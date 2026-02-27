@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "ghidra-mcp": {
+      "command": "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\ghidra_mcp\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\ghidra_mcp\\bridge_mcp_ghidra.py"
+      ],
+      "env": {
+        "GHIDRA_SERVER_URL": "http://127.0.0.1:8089/"
+      }
+    },
+    "debugmcp": {
+      "url": "http://localhost:3001/sse"
+    },
+    "vscode": {
+      "command": "npx",
+      "args": ["vscode-as-mcp-server"]
+    }
+  }
+}

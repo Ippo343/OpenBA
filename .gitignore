@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# GhidraMCP tools (downloaded binaries, not source)
+tools/ghidra_mcp/.venv/
+tools/ghidra_mcp/GhidraMCP-3.0.0.zip
+tools/ghidra_mcp/bridge_mcp_ghidra.py
+
+# Ghidra project files
+*.gpr
+*.rep/
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+patches/build/
+
+# OS
+Thumbs.db
+.DS_Store
