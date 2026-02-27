@@ -7,9 +7,6 @@ binary-compatible type header and a reimplementation that hooks the original at 
 The end goal is a readable C++ codebase that mirrors the game's logic, similar to
 projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
-Secondary goal: identify and fix performance bottlenecks, particularly late-game with
-large populations and complex logistics.
-
 ## Target Binaries
 
 The game is a multi-binary architecture. The exe contains game logic; the engine runtime is in DLLs.
@@ -57,6 +54,9 @@ Engine::MainLoop::Run(UpdateLoop*)
 ```
 Loop types: `LoaderLoop`, `DialogLoaderLoopT`, `DialogLoopT` (menus/loading), plus the main gameplay `UpdateLoop`.
 
+### Launcher Dialog
+`Engine::Engine::PlatformConfigure` (0x1800a1670) — Win32 launcher with Options/Video/Play buttons. Hooked to always return true (skip), since the "already configured" flag doesn't persist correctly. See `engine/reimpl/platformconfigure.cpp`.
+
 ### Threading Model
 - `System::Thread` with `Start()`, `WaitForFinish()`, `OnCompleted()` virtual
 - `Application::YieldToThreads()` - cooperative yielding
@@ -78,7 +78,7 @@ Covers all three binaries: Application-x64.exe (10,476 functions), Runtime-x64.d
 ### Ghidra is the primary documentation tool
 All function renaming, type annotation, struct layouts, and per-function comments go directly in Ghidra. It's persistent, searchable, and stays in sync with the actual analysis. External markdown files are for higher-level notes that don't fit in Ghidra (architecture diagrams, algorithm analysis, session logs).
 
-### Decompilation priority order (for performance patching)
+### Decompilation priority order
 
 1. **Engine** (MainLoop/UpdateLoop) - understand the tick structure and frame budget
 2. **ECS core** (ComponentEntity update loop) - find the per-frame iteration pattern
@@ -88,7 +88,7 @@ All function renaming, type annotation, struct layouts, and per-function comment
 
 ---
 
-## Performance Hotspot Hypotheses
+## Future Hotspot Hypotheses
 1. **Citizen AI / Pathfinding** - CitizenAIComponent + Pathfinding::PointList likely dominate CPU in large towns
 2. **Storage/Market lookups** - StorageComponent + MarketComponent scans may be O(n) across all buildings
 3. **State machine ticks** - StateMachineComponent updates every citizen every frame

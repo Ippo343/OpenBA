@@ -160,6 +160,36 @@ extern void RemoveDialogLoaderLoopUpdate();
 extern void InstallDialogLoaderLoopDraw();
 extern void RemoveDialogLoaderLoopDraw();
 
+// --- DialogLoopT reimplementations (engine/reimpl/dialogloop.cpp) ---
+extern void InstallDialogLoopStartup();
+extern void RemoveDialogLoopStartup();
+extern void InstallDialogLoopShutdown();
+extern void RemoveDialogLoopShutdown();
+extern void InstallDialogLoopUpdate();
+extern void RemoveDialogLoopUpdate();
+extern void InstallDialogLoopDraw();
+extern void RemoveDialogLoopDraw();
+
+// --- PlatformConfigure (engine/reimpl/platformconfigure.cpp) ---
+extern void InstallPlatformConfigure();
+extern void RemovePlatformConfigure();
+
+// --- Configuration reimplementations (engine/reimpl/configuration.cpp) ---
+extern void InstallConfigCurrentBuildId();
+extern void RemoveConfigCurrentBuildId();
+extern void InstallConfigCurrentVersion();
+extern void RemoveConfigCurrentVersion();
+extern void InstallConfigGetVersionString();
+extern void RemoveConfigGetVersionString();
+
+// --- Modification reimplementations (engine/reimpl/modification.cpp) ---
+extern void InstallModificationFind();
+extern void RemoveModificationFind();
+extern void InstallModificationEnable();
+extern void RemoveModificationEnable();
+extern void InstallModificationDisableAll();
+extern void RemoveModificationDisableAll();
+
 // --- LoaderLoop reimplementations (engine/reimpl/loaderloop.cpp) ---
 extern void InstallLoaderLoopStartup();
 extern void RemoveLoaderLoopStartup();
@@ -180,6 +210,9 @@ static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
     { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
 
+    // --- Launcher skip ---
+    { "PlatformConfigure",     InstallPlatformConfigure,   RemovePlatformConfigure,   true  },
+
     // --- MainLoop reimplementations ---
     { "MainLoop::Frame",       InstallMainLoopFrame,       RemoveMainLoopFrame,       true  },
     { "MainLoop::Update",      InstallMainLoopUpdate,      RemoveMainLoopUpdate,      true  },
@@ -196,6 +229,12 @@ static ReimplEntry g_reimplementations[] = {
     { "DialogLoaderLoopT::Update",   InstallDialogLoaderLoopUpdate,   RemoveDialogLoaderLoopUpdate,   true  },
     { "DialogLoaderLoopT::Draw",     InstallDialogLoaderLoopDraw,     RemoveDialogLoaderLoopDraw,     true  },
 
+    // --- DialogLoopT reimplementations ---
+    { "DialogLoopT::Startup",  InstallDialogLoopStartup,  RemoveDialogLoopStartup,  true  },
+    { "DialogLoopT::Shutdown", InstallDialogLoopShutdown, RemoveDialogLoopShutdown, true  },
+    { "DialogLoopT::Update",   InstallDialogLoopUpdate,   RemoveDialogLoopUpdate,   true  },
+    { "DialogLoopT::Draw",     InstallDialogLoopDraw,     RemoveDialogLoopDraw,     true  },
+
     // --- LoaderLoop reimplementations ---
     { "LoaderLoop::Startup",      InstallLoaderLoopStartup,      RemoveLoaderLoopStartup,      true  },
     { "LoaderLoop::Shutdown",     InstallLoaderLoopShutdown,      RemoveLoaderLoopShutdown,      true  },
@@ -204,6 +243,16 @@ static ReimplEntry g_reimplementations[] = {
     { "LoaderLoop::Exit",         InstallLoaderLoopExit,          RemoveLoaderLoopExit,          true  },
     { "LoaderLoop::IsFinished",   InstallLoaderLoopIsFinished,    RemoveLoaderLoopIsFinished,    true  },
     { "LoaderLoop::OnVideoError", InstallLoaderLoopOnVideoError,  RemoveLoaderLoopOnVideoError,  true  },
+
+    // --- Configuration reimplementations ---
+    { "Configuration::CurrentBuildId",   InstallConfigCurrentBuildId,   RemoveConfigCurrentBuildId,   true  },
+    { "Configuration::CurrentVersion",   InstallConfigCurrentVersion,   RemoveConfigCurrentVersion,   true  },
+    { "Configuration::GetVersionString", InstallConfigGetVersionString, RemoveConfigGetVersionString, true  },
+
+    // --- Modification reimplementations ---
+    { "Modification::Find",       InstallModificationFind,       RemoveModificationFind,       true  },
+    { "Modification::Enable",     InstallModificationEnable,     RemoveModificationEnable,     true  },
+    { "Modification::DisableAll", InstallModificationDisableAll, RemoveModificationDisableAll, true  },
 
     // Add new entries as you reimplement functions...
 };

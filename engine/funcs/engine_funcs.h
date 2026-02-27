@@ -79,6 +79,26 @@ typedef void (*fn_DynArrayPush_t)(void* arrayBase, int newCount, void* elementPt
 extern fn_DynArrayPush_t fn_DynArrayPush;
 
 // ============================================================
+// System::String function pointers
+// ============================================================
+
+// String::Set(const char*) — releases old data, copies new
+// Member function: RCX=this(String*), RDX=const char* src
+typedef void (*fn_String_Set_t)(void* thisStr, const char* src);
+extern fn_String_Set_t fn_String_Set;
+
+// String::Format(const char*, ...) — static, creates formatted string
+// MSVC ABI: hidden return pointer in RCX (String*), RDX=fmt, R8/R9/stack=varargs
+// Returns: pointer to the return String (same as RCX)
+typedef void* (*fn_String_Format_t)(void* retval, const char* fmt, ...);
+extern fn_String_Format_t fn_String_Format;
+
+// String::~String() — decrements refcount, frees if reaches 0
+// Member function: RCX=this(String*)
+typedef void (*fn_String_Dtor_t)(void* thisStr);
+extern fn_String_Dtor_t fn_String_Dtor;
+
+// ============================================================
 // Engine globals (resolved pointers into Runtime-x64.dll data)
 // ============================================================
 

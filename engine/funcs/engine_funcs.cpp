@@ -58,6 +58,11 @@ fn_UI_CloseDialog_t fn_UI_CloseDialog = nullptr;
 // Dynamic array push helper
 fn_DynArrayPush_t fn_DynArrayPush = nullptr;
 
+// String functions
+fn_String_Set_t fn_String_Set = nullptr;
+fn_String_Format_t fn_String_Format = nullptr;
+fn_String_Dtor_t fn_String_Dtor = nullptr;
+
 // ============================================================
 // Engine globals
 // ============================================================
@@ -152,6 +157,28 @@ bool EngineFuncsInit() {
     fn_DynArrayPush = reinterpret_cast<fn_DynArrayPush_t>(
         ResolveAddr(Module::Runtime, 0x18007a0d0));
 
+    // --- String functions ---
+    fn_String_Set = reinterpret_cast<fn_String_Set_t>(
+        ResolveExport("?Set@String@System@@QEAAXPEBD@Z"));
+    if (!fn_String_Set) {
+        fn_String_Set = reinterpret_cast<fn_String_Set_t>(
+            ResolveAddr(Module::Runtime, 0x1800c95d0));
+    }
+
+    fn_String_Format = reinterpret_cast<fn_String_Format_t>(
+        ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ"));
+    if (!fn_String_Format) {
+        fn_String_Format = reinterpret_cast<fn_String_Format_t>(
+            ResolveAddr(Module::Runtime, 0x1800c9730));
+    }
+
+    fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
+        ResolveExport("??1String@System@@QEAA@XZ"));
+    if (!fn_String_Dtor) {
+        fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x180006c80));
+    }
+
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
     g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
@@ -181,6 +208,9 @@ bool EngineFuncsInit() {
     printf("  UI::Draw                  = %p\n", (void*)fn_UI_Draw);
     printf("  UI::CloseDialog           = %p\n", (void*)fn_UI_CloseDialog);
     printf("  DynArrayPush              = %p\n", (void*)fn_DynArrayPush);
+    printf("  String::Set               = %p\n", (void*)fn_String_Set);
+    printf("  String::Format            = %p\n", (void*)fn_String_Format);
+    printf("  String::~String           = %p\n", (void*)fn_String_Dtor);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,

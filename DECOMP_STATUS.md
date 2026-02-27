@@ -22,10 +22,10 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | ~ | `UpdateLoop` | Engine | Update, Draw, Startup, Shutdown, SaveRestore, DrawFailed, OnVideoRestart, AllowsModChanges, GetResourceFilename, IsRunning (**reimpl: `engine/reimpl/updateloop.cpp`**), LoadResources, SetLoadProgress, GetLoadProgress, GetLoadBit, ctor, dtor |
 | ~ | `LoaderLoop` | Engine | Startup, Shutdown, Update, Draw, Exit, IsFinished, OnVideoError (**reimpl: `engine/reimpl/loaderloop.cpp`**), Load (blocked: needs `ExternalFactory`), ctor, dtor |
 | ~ | `DialogLoaderLoopT` | Engine | Update, Draw, Startup, Shutdown (**reimpl: `engine/reimpl/dialogloaderloop.cpp`**), Load (blocked on ExternalFactory), ctor, dtor |
-| - | `DialogLoopT` | Engine | Update, Draw, Load, Startup, Shutdown, ctor, dtor |
-| - | `Application` | System | YieldToThreads |
-| ~ | `Configuration` | System | CurrentBuildId (static), CurrentVersion (static), GetVersionString (static) |
-| - | `Modification` | Engine | (mod system) |
+| ~ | `DialogLoopT` | Engine | Startup, Shutdown, Update, Draw (**reimpl: `engine/reimpl/dialogloop.cpp`**), Load (blocked on ExternalFactory), GetUserInterface, ctor, dtor |
+| ✓ | `Application` | System | YieldToThreads (trivial thunk → `SwitchToThread()`, 7 bytes at `0x18009f920`, no hook needed) |
+| ~ | `Configuration` | System | CurrentBuildId, CurrentVersion, GetVersionString (**reimpl: `engine/reimpl/configuration.cpp`**), 26 other methods (accessors, command line, ctor/dtor — trivial or blocked on Map/String infrastructure) |
+| ~ | `Modification` | IO | Find, Enable, DisableAll (**reimpl: `engine/reimpl/modification.cpp`**), Get/GetCount/IsDirty/GetModification (too small to hook, 3-12 bytes), AreExternalModsUpToDate/UpdateExternalMods (stubs), Swap/EnableSavingSettings (hookable but need Mod copy helpers), RefreshList/SaveList/SetupFileSystem (blocked on Persistence/FileSystem/PackageFile) |
 
 ### ECS - Game Components (all ComponentEntity children)
 
@@ -352,7 +352,7 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | ~ | `LoaderLoop` | Startup, Shutdown, Update, Draw, Exit, IsFinished, OnVideoError (**reimpl: `engine/reimpl/loaderloop.cpp`** — 7/10 methods), Load (blocked: needs `ExternalFactory`), ctor, dtor (0x48 bytes) |
 | - | `Loader` | resource loader (singleton) |
 | ~ | `DialogLoaderLoopT` | Startup, Shutdown, Update, Draw (**reimpl: `engine/reimpl/dialogloaderloop.cpp`**), Load (blocked: needs `ExternalFactory`, `String` refcounting) |
-| - | `DialogLoopT` | GetUserInterface |
+| ~ | `DialogLoopT` | Startup, Shutdown, Update, Draw (**reimpl: `engine/reimpl/dialogloop.cpp`** — 4/7 methods), Load (blocked: needs `ExternalFactory`), GetUserInterface, ctor, dtor (0x168 bytes, vtable at 0x1801579A0) |
 | - | `Application` | top-level application class |
 
 ### Collision2D - 81 symbols
@@ -443,13 +443,13 @@ Tracking what's needed to promote `~` (partial) entries to `R` (fully reimplemen
 | `MainLoop` (21 remaining methods) | Mostly trivial accessors | Getters/setters, OnVideoError/Restart, CreateVideoContext, ctor/dtor — low priority, no hard blockers |
 | `UpdateLoop::LoadResources` | `ExternalFactory` bitmask, `String`, `Modification` | Same ExternalFactory + mod system integration |
 | `UpdateLoop::ctor/dtor` | `ExternalFactory` bitmask allocation | Allocates/frees a bit from ExternalFactory's global bitmask |
-| `DialogLoopT` (not started) | `UserInterface` embedded object | Need UI::UserInterface struct layout (0x128 bytes, opaque) |
-| `DialogLoopT` (not started) | `DialogInstance` lifecycle | Need dialog open/close/update/draw flow |
+| `DialogLoopT::Load` | `ExternalFactory::FindOrLoad` | Same as DialogLoaderLoopT::Load — resource loading by path |
+| `DialogLoopT::Load` | `String` refcounting | Decompile String ctor/dtor/operator= — reference counted with shared buffer |
 
 ### Hook Infrastructure Notes
 
-- **Trampoline safety**: 7 of 18 hooks have RIP-relative instructions in their prologues. Trampolines for these are broken (wrong displacement after relocation). Currently safe because no reimplementations call through trampolines. If A/B testing via trampoline is needed later, `InstallHook` must detect and relocate RIP-relative instructions.
-- **Affected hooks**: LoaderLoop::Startup, Shutdown, Draw, Exit, IsFinished, OnVideoError; DialogLoaderLoopT::Draw
+- **Trampoline safety**: 8 of 22 hooks have RIP-relative instructions in their prologues. Trampolines for these are broken (wrong displacement after relocation). Currently safe because no reimplementations call through trampolines. If A/B testing via trampoline is needed later, `InstallHook` must detect and relocate RIP-relative instructions.
+- **Affected hooks**: LoaderLoop::Startup, Shutdown, Draw, Exit, IsFinished, OnVideoError; DialogLoaderLoopT::Draw; DialogLoopT::Draw
 
 ---
 
