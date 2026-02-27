@@ -18,12 +18,16 @@ extern uintptr_t ghidra_addr(uintptr_t ghidra_address);
 struct HookInfo {
     void* trampoline;     // call this to invoke the original function
     void* target;         // the address we hooked
-    uint8_t original[16]; // saved original bytes
-    size_t patchSize;     // bytes overwritten (always 12 for x64 abs jump)
+    uint8_t original[32]; // saved original bytes (up to 32 for variable prologue)
+    size_t patchSize;     // bytes saved/restored (>= 12, must end on instruction boundary)
 };
 
-// Install a hook: overwrites target with a jump to detour, returns trampoline
-bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info);
+// Install a hook: overwrites target with a jump to detour, returns trampoline.
+// prologueSize = number of bytes to save in trampoline. Must be >= 12 (the jump
+// size) and MUST end on an instruction boundary. Default 12 works when the first
+// 12 bytes of the target are complete instructions. Use a larger value when the
+// 12-byte boundary falls mid-instruction (check with a disassembler).
+bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t prologueSize = 12);
 
 // Remove a hook: restores original bytes
 void RemoveHook(HookInfo* info);

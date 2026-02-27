@@ -10,37 +10,45 @@
 // Low-level hook infrastructure (unchanged)
 // ============================================================
 
-bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info) {
-    const size_t HOOK_SIZE = 12; // mov rax, imm64 (10) + jmp rax (2)
+bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t prologueSize) {
+    const size_t JUMP_SIZE = 12; // mov rax, imm64 (10) + jmp rax (2)
 
-    memcpy(info->original, (void*)targetAddr, HOOK_SIZE);
+    // prologueSize must cover at least the jump and fit in our save buffer
+    if (prologueSize < JUMP_SIZE) prologueSize = JUMP_SIZE;
+    if (prologueSize > sizeof(info->original)) return false;
+
+    memcpy(info->original, (void*)targetAddr, prologueSize);
     info->target = (void*)targetAddr;
-    info->patchSize = HOOK_SIZE;
+    info->patchSize = prologueSize;
 
     // Allocate executable trampoline: original bytes + jump back
     info->trampoline = VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!info->trampoline) return false;
 
-    // Copy original bytes to trampoline
-    memcpy(info->trampoline, info->original, HOOK_SIZE);
+    // Copy original prologue bytes to trampoline
+    memcpy(info->trampoline, info->original, prologueSize);
 
-    // Append jump back to (target + HOOK_SIZE)
-    uint8_t* jmpBack = (uint8_t*)info->trampoline + HOOK_SIZE;
+    // Append jump back to (target + prologueSize)
+    uint8_t* jmpBack = (uint8_t*)info->trampoline + prologueSize;
     jmpBack[0] = 0x48; jmpBack[1] = 0xB8; // mov rax, imm64
-    *(uintptr_t*)(jmpBack + 2) = targetAddr + HOOK_SIZE;
+    *(uintptr_t*)(jmpBack + 2) = targetAddr + prologueSize;
     jmpBack[10] = 0xFF; jmpBack[11] = 0xE0; // jmp rax
 
-    // Overwrite target with jump to detour
+    // Overwrite target with jump to detour (always 12 bytes)
     DWORD oldProtect;
-    VirtualProtect((void*)targetAddr, HOOK_SIZE, PAGE_EXECUTE_READWRITE, &oldProtect);
+    VirtualProtect((void*)targetAddr, prologueSize, PAGE_EXECUTE_READWRITE, &oldProtect);
 
     uint8_t* patch = (uint8_t*)targetAddr;
     patch[0] = 0x48; patch[1] = 0xB8; // mov rax, imm64
     *(uintptr_t*)(patch + 2) = (uintptr_t)detourFunc;
     patch[10] = 0xFF; patch[11] = 0xE0; // jmp rax
 
-    VirtualProtect((void*)targetAddr, HOOK_SIZE, oldProtect, &oldProtect);
-    FlushInstructionCache(GetCurrentProcess(), (void*)targetAddr, HOOK_SIZE);
+    // NOP any remaining bytes between the jump and the prologue boundary
+    for (size_t i = JUMP_SIZE; i < prologueSize; i++)
+        patch[i] = 0x90;
+
+    VirtualProtect((void*)targetAddr, prologueSize, oldProtect, &oldProtect);
+    FlushInstructionCache(GetCurrentProcess(), (void*)targetAddr, prologueSize);
 
     return true;
 }
@@ -142,6 +150,16 @@ extern void RemoveMainLoopRun();
 extern void InstallUpdateLoopIsRunning();
 extern void RemoveUpdateLoopIsRunning();
 
+// --- DialogLoaderLoopT reimplementations (engine/reimpl/dialogloaderloop.cpp) ---
+extern void InstallDialogLoaderLoopStartup();
+extern void RemoveDialogLoaderLoopStartup();
+extern void InstallDialogLoaderLoopShutdown();
+extern void RemoveDialogLoaderLoopShutdown();
+extern void InstallDialogLoaderLoopUpdate();
+extern void RemoveDialogLoaderLoopUpdate();
+extern void InstallDialogLoaderLoopDraw();
+extern void RemoveDialogLoaderLoopDraw();
+
 // --- LoaderLoop reimplementations (engine/reimpl/loaderloop.cpp) ---
 extern void InstallLoaderLoopStartup();
 extern void RemoveLoaderLoopStartup();
@@ -171,6 +189,12 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- UpdateLoop reimplementations ---
     { "UpdateLoop::IsRunning", InstallUpdateLoopIsRunning, RemoveUpdateLoopIsRunning, true },
+
+    // --- DialogLoaderLoopT reimplementations ---
+    { "DialogLoaderLoopT::Startup",  InstallDialogLoaderLoopStartup,  RemoveDialogLoaderLoopStartup,  true  },
+    { "DialogLoaderLoopT::Shutdown", InstallDialogLoaderLoopShutdown, RemoveDialogLoaderLoopShutdown, true  },
+    { "DialogLoaderLoopT::Update",   InstallDialogLoaderLoopUpdate,   RemoveDialogLoaderLoopUpdate,   true  },
+    { "DialogLoaderLoopT::Draw",     InstallDialogLoaderLoopDraw,     RemoveDialogLoaderLoopDraw,     true  },
 
     // --- LoaderLoop reimplementations ---
     { "LoaderLoop::Startup",      InstallLoaderLoopStartup,      RemoveLoaderLoopStartup,      true  },

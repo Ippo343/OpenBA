@@ -62,6 +62,22 @@ extern fn_Loader_Load_t fn_Loader_Load;
 typedef void (*fn_App_SleepThread_t)(void* self, int ms);
 extern fn_App_SleepThread_t fn_App_SleepThread;
 
+// UI::UserInterface::Update(this, Time const&)
+typedef void (*fn_UI_Update_t)(void* self, void* time);
+extern fn_UI_Update_t fn_UI_Update;
+
+// UI::UserInterface::Draw(this, Context&)
+typedef void (*fn_UI_Draw_t)(void* self, void* context);
+extern fn_UI_Draw_t fn_UI_Draw;
+
+// UI::UserInterface::CloseDialog(this, InternalPtr<DialogInstance>&)
+typedef void (*fn_UI_CloseDialog_t)(void* self, void* dialogPtr);
+extern fn_UI_CloseDialog_t fn_UI_CloseDialog;
+
+// Generic dynamic array push (FUN_18007a0d0) — used for dialog pending lists
+typedef void (*fn_DynArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
+extern fn_DynArrayPush_t fn_DynArrayPush;
+
 // ============================================================
 // Engine globals (resolved pointers into Runtime-x64.dll data)
 // ============================================================

@@ -46,6 +46,18 @@ fn_Loader_Load_t fn_Loader_Load = nullptr;
 // Application::Application::SleepThread
 fn_App_SleepThread_t fn_App_SleepThread = nullptr;
 
+// UI::UserInterface::Update
+fn_UI_Update_t fn_UI_Update = nullptr;
+
+// UI::UserInterface::Draw
+fn_UI_Draw_t fn_UI_Draw = nullptr;
+
+// UI::UserInterface::CloseDialog
+fn_UI_CloseDialog_t fn_UI_CloseDialog = nullptr;
+
+// Dynamic array push helper
+fn_DynArrayPush_t fn_DynArrayPush = nullptr;
+
 // ============================================================
 // Engine globals
 // ============================================================
@@ -112,6 +124,34 @@ bool EngineFuncsInit() {
     fn_App_SleepThread = reinterpret_cast<fn_App_SleepThread_t>(
         ResolveExport("?SleepThread@Application@1@QEAAXH@Z"));
 
+    // UI::UserInterface::Update(Time const&) — resolve by name
+    fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
+        ResolveExport("?Update@UserInterface@UI@@QEAAXAEBVTime@System@@@Z"));
+    if (!fn_UI_Update) {
+        fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
+            ResolveAddr(Module::Runtime, 0x1801213C0));
+    }
+
+    // UI::UserInterface::Draw(Context&) — resolve by name
+    fn_UI_Draw = reinterpret_cast<fn_UI_Draw_t>(
+        ResolveExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z"));
+    if (!fn_UI_Draw) {
+        fn_UI_Draw = reinterpret_cast<fn_UI_Draw_t>(
+            ResolveAddr(Module::Runtime, 0x180121890));
+    }
+
+    // UI::UserInterface::CloseDialog(InternalPtr<DialogInstance>&) — resolve by name
+    fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
+        ResolveExport("?CloseDialog@UserInterface@UI@@QEAAXAEAV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
+    if (!fn_UI_CloseDialog) {
+        fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
+            ResolveAddr(Module::Runtime, 0x180120F20));
+    }
+
+    // Dynamic array push (generic helper at 0x18007a0d0)
+    fn_DynArrayPush = reinterpret_cast<fn_DynArrayPush_t>(
+        ResolveAddr(Module::Runtime, 0x18007a0d0));
+
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
     g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
@@ -137,6 +177,10 @@ bool EngineFuncsInit() {
     printf("  VideoCtx::Reset           = %p\n", (void*)fn_VideoCtx_Reset);
     printf("  Loader::Load              = %p\n", (void*)fn_Loader_Load);
     printf("  App::SleepThread          = %p\n", (void*)fn_App_SleepThread);
+    printf("  UI::Update                = %p\n", (void*)fn_UI_Update);
+    printf("  UI::Draw                  = %p\n", (void*)fn_UI_Draw);
+    printf("  UI::CloseDialog           = %p\n", (void*)fn_UI_CloseDialog);
+    printf("  DynArrayPush              = %p\n", (void*)fn_DynArrayPush);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,

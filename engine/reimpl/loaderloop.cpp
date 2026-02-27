@@ -206,7 +206,8 @@ void InstallLoaderLoopStartup() {
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Startup);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup);
+    // Prologue: 16 bytes (verified against binary, contains RIP-relative instr)
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 16);
 #ifdef _DEBUG
     printf("[LoaderLoop] Startup hooked at %p\n", (void*)target);
 #endif
@@ -221,7 +222,8 @@ void RemoveLoaderLoopStartup() {
 
 void InstallLoaderLoopShutdown() {
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Shutdown);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown);
+    // Prologue: 17 bytes (verified against binary, contains RIP-relative instr)
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 17);
 #ifdef _DEBUG
     printf("[LoaderLoop] Shutdown hooked at %p\n", (void*)target);
 #endif
@@ -239,7 +241,8 @@ void InstallLoaderLoopUpdate() {
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Update);
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate);
+    // Prologue: 13 bytes (verified against binary)
+    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 13);
 #ifdef _DEBUG
     printf("[LoaderLoop] Update hooked at %p\n", (void*)target);
 #endif
@@ -257,7 +260,8 @@ void InstallLoaderLoopDraw() {
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Draw);
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw);
+    // Prologue: 19 bytes (verified against binary, contains RIP-relative instr)
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 19);
 #ifdef _DEBUG
     printf("[LoaderLoop] Draw hooked at %p\n", (void*)target);
 #endif
@@ -275,7 +279,8 @@ void InstallLoaderLoopExit() {
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Exit);
-    InstallHook(target, (void*)Reimpl_Exit, &g_hookExit);
+    // Prologue: 15 bytes (verified against binary, contains RIP-relative instr)
+    InstallHook(target, (void*)Reimpl_Exit, &g_hookExit, 15);
 #ifdef _DEBUG
     printf("[LoaderLoop] Exit hooked at %p\n", (void*)target);
 #endif
@@ -290,7 +295,8 @@ void RemoveLoaderLoopExit() {
 
 void InstallLoaderLoopIsFinished() {
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::IsFinished);
-    InstallHook(target, (void*)Reimpl_IsFinished, &g_hookIsFinished);
+    // Prologue: 13 bytes (verified against binary, contains RIP-relative instr)
+    InstallHook(target, (void*)Reimpl_IsFinished, &g_hookIsFinished, 13);
 #ifdef _DEBUG
     printf("[LoaderLoop] IsFinished hooked at %p\n", (void*)target);
 #endif
@@ -305,7 +311,8 @@ void RemoveLoaderLoopIsFinished() {
 
 void InstallLoaderLoopOnVideoError() {
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::OnVideoError);
-    InstallHook(target, (void*)Reimpl_OnVideoError, &g_hookOnVideoError);
+    // Prologue: 17 bytes (verified against binary, contains RIP-relative instr)
+    InstallHook(target, (void*)Reimpl_OnVideoError, &g_hookOnVideoError, 17);
 #ifdef _DEBUG
     printf("[LoaderLoop] OnVideoError hooked at %p\n", (void*)target);
 #endif

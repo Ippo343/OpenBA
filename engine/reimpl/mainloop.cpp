@@ -525,7 +525,8 @@ void InstallMainLoopFrame() {
         ResolveAddr(Module::Runtime, MainLoopAddr::Draw));
 
     uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::Frame);
-    InstallHook(target, (void*)Reimpl_Frame, &g_hookFrame);
+    // Prologue: MOV(5)+PUSH(1)+SUB(4)+XORPS(3)=13 bytes
+    InstallHook(target, (void*)Reimpl_Frame, &g_hookFrame, 13);
 
 #ifdef _DEBUG
     printf("[MainLoop] Frame hooked at %p -> Reimpl_Frame\n", (void*)target);
@@ -542,7 +543,8 @@ void RemoveMainLoopFrame() {
 
 void InstallMainLoopUpdate() {
     uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::Update);
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate);
+    // Prologue: MOV(5)+PUSH(1)+SUB(4)+MOV(3)=13 bytes
+    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 13);
 #ifdef _DEBUG
     printf("[MainLoop] Update hooked at %p\n", (void*)target);
 #endif
@@ -557,7 +559,8 @@ void RemoveMainLoopUpdate() {
 
 void InstallMainLoopDraw() {
     uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::Draw);
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw);
+    // Prologue: 13 bytes (verified against binary)
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 13);
 #ifdef _DEBUG
     printf("[MainLoop] Draw hooked at %p\n", (void*)target);
 #endif
@@ -593,7 +596,8 @@ void InstallMainLoopRun() {
         ResolveAddr(Module::Runtime, MainLoopAddr::Draw));
 
     uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::Run);
-    InstallHook(target, (void*)Reimpl_Run, &g_hookRun);
+    // Prologue: MOV(5)+PUSH(2)+SUB(4)+MOV(4)=15 bytes
+    InstallHook(target, (void*)Reimpl_Run, &g_hookRun, 15);
 #ifdef _DEBUG
     printf("[MainLoop] Run hooked at %p\n", (void*)target);
 #endif
