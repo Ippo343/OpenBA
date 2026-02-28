@@ -744,13 +744,18 @@ static void Reimpl_CreateVideoContext(MainLoop* self) {
     // Destroy existing context
     if (self->m_context) {
         fn_VideoCtx_Dtor(self->m_context);
-        fn_VideoCtx_Delete(self->m_context);
+        fn_VideoCtx_Delete(self->m_context);  // Delete wraps Free in CS internally
         self->m_context = nullptr;
     }
 
     // Allocate new context (0x2168 bytes, 8-byte aligned)
-    // Uses MemoryAllocator with critical section
+    // Original wraps Allocate in critical section at MemoryAllocator::_singleton + 0x640
+    LPCRITICAL_SECTION lpCS = reinterpret_cast<LPCRITICAL_SECTION>(
+        reinterpret_cast<uint8_t*>(g_pMemAllocSingleton) + 0x640);
+    EnterCriticalSection(lpCS);
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x2168, 8);
+    LeaveCriticalSection(lpCS);
+
     if (mem) {
         void* ctx = fn_VideoCtx_Ctor(
             mem,

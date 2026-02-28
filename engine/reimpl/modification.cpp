@@ -150,23 +150,23 @@ static void Reimpl_Swap(Modification* self, int idx1, int idx2) {
 
 // ============================================================
 // EnableSavingSettings (0x1800aead0) — PASSTHROUGH WRAPPER
-// Enables persistence saving. Calls RefreshList to reload the mod
-// list from disk, copies m_mods to m_savedMods as a backup, then
-// sets m_savingEnabled = 1.
+// Conditionally enables/disables persistence saving.
+// If enabling (and not already enabled): calls RefreshList, sets dirty.
+// If disabling (and not already disabled): copies mods to saved, sets dirty.
 //
-// Parameters: RCX = this
+// Parameters: RCX = this, DL = enable (bool)
 // ============================================================
 
-typedef void (*Modification_EnableSavingSettings_t)(Modification* self);
+typedef void (*Modification_EnableSavingSettings_t)(Modification* self, bool enable);
 
-static void Reimpl_EnableSavingSettings(Modification* self) {
+static void Reimpl_EnableSavingSettings(Modification* self, bool enable) {
 #ifdef _DEBUG
-    printf("[Modification::EnableSavingSettings] self=%p count=%d\n",
-           (void*)self, self->m_count);
+    printf("[Modification::EnableSavingSettings] self=%p count=%d enable=%d\n",
+           (void*)self, self->m_count, (int)enable);
 #endif
 
-    // Call original implementation via trampoline
-    ((Modification_EnableSavingSettings_t)g_hookEnableSavingSettings.trampoline)(self);
+    // Call original implementation via trampoline (must forward both params)
+    ((Modification_EnableSavingSettings_t)g_hookEnableSavingSettings.trampoline)(self, enable);
 
 #ifdef _DEBUG
     printf("[Modification::EnableSavingSettings] done, savingEnabled=%d savedCount=%d\n",

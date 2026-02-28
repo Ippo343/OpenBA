@@ -262,6 +262,70 @@ extern void RemoveLoaderLoopIsFinished();
 extern void InstallLoaderLoopOnVideoError();
 extern void RemoveLoaderLoopOnVideoError();
 
+// --- LivestockComponent reimplementations (engine/reimpl/livestockcomponent.cpp) ---
+extern void InstallLivestockComponentUpdate();
+extern void RemoveLivestockComponentUpdate();
+
+// --- StateMachineComponent reimplementations (engine/reimpl/statemachinecomponent.cpp) ---
+extern void InstallStateMachineComponentUpdate();
+extern void RemoveStateMachineComponentUpdate();
+
+// --- HuntComponent reimplementations (engine/reimpl/huntcomponent.cpp) ---
+extern void InstallHuntComponentUpdate();
+extern void RemoveHuntComponentUpdate();
+
+// --- DiseaseComponent reimplementations (engine/reimpl/diseasecomponent.cpp) ---
+extern void InstallDiseaseComponentUpdate();
+extern void RemoveDiseaseComponentUpdate();
+
+// --- AttendanceComponent reimplementations (engine/reimpl/attendancecomponent.cpp) ---
+extern void InstallAttendanceComponentUpdate();
+extern void RemoveAttendanceComponentUpdate();
+
+// --- AmbientEnvironmentComponent reimplementations (engine/reimpl/ambientenvironmentcomponent.cpp) ---
+extern void InstallAmbientEnvironmentComponentUpdate();
+extern void RemoveAmbientEnvironmentComponentUpdate();
+
+// --- CharacterComponent reimplementations (engine/reimpl/charactercomponent.cpp) ---
+extern void InstallCharacterComponentUpdate();
+extern void RemoveCharacterComponentUpdate();
+
+// --- PopulationComponent reimplementations (engine/reimpl/populationcomponent.cpp) ---
+extern void InstallPopulationComponentUpdate();
+extern void RemovePopulationComponentUpdate();
+
+// --- FruitComponent reimplementations (engine/reimpl/fruitcomponent.cpp) ---
+extern void InstallFruitComponentUpdate();
+extern void RemoveFruitComponentUpdate();
+
+// --- SpawnComponent reimplementations (engine/reimpl/spawncomponent.cpp) ---
+extern void InstallSpawnComponentUpdate();
+extern void RemoveSpawnComponentUpdate();
+
+// --- FireComponent reimplementations (engine/reimpl/firecomponent.cpp) ---
+extern void InstallFireComponentUpdate();
+extern void RemoveFireComponentUpdate();
+
+// --- GrowthComponent reimplementations (engine/reimpl/growth.cpp) ---
+extern void InstallGrowthComponentUpdate();
+extern void RemoveGrowthComponentUpdate();
+
+// --- HerdComponent reimplementations (engine/reimpl/herdcomponent.cpp) ---
+extern void InstallHerdComponentUpdate();
+extern void RemoveHerdComponentUpdate();
+
+// --- AnimalComponent reimplementations (engine/reimpl/animal.cpp) ---
+extern void InstallAnimalComponentUpdate();
+extern void RemoveAnimalComponentUpdate();
+
+// --- CitizenAIComponent reimplementations (engine/reimpl/citizenaicomponent.cpp) ---
+extern void InstallCitizenAIComponentUpdate();
+extern void RemoveCitizenAIComponentUpdate();
+
+// --- CitizenComponent reimplementations (engine/reimpl/citizencomponent.cpp) ---
+extern void InstallCitizenComponentUpdate();
+extern void RemoveCitizenComponentUpdate();
+
 static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
     { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
@@ -337,6 +401,54 @@ static ReimplEntry g_reimplementations[] = {
     { "Modification::SaveList",        InstallModificationSaveList,        RemoveModificationSaveList,        true },
     { "Modification::RefreshList",     InstallModificationRefreshList,     RemoveModificationRefreshList,     true },
     { "Modification::SetupFileSystem", InstallModificationSetupFileSystem, RemoveModificationSetupFileSystem, true },
+
+    // --- LivestockComponent reimplementations ---
+    { "LivestockComponent::Update", InstallLivestockComponentUpdate, RemoveLivestockComponentUpdate, true },
+
+    // --- StateMachineComponent reimplementations ---
+    { "StateMachineComponent::Update", InstallStateMachineComponentUpdate, RemoveStateMachineComponentUpdate, true },
+
+    // --- HuntComponent reimplementations ---
+    { "HuntComponent::Update", InstallHuntComponentUpdate, RemoveHuntComponentUpdate, true },
+
+    // --- DiseaseComponent reimplementations ---
+    { "DiseaseComponent::Update", InstallDiseaseComponentUpdate, RemoveDiseaseComponentUpdate, true },
+
+    // --- AttendanceComponent reimplementations ---
+    { "AttendanceComponent::Update", InstallAttendanceComponentUpdate, RemoveAttendanceComponentUpdate, true },
+
+    // --- AmbientEnvironmentComponent reimplementations ---
+    { "AmbientEnvironmentComponent::Update", InstallAmbientEnvironmentComponentUpdate, RemoveAmbientEnvironmentComponentUpdate, true },
+
+    // --- CharacterComponent reimplementations ---
+    { "CharacterComponent::Update", InstallCharacterComponentUpdate, RemoveCharacterComponentUpdate, true },
+
+    // --- PopulationComponent reimplementations ---
+    { "PopulationComponent::Update", InstallPopulationComponentUpdate, RemovePopulationComponentUpdate, true },
+
+    // --- FruitComponent reimplementations ---
+    { "FruitComponent::Update", InstallFruitComponentUpdate, RemoveFruitComponentUpdate, true },
+
+    // --- SpawnComponent reimplementations ---
+    { "SpawnComponent::Update", InstallSpawnComponentUpdate, RemoveSpawnComponentUpdate, true },
+
+    // --- FireComponent reimplementations ---
+    { "FireComponent::Update", InstallFireComponentUpdate, RemoveFireComponentUpdate, true },
+
+    // --- GrowthComponent reimplementations ---
+    { "GrowthComponent::Update", InstallGrowthComponentUpdate, RemoveGrowthComponentUpdate, true },
+
+    // --- HerdComponent reimplementations ---
+    { "HerdComponent::Update", InstallHerdComponentUpdate, RemoveHerdComponentUpdate, true },
+
+    // --- AnimalComponent reimplementations ---
+    { "AnimalComponent::Update", InstallAnimalComponentUpdate, RemoveAnimalComponentUpdate, true },
+
+    // --- CitizenAIComponent reimplementations ---
+    { "CitizenAIComponent::Update", InstallCitizenAIComponentUpdate, RemoveCitizenAIComponentUpdate, true },
+
+    // --- CitizenComponent reimplementations ---
+    { "CitizenComponent::Update", InstallCitizenComponentUpdate, RemoveCitizenComponentUpdate, true },
 
     // Add new entries as you reimplement functions...
 };
