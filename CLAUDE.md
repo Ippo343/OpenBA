@@ -4,15 +4,15 @@
 Reverse engineer Banished (by Shining Rock Software) and **progressively replace game
 functions with clean, readable C++ source code**. Each decompiled function gets a
 binary-compatible type header and a reimplementation that hooks the original at runtime.
-The end goal is a readable C++ codebase that mirrors the game's logic, similar to
-projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
+The end goal is a readable C++ codebase that mirrors the game's logic and can be generatedyeah et into a replacement exe, similar to projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
-## Current project goal:
+## Current project goals:
 
 1. Hit 100% mapping of all classes in Application-x64.exe
 2. Hit 100% mapping of all types in Application-x64.exe
 3. Hit 100% replacement of exe code with cleaned up decomp of all functions in msvc
-4. After 1-3 done move to the runtime-x64.dll
+4. Build new exe with all of our code, swap in, use pre-existing runtime and dx dlls.
+5. Then move onto dlls last once solified main core exe
 
 ## Target Binaries
 

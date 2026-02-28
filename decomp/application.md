@@ -1,4 +1,4 @@
-# Application-x64.exe (Game Logic)
+/# Application-x64.exe (Game Logic)
 
 ## Engine Core
 
@@ -187,143 +187,137 @@ Inheritance note: `SelectResourceUI` is an abstract base class (placeholder fact
 
 UI Element types registered in the exe (beyond the 22+ base elements in Runtime-x64.dll).
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `CaptureBoxElement` | `0x14015d3c8` | Screenshot capture box element |
-| - | `FrustumOutlineElement` | `0x14015c218` | Debug frustum outline element |
+Both extend `UI::Element` and embed a `UI::Sprite` at +0xC0. Construction is inline in Factory (no separate Ctor function).
 
-## Game Systems — Tools & Placement (11 classes)
+| Status | Class | Size | Vtable | Factory | Parent | Purpose |
+|--------|-------|------|--------|---------|--------|---------|
+| ~ | `CaptureBoxElement` | 0xe0 (224B) | `0x14015d440` | `0x140013eb0` | UI::Element | Screenshot capture box. Sprite@+0xC0, two zero qwords @+0xD0/+0xD8 |
+| ~ | `FrustumOutlineElement` | 0xd8 (216B) | `0x14015c2a0` | `0x140012400` | UI::Element | Debug frustum outline. Sprite@+0xC0, int64@+0xD0 init -1 |
 
-Registered types for building/creation tools used by the placement system.
+## Game Systems — Tools & Placement (12 classes)
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `Toolbar` | `0x140160110` | Tool toolbar container |
-| - | `ToolSetting` | `0x140160700` | Tool configuration |
-| - | `BridgeTool` | `0x140161ae8` | Bridge placement |
-| - | `DragTool` | `0x140160648` | Drag-to-build |
-| - | `DragPlacementTool` | `0x140161b78` | Drag placement variant |
-| - | `EditTool` | `0x140161c88` | Edit/modify tool |
-| - | `FencedTool` | `0x140160658` | Fenced area tool |
-| - | `PathTool` | `0x140160670` | Path creation |
-| - | `PlacementTool` | `0x140161d10` | Single building placement |
-| - | `RemovalTool` | `0x140161dd0` | Demolition/removal |
-| - | `RoadTool` | `0x140161e58` | Road building |
+Registered types for building/creation tools used by the placement system. Inheritance: Tool (vtable `0x140161f10`) is the base; DragTool (vtable `0x140161c10`) is an abstract intermediate for drag-based tools. ToolSetting is a separate abstract base for tool configuration.
 
-## Game Systems — State Machine Actions (32 classes)
+| Status | Class | Size | Vtable | Factory | Ctor | Parent | TypeInfo | Purpose |
+|--------|-------|------|--------|---------|------|--------|----------|---------|
+| ~ | `Toolbar` | 0x68 (104B) | `0x140160120` | `0x140024ba0` | `0x1400d2130` | Object::External | `DAT_1401c6128` | Tool toolbar container |
+| ~ | `ToolSetting` | — | — | ABSTRACT | — | Object::Internal | `DAT_1401c6ef0` | **ABSTRACT** tool configuration base |
+| ~ | `RotationSetting` | 0x18 (24B) | `0x140160710` | `0x140026d20` | inline | ToolSetting | `DAT_1401c63c8` | Rotation tool setting |
+| ~ | `DragTool` | — | `0x140161c10` | ABSTRACT | — | Tool | `DAT_1401c6da0` | **ABSTRACT** drag-to-build base |
+| ~ | `BridgeTool` | 0x40 (64B) | `0x140161b00` | `0x14002d7a0` | `0x1400fb890` | DragTool | `DAT_1401c6d30` | Bridge placement |
+| ~ | `DragPlacementTool` | 0x48 (72B) | `0x140161b90` | `0x14002d8b0` | `0x1400fc530` | DragTool | `DAT_1401c6d68` | Drag placement variant |
+| ~ | `EditTool` | 0x38 (56B) | `0x140161ca0` | `0x14002daa0` | `0x1400fd340` | Tool | `DAT_1401c6dd8` | Edit/modify tool |
+| ~ | `FencedTool` | 0x70 (112B) | `0x1401605d0` | `0x1400268d0` | `0x1400dd070` | DragTool | `DAT_1401c6358` | Fenced area tool |
+| ~ | `PathTool` | 0x60 (96B) | `0x140160680` | `0x140026b10` | `0x1400de9e0` | Tool | `DAT_1401c6390` | Path creation |
+| ~ | `PlacementTool` | 0x70 (112B) | `0x140161d20` | `0x14002dc40` | `0x1400fe850` | Tool | `DAT_1401c6e10` | Single building placement |
+| ~ | `RemovalTool` | 0x40 (64B) | `0x140161de0` | `0x14002e7a0` | `0x140104cc0` | DragTool | `DAT_1401c6e48` | Demolition/removal |
+| ~ | `RoadTool` | 0x48 (72B) | `0x140161e70` | `0x14002e870` | `0x1401057d0` | DragTool | `DAT_1401c6e80` | Road building |
 
-Registered types used by `StateMachineComponent` to drive citizen AI behavior. Each action is a discrete work step.
+## Game Systems — State Machine Actions (35 classes)
 
-| Status | Class | String Address | Category |
-|--------|-------|---------------|----------|
-| - | `AnimateNaturalResource` | `0x14015faf0` | Resource |
-| - | `AnimAudioEvent` | `0x14015e088` | Audio |
-| - | `AutoPickupWork` | `0x140160f88` | Work |
-| - | `BuildRoad` | `0x140161008` | Construction |
-| - | `BuildStructure` | `0x140161088` | Construction |
-| - | `CompleteRoad` | `0x14015fb60` | Construction |
-| - | `CompleteTask` | `0x14015fbc0` | General |
-| - | `ConsumeProduce` | `0x140161208` | Production |
-| - | `ConsumeRawMaterial` | `0x14015fc70` | Resource |
-| - | `CreateNaturalResource` | `0x14015fc88` | Resource |
-| - | `CreateRawMaterial` | `0x14015fcf0` | Resource |
-| - | `DropOffRawMaterial` | `0x14015fd60` | Resource |
-| - | `FireWork` | `0x140161288` | Emergency |
-| - | `FishingWork` | `0x140161308` | Production |
-| - | `ForesterWork` | `0x140161388` | Production |
-| - | `GatherRawMaterials` | `0x140161408` | Resource |
-| - | `HerbalistWork` | `0x140161588` | Production |
-| - | `HuntWork` | `0x140161608` | Production |
-| - | `LocationWork` | `0x140161688` | Work |
-| - | `MarketWork` | `0x140161778` | Economy |
-| - | `MoveTo` | `0x14015fe30` | Navigation |
-| - | `PastureWork` | `0x140161788` | Production |
-| - | `PerformWork` | `0x14015fe90` | Work |
-| - | `Pickup` | `0x140161808` | Resource |
-| - | `PickupRawMaterial` | `0x14015fef0` | Resource |
-| - | `PickupStoredRawMaterial` | `0x14015ff60` | Resource |
-| - | `PlayAnimation` | `0x140158938` | Animation |
-| - | `RemoveAnimal` | `0x14015ffd0` | Resource |
-| - | `RemoveNaturalResource` | `0x140160030` | Resource |
-| - | `SendComponentMessage` | `0x1401600a0` | Messaging |
-| - | `ShowTool` | `0x1401589a0` | UI |
-| - | `TradeWork` | `0x1401619f8` | Economy |
+Registered types used by `StateMachineComponent` to drive citizen AI behavior. Each action is a discrete work step. Three-level hierarchy: Action (vtable `0x14015faa0`) → Work (vtable `0x140161a80`) → AutoPickupWork (vtable `0x140160fa0`, abstract). AnimAudioEvent is unique — inherits from `Graphics::AnimationEvent` instead.
+
+| Status | Class | Size | Vtable | Factory | Ctor | Parent | TypeInfo | Category |
+|--------|-------|------|--------|---------|------|--------|----------|----------|
+| ~ | `AnimAudioEvent` | 0x30 (48B) | `0x14015e0c0` | `0x140016f00` | inline | Graphics::AnimationEvent | `0x1401c58d8` | Audio |
+| ~ | `AnimateNaturalResource` | 0x30 (48B) | `0x14015fb10` | `0x140021dc0` | inline | Action | `0x1401c5de0` | Resource |
+| ~ | `CompleteRoad` | 0x30 (48B) | `0x14015fb70` | `0x140021ec0` | inline | Action | `0x1401c5e18` | Construction |
+| ~ | `CompleteTask` | 0x38 (56B) | `0x14015fbd0` | `0x140021fc0` | inline | Action | `0x1401c5e50` | General |
+| ~ | `ConsumeRawMaterial` | 0x40 (64B) | `0x14015fc20` | `0x1400220c0` | inline | Action | `0x1401c5e88` | Resource |
+| ~ | `CreateNaturalResource` | 0x38 (56B) | `0x14015fca0` | `0x1400221d0` | inline | Action | `0x1401c5ec0` | Resource |
+| ~ | `CreateRawMaterial` | 0x58 (88B) | `0x14015fd10` | `0x1400222d0` | inline | Action | `0x1401c5ef8` | Resource |
+| ~ | `DropOffRawMaterial` | 0x40 (64B) | `0x14015fd80` | `0x140022600` | inline | Action | `0x1401c5f30` | Resource |
+| ~ | `MoveTo` | 0x480 (1152B) | `0x14015fe40` | `0x1400228c0` | `0x1400c90e0` | Action | `0x1401c5fa0` | Navigation |
+| ~ | `PerformWork` | 0x48 (72B) | `0x14015fea0` | `0x140022b90` | `0x1400c96b0` | Action | `0x1401c5fd8` | Work |
+| ~ | `PickupRawMaterial` | 0x30 (48B) | `0x14015ff10` | `0x140022c60` | inline | Action | `0x1401c6010` | Resource |
+| ~ | `PickupStoredRawMaterial` | 0x48 (72B) | `0x14015ff80` | `0x140022d60` | inline | Action | `0x1401c6048` | Resource |
+| ~ | `RemoveAnimal` | 0x28 (40B) | `0x14015ffe0` | `0x140022e70` | inline | Action | `0x1401c6080` | Resource |
+| ~ | `RemoveNaturalResource` | 0x38 (56B) | `0x140160050` | `0x140022f70` | inline | Action | `0x1401c60b8` | Resource |
+| ~ | `SendComponentMessage` | 0x40 (64B) | `0x1401600c0` | `0x140023070` | inline | Action | `0x1401c60f0` | Messaging |
+| ~ | `PlayAnimation` | 0x40 (64B) | `0x140158950` | `0x1400011f0` | inline | Action | `0x1401c3df0` | Animation |
+| ~ | `ShowTool` | 0x30 (48B) | `0x1401589b0` | `0x1400013b0` | inline | Action | `0x1401c3e28` | UI |
+| ~ | `AutoPickupWork` | 0x48 (72B) | `0x140160fa0` | ABSTRACT | `0x1400e4050` | Work | `0x1401c6828` | **ABSTRACT** auto-pickup base |
+| ~ | `BuildRoad` | 0x70 (112B) | `0x140161020` | `0x140029560` | `0x1400e4ad0` | Work | `0x1401c6860` | Construction |
+| ~ | `BuildStructure` | 0x70 (112B) | `0x1401610a0` | `0x140029630` | `0x1400e5a90` | Work | `0x1401c6898` | Construction |
+| ~ | `ConsumeProduce` | 0x78 (120B) | `0x140161220` | `0x14002a150` | `0x1400e9340` | Work | `0x1401c6940` | Production |
+| ~ | `FireWork` | 0x60 (96B) | `0x1401612a0` | `0x14002a1e0` | `0x1400e9b50` | Work | `0x1401c6978` | Emergency |
+| ~ | `FishingWork` | 0x70 (112B) | `0x140161320` | `0x14002a280` | `0x1400eabe0` | Work | `0x1401c69b0` | Production |
+| ~ | `ForesterWork` | 0x60 (96B) | `0x1401613a0` | `0x14002a310` | inline | AutoPickupWork | `0x1401c69e8` | Production |
+| ~ | `GatherRawMaterials` | 0x78 (120B) | `0x140161420` | `0x14002a3c0` | `0x1400ec8a0` | Work | `0x1401c6a20` | Resource |
+| ~ | `HarvestArea` | 0x68 (104B) | `0x1401614a0` | `0x14002a460` | inline | AutoPickupWork | `0x1401c6a58` | Production |
+| ~ | `HarvestOrchard` | 0x68 (104B) | `0x140161520` | `0x14002a520` | inline | AutoPickupWork | `0x1401c6a90` | Production |
+| ~ | `HerbalistWork` | 0x60 (96B) | `0x1401615a0` | `0x14002a5e0` | inline | AutoPickupWork | `0x1401c6ac8` | Production |
+| ~ | `HuntWork` | 0x58 (88B) | `0x140161620` | `0x14002a690` | inline | AutoPickupWork | `0x1401c6b00` | Production |
+| ~ | `LocationWork` | 0x50 (80B) | `0x1401616a0` | `0x14002a810` | `0x1400efc60` | Work | `0x1401c6b38` | Work |
+| ~ | `MarketWork` | 0x58 (88B) | `0x140161710` | `0x14002a8d0` | `0x1400f1f70` | Work | `0x1401c6b70` | Economy |
+| ~ | `PastureWork` | 0x58 (88B) | `0x1401617a0` | `0x14002bf00` | inline | AutoPickupWork | `0x1401c6ba8` | Production |
+| ~ | `Pickup` | 0x60 (96B) | `0x140161810` | `0x14002bfc0` | `0x1400f3c00` | Work | `0x1401c6be0` | Resource |
+| ~ | `TradeWork` | 0x58 (88B) | `0x140161a10` | `0x14002c620` | `0x1400f6da0` | Work | `0x1401c6cc0` | Economy |
 
 ## Game Systems — Tutorials (16 classes)
 
-Registered types for the tutorial system. Hierarchical: Tutorial contains TutorialSteps, each step has Setup/Goal/Image sub-types.
+Registered types for the tutorial system. Hierarchical: Tutorial contains TutorialSteps, each step has Setup/Goal/Image sub-types. TutorialGoal and TutorialSetup are abstract bases (null factory).
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `Tutorial` | `0x140160730` | Tutorial definition (External) |
-| - | `TutorialInstance` | `0x140160be0` | Runtime tutorial state |
-| - | `TutorialStep` | `0x140160e80` | Individual tutorial step |
-| - | `TutorialGoal` | `0x140160788` | Goal condition base |
-| - | `TutorialGoalButton` | `0x1401607e8` | Goal: click a button |
-| - | `TutorialGoalCount` | `0x140160930` | Goal: reach a count |
-| - | `TutorialGoalGameSpeed` | `0x1401608c0` | Goal: set game speed |
-| - | `TutorialImage` | `0x140160a30` | Tutorial image base |
-| - | `TutorialImageHotKey` | `0x140160a90` | Image with hotkey overlay |
-| - | `TutorialImageInputKey` | `0x140160b00` | Image with input key |
-| - | `TutorialImageToolbarIcon` | `0x140160b70` | Image with toolbar icon |
-| - | `TutorialSetup` | `0x140160c18` | Setup action base |
-| - | `TutorialSetupCamera` | `0x140160c88` | Setup: position camera |
-| - | `TutorialSetupDialog` | `0x140160d00` | Setup: open dialog |
-| - | `TutorialSetupGameSpeed` | `0x140160d80` | Setup: set game speed |
-| - | `TutorialSetupRestrictPlayer` | `0x140160e00` | Setup: restrict input |
+| Status | Class | Size | Vtable | Factory | Ctor | Parent | TypeInfo | Purpose |
+|--------|-------|------|--------|---------|------|--------|----------|---------|
+| ~ | `Tutorial` | 0x40 (64B) | `0x140160740` | `0x140026e50` | inline | Object::External | `0x1401c6400` | Tutorial definition |
+| ~ | `TutorialInstance` | 0x38 (56B) | `0x140160bf8` | `0x140028120` | inline | Object::Internal | `0x1401c6668` | Runtime tutorial state |
+| ~ | `TutorialStep` | 0x70 (112B) | `0x140160e90` | `0x140028c50` | `0x1400e3480` | Object::External | `0x1401c67b8` | Individual tutorial step |
+| ~ | `TutorialGoal` | — | `0x1401607a0` | ABSTRACT | — | Object::External | `0x1401c6438` | **ABSTRACT** goal condition base |
+| ~ | `TutorialGoalButton` | 0x30 (48B) | `0x140160800` | `0x140027290` | inline | TutorialGoal | `0x1401c6470` | Goal: click a button |
+| ~ | `TutorialGoalCount` | 0x50 (80B) | `0x140160950` | `0x1400277b0` | `0x1400dfa60` | TutorialGoal | `0x1401c6518` | Goal: reach a count |
+| ~ | `TutorialGoalGameSpeed` | 0x28 (40B) | `0x1401608e0` | `0x140027630` | inline | TutorialGoal | `0x1401c64e0` | Goal: set game speed |
+| ~ | `TutorialImage` | 0x30 (48B) | `0x140160a40` | `0x140027980` | inline | Object::External | `0x1401c6588` | Tutorial image base |
+| ~ | `TutorialImageHotKey` | 0x48 (72B) | `0x140160ab0` | `0x140027d00` | `0x1400e0680` | TutorialImage | `0x1401c65c0` | Image with hotkey overlay |
+| ~ | `TutorialImageInputKey` | 0x38 (56B) | `0x140160b20` | `0x140027ea0` | inline | TutorialImage | `0x1401c65f8` | Image with input key |
+| ~ | `TutorialImageToolbarIcon` | 0x48 (72B) | `0x140160b90` | `0x140028020` | `0x1400e0c30` | TutorialImage | `0x1401c6630` | Image with toolbar icon |
+| ~ | `TutorialSetup` | — | `0x140160c30` | ABSTRACT | — | Object::External | `0x1401c66a0` | **ABSTRACT** setup action base |
+| ~ | `TutorialSetupCamera` | 0x30 (48B) | `0x140160ca0` | `0x140028400` | inline | TutorialSetup | `0x1401c66d8` | Setup: position camera |
+| ~ | `TutorialSetupDialog` | 0x78 (120B) | `0x140160d20` | `0x1400285b0` | `0x1400e2cc0` | TutorialSetup | `0x1401c6710` | Setup: open dialog |
+| ~ | `TutorialSetupGameSpeed` | 0x28 (40B) | `0x140160da0` | `0x1400289c0` | inline | TutorialSetup | `0x1401c6748` | Setup: set game speed |
+| ~ | `TutorialSetupRestrictPlayer` | 0x68 (104B) | `0x140160e20` | `0x140028b40` | `0x1400e3220` | TutorialSetup | `0x1401c6780` | Setup: restrict input |
 
 ## Game Systems — Achievement Goals (7 exe-specific subtypes)
 
-Goal subtypes registered in the exe. Base types (Achievement, AchievementInstance, AchievementManager, Goal, GoalInstance, GoalList) are in Runtime-x64.dll.
+Goal subtypes registered in the exe. Base types (Achievement, AchievementInstance, AchievementManager, Goal, GoalInstance, GoalList) are in Runtime-x64.dll. All Goal subtypes inherit from `Achievement::Goal`; instance types inherit from `Achievement::GoalInstance`.
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `BuildingGoal` | `0x1401602f0` | Goal: build N buildings |
-| - | `PopulationGoal` | `0x140160358` | Goal: reach population N |
-| - | `StatGoal` | `0x1401604b0` | Goal: reach statistic N |
-| - | `TimeGoal` | `0x140160530` | Goal: survive N years |
-| - | `TimeGoalInstance` | `0x140160518` | Runtime state for TimeGoal |
-| - | `FinishTutorialGoal` | `0x140160400` | Goal: complete tutorial |
-| - | `FinishTutorialInstance` | `0x1401603e8` | Runtime state for FinishTutorialGoal |
+| Status | Class | Size | Vtable | Factory | Ctor | Parent | TypeInfo | Purpose |
+|--------|-------|------|--------|---------|------|--------|----------|---------|
+| ~ | `BuildingGoal` | 0x48 (72B) | `0x140160300` | `0x140025d80` | inline | Achievement::Goal | `0x1401c61d0` | Goal: build N buildings |
+| ~ | `PopulationGoal` | 0x38 (56B) | `0x140160370` | `0x140025f00` | inline | Achievement::Goal | `0x1401c6208` | Goal: reach population N |
+| ~ | `FinishTutorialGoal` | 0x38 (56B) | `0x140160420` | `0x1400260f0` | inline | Achievement::Goal | `0x1401c6240` | Goal: complete tutorial |
+| ~ | `FinishTutorialInstance` | 0x28 (40B) | `0x140160478` | `0x140026070` | inline | Achievement::GoalInstance | `0x1401c6278` | Runtime state for FinishTutorialGoal |
+| ~ | `StatGoal` | 0x80 (128B) | `0x1401604c0` | `0x1400264d0` | `0x1400daa80` | Achievement::Goal | `0x1401c62b0` | Goal: reach statistic N |
+| ~ | `TimeGoal` | 0x38 (56B) | `0x140160540` | `0x1400266f0` | inline | Achievement::Goal | `0x1401c62e8` | Goal: survive N years |
+| ~ | `TimeGoalInstance` | 0x28 (40B) | `0x140160598` | `0x140026670` | inline | Achievement::GoalInstance | `0x1401c6320` | Runtime state for TimeGoal |
 
 ## Game Systems — World Generation (3 classes)
 
-Map and terrain generation types.
+Map and terrain generation types. All inherit from `Object::External`.
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `MapGenerator` | `0x14015ed68` | Top-level map generation |
-| - | `TerrainGenerator` | `0x14015f158` | Terrain heightmap/biome generation |
-| - | `ClimateGenerator` | `0x14015e128` | Climate/weather pattern generation |
+| Status | Class | Size | Vtable | Factory | Ctor | Parent | TypeInfo | Purpose |
+|--------|-------|------|--------|---------|------|--------|----------|---------|
+| ~ | `MapGenerator` | 0x178 (376B) | `0x14015ed80` | `0x14001ade0` | `0x1400a3030` | Object::External | `DAT_1401c59b8` | Top-level map generation |
+| ~ | `TerrainGenerator` | 0x90 (144B) | `0x14015f170` | `0x140020590` | `0x1400b1810` | Object::External | `DAT_1401c5b40` | Terrain heightmap/biome generation |
+| ~ | `ClimateGenerator` | 0x110 (272B) | `0x14015e140` | `0x140018ef0` | `0x1400930c0` | Object::External | `DAT_1401c5910` | Climate/weather pattern generation |
 
-## Game Systems — Miscellaneous Types (9 classes)
+## Game Systems — Miscellaneous Types (6 classes + 3 string constants)
 
-Other registered types in the exe that don't fit the above categories.
+Other registered types in the exe that don't fit the above categories. Scenario inherits from `Achievement::Achievement` (not Object::External).
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `ComponentEntity` | `0x14015fa50` | Entity that holds components (ECS container) |
-| - | `Profession` | `0x14015ef28` | Profession definition (External) |
-| - | `ProfessionList` | `0x14015ef38` | Collection of professions |
-| - | `Scenario` | `0x14015efe8` | Scenario definition (External) |
-| - | `Weather` | `0x140160230` | Weather system type |
-| - | `MenuScene` | `0x14015edc8` | Main menu 3D scene |
-| - | `ResourceTip` | `0x14015f200` | Resource tooltip type |
-| - | `SaveLoadEmpty` | `0x14015ebc0` | Empty save state placeholder |
-| - | `AutosaveInterval` | `0x14015e548` | Autosave timing config |
+| Status | Class | Size | Vtable | Factory | Ctor | Parent | TypeInfo | Purpose |
+|--------|-------|------|--------|---------|------|--------|----------|---------|
+| ~ | `ComponentEntity` | 0x48 (72B) | `0x14015fa78` | `0x1400219c0` | `0x1400c3620` | Object::Internal | `0x1401c5d70` | Entity that holds components (ECS container) |
+| ~ | `Profession` | 0x60 (96B) | `0x14015efa0` | `0x14001e530` | `0x1400a9030` | Object::External | `0x1401c5a98` | Profession definition |
+| ~ | `ProfessionList` | 0x50 (80B) | `0x14015ef50` | `0x14001e5c0` | inline | Object::External | `0x1401c5ad0` | Collection of professions |
+| ~ | `Scenario` | 0x90 (144B) | `0x14015f020` | `0x14001e9f0` | inline | Achievement::Achievement | `0x1401c5b08` | Scenario definition |
+| ~ | `Weather` | 0x80 (128B) | `0x140160290` | `0x140024fb0` | `0x1400d3e50` | Object::External | `0x1401c6198` | Weather system type |
+| ~ | `MenuScene` | 0x208 (520B) | `0x14015ede0` | `0x14001b7c0` | `0x1400a3d70` | Object::External | `0x1401c59f0` | Main menu 3D scene |
 
-## Key Standalone Functions
+**Not type-registered** (string constants used in game logic, not class registrations):
 
-Major game-logic functions identified but not yet part of any class decomposition.
-
-| Status | Address | Name | XRefs | Purpose |
-|--------|---------|------|-------|---------|
-| - | `0x140041ef0` | `GameMain` | 3 | Top-level startup — creates Engine, MainLoop, all loop types |
-| - | `0x140096380` | (unnamed) | — | **Main gameplay tick** — calls ComponentEntity update, AchievementManager, AnimationManager, AudioScene, Camera, SaveLoad, UI |
-| - | `0x1400a9660` | `StateMachine_Tick` | 62 | State machine update (all StateMachineComponents) |
-| - | `0x140001740` | (unnamed) | 745 | Vector/array free (most-called function in binary) |
-| - | `0x1400c54e0` | (unnamed) | 143 | Vector push_back |
-| - | `0x1400a6a30` | (unnamed) | 88 | Entity component message dispatch |
-| - | `0x14009f3e0` | (unnamed) | 102 | Terrain grid query with pathfinding |
-| - | `0x1400bf790` | `Pathfinding_FindPath` | 12 | A* pathfinding |
-| - | `0x14012cf10` | `StorageComponent_QueryCount` | 44 | Storage query — O(entries×components), critical hotspot |
+| String | Address | Usage |
+|--------|---------|-------|
+| `ResourceTip` | `0x14015f200` | UI tooltip rendering string in function `0x1400b1f40` |
+| `SaveLoadEmpty` | `0x14015ebc0` | Persistence key string, not a type |
+| `AutosaveInterval` | `0x14015e548` | IO::Persistence Set/Get key for autosave timing |
