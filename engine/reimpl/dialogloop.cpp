@@ -14,11 +14,12 @@
 //   - Update    (0x1800DB270) — UI::Update with float-precision time
 //   - Draw      (0x1800DB210) — clear screen to gray, UI::Draw
 //
-// Methods using trampoline (complex dependencies):
-//   - Load      (0x1800DB140) — uses ExternalFactory::FindOrLoad, String refcounting
+// Methods reimplemented (with resolved engine function pointers):
+//   - Load      (0x1800DB140) — uses ExternalFactory::FindOrLoad, String lifecycle
 
 #include "DialogLoopT.h"
 #include "MainLoop.h"
+#include "SystemString.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -33,6 +34,7 @@ namespace DialogLoopAddr {
     constexpr uintptr_t Shutdown  = 0x1800DB2C0;
     constexpr uintptr_t Update    = 0x1800DB270;
     constexpr uintptr_t Draw      = 0x1800DB210;
+    constexpr uintptr_t Load      = 0x1800DB140;
 }
 
 // ============================================================
@@ -49,6 +51,7 @@ static HookInfo g_hookStartup;
 static HookInfo g_hookShutdown;
 static HookInfo g_hookUpdate;
 static HookInfo g_hookDraw;
+static HookInfo g_hookLoad;
 
 // ============================================================
 // Helper: get UserInterface pointer from DialogLoopT
@@ -186,6 +189,44 @@ static void Reimpl_Draw(DialogLoopT* self, float /*alpha*/) {
 }
 
 // ============================================================
+// DialogLoopT::Load (0x1800DB140) [hookable, prologue=15]
+// Loads the dialog External resource by filename.
+// Same logic as DialogLoaderLoopT::Load but offsets differ.
+// ============================================================
+
+static void Reimpl_Load(uint8_t* self) {
+    // local Filename (same as SystemString — 8-byte COW pointer)
+    SystemString tempStr;
+    tempStr.m_data = nullptr;
+
+    // Copy m_dialogFilename (COW string at +0x28) via copy ctor
+    SystemString* srcStr = reinterpret_cast<SystemString*>(self + 0x28);
+    fn_String_Ctor_Copy(&tempStr, srcStr);
+
+    // AdjustDelimiters on the copy
+    fn_Filename_AdjustDelimiters(&tempStr);
+
+    // FindOrLoad from ExternalFactory
+    void* factory = *g_pExternalFactorySingleton;
+    void* external = fn_ExternalFactory_FindOrLoad(factory, &tempStr);
+
+    void* result = nullptr;
+    if (external) {
+        // Type check: IsDerivedFrom(external, typeId)
+        bool isDerived = fn_IsDerivedFrom(external, *g_pExternalTypeId);
+        if (isDerived) {
+            result = external;
+        }
+    }
+
+    // Store result in m_dialogExternal (+0x30)
+    *reinterpret_cast<void**>(self + 0x30) = result;
+
+    // Release temp string via proper destructor
+    fn_String_Dtor(&tempStr);
+}
+
+// ============================================================
 // Install / Remove
 // ============================================================
 
@@ -242,5 +283,13 @@ void InstallDialogLoopDraw() {
 }
 void RemoveDialogLoopDraw() { RemoveHook(&g_hookDraw); }
 
-// NOTE: Load() (0x1800DB140) is NOT hooked — it depends on ExternalFactory::FindOrLoad
-// and String refcounting. Will be reimplemented once those engine types are available.
+// --- Load (0x1800DB140, prologue=15) ---
+
+void InstallDialogLoopLoad() {
+    uintptr_t target = ResolveAddr(Module::Runtime, DialogLoopAddr::Load);
+    InstallHook(target, (void*)Reimpl_Load, &g_hookLoad, 15);
+#ifdef _DEBUG
+    printf("[DialogLoopT] Load hooked at %p (prologue=15)\n", (void*)target);
+#endif
+}
+void RemoveDialogLoopLoad() { RemoveHook(&g_hookLoad); }

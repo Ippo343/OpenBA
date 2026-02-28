@@ -2,24 +2,24 @@
 // Reimplementation of IO::Modification methods from Runtime-x64.dll.
 //
 // The mod management system handles .pkm packages: enable/disable, ordering,
-// discovery, and filesystem mounting. This file reimplements the simpler
-// methods that don't depend on Persistence, FileSystem, or PackageFile.
+// discovery, and filesystem mounting.
 //
-// Methods reimplemented:
+// Methods fully reimplemented:
 //   - Find          (0x1800aea10) — linear search mods by filename (case-insensitive)
 //   - Enable        (0x1800aeab0) — toggle a mod's enabled state
 //   - DisableAll    (0x1800b05b0) — disable all mods
+//   - Swap          (0x1800aeb20) — swap two mod entries by index
 //
-// Methods NOT reimplemented (complex dependencies):
-//   - Swap              — needs internal Mod copy/destruct helpers
-//   - EnableSavingSettings — needs RefreshList + array copy with refcounting
-//   - RefreshList        — needs Persistence, FileSystem, PackageFile
-//   - SaveList           — needs Persistence
-//   - SetupFileSystem    — needs FileSystem, PackageFile
+// Methods hooked (passthrough wrapper with logging):
+//   - EnableSavingSettings (0x1800aead0) — enable persistence, calls RefreshList
+//   - SaveList             (0x1800b05f0) — persist mod state to Persistence
+//   - RefreshList          (0x1800af5f0) — scan filesystem for .pkm packages
+//   - SetupFileSystem      (0x1800aebb0) — mount mod packages into FileSystem
 
 #include "Modification.h"
 #include "hooks.h"
 #include "resolve.h"
+#include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -31,6 +31,11 @@
 static HookInfo g_hookFind;
 static HookInfo g_hookEnable;
 static HookInfo g_hookDisableAll;
+static HookInfo g_hookSwap;
+static HookInfo g_hookEnableSavingSettings;
+static HookInfo g_hookSaveList;
+static HookInfo g_hookRefreshList;
+static HookInfo g_hookSetupFileSystem;
 
 // ============================================================
 // Find (0x1800aea10)
@@ -77,13 +82,6 @@ static int Reimpl_Find(const Modification* self, const void* filename) {
 // Enable (0x1800aeab0)
 // Sets a mod's enabled flag and marks the modification list as dirty.
 //
-// Original is only 20 bytes (inline, no frame):
-//   mov rax, [rcx+8]       ; m_mods pointer
-//   movsxd rdx, edx        ; sign-extend index
-//   mov byte ptr [rcx], 1  ; m_dirty = true
-//   shl rdx, 7             ; index * 0x80
-//   mov [rdx+rax+0x50], r8b ; m_mods[i].m_enabled = enabled
-//
 // Parameters: RCX = this, EDX = index, R8B = enabled (bool)
 // ============================================================
 
@@ -101,7 +99,6 @@ static void Reimpl_Enable(Modification* self, int index, bool enabled) {
 // DisableAll (0x1800b05b0)
 // Clears the enabled flag on every mod and marks dirty.
 //
-// Original loops through m_mods array clearing m_enabled at +0x50.
 // Note: trampoline passthrough is broken (relative jle in prologue)
 // but we never call it — full reimplementation.
 //
@@ -117,6 +114,151 @@ static void Reimpl_DisableAll(Modification* self) {
         self->m_mods[i].m_enabled = 0;
     }
     self->m_dirty = 1;
+}
+
+// ============================================================
+// Swap (0x1800aeb20) — FULL REIMPLEMENTATION
+// Swaps two mod entries by index using copy-construct/assign/destruct.
+// Uses resolved Mod lifecycle functions for proper refcount handling.
+//
+// Parameters: RCX = this, EDX = index1, R8D = index2
+// ============================================================
+
+static void Reimpl_Swap(Modification* self, int idx1, int idx2) {
+#ifdef _DEBUG
+    printf("[Modification::Swap] idx1=%d idx2=%d (count=%d)\n",
+           idx1, idx2, self->m_count);
+#endif
+
+    // Stack-local temp Mod (0x80 bytes, zero-initialized for safety)
+    uint8_t temp[0x80] = {};
+
+    // temp = mods[idx1]  (copy construct — increments refcounts on strings/arrays)
+    fn_ModEntry_CopyCtor(temp, &self->m_mods[idx1]);
+
+    // mods[idx1] = mods[idx2]  (assign — handles refcount transfer)
+    fn_ModEntry_Assign(&self->m_mods[idx1], &self->m_mods[idx2]);
+
+    // mods[idx2] = temp  (assign — handles refcount transfer)
+    fn_ModEntry_Assign(&self->m_mods[idx2], reinterpret_cast<Mod*>(temp));
+
+    // Destroy temp (decrements refcounts, frees arrays if last ref)
+    fn_ModEntry_Dtor(temp);
+
+    self->m_dirty = 1;
+}
+
+// ============================================================
+// EnableSavingSettings (0x1800aead0) — PASSTHROUGH WRAPPER
+// Enables persistence saving. Calls RefreshList to reload the mod
+// list from disk, copies m_mods to m_savedMods as a backup, then
+// sets m_savingEnabled = 1.
+//
+// Parameters: RCX = this
+// ============================================================
+
+typedef void (*Modification_EnableSavingSettings_t)(Modification* self);
+
+static void Reimpl_EnableSavingSettings(Modification* self) {
+#ifdef _DEBUG
+    printf("[Modification::EnableSavingSettings] self=%p count=%d\n",
+           (void*)self, self->m_count);
+#endif
+
+    // Call original implementation via trampoline
+    ((Modification_EnableSavingSettings_t)g_hookEnableSavingSettings.trampoline)(self);
+
+#ifdef _DEBUG
+    printf("[Modification::EnableSavingSettings] done, savingEnabled=%d savedCount=%d\n",
+           self->m_savingEnabled, self->m_savedCount);
+#endif
+}
+
+// ============================================================
+// SaveList (0x1800b05f0) — PASSTHROUGH WRAPPER
+// Saves the mod list state (enabled flags, sort order) to Persistence.
+// For each mod: writes "mod count", "mod enabled N", "mod order N".
+//
+// Parameters: RCX = this
+// ============================================================
+
+typedef void (*Modification_SaveList_t)(Modification* self);
+
+static void Reimpl_SaveList(Modification* self) {
+#ifdef _DEBUG
+    printf("[Modification::SaveList] self=%p count=%d dirty=%d\n",
+           (void*)self, self->m_count, self->m_dirty);
+#endif
+
+    // Call original implementation via trampoline
+    ((Modification_SaveList_t)g_hookSaveList.trampoline)(self);
+
+#ifdef _DEBUG
+    printf("[Modification::SaveList] done, dirty=%d\n", self->m_dirty);
+#endif
+}
+
+// ============================================================
+// RefreshList (0x1800af5f0) — PASSTHROUGH WRAPPER
+// Scans the filesystem for .pkm mod packages, rebuilds the mod list.
+// Complex: ~3600 bytes, touches FileSystem, PackageFile, Persistence,
+// BST operations, and string processing.
+//
+// Parameters: RCX = this
+// ============================================================
+
+typedef void (*Modification_RefreshList_t)(Modification* self);
+
+static void Reimpl_RefreshList(Modification* self) {
+#ifdef _DEBUG
+    printf("[Modification::RefreshList] self=%p count=%d\n",
+           (void*)self, self->m_count);
+#endif
+
+    // Call original implementation via trampoline
+    ((Modification_RefreshList_t)g_hookRefreshList.trampoline)(self);
+
+#ifdef _DEBUG
+    printf("[Modification::RefreshList] done, count=%d\n", self->m_count);
+    for (int i = 0; i < self->m_count && i < 5; i++) {
+        const char* name = reinterpret_cast<const char*>(self->m_mods[i].m_name);
+        const char* path = reinterpret_cast<const char*>(self->m_mods[i].m_filename);
+        printf("[Modification::RefreshList]   [%d] \"%s\" enabled=%d path=\"%s\"\n",
+               i, name ? name : "(null)", self->m_mods[i].m_enabled,
+               path ? path : "(null)");
+    }
+    if (self->m_count > 5)
+        printf("[Modification::RefreshList]   ... and %d more\n", self->m_count - 5);
+#endif
+}
+
+// ============================================================
+// SetupFileSystem (0x1800aebb0) — PASSTHROUGH WRAPPER
+// Mounts enabled mod packages into the engine's FileSystem.
+// Complex: ~2600 bytes, iterates mods, closes/loads PackageFiles,
+// interacts with ExternalFactory.
+//
+// Parameters: RCX = this
+// ============================================================
+
+typedef void (*Modification_SetupFileSystem_t)(Modification* self);
+
+static void Reimpl_SetupFileSystem(Modification* self) {
+#ifdef _DEBUG
+    printf("[Modification::SetupFileSystem] self=%p count=%d\n",
+           (void*)self, self->m_count);
+    int enabledCount = 0;
+    for (int i = 0; i < self->m_count; i++)
+        if (self->m_mods[i].m_enabled) enabledCount++;
+    printf("[Modification::SetupFileSystem] %d mods enabled\n", enabledCount);
+#endif
+
+    // Call original implementation via trampoline
+    ((Modification_SetupFileSystem_t)g_hookSetupFileSystem.trampoline)(self);
+
+#ifdef _DEBUG
+    printf("[Modification::SetupFileSystem] done\n");
+#endif
 }
 
 // ============================================================
@@ -154,3 +296,54 @@ void InstallModificationDisableAll() {
 #endif
 }
 void RemoveModificationDisableAll() { RemoveHook(&g_hookDisableAll); }
+
+void InstallModificationSwap() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ModificationAddr::Swap);
+    // Prologue=20: unusual layout, 9-byte MOV spans offset 11-19.
+    // Trampoline is NOT usable (may contain RIP-relative), but we never call it.
+    InstallHook(target, (void*)Reimpl_Swap, &g_hookSwap, 20);
+#ifdef _DEBUG
+    printf("[Modification] Swap hooked at %p (prologue=20)\n", (void*)target);
+#endif
+}
+void RemoveModificationSwap() { RemoveHook(&g_hookSwap); }
+
+void InstallModificationEnableSavingSettings() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ModificationAddr::EnableSavingSettings);
+    // Prologue: standard 13 bytes (MOV+PUSH+SUB)
+    InstallHook(target, (void*)Reimpl_EnableSavingSettings, &g_hookEnableSavingSettings, 13);
+#ifdef _DEBUG
+    printf("[Modification] EnableSavingSettings hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveModificationEnableSavingSettings() { RemoveHook(&g_hookEnableSavingSettings); }
+
+void InstallModificationSaveList() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ModificationAddr::SaveList);
+    // Prologue: standard 13 bytes (MOV+PUSH+SUB)
+    InstallHook(target, (void*)Reimpl_SaveList, &g_hookSaveList, 13);
+#ifdef _DEBUG
+    printf("[Modification] SaveList hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveModificationSaveList() { RemoveHook(&g_hookSaveList); }
+
+void InstallModificationRefreshList() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ModificationAddr::RefreshList);
+    // Prologue: standard 13 bytes (MOV+PUSH+SUB)
+    InstallHook(target, (void*)Reimpl_RefreshList, &g_hookRefreshList, 13);
+#ifdef _DEBUG
+    printf("[Modification] RefreshList hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveModificationRefreshList() { RemoveHook(&g_hookRefreshList); }
+
+void InstallModificationSetupFileSystem() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ModificationAddr::SetupFileSystem);
+    // Prologue: standard 13 bytes (MOV+PUSH+SUB)
+    InstallHook(target, (void*)Reimpl_SetupFileSystem, &g_hookSetupFileSystem, 13);
+#ifdef _DEBUG
+    printf("[Modification] SetupFileSystem hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveModificationSetupFileSystem() { RemoveHook(&g_hookSetupFileSystem); }

@@ -1,15 +1,22 @@
 // engine/reimpl/configuration.cpp
-// Reimplementation of System::Configuration static methods from Runtime-x64.dll.
+// Reimplementation of System::Configuration methods from Runtime-x64.dll.
 //
-// These are static methods that return System::String by value. In MSVC x64 ABI,
-// String has a user-defined destructor so it's returned via hidden pointer in RCX,
-// even though it's only 8 bytes. Our hooks receive the hidden return pointer as
-// the first parameter.
+// Static methods returning String by value use MSVC non-trivial return ABI:
+// hidden pointer in RCX, even though String is only 8 bytes.
 //
-// Methods reimplemented:
+// Methods fully reimplemented:
 //   - CurrentBuildId    (0x1800C4C60) — parses compile date → YYMMDD build ID
-//   - CurrentVersion    (0x1800C4F40) — returns "1.0.7" (wrapper for GetVersionString)
-//   - GetVersionString  (0x1800C4F90) — formats packed version int to "X.Y.Z [suffix]"
+//   - CurrentVersion    (0x1800C4F40) — returns "1.0.7"
+//   - GetVersionString  (0x1800C4F90) — formats packed version int
+//   - GetPlatformName   (0x1800C5210) — returns platform name string
+//   - GetLanguageName   (0x1800C4BC0) — returns language name string
+//   - GetBuildName      (0x1800C5280) — returns build name string
+//
+// Methods hooked (passthrough wrapper with logging):
+//   - Ctor                  (0x1800C51B0) — zero-init + set singleton
+//   - Dtor                  (0x1800C5170) — destroy map + cleanup
+//   - GetCommandLineString  (0x1800C5300) — AVL tree lookup
+//   - SetCommandLine        (0x1800C47A0) — parse + AVL tree insert
 
 #include "Configuration.h"
 #include "hooks.h"
@@ -25,26 +32,22 @@
 static HookInfo g_hookCurrentBuildId;
 static HookInfo g_hookCurrentVersion;
 static HookInfo g_hookGetVersionString;
+static HookInfo g_hookCtor;
+static HookInfo g_hookDtor;
+static HookInfo g_hookGetCommandLineString;
+static HookInfo g_hookSetCommandLine;
+static HookInfo g_hookGetPlatformName;
+static HookInfo g_hookGetLanguageName;
+static HookInfo g_hookGetBuildName;
 
 // ============================================================
-// GetVersionString (0x1800C4F90)
-// Unpacks a version uint into "major.minor.patch" with optional
-// build type suffix. Called by CurrentVersion and by exe UI code.
+// GetVersionString (0x1800C4F90) — FULL REIMPLEMENTATION
+// Unpacks a version uint into "major.minor.patch" with optional suffix.
 //
-// Packed version format: [major:8][minor:8][patch:8][buildType:8]
-//   0x010007FF = version 1.0.7 Release
-//
-// Build type suffixes:
-//   0xFF = Release (no suffix)
-//   0xFE = Beta    → "B" or " Beta"
-//   0xFD = Alpha   → "A" or " Alpha"
-//   0xFC = PreAlpha → "P" or " Pre Alpha"
-//   0xFB = Prototype → "R" or " Prototype"
-//
-// Parameters (MSVC x64 ABI for static returning non-trivial type):
-//   RCX = hidden return pointer (String*, 8 bytes)
+// Parameters (MSVC non-trivial return):
+//   RCX = hidden return pointer (String*)
 //   EDX = packed version uint
-//   R8B = bool shortSuffix (true = 1-letter, false = full word)
+//   R8B = bool shortSuffix
 // ============================================================
 
 static void* Reimpl_GetVersionString(void* retval, uint32_t packedVersion, bool shortSuffix) {
@@ -58,7 +61,6 @@ static void* Reimpl_GetVersionString(void* retval, uint32_t packedVersion, bool 
            packedVersion, major, minor, patch, buildType, shortSuffix);
 #endif
 
-    // Determine suffix for non-release builds
     const char* suffix = nullptr;
     if (buildType != BuildType_Release) {
         switch (buildType) {
@@ -69,8 +71,7 @@ static void* Reimpl_GetVersionString(void* retval, uint32_t packedVersion, bool 
         }
     }
 
-    // Format the version string in one call
-    *(uint64_t*)retval = 0;  // zero-init String (m_data = NULL)
+    *(uint64_t*)retval = 0;
     if (suffix) {
         fn_String_Format(retval, "%i.%i.%i%s", (int)major, (int)minor, (int)patch, suffix);
     } else {
@@ -86,38 +87,23 @@ static void* Reimpl_GetVersionString(void* retval, uint32_t packedVersion, bool 
 }
 
 // ============================================================
-// CurrentVersion (0x1800C4F40)
-// Returns the game's version string: "1.0.7"
-// Just a thin wrapper calling GetVersionString(0x010007FF, false).
-//
-// Parameters:
-//   RCX = hidden return pointer (String*)
+// CurrentVersion (0x1800C4F40) — FULL REIMPLEMENTATION
+// Returns "1.0.7" via GetVersionString(0x010007FF, false).
 // ============================================================
 
 static void* Reimpl_CurrentVersion(void* retval) {
 #ifdef _DEBUG
     printf("[Configuration::CurrentVersion] called\n");
 #endif
-
-    // Banished v1.0.7 Release — packed as 0x010007FF
     return Reimpl_GetVersionString(retval, 0x010007FF, false);
 }
 
 // ============================================================
-// CurrentBuildId (0x1800C4C60)
-// Generates a YYMMDD build ID from the compile date string
-// embedded in Runtime-x64.dll's .rdata ("Sep 10 2017" → "170910").
-//
-// Reads the date string from the DLL's memory so the BuildNumber
-// patch (which changes it to "Dec 56 2012") is respected, producing
-// "123456" when the patch is active.
-//
-// Parameters:
-//   RCX = hidden return pointer (String*)
+// CurrentBuildId (0x1800C4C60) — FULL REIMPLEMENTATION
+// Parses compile date from .rdata → YYMMDD build ID string.
 // ============================================================
 
 static void* Reimpl_CurrentBuildId(void* retval) {
-    // Resolve the compile date string from Runtime-x64.dll .rdata
     const char* buildDate = reinterpret_cast<const char*>(
         ResolveAddr(Module::Runtime, ConfigurationAddr::BuildDateString));
 
@@ -125,7 +111,6 @@ static void* Reimpl_CurrentBuildId(void* retval) {
     printf("[Configuration::CurrentBuildId] buildDate=\"%.11s\"\n", buildDate);
 #endif
 
-    // Month abbreviation → 2-digit number
     static const char* months[] = {
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
@@ -141,15 +126,11 @@ static void* Reimpl_CurrentBuildId(void* retval) {
         }
     }
 
-    // Day digits (positions 4-5), space-padded → zero-padded
     char d0 = (buildDate[4] == ' ') ? '0' : buildDate[4];
     char d1 = buildDate[5];
-
-    // Year: last 2 digits (positions 9-10 of "Sep 10 2017")
     char y0 = buildDate[9];
     char y1 = buildDate[10];
 
-    // Build YYMMDD string
     char buildId[7];
     buildId[0] = y0;
     buildId[1] = y1;
@@ -159,7 +140,7 @@ static void* Reimpl_CurrentBuildId(void* retval) {
     buildId[5] = d1;
     buildId[6] = '\0';
 
-    *(uint64_t*)retval = 0;  // zero-init String
+    *(uint64_t*)retval = 0;
     fn_String_Set(retval, buildId);
 
 #ifdef _DEBUG
@@ -170,12 +151,180 @@ static void* Reimpl_CurrentBuildId(void* retval) {
 }
 
 // ============================================================
+// GetPlatformName (0x1800C5210) — FULL REIMPLEMENTATION
+// Returns platform name string for the given Platform enum value.
+// Only known value: Platform::Win (0) → "Win"
+//
+// MSVC non-trivial return: RCX=hidden return ptr, RDX=this, R8D=Platform enum
+// ============================================================
+
+static void* Reimpl_GetPlatformName(void* retval, void* /*self*/, int platform) {
+    *(uint64_t*)retval = 0;
+    if (platform == Platform_Win) {
+        fn_String_Set(retval, "Win");
+    }
+
+#ifdef _DEBUG
+    static int count = 0;
+    if (count < 3) {
+        char* s = *(char**)retval;
+        printf("[Configuration::GetPlatformName] platform=%d -> \"%s\"\n",
+               platform, s ? s : "(null)");
+        count++;
+    }
+#endif
+
+    return retval;
+}
+
+// ============================================================
+// GetLanguageName (0x1800C4BC0) — FULL REIMPLEMENTATION
+// Returns language name string for the given Language enum value.
+// Only known value: Language::English (0) → "English"
+//
+// MSVC non-trivial return: RCX=hidden return ptr, RDX=this, R8D=Language enum
+// ============================================================
+
+static void* Reimpl_GetLanguageName(void* retval, void* /*self*/, int language) {
+    *(uint64_t*)retval = 0;
+    if (language == Language_English) {
+        fn_String_Set(retval, "English");
+    }
+
+#ifdef _DEBUG
+    static int count = 0;
+    if (count < 3) {
+        char* s = *(char**)retval;
+        printf("[Configuration::GetLanguageName] language=%d -> \"%s\"\n",
+               language, s ? s : "(null)");
+        count++;
+    }
+#endif
+
+    return retval;
+}
+
+// ============================================================
+// GetBuildName (0x1800C5280) — FULL REIMPLEMENTATION
+// Returns build name string for the given Build enum value.
+// Known values: Build::Data (0) → "Data", Build::Eval (1) → "Eval"
+//
+// MSVC non-trivial return: RCX=hidden return ptr, RDX=this, R8D=Build enum
+// ============================================================
+
+static void* Reimpl_GetBuildName(void* retval, void* /*self*/, int build) {
+    *(uint64_t*)retval = 0;
+    if (build == Build_Data) {
+        fn_String_Set(retval, "Data");
+    } else if (build == Build_Eval) {
+        fn_String_Set(retval, "Eval");
+    }
+
+#ifdef _DEBUG
+    static int count = 0;
+    if (count < 3) {
+        char* s = *(char**)retval;
+        printf("[Configuration::GetBuildName] build=%d -> \"%s\"\n",
+               build, s ? s : "(null)");
+        count++;
+    }
+#endif
+
+    return retval;
+}
+
+// ============================================================
+// Constructor (0x1800C51B0) — PASSTHROUGH WRAPPER
+// Zero-inits all 0x30 bytes, sets _singleton pointer.
+// ============================================================
+
+typedef void* (*Configuration_Ctor_t)(Configuration* self);
+
+static void* Reimpl_Ctor(Configuration* self) {
+#ifdef _DEBUG
+    printf("[Configuration::Ctor] self=%p\n", (void*)self);
+#endif
+    void* result = ((Configuration_Ctor_t)g_hookCtor.trampoline)(self);
+#ifdef _DEBUG
+    printf("[Configuration::Ctor] done, platform=%d language=%d build=%d\n",
+           self->m_platform, self->m_language, self->m_build);
+#endif
+    return result;
+}
+
+// ============================================================
+// Destructor (0x1800C5170) — PASSTHROUGH WRAPPER
+// Destroys command line map and resource parameter list.
+// ============================================================
+
+typedef void (*Configuration_Dtor_t)(Configuration* self);
+
+static void Reimpl_Dtor(Configuration* self) {
+#ifdef _DEBUG
+    printf("[Configuration::Dtor] self=%p\n", (void*)self);
+#endif
+    ((Configuration_Dtor_t)g_hookDtor.trampoline)(self);
+#ifdef _DEBUG
+    printf("[Configuration::Dtor] done\n");
+#endif
+}
+
+// ============================================================
+// GetCommandLineString (0x1800C5300) — PASSTHROUGH WRAPPER
+// Looks up a command-line key in the AVL tree map, returns value.
+// Uses Map::Find (FUN_18002ace0) internally.
+//
+// MSVC non-trivial return: RCX=hidden return ptr, RDX=this, R8=key
+// ============================================================
+
+typedef void* (*Configuration_GetCommandLineString_t)(void* retval, Configuration* self, void* key);
+
+static void* Reimpl_GetCommandLineString(void* retval, Configuration* self, void* key) {
+#ifdef _DEBUG
+    const char* keyStr = key ? *(const char**)key : nullptr;
+    printf("[Configuration::GetCommandLineString] key=\"%s\" mapCount=%d\n",
+           keyStr ? keyStr : "(null)", self->m_commandLineCount);
+#endif
+
+    void* result = ((Configuration_GetCommandLineString_t)g_hookGetCommandLineString.trampoline)(
+        retval, self, key);
+
+#ifdef _DEBUG
+    char* val = *(char**)retval;
+    printf("[Configuration::GetCommandLineString] result=\"%s\"\n", val ? val : "(null)");
+#endif
+
+    return result;
+}
+
+// ============================================================
+// SetCommandLine (0x1800C47A0) — PASSTHROUGH WRAPPER
+// Parses "key=value" pairs from a command-line string and inserts
+// them into the AVL tree map.
+// ============================================================
+
+typedef void (*Configuration_SetCommandLine_t)(Configuration* self, void* commandLine);
+
+static void Reimpl_SetCommandLine(Configuration* self, void* commandLine) {
+#ifdef _DEBUG
+    const char* cmdStr = commandLine ? *(const char**)commandLine : nullptr;
+    printf("[Configuration::SetCommandLine] self=%p cmd=\"%s\"\n",
+           (void*)self, cmdStr ? cmdStr : "(null)");
+#endif
+
+    ((Configuration_SetCommandLine_t)g_hookSetCommandLine.trampoline)(self, commandLine);
+
+#ifdef _DEBUG
+    printf("[Configuration::SetCommandLine] done, mapCount=%d\n", self->m_commandLineCount);
+#endif
+}
+
+// ============================================================
 // Install / Remove
 // ============================================================
 
 void InstallConfigCurrentBuildId() {
     uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::CurrentBuildId);
-    // Prologue: mov [rsp+8],rcx(5) + push rbp(1) + push rsi(1) + push rdi(1) + lea rbp,[rsp-47h](5) = 13
     InstallHook(target, (void*)Reimpl_CurrentBuildId, &g_hookCurrentBuildId, 13);
 #ifdef _DEBUG
     printf("[Configuration] CurrentBuildId hooked at %p (prologue=13)\n", (void*)target);
@@ -185,7 +334,6 @@ void RemoveConfigCurrentBuildId() { RemoveHook(&g_hookCurrentBuildId); }
 
 void InstallConfigCurrentVersion() {
     uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::CurrentVersion);
-    // Prologue: mov [rsp+8],rcx(5) + push rbx(1) + sub rsp,30h(4) + mov [rsp+28h],-2(8) = 13 safe
     InstallHook(target, (void*)Reimpl_CurrentVersion, &g_hookCurrentVersion, 13);
 #ifdef _DEBUG
     printf("[Configuration] CurrentVersion hooked at %p (prologue=13)\n", (void*)target);
@@ -195,10 +343,72 @@ void RemoveConfigCurrentVersion() { RemoveHook(&g_hookCurrentVersion); }
 
 void InstallConfigGetVersionString() {
     uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::GetVersionString);
-    // Prologue: mov rax,rsp(3) + mov [rax+8],rcx(4) + push rdi(1) + sub rsp,60h(4) + mov [rax-18h],-2(5) = 13 safe
     InstallHook(target, (void*)Reimpl_GetVersionString, &g_hookGetVersionString, 13);
 #ifdef _DEBUG
     printf("[Configuration] GetVersionString hooked at %p (prologue=13)\n", (void*)target);
 #endif
 }
 void RemoveConfigGetVersionString() { RemoveHook(&g_hookGetVersionString); }
+
+void InstallConfigCtor() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::Ctor);
+    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 13);
+#ifdef _DEBUG
+    printf("[Configuration] Ctor hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigCtor() { RemoveHook(&g_hookCtor); }
+
+void InstallConfigDtor() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::Dtor);
+    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 13);
+#ifdef _DEBUG
+    printf("[Configuration] Dtor hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigDtor() { RemoveHook(&g_hookDtor); }
+
+void InstallConfigGetCommandLineString() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::GetCommandLineString);
+    InstallHook(target, (void*)Reimpl_GetCommandLineString, &g_hookGetCommandLineString, 13);
+#ifdef _DEBUG
+    printf("[Configuration] GetCommandLineString hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigGetCommandLineString() { RemoveHook(&g_hookGetCommandLineString); }
+
+void InstallConfigSetCommandLine() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::SetCommandLine);
+    InstallHook(target, (void*)Reimpl_SetCommandLine, &g_hookSetCommandLine, 13);
+#ifdef _DEBUG
+    printf("[Configuration] SetCommandLine hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigSetCommandLine() { RemoveHook(&g_hookSetCommandLine); }
+
+void InstallConfigGetPlatformName() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::GetPlatformName);
+    InstallHook(target, (void*)Reimpl_GetPlatformName, &g_hookGetPlatformName, 13);
+#ifdef _DEBUG
+    printf("[Configuration] GetPlatformName hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigGetPlatformName() { RemoveHook(&g_hookGetPlatformName); }
+
+void InstallConfigGetLanguageName() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::GetLanguageName);
+    InstallHook(target, (void*)Reimpl_GetLanguageName, &g_hookGetLanguageName, 13);
+#ifdef _DEBUG
+    printf("[Configuration] GetLanguageName hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigGetLanguageName() { RemoveHook(&g_hookGetLanguageName); }
+
+void InstallConfigGetBuildName() {
+    uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::GetBuildName);
+    InstallHook(target, (void*)Reimpl_GetBuildName, &g_hookGetBuildName, 13);
+#ifdef _DEBUG
+    printf("[Configuration] GetBuildName hooked at %p (prologue=13)\n", (void*)target);
+#endif
+}
+void RemoveConfigGetBuildName() { RemoveHook(&g_hookGetBuildName); }

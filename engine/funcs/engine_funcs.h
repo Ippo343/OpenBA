@@ -78,6 +78,50 @@ extern fn_UI_CloseDialog_t fn_UI_CloseDialog;
 typedef void (*fn_DynArrayPush_t)(void* arrayBase, int newCount, void* elementPtr);
 extern fn_DynArrayPush_t fn_DynArrayPush;
 
+// PostDraw callback array push (FUN_18004f790) — 16-byte element
+extern fn_DynArrayPush_t fn_PostDrawPush;
+
+// PostUpdate callback array push (FUN_18004f8e0) — 16-byte element
+extern fn_DynArrayPush_t fn_PostUpdatePush;
+
+// ============================================================
+// Video::Context lifecycle
+// ============================================================
+
+// Video::Context::Context(this, Device*, int, int, int, RenderBuffer*)
+typedef void* (*fn_VideoCtx_Ctor_t)(void* self, void* device, int param1, int param2, int param3, void* renderBuf);
+extern fn_VideoCtx_Ctor_t fn_VideoCtx_Ctor;
+
+// Video::Context::~Context(this)
+typedef void (*fn_VideoCtx_Dtor_t)(void* self);
+extern fn_VideoCtx_Dtor_t fn_VideoCtx_Dtor;
+
+// Video::Context::operator_delete(ptr)
+typedef void (*fn_VideoCtx_Delete_t)(void* ptr);
+extern fn_VideoCtx_Delete_t fn_VideoCtx_Delete;
+
+// ============================================================
+// System::MemoryAllocator
+// ============================================================
+
+// MemoryAllocator::Allocate(singleton, size, alignment) -> void*
+typedef void* (*fn_MemAlloc_t)(void* singleton, uint64_t size, int alignment);
+extern fn_MemAlloc_t fn_MemAlloc;
+
+// MemoryAllocator::Free(singleton, ptr)
+typedef void (*fn_MemFree_t)(void* singleton, void* ptr);
+extern fn_MemFree_t fn_MemFree;
+
+// MemoryAllocator::_singleton
+extern void* g_pMemAllocSingleton;
+
+// ============================================================
+// Video::Device globals
+// ============================================================
+
+// Video::Device::_singleton
+extern void** g_pVideoDeviceSingleton;
+
 // ============================================================
 // System::String function pointers
 // ============================================================
@@ -97,6 +141,85 @@ extern fn_String_Format_t fn_String_Format;
 // Member function: RCX=this(String*)
 typedef void (*fn_String_Dtor_t)(void* thisStr);
 extern fn_String_Dtor_t fn_String_Dtor;
+
+// String::String() — default ctor, zeroes the data pointer
+// Member function: RCX=this(String*), returns this
+typedef void* (*fn_String_Ctor_Default_t)(void* thisStr);
+extern fn_String_Ctor_Default_t fn_String_Ctor_Default;
+
+// String::String(const char*) — ctor from C string, calls Set internally
+// Member function: RCX=this(String*), RDX=const char* src, returns this
+typedef void* (*fn_String_Ctor_CStr_t)(void* thisStr, const char* src);
+extern fn_String_Ctor_CStr_t fn_String_Ctor_CStr;
+
+// String::String(String const&) — copy ctor, increments refcount
+// Member function: RCX=this(String*), RDX=const String& src, returns this
+typedef void* (*fn_String_Ctor_Copy_t)(void* thisStr, const void* src);
+extern fn_String_Ctor_Copy_t fn_String_Ctor_Copy;
+
+// ============================================================
+// Object::ExternalFactory
+// ============================================================
+
+// ExternalFactory::_singleton — pointer to the global ExternalFactory instance
+extern void** g_pExternalFactorySingleton;
+
+// ExternalFactory::FindOrLoad(this, Filename const&) -> External const*
+typedef void* (*fn_ExternalFactory_FindOrLoad_t)(void* self, const void* filename);
+extern fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad;
+
+// ExternalFactory::Clean(this) — cleanup resources for freed bits
+typedef void (*fn_ExternalFactory_Clean_t)(void* self);
+extern fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean;
+
+// Object::Base::IsDerivedFrom(this, uint typeId) -> bool
+typedef bool (*fn_IsDerivedFrom_t)(void* self, uint32_t typeId);
+extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
+
+// Type ID for External resource (used by dialog Load methods)
+extern uint32_t* g_pExternalTypeId;
+
+// System::Filename::AdjustDelimiters(this)
+typedef void (*fn_Filename_AdjustDelimiters_t)(void* self);
+extern fn_Filename_AdjustDelimiters_t fn_Filename_AdjustDelimiters;
+
+// UpdateLoop::LoadResources(this) — base class resource loading
+typedef void (*fn_UpdateLoop_LoadResources_t)(void* self);
+extern fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources;
+
+// Internal list cleanup (used by UpdateLoop dtor)
+typedef void (*fn_ListCleanup_t)(void* listBase);
+extern fn_ListCleanup_t fn_ListCleanup;
+
+// ============================================================
+// Mod entry lifecycle (for Modification::Swap)
+// ============================================================
+
+// Mod copy constructor (0x1800101e0) — copy-constructs a 0x80-byte Mod entry
+// RCX=dest, RDX=src, returns dest
+typedef void* (*fn_ModEntry_CopyCtor_t)(void* dest, const void* src);
+extern fn_ModEntry_CopyCtor_t fn_ModEntry_CopyCtor;
+
+// Mod assignment operator (0x180026ef0) — assigns one Mod entry to another
+// RCX=dest, RDX=src, returns dest
+typedef void* (*fn_ModEntry_Assign_t)(void* dest, const void* src);
+extern fn_ModEntry_Assign_t fn_ModEntry_Assign;
+
+// Mod destructor (0x180011460) — destroys a Mod entry (decrements string refcounts, frees arrays)
+// RCX=self
+typedef void (*fn_ModEntry_Dtor_t)(void* self);
+extern fn_ModEntry_Dtor_t fn_ModEntry_Dtor;
+
+// ============================================================
+// Collection::Map (AVL tree) — for Configuration command-line accessors
+// ============================================================
+
+// Map::Find(this, key) -> node* (returns nullptr if not found)
+// AVL tree lookup: compares String keys, returns pointer to node
+// Node layout: +0x00 key(String), +0x08 value(String), +0x10 parent, +0x18 left, +0x20 right
+// RCX=this(Map*), RDX=key(String const&), returns node pointer or nullptr
+typedef void* (*fn_Map_Find_t)(const void* self, const void* key);
+extern fn_Map_Find_t fn_Map_Find;
 
 // ============================================================
 // Engine globals (resolved pointers into Runtime-x64.dll data)

@@ -58,10 +58,48 @@ fn_UI_CloseDialog_t fn_UI_CloseDialog = nullptr;
 // Dynamic array push helper
 fn_DynArrayPush_t fn_DynArrayPush = nullptr;
 
+// PostDraw/PostUpdate callback array push helpers
+fn_DynArrayPush_t fn_PostDrawPush = nullptr;
+fn_DynArrayPush_t fn_PostUpdatePush = nullptr;
+
+// Video::Context lifecycle
+fn_VideoCtx_Ctor_t fn_VideoCtx_Ctor = nullptr;
+fn_VideoCtx_Dtor_t fn_VideoCtx_Dtor = nullptr;
+fn_VideoCtx_Delete_t fn_VideoCtx_Delete = nullptr;
+
+// MemoryAllocator
+fn_MemAlloc_t fn_MemAlloc = nullptr;
+fn_MemFree_t fn_MemFree = nullptr;
+void* g_pMemAllocSingleton = nullptr;
+
+// Video::Device singleton
+void** g_pVideoDeviceSingleton = nullptr;
+
 // String functions
 fn_String_Set_t fn_String_Set = nullptr;
 fn_String_Format_t fn_String_Format = nullptr;
 fn_String_Dtor_t fn_String_Dtor = nullptr;
+fn_String_Ctor_Default_t fn_String_Ctor_Default = nullptr;
+fn_String_Ctor_CStr_t fn_String_Ctor_CStr = nullptr;
+fn_String_Ctor_Copy_t fn_String_Ctor_Copy = nullptr;
+
+// ExternalFactory
+void** g_pExternalFactorySingleton = nullptr;
+fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad = nullptr;
+fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean = nullptr;
+fn_IsDerivedFrom_t fn_IsDerivedFrom = nullptr;
+uint32_t* g_pExternalTypeId = nullptr;
+fn_Filename_AdjustDelimiters_t fn_Filename_AdjustDelimiters = nullptr;
+fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
+fn_ListCleanup_t fn_ListCleanup = nullptr;
+
+// Mod entry lifecycle
+fn_ModEntry_CopyCtor_t fn_ModEntry_CopyCtor = nullptr;
+fn_ModEntry_Assign_t fn_ModEntry_Assign = nullptr;
+fn_ModEntry_Dtor_t fn_ModEntry_Dtor = nullptr;
+
+// Map::Find (AVL tree lookup)
+fn_Map_Find_t fn_Map_Find = nullptr;
 
 // ============================================================
 // Engine globals
@@ -157,6 +195,34 @@ bool EngineFuncsInit() {
     fn_DynArrayPush = reinterpret_cast<fn_DynArrayPush_t>(
         ResolveAddr(Module::Runtime, 0x18007a0d0));
 
+    // PostDraw/PostUpdate callback array push (16-byte element template instantiations)
+    fn_PostDrawPush = reinterpret_cast<fn_DynArrayPush_t>(
+        ResolveAddr(Module::Runtime, 0x18004f790));
+    fn_PostUpdatePush = reinterpret_cast<fn_DynArrayPush_t>(
+        ResolveAddr(Module::Runtime, 0x18004f8e0));
+
+    // Video::Context lifecycle
+    fn_VideoCtx_Ctor = reinterpret_cast<fn_VideoCtx_Ctor_t>(
+        ResolveAddr(Module::Runtime, 0x1800f1820));
+    fn_VideoCtx_Dtor = reinterpret_cast<fn_VideoCtx_Dtor_t>(
+        ResolveExport("??1Context@Video@@QEAA@XZ"));
+    if (!fn_VideoCtx_Dtor) {
+        fn_VideoCtx_Dtor = reinterpret_cast<fn_VideoCtx_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x1800f16e0));
+    }
+    fn_VideoCtx_Delete = reinterpret_cast<fn_VideoCtx_Delete_t>(
+        ResolveAddr(Module::Runtime, 0x180018500));
+
+    // MemoryAllocator
+    g_pMemAllocSingleton = reinterpret_cast<void*>(
+        *reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fc718)));
+    fn_MemAlloc = reinterpret_cast<fn_MemAlloc_t>(
+        ResolveAddr(Module::Runtime, 0x1800c6e60));
+
+    // Video::Device::_singleton
+    g_pVideoDeviceSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fe7a8));
+
     // --- String functions ---
     fn_String_Set = reinterpret_cast<fn_String_Set_t>(
         ResolveExport("?Set@String@System@@QEAAXPEBD@Z"));
@@ -178,6 +244,88 @@ bool EngineFuncsInit() {
         fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
             ResolveAddr(Module::Runtime, 0x180006c80));
     }
+
+    // String::String() — default ctor
+    fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(
+        ResolveExport("??0String@System@@QEAA@XZ"));
+    if (!fn_String_Ctor_Default) {
+        fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(
+            ResolveAddr(Module::Runtime, 0x180006760));
+    }
+
+    // String::String(const char*) — ctor from C string
+    fn_String_Ctor_CStr = reinterpret_cast<fn_String_Ctor_CStr_t>(
+        ResolveExport("??0String@System@@QEAA@PEBD@Z"));
+    if (!fn_String_Ctor_CStr) {
+        fn_String_Ctor_CStr = reinterpret_cast<fn_String_Ctor_CStr_t>(
+            ResolveAddr(Module::Runtime, 0x18000b630));
+    }
+
+    // String::String(String const&) — copy ctor
+    fn_String_Ctor_Copy = reinterpret_cast<fn_String_Ctor_Copy_t>(
+        ResolveExport("??0String@System@@QEAA@AEBV01@@Z"));
+    if (!fn_String_Ctor_Copy) {
+        fn_String_Ctor_Copy = reinterpret_cast<fn_String_Ctor_Copy_t>(
+            ResolveAddr(Module::Runtime, 0x180006cb0));
+    }
+
+    // --- ExternalFactory ---
+    g_pExternalFactorySingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fc6c8));
+
+    fn_ExternalFactory_FindOrLoad = reinterpret_cast<fn_ExternalFactory_FindOrLoad_t>(
+        ResolveExport("?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
+    if (!fn_ExternalFactory_FindOrLoad) {
+        fn_ExternalFactory_FindOrLoad = reinterpret_cast<fn_ExternalFactory_FindOrLoad_t>(
+            ResolveAddr(Module::Runtime, 0x1800bf320));
+    }
+
+    fn_ExternalFactory_Clean = reinterpret_cast<fn_ExternalFactory_Clean_t>(
+        ResolveExport("?Clean@ExternalFactory@Object@@QEAAXXZ"));
+    if (!fn_ExternalFactory_Clean) {
+        fn_ExternalFactory_Clean = reinterpret_cast<fn_ExternalFactory_Clean_t>(
+            ResolveAddr(Module::Runtime, 0x1800be310));
+    }
+
+    fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
+        ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
+    if (!fn_IsDerivedFrom) {
+        fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
+            ResolveAddr(Module::Runtime, 0x1800c0390));
+    }
+
+    // Type ID for External resource (dialog resources)
+    g_pExternalTypeId = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Runtime, 0x1801faa88));
+
+    fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
+        ResolveExport("?AdjustDelimiters@Filename@System@@QEAAXXZ"));
+    if (!fn_Filename_AdjustDelimiters) {
+        fn_Filename_AdjustDelimiters = reinterpret_cast<fn_Filename_AdjustDelimiters_t>(
+            ResolveAddr(Module::Runtime, 0x1800c6970));
+    }
+
+    fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
+        ResolveExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ"));
+    if (!fn_UpdateLoop_LoadResources) {
+        fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
+            ResolveAddr(Module::Runtime, 0x1800DD7D0));
+    }
+
+    fn_ListCleanup = reinterpret_cast<fn_ListCleanup_t>(
+        ResolveAddr(Module::Runtime, 0x180010ab0));
+
+    // --- Mod entry lifecycle (for Modification::Swap) ---
+    fn_ModEntry_CopyCtor = reinterpret_cast<fn_ModEntry_CopyCtor_t>(
+        ResolveAddr(Module::Runtime, 0x1800101e0));
+    fn_ModEntry_Assign = reinterpret_cast<fn_ModEntry_Assign_t>(
+        ResolveAddr(Module::Runtime, 0x180026ef0));
+    fn_ModEntry_Dtor = reinterpret_cast<fn_ModEntry_Dtor_t>(
+        ResolveAddr(Module::Runtime, 0x180011460));
+
+    // --- Map::Find (AVL tree lookup for Configuration) ---
+    fn_Map_Find = reinterpret_cast<fn_Map_Find_t>(
+        ResolveAddr(Module::Runtime, 0x18002ace0));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
@@ -211,6 +359,32 @@ bool EngineFuncsInit() {
     printf("  String::Set               = %p\n", (void*)fn_String_Set);
     printf("  String::Format            = %p\n", (void*)fn_String_Format);
     printf("  String::~String           = %p\n", (void*)fn_String_Dtor);
+    printf("  String::String()          = %p\n", (void*)fn_String_Ctor_Default);
+    printf("  String::String(cstr)      = %p\n", (void*)fn_String_Ctor_CStr);
+    printf("  String::String(copy)      = %p\n", (void*)fn_String_Ctor_Copy);
+    printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
+    printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
+    printf("  VideoCtx::Ctor            = %p\n", (void*)fn_VideoCtx_Ctor);
+    printf("  VideoCtx::Dtor            = %p\n", (void*)fn_VideoCtx_Dtor);
+    printf("  VideoCtx::Delete          = %p\n", (void*)fn_VideoCtx_Delete);
+    printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
+    printf("  MemAllocSingleton         = %p\n", g_pMemAllocSingleton);
+    printf("  VideoDevice::_singleton   = %p -> %p\n", (void*)g_pVideoDeviceSingleton,
+           g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr);
+    printf("  ExtFactory::_singleton    = %p -> %p\n", (void*)g_pExternalFactorySingleton,
+           g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+    printf("  ExtFactory::FindOrLoad    = %p\n", (void*)fn_ExternalFactory_FindOrLoad);
+    printf("  ExtFactory::Clean         = %p\n", (void*)fn_ExternalFactory_Clean);
+    printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
+    printf("  ExternalTypeId            = %p -> 0x%x\n", (void*)g_pExternalTypeId,
+           g_pExternalTypeId ? *g_pExternalTypeId : 0);
+    printf("  Filename::AdjustDelimiters= %p\n", (void*)fn_Filename_AdjustDelimiters);
+    printf("  UpdateLoop::LoadResources = %p\n", (void*)fn_UpdateLoop_LoadResources);
+    printf("  ListCleanup               = %p\n", (void*)fn_ListCleanup);
+    printf("  ModEntry::CopyCtor        = %p\n", (void*)fn_ModEntry_CopyCtor);
+    printf("  ModEntry::Assign          = %p\n", (void*)fn_ModEntry_Assign);
+    printf("  ModEntry::Dtor            = %p\n", (void*)fn_ModEntry_Dtor);
+    printf("  Map::Find                 = %p\n", (void*)fn_Map_Find);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,

@@ -19,6 +19,12 @@
 #include <cstdio>
 
 // ============================================================
+// MainLoop singleton pointer (resolved at hook install time)
+// ============================================================
+
+static MainLoop** g_pMainLoopSingleton = nullptr;
+
+// ============================================================
 // QPC / timing helpers
 // ============================================================
 
@@ -514,6 +520,353 @@ static void Reimpl_Run(MainLoop* self, UpdateLoop* loop) {
 
 
 // ============================================================
+// MainLoop::Get (0x180031570) [STATIC, 8 bytes — too small to hook]
+// Returns the global singleton pointer.
+// ============================================================
+
+/* NOT HOOKED — function is 8 bytes (mov rax,[RIP+offset]; ret).
+static MainLoop* Reimpl_Get(void) {
+    return *g_pMainLoopSingleton;
+}
+*/
+
+// ============================================================
+// MainLoop::IsRunning (0x1800314b0) [17 bytes — hookable]
+// Checks if the given UpdateLoop is the currently active loop.
+// NOTE: This is different from UpdateLoop::IsRunning (takes param).
+// MSVC: RCX=this, RDX=UpdateLoop* to compare
+// ============================================================
+
+static HookInfo g_hookIsRunningML;
+
+static bool Reimpl_IsRunningML(MainLoop* self, UpdateLoop* loop) {
+    if (loop != nullptr && loop == self->m_currentLoop) {
+        return true;
+    }
+    return false;
+}
+
+// ============================================================
+// MainLoop::GetContext (0x1800314d0) [5 bytes — too small to hook]
+// Returns the Video::Context pointer.
+// ============================================================
+
+/* NOT HOOKED — function is 5 bytes (mov rax,[rcx+0x10]; ret).
+static VideoContext* Reimpl_GetContext(MainLoop* self) {
+    return self->m_context;
+}
+*/
+
+// ============================================================
+// MainLoop::GetCurrentLoop (0x1800314e0) [5 bytes — too small to hook]
+// Returns the currently active UpdateLoop.
+// ============================================================
+
+/* NOT HOOKED — function is 5 bytes (mov rax,[rcx+0x20]; ret).
+static UpdateLoop* Reimpl_GetCurrentLoop(MainLoop* self) {
+    return self->m_currentLoop;
+}
+*/
+
+// ============================================================
+// MainLoop::GetDeltaTime (0x1800314f0) [11 bytes — too small to hook]
+// Returns the fixed timestep via hidden return pointer in RDX.
+// MSVC ABI: RCX=this(const), RDX=Time* retval
+// ============================================================
+
+/* NOT HOOKED — function is 11 bytes.
+static void Reimpl_GetDeltaTime(MainLoop* self, int64_t* retval) {
+    *retval = self->m_deltaTime;
+}
+*/
+
+// ============================================================
+// MainLoop::GetFrameTime (0x180031500) [11 bytes — too small to hook]
+// ============================================================
+
+/* NOT HOOKED — function is 11 bytes.
+static void Reimpl_GetFrameTime(MainLoop* self, int64_t* retval) {
+    *retval = self->m_frameTime;
+}
+*/
+
+// ============================================================
+// MainLoop::GetFrameStartTime (0x180031510) [11 bytes — too small to hook]
+// ============================================================
+
+/* NOT HOOKED — function is 11 bytes.
+static void Reimpl_GetFrameStartTime(MainLoop* self, int64_t* retval) {
+    *retval = self->m_frameStartTime;
+}
+*/
+
+// ============================================================
+// MainLoop::GetFrameUpdateTime (0x180031520) [11 bytes — too small to hook]
+// ============================================================
+
+/* NOT HOOKED — function is 11 bytes.
+static void Reimpl_GetFrameUpdateTime(MainLoop* self, int64_t* retval) {
+    *retval = self->m_frameUpdateTime;
+}
+*/
+
+// ============================================================
+// MainLoop::MarkFrameUpdateTime (0x180031530) [63 bytes — hookable]
+// Captures the render-phase duration from QPC delta.
+// ============================================================
+
+static HookInfo g_hookMarkFrameUpdateTime;
+
+static void Reimpl_MarkFrameUpdateTime(MainLoop* self) {
+    int64_t now = QPCToTicks(GetQPC());
+    self->m_frameUpdateTime = now - self->m_frameStartTime;
+}
+
+// ============================================================
+// MainLoop::AddPostUpdate (0x1800dcf60) [41 bytes — hookable]
+// Appends a callback to the post-update list.
+// ============================================================
+
+static HookInfo g_hookAddPostUpdate;
+
+static void Reimpl_AddPostUpdate(MainLoop* self, void* funcPtr, void* userData) {
+    PostCallback entry;
+    entry.funcPtr = funcPtr;
+    entry.userData = userData;
+    fn_PostUpdatePush(
+        reinterpret_cast<void*>(&self->m_postUpdateCallbacks),
+        self->m_postUpdateCount + 1,
+        &entry);
+}
+
+// ============================================================
+// MainLoop::AddPostDraw (0x1800dd040) [38 bytes — hookable]
+// Appends a callback to the post-draw list.
+// ============================================================
+
+static HookInfo g_hookAddPostDraw;
+
+static void Reimpl_AddPostDraw(MainLoop* self, void* funcPtr, void* userData) {
+    PostCallback entry;
+    entry.funcPtr = funcPtr;
+    entry.userData = userData;
+    fn_PostDrawPush(
+        reinterpret_cast<void*>(&self->m_postDrawCallbacks),
+        self->m_postDrawCount + 1,
+        &entry);
+}
+
+// ============================================================
+// MainLoop::RemovePostUpdate (0x1800dceb0) [156 bytes — hookable]
+// Linear search for matching callback, shift remaining entries down.
+// ============================================================
+
+static HookInfo g_hookRemovePostUpdate;
+
+static void Reimpl_RemovePostUpdate(MainLoop* self, void* funcPtr, void* userData) {
+    int i = 0;
+    while (i < self->m_postUpdateCount) {
+        PostCallback* arr = self->m_postUpdateCallbacks;
+        if (arr[i].funcPtr == funcPtr && arr[i].userData == userData) {
+            // Shift entries down
+            for (int j = i; j + 1 < self->m_postUpdateCount; j++) {
+                arr[j] = arr[j + 1];
+            }
+            self->m_postUpdateCount--;
+            i--; // re-check same index after shift
+        }
+        i++;
+    }
+}
+
+// ============================================================
+// MainLoop::RemovePostDraw (0x1800dcf90) [156 bytes — hookable]
+// Linear search for matching callback, shift remaining entries down.
+// ============================================================
+
+static HookInfo g_hookRemovePostDraw;
+
+static void Reimpl_RemovePostDraw(MainLoop* self, void* funcPtr, void* userData) {
+    int i = 0;
+    while (i < self->m_postDrawCount) {
+        PostCallback* arr = self->m_postDrawCallbacks;
+        if (arr[i].funcPtr == funcPtr && arr[i].userData == userData) {
+            for (int j = i; j + 1 < self->m_postDrawCount; j++) {
+                arr[j] = arr[j + 1];
+            }
+            self->m_postDrawCount--;
+            i--;
+        }
+        i++;
+    }
+}
+
+// ============================================================
+// MainLoop::OnVideoError_static (0x1800dcd20) [hookable]
+// Static wrapper that dispatches to OnVideoError on the singleton.
+// ============================================================
+
+static HookInfo g_hookOnVideoErrorStatic;
+
+static void Reimpl_OnVideoErrorStatic(void) {
+    MainLoop* ml = *g_pMainLoopSingleton;
+    // Dispatch to the instance method (may be hooked or original)
+    typedef void (*OnVideoError_t)(MainLoop*);
+    OnVideoError_t fn = reinterpret_cast<OnVideoError_t>(
+        ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoError));
+    fn(ml);
+}
+
+// ============================================================
+// MainLoop::OnVideoRestart_static (0x1800dc5c0) [hookable]
+// Static wrapper that dispatches to OnVideoRestart on the singleton.
+// ============================================================
+
+static HookInfo g_hookOnVideoRestartStatic;
+
+static void Reimpl_OnVideoRestartStatic(void) {
+    MainLoop* ml = *g_pMainLoopSingleton;
+    typedef void (*OnVideoRestart_t)(MainLoop*);
+    OnVideoRestart_t fn = reinterpret_cast<OnVideoRestart_t>(
+        ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoRestart));
+    fn(ml);
+}
+
+// ============================================================
+// MainLoop::CreateVideoContext (0x1800dd500) [hookable]
+// Destroys old context if any, allocates new 0x2168-byte
+// Video::Context with standard parameters.
+// ============================================================
+
+static HookInfo g_hookCreateVideoCtx;
+
+static void Reimpl_CreateVideoContext(MainLoop* self) {
+    // Destroy existing context
+    if (self->m_context) {
+        fn_VideoCtx_Dtor(self->m_context);
+        fn_VideoCtx_Delete(self->m_context);
+        self->m_context = nullptr;
+    }
+
+    // Allocate new context (0x2168 bytes, 8-byte aligned)
+    // Uses MemoryAllocator with critical section
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x2168, 8);
+    if (mem) {
+        void* ctx = fn_VideoCtx_Ctor(
+            mem,
+            *g_pVideoDeviceSingleton,  // Video::Device::_singleton
+            0x800000,  // param1
+            0x400000,  // param2
+            0x100000,  // param3
+            nullptr    // RenderBuffer* = null
+        );
+        self->m_context = reinterpret_cast<VideoContext*>(ctx);
+    } else {
+        self->m_context = nullptr;
+    }
+}
+
+// ============================================================
+// MainLoop::ReleaseVideoContext (0x1800dd5e0) [hookable]
+// Destroys and frees the video context.
+// ============================================================
+
+static HookInfo g_hookReleaseVideoCtx;
+
+static void Reimpl_ReleaseVideoContext(MainLoop* self) {
+    if (self->m_context) {
+        fn_VideoCtx_Dtor(self->m_context);
+        fn_VideoCtx_Delete(self->m_context);
+    }
+    self->m_context = nullptr;
+}
+
+// ============================================================
+// MainLoop::MainLoop (ctor) (0x1800dd6b0) [hookable]
+// Initializes all fields, sets timing defaults, registers video
+// error callbacks, and creates the video context.
+// ============================================================
+
+// .rdata constants: fixed timestep and max accumulator (seconds as doubles)
+static double* g_pDeltaTimeSeconds = nullptr;    // DAT_1801616a8
+static double* g_pMaxAccumSeconds = nullptr;      // DAT_1801616b0
+
+static HookInfo g_hookCtor;
+
+static MainLoop* Reimpl_Ctor(MainLoop* self, EngineInstance* engine) {
+#ifdef _DEBUG
+    printf("[MainLoop::Ctor] self=%p engine=%p\n", (void*)self, (void*)engine);
+#endif
+
+    // Zero all fields
+    memset(self, 0, sizeof(MainLoop));
+
+    // Set engine back-pointer
+    self->m_engine = engine;
+
+    // Convert timing constants from seconds to ticks
+    self->m_deltaTime = (int64_t)(*g_pDeltaTimeSeconds / (*g_Timer_secondsPerTick));
+    self->m_maxAccumulator = (int64_t)(*g_pMaxAccumSeconds / (*g_Timer_secondsPerTick));
+
+    // Register as singleton
+    *g_pMainLoopSingleton = self;
+
+    // Register video error/restart callbacks on Video::Device
+    uint8_t* videoDevice = reinterpret_cast<uint8_t*>(*g_pVideoDeviceSingleton);
+    // +0x50 = OnVideoError callback
+    *reinterpret_cast<void**>(videoDevice + 0x50) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoError_static));
+    // +0x58 = OnVideoRestart callback
+    *reinterpret_cast<void**>(videoDevice + 0x58) = reinterpret_cast<void*>(
+        ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoRestart_static));
+
+    // Create the initial video context
+    Reimpl_CreateVideoContext(self);
+
+    return self;
+}
+
+// ============================================================
+// MainLoop::~MainLoop (dtor) (0x1800dd640) [hookable]
+// Destroys video context, cleans up callback arrays and
+// resource tracking array.
+// ============================================================
+
+// Cleanup functions for dynamic arrays
+typedef void (*fn_ArrayCleanup_t)(void* arrayBase);
+static fn_ArrayCleanup_t fn_CleanupPostUpdate = nullptr;   // FUN_180033a40
+static fn_ArrayCleanup_t fn_CleanupPostDraw = nullptr;     // FUN_180033960
+static fn_ArrayCleanup_t fn_CleanupResources = nullptr;    // FUN_180033880
+
+static HookInfo g_hookDtor;
+
+static void Reimpl_Dtor(MainLoop* self) {
+#ifdef _DEBUG
+    printf("[MainLoop::Dtor] self=%p\n", (void*)self);
+#endif
+
+    // Destroy video context
+    if (self->m_context) {
+        fn_VideoCtx_Dtor(self->m_context);
+        fn_VideoCtx_Delete(self->m_context);
+    }
+    self->m_context = nullptr;
+
+    // Clean up callback arrays and resource array
+    fn_CleanupPostUpdate(&self->m_postUpdateCallbacks);
+    fn_CleanupPostDraw(&self->m_postDrawCallbacks);
+    fn_CleanupResources(self);  // resource array at offset 0x00
+}
+
+// ============================================================
+// OnVideoError (0x1800dc5e0) — NOT REIMPLEMENTED (Phase 3)
+// OnVideoRestart (0x1800dc3b0) — NOT REIMPLEMENTED (Phase 3)
+// These depend on ExternalFactory, SaveLoad, and Factory.
+// Left running as original code.
+// ============================================================
+
+
+// ============================================================
 // Install / Remove functions (called from hooks.cpp)
 // ============================================================
 
@@ -609,3 +962,161 @@ void RemoveMainLoopRun() {
     printf("[MainLoop] Run hook removed\n");
 #endif
 }
+
+// --- Helper: resolve g_pMainLoopSingleton if not yet done ---
+static void EnsureMainLoopSingleton() {
+    if (!g_pMainLoopSingleton) {
+        g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+            ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
+    }
+}
+
+// --- IsRunning (0x1800314b0, prologue=13) ---
+
+void InstallMainLoopIsRunningML() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::IsRunning);
+    InstallHook(target, (void*)Reimpl_IsRunningML, &g_hookIsRunningML, 13);
+#ifdef _DEBUG
+    printf("[MainLoop] IsRunning hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopIsRunningML() { RemoveHook(&g_hookIsRunningML); }
+
+// --- MarkFrameUpdateTime (0x180031530, prologue=14) ---
+
+void InstallMainLoopMarkFrameUpdateTime() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::MarkFrameUpdateTime);
+    InstallHook(target, (void*)Reimpl_MarkFrameUpdateTime, &g_hookMarkFrameUpdateTime, 14);
+#ifdef _DEBUG
+    printf("[MainLoop] MarkFrameUpdateTime hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopMarkFrameUpdateTime() { RemoveHook(&g_hookMarkFrameUpdateTime); }
+
+// --- AddPostUpdate (0x1800dcf60, prologue=16) ---
+
+void InstallMainLoopAddPostUpdate() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::AddPostUpdate);
+    InstallHook(target, (void*)Reimpl_AddPostUpdate, &g_hookAddPostUpdate, 16);
+#ifdef _DEBUG
+    printf("[MainLoop] AddPostUpdate hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopAddPostUpdate() { RemoveHook(&g_hookAddPostUpdate); }
+
+// --- AddPostDraw (0x1800dd040, prologue=13) ---
+
+void InstallMainLoopAddPostDraw() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::AddPostDraw);
+    InstallHook(target, (void*)Reimpl_AddPostDraw, &g_hookAddPostDraw, 13);
+#ifdef _DEBUG
+    printf("[MainLoop] AddPostDraw hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopAddPostDraw() { RemoveHook(&g_hookAddPostDraw); }
+
+// --- RemovePostUpdate (0x1800dceb0, prologue=13) ---
+
+void InstallMainLoopRemovePostUpdate() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::RemovePostUpdate);
+    InstallHook(target, (void*)Reimpl_RemovePostUpdate, &g_hookRemovePostUpdate, 13);
+#ifdef _DEBUG
+    printf("[MainLoop] RemovePostUpdate hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopRemovePostUpdate() { RemoveHook(&g_hookRemovePostUpdate); }
+
+// --- RemovePostDraw (0x1800dcf90, prologue=13) ---
+
+void InstallMainLoopRemovePostDraw() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::RemovePostDraw);
+    InstallHook(target, (void*)Reimpl_RemovePostDraw, &g_hookRemovePostDraw, 13);
+#ifdef _DEBUG
+    printf("[MainLoop] RemovePostDraw hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopRemovePostDraw() { RemoveHook(&g_hookRemovePostDraw); }
+
+// --- OnVideoError_static (0x1800dcd20, prologue=12) ---
+
+void InstallMainLoopOnVideoErrorStatic() {
+    EnsureMainLoopSingleton();
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoError_static);
+    InstallHook(target, (void*)Reimpl_OnVideoErrorStatic, &g_hookOnVideoErrorStatic, 12);
+#ifdef _DEBUG
+    printf("[MainLoop] OnVideoError_static hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopOnVideoErrorStatic() { RemoveHook(&g_hookOnVideoErrorStatic); }
+
+// --- OnVideoRestart_static (0x1800dc5c0, prologue=12) ---
+
+void InstallMainLoopOnVideoRestartStatic() {
+    EnsureMainLoopSingleton();
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoRestart_static);
+    InstallHook(target, (void*)Reimpl_OnVideoRestartStatic, &g_hookOnVideoRestartStatic, 12);
+#ifdef _DEBUG
+    printf("[MainLoop] OnVideoRestart_static hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopOnVideoRestartStatic() { RemoveHook(&g_hookOnVideoRestartStatic); }
+
+// --- CreateVideoContext (0x1800dd500, prologue=15) ---
+
+void InstallMainLoopCreateVideoCtx() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::CreateVideoCtx);
+    InstallHook(target, (void*)Reimpl_CreateVideoContext, &g_hookCreateVideoCtx, 15);
+#ifdef _DEBUG
+    printf("[MainLoop] CreateVideoContext hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopCreateVideoCtx() { RemoveHook(&g_hookCreateVideoCtx); }
+
+// --- ReleaseVideoContext (0x1800dd5e0, prologue=14) ---
+
+void InstallMainLoopReleaseVideoCtx() {
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::ReleaseVideoCtx);
+    InstallHook(target, (void*)Reimpl_ReleaseVideoContext, &g_hookReleaseVideoCtx, 14);
+#ifdef _DEBUG
+    printf("[MainLoop] ReleaseVideoContext hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopReleaseVideoCtx() { RemoveHook(&g_hookReleaseVideoCtx); }
+
+// --- Ctor (0x1800dd6b0, prologue=19) ---
+
+void InstallMainLoopCtor() {
+    EnsureMainLoopSingleton();
+    // Resolve .rdata timing constants
+    g_pDeltaTimeSeconds = reinterpret_cast<double*>(
+        ResolveAddr(Module::Runtime, 0x1801616a8));
+    g_pMaxAccumSeconds = reinterpret_cast<double*>(
+        ResolveAddr(Module::Runtime, 0x1801616b0));
+
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::Ctor);
+    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 19);
+#ifdef _DEBUG
+    printf("[MainLoop] Ctor hooked at %p (dtSec=%p, maxAccSec=%p)\n",
+           (void*)target, (void*)g_pDeltaTimeSeconds, (void*)g_pMaxAccumSeconds);
+#endif
+}
+void RemoveMainLoopCtor() { RemoveHook(&g_hookCtor); }
+
+// --- Dtor (0x1800dd640, prologue=19) ---
+
+void InstallMainLoopDtor() {
+    // Resolve cleanup functions used by destructor
+    fn_CleanupPostUpdate = reinterpret_cast<fn_ArrayCleanup_t>(
+        ResolveAddr(Module::Runtime, 0x180033a40));
+    fn_CleanupPostDraw = reinterpret_cast<fn_ArrayCleanup_t>(
+        ResolveAddr(Module::Runtime, 0x180033960));
+    fn_CleanupResources = reinterpret_cast<fn_ArrayCleanup_t>(
+        ResolveAddr(Module::Runtime, 0x180033880));
+
+    uintptr_t target = ResolveAddr(Module::Runtime, MainLoopAddr::Dtor);
+    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 19);
+#ifdef _DEBUG
+    printf("[MainLoop] Dtor hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMainLoopDtor() { RemoveHook(&g_hookDtor); }

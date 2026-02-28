@@ -43,6 +43,8 @@ namespace MainLoopAddr {
     constexpr uintptr_t RemovePostDraw  = 0x1800dcf90;
     constexpr uintptr_t OnVideoError    = 0x1800dc5e0;
     constexpr uintptr_t OnVideoRestart  = 0x1800dc3b0;
+    constexpr uintptr_t OnVideoError_static  = 0x1800dcd20;
+    constexpr uintptr_t OnVideoRestart_static = 0x1800dc5c0;
 }
 
 struct MainLoop {

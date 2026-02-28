@@ -1,18 +1,27 @@
 #pragma once
-// System::Configuration — game configuration singleton (0x2C bytes).
+// System::Configuration — game configuration singleton (0x30 bytes).
 // Runtime-x64.dll, constructor at 0x1800C51B0, singleton pattern.
 //
-// Holds platform/language/build enums, command line map, resource params.
-// Three key static methods provide version/build info:
-//   - CurrentBuildId()      (0x1800C4C60) — YYMMDD from compile date
-//   - CurrentVersion()      (0x1800C4F40) — "1.0.7" (calls GetVersionString)
-//   - GetVersionString()    (0x1800C4F90) — formats packed version int
-//
+// Holds platform/language/build enums, command line map (AVL tree), resource params.
 // Engine accessor: Engine::GetConfiguration() returns *(engine + 0x688)
 //
-// 29 methods total exported. The three static methods above are the
-// reimplementation targets; the rest are trivial accessors or use
-// complex Map/String infrastructure.
+// Methods (13 exported):
+//   REIMPLEMENTED:
+//     - CurrentBuildId()      (0x1800C4C60, 62b) — static, YYMMDD from compile date
+//     - CurrentVersion()      (0x1800C4F40, 37b) — static, returns "1.0.7"
+//     - GetVersionString()    (0x1800C4F90, ~100b) — static, formats packed version int
+//     - GetPlatformName()     (0x1800C5210, 81b) — returns "Win" for Platform::Win
+//     - GetLanguageName()     (0x1800C4BC0, 81b) — returns "English" for Language::English
+//     - GetBuildName()        (0x1800C5280, 103b) — returns "Data"/"Eval"
+//   PASSTHROUGH WRAPPERS:
+//     - Ctor                  (0x1800C51B0, 62b) — zero-init fields, set singleton
+//     - Dtor                  (0x1800C5170, 49b) — destroy map, cleanup lists
+//     - GetCommandLineString  (0x1800C5300, 257b) — AVL tree lookup, returns String
+//     - SetCommandLine        (0x1800C47A0, 391b) — parse & insert into AVL tree
+//   TOO SMALL TO HOOK (documented):
+//     - AddCommandLine        (0x1800C5200, 4b) — thunk to SetCommandLine
+//     - GetResourceParameter  (0x1800C4750, 10b) — array index
+//     - GetResourceParameterCount (0x1800C4770, 3b) — field read
 
 #include <cstdint>
 #include <cstddef>
@@ -27,6 +36,22 @@ enum ConfigBuildType : uint8_t {
     BuildType_Release   = 0xFF
 };
 
+// Platform enum
+enum ConfigPlatform : int32_t {
+    Platform_Win = 0
+};
+
+// Language enum
+enum ConfigLanguage : int32_t {
+    Language_English = 0
+};
+
+// Build enum
+enum ConfigBuild : int32_t {
+    Build_Data = 0,
+    Build_Eval = 1
+};
+
 struct Configuration {
     // --- Resource parameters (0x00 - 0x0F) ---
     void*    m_resourceParams;      // +0x00: String*[] (resource parameter array)
@@ -34,7 +59,7 @@ struct Configuration {
     int32_t  _pad0C;                // +0x0C: padding
 
     // --- Command line (0x10 - 0x1F) ---
-    void*    m_commandLineData;     // +0x10: Map<String,String> data pointer
+    void*    m_commandLineData;     // +0x10: Map<String,String> AVL tree root
     int32_t  m_commandLineCount;    // +0x18: number of command line entries
     int32_t  _pad1C;                // +0x1C: padding/capacity
 
@@ -55,8 +80,23 @@ static_assert(offsetof(Configuration, m_build) == 0x28, "m_build at +0x28");
 
 // Address constants
 namespace ConfigurationAddr {
+    // Static methods (version/build info)
     constexpr uintptr_t CurrentBuildId    = 0x1800C4C60;
     constexpr uintptr_t CurrentVersion    = 0x1800C4F40;
     constexpr uintptr_t GetVersionString  = 0x1800C4F90;
     constexpr uintptr_t BuildDateString   = 0x180155C50;  // "Sep 10 2017" in .rdata
+
+    // Instance methods
+    constexpr uintptr_t Ctor                       = 0x1800C51B0;  // 62 bytes
+    constexpr uintptr_t Dtor                       = 0x1800C5170;  // 49 bytes
+    constexpr uintptr_t GetCommandLineString       = 0x1800C5300;  // 257 bytes
+    constexpr uintptr_t SetCommandLine             = 0x1800C47A0;  // 391 bytes
+    constexpr uintptr_t GetPlatformName            = 0x1800C5210;  // 81 bytes
+    constexpr uintptr_t GetLanguageName            = 0x1800C4BC0;  // 81 bytes
+    constexpr uintptr_t GetBuildName               = 0x1800C5280;  // 103 bytes
+
+    // Too small to hook
+    constexpr uintptr_t AddCommandLine             = 0x1800C5200;  // 4 bytes (thunk)
+    constexpr uintptr_t GetResourceParameter       = 0x1800C4750;  // 10 bytes
+    constexpr uintptr_t GetResourceParameterCount  = 0x1800C4770;  // 3 bytes
 }

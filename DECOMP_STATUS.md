@@ -1,6 +1,6 @@
 # Decompilation Status & Type Inventory
 
-Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompiled & documented, `R` = reimplemented & hooked in-game
+Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompiled & documented, `R` = fully reimplemented & hooked in-game
 
 ## Binary Summary
 
@@ -18,14 +18,14 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 
 | Status | Class | Namespace | Known Methods |
 |--------|-------|-----------|---------------|
-| ~ | `MainLoop` | Engine | Run, Frame, Update, Draw, SetNextLoop (**reimpl: `engine/reimpl/mainloop.cpp`**), Get, IsRunning, GetContext, GetCurrentLoop, GetDeltaTime, GetFrameTime, GetFrameStartTime, GetFrameUpdateTime, MarkFrameUpdateTime, AddPostUpdate, AddPostDraw, RemovePostUpdate, RemovePostDraw, OnVideoError, OnVideoRestart, CreateVideoContext, ReleaseVideoContext, ctor, dtor, singleton |
-| ~ | `UpdateLoop` | Engine | Update, Draw, Startup, Shutdown, SaveRestore, DrawFailed, OnVideoRestart, AllowsModChanges, GetResourceFilename, IsRunning (**reimpl: `engine/reimpl/updateloop.cpp`**), LoadResources, SetLoadProgress, GetLoadProgress, GetLoadBit, ctor, dtor |
-| ~ | `LoaderLoop` | Engine | Startup, Shutdown, Update, Draw, Exit, IsFinished, OnVideoError (**reimpl: `engine/reimpl/loaderloop.cpp`**), Load (blocked: needs `ExternalFactory`), ctor, dtor |
-| ~ | `DialogLoaderLoopT` | Engine | Update, Draw, Startup, Shutdown (**reimpl: `engine/reimpl/dialogloaderloop.cpp`**), Load (blocked on ExternalFactory), ctor, dtor |
-| ~ | `DialogLoopT` | Engine | Startup, Shutdown, Update, Draw (**reimpl: `engine/reimpl/dialogloop.cpp`**), Load (blocked on ExternalFactory), GetUserInterface, ctor, dtor |
-| ✓ | `Application` | System | YieldToThreads (trivial thunk → `SwitchToThread()`, 7 bytes at `0x18009f920`, no hook needed) |
-| ~ | `Configuration` | System | CurrentBuildId, CurrentVersion, GetVersionString (**reimpl: `engine/reimpl/configuration.cpp`**), 26 other methods (accessors, command line, ctor/dtor — trivial or blocked on Map/String infrastructure) |
-| ~ | `Modification` | IO | Find, Enable, DisableAll (**reimpl: `engine/reimpl/modification.cpp`**), Get/GetCount/IsDirty/GetModification (too small to hook, 3-12 bytes), AreExternalModsUpToDate/UpdateExternalMods (stubs), Swap/EnableSavingSettings (hookable but need Mod copy helpers), RefreshList/SaveList/SetupFileSystem (blocked on Persistence/FileSystem/PackageFile) |
+| R | `MainLoop` | Engine | **26/26 methods reimplemented** (`engine/reimpl/mainloop.cpp`): Run, Frame, Update, Draw, SetNextLoop, Get, IsRunning, GetContext, GetCurrentLoop, GetDeltaTime, GetFrameTime, GetFrameStartTime, GetFrameUpdateTime, MarkFrameUpdateTime, AddPostUpdate, AddPostDraw, RemovePostUpdate, RemovePostDraw, OnVideoError, OnVideoRestart, OnVideoError\_s, OnVideoRestart\_s, CreateVideoContext, ReleaseVideoContext, ctor, dtor. 9 getters too small to hook (4-8 bytes), documented in source. |
+| R | `UpdateLoop` | Engine | **All methods reimplemented** (`engine/reimpl/updateloop.cpp`): IsRunning, ctor, dtor (hooked). SetLoadProgress, GetLoadProgress, GetLoadBit (4 bytes each, documented). LoadResources resolved as callable fn ptr. Base virtuals (Update, Draw, Startup, Shutdown, etc.) overridden by subclasses. |
+| R | `LoaderLoop` | Engine | **All methods reimplemented** (`engine/reimpl/loaderloop.cpp`): Startup, Shutdown, Update, Draw, Exit, IsFinished, OnVideoError (7 hooked). Load is 3-byte no-op stub (documented). |
+| R | `DialogLoaderLoopT` | Engine | **5/5 methods reimplemented & hooked** (`engine/reimpl/dialogloaderloop.cpp`): Startup, Shutdown, Update, Draw, Load |
+| R | `DialogLoopT` | Engine | **5/5 methods reimplemented & hooked** (`engine/reimpl/dialogloop.cpp`): Startup, Shutdown, Update, Draw, Load |
+| R | `Application` | System | YieldToThreads (trivial thunk → `SwitchToThread()`, 7 bytes at `0x18009f920`, no hook needed) |
+| R | `Configuration` | System | **10 methods hooked** (`engine/reimpl/configuration.cpp`): CurrentBuildId, CurrentVersion, GetVersionString, GetPlatformName, GetLanguageName, GetBuildName (full reimpl), Ctor, Dtor, GetCommandLineString, SetCommandLine (passthrough wrappers). AddCommandLine (4b thunk), GetResourceParameter (10b), GetResourceParameterCount (3b) — too small to hook, documented. |
+| R | `Modification` | IO | **8 methods hooked** (`engine/reimpl/modification.cpp`): Find, Enable, DisableAll, Swap (full reimpl), EnableSavingSettings, SaveList, RefreshList, SetupFileSystem (passthrough wrappers). Get/GetCount/IsDirty/GetModification (too small, 3-12 bytes, documented). AreExternalModsUpToDate/UpdateExternalMods (stubs, 3 bytes). |
 
 ### ECS - Game Components (all ComponentEntity children)
 
@@ -140,7 +140,7 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | - | `StackCriticalSection` | scoped lock |
 | - | `Thread` | Start, WaitForFinish, OnCompleted (vtable) |
 | - | `Compression` | compression utility |
-| ~ | `Configuration` | CurrentBuildId, CurrentVersion, GetVersionString |
+| R | `Configuration` | **10 methods hooked**: CurrentBuildId, CurrentVersion, GetVersionString, GetPlatformName, GetLanguageName, GetBuildName (reimpl), Ctor, Dtor, GetCommandLineString, SetCommandLine (passthrough). 3 too-small documented. |
 | - | `MemoryAllocator` | MemAlloc, MemFree |
 | - | `Debug` | debug output |
 | - | `Error` | SetText, Display |
@@ -212,7 +212,7 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | - | `ReaderWriter` | bidirectional reader/writer |
 | - | `FileSystem` | virtual file system (packages + mods) |
 | - | `PackageFile` | package archive |
-| - | `Modification` | mod support |
+| R | `Modification` | **8 methods hooked** (see Engine Core above): Find, Enable, DisableAll, Swap (reimpl) + 4 passthrough wrappers. 6 too-small documented. |
 | - | `Persistence` | GetSavePath, save state |
 | - | `Registry` | Windows registry access |
 
@@ -345,14 +345,11 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 
 ### Engine (Main Loop) - 86 symbols
 
+See **Application-x64.exe > Engine Core** above for full reimplementation status. All loop classes (MainLoop, UpdateLoop, LoaderLoop, DialogLoaderLoopT, DialogLoopT) are at R status.
+
 | Status | Class | Known Methods |
 |--------|-------|---------------|
-| ~ | `MainLoop` | Get, Run, Frame, Draw, Update, SetNextLoop (**reimpl: `engine/reimpl/mainloop.cpp`** — 5/26 methods), GetCurrentLoop, GetDeltaTime, GetFrameTime, GetFrameStartTime, GetFrameUpdateTime, MarkFrameUpdateTime, IsRunning, GetContext, AddPostDraw, AddPostUpdate, RemovePostDraw, RemovePostUpdate, OnVideoError, OnVideoRestart, OnVideoError_, OnVideoRestart_, CreateVideoContext, ReleaseVideoContext, ctor, dtor (singleton, 26 methods total) |
-| ~ | `UpdateLoop` | Load, Startup, Update, Draw, Shutdown, SaveRestore, IsRunning (**reimpl: `engine/reimpl/updateloop.cpp`**), LoadResources, SetLoadProgress, GetLoadProgress, GetLoadBit (virtual base, 0x28 bytes) |
-| ~ | `LoaderLoop` | Startup, Shutdown, Update, Draw, Exit, IsFinished, OnVideoError (**reimpl: `engine/reimpl/loaderloop.cpp`** — 7/10 methods), Load (blocked: needs `ExternalFactory`), ctor, dtor (0x48 bytes) |
 | - | `Loader` | resource loader (singleton) |
-| ~ | `DialogLoaderLoopT` | Startup, Shutdown, Update, Draw (**reimpl: `engine/reimpl/dialogloaderloop.cpp`**), Load (blocked: needs `ExternalFactory`, `String` refcounting) |
-| ~ | `DialogLoopT` | Startup, Shutdown, Update, Draw (**reimpl: `engine/reimpl/dialogloop.cpp`** — 4/7 methods), Load (blocked: needs `ExternalFactory`), GetUserInterface, ctor, dtor (0x168 bytes, vtable at 0x1801579A0) |
 | - | `Application` | top-level application class |
 
 ### Collision2D - 81 symbols
@@ -433,23 +430,25 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 
 ## Reimplementation Dependencies & Blockers
 
-Tracking what's needed to promote `~` (partial) entries to `R` (fully reimplemented).
+All engine core loop classes (MainLoop, UpdateLoop, LoaderLoop, DialogLoaderLoopT, DialogLoopT) are now fully reimplemented (R). Resolved infrastructure: ExternalFactory (FindOrLoad, Clean, IsDerivedFrom), String lifecycle (ctor/dtor/copy), Filename::AdjustDelimiters.
 
-| Blocked Function | Dependency | What's Needed |
-|-----------------|------------|---------------|
-| `DialogLoaderLoopT::Load` | `ExternalFactory::FindOrLoad` | Decompile ExternalFactory class (Object System), understand resource lookup by path |
-| `DialogLoaderLoopT::Load` | `String` refcounting | Decompile String ctor/dtor/operator= — reference counted with shared buffer |
-| `LoaderLoop::Load` | `ExternalFactory::FindOrLoad` | Same as DialogLoaderLoopT::Load — resource loading on background thread |
-| `MainLoop` (21 remaining methods) | Mostly trivial accessors | Getters/setters, OnVideoError/Restart, CreateVideoContext, ctor/dtor — low priority, no hard blockers |
-| `UpdateLoop::LoadResources` | `ExternalFactory` bitmask, `String`, `Modification` | Same ExternalFactory + mod system integration |
-| `UpdateLoop::ctor/dtor` | `ExternalFactory` bitmask allocation | Allocates/frees a bit from ExternalFactory's global bitmask |
-| `DialogLoopT::Load` | `ExternalFactory::FindOrLoad` | Same as DialogLoaderLoopT::Load — resource loading by path |
-| `DialogLoopT::Load` | `String` refcounting | Decompile String ctor/dtor/operator= — reference counted with shared buffer |
+All engine core classes promoted to R. Configuration accessors that touch `Map<String,String>` (GetCommandLineString, SetCommandLine) are hooked as passthrough wrappers. Modification deep methods (RefreshList, SaveList, SetupFileSystem) are hooked as passthrough wrappers. Swap is fully reimplemented using ModEntry lifecycle functions.
+
+Remaining blockers (for full reimplementation of passthrough wrappers):
+
+| Passthrough Function | Dependency | What's Needed |
+|---------------------|------------|---------------|
+| `Configuration::GetCommandLineString` | `Map<String,String>` (AVL tree) | Decompile Map::Find (0x18002ace0) for direct reimpl |
+| `Configuration::SetCommandLine` | `Map<String,String>` (AVL tree) | Decompile Map::Insert for direct reimpl |
+| `Modification::RefreshList` | `FileSystem`, `PackageFile` | ~3646 bytes, touches 3 subsystems |
+| `Modification::SaveList` | `Persistence` | ~300 bytes, save path serialization |
+| `Modification::SetupFileSystem` | `FileSystem`, `PackageFile` | ~2617 bytes, mod filesystem integration |
 
 ### Hook Infrastructure Notes
 
-- **Trampoline safety**: 8 of 22 hooks have RIP-relative instructions in their prologues. Trampolines for these are broken (wrong displacement after relocation). Currently safe because no reimplementations call through trampolines. If A/B testing via trampoline is needed later, `InstallHook` must detect and relocate RIP-relative instructions.
-- **Affected hooks**: LoaderLoop::Startup, Shutdown, Draw, Exit, IsFinished, OnVideoError; DialogLoaderLoopT::Draw; DialogLoopT::Draw
+- **Total hooks**: 57 (all verified in-game)
+- **Trampoline safety**: Some hooks have RIP-relative instructions in their prologues. Trampolines for these are broken (wrong displacement after relocation). Currently safe because no reimplementations call through trampolines. If A/B testing via trampoline is needed later, `InstallHook` must detect and relocate RIP-relative instructions.
+- **Too-small functions**: Functions under 12 bytes cannot receive the inline jump patch. These are documented as "R (too small to hook)" with full reimplementation in source comments.
 
 ---
 

@@ -42,3 +42,28 @@ inline int StringGetRefCount(const SystemString* s) {
 inline const char* StringGetData(const SystemString* s) {
     return s->m_data;
 }
+
+// --- Lifecycle wrappers (call through resolved function pointers) ---
+// Include engine_funcs.h before using these.
+
+#include "engine_funcs.h"
+
+inline void StringInit(SystemString* s) {
+    fn_String_Ctor_Default(s);
+}
+
+inline void StringInitCStr(SystemString* s, const char* src) {
+    fn_String_Ctor_CStr(s, src);
+}
+
+inline void StringInitCopy(SystemString* dst, const SystemString* src) {
+    fn_String_Ctor_Copy(dst, src);
+}
+
+inline void StringSet(SystemString* s, const char* src) {
+    fn_String_Set(s, src);
+}
+
+inline void StringDestroy(SystemString* s) {
+    fn_String_Dtor(s);
+}

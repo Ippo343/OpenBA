@@ -145,10 +145,38 @@ extern void InstallMainLoopSetNextLoop();
 extern void RemoveMainLoopSetNextLoop();
 extern void InstallMainLoopRun();
 extern void RemoveMainLoopRun();
+extern void InstallMainLoopIsRunningML();
+extern void RemoveMainLoopIsRunningML();
+extern void InstallMainLoopMarkFrameUpdateTime();
+extern void RemoveMainLoopMarkFrameUpdateTime();
+extern void InstallMainLoopAddPostUpdate();
+extern void RemoveMainLoopAddPostUpdate();
+extern void InstallMainLoopAddPostDraw();
+extern void RemoveMainLoopAddPostDraw();
+extern void InstallMainLoopRemovePostUpdate();
+extern void RemoveMainLoopRemovePostUpdate();
+extern void InstallMainLoopRemovePostDraw();
+extern void RemoveMainLoopRemovePostDraw();
+extern void InstallMainLoopOnVideoErrorStatic();
+extern void RemoveMainLoopOnVideoErrorStatic();
+extern void InstallMainLoopOnVideoRestartStatic();
+extern void RemoveMainLoopOnVideoRestartStatic();
+extern void InstallMainLoopCreateVideoCtx();
+extern void RemoveMainLoopCreateVideoCtx();
+extern void InstallMainLoopReleaseVideoCtx();
+extern void RemoveMainLoopReleaseVideoCtx();
+extern void InstallMainLoopCtor();
+extern void RemoveMainLoopCtor();
+extern void InstallMainLoopDtor();
+extern void RemoveMainLoopDtor();
 
 // --- UpdateLoop reimplementations (engine/reimpl/updateloop.cpp) ---
 extern void InstallUpdateLoopIsRunning();
 extern void RemoveUpdateLoopIsRunning();
+extern void InstallUpdateLoopCtor();
+extern void RemoveUpdateLoopCtor();
+extern void InstallUpdateLoopDtor();
+extern void RemoveUpdateLoopDtor();
 
 // --- DialogLoaderLoopT reimplementations (engine/reimpl/dialogloaderloop.cpp) ---
 extern void InstallDialogLoaderLoopStartup();
@@ -159,6 +187,8 @@ extern void InstallDialogLoaderLoopUpdate();
 extern void RemoveDialogLoaderLoopUpdate();
 extern void InstallDialogLoaderLoopDraw();
 extern void RemoveDialogLoaderLoopDraw();
+extern void InstallDialogLoaderLoopLoad();
+extern void RemoveDialogLoaderLoopLoad();
 
 // --- DialogLoopT reimplementations (engine/reimpl/dialogloop.cpp) ---
 extern void InstallDialogLoopStartup();
@@ -169,6 +199,8 @@ extern void InstallDialogLoopUpdate();
 extern void RemoveDialogLoopUpdate();
 extern void InstallDialogLoopDraw();
 extern void RemoveDialogLoopDraw();
+extern void InstallDialogLoopLoad();
+extern void RemoveDialogLoopLoad();
 
 // --- PlatformConfigure (engine/reimpl/platformconfigure.cpp) ---
 extern void InstallPlatformConfigure();
@@ -181,6 +213,20 @@ extern void InstallConfigCurrentVersion();
 extern void RemoveConfigCurrentVersion();
 extern void InstallConfigGetVersionString();
 extern void RemoveConfigGetVersionString();
+extern void InstallConfigCtor();
+extern void RemoveConfigCtor();
+extern void InstallConfigDtor();
+extern void RemoveConfigDtor();
+extern void InstallConfigGetCommandLineString();
+extern void RemoveConfigGetCommandLineString();
+extern void InstallConfigSetCommandLine();
+extern void RemoveConfigSetCommandLine();
+extern void InstallConfigGetPlatformName();
+extern void RemoveConfigGetPlatformName();
+extern void InstallConfigGetLanguageName();
+extern void RemoveConfigGetLanguageName();
+extern void InstallConfigGetBuildName();
+extern void RemoveConfigGetBuildName();
 
 // --- Modification reimplementations (engine/reimpl/modification.cpp) ---
 extern void InstallModificationFind();
@@ -189,6 +235,16 @@ extern void InstallModificationEnable();
 extern void RemoveModificationEnable();
 extern void InstallModificationDisableAll();
 extern void RemoveModificationDisableAll();
+extern void InstallModificationSwap();
+extern void RemoveModificationSwap();
+extern void InstallModificationEnableSavingSettings();
+extern void RemoveModificationEnableSavingSettings();
+extern void InstallModificationSaveList();
+extern void RemoveModificationSaveList();
+extern void InstallModificationRefreshList();
+extern void RemoveModificationRefreshList();
+extern void InstallModificationSetupFileSystem();
+extern void RemoveModificationSetupFileSystem();
 
 // --- LoaderLoop reimplementations (engine/reimpl/loaderloop.cpp) ---
 extern void InstallLoaderLoopStartup();
@@ -219,21 +275,37 @@ static ReimplEntry g_reimplementations[] = {
     { "MainLoop::Draw",        InstallMainLoopDraw,        RemoveMainLoopDraw,        true  },
     { "MainLoop::SetNextLoop", InstallMainLoopSetNextLoop, RemoveMainLoopSetNextLoop, true  },
     { "MainLoop::Run",         InstallMainLoopRun,         RemoveMainLoopRun,         true  },
+    { "MainLoop::IsRunning",   InstallMainLoopIsRunningML, RemoveMainLoopIsRunningML, true  },
+    { "MainLoop::MarkFrameUpdateTime", InstallMainLoopMarkFrameUpdateTime, RemoveMainLoopMarkFrameUpdateTime, true },
+    { "MainLoop::AddPostUpdate",    InstallMainLoopAddPostUpdate,    RemoveMainLoopAddPostUpdate,    true  },
+    { "MainLoop::AddPostDraw",      InstallMainLoopAddPostDraw,      RemoveMainLoopAddPostDraw,      true  },
+    { "MainLoop::RemovePostUpdate", InstallMainLoopRemovePostUpdate, RemoveMainLoopRemovePostUpdate, true  },
+    { "MainLoop::RemovePostDraw",   InstallMainLoopRemovePostDraw,   RemoveMainLoopRemovePostDraw,   true  },
+    { "MainLoop::OnVideoError_s",   InstallMainLoopOnVideoErrorStatic,   RemoveMainLoopOnVideoErrorStatic,   true },
+    { "MainLoop::OnVideoRestart_s", InstallMainLoopOnVideoRestartStatic, RemoveMainLoopOnVideoRestartStatic, true },
+    { "MainLoop::CreateVideoCtx",   InstallMainLoopCreateVideoCtx,   RemoveMainLoopCreateVideoCtx,   true  },
+    { "MainLoop::ReleaseVideoCtx",  InstallMainLoopReleaseVideoCtx,  RemoveMainLoopReleaseVideoCtx,  true  },
+    { "MainLoop::Ctor",             InstallMainLoopCtor,             RemoveMainLoopCtor,             true  },
+    { "MainLoop::Dtor",             InstallMainLoopDtor,             RemoveMainLoopDtor,             true  },
 
     // --- UpdateLoop reimplementations ---
     { "UpdateLoop::IsRunning", InstallUpdateLoopIsRunning, RemoveUpdateLoopIsRunning, true },
+    { "UpdateLoop::Ctor",      InstallUpdateLoopCtor,      RemoveUpdateLoopCtor,      true },
+    { "UpdateLoop::Dtor",      InstallUpdateLoopDtor,      RemoveUpdateLoopDtor,      true },
 
     // --- DialogLoaderLoopT reimplementations ---
     { "DialogLoaderLoopT::Startup",  InstallDialogLoaderLoopStartup,  RemoveDialogLoaderLoopStartup,  true  },
     { "DialogLoaderLoopT::Shutdown", InstallDialogLoaderLoopShutdown, RemoveDialogLoaderLoopShutdown, true  },
     { "DialogLoaderLoopT::Update",   InstallDialogLoaderLoopUpdate,   RemoveDialogLoaderLoopUpdate,   true  },
     { "DialogLoaderLoopT::Draw",     InstallDialogLoaderLoopDraw,     RemoveDialogLoaderLoopDraw,     true  },
+    { "DialogLoaderLoopT::Load",     InstallDialogLoaderLoopLoad,     RemoveDialogLoaderLoopLoad,     true  },
 
     // --- DialogLoopT reimplementations ---
     { "DialogLoopT::Startup",  InstallDialogLoopStartup,  RemoveDialogLoopStartup,  true  },
     { "DialogLoopT::Shutdown", InstallDialogLoopShutdown, RemoveDialogLoopShutdown, true  },
     { "DialogLoopT::Update",   InstallDialogLoopUpdate,   RemoveDialogLoopUpdate,   true  },
     { "DialogLoopT::Draw",     InstallDialogLoopDraw,     RemoveDialogLoopDraw,     true  },
+    { "DialogLoopT::Load",     InstallDialogLoopLoad,     RemoveDialogLoopLoad,     true  },
 
     // --- LoaderLoop reimplementations ---
     { "LoaderLoop::Startup",      InstallLoaderLoopStartup,      RemoveLoaderLoopStartup,      true  },
@@ -248,11 +320,23 @@ static ReimplEntry g_reimplementations[] = {
     { "Configuration::CurrentBuildId",   InstallConfigCurrentBuildId,   RemoveConfigCurrentBuildId,   true  },
     { "Configuration::CurrentVersion",   InstallConfigCurrentVersion,   RemoveConfigCurrentVersion,   true  },
     { "Configuration::GetVersionString", InstallConfigGetVersionString, RemoveConfigGetVersionString, true  },
+    { "Configuration::Ctor",             InstallConfigCtor,             RemoveConfigCtor,             true  },
+    { "Configuration::Dtor",             InstallConfigDtor,             RemoveConfigDtor,             true  },
+    { "Configuration::GetCommandLineString", InstallConfigGetCommandLineString, RemoveConfigGetCommandLineString, true },
+    { "Configuration::SetCommandLine",   InstallConfigSetCommandLine,   RemoveConfigSetCommandLine,   true  },
+    { "Configuration::GetPlatformName",  InstallConfigGetPlatformName,  RemoveConfigGetPlatformName,  true  },
+    { "Configuration::GetLanguageName",  InstallConfigGetLanguageName,  RemoveConfigGetLanguageName,  true  },
+    { "Configuration::GetBuildName",     InstallConfigGetBuildName,     RemoveConfigGetBuildName,     true  },
 
     // --- Modification reimplementations ---
     { "Modification::Find",       InstallModificationFind,       RemoveModificationFind,       true  },
     { "Modification::Enable",     InstallModificationEnable,     RemoveModificationEnable,     true  },
     { "Modification::DisableAll", InstallModificationDisableAll, RemoveModificationDisableAll, true  },
+    { "Modification::Swap",       InstallModificationSwap,       RemoveModificationSwap,       true  },
+    { "Modification::EnableSavingSettings", InstallModificationEnableSavingSettings, RemoveModificationEnableSavingSettings, true },
+    { "Modification::SaveList",        InstallModificationSaveList,        RemoveModificationSaveList,        true },
+    { "Modification::RefreshList",     InstallModificationRefreshList,     RemoveModificationRefreshList,     true },
+    { "Modification::SetupFileSystem", InstallModificationSetupFileSystem, RemoveModificationSetupFileSystem, true },
 
     // Add new entries as you reimplement functions...
 };
