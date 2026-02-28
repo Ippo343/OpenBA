@@ -7,6 +7,13 @@ binary-compatible type header and a reimplementation that hooks the original at 
 The end goal is a readable C++ codebase that mirrors the game's logic, similar to
 projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
+## Current project goal:
+
+1. Hit 100% mapping of all classes in Application-x64.exe
+2. Hit 100% mapping of all types in Application-x64.exe
+3. Hit 100% replacement of exe code with cleaned up decomp of all functions in msvc
+4. After 1-3 done move to the runtime-x64.dll
+
 ## Target Binaries
 
 The game is a multi-binary architecture. The exe contains game logic; the engine runtime is in DLLs.
@@ -67,9 +74,11 @@ Loop types: `LoaderLoop`, `DialogLoaderLoopT`, `DialogLoopT` (menus/loading), pl
 
 ## Type & Function Inventory
 
-Full decompilation status tracking is in **[DECOMP_STATUS.md](DECOMP_STATUS.md)**.
+Full decompilation status tracking is in the **[decomp/](decomp/README.md)** directory, split per-binary:
 
-Covers all three binaries: Application-x64.exe (10,476 functions), Runtime-x64.dll (15,290 functions), VideoDX11-x64.dll (576 functions). Includes engine classes, ECS components, key identified functions, and per-binary breakdowns.
+- **[decomp/application.md](decomp/application.md)** — Application-x64.exe (10,476 functions: ECS components, UI controllers, game logic)
+- **[decomp/runtime.md](decomp/runtime.md)** — Runtime-x64.dll (15,290 functions: 18 namespaces, 100+ classes)
+- **[decomp/videodx11.md](decomp/videodx11.md)** — VideoDX11-x64.dll (576 functions: DX11 renderer plugin)
 
 ---
 
@@ -77,14 +86,6 @@ Covers all three binaries: Application-x64.exe (10,476 functions), Runtime-x64.d
 
 ### Ghidra is the primary documentation tool
 All function renaming, type annotation, struct layouts, and per-function comments go directly in Ghidra. It's persistent, searchable, and stays in sync with the actual analysis. External markdown files are for higher-level notes that don't fit in Ghidra (architecture diagrams, algorithm analysis, session logs).
-
-### Decompilation priority order
-
-1. **Engine** (MainLoop/UpdateLoop) - understand the tick structure and frame budget
-2. **ECS core** (ComponentEntity update loop) - find the per-frame iteration pattern
-3. **AI/Pathfinding** - CitizenAIComponent + Pathfinding::Scene likely the biggest CPU sink in late-game
-4. **Economy** (Storage/Market) - suspected O(n) lookups across all buildings
-5. **Graphics** (Renderer/DrawItems) - batching and draw call optimization opportunities
 
 ---
 

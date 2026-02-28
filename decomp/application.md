@@ -1,20 +1,6 @@
-# Decompilation Status & Type Inventory
+# Application-x64.exe (Game Logic)
 
-Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompiled & documented, `R` = fully reimplemented & hooked in-game
-
-## Binary Summary
-
-| Binary | Functions | Classes | Role |
-|--------|-----------|---------|------|
-| Application-x64.exe | 10,476 | ~67 ECS components + game logic | Game logic, UI controllers, ECS |
-| Runtime-x64.dll | 15,290 | 100+ across 18 namespaces | Full engine runtime |
-| VideoDX11-x64.dll | 576 (~86 rendering) | ~25 Video::*Data classes | DX11 renderer plugin |
-
----
-
-## Application-x64.exe (Game Logic)
-
-### Engine Core
+## Engine Core
 
 | Status | Class | Namespace | Known Methods |
 |--------|-------|-----------|---------------|
@@ -27,7 +13,7 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | R | `Configuration` | System | **10 methods hooked** (`engine/reimpl/configuration.cpp`): CurrentBuildId, CurrentVersion, GetVersionString, GetPlatformName, GetLanguageName, GetBuildName, GetCommandLineString, SetCommandLine (8 full reimpl), Ctor, Dtor (2 passthrough wrappers — lifecycle only). AddCommandLine (4b thunk), GetResourceParameter (10b), GetResourceParameterCount (3b) — too small to hook, documented. |
 | R | `Modification` | IO | **8 methods hooked** (`engine/reimpl/modification.cpp`): Find, Enable, DisableAll, Swap, SaveList (5 full reimpl), EnableSavingSettings, RefreshList, SetupFileSystem (3 passthrough wrappers — RefreshList/SetupFileSystem need FileSystem+PackageFile subsystem). Get/GetCount/IsDirty/GetModification (too small, 3-12 bytes, documented). AreExternalModsUpToDate/UpdateExternalMods (stubs, 3 bytes). |
 
-### ECS - Game Components (all ComponentEntity children)
+## ECS - Game Components (all ComponentEntity children)
 
 | Status | Component | Category | Purpose |
 |--------|-----------|----------|---------|
@@ -101,7 +87,7 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | ~ | `StatusIconComponent` | Rendering | **0x108 bytes** (3rd largest), parent=Component. Overhead status icons. Ctor 0x14012c0c0, factory 0x1400388c0. TypeInfo DAT_1401c7e08. |
 | ~ | `UIComponent` | UI | 0x38 bytes, parent=Component. In-world UI element. Ctor 0x14012de00, factory 0x140039550. TypeInfo DAT_1401c7fc8. |
 
-### ECS - Tool/Creation Descriptions
+## ECS - Tool/Creation Descriptions
 
 | Status | Description | Parent | Size | Details |
 |--------|-------------|--------|------|---------|
@@ -116,86 +102,88 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | ~ | `SelectDescription` | Description | 0x48 (72B) | Ctor inlined, vtable 0x14015a5f0, factory 0x14000bb90. TypeInfo DAT_1401c48a8. Selection tool. |
 | ~ | `ValueDescription` | Description | 0x50 (80B) | Ctor inlined, vtable 0x14015add0, factory 0x14000faa0. TypeInfo DAT_1401c4bf0. Default value=100 at +0x44. |
 | ~ | `ToolbarDescription` | Description | 0x68 (104B) | Ctor 0x14012dc30, factory 0x140039490. TypeInfo DAT_1401c7f58. Sentinel -1 at +0x60. Toolbar layout. |
-| ~ | `EnvironmentDescription` | Object::External | 0x1b8 (440B) | Ctor 0x1400941c0, factory 0x140019120. TypeInfo DAT_1401c5980. 12×0x20-byte blocks of ARGB colors + float params (lighting/environment presets). |
+| ~ | `EnvironmentDescription` | Object::External | 0x1b8 (440B) | Ctor 0x1400941c0, factory 0x140019190. TypeInfo DAT_1401c5980. 12×0x20-byte blocks of ARGB colors + float params (lighting/environment presets). |
 | ~ | `CaptureBoxDescription` | ElementDescription | 0x78 (120B) | Ctor inlined, vtable 0x14015d4a0, factory 0x140013d90. TypeInfo DAT_1401c5600. Screenshot capture. |
 | ~ | `FrustumOutlineDescription` | ElementDescription | 0x80 (128B) | Ctor inlined, vtable 0x14015c300, factory 0x1400122c0. TypeInfo DAT_1401c5168. Sentinel -1 at +0x78. Debug frustum display. |
 
-### Game UI — Dialog Controllers (22 classes)
+## Game UI — Dialog Controllers (22 classes)
 
-Registered types inheriting from `UI::DialogController`. Each manages a specific game dialog/screen.
+Registered types inheriting from `UI::DialogInstance`. Each manages a specific game dialog/screen.
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `AchievementDialog` | `0x14015af70` | Achievement display |
-| - | `AutoSaveDialog` | `0x14015b0f0` | Autosave notification |
-| - | `EventNotifyDialog` | `0x14015bcf0` | Event notification banner |
-| - | `EventPopupDialog` | `0x14015bd58` | Event popup window |
-| - | `FollowDialog` | `0x14015bdd0` | Camera follow UI |
-| - | `GoalDialog` | `0x14015be50` | Goal/objective display |
-| - | `LoaderDialog` | `0x14015f2e0` | Loading screen |
-| - | `MainMenuDialog` | `0x14015f350` | Main menu |
-| - | `MapParamsDialog` | `0x14015c0d8` | Map generation parameters |
-| - | `MessageDialog` | `0x14015c448` | Message popup |
-| - | `ModDetailsDialog` | `0x14015c558` | Mod details view |
-| - | `ModDialog` | `0x14015c710` | Mod browser/list |
-| - | `ModUploadDialog` | `0x14015c910` | Mod upload (Steam Workshop) |
-| - | `NewGameDialog` | `0x14015c970` | New game setup |
-| - | `OptionsDialog` | `0x14015cad8` | Options/settings menu |
-| - | `OptionInputBindDialog` | `0x14015cb08` | Key binding dialog |
-| - | `SaveLoadDialog` | `0x14015f728` | Save/load screen |
-| - | `ScenarioDialog` | `0x14015d298` | Scenario selection |
-| - | `ToolbarDialog` | `0x14015f9c8` | Main toolbar |
-| - | `TutorialGoalDialog` | `0x140160850` | Tutorial goal display |
-| - | `TutorialHighlightDialog` | `0x1401609a0` | Tutorial highlight overlay |
-| - | `TutorialSetupDialog` | `0x140160d00` | Tutorial setup |
+| Status | Class | Size | Vtable | Factory | Parent | Purpose |
+|--------|-------|------|--------|---------|--------|---------|
+| ~ | `AchievementDialog` | 0xd0 (208B) | `0x14015b020` | `0x140010320` | UI::DialogInstance | Achievement display |
+| ~ | `AutoSaveDialog` | 0xd0 (208B) | `0x14015b120` | `0x1400106c0` | UI::DialogInstance | Autosave notification |
+| ~ | `EventNotifyDialog` | 0xf0 (240B) | `0x14015bca0` | `0x140011500` | UI::DialogInstance | Event notification banner. Ctor 0x140068b60 |
+| ~ | `EventPopupDialog` | 0xc0 (192B) | `0x14015bd80` | `0x140011920` | UI::DialogInstance | Event popup window |
+| ~ | `FollowDialog` | 0xd8 (216B) | `0x14015be00` | `0x140011a20` | UI::DialogInstance | Camera follow UI |
+| ~ | `GoalDialog` | 0xc8 (200B) | `0x14015beb0` | `0x140011b60` | UI::DialogInstance | Goal/objective display |
+| ~ | `LoaderDialog` | 0xc8 (200B) | `0x14015f300` | `0x140020bb0` | UI::DialogInstance | Loading screen |
+| ~ | `MainMenuDialog` | 0xc8 (200B) | `0x14015f550` | `0x140020d10` | UI::DialogInstance | Main menu |
+| ~ | `MapParamsDialog` | 0xf8 (248B) | `0x14015c180` | `0x140012100` | UI::DialogInstance | Map generation parameters. Ctor 0x14006be20 |
+| ~ | `MessageDialog` | 0xc0 (192B) | `0x14015c480` | `0x1400125d0` | UI::DialogInstance | Message popup |
+| ~ | `ModDetailsDialog` | 0xc8 (200B) | `0x14015c670` | `0x140012790` | UI::DialogInstance | Mod details view |
+| ~ | `ModDialog` | 0xd8 (216B) | `0x14015c870` | `0x140012900` | UI::DialogInstance | Mod browser/list |
+| ~ | `ModUploadDialog` | 0xb8 (184B) | `0x14015c6c0` | `0x140012bc0` | UI::DialogInstance | Mod upload (Steam Workshop) |
+| ~ | `NewGameDialog` | 0xae8 (2792B) | `0x14015c920` | `0x140012c70` | UI::DialogInstance | New game setup (largest). Ctor 0x140071120, has Random@+0x118 |
+| ~ | `OptionsDialog` | 0x1c0 (448B) | `0x14015ceb0` | `0x140012df0` | UI::DialogInstance | Options/settings menu. Ctor 0x140075280 |
+| ~ | `OptionInputBindDialog` | 0xc8 (200B) | `0x14015c480` | `0x140012e60` | **MessageDialog** | Key binding (extends MessageDialog) |
+| ~ | `SaveLoadDialog` | 0x160 (352B) | `0x14015f900` | `0x140021160` | UI::DialogInstance | Save/load screen. Ctor 0x1400b81c0, Sprite@+0xD0 |
+| ~ | `ScenarioDialog` | 0xe8 (232B) | `0x14015d2d0` | `0x140013970` | UI::DialogInstance | Scenario selection |
+| ~ | `ToolbarDialog` | 0x108 (264B) | `0x14015fa00` | `0x140021710` | UI::DialogInstance | Main toolbar. Ctor 0x1400b9890 |
+| ~ | `TutorialGoalDialog` | 0x40 (64B) | `0x1401607a0` | `0x140027440` | **TutorialGoal** | Tutorial goal display |
+| ~ | `TutorialHighlightDialog` | 0xf0 (240B) | `0x1401609e0` | `0x1400278c0` | UI::DialogInstance | Tutorial highlight overlay. Ctor 0x1400e0290 |
+| ~ | `TutorialSetupDialog` | 0x78 (120B) | `0x140160d20` | `0x1400285b0` | **Object::External** | Tutorial setup. Ctor 0x1400e2cc0, base vtable 0x140160c30 |
 
-### Game UI — Panel Controllers (39 classes)
+## Game UI — Panel Controllers (39 classes)
 
 Registered types inheriting from `UI::DialogController`. Each manages a specific in-game panel/HUD element. Some have paired `*Config` types.
 
-| Status | Class | String Address | Purpose |
-|--------|-------|---------------|---------|
-| - | `AttendanceUI` | `0x14015b0c8` | Attendance panel |
-| - | `BuildRequirementUI` | `0x14015b170` | Build requirements display |
-| - | `BuildUI` | `0x14015f1b8` | Build/construction panel |
-| - | `CemeteryUI` | `0x14015b228` | Cemetery panel |
-| - | `CitizenUI` | `0x14015b8c8` | Citizen info panel |
-| - | `ConsumeProduceUI` | `0x14015b298` | Production chain panel |
-| - | `ControlUI` | `0x14015b338` | Control panel (+`ControlUIConfig` at `0x14015b348`) |
-| - | `CropUI` | `0x14015f268` | Crop field panel |
-| - | `DebugUI` | `0x14015b440` | Debug overlay |
-| - | `DestroyUI` | `0x14015ba58` | Demolition panel |
-| - | `EntityUI` | `0x14015bb58` | Entity info panel |
-| - | `EventLogUI` | `0x14015bbe8` | Event log |
-| - | `HelpUI` | `0x14015bf00` | Help panel |
-| - | `HotKeyToolTipUI` | `0x14015bf88` | Hotkey tooltip |
-| - | `ImmigrationUI` | `0x14015c028` | Immigration panel |
-| - | `MapUI` | `0x14015c1f0` | Minimap |
-| - | `ModBrowseUI` | `0x14015c4f0` | Mod browser panel |
-| - | `NoiseUI` | `0x14015c9f8` | Noise/debug display |
-| - | `OrchardUI` | `0x14015cf18` | Orchard panel |
-| - | `PageToggleUI` | `0x14015cfa0` | Page toggle |
-| - | `PastureUI` | `0x14015f5f0` | Pasture panel |
-| - | `ProductionUI` | `0x14015d008` | Production overview |
-| - | `ProfessionUI` | `0x14015d0c8` | Profession assignment |
-| - | `RadiusUI` | `0x14015d148` | Radius display |
-| - | `ResidenceUI` | `0x14015f680` | Residence panel |
-| - | `ResourceLimitUI` | `0x14015d1b8` | Resource limits (+`ResourceLimitUIConfig` at `0x14015d1c8`) |
-| - | `SelectResourceUI` | `0x14015cf00` | Resource selection |
-| - | `SpriteCaptureUI` | `0x14015d3a0` | Screenshot capture |
-| - | `StatusBarUI` | `0x14015d598` | Status bar |
-| - | `StatusIconUI` | `0x14015d868` | Status icons (+`StatusIconUIConfig` at `0x14015d878`) |
-| - | `StorageCapacityUI` | `0x14015d9a8` | Storage capacity display |
-| - | `StorageUI` | `0x14015f950` | Storage panel |
-| - | `TitleDescToolTipUI` | `0x14015d9c0` | Title/description tooltip |
-| - | `ToolUI` | `0x14015da48` | Tool panel |
-| - | `TownHallUI` | `0x14015dac8` | Town hall panel |
-| - | `TradeUI` | `0x14015dd38` | Trade post panel |
-| - | `TutorialUI` | `0x140160ed8` | Tutorial panel |
-| - | `UpgradeUI` | `0x14015ded8` | Upgrade panel (+`UpgradeUIConfig` at `0x14015dee8`) |
-| - | `WorkPlaceUI` | `0x14015dfa8` | Workplace panel |
+Inheritance note: `SelectResourceUI` is an abstract base class (placeholder factory). `CropUI`, `OrchardUI`, and `PastureUI` extend it. `OrchardUI` and `PastureUI` share the same vtable (`0x14015d330`).
 
-### Game UI — Exe-Specific Elements (2 classes)
+| Status | Class | Size | Vtable | Factory | Parent | Purpose |
+|--------|-------|------|--------|---------|--------|---------|
+| ~ | `AttendanceUI` | 0x38 (56B) | `0x14015b070` | `0x1400104b0` | UI::DialogController | Attendance panel |
+| ~ | `BuildRequirementUI` | 0x60 (96B) | `0x14015b1d0` | `0x1400107f0` | UI::DialogController | Build requirements display |
+| ~ | `BuildUI` | 0x50 (80B) | `0x14015f210` | `0x1400209e0` | UI::DialogController | Build/construction panel |
+| ~ | `CemeteryUI` | 0x38 (56B) | `0x14015b240` | `0x140010900` | UI::DialogController | Cemetery panel |
+| ~ | `CitizenUI` | 0xe8 (232B) | `0x14015ba00` | `0x140010f80` | UI::DialogController | Citizen info panel. Ctor 0x140065a40, InternalBasePtr@+0xE0 |
+| ~ | `ConsumeProduceUI` | 0x40 (64B) | `0x14015b2e0` | `0x140010ae0` | UI::DialogController | Production chain panel |
+| ~ | `ControlUI` | 0x40 (64B) | `0x14015b380` | `0x140010c00` | UI::DialogController | Control panel (+`ControlUIConfig`) |
+| ~ | `CropUI` | 0x60 (96B) | `0x14015f270` | `0x140020b10` | **SelectResourceUI** | Crop field panel. Ctor 0x1400b2c90, base vtable 0x14015d330 |
+| ~ | `DebugUI` | 0x130 (304B) | `0x14015b870` | `0x140010ec0` | DialogController | Debug overlay. Ctor 0x140064630 |
+| ~ | `DestroyUI` | 0x78 (120B) | `0x14015bb00` | `0x140011130` | UI::DialogController | Demolition panel |
+| ~ | `EntityUI` | 0x48 (72B) | `0x14015bb90` | `0x140011270` | UI::DialogController | Entity info panel |
+| ~ | `EventLogUI` | 0x80 (128B) | `0x14015bc40` | `0x1400113e0` | UI::DialogController | Event log |
+| ~ | `HelpUI` | 0x78 (120B) | `0x14015bf30` | `0x140011ca0` | UI::DialogController | Help panel. Ctor 0x14006a920 |
+| ~ | `HotKeyToolTipUI` | 0x30 (48B) | `0x14015bfc0` | `0x140011e20` | UI::DialogController | Hotkey tooltip |
+| ~ | `ImmigrationUI` | 0x50 (80B) | `0x14015c080` | `0x140011ee0` | UI::DialogController | Immigration panel |
+| ~ | `MapUI` | 0x50 (80B) | `0x14015c350` | `0x140012240` | UI::DialogController | Minimap |
+| ~ | `ModBrowseUI` | 0x30 (48B) | `0x14015c500` | `0x1400126d0` | UI::DialogController | Mod browser panel |
+| ~ | `NoiseUI` | 0x70 (112B) | `0x14015ca80` | `0x140012d30` | UI::DialogController | Noise/debug display |
+| ~ | `OrchardUI` | 0x48 (72B) | `0x14015d330` | `0x140012ff0` | **SelectResourceUI** | Orchard panel |
+| ~ | `PageToggleUI` | 0x48 (72B) | `0x14015cfb0` | `0x140013160` | UI::DialogController | Page toggle |
+| ~ | `PastureUI` | 0x40 (64B) | `0x14015d330` | `0x140020e10` | **SelectResourceUI** | Pasture panel |
+| ~ | `ProductionUI` | 0x50 (80B) | `0x14015d070` | `0x140013230` | UI::DialogController | Production overview |
+| ~ | `ProfessionUI` | 0x78 (120B) | `0x14015d0f0` | `0x140013400` | UI::DialogController | Profession assignment. Ctor 0x1400775a0 |
+| ~ | `RadiusUI` | 0x38 (56B) | `0x14015d160` | `0x140013590` | UI::DialogController | Radius display |
+| ~ | `ResidenceUI` | 0x40 (64B) | `0x14015f6d0` | `0x140020f60` | UI::DialogController | Residence panel |
+| ~ | `ResourceLimitUI` | 0x40 (64B) | `0x14015d1f0` | `0x1400136b0` | UI::DialogController | Resource limits (+`ResourceLimitUIConfig`) |
+| ~ | `SelectResourceUI` | abstract | — | (abstract) | UI::DialogController | Resource selection base class |
+| ~ | `SpriteCaptureUI` | 0x70 (112B) | `0x14015d4f0` | `0x140013d10` | UI::DialogController | Screenshot capture |
+| ~ | `StatusBarUI` | 0x1d0 (464B) | `0x14015d810` | `0x1400140e0` | UI::DialogController | Status bar. Ctor 0x14007af20 |
+| ~ | `StatusIconUI` | 0x40 (64B) | `0x14015d8a0` | `0x140014180` | UI::DialogController | Status icons (+`StatusIconUIConfig`) |
+| ~ | `StorageCapacityUI` | 0x38 (56B) | `0x14015d950` | `0x1400143f0` | UI::DialogController | Storage capacity display |
+| ~ | `StorageUI` | 0x40 (64B) | `0x14015f970` | `0x140021330` | UI::DialogController | Storage panel |
+| ~ | `TitleDescToolTipUI` | 0x30 (48B) | `0x14015d9f0` | `0x1400144c0` | UI::DialogController | Title/description tooltip |
+| ~ | `ToolUI` | 0x58 (88B) | `0x14015da70` | `0x140014580` | UI::DialogController | Tool panel |
+| ~ | `TownHallUI` | 0x1e8 (488B) | `0x14015dce0` | `0x140014660` | UI::DialogController | Town hall panel. Ctor 0x140081280 |
+| ~ | `TradeUI` | 0x148 (328B) | `0x14015de80` | `0x140015f80` | UI::DialogController | Trade post panel. Ctor 0x140086b80 |
+| ~ | `TutorialUI` | 0x60 (96B) | `0x140160f30` | `0x140029400` | UI::DialogController | Tutorial panel |
+| ~ | `UpgradeUI` | 0x38 (56B) | `0x14015df00` | `0x140016b30` | UI::DialogController | Upgrade panel (+`UpgradeUIConfig`) |
+| ~ | `WorkPlaceUI` | 0x68 (104B) | `0x14015e030` | `0x140016dc0` | UI::DialogController | Workplace panel |
+
+## Game UI — Exe-Specific Elements (2 classes)
 
 UI Element types registered in the exe (beyond the 22+ base elements in Runtime-x64.dll).
 
@@ -204,7 +192,7 @@ UI Element types registered in the exe (beyond the 22+ base elements in Runtime-
 | - | `CaptureBoxElement` | `0x14015d3c8` | Screenshot capture box element |
 | - | `FrustumOutlineElement` | `0x14015c218` | Debug frustum outline element |
 
-### Game Systems — Tools & Placement (11 classes)
+## Game Systems — Tools & Placement (11 classes)
 
 Registered types for building/creation tools used by the placement system.
 
@@ -222,7 +210,7 @@ Registered types for building/creation tools used by the placement system.
 | - | `RemovalTool` | `0x140161dd0` | Demolition/removal |
 | - | `RoadTool` | `0x140161e58` | Road building |
 
-### Game Systems — State Machine Actions (32 classes)
+## Game Systems — State Machine Actions (32 classes)
 
 Registered types used by `StateMachineComponent` to drive citizen AI behavior. Each action is a discrete work step.
 
@@ -261,7 +249,7 @@ Registered types used by `StateMachineComponent` to drive citizen AI behavior. E
 | - | `ShowTool` | `0x1401589a0` | UI |
 | - | `TradeWork` | `0x1401619f8` | Economy |
 
-### Game Systems — Tutorials (16 classes)
+## Game Systems — Tutorials (16 classes)
 
 Registered types for the tutorial system. Hierarchical: Tutorial contains TutorialSteps, each step has Setup/Goal/Image sub-types.
 
@@ -284,7 +272,7 @@ Registered types for the tutorial system. Hierarchical: Tutorial contains Tutori
 | - | `TutorialSetupGameSpeed` | `0x140160d80` | Setup: set game speed |
 | - | `TutorialSetupRestrictPlayer` | `0x140160e00` | Setup: restrict input |
 
-### Game Systems — Achievement Goals (7 exe-specific subtypes)
+## Game Systems — Achievement Goals (7 exe-specific subtypes)
 
 Goal subtypes registered in the exe. Base types (Achievement, AchievementInstance, AchievementManager, Goal, GoalInstance, GoalList) are in Runtime-x64.dll.
 
@@ -298,7 +286,7 @@ Goal subtypes registered in the exe. Base types (Achievement, AchievementInstanc
 | - | `FinishTutorialGoal` | `0x140160400` | Goal: complete tutorial |
 | - | `FinishTutorialInstance` | `0x1401603e8` | Runtime state for FinishTutorialGoal |
 
-### Game Systems — World Generation (3 classes)
+## Game Systems — World Generation (3 classes)
 
 Map and terrain generation types.
 
@@ -308,7 +296,7 @@ Map and terrain generation types.
 | - | `TerrainGenerator` | `0x14015f158` | Terrain heightmap/biome generation |
 | - | `ClimateGenerator` | `0x14015e128` | Climate/weather pattern generation |
 
-### Game Systems — Miscellaneous Types (9 classes)
+## Game Systems — Miscellaneous Types (9 classes)
 
 Other registered types in the exe that don't fit the above categories.
 
@@ -324,7 +312,7 @@ Other registered types in the exe that don't fit the above categories.
 | - | `SaveLoadEmpty` | `0x14015ebc0` | Empty save state placeholder |
 | - | `AutosaveInterval` | `0x14015e548` | Autosave timing config |
 
-### Key Standalone Functions
+## Key Standalone Functions
 
 Major game-logic functions identified but not yet part of any class decomposition.
 
@@ -339,374 +327,3 @@ Major game-logic functions identified but not yet part of any class decompositio
 | - | `0x14009f3e0` | (unnamed) | 102 | Terrain grid query with pathfinding |
 | - | `0x1400bf790` | `Pathfinding_FindPath` | 12 | A* pathfinding |
 | - | `0x14012cf10` | `StorageComponent_QueryCount` | 44 | Storage query — O(entries×components), critical hotspot |
-
----
-
-## Runtime-x64.dll (Engine Core)
-
-15,290 functions, ~4,800+ exports, 18 namespaces. Every exported class follows a consistent pattern: `_TypeName`, `_ParentTypeName`, `Type`, `TypeId`, `TypeName`, `operator_new`, `operator_delete`, `CreateNewObject`, `CreateInPlaceObject`, `Reconstruct`, `Construct`, `Destruct`, copy-ctor, `operator=`.
-
-### System (Core Types) - 508 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `String` | ctor, operator=, concatenation, comparison, conversion |
-| - | `WideString` | StrLength, AsUTF8, dtor |
-| - | `Filename` | GetPathFilename, GetPathIdentifier |
-| - | `Color` | RGBA (uint32-backed) |
-| - | `Time` | AsSeconds (int64 ticks) |
-| - | `Timer` | timer utility |
-| - | `DateTime` | from FILETIME |
-| - | `Random` | Rand, RandTol, RandFloat, RandFloatTol |
-| - | `CriticalSection` | mutex wrapper |
-| - | `StackCriticalSection` | scoped lock |
-| - | `Thread` | Start, WaitForFinish, OnCompleted (vtable) |
-| - | `Compression` | compression utility |
-| R | `Configuration` | **10 methods hooked**: CurrentBuildId, CurrentVersion, GetVersionString, GetPlatformName, GetLanguageName, GetBuildName, GetCommandLineString, SetCommandLine (8 full reimpl), Ctor, Dtor (2 passthrough — lifecycle). 3 too-small documented. Uses Map::Find/Insert, ParseCommand/ParseValue. |
-| - | `MemoryAllocator` | MemAlloc, MemFree |
-| - | `Debug` | debug output |
-| - | `Error` | SetText, Display |
-| - | `CRC` | CRC hash |
-
-### Math - 384 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Scalar` | float wrapper (SSE float1) |
-| - | `Vector2` | Scalar, ctor (float2) |
-| - | `Vector3` | Scalar, X, Y, Dot, Normalize, Length, Heading (float3) |
-| - | `Vector4` | float4 |
-| - | `Matrix` | Identity (4x4) |
-| - | `Quaternion` | FromYawPitch, FromYawPitchOffset |
-| - | `Transform` | SetTransform, GetTransform, Identity, operator* (Quat + Vec3) |
-| - | `Transform2` | 2D transform (rotation + translation) |
-| - | `Transform3` | Identity (axis vectors + origin) |
-
-### Volume (Bounding Primitives) - 93 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Box` | Extend (AABB, min/max Vector3) |
-| - | `Circle` | center + radius |
-| - | `Rectangle` | min/max Vector2 |
-| - | `Frustum` | 6 planes, perspective or ortho |
-| - | `Plane` | normal + offset |
-
-### Object System - 806 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Base` | TypeName, Type, IsA, Construct, Destruct, Reconstruct, Serialize, operator_delete |
-| - | `BaseTypeInfo` | RTTI descriptors |
-| - | `Type` | type registry (uint32) |
-| - | `Internal` | internal (owned) object |
-| - | `External` | external (resource) object, GetPath |
-| - | `InternalBasePtr` | IsPtrValid, CheckPtr |
-| - | `InternalPtr<T>` | smart pointer for internal objects |
-| - | `ExternalPtr<T>` | smart pointer for external objects |
-| - | `Factory` | object creation |
-| - | `InternalFactory` | internal object creation |
-| - | `ExternalFactory` | FindOrLoad, GetPathForReferenceId, IsReferenceModeEnabled |
-| - | `ExternalList` | external resource lists |
-| - | `ExternalCompiler` | asset compilation |
-| - | `ExtensionCompiler` | extension compilation |
-| - | `CompiledExternal` | compiled resource |
-
-### IO (File System & Serialization) - 550 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Stream` | base stream (vtable) |
-| - | `FileStream` | file-backed stream |
-| - | `MemoryStream` | memory-backed stream |
-| - | `CompressedStream` | compressed stream |
-| - | `CompressedFileStream` | compressed file I/O |
-| - | `CompressedMemoryStream` | compressed memory I/O |
-| - | `CompressedCopyFileStream` | compressed copy stream |
-| - | `BinaryFileStream` | binary file stream |
-| - | `TextFileStream` | text file I/O |
-| - | `TextFile` | text file |
-| - | `VisitorStream` | visitor-pattern stream |
-| - | `Visitor` | visitor pattern |
-| - | `Serializer` | serialization engine |
-| - | `BinaryReader` | typed binary reader |
-| - | `BinaryWriter` | typed binary writer |
-| - | `ReaderWriter` | bidirectional reader/writer |
-| - | `FileSystem` | virtual file system (packages + mods) |
-| - | `PackageFile` | package archive |
-| R | `Modification` | **8 methods hooked** (see Engine Core above): Find, Enable, DisableAll, Swap, SaveList (5 full reimpl) + EnableSavingSettings, RefreshList, SetupFileSystem (3 passthrough). Uses Persistence SetBool/SetInt, Filename::GetPathFilename, ModArrayCopy. 6 too-small documented. |
-| - | `Persistence` | GetSavePath, save state |
-| - | `Registry` | Windows registry access |
-
-### Graphics / Rendering - 641 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Scene` | scene graph root |
-| - | `Renderer` | Draw, AddDrawItem, GetShader, GetCullCamera |
-| - | `Camera` | Frustum + Transform3 |
-| - | `Geometry` | UpdateAttached, AABB |
-| - | `GraphicsMesh` | Node, TriangleList |
-| - | `MeshInstance` | Update, UpdateHierarchy, AddDrawItems, SetMesh, SetMaterials, IsAnimating |
-| - | `EdgeMesh` | Vertices, ctor, dtor |
-| - | `EdgeMeshInstance` | AddObject, RemoveObject, SetMesh |
-| - | `EdgeVertex` | Set |
-| - | `TriangleVertex` | Set |
-| - | `Material` | material definitions |
-| - | `MaterialInstance` | per-object materials, BuildParameters |
-| - | `Light` | base light |
-| - | `AmbientLight` | ambient light |
-| - | `SpotLight` | position, cone, color, shadow map |
-| - | `SunLight` | Update, Draw, DrawShadowMap, AddDrawItems |
-| - | `Animation` | animation data |
-| - | `AnimationGroup` | animation sets (external resource) |
-| - | `AnimationEvent` | animation callbacks |
-| - | `AnimationManager` | Update, Serialize |
-| - | `AnimationState` | playback state |
-| - | `Particle` | single particle |
-| - | `ParticleInstance` | Update, AddDrawItems |
-| - | `ParticleSystem` | particle system def |
-| - | `ParticleSystemInstance` | Update |
-| - | `InterpolatedState<T>` | smooth interpolation (Transform, Vector3, Box, float, double) |
-| - | `FrameCopyImageBuffer` | Render |
-| - | `GeneratedImageBuffer` | generated textures |
-| - | `ReflectionImageBuffer` | reflection rendering |
-| - | `Sprite` | 2D sprite |
-| - | `SpriteSheet` | sprite atlas |
-| - | `SpriteCapture` | sprite rendering |
-| - | `SpriteContext` | sprite batch state |
-
-### Video (GPU Abstraction) - 669 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Device` | Lock, Unlock, ReleaseDynamic, AdjustDisplay, singleton |
-| - | `Device::Adapter` | GPU adapter info |
-| - | `Device::DisplayMode` | display mode |
-| - | `Device::GraphicsInterface` | graphics API interface |
-| - | `Device::RefreshRate` | refresh rate |
-| - | `DeviceData` | platform-specific device data |
-| - | `Context` | SetRenderBuffer, SetDefaultRenderBuffer |
-| - | `ContextData` | platform-specific context data |
-| - | `RenderBuffer` | Create, ctor, dtor |
-| - | `RenderBufferData` | Bind |
-| - | `ImageBuffer` | Width, Height, IsCompressed, GetLevelCount, CopyFromTexture |
-| - | `ImageBufferData` | platform-specific texture data |
-| - | `VertexBuffer` | Lock, Unlock |
-| - | `VertexBufferData` | platform vertex data |
-| - | `IndexBuffer` | Lock, Unlock |
-| - | `IndexBufferData` | platform index data |
-| - | `ConstantBuffer` | Bind (context, data, size) |
-| - | `ConstantBufferData` | platform constant buffer |
-| - | `VertexLayout` | vertex input layout |
-| - | `VertexLayoutData` | IAInputLayout |
-| - | `VertexProgram` | vertex shader |
-| - | `VertexProgramData` | platform vertex shader |
-| - | `PixelProgram` | pixel shader |
-| - | `PixelProgramData` | platform pixel shader |
-| - | `VideoProgram` | combined shader program |
-| - | `VideoProgramData` | platform shader program |
-| - | `ShaderProgram` | shader with Parameter constants |
-| - | `RenderState` | render state management |
-| - | `RenderState::AlphaBlend` | alpha blend state |
-| - | `RenderState::Depth` | depth state |
-| - | `RenderState::Stencil` | stencil state |
-| - | `RenderStateData` | platform render state |
-| - | `Viewport` | viewport rect |
-| - | `Configuration` | video configuration, singleton |
-
-### UI System - 1,766 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `UserInterface` | Update, PausesGame |
-| - | `Dialog` | GetTemplate, CreateElement |
-| - | `DialogInstance` | OnUpdate, OnUpdateLayout, AddController, GetController, FindElement, SetElementId, SetChild |
-| - | `DialogController` | OnUpdate, OnUpdateLayout, OnOpened, OnClosed, OnCreated, OnElementEvent, OnSerializeSettings, GetContainer, CreateInPlaceObject |
-| - | `DialogControllerConfig` | ctor, dtor |
-| - | `Element` | Update, SetFlagsOnOff, FindNext |
-| - | `ElementDescription` | GetFileVersion, Serialize, CreateInstance |
-| - | `Font` | font rendering |
-| - | `CharacterSet` | character set data |
-| - | `StringTable` | localized string lookup |
-| - | `Cursor` | mouse cursor |
-| - | `ComboDialog` | dropdown dialog |
-| - | `ToolTipDialog` | tooltip dialog |
-
-**UI Element Types** (all under `UI` namespace, each has matching `*Description`):
-
-| Status | Element | Purpose |
-|--------|---------|---------|
-| - | `AnimatedImageElement` | Animated image display |
-| - | `BorderElement` | Border/frame |
-| - | `ButtonElement` | Clickable button |
-| - | `CheckElement` | Checkbox |
-| - | `ClipRegionElement` | Clip region |
-| - | `ComboElement` | Dropdown combo box |
-| - | `ContainerElement` | Generic container |
-| - | `DocumentTextElement` | Rich text display |
-| - | `EditElement` | Text input field |
-| - | `GraphElement` | Data graph/chart |
-| - | `GroupElement` | Grouping container |
-| - | `ImageElement` | Image display |
-| - | `LabelElement` | Text label |
-| - | `LayoutElement` | Layout container |
-| - | `ListElement` | List display |
-| - | `NumberElement` | Number display |
-| - | `NumberEditElement` | Number input |
-| - | `PageElement` | Tab page content |
-| - | `ProgressElement` | Progress bar |
-| - | `RadioElement` | Radio button |
-| - | `RibbonElement` | Ribbon UI |
-| - | `ScrollElement` | Scroll container |
-| - | `SliderElement` | Slider control |
-| - | `SpinnerElement` | Numeric spinner |
-| - | `TabElement` | Tab container (AddTab) |
-| - | `TableElement` | Data table |
-| - | `TextElement` | Text block (SetParameter) |
-
-### Collision2D - 81 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `CollisionMesh` | edges, triangles, vertices, normals |
-| - | `Surface` | mask, color, report-only |
-| - | `Scene` | AddCircle, AddMesh, Collide, Intersect (swept circles, static meshes) |
-
-### Picking (3D) - 52 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `PickingMesh` | SubMesh, AABB, triangles, vertices, normals |
-| - | `Scene` | AddMesh, Clip, Intersect, GetTransform |
-
-### Pathfinding - 49 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `PointList` | navigation point list (external resource) |
-| - | `Scene` | AddNode, Build, GeneratePath, SmoothPath, RemoveNode (A* on 2D grids) |
-| - | `IPathInfo` | path info interface |
-
-### Input - 69 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Device` | GetValue, Pressed, Released, PressedOrRepeated (keyboard/mouse/gamepad, singleton) |
-| - | `Configuration` | mouse clipping/display, legacy mode (singleton) |
-| - | `KeyMap` | RegisterInput, GetValue, Pressed, Released, ClearAll, Save, Load |
-
-### Achievement - 102 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Achievement` | title, description, goals, sprite |
-| - | `AchievementInstance` | Update, IsMet, HasFailed |
-| - | `AchievementManager` | GetAchievementCount, SetAchievementMet, ReadAchievements (singleton) |
-| - | `Goal` | text |
-| - | `GoalInstance` | Update, IsMet, HasFailed, CheckGoalState |
-| - | `GoalList` | AreGoalsMet, AnyGoalFailed |
-
-### Save / Persistence - 39 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `SaveLoad` | SetOperation, Update, Draw, LoadMetaData, SaveMetaData (singleton) |
-| - | `SavedState` | Store, Retrieve, Discard |
-
-### Collection (Containers) - 41 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `Array<T>` | dynamic array |
-| - | `LinkedList<T>` | doubly-linked list |
-| - | `Set<T>` | sorted set (AVL tree) |
-
-### Utility - 20 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `PerlinNoise` | noise generation |
-| - | `ImageTools` | image resize, color swap, load from memory |
-| - | `HashGrid<T>` | spatial hash grid (used by Collision2D, Pathfinding) |
-
-### Debug - 8 symbols
-
-| Status | Class | Known Methods |
-|--------|-------|---------------|
-| - | `AnimationDebug` | draw animation skeleton |
-| - | `Collision2DDebug` | draw collision shapes |
-| - | `PathfindingDebug` | draw pathfinding graph |
-| - | `PickingDebug` | draw picking meshes |
-
----
-
-## Reimplementation Dependencies & Blockers
-
-All engine core loop classes (MainLoop, UpdateLoop, LoaderLoop, DialogLoaderLoopT, DialogLoopT) are now fully reimplemented (R). Resolved infrastructure: ExternalFactory (FindOrLoad, Clean, IsDerivedFrom), String lifecycle (ctor/dtor/copy), Filename::AdjustDelimiters.
-
-All engine core classes promoted to R. Configuration fully reimplemented (8/10 methods, remaining 2 are lifecycle passthroughs). Modification at 5/8 full reimpl, remaining 3 passthroughs need deeper I/O subsystem support.
-
-Resolved dependencies (used by Configuration and Modification reimplementations):
-- `Map::Find` (0x18002ace0) — AVL tree lookup for command-line map
-- `Map::Insert` (0x18002a090) — AVL tree insert for command-line map
-- `ParseCommand` (0x1800c4a00) — extract "/command" token from CLI string
-- `ParseValue` (0x1800c4930) — extract value token after command
-- `Persistence::_singleton` (0x1801fc6b8) — key/value settings store
-- `Persistence::SetBool` (0x1800b8380) — store bool via "prefix + suffix" key format
-- `Persistence::SetInt` (0x1800b80c0) — store int via "prefix + suffix" key format
-- `Filename::GetPathFilename` (0x1800c6740) — extract base filename, strips path/extension
-- `ModArrayCopy` (0x180010110) — deep copy Mod array (0x80-byte elements)
-
-Remaining passthrough wrappers (blocked on subsystem infrastructure):
-
-| Passthrough Function | Dependency | What's Needed |
-|---------------------|------------|---------------|
-| `Modification::RefreshList` | `FileSystem`, `PackageFile`, `Persistence` | ~3646 bytes, scans filesystem for .pkm packages, rebuilds mod list |
-| `Modification::SetupFileSystem` | `FileSystem`, `PackageFile`, `ExternalFactory` | ~2617 bytes, mounts mod packages into engine VFS |
-| `Modification::EnableSavingSettings` | Calls `RefreshList` | Thin wrapper, blocked by RefreshList |
-| `Configuration::Ctor` | Map init, field zeroing | 62 bytes, lifecycle — low priority |
-| `Configuration::Dtor` | Map teardown, list cleanup | 49 bytes, lifecycle — low priority |
-
-### Hook Infrastructure Notes
-
-- **Total hooks**: 57 (all verified in-game)
-- **Trampoline safety**: Some hooks have RIP-relative instructions in their prologues. Trampolines for these are broken (wrong displacement after relocation). Currently safe because no reimplementations call through trampolines. If A/B testing via trampoline is needed later, `InstallHook` must detect and relocate RIP-relative instructions.
-- **Too-small functions**: Functions under 12 bytes cannot receive the inline jump patch. These are documented as "R (too small to hook)" with full reimplementation in source comments.
-
----
-
-## VideoDX11-x64.dll (DX11 Renderer Plugin)
-
-576 functions (~86 rendering code, rest CRT). Plugin-style DLL with minimal export surface.
-
-### Exports
-
-| Export | Address | Purpose |
-|--------|---------|---------|
-| `CreateDeviceData` | `0x1800011a0` | Factory - creates DX11 device backend |
-| `GetDeviceName` | `0x180001230` | Returns renderer name |
-
-### Classes (all `*Data` companion classes for engine abstractions)
-
-| Status | Class | Purpose |
-|--------|-------|---------|
-| - | `DeviceData` | DX11 device implementation |
-| - | `ContextData` | DX11 context bindings |
-| - | `VertexBufferData` | DX11 vertex buffer |
-| - | `IndexBufferData` | DX11 index buffer |
-| - | `ConstantBufferData` | DX11 constant buffer |
-| - | `RenderBufferData` | DX11 render target |
-| - | `ImageBufferData` | DX11 texture |
-| - | `VertexProgramData` | DX11 vertex shader |
-| - | `PixelProgramData` | DX11 pixel shader |
-| - | `VideoProgramData` | DX11 combined shader program |
-| - | `RenderStateData` | DX11 rasterizer/blend/depth state |
-| - | `VertexLayoutData` | DX11 input layout |
-
-### Rendering Specs
-- Backbuffer: `DXGI_FORMAT_B8G8R8A8_UNORM`
-- Depth/Stencil: `DXGI_FORMAT_D24_UNORM_S8_UINT`
-- Min feature level: `D3D_FEATURE_LEVEL_10_0`
-- MSAA support, device lost/reset handling
-- Imports: `d3d11.dll` (D3D11CreateDevice), `dxgi.dll` (CreateDXGIFactory1), DINPUT8
