@@ -5,18 +5,18 @@
 // hidden pointer in RCX, even though String is only 8 bytes.
 //
 // Methods fully reimplemented:
-//   - CurrentBuildId    (0x1800C4C60) — parses compile date → YYMMDD build ID
-//   - CurrentVersion    (0x1800C4F40) — returns "1.0.7"
-//   - GetVersionString  (0x1800C4F90) — formats packed version int
-//   - GetPlatformName   (0x1800C5210) — returns platform name string
-//   - GetLanguageName   (0x1800C4BC0) — returns language name string
-//   - GetBuildName      (0x1800C5280) — returns build name string
+//   - CurrentBuildId       (0x1800C4C60) — parses compile date → YYMMDD build ID
+//   - CurrentVersion       (0x1800C4F40) — returns "1.0.7"
+//   - GetVersionString     (0x1800C4F90) — formats packed version int
+//   - GetPlatformName      (0x1800C5210) — returns platform name string
+//   - GetLanguageName      (0x1800C4BC0) — returns language name string
+//   - GetBuildName         (0x1800C5280) — returns build name string
+//   - GetCommandLineString (0x1800C5300) — AVL tree lookup via Map::Find
+//   - SetCommandLine       (0x1800C47A0) — parse + AVL tree insert via ParseCommand/ParseValue
 //
 // Methods hooked (passthrough wrapper with logging):
 //   - Ctor                  (0x1800C51B0) — zero-init + set singleton
 //   - Dtor                  (0x1800C5170) — destroy map + cleanup
-//   - GetCommandLineString  (0x1800C5300) — AVL tree lookup
-//   - SetCommandLine        (0x1800C47A0) — parse + AVL tree insert
 
 #include "Configuration.h"
 #include "hooks.h"
@@ -270,49 +270,89 @@ static void Reimpl_Dtor(Configuration* self) {
 }
 
 // ============================================================
-// GetCommandLineString (0x1800C5300) — PASSTHROUGH WRAPPER
-// Looks up a command-line key in the AVL tree map, returns value.
-// Uses Map::Find (FUN_18002ace0) internally.
+// GetCommandLineString (0x1800C5300) — FULL REIMPLEMENTATION
+// Looks up a command-line key in the AVL tree map, returns value as String.
 //
-// MSVC non-trivial return: RCX=hidden return ptr, RDX=this, R8=key
+// MSVC member non-trivial return: RCX=this, RDX=hidden return ptr, R8=key
+// Map::Find returns a BST node: [0]=key.m_data, [8]=value.m_data, ...
 // ============================================================
 
-typedef void* (*Configuration_GetCommandLineString_t)(void* retval, Configuration* self, void* key);
+static void* Reimpl_GetCommandLineString(Configuration* self, void* retval, void* key) {
+    // Look up key in the AVL tree map at &self->m_commandLineData
+    void** node = (void**)fn_Map_Find(&self->m_commandLineData, key);
 
-static void* Reimpl_GetCommandLineString(void* retval, Configuration* self, void* key) {
+    // Initialize return String to empty
+    *(void**)retval = nullptr;
+
+    if (node != nullptr) {
+        // Node[1] = value String's m_data pointer (at offset +0x08 in BST node)
+        void* valueData = node[1];
+        if (valueData != nullptr) {
+            *(void**)retval = valueData;
+            // Increment refcount (int32 at m_data - 4)
+            *reinterpret_cast<int32_t*>(static_cast<char*>(valueData) - 4) += 1;
+        }
+    }
+
 #ifdef _DEBUG
     const char* keyStr = key ? *(const char**)key : nullptr;
-    printf("[Configuration::GetCommandLineString] key=\"%s\" mapCount=%d\n",
-           keyStr ? keyStr : "(null)", self->m_commandLineCount);
-#endif
-
-    void* result = ((Configuration_GetCommandLineString_t)g_hookGetCommandLineString.trampoline)(
-        retval, self, key);
-
-#ifdef _DEBUG
     char* val = *(char**)retval;
-    printf("[Configuration::GetCommandLineString] result=\"%s\"\n", val ? val : "(null)");
+    printf("[Configuration::GetCommandLineString] key=\"%s\" -> \"%s\"\n",
+           keyStr ? keyStr : "(null)", val ? val : "(empty)");
 #endif
 
-    return result;
+    return retval;
 }
 
 // ============================================================
-// SetCommandLine (0x1800C47A0) — PASSTHROUGH WRAPPER
-// Parses "key=value" pairs from a command-line string and inserts
-// them into the AVL tree map.
+// SetCommandLine (0x1800C47A0) — FULL REIMPLEMENTATION
+// Parses "/key value" or "/key:value" pairs from a command-line
+// string and inserts them into the AVL tree map.
+//
+// MSVC member: RCX=this, RDX=commandLine(const String&)
+// Uses ParseCommand/ParseValue (static, non-trivial return) to tokenize.
+// Uses Map::Insert to add key/value pairs to the AVL tree.
 // ============================================================
 
-typedef void (*Configuration_SetCommandLine_t)(Configuration* self, void* commandLine);
-
 static void Reimpl_SetCommandLine(Configuration* self, void* commandLine) {
+    // Get command line string data and length
+    void* cmdData = *(void**)commandLine;
+    if (cmdData == nullptr) return;
+    int cmdLen = *reinterpret_cast<int32_t*>(static_cast<char*>(cmdData) - 8);
+    if (cmdLen <= 0) return;
+
 #ifdef _DEBUG
-    const char* cmdStr = commandLine ? *(const char**)commandLine : nullptr;
-    printf("[Configuration::SetCommandLine] self=%p cmd=\"%s\"\n",
-           (void*)self, cmdStr ? cmdStr : "(null)");
+    printf("[Configuration::SetCommandLine] cmd=\"%s\" len=%d\n",
+           (const char*)cmdData, cmdLen);
 #endif
 
-    ((Configuration_SetCommandLine_t)g_hookSetCommandLine.trampoline)(self, commandLine);
+    int pos = 0;
+    do {
+        // Parse next "/command" token (static, non-trivial return: RCX=retval)
+        void* cmdStr = nullptr;
+        fn_ParseCommand(&cmdStr, &pos, commandLine);
+
+        // Empty/null command = end of parsing
+        if (cmdStr == nullptr) return;
+        int cmdNameLen = *reinterpret_cast<int32_t*>(static_cast<char*>(cmdStr) - 8);
+        if (cmdNameLen == 0) {
+            fn_String_Dtor(&cmdStr);
+            return;
+        }
+
+        // Parse the value token
+        void* valStr = nullptr;
+        fn_ParseValue(&valStr, &pos, commandLine);
+
+        // Insert key=value into the AVL tree map
+        uint64_t nodeTemp = 0;
+        fn_Map_Insert(&self->m_commandLineData, &nodeTemp, &cmdStr, &valStr);
+
+        // Destroy temp strings
+        fn_String_Dtor(&valStr);
+        fn_String_Dtor(&cmdStr);
+
+    } while (pos < cmdLen);
 
 #ifdef _DEBUG
     printf("[Configuration::SetCommandLine] done, mapCount=%d\n", self->m_commandLineCount);

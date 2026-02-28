@@ -101,6 +101,24 @@ fn_ModEntry_Dtor_t fn_ModEntry_Dtor = nullptr;
 // Map::Find (AVL tree lookup)
 fn_Map_Find_t fn_Map_Find = nullptr;
 
+// Map::Insert (AVL tree insert)
+fn_Map_Insert_t fn_Map_Insert = nullptr;
+
+// Configuration parsing helpers
+fn_ParseCommand_t fn_ParseCommand = nullptr;
+fn_ParseValue_t fn_ParseValue = nullptr;
+
+// Persistence
+void** g_pPersistenceSingleton = nullptr;
+fn_Persistence_SetBool_t fn_Persistence_SetBool = nullptr;
+fn_Persistence_SetInt_t fn_Persistence_SetInt = nullptr;
+
+// Filename helpers
+fn_Filename_GetPathFilename_t fn_Filename_GetPathFilename = nullptr;
+
+// Array<Mod> copy
+fn_ModArrayCopy_t fn_ModArrayCopy = nullptr;
+
 // ============================================================
 // Engine globals
 // ============================================================
@@ -323,9 +341,47 @@ bool EngineFuncsInit() {
     fn_ModEntry_Dtor = reinterpret_cast<fn_ModEntry_Dtor_t>(
         ResolveAddr(Module::Runtime, 0x180011460));
 
-    // --- Map::Find (AVL tree lookup for Configuration) ---
+    // --- Map::Find / Map::Insert (AVL tree for Configuration) ---
     fn_Map_Find = reinterpret_cast<fn_Map_Find_t>(
         ResolveAddr(Module::Runtime, 0x18002ace0));
+    fn_Map_Insert = reinterpret_cast<fn_Map_Insert_t>(
+        ResolveAddr(Module::Runtime, 0x18002a090));
+
+    // --- Configuration parsing helpers (private static methods) ---
+    fn_ParseCommand = reinterpret_cast<fn_ParseCommand_t>(
+        ResolveAddr(Module::Runtime, 0x1800c4a00));
+    fn_ParseValue = reinterpret_cast<fn_ParseValue_t>(
+        ResolveAddr(Module::Runtime, 0x1800c4930));
+
+    // --- Persistence ---
+    g_pPersistenceSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fc6b8));
+
+    fn_Persistence_SetBool = reinterpret_cast<fn_Persistence_SetBool_t>(
+        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0_N@Z"));
+    if (!fn_Persistence_SetBool) {
+        fn_Persistence_SetBool = reinterpret_cast<fn_Persistence_SetBool_t>(
+            ResolveAddr(Module::Runtime, 0x1800b8380));
+    }
+
+    fn_Persistence_SetInt = reinterpret_cast<fn_Persistence_SetInt_t>(
+        ResolveExport("?Set@Persistence@IO@@QEAAXPEBD0H@Z"));
+    if (!fn_Persistence_SetInt) {
+        fn_Persistence_SetInt = reinterpret_cast<fn_Persistence_SetInt_t>(
+            ResolveAddr(Module::Runtime, 0x1800b80c0));
+    }
+
+    // --- Filename::GetPathFilename ---
+    fn_Filename_GetPathFilename = reinterpret_cast<fn_Filename_GetPathFilename_t>(
+        ResolveExport("?GetPathFilename@Filename@System@@QEBA?AV12@_N@Z"));
+    if (!fn_Filename_GetPathFilename) {
+        fn_Filename_GetPathFilename = reinterpret_cast<fn_Filename_GetPathFilename_t>(
+            ResolveAddr(Module::Runtime, 0x1800c6740));
+    }
+
+    // --- Array<Mod>::operator= (deep copy with CopyCtor per element) ---
+    fn_ModArrayCopy = reinterpret_cast<fn_ModArrayCopy_t>(
+        ResolveAddr(Module::Runtime, 0x180010110));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
@@ -385,6 +441,15 @@ bool EngineFuncsInit() {
     printf("  ModEntry::Assign          = %p\n", (void*)fn_ModEntry_Assign);
     printf("  ModEntry::Dtor            = %p\n", (void*)fn_ModEntry_Dtor);
     printf("  Map::Find                 = %p\n", (void*)fn_Map_Find);
+    printf("  Map::Insert               = %p\n", (void*)fn_Map_Insert);
+    printf("  ParseCommand              = %p\n", (void*)fn_ParseCommand);
+    printf("  ParseValue                = %p\n", (void*)fn_ParseValue);
+    printf("  Persistence::_singleton   = %p -> %p\n", (void*)g_pPersistenceSingleton,
+           g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr);
+    printf("  Persistence::SetBool      = %p\n", (void*)fn_Persistence_SetBool);
+    printf("  Persistence::SetInt       = %p\n", (void*)fn_Persistence_SetInt);
+    printf("  Filename::GetPathFilename = %p\n", (void*)fn_Filename_GetPathFilename);
+    printf("  ModArrayCopy              = %p\n", (void*)fn_ModArrayCopy);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,

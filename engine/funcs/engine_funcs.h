@@ -221,6 +221,66 @@ extern fn_ModEntry_Dtor_t fn_ModEntry_Dtor;
 typedef void* (*fn_Map_Find_t)(const void* self, const void* key);
 extern fn_Map_Find_t fn_Map_Find;
 
+// Map::Insert(map, outNode, key, value) — BST insert/update
+// RCX=map*, RDX=outNode*, R8=key(String*), R9=value(String*)
+// Returns pointer to outNode
+typedef void* (*fn_Map_Insert_t)(void* map, void* outNode, const void* key, const void* value);
+extern fn_Map_Insert_t fn_Map_Insert;
+
+// ============================================================
+// Configuration helpers (for SetCommandLine reimpl)
+// ============================================================
+
+// Configuration::ParseCommand(retval, pos, cmdLine) — static, non-trivial return
+// Extracts "/command" token from command line string.
+// RCX=retval(String*), RDX=pos(int*), R8=cmdLine(const String*)
+typedef void* (*fn_ParseCommand_t)(void* retval, int* pos, const void* cmdLine);
+extern fn_ParseCommand_t fn_ParseCommand;
+
+// Configuration::ParseValue(retval, pos, cmdLine) — static, non-trivial return
+// Extracts value token after command.
+// RCX=retval(String*), RDX=pos(int*), R8=cmdLine(const String*)
+typedef void* (*fn_ParseValue_t)(void* retval, int* pos, const void* cmdLine);
+extern fn_ParseValue_t fn_ParseValue;
+
+// ============================================================
+// IO::Persistence — key/value settings store
+// ============================================================
+
+// Persistence::_singleton pointer
+extern void** g_pPersistenceSingleton;
+
+// Persistence::Set(this, prefix, suffix, bool) — store bool setting
+// Key = prefix + suffix (e.g., "ModEnabled_" + "ModName")
+// RCX=this, RDX=prefix(const char*), R8=suffix(const char*), R9B=value(bool)
+typedef void (*fn_Persistence_SetBool_t)(void* self, const char* prefix, const char* suffix, bool value);
+extern fn_Persistence_SetBool_t fn_Persistence_SetBool;
+
+// Persistence::Set(this, prefix, suffix, int) — store int setting
+// RCX=this, RDX=prefix(const char*), R8=suffix(const char*), R9D=value(int)
+typedef void (*fn_Persistence_SetInt_t)(void* self, const char* prefix, const char* suffix, int value);
+extern fn_Persistence_SetInt_t fn_Persistence_SetInt;
+
+// ============================================================
+// System::Filename helpers
+// ============================================================
+
+// Filename::GetPathFilename(self, retval, stripExt) — const member, non-trivial return
+// Extracts filename portion (no path, optionally no extension).
+// RCX=self(const Filename*), RDX=retval(Filename*), R8B=stripExtension
+typedef void* (*fn_Filename_GetPathFilename_t)(const void* self, void* retval, bool stripExt);
+extern fn_Filename_GetPathFilename_t fn_Filename_GetPathFilename;
+
+// ============================================================
+// Dynamic array operations (for Mod array management)
+// ============================================================
+
+// Array<Mod>::operator= — deep copies source array to dest (0x80-byte elements)
+// Uses fn_ModEntry_CopyCtor per element, handles reallocation.
+// RCX=dest(ArrayHeader*), RDX=src(const ArrayHeader*)
+typedef void* (*fn_ModArrayCopy_t)(void* dest, const void* src);
+extern fn_ModArrayCopy_t fn_ModArrayCopy;
+
 // ============================================================
 // Engine globals (resolved pointers into Runtime-x64.dll data)
 // ============================================================

@@ -9,10 +9,10 @@
 //   - Enable        (0x1800aeab0) — toggle a mod's enabled state
 //   - DisableAll    (0x1800b05b0) — disable all mods
 //   - Swap          (0x1800aeb20) — swap two mod entries by index
+//   - SaveList      (0x1800b05f0) — persist mod state to Persistence
 //
 // Methods hooked (passthrough wrapper with logging):
 //   - EnableSavingSettings (0x1800aead0) — enable persistence, calls RefreshList
-//   - SaveList             (0x1800b05f0) — persist mod state to Persistence
 //   - RefreshList          (0x1800af5f0) — scan filesystem for .pkm packages
 //   - SetupFileSystem      (0x1800aebb0) — mount mod packages into FileSystem
 
@@ -175,26 +175,62 @@ static void Reimpl_EnableSavingSettings(Modification* self) {
 }
 
 // ============================================================
-// SaveList (0x1800b05f0) — PASSTHROUGH WRAPPER
+// SaveList (0x1800b05f0) — FULL REIMPLEMENTATION
 // Saves the mod list state (enabled flags, sort order) to Persistence.
-// For each mod: writes "mod count", "mod enabled N", "mod order N".
+// If saving is not enabled (m_savingEnabled == 0), copies m_mods to
+// m_savedMods as a backup. Otherwise persists each mod's enabled
+// state and sort index as "ModEnabled_<name>" / "ModIndex_<name>".
 //
 // Parameters: RCX = this
 // ============================================================
 
-typedef void (*Modification_SaveList_t)(Modification* self);
-
 static void Reimpl_SaveList(Modification* self) {
 #ifdef _DEBUG
-    printf("[Modification::SaveList] self=%p count=%d dirty=%d\n",
-           (void*)self, self->m_count, self->m_dirty);
+    printf("[Modification::SaveList] self=%p count=%d dirty=%d savingEnabled=%d\n",
+           (void*)self, self->m_count, self->m_dirty, self->m_savingEnabled);
 #endif
 
-    // Call original implementation via trampoline
-    ((Modification_SaveList_t)g_hookSaveList.trampoline)(self);
+    if (!self->m_savingEnabled) {
+        // Copy m_mods array to m_savedMods (deep copy with refcount management)
+        // Both arrays share the same contiguous layout: [Mod*, count, capacity]
+        fn_ModArrayCopy(&self->m_savedMods, &self->m_mods);
+    } else {
+        void* persistence = *g_pPersistenceSingleton;
+
+        for (int i = 0; i < self->m_count; i++) {
+            Mod* mod = &self->m_mods[i];
+
+            // Set sort index to current position
+            mod->m_sortIndex = i;
+
+            // Get filename without path or extension (e.g., "MyMod" from "data/mods/MyMod.pkm")
+            // Member non-trivial return: RCX=self(&m_filename), RDX=retval, R8B=true
+            void* pathFilename = nullptr;
+            fn_Filename_GetPathFilename(&mod->m_filename, &pathFilename, true);
+
+            // The raw C string data for use as key suffix
+            const char* nameStr = (const char*)pathFilename;
+
+            // Persist "ModEnabled_<name>" = true/false
+            fn_Persistence_SetBool(persistence, "ModEnabled_", nameStr, (bool)mod->m_enabled);
+
+            // Persist "ModIndex_<name>" = sort index
+            fn_Persistence_SetInt(persistence, "ModIndex_", nameStr, mod->m_sortIndex);
+
+            // Destroy temp filename string
+            fn_String_Dtor(&pathFilename);
 
 #ifdef _DEBUG
-    printf("[Modification::SaveList] done, dirty=%d\n", self->m_dirty);
+            if (i < 5) {
+                printf("[Modification::SaveList]   [%d] \"%s\" enabled=%d\n",
+                       i, nameStr ? nameStr : "(null)", mod->m_enabled);
+            }
+#endif
+        }
+    }
+
+#ifdef _DEBUG
+    printf("[Modification::SaveList] done\n");
 #endif
 }
 
