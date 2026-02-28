@@ -1,0 +1,247 @@
+[BanishedPatch] Loaded. Starting init thread...
+[BanishedPatch] Crash handler installed
+[Resolve] Application-x64.exe: base=0x7ff73bb10000 preferred=0x140000000 delta=+140694466396160
+[Resolve] Runtime-x64.dll: base=0x7ffdc9e70000 preferred=0x180000000 delta=+140721548361728
+[Resolve] VideoDX11-x64.dll: base=0x7ffdffd70000 preferred=0x180000000 delta=+140722453282816
+[EngineFuncs] Timer globals:
+  _ticksPerSecond       @ 00007ffdca06e720 = 1000000
+  _secondsPerTick       @ 00007ffdca06e728 = 0.000001
+  _systemTicksPerSecond @ 00007ffdca06e730 = 10000000
+  _systemInitialTick    @ 00007ffdca06e738 = 955838959836
+[EngineFuncs] Functions:
+  Input::Device::Update     = 00007ffdc9f51490
+  Audio::Device::Update     = 00007ffdc9f4e520
+  Audio::FreeChannel        = 00007ffdc9f4e6f0
+  App::PlatformUpdate       = 00007ffdc9f0fdf0
+  VideoCtx::ClearResources  = 00007ffdc9f62090
+  VideoCtx::Reset           = 00007ffdc9f61e50
+  Loader::Load              = 00007ffdc9f4c050
+  App::SleepThread          = 00007ffdc9f0f850
+  UI::Update                = 00007ffdc9f913c0
+  UI::Draw                  = 00007ffdc9f91890
+  UI::CloseDialog           = 00007ffdc9f90f20
+  DynArrayPush              = 00007ffdc9eea0d0
+  String::Set               = 00007ffdc9f395d0
+  String::Format            = 00007ffdc9f39730
+  String::~String           = 00007ffdc9e76c80
+  String::String()          = 00007ffdc9e76760
+  String::String(cstr)      = 00007ffdc9e7b630
+  String::String(copy)      = 00007ffdc9e76cb0
+  PostDrawPush              = 00007ffdc9ebf790
+  PostUpdatePush            = 00007ffdc9ebf8e0
+  VideoCtx::Ctor            = 00007ffdc9f61820
+  VideoCtx::Dtor            = 00007ffdc9f616e0
+  VideoCtx::Delete          = 00007ffdc9e88500
+  MemAlloc                  = 00007ffdc9f36e60
+  MemAllocSingleton         = 000000595339f060
+  VideoDevice::_singleton   = 00007ffdca06e7a8 -> 00000247509b7d70
+  ExtFactory::_singleton    = 00007ffdca06c6c8 -> 00000247509b6208
+  ExtFactory::FindOrLoad    = 00007ffdc9f2f320
+  ExtFactory::Clean         = 00007ffdc9f2e310
+  IsDerivedFrom             = 00007ffdc9f30390
+  ExternalTypeId            = 00007ffdca06aa88 -> 0x4fcc106b
+  Filename::AdjustDelimiters= 00007ffdc9f36970
+  UpdateLoop::LoadResources = 00007ffdc9f4d7d0
+  ListCleanup               = 00007ffdc9e80ab0
+  ModEntry::CopyCtor        = 00007ffdc9e801e0
+  ModEntry::Assign          = 00007ffdc9e96ef0
+  ModEntry::Dtor            = 00007ffdc9e81460
+  Map::Find                 = 00007ffdc9e9ace0
+  Map::Insert               = 00007ffdc9e9a090
+  ParseCommand              = 00007ffdc9f34a00
+  ParseValue                = 00007ffdc9f34930
+  Persistence::_singleton   = 00007ffdca06c6b8 -> 00000247508e01e0
+  Persistence::SetBool      = 00007ffdc9f28380
+  Persistence::SetInt       = 00007ffdc9f280c0
+  Filename::GetPathFilename = 00007ffdc9f36740
+  ModArrayCopy              = 00007ffdc9e80110
+[EngineFuncs] Globals:
+  _loader                   = 00007ffdca06e7b8
+  _loader.m_flags           = 00007ffdca06e7c0 -> 0x0
+  _loader.m_completionEvent = 00007ffdca06e7e0 -> 00000000000001cc
+  App::_singleton           = 00007ffdca06eb80 -> 55f5fdd033d2b07c
+[BanishedPatch] Installing 57 hooks/patches...
+[BanishedPatch]   [0] BuildNumber: installed
+[PlatformConfigure] Hooked at 00007ffdc9f11670 -> skip launcher
+[BanishedPatch]   [1] PlatformConfigure: installed
+[MainLoop] Frame hooked at 00007ffdc9f4d100 -> Reimpl_Frame
+[MainLoop]   Update @ 00007ffdc9f4d070, Draw @ 00007ffdc9f4cd40
+[BanishedPatch]   [2] MainLoop::Frame: installed
+[MainLoop] Update hooked at 00007ffdc9f4d070
+[BanishedPatch]   [3] MainLoop::Update: installed
+[MainLoop] Draw hooked at 00007ffdc9f4cd40
+[BanishedPatch]   [4] MainLoop::Draw: installed
+[MainLoop] SetNextLoop hooked at 00007ffdc9f4d7a0
+[BanishedPatch]   [5] MainLoop::SetNextLoop: installed
+[MainLoop] Run hooked at 00007ffdc9f4d3c0
+[BanishedPatch]   [6] MainLoop::Run: installed
+[MainLoop] IsRunning hooked at 00007ffdc9ea14b0
+[BanishedPatch]   [7] MainLoop::IsRunning: installed
+[MainLoop] MarkFrameUpdateTime hooked at 00007ffdc9ea1530
+[BanishedPatch]   [8] MainLoop::MarkFrameUpdateTime: installed
+[MainLoop] AddPostUpdate hooked at 00007ffdc9f4cf60
+[BanishedPatch]   [9] MainLoop::AddPostUpdate: installed
+[MainLoop] AddPostDraw hooked at 00007ffdc9f4d040
+[BanishedPatch]   [10] MainLoop::AddPostDraw: installed
+[MainLoop] RemovePostUpdate hooked at 00007ffdc9f4ceb0
+[BanishedPatch]   [11] MainLoop::RemovePostUpdate: installed
+[MainLoop] RemovePostDraw hooked at 00007ffdc9f4cf90
+[BanishedPatch]   [12] MainLoop::RemovePostDraw: installed
+[MainLoop] OnVideoError_static hooked at 00007ffdc9f4cd20
+[BanishedPatch]   [13] MainLoop::OnVideoError_s: installed
+[MainLoop] OnVideoRestart_static hooked at 00007ffdc9f4c5c0
+[BanishedPatch]   [14] MainLoop::OnVideoRestart_s: installed
+[MainLoop] CreateVideoContext hooked at 00007ffdc9f4d500
+[BanishedPatch]   [15] MainLoop::CreateVideoCtx: installed
+[MainLoop] ReleaseVideoContext hooked at 00007ffdc9f4d5e0
+[BanishedPatch]   [16] MainLoop::ReleaseVideoCtx: installed
+[MainLoop] Ctor hooked at 00007ffdc9f4d6b0 (dtSec=00007ffdc9fd16a8, maxAccSec=00007ffdc9fd16b0)
+[BanishedPatch]   [17] MainLoop::Ctor: installed
+[MainLoop] Dtor hooked at 00007ffdc9f4d640
+[BanishedPatch]   [18] MainLoop::Dtor: installed
+[UpdateLoop] IsRunning hooked at 00007ffdc9f4d7b0
+[UpdateLoop]   MainLoop singleton @ 00007ffdca06e750 -> 0000000000000000
+[BanishedPatch]   [19] UpdateLoop::IsRunning: installed
+[UpdateLoop] Ctor hooked at 00007ffdc9f4dd30 (vtable=00007ffdc9fc5ba0)
+[BanishedPatch]   [20] UpdateLoop::Ctor: installed
+[UpdateLoop] Dtor hooked at 00007ffdc9f4ddb0
+[BanishedPatch]   [21] UpdateLoop::Dtor: installed
+[DialogLoaderLoopT] Startup hooked at 00007ffdc9f4b000 (prologue=14)
+[BanishedPatch]   [22] DialogLoaderLoopT::Startup: installed
+[DialogLoaderLoopT] Shutdown hooked at 00007ffdc9f4afc0 (prologue=13)
+[BanishedPatch]   [23] DialogLoaderLoopT::Shutdown: installed
+[DialogLoaderLoopT] Update hooked at 00007ffdc9f4af20 (prologue=13)
+[BanishedPatch]   [24] DialogLoaderLoopT::Update: installed
+[DialogLoaderLoopT] Draw hooked at 00007ffdc9f4ae20 (prologue=17)
+[BanishedPatch]   [25] DialogLoaderLoopT::Draw: installed
+[DialogLoaderLoopT] Load hooked at 00007ffdc9f4ad50 (prologue=15)
+[BanishedPatch]   [26] DialogLoaderLoopT::Load: installed
+[DialogLoopT] Startup hooked at 00007ffdc9f4b2f0 (prologue=14)
+[BanishedPatch]   [27] DialogLoopT::Startup: installed
+[DialogLoopT] Shutdown hooked at 00007ffdc9f4b2c0 (prologue=13)
+[BanishedPatch]   [28] DialogLoopT::Shutdown: installed
+[DialogLoopT] Update hooked at 00007ffdc9f4b270 (prologue=16)
+[BanishedPatch]   [29] DialogLoopT::Update: installed
+[DialogLoopT] Draw hooked at 00007ffdc9f4b210 (prologue=17)
+[BanishedPatch]   [30] DialogLoopT::Draw: installed
+[DialogLoopT] Load hooked at 00007ffdc9f4b140 (prologue=15)
+[BanishedPatch]   [31] DialogLoopT::Load: installed
+[LoaderLoop] Startup hooked at 00007ffdc9f4c260
+[BanishedPatch]   [32] LoaderLoop::Startup: installed
+[LoaderLoop] Shutdown hooked at 00007ffdc9f4c280
+[BanishedPatch]   [33] LoaderLoop::Shutdown: installed
+[LoaderLoop] Update hooked at 00007ffdc9f4c2a0
+[BanishedPatch]   [34] LoaderLoop::Update: installed
+[LoaderLoop] Draw hooked at 00007ffdc9f4c310
+[BanishedPatch]   [35] LoaderLoop::Draw: installed
+[LoaderLoop] Exit hooked at 00007ffdc9f4c130
+[BanishedPatch]   [36] LoaderLoop::Exit: installed
+[LoaderLoop] IsFinished hooked at 00007ffdc9f4c150
+[BanishedPatch]   [37] LoaderLoop::IsFinished: installed
+[LoaderLoop] OnVideoError hooked at 00007ffdc9f4c360
+[BanishedPatch]   [38] LoaderLoop::OnVideoError: installed
+[Configuration] CurrentBuildId hooked at 00007ffdc9f34c60 (prologue=13)
+[BanishedPatch]   [39] Configuration::CurrentBuildId: installed
+[Configuration] CurrentVersion hooked at 00007ffdc9f34f40 (prologue=13)
+[BanishedPatch]   [40] Configuration::CurrentVersion: installed
+[Configuration] GetVersionString hooked at 00007ffdc9f34f90 (prologue=13)
+[BanishedPatch]   [41] Configuration::GetVersionString: installed
+[Configuration] Ctor hooked at 00007ffdc9f351b0 (prologue=17)
+[BanishedPatch]   [42] Configuration::Ctor: installed
+[Configuration] Dtor hooked at 00007ffdc9f35170 (prologue=19)
+[BanishedPatch]   [43] Configuration::Dtor: installed
+[Configuration] GetCommandLineString hooked at 00007ffdc9f35300 (prologue=13)
+[BanishedPatch]   [44] Configuration::GetCommandLineString: installed
+[Configuration] SetCommandLine hooked at 00007ffdc9f347a0 (prologue=13)
+[BanishedPatch]   [45] Configuration::SetCommandLine: installed
+[Configuration] GetPlatformName hooked at 00007ffdc9f35210 (prologue=13)
+[BanishedPatch]   [46] Configuration::GetPlatformName: installed
+[Configuration] GetLanguageName hooked at 00007ffdc9f34bc0 (prologue=13)
+[BanishedPatch]   [47] Configuration::GetLanguageName: installed
+[Configuration] GetBuildName hooked at 00007ffdc9f35280 (prologue=13)
+[BanishedPatch]   [48] Configuration::GetBuildName: installed
+[Modification] Find hooked at 00007ffdc9f1ea10 (prologue=17)
+[BanishedPatch]   [49] Modification::Find: installed
+[Modification] Enable hooked at 00007ffdc9f1eab0 (prologue=14)
+[BanishedPatch]   [50] Modification::Enable: installed
+[Modification] DisableAll hooked at 00007ffdc9f205b0 (prologue=16)
+[BanishedPatch]   [51] Modification::DisableAll: installed
+[Modification] Swap hooked at 00007ffdc9f1eb20 (prologue=20)
+[BanishedPatch]   [52] Modification::Swap: installed
+[Modification] EnableSavingSettings hooked at 00007ffdc9f1ead0 (prologue=13)
+[BanishedPatch]   [53] Modification::EnableSavingSettings: installed
+[Modification] SaveList hooked at 00007ffdc9f205f0 (prologue=13)
+[BanishedPatch]   [54] Modification::SaveList: installed
+[Modification] RefreshList hooked at 00007ffdc9f1f5f0 (prologue=13)
+[BanishedPatch]   [55] Modification::RefreshList: installed
+[Modification] SetupFileSystem hooked at 00007ffdc9f1ebb0 (prologue=13)
+[BanishedPatch]   [56] Modification::SetupFileSystem: installed
+[BanishedPatch] All hooks installed.
+[PlatformConfigure] Skipping launcher dialog
+[MainLoop::Ctor] self=00000247509ba1b8 engine=000000595339f060
+[UpdateLoop::Ctor] self=00000247509c09a0
+[UpdateLoop::Ctor] self=0000024750a085e0
+[UpdateLoop::Ctor] self=0000024750a09170
+[UpdateLoop::Ctor] self=0000024750a09d00
+[UpdateLoop::Ctor] self=0000024750a09d50
+[MainLoop::Run] ENTER self=00000247509ba1b8 loop=0000024750a09d50
+[MainLoop::Run]   fn_InputDevice_Update  = 00007ffdc9f51490
+[MainLoop::Run]   fn_AudioDevice_Update  = 00007ffdc9f4e520
+[MainLoop::Run]   fn_App_PlatformUpdate  = 00007ffdc9f0fdf0
+[MainLoop::Run]   g_addr_Update          = 00007ffdc9f4d070
+[MainLoop::Run]   m_engine               = 000000595339f060
+[LoaderLoop::Startup] self=0000024750a09d50 nextLoop=0000024750a09d00
+[Modification::SetupFileSystem] self=00000247509ac768 count=0
+[Modification::SetupFileSystem] 0 mods enabled
+[Modification::SetupFileSystem] done
+[MainLoop::Run] Startup done, running initial system updates...
+[MainLoop::Run] Initial Update tick...
+[MainLoop::Run] Entering main loop, quit=0
+[Configuration::GetCommandLineString] key="ref" -> "(empty)"
+[LoaderLoop::Update] Loading complete, transitioning to nextLoop=0000024750a09d00
+[LoaderLoop::Shutdown] self=0000024750a09d50, waiting for loader completion...
+[LoaderLoop::Shutdown] loader completed
+[LoaderLoop::Startup] self=0000024750a09d00 nextLoop=0000024750a09170
+[Modification::SetupFileSystem] self=00000247509ac768 count=0
+[Modification::SetupFileSystem] 0 mods enabled
+[Modification::SetupFileSystem] done
+[Configuration::GetCommandLineString] key="ref" -> "(empty)"
+[LoaderLoop::Update] Loading complete, transitioning to nextLoop=0000024750a09170
+[LoaderLoop::Shutdown] self=0000024750a09d00, waiting for loader completion...
+[LoaderLoop::Shutdown] loader completed
+[DialogLoaderLoopT::Startup] self=0000024750a09170 nextLoop=0000024750a085e0
+[Modification::SetupFileSystem] self=00000247509ac768 count=0
+[Modification::SetupFileSystem] 0 mods enabled
+[Modification::SetupFileSystem] done
+[DialogLoaderLoopT::Startup] dialog=0000024750a5ada0, loading started
+[Configuration::GetCommandLineString] key="ref" -> "(empty)"
+[DialogLoaderLoopT::Update] self=0000024750a09170 dt=16666 (call #0) finished=0 loaderFlags=0x1
+[DialogLoaderLoopT::Update] self=0000024750a09170 dt=16666 (call #1) finished=0 loaderFlags=0x0
+[DialogLoaderLoopT::Draw] self=0000024750a09170 (call #0)
+[DialogLoaderLoopT::Update] self=0000024750a09170 dt=16666 (call #2) finished=0 loaderFlags=0x0
+[DialogLoaderLoopT::Update] self=0000024750a09170 dt=16666 (call #3) finished=0 loaderFlags=0x0
+[DialogLoaderLoopT::Update] self=0000024750a09170 dt=16666 (call #4) finished=0 loaderFlags=0x0
+[DialogLoaderLoopT::Draw] self=0000024750a09170 (call #1)
+[DialogLoaderLoopT::Draw] self=0000024750a09170 (call #2)
+[LoaderLoop::Exit] Force transition to nextLoop=0000024750a085e0
+[DialogLoaderLoopT::Startup] self=0000024750a085e0 nextLoop=00000247509c09a0
+[Modification::RefreshList] self=00000247509ac768 count=0
+[Modification::RefreshList] done, count=0
+[Modification::SetupFileSystem] self=00000247509ac768 count=0
+[Modification::SetupFileSystem] 0 mods enabled
+[Modification::SetupFileSystem] done
+[DialogLoaderLoopT::Startup] dialog=0000024750a5a9a8, loading started
+[Configuration::GetCommandLineString] key="ref" -> "(empty)"
+[LoaderLoop::Exit] Force transition to nextLoop=00000247509c09a0
+[DialogLoopT::Startup] self=00000247509c09a0
+[Configuration::CurrentVersion] called
+[Configuration::GetVersionString] packed=0x010007FF -> 1.0.7 type=0xFF short=0
+[Configuration::GetVersionString] result="1.0.7"
+[Configuration::CurrentBuildId] buildDate="Dec 56 2012"
+[Configuration::CurrentBuildId] result="121256"
+[DialogLoopT::Startup] dialog=0000024750ae1068
+[DialogLoopT::Update] self=00000247509c09a0 dt=16666 (call #0)
+[DialogLoopT::Update] self=00000247509c09a0 dt=16666 (call #1)
+[DialogLoopT::Update] self=00000247509c09a0 dt=16666 (call #2)
+[DialogLoopT::Update] self=00000247509c09a0 dt=16666 (call #3)
+[DialogLoopT::Update] self=00000247509c09a0 dt=16666 (call #4)

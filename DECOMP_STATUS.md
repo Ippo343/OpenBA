@@ -120,6 +120,226 @@ Status key: `-` = not started, `~` = partially decompiled, `x` = fully decompile
 | ~ | `CaptureBoxDescription` | ElementDescription | 0x78 (120B) | Ctor inlined, vtable 0x14015d4a0, factory 0x140013d90. TypeInfo DAT_1401c5600. Screenshot capture. |
 | ~ | `FrustumOutlineDescription` | ElementDescription | 0x80 (128B) | Ctor inlined, vtable 0x14015c300, factory 0x1400122c0. TypeInfo DAT_1401c5168. Sentinel -1 at +0x78. Debug frustum display. |
 
+### Game UI — Dialog Controllers (22 classes)
+
+Registered types inheriting from `UI::DialogController`. Each manages a specific game dialog/screen.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `AchievementDialog` | `0x14015af70` | Achievement display |
+| - | `AutoSaveDialog` | `0x14015b0f0` | Autosave notification |
+| - | `EventNotifyDialog` | `0x14015bcf0` | Event notification banner |
+| - | `EventPopupDialog` | `0x14015bd58` | Event popup window |
+| - | `FollowDialog` | `0x14015bdd0` | Camera follow UI |
+| - | `GoalDialog` | `0x14015be50` | Goal/objective display |
+| - | `LoaderDialog` | `0x14015f2e0` | Loading screen |
+| - | `MainMenuDialog` | `0x14015f350` | Main menu |
+| - | `MapParamsDialog` | `0x14015c0d8` | Map generation parameters |
+| - | `MessageDialog` | `0x14015c448` | Message popup |
+| - | `ModDetailsDialog` | `0x14015c558` | Mod details view |
+| - | `ModDialog` | `0x14015c710` | Mod browser/list |
+| - | `ModUploadDialog` | `0x14015c910` | Mod upload (Steam Workshop) |
+| - | `NewGameDialog` | `0x14015c970` | New game setup |
+| - | `OptionsDialog` | `0x14015cad8` | Options/settings menu |
+| - | `OptionInputBindDialog` | `0x14015cb08` | Key binding dialog |
+| - | `SaveLoadDialog` | `0x14015f728` | Save/load screen |
+| - | `ScenarioDialog` | `0x14015d298` | Scenario selection |
+| - | `ToolbarDialog` | `0x14015f9c8` | Main toolbar |
+| - | `TutorialGoalDialog` | `0x140160850` | Tutorial goal display |
+| - | `TutorialHighlightDialog` | `0x1401609a0` | Tutorial highlight overlay |
+| - | `TutorialSetupDialog` | `0x140160d00` | Tutorial setup |
+
+### Game UI — Panel Controllers (39 classes)
+
+Registered types inheriting from `UI::DialogController`. Each manages a specific in-game panel/HUD element. Some have paired `*Config` types.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `AttendanceUI` | `0x14015b0c8` | Attendance panel |
+| - | `BuildRequirementUI` | `0x14015b170` | Build requirements display |
+| - | `BuildUI` | `0x14015f1b8` | Build/construction panel |
+| - | `CemeteryUI` | `0x14015b228` | Cemetery panel |
+| - | `CitizenUI` | `0x14015b8c8` | Citizen info panel |
+| - | `ConsumeProduceUI` | `0x14015b298` | Production chain panel |
+| - | `ControlUI` | `0x14015b338` | Control panel (+`ControlUIConfig` at `0x14015b348`) |
+| - | `CropUI` | `0x14015f268` | Crop field panel |
+| - | `DebugUI` | `0x14015b440` | Debug overlay |
+| - | `DestroyUI` | `0x14015ba58` | Demolition panel |
+| - | `EntityUI` | `0x14015bb58` | Entity info panel |
+| - | `EventLogUI` | `0x14015bbe8` | Event log |
+| - | `HelpUI` | `0x14015bf00` | Help panel |
+| - | `HotKeyToolTipUI` | `0x14015bf88` | Hotkey tooltip |
+| - | `ImmigrationUI` | `0x14015c028` | Immigration panel |
+| - | `MapUI` | `0x14015c1f0` | Minimap |
+| - | `ModBrowseUI` | `0x14015c4f0` | Mod browser panel |
+| - | `NoiseUI` | `0x14015c9f8` | Noise/debug display |
+| - | `OrchardUI` | `0x14015cf18` | Orchard panel |
+| - | `PageToggleUI` | `0x14015cfa0` | Page toggle |
+| - | `PastureUI` | `0x14015f5f0` | Pasture panel |
+| - | `ProductionUI` | `0x14015d008` | Production overview |
+| - | `ProfessionUI` | `0x14015d0c8` | Profession assignment |
+| - | `RadiusUI` | `0x14015d148` | Radius display |
+| - | `ResidenceUI` | `0x14015f680` | Residence panel |
+| - | `ResourceLimitUI` | `0x14015d1b8` | Resource limits (+`ResourceLimitUIConfig` at `0x14015d1c8`) |
+| - | `SelectResourceUI` | `0x14015cf00` | Resource selection |
+| - | `SpriteCaptureUI` | `0x14015d3a0` | Screenshot capture |
+| - | `StatusBarUI` | `0x14015d598` | Status bar |
+| - | `StatusIconUI` | `0x14015d868` | Status icons (+`StatusIconUIConfig` at `0x14015d878`) |
+| - | `StorageCapacityUI` | `0x14015d9a8` | Storage capacity display |
+| - | `StorageUI` | `0x14015f950` | Storage panel |
+| - | `TitleDescToolTipUI` | `0x14015d9c0` | Title/description tooltip |
+| - | `ToolUI` | `0x14015da48` | Tool panel |
+| - | `TownHallUI` | `0x14015dac8` | Town hall panel |
+| - | `TradeUI` | `0x14015dd38` | Trade post panel |
+| - | `TutorialUI` | `0x140160ed8` | Tutorial panel |
+| - | `UpgradeUI` | `0x14015ded8` | Upgrade panel (+`UpgradeUIConfig` at `0x14015dee8`) |
+| - | `WorkPlaceUI` | `0x14015dfa8` | Workplace panel |
+
+### Game UI — Exe-Specific Elements (2 classes)
+
+UI Element types registered in the exe (beyond the 22+ base elements in Runtime-x64.dll).
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `CaptureBoxElement` | `0x14015d3c8` | Screenshot capture box element |
+| - | `FrustumOutlineElement` | `0x14015c218` | Debug frustum outline element |
+
+### Game Systems — Tools & Placement (11 classes)
+
+Registered types for building/creation tools used by the placement system.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `Toolbar` | `0x140160110` | Tool toolbar container |
+| - | `ToolSetting` | `0x140160700` | Tool configuration |
+| - | `BridgeTool` | `0x140161ae8` | Bridge placement |
+| - | `DragTool` | `0x140160648` | Drag-to-build |
+| - | `DragPlacementTool` | `0x140161b78` | Drag placement variant |
+| - | `EditTool` | `0x140161c88` | Edit/modify tool |
+| - | `FencedTool` | `0x140160658` | Fenced area tool |
+| - | `PathTool` | `0x140160670` | Path creation |
+| - | `PlacementTool` | `0x140161d10` | Single building placement |
+| - | `RemovalTool` | `0x140161dd0` | Demolition/removal |
+| - | `RoadTool` | `0x140161e58` | Road building |
+
+### Game Systems — State Machine Actions (32 classes)
+
+Registered types used by `StateMachineComponent` to drive citizen AI behavior. Each action is a discrete work step.
+
+| Status | Class | String Address | Category |
+|--------|-------|---------------|----------|
+| - | `AnimateNaturalResource` | `0x14015faf0` | Resource |
+| - | `AnimAudioEvent` | `0x14015e088` | Audio |
+| - | `AutoPickupWork` | `0x140160f88` | Work |
+| - | `BuildRoad` | `0x140161008` | Construction |
+| - | `BuildStructure` | `0x140161088` | Construction |
+| - | `CompleteRoad` | `0x14015fb60` | Construction |
+| - | `CompleteTask` | `0x14015fbc0` | General |
+| - | `ConsumeProduce` | `0x140161208` | Production |
+| - | `ConsumeRawMaterial` | `0x14015fc70` | Resource |
+| - | `CreateNaturalResource` | `0x14015fc88` | Resource |
+| - | `CreateRawMaterial` | `0x14015fcf0` | Resource |
+| - | `DropOffRawMaterial` | `0x14015fd60` | Resource |
+| - | `FireWork` | `0x140161288` | Emergency |
+| - | `FishingWork` | `0x140161308` | Production |
+| - | `ForesterWork` | `0x140161388` | Production |
+| - | `GatherRawMaterials` | `0x140161408` | Resource |
+| - | `HerbalistWork` | `0x140161588` | Production |
+| - | `HuntWork` | `0x140161608` | Production |
+| - | `LocationWork` | `0x140161688` | Work |
+| - | `MarketWork` | `0x140161778` | Economy |
+| - | `MoveTo` | `0x14015fe30` | Navigation |
+| - | `PastureWork` | `0x140161788` | Production |
+| - | `PerformWork` | `0x14015fe90` | Work |
+| - | `Pickup` | `0x140161808` | Resource |
+| - | `PickupRawMaterial` | `0x14015fef0` | Resource |
+| - | `PickupStoredRawMaterial` | `0x14015ff60` | Resource |
+| - | `PlayAnimation` | `0x140158938` | Animation |
+| - | `RemoveAnimal` | `0x14015ffd0` | Resource |
+| - | `RemoveNaturalResource` | `0x140160030` | Resource |
+| - | `SendComponentMessage` | `0x1401600a0` | Messaging |
+| - | `ShowTool` | `0x1401589a0` | UI |
+| - | `TradeWork` | `0x1401619f8` | Economy |
+
+### Game Systems — Tutorials (16 classes)
+
+Registered types for the tutorial system. Hierarchical: Tutorial contains TutorialSteps, each step has Setup/Goal/Image sub-types.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `Tutorial` | `0x140160730` | Tutorial definition (External) |
+| - | `TutorialInstance` | `0x140160be0` | Runtime tutorial state |
+| - | `TutorialStep` | `0x140160e80` | Individual tutorial step |
+| - | `TutorialGoal` | `0x140160788` | Goal condition base |
+| - | `TutorialGoalButton` | `0x1401607e8` | Goal: click a button |
+| - | `TutorialGoalCount` | `0x140160930` | Goal: reach a count |
+| - | `TutorialGoalGameSpeed` | `0x1401608c0` | Goal: set game speed |
+| - | `TutorialImage` | `0x140160a30` | Tutorial image base |
+| - | `TutorialImageHotKey` | `0x140160a90` | Image with hotkey overlay |
+| - | `TutorialImageInputKey` | `0x140160b00` | Image with input key |
+| - | `TutorialImageToolbarIcon` | `0x140160b70` | Image with toolbar icon |
+| - | `TutorialSetup` | `0x140160c18` | Setup action base |
+| - | `TutorialSetupCamera` | `0x140160c88` | Setup: position camera |
+| - | `TutorialSetupDialog` | `0x140160d00` | Setup: open dialog |
+| - | `TutorialSetupGameSpeed` | `0x140160d80` | Setup: set game speed |
+| - | `TutorialSetupRestrictPlayer` | `0x140160e00` | Setup: restrict input |
+
+### Game Systems — Achievement Goals (7 exe-specific subtypes)
+
+Goal subtypes registered in the exe. Base types (Achievement, AchievementInstance, AchievementManager, Goal, GoalInstance, GoalList) are in Runtime-x64.dll.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `BuildingGoal` | `0x1401602f0` | Goal: build N buildings |
+| - | `PopulationGoal` | `0x140160358` | Goal: reach population N |
+| - | `StatGoal` | `0x1401604b0` | Goal: reach statistic N |
+| - | `TimeGoal` | `0x140160530` | Goal: survive N years |
+| - | `TimeGoalInstance` | `0x140160518` | Runtime state for TimeGoal |
+| - | `FinishTutorialGoal` | `0x140160400` | Goal: complete tutorial |
+| - | `FinishTutorialInstance` | `0x1401603e8` | Runtime state for FinishTutorialGoal |
+
+### Game Systems — World Generation (3 classes)
+
+Map and terrain generation types.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `MapGenerator` | `0x14015ed68` | Top-level map generation |
+| - | `TerrainGenerator` | `0x14015f158` | Terrain heightmap/biome generation |
+| - | `ClimateGenerator` | `0x14015e128` | Climate/weather pattern generation |
+
+### Game Systems — Miscellaneous Types (9 classes)
+
+Other registered types in the exe that don't fit the above categories.
+
+| Status | Class | String Address | Purpose |
+|--------|-------|---------------|---------|
+| - | `ComponentEntity` | `0x14015fa50` | Entity that holds components (ECS container) |
+| - | `Profession` | `0x14015ef28` | Profession definition (External) |
+| - | `ProfessionList` | `0x14015ef38` | Collection of professions |
+| - | `Scenario` | `0x14015efe8` | Scenario definition (External) |
+| - | `Weather` | `0x140160230` | Weather system type |
+| - | `MenuScene` | `0x14015edc8` | Main menu 3D scene |
+| - | `ResourceTip` | `0x14015f200` | Resource tooltip type |
+| - | `SaveLoadEmpty` | `0x14015ebc0` | Empty save state placeholder |
+| - | `AutosaveInterval` | `0x14015e548` | Autosave timing config |
+
+### Key Standalone Functions
+
+Major game-logic functions identified but not yet part of any class decomposition.
+
+| Status | Address | Name | XRefs | Purpose |
+|--------|---------|------|-------|---------|
+| - | `0x140041ef0` | `GameMain` | 3 | Top-level startup — creates Engine, MainLoop, all loop types |
+| - | `0x140096380` | (unnamed) | — | **Main gameplay tick** — calls ComponentEntity update, AchievementManager, AnimationManager, AudioScene, Camera, SaveLoad, UI |
+| - | `0x1400a9660` | `StateMachine_Tick` | 62 | State machine update (all StateMachineComponents) |
+| - | `0x140001740` | (unnamed) | 745 | Vector/array free (most-called function in binary) |
+| - | `0x1400c54e0` | (unnamed) | 143 | Vector push_back |
+| - | `0x1400a6a30` | (unnamed) | 88 | Entity component message dispatch |
+| - | `0x14009f3e0` | (unnamed) | 102 | Terrain grid query with pathfinding |
+| - | `0x1400bf790` | `Pathfinding_FindPath` | 12 | A* pathfinding |
+| - | `0x14012cf10` | `StorageComponent_QueryCount` | 44 | Storage query — O(entries×components), critical hotspot |
+
 ---
 
 ## Runtime-x64.dll (Engine Core)

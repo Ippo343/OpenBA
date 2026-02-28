@@ -205,28 +205,34 @@ static void Reimpl_Draw(DialogLoaderLoopT* self, float /*alpha*/) {
     typedef void (*DeviceClear_t)(void*, uint32_t, uint32_t, float, int);
     ((DeviceClear_t)deviceVtable[4])(device, 7, 0, 1.0f, 0);
 
-    // Compute elapsed time in seconds
+    // Compute elapsed time in seconds (matches original: double → float)
     float totalSeconds = (float)((double)self->m_elapsedTicks * (*g_Timer_secondsPerTick));
 
-    // Set m_viewTime (context+0x288, float4)
-    *reinterpret_cast<float*>(ctx + 0x288) = totalSeconds;
-    *reinterpret_cast<float*>(ctx + 0x28C) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x290) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x294) = 0.0f;
-
-    // Set m_prevTime (context+0x3B8, float4)
-    *reinterpret_cast<float*>(ctx + 0x3B8) = totalSeconds;
-    *reinterpret_cast<float*>(ctx + 0x3BC) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x3C0) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x3C4) = 0.0f;
-
-    // Set m_gameTime (context+0x3C8, float4)
+    // 1. Set m_gameTime FIRST (context+0x3C8, float4) — matches original order
     *reinterpret_cast<float*>(ctx + 0x3C8) = totalSeconds;
-    *reinterpret_cast<float*>(ctx + 0x3CC) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x3D0) = 0.0f;
-    *reinterpret_cast<float*>(ctx + 0x3D4) = 0.0f;
+    *reinterpret_cast<uint32_t*>(ctx + 0x3CC) = 0;
+    *reinterpret_cast<uint32_t*>(ctx + 0x3D0) = 0;
+    *reinterpret_cast<uint32_t*>(ctx + 0x3D4) = 0;
 
-    // Mark dirty flags: time updated + view updated
+    // 2. Intermediate dirty flag: gameTime updated
+    *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x800;
+
+    // 3. Recompute time as double for prevTime/viewTime (matches original's dVar2 path)
+    double dVar2 = (double)self->m_elapsedTicks * (*g_Timer_secondsPerTick);
+
+    // 4. Set m_prevTime (context+0x3B8, float4)
+    *reinterpret_cast<float*>(ctx + 0x3B8) = (float)dVar2;
+    *reinterpret_cast<uint32_t*>(ctx + 0x3BC) = 0;
+    *reinterpret_cast<uint32_t*>(ctx + 0x3C0) = 0;
+    *reinterpret_cast<uint32_t*>(ctx + 0x3C4) = 0;
+
+    // 5. Set m_viewTime (context+0x288, float4)
+    *reinterpret_cast<float*>(ctx + 0x288) = (float)dVar2;
+    *reinterpret_cast<uint32_t*>(ctx + 0x28C) = 0;
+    *reinterpret_cast<uint32_t*>(ctx + 0x290) = 0;
+    *reinterpret_cast<uint32_t*>(ctx + 0x294) = 0;
+
+    // 6. Final dirty flags: time + view updated
     *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x10800;
 
     // Draw the UI overlay

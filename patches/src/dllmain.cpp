@@ -14,12 +14,25 @@
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
+#include <string>
 #include <windows.h>
 #include <dbghelp.h>
 
 // Legacy wrapper — use ResolveAddr(Module::Exe, addr) in new code.
 uintptr_t ghidra_addr(uintptr_t ghidra_address) {
     return ResolveAddr(Module::Exe, ghidra_address);
+}
+
+// Build an absolute path in the game directory (next to the exe).
+// This ensures log files always land in C:/GOG Games/Banished/ regardless of CWD.
+static std::string GameDirPath(const char* filename) {
+    char exePath[MAX_PATH];
+    GetModuleFileNameA(nullptr, exePath, MAX_PATH);
+    // Truncate to directory
+    char* lastSlash = strrchr(exePath, '\\');
+    if (!lastSlash) lastSlash = strrchr(exePath, '/');
+    if (lastSlash) *(lastSlash + 1) = '\0';
+    return std::string(exePath) + filename;
 }
 
 // Background init thread — waits for Runtime-x64.dll, then resolves everything.
@@ -81,7 +94,8 @@ static LPTOP_LEVEL_EXCEPTION_FILTER g_prevExceptionFilter = nullptr;
 
 static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // Write to both stdout (patch_debug.log) and a dedicated crash file
-    FILE* crashFile = fopen("patch_crash.log", "w");
+    std::string crashPath = GameDirPath("patch_crash.log");
+    FILE* crashFile = fopen(crashPath.c_str(), "w");
     FILE* outputs[] = { stdout, crashFile };
     int numOutputs = crashFile ? 2 : 1;
 
@@ -207,7 +221,8 @@ static void RemoveCrashHandler() {
 static void PatchInit() {
 #ifdef _DEBUG
     AllocConsole();
-    freopen("patch_debug.log", "w", stdout);
+    std::string logPath = GameDirPath("patch_debug.log");
+    freopen(logPath.c_str(), "w", stdout);
     freopen("CONOUT$", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);  // unbuffered so we can read in real-time
     printf("[BanishedPatch] Loaded. Starting init thread...\n");

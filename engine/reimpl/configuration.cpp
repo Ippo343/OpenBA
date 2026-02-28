@@ -392,18 +392,22 @@ void RemoveConfigGetVersionString() { RemoveHook(&g_hookGetVersionString); }
 
 void InstallConfigCtor() {
     uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::Ctor);
-    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 13);
+    // Prologue: MOV(5)+SUB(4)+MOV_qword(8)=17 bytes
+    // Old prologue=13 cut the 8-byte MOV at offset 9 — trampoline had truncated instruction!
+    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 17);
 #ifdef _DEBUG
-    printf("[Configuration] Ctor hooked at %p (prologue=13)\n", (void*)target);
+    printf("[Configuration] Ctor hooked at %p (prologue=17)\n", (void*)target);
 #endif
 }
 void RemoveConfigCtor() { RemoveHook(&g_hookCtor); }
 
 void InstallConfigDtor() {
     uintptr_t target = ResolveAddr(Module::Runtime, ConfigurationAddr::Dtor);
-    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 13);
+    // Prologue: MOV(5)+PUSH(1)+SUB(4)+MOV_qword(9)=19 bytes
+    // Old prologue=13 cut the 9-byte MOV at offset 10 — trampoline had truncated instruction!
+    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 19);
 #ifdef _DEBUG
-    printf("[Configuration] Dtor hooked at %p (prologue=13)\n", (void*)target);
+    printf("[Configuration] Dtor hooked at %p (prologue=19)\n", (void*)target);
 #endif
 }
 void RemoveConfigDtor() { RemoveHook(&g_hookDtor); }

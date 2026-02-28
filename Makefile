@@ -76,7 +76,8 @@ $(OBJ_DIR):
 
 deploy: debug
 	cp "$(TARGET)" "$(BANISHED_DIR)/version.dll"
-	@echo "Deployed to $(BANISHED_DIR)/version.dll"
+	rm -f "$(BANISHED_DIR)/patch_debug.log"
+	@echo "Deployed to $(BANISHED_DIR)/version.dll (log cleared)"
 
 undeploy:
 	rm -f "$(BANISHED_DIR)/version.dll"
