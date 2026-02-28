@@ -660,6 +660,432 @@ extern void RemoveZoneComponentDraw();
 extern void InstallZoneComponentOnCreate();
 extern void RemoveZoneComponentOnCreate();
 
+// ====================================================================
+// Phase 3: Action and Work class reimplementations
+// ====================================================================
+
+// --- AnimateNaturalResource (engine/reimpl/animatenaturalresource.cpp) ---
+extern void InstallAnimateNaturalResourceSerialize();
+extern void RemoveAnimateNaturalResourceSerialize();
+extern void InstallAnimateNaturalResourcePurecall();
+extern void RemoveAnimateNaturalResourcePurecall();
+extern void InstallAnimateNaturalResourceExecute();
+extern void RemoveAnimateNaturalResourceExecute();
+extern void InstallAnimateNaturalResourceGetTarget();
+extern void RemoveAnimateNaturalResourceGetTarget();
+
+// --- AutoPickupWork (engine/reimpl/autopickupwork.cpp) ---
+extern void InstallAutoPickupWorkSlot8();
+extern void RemoveAutoPickupWorkSlot8();
+extern void InstallAutoPickupWorkCtor();
+extern void RemoveAutoPickupWorkCtor();
+
+// --- BuildRoad (engine/reimpl/buildroad.cpp) ---
+extern void InstallBuildRoadCtor();
+extern void RemoveBuildRoadCtor();
+extern void InstallBuildRoadScalarDtor();
+extern void RemoveBuildRoadScalarDtor();
+extern void InstallBuildRoadSerialize();
+extern void RemoveBuildRoadSerialize();
+
+// --- BuildStructure (engine/reimpl/buildstructure.cpp) ---
+extern void InstallBuildStructureCtor();
+extern void RemoveBuildStructureCtor();
+extern void InstallBuildStructureScalarDtor();
+extern void RemoveBuildStructureScalarDtor();
+extern void InstallBuildStructureSerialize();
+extern void RemoveBuildStructureSerialize();
+
+// --- ClearArea (engine/reimpl/cleararea.cpp) ---
+extern void InstallClearAreaCtor();
+extern void RemoveClearAreaCtor();
+extern void InstallClearAreaScalarDtor();
+extern void RemoveClearAreaScalarDtor();
+extern void InstallClearAreaSerialize();
+extern void RemoveClearAreaSerialize();
+
+// --- ClearStorage (engine/reimpl/clearstorage.cpp) ---
+extern void InstallClearStorageSerialize();
+extern void RemoveClearStorageSerialize();
+extern void InstallClearStorageSlot4();
+extern void RemoveClearStorageSlot4();
+extern void InstallClearStorageSlot6();
+extern void RemoveClearStorageSlot6();
+extern void InstallClearStorageSlot8();
+extern void RemoveClearStorageSlot8();
+extern void InstallClearStorageSlot9();
+extern void RemoveClearStorageSlot9();
+extern void InstallClearStorageSlot10();
+extern void RemoveClearStorageSlot10();
+
+// --- CompleteRoad (engine/reimpl/completeroad.cpp) ---
+extern void InstallCompleteRoadSerialize();
+extern void RemoveCompleteRoadSerialize();
+extern void InstallCompleteRoadPurecall();
+extern void RemoveCompleteRoadPurecall();
+
+// --- CompleteTask (engine/reimpl/completetask.cpp) ---
+extern void InstallCompleteTaskSerialize();
+extern void RemoveCompleteTaskSerialize();
+extern void InstallCompleteTaskPurecall();
+extern void RemoveCompleteTaskPurecall();
+extern void InstallCompleteTaskCheckEntity();
+extern void RemoveCompleteTaskCheckEntity();
+extern void InstallCompleteTaskGetTarget();
+extern void RemoveCompleteTaskGetTarget();
+
+// --- ConsumeProduce (engine/reimpl/consumeproduce.cpp) ---
+extern void InstallConsumeProduceCtor();
+extern void RemoveConsumeProduceCtor();
+extern void InstallConsumeProduceScalarDtor();
+extern void RemoveConsumeProduceScalarDtor();
+extern void InstallConsumeProduceSerialize();
+extern void RemoveConsumeProduceSerialize();
+
+// --- ConsumeRawMaterial (engine/reimpl/consumerawmaterial.cpp) ---
+extern void InstallConsumeRawMaterialSerialize();
+extern void RemoveConsumeRawMaterialSerialize();
+extern void InstallConsumeRawMaterialAbstractImpl();
+extern void RemoveConsumeRawMaterialAbstractImpl();
+extern void InstallConsumeRawMaterialCheckEntity();
+extern void RemoveConsumeRawMaterialCheckEntity();
+
+// --- CreateNaturalResource (engine/reimpl/createnaturalresource.cpp) ---
+extern void InstallCreateNaturalResourceSerialize();
+extern void RemoveCreateNaturalResourceSerialize();
+extern void InstallCreateNaturalResourcePurecall();
+extern void RemoveCreateNaturalResourcePurecall();
+extern void InstallCreateNaturalResourceGetTarget();
+extern void RemoveCreateNaturalResourceGetTarget();
+
+// --- CreateRawMaterial (engine/reimpl/createrawmaterial.cpp) ---
+extern void InstallCreateRawMaterialSerialize();
+extern void RemoveCreateRawMaterialSerialize();
+extern void InstallCreateRawMaterialAbstractImpl();
+extern void RemoveCreateRawMaterialAbstractImpl();
+
+// --- DropOffRawMaterial (engine/reimpl/dropoffrawmaterial.cpp) ---
+extern void InstallDropOffRawMaterialSerialize();
+extern void RemoveDropOffRawMaterialSerialize();
+extern void InstallDropOffRawMaterialAbstractImpl();
+extern void RemoveDropOffRawMaterialAbstractImpl();
+
+// --- FireWork (engine/reimpl/firework.cpp) ---
+extern void InstallFireWorkSerialize();
+extern void RemoveFireWorkSerialize();
+extern void InstallFireWorkSlot4();
+extern void RemoveFireWorkSlot4();
+extern void InstallFireWorkSlot6();
+extern void RemoveFireWorkSlot6();
+extern void InstallFireWorkSlot8();
+extern void RemoveFireWorkSlot8();
+extern void InstallFireWorkSlot9();
+extern void RemoveFireWorkSlot9();
+
+// --- FishingWork (engine/reimpl/fishingwork.cpp) ---
+extern void InstallFishingWorkSerialize();
+extern void RemoveFishingWorkSerialize();
+extern void InstallFishingWorkSlot4();
+extern void RemoveFishingWorkSlot4();
+extern void InstallFishingWorkSlot6();
+extern void RemoveFishingWorkSlot6();
+extern void InstallFishingWorkSlot7();
+extern void RemoveFishingWorkSlot7();
+extern void InstallFishingWorkSlot8();
+extern void RemoveFishingWorkSlot8();
+extern void InstallFishingWorkSlot9();
+extern void RemoveFishingWorkSlot9();
+extern void InstallFishingWorkSlot10();
+extern void RemoveFishingWorkSlot10();
+
+// --- ForesterWork (engine/reimpl/foresterwork.cpp) ---
+extern void InstallForesterWorkScalarDtor();
+extern void RemoveForesterWorkScalarDtor();
+extern void InstallForesterWorkSerialize();
+extern void RemoveForesterWorkSerialize();
+extern void InstallForesterWorkSlot4();
+extern void RemoveForesterWorkSlot4();
+extern void InstallForesterWorkSlot8();
+extern void RemoveForesterWorkSlot8();
+extern void InstallForesterWorkSlot9();
+extern void RemoveForesterWorkSlot9();
+extern void InstallForesterWorkSlot10();
+extern void RemoveForesterWorkSlot10();
+
+// --- GatherRawMaterials (engine/reimpl/gatherrawmaterials.cpp) ---
+extern void InstallGatherRawMaterialsCtor();
+extern void RemoveGatherRawMaterialsCtor();
+extern void InstallGatherRawMaterialsScalarDtor();
+extern void RemoveGatherRawMaterialsScalarDtor();
+extern void InstallGatherRawMaterialsSerialize();
+extern void RemoveGatherRawMaterialsSerialize();
+
+// --- HarvestArea (engine/reimpl/harvestarea.cpp) ---
+extern void InstallHarvestAreaScalarDtor();
+extern void RemoveHarvestAreaScalarDtor();
+extern void InstallHarvestAreaSerialize();
+extern void RemoveHarvestAreaSerialize();
+extern void InstallHarvestAreaSlot4();
+extern void RemoveHarvestAreaSlot4();
+extern void InstallHarvestAreaSlot6();
+extern void RemoveHarvestAreaSlot6();
+extern void InstallHarvestAreaSlot7();
+extern void RemoveHarvestAreaSlot7();
+extern void InstallHarvestAreaSlot8();
+extern void RemoveHarvestAreaSlot8();
+extern void InstallHarvestAreaSlot9();
+extern void RemoveHarvestAreaSlot9();
+extern void InstallHarvestAreaSlot10();
+extern void RemoveHarvestAreaSlot10();
+
+// --- HarvestOrchard (engine/reimpl/harvestorchard.cpp) ---
+extern void InstallHarvestOrchardScalarDtor();
+extern void RemoveHarvestOrchardScalarDtor();
+extern void InstallHarvestOrchardSerialize();
+extern void RemoveHarvestOrchardSerialize();
+extern void InstallHarvestOrchardSlot4();
+extern void RemoveHarvestOrchardSlot4();
+extern void InstallHarvestOrchardSlot6();
+extern void RemoveHarvestOrchardSlot6();
+extern void InstallHarvestOrchardSlot7();
+extern void RemoveHarvestOrchardSlot7();
+extern void InstallHarvestOrchardSlot8();
+extern void RemoveHarvestOrchardSlot8();
+extern void InstallHarvestOrchardSlot9();
+extern void RemoveHarvestOrchardSlot9();
+extern void InstallHarvestOrchardSlot10();
+extern void RemoveHarvestOrchardSlot10();
+
+// --- HerbalistWork (engine/reimpl/herbalistwork.cpp) ---
+extern void InstallHerbalistWorkScalarDtor();
+extern void RemoveHerbalistWorkScalarDtor();
+extern void InstallHerbalistWorkSerialize();
+extern void RemoveHerbalistWorkSerialize();
+extern void InstallHerbalistWorkSlot4();
+extern void RemoveHerbalistWorkSlot4();
+extern void InstallHerbalistWorkSlot8();
+extern void RemoveHerbalistWorkSlot8();
+extern void InstallHerbalistWorkSlot9();
+extern void RemoveHerbalistWorkSlot9();
+extern void InstallHerbalistWorkSlot10();
+extern void RemoveHerbalistWorkSlot10();
+
+// --- HuntAnimal (engine/reimpl/huntanimal.cpp) ---
+extern void InstallHuntAnimalSerialize();
+extern void RemoveHuntAnimalSerialize();
+extern void InstallHuntAnimalEnter();
+extern void RemoveHuntAnimalEnter();
+
+// --- HuntWork (engine/reimpl/huntwork.cpp) ---
+extern void InstallHuntWorkScalarDtor();
+extern void RemoveHuntWorkScalarDtor();
+extern void InstallHuntWorkSerialize();
+extern void RemoveHuntWorkSerialize();
+extern void InstallHuntWorkSlot4();
+extern void RemoveHuntWorkSlot4();
+extern void InstallHuntWorkSlot8();
+extern void RemoveHuntWorkSlot8();
+extern void InstallHuntWorkSlot9();
+extern void RemoveHuntWorkSlot9();
+extern void InstallHuntWorkSlot10();
+extern void RemoveHuntWorkSlot10();
+
+// --- LocationWork (engine/reimpl/locationwork.cpp) ---
+extern void InstallLocationWorkSerialize();
+extern void RemoveLocationWorkSerialize();
+extern void InstallLocationWorkSlot4();
+extern void RemoveLocationWorkSlot4();
+extern void InstallLocationWorkSlot6();
+extern void RemoveLocationWorkSlot6();
+extern void InstallLocationWorkSlot7();
+extern void RemoveLocationWorkSlot7();
+extern void InstallLocationWorkSlot8();
+extern void RemoveLocationWorkSlot8();
+extern void InstallLocationWorkSlot9();
+extern void RemoveLocationWorkSlot9();
+extern void InstallLocationWorkSlot10();
+extern void RemoveLocationWorkSlot10();
+
+// --- MarketWork (engine/reimpl/marketwork.cpp) ---
+extern void InstallMarketWorkSerialize();
+extern void RemoveMarketWorkSerialize();
+extern void InstallMarketWorkSlot4();
+extern void RemoveMarketWorkSlot4();
+extern void InstallMarketWorkSlot6();
+extern void RemoveMarketWorkSlot6();
+extern void InstallMarketWorkSlot8();
+extern void RemoveMarketWorkSlot8();
+extern void InstallMarketWorkSlot9();
+extern void RemoveMarketWorkSlot9();
+extern void InstallMarketWorkSlot10();
+extern void RemoveMarketWorkSlot10();
+
+// --- MoveTo (engine/reimpl/moveto.cpp) ---
+extern void InstallMoveToSerialize();
+extern void RemoveMoveToSerialize();
+extern void InstallMoveToAbstractImpl();
+extern void RemoveMoveToAbstractImpl();
+extern void InstallMoveToExecute();
+extern void RemoveMoveToExecute();
+extern void InstallMoveToEnter();
+extern void RemoveMoveToEnter();
+extern void InstallMoveToExit();
+extern void RemoveMoveToExit();
+extern void InstallMoveToCheckEntity();
+extern void RemoveMoveToCheckEntity();
+
+// --- PastureWork (engine/reimpl/pasturework.cpp) ---
+extern void InstallPastureWorkScalarDtor();
+extern void RemovePastureWorkScalarDtor();
+extern void InstallPastureWorkSerialize();
+extern void RemovePastureWorkSerialize();
+extern void InstallPastureWorkSlot4();
+extern void RemovePastureWorkSlot4();
+extern void InstallPastureWorkSlot7();
+extern void RemovePastureWorkSlot7();
+extern void InstallPastureWorkSlot8();
+extern void RemovePastureWorkSlot8();
+extern void InstallPastureWorkSlot9();
+extern void RemovePastureWorkSlot9();
+extern void InstallPastureWorkSlot10();
+extern void RemovePastureWorkSlot10();
+
+// --- PerformWork (engine/reimpl/performwork.cpp) ---
+extern void InstallPerformWorkSerialize();
+extern void RemovePerformWorkSerialize();
+extern void InstallPerformWorkAbstractImpl();
+extern void RemovePerformWorkAbstractImpl();
+extern void InstallPerformWorkExecute();
+extern void RemovePerformWorkExecute();
+extern void InstallPerformWorkExit();
+extern void RemovePerformWorkExit();
+extern void InstallPerformWorkCheckEntity();
+extern void RemovePerformWorkCheckEntity();
+
+// --- Pickup (engine/reimpl/pickup.cpp) ---
+extern void InstallPickupSerialize();
+extern void RemovePickupSerialize();
+extern void InstallPickupSlot4();
+extern void RemovePickupSlot4();
+extern void InstallPickupExecute();
+extern void RemovePickupExecute();
+extern void InstallPickupSlot6();
+extern void RemovePickupSlot6();
+extern void InstallPickupSlot7();
+extern void RemovePickupSlot7();
+extern void InstallPickupSlot8();
+extern void RemovePickupSlot8();
+extern void InstallPickupSlot9();
+extern void RemovePickupSlot9();
+extern void InstallPickupSlot10();
+extern void RemovePickupSlot10();
+
+// --- PickupRawMaterial (engine/reimpl/pickuprawmaterial.cpp) ---
+extern void InstallPickupRawMaterialSerialize();
+extern void RemovePickupRawMaterialSerialize();
+extern void InstallPickupRawMaterialPurecall();
+extern void RemovePickupRawMaterialPurecall();
+extern void InstallPickupRawMaterialGetTarget();
+extern void RemovePickupRawMaterialGetTarget();
+
+// --- PickupStoredRawMaterial (engine/reimpl/pickupstoredrawmaterial.cpp) ---
+extern void InstallPickupStoredRawMaterialSerialize();
+extern void RemovePickupStoredRawMaterialSerialize();
+extern void InstallPickupStoredRawMaterialAbstractImpl();
+extern void RemovePickupStoredRawMaterialAbstractImpl();
+extern void InstallPickupStoredRawMaterialCheckEntity();
+extern void RemovePickupStoredRawMaterialCheckEntity();
+
+// --- PlantArea (engine/reimpl/plantarea.cpp) ---
+extern void InstallPlantAreaCtor();
+extern void RemovePlantAreaCtor();
+extern void InstallPlantAreaScalarDtor();
+extern void RemovePlantAreaScalarDtor();
+extern void InstallPlantAreaSerialize();
+extern void RemovePlantAreaSerialize();
+
+// --- PlantOrchard (engine/reimpl/plantorchard.cpp) ---
+extern void InstallPlantOrchardCtor();
+extern void RemovePlantOrchardCtor();
+extern void InstallPlantOrchardScalarDtor();
+extern void RemovePlantOrchardScalarDtor();
+extern void InstallPlantOrchardSerialize();
+extern void RemovePlantOrchardSerialize();
+
+// --- PlayAnimation (engine/reimpl/playanimation.cpp) ---
+extern void InstallPlayAnimationSerialize();
+extern void RemovePlayAnimationSerialize();
+extern void InstallPlayAnimationPurecall();
+extern void RemovePlayAnimationPurecall();
+extern void InstallPlayAnimationExecute();
+extern void RemovePlayAnimationExecute();
+extern void InstallPlayAnimationGetTarget();
+extern void RemovePlayAnimationGetTarget();
+
+// --- RemoveAnimal (engine/reimpl/removeanimal.cpp) ---
+extern void InstallRemoveAnimalSerialize();
+extern void RemoveRemoveAnimalSerialize();
+extern void InstallRemoveAnimalPurecall();
+extern void RemoveRemoveAnimalPurecall();
+extern void InstallRemoveAnimalCheckEntity();
+extern void RemoveRemoveAnimalCheckEntity();
+extern void InstallRemoveAnimalGetTarget();
+extern void RemoveRemoveAnimalGetTarget();
+
+// --- RemoveNaturalResource (engine/reimpl/removenaturalresource.cpp) ---
+extern void InstallRemoveNaturalResourceSerialize();
+extern void RemoveRemoveNaturalResourceSerialize();
+extern void InstallRemoveNaturalResourcePurecall();
+extern void RemoveRemoveNaturalResourcePurecall();
+extern void InstallRemoveNaturalResourceCheckEntity();
+extern void RemoveRemoveNaturalResourceCheckEntity();
+extern void InstallRemoveNaturalResourceGetTarget();
+extern void RemoveRemoveNaturalResourceGetTarget();
+
+// --- SendComponentMessage (engine/reimpl/sendcomponentmessage.cpp) ---
+extern void InstallSendComponentMessageSerialize();
+extern void RemoveSendComponentMessageSerialize();
+extern void InstallSendComponentMessageAbstractImpl();
+extern void RemoveSendComponentMessageAbstractImpl();
+
+// --- ShowTool (engine/reimpl/showtool.cpp) ---
+extern void InstallShowToolSerialize();
+extern void RemoveShowToolSerialize();
+extern void InstallShowToolPurecall();
+extern void RemoveShowToolPurecall();
+extern void InstallShowToolCheckEntity();
+extern void RemoveShowToolCheckEntity();
+extern void InstallShowToolGetTarget();
+extern void RemoveShowToolGetTarget();
+
+// --- TendArea (engine/reimpl/tendarea.cpp) ---
+extern void InstallTendAreaSerialize();
+extern void RemoveTendAreaSerialize();
+extern void InstallTendAreaSlot4();
+extern void RemoveTendAreaSlot4();
+extern void InstallTendAreaSlot6();
+extern void RemoveTendAreaSlot6();
+extern void InstallTendAreaSlot8();
+extern void RemoveTendAreaSlot8();
+extern void InstallTendAreaSlot9();
+extern void RemoveTendAreaSlot9();
+extern void InstallTendAreaSlot10();
+extern void RemoveTendAreaSlot10();
+
+// --- TradeWork (engine/reimpl/tradework.cpp) ---
+extern void InstallTradeWorkSerialize();
+extern void RemoveTradeWorkSerialize();
+extern void InstallTradeWorkSlot4();
+extern void RemoveTradeWorkSlot4();
+extern void InstallTradeWorkSlot6();
+extern void RemoveTradeWorkSlot6();
+extern void InstallTradeWorkSlot8();
+extern void RemoveTradeWorkSlot8();
+extern void InstallTradeWorkSlot9();
+extern void RemoveTradeWorkSlot9();
+extern void InstallTradeWorkSlot10();
+extern void RemoveTradeWorkSlot10();
+
 static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
     { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
@@ -1003,6 +1429,260 @@ static ReimplEntry g_reimplementations[] = {
     { "ZoneComponent::Shutdown", InstallZoneComponentShutdown, RemoveZoneComponentShutdown, true },
     { "ZoneComponent::Draw", InstallZoneComponentDraw, RemoveZoneComponentDraw, true },
     { "ZoneComponent::OnCreate", InstallZoneComponentOnCreate, RemoveZoneComponentOnCreate, true },
+
+    // ====================================================================
+    // Phase 3: Action and Work class reimplementations
+    // ====================================================================
+
+    // --- AnimateNaturalResource ---
+    { "AnimateNaturalResource::Serialize", InstallAnimateNaturalResourceSerialize, RemoveAnimateNaturalResourceSerialize, true },
+    { "AnimateNaturalResource::Purecall", InstallAnimateNaturalResourcePurecall, RemoveAnimateNaturalResourcePurecall, true },
+    { "AnimateNaturalResource::Execute", InstallAnimateNaturalResourceExecute, RemoveAnimateNaturalResourceExecute, true },
+    { "AnimateNaturalResource::GetTarget", InstallAnimateNaturalResourceGetTarget, RemoveAnimateNaturalResourceGetTarget, true },
+
+    // --- AutoPickupWork ---
+    { "AutoPickupWork::Slot8", InstallAutoPickupWorkSlot8, RemoveAutoPickupWorkSlot8, true },
+    { "AutoPickupWork::Ctor", InstallAutoPickupWorkCtor, RemoveAutoPickupWorkCtor, true },
+
+    // --- BuildRoad ---
+    { "BuildRoad::Ctor", InstallBuildRoadCtor, RemoveBuildRoadCtor, true },
+    { "BuildRoad::ScalarDtor", InstallBuildRoadScalarDtor, RemoveBuildRoadScalarDtor, true },
+    { "BuildRoad::Serialize", InstallBuildRoadSerialize, RemoveBuildRoadSerialize, true },
+
+    // --- BuildStructure ---
+    { "BuildStructure::Ctor", InstallBuildStructureCtor, RemoveBuildStructureCtor, true },
+    { "BuildStructure::ScalarDtor", InstallBuildStructureScalarDtor, RemoveBuildStructureScalarDtor, true },
+    { "BuildStructure::Serialize", InstallBuildStructureSerialize, RemoveBuildStructureSerialize, true },
+
+    // --- ClearArea ---
+    { "ClearArea::Ctor", InstallClearAreaCtor, RemoveClearAreaCtor, true },
+    { "ClearArea::ScalarDtor", InstallClearAreaScalarDtor, RemoveClearAreaScalarDtor, true },
+    { "ClearArea::Serialize", InstallClearAreaSerialize, RemoveClearAreaSerialize, true },
+
+    // --- ClearStorage ---
+    { "ClearStorage::Serialize", InstallClearStorageSerialize, RemoveClearStorageSerialize, true },
+    { "ClearStorage::Slot4", InstallClearStorageSlot4, RemoveClearStorageSlot4, true },
+    { "ClearStorage::Slot6", InstallClearStorageSlot6, RemoveClearStorageSlot6, true },
+    { "ClearStorage::Slot8", InstallClearStorageSlot8, RemoveClearStorageSlot8, true },
+    { "ClearStorage::Slot9", InstallClearStorageSlot9, RemoveClearStorageSlot9, true },
+    { "ClearStorage::Slot10", InstallClearStorageSlot10, RemoveClearStorageSlot10, true },
+
+    // --- CompleteRoad ---
+    { "CompleteRoad::Serialize", InstallCompleteRoadSerialize, RemoveCompleteRoadSerialize, true },
+    { "CompleteRoad::Purecall", InstallCompleteRoadPurecall, RemoveCompleteRoadPurecall, true },
+
+    // --- CompleteTask ---
+    { "CompleteTask::Serialize", InstallCompleteTaskSerialize, RemoveCompleteTaskSerialize, true },
+    { "CompleteTask::Purecall", InstallCompleteTaskPurecall, RemoveCompleteTaskPurecall, true },
+    { "CompleteTask::CheckEntity", InstallCompleteTaskCheckEntity, RemoveCompleteTaskCheckEntity, true },
+    { "CompleteTask::GetTarget", InstallCompleteTaskGetTarget, RemoveCompleteTaskGetTarget, true },
+
+    // --- ConsumeProduce ---
+    { "ConsumeProduce::Ctor", InstallConsumeProduceCtor, RemoveConsumeProduceCtor, true },
+    { "ConsumeProduce::ScalarDtor", InstallConsumeProduceScalarDtor, RemoveConsumeProduceScalarDtor, true },
+    { "ConsumeProduce::Serialize", InstallConsumeProduceSerialize, RemoveConsumeProduceSerialize, true },
+
+    // --- ConsumeRawMaterial ---
+    { "ConsumeRawMaterial::Serialize", InstallConsumeRawMaterialSerialize, RemoveConsumeRawMaterialSerialize, true },
+    { "ConsumeRawMaterial::AbstractImpl", InstallConsumeRawMaterialAbstractImpl, RemoveConsumeRawMaterialAbstractImpl, true },
+    { "ConsumeRawMaterial::CheckEntity", InstallConsumeRawMaterialCheckEntity, RemoveConsumeRawMaterialCheckEntity, true },
+
+    // --- CreateNaturalResource ---
+    { "CreateNaturalResource::Serialize", InstallCreateNaturalResourceSerialize, RemoveCreateNaturalResourceSerialize, true },
+    { "CreateNaturalResource::Purecall", InstallCreateNaturalResourcePurecall, RemoveCreateNaturalResourcePurecall, true },
+    { "CreateNaturalResource::GetTarget", InstallCreateNaturalResourceGetTarget, RemoveCreateNaturalResourceGetTarget, true },
+
+    // --- CreateRawMaterial ---
+    { "CreateRawMaterial::Serialize", InstallCreateRawMaterialSerialize, RemoveCreateRawMaterialSerialize, true },
+    { "CreateRawMaterial::AbstractImpl", InstallCreateRawMaterialAbstractImpl, RemoveCreateRawMaterialAbstractImpl, true },
+
+    // --- DropOffRawMaterial ---
+    { "DropOffRawMaterial::Serialize", InstallDropOffRawMaterialSerialize, RemoveDropOffRawMaterialSerialize, true },
+    { "DropOffRawMaterial::AbstractImpl", InstallDropOffRawMaterialAbstractImpl, RemoveDropOffRawMaterialAbstractImpl, true },
+
+    // --- FireWork ---
+    { "FireWork::Serialize", InstallFireWorkSerialize, RemoveFireWorkSerialize, true },
+    { "FireWork::Slot4", InstallFireWorkSlot4, RemoveFireWorkSlot4, true },
+    { "FireWork::Slot6", InstallFireWorkSlot6, RemoveFireWorkSlot6, true },
+    { "FireWork::Slot8", InstallFireWorkSlot8, RemoveFireWorkSlot8, true },
+    { "FireWork::Slot9", InstallFireWorkSlot9, RemoveFireWorkSlot9, true },
+
+    // --- FishingWork ---
+    { "FishingWork::Serialize", InstallFishingWorkSerialize, RemoveFishingWorkSerialize, true },
+    { "FishingWork::Slot4", InstallFishingWorkSlot4, RemoveFishingWorkSlot4, true },
+    { "FishingWork::Slot6", InstallFishingWorkSlot6, RemoveFishingWorkSlot6, true },
+    { "FishingWork::Slot7", InstallFishingWorkSlot7, RemoveFishingWorkSlot7, true },
+    { "FishingWork::Slot8", InstallFishingWorkSlot8, RemoveFishingWorkSlot8, true },
+    { "FishingWork::Slot9", InstallFishingWorkSlot9, RemoveFishingWorkSlot9, true },
+    { "FishingWork::Slot10", InstallFishingWorkSlot10, RemoveFishingWorkSlot10, true },
+
+    // --- ForesterWork ---
+    { "ForesterWork::ScalarDtor", InstallForesterWorkScalarDtor, RemoveForesterWorkScalarDtor, true },
+    { "ForesterWork::Serialize", InstallForesterWorkSerialize, RemoveForesterWorkSerialize, true },
+    { "ForesterWork::Slot4", InstallForesterWorkSlot4, RemoveForesterWorkSlot4, true },
+    { "ForesterWork::Slot8", InstallForesterWorkSlot8, RemoveForesterWorkSlot8, true },
+    { "ForesterWork::Slot9", InstallForesterWorkSlot9, RemoveForesterWorkSlot9, true },
+    { "ForesterWork::Slot10", InstallForesterWorkSlot10, RemoveForesterWorkSlot10, true },
+
+    // --- GatherRawMaterials ---
+    { "GatherRawMaterials::Ctor", InstallGatherRawMaterialsCtor, RemoveGatherRawMaterialsCtor, true },
+    { "GatherRawMaterials::ScalarDtor", InstallGatherRawMaterialsScalarDtor, RemoveGatherRawMaterialsScalarDtor, true },
+    { "GatherRawMaterials::Serialize", InstallGatherRawMaterialsSerialize, RemoveGatherRawMaterialsSerialize, true },
+
+    // --- HarvestArea ---
+    { "HarvestArea::ScalarDtor", InstallHarvestAreaScalarDtor, RemoveHarvestAreaScalarDtor, true },
+    { "HarvestArea::Serialize", InstallHarvestAreaSerialize, RemoveHarvestAreaSerialize, true },
+    { "HarvestArea::Slot4", InstallHarvestAreaSlot4, RemoveHarvestAreaSlot4, true },
+    { "HarvestArea::Slot6", InstallHarvestAreaSlot6, RemoveHarvestAreaSlot6, true },
+    { "HarvestArea::Slot7", InstallHarvestAreaSlot7, RemoveHarvestAreaSlot7, true },
+    { "HarvestArea::Slot8", InstallHarvestAreaSlot8, RemoveHarvestAreaSlot8, true },
+    { "HarvestArea::Slot9", InstallHarvestAreaSlot9, RemoveHarvestAreaSlot9, true },
+    { "HarvestArea::Slot10", InstallHarvestAreaSlot10, RemoveHarvestAreaSlot10, true },
+
+    // --- HarvestOrchard ---
+    { "HarvestOrchard::ScalarDtor", InstallHarvestOrchardScalarDtor, RemoveHarvestOrchardScalarDtor, true },
+    { "HarvestOrchard::Serialize", InstallHarvestOrchardSerialize, RemoveHarvestOrchardSerialize, true },
+    { "HarvestOrchard::Slot4", InstallHarvestOrchardSlot4, RemoveHarvestOrchardSlot4, true },
+    { "HarvestOrchard::Slot6", InstallHarvestOrchardSlot6, RemoveHarvestOrchardSlot6, true },
+    { "HarvestOrchard::Slot7", InstallHarvestOrchardSlot7, RemoveHarvestOrchardSlot7, true },
+    { "HarvestOrchard::Slot8", InstallHarvestOrchardSlot8, RemoveHarvestOrchardSlot8, true },
+    { "HarvestOrchard::Slot9", InstallHarvestOrchardSlot9, RemoveHarvestOrchardSlot9, true },
+    { "HarvestOrchard::Slot10", InstallHarvestOrchardSlot10, RemoveHarvestOrchardSlot10, true },
+
+    // --- HerbalistWork ---
+    { "HerbalistWork::ScalarDtor", InstallHerbalistWorkScalarDtor, RemoveHerbalistWorkScalarDtor, true },
+    { "HerbalistWork::Serialize", InstallHerbalistWorkSerialize, RemoveHerbalistWorkSerialize, true },
+    { "HerbalistWork::Slot4", InstallHerbalistWorkSlot4, RemoveHerbalistWorkSlot4, true },
+    { "HerbalistWork::Slot8", InstallHerbalistWorkSlot8, RemoveHerbalistWorkSlot8, true },
+    { "HerbalistWork::Slot9", InstallHerbalistWorkSlot9, RemoveHerbalistWorkSlot9, true },
+    { "HerbalistWork::Slot10", InstallHerbalistWorkSlot10, RemoveHerbalistWorkSlot10, true },
+
+    // --- HuntAnimal ---
+    { "HuntAnimal::Serialize", InstallHuntAnimalSerialize, RemoveHuntAnimalSerialize, true },
+    { "HuntAnimal::Enter", InstallHuntAnimalEnter, RemoveHuntAnimalEnter, true },
+
+    // --- HuntWork ---
+    { "HuntWork::ScalarDtor", InstallHuntWorkScalarDtor, RemoveHuntWorkScalarDtor, true },
+    { "HuntWork::Serialize", InstallHuntWorkSerialize, RemoveHuntWorkSerialize, true },
+    { "HuntWork::Slot4", InstallHuntWorkSlot4, RemoveHuntWorkSlot4, true },
+    { "HuntWork::Slot8", InstallHuntWorkSlot8, RemoveHuntWorkSlot8, true },
+    { "HuntWork::Slot9", InstallHuntWorkSlot9, RemoveHuntWorkSlot9, true },
+    { "HuntWork::Slot10", InstallHuntWorkSlot10, RemoveHuntWorkSlot10, true },
+
+    // --- LocationWork ---
+    { "LocationWork::Serialize", InstallLocationWorkSerialize, RemoveLocationWorkSerialize, true },
+    { "LocationWork::Slot4", InstallLocationWorkSlot4, RemoveLocationWorkSlot4, true },
+    { "LocationWork::Slot6", InstallLocationWorkSlot6, RemoveLocationWorkSlot6, true },
+    { "LocationWork::Slot7", InstallLocationWorkSlot7, RemoveLocationWorkSlot7, true },
+    { "LocationWork::Slot8", InstallLocationWorkSlot8, RemoveLocationWorkSlot8, true },
+    { "LocationWork::Slot9", InstallLocationWorkSlot9, RemoveLocationWorkSlot9, true },
+    { "LocationWork::Slot10", InstallLocationWorkSlot10, RemoveLocationWorkSlot10, true },
+
+    // --- MarketWork ---
+    { "MarketWork::Serialize", InstallMarketWorkSerialize, RemoveMarketWorkSerialize, true },
+    { "MarketWork::Slot4", InstallMarketWorkSlot4, RemoveMarketWorkSlot4, true },
+    { "MarketWork::Slot6", InstallMarketWorkSlot6, RemoveMarketWorkSlot6, true },
+    { "MarketWork::Slot8", InstallMarketWorkSlot8, RemoveMarketWorkSlot8, true },
+    { "MarketWork::Slot9", InstallMarketWorkSlot9, RemoveMarketWorkSlot9, true },
+    { "MarketWork::Slot10", InstallMarketWorkSlot10, RemoveMarketWorkSlot10, true },
+
+    // --- MoveTo ---
+    { "MoveTo::Serialize", InstallMoveToSerialize, RemoveMoveToSerialize, true },
+    { "MoveTo::AbstractImpl", InstallMoveToAbstractImpl, RemoveMoveToAbstractImpl, true },
+    { "MoveTo::Execute", InstallMoveToExecute, RemoveMoveToExecute, true },
+    { "MoveTo::Enter", InstallMoveToEnter, RemoveMoveToEnter, true },
+    { "MoveTo::Exit", InstallMoveToExit, RemoveMoveToExit, true },
+    { "MoveTo::CheckEntity", InstallMoveToCheckEntity, RemoveMoveToCheckEntity, true },
+
+    // --- PastureWork ---
+    { "PastureWork::ScalarDtor", InstallPastureWorkScalarDtor, RemovePastureWorkScalarDtor, true },
+    { "PastureWork::Serialize", InstallPastureWorkSerialize, RemovePastureWorkSerialize, true },
+    { "PastureWork::Slot4", InstallPastureWorkSlot4, RemovePastureWorkSlot4, true },
+    { "PastureWork::Slot7", InstallPastureWorkSlot7, RemovePastureWorkSlot7, true },
+    { "PastureWork::Slot8", InstallPastureWorkSlot8, RemovePastureWorkSlot8, true },
+    { "PastureWork::Slot9", InstallPastureWorkSlot9, RemovePastureWorkSlot9, true },
+    { "PastureWork::Slot10", InstallPastureWorkSlot10, RemovePastureWorkSlot10, true },
+
+    // --- PerformWork ---
+    { "PerformWork::Serialize", InstallPerformWorkSerialize, RemovePerformWorkSerialize, true },
+    { "PerformWork::AbstractImpl", InstallPerformWorkAbstractImpl, RemovePerformWorkAbstractImpl, true },
+    { "PerformWork::Execute", InstallPerformWorkExecute, RemovePerformWorkExecute, true },
+    { "PerformWork::Exit", InstallPerformWorkExit, RemovePerformWorkExit, true },
+    { "PerformWork::CheckEntity", InstallPerformWorkCheckEntity, RemovePerformWorkCheckEntity, true },
+
+    // --- Pickup ---
+    { "Pickup::Serialize", InstallPickupSerialize, RemovePickupSerialize, true },
+    { "Pickup::Slot4", InstallPickupSlot4, RemovePickupSlot4, true },
+    { "Pickup::Execute", InstallPickupExecute, RemovePickupExecute, true },
+    { "Pickup::Slot6", InstallPickupSlot6, RemovePickupSlot6, true },
+    { "Pickup::Slot7", InstallPickupSlot7, RemovePickupSlot7, true },
+    { "Pickup::Slot8", InstallPickupSlot8, RemovePickupSlot8, true },
+    { "Pickup::Slot9", InstallPickupSlot9, RemovePickupSlot9, true },
+    { "Pickup::Slot10", InstallPickupSlot10, RemovePickupSlot10, true },
+
+    // --- PickupRawMaterial ---
+    { "PickupRawMaterial::Serialize", InstallPickupRawMaterialSerialize, RemovePickupRawMaterialSerialize, true },
+    { "PickupRawMaterial::Purecall", InstallPickupRawMaterialPurecall, RemovePickupRawMaterialPurecall, true },
+    { "PickupRawMaterial::GetTarget", InstallPickupRawMaterialGetTarget, RemovePickupRawMaterialGetTarget, true },
+
+    // --- PickupStoredRawMaterial ---
+    { "PickupStoredRawMaterial::Serialize", InstallPickupStoredRawMaterialSerialize, RemovePickupStoredRawMaterialSerialize, true },
+    { "PickupStoredRawMaterial::AbstractImpl", InstallPickupStoredRawMaterialAbstractImpl, RemovePickupStoredRawMaterialAbstractImpl, true },
+    { "PickupStoredRawMaterial::CheckEntity", InstallPickupStoredRawMaterialCheckEntity, RemovePickupStoredRawMaterialCheckEntity, true },
+
+    // --- PlantArea ---
+    { "PlantArea::Ctor", InstallPlantAreaCtor, RemovePlantAreaCtor, true },
+    { "PlantArea::ScalarDtor", InstallPlantAreaScalarDtor, RemovePlantAreaScalarDtor, true },
+    { "PlantArea::Serialize", InstallPlantAreaSerialize, RemovePlantAreaSerialize, true },
+
+    // --- PlantOrchard ---
+    { "PlantOrchard::Ctor", InstallPlantOrchardCtor, RemovePlantOrchardCtor, true },
+    { "PlantOrchard::ScalarDtor", InstallPlantOrchardScalarDtor, RemovePlantOrchardScalarDtor, true },
+    { "PlantOrchard::Serialize", InstallPlantOrchardSerialize, RemovePlantOrchardSerialize, true },
+
+    // --- PlayAnimation ---
+    { "PlayAnimation::Serialize", InstallPlayAnimationSerialize, RemovePlayAnimationSerialize, true },
+    { "PlayAnimation::Purecall", InstallPlayAnimationPurecall, RemovePlayAnimationPurecall, true },
+    { "PlayAnimation::Execute", InstallPlayAnimationExecute, RemovePlayAnimationExecute, true },
+    { "PlayAnimation::GetTarget", InstallPlayAnimationGetTarget, RemovePlayAnimationGetTarget, true },
+
+    // --- RemoveAnimal ---
+    { "RemoveAnimal::Serialize", InstallRemoveAnimalSerialize, RemoveRemoveAnimalSerialize, true },
+    { "RemoveAnimal::Purecall", InstallRemoveAnimalPurecall, RemoveRemoveAnimalPurecall, true },
+    { "RemoveAnimal::CheckEntity", InstallRemoveAnimalCheckEntity, RemoveRemoveAnimalCheckEntity, true },
+    { "RemoveAnimal::GetTarget", InstallRemoveAnimalGetTarget, RemoveRemoveAnimalGetTarget, true },
+
+    // --- RemoveNaturalResource ---
+    { "RemoveNaturalResource::Serialize", InstallRemoveNaturalResourceSerialize, RemoveRemoveNaturalResourceSerialize, true },
+    { "RemoveNaturalResource::Purecall", InstallRemoveNaturalResourcePurecall, RemoveRemoveNaturalResourcePurecall, true },
+    { "RemoveNaturalResource::CheckEntity", InstallRemoveNaturalResourceCheckEntity, RemoveRemoveNaturalResourceCheckEntity, true },
+    { "RemoveNaturalResource::GetTarget", InstallRemoveNaturalResourceGetTarget, RemoveRemoveNaturalResourceGetTarget, true },
+
+    // --- SendComponentMessage ---
+    { "SendComponentMessage::Serialize", InstallSendComponentMessageSerialize, RemoveSendComponentMessageSerialize, true },
+    { "SendComponentMessage::AbstractImpl", InstallSendComponentMessageAbstractImpl, RemoveSendComponentMessageAbstractImpl, true },
+
+    // --- ShowTool ---
+    { "ShowTool::Serialize", InstallShowToolSerialize, RemoveShowToolSerialize, true },
+    { "ShowTool::Purecall", InstallShowToolPurecall, RemoveShowToolPurecall, true },
+    { "ShowTool::CheckEntity", InstallShowToolCheckEntity, RemoveShowToolCheckEntity, true },
+    { "ShowTool::GetTarget", InstallShowToolGetTarget, RemoveShowToolGetTarget, true },
+
+    // --- TendArea ---
+    { "TendArea::Serialize", InstallTendAreaSerialize, RemoveTendAreaSerialize, true },
+    { "TendArea::Slot4", InstallTendAreaSlot4, RemoveTendAreaSlot4, true },
+    { "TendArea::Slot6", InstallTendAreaSlot6, RemoveTendAreaSlot6, true },
+    { "TendArea::Slot8", InstallTendAreaSlot8, RemoveTendAreaSlot8, true },
+    { "TendArea::Slot9", InstallTendAreaSlot9, RemoveTendAreaSlot9, true },
+    { "TendArea::Slot10", InstallTendAreaSlot10, RemoveTendAreaSlot10, true },
+
+    // --- TradeWork ---
+    { "TradeWork::Serialize", InstallTradeWorkSerialize, RemoveTradeWorkSerialize, true },
+    { "TradeWork::Slot4", InstallTradeWorkSlot4, RemoveTradeWorkSlot4, true },
+    { "TradeWork::Slot6", InstallTradeWorkSlot6, RemoveTradeWorkSlot6, true },
+    { "TradeWork::Slot8", InstallTradeWorkSlot8, RemoveTradeWorkSlot8, true },
+    { "TradeWork::Slot9", InstallTradeWorkSlot9, RemoveTradeWorkSlot9, true },
+    { "TradeWork::Slot10", InstallTradeWorkSlot10, RemoveTradeWorkSlot10, true },
 };
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);

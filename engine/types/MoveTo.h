@@ -28,7 +28,7 @@ struct MoveTo {
     uint8_t  _base08[8];         // +0x08: Object::Internal base
     void*    entity;             // +0x10: entity pointer
     uint8_t  status;             // +0x18: status byte
-    uint8_t  _pad19[3];          // +0x19: padding
+    uint8_t  _pad19[7];          // +0x19: padding to 0x20
 
     // --- MoveTo fields ---
     int32_t  targetId;           // +0x20: target ID (-1 = invalid)

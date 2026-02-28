@@ -31,7 +31,8 @@ struct FireWork {
     uint8_t  _pad44[4];          // +0x44: padding
 
     // --- FireWork fields ---
-    void*    _field50;           // +0x50: zeroed (Note: +0x48 gap from alignment)
+    void*    _field48;           // +0x48: zeroed
+    void*    _field50;           // +0x50: zeroed
     uint32_t _field58;           // +0x58: zeroed
     uint8_t  _pad5C[4];          // +0x5C: padding
 };
