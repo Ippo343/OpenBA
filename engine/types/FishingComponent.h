@@ -30,8 +30,9 @@ struct FishingComponent {
     uint8_t  produceFlag;       // +0x48
     uint8_t  _pad49[7];         // +0x49
 
-    uint8_t  fishingFlag;       // +0x50: initialized to 0
-    uint8_t  _pad51[7];         // +0x51: padding to 0x58
+    uint8_t  fishingFlag;       // +0x50: initialized to 0 (serialized as bool)
+    uint8_t  _pad51[3];         // +0x51: padding
+    float    fishingRate;        // +0x54: serialized by Shutdown (float field)
 };
 
 static_assert(sizeof(FishingComponent) == 0x58, "FishingComponent size mismatch");
@@ -39,3 +40,4 @@ static_assert(offsetof(FishingComponent, vtable) == 0x00, "");
 static_assert(offsetof(FishingComponent, controllerVtable) == 0x28, "");
 static_assert(offsetof(FishingComponent, selfPtr) == 0x40, "");
 static_assert(offsetof(FishingComponent, fishingFlag) == 0x50, "");
+static_assert(offsetof(FishingComponent, fishingRate) == 0x54, "");

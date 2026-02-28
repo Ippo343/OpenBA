@@ -326,6 +326,340 @@ extern void RemoveCitizenAIComponentUpdate();
 extern void InstallCitizenComponentUpdate();
 extern void RemoveCitizenComponentUpdate();
 
+// ============================================================
+// Phase 2: Passive component lifecycle methods
+// ============================================================
+
+// --- AbsorbResourceComponent (engine/reimpl/absorbresourcecomponent.cpp) ---
+extern void InstallAbsorbResourceComponentShutdown();
+extern void RemoveAbsorbResourceComponentShutdown();
+
+// --- AmbientEmitterComponent (engine/reimpl/ambientemittercomponent.cpp) ---
+extern void InstallAmbientEmitterComponentShutdown();
+extern void RemoveAmbientEmitterComponentShutdown();
+extern void InstallAmbientEmitterComponentDraw();
+extern void RemoveAmbientEmitterComponentDraw();
+
+// --- AutoPickupComponent (engine/reimpl/autopickupcomponent.cpp) ---
+extern void InstallAutoPickupComponentShutdown();
+extern void RemoveAutoPickupComponentShutdown();
+extern void InstallAutoPickupComponentSerialize();
+extern void RemoveAutoPickupComponentSerialize();
+
+// --- BoatComponent (engine/reimpl/boatcomponent.cpp) ---
+extern void InstallBoatComponentShutdown();
+extern void RemoveBoatComponentShutdown();
+
+// --- BuildComponent (engine/reimpl/buildcomponent.cpp) ---
+extern void InstallBuildComponentShutdown();
+extern void RemoveBuildComponentShutdown();
+extern void InstallBuildComponentDraw();
+extern void RemoveBuildComponentDraw();
+extern void InstallBuildComponentOnCreate();
+extern void RemoveBuildComponentOnCreate();
+
+// --- CemeteryComponent (engine/reimpl/cemeterycomponent.cpp) ---
+extern void InstallCemeteryComponentShutdown();
+extern void RemoveCemeteryComponentShutdown();
+extern void InstallCemeteryComponentDraw();
+extern void RemoveCemeteryComponentDraw();
+extern void InstallCemeteryComponentOnCreate();
+extern void RemoveCemeteryComponentOnCreate();
+
+// --- ClearAreaComponent (engine/reimpl/clearareacomponent.cpp) ---
+extern void InstallClearAreaComponentShutdown();
+extern void RemoveClearAreaComponentShutdown();
+
+// --- ClearResourceComponent (engine/reimpl/clearresourcecomponent.cpp) ---
+extern void InstallClearResourceComponentShutdown();
+extern void RemoveClearResourceComponentShutdown();
+
+// --- ConsumeProduceComponent (engine/reimpl/consumeproducecomponent.cpp) ---
+extern void InstallConsumeProduceComponentShutdown();
+extern void RemoveConsumeProduceComponentShutdown();
+extern void InstallConsumeProduceComponentSerialize();
+extern void RemoveConsumeProduceComponentSerialize();
+
+// --- CropFieldComponent (engine/reimpl/cropfieldcomponent.cpp) ---
+extern void InstallCropFieldComponentShutdown();
+extern void RemoveCropFieldComponentShutdown();
+
+// --- DecalComponent (engine/reimpl/decalcomponent.cpp) ---
+extern void InstallDecalComponentShutdown();
+extern void RemoveDecalComponentShutdown();
+extern void InstallDecalComponentDraw();
+extern void RemoveDecalComponentDraw();
+extern void InstallDecalComponentOnCreate();
+extern void RemoveDecalComponentOnCreate();
+extern void InstallDecalComponentSerialize();
+extern void RemoveDecalComponentSerialize();
+
+// --- DestroyComponent (engine/reimpl/destroycomponent.cpp) ---
+extern void InstallDestroyComponentShutdown();
+extern void RemoveDestroyComponentShutdown();
+extern void InstallDestroyComponentSerialize();
+extern void RemoveDestroyComponentSerialize();
+
+// --- FishingComponent (engine/reimpl/fishingcomponent.cpp) ---
+extern void InstallFishingComponentShutdown();
+extern void RemoveFishingComponentShutdown();
+
+// --- FloorComponent (engine/reimpl/floorcomponent.cpp) ---
+extern void InstallFloorComponentShutdown();
+extern void RemoveFloorComponentShutdown();
+extern void InstallFloorComponentDraw();
+extern void RemoveFloorComponentDraw();
+extern void InstallFloorComponentOnCreate();
+extern void RemoveFloorComponentOnCreate();
+
+// --- ForesterComponent (engine/reimpl/forestercomponent.cpp) ---
+extern void InstallForesterComponentShutdown();
+extern void RemoveForesterComponentShutdown();
+
+// --- HappinessComponent (engine/reimpl/happinesscomponent.cpp) ---
+extern void InstallHappinessComponentShutdown();
+extern void RemoveHappinessComponentShutdown();
+extern void InstallHappinessComponentOnCreate();
+extern void RemoveHappinessComponentOnCreate();
+
+// --- HealerComponent (engine/reimpl/healercomponent.cpp) ---
+extern void InstallHealerComponentShutdown();
+extern void RemoveHealerComponentShutdown();
+extern void InstallHealerComponentOnCreate();
+extern void RemoveHealerComponentOnCreate();
+
+// --- HerbalistComponent (engine/reimpl/herbalistcomponent.cpp) ---
+extern void InstallHerbalistComponentShutdown();
+extern void RemoveHerbalistComponentShutdown();
+
+// --- HighlightComponent (engine/reimpl/highlightcomponent.cpp) ---
+extern void InstallHighlightComponentShutdown();
+extern void RemoveHighlightComponentShutdown();
+
+// --- ImmigrationComponent (engine/reimpl/immigrationcomponent.cpp) ---
+extern void InstallImmigrationComponentShutdown();
+extern void RemoveImmigrationComponentShutdown();
+
+// --- InteractComponent (engine/reimpl/interactcomponent.cpp) ---
+extern void InstallInteractComponentShutdown();
+extern void RemoveInteractComponentShutdown();
+extern void InstallInteractComponentDraw();
+extern void RemoveInteractComponentDraw();
+
+// --- MapComponent (engine/reimpl/mapcomponent.cpp) ---
+extern void InstallMapComponentShutdown();
+extern void RemoveMapComponentShutdown();
+extern void InstallMapComponentDraw();
+extern void RemoveMapComponentDraw();
+extern void InstallMapComponentOnCreate();
+extern void RemoveMapComponentOnCreate();
+
+// --- MarketComponent (engine/reimpl/marketcomponent.cpp) ---
+extern void InstallMarketComponentShutdown();
+extern void RemoveMarketComponentShutdown();
+
+// --- MarketLocationComponent (engine/reimpl/marketlocationcomponent.cpp) ---
+extern void InstallMarketLocationComponentShutdown();
+extern void RemoveMarketLocationComponentShutdown();
+extern void InstallMarketLocationComponentOnCreate();
+extern void RemoveMarketLocationComponentOnCreate();
+
+// --- MineComponent (engine/reimpl/minecomponent.cpp) ---
+extern void InstallMineComponentShutdown();
+extern void RemoveMineComponentShutdown();
+
+// --- ModelComponent (engine/reimpl/modelcomponent.cpp) ---
+extern void InstallModelComponentShutdown();
+extern void RemoveModelComponentShutdown();
+extern void InstallModelComponentDraw();
+extern void RemoveModelComponentDraw();
+extern void InstallModelComponentOnCreate();
+extern void RemoveModelComponentOnCreate();
+extern void InstallModelComponentOnRemove();
+extern void RemoveModelComponentOnRemove();
+extern void InstallModelComponentSerialize();
+extern void RemoveModelComponentSerialize();
+
+// --- MultiObjectComponent (engine/reimpl/multiobjectcomponent.cpp) ---
+extern void InstallMultiObjectComponentShutdown();
+extern void RemoveMultiObjectComponentShutdown();
+extern void InstallMultiObjectComponentOnCreate();
+extern void RemoveMultiObjectComponentOnCreate();
+
+// --- NaturalResourceComponent (engine/reimpl/naturalresourcecomponent.cpp) ---
+extern void InstallNaturalResourceComponentShutdown();
+extern void RemoveNaturalResourceComponentShutdown();
+extern void InstallNaturalResourceComponentOnRemove();
+extern void RemoveNaturalResourceComponentOnRemove();
+
+// --- NomadComponent (engine/reimpl/nomadcomponent.cpp) ---
+extern void InstallNomadComponentShutdown();
+extern void RemoveNomadComponentShutdown();
+extern void InstallNomadComponentOnCreate();
+extern void RemoveNomadComponentOnCreate();
+
+// --- OrchardComponent (engine/reimpl/orchardcomponent.cpp) ---
+extern void InstallOrchardComponentShutdown();
+extern void RemoveOrchardComponentShutdown();
+
+// --- ParticleComponent (engine/reimpl/particlecomponent.cpp) ---
+extern void InstallParticleComponentShutdown();
+extern void RemoveParticleComponentShutdown();
+extern void InstallParticleComponentDraw();
+extern void RemoveParticleComponentDraw();
+extern void InstallParticleComponentOnCreate();
+extern void RemoveParticleComponentOnCreate();
+extern void InstallParticleComponentOnRemove();
+extern void RemoveParticleComponentOnRemove();
+extern void InstallParticleComponentSerialize();
+extern void RemoveParticleComponentSerialize();
+extern void InstallParticleComponentOnUpdate2();
+extern void RemoveParticleComponentOnUpdate2();
+
+// --- PastureComponent (engine/reimpl/pasturecomponent.cpp) ---
+extern void InstallPastureComponentShutdown();
+extern void RemovePastureComponentShutdown();
+extern void InstallPastureComponentDraw();
+extern void RemovePastureComponentDraw();
+extern void InstallPastureComponentOnCreate();
+extern void RemovePastureComponentOnCreate();
+
+// --- PickingComponent (engine/reimpl/pickingcomponent.cpp) ---
+extern void InstallPickingComponentShutdown();
+extern void RemovePickingComponentShutdown();
+extern void InstallPickingComponentOnCreate();
+extern void RemovePickingComponentOnCreate();
+
+// --- QuarryComponent (engine/reimpl/quarrycomponent.cpp) ---
+extern void InstallQuarryComponentShutdown();
+extern void RemoveQuarryComponentShutdown();
+
+// --- RawMaterialComponent (engine/reimpl/rawmaterialcomponent.cpp) ---
+extern void InstallRawMaterialComponentShutdown();
+extern void RemoveRawMaterialComponentShutdown();
+extern void InstallRawMaterialComponentDraw();
+extern void RemoveRawMaterialComponentDraw();
+extern void InstallRawMaterialComponentSerialize();
+extern void RemoveRawMaterialComponentSerialize();
+extern void InstallRawMaterialComponentUpdate();
+extern void RemoveRawMaterialComponentUpdate();
+
+// --- ResidenceComponent (engine/reimpl/residencecomponent.cpp) ---
+extern void InstallResidenceComponentShutdown();
+extern void RemoveResidenceComponentShutdown();
+extern void InstallResidenceComponentSerialize();
+extern void RemoveResidenceComponentSerialize();
+extern void InstallResidenceComponentOnCreate();
+extern void RemoveResidenceComponentOnCreate();
+
+// --- StatusIconComponent (engine/reimpl/statusiconcomponent.cpp) ---
+extern void InstallStatusIconComponentShutdown();
+extern void RemoveStatusIconComponentShutdown();
+extern void InstallStatusIconComponentSerialize();
+extern void RemoveStatusIconComponentSerialize();
+extern void InstallStatusIconComponentOnRemove();
+extern void RemoveStatusIconComponentOnRemove();
+extern void InstallStatusIconComponentOnUpdate2();
+extern void RemoveStatusIconComponentOnUpdate2();
+
+// --- StorageComponent (engine/reimpl/storagecomponent.cpp) ---
+extern void InstallStorageComponentShutdown();
+extern void RemoveStorageComponentShutdown();
+extern void InstallStorageComponentDraw();
+extern void RemoveStorageComponentDraw();
+
+// --- StorageDisplayComponent (engine/reimpl/storagedisplaycomponent.cpp) ---
+extern void InstallStorageDisplayComponentShutdown();
+extern void RemoveStorageDisplayComponentShutdown();
+extern void InstallStorageDisplayComponentDraw();
+extern void RemoveStorageDisplayComponentDraw();
+extern void InstallStorageDisplayComponentOnCreate();
+extern void RemoveStorageDisplayComponentOnCreate();
+extern void InstallStorageDisplayComponentUpdate();
+extern void RemoveStorageDisplayComponentUpdate();
+extern void InstallStorageDisplayComponentOnUpdate2();
+extern void RemoveStorageDisplayComponentOnUpdate2();
+
+// --- StorageLocationComponent (engine/reimpl/storagelocationcomponent.cpp) ---
+extern void InstallStorageLocationComponentShutdown();
+extern void RemoveStorageLocationComponentShutdown();
+extern void InstallStorageLocationComponentOnCreate();
+extern void RemoveStorageLocationComponentOnCreate();
+
+// --- TerraformComponent (engine/reimpl/terraformcomponent.cpp) ---
+extern void InstallTerraformComponentShutdown();
+extern void RemoveTerraformComponentShutdown();
+extern void InstallTerraformComponentOnCreate();
+extern void RemoveTerraformComponentOnCreate();
+
+// --- TombstoneComponent (engine/reimpl/tombstonecomponent.cpp) ---
+extern void InstallTombstoneComponentShutdown();
+extern void RemoveTombstoneComponentShutdown();
+extern void InstallTombstoneComponentSerialize();
+extern void RemoveTombstoneComponentSerialize();
+extern void InstallTombstoneComponentUpdate();
+extern void RemoveTombstoneComponentUpdate();
+
+// --- TornadoComponent (engine/reimpl/tornadocomponent.cpp) ---
+extern void InstallTornadoComponentShutdown();
+extern void RemoveTornadoComponentShutdown();
+extern void InstallTornadoComponentSerialize();
+extern void RemoveTornadoComponentSerialize();
+extern void InstallTornadoComponentOnRemove();
+extern void RemoveTornadoComponentOnRemove();
+
+// --- TrackerComponent (engine/reimpl/trackercomponent.cpp) ---
+extern void InstallTrackerComponentShutdown();
+extern void RemoveTrackerComponentShutdown();
+
+// --- TradeComponent (engine/reimpl/tradecomponent.cpp) ---
+extern void InstallTradeComponentShutdown();
+extern void RemoveTradeComponentShutdown();
+extern void InstallTradeComponentDraw();
+extern void RemoveTradeComponentDraw();
+extern void InstallTradeComponentOnCreate();
+extern void RemoveTradeComponentOnCreate();
+
+// --- UIComponent (engine/reimpl/uicomponent.cpp) ---
+extern void InstallUIComponentShutdown();
+extern void RemoveUIComponentShutdown();
+extern void InstallUIComponentSerialize();
+extern void RemoveUIComponentSerialize();
+
+// --- WellComponent (engine/reimpl/wellcomponent.cpp) ---
+extern void InstallWellComponentShutdown();
+extern void RemoveWellComponentShutdown();
+extern void InstallWellComponentOnCreate();
+extern void RemoveWellComponentOnCreate();
+
+// --- WildAnimalComponent (engine/reimpl/wildanimalcomponent.cpp) ---
+extern void InstallWildAnimalComponentShutdown();
+extern void RemoveWildAnimalComponentShutdown();
+extern void InstallWildAnimalComponentOnCreate();
+extern void RemoveWildAnimalComponentOnCreate();
+
+// --- WorkComponent (engine/reimpl/workcomponent.cpp) ---
+extern void InstallWorkComponentShutdown();
+extern void RemoveWorkComponentShutdown();
+extern void InstallWorkComponentDraw();
+extern void RemoveWorkComponentDraw();
+extern void InstallWorkComponentOnCreate();
+extern void RemoveWorkComponentOnCreate();
+
+// --- WorkPlaceComponent (engine/reimpl/workplacecomponent.cpp) ---
+extern void InstallWorkPlaceComponentShutdown();
+extern void RemoveWorkPlaceComponentShutdown();
+extern void InstallWorkPlaceComponentOnCreate();
+extern void RemoveWorkPlaceComponentOnCreate();
+
+// --- ZoneComponent (engine/reimpl/zonecomponent.cpp) ---
+extern void InstallZoneComponentShutdown();
+extern void RemoveZoneComponentShutdown();
+extern void InstallZoneComponentDraw();
+extern void RemoveZoneComponentDraw();
+extern void InstallZoneComponentOnCreate();
+extern void RemoveZoneComponentOnCreate();
+
 static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
     { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
@@ -450,7 +784,225 @@ static ReimplEntry g_reimplementations[] = {
     // --- CitizenComponent reimplementations ---
     { "CitizenComponent::Update", InstallCitizenComponentUpdate, RemoveCitizenComponentUpdate, true },
 
-    // Add new entries as you reimplement functions...
+    // ============================================================
+    // Phase 2: Passive component lifecycle methods
+    // ============================================================
+
+    // --- AbsorbResourceComponent ---
+    { "AbsorbResourceComponent::Shutdown", InstallAbsorbResourceComponentShutdown, RemoveAbsorbResourceComponentShutdown, true },
+
+    // --- AmbientEmitterComponent ---
+    { "AmbientEmitterComponent::Shutdown", InstallAmbientEmitterComponentShutdown, RemoveAmbientEmitterComponentShutdown, true },
+    { "AmbientEmitterComponent::Draw", InstallAmbientEmitterComponentDraw, RemoveAmbientEmitterComponentDraw, true },
+
+    // --- AutoPickupComponent ---
+    { "AutoPickupComponent::Shutdown", InstallAutoPickupComponentShutdown, RemoveAutoPickupComponentShutdown, true },
+    { "AutoPickupComponent::Serialize", InstallAutoPickupComponentSerialize, RemoveAutoPickupComponentSerialize, true },
+
+    // --- BoatComponent ---
+    { "BoatComponent::Shutdown", InstallBoatComponentShutdown, RemoveBoatComponentShutdown, true },
+
+    // --- BuildComponent ---
+    { "BuildComponent::Shutdown", InstallBuildComponentShutdown, RemoveBuildComponentShutdown, true },
+    { "BuildComponent::Draw", InstallBuildComponentDraw, RemoveBuildComponentDraw, true },
+    { "BuildComponent::OnCreate", InstallBuildComponentOnCreate, RemoveBuildComponentOnCreate, true },
+
+    // --- CemeteryComponent ---
+    { "CemeteryComponent::Shutdown", InstallCemeteryComponentShutdown, RemoveCemeteryComponentShutdown, true },
+    { "CemeteryComponent::Draw", InstallCemeteryComponentDraw, RemoveCemeteryComponentDraw, true },
+    { "CemeteryComponent::OnCreate", InstallCemeteryComponentOnCreate, RemoveCemeteryComponentOnCreate, true },
+
+    // --- ClearAreaComponent ---
+    { "ClearAreaComponent::Shutdown", InstallClearAreaComponentShutdown, RemoveClearAreaComponentShutdown, true },
+
+    // --- ClearResourceComponent ---
+    { "ClearResourceComponent::Shutdown", InstallClearResourceComponentShutdown, RemoveClearResourceComponentShutdown, true },
+
+    // --- ConsumeProduceComponent ---
+    { "ConsumeProduceComponent::Shutdown", InstallConsumeProduceComponentShutdown, RemoveConsumeProduceComponentShutdown, true },
+    { "ConsumeProduceComponent::Serialize", InstallConsumeProduceComponentSerialize, RemoveConsumeProduceComponentSerialize, true },
+
+    // --- CropFieldComponent ---
+    { "CropFieldComponent::Shutdown", InstallCropFieldComponentShutdown, RemoveCropFieldComponentShutdown, true },
+
+    // --- DecalComponent ---
+    { "DecalComponent::Shutdown", InstallDecalComponentShutdown, RemoveDecalComponentShutdown, true },
+    { "DecalComponent::Draw", InstallDecalComponentDraw, RemoveDecalComponentDraw, true },
+    { "DecalComponent::OnCreate", InstallDecalComponentOnCreate, RemoveDecalComponentOnCreate, true },
+    { "DecalComponent::Serialize", InstallDecalComponentSerialize, RemoveDecalComponentSerialize, true },
+
+    // --- DestroyComponent ---
+    { "DestroyComponent::Shutdown", InstallDestroyComponentShutdown, RemoveDestroyComponentShutdown, true },
+    { "DestroyComponent::Serialize", InstallDestroyComponentSerialize, RemoveDestroyComponentSerialize, true },
+
+    // --- FishingComponent ---
+    { "FishingComponent::Shutdown", InstallFishingComponentShutdown, RemoveFishingComponentShutdown, true },
+
+    // --- FloorComponent ---
+    { "FloorComponent::Shutdown", InstallFloorComponentShutdown, RemoveFloorComponentShutdown, true },
+    { "FloorComponent::Draw", InstallFloorComponentDraw, RemoveFloorComponentDraw, true },
+    { "FloorComponent::OnCreate", InstallFloorComponentOnCreate, RemoveFloorComponentOnCreate, true },
+
+    // --- ForesterComponent ---
+    { "ForesterComponent::Shutdown", InstallForesterComponentShutdown, RemoveForesterComponentShutdown, true },
+
+    // --- HappinessComponent ---
+    { "HappinessComponent::Shutdown", InstallHappinessComponentShutdown, RemoveHappinessComponentShutdown, true },
+    { "HappinessComponent::OnCreate", InstallHappinessComponentOnCreate, RemoveHappinessComponentOnCreate, true },
+
+    // --- HealerComponent ---
+    { "HealerComponent::Shutdown", InstallHealerComponentShutdown, RemoveHealerComponentShutdown, true },
+    { "HealerComponent::OnCreate", InstallHealerComponentOnCreate, RemoveHealerComponentOnCreate, true },
+
+    // --- HerbalistComponent ---
+    { "HerbalistComponent::Shutdown", InstallHerbalistComponentShutdown, RemoveHerbalistComponentShutdown, true },
+
+    // --- HighlightComponent ---
+    { "HighlightComponent::Shutdown", InstallHighlightComponentShutdown, RemoveHighlightComponentShutdown, true },
+
+    // --- ImmigrationComponent ---
+    { "ImmigrationComponent::Shutdown", InstallImmigrationComponentShutdown, RemoveImmigrationComponentShutdown, true },
+
+    // --- InteractComponent ---
+    { "InteractComponent::Shutdown", InstallInteractComponentShutdown, RemoveInteractComponentShutdown, true },
+    { "InteractComponent::Draw", InstallInteractComponentDraw, RemoveInteractComponentDraw, true },
+
+    // --- MapComponent ---
+    { "MapComponent::Shutdown", InstallMapComponentShutdown, RemoveMapComponentShutdown, true },
+    { "MapComponent::Draw", InstallMapComponentDraw, RemoveMapComponentDraw, true },
+    { "MapComponent::OnCreate", InstallMapComponentOnCreate, RemoveMapComponentOnCreate, true },
+
+    // --- MarketComponent ---
+    { "MarketComponent::Shutdown", InstallMarketComponentShutdown, RemoveMarketComponentShutdown, true },
+
+    // --- MarketLocationComponent ---
+    { "MarketLocationComponent::Shutdown", InstallMarketLocationComponentShutdown, RemoveMarketLocationComponentShutdown, true },
+    { "MarketLocationComponent::OnCreate", InstallMarketLocationComponentOnCreate, RemoveMarketLocationComponentOnCreate, true },
+
+    // --- MineComponent ---
+    { "MineComponent::Shutdown", InstallMineComponentShutdown, RemoveMineComponentShutdown, true },
+
+    // --- ModelComponent ---
+    { "ModelComponent::Shutdown", InstallModelComponentShutdown, RemoveModelComponentShutdown, true },
+    { "ModelComponent::Draw", InstallModelComponentDraw, RemoveModelComponentDraw, true },
+    { "ModelComponent::OnCreate", InstallModelComponentOnCreate, RemoveModelComponentOnCreate, true },
+    { "ModelComponent::OnRemove", InstallModelComponentOnRemove, RemoveModelComponentOnRemove, true },
+    { "ModelComponent::Serialize", InstallModelComponentSerialize, RemoveModelComponentSerialize, true },
+
+    // --- MultiObjectComponent ---
+    { "MultiObjectComponent::Shutdown", InstallMultiObjectComponentShutdown, RemoveMultiObjectComponentShutdown, true },
+    { "MultiObjectComponent::OnCreate", InstallMultiObjectComponentOnCreate, RemoveMultiObjectComponentOnCreate, true },
+
+    // --- NaturalResourceComponent ---
+    { "NaturalResourceComponent::Shutdown", InstallNaturalResourceComponentShutdown, RemoveNaturalResourceComponentShutdown, true },
+    { "NaturalResourceComponent::OnRemove", InstallNaturalResourceComponentOnRemove, RemoveNaturalResourceComponentOnRemove, true },
+
+    // --- NomadComponent ---
+    { "NomadComponent::Shutdown", InstallNomadComponentShutdown, RemoveNomadComponentShutdown, true },
+    { "NomadComponent::OnCreate", InstallNomadComponentOnCreate, RemoveNomadComponentOnCreate, true },
+
+    // --- OrchardComponent ---
+    { "OrchardComponent::Shutdown", InstallOrchardComponentShutdown, RemoveOrchardComponentShutdown, true },
+
+    // --- ParticleComponent ---
+    { "ParticleComponent::Shutdown", InstallParticleComponentShutdown, RemoveParticleComponentShutdown, true },
+    { "ParticleComponent::Draw", InstallParticleComponentDraw, RemoveParticleComponentDraw, true },
+    { "ParticleComponent::OnCreate", InstallParticleComponentOnCreate, RemoveParticleComponentOnCreate, true },
+    { "ParticleComponent::OnRemove", InstallParticleComponentOnRemove, RemoveParticleComponentOnRemove, true },
+    { "ParticleComponent::Serialize", InstallParticleComponentSerialize, RemoveParticleComponentSerialize, true },
+    { "ParticleComponent::OnUpdate2", InstallParticleComponentOnUpdate2, RemoveParticleComponentOnUpdate2, true },
+
+    // --- PastureComponent ---
+    { "PastureComponent::Shutdown", InstallPastureComponentShutdown, RemovePastureComponentShutdown, true },
+    { "PastureComponent::Draw", InstallPastureComponentDraw, RemovePastureComponentDraw, true },
+    { "PastureComponent::OnCreate", InstallPastureComponentOnCreate, RemovePastureComponentOnCreate, true },
+
+    // --- PickingComponent ---
+    { "PickingComponent::Shutdown", InstallPickingComponentShutdown, RemovePickingComponentShutdown, true },
+    { "PickingComponent::OnCreate", InstallPickingComponentOnCreate, RemovePickingComponentOnCreate, true },
+
+    // --- QuarryComponent ---
+    { "QuarryComponent::Shutdown", InstallQuarryComponentShutdown, RemoveQuarryComponentShutdown, true },
+
+    // --- RawMaterialComponent ---
+    { "RawMaterialComponent::Shutdown", InstallRawMaterialComponentShutdown, RemoveRawMaterialComponentShutdown, true },
+    { "RawMaterialComponent::Draw", InstallRawMaterialComponentDraw, RemoveRawMaterialComponentDraw, true },
+    { "RawMaterialComponent::Serialize", InstallRawMaterialComponentSerialize, RemoveRawMaterialComponentSerialize, true },
+    { "RawMaterialComponent::Update", InstallRawMaterialComponentUpdate, RemoveRawMaterialComponentUpdate, true },
+
+    // --- ResidenceComponent ---
+    { "ResidenceComponent::Shutdown", InstallResidenceComponentShutdown, RemoveResidenceComponentShutdown, true },
+    { "ResidenceComponent::Serialize", InstallResidenceComponentSerialize, RemoveResidenceComponentSerialize, true },
+    { "ResidenceComponent::OnCreate", InstallResidenceComponentOnCreate, RemoveResidenceComponentOnCreate, true },
+
+    // --- StatusIconComponent ---
+    { "StatusIconComponent::Shutdown", InstallStatusIconComponentShutdown, RemoveStatusIconComponentShutdown, true },
+    { "StatusIconComponent::Serialize", InstallStatusIconComponentSerialize, RemoveStatusIconComponentSerialize, true },
+    { "StatusIconComponent::OnRemove", InstallStatusIconComponentOnRemove, RemoveStatusIconComponentOnRemove, true },
+    { "StatusIconComponent::OnUpdate2", InstallStatusIconComponentOnUpdate2, RemoveStatusIconComponentOnUpdate2, true },
+
+    // --- StorageComponent ---
+    { "StorageComponent::Shutdown", InstallStorageComponentShutdown, RemoveStorageComponentShutdown, true },
+    { "StorageComponent::Draw", InstallStorageComponentDraw, RemoveStorageComponentDraw, true },
+
+    // --- StorageDisplayComponent ---
+    { "StorageDisplayComponent::Shutdown", InstallStorageDisplayComponentShutdown, RemoveStorageDisplayComponentShutdown, true },
+    { "StorageDisplayComponent::Draw", InstallStorageDisplayComponentDraw, RemoveStorageDisplayComponentDraw, true },
+    { "StorageDisplayComponent::OnCreate", InstallStorageDisplayComponentOnCreate, RemoveStorageDisplayComponentOnCreate, true },
+    { "StorageDisplayComponent::Update", InstallStorageDisplayComponentUpdate, RemoveStorageDisplayComponentUpdate, true },
+    { "StorageDisplayComponent::OnUpdate2", InstallStorageDisplayComponentOnUpdate2, RemoveStorageDisplayComponentOnUpdate2, true },
+
+    // --- StorageLocationComponent ---
+    { "StorageLocationComponent::Shutdown", InstallStorageLocationComponentShutdown, RemoveStorageLocationComponentShutdown, true },
+    { "StorageLocationComponent::OnCreate", InstallStorageLocationComponentOnCreate, RemoveStorageLocationComponentOnCreate, true },
+
+    // --- TerraformComponent ---
+    { "TerraformComponent::Shutdown", InstallTerraformComponentShutdown, RemoveTerraformComponentShutdown, true },
+    { "TerraformComponent::OnCreate", InstallTerraformComponentOnCreate, RemoveTerraformComponentOnCreate, true },
+
+    // --- TombstoneComponent ---
+    { "TombstoneComponent::Shutdown", InstallTombstoneComponentShutdown, RemoveTombstoneComponentShutdown, true },
+    { "TombstoneComponent::Serialize", InstallTombstoneComponentSerialize, RemoveTombstoneComponentSerialize, true },
+    { "TombstoneComponent::Update", InstallTombstoneComponentUpdate, RemoveTombstoneComponentUpdate, true },
+
+    // --- TornadoComponent ---
+    { "TornadoComponent::Shutdown", InstallTornadoComponentShutdown, RemoveTornadoComponentShutdown, true },
+    { "TornadoComponent::Serialize", InstallTornadoComponentSerialize, RemoveTornadoComponentSerialize, true },
+    { "TornadoComponent::OnRemove", InstallTornadoComponentOnRemove, RemoveTornadoComponentOnRemove, true },
+
+    // --- TrackerComponent ---
+    { "TrackerComponent::Shutdown", InstallTrackerComponentShutdown, RemoveTrackerComponentShutdown, true },
+
+    // --- TradeComponent ---
+    { "TradeComponent::Shutdown", InstallTradeComponentShutdown, RemoveTradeComponentShutdown, true },
+    { "TradeComponent::Draw", InstallTradeComponentDraw, RemoveTradeComponentDraw, true },
+    { "TradeComponent::OnCreate", InstallTradeComponentOnCreate, RemoveTradeComponentOnCreate, true },
+
+    // --- UIComponent ---
+    { "UIComponent::Shutdown", InstallUIComponentShutdown, RemoveUIComponentShutdown, true },
+    { "UIComponent::Serialize", InstallUIComponentSerialize, RemoveUIComponentSerialize, true },
+
+    // --- WellComponent ---
+    { "WellComponent::Shutdown", InstallWellComponentShutdown, RemoveWellComponentShutdown, true },
+    { "WellComponent::OnCreate", InstallWellComponentOnCreate, RemoveWellComponentOnCreate, true },
+
+    // --- WildAnimalComponent ---
+    { "WildAnimalComponent::Shutdown", InstallWildAnimalComponentShutdown, RemoveWildAnimalComponentShutdown, true },
+    { "WildAnimalComponent::OnCreate", InstallWildAnimalComponentOnCreate, RemoveWildAnimalComponentOnCreate, true },
+
+    // --- WorkComponent ---
+    { "WorkComponent::Shutdown", InstallWorkComponentShutdown, RemoveWorkComponentShutdown, true },
+    { "WorkComponent::Draw", InstallWorkComponentDraw, RemoveWorkComponentDraw, true },
+    { "WorkComponent::OnCreate", InstallWorkComponentOnCreate, RemoveWorkComponentOnCreate, true },
+
+    // --- WorkPlaceComponent ---
+    { "WorkPlaceComponent::Shutdown", InstallWorkPlaceComponentShutdown, RemoveWorkPlaceComponentShutdown, true },
+    { "WorkPlaceComponent::OnCreate", InstallWorkPlaceComponentOnCreate, RemoveWorkPlaceComponentOnCreate, true },
+
+    // --- ZoneComponent ---
+    { "ZoneComponent::Shutdown", InstallZoneComponentShutdown, RemoveZoneComponentShutdown, true },
+    { "ZoneComponent::Draw", InstallZoneComponentDraw, RemoveZoneComponentDraw, true },
+    { "ZoneComponent::OnCreate", InstallZoneComponentOnCreate, RemoveZoneComponentOnCreate, true },
 };
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);
