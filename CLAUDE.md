@@ -177,12 +177,12 @@ Three MCP servers configured in `.mcp.json`. All are available to Claude Code au
 | Server | Source | Transport | Port | Purpose |
 |--------|--------|-----------|------|---------|
 | `ghidra-mcp` | bethington/ghidra-mcp v3.0.0 | stdio | 8089 | 179 RE tools: decompile, rename, analyze, xrefs, scripts, batch ops |
-| `debugmcp` | microsoft/DebugMCP v1.0.5 | SSE | 3001 | VS Code debugger control: breakpoints, stepping, variables, call stacks |
+| `vscode-debugger` | rauschit/vscode-debugger-mcp-server v1.0.8 | SSE | 10101 | Full debugger control via DAP: breakpoints, stepping, variables, stack traces, watches, expression eval. Works with any VS Code debug adapter including cppdbg/GDB. |
 | `vscode` | acomagu/vscode-as-mcp-server v0.0.25 | stdio (npx) | - | Execute any VS Code command: run tasks, launch debug, open files |
 
 ### Prerequisites for MCP servers
 - **ghidra-mcp**: Ghidra must be open with binary loaded + GhidraMCP server started (Tools > GhidraMCP > Start MCP Server). See `HOW_TO_START_GHIDRA.md`.
-- **debugmcp**: VS Code must be open with this project. Extension auto-starts on port 3001.
+- **vscode-debugger**: VS Code must be open with extension installed (`rauschit.vscode-debugger-mcp-server`). Auto-starts SSE on port 10101.
 - **vscode**: VS Code must be open with this project. Connects via npx.
 
 ### MCP server config location
@@ -212,6 +212,55 @@ Defined in `.vscode/launch.json`:
 - GCC 13.1 (MSYS2 UCRT64) at `C:\msys64\ucrt64\bin\`
 - `mingw32-make` for builds (full path: `/c/msys64/ucrt64/bin/mingw32-make.exe`)
 - C++17 standard, static-linked runtime
+
+### Debugging via MCP (Claude Code workflow)
+
+All debugger operations go through `vscode-debugger` MCP (rauschit/vscode-debugger-mcp-server).
+The `vscode` MCP is used only for launching the debug session (start_debug_session).
+
+**1. Set breakpoints** (`vscode-debugger`):
+```
+mcp__vscode-debugger__set_breakpoint(
+  file: "C:\\code\\GIT\\untitled_rev_eng_project\\patches\\src\\dllmain.cpp",
+  line: 221
+)
+```
+
+**2. Launch the game under GDB** (`vscode` MCP):
+```
+mcp__vscode__start_debug_session(
+  workspaceFolder: "c:\\code\\GIT\\untitled_rev_eng_project",   // lowercase drive letter!
+  configuration: {
+    "name": "Launch Banished (with patch)",
+    "type": "cppdbg",
+    "request": "launch",
+    "program": "C:/GOG Games/Banished/Application-x64.exe",
+    "cwd": "C:/GOG Games/Banished",
+    "MIMode": "gdb",
+    "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+    "preLaunchTask": "Deploy to Banished",
+    "additionalSOLibSearchPath": "C:/code/GIT/untitled_rev_eng_project/patches/build",
+    "setupCommands": [{"description": "Enable pretty-printing", "text": "-enable-pretty-printing"}]
+  }
+)
+```
+Note: `workspaceFolder` must use **lowercase drive letter** (`c:\...`) or VS Code won't find it.
+
+**3. Debugger control** (`vscode-debugger`):
+- `continue`, `pause`, `step_over`, `step_in`, `step_out`, `stop`
+
+**4. Inspect state** (`vscode-debugger`):
+- `get_variables` — read locals/globals at current frame
+- `evaluate_expression` — eval any expression (including GDB `-exec` commands)
+- `get_stack_trace` — call stack
+- `get_threads`, `get_scopes` — thread/scope info
+- `add_watch` / `list_watches` — persistent watch expressions
+
+**5. Cleanup**:
+```
+mcp__vscode-debugger__clear_all_breakpoints()
+mcp__vscode__stop_debug_session(sessionName: "Launch Banished (with patch)")
+```
 
 ---
 

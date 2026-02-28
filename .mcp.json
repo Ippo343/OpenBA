@@ -9,12 +9,13 @@
         "GHIDRA_SERVER_URL": "http://127.0.0.1:8089/"
       }
     },
-    "debugmcp": {
-      "url": "http://localhost:3001/sse"
+    "vscode-debugger": {
+      "type": "sse",
+      "url": "http://127.0.0.1:10101/mcp-events"
     },
     "vscode": {
-      "command": "npx",
-      "args": ["vscode-as-mcp-server"]
+      "command": "cmd",
+      "args": ["/c", "npx", "vscode-as-mcp-server"]
     }
   }
 }
