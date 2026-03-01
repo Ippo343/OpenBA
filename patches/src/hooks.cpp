@@ -1086,6 +1086,614 @@ extern void RemoveTradeWorkSlot9();
 extern void InstallTradeWorkSlot10();
 extern void RemoveTradeWorkSlot10();
 
+// ============================================================
+// Phase 4: UI Panel Controllers (A-E)
+// ============================================================
+
+// --- AttendanceUI (engine/reimpl/attendanceui.cpp) ---
+extern void InstallAttendanceUIDtor();
+extern void RemoveAttendanceUIDtor();
+extern void InstallAttendanceUISlot4();
+extern void RemoveAttendanceUISlot4();
+extern void InstallAttendanceUISlot7();
+extern void RemoveAttendanceUISlot7();
+
+// --- BuildRequirementUI (engine/reimpl/buildrequirementui.cpp) ---
+extern void InstallBuildRequirementUIDtor();
+extern void RemoveBuildRequirementUIDtor();
+extern void InstallBuildRequirementUISlot4();
+extern void RemoveBuildRequirementUISlot4();
+
+// --- BuildUI (engine/reimpl/buildui.cpp) ---
+extern void InstallBuildUIDtor();
+extern void RemoveBuildUIDtor();
+extern void InstallBuildUISlot4();
+extern void RemoveBuildUISlot4();
+extern void InstallBuildUISlot7();
+extern void RemoveBuildUISlot7();
+extern void InstallBuildUISlot9();
+extern void RemoveBuildUISlot9();
+
+// --- CemeteryUI (engine/reimpl/cemeteryui.cpp) ---
+extern void InstallCemeteryUIDtor();
+extern void RemoveCemeteryUIDtor();
+extern void InstallCemeteryUISlot4();
+extern void RemoveCemeteryUISlot4();
+extern void InstallCemeteryUISlot7();
+extern void RemoveCemeteryUISlot7();
+
+// --- CitizenUI (engine/reimpl/citizenui.cpp) ---
+extern void InstallCitizenUIDtor();
+extern void RemoveCitizenUIDtor();
+extern void InstallCitizenUISlot4();
+extern void RemoveCitizenUISlot4();
+extern void InstallCitizenUISlot6();
+extern void RemoveCitizenUISlot6();
+extern void InstallCitizenUISlot7();
+extern void RemoveCitizenUISlot7();
+extern void InstallCitizenUISlot9();
+extern void RemoveCitizenUISlot9();
+
+// --- ConsumeProduceUI (engine/reimpl/consumeproduceui.cpp) ---
+extern void InstallConsumeProduceUIDtor();
+extern void RemoveConsumeProduceUIDtor();
+extern void InstallConsumeProduceUISlot4();
+extern void RemoveConsumeProduceUISlot4();
+extern void InstallConsumeProduceUISlot7();
+extern void RemoveConsumeProduceUISlot7();
+extern void InstallConsumeProduceUISlot9();
+extern void RemoveConsumeProduceUISlot9();
+
+// --- ControlUI (engine/reimpl/controlui.cpp) ---
+extern void InstallControlUIDtor();
+extern void RemoveControlUIDtor();
+extern void InstallControlUISlot4();
+extern void RemoveControlUISlot4();
+extern void InstallControlUISlot7();
+extern void RemoveControlUISlot7();
+extern void InstallControlUISlot9();
+extern void RemoveControlUISlot9();
+
+// --- CropUI (engine/reimpl/cropui.cpp) ---
+extern void InstallCropUIDtor();
+extern void RemoveCropUIDtor();
+extern void InstallCropUISlot4();
+extern void RemoveCropUISlot4();
+extern void InstallCropUISlot7();
+extern void RemoveCropUISlot7();
+extern void InstallCropUISlot8();
+extern void RemoveCropUISlot8();
+extern void InstallCropUISlot9();
+extern void RemoveCropUISlot9();
+
+// --- DebugUI (engine/reimpl/debugui.cpp) ---
+extern void InstallDebugUIDtor();
+extern void RemoveDebugUIDtor();
+extern void InstallDebugUISlot4();
+extern void RemoveDebugUISlot4();
+extern void InstallDebugUISlot7();
+extern void RemoveDebugUISlot7();
+extern void InstallDebugUISlot8();
+extern void RemoveDebugUISlot8();
+extern void InstallDebugUISlot9();
+extern void RemoveDebugUISlot9();
+
+// --- DestroyUI (engine/reimpl/destroyui.cpp) ---
+extern void InstallDestroyUIDtor();
+extern void RemoveDestroyUIDtor();
+extern void InstallDestroyUISlot4();
+extern void RemoveDestroyUISlot4();
+extern void InstallDestroyUISlot7();
+extern void RemoveDestroyUISlot7();
+extern void InstallDestroyUISlot9();
+extern void RemoveDestroyUISlot9();
+
+// --- EntityUI (engine/reimpl/entityui.cpp) ---
+extern void InstallEntityUIDtor();
+extern void RemoveEntityUIDtor();
+extern void InstallEntityUISlot4();
+extern void RemoveEntityUISlot4();
+extern void InstallEntityUISlot6();
+extern void RemoveEntityUISlot6();
+extern void InstallEntityUISlot7();
+extern void RemoveEntityUISlot7();
+extern void InstallEntityUISlot8();
+extern void RemoveEntityUISlot8();
+extern void InstallEntityUISlot9();
+extern void RemoveEntityUISlot9();
+
+// --- EventLogUI (engine/reimpl/eventlogui.cpp) ---
+extern void InstallEventLogUIDtor();
+extern void RemoveEventLogUIDtor();
+extern void InstallEventLogUISlot5();
+extern void RemoveEventLogUISlot5();
+extern void InstallEventLogUISlot7();
+extern void RemoveEventLogUISlot7();
+extern void InstallEventLogUISlot9();
+extern void RemoveEventLogUISlot9();
+
+// --- HelpUI (engine/reimpl/helpui.cpp) ---
+extern void InstallHelpUIDtor();
+extern void RemoveHelpUIDtor();
+extern void InstallHelpUISlot4();
+extern void RemoveHelpUISlot4();
+extern void InstallHelpUISlot7();
+extern void RemoveHelpUISlot7();
+extern void InstallHelpUISlot9();
+extern void RemoveHelpUISlot9();
+
+// ============================================================
+// Phase 4: UI Panel Controllers (H-R)
+// ============================================================
+
+// --- HotKeyToolTipUI (engine/reimpl/hotkeytooltipu.cpp) ---
+extern void InstallHotKeyToolTipUIDtor();
+extern void RemoveHotKeyToolTipUIDtor();
+extern void InstallHotKeyToolTipUISlot4();
+extern void RemoveHotKeyToolTipUISlot4();
+
+// --- ImmigrationUI (engine/reimpl/immigrationui.cpp) ---
+extern void InstallImmigrationUIDtor();
+extern void RemoveImmigrationUIDtor();
+extern void InstallImmigrationUISlot4();
+extern void RemoveImmigrationUISlot4();
+extern void InstallImmigrationUISlot7();
+extern void RemoveImmigrationUISlot7();
+extern void InstallImmigrationUISlot9();
+extern void RemoveImmigrationUISlot9();
+
+// --- MapUI (engine/reimpl/mapui.cpp) ---
+extern void InstallMapUIDtor();
+extern void RemoveMapUIDtor();
+extern void InstallMapUISlot4();
+extern void RemoveMapUISlot4();
+extern void InstallMapUISlot9();
+extern void RemoveMapUISlot9();
+
+// --- ModBrowseUI (engine/reimpl/modbrowseui.cpp) ---
+extern void InstallModBrowseUIDtor();
+extern void RemoveModBrowseUIDtor();
+
+// --- NoiseUI (engine/reimpl/noiseui.cpp) ---
+extern void InstallNoiseUIDtor();
+extern void RemoveNoiseUIDtor();
+extern void InstallNoiseUISlot4();
+extern void RemoveNoiseUISlot4();
+extern void InstallNoiseUISlot9();
+extern void RemoveNoiseUISlot9();
+
+// --- OrchardUI (engine/reimpl/orchardui.cpp) ---
+extern void InstallOrchardUIDtor();
+extern void RemoveOrchardUIDtor();
+extern void InstallOrchardUISlot4();
+extern void RemoveOrchardUISlot4();
+extern void InstallOrchardUISlot7();
+extern void RemoveOrchardUISlot7();
+extern void InstallOrchardUISlot8();
+extern void RemoveOrchardUISlot8();
+extern void InstallOrchardUISlot9();
+extern void RemoveOrchardUISlot9();
+extern void InstallOrchardUISlot11();
+extern void RemoveOrchardUISlot11();
+extern void InstallOrchardUISlot12();
+extern void RemoveOrchardUISlot12();
+
+// --- PageToggleUI (engine/reimpl/pagetoggleui.cpp) ---
+extern void InstallPageToggleUIDtor();
+extern void RemovePageToggleUIDtor();
+extern void InstallPageToggleUISlot4();
+extern void RemovePageToggleUISlot4();
+extern void InstallPageToggleUISlot7();
+extern void RemovePageToggleUISlot7();
+extern void InstallPageToggleUISlot9();
+extern void RemovePageToggleUISlot9();
+
+// --- PastureUI (engine/reimpl/pastureui.cpp) ---
+extern void InstallPastureUIDtor();
+extern void RemovePastureUIDtor();
+extern void InstallPastureUISlot4();
+extern void RemovePastureUISlot4();
+extern void InstallPastureUISlot7();
+extern void RemovePastureUISlot7();
+extern void InstallPastureUISlot8();
+extern void RemovePastureUISlot8();
+extern void InstallPastureUISlot9();
+extern void RemovePastureUISlot9();
+extern void InstallPastureUISlot11();
+extern void RemovePastureUISlot11();
+extern void InstallPastureUISlot12();
+extern void RemovePastureUISlot12();
+
+// --- ProductionUI (engine/reimpl/productionui.cpp) ---
+extern void InstallProductionUIDtor();
+extern void RemoveProductionUIDtor();
+extern void InstallProductionUISlot4();
+extern void RemoveProductionUISlot4();
+extern void InstallProductionUISlot7();
+extern void RemoveProductionUISlot7();
+
+// --- ProfessionUI (engine/reimpl/professionui.cpp) ---
+extern void InstallProfessionUIDtor();
+extern void RemoveProfessionUIDtor();
+extern void InstallProfessionUISlot5();
+extern void RemoveProfessionUISlot5();
+extern void InstallProfessionUISlot8();
+extern void RemoveProfessionUISlot8();
+extern void InstallProfessionUISlot9();
+extern void RemoveProfessionUISlot9();
+
+// --- RadiusUI (engine/reimpl/radiusui.cpp) ---
+extern void InstallRadiusUIDtor();
+extern void RemoveRadiusUIDtor();
+extern void InstallRadiusUISlot5();
+extern void RemoveRadiusUISlot5();
+extern void InstallRadiusUISlot6();
+extern void RemoveRadiusUISlot6();
+
+// --- ResidenceUI (engine/reimpl/residenceui.cpp) ---
+extern void InstallResidenceUIDtor();
+extern void RemoveResidenceUIDtor();
+extern void InstallResidenceUISlot4();
+extern void RemoveResidenceUISlot4();
+extern void InstallResidenceUISlot7();
+extern void RemoveResidenceUISlot7();
+extern void InstallResidenceUISlot9();
+extern void RemoveResidenceUISlot9();
+
+// --- ResourceLimitUI (engine/reimpl/resourcelimitui.cpp) ---
+extern void InstallResourceLimitUIDtor();
+extern void RemoveResourceLimitUIDtor();
+extern void InstallResourceLimitUISlot4();
+extern void RemoveResourceLimitUISlot4();
+extern void InstallResourceLimitUISlot7();
+extern void RemoveResourceLimitUISlot7();
+extern void InstallResourceLimitUISlot9();
+extern void RemoveResourceLimitUISlot9();
+
+// ============================================================
+// Phase 4: UI Panel Controllers (S-W)
+// ============================================================
+
+// --- SpriteCaptureUI (engine/reimpl/spritecaptureui.cpp) ---
+extern void InstallSpriteCaptureUIScalarDtor();
+extern void RemoveSpriteCaptureUIScalarDtor();
+extern void InstallSpriteCaptureUISerialize();
+extern void RemoveSpriteCaptureUISerialize();
+extern void InstallSpriteCaptureUIOnCreate();
+extern void RemoveSpriteCaptureUIOnCreate();
+
+// --- StatusBarUI (engine/reimpl/statusbarui.cpp) ---
+extern void InstallStatusBarUIScalarDtor();
+extern void RemoveStatusBarUIScalarDtor();
+extern void InstallStatusBarUIDraw();
+extern void RemoveStatusBarUIDraw();
+extern void InstallStatusBarUIStartup();
+extern void RemoveStatusBarUIStartup();
+extern void InstallStatusBarUIOnRemove();
+extern void RemoveStatusBarUIOnRemove();
+
+// --- StatusIconUI (engine/reimpl/statusiconui.cpp) ---
+extern void InstallStatusIconUIScalarDtor();
+extern void RemoveStatusIconUIScalarDtor();
+extern void InstallStatusIconUISerialize();
+extern void RemoveStatusIconUISerialize();
+extern void InstallStatusIconUIStartup();
+extern void RemoveStatusIconUIStartup();
+
+// --- StorageCapacityUI (engine/reimpl/storagecapacityui.cpp) ---
+extern void InstallStorageCapacityUIScalarDtor();
+extern void RemoveStorageCapacityUIScalarDtor();
+extern void InstallStorageCapacityUISerialize();
+extern void RemoveStorageCapacityUISerialize();
+extern void InstallStorageCapacityUIStartup();
+extern void RemoveStorageCapacityUIStartup();
+
+// --- StorageUI (engine/reimpl/storageui.cpp) ---
+extern void InstallStorageUIScalarDtor();
+extern void RemoveStorageUIScalarDtor();
+extern void InstallStorageUISerialize();
+extern void RemoveStorageUISerialize();
+extern void InstallStorageUIStartup();
+extern void RemoveStorageUIStartup();
+
+// --- TitleDescToolTipUI (engine/reimpl/titledesctooltipui.cpp) ---
+extern void InstallTitleDescToolTipUIScalarDtor();
+extern void RemoveTitleDescToolTipUIScalarDtor();
+extern void InstallTitleDescToolTipUISerialize();
+extern void RemoveTitleDescToolTipUISerialize();
+
+// --- ToolUI (engine/reimpl/toolui.cpp) ---
+extern void InstallToolUIScalarDtor();
+extern void RemoveToolUIScalarDtor();
+extern void InstallToolUISerialize();
+extern void RemoveToolUISerialize();
+extern void InstallToolUIOnCreate();
+extern void RemoveToolUIOnCreate();
+extern void InstallToolUIOnRemove();
+extern void RemoveToolUIOnRemove();
+
+// --- TownHallUI (engine/reimpl/townhallui.cpp) ---
+extern void InstallTownHallUIScalarDtor();
+extern void RemoveTownHallUIScalarDtor();
+extern void InstallTownHallUISerialize();
+extern void RemoveTownHallUISerialize();
+extern void InstallTownHallUIStartup();
+extern void RemoveTownHallUIStartup();
+extern void InstallTownHallUIOnCreate();
+extern void RemoveTownHallUIOnCreate();
+extern void InstallTownHallUIOnRemove();
+extern void RemoveTownHallUIOnRemove();
+extern void InstallTownHallUIUpdate();
+extern void RemoveTownHallUIUpdate();
+
+// --- TradeUI (engine/reimpl/tradeui.cpp) ---
+extern void InstallTradeUIScalarDtor();
+extern void RemoveTradeUIScalarDtor();
+extern void InstallTradeUISerialize();
+extern void RemoveTradeUISerialize();
+extern void InstallTradeUIDraw();
+extern void RemoveTradeUIDraw();
+extern void InstallTradeUISlot6();
+extern void RemoveTradeUISlot6();
+extern void InstallTradeUIStartup();
+extern void RemoveTradeUIStartup();
+extern void InstallTradeUIOnCreate();
+extern void RemoveTradeUIOnCreate();
+extern void InstallTradeUIOnRemove();
+extern void RemoveTradeUIOnRemove();
+extern void InstallTradeUIUpdate();
+extern void RemoveTradeUIUpdate();
+
+// --- TutorialUI (engine/reimpl/tutorialui.cpp) ---
+extern void InstallTutorialUIScalarDtor();
+extern void RemoveTutorialUIScalarDtor();
+extern void InstallTutorialUISerialize();
+extern void RemoveTutorialUISerialize();
+extern void InstallTutorialUIStartup();
+extern void RemoveTutorialUIStartup();
+extern void InstallTutorialUIOnRemove();
+extern void RemoveTutorialUIOnRemove();
+
+// --- UpgradeUI (engine/reimpl/upgradeui.cpp) ---
+extern void InstallUpgradeUIScalarDtor();
+extern void RemoveUpgradeUIScalarDtor();
+extern void InstallUpgradeUISerialize();
+extern void RemoveUpgradeUISerialize();
+extern void InstallUpgradeUIOnRemove();
+extern void RemoveUpgradeUIOnRemove();
+
+// --- WorkPlaceUI (engine/reimpl/workplaceui.cpp) ---
+extern void InstallWorkPlaceUIScalarDtor();
+extern void RemoveWorkPlaceUIScalarDtor();
+extern void InstallWorkPlaceUISerialize();
+extern void RemoveWorkPlaceUISerialize();
+extern void InstallWorkPlaceUIStartup();
+extern void RemoveWorkPlaceUIStartup();
+extern void InstallWorkPlaceUIOnRemove();
+extern void RemoveWorkPlaceUIOnRemove();
+
+// ====================================================================
+// Phase 4: Dialog Controller reimplementations
+// ====================================================================
+
+// --- EventNotifyDialog (engine/reimpl/eventnotifydialog.cpp) ---
+extern void InstallEventNotifyDialogScalarDtor();
+extern void RemoveEventNotifyDialogScalarDtor();
+extern void InstallEventNotifyDialogStartup();
+extern void RemoveEventNotifyDialogStartup();
+extern void InstallEventNotifyDialogUpdate();
+extern void RemoveEventNotifyDialogUpdate();
+extern void InstallEventNotifyDialogLoad();
+extern void RemoveEventNotifyDialogLoad();
+
+// --- MapParamsDialog (engine/reimpl/mapparamsdialog.cpp) ---
+extern void InstallMapParamsDialogScalarDtor();
+extern void RemoveMapParamsDialogScalarDtor();
+extern void InstallMapParamsDialogStartup();
+extern void RemoveMapParamsDialogStartup();
+extern void InstallMapParamsDialogUpdate();
+extern void RemoveMapParamsDialogUpdate();
+
+// --- NewGameDialog (engine/reimpl/newgamedialog.cpp) ---
+extern void InstallNewGameDialogScalarDtor();
+extern void RemoveNewGameDialogScalarDtor();
+extern void InstallNewGameDialogStartup();
+extern void RemoveNewGameDialogStartup();
+extern void InstallNewGameDialogUpdate();
+extern void RemoveNewGameDialogUpdate();
+
+// --- OptionsDialog (engine/reimpl/optionsdialog.cpp) ---
+extern void InstallOptionsDialogScalarDtor();
+extern void RemoveOptionsDialogScalarDtor();
+extern void InstallOptionsDialogStartup();
+extern void RemoveOptionsDialogStartup();
+extern void InstallOptionsDialogOnEvent();
+extern void RemoveOptionsDialogOnEvent();
+
+// --- OptionInputBindDialog (engine/reimpl/optioninputbinddialog.cpp) ---
+extern void InstallOptionInputBindDialogScalarDtor();
+extern void RemoveOptionInputBindDialogScalarDtor();
+extern void InstallOptionInputBindDialogStartup();
+extern void RemoveOptionInputBindDialogStartup();
+extern void InstallOptionInputBindDialogLoad();
+extern void RemoveOptionInputBindDialogLoad();
+extern void InstallOptionInputBindDialogOnOk();
+extern void RemoveOptionInputBindDialogOnOk();
+extern void InstallOptionInputBindDialogOnCancel();
+extern void RemoveOptionInputBindDialogOnCancel();
+extern void InstallOptionInputBindDialogOnButton2();
+extern void RemoveOptionInputBindDialogOnButton2();
+extern void InstallOptionInputBindDialogOnButton3();
+extern void RemoveOptionInputBindDialogOnButton3();
+
+// --- SaveLoadDialog (engine/reimpl/saveloaddialog.cpp) ---
+extern void InstallSaveLoadDialogScalarDtor();
+extern void RemoveSaveLoadDialogScalarDtor();
+extern void InstallSaveLoadDialogStartup();
+extern void RemoveSaveLoadDialogStartup();
+extern void InstallSaveLoadDialogUpdate();
+extern void RemoveSaveLoadDialogUpdate();
+extern void InstallSaveLoadDialogLoad();
+extern void RemoveSaveLoadDialogLoad();
+
+// --- ToolbarDialog (engine/reimpl/toolbardialog.cpp) ---
+extern void InstallToolbarDialogScalarDtor();
+extern void RemoveToolbarDialogScalarDtor();
+extern void InstallToolbarDialogUpdate();
+extern void RemoveToolbarDialogUpdate();
+extern void InstallToolbarDialogOnEvent();
+extern void RemoveToolbarDialogOnEvent();
+
+// --- TutorialHighlightDialog (engine/reimpl/tutorialhighlightdialog.cpp) ---
+extern void InstallTutorialHighlightDialogScalarDtor();
+extern void RemoveTutorialHighlightDialogScalarDtor();
+extern void InstallTutorialHighlightDialogStartup();
+extern void RemoveTutorialHighlightDialogStartup();
+
+// --- TutorialGoalDialog (engine/reimpl/tutorialgoaldialog.cpp) ---
+extern void InstallTutorialGoalDialogScalarDtor();
+extern void RemoveTutorialGoalDialogScalarDtor();
+extern void InstallTutorialGoalDialogShutdown();
+extern void RemoveTutorialGoalDialogShutdown();
+extern void InstallTutorialGoalDialogOnEvent();
+extern void RemoveTutorialGoalDialogOnEvent();
+extern void InstallTutorialGoalDialogOnInit();
+extern void RemoveTutorialGoalDialogOnInit();
+extern void InstallTutorialGoalDialogOnDestroy();
+extern void RemoveTutorialGoalDialogOnDestroy();
+
+// --- TutorialSetupDialog (engine/reimpl/tutorialsetupdialog.cpp) ---
+extern void InstallTutorialSetupDialogScalarDtor();
+extern void RemoveTutorialSetupDialogScalarDtor();
+extern void InstallTutorialSetupDialogShutdown();
+extern void RemoveTutorialSetupDialogShutdown();
+extern void InstallTutorialSetupDialogOnEvent();
+extern void RemoveTutorialSetupDialogOnEvent();
+
+// ====================================================================
+// Phase 4: Simple Dialog Controllers (dialogs-simple)
+// ====================================================================
+
+// --- AchievementDialog (engine/reimpl/achievementdialog.cpp) ---
+extern void InstallAchievementDialogDtor();
+extern void RemoveAchievementDialogDtor();
+extern void InstallAchievementDialogSlot4();
+extern void RemoveAchievementDialogSlot4();
+extern void InstallAchievementDialogSlot6();
+extern void RemoveAchievementDialogSlot6();
+extern void InstallAchievementDialogSlot8();
+extern void RemoveAchievementDialogSlot8();
+extern void InstallAchievementDialogSlot10();
+extern void RemoveAchievementDialogSlot10();
+extern void InstallAchievementDialogSlot14();
+extern void RemoveAchievementDialogSlot14();
+extern void InstallAchievementDialogSlot17();
+extern void RemoveAchievementDialogSlot17();
+
+// --- AutoSaveDialog (engine/reimpl/autosavedialog.cpp) ---
+extern void InstallAutoSaveDialogDtor();
+extern void RemoveAutoSaveDialogDtor();
+extern void InstallAutoSaveDialogSlot6();
+extern void RemoveAutoSaveDialogSlot6();
+extern void InstallAutoSaveDialogSlot7();
+extern void RemoveAutoSaveDialogSlot7();
+
+// --- EventPopupDialog (engine/reimpl/eventpopupdialog.cpp) ---
+extern void InstallEventPopupDialogDtor();
+extern void RemoveEventPopupDialogDtor();
+extern void InstallEventPopupDialogSlot4();
+extern void RemoveEventPopupDialogSlot4();
+extern void InstallEventPopupDialogSlot8();
+extern void RemoveEventPopupDialogSlot8();
+
+// --- FollowDialog (engine/reimpl/followdialog.cpp) ---
+extern void InstallFollowDialogDtor();
+extern void RemoveFollowDialogDtor();
+extern void InstallFollowDialogSlot4();
+extern void RemoveFollowDialogSlot4();
+extern void InstallFollowDialogSlot6();
+extern void RemoveFollowDialogSlot6();
+extern void InstallFollowDialogSlot7();
+extern void RemoveFollowDialogSlot7();
+
+// --- GoalDialog (engine/reimpl/goaldialog.cpp) ---
+extern void InstallGoalDialogDtor();
+extern void RemoveGoalDialogDtor();
+extern void InstallGoalDialogSlot4();
+extern void RemoveGoalDialogSlot4();
+extern void InstallGoalDialogSlot6();
+extern void RemoveGoalDialogSlot6();
+extern void InstallGoalDialogSlot8();
+extern void RemoveGoalDialogSlot8();
+
+// --- LoaderDialog (engine/reimpl/loaderdialog.cpp) ---
+extern void InstallLoaderDialogDtor();
+extern void RemoveLoaderDialogDtor();
+extern void InstallLoaderDialogSlot4();
+extern void RemoveLoaderDialogSlot4();
+extern void InstallLoaderDialogSlot6();
+extern void RemoveLoaderDialogSlot6();
+extern void InstallLoaderDialogSlot7();
+extern void RemoveLoaderDialogSlot7();
+
+// --- MainMenuDialog (engine/reimpl/mainmenudialog.cpp) ---
+extern void InstallMainMenuDialogDtor();
+extern void RemoveMainMenuDialogDtor();
+extern void InstallMainMenuDialogSlot4();
+extern void RemoveMainMenuDialogSlot4();
+extern void InstallMainMenuDialogSlot5();
+extern void RemoveMainMenuDialogSlot5();
+extern void InstallMainMenuDialogSlot8();
+extern void RemoveMainMenuDialogSlot8();
+extern void InstallMainMenuDialogSlot10();
+extern void RemoveMainMenuDialogSlot10();
+
+// --- MessageDialog (engine/reimpl/messagedialog.cpp) ---
+extern void InstallMessageDialogDtor();
+extern void RemoveMessageDialogDtor();
+extern void InstallMessageDialogSlot4();
+extern void RemoveMessageDialogSlot4();
+extern void InstallMessageDialogSlot10();
+extern void RemoveMessageDialogSlot10();
+extern void InstallMessageDialogSlot11();
+extern void RemoveMessageDialogSlot11();
+extern void InstallMessageDialogSlot12();
+extern void RemoveMessageDialogSlot12();
+extern void InstallMessageDialogSlot13();
+extern void RemoveMessageDialogSlot13();
+
+// --- ModDetailsDialog (engine/reimpl/moddetailsdialog.cpp) ---
+extern void InstallModDetailsDialogDtor();
+extern void RemoveModDetailsDialogDtor();
+extern void InstallModDetailsDialogSlot4();
+extern void RemoveModDetailsDialogSlot4();
+extern void InstallModDetailsDialogSlot8();
+extern void RemoveModDetailsDialogSlot8();
+
+// --- ModUploadDialog (engine/reimpl/moduploaddialog.cpp) ---
+extern void InstallModUploadDialogDtor();
+extern void RemoveModUploadDialogDtor();
+
+// --- ModDialog (engine/reimpl/moddialog.cpp) ---
+extern void InstallModDialogDtor();
+extern void RemoveModDialogDtor();
+extern void InstallModDialogSlot4();
+extern void RemoveModDialogSlot4();
+extern void InstallModDialogSlot8();
+extern void RemoveModDialogSlot8();
+extern void InstallModDialogSlot10();
+extern void RemoveModDialogSlot10();
+
+// --- ScenarioDialog (engine/reimpl/scenariodialog.cpp) ---
+extern void InstallScenarioDialogDtor();
+extern void RemoveScenarioDialogDtor();
+extern void InstallScenarioDialogSlot4();
+extern void RemoveScenarioDialogSlot4();
+extern void InstallScenarioDialogSlot6();
+extern void RemoveScenarioDialogSlot6();
+extern void InstallScenarioDialogSlot8();
+extern void RemoveScenarioDialogSlot8();
+
 static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
     { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
@@ -1683,6 +2291,366 @@ static ReimplEntry g_reimplementations[] = {
     { "TradeWork::Slot8", InstallTradeWorkSlot8, RemoveTradeWorkSlot8, true },
     { "TradeWork::Slot9", InstallTradeWorkSlot9, RemoveTradeWorkSlot9, true },
     { "TradeWork::Slot10", InstallTradeWorkSlot10, RemoveTradeWorkSlot10, true },
+
+    // ============================================================
+    // Phase 4: UI Panel Controllers (A-E)
+    // ============================================================
+
+    // --- AttendanceUI ---
+    { "AttendanceUI::Dtor", InstallAttendanceUIDtor, RemoveAttendanceUIDtor, true },
+    { "AttendanceUI::Slot4", InstallAttendanceUISlot4, RemoveAttendanceUISlot4, true },
+    { "AttendanceUI::Slot7", InstallAttendanceUISlot7, RemoveAttendanceUISlot7, true },
+
+    // --- BuildRequirementUI ---
+    { "BuildRequirementUI::Dtor", InstallBuildRequirementUIDtor, RemoveBuildRequirementUIDtor, true },
+    { "BuildRequirementUI::Slot4", InstallBuildRequirementUISlot4, RemoveBuildRequirementUISlot4, true },
+
+    // --- BuildUI ---
+    { "BuildUI::Dtor", InstallBuildUIDtor, RemoveBuildUIDtor, true },
+    { "BuildUI::Slot4", InstallBuildUISlot4, RemoveBuildUISlot4, true },
+    { "BuildUI::Slot7", InstallBuildUISlot7, RemoveBuildUISlot7, true },
+    { "BuildUI::Slot9", InstallBuildUISlot9, RemoveBuildUISlot9, true },
+
+    // --- CemeteryUI ---
+    { "CemeteryUI::Dtor", InstallCemeteryUIDtor, RemoveCemeteryUIDtor, true },
+    { "CemeteryUI::Slot4", InstallCemeteryUISlot4, RemoveCemeteryUISlot4, true },
+    { "CemeteryUI::Slot7", InstallCemeteryUISlot7, RemoveCemeteryUISlot7, true },
+
+    // --- CitizenUI ---
+    { "CitizenUI::Dtor", InstallCitizenUIDtor, RemoveCitizenUIDtor, true },
+    { "CitizenUI::Slot4", InstallCitizenUISlot4, RemoveCitizenUISlot4, true },
+    { "CitizenUI::Slot6", InstallCitizenUISlot6, RemoveCitizenUISlot6, true },
+    { "CitizenUI::Slot7", InstallCitizenUISlot7, RemoveCitizenUISlot7, true },
+    { "CitizenUI::Slot9", InstallCitizenUISlot9, RemoveCitizenUISlot9, true },
+
+    // --- ConsumeProduceUI ---
+    { "ConsumeProduceUI::Dtor", InstallConsumeProduceUIDtor, RemoveConsumeProduceUIDtor, true },
+    { "ConsumeProduceUI::Slot4", InstallConsumeProduceUISlot4, RemoveConsumeProduceUISlot4, true },
+    { "ConsumeProduceUI::Slot7", InstallConsumeProduceUISlot7, RemoveConsumeProduceUISlot7, true },
+    { "ConsumeProduceUI::Slot9", InstallConsumeProduceUISlot9, RemoveConsumeProduceUISlot9, true },
+
+    // --- ControlUI ---
+    { "ControlUI::Dtor", InstallControlUIDtor, RemoveControlUIDtor, true },
+    { "ControlUI::Slot4", InstallControlUISlot4, RemoveControlUISlot4, true },
+    { "ControlUI::Slot7", InstallControlUISlot7, RemoveControlUISlot7, true },
+    { "ControlUI::Slot9", InstallControlUISlot9, RemoveControlUISlot9, true },
+
+    // --- CropUI ---
+    { "CropUI::Dtor", InstallCropUIDtor, RemoveCropUIDtor, true },
+    { "CropUI::Slot4", InstallCropUISlot4, RemoveCropUISlot4, true },
+    { "CropUI::Slot7", InstallCropUISlot7, RemoveCropUISlot7, true },
+    { "CropUI::Slot8", InstallCropUISlot8, RemoveCropUISlot8, true },
+    { "CropUI::Slot9", InstallCropUISlot9, RemoveCropUISlot9, true },
+
+    // --- DebugUI ---
+    { "DebugUI::Dtor", InstallDebugUIDtor, RemoveDebugUIDtor, true },
+    { "DebugUI::Slot4", InstallDebugUISlot4, RemoveDebugUISlot4, true },
+    { "DebugUI::Slot7", InstallDebugUISlot7, RemoveDebugUISlot7, true },
+    { "DebugUI::Slot8", InstallDebugUISlot8, RemoveDebugUISlot8, true },
+    { "DebugUI::Slot9", InstallDebugUISlot9, RemoveDebugUISlot9, true },
+
+    // --- DestroyUI ---
+    { "DestroyUI::Dtor", InstallDestroyUIDtor, RemoveDestroyUIDtor, true },
+    { "DestroyUI::Slot4", InstallDestroyUISlot4, RemoveDestroyUISlot4, true },
+    { "DestroyUI::Slot7", InstallDestroyUISlot7, RemoveDestroyUISlot7, true },
+    { "DestroyUI::Slot9", InstallDestroyUISlot9, RemoveDestroyUISlot9, true },
+
+    // --- EntityUI ---
+    { "EntityUI::Dtor", InstallEntityUIDtor, RemoveEntityUIDtor, true },
+    { "EntityUI::Slot4", InstallEntityUISlot4, RemoveEntityUISlot4, true },
+    { "EntityUI::Slot6", InstallEntityUISlot6, RemoveEntityUISlot6, true },
+    { "EntityUI::Slot7", InstallEntityUISlot7, RemoveEntityUISlot7, true },
+    { "EntityUI::Slot8", InstallEntityUISlot8, RemoveEntityUISlot8, true },
+    { "EntityUI::Slot9", InstallEntityUISlot9, RemoveEntityUISlot9, true },
+
+    // --- EventLogUI ---
+    { "EventLogUI::Dtor", InstallEventLogUIDtor, RemoveEventLogUIDtor, true },
+    { "EventLogUI::Slot5", InstallEventLogUISlot5, RemoveEventLogUISlot5, true },
+    { "EventLogUI::Slot7", InstallEventLogUISlot7, RemoveEventLogUISlot7, true },
+    { "EventLogUI::Slot9", InstallEventLogUISlot9, RemoveEventLogUISlot9, true },
+
+    // --- HelpUI ---
+    { "HelpUI::Dtor", InstallHelpUIDtor, RemoveHelpUIDtor, true },
+    { "HelpUI::Slot4", InstallHelpUISlot4, RemoveHelpUISlot4, true },
+    { "HelpUI::Slot7", InstallHelpUISlot7, RemoveHelpUISlot7, true },
+    { "HelpUI::Slot9", InstallHelpUISlot9, RemoveHelpUISlot9, true },
+
+    // ============================================================
+    // Phase 4: UI Panel Controllers (H-R)
+    // ============================================================
+
+    // --- HotKeyToolTipUI ---
+    { "HotKeyToolTipUI::Dtor", InstallHotKeyToolTipUIDtor, RemoveHotKeyToolTipUIDtor, true },
+    { "HotKeyToolTipUI::Slot4", InstallHotKeyToolTipUISlot4, RemoveHotKeyToolTipUISlot4, true },
+
+    // --- ImmigrationUI ---
+    { "ImmigrationUI::Dtor", InstallImmigrationUIDtor, RemoveImmigrationUIDtor, true },
+    { "ImmigrationUI::Slot4", InstallImmigrationUISlot4, RemoveImmigrationUISlot4, true },
+    { "ImmigrationUI::Slot7", InstallImmigrationUISlot7, RemoveImmigrationUISlot7, true },
+    { "ImmigrationUI::Slot9", InstallImmigrationUISlot9, RemoveImmigrationUISlot9, true },
+
+    // --- MapUI ---
+    { "MapUI::Dtor", InstallMapUIDtor, RemoveMapUIDtor, true },
+    { "MapUI::Slot4", InstallMapUISlot4, RemoveMapUISlot4, true },
+    { "MapUI::Slot9", InstallMapUISlot9, RemoveMapUISlot9, true },
+
+    // --- ModBrowseUI ---
+    { "ModBrowseUI::Dtor", InstallModBrowseUIDtor, RemoveModBrowseUIDtor, true },
+
+    // --- NoiseUI ---
+    { "NoiseUI::Dtor", InstallNoiseUIDtor, RemoveNoiseUIDtor, true },
+    { "NoiseUI::Slot4", InstallNoiseUISlot4, RemoveNoiseUISlot4, true },
+    { "NoiseUI::Slot9", InstallNoiseUISlot9, RemoveNoiseUISlot9, true },
+
+    // --- OrchardUI ---
+    { "OrchardUI::Dtor", InstallOrchardUIDtor, RemoveOrchardUIDtor, true },
+    { "OrchardUI::Slot4", InstallOrchardUISlot4, RemoveOrchardUISlot4, true },
+    { "OrchardUI::Slot7", InstallOrchardUISlot7, RemoveOrchardUISlot7, true },
+    { "OrchardUI::Slot8", InstallOrchardUISlot8, RemoveOrchardUISlot8, true },
+    { "OrchardUI::Slot9", InstallOrchardUISlot9, RemoveOrchardUISlot9, true },
+    { "OrchardUI::Slot11", InstallOrchardUISlot11, RemoveOrchardUISlot11, true },
+    { "OrchardUI::Slot12", InstallOrchardUISlot12, RemoveOrchardUISlot12, true },
+
+    // --- PageToggleUI ---
+    { "PageToggleUI::Dtor", InstallPageToggleUIDtor, RemovePageToggleUIDtor, true },
+    { "PageToggleUI::Slot4", InstallPageToggleUISlot4, RemovePageToggleUISlot4, true },
+    { "PageToggleUI::Slot7", InstallPageToggleUISlot7, RemovePageToggleUISlot7, true },
+    { "PageToggleUI::Slot9", InstallPageToggleUISlot9, RemovePageToggleUISlot9, true },
+
+    // --- PastureUI ---
+    { "PastureUI::Dtor", InstallPastureUIDtor, RemovePastureUIDtor, true },
+    { "PastureUI::Slot4", InstallPastureUISlot4, RemovePastureUISlot4, true },
+    { "PastureUI::Slot7", InstallPastureUISlot7, RemovePastureUISlot7, true },
+    { "PastureUI::Slot8", InstallPastureUISlot8, RemovePastureUISlot8, true },
+    { "PastureUI::Slot9", InstallPastureUISlot9, RemovePastureUISlot9, true },
+    { "PastureUI::Slot11", InstallPastureUISlot11, RemovePastureUISlot11, true },
+    { "PastureUI::Slot12", InstallPastureUISlot12, RemovePastureUISlot12, true },
+
+    // --- ProductionUI ---
+    { "ProductionUI::Dtor", InstallProductionUIDtor, RemoveProductionUIDtor, true },
+    { "ProductionUI::Slot4", InstallProductionUISlot4, RemoveProductionUISlot4, true },
+    { "ProductionUI::Slot7", InstallProductionUISlot7, RemoveProductionUISlot7, true },
+
+    // --- ProfessionUI ---
+    { "ProfessionUI::Dtor", InstallProfessionUIDtor, RemoveProfessionUIDtor, true },
+    { "ProfessionUI::Slot5", InstallProfessionUISlot5, RemoveProfessionUISlot5, true },
+    { "ProfessionUI::Slot8", InstallProfessionUISlot8, RemoveProfessionUISlot8, true },
+    { "ProfessionUI::Slot9", InstallProfessionUISlot9, RemoveProfessionUISlot9, true },
+
+    // --- RadiusUI ---
+    { "RadiusUI::Dtor", InstallRadiusUIDtor, RemoveRadiusUIDtor, true },
+    { "RadiusUI::Slot5", InstallRadiusUISlot5, RemoveRadiusUISlot5, true },
+    { "RadiusUI::Slot6", InstallRadiusUISlot6, RemoveRadiusUISlot6, true },
+
+    // --- ResidenceUI ---
+    { "ResidenceUI::Dtor", InstallResidenceUIDtor, RemoveResidenceUIDtor, true },
+    { "ResidenceUI::Slot4", InstallResidenceUISlot4, RemoveResidenceUISlot4, true },
+    { "ResidenceUI::Slot7", InstallResidenceUISlot7, RemoveResidenceUISlot7, true },
+    { "ResidenceUI::Slot9", InstallResidenceUISlot9, RemoveResidenceUISlot9, true },
+
+    // --- ResourceLimitUI ---
+    { "ResourceLimitUI::Dtor", InstallResourceLimitUIDtor, RemoveResourceLimitUIDtor, true },
+    { "ResourceLimitUI::Slot4", InstallResourceLimitUISlot4, RemoveResourceLimitUISlot4, true },
+    { "ResourceLimitUI::Slot7", InstallResourceLimitUISlot7, RemoveResourceLimitUISlot7, true },
+    { "ResourceLimitUI::Slot9", InstallResourceLimitUISlot9, RemoveResourceLimitUISlot9, true },
+
+    // ============================================================
+    // Phase 4: UI Panel Controllers (S-W)
+    // ============================================================
+
+    // --- SpriteCaptureUI ---
+    { "SpriteCaptureUI::ScalarDtor", InstallSpriteCaptureUIScalarDtor, RemoveSpriteCaptureUIScalarDtor, true },
+    { "SpriteCaptureUI::Serialize", InstallSpriteCaptureUISerialize, RemoveSpriteCaptureUISerialize, true },
+    { "SpriteCaptureUI::OnCreate", InstallSpriteCaptureUIOnCreate, RemoveSpriteCaptureUIOnCreate, true },
+
+    // --- StatusBarUI ---
+    { "StatusBarUI::ScalarDtor", InstallStatusBarUIScalarDtor, RemoveStatusBarUIScalarDtor, true },
+    { "StatusBarUI::Draw", InstallStatusBarUIDraw, RemoveStatusBarUIDraw, true },
+    { "StatusBarUI::Startup", InstallStatusBarUIStartup, RemoveStatusBarUIStartup, true },
+    { "StatusBarUI::OnRemove", InstallStatusBarUIOnRemove, RemoveStatusBarUIOnRemove, true },
+
+    // --- StatusIconUI ---
+    { "StatusIconUI::ScalarDtor", InstallStatusIconUIScalarDtor, RemoveStatusIconUIScalarDtor, true },
+    { "StatusIconUI::Serialize", InstallStatusIconUISerialize, RemoveStatusIconUISerialize, true },
+    { "StatusIconUI::Startup", InstallStatusIconUIStartup, RemoveStatusIconUIStartup, true },
+
+    // --- StorageCapacityUI ---
+    { "StorageCapacityUI::ScalarDtor", InstallStorageCapacityUIScalarDtor, RemoveStorageCapacityUIScalarDtor, true },
+    { "StorageCapacityUI::Serialize", InstallStorageCapacityUISerialize, RemoveStorageCapacityUISerialize, true },
+    { "StorageCapacityUI::Startup", InstallStorageCapacityUIStartup, RemoveStorageCapacityUIStartup, true },
+
+    // --- StorageUI ---
+    { "StorageUI::ScalarDtor", InstallStorageUIScalarDtor, RemoveStorageUIScalarDtor, true },
+    { "StorageUI::Serialize", InstallStorageUISerialize, RemoveStorageUISerialize, true },
+    { "StorageUI::Startup", InstallStorageUIStartup, RemoveStorageUIStartup, true },
+
+    // --- TitleDescToolTipUI ---
+    { "TitleDescToolTipUI::ScalarDtor", InstallTitleDescToolTipUIScalarDtor, RemoveTitleDescToolTipUIScalarDtor, true },
+    { "TitleDescToolTipUI::Serialize", InstallTitleDescToolTipUISerialize, RemoveTitleDescToolTipUISerialize, true },
+
+    // --- ToolUI ---
+    { "ToolUI::ScalarDtor", InstallToolUIScalarDtor, RemoveToolUIScalarDtor, true },
+    { "ToolUI::Serialize", InstallToolUISerialize, RemoveToolUISerialize, true },
+    { "ToolUI::OnCreate", InstallToolUIOnCreate, RemoveToolUIOnCreate, true },
+    { "ToolUI::OnRemove", InstallToolUIOnRemove, RemoveToolUIOnRemove, true },
+
+    // --- TownHallUI ---
+    { "TownHallUI::ScalarDtor", InstallTownHallUIScalarDtor, RemoveTownHallUIScalarDtor, true },
+    { "TownHallUI::Serialize", InstallTownHallUISerialize, RemoveTownHallUISerialize, true },
+    { "TownHallUI::Startup", InstallTownHallUIStartup, RemoveTownHallUIStartup, true },
+    { "TownHallUI::OnCreate", InstallTownHallUIOnCreate, RemoveTownHallUIOnCreate, true },
+    { "TownHallUI::OnRemove", InstallTownHallUIOnRemove, RemoveTownHallUIOnRemove, true },
+    { "TownHallUI::Update", InstallTownHallUIUpdate, RemoveTownHallUIUpdate, true },
+
+    // --- TradeUI ---
+    { "TradeUI::ScalarDtor", InstallTradeUIScalarDtor, RemoveTradeUIScalarDtor, true },
+    { "TradeUI::Serialize", InstallTradeUISerialize, RemoveTradeUISerialize, true },
+    { "TradeUI::Draw", InstallTradeUIDraw, RemoveTradeUIDraw, true },
+    { "TradeUI::Slot6", InstallTradeUISlot6, RemoveTradeUISlot6, true },
+    { "TradeUI::Startup", InstallTradeUIStartup, RemoveTradeUIStartup, true },
+    { "TradeUI::OnCreate", InstallTradeUIOnCreate, RemoveTradeUIOnCreate, true },
+    { "TradeUI::OnRemove", InstallTradeUIOnRemove, RemoveTradeUIOnRemove, true },
+    { "TradeUI::Update", InstallTradeUIUpdate, RemoveTradeUIUpdate, true },
+
+    // --- TutorialUI ---
+    { "TutorialUI::ScalarDtor", InstallTutorialUIScalarDtor, RemoveTutorialUIScalarDtor, true },
+    { "TutorialUI::Serialize", InstallTutorialUISerialize, RemoveTutorialUISerialize, true },
+    { "TutorialUI::Startup", InstallTutorialUIStartup, RemoveTutorialUIStartup, true },
+    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, true },
+
+    // --- UpgradeUI ---
+    { "UpgradeUI::ScalarDtor", InstallUpgradeUIScalarDtor, RemoveUpgradeUIScalarDtor, true },
+    { "UpgradeUI::Serialize", InstallUpgradeUISerialize, RemoveUpgradeUISerialize, true },
+    { "UpgradeUI::OnRemove", InstallUpgradeUIOnRemove, RemoveUpgradeUIOnRemove, true },
+
+    // --- WorkPlaceUI ---
+    { "WorkPlaceUI::ScalarDtor", InstallWorkPlaceUIScalarDtor, RemoveWorkPlaceUIScalarDtor, true },
+    { "WorkPlaceUI::Serialize", InstallWorkPlaceUISerialize, RemoveWorkPlaceUISerialize, true },
+    { "WorkPlaceUI::Startup", InstallWorkPlaceUIStartup, RemoveWorkPlaceUIStartup, true },
+    { "WorkPlaceUI::OnRemove", InstallWorkPlaceUIOnRemove, RemoveWorkPlaceUIOnRemove, true },
+
+    // ====================================================================
+    // Phase 4: Dialog Controllers
+    // ====================================================================
+
+    // --- EventNotifyDialog ---
+    { "EventNotifyDialog::ScalarDtor", InstallEventNotifyDialogScalarDtor, RemoveEventNotifyDialogScalarDtor, true },
+    { "EventNotifyDialog::Startup", InstallEventNotifyDialogStartup, RemoveEventNotifyDialogStartup, true },
+    { "EventNotifyDialog::Update", InstallEventNotifyDialogUpdate, RemoveEventNotifyDialogUpdate, true },
+    { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, true },
+
+    // --- MapParamsDialog ---
+    { "MapParamsDialog::ScalarDtor", InstallMapParamsDialogScalarDtor, RemoveMapParamsDialogScalarDtor, true },
+    { "MapParamsDialog::Startup", InstallMapParamsDialogStartup, RemoveMapParamsDialogStartup, true },
+    { "MapParamsDialog::Update", InstallMapParamsDialogUpdate, RemoveMapParamsDialogUpdate, true },
+
+    // --- NewGameDialog ---
+    { "NewGameDialog::ScalarDtor", InstallNewGameDialogScalarDtor, RemoveNewGameDialogScalarDtor, true },
+    { "NewGameDialog::Startup", InstallNewGameDialogStartup, RemoveNewGameDialogStartup, true },
+    { "NewGameDialog::Update", InstallNewGameDialogUpdate, RemoveNewGameDialogUpdate, true },
+
+    // --- OptionsDialog ---
+    { "OptionsDialog::ScalarDtor", InstallOptionsDialogScalarDtor, RemoveOptionsDialogScalarDtor, true },
+    { "OptionsDialog::Startup", InstallOptionsDialogStartup, RemoveOptionsDialogStartup, true },
+    { "OptionsDialog::OnEvent", InstallOptionsDialogOnEvent, RemoveOptionsDialogOnEvent, true },
+
+    // --- OptionInputBindDialog ---
+    { "OptionInputBindDialog::ScalarDtor", InstallOptionInputBindDialogScalarDtor, RemoveOptionInputBindDialogScalarDtor, true },
+    { "OptionInputBindDialog::Startup", InstallOptionInputBindDialogStartup, RemoveOptionInputBindDialogStartup, true },
+    { "OptionInputBindDialog::Load", InstallOptionInputBindDialogLoad, RemoveOptionInputBindDialogLoad, true },
+    { "OptionInputBindDialog::OnOk", InstallOptionInputBindDialogOnOk, RemoveOptionInputBindDialogOnOk, true },
+    { "OptionInputBindDialog::OnCancel", InstallOptionInputBindDialogOnCancel, RemoveOptionInputBindDialogOnCancel, true },
+    { "OptionInputBindDialog::OnButton2", InstallOptionInputBindDialogOnButton2, RemoveOptionInputBindDialogOnButton2, true },
+    { "OptionInputBindDialog::OnButton3", InstallOptionInputBindDialogOnButton3, RemoveOptionInputBindDialogOnButton3, true },
+
+    // --- SaveLoadDialog ---
+    { "SaveLoadDialog::ScalarDtor", InstallSaveLoadDialogScalarDtor, RemoveSaveLoadDialogScalarDtor, true },
+    { "SaveLoadDialog::Startup", InstallSaveLoadDialogStartup, RemoveSaveLoadDialogStartup, true },
+    { "SaveLoadDialog::Update", InstallSaveLoadDialogUpdate, RemoveSaveLoadDialogUpdate, true },
+    { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, true },
+
+    // --- ToolbarDialog ---
+    { "ToolbarDialog::ScalarDtor", InstallToolbarDialogScalarDtor, RemoveToolbarDialogScalarDtor, true },
+    { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, true },
+    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, true },
+
+    // --- TutorialHighlightDialog ---
+    { "TutorialHighlightDialog::ScalarDtor", InstallTutorialHighlightDialogScalarDtor, RemoveTutorialHighlightDialogScalarDtor, true },
+    { "TutorialHighlightDialog::Startup", InstallTutorialHighlightDialogStartup, RemoveTutorialHighlightDialogStartup, true },
+
+    // --- TutorialGoalDialog ---
+    { "TutorialGoalDialog::ScalarDtor", InstallTutorialGoalDialogScalarDtor, RemoveTutorialGoalDialogScalarDtor, true },
+    { "TutorialGoalDialog::Shutdown", InstallTutorialGoalDialogShutdown, RemoveTutorialGoalDialogShutdown, true },
+    { "TutorialGoalDialog::OnEvent", InstallTutorialGoalDialogOnEvent, RemoveTutorialGoalDialogOnEvent, true },
+    { "TutorialGoalDialog::OnInit", InstallTutorialGoalDialogOnInit, RemoveTutorialGoalDialogOnInit, true },
+    { "TutorialGoalDialog::OnDestroy", InstallTutorialGoalDialogOnDestroy, RemoveTutorialGoalDialogOnDestroy, true },
+
+    // --- TutorialSetupDialog ---
+    { "TutorialSetupDialog::ScalarDtor", InstallTutorialSetupDialogScalarDtor, RemoveTutorialSetupDialogScalarDtor, true },
+    { "TutorialSetupDialog::Shutdown", InstallTutorialSetupDialogShutdown, RemoveTutorialSetupDialogShutdown, true },
+    { "TutorialSetupDialog::OnEvent", InstallTutorialSetupDialogOnEvent, RemoveTutorialSetupDialogOnEvent, true },
+
+    // Phase 4: Simple Dialog Controllers
+    // --- AchievementDialog ---
+    { "AchievementDialog::Dtor", InstallAchievementDialogDtor, RemoveAchievementDialogDtor, true },
+    { "AchievementDialog::Slot4", InstallAchievementDialogSlot4, RemoveAchievementDialogSlot4, true },
+    { "AchievementDialog::Slot6", InstallAchievementDialogSlot6, RemoveAchievementDialogSlot6, true },
+    { "AchievementDialog::Slot8", InstallAchievementDialogSlot8, RemoveAchievementDialogSlot8, true },
+    { "AchievementDialog::Slot10", InstallAchievementDialogSlot10, RemoveAchievementDialogSlot10, true },
+    { "AchievementDialog::Slot14", InstallAchievementDialogSlot14, RemoveAchievementDialogSlot14, true },
+    { "AchievementDialog::Slot17", InstallAchievementDialogSlot17, RemoveAchievementDialogSlot17, true },
+    // --- AutoSaveDialog ---
+    { "AutoSaveDialog::Dtor", InstallAutoSaveDialogDtor, RemoveAutoSaveDialogDtor, true },
+    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, true },
+    { "AutoSaveDialog::Slot7", InstallAutoSaveDialogSlot7, RemoveAutoSaveDialogSlot7, true },
+    // --- EventPopupDialog ---
+    { "EventPopupDialog::Dtor", InstallEventPopupDialogDtor, RemoveEventPopupDialogDtor, true },
+    { "EventPopupDialog::Slot4", InstallEventPopupDialogSlot4, RemoveEventPopupDialogSlot4, true },
+    { "EventPopupDialog::Slot8", InstallEventPopupDialogSlot8, RemoveEventPopupDialogSlot8, true },
+    // --- FollowDialog ---
+    { "FollowDialog::Dtor", InstallFollowDialogDtor, RemoveFollowDialogDtor, true },
+    { "FollowDialog::Slot4", InstallFollowDialogSlot4, RemoveFollowDialogSlot4, true },
+    { "FollowDialog::Slot6", InstallFollowDialogSlot6, RemoveFollowDialogSlot6, true },
+    { "FollowDialog::Slot7", InstallFollowDialogSlot7, RemoveFollowDialogSlot7, true },
+    // --- GoalDialog ---
+    { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },
+    { "GoalDialog::Slot4", InstallGoalDialogSlot4, RemoveGoalDialogSlot4, true },
+    { "GoalDialog::Slot6", InstallGoalDialogSlot6, RemoveGoalDialogSlot6, true },
+    { "GoalDialog::Slot8", InstallGoalDialogSlot8, RemoveGoalDialogSlot8, true },
+    // --- LoaderDialog ---
+    { "LoaderDialog::Dtor", InstallLoaderDialogDtor, RemoveLoaderDialogDtor, true },
+    { "LoaderDialog::Slot4", InstallLoaderDialogSlot4, RemoveLoaderDialogSlot4, true },
+    { "LoaderDialog::Slot6", InstallLoaderDialogSlot6, RemoveLoaderDialogSlot6, true },
+    { "LoaderDialog::Slot7", InstallLoaderDialogSlot7, RemoveLoaderDialogSlot7, true },
+    // --- MainMenuDialog ---
+    { "MainMenuDialog::Dtor", InstallMainMenuDialogDtor, RemoveMainMenuDialogDtor, true },
+    { "MainMenuDialog::Slot4", InstallMainMenuDialogSlot4, RemoveMainMenuDialogSlot4, true },
+    { "MainMenuDialog::Slot5", InstallMainMenuDialogSlot5, RemoveMainMenuDialogSlot5, true },
+    { "MainMenuDialog::Slot8", InstallMainMenuDialogSlot8, RemoveMainMenuDialogSlot8, true },
+    { "MainMenuDialog::Slot10", InstallMainMenuDialogSlot10, RemoveMainMenuDialogSlot10, true },
+    // --- MessageDialog ---
+    { "MessageDialog::Dtor", InstallMessageDialogDtor, RemoveMessageDialogDtor, true },
+    { "MessageDialog::Slot4", InstallMessageDialogSlot4, RemoveMessageDialogSlot4, true },
+    { "MessageDialog::Slot10", InstallMessageDialogSlot10, RemoveMessageDialogSlot10, true },
+    { "MessageDialog::Slot11", InstallMessageDialogSlot11, RemoveMessageDialogSlot11, true },
+    { "MessageDialog::Slot12", InstallMessageDialogSlot12, RemoveMessageDialogSlot12, true },
+    { "MessageDialog::Slot13", InstallMessageDialogSlot13, RemoveMessageDialogSlot13, true },
+    // --- ModDetailsDialog ---
+    { "ModDetailsDialog::Dtor", InstallModDetailsDialogDtor, RemoveModDetailsDialogDtor, true },
+    { "ModDetailsDialog::Slot4", InstallModDetailsDialogSlot4, RemoveModDetailsDialogSlot4, true },
+    { "ModDetailsDialog::Slot8", InstallModDetailsDialogSlot8, RemoveModDetailsDialogSlot8, true },
+    // --- ModUploadDialog ---
+    { "ModUploadDialog::Dtor", InstallModUploadDialogDtor, RemoveModUploadDialogDtor, true },
+    // --- ModDialog ---
+    { "ModDialog::Dtor", InstallModDialogDtor, RemoveModDialogDtor, true },
+    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, true },
+    { "ModDialog::Slot8", InstallModDialogSlot8, RemoveModDialogSlot8, true },
+    { "ModDialog::Slot10", InstallModDialogSlot10, RemoveModDialogSlot10, true },
+    // --- ScenarioDialog ---
+    { "ScenarioDialog::Dtor", InstallScenarioDialogDtor, RemoveScenarioDialogDtor, true },
+    { "ScenarioDialog::Slot4", InstallScenarioDialogSlot4, RemoveScenarioDialogSlot4, true },
+    { "ScenarioDialog::Slot6", InstallScenarioDialogSlot6, RemoveScenarioDialogSlot6, true },
+    { "ScenarioDialog::Slot8", InstallScenarioDialogSlot8, RemoveScenarioDialogSlot8, true },
 };
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);

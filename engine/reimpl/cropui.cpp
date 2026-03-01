@@ -1,0 +1,113 @@
+// engine/reimpl/cropui.cpp
+// Reimplementation of CropUI vtable methods from Application-x64.exe.
+//
+// CropUI (0x60 bytes), vtable at 0x14015d330 (SelectResourceUI base vtable).
+// Extends SelectResourceUI (abstract) which extends DialogController (0x30 base).
+// Note: This vtable is shared as the SelectResourceUI base. OrchardUI and PastureUI
+// have their own override vtables but may share some method pointers.
+//
+// Vtable overrides (exe-range functions):
+//   +0x00: 0x140013CA0 — Dtor (scalar deleting destructor)
+//   +0x20: 0x140078BE0 — Slot4 (setup/refresh)
+//   +0x38: 0x140078CB0 — Slot7 (update handler)
+//   +0x40: 0x140078D30 — Slot8 (additional handler)
+//   +0x48: 0x140078D80 — Slot9 (notification handler)
+//
+// Unhookable (too small):
+//   +0x08: 0x140013C90 — 8 bytes, Slot1 (Setup getter)
+//   +0x10: 0x140013C80 — 7 bytes, Slot2 (Cleanup getter)
+//
+// Stubs (base class no-ops):
+//   +0x18: Slot3, +0x28: Slot5, +0x30: Slot6, +0x50: Slot10
+
+#include "ui/Panels.h"
+#include "hooks.h"
+#include "resolve.h"
+#include "engine_funcs.h"
+#include <cstdio>
+#include <cstdint>
+
+// ============================================================
+// Hook state
+// ============================================================
+static HookInfo g_hookDtor;
+static HookInfo g_hookSlot4;
+static HookInfo g_hookSlot7;
+static HookInfo g_hookSlot8;
+static HookInfo g_hookSlot9;
+
+// ============================================================
+// Passthrough wrappers
+// ============================================================
+typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+}
+
+typedef void (*fn_Slot4_t)(void* self);
+static void Reimpl_Slot4(void* self) {
+    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+}
+
+typedef void (*fn_Slot7_t)(void* self);
+static void Reimpl_Slot7(void* self) {
+    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+}
+
+typedef void (*fn_Slot8_t)(void* self);
+static void Reimpl_Slot8(void* self) {
+    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+}
+
+typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
+static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
+    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+}
+
+// ============================================================
+// Install / Remove
+// ============================================================
+void InstallCropUIDtor() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x140013CA0);
+    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 19);
+#ifdef _DEBUG
+    printf("[CropUI] Dtor hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveCropUIDtor() { RemoveHook(&g_hookDtor); }
+
+void InstallCropUISlot4() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x140078BE0);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
+#ifdef _DEBUG
+    printf("[CropUI] Slot4 hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveCropUISlot4() { RemoveHook(&g_hookSlot4); }
+
+void InstallCropUISlot7() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x140078CB0);
+    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 15);
+#ifdef _DEBUG
+    printf("[CropUI] Slot7 hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveCropUISlot7() { RemoveHook(&g_hookSlot7); }
+
+void InstallCropUISlot8() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x140078D30);
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 13);
+#ifdef _DEBUG
+    printf("[CropUI] Slot8 hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveCropUISlot8() { RemoveHook(&g_hookSlot8); }
+
+void InstallCropUISlot9() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x140078D80);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 13);
+#ifdef _DEBUG
+    printf("[CropUI] Slot9 hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveCropUISlot9() { RemoveHook(&g_hookSlot9); }
