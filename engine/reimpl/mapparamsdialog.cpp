@@ -59,7 +59,7 @@ static void Reimpl_Update(void* self) {
 
 void InstallMapParamsDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140012150);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[MapParamsDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif
@@ -68,7 +68,7 @@ void RemoveMapParamsDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallMapParamsDialogStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006b810);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 14);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 16);
 #ifdef _DEBUG
     printf("[MapParamsDialog] Startup hooked at %p\n", (void*)target);
 #endif

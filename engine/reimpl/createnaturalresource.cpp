@@ -130,7 +130,7 @@ static void ResolveHelpers() {
 void InstallCreateNaturalResourceSerialize() {
     ResolveHelpers();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6890);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[CreateNaturalResource] Serialize hooked at %p\n", (void*)target);
 #endif

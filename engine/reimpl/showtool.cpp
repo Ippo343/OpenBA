@@ -147,7 +147,7 @@ static void ResolveHelpers() {
 void InstallShowToolSerialize() {
     ResolveHelpers();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140042780);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[ShowTool] Serialize hooked at %p\n", (void*)target);
 #endif

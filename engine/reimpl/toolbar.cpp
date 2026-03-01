@@ -54,7 +54,7 @@ void RemoveToolbarDtor() { RemoveHook(&g_hookToolbarDtor); }
 
 void InstallToolbarSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400d2010);
-    InstallHook(target, (void*)Reimpl_ToolbarSerialize, &g_hookToolbarSerialize, 14);
+    InstallHook(target, (void*)Reimpl_ToolbarSerialize, &g_hookToolbarSerialize, 15);
 #ifdef _DEBUG
     printf("[Toolbar] Serialize hooked at %p\n", (void*)target);
 #endif

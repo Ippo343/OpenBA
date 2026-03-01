@@ -66,7 +66,7 @@ static void Reimpl_Load(void* self, void* param2) {
 
 void InstallEventNotifyDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140011550);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[EventNotifyDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif

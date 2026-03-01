@@ -114,7 +114,7 @@ void RemoveParticleComponentOnCreate() { RemoveHook(&g_hookOnCreate); }
 
 void InstallParticleComponentOnRemove() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140052b30);
-    InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 14);
+    InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 17);
 #ifdef _DEBUG
     printf("[ParticleComponent] OnRemove hooked at %p\n", (void*)target);
 #endif

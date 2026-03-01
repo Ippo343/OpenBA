@@ -59,7 +59,7 @@ static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventDa
 
 void InstallOptionsDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140012f30);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[OptionsDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif
@@ -68,7 +68,7 @@ void RemoveOptionsDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallOptionsDialogStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400742d0);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 14);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 15);
 #ifdef _DEBUG
     printf("[OptionsDialog] Startup hooked at %p\n", (void*)target);
 #endif

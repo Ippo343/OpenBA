@@ -78,7 +78,7 @@ void RemoveCreateRoadDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallCreateRoadDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140032df0);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
 #ifdef _DEBUG
     printf("[CreateRoadDescription] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -87,7 +87,7 @@ void RemoveCreateRoadDescriptionCleanup() { RemoveHook(&g_hookCleanup); }
 
 void InstallCreateRoadDescriptionCreateInPlace() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140032da0);
-    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 14);
+    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 15);
 #ifdef _DEBUG
     printf("[CreateRoadDescription] CreateInPlace hooked at %p\n", (void*)target);
 #endif

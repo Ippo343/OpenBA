@@ -90,7 +90,7 @@ void RemoveFrustumOutlineDescriptionSlot3() { RemoveHook(&g_hookSlot3); }
 
 void InstallFrustumOutlineDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006c460);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[FrustumOutlineDescription] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -99,7 +99,7 @@ void RemoveFrustumOutlineDescriptionSerialize() { RemoveHook(&g_hookSerialize); 
 
 void InstallFrustumOutlineDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140012390);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
 #ifdef _DEBUG
     printf("[FrustumOutlineDescription] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -108,7 +108,7 @@ void RemoveFrustumOutlineDescriptionCleanup() { RemoveHook(&g_hookCleanup); }
 
 void InstallFrustumOutlineDescriptionCreateElement() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006c340);
-    InstallHook(target, (void*)Reimpl_CreateElement, &g_hookCreateElement, 14);
+    InstallHook(target, (void*)Reimpl_CreateElement, &g_hookCreateElement, 15);
 #ifdef _DEBUG
     printf("[FrustumOutlineDescription] CreateElement hooked at %p\n", (void*)target);
 #endif
@@ -117,7 +117,7 @@ void RemoveFrustumOutlineDescriptionCreateElement() { RemoveHook(&g_hookCreateEl
 
 void InstallFrustumOutlineDescriptionCreateInPlace() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140012330);
-    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 14);
+    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 15);
 #ifdef _DEBUG
     printf("[FrustumOutlineDescription] CreateInPlace hooked at %p\n", (void*)target);
 #endif

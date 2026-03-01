@@ -60,7 +60,7 @@ static void Reimpl_Update(void* self) {
 
 void InstallNewGameDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140012cc0);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[NewGameDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif
@@ -69,7 +69,7 @@ void RemoveNewGameDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallNewGameDialogStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400706d0);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 14);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 16);
 #ifdef _DEBUG
     printf("[NewGameDialog] Startup hooked at %p\n", (void*)target);
 #endif

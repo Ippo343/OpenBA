@@ -2038,7 +2038,7 @@ static ReimplEntry g_reimplementations[] = {
     { "Modification::EnableSavingSettings", InstallModificationEnableSavingSettings, RemoveModificationEnableSavingSettings, true },
     { "Modification::SaveList",        InstallModificationSaveList,        RemoveModificationSaveList,        true },
     { "Modification::RefreshList",     InstallModificationRefreshList,     RemoveModificationRefreshList,     true },
-    { "Modification::SetupFileSystem", InstallModificationSetupFileSystem, RemoveModificationSetupFileSystem, true },
+    { "Modification::SetupFileSystem", InstallModificationSetupFileSystem, RemoveModificationSetupFileSystem, false }, // crashes — 709-instr function, likely SEH/unwind issue with trampoline
 
     // --- LivestockComponent reimplementations ---
     { "LivestockComponent::Update", InstallLivestockComponentUpdate, RemoveLivestockComponentUpdate, true },
@@ -3195,12 +3195,19 @@ static ReimplEntry g_reimplementations[] = {
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);
 
+// Set to -1 to install all hooks, or a specific index to stop after that many.
+// Use for bisecting crashes: try 30 (engine core only), then 100, 200, etc.
+static constexpr int DEBUG_MAX_HOOKS = -1;
+
 void InstallHooks() {
+    int limit = (DEBUG_MAX_HOOKS < 0) ? g_reimplCount : DEBUG_MAX_HOOKS;
+    if (limit > g_reimplCount) limit = g_reimplCount;
+
 #ifdef _DEBUG
-    printf("[BanishedPatch] Installing %d hooks/patches...\n", g_reimplCount);
+    printf("[BanishedPatch] Installing %d/%d hooks/patches...\n", limit, g_reimplCount);
 #endif
 
-    for (int i = 0; i < g_reimplCount; i++) {
+    for (int i = 0; i < limit; i++) {
         auto& r = g_reimplementations[i];
         if (r.enabled) {
             r.install();

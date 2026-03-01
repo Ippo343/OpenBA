@@ -69,7 +69,7 @@ void RemoveSelectDescriptionDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallSelectDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140055630);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[SelectDescription] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -78,7 +78,7 @@ void RemoveSelectDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallSelectDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14000bc60);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
 #ifdef _DEBUG
     printf("[SelectDescription] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -87,7 +87,7 @@ void RemoveSelectDescriptionCleanup() { RemoveHook(&g_hookCleanup); }
 
 void InstallSelectDescriptionCreateInPlace() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14000bc00);
-    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 14);
+    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 15);
 #ifdef _DEBUG
     printf("[SelectDescription] CreateInPlace hooked at %p\n", (void*)target);
 #endif

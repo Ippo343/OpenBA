@@ -65,7 +65,7 @@ void RemoveEnvironmentDescriptionDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallEnvironmentDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140094040);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[EnvironmentDescription] Serialize hooked at %p\n", (void*)target);
 #endif

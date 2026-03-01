@@ -79,7 +79,7 @@ void RemoveToolbarDialogUpdate() { RemoveHook(&g_hookUpdate); }
 
 void InstallToolbarDialogOnEvent() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400b92a0);
-    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 14);
+    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 16);
 #ifdef _DEBUG
     printf("[ToolbarDialog] OnEvent hooked at %p\n", (void*)target);
 #endif

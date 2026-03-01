@@ -128,7 +128,7 @@ static void ResolveHelpers() {
 void InstallPickupRawMaterialSerialize() {
     ResolveHelpers();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c99e0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[PickupRawMaterial] Serialize hooked at %p\n", (void*)target);
 #endif

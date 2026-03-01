@@ -90,7 +90,7 @@ void RemoveCaptureBoxDescriptionSlot3() { RemoveHook(&g_hookSlot3); }
 
 void InstallCaptureBoxDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400791a0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[CaptureBoxDescription] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -99,7 +99,7 @@ void RemoveCaptureBoxDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallCaptureBoxDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140013e40);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
 #ifdef _DEBUG
     printf("[CaptureBoxDescription] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -108,7 +108,7 @@ void RemoveCaptureBoxDescriptionCleanup() { RemoveHook(&g_hookCleanup); }
 
 void InstallCaptureBoxDescriptionCreateElement() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400790a0);
-    InstallHook(target, (void*)Reimpl_CreateElement, &g_hookCreateElement, 14);
+    InstallHook(target, (void*)Reimpl_CreateElement, &g_hookCreateElement, 15);
 #ifdef _DEBUG
     printf("[CaptureBoxDescription] CreateElement hooked at %p\n", (void*)target);
 #endif
@@ -117,7 +117,7 @@ void RemoveCaptureBoxDescriptionCreateElement() { RemoveHook(&g_hookCreateElemen
 
 void InstallCaptureBoxDescriptionCreateInPlace() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140013df0);
-    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 14);
+    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 15);
 #ifdef _DEBUG
     printf("[CaptureBoxDescription] CreateInPlace hooked at %p\n", (void*)target);
 #endif

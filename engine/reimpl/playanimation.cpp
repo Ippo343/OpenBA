@@ -162,7 +162,7 @@ static void ResolveHelpers() {
 void InstallPlayAnimationSerialize() {
     ResolveHelpers();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140042480);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[PlayAnimation] Serialize hooked at %p\n", (void*)target);
 #endif

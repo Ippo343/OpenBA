@@ -71,7 +71,7 @@ void RemoveTutorialSetupDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallTutorialSetupDialogShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e2a60);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 17);
 #ifdef _DEBUG
     printf("[TutorialSetupDialog] Shutdown hooked at %p\n", (void*)target);
 #endif

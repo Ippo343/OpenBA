@@ -69,7 +69,7 @@ void RemoveRadiusDescriptionDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallRadiusDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140055530);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[RadiusDescription] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -78,7 +78,7 @@ void RemoveRadiusDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallRadiusDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14000bab0);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
 #ifdef _DEBUG
     printf("[RadiusDescription] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -87,7 +87,7 @@ void RemoveRadiusDescriptionCleanup() { RemoveHook(&g_hookCleanup); }
 
 void InstallRadiusDescriptionCreateInPlace() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14000ba50);
-    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 14);
+    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 15);
 #ifdef _DEBUG
     printf("[RadiusDescription] CreateInPlace hooked at %p\n", (void*)target);
 #endif

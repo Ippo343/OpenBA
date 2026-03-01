@@ -199,7 +199,7 @@ static void ResolveHelpers() {
 void InstallCompleteTaskSerialize() {
     ResolveHelpers();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c5be0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[CompleteTask] Serialize hooked at %p\n", (void*)target);
 #endif

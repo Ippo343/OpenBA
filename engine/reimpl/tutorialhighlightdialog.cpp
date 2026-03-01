@@ -52,7 +52,7 @@ static void Reimpl_Startup(void* self) {
 
 void InstallTutorialHighlightDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140027910);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[TutorialHighlightDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif

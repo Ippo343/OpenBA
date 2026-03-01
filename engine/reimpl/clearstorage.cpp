@@ -164,7 +164,7 @@ void RemoveClearStorageSlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallClearStorageSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e72a0);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 16);
 #ifdef _DEBUG
     printf("[ClearStorage] Slot8 hooked at %p (passthrough)\n", (void*)target);
 #endif

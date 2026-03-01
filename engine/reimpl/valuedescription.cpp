@@ -69,7 +69,7 @@ void RemoveValueDescriptionDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallValueDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14005cd60);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[ValueDescription] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -78,7 +78,7 @@ void RemoveValueDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallValueDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14000fb80);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
 #ifdef _DEBUG
     printf("[ValueDescription] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -87,7 +87,7 @@ void RemoveValueDescriptionCleanup() { RemoveHook(&g_hookCleanup); }
 
 void InstallValueDescriptionCreateInPlace() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14000fb10);
-    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 14);
+    InstallHook(target, (void*)Reimpl_CreateInPlace, &g_hookCreateInPlace, 15);
 #ifdef _DEBUG
     printf("[ValueDescription] CreateInPlace hooked at %p\n", (void*)target);
 #endif

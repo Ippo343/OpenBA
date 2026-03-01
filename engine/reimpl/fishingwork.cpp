@@ -136,7 +136,7 @@ void RemoveFishingWorkSlot7() { RemoveHook(&g_hookSlot7); }
 
 void InstallFishingWorkSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400ea830);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 15);
 #ifdef _DEBUG
     printf("[FishingWork] Slot8 hooked at %p (passthrough)\n", (void*)target);
 #endif

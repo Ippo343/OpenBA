@@ -163,7 +163,7 @@ void RemoveTradeWorkSlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallTradeWorkSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f6be0);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 15);
 #ifdef _DEBUG
     printf("[TradeWork] Slot8 hooked at %p (passthrough)\n", (void*)target);
 #endif

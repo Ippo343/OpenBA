@@ -177,7 +177,7 @@ void RemoveTendAreaSlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallTendAreaSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5830);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 15);
 #ifdef _DEBUG
     printf("[TendArea] Slot8 hooked at %p (passthrough)\n", (void*)target);
 #endif

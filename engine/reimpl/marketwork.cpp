@@ -123,8 +123,8 @@ void RemoveMarketWorkSlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallMarketWorkSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f1ca0);
-    // Prologue: MOV [RSP+0x8],RBX(5) + PUSH RDI(2) + SUB RSP,0x20(4) + MOV RDI,RCX(3) = 14
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    // Prologue: MOV [RSP+0x8],RBX(5) + PUSH RDI(2) + SUB RSP,0x20(4) + MOV RDI,RCX(3) = 14 -> corrected to 15
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 15);
 #ifdef _DEBUG
     printf("[MarketWork] Slot8 hooked at %p (passthrough)\n", (void*)target);
 #endif

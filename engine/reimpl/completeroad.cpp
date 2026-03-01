@@ -106,7 +106,7 @@ static void ResolveHelpers() {
 void InstallCompleteRoadSerialize() {
     ResolveHelpers();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c5880);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[CompleteRoad] Serialize hooked at %p\n", (void*)target);
 #endif

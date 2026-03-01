@@ -171,7 +171,7 @@ static bool Reimpl_GetTarget(void* self, void** param) {
 
 void InstallRemoveAnimalSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400ca870);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[RemoveAnimal] Serialize hooked at %p\n", (void*)target);
 #endif

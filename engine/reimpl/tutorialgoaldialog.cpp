@@ -73,7 +73,8 @@ static void* Reimpl_OnDestroy(void* self) {
 
 void InstallTutorialGoalDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140027590);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    // Prologue: MOV [rsp+8],rcx(5) + PUSH RDI(1) + SUB RSP,0x30(4) + MOV qword,-2(9) = 19
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[TutorialGoalDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif
@@ -82,7 +83,8 @@ void RemoveTutorialGoalDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallTutorialGoalDialogShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400defd0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
+    // Prologue: PUSH RDI(2) + SUB RSP,0x50(4) + MOV qword,-2(9) = 15
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[TutorialGoalDialog] Shutdown hooked at %p\n", (void*)target);
 #endif
@@ -91,7 +93,8 @@ void RemoveTutorialGoalDialogShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallTutorialGoalDialogOnEvent() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140027520);
-    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 14);
+    // Prologue: PUSH RBX(2) + SUB RSP,0x30(4) + MOV qword,-2(9) = 15
+    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 15);
 #ifdef _DEBUG
     printf("[TutorialGoalDialog] OnEvent hooked at %p\n", (void*)target);
 #endif
@@ -109,7 +112,8 @@ void RemoveTutorialGoalDialogOnInit() { RemoveHook(&g_hookOnInit); }
 
 void InstallTutorialGoalDialogOnDestroy() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400274b0);
-    InstallHook(target, (void*)Reimpl_OnDestroy, &g_hookOnDestroy, 14);
+    // Prologue: PUSH RBX(2) + SUB RSP,0x30(4) + MOV qword,-2(9) = 15
+    InstallHook(target, (void*)Reimpl_OnDestroy, &g_hookOnDestroy, 15);
 #ifdef _DEBUG
     printf("[TutorialGoalDialog] OnDestroy hooked at %p\n", (void*)target);
 #endif

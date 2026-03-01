@@ -161,8 +161,8 @@ void RemoveFireWorkSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallFireWorkSlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e9620);
-    // Prologue: MOV [RSP+0x18],R8(5) + MOV [RSP+0x10],RDX(5) + PUSH RBP(2) + PUSH RBX(2) = 14
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 14);
+    // Prologue: MOV [RSP+0x18],R8(5) + MOV [RSP+0x10],RDX(5) + PUSH RBP(2) + PUSH RBX(2) = 14 -> corrected to 15
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
 #ifdef _DEBUG
     printf("[FireWork] Slot4 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -183,8 +183,8 @@ void RemoveFireWorkSlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallFireWorkSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e99a0);
-    // Prologue: MOV [RSP+0x8],RBX(5) + PUSH RDI(2) + SUB RSP,0x20(4) + MOV RDI,RCX(3) = 14
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    // Prologue: MOV [RSP+0x8],RBX(5) + PUSH RDI(2) + SUB RSP,0x20(4) + MOV RDI,RCX(3) = 14 -> corrected to 16
+    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 16);
 #ifdef _DEBUG
     printf("[FireWork] Slot8 hooked at %p (passthrough)\n", (void*)target);
 #endif

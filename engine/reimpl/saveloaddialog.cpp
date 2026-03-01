@@ -76,7 +76,7 @@ void RemoveSaveLoadDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallSaveLoadDialogStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400b7d00);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 14);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 15);
 #ifdef _DEBUG
     printf("[SaveLoadDialog] Startup hooked at %p\n", (void*)target);
 #endif

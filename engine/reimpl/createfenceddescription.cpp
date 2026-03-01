@@ -63,7 +63,7 @@ void RemoveCreateFencedDescriptionDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallCreateFencedDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400478f0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[CreateFencedDescription] Serialize hooked at %p\n", (void*)target);
 #endif

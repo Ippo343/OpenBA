@@ -91,7 +91,7 @@ static void Reimpl_OnButton3(void* self) {
 
 void InstallOptionInputBindDialogScalarDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140012f80);
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 14);
+    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
 #ifdef _DEBUG
     printf("[OptionInputBindDialog] ScalarDtor hooked at %p\n", (void*)target);
 #endif
