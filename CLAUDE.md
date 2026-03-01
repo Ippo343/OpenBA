@@ -10,7 +10,7 @@ The end goal is a readable C++ codebase that mirrors the game's logic and can be
 
 1. Hit 100% mapping of all classes in Application-x64.exe
 2. Hit 100% mapping of all types in Application-x64.exe
-3. Hit 100% replacement of exe code with cleaned up decomp of all functions in msvc
+3. Hit 100% deep reimplementation of exe code with cleaned up decomp of all functions in msvc
 4. Build new exe with all of our code, swap in, use pre-existing runtime and dx dlls.
 5. Then move onto dlls last once solified main core exe
 

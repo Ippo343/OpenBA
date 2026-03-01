@@ -32,9 +32,9 @@ static HookInfo g_hookSlot6;
 // Original function typedefs
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot3_t)(void* self);
-typedef void  (*fn_Slot4_t)(void* self);
-typedef void  (*fn_Slot5_t)(void* self);
+typedef void  (*fn_Slot3_t)(void* self, void* stream);
+typedef void  (*fn_Slot4_t)(void* self, void* p2, void* p3);
+typedef void  (*fn_Slot5_t)(void* self, void* p2, void* p3, void* p4);
 typedef void  (*fn_Slot6_t)(void* self);
 
 // ============================================================
@@ -44,16 +44,16 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-static void Reimpl_Slot3(void* self) {
-    ((fn_Slot3_t)g_hookSlot3.trampoline)(self);
+static void Reimpl_Slot3(void* self, void* stream) {
+    ((fn_Slot3_t)g_hookSlot3.trampoline)(self, stream);
 }
 
-static void Reimpl_Slot4(void* self) {
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+static void Reimpl_Slot4(void* self, void* p2, void* p3) {
+    ((fn_Slot4_t)g_hookSlot4.trampoline)(self, p2, p3);
 }
 
-static void Reimpl_Slot5(void* self) {
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
+static void Reimpl_Slot5(void* self, void* p2, void* p3, void* p4) {
+    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, p2, p3, p4);
 }
 
 static void Reimpl_Slot6(void* self) {

@@ -38,7 +38,7 @@ static HookInfo g_hookSlot8;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 typedef uint32_t (*fn_Slot3_t)(void* self);
-typedef void  (*fn_Slot5_t)(void* self);
+typedef void  (*fn_Slot5_t)(void* self, void* stream);
 typedef void  (*fn_Slot6_t)(void* self);
 typedef void  (*fn_Slot8_t)(void* self);
 
@@ -53,8 +53,8 @@ static uint32_t Reimpl_Slot3(void* self) {
     return ((fn_Slot3_t)g_hookSlot3.trampoline)(self);
 }
 
-static void Reimpl_Slot5(void* self) {
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
+static void Reimpl_Slot5(void* self, void* stream) {
+    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {

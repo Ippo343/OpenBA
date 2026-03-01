@@ -2108,7 +2108,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- BuildComponent ---
     { "BuildComponent::Shutdown", InstallBuildComponentShutdown, RemoveBuildComponentShutdown, true },
-    { "BuildComponent::Draw", InstallBuildComponentDraw, RemoveBuildComponentDraw, true },
+    { "BuildComponent::Draw", InstallBuildComponentDraw, RemoveBuildComponentDraw, false }, // RIP-relative in prologue
     { "BuildComponent::OnCreate", InstallBuildComponentOnCreate, RemoveBuildComponentOnCreate, true },
 
     // --- CemeteryComponent ---
@@ -2203,7 +2203,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- NomadComponent ---
     { "NomadComponent::Shutdown", InstallNomadComponentShutdown, RemoveNomadComponentShutdown, true },
-    { "NomadComponent::OnCreate", InstallNomadComponentOnCreate, RemoveNomadComponentOnCreate, true },
+    { "NomadComponent::OnCreate", InstallNomadComponentOnCreate, RemoveNomadComponentOnCreate, false }, // RIP-relative in prologue
 
     // --- OrchardComponent ---
     { "OrchardComponent::Shutdown", InstallOrchardComponentShutdown, RemoveOrchardComponentShutdown, true },
@@ -2343,7 +2343,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ClearStorage::Slot6", InstallClearStorageSlot6, RemoveClearStorageSlot6, true },
     { "ClearStorage::Slot8", InstallClearStorageSlot8, RemoveClearStorageSlot8, true },
     { "ClearStorage::Slot9", InstallClearStorageSlot9, RemoveClearStorageSlot9, true },
-    { "ClearStorage::Slot10", InstallClearStorageSlot10, RemoveClearStorageSlot10, true },
+    { "ClearStorage::Slot10", InstallClearStorageSlot10, RemoveClearStorageSlot10, false }, // RIP-relative in prologue
 
     // --- CompleteRoad ---
     { "CompleteRoad::Serialize", InstallCompleteRoadSerialize, RemoveCompleteRoadSerialize, true },
@@ -2496,7 +2496,7 @@ static ReimplEntry g_reimplementations[] = {
     { "Pickup::Slot7", InstallPickupSlot7, RemovePickupSlot7, true },
     { "Pickup::Slot8", InstallPickupSlot8, RemovePickupSlot8, true },
     { "Pickup::Slot9", InstallPickupSlot9, RemovePickupSlot9, true },
-    { "Pickup::Slot10", InstallPickupSlot10, RemovePickupSlot10, true },
+    { "Pickup::Slot10", InstallPickupSlot10, RemovePickupSlot10, false }, // RIP-relative in prologue
 
     // --- PickupRawMaterial ---
     { "PickupRawMaterial::Serialize", InstallPickupRawMaterialSerialize, RemovePickupRawMaterialSerialize, true },
@@ -2568,7 +2568,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- AttendanceUI ---
     { "AttendanceUI::Dtor", InstallAttendanceUIDtor, RemoveAttendanceUIDtor, true },
-    { "AttendanceUI::Slot4", InstallAttendanceUISlot4, RemoveAttendanceUISlot4, true },
+    { "AttendanceUI::Slot4", InstallAttendanceUISlot4, RemoveAttendanceUISlot4, false }, // RIP-relative in prologue
     { "AttendanceUI::Slot7", InstallAttendanceUISlot7, RemoveAttendanceUISlot7, true },
 
     // --- BuildRequirementUI ---
@@ -2583,7 +2583,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- CemeteryUI ---
     { "CemeteryUI::Dtor", InstallCemeteryUIDtor, RemoveCemeteryUIDtor, true },
-    { "CemeteryUI::Slot4", InstallCemeteryUISlot4, RemoveCemeteryUISlot4, true },
+    { "CemeteryUI::Slot4", InstallCemeteryUISlot4, RemoveCemeteryUISlot4, false }, // RIP-relative in prologue
     { "CemeteryUI::Slot7", InstallCemeteryUISlot7, RemoveCemeteryUISlot7, true },
 
     // --- CitizenUI ---
@@ -2616,7 +2616,7 @@ static ReimplEntry g_reimplementations[] = {
     { "DebugUI::Dtor", InstallDebugUIDtor, RemoveDebugUIDtor, true },
     { "DebugUI::Slot4", InstallDebugUISlot4, RemoveDebugUISlot4, true },
     { "DebugUI::Slot7", InstallDebugUISlot7, RemoveDebugUISlot7, true },
-    { "DebugUI::Slot8", InstallDebugUISlot8, RemoveDebugUISlot8, true },
+    { "DebugUI::Slot8", InstallDebugUISlot8, RemoveDebugUISlot8, false }, // RIP-relative in prologue
     { "DebugUI::Slot9", InstallDebugUISlot9, RemoveDebugUISlot9, true },
 
     // --- DestroyUI ---
@@ -2631,7 +2631,7 @@ static ReimplEntry g_reimplementations[] = {
     { "EntityUI::Slot6", InstallEntityUISlot6, RemoveEntityUISlot6, true },
     { "EntityUI::Slot7", InstallEntityUISlot7, RemoveEntityUISlot7, true },
     { "EntityUI::Slot8", InstallEntityUISlot8, RemoveEntityUISlot8, true },
-    { "EntityUI::Slot9", InstallEntityUISlot9, RemoveEntityUISlot9, true },
+    { "EntityUI::Slot9", InstallEntityUISlot9, RemoveEntityUISlot9, false }, // RIP-relative in prologue
 
     // --- EventLogUI ---
     { "EventLogUI::Dtor", InstallEventLogUIDtor, RemoveEventLogUIDtor, true },
@@ -2661,7 +2661,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- MapUI ---
     { "MapUI::Dtor", InstallMapUIDtor, RemoveMapUIDtor, true },
-    { "MapUI::Slot4", InstallMapUISlot4, RemoveMapUISlot4, true },
+    { "MapUI::Slot4", InstallMapUISlot4, RemoveMapUISlot4, false }, // RIP-relative in prologue
     { "MapUI::Slot9", InstallMapUISlot9, RemoveMapUISlot9, true },
 
     // --- ModBrowseUI ---
@@ -2776,7 +2776,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TradeUI::ScalarDtor", InstallTradeUIScalarDtor, RemoveTradeUIScalarDtor, true },
     { "TradeUI::Serialize", InstallTradeUISerialize, RemoveTradeUISerialize, true },
     { "TradeUI::Draw", InstallTradeUIDraw, RemoveTradeUIDraw, true },
-    { "TradeUI::Slot6", InstallTradeUISlot6, RemoveTradeUISlot6, true },
+    { "TradeUI::Slot6", InstallTradeUISlot6, RemoveTradeUISlot6, false }, // RIP-relative in prologue
     { "TradeUI::Startup", InstallTradeUIStartup, RemoveTradeUIStartup, true },
     { "TradeUI::OnCreate", InstallTradeUIOnCreate, RemoveTradeUIOnCreate, true },
     { "TradeUI::OnRemove", InstallTradeUIOnRemove, RemoveTradeUIOnRemove, true },
@@ -2867,11 +2867,11 @@ static ReimplEntry g_reimplementations[] = {
     { "AchievementDialog::Slot6", InstallAchievementDialogSlot6, RemoveAchievementDialogSlot6, true },
     { "AchievementDialog::Slot8", InstallAchievementDialogSlot8, RemoveAchievementDialogSlot8, true },
     { "AchievementDialog::Slot10", InstallAchievementDialogSlot10, RemoveAchievementDialogSlot10, true },
-    { "AchievementDialog::Slot14", InstallAchievementDialogSlot14, RemoveAchievementDialogSlot14, true },
+    { "AchievementDialog::Slot14", InstallAchievementDialogSlot14, RemoveAchievementDialogSlot14, false }, // RIP-relative in prologue
     { "AchievementDialog::Slot17", InstallAchievementDialogSlot17, RemoveAchievementDialogSlot17, true },
     // --- AutoSaveDialog ---
     { "AutoSaveDialog::Dtor", InstallAutoSaveDialogDtor, RemoveAutoSaveDialogDtor, true },
-    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, true },
+    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, false }, // RIP-relative in prologue
     { "AutoSaveDialog::Slot7", InstallAutoSaveDialogSlot7, RemoveAutoSaveDialogSlot7, true },
     // --- EventPopupDialog ---
     { "EventPopupDialog::Dtor", InstallEventPopupDialogDtor, RemoveEventPopupDialogDtor, true },
@@ -2885,7 +2885,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- GoalDialog ---
     { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },
     { "GoalDialog::Slot4", InstallGoalDialogSlot4, RemoveGoalDialogSlot4, true },
-    { "GoalDialog::Slot6", InstallGoalDialogSlot6, RemoveGoalDialogSlot6, true },
+    { "GoalDialog::Slot6", InstallGoalDialogSlot6, RemoveGoalDialogSlot6, false }, // RIP-relative in prologue
     { "GoalDialog::Slot8", InstallGoalDialogSlot8, RemoveGoalDialogSlot8, true },
     // --- LoaderDialog ---
     { "LoaderDialog::Dtor", InstallLoaderDialogDtor, RemoveLoaderDialogDtor, true },
@@ -2968,13 +2968,13 @@ static ReimplEntry g_reimplementations[] = {
     { "EnvironmentDesc::Serialize", InstallEnvironmentDescriptionSerialize, RemoveEnvironmentDescriptionSerialize, true },
     { "EnvironmentDesc::Cleanup", InstallEnvironmentDescriptionCleanup, RemoveEnvironmentDescriptionCleanup, true },
     { "CaptureBoxDesc::Dtor", InstallCaptureBoxDescriptionDtor, RemoveCaptureBoxDescriptionDtor, true },
-    { "CaptureBoxDesc::Slot3", InstallCaptureBoxDescriptionSlot3, RemoveCaptureBoxDescriptionSlot3, true },
+    { "CaptureBoxDesc::Slot3", InstallCaptureBoxDescriptionSlot3, RemoveCaptureBoxDescriptionSlot3, false }, // RIP-relative in prologue
     { "CaptureBoxDesc::Serialize", InstallCaptureBoxDescriptionSerialize, RemoveCaptureBoxDescriptionSerialize, true },
     { "CaptureBoxDesc::Cleanup", InstallCaptureBoxDescriptionCleanup, RemoveCaptureBoxDescriptionCleanup, true },
     { "CaptureBoxDesc::CreateElement", InstallCaptureBoxDescriptionCreateElement, RemoveCaptureBoxDescriptionCreateElement, true },
     { "CaptureBoxDesc::CreateInPlace", InstallCaptureBoxDescriptionCreateInPlace, RemoveCaptureBoxDescriptionCreateInPlace, true },
     { "FrustumOutlineDesc::Dtor", InstallFrustumOutlineDescriptionDtor, RemoveFrustumOutlineDescriptionDtor, true },
-    { "FrustumOutlineDesc::Slot3", InstallFrustumOutlineDescriptionSlot3, RemoveFrustumOutlineDescriptionSlot3, true },
+    { "FrustumOutlineDesc::Slot3", InstallFrustumOutlineDescriptionSlot3, RemoveFrustumOutlineDescriptionSlot3, false }, // RIP-relative in prologue
     { "FrustumOutlineDesc::Serialize", InstallFrustumOutlineDescriptionSerialize, RemoveFrustumOutlineDescriptionSerialize, true },
     { "FrustumOutlineDesc::Cleanup", InstallFrustumOutlineDescriptionCleanup, RemoveFrustumOutlineDescriptionCleanup, true },
     { "FrustumOutlineDesc::CreateElement", InstallFrustumOutlineDescriptionCreateElement, RemoveFrustumOutlineDescriptionCreateElement, true },
@@ -3061,7 +3061,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialGoalGameSpeed::Dtor", InstallTutorialGoalGameSpeedDtor, RemoveTutorialGoalGameSpeedDtor, true },
     { "TutorialGoalGameSpeed::Serialize", InstallTutorialGoalGameSpeedSerialize, RemoveTutorialGoalGameSpeedSerialize, true },
     { "TutorialGoalGameSpeed::Cleanup", InstallTutorialGoalGameSpeedCleanup, RemoveTutorialGoalGameSpeedCleanup, true },
-    { "TutorialGoalGameSpeed::Slot8", InstallTutorialGoalGameSpeedSlot8, RemoveTutorialGoalGameSpeedSlot8, true },
+    { "TutorialGoalGameSpeed::Slot8", InstallTutorialGoalGameSpeedSlot8, RemoveTutorialGoalGameSpeedSlot8, false }, // RIP-relative in prologue
     { "TutorialGoalGameSpeed::Ctor", InstallTutorialGoalGameSpeedCtor, RemoveTutorialGoalGameSpeedCtor, true },
     { "TutorialImage::Dtor", InstallTutorialImageDtor, RemoveTutorialImageDtor, true },
     { "TutorialImage::Serialize", InstallTutorialImageSerialize, RemoveTutorialImageSerialize, true },
@@ -3090,18 +3090,18 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialSetupCamera::Dtor", InstallTutorialSetupCameraDtor, RemoveTutorialSetupCameraDtor, true },
     { "TutorialSetupCamera::Serialize", InstallTutorialSetupCameraSerialize, RemoveTutorialSetupCameraSerialize, true },
     { "TutorialSetupCamera::Cleanup", InstallTutorialSetupCameraCleanup, RemoveTutorialSetupCameraCleanup, true },
-    { "TutorialSetupCamera::Slot8", InstallTutorialSetupCameraSlot8, RemoveTutorialSetupCameraSlot8, true },
+    { "TutorialSetupCamera::Slot8", InstallTutorialSetupCameraSlot8, RemoveTutorialSetupCameraSlot8, false }, // RIP-relative in prologue
     { "TutorialSetupCamera::Ctor", InstallTutorialSetupCameraCtor, RemoveTutorialSetupCameraCtor, true },
     { "TutorialSetupGameSpeed::Dtor", InstallTutorialSetupGameSpeedDtor, RemoveTutorialSetupGameSpeedDtor, true },
     { "TutorialSetupGameSpeed::Serialize", InstallTutorialSetupGameSpeedSerialize, RemoveTutorialSetupGameSpeedSerialize, true },
     { "TutorialSetupGameSpeed::Cleanup", InstallTutorialSetupGameSpeedCleanup, RemoveTutorialSetupGameSpeedCleanup, true },
-    { "TutorialSetupGameSpeed::Slot8", InstallTutorialSetupGameSpeedSlot8, RemoveTutorialSetupGameSpeedSlot8, true },
+    { "TutorialSetupGameSpeed::Slot8", InstallTutorialSetupGameSpeedSlot8, RemoveTutorialSetupGameSpeedSlot8, false }, // RIP-relative in prologue
     { "TutorialSetupGameSpeed::Ctor", InstallTutorialSetupGameSpeedCtor, RemoveTutorialSetupGameSpeedCtor, true },
     { "TutorialSetupRestrictPlayer::Dtor", InstallTutorialSetupRestrictPlayerDtor, RemoveTutorialSetupRestrictPlayerDtor, true },
     { "TutorialSetupRestrictPlayer::Serialize", InstallTutorialSetupRestrictPlayerSerialize, RemoveTutorialSetupRestrictPlayerSerialize, true },
     { "TutorialSetupRestrictPlayer::Cleanup", InstallTutorialSetupRestrictPlayerCleanup, RemoveTutorialSetupRestrictPlayerCleanup, true },
     { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, true },
-    { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, true },
+    { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, false }, // RIP-relative in prologue
     { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, true },
     { "TutorialStep::Dtor", InstallTutorialStepDtor, RemoveTutorialStepDtor, true },
     { "TutorialStep::Serialize", InstallTutorialStepSerialize, RemoveTutorialStepSerialize, true },
@@ -3119,7 +3119,7 @@ static ReimplEntry g_reimplementations[] = {
     { "PopulationGoal::Dtor", InstallPopulationGoalDtor, RemovePopulationGoalDtor, true },
     { "PopulationGoal::Slot5", InstallPopulationGoalSlot5, RemovePopulationGoalSlot5, true },
     { "PopulationGoal::Slot6", InstallPopulationGoalSlot6, RemovePopulationGoalSlot6, true },
-    { "PopulationGoal::Slot8", InstallPopulationGoalSlot8, RemovePopulationGoalSlot8, true },
+    { "PopulationGoal::Slot8", InstallPopulationGoalSlot8, RemovePopulationGoalSlot8, false }, // RIP-relative in prologue
     { "PopulationGoal::Slot10", InstallPopulationGoalSlot10, RemovePopulationGoalSlot10, true },
     { "FinishTutorialGoal::Dtor", InstallFinishTutorialGoalDtor, RemoveFinishTutorialGoalDtor, true },
     { "FinishTutorialGoal::Slot5", InstallFinishTutorialGoalSlot5, RemoveFinishTutorialGoalSlot5, true },
@@ -3179,7 +3179,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ProfessionList::Slot6", InstallProfessionListSlot6, RemoveProfessionListSlot6, true },
     { "ProfessionList::Slot8", InstallProfessionListSlot8, RemoveProfessionListSlot8, true },
     { "Scenario::Dtor", InstallScenarioDtor, RemoveScenarioDtor, true },
-    { "Scenario::Slot3", InstallScenarioSlot3, RemoveScenarioSlot3, true },
+    { "Scenario::Slot3", InstallScenarioSlot3, RemoveScenarioSlot3, false }, // RIP-relative call in prologue — trampoline crashes
     { "Scenario::Slot5", InstallScenarioSlot5, RemoveScenarioSlot5, true },
     { "Scenario::Slot6", InstallScenarioSlot6, RemoveScenarioSlot6, true },
     { "Scenario::Slot8", InstallScenarioSlot8, RemoveScenarioSlot8, true },
