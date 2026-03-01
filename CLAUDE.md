@@ -6,13 +6,22 @@ functions with clean, readable C++ source code**. Each decompiled function gets 
 binary-compatible type header and a reimplementation that hooks the original at runtime.
 The end goal is a readable C++ codebase that mirrors the game's logic and can be generatedyeah et into a replacement exe, similar to projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
-## Current project goals:
+## Current Phase: Deep Reimplementation
 
-1. Hit 100% mapping of all classes in Application-x64.exe
-2. Hit 100% mapping of all types in Application-x64.exe
-3. Hit 100% deep reimplementation of exe code with cleaned up decomp of all functions in msvc
-4. Build new exe with all of our code, swap in, use pre-existing runtime and dx dlls.
-5. Then move onto dlls last once solified main core exe
+All 232 exe classes are covered with passthrough hooks (659 enabled, 132 disabled).
+Now converting passthroughs to real C++ game logic, module by module.
+
+### Goals (in order):
+1. **Deep reimplementation** — convert all passthrough wrappers in `engine/reimpl/` to real C++ in `engine/src/`, organized by module. Decompile each function in Ghidra, write clean C++ equivalent.
+2. **Standalone exe** — once all game logic is in `engine/src/`, compile it as a replacement Application-x64.exe that links against Runtime-x64.dll + VideoDX11-x64.dll.
+3. **Runtime DLL** — after the exe is solid, start reimplementing Runtime-x64.dll functions.
+
+### Module priority for deep reimpl:
+1. **Components with Update** — CitizenAI, Citizen, StateMachine, Character, Animal, Herd, etc. (highest gameplay impact, some already partially done)
+2. **Actions & Work** — StateMachine action/work classes (citizen behavior)
+3. **Game systems** — Weather, Scenario, WorldGen, Tutorial, Achievement
+4. **UI** — Dialogs and Panels (mostly data binding, lower priority)
+5. **Tools** — Placement/building tools
 
 ## Target Binaries
 
@@ -118,14 +127,39 @@ mingw32-make undeploy  # remove from Banished directory
 mingw32-make clean     # remove build artifacts
 ```
 
-### Reimplementation Workflow (per function)
+### Deep Reimplementation Workflow (per function)
 1. **Decompile** in Ghidra → rename, annotate, document struct layout
-2. **Type header** — add binary-compatible struct in `engine/types/` with `static_assert` on every field offset
+2. **Type header** — add/update binary-compatible struct in `engine/types/` with `static_assert` on every field offset
 3. **Resolve deps** — add any engine functions the reimpl needs to `engine/funcs/engine_funcs.h`
-4. **Reimplement** — write clean C++ in `engine/reimpl/`, hook original via `InstallHook`
-5. **Register** — add `ReimplEntry` to the table in `hooks.cpp` (extern-declare Install/Remove in hooks.cpp)
+4. **Write clean C++** in `engine/src/<module>/` (e.g., `engine/src/components/animal.cpp`)
+5. **Update hook wrapper** in `engine/reimpl/` to call the clean src function instead of trampoline
 6. **Test** — `mingw32-make deploy`, launch game, read `C:/GOG Games/Banished/patch_debug.log` for debug output
-7. **Enable incrementally** — start with `enabled=true` for the core function, `false` for others. Flip on one at a time.
+
+### Code Organization (two-layer architecture)
+```
+engine/src/          — Clean game logic (future standalone exe source)
+  components/        — ECS components (60 classes: AI, economy, building, etc.)
+  actions/           — StateMachine actions (17 classes: MoveTo, PerformWork, etc.)
+  work/              — Work classes (18 classes: BuildRoad, FishingWork, etc.)
+  ui/                — UI dialogs + panels (61 classes)
+  tools/             — Placement tools (12 classes: BridgeTool, RoadTool, etc.)
+  systems/           — Tutorial, Achievement, WorldGen, Weather, Scenario
+  core/              — ComponentEntity, Profession, ProfessionList
+
+engine/reimpl/       — Hook wrappers (thin, delegate to engine/src/ or trampoline)
+engine/types/        — Binary-compatible struct definitions (142 headers)
+engine/funcs/        — Resolved engine function pointers
+```
+
+The reimpl layer is temporary scaffolding. As each function gets a real implementation
+in engine/src/, the reimpl wrapper switches from calling the trampoline to calling
+the clean code. When ALL functions are reimplemented, engine/src/ compiles as a
+standalone exe without the reimpl/hooks layer.
+
+### Adding a new passthrough hook (for completeness)
+1. **Reimplement** — passthrough wrapper in `engine/reimpl/`, calls trampoline
+2. **Register** — add `ReimplEntry` to the table in `hooks.cpp` (extern-declare Install/Remove)
+3. **Test** — `mingw32-make deploy`, launch game, check crash log
 
 ### Address Resolution
 - `ResolveAddr(Module::Exe, ghidra_addr)` — exe addresses (base 0x140000000)
@@ -165,9 +199,23 @@ static bool Reimpl(MainLoop* self, bool drawOnly) {
 - **MSVC mangled names**: Always verify against actual DLL exports using Ghidra `search_functions`. Access specifier matters: `QEAA` = public, `AEAA` = private. Return type matters: `X` = void, `_N` = bool. The `@1@` backreference means "same name as class" (e.g., `Application::Application`).
 - **Null function pointers**: `ResolveExport()` returns NULL if the mangled name is wrong. Always null-check function pointers before calling, or the game crashes with no useful error.
 - **Ghidra decompilation quirks**: `this[0x19]` in Ghidra output means byte access at offset 0x19, NOT array indexing. Empty `do {} while` loops are usually decompiler artifacts for simple conditionals. Missing function arguments in virtual calls are common (Ghidra loses `this` pointer tracking).
+- **Ghidra ADD vs dereference**: `ADD RCX, 0x48` is pointer arithmetic (passes address of field), NOT `MOV RCX, [RCX+0x48]` (dereference). Critical distinction — getting this wrong passes the wrong pointer level (e.g., StateMachineComponent::Update).
 - **Hook chaining**: When multiple MainLoop methods are hooked, calling one from another through the resolved runtime address correctly chains through hooks. Frame calls Update/Draw via `g_addr_Update`/`g_addr_Draw` — if those are hooked, our reimpl runs; if not, the original runs.
 - **Virtual call helpers**: Use typed inline wrappers (e.g., `VCall_Update`, `VCall_Draw`) for UpdateLoop vtable calls. Explicit `this` pointer as first arg, correct Win64 parameter types.
 - **Engine sub-objects**: EngineInstance (at `MainLoop::m_engine`) holds pointers to subsystems at fixed offsets: `+0x690` = Application, `+0x6d0` = Audio::Device, `+0x6e0` = Input::Device.
+
+### Trampoline Bug Classes (5 discovered)
+Hooks copy N prologue bytes to a trampoline, overwrite original with JMP. See `notes/NOTES030126.md` for full details.
+1. **Split instructions** — prologue size doesn't land on instruction boundary. Fix: verify in Ghidra.
+2. **Relative branches/calls** — PC-relative instructions (JNZ, CALL E8, JMP rel) break when relocated. Fix: disable hook (68 affected).
+3. **RSP captures (MOV RAX/R11,RSP)** — captures wrong RSP value, used for absolute addressing. Fix: disable hook (40 affected).
+4. **RSP-relative stores (MOV [RSP+xx],reg)** — safe for passthroughs (write/read internally consistent). No fix needed.
+5. **RAX clobbered by JMP-back** — trampoline's `MOV RAX, imm64; JMP RAX` overwrites values prologue set in RAX. Fix: changed to `MOV R10; JMP R10`.
+
+### Crash Diagnostics
+- VEH handler catches ACCESS_VIOLATION/ILLEGAL_INSTRUCTION, logs to `patch_debug.log`
+- `g_lastHook` breadcrumb set by every Reimpl_*/Passthrough_* function
+- Combined: instant crash → hook name + fault address + registers + stack trace
 
 ---
 
@@ -318,14 +366,22 @@ untitled_rev_eng_project/
       version.dll                # compiled patch DLL (~288K debug)
       obj/                       # intermediate object files
   engine/
-    types/                       # binary-compatible struct definitions
+    types/                       # binary-compatible struct definitions (142 headers)
       common.h                   # Time, Vector3, PostCallback, forward decls
       MainLoop.h                 # Engine::MainLoop (0xA0 bytes, all offsets verified)
       UpdateLoop.h               # Engine::UpdateLoop base + vtable layout
     funcs/                       # resolved engine function pointers
       engine_funcs.h             # function pointer declarations
       engine_funcs.cpp           # runtime resolution (by name, RVA, or ordinal)
-    reimpl/                      # reimplemented functions (auto-compiled by Makefile)
+    src/                         # clean game logic (future standalone exe)
+      components/                # ECS components (60 classes)
+      actions/                   # StateMachine actions (17 classes)
+      work/                      # Work classes (18 classes)
+      ui/                        # UI dialogs + panels (61 classes)
+      tools/                     # Placement tools (12 classes)
+      systems/                   # Tutorial, Achievement, WorldGen, Weather
+      core/                      # ComponentEntity, Profession, Scenario
+    reimpl/                      # hook wrappers (232 files, auto-compiled by Makefile)
       mainloop.cpp               # Engine::MainLoop (Run, Frame, Update, Draw, SetNextLoop)
   docs/                          # function documentation exports
   notes/                         # daily RE session notes (NOTESMMDDYY.md)

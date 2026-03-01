@@ -1,4 +1,10 @@
-/# Application-x64.exe (Game Logic)
+# Application-x64.exe (Game Logic)
+
+## Status Legend
+- `R` = Fully reimplemented in `engine/src/` (clean C++, no trampoline dependency)
+- `~` = Passthrough hooks active (calls trampoline to original code)
+- `P` = Partially reimplemented (some methods in engine/src/, others passthrough)
+- `-` = Not hooked (too small, abstract, or no need)
 
 ## Engine Core
 

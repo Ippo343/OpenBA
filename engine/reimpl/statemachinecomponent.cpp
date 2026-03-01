@@ -29,8 +29,9 @@ static fn_StateMachine_Tick_t fn_StateMachine_Tick = nullptr;
 
 // ============================================================
 // Update (0x14012b620)
-// Delegates to StateMachine_Tick(this->controllerSelf, dt, true, true).
-// The state machine pointer is at offset +0x48.
+// Delegates to StateMachine_Tick(&this->controllerSelf, dt, true, true).
+// The original uses ADD RCX,0x48 — passes the ADDRESS of the controllerSelf
+// field, not its value. StateMachine_Tick reads through this pointer internally.
 //
 // Parameters: RCX = this, RDX = Time (int64)
 // ============================================================
@@ -40,13 +41,13 @@ static void Reimpl_Update(StateMachineComponent* self, int64_t deltaTime) {
     static int callCount = 0;
     if (callCount < 5) {
         printf("[StateMachineComponent::Update] self=%p dt=%lld stateMachine=%p\n",
-               (void*)self, deltaTime, self->controllerSelf);
+               (void*)self, deltaTime, (void*)&self->controllerSelf);
         callCount++;
     }
 #endif
 
     if (fn_StateMachine_Tick) {
-        fn_StateMachine_Tick(self->controllerSelf, deltaTime, 1, 1);
+        fn_StateMachine_Tick(&self->controllerSelf, deltaTime, 1, 1);
     }
 }
 

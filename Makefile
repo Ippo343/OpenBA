@@ -13,7 +13,7 @@ LDFLAGS = -shared -static-libgcc -static-libstdc++
 LIBS = -luser32 -ldbghelp
 
 # Include paths: project root + all source directories
-INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs
+INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs -Iengine/src
 
 # Directories
 BUILD_DIR = patches/build
@@ -30,10 +30,13 @@ PATCH_SRCS = \
 ENGINE_FUNC_SRCS = \
     engine/funcs/engine_funcs.cpp
 
-# Auto-discover reimplementation files
+# Auto-discover reimplementation files (hook wrappers)
 ENGINE_REIMPL_SRCS = $(wildcard engine/reimpl/*.cpp)
 
-ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS)
+# Auto-discover clean game logic files (future standalone exe source)
+ENGINE_SRC_SRCS = $(wildcard engine/src/*/*.cpp)
+
+ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS) $(ENGINE_SRC_SRCS)
 
 # Object files: flatten paths into OBJ_DIR to avoid collisions
 #   patches/src/dllmain.cpp -> patches/build/obj/patches__src__dllmain.o
@@ -66,6 +69,28 @@ $(OBJ_DIR)/engine__funcs__%.o: engine/funcs/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJ_DIR)/engine__reimpl__%.o: engine/reimpl/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Pattern rules for engine/src subdirectories (clean game logic)
+$(OBJ_DIR)/engine__src__components__%.o: engine/src/components/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/engine__src__actions__%.o: engine/src/actions/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/engine__src__work__%.o: engine/src/work/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/engine__src__ui__%.o: engine/src/ui/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/engine__src__tools__%.o: engine/src/tools/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/engine__src__systems__%.o: engine/src/systems/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/engine__src__core__%.o: engine/src/core/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR):

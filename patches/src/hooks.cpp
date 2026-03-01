@@ -91,11 +91,16 @@ bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t 
     //   those hooks must remain disabled.
     memcpy(info->trampoline, info->original, prologueSize);
 
-    // Append jump back to (target + prologueSize)
+    // Append jump back to (target + prologueSize).
+    // IMPORTANT: Use R10 (not RAX) for the jump. The copied prologue may set RAX
+    // (e.g., MOV RAX,[RCX+0x28] to load a vtable pointer). Using MOV RAX for the
+    // jump-back would clobber that value, causing crashes when the function body
+    // tries to use RAX. R10 is volatile in the Win64 ABI and is never used in
+    // MSVC function prologues, so it's safe to clobber here.
     uint8_t* jmpBack = (uint8_t*)info->trampoline + prologueSize;
-    jmpBack[0] = 0x48; jmpBack[1] = 0xB8; // mov rax, imm64
+    jmpBack[0] = 0x49; jmpBack[1] = 0xBA; // mov r10, imm64
     *(uintptr_t*)(jmpBack + 2) = targetAddr + prologueSize;
-    jmpBack[10] = 0xFF; jmpBack[11] = 0xE0; // jmp rax
+    jmpBack[10] = 0x41; jmpBack[11] = 0xFF; jmpBack[12] = 0xE2; // jmp r10
 
     // Overwrite target with jump to detour (always 12 bytes)
     DWORD oldProtect;
