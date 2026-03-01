@@ -1694,6 +1694,276 @@ extern void RemoveScenarioDialogSlot6();
 extern void InstallScenarioDialogSlot8();
 extern void RemoveScenarioDialogSlot8();
 
+// ====================================================================
+// Phase 5: Descriptions (engine/reimpl/create*description.cpp etc.)
+// ====================================================================
+extern void InstallCreateBridgeDescriptionDtor(); extern void RemoveCreateBridgeDescriptionDtor();
+extern void InstallCreateBridgeDescriptionSerialize(); extern void RemoveCreateBridgeDescriptionSerialize();
+extern void InstallCreateBridgeDescriptionCleanup(); extern void RemoveCreateBridgeDescriptionCleanup();
+extern void InstallCreateDragDescriptionDtor(); extern void RemoveCreateDragDescriptionDtor();
+extern void InstallCreateDragDescriptionSerialize(); extern void RemoveCreateDragDescriptionSerialize();
+extern void InstallCreateDragDescriptionCleanup(); extern void RemoveCreateDragDescriptionCleanup();
+extern void InstallCreateFencedDescriptionDtor(); extern void RemoveCreateFencedDescriptionDtor();
+extern void InstallCreateFencedDescriptionSerialize(); extern void RemoveCreateFencedDescriptionSerialize();
+extern void InstallCreateFencedDescriptionCleanup(); extern void RemoveCreateFencedDescriptionCleanup();
+extern void InstallCreatePathDescriptionDtor(); extern void RemoveCreatePathDescriptionDtor();
+extern void InstallCreatePathDescriptionSerialize(); extern void RemoveCreatePathDescriptionSerialize();
+extern void InstallCreatePathDescriptionCleanup(); extern void RemoveCreatePathDescriptionCleanup();
+extern void InstallCreatePathDescriptionCreateInPlace(); extern void RemoveCreatePathDescriptionCreateInPlace();
+extern void InstallCreatePlacedDescriptionDtor(); extern void RemoveCreatePlacedDescriptionDtor();
+extern void InstallCreatePlacedDescriptionSerialize(); extern void RemoveCreatePlacedDescriptionSerialize();
+extern void InstallCreatePlacedDescriptionCleanup(); extern void RemoveCreatePlacedDescriptionCleanup();
+extern void InstallCreateRemovalDescriptionDtor(); extern void RemoveCreateRemovalDescriptionDtor();
+extern void InstallCreateRemovalDescriptionSerialize(); extern void RemoveCreateRemovalDescriptionSerialize();
+extern void InstallCreateRemovalDescriptionCleanup(); extern void RemoveCreateRemovalDescriptionCleanup();
+extern void InstallCreateRemovalDescriptionCreateInPlace(); extern void RemoveCreateRemovalDescriptionCreateInPlace();
+extern void InstallCreateRoadDescriptionDtor(); extern void RemoveCreateRoadDescriptionDtor();
+extern void InstallCreateRoadDescriptionSerialize(); extern void RemoveCreateRoadDescriptionSerialize();
+extern void InstallCreateRoadDescriptionCleanup(); extern void RemoveCreateRoadDescriptionCleanup();
+extern void InstallCreateRoadDescriptionCreateInPlace(); extern void RemoveCreateRoadDescriptionCreateInPlace();
+extern void InstallRadiusDescriptionDtor(); extern void RemoveRadiusDescriptionDtor();
+extern void InstallRadiusDescriptionSerialize(); extern void RemoveRadiusDescriptionSerialize();
+extern void InstallRadiusDescriptionCleanup(); extern void RemoveRadiusDescriptionCleanup();
+extern void InstallRadiusDescriptionCreateInPlace(); extern void RemoveRadiusDescriptionCreateInPlace();
+extern void InstallSelectDescriptionDtor(); extern void RemoveSelectDescriptionDtor();
+extern void InstallSelectDescriptionSerialize(); extern void RemoveSelectDescriptionSerialize();
+extern void InstallSelectDescriptionCleanup(); extern void RemoveSelectDescriptionCleanup();
+extern void InstallSelectDescriptionCreateInPlace(); extern void RemoveSelectDescriptionCreateInPlace();
+extern void InstallValueDescriptionDtor(); extern void RemoveValueDescriptionDtor();
+extern void InstallValueDescriptionSerialize(); extern void RemoveValueDescriptionSerialize();
+extern void InstallValueDescriptionCleanup(); extern void RemoveValueDescriptionCleanup();
+extern void InstallValueDescriptionCreateInPlace(); extern void RemoveValueDescriptionCreateInPlace();
+extern void InstallToolbarDescriptionDtor(); extern void RemoveToolbarDescriptionDtor();
+extern void InstallToolbarDescriptionSerialize(); extern void RemoveToolbarDescriptionSerialize();
+extern void InstallToolbarDescriptionCleanup(); extern void RemoveToolbarDescriptionCleanup();
+extern void InstallEnvironmentDescriptionDtor(); extern void RemoveEnvironmentDescriptionDtor();
+extern void InstallEnvironmentDescriptionSerialize(); extern void RemoveEnvironmentDescriptionSerialize();
+extern void InstallEnvironmentDescriptionCleanup(); extern void RemoveEnvironmentDescriptionCleanup();
+extern void InstallCaptureBoxDescriptionDtor(); extern void RemoveCaptureBoxDescriptionDtor();
+extern void InstallCaptureBoxDescriptionSlot3(); extern void RemoveCaptureBoxDescriptionSlot3();
+extern void InstallCaptureBoxDescriptionSerialize(); extern void RemoveCaptureBoxDescriptionSerialize();
+extern void InstallCaptureBoxDescriptionCleanup(); extern void RemoveCaptureBoxDescriptionCleanup();
+extern void InstallCaptureBoxDescriptionCreateElement(); extern void RemoveCaptureBoxDescriptionCreateElement();
+extern void InstallCaptureBoxDescriptionCreateInPlace(); extern void RemoveCaptureBoxDescriptionCreateInPlace();
+extern void InstallFrustumOutlineDescriptionDtor(); extern void RemoveFrustumOutlineDescriptionDtor();
+extern void InstallFrustumOutlineDescriptionSlot3(); extern void RemoveFrustumOutlineDescriptionSlot3();
+extern void InstallFrustumOutlineDescriptionSerialize(); extern void RemoveFrustumOutlineDescriptionSerialize();
+extern void InstallFrustumOutlineDescriptionCleanup(); extern void RemoveFrustumOutlineDescriptionCleanup();
+extern void InstallFrustumOutlineDescriptionCreateElement(); extern void RemoveFrustumOutlineDescriptionCreateElement();
+extern void InstallFrustumOutlineDescriptionCreateInPlace(); extern void RemoveFrustumOutlineDescriptionCreateInPlace();
+// UI Elements
+extern void InstallCaptureBoxElementDtor(); extern void RemoveCaptureBoxElementDtor();
+extern void InstallCaptureBoxElementOnCreate(); extern void RemoveCaptureBoxElementOnCreate();
+extern void InstallCaptureBoxElementComputeLayout(); extern void RemoveCaptureBoxElementComputeLayout();
+extern void InstallCaptureBoxElementDraw(); extern void RemoveCaptureBoxElementDraw();
+extern void InstallFrustumOutlineElementDtor(); extern void RemoveFrustumOutlineElementDtor();
+extern void InstallFrustumOutlineElementOnCreate(); extern void RemoveFrustumOutlineElementOnCreate();
+extern void InstallFrustumOutlineElementComputeLayout(); extern void RemoveFrustumOutlineElementComputeLayout();
+extern void InstallFrustumOutlineElementDraw(); extern void RemoveFrustumOutlineElementDraw();
+
+// ====================================================================
+// Phase 5: Tools & Placement
+// ====================================================================
+extern void InstallToolbarDtor(); extern void RemoveToolbarDtor();
+extern void InstallToolbarSerialize(); extern void RemoveToolbarSerialize();
+extern void InstallToolbarCleanup(); extern void RemoveToolbarCleanup();
+extern void InstallRotationSettingDtor(); extern void RemoveRotationSettingDtor();
+extern void InstallDragToolDtor(); extern void RemoveDragToolDtor();
+extern void InstallDragToolOnKey(); extern void RemoveDragToolOnKey();
+extern void InstallBridgeToolDtor(); extern void RemoveBridgeToolDtor();
+extern void InstallBridgeToolStartup(); extern void RemoveBridgeToolStartup();
+extern void InstallBridgeToolCalcPath(); extern void RemoveBridgeToolCalcPath();
+extern void InstallBridgeToolCalcCost(); extern void RemoveBridgeToolCalcCost();
+extern void InstallDragPlacementToolDtor(); extern void RemoveDragPlacementToolDtor();
+extern void InstallDragPlacementToolStartup(); extern void RemoveDragPlacementToolStartup();
+extern void InstallDragPlacementToolDraw(); extern void RemoveDragPlacementToolDraw();
+extern void InstallDragPlacementToolCalcPath(); extern void RemoveDragPlacementToolCalcPath();
+extern void InstallDragPlacementToolCalcCost(); extern void RemoveDragPlacementToolCalcCost();
+extern void InstallEditToolDtor(); extern void RemoveEditToolDtor();
+extern void InstallEditToolOnKey(); extern void RemoveEditToolOnKey();
+extern void InstallEditToolStartup(); extern void RemoveEditToolStartup();
+extern void InstallEditToolSerialize(); extern void RemoveEditToolSerialize();
+extern void InstallFencedToolDtor(); extern void RemoveFencedToolDtor();
+extern void InstallFencedToolStartup(); extern void RemoveFencedToolStartup();
+extern void InstallFencedToolShutdown2(); extern void RemoveFencedToolShutdown2();
+extern void InstallFencedToolOnKey(); extern void RemoveFencedToolOnKey();
+extern void InstallFencedToolSerialize(); extern void RemoveFencedToolSerialize();
+extern void InstallFencedToolDraw(); extern void RemoveFencedToolDraw();
+extern void InstallFencedToolShutdown(); extern void RemoveFencedToolShutdown();
+extern void InstallFencedToolCalcPath(); extern void RemoveFencedToolCalcPath();
+extern void InstallFencedToolCalcCost(); extern void RemoveFencedToolCalcCost();
+extern void InstallPathToolDtor(); extern void RemovePathToolDtor();
+extern void InstallPathToolOnKey(); extern void RemovePathToolOnKey();
+extern void InstallPathToolDraw(); extern void RemovePathToolDraw();
+extern void InstallPathToolSerialize(); extern void RemovePathToolSerialize();
+extern void InstallPlacementToolDtor(); extern void RemovePlacementToolDtor();
+extern void InstallPlacementToolStartup(); extern void RemovePlacementToolStartup();
+extern void InstallPlacementToolShutdown2(); extern void RemovePlacementToolShutdown2();
+extern void InstallPlacementToolOnKey(); extern void RemovePlacementToolOnKey();
+extern void InstallPlacementToolSerialize(); extern void RemovePlacementToolSerialize();
+extern void InstallPlacementToolDraw(); extern void RemovePlacementToolDraw();
+extern void InstallRemovalToolDtor(); extern void RemoveRemovalToolDtor();
+extern void InstallRemovalToolStartup(); extern void RemoveRemovalToolStartup();
+extern void InstallRemovalToolDraw(); extern void RemoveRemovalToolDraw();
+extern void InstallRemovalToolCalcPath(); extern void RemoveRemovalToolCalcPath();
+extern void InstallRemovalToolCalcCost(); extern void RemoveRemovalToolCalcCost();
+extern void InstallRoadToolDtor(); extern void RemoveRoadToolDtor();
+extern void InstallRoadToolStartup(); extern void RemoveRoadToolStartup();
+extern void InstallRoadToolDraw(); extern void RemoveRoadToolDraw();
+
+// ====================================================================
+// Phase 5: Tutorial System
+// ====================================================================
+extern void InstallTutorialDtor(); extern void RemoveTutorialDtor();
+extern void InstallTutorialSerialize(); extern void RemoveTutorialSerialize();
+extern void InstallTutorialCleanup(); extern void RemoveTutorialCleanup();
+extern void InstallTutorialCtor(); extern void RemoveTutorialCtor();
+extern void InstallTutorialGoalDtor(); extern void RemoveTutorialGoalDtor();
+extern void InstallTutorialGoalSerialize(); extern void RemoveTutorialGoalSerialize();
+extern void InstallTutorialGoalButtonDtor(); extern void RemoveTutorialGoalButtonDtor();
+extern void InstallTutorialGoalButtonSerialize(); extern void RemoveTutorialGoalButtonSerialize();
+extern void InstallTutorialGoalButtonCleanup(); extern void RemoveTutorialGoalButtonCleanup();
+extern void InstallTutorialGoalButtonSlot8(); extern void RemoveTutorialGoalButtonSlot8();
+extern void InstallTutorialGoalButtonCtor(); extern void RemoveTutorialGoalButtonCtor();
+extern void InstallTutorialGoalCountDtor(); extern void RemoveTutorialGoalCountDtor();
+extern void InstallTutorialGoalCountSerialize(); extern void RemoveTutorialGoalCountSerialize();
+extern void InstallTutorialGoalCountCleanup(); extern void RemoveTutorialGoalCountCleanup();
+extern void InstallTutorialGoalCountSlot8(); extern void RemoveTutorialGoalCountSlot8();
+extern void InstallTutorialGoalCountCtor(); extern void RemoveTutorialGoalCountCtor();
+extern void InstallTutorialGoalGameSpeedDtor(); extern void RemoveTutorialGoalGameSpeedDtor();
+extern void InstallTutorialGoalGameSpeedSerialize(); extern void RemoveTutorialGoalGameSpeedSerialize();
+extern void InstallTutorialGoalGameSpeedCleanup(); extern void RemoveTutorialGoalGameSpeedCleanup();
+extern void InstallTutorialGoalGameSpeedSlot8(); extern void RemoveTutorialGoalGameSpeedSlot8();
+extern void InstallTutorialGoalGameSpeedCtor(); extern void RemoveTutorialGoalGameSpeedCtor();
+extern void InstallTutorialImageDtor(); extern void RemoveTutorialImageDtor();
+extern void InstallTutorialImageSerialize(); extern void RemoveTutorialImageSerialize();
+extern void InstallTutorialImageCleanup(); extern void RemoveTutorialImageCleanup();
+extern void InstallTutorialImageCtor(); extern void RemoveTutorialImageCtor();
+extern void InstallTutorialImageSlot9(); extern void RemoveTutorialImageSlot9();
+extern void InstallTutorialImageHotKeyDtor(); extern void RemoveTutorialImageHotKeyDtor();
+extern void InstallTutorialImageHotKeySerialize(); extern void RemoveTutorialImageHotKeySerialize();
+extern void InstallTutorialImageHotKeyCleanup(); extern void RemoveTutorialImageHotKeyCleanup();
+extern void InstallTutorialImageHotKeyCtor(); extern void RemoveTutorialImageHotKeyCtor();
+extern void InstallTutorialImageHotKeySlot9(); extern void RemoveTutorialImageHotKeySlot9();
+extern void InstallTutorialImageInputKeyDtor(); extern void RemoveTutorialImageInputKeyDtor();
+extern void InstallTutorialImageInputKeySerialize(); extern void RemoveTutorialImageInputKeySerialize();
+extern void InstallTutorialImageInputKeyCleanup(); extern void RemoveTutorialImageInputKeyCleanup();
+extern void InstallTutorialImageInputKeyCtor(); extern void RemoveTutorialImageInputKeyCtor();
+extern void InstallTutorialImageInputKeySlot9(); extern void RemoveTutorialImageInputKeySlot9();
+extern void InstallTutorialImageToolbarIconDtor(); extern void RemoveTutorialImageToolbarIconDtor();
+extern void InstallTutorialImageToolbarIconSerialize(); extern void RemoveTutorialImageToolbarIconSerialize();
+extern void InstallTutorialImageToolbarIconCleanup(); extern void RemoveTutorialImageToolbarIconCleanup();
+extern void InstallTutorialImageToolbarIconCtor(); extern void RemoveTutorialImageToolbarIconCtor();
+extern void InstallTutorialImageToolbarIconSlot9(); extern void RemoveTutorialImageToolbarIconSlot9();
+extern void InstallTutorialInstanceDtor(); extern void RemoveTutorialInstanceDtor();
+extern void InstallTutorialInstanceSerialize(); extern void RemoveTutorialInstanceSerialize();
+extern void InstallTutorialSetupDtor(); extern void RemoveTutorialSetupDtor();
+extern void InstallTutorialSetupSerialize(); extern void RemoveTutorialSetupSerialize();
+extern void InstallTutorialSetupCameraDtor(); extern void RemoveTutorialSetupCameraDtor();
+extern void InstallTutorialSetupCameraSerialize(); extern void RemoveTutorialSetupCameraSerialize();
+extern void InstallTutorialSetupCameraCleanup(); extern void RemoveTutorialSetupCameraCleanup();
+extern void InstallTutorialSetupCameraSlot8(); extern void RemoveTutorialSetupCameraSlot8();
+extern void InstallTutorialSetupCameraCtor(); extern void RemoveTutorialSetupCameraCtor();
+extern void InstallTutorialSetupGameSpeedDtor(); extern void RemoveTutorialSetupGameSpeedDtor();
+extern void InstallTutorialSetupGameSpeedSerialize(); extern void RemoveTutorialSetupGameSpeedSerialize();
+extern void InstallTutorialSetupGameSpeedCleanup(); extern void RemoveTutorialSetupGameSpeedCleanup();
+extern void InstallTutorialSetupGameSpeedSlot8(); extern void RemoveTutorialSetupGameSpeedSlot8();
+extern void InstallTutorialSetupGameSpeedCtor(); extern void RemoveTutorialSetupGameSpeedCtor();
+extern void InstallTutorialSetupRestrictPlayerDtor(); extern void RemoveTutorialSetupRestrictPlayerDtor();
+extern void InstallTutorialSetupRestrictPlayerSerialize(); extern void RemoveTutorialSetupRestrictPlayerSerialize();
+extern void InstallTutorialSetupRestrictPlayerCleanup(); extern void RemoveTutorialSetupRestrictPlayerCleanup();
+extern void InstallTutorialSetupRestrictPlayerSlot8(); extern void RemoveTutorialSetupRestrictPlayerSlot8();
+extern void InstallTutorialSetupRestrictPlayerSlot10(); extern void RemoveTutorialSetupRestrictPlayerSlot10();
+extern void InstallTutorialSetupRestrictPlayerCtor(); extern void RemoveTutorialSetupRestrictPlayerCtor();
+extern void InstallTutorialStepDtor(); extern void RemoveTutorialStepDtor();
+extern void InstallTutorialStepSerialize(); extern void RemoveTutorialStepSerialize();
+extern void InstallTutorialStepCleanup(); extern void RemoveTutorialStepCleanup();
+extern void InstallTutorialStepInit(); extern void RemoveTutorialStepInit();
+
+// ====================================================================
+// Phase 5: Achievement Goals
+// ====================================================================
+extern void InstallBuildingGoalDtor(); extern void RemoveBuildingGoalDtor();
+extern void InstallBuildingGoalSlot5(); extern void RemoveBuildingGoalSlot5();
+extern void InstallBuildingGoalSlot6(); extern void RemoveBuildingGoalSlot6();
+extern void InstallBuildingGoalSlot8(); extern void RemoveBuildingGoalSlot8();
+extern void InstallBuildingGoalSlot10(); extern void RemoveBuildingGoalSlot10();
+extern void InstallPopulationGoalDtor(); extern void RemovePopulationGoalDtor();
+extern void InstallPopulationGoalSlot5(); extern void RemovePopulationGoalSlot5();
+extern void InstallPopulationGoalSlot6(); extern void RemovePopulationGoalSlot6();
+extern void InstallPopulationGoalSlot8(); extern void RemovePopulationGoalSlot8();
+extern void InstallPopulationGoalSlot10(); extern void RemovePopulationGoalSlot10();
+extern void InstallFinishTutorialGoalDtor(); extern void RemoveFinishTutorialGoalDtor();
+extern void InstallFinishTutorialGoalSlot5(); extern void RemoveFinishTutorialGoalSlot5();
+extern void InstallFinishTutorialGoalSlot6(); extern void RemoveFinishTutorialGoalSlot6();
+extern void InstallFinishTutorialGoalSlot10(); extern void RemoveFinishTutorialGoalSlot10();
+extern void InstallFinishTutorialGoalSlot11(); extern void RemoveFinishTutorialGoalSlot11();
+extern void InstallFinishTutorialInstanceDtor(); extern void RemoveFinishTutorialInstanceDtor();
+extern void InstallFinishTutorialInstanceSlot3(); extern void RemoveFinishTutorialInstanceSlot3();
+extern void InstallFinishTutorialInstanceSlot4(); extern void RemoveFinishTutorialInstanceSlot4();
+extern void InstallFinishTutorialInstanceSlot5(); extern void RemoveFinishTutorialInstanceSlot5();
+extern void InstallFinishTutorialInstanceSlot6(); extern void RemoveFinishTutorialInstanceSlot6();
+extern void InstallStatGoalDtor(); extern void RemoveStatGoalDtor();
+extern void InstallStatGoalSlot5(); extern void RemoveStatGoalSlot5();
+extern void InstallStatGoalSlot6(); extern void RemoveStatGoalSlot6();
+extern void InstallStatGoalSlot8(); extern void RemoveStatGoalSlot8();
+extern void InstallStatGoalSlot10(); extern void RemoveStatGoalSlot10();
+extern void InstallTimeGoalDtor(); extern void RemoveTimeGoalDtor();
+extern void InstallTimeGoalSlot5(); extern void RemoveTimeGoalSlot5();
+extern void InstallTimeGoalSlot6(); extern void RemoveTimeGoalSlot6();
+extern void InstallTimeGoalSlot10(); extern void RemoveTimeGoalSlot10();
+extern void InstallTimeGoalSlot11(); extern void RemoveTimeGoalSlot11();
+extern void InstallTimeGoalInstanceDtor(); extern void RemoveTimeGoalInstanceDtor();
+extern void InstallTimeGoalInstanceSlot3(); extern void RemoveTimeGoalInstanceSlot3();
+extern void InstallTimeGoalInstanceSlot5(); extern void RemoveTimeGoalInstanceSlot5();
+extern void InstallTimeGoalInstanceSlot6(); extern void RemoveTimeGoalInstanceSlot6();
+
+// ====================================================================
+// Phase 5: World Generation
+// ====================================================================
+extern void InstallMapGeneratorDtor(); extern void RemoveMapGeneratorDtor();
+extern void InstallMapGeneratorSlot5(); extern void RemoveMapGeneratorSlot5();
+extern void InstallMapGeneratorSlot6(); extern void RemoveMapGeneratorSlot6();
+extern void InstallMapGeneratorSlot8(); extern void RemoveMapGeneratorSlot8();
+extern void InstallTerrainGeneratorDtor(); extern void RemoveTerrainGeneratorDtor();
+extern void InstallTerrainGeneratorSlot5(); extern void RemoveTerrainGeneratorSlot5();
+extern void InstallTerrainGeneratorSlot6(); extern void RemoveTerrainGeneratorSlot6();
+extern void InstallTerrainGeneratorSlot8(); extern void RemoveTerrainGeneratorSlot8();
+extern void InstallClimateGeneratorDtor(); extern void RemoveClimateGeneratorDtor();
+extern void InstallClimateGeneratorSlot5(); extern void RemoveClimateGeneratorSlot5();
+extern void InstallClimateGeneratorSlot6(); extern void RemoveClimateGeneratorSlot6();
+extern void InstallClimateGeneratorSlot8(); extern void RemoveClimateGeneratorSlot8();
+
+// ====================================================================
+// Phase 5: Miscellaneous Types
+// ====================================================================
+extern void InstallComponentEntityDtor(); extern void RemoveComponentEntityDtor();
+extern void InstallComponentEntitySlot3(); extern void RemoveComponentEntitySlot3();
+extern void InstallComponentEntitySlot5(); extern void RemoveComponentEntitySlot5();
+extern void InstallComponentEntitySlot8(); extern void RemoveComponentEntitySlot8();
+extern void InstallComponentEntitySlot9(); extern void RemoveComponentEntitySlot9();
+extern void InstallProfessionDtor(); extern void RemoveProfessionDtor();
+extern void InstallProfessionSlot5(); extern void RemoveProfessionSlot5();
+extern void InstallProfessionSlot6(); extern void RemoveProfessionSlot6();
+extern void InstallProfessionSlot8(); extern void RemoveProfessionSlot8();
+extern void InstallProfessionListDtor(); extern void RemoveProfessionListDtor();
+extern void InstallProfessionListSlot5(); extern void RemoveProfessionListSlot5();
+extern void InstallProfessionListSlot6(); extern void RemoveProfessionListSlot6();
+extern void InstallProfessionListSlot8(); extern void RemoveProfessionListSlot8();
+extern void InstallScenarioDtor(); extern void RemoveScenarioDtor();
+extern void InstallScenarioSlot3(); extern void RemoveScenarioSlot3();
+extern void InstallScenarioSlot5(); extern void RemoveScenarioSlot5();
+extern void InstallScenarioSlot6(); extern void RemoveScenarioSlot6();
+extern void InstallScenarioSlot8(); extern void RemoveScenarioSlot8();
+extern void InstallWeatherDtor(); extern void RemoveWeatherDtor();
+extern void InstallWeatherSlot5(); extern void RemoveWeatherSlot5();
+extern void InstallWeatherSlot6(); extern void RemoveWeatherSlot6();
+extern void InstallWeatherSlot8(); extern void RemoveWeatherSlot8();
+extern void InstallMenuSceneDtor(); extern void RemoveMenuSceneDtor();
+extern void InstallMenuSceneSlot5(); extern void RemoveMenuSceneSlot5();
+extern void InstallMenuSceneSlot6(); extern void RemoveMenuSceneSlot6();
+extern void InstallMenuSceneSlot8(); extern void RemoveMenuSceneSlot8();
+
 static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
     { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
@@ -2651,6 +2921,276 @@ static ReimplEntry g_reimplementations[] = {
     { "ScenarioDialog::Slot4", InstallScenarioDialogSlot4, RemoveScenarioDialogSlot4, true },
     { "ScenarioDialog::Slot6", InstallScenarioDialogSlot6, RemoveScenarioDialogSlot6, true },
     { "ScenarioDialog::Slot8", InstallScenarioDialogSlot8, RemoveScenarioDialogSlot8, true },
+
+    // ================================================================
+    // Phase 5: Descriptions
+    // ================================================================
+    { "CreateBridgeDesc::Dtor", InstallCreateBridgeDescriptionDtor, RemoveCreateBridgeDescriptionDtor, true },
+    { "CreateBridgeDesc::Serialize", InstallCreateBridgeDescriptionSerialize, RemoveCreateBridgeDescriptionSerialize, true },
+    { "CreateBridgeDesc::Cleanup", InstallCreateBridgeDescriptionCleanup, RemoveCreateBridgeDescriptionCleanup, true },
+    { "CreateDragDesc::Dtor", InstallCreateDragDescriptionDtor, RemoveCreateDragDescriptionDtor, true },
+    { "CreateDragDesc::Serialize", InstallCreateDragDescriptionSerialize, RemoveCreateDragDescriptionSerialize, true },
+    { "CreateDragDesc::Cleanup", InstallCreateDragDescriptionCleanup, RemoveCreateDragDescriptionCleanup, true },
+    { "CreateFencedDesc::Dtor", InstallCreateFencedDescriptionDtor, RemoveCreateFencedDescriptionDtor, true },
+    { "CreateFencedDesc::Serialize", InstallCreateFencedDescriptionSerialize, RemoveCreateFencedDescriptionSerialize, true },
+    { "CreateFencedDesc::Cleanup", InstallCreateFencedDescriptionCleanup, RemoveCreateFencedDescriptionCleanup, true },
+    { "CreatePathDesc::Dtor", InstallCreatePathDescriptionDtor, RemoveCreatePathDescriptionDtor, true },
+    { "CreatePathDesc::Serialize", InstallCreatePathDescriptionSerialize, RemoveCreatePathDescriptionSerialize, true },
+    { "CreatePathDesc::Cleanup", InstallCreatePathDescriptionCleanup, RemoveCreatePathDescriptionCleanup, true },
+    { "CreatePathDesc::CreateInPlace", InstallCreatePathDescriptionCreateInPlace, RemoveCreatePathDescriptionCreateInPlace, true },
+    { "CreatePlacedDesc::Dtor", InstallCreatePlacedDescriptionDtor, RemoveCreatePlacedDescriptionDtor, true },
+    { "CreatePlacedDesc::Serialize", InstallCreatePlacedDescriptionSerialize, RemoveCreatePlacedDescriptionSerialize, true },
+    { "CreatePlacedDesc::Cleanup", InstallCreatePlacedDescriptionCleanup, RemoveCreatePlacedDescriptionCleanup, true },
+    { "CreateRemovalDesc::Dtor", InstallCreateRemovalDescriptionDtor, RemoveCreateRemovalDescriptionDtor, true },
+    { "CreateRemovalDesc::Serialize", InstallCreateRemovalDescriptionSerialize, RemoveCreateRemovalDescriptionSerialize, true },
+    { "CreateRemovalDesc::Cleanup", InstallCreateRemovalDescriptionCleanup, RemoveCreateRemovalDescriptionCleanup, true },
+    { "CreateRemovalDesc::CreateInPlace", InstallCreateRemovalDescriptionCreateInPlace, RemoveCreateRemovalDescriptionCreateInPlace, true },
+    { "CreateRoadDesc::Dtor", InstallCreateRoadDescriptionDtor, RemoveCreateRoadDescriptionDtor, true },
+    { "CreateRoadDesc::Serialize", InstallCreateRoadDescriptionSerialize, RemoveCreateRoadDescriptionSerialize, true },
+    { "CreateRoadDesc::Cleanup", InstallCreateRoadDescriptionCleanup, RemoveCreateRoadDescriptionCleanup, true },
+    { "CreateRoadDesc::CreateInPlace", InstallCreateRoadDescriptionCreateInPlace, RemoveCreateRoadDescriptionCreateInPlace, true },
+    { "RadiusDesc::Dtor", InstallRadiusDescriptionDtor, RemoveRadiusDescriptionDtor, true },
+    { "RadiusDesc::Serialize", InstallRadiusDescriptionSerialize, RemoveRadiusDescriptionSerialize, true },
+    { "RadiusDesc::Cleanup", InstallRadiusDescriptionCleanup, RemoveRadiusDescriptionCleanup, true },
+    { "RadiusDesc::CreateInPlace", InstallRadiusDescriptionCreateInPlace, RemoveRadiusDescriptionCreateInPlace, true },
+    { "SelectDesc::Dtor", InstallSelectDescriptionDtor, RemoveSelectDescriptionDtor, true },
+    { "SelectDesc::Serialize", InstallSelectDescriptionSerialize, RemoveSelectDescriptionSerialize, true },
+    { "SelectDesc::Cleanup", InstallSelectDescriptionCleanup, RemoveSelectDescriptionCleanup, true },
+    { "SelectDesc::CreateInPlace", InstallSelectDescriptionCreateInPlace, RemoveSelectDescriptionCreateInPlace, true },
+    { "ValueDesc::Dtor", InstallValueDescriptionDtor, RemoveValueDescriptionDtor, true },
+    { "ValueDesc::Serialize", InstallValueDescriptionSerialize, RemoveValueDescriptionSerialize, true },
+    { "ValueDesc::Cleanup", InstallValueDescriptionCleanup, RemoveValueDescriptionCleanup, true },
+    { "ValueDesc::CreateInPlace", InstallValueDescriptionCreateInPlace, RemoveValueDescriptionCreateInPlace, true },
+    { "ToolbarDesc::Dtor", InstallToolbarDescriptionDtor, RemoveToolbarDescriptionDtor, true },
+    { "ToolbarDesc::Serialize", InstallToolbarDescriptionSerialize, RemoveToolbarDescriptionSerialize, true },
+    { "ToolbarDesc::Cleanup", InstallToolbarDescriptionCleanup, RemoveToolbarDescriptionCleanup, true },
+    { "EnvironmentDesc::Dtor", InstallEnvironmentDescriptionDtor, RemoveEnvironmentDescriptionDtor, true },
+    { "EnvironmentDesc::Serialize", InstallEnvironmentDescriptionSerialize, RemoveEnvironmentDescriptionSerialize, true },
+    { "EnvironmentDesc::Cleanup", InstallEnvironmentDescriptionCleanup, RemoveEnvironmentDescriptionCleanup, true },
+    { "CaptureBoxDesc::Dtor", InstallCaptureBoxDescriptionDtor, RemoveCaptureBoxDescriptionDtor, true },
+    { "CaptureBoxDesc::Slot3", InstallCaptureBoxDescriptionSlot3, RemoveCaptureBoxDescriptionSlot3, true },
+    { "CaptureBoxDesc::Serialize", InstallCaptureBoxDescriptionSerialize, RemoveCaptureBoxDescriptionSerialize, true },
+    { "CaptureBoxDesc::Cleanup", InstallCaptureBoxDescriptionCleanup, RemoveCaptureBoxDescriptionCleanup, true },
+    { "CaptureBoxDesc::CreateElement", InstallCaptureBoxDescriptionCreateElement, RemoveCaptureBoxDescriptionCreateElement, true },
+    { "CaptureBoxDesc::CreateInPlace", InstallCaptureBoxDescriptionCreateInPlace, RemoveCaptureBoxDescriptionCreateInPlace, true },
+    { "FrustumOutlineDesc::Dtor", InstallFrustumOutlineDescriptionDtor, RemoveFrustumOutlineDescriptionDtor, true },
+    { "FrustumOutlineDesc::Slot3", InstallFrustumOutlineDescriptionSlot3, RemoveFrustumOutlineDescriptionSlot3, true },
+    { "FrustumOutlineDesc::Serialize", InstallFrustumOutlineDescriptionSerialize, RemoveFrustumOutlineDescriptionSerialize, true },
+    { "FrustumOutlineDesc::Cleanup", InstallFrustumOutlineDescriptionCleanup, RemoveFrustumOutlineDescriptionCleanup, true },
+    { "FrustumOutlineDesc::CreateElement", InstallFrustumOutlineDescriptionCreateElement, RemoveFrustumOutlineDescriptionCreateElement, true },
+    { "FrustumOutlineDesc::CreateInPlace", InstallFrustumOutlineDescriptionCreateInPlace, RemoveFrustumOutlineDescriptionCreateInPlace, true },
+    // UI Elements
+    { "CaptureBoxElement::Dtor", InstallCaptureBoxElementDtor, RemoveCaptureBoxElementDtor, true },
+    { "CaptureBoxElement::OnCreate", InstallCaptureBoxElementOnCreate, RemoveCaptureBoxElementOnCreate, true },
+    { "CaptureBoxElement::ComputeLayout", InstallCaptureBoxElementComputeLayout, RemoveCaptureBoxElementComputeLayout, true },
+    { "CaptureBoxElement::Draw", InstallCaptureBoxElementDraw, RemoveCaptureBoxElementDraw, true },
+    { "FrustumOutlineElement::Dtor", InstallFrustumOutlineElementDtor, RemoveFrustumOutlineElementDtor, true },
+    { "FrustumOutlineElement::OnCreate", InstallFrustumOutlineElementOnCreate, RemoveFrustumOutlineElementOnCreate, true },
+    { "FrustumOutlineElement::ComputeLayout", InstallFrustumOutlineElementComputeLayout, RemoveFrustumOutlineElementComputeLayout, true },
+    { "FrustumOutlineElement::Draw", InstallFrustumOutlineElementDraw, RemoveFrustumOutlineElementDraw, true },
+
+    // ================================================================
+    // Phase 5: Tools & Placement
+    // ================================================================
+    { "Toolbar::Dtor", InstallToolbarDtor, RemoveToolbarDtor, true },
+    { "Toolbar::Serialize", InstallToolbarSerialize, RemoveToolbarSerialize, true },
+    { "Toolbar::Cleanup", InstallToolbarCleanup, RemoveToolbarCleanup, true },
+    { "RotationSetting::Dtor", InstallRotationSettingDtor, RemoveRotationSettingDtor, true },
+    { "DragTool::Dtor", InstallDragToolDtor, RemoveDragToolDtor, true },
+    { "DragTool::OnKey", InstallDragToolOnKey, RemoveDragToolOnKey, true },
+    { "BridgeTool::Dtor", InstallBridgeToolDtor, RemoveBridgeToolDtor, true },
+    { "BridgeTool::Startup", InstallBridgeToolStartup, RemoveBridgeToolStartup, true },
+    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, true },
+    { "BridgeTool::CalcCost", InstallBridgeToolCalcCost, RemoveBridgeToolCalcCost, true },
+    { "DragPlacementTool::Dtor", InstallDragPlacementToolDtor, RemoveDragPlacementToolDtor, true },
+    { "DragPlacementTool::Startup", InstallDragPlacementToolStartup, RemoveDragPlacementToolStartup, true },
+    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, true },
+    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, true },
+    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, true },
+    { "EditTool::Dtor", InstallEditToolDtor, RemoveEditToolDtor, true },
+    { "EditTool::OnKey", InstallEditToolOnKey, RemoveEditToolOnKey, true },
+    { "EditTool::Startup", InstallEditToolStartup, RemoveEditToolStartup, true },
+    { "EditTool::Serialize", InstallEditToolSerialize, RemoveEditToolSerialize, true },
+    { "FencedTool::Dtor", InstallFencedToolDtor, RemoveFencedToolDtor, true },
+    { "FencedTool::Startup", InstallFencedToolStartup, RemoveFencedToolStartup, true },
+    { "FencedTool::Shutdown2", InstallFencedToolShutdown2, RemoveFencedToolShutdown2, true },
+    { "FencedTool::OnKey", InstallFencedToolOnKey, RemoveFencedToolOnKey, true },
+    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, true },
+    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, true },
+    { "FencedTool::Shutdown", InstallFencedToolShutdown, RemoveFencedToolShutdown, true },
+    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, true },
+    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, true },
+    { "PathTool::Dtor", InstallPathToolDtor, RemovePathToolDtor, true },
+    { "PathTool::OnKey", InstallPathToolOnKey, RemovePathToolOnKey, true },
+    { "PathTool::Draw", InstallPathToolDraw, RemovePathToolDraw, true },
+    { "PathTool::Serialize", InstallPathToolSerialize, RemovePathToolSerialize, true },
+    { "PlacementTool::Dtor", InstallPlacementToolDtor, RemovePlacementToolDtor, true },
+    { "PlacementTool::Startup", InstallPlacementToolStartup, RemovePlacementToolStartup, true },
+    { "PlacementTool::Shutdown2", InstallPlacementToolShutdown2, RemovePlacementToolShutdown2, true },
+    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, true },
+    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, true },
+    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, true },
+    { "RemovalTool::Dtor", InstallRemovalToolDtor, RemoveRemovalToolDtor, true },
+    { "RemovalTool::Startup", InstallRemovalToolStartup, RemoveRemovalToolStartup, true },
+    { "RemovalTool::Draw", InstallRemovalToolDraw, RemoveRemovalToolDraw, true },
+    { "RemovalTool::CalcPath", InstallRemovalToolCalcPath, RemoveRemovalToolCalcPath, true },
+    { "RemovalTool::CalcCost", InstallRemovalToolCalcCost, RemoveRemovalToolCalcCost, true },
+    { "RoadTool::Dtor", InstallRoadToolDtor, RemoveRoadToolDtor, true },
+    { "RoadTool::Startup", InstallRoadToolStartup, RemoveRoadToolStartup, true },
+    { "RoadTool::Draw", InstallRoadToolDraw, RemoveRoadToolDraw, true },
+
+    // ================================================================
+    // Phase 5: Tutorial System
+    // ================================================================
+    { "Tutorial::Dtor", InstallTutorialDtor, RemoveTutorialDtor, true },
+    { "Tutorial::Serialize", InstallTutorialSerialize, RemoveTutorialSerialize, true },
+    { "Tutorial::Cleanup", InstallTutorialCleanup, RemoveTutorialCleanup, true },
+    { "Tutorial::Ctor", InstallTutorialCtor, RemoveTutorialCtor, true },
+    { "TutorialGoal::Dtor", InstallTutorialGoalDtor, RemoveTutorialGoalDtor, true },
+    { "TutorialGoal::Serialize", InstallTutorialGoalSerialize, RemoveTutorialGoalSerialize, true },
+    { "TutorialGoalButton::Dtor", InstallTutorialGoalButtonDtor, RemoveTutorialGoalButtonDtor, true },
+    { "TutorialGoalButton::Serialize", InstallTutorialGoalButtonSerialize, RemoveTutorialGoalButtonSerialize, true },
+    { "TutorialGoalButton::Cleanup", InstallTutorialGoalButtonCleanup, RemoveTutorialGoalButtonCleanup, true },
+    { "TutorialGoalButton::Slot8", InstallTutorialGoalButtonSlot8, RemoveTutorialGoalButtonSlot8, true },
+    { "TutorialGoalButton::Ctor", InstallTutorialGoalButtonCtor, RemoveTutorialGoalButtonCtor, true },
+    { "TutorialGoalCount::Dtor", InstallTutorialGoalCountDtor, RemoveTutorialGoalCountDtor, true },
+    { "TutorialGoalCount::Serialize", InstallTutorialGoalCountSerialize, RemoveTutorialGoalCountSerialize, true },
+    { "TutorialGoalCount::Cleanup", InstallTutorialGoalCountCleanup, RemoveTutorialGoalCountCleanup, true },
+    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, true },
+    { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, true },
+    { "TutorialGoalGameSpeed::Dtor", InstallTutorialGoalGameSpeedDtor, RemoveTutorialGoalGameSpeedDtor, true },
+    { "TutorialGoalGameSpeed::Serialize", InstallTutorialGoalGameSpeedSerialize, RemoveTutorialGoalGameSpeedSerialize, true },
+    { "TutorialGoalGameSpeed::Cleanup", InstallTutorialGoalGameSpeedCleanup, RemoveTutorialGoalGameSpeedCleanup, true },
+    { "TutorialGoalGameSpeed::Slot8", InstallTutorialGoalGameSpeedSlot8, RemoveTutorialGoalGameSpeedSlot8, true },
+    { "TutorialGoalGameSpeed::Ctor", InstallTutorialGoalGameSpeedCtor, RemoveTutorialGoalGameSpeedCtor, true },
+    { "TutorialImage::Dtor", InstallTutorialImageDtor, RemoveTutorialImageDtor, true },
+    { "TutorialImage::Serialize", InstallTutorialImageSerialize, RemoveTutorialImageSerialize, true },
+    { "TutorialImage::Cleanup", InstallTutorialImageCleanup, RemoveTutorialImageCleanup, true },
+    { "TutorialImage::Ctor", InstallTutorialImageCtor, RemoveTutorialImageCtor, true },
+    { "TutorialImage::Slot9", InstallTutorialImageSlot9, RemoveTutorialImageSlot9, true },
+    { "TutorialImageHotKey::Dtor", InstallTutorialImageHotKeyDtor, RemoveTutorialImageHotKeyDtor, true },
+    { "TutorialImageHotKey::Serialize", InstallTutorialImageHotKeySerialize, RemoveTutorialImageHotKeySerialize, true },
+    { "TutorialImageHotKey::Cleanup", InstallTutorialImageHotKeyCleanup, RemoveTutorialImageHotKeyCleanup, true },
+    { "TutorialImageHotKey::Ctor", InstallTutorialImageHotKeyCtor, RemoveTutorialImageHotKeyCtor, true },
+    { "TutorialImageHotKey::Slot9", InstallTutorialImageHotKeySlot9, RemoveTutorialImageHotKeySlot9, true },
+    { "TutorialImageInputKey::Dtor", InstallTutorialImageInputKeyDtor, RemoveTutorialImageInputKeyDtor, true },
+    { "TutorialImageInputKey::Serialize", InstallTutorialImageInputKeySerialize, RemoveTutorialImageInputKeySerialize, true },
+    { "TutorialImageInputKey::Cleanup", InstallTutorialImageInputKeyCleanup, RemoveTutorialImageInputKeyCleanup, true },
+    { "TutorialImageInputKey::Ctor", InstallTutorialImageInputKeyCtor, RemoveTutorialImageInputKeyCtor, true },
+    { "TutorialImageInputKey::Slot9", InstallTutorialImageInputKeySlot9, RemoveTutorialImageInputKeySlot9, true },
+    { "TutorialImageToolbarIcon::Dtor", InstallTutorialImageToolbarIconDtor, RemoveTutorialImageToolbarIconDtor, true },
+    { "TutorialImageToolbarIcon::Serialize", InstallTutorialImageToolbarIconSerialize, RemoveTutorialImageToolbarIconSerialize, true },
+    { "TutorialImageToolbarIcon::Cleanup", InstallTutorialImageToolbarIconCleanup, RemoveTutorialImageToolbarIconCleanup, true },
+    { "TutorialImageToolbarIcon::Ctor", InstallTutorialImageToolbarIconCtor, RemoveTutorialImageToolbarIconCtor, true },
+    { "TutorialImageToolbarIcon::Slot9", InstallTutorialImageToolbarIconSlot9, RemoveTutorialImageToolbarIconSlot9, true },
+    { "TutorialInstance::Dtor", InstallTutorialInstanceDtor, RemoveTutorialInstanceDtor, true },
+    { "TutorialInstance::Serialize", InstallTutorialInstanceSerialize, RemoveTutorialInstanceSerialize, true },
+    { "TutorialSetup::Dtor", InstallTutorialSetupDtor, RemoveTutorialSetupDtor, true },
+    { "TutorialSetup::Serialize", InstallTutorialSetupSerialize, RemoveTutorialSetupSerialize, true },
+    { "TutorialSetupCamera::Dtor", InstallTutorialSetupCameraDtor, RemoveTutorialSetupCameraDtor, true },
+    { "TutorialSetupCamera::Serialize", InstallTutorialSetupCameraSerialize, RemoveTutorialSetupCameraSerialize, true },
+    { "TutorialSetupCamera::Cleanup", InstallTutorialSetupCameraCleanup, RemoveTutorialSetupCameraCleanup, true },
+    { "TutorialSetupCamera::Slot8", InstallTutorialSetupCameraSlot8, RemoveTutorialSetupCameraSlot8, true },
+    { "TutorialSetupCamera::Ctor", InstallTutorialSetupCameraCtor, RemoveTutorialSetupCameraCtor, true },
+    { "TutorialSetupGameSpeed::Dtor", InstallTutorialSetupGameSpeedDtor, RemoveTutorialSetupGameSpeedDtor, true },
+    { "TutorialSetupGameSpeed::Serialize", InstallTutorialSetupGameSpeedSerialize, RemoveTutorialSetupGameSpeedSerialize, true },
+    { "TutorialSetupGameSpeed::Cleanup", InstallTutorialSetupGameSpeedCleanup, RemoveTutorialSetupGameSpeedCleanup, true },
+    { "TutorialSetupGameSpeed::Slot8", InstallTutorialSetupGameSpeedSlot8, RemoveTutorialSetupGameSpeedSlot8, true },
+    { "TutorialSetupGameSpeed::Ctor", InstallTutorialSetupGameSpeedCtor, RemoveTutorialSetupGameSpeedCtor, true },
+    { "TutorialSetupRestrictPlayer::Dtor", InstallTutorialSetupRestrictPlayerDtor, RemoveTutorialSetupRestrictPlayerDtor, true },
+    { "TutorialSetupRestrictPlayer::Serialize", InstallTutorialSetupRestrictPlayerSerialize, RemoveTutorialSetupRestrictPlayerSerialize, true },
+    { "TutorialSetupRestrictPlayer::Cleanup", InstallTutorialSetupRestrictPlayerCleanup, RemoveTutorialSetupRestrictPlayerCleanup, true },
+    { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, true },
+    { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, true },
+    { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, true },
+    { "TutorialStep::Dtor", InstallTutorialStepDtor, RemoveTutorialStepDtor, true },
+    { "TutorialStep::Serialize", InstallTutorialStepSerialize, RemoveTutorialStepSerialize, true },
+    { "TutorialStep::Cleanup", InstallTutorialStepCleanup, RemoveTutorialStepCleanup, true },
+    { "TutorialStep::Init", InstallTutorialStepInit, RemoveTutorialStepInit, true },
+
+    // ================================================================
+    // Phase 5: Achievement Goals
+    // ================================================================
+    { "BuildingGoal::Dtor", InstallBuildingGoalDtor, RemoveBuildingGoalDtor, true },
+    { "BuildingGoal::Slot5", InstallBuildingGoalSlot5, RemoveBuildingGoalSlot5, true },
+    { "BuildingGoal::Slot6", InstallBuildingGoalSlot6, RemoveBuildingGoalSlot6, true },
+    { "BuildingGoal::Slot8", InstallBuildingGoalSlot8, RemoveBuildingGoalSlot8, true },
+    { "BuildingGoal::Slot10", InstallBuildingGoalSlot10, RemoveBuildingGoalSlot10, true },
+    { "PopulationGoal::Dtor", InstallPopulationGoalDtor, RemovePopulationGoalDtor, true },
+    { "PopulationGoal::Slot5", InstallPopulationGoalSlot5, RemovePopulationGoalSlot5, true },
+    { "PopulationGoal::Slot6", InstallPopulationGoalSlot6, RemovePopulationGoalSlot6, true },
+    { "PopulationGoal::Slot8", InstallPopulationGoalSlot8, RemovePopulationGoalSlot8, true },
+    { "PopulationGoal::Slot10", InstallPopulationGoalSlot10, RemovePopulationGoalSlot10, true },
+    { "FinishTutorialGoal::Dtor", InstallFinishTutorialGoalDtor, RemoveFinishTutorialGoalDtor, true },
+    { "FinishTutorialGoal::Slot5", InstallFinishTutorialGoalSlot5, RemoveFinishTutorialGoalSlot5, true },
+    { "FinishTutorialGoal::Slot6", InstallFinishTutorialGoalSlot6, RemoveFinishTutorialGoalSlot6, true },
+    { "FinishTutorialGoal::Slot10", InstallFinishTutorialGoalSlot10, RemoveFinishTutorialGoalSlot10, true },
+    // NOTE: FinishTutorialGoal::Slot11 skipped — same address as FinishTutorialInstance::Dtor
+    { "FinishTutorialInstance::Dtor", InstallFinishTutorialInstanceDtor, RemoveFinishTutorialInstanceDtor, true },
+    { "FinishTutorialInstance::Slot3", InstallFinishTutorialInstanceSlot3, RemoveFinishTutorialInstanceSlot3, true },
+    { "FinishTutorialInstance::Slot4", InstallFinishTutorialInstanceSlot4, RemoveFinishTutorialInstanceSlot4, true },
+    { "FinishTutorialInstance::Slot5", InstallFinishTutorialInstanceSlot5, RemoveFinishTutorialInstanceSlot5, true },
+    { "FinishTutorialInstance::Slot6", InstallFinishTutorialInstanceSlot6, RemoveFinishTutorialInstanceSlot6, true },
+    { "StatGoal::Dtor", InstallStatGoalDtor, RemoveStatGoalDtor, true },
+    { "StatGoal::Slot5", InstallStatGoalSlot5, RemoveStatGoalSlot5, true },
+    { "StatGoal::Slot6", InstallStatGoalSlot6, RemoveStatGoalSlot6, true },
+    { "StatGoal::Slot8", InstallStatGoalSlot8, RemoveStatGoalSlot8, true },
+    { "StatGoal::Slot10", InstallStatGoalSlot10, RemoveStatGoalSlot10, true },
+    { "TimeGoal::Dtor", InstallTimeGoalDtor, RemoveTimeGoalDtor, true },
+    { "TimeGoal::Slot5", InstallTimeGoalSlot5, RemoveTimeGoalSlot5, true },
+    { "TimeGoal::Slot6", InstallTimeGoalSlot6, RemoveTimeGoalSlot6, true },
+    { "TimeGoal::Slot10", InstallTimeGoalSlot10, RemoveTimeGoalSlot10, true },
+    // NOTE: TimeGoal::Slot11 skipped — same address as TimeGoalInstance::Dtor
+    { "TimeGoalInstance::Dtor", InstallTimeGoalInstanceDtor, RemoveTimeGoalInstanceDtor, true },
+    { "TimeGoalInstance::Slot3", InstallTimeGoalInstanceSlot3, RemoveTimeGoalInstanceSlot3, true },
+    { "TimeGoalInstance::Slot5", InstallTimeGoalInstanceSlot5, RemoveTimeGoalInstanceSlot5, true },
+    { "TimeGoalInstance::Slot6", InstallTimeGoalInstanceSlot6, RemoveTimeGoalInstanceSlot6, true },
+
+    // ================================================================
+    // Phase 5: World Generation
+    // ================================================================
+    { "MapGenerator::Dtor", InstallMapGeneratorDtor, RemoveMapGeneratorDtor, true },
+    { "MapGenerator::Slot5", InstallMapGeneratorSlot5, RemoveMapGeneratorSlot5, true },
+    { "MapGenerator::Slot6", InstallMapGeneratorSlot6, RemoveMapGeneratorSlot6, true },
+    { "MapGenerator::Slot8", InstallMapGeneratorSlot8, RemoveMapGeneratorSlot8, true },
+    { "TerrainGenerator::Dtor", InstallTerrainGeneratorDtor, RemoveTerrainGeneratorDtor, true },
+    { "TerrainGenerator::Slot5", InstallTerrainGeneratorSlot5, RemoveTerrainGeneratorSlot5, true },
+    { "TerrainGenerator::Slot6", InstallTerrainGeneratorSlot6, RemoveTerrainGeneratorSlot6, true },
+    { "TerrainGenerator::Slot8", InstallTerrainGeneratorSlot8, RemoveTerrainGeneratorSlot8, true },
+    { "ClimateGenerator::Dtor", InstallClimateGeneratorDtor, RemoveClimateGeneratorDtor, true },
+    { "ClimateGenerator::Slot5", InstallClimateGeneratorSlot5, RemoveClimateGeneratorSlot5, true },
+    { "ClimateGenerator::Slot6", InstallClimateGeneratorSlot6, RemoveClimateGeneratorSlot6, true },
+    { "ClimateGenerator::Slot8", InstallClimateGeneratorSlot8, RemoveClimateGeneratorSlot8, true },
+
+    // ================================================================
+    // Phase 5: Miscellaneous Types
+    // ================================================================
+    { "ComponentEntity::Dtor", InstallComponentEntityDtor, RemoveComponentEntityDtor, true },
+    { "ComponentEntity::Slot3", InstallComponentEntitySlot3, RemoveComponentEntitySlot3, true },
+    { "ComponentEntity::Slot5", InstallComponentEntitySlot5, RemoveComponentEntitySlot5, true },
+    { "ComponentEntity::Slot8", InstallComponentEntitySlot8, RemoveComponentEntitySlot8, true },
+    // NOTE: ComponentEntity::Slot9 skipped — shared function 0x14003addc
+    { "Profession::Dtor", InstallProfessionDtor, RemoveProfessionDtor, true },
+    { "Profession::Slot5", InstallProfessionSlot5, RemoveProfessionSlot5, true },
+    { "Profession::Slot6", InstallProfessionSlot6, RemoveProfessionSlot6, true },
+    { "Profession::Slot8", InstallProfessionSlot8, RemoveProfessionSlot8, true },
+    { "ProfessionList::Dtor", InstallProfessionListDtor, RemoveProfessionListDtor, true },
+    { "ProfessionList::Slot5", InstallProfessionListSlot5, RemoveProfessionListSlot5, true },
+    { "ProfessionList::Slot6", InstallProfessionListSlot6, RemoveProfessionListSlot6, true },
+    { "ProfessionList::Slot8", InstallProfessionListSlot8, RemoveProfessionListSlot8, true },
+    { "Scenario::Dtor", InstallScenarioDtor, RemoveScenarioDtor, true },
+    { "Scenario::Slot3", InstallScenarioSlot3, RemoveScenarioSlot3, true },
+    { "Scenario::Slot5", InstallScenarioSlot5, RemoveScenarioSlot5, true },
+    { "Scenario::Slot6", InstallScenarioSlot6, RemoveScenarioSlot6, true },
+    { "Scenario::Slot8", InstallScenarioSlot8, RemoveScenarioSlot8, true },
+    { "Weather::Dtor", InstallWeatherDtor, RemoveWeatherDtor, true },
+    { "Weather::Slot5", InstallWeatherSlot5, RemoveWeatherSlot5, true },
+    { "Weather::Slot6", InstallWeatherSlot6, RemoveWeatherSlot6, true },
+    { "Weather::Slot8", InstallWeatherSlot8, RemoveWeatherSlot8, true },
+    { "MenuScene::Dtor", InstallMenuSceneDtor, RemoveMenuSceneDtor, true },
+    { "MenuScene::Slot5", InstallMenuSceneSlot5, RemoveMenuSceneSlot5, true },
+    { "MenuScene::Slot6", InstallMenuSceneSlot6, RemoveMenuSceneSlot6, true },
+    { "MenuScene::Slot8", InstallMenuSceneSlot8, RemoveMenuSceneSlot8, true },
 };
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);
