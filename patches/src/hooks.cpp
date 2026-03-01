@@ -66,25 +66,33 @@ bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t 
     info->target = (void*)targetAddr;
     info->patchSize = prologueSize;
 
-    // Allocate executable trampoline: RSP fix prefix + original bytes + jump back
+    // Allocate executable trampoline: original bytes + jump back
     info->trampoline = VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!info->trampoline) return false;
 
-    uint8_t* t = (uint8_t*)info->trampoline;
-
-    // RSP fix: the CALL into the trampoline pushes a return address, shifting RSP
-    // by 8. Any prologue instruction referencing RSP (MOV [RSP+xx], MOV RAX,RSP,
-    // LEA RBP,[RSP+xx]) would operate on the wrong stack context. Fix: POP the
-    // return address into R10 (volatile, safe to clobber), then store it at [RSP]
-    // where the function's eventual RET will find it.
-    t[0] = 0x41; t[1] = 0x5A;                                 // POP R10
-    t[2] = 0x4C; t[3] = 0x89; t[4] = 0x14; t[5] = 0x24;     // MOV [RSP], R10
-
-    // Copy original prologue bytes after the RSP fix prefix
-    memcpy(t + 6, info->original, prologueSize);
+    // Copy original prologue bytes to trampoline (unmodified).
+    //
+    // The CALL into the trampoline shifts RSP by 8. This means RSP-relative
+    // instructions in the copied prologue access addresses 8 bytes lower than
+    // intended. However, for passthrough wrappers this is safe because:
+    //
+    // Bug Class 4 (MOV [RSP+xx],reg): The prologue stores and the epilogue
+    //   loads use the SAME shifted RSP, so register saves/restores are
+    //   internally consistent. The writes land in the caller's shadow space
+    //   (allocated for callee use), so no collision.
+    //
+    // Bug Class 3 - LEA variant (LEA RBP,[RSP+xx]): The captured frame pointer
+    //   is 8 bytes off, but ALL frame-relative accesses through RBP use the same
+    //   offset, so they're internally consistent.
+    //
+    // Bug Class 3 - MOV variant (MOV RAX,RSP / MOV R11,RSP): These capture RSP
+    //   into a register that's used for ABSOLUTE addressing throughout the function
+    //   body (e.g., accessing parameters on the stack). These are NOT safe and
+    //   those hooks must remain disabled.
+    memcpy(info->trampoline, info->original, prologueSize);
 
     // Append jump back to (target + prologueSize)
-    uint8_t* jmpBack = t + 6 + prologueSize;
+    uint8_t* jmpBack = (uint8_t*)info->trampoline + prologueSize;
     jmpBack[0] = 0x48; jmpBack[1] = 0xB8; // mov rax, imm64
     *(uintptr_t*)(jmpBack + 2) = targetAddr + prologueSize;
     jmpBack[10] = 0xFF; jmpBack[11] = 0xE0; // jmp rax
@@ -2135,7 +2143,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HerdComponent::Update", InstallHerdComponentUpdate, RemoveHerdComponentUpdate, true },
 
     // --- AnimalComponent reimplementations ---
-    { "AnimalComponent::Update", InstallAnimalComponentUpdate, RemoveAnimalComponentUpdate, true },
+    { "AnimalComponent::Update", InstallAnimalComponentUpdate, RemoveAnimalComponentUpdate, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // --- CitizenAIComponent reimplementations ---
     { "CitizenAIComponent::Update", InstallCitizenAIComponentUpdate, RemoveCitizenAIComponentUpdate, true },
@@ -2186,7 +2194,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- DecalComponent ---
     { "DecalComponent::Shutdown", InstallDecalComponentShutdown, RemoveDecalComponentShutdown, true },
-    { "DecalComponent::Draw", InstallDecalComponentDraw, RemoveDecalComponentDraw, true },
+    { "DecalComponent::Draw", InstallDecalComponentDraw, RemoveDecalComponentDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "DecalComponent::OnCreate", InstallDecalComponentOnCreate, RemoveDecalComponentOnCreate, true },
     { "DecalComponent::Serialize", InstallDecalComponentSerialize, RemoveDecalComponentSerialize, true },
 
@@ -2267,7 +2275,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ParticleComponent::Shutdown", InstallParticleComponentShutdown, RemoveParticleComponentShutdown, true },
     { "ParticleComponent::Draw", InstallParticleComponentDraw, RemoveParticleComponentDraw, true },
     { "ParticleComponent::OnCreate", InstallParticleComponentOnCreate, RemoveParticleComponentOnCreate, true },
-    { "ParticleComponent::OnRemove", InstallParticleComponentOnRemove, RemoveParticleComponentOnRemove, true },
+    { "ParticleComponent::OnRemove", InstallParticleComponentOnRemove, RemoveParticleComponentOnRemove, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "ParticleComponent::Serialize", InstallParticleComponentSerialize, RemoveParticleComponentSerialize, false }, // relative CALL at +9 breaks trampoline
     { "ParticleComponent::OnUpdate2", InstallParticleComponentOnUpdate2, RemoveParticleComponentOnUpdate2, true },
 
@@ -2397,7 +2405,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ClearStorage::Slot4", InstallClearStorageSlot4, RemoveClearStorageSlot4, true },
     { "ClearStorage::Slot6", InstallClearStorageSlot6, RemoveClearStorageSlot6, false }, // DISABLED: relative CALL in prologue
     { "ClearStorage::Slot8", InstallClearStorageSlot8, RemoveClearStorageSlot8, true },
-    { "ClearStorage::Slot9", InstallClearStorageSlot9, RemoveClearStorageSlot9, true },
+    { "ClearStorage::Slot9", InstallClearStorageSlot9, RemoveClearStorageSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "ClearStorage::Slot10", InstallClearStorageSlot10, RemoveClearStorageSlot10, false }, // RIP-relative in prologue
 
     // --- CompleteRoad ---
@@ -2438,7 +2446,7 @@ static ReimplEntry g_reimplementations[] = {
     { "FireWork::Slot4", InstallFireWorkSlot4, RemoveFireWorkSlot4, true },
     { "FireWork::Slot6", InstallFireWorkSlot6, RemoveFireWorkSlot6, false }, // DISABLED: relative CALL in prologue
     { "FireWork::Slot8", InstallFireWorkSlot8, RemoveFireWorkSlot8, true },
-    { "FireWork::Slot9", InstallFireWorkSlot9, RemoveFireWorkSlot9, true },
+    { "FireWork::Slot9", InstallFireWorkSlot9, RemoveFireWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // --- FishingWork ---
     { "FishingWork::Serialize", InstallFishingWorkSerialize, RemoveFishingWorkSerialize, true },
@@ -2454,7 +2462,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ForesterWork::Serialize", InstallForesterWorkSerialize, RemoveForesterWorkSerialize, true },
     { "ForesterWork::Slot4", InstallForesterWorkSlot4, RemoveForesterWorkSlot4, true },
     { "ForesterWork::Slot8", InstallForesterWorkSlot8, RemoveForesterWorkSlot8, true },
-    { "ForesterWork::Slot9", InstallForesterWorkSlot9, RemoveForesterWorkSlot9, true },
+    { "ForesterWork::Slot9", InstallForesterWorkSlot9, RemoveForesterWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "ForesterWork::Slot10", InstallForesterWorkSlot10, RemoveForesterWorkSlot10, true },
 
     // --- GatherRawMaterials ---
@@ -2469,7 +2477,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HarvestArea::Slot6", InstallHarvestAreaSlot6, RemoveHarvestAreaSlot6, true },
     { "HarvestArea::Slot7", InstallHarvestAreaSlot7, RemoveHarvestAreaSlot7, true },
     { "HarvestArea::Slot8", InstallHarvestAreaSlot8, RemoveHarvestAreaSlot8, true },
-    { "HarvestArea::Slot9", InstallHarvestAreaSlot9, RemoveHarvestAreaSlot9, true },
+    { "HarvestArea::Slot9", InstallHarvestAreaSlot9, RemoveHarvestAreaSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "HarvestArea::Slot10", InstallHarvestAreaSlot10, RemoveHarvestAreaSlot10, true },
 
     // --- HarvestOrchard ---
@@ -2479,7 +2487,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HarvestOrchard::Slot6", InstallHarvestOrchardSlot6, RemoveHarvestOrchardSlot6, true },
     { "HarvestOrchard::Slot7", InstallHarvestOrchardSlot7, RemoveHarvestOrchardSlot7, true },
     { "HarvestOrchard::Slot8", InstallHarvestOrchardSlot8, RemoveHarvestOrchardSlot8, true },
-    { "HarvestOrchard::Slot9", InstallHarvestOrchardSlot9, RemoveHarvestOrchardSlot9, true },
+    { "HarvestOrchard::Slot9", InstallHarvestOrchardSlot9, RemoveHarvestOrchardSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "HarvestOrchard::Slot10", InstallHarvestOrchardSlot10, RemoveHarvestOrchardSlot10, true },
 
     // --- HerbalistWork ---
@@ -2487,7 +2495,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HerbalistWork::Serialize", InstallHerbalistWorkSerialize, RemoveHerbalistWorkSerialize, true },
     { "HerbalistWork::Slot4", InstallHerbalistWorkSlot4, RemoveHerbalistWorkSlot4, true },
     { "HerbalistWork::Slot8", InstallHerbalistWorkSlot8, RemoveHerbalistWorkSlot8, true },
-    { "HerbalistWork::Slot9", InstallHerbalistWorkSlot9, RemoveHerbalistWorkSlot9, true },
+    { "HerbalistWork::Slot9", InstallHerbalistWorkSlot9, RemoveHerbalistWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "HerbalistWork::Slot10", InstallHerbalistWorkSlot10, RemoveHerbalistWorkSlot10, true },
 
     // --- HuntAnimal ---
@@ -2499,7 +2507,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HuntWork::Serialize", InstallHuntWorkSerialize, RemoveHuntWorkSerialize, true },
     { "HuntWork::Slot4", InstallHuntWorkSlot4, RemoveHuntWorkSlot4, true },
     { "HuntWork::Slot8", InstallHuntWorkSlot8, RemoveHuntWorkSlot8, true },
-    { "HuntWork::Slot9", InstallHuntWorkSlot9, RemoveHuntWorkSlot9, true },
+    { "HuntWork::Slot9", InstallHuntWorkSlot9, RemoveHuntWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "HuntWork::Slot10", InstallHuntWorkSlot10, RemoveHuntWorkSlot10, true },
 
     // --- LocationWork ---
@@ -2513,16 +2521,16 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- MarketWork ---
     { "MarketWork::Serialize", InstallMarketWorkSerialize, RemoveMarketWorkSerialize, true },
-    { "MarketWork::Slot4", InstallMarketWorkSlot4, RemoveMarketWorkSlot4, true },
+    { "MarketWork::Slot4", InstallMarketWorkSlot4, RemoveMarketWorkSlot4, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "MarketWork::Slot6", InstallMarketWorkSlot6, RemoveMarketWorkSlot6, false }, // DISABLED: relative CALL in prologue
     { "MarketWork::Slot8", InstallMarketWorkSlot8, RemoveMarketWorkSlot8, false }, // DISABLED: short Jcc in prologue
-    { "MarketWork::Slot9", InstallMarketWorkSlot9, RemoveMarketWorkSlot9, true },
+    { "MarketWork::Slot9", InstallMarketWorkSlot9, RemoveMarketWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "MarketWork::Slot10", InstallMarketWorkSlot10, RemoveMarketWorkSlot10, true },
 
     // --- MoveTo ---
     { "MoveTo::Serialize", InstallMoveToSerialize, RemoveMoveToSerialize, true },
     { "MoveTo::AbstractImpl", InstallMoveToAbstractImpl, RemoveMoveToAbstractImpl, true },
-    { "MoveTo::Execute", InstallMoveToExecute, RemoveMoveToExecute, true },
+    { "MoveTo::Execute", InstallMoveToExecute, RemoveMoveToExecute, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "MoveTo::Enter", InstallMoveToEnter, RemoveMoveToEnter, true },
     { "MoveTo::Exit", InstallMoveToExit, RemoveMoveToExit, true },
     { "MoveTo::CheckEntity", InstallMoveToCheckEntity, RemoveMoveToCheckEntity, true },
@@ -2533,7 +2541,7 @@ static ReimplEntry g_reimplementations[] = {
     { "PastureWork::Slot4", InstallPastureWorkSlot4, RemovePastureWorkSlot4, true },
     { "PastureWork::Slot7", InstallPastureWorkSlot7, RemovePastureWorkSlot7, true },
     { "PastureWork::Slot8", InstallPastureWorkSlot8, RemovePastureWorkSlot8, true },
-    { "PastureWork::Slot9", InstallPastureWorkSlot9, RemovePastureWorkSlot9, true },
+    { "PastureWork::Slot9", InstallPastureWorkSlot9, RemovePastureWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "PastureWork::Slot10", InstallPastureWorkSlot10, RemovePastureWorkSlot10, true },
 
     // --- PerformWork ---
@@ -2545,7 +2553,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- Pickup ---
     { "Pickup::Serialize", InstallPickupSerialize, RemovePickupSerialize, true },
-    { "Pickup::Slot4", InstallPickupSlot4, RemovePickupSlot4, true },
+    { "Pickup::Slot4", InstallPickupSlot4, RemovePickupSlot4, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "Pickup::Execute", InstallPickupExecute, RemovePickupExecute, true },
     { "Pickup::Slot6", InstallPickupSlot6, RemovePickupSlot6, true },
     { "Pickup::Slot7", InstallPickupSlot7, RemovePickupSlot7, true },
@@ -2606,15 +2614,15 @@ static ReimplEntry g_reimplementations[] = {
     { "TendArea::Slot4", InstallTendAreaSlot4, RemoveTendAreaSlot4, true },
     { "TendArea::Slot6", InstallTendAreaSlot6, RemoveTendAreaSlot6, false }, // DISABLED: relative CALL in prologue
     { "TendArea::Slot8", InstallTendAreaSlot8, RemoveTendAreaSlot8, false }, // DISABLED: short Jcc in prologue
-    { "TendArea::Slot9", InstallTendAreaSlot9, RemoveTendAreaSlot9, true },
+    { "TendArea::Slot9", InstallTendAreaSlot9, RemoveTendAreaSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "TendArea::Slot10", InstallTendAreaSlot10, RemoveTendAreaSlot10, true },
 
     // --- TradeWork ---
     { "TradeWork::Serialize", InstallTradeWorkSerialize, RemoveTradeWorkSerialize, true },
-    { "TradeWork::Slot4", InstallTradeWorkSlot4, RemoveTradeWorkSlot4, true },
+    { "TradeWork::Slot4", InstallTradeWorkSlot4, RemoveTradeWorkSlot4, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "TradeWork::Slot6", InstallTradeWorkSlot6, RemoveTradeWorkSlot6, false }, // DISABLED: relative CALL in prologue
     { "TradeWork::Slot8", InstallTradeWorkSlot8, RemoveTradeWorkSlot8, false }, // DISABLED: short Jcc in prologue
-    { "TradeWork::Slot9", InstallTradeWorkSlot9, RemoveTradeWorkSlot9, true },
+    { "TradeWork::Slot9", InstallTradeWorkSlot9, RemoveTradeWorkSlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "TradeWork::Slot10", InstallTradeWorkSlot10, RemoveTradeWorkSlot10, true },
 
     // ============================================================
@@ -2698,7 +2706,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HelpUI::Dtor", InstallHelpUIDtor, RemoveHelpUIDtor, true },
     { "HelpUI::Slot4", InstallHelpUISlot4, RemoveHelpUISlot4, true },
     { "HelpUI::Slot7", InstallHelpUISlot7, RemoveHelpUISlot7, true },
-    { "HelpUI::Slot9", InstallHelpUISlot9, RemoveHelpUISlot9, true },
+    { "HelpUI::Slot9", InstallHelpUISlot9, RemoveHelpUISlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // ============================================================
     // Phase 4: UI Panel Controllers (H-R)
@@ -2791,7 +2799,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- StatusBarUI ---
     { "StatusBarUI::ScalarDtor", InstallStatusBarUIScalarDtor, RemoveStatusBarUIScalarDtor, true },
     { "StatusBarUI::Draw", InstallStatusBarUIDraw, RemoveStatusBarUIDraw, true },
-    { "StatusBarUI::Startup", InstallStatusBarUIStartup, RemoveStatusBarUIStartup, true },
+    { "StatusBarUI::Startup", InstallStatusBarUIStartup, RemoveStatusBarUIStartup, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "StatusBarUI::OnRemove", InstallStatusBarUIOnRemove, RemoveStatusBarUIOnRemove, false }, // DISABLED: short Jcc in prologue
 
     // --- StatusIconUI ---
@@ -2862,7 +2870,7 @@ static ReimplEntry g_reimplementations[] = {
     { "EventNotifyDialog::ScalarDtor", InstallEventNotifyDialogScalarDtor, RemoveEventNotifyDialogScalarDtor, true },
     { "EventNotifyDialog::Startup", InstallEventNotifyDialogStartup, RemoveEventNotifyDialogStartup, true },
     { "EventNotifyDialog::Update", InstallEventNotifyDialogUpdate, RemoveEventNotifyDialogUpdate, true },
-    { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, true },
+    { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // --- MapParamsDialog ---
     { "MapParamsDialog::ScalarDtor", InstallMapParamsDialogScalarDtor, RemoveMapParamsDialogScalarDtor, true },
@@ -2892,12 +2900,12 @@ static ReimplEntry g_reimplementations[] = {
     { "SaveLoadDialog::ScalarDtor", InstallSaveLoadDialogScalarDtor, RemoveSaveLoadDialogScalarDtor, true },
     { "SaveLoadDialog::Startup", InstallSaveLoadDialogStartup, RemoveSaveLoadDialogStartup, true },
     { "SaveLoadDialog::Update", InstallSaveLoadDialogUpdate, RemoveSaveLoadDialogUpdate, true },
-    { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, true },
+    { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // --- ToolbarDialog ---
     { "ToolbarDialog::ScalarDtor", InstallToolbarDialogScalarDtor, RemoveToolbarDialogScalarDtor, true },
     { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, true },
-    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, true },
+    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // --- TutorialHighlightDialog ---
     { "TutorialHighlightDialog::ScalarDtor", InstallTutorialHighlightDialogScalarDtor, RemoveTutorialHighlightDialogScalarDtor, true },
@@ -2935,7 +2943,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- FollowDialog ---
     { "FollowDialog::Dtor", InstallFollowDialogDtor, RemoveFollowDialogDtor, true },
     { "FollowDialog::Slot4", InstallFollowDialogSlot4, RemoveFollowDialogSlot4, true },
-    { "FollowDialog::Slot6", InstallFollowDialogSlot6, RemoveFollowDialogSlot6, true },
+    { "FollowDialog::Slot6", InstallFollowDialogSlot6, RemoveFollowDialogSlot6, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "FollowDialog::Slot7", InstallFollowDialogSlot7, RemoveFollowDialogSlot7, true },
     // --- GoalDialog ---
     { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },
@@ -2968,7 +2976,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ModUploadDialog::Dtor", InstallModUploadDialogDtor, RemoveModUploadDialogDtor, true },
     // --- ModDialog ---
     { "ModDialog::Dtor", InstallModDialogDtor, RemoveModDialogDtor, true },
-    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, true },
+    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "ModDialog::Slot8", InstallModDialogSlot8, RemoveModDialogSlot8, true },
     { "ModDialog::Slot10", InstallModDialogSlot10, RemoveModDialogSlot10, true },
     // --- ScenarioDialog ---
@@ -3042,7 +3050,7 @@ static ReimplEntry g_reimplementations[] = {
     { "FrustumOutlineElement::Dtor", InstallFrustumOutlineElementDtor, RemoveFrustumOutlineElementDtor, true },
     { "FrustumOutlineElement::OnCreate", InstallFrustumOutlineElementOnCreate, RemoveFrustumOutlineElementOnCreate, false }, // DISABLED: short Jcc in prologue
     { "FrustumOutlineElement::ComputeLayout", InstallFrustumOutlineElementComputeLayout, RemoveFrustumOutlineElementComputeLayout, true },
-    { "FrustumOutlineElement::Draw", InstallFrustumOutlineElementDraw, RemoveFrustumOutlineElementDraw, true },
+    { "FrustumOutlineElement::Draw", InstallFrustumOutlineElementDraw, RemoveFrustumOutlineElementDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
 
     // ================================================================
     // Phase 5: Tools & Placement
@@ -3055,13 +3063,13 @@ static ReimplEntry g_reimplementations[] = {
     { "DragTool::OnKey", InstallDragToolOnKey, RemoveDragToolOnKey, true },
     { "BridgeTool::Dtor", InstallBridgeToolDtor, RemoveBridgeToolDtor, true },
     { "BridgeTool::Startup", InstallBridgeToolStartup, RemoveBridgeToolStartup, true },
-    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, true },
+    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "BridgeTool::CalcCost", InstallBridgeToolCalcCost, RemoveBridgeToolCalcCost, true },
     { "DragPlacementTool::Dtor", InstallDragPlacementToolDtor, RemoveDragPlacementToolDtor, true },
     { "DragPlacementTool::Startup", InstallDragPlacementToolStartup, RemoveDragPlacementToolStartup, true },
-    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, true },
-    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, true },
-    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, true },
+    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "EditTool::Dtor", InstallEditToolDtor, RemoveEditToolDtor, true },
     { "EditTool::OnKey", InstallEditToolOnKey, RemoveEditToolOnKey, true },
     { "EditTool::Startup", InstallEditToolStartup, RemoveEditToolStartup, true },
@@ -3070,11 +3078,11 @@ static ReimplEntry g_reimplementations[] = {
     { "FencedTool::Startup", InstallFencedToolStartup, RemoveFencedToolStartup, true },
     { "FencedTool::Shutdown2", InstallFencedToolShutdown2, RemoveFencedToolShutdown2, true },
     { "FencedTool::OnKey", InstallFencedToolOnKey, RemoveFencedToolOnKey, true },
-    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, true },
-    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, true },
+    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "FencedTool::Shutdown", InstallFencedToolShutdown, RemoveFencedToolShutdown, true },
-    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, true },
-    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, true },
+    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "PathTool::Dtor", InstallPathToolDtor, RemovePathToolDtor, true },
     { "PathTool::OnKey", InstallPathToolOnKey, RemovePathToolOnKey, true },
     { "PathTool::Draw", InstallPathToolDraw, RemovePathToolDraw, true },
@@ -3082,9 +3090,9 @@ static ReimplEntry g_reimplementations[] = {
     { "PlacementTool::Dtor", InstallPlacementToolDtor, RemovePlacementToolDtor, true },
     { "PlacementTool::Startup", InstallPlacementToolStartup, RemovePlacementToolStartup, true },
     { "PlacementTool::Shutdown2", InstallPlacementToolShutdown2, RemovePlacementToolShutdown2, true },
-    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, true },
-    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, true },
-    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, true },
+    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "RemovalTool::Dtor", InstallRemovalToolDtor, RemoveRemovalToolDtor, true },
     { "RemovalTool::Startup", InstallRemovalToolStartup, RemoveRemovalToolStartup, true },
     { "RemovalTool::Draw", InstallRemovalToolDraw, RemoveRemovalToolDraw, true },
@@ -3111,7 +3119,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialGoalCount::Dtor", InstallTutorialGoalCountDtor, RemoveTutorialGoalCountDtor, true },
     { "TutorialGoalCount::Serialize", InstallTutorialGoalCountSerialize, RemoveTutorialGoalCountSerialize, true },
     { "TutorialGoalCount::Cleanup", InstallTutorialGoalCountCleanup, RemoveTutorialGoalCountCleanup, true },
-    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, true },
+    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, false }, // DISABLED: near Jcc in prologue
     { "TutorialGoalGameSpeed::Dtor", InstallTutorialGoalGameSpeedDtor, RemoveTutorialGoalGameSpeedDtor, true },
     { "TutorialGoalGameSpeed::Serialize", InstallTutorialGoalGameSpeedSerialize, RemoveTutorialGoalGameSpeedSerialize, true },
@@ -3155,7 +3163,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialSetupRestrictPlayer::Dtor", InstallTutorialSetupRestrictPlayerDtor, RemoveTutorialSetupRestrictPlayerDtor, true },
     { "TutorialSetupRestrictPlayer::Serialize", InstallTutorialSetupRestrictPlayerSerialize, RemoveTutorialSetupRestrictPlayerSerialize, true },
     { "TutorialSetupRestrictPlayer::Cleanup", InstallTutorialSetupRestrictPlayerCleanup, RemoveTutorialSetupRestrictPlayerCleanup, true },
-    { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, true },
+    { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, false }, // RIP-relative in prologue
     { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, false }, // DISABLED: near Jcc in prologue
     { "TutorialStep::Dtor", InstallTutorialStepDtor, RemoveTutorialStepDtor, true },
@@ -3169,7 +3177,7 @@ static ReimplEntry g_reimplementations[] = {
     { "BuildingGoal::Dtor", InstallBuildingGoalDtor, RemoveBuildingGoalDtor, true },
     { "BuildingGoal::Slot5", InstallBuildingGoalSlot5, RemoveBuildingGoalSlot5, true },
     { "BuildingGoal::Slot6", InstallBuildingGoalSlot6, RemoveBuildingGoalSlot6, true },
-    { "BuildingGoal::Slot8", InstallBuildingGoalSlot8, RemoveBuildingGoalSlot8, true },
+    { "BuildingGoal::Slot8", InstallBuildingGoalSlot8, RemoveBuildingGoalSlot8, false }, // DISABLED: MOV RAX/R11,RSP in prologue
     { "BuildingGoal::Slot10", InstallBuildingGoalSlot10, RemoveBuildingGoalSlot10, true },
     { "PopulationGoal::Dtor", InstallPopulationGoalDtor, RemovePopulationGoalDtor, true },
     { "PopulationGoal::Slot5", InstallPopulationGoalSlot5, RemovePopulationGoalSlot5, true },
