@@ -67,6 +67,7 @@ static fn_Serializer_SerializeFloat_t fn_Serializer_SerializeFloat = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(FishingComponent* self, void* stream) {
+    g_lastHook = "FishingComponent::Shutdown";
     fn_ResourceProduceShutdown(self, stream);
 
     uint8_t serializer[24];

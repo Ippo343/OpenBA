@@ -37,12 +37,14 @@ static HookInfo g_hookStartup;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialHighlightDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 4: Startup(this) — set up tutorial highlight overlay
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "TutorialHighlightDialog::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
@@ -61,7 +63,7 @@ void RemoveTutorialHighlightDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); 
 
 void InstallTutorialHighlightDialogStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e0020);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 13);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 17);
 #ifdef _DEBUG
     printf("[TutorialHighlightDialog] Startup hooked at %p\n", (void*)target);
 #endif

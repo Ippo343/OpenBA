@@ -52,16 +52,19 @@ static HookInfo g_hookOnCreate;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "MapComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "MapComponent::Draw";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookDraw.trampoline)(self);
 }
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "MapComponent::OnCreate";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookOnCreate.trampoline)(self);
 }

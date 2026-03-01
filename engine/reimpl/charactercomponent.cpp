@@ -39,6 +39,7 @@ static fn_Character_UpdateAnimation_t fn_Character_UpdateAnimation = nullptr;
 // Parameters: RCX = this, RDX = Time (int64)
 // ============================================================
 static void Reimpl_Update(CharacterComponent* self, int64_t deltaTime) {
+    g_lastHook = "CharacterComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

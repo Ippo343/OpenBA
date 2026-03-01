@@ -74,6 +74,7 @@ static HookInfo g_hookGetTarget;
 // Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28), bool(+0x2C)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "AnimateNaturalResource::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -102,6 +103,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Returns _field2C (bool at +0x2C).
 // ============================================================
 static bool Reimpl_Purecall(void* self) {
+    g_lastHook = "AnimateNaturalResource::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* localIBP;
 
@@ -117,6 +119,7 @@ static bool Reimpl_Purecall(void* self) {
 // Checks if entity's model is still animating. Returns true while animating.
 // ============================================================
 static bool Reimpl_Execute(void* self) {
+    g_lastHook = "AnimateNaturalResource::Execute";
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
@@ -131,6 +134,7 @@ static bool Reimpl_Execute(void* self) {
 // Returns true if param matches entity at +0x20.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "AnimateNaturalResource::GetTarget";
     uint8_t* s = (uint8_t*)self;
     fn_CheckPtr(param);
     return *(void**)(s + 0x20) == *(void**)param;
@@ -181,7 +185,7 @@ void RemoveAnimateNaturalResourcePurecall() { RemoveHook(&g_hookPurecall); }
 
 void InstallAnimateNaturalResourceExecute() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c55b0);
-    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 12);
+    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 13);
 #ifdef _DEBUG
     printf("[AnimateNaturalResource] Execute hooked at %p\n", (void*)target);
 #endif

@@ -68,6 +68,7 @@ static fn_RegisterWorkSlot_t fn_RegisterWorkSlot = nullptr;
 //   - Version >= 2: serialize workFlags (+0x2c)
 // ============================================================
 static void Reimpl_Shutdown(WorkComponent* self, void* stream) {
+    g_lastHook = "WorkComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -113,6 +114,7 @@ static void Reimpl_Shutdown(WorkComponent* self, void* stream) {
 // Calls FUN_14012e5c0 which factors in building size and data.
 // ============================================================
 static void Reimpl_Draw(WorkComponent* self) {
+    g_lastHook = "WorkComponent::Draw";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -132,6 +134,7 @@ static void Reimpl_Draw(WorkComponent* self) {
 // If available, register it with the work slot manager.
 // ============================================================
 static void Reimpl_OnCreate(WorkComponent* self) {
+    g_lastHook = "WorkComponent::OnCreate";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

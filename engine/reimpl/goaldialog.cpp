@@ -40,24 +40,28 @@ static HookInfo g_hookSlot8;
 // Slot0 Dtor (0x140011C10)
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "GoalDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x140069810) — Setup: populates goal table with achievements/goals
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "GoalDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot6 (0x140069640) — Draw: updates goal progress indicators
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
+    g_lastHook = "GoalDialog::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 
 // Slot8 (0x1400697C0) — OnCommand: msg=0x12, id=100 closes dialog
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
+    g_lastHook = "GoalDialog::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
 }
 
@@ -76,7 +80,7 @@ void RemoveGoalDialogDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallGoalDialogSlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140069810);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 13);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 17);
 #ifdef _DEBUG
     printf("[GoalDialog] Slot4 hooked at %p\n", (void*)target);
 #endif

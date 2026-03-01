@@ -25,6 +25,7 @@
 static HookInfo g_hookTutorialStepDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialStep::Dtor";
     return ((fn_Dtor_t)g_hookTutorialStepDtor.trampoline)(self, flags);
 }
 
@@ -41,6 +42,7 @@ void RemoveTutorialStepDtor() { RemoveHook(&g_hookTutorialStepDtor); }
 static HookInfo g_hookTutorialStepSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "TutorialStep::Serialize";
     ((fn_Serialize_t)g_hookTutorialStepSerialize.trampoline)(self, stream);
 }
 
@@ -57,6 +59,7 @@ void RemoveTutorialStepSerialize() { RemoveHook(&g_hookTutorialStepSerialize); }
 static HookInfo g_hookTutorialStepCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "TutorialStep::Cleanup";
     ((fn_Cleanup_t)g_hookTutorialStepCleanup.trampoline)(self);
 }
 
@@ -73,6 +76,7 @@ void RemoveTutorialStepCleanup() { RemoveHook(&g_hookTutorialStepCleanup); }
 static HookInfo g_hookTutorialStepInit;
 typedef void* (*fn_Init_t)(void* self);
 static void* Reimpl_Init(void* self) {
+    g_lastHook = "TutorialStep::Init";
     return ((fn_Init_t)g_hookTutorialStepInit.trampoline)(self);
 }
 

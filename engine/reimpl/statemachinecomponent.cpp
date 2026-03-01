@@ -35,6 +35,7 @@ static fn_StateMachine_Tick_t fn_StateMachine_Tick = nullptr;
 // Parameters: RCX = this, RDX = Time (int64)
 // ============================================================
 static void Reimpl_Update(StateMachineComponent* self, int64_t deltaTime) {
+    g_lastHook = "StateMachineComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

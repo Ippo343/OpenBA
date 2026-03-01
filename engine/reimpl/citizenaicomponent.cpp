@@ -85,6 +85,7 @@ static uint32_t* g_pStorageTypeId = nullptr;  // DAT_1401c7e78
 // Parameters: RCX = this, RDX = pointer to Time (int64*)
 // ============================================================
 static void Reimpl_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
+    g_lastHook = "CitizenAIComponent::Update";
     int64_t dt = *pDeltaTime;
 
 #ifdef _DEBUG

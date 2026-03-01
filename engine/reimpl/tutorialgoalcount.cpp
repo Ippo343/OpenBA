@@ -26,6 +26,7 @@
 static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialGoalCount::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
@@ -42,6 +43,7 @@ void RemoveTutorialGoalCountDtor() { RemoveHook(&g_hookDtor); }
 static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "TutorialGoalCount::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
@@ -58,12 +60,13 @@ void RemoveTutorialGoalCountSerialize() { RemoveHook(&g_hookSerialize); }
 static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "TutorialGoalCount::Cleanup";
     ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
 }
 
 void InstallTutorialGoalCountCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140027800);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 15);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 16);
 #ifdef _DEBUG
     printf("[TutorialGoalCount] Cleanup hooked at %p\n", (void*)target);
 #endif
@@ -74,6 +77,7 @@ void RemoveTutorialGoalCountCleanup() { RemoveHook(&g_hookCleanup); }
 static HookInfo g_hookSlot8;
 typedef void (*fn_Slot8_t)(void* self, void* param1, void* param2);
 static void Reimpl_Slot8(void* self, void* param1, void* param2) {
+    g_lastHook = "TutorialGoalCount::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, param1, param2);
 }
 
@@ -90,6 +94,7 @@ void RemoveTutorialGoalCountSlot8() { RemoveHook(&g_hookSlot8); }
 static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
+    g_lastHook = "TutorialGoalCount::Ctor";
     return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
 }
 

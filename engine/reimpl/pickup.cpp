@@ -77,6 +77,7 @@ static uint32_t g_typeId = 0;
 //   + if version > 0: ArraySerialize(+0x58)
 // ============================================================
 static void Reimpl_Serialize(Pickup* self, void* stream) {
+    g_lastHook = "Pickup::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -120,37 +121,44 @@ static void Reimpl_Serialize(Pickup* self, void* stream) {
 
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "Pickup::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 // Execute (0x1400f38f0) — unique to Pickup, handles re-targeting
 typedef uint64_t (*fn_Execute_t)(void* self, void* param2, void* param3);
 static uint64_t Reimpl_Execute(void* self, void* param2, void* param3) {
+    g_lastHook = "Pickup::Execute";
     return ((fn_Execute_t)g_hookExecute.trampoline)(self, param2, param3);
 }
 
 typedef uint64_t (*fn_Slot6_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "Pickup::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "Pickup::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "Pickup::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "Pickup::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "Pickup::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -212,7 +220,7 @@ void RemovePickupSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallPickupSlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f2f00);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 16);
 #ifdef _DEBUG
     printf("[Pickup] Slot4 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -223,7 +231,7 @@ void RemovePickupSlot4() { RemoveHook(&g_hookSlot4); }
 void InstallPickupExecute() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f38f0);
     // Prologue: MOV [RSP+0x20],RBP(5) + PUSH RSI(2) + PUSH R14(2) + PUSH R15(2) + SUB RSP,0x20(4) = 15
-    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 15);
+    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 18);
 #ifdef _DEBUG
     printf("[Pickup] Execute hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -233,7 +241,7 @@ void RemovePickupExecute() { RemoveHook(&g_hookExecute); }
 
 void InstallPickupSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f2ec0);
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 12);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 14);
 #ifdef _DEBUG
     printf("[Pickup] Slot6 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -243,7 +251,7 @@ void RemovePickupSlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallPickupSlot7() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f2e80);
-    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 12);
+    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 14);
 #ifdef _DEBUG
     printf("[Pickup] Slot7 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -263,7 +271,7 @@ void RemovePickupSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallPickupSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f2e20);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 15);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 16);
 #ifdef _DEBUG
     printf("[Pickup] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -273,7 +281,7 @@ void RemovePickupSlot9() { RemoveHook(&g_hookSlot9); }
 
 void InstallPickupSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f3a50);
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 18);
 #ifdef _DEBUG
     printf("[Pickup] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

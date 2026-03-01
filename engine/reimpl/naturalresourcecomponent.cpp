@@ -67,6 +67,7 @@ static fn_Serializer_SerializeBool_t fn_Serializer_SerializeBool = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(NaturalResourceComponent* self, void* stream) {
+    g_lastHook = "NaturalResourceComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer[24];
@@ -94,6 +95,7 @@ static void Reimpl_Shutdown(NaturalResourceComponent* self, void* stream) {
 typedef void (*fn_OnRemove_Orig_t)(NaturalResourceComponent* self);
 
 static void Reimpl_OnRemove(NaturalResourceComponent* self) {
+    g_lastHook = "NaturalResourceComponent::OnRemove";
     ((fn_OnRemove_Orig_t)g_hookOnRemove.trampoline)(self);
 }
 

@@ -45,6 +45,7 @@ static HookInfo g_hookSerialize;
 // Constructor (0x1400e9340)
 // ============================================================
 static void* Reimpl_Ctor(ConsumeProduceAction* self) {
+    g_lastHook = "ConsumeProduce::Ctor";
     fn_ObjectInternal_Ctor(self);
 
     // Work base fields
@@ -76,6 +77,7 @@ static void* Reimpl_Ctor(ConsumeProduceAction* self) {
 // ScalarDtor (0x14002a190) — passthrough
 // ============================================================
 static void* Reimpl_ScalarDtor(ConsumeProduceAction* self, uint32_t flags) {
+    g_lastHook = "ConsumeProduce::ScalarDtor";
     return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -83,6 +85,7 @@ static void* Reimpl_ScalarDtor(ConsumeProduceAction* self, uint32_t flags) {
 // Serialize (0x1400e9020) — passthrough
 // ============================================================
 static void Reimpl_Serialize(ConsumeProduceAction* self, void* stream) {
+    g_lastHook = "ConsumeProduce::Serialize";
     ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
 }
 

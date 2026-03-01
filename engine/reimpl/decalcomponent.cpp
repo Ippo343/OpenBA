@@ -38,21 +38,25 @@ static HookInfo g_hookOnCreate;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "DecalComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "DecalComponent::Serialize";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookSerialize.trampoline)(self);
 }
 
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "DecalComponent::Draw";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookDraw.trampoline)(self);
 }
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "DecalComponent::OnCreate";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookOnCreate.trampoline)(self);
 }
@@ -80,7 +84,7 @@ void RemoveDecalComponentSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallDecalComponentDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011b560);
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 13);
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 14);
 #ifdef _DEBUG
     printf("[DecalComponent] Draw hooked at %p\n", (void*)target);
 #endif
@@ -89,7 +93,7 @@ void RemoveDecalComponentDraw() { RemoveHook(&g_hookDraw); }
 
 void InstallDecalComponentOnCreate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011b510);
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 13);
+    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 14);
 #ifdef _DEBUG
     printf("[DecalComponent] OnCreate hooked at %p\n", (void*)target);
 #endif

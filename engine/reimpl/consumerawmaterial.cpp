@@ -44,6 +44,7 @@ typedef void (*ConsumeRawMaterial_CheckEntity_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "ConsumeRawMaterial::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -61,6 +62,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self) {
+    g_lastHook = "ConsumeRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -81,6 +83,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
 // ============================================================
 
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "ConsumeRawMaterial::CheckEntity";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

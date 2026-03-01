@@ -41,21 +41,25 @@ static HookInfo g_hookDraw;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "FrustumOutlineElement::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_OnCreate_t)(void* self);
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "FrustumOutlineElement::OnCreate";
     ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 
 typedef void (*fn_ComputeLayout_t)(void* self, int a, int b, int c, int d);
 static void Reimpl_ComputeLayout(void* self, int a, int b, int c, int d) {
+    g_lastHook = "FrustumOutlineElement::ComputeLayout";
     ((fn_ComputeLayout_t)g_hookComputeLayout.trampoline)(self, a, b, c, d);
 }
 
 typedef void (*fn_Draw_t)(void* self, void* spriteCtx, uint8_t alpha);
 static void Reimpl_Draw(void* self, void* spriteCtx, uint8_t alpha) {
+    g_lastHook = "FrustumOutlineElement::Draw";
     ((fn_Draw_t)g_hookDraw.trampoline)(self, spriteCtx, alpha);
 }
 

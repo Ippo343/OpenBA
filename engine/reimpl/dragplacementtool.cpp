@@ -32,6 +32,7 @@
 static HookInfo g_hookDragPlacementToolDtor;
 typedef void* (*fn_DragPlacementToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_DragPlacementToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "DragPlacementTool::DragPlacementToolDtor";
     return ((fn_DragPlacementToolDtor_t)g_hookDragPlacementToolDtor.trampoline)(self, flags);
 }
 
@@ -39,6 +40,7 @@ static void* Reimpl_DragPlacementToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookDragPlacementToolStartup;
 typedef void (*fn_DragPlacementToolStartup_t)(void* self);
 static void Reimpl_DragPlacementToolStartup(void* self) {
+    g_lastHook = "DragPlacementTool::DragPlacementToolStartup";
     ((fn_DragPlacementToolStartup_t)g_hookDragPlacementToolStartup.trampoline)(self);
 }
 
@@ -46,6 +48,7 @@ static void Reimpl_DragPlacementToolStartup(void* self) {
 static HookInfo g_hookDragPlacementToolDraw;
 typedef void (*fn_DragPlacementToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_DragPlacementToolDraw(void* self, void* context, char param) {
+    g_lastHook = "DragPlacementTool::DragPlacementToolDraw";
     ((fn_DragPlacementToolDraw_t)g_hookDragPlacementToolDraw.trampoline)(self, context, param);
 }
 
@@ -53,6 +56,7 @@ static void Reimpl_DragPlacementToolDraw(void* self, void* context, char param) 
 static HookInfo g_hookDragPlacementToolCalcPath;
 typedef uint64_t (*fn_DragPlacementToolCalcPath_t)(void* self, int x, int z);
 static uint64_t Reimpl_DragPlacementToolCalcPath(void* self, int x, int z) {
+    g_lastHook = "DragPlacementTool::DragPlacementToolCalcPath";
     return ((fn_DragPlacementToolCalcPath_t)g_hookDragPlacementToolCalcPath.trampoline)(self, x, z);
 }
 
@@ -60,6 +64,7 @@ static uint64_t Reimpl_DragPlacementToolCalcPath(void* self, int x, int z) {
 static HookInfo g_hookDragPlacementToolCalcCost;
 typedef uint64_t (*fn_DragPlacementToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, uint32_t* d);
 static uint64_t Reimpl_DragPlacementToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, uint32_t* d) {
+    g_lastHook = "DragPlacementTool::DragPlacementToolCalcCost";
     return ((fn_DragPlacementToolCalcCost_t)g_hookDragPlacementToolCalcCost.trampoline)(self, x, z, a, b, c, d);
 }
 

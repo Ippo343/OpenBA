@@ -50,6 +50,7 @@ typedef void (*PickupStoredRawMaterial_CheckEntity_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "PickupStoredRawMaterial::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -66,6 +67,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self) {
+    g_lastHook = "PickupStoredRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -86,6 +88,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
 // ============================================================
 
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "PickupStoredRawMaterial::CheckEntity";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -116,7 +119,7 @@ void RemovePickupStoredRawMaterialSerialize() {
 void InstallPickupStoredRawMaterialAbstractImpl() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c9d40);
     // Prologue: MOV(5)+PUSH(1)+PUSH(1)+PUSH(1)+PUSH(2)+PUSH(2)+PUSH(2)+SUB(4) = 18 bytes
-    InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 18);
+    InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 20);
 #ifdef _DEBUG
     printf("[PickupStoredRawMaterial] AbstractImpl hooked at %p (prologue=18, passthrough)\n", (void*)target);
 #endif

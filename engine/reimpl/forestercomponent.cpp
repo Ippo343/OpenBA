@@ -65,6 +65,7 @@ static fn_Serializer_SerializeBool_t fn_Serializer_SerializeBool = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(ForesterComponent* self, void* stream) {
+    g_lastHook = "ForesterComponent::Shutdown";
     // Call base ResourceProduceComponent::Shutdown
     fn_ResourceProduceShutdown(self, stream);
 

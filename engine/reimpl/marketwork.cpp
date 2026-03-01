@@ -42,6 +42,7 @@ static HookInfo g_hookSlot10;
 // Serialize (0x1400f1d70) — complex versioned BST serialization
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "MarketWork::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -55,30 +56,35 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Slot4 (0x1400eff80) — huge market logic function
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "MarketWork::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 // Slot6 (0x1400eff60) — adds entry to BST at +0x48
 typedef uint8_t (*fn_Slot6_t)(void* self, void* param2);
 static uint8_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "MarketWork::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 // Slot8 (0x1400f1ca0) — cleanup loop over BST entries
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "MarketWork::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 // Slot9 (0x1400efd20) — validates and prunes BST entries
 typedef bool (*fn_Slot9_t)(void* self, void* param2);
 static bool Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "MarketWork::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 // Slot10 (0x1400f1d10) — gets entity sub-object
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "MarketWork::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -113,7 +119,7 @@ void InstallMarketWorkSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400eff60);
     // Small function but >= 12 bytes
     // SUB RSP,0x28(4) + ... check size
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 12);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 13);
 #ifdef _DEBUG
     printf("[MarketWork] Slot6 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -135,7 +141,7 @@ void RemoveMarketWorkSlot8() { RemoveHook(&g_hookSlot8); }
 void InstallMarketWorkSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400efd20);
     // Prologue needs checking - use safe 15
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 15);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
 #ifdef _DEBUG
     printf("[MarketWork] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -146,7 +152,7 @@ void RemoveMarketWorkSlot9() { RemoveHook(&g_hookSlot9); }
 void InstallMarketWorkSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f1d10);
     // Same pattern as LocationWork::Slot10: MOV [RSP+0x10],RBX(5) + PUSH RDI(2) + SUB RSP,0x20(4) + LEA(4) = 15
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 17);
 #ifdef _DEBUG
     printf("[MarketWork] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

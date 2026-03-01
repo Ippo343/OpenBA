@@ -26,6 +26,7 @@ typedef void (*NomadShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "NomadComponent::Shutdown";
     ((NomadShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -49,6 +50,7 @@ typedef void (*NomadOnCreate_t)(void* self);
 static HookInfo g_hookOnCreate;
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "NomadComponent::OnCreate";
     ((NomadOnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 

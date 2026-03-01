@@ -39,21 +39,25 @@ static HookInfo g_hookOnRemove;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "StatusBarUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Draw_t)(void* self);
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "StatusBarUI::Draw";
     ((fn_Draw_t)g_hookDraw.trampoline)(self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "StatusBarUI::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
+    g_lastHook = "StatusBarUI::OnRemove";
     ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
 }
 
@@ -71,7 +75,7 @@ void RemoveStatusBarUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallStatusBarUIDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007a3d0);
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 15);
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 18);
 #ifdef _DEBUG
     printf("[StatusBarUI] Draw hooked at %p\n", (void*)target);
 #endif

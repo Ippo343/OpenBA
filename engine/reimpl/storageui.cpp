@@ -38,16 +38,19 @@ static HookInfo g_hookStartup;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "StorageUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "StorageUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "StorageUI::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
@@ -65,7 +68,7 @@ void RemoveStorageUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallStorageUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400b8820);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 18);
 #ifdef _DEBUG
     printf("[StorageUI] Serialize hooked at %p\n", (void*)target);
 #endif

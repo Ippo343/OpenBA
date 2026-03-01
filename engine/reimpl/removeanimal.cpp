@@ -79,6 +79,7 @@ static HookInfo g_hookGetTarget;
 // Serializes status byte + entity ref at +0x20 with ComponentEntity type validation.
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "RemoveAnimal::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t localSerializer1[16];
     uint8_t localSerializer2[24];
@@ -107,6 +108,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "RemoveAnimal::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* entityRef = *(void**)(s + 0x20);
     void* gameState = *g_pGameState;
@@ -132,6 +134,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 // Clears "in use" bit (bit 20) on entity model component's flags.
 // ============================================================
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "RemoveAnimal::CheckEntity";
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
@@ -160,6 +163,7 @@ static void Reimpl_CheckEntity(void* self) {
 // Returns true if param matches _field20.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void** param) {
+    g_lastHook = "RemoveAnimal::GetTarget";
     uint8_t* s = (uint8_t*)self;
     fn_CheckPtr(s + 0x20);
     return *param == *(void**)(s + 0x20);
@@ -198,7 +202,7 @@ void InstallRemoveAnimalCheckEntity() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400ca760);
     fn_GetModelComp = (fn_GetModelComp_t)ResolveAddr(Module::Exe, 0x140005500);
     fn_NotifyEntityChanged = (fn_NotifyEntityChanged_t)ResolveAddr(Module::Exe, 0x1400c3470);
-    InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 12);
+    InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 15);
 #ifdef _DEBUG
     printf("[RemoveAnimal] CheckEntity hooked at %p\n", (void*)target);
 #endif

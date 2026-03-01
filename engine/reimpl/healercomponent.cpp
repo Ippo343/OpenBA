@@ -63,6 +63,7 @@ static void** g_pWorldManager = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(HealerComponent* self, void* stream) {
+    g_lastHook = "HealerComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     // Two empty serializer blocks (component section + controller section)
@@ -88,6 +89,7 @@ static void Reimpl_Shutdown(HealerComponent* self, void* stream) {
 // ============================================================
 
 static void Reimpl_OnCreate(HealerComponent* self) {
+    g_lastHook = "HealerComponent::OnCreate";
     uint8_t basePtr[24];
     fn_InternalBasePtr_Ctor(basePtr, self->owner);
 
@@ -119,7 +121,7 @@ void InstallHealerComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x14004aeb0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG
     printf("[HealerComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

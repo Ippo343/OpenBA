@@ -37,18 +37,21 @@ static HookInfo g_hookSlot8;
 // Slot0 Dtor (0x1400119B0)
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "EventPopupDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x140068C20) — Setup: populates event popup text/image elements
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "EventPopupDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot8 (0x140068BD0) — OnCommand: msg=0x12, id=200 closes dialog
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
+    g_lastHook = "EventPopupDialog::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
 }
 

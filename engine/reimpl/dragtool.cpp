@@ -31,6 +31,7 @@
 static HookInfo g_hookDragToolDtor;
 typedef void* (*fn_DragToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_DragToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "DragTool::DragToolDtor";
     return ((fn_DragToolDtor_t)g_hookDragToolDtor.trampoline)(self, flags);
 }
 
@@ -38,6 +39,7 @@ static void* Reimpl_DragToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookDragToolOnKey;
 typedef uint64_t (*fn_DragToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_DragToolOnKey(void* self, char key) {
+    g_lastHook = "DragTool::DragToolOnKey";
     return ((fn_DragToolOnKey_t)g_hookDragToolOnKey.trampoline)(self, key);
 }
 

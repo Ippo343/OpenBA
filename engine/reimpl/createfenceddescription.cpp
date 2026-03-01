@@ -36,16 +36,19 @@ static HookInfo g_hookCleanup;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "CreateFencedDescription::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CreateFencedDescription::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "CreateFencedDescription::Cleanup";
     ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
 }
 
@@ -72,7 +75,7 @@ void RemoveCreateFencedDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallCreateFencedDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140004930);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 13);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
 #ifdef _DEBUG
     printf("[CreateFencedDescription] Cleanup hooked at %p\n", (void*)target);
 #endif

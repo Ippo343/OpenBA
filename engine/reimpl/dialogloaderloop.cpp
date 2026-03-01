@@ -67,6 +67,7 @@ static inline void* GetUI(DialogLoaderLoopT* self) {
 typedef void (*DialogLoaderLoopT_Startup_t)(DialogLoaderLoopT* self);
 
 static void Reimpl_Startup(DialogLoaderLoopT* self) {
+    g_lastHook = "DialogLoaderLoopT::Startup";
 #ifdef _DEBUG
     printf("[DialogLoaderLoopT::Startup] self=%p nextLoop=%p\n",
            (void*)self, (void*)self->m_nextLoop);
@@ -114,6 +115,7 @@ static void Reimpl_Startup(DialogLoaderLoopT* self) {
 typedef void (*DialogLoaderLoopT_Shutdown_t)(DialogLoaderLoopT* self);
 
 static void Reimpl_Shutdown(DialogLoaderLoopT* self) {
+    g_lastHook = "DialogLoaderLoopT::Shutdown";
 #ifdef _DEBUG
     printf("[DialogLoaderLoopT::Shutdown] self=%p dialog=%p\n",
            (void*)self, self->m_dialogInstance);
@@ -140,6 +142,7 @@ static void Reimpl_Shutdown(DialogLoaderLoopT* self) {
 typedef bool (*DialogLoaderLoopT_Update_t)(DialogLoaderLoopT* self, Time* dt);
 
 static bool Reimpl_Update(DialogLoaderLoopT* self, Time* dt) {
+    g_lastHook = "DialogLoaderLoopT::Update";
 #ifdef _DEBUG
     static int updateCount = 0;
     if (updateCount < 5) {
@@ -189,6 +192,7 @@ static bool Reimpl_Update(DialogLoaderLoopT* self, Time* dt) {
 typedef void (*DialogLoaderLoopT_Draw_t)(DialogLoaderLoopT* self, float alpha);
 
 static void Reimpl_Draw(DialogLoaderLoopT* self, float /*alpha*/) {
+    g_lastHook = "DialogLoaderLoopT::Draw";
 #ifdef _DEBUG
     static int drawCount = 0;
     if (drawCount < 3) {
@@ -245,6 +249,7 @@ static void Reimpl_Draw(DialogLoaderLoopT* self, float /*alpha*/) {
 // ============================================================
 
 static void Reimpl_Load(uint8_t* self) {
+    g_lastHook = "DialogLoaderLoopT::Load";
     // local Filename (same as SystemString — 8-byte COW pointer)
     SystemString tempStr;
     tempStr.m_data = nullptr;

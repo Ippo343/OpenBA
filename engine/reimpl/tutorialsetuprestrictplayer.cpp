@@ -28,6 +28,7 @@
 static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialSetupRestrictPlayer::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
@@ -44,6 +45,7 @@ void RemoveTutorialSetupRestrictPlayerDtor() { RemoveHook(&g_hookDtor); }
 static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "TutorialSetupRestrictPlayer::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
@@ -60,6 +62,7 @@ void RemoveTutorialSetupRestrictPlayerSerialize() { RemoveHook(&g_hookSerialize)
 static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "TutorialSetupRestrictPlayer::Cleanup";
     ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
 }
 
@@ -76,6 +79,7 @@ void RemoveTutorialSetupRestrictPlayerCleanup() { RemoveHook(&g_hookCleanup); }
 static HookInfo g_hookSlot8;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "TutorialSetupRestrictPlayer::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
@@ -92,6 +96,7 @@ void RemoveTutorialSetupRestrictPlayerSlot8() { RemoveHook(&g_hookSlot8); }
 static HookInfo g_hookSlot10;
 typedef void (*fn_Slot10_t)(void* self);
 static void Reimpl_Slot10(void* self) {
+    g_lastHook = "TutorialSetupRestrictPlayer::Slot10";
     ((fn_Slot10_t)g_hookSlot10.trampoline)(self);
 }
 
@@ -108,6 +113,7 @@ void RemoveTutorialSetupRestrictPlayerSlot10() { RemoveHook(&g_hookSlot10); }
 static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
+    g_lastHook = "TutorialSetupRestrictPlayer::Ctor";
     return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
 }
 

@@ -41,6 +41,7 @@ typedef void (*BoatShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "BoatComponent::Shutdown";
     ((BoatShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 

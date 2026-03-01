@@ -55,6 +55,7 @@ static HookInfo g_hookPurecall;
 // Serializes: status(+0x18), int(+0x20), uchar(+0x28), int(+0x24)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CompleteRoad::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -78,6 +79,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "CompleteRoad::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* gameState = *g_pGameState;
     void* terrain = *(void**)((uint8_t*)gameState + 0xf8);

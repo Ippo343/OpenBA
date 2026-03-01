@@ -40,21 +40,25 @@ static HookInfo g_hookOnUpdate2;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "StatusIconComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "StatusIconComponent::Serialize";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookSerialize.trampoline)(self);
 }
 
 static void Reimpl_OnRemove(void* self) {
+    g_lastHook = "StatusIconComponent::OnRemove";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookOnRemove.trampoline)(self);
 }
 
 static void Reimpl_OnUpdate2(void* self) {
+    g_lastHook = "StatusIconComponent::OnUpdate2";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookOnUpdate2.trampoline)(self);
 }
@@ -73,7 +77,7 @@ void RemoveStatusIconComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallStatusIconComponentSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14012bed0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 12);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[StatusIconComponent] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -91,7 +95,7 @@ void RemoveStatusIconComponentOnRemove() { RemoveHook(&g_hookOnRemove); }
 
 void InstallStatusIconComponentOnUpdate2() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14012bf40);
-    InstallHook(target, (void*)Reimpl_OnUpdate2, &g_hookOnUpdate2, 14);
+    InstallHook(target, (void*)Reimpl_OnUpdate2, &g_hookOnUpdate2, 19);
 #ifdef _DEBUG
     printf("[StatusIconComponent] OnUpdate2 hooked at %p\n", (void*)target);
 #endif

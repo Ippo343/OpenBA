@@ -66,6 +66,7 @@ static void** g_pGameState = nullptr;
 // Simple: Component_Serialize + one empty Serializer block (version 0)
 // ============================================================
 static void Reimpl_Shutdown(StorageDisplayComponent* self, void* stream) {
+    g_lastHook = "StorageDisplayComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -89,6 +90,7 @@ static void Reimpl_Shutdown(StorageDisplayComponent* self, void* stream) {
 // geometry transforms for each display object. 111 instructions.
 // ============================================================
 static void Reimpl_Draw(StorageDisplayComponent* self) {
+    g_lastHook = "StorageDisplayComponent::Draw";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -109,6 +111,7 @@ static void Reimpl_Draw(StorageDisplayComponent* self) {
 // Scene ID is at entry+0x120.
 // ============================================================
 static void Reimpl_OnCreate(StorageDisplayComponent* self) {
+    g_lastHook = "StorageDisplayComponent::OnCreate";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -143,6 +146,7 @@ static void Reimpl_OnCreate(StorageDisplayComponent* self) {
 // proportionally allocates display objects across resource types.
 // ============================================================
 static void Reimpl_Update(StorageDisplayComponent* self) {
+    g_lastHook = "StorageDisplayComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -161,6 +165,7 @@ static void Reimpl_Update(StorageDisplayComponent* self) {
 // PASSTHROUGH since it chains to complex rendering code.
 // ============================================================
 static void Reimpl_OnUpdate2(StorageDisplayComponent* self) {
+    g_lastHook = "StorageDisplayComponent::OnUpdate2";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -204,7 +209,7 @@ void RemoveStorageDisplayComponentShutdown() { RemoveHook(&g_hookShutdown); }
 void InstallStorageDisplayComponentDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140056730);
     // Prologue: 7 PUSHes (1+1+1+2+2+2+2=11) + SUB RSP,0xb0(7) = 18
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 18);
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 19);
 #ifdef _DEBUG
     printf("[StorageDisplayComponent] Draw hooked at %p (prologue=18, passthrough)\n", (void*)target);
 #endif
@@ -245,7 +250,7 @@ void InstallStorageDisplayComponentUpdate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400563e0);
     // Check prologue of FUN_1400563e0
     // Prologue of FUN_1400563e0: PUSH RSI(1)+PUSH R15(2)+SUB RSP,0x88(7)+MOV R15,RCX(3) = 13
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 13);
+    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 14);
 #ifdef _DEBUG
     printf("[StorageDisplayComponent] Update hooked at %p (prologue=14, passthrough)\n", (void*)target);
 #endif

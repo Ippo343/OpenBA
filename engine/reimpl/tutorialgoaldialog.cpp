@@ -40,30 +40,35 @@ static HookInfo g_hookOnDestroy;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialGoalDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 5: Shutdown(this, stream) — serialize/cleanup
 typedef uint64_t (*fn_Shutdown_t)(void* self, void* stream);
 static uint64_t Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "TutorialGoalDialog::Shutdown";
     return ((fn_Shutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 // Slot 6: OnEvent(this, p2, p3, p4) — handle goal dialog events
 typedef void* (*fn_OnEvent_t)(void* self, uint64_t p2, uint64_t p3, uint64_t p4);
 static void* Reimpl_OnEvent(void* self, uint64_t p2, uint64_t p3, uint64_t p4) {
+    g_lastHook = "TutorialGoalDialog::OnEvent";
     return ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, p2, p3, p4);
 }
 
 // Slot 8: OnInit(this) — initialize tutorial goal state
 typedef uint64_t (*fn_OnInit_t)(void* self);
 static uint64_t Reimpl_OnInit(void* self) {
+    g_lastHook = "TutorialGoalDialog::OnInit";
     return ((fn_OnInit_t)g_hookOnInit.trampoline)(self);
 }
 
 // Slot 9: OnDestroy(this) — cleanup tutorial goal dialog
 typedef void* (*fn_OnDestroy_t)(void* self);
 static void* Reimpl_OnDestroy(void* self) {
+    g_lastHook = "TutorialGoalDialog::OnDestroy";
     return ((fn_OnDestroy_t)g_hookOnDestroy.trampoline)(self);
 }
 

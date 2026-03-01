@@ -63,6 +63,7 @@ static HookInfo g_hookGetTarget;
 // Serializes: status(+0x18), typeRef(+0x20), int(+0x30), versioned entity(+0x28)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CreateNaturalResource::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -96,6 +97,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 typedef uint64_t (*fn_CNRPurecall_t)(void* self);
 
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "CreateNaturalResource::Purecall";
     return ((fn_CNRPurecall_t)g_hookPurecall.trampoline)(self);
 }
 
@@ -104,6 +106,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 // Returns true if param matches entity at +0x28.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "CreateNaturalResource::GetTarget";
     uint8_t* s = (uint8_t*)self;
     fn_CheckPtr(s + 0x28);
     return *(void**)param == *(void**)(s + 0x28);
@@ -139,7 +142,7 @@ void RemoveCreateNaturalResourceSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallCreateNaturalResourcePurecall() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6650);
-    InstallHook(target, (void*)Reimpl_Purecall, &g_hookPurecall, 12);
+    InstallHook(target, (void*)Reimpl_Purecall, &g_hookPurecall, 20);
 #ifdef _DEBUG
     printf("[CreateNaturalResource] Purecall hooked (passthrough) at %p\n", (void*)target);
 #endif
@@ -148,7 +151,7 @@ void RemoveCreateNaturalResourcePurecall() { RemoveHook(&g_hookPurecall); }
 
 void InstallCreateNaturalResourceGetTarget() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6610);
-    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 13);
+    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 14);
 #ifdef _DEBUG
     printf("[CreateNaturalResource] GetTarget hooked at %p\n", (void*)target);
 #endif

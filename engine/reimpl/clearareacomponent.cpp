@@ -43,6 +43,7 @@ static HookInfo g_hookShutdown;
 //   2. Serializer block with clearState at +0x48
 // ============================================================
 static void Reimpl_Shutdown(ClearAreaComponent* self, void* stream) {
+    g_lastHook = "ClearAreaComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     // Empty serializer block (format compatibility stub)
@@ -90,7 +91,7 @@ void InstallClearAreaComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x140117EC0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[ClearAreaComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

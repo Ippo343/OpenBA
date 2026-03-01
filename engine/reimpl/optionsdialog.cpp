@@ -38,18 +38,21 @@ static HookInfo g_hookOnEvent;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "OptionsDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 4: Startup(this) — build options UI with tabs/controls
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "OptionsDialog::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData)
 typedef void (*fn_OnEvent_t)(void* self, void* element, int eventType, int eventData);
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
+    g_lastHook = "OptionsDialog::OnEvent";
     ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, element, eventType, eventData);
 }
 

@@ -49,6 +49,7 @@ static HookInfo g_hookSlot10;
 //   with count at +0x60, then serialize int at +0x68
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "FishingWork::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -61,31 +62,37 @@ static void Reimpl_Serialize(void* self, void* stream) {
 
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "FishingWork::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 typedef uint64_t (*fn_Slot6_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "FishingWork::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "FishingWork::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "FishingWork::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "FishingWork::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "FishingWork::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -116,7 +123,7 @@ void RemoveFishingWorkSlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallFishingWorkSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e9eb0);
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 12);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 13);
 #ifdef _DEBUG
     printf("[FishingWork] Slot6 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -146,7 +153,7 @@ void RemoveFishingWorkSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallFishingWorkSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e9c30);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 15);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 17);
 #ifdef _DEBUG
     printf("[FishingWork] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -156,7 +163,7 @@ void RemoveFishingWorkSlot9() { RemoveHook(&g_hookSlot9); }
 
 void InstallFishingWorkSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400ea8b0);
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 17);
 #ifdef _DEBUG
     printf("[FishingWork] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

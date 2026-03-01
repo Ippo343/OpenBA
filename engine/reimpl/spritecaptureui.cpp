@@ -38,16 +38,19 @@ static HookInfo g_hookOnCreate;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "SpriteCaptureUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "SpriteCaptureUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_OnCreate_t)(void* self);
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "SpriteCaptureUI::OnCreate";
     ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 
@@ -65,7 +68,7 @@ void RemoveSpriteCaptureUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallSpriteCaptureUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140079640);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 20);
 #ifdef _DEBUG
     printf("[SpriteCaptureUI] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -74,7 +77,7 @@ void RemoveSpriteCaptureUISerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallSpriteCaptureUIOnCreate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400793a0);
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 15);
+    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 17);
 #ifdef _DEBUG
     printf("[SpriteCaptureUI] OnCreate hooked at %p\n", (void*)target);
 #endif

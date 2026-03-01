@@ -110,6 +110,7 @@ static bool IsTileValid(HerdComponent* self) {
 // ============================================================
 
 static void Reimpl_Update(HerdComponent* self, int64_t* deltaTime) {
+    g_lastHook = "HerdComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

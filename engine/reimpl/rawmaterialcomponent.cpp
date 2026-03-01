@@ -95,6 +95,7 @@ static float* g_pThresholdTime = nullptr;
 // Versioned serialization: field28 (int), field38 (Time), field30 (v2+)
 // ============================================================
 static void Reimpl_Shutdown(RawMaterialComponent* self, void* stream) {
+    g_lastHook = "RawMaterialComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -129,6 +130,7 @@ static void Reimpl_Shutdown(RawMaterialComponent* self, void* stream) {
 // registers the entity with the world raw material manager.
 // ============================================================
 static void Reimpl_Serialize(RawMaterialComponent* self) {
+    g_lastHook = "RawMaterialComponent::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -165,6 +167,7 @@ static void Reimpl_Serialize(RawMaterialComponent* self) {
 // the draw system. Too many internal dependencies to reimpl safely.
 // ============================================================
 static void Reimpl_Draw(RawMaterialComponent* self) {
+    g_lastHook = "RawMaterialComponent::Draw";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -184,6 +187,7 @@ static void Reimpl_Draw(RawMaterialComponent* self) {
 // pending list.
 // ============================================================
 static void Reimpl_Update(RawMaterialComponent* self, int64_t* pDeltaTime) {
+    g_lastHook = "RawMaterialComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -311,7 +315,7 @@ void RemoveRawMaterialComponentSerialize() { RemoveHook(&g_hookSerialize); }
 void InstallRawMaterialComponentDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401291d0);
     // Prologue: PUSH RBX(1)+PUSH RSI(1)+PUSH RDI(1)+SUB RSP,0x30(4)+MOV qword,-0x2(9) = 16
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 16);
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 17);
 #ifdef _DEBUG
     printf("[RawMaterialComponent] Draw hooked at %p (prologue=16, passthrough)\n", (void*)target);
 #endif

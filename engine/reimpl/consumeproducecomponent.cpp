@@ -65,6 +65,7 @@ static fn_Serializer_SerializeFloatArray_t fn_Serializer_SerializeFloatArray = n
 //   - Version-0 migration: if consumeResourceId < 0 on load, reset to 0
 // ============================================================
 static void Reimpl_Shutdown(ConsumeProduceComponent* self, void* stream) {
+    g_lastHook = "ConsumeProduceComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -119,6 +120,7 @@ static void Reimpl_Shutdown(ConsumeProduceComponent* self, void* stream) {
 // float array to 1.0f per slot. Too many type lookups to reimpl safely.
 // ============================================================
 static void Reimpl_Serialize(ConsumeProduceComponent* self) {
+    g_lastHook = "ConsumeProduceComponent::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -189,7 +191,7 @@ void InstallConsumeProduceComponentSerialize() {
     // Wait: 0x140118ef0=PUSH RSI(1), ef1=PUSH RDI(1), ef2=PUSH R15(2), ef4=SUB RSP,0x20(4), ef8=nope.
     // ef0+1=ef1, +1=ef2, +2=ef4, +4=ef8 (not ef9). ef8=MOV R15,RCX(3)=efb. efb+1=efc=MOV [RSP+0x40],RBX(5)=f01.
     // Boundaries: 0,1,2,4,8,11,16. 12 falls in MOV [RSP+0x40],RBX (11-16). Need 16.
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 16);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 17);
 #ifdef _DEBUG
     printf("[ConsumeProduceComponent] Serialize hooked at %p (prologue=16, passthrough)\n", (void*)target);
 #endif

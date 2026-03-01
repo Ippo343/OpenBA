@@ -35,6 +35,7 @@ typedef void* (*HA_ScalarDtor_t)(void* self, uint32_t flags);
 static HookInfo g_hookScalarDtor;
 
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "HarvestArea::ScalarDtor";
     return ((HA_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -56,6 +57,7 @@ typedef void (*HA_Serialize_t)(void* self, void* stream);
 static HookInfo g_hookSerialize;
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "HarvestArea::Serialize";
     ((HA_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
@@ -77,6 +79,7 @@ typedef uint64_t (*HA_Slot4_t)(void* self, void* param2, uint64_t param3, uint64
 static HookInfo g_hookSlot4;
 
 static uint64_t Reimpl_Slot4(void* self, void* param2, uint64_t param3, uint64_t param4) {
+    g_lastHook = "HarvestArea::Slot4";
     return ((HA_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3, param4);
 }
 
@@ -98,6 +101,7 @@ typedef uint8_t (*HA_Slot6_t)(void* self, void* param2);
 static HookInfo g_hookSlot6;
 
 static uint8_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "HarvestArea::Slot6";
     return ((HA_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
@@ -119,6 +123,7 @@ typedef void (*HA_Slot7_t)(void* self, void* param2);
 static HookInfo g_hookSlot7;
 
 static void Reimpl_Slot7(void* self, void* param2) {
+    g_lastHook = "HarvestArea::Slot7";
     ((HA_Slot7_t)g_hookSlot7.trampoline)(self, param2);
 }
 
@@ -141,6 +146,7 @@ typedef void (*HA_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "HarvestArea::Slot8";
     ((HA_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
@@ -162,6 +168,7 @@ typedef bool (*HA_Slot9_t)(void* self, void* param2);
 static HookInfo g_hookSlot9;
 
 static bool Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "HarvestArea::Slot9";
     return ((HA_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
@@ -184,6 +191,7 @@ typedef void* (*HA_Slot10_t)(void* self, void* outPtr);
 static HookInfo g_hookSlot10;
 
 static void* Reimpl_Slot10(void* self, void* outPtr) {
+    g_lastHook = "HarvestArea::Slot10";
     return ((HA_Slot10_t)g_hookSlot10.trampoline)(self, outPtr);
 }
 

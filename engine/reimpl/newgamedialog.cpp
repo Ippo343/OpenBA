@@ -39,18 +39,21 @@ static HookInfo g_hookUpdate;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "NewGameDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 4: Startup(this) — build new game UI with combos, seed, terrain
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "NewGameDialog::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 // Slot 6: Update(this) — sync new game settings
 typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
+    g_lastHook = "NewGameDialog::Update";
     ((fn_Update_t)g_hookUpdate.trampoline)(self);
 }
 

@@ -43,30 +43,35 @@ static HookInfo g_hookSlot10;
 // Slot0 Dtor (0x140020DA0)
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "MainMenuDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x1400B3CD0) — Setup: initializes main menu UI, buttons, events
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "MainMenuDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot5 (0x1400B3C60) — Shutdown: unpauses audio scenes (channels 2,3,4)
 typedef void (*fn_Slot5_t)(void* self);
 static void Reimpl_Slot5(void* self) {
+    g_lastHook = "MainMenuDialog::Slot5";
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
 }
 
 // Slot8 (0x1400B3B50) — OnCommand: dispatches menu button clicks
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
+    g_lastHook = "MainMenuDialog::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
 }
 
 // Slot10 (0x140020CB0) — Secondary dtor
 typedef void* (*fn_Slot10_t)(void* self, uint32_t flags);
 static void* Reimpl_Slot10(void* self, uint32_t flags) {
+    g_lastHook = "MainMenuDialog::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, flags);
 }
 

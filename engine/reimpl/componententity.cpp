@@ -46,22 +46,27 @@ typedef void  (*fn_Slot9_t)(void* self);
 // Passthrough wrappers
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "ComponentEntity::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 static void Reimpl_Slot3(void* self, void* stream) {
+    g_lastHook = "ComponentEntity::Slot3";
     ((fn_Slot3_t)g_hookSlot3.trampoline)(self, stream);
 }
 
 static void* Reimpl_Slot5(void* self, uint32_t flags) {
+    g_lastHook = "ComponentEntity::Slot5";
     return ((fn_Slot5_t)g_hookSlot5.trampoline)(self, flags);
 }
 
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "ComponentEntity::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 static void Reimpl_Slot9(void* self) {
+    g_lastHook = "ComponentEntity::Slot9";
     ((fn_Slot9_t)g_hookSlot9.trampoline)(self);
 }
 
@@ -71,7 +76,7 @@ static void Reimpl_Slot9(void* self) {
 void InstallComponentEntityDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140021a00);
     // Prologue: mov [rsp+8],rbx(5) + push rdi(2) + sub rsp,0x20(4) + mov ebx,edx(2) + mov rdi,rcx(3) = 13
-    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 13);
+    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 15);
 #ifdef _DEBUG
     printf("[ComponentEntity] Dtor hooked at %p\n", (void*)target);
 #endif
@@ -81,7 +86,7 @@ void RemoveComponentEntityDtor() { RemoveHook(&g_hookDtor); }
 void InstallComponentEntitySlot3() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c3140);
     // Prologue: push rbp(2)+push rsi(1)+push rdi(1)+push r12(2)+push r13(2)+push r14(2)+push r15(2)+sub rsp,0x40(4) = 16 -> 15 (at r15 end)
-    InstallHook(target, (void*)Reimpl_Slot3, &g_hookSlot3, 15);
+    InstallHook(target, (void*)Reimpl_Slot3, &g_hookSlot3, 16);
 #ifdef _DEBUG
     printf("[ComponentEntity] Slot3 hooked at %p\n", (void*)target);
 #endif
@@ -91,7 +96,7 @@ void RemoveComponentEntitySlot3() { RemoveHook(&g_hookSlot3); }
 void InstallComponentEntitySlot5() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140021c90);
     // Prologue: mov [rsp+8],rcx(5) + push rdi(2) + sub rsp,0x30(4) + mov qword,-2(9) = 15
-    InstallHook(target, (void*)Reimpl_Slot5, &g_hookSlot5, 15);
+    InstallHook(target, (void*)Reimpl_Slot5, &g_hookSlot5, 19);
 #ifdef _DEBUG
     printf("[ComponentEntity] Slot5 hooked at %p\n", (void*)target);
 #endif
@@ -111,7 +116,7 @@ void RemoveComponentEntitySlot8() { RemoveHook(&g_hookSlot8); }
 void InstallComponentEntitySlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14003addc);
     // Prologue: sub rsp,0x28(4) + mov rcx,[rip+xx](7) = boundary at 4, need more. Next is call(6) = 10. Next test(3) = 13
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 13);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 17);
 #ifdef _DEBUG
     printf("[ComponentEntity] Slot9 hooked at %p\n", (void*)target);
 #endif

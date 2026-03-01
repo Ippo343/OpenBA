@@ -30,6 +30,7 @@
 static HookInfo g_hookPathToolDtor;
 typedef void* (*fn_PathToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_PathToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "PathTool::PathToolDtor";
     return ((fn_PathToolDtor_t)g_hookPathToolDtor.trampoline)(self, flags);
 }
 
@@ -37,6 +38,7 @@ static void* Reimpl_PathToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookPathToolOnKey;
 typedef uint64_t (*fn_PathToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_PathToolOnKey(void* self, char key) {
+    g_lastHook = "PathTool::PathToolOnKey";
     return ((fn_PathToolOnKey_t)g_hookPathToolOnKey.trampoline)(self, key);
 }
 
@@ -44,6 +46,7 @@ static uint64_t Reimpl_PathToolOnKey(void* self, char key) {
 static HookInfo g_hookPathToolDraw;
 typedef void (*fn_PathToolDraw_t)(void* self, void* context);
 static void Reimpl_PathToolDraw(void* self, void* context) {
+    g_lastHook = "PathTool::PathToolDraw";
     ((fn_PathToolDraw_t)g_hookPathToolDraw.trampoline)(self, context);
 }
 
@@ -51,6 +54,7 @@ static void Reimpl_PathToolDraw(void* self, void* context) {
 static HookInfo g_hookPathToolSerialize;
 typedef void (*fn_PathToolSerialize_t)(void* self, void* stream);
 static void Reimpl_PathToolSerialize(void* self, void* stream) {
+    g_lastHook = "PathTool::PathToolSerialize";
     ((fn_PathToolSerialize_t)g_hookPathToolSerialize.trampoline)(self, stream);
 }
 

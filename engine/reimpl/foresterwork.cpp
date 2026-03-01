@@ -38,6 +38,7 @@ typedef void* (*FW_ScalarDtor_t)(void* self, uint32_t flags);
 static HookInfo g_hookScalarDtor;
 
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "ForesterWork::ScalarDtor";
     return ((FW_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -60,6 +61,7 @@ typedef void (*FW_Serialize_t)(void* self, void* stream);
 static HookInfo g_hookSerialize;
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "ForesterWork::Serialize";
     ((FW_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
@@ -83,6 +85,7 @@ typedef uint64_t (*FW_Slot4_t)(void* self, void* param2, uint64_t param3, uint64
 static HookInfo g_hookSlot4;
 
 static uint64_t Reimpl_Slot4(void* self, void* param2, uint64_t param3, uint64_t param4) {
+    g_lastHook = "ForesterWork::Slot4";
     return ((FW_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3, param4);
 }
 
@@ -112,6 +115,7 @@ typedef void (*FW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "ForesterWork::Slot8";
     ((FW_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
@@ -134,6 +138,7 @@ typedef bool (*FW_Slot9_t)(void* self, void* param2);
 static HookInfo g_hookSlot9;
 
 static bool Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "ForesterWork::Slot9";
     return ((FW_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
@@ -157,6 +162,7 @@ typedef void* (*FW_Slot10_t)(void* self, void* outPtr);
 static HookInfo g_hookSlot10;
 
 static void* Reimpl_Slot10(void* self, void* outPtr) {
+    g_lastHook = "ForesterWork::Slot10";
     return ((FW_Slot10_t)g_hookSlot10.trampoline)(self, outPtr);
 }
 

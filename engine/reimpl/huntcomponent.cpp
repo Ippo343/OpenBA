@@ -53,6 +53,7 @@ static fn_ComputeTerrainSpeed_t fn_ComputeTerrainSpeed = nullptr;
 // Parameters: RCX = this, RDX = Time (int64)
 // ============================================================
 static void Reimpl_Update(HuntComponent* self, int64_t deltaTime) {
+    g_lastHook = "HuntComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

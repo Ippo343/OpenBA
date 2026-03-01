@@ -27,6 +27,7 @@
 static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialSetup::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
@@ -43,6 +44,7 @@ void RemoveTutorialSetupDtor() { RemoveHook(&g_hookDtor); }
 static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "TutorialSetup::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 

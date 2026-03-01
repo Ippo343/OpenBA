@@ -37,11 +37,13 @@ static HookInfo g_hookSerialize;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TitleDescToolTipUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "TitleDescToolTipUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
@@ -59,7 +61,7 @@ void RemoveTitleDescToolTipUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallTitleDescToolTipUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007b730);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 13);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 18);
 #ifdef _DEBUG
     printf("[TitleDescToolTipUI] Serialize hooked at %p\n", (void*)target);
 #endif

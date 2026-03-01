@@ -39,24 +39,28 @@ static HookInfo g_hookLoad;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "EventNotifyDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 4: Startup(this) — find UI elements, build notification array
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "EventNotifyDialog::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 // Slot 6: Update(this) — position ribbon, set sprites/flags
 typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
+    g_lastHook = "EventNotifyDialog::Update";
     ((fn_Update_t)g_hookUpdate.trampoline)(self);
 }
 
 // Slot 7: Load(this, param2) — process events, handle button clicks
 typedef void (*fn_Load_t)(void* self, void* param2);
 static void Reimpl_Load(void* self, void* param2) {
+    g_lastHook = "EventNotifyDialog::Load";
     ((fn_Load_t)g_hookLoad.trampoline)(self, param2);
 }
 

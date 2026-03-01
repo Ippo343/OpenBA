@@ -39,24 +39,28 @@ static HookInfo g_hookSlot7;
 // Slot0 Dtor (0x140020C70)
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "LoaderDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x1400B2D90) — Setup: finds loadingImage element
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "LoaderDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot6 (0x1400B2D00) — Draw: applies rotation to loading spinner
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
+    g_lastHook = "LoaderDialog::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 
 // Slot7 (0x1400B2D50) — Update: accumulates rotation angle from elapsed time
 typedef void (*fn_Slot7_t)(void* self, void* time);
 static void Reimpl_Slot7(void* self, void* time) {
+    g_lastHook = "LoaderDialog::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self, time);
 }
 

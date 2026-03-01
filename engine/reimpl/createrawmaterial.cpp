@@ -57,6 +57,7 @@ typedef uint64_t (*CreateRawMaterial_AbstractImpl_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CreateRawMaterial::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -74,6 +75,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self) {
+    g_lastHook = "CreateRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -109,7 +111,7 @@ void RemoveCreateRawMaterialSerialize() {
 void InstallCreateRawMaterialAbstractImpl() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6b40);
     // Prologue: PUSH(1)+PUSH(1)+PUSH(1)+PUSH(2)+PUSH(2)+PUSH(2)+MOV(3)+SUB(7) = 19 bytes
-    InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 19);
+    InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 22);
 #ifdef _DEBUG
     printf("[CreateRawMaterial] AbstractImpl hooked at %p (prologue=19, passthrough)\n", (void*)target);
 #endif

@@ -30,6 +30,7 @@
 static HookInfo g_hookPlacementToolDtor;
 typedef void* (*fn_PlacementToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_PlacementToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "PlacementTool::PlacementToolDtor";
     return ((fn_PlacementToolDtor_t)g_hookPlacementToolDtor.trampoline)(self, flags);
 }
 
@@ -37,6 +38,7 @@ static void* Reimpl_PlacementToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookPlacementToolStartup;
 typedef void (*fn_PlacementToolStartup_t)(void* self);
 static void Reimpl_PlacementToolStartup(void* self) {
+    g_lastHook = "PlacementTool::PlacementToolStartup";
     ((fn_PlacementToolStartup_t)g_hookPlacementToolStartup.trampoline)(self);
 }
 
@@ -44,6 +46,7 @@ static void Reimpl_PlacementToolStartup(void* self) {
 static HookInfo g_hookPlacementToolShutdown2;
 typedef void (*fn_PlacementToolShutdown2_t)(void* self);
 static void Reimpl_PlacementToolShutdown2(void* self) {
+    g_lastHook = "PlacementTool::PlacementToolShutdown2";
     ((fn_PlacementToolShutdown2_t)g_hookPlacementToolShutdown2.trampoline)(self);
 }
 
@@ -51,6 +54,7 @@ static void Reimpl_PlacementToolShutdown2(void* self) {
 static HookInfo g_hookPlacementToolOnKey;
 typedef uint64_t (*fn_PlacementToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_PlacementToolOnKey(void* self, char key) {
+    g_lastHook = "PlacementTool::PlacementToolOnKey";
     return ((fn_PlacementToolOnKey_t)g_hookPlacementToolOnKey.trampoline)(self, key);
 }
 
@@ -58,6 +62,7 @@ static uint64_t Reimpl_PlacementToolOnKey(void* self, char key) {
 static HookInfo g_hookPlacementToolSerialize;
 typedef void (*fn_PlacementToolSerialize_t)(void* self);
 static void Reimpl_PlacementToolSerialize(void* self) {
+    g_lastHook = "PlacementTool::PlacementToolSerialize";
     ((fn_PlacementToolSerialize_t)g_hookPlacementToolSerialize.trampoline)(self);
 }
 
@@ -65,6 +70,7 @@ static void Reimpl_PlacementToolSerialize(void* self) {
 static HookInfo g_hookPlacementToolDraw;
 typedef void (*fn_PlacementToolDraw_t)(void* self);
 static void Reimpl_PlacementToolDraw(void* self) {
+    g_lastHook = "PlacementTool::PlacementToolDraw";
     ((fn_PlacementToolDraw_t)g_hookPlacementToolDraw.trampoline)(self);
 }
 

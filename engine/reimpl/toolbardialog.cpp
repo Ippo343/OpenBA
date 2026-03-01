@@ -38,12 +38,14 @@ static HookInfo g_hookOnEvent;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "ToolbarDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 6: Update(this, param2, param3, param4) — sync toolbar buttons with game state
 typedef void (*fn_Update_t)(void* self, uint64_t param2, uint64_t param3, uint64_t param4);
 static void Reimpl_Update(void* self, uint64_t param2, uint64_t param3, uint64_t param4) {
+    g_lastHook = "ToolbarDialog::Update";
     ((fn_Update_t)g_hookUpdate.trampoline)(self, param2, param3, param4);
 }
 
@@ -52,6 +54,7 @@ typedef void (*fn_OnEvent_t)(void* self, void* element, int eventType, int event
                              uint64_t p5, uint64_t p6, int p7);
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData,
                            uint64_t p5, uint64_t p6, int p7) {
+    g_lastHook = "ToolbarDialog::OnEvent";
     ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, element, eventType, eventData, p5, p6, p7);
 }
 
@@ -70,7 +73,7 @@ void RemoveToolbarDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallToolbarDialogUpdate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400b8d40);
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 13);
+    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 15);
 #ifdef _DEBUG
     printf("[ToolbarDialog] Update hooked at %p\n", (void*)target);
 #endif

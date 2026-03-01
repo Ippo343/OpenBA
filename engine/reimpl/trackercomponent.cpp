@@ -49,6 +49,7 @@ static HookInfo g_hookShutdown;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "TrackerComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }

@@ -30,6 +30,7 @@
 static HookInfo g_hookEditToolDtor;
 typedef void* (*fn_EditToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_EditToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "EditTool::EditToolDtor";
     return ((fn_EditToolDtor_t)g_hookEditToolDtor.trampoline)(self, flags);
 }
 
@@ -37,6 +38,7 @@ static void* Reimpl_EditToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookEditToolOnKey;
 typedef uint64_t (*fn_EditToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_EditToolOnKey(void* self, char key) {
+    g_lastHook = "EditTool::EditToolOnKey";
     return ((fn_EditToolOnKey_t)g_hookEditToolOnKey.trampoline)(self, key);
 }
 
@@ -44,6 +46,7 @@ static uint64_t Reimpl_EditToolOnKey(void* self, char key) {
 static HookInfo g_hookEditToolStartup;
 typedef void (*fn_EditToolStartup_t)(void* self);
 static void Reimpl_EditToolStartup(void* self) {
+    g_lastHook = "EditTool::EditToolStartup";
     ((fn_EditToolStartup_t)g_hookEditToolStartup.trampoline)(self);
 }
 
@@ -51,6 +54,7 @@ static void Reimpl_EditToolStartup(void* self) {
 static HookInfo g_hookEditToolSerialize;
 typedef void (*fn_EditToolSerialize_t)(void* self, void* stream);
 static void Reimpl_EditToolSerialize(void* self, void* stream) {
+    g_lastHook = "EditTool::EditToolSerialize";
     ((fn_EditToolSerialize_t)g_hookEditToolSerialize.trampoline)(self, stream);
 }
 

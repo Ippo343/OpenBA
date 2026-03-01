@@ -73,6 +73,7 @@ static HookInfo g_hookGetTarget;
 // CompleteTask::Serialize (0x1400c5be0)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CompleteTask::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -110,6 +111,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "CompleteTask::Purecall";
     uint8_t* s = (uint8_t*)self;
 
     // Lazy-resolve task index from work entity
@@ -138,6 +140,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 // Resolves task index, calls task reassignment.
 // ============================================================
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "CompleteTask::CheckEntity";
     uint8_t* s = (uint8_t*)self;
 
     // Lazy-resolve task index
@@ -159,6 +162,7 @@ static void Reimpl_CheckEntity(void* self) {
 // Returns true if param matches entity at +0x28 or entity at +0x20's parent.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "CompleteTask::GetTarget";
     uint8_t* s = (uint8_t*)self;
 
     fn_CheckPtr(param);

@@ -34,6 +34,7 @@ typedef void (*CitizenComponent_Update_t)(void* self, void* deltaTime);
 // Parameters: RCX = this (CitizenComponent*), RDX = Time* (pointer to int64)
 // ============================================================
 static void Reimpl_Update(CitizenComponent* self, void* deltaTime) {
+    g_lastHook = "CitizenComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

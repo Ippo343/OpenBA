@@ -39,6 +39,7 @@ static HookInfo g_hookShutdown;
 // format compatibility for components that once had serialized fields.
 // ============================================================
 static void Reimpl_Shutdown(ClearResourceComponent* self, void* stream) {
+    g_lastHook = "ClearResourceComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer1[16];
@@ -79,7 +80,7 @@ void InstallClearResourceComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401185E0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG
     printf("[ClearResourceComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

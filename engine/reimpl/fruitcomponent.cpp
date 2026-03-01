@@ -74,6 +74,7 @@ static void** g_pGameState = nullptr;
 // Parameters: RCX = this (FruitComponent*), RDX = Time* (int64*)
 // ============================================================
 static void Reimpl_Update(FruitComponent* self, int64_t* pDeltaTime) {
+    g_lastHook = "FruitComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

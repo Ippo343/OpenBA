@@ -43,6 +43,7 @@ typedef uint64_t (*DropOffRawMaterial_AbstractImpl_t)(void* self, void* param2);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "DropOffRawMaterial::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -60,6 +61,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self, void* param2) {
+    g_lastHook = "DropOffRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

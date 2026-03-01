@@ -50,6 +50,7 @@ static void** g_pGameState = nullptr;
 // Same pattern: Component_Serialize + two empty Serializer blocks
 // ============================================================
 static void Reimpl_Shutdown(MarketLocationComponent* self, void* stream) {
+    g_lastHook = "MarketLocationComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -77,6 +78,7 @@ static void Reimpl_Shutdown(MarketLocationComponent* self, void* stream) {
 // (gameState->+0xf0)+0x10 list.
 // ============================================================
 static void Reimpl_OnCreate(MarketLocationComponent* self) {
+    g_lastHook = "MarketLocationComponent::OnCreate";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

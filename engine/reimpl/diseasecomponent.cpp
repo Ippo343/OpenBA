@@ -60,6 +60,7 @@ static fn_ActiveDisease_t fn_ActiveDisease = nullptr;
 //   JMP InfectionTick
 // ============================================================
 static void Reimpl_Update(DiseaseComponent* self, int64_t* deltaTime) {
+    g_lastHook = "DiseaseComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

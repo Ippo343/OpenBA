@@ -51,6 +51,7 @@ static HookInfo g_hookGetBuildName;
 // ============================================================
 
 static void* Reimpl_GetVersionString(void* retval, uint32_t packedVersion, bool shortSuffix) {
+    g_lastHook = "Configuration::GetVersionString";
     uint8_t buildType = packedVersion & 0xFF;
     uint8_t patch     = (packedVersion >> 8) & 0xFF;
     uint8_t minor     = (packedVersion >> 16) & 0xFF;
@@ -92,6 +93,7 @@ static void* Reimpl_GetVersionString(void* retval, uint32_t packedVersion, bool 
 // ============================================================
 
 static void* Reimpl_CurrentVersion(void* retval) {
+    g_lastHook = "Configuration::CurrentVersion";
 #ifdef _DEBUG
     printf("[Configuration::CurrentVersion] called\n");
 #endif
@@ -104,6 +106,7 @@ static void* Reimpl_CurrentVersion(void* retval) {
 // ============================================================
 
 static void* Reimpl_CurrentBuildId(void* retval) {
+    g_lastHook = "Configuration::CurrentBuildId";
     const char* buildDate = reinterpret_cast<const char*>(
         ResolveAddr(Module::Runtime, ConfigurationAddr::BuildDateString));
 
@@ -159,6 +162,7 @@ static void* Reimpl_CurrentBuildId(void* retval) {
 // ============================================================
 
 static void* Reimpl_GetPlatformName(void* retval, void* /*self*/, int platform) {
+    g_lastHook = "Configuration::GetPlatformName";
     *(uint64_t*)retval = 0;
     if (platform == Platform_Win) {
         fn_String_Set(retval, "Win");
@@ -186,6 +190,7 @@ static void* Reimpl_GetPlatformName(void* retval, void* /*self*/, int platform) 
 // ============================================================
 
 static void* Reimpl_GetLanguageName(void* retval, void* /*self*/, int language) {
+    g_lastHook = "Configuration::GetLanguageName";
     *(uint64_t*)retval = 0;
     if (language == Language_English) {
         fn_String_Set(retval, "English");
@@ -213,6 +218,7 @@ static void* Reimpl_GetLanguageName(void* retval, void* /*self*/, int language) 
 // ============================================================
 
 static void* Reimpl_GetBuildName(void* retval, void* /*self*/, int build) {
+    g_lastHook = "Configuration::GetBuildName";
     *(uint64_t*)retval = 0;
     if (build == Build_Data) {
         fn_String_Set(retval, "Data");
@@ -241,6 +247,7 @@ static void* Reimpl_GetBuildName(void* retval, void* /*self*/, int build) {
 typedef void* (*Configuration_Ctor_t)(Configuration* self);
 
 static void* Reimpl_Ctor(Configuration* self) {
+    g_lastHook = "Configuration::Ctor";
 #ifdef _DEBUG
     printf("[Configuration::Ctor] self=%p\n", (void*)self);
 #endif
@@ -260,6 +267,7 @@ static void* Reimpl_Ctor(Configuration* self) {
 typedef void (*Configuration_Dtor_t)(Configuration* self);
 
 static void Reimpl_Dtor(Configuration* self) {
+    g_lastHook = "Configuration::Dtor";
 #ifdef _DEBUG
     printf("[Configuration::Dtor] self=%p\n", (void*)self);
 #endif
@@ -278,6 +286,7 @@ static void Reimpl_Dtor(Configuration* self) {
 // ============================================================
 
 static void* Reimpl_GetCommandLineString(Configuration* self, void* retval, void* key) {
+    g_lastHook = "Configuration::GetCommandLineString";
     // Look up key in the AVL tree map at &self->m_commandLineData
     void** node = (void**)fn_Map_Find(&self->m_commandLineData, key);
 
@@ -315,6 +324,7 @@ static void* Reimpl_GetCommandLineString(Configuration* self, void* retval, void
 // ============================================================
 
 static void Reimpl_SetCommandLine(Configuration* self, void* commandLine) {
+    g_lastHook = "Configuration::SetCommandLine";
     // Get command line string data and length
     void* cmdData = *(void**)commandLine;
     if (cmdData == nullptr) return;

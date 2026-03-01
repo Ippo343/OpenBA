@@ -50,3 +50,27 @@ void InstallHooks();
 
 // Called from DllMain — tear down all hooks
 void RemoveHooks();
+
+// ============================================================
+// Crash diagnostics breadcrumb
+// ============================================================
+
+// Last hook that was entered — set by each Reimpl_*/Passthrough_* function.
+// On crash, the VEH logs this to identify the last hook that ran.
+extern volatile const char* g_lastHook;
+
+// Access the reimplementation table for crash diagnostics (trampoline matching).
+// Returns pointer to the ReimplEntry array and sets outCount to the number of entries.
+const ReimplEntry* GetReimplTable(int* outCount);
+
+// ============================================================
+// Hook registry for crash diagnostics
+// ============================================================
+
+// Register a HookInfo with a name so the VEH can match trampoline addresses to hook names.
+// Called automatically from each reimpl file's Install function.
+void RegisterHookInfo(const char* name, HookInfo* info);
+
+// Look up which hook owns a given address (checks target and trampoline ranges).
+// Returns the hook name, or nullptr if no match.
+const char* FindHookByAddress(uintptr_t addr);

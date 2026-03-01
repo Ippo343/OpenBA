@@ -46,42 +46,49 @@ static HookInfo g_hookOnButton3;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "OptionInputBindDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 4: Startup(this) — set up input bind dialog UI
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "OptionInputBindDialog::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 // Slot 7: Load(this) — load input binding data
 typedef void (*fn_Load_t)(void* self);
 static void Reimpl_Load(void* self) {
+    g_lastHook = "OptionInputBindDialog::Load";
     ((fn_Load_t)g_hookLoad.trampoline)(self);
 }
 
 // Slot 10: OnOk(this) — set binding value=1, close dialog
 typedef void (*fn_OnOk_t)(void* self);
 static void Reimpl_OnOk(void* self) {
+    g_lastHook = "OptionInputBindDialog::OnOk";
     ((fn_OnOk_t)g_hookOnOk.trampoline)(self);
 }
 
 // Slot 11: OnCancel(this) — set binding value=0, close dialog
 typedef void (*fn_OnCancel_t)(void* self);
 static void Reimpl_OnCancel(void* self) {
+    g_lastHook = "OptionInputBindDialog::OnCancel";
     ((fn_OnCancel_t)g_hookOnCancel.trampoline)(self);
 }
 
 // Slot 12: OnButton2(this) — set binding value=2, close dialog
 typedef void (*fn_OnButton2_t)(void* self);
 static void Reimpl_OnButton2(void* self) {
+    g_lastHook = "OptionInputBindDialog::OnButton2";
     ((fn_OnButton2_t)g_hookOnButton2.trampoline)(self);
 }
 
 // Slot 13: OnButton3(this) — set binding value=3, close dialog
 typedef void (*fn_OnButton3_t)(void* self);
 static void Reimpl_OnButton3(void* self) {
+    g_lastHook = "OptionInputBindDialog::OnButton3";
     ((fn_OnButton3_t)g_hookOnButton3.trampoline)(self);
 }
 
@@ -100,7 +107,7 @@ void RemoveOptionInputBindDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallOptionInputBindDialogStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006d140);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 13);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 19);
 #ifdef _DEBUG
     printf("[OptionInputBindDialog] Startup hooked at %p\n", (void*)target);
 #endif
@@ -118,7 +125,7 @@ void RemoveOptionInputBindDialogLoad() { RemoveHook(&g_hookLoad); }
 
 void InstallOptionInputBindDialogOnOk() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006cff0);
-    InstallHook(target, (void*)Reimpl_OnOk, &g_hookOnOk, 13);
+    InstallHook(target, (void*)Reimpl_OnOk, &g_hookOnOk, 16);
 #ifdef _DEBUG
     printf("[OptionInputBindDialog] OnOk hooked at %p\n", (void*)target);
 #endif
@@ -127,7 +134,7 @@ void RemoveOptionInputBindDialogOnOk() { RemoveHook(&g_hookOnOk); }
 
 void InstallOptionInputBindDialogOnCancel() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006d030);
-    InstallHook(target, (void*)Reimpl_OnCancel, &g_hookOnCancel, 13);
+    InstallHook(target, (void*)Reimpl_OnCancel, &g_hookOnCancel, 16);
 #ifdef _DEBUG
     printf("[OptionInputBindDialog] OnCancel hooked at %p\n", (void*)target);
 #endif
@@ -136,7 +143,7 @@ void RemoveOptionInputBindDialogOnCancel() { RemoveHook(&g_hookOnCancel); }
 
 void InstallOptionInputBindDialogOnButton2() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006cfb0);
-    InstallHook(target, (void*)Reimpl_OnButton2, &g_hookOnButton2, 13);
+    InstallHook(target, (void*)Reimpl_OnButton2, &g_hookOnButton2, 16);
 #ifdef _DEBUG
     printf("[OptionInputBindDialog] OnButton2 hooked at %p\n", (void*)target);
 #endif
@@ -145,7 +152,7 @@ void RemoveOptionInputBindDialogOnButton2() { RemoveHook(&g_hookOnButton2); }
 
 void InstallOptionInputBindDialogOnButton3() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006cf70);
-    InstallHook(target, (void*)Reimpl_OnButton3, &g_hookOnButton3, 13);
+    InstallHook(target, (void*)Reimpl_OnButton3, &g_hookOnButton3, 16);
 #ifdef _DEBUG
     printf("[OptionInputBindDialog] OnButton3 hooked at %p\n", (void*)target);
 #endif

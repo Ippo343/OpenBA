@@ -30,6 +30,7 @@ typedef void (*InteractShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "InteractComponent::Shutdown";
     ((InteractShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -59,6 +60,7 @@ typedef void (*InteractDraw_t)(void* self);
 static HookInfo g_hookDraw;
 
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "InteractComponent::Draw";
     ((InteractDraw_t)g_hookDraw.trampoline)(self);
 }
 

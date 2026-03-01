@@ -38,16 +38,19 @@ static HookInfo g_hookOnRemove;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "UpgradeUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "UpgradeUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* p2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* p2, int eventType, int eventId) {
+    g_lastHook = "UpgradeUI::OnRemove";
     ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, p2, eventType, eventId);
 }
 
@@ -65,7 +68,7 @@ void RemoveUpgradeUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallUpgradeUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140086d90);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 20);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 22);
 #ifdef _DEBUG
     printf("[UpgradeUI] Serialize hooked at %p\n", (void*)target);
 #endif

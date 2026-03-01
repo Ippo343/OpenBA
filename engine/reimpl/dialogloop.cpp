@@ -70,6 +70,7 @@ static inline void* GetUI(DialogLoopT* self) {
 typedef void (*DialogLoopT_Startup_t)(DialogLoopT* self);
 
 static void Reimpl_Startup(DialogLoopT* self) {
+    g_lastHook = "DialogLoopT::Startup";
 #ifdef _DEBUG
     printf("[DialogLoopT::Startup] self=%p\n", (void*)self);
 #endif
@@ -113,6 +114,7 @@ static void Reimpl_Startup(DialogLoopT* self) {
 typedef void (*DialogLoopT_Shutdown_t)(DialogLoopT* self);
 
 static void Reimpl_Shutdown(DialogLoopT* self) {
+    g_lastHook = "DialogLoopT::Shutdown";
 #ifdef _DEBUG
     printf("[DialogLoopT::Shutdown] self=%p dialog=%p\n",
            (void*)self, self->m_dialogInstance);
@@ -136,6 +138,7 @@ static void Reimpl_Shutdown(DialogLoopT* self) {
 typedef bool (*DialogLoopT_Update_t)(DialogLoopT* self, Time* dt);
 
 static bool Reimpl_Update(DialogLoopT* self, Time* dt) {
+    g_lastHook = "DialogLoopT::Update";
 #ifdef _DEBUG
     static int updateCount = 0;
     if (updateCount < 5) {
@@ -166,6 +169,7 @@ static bool Reimpl_Update(DialogLoopT* self, Time* dt) {
 typedef void (*DialogLoopT_Draw_t)(DialogLoopT* self, float alpha);
 
 static void Reimpl_Draw(DialogLoopT* self, float /*alpha*/) {
+    g_lastHook = "DialogLoopT::Draw";
 #ifdef _DEBUG
     static int drawCount = 0;
     if (drawCount < 3) {
@@ -195,6 +199,7 @@ static void Reimpl_Draw(DialogLoopT* self, float /*alpha*/) {
 // ============================================================
 
 static void Reimpl_Load(uint8_t* self) {
+    g_lastHook = "DialogLoopT::Load";
     // local Filename (same as SystemString — 8-byte COW pointer)
     SystemString tempStr;
     tempStr.m_data = nullptr;

@@ -83,6 +83,7 @@ static float* g_fFreezeGrowth = nullptr;   // DAT_140172288 = growth rate at fre
 // ============================================================
 
 static void Reimpl_Update(void* self, int64_t* deltaTime) {
+    g_lastHook = "GrowthComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

@@ -32,6 +32,7 @@
 static HookInfo g_hookFencedToolDtor;
 typedef void* (*fn_FencedToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_FencedToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "FencedTool::FencedToolDtor";
     return ((fn_FencedToolDtor_t)g_hookFencedToolDtor.trampoline)(self, flags);
 }
 
@@ -39,6 +40,7 @@ static void* Reimpl_FencedToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookFencedToolStartup;
 typedef void (*fn_FencedToolStartup_t)(void* self);
 static void Reimpl_FencedToolStartup(void* self) {
+    g_lastHook = "FencedTool::FencedToolStartup";
     ((fn_FencedToolStartup_t)g_hookFencedToolStartup.trampoline)(self);
 }
 
@@ -46,6 +48,7 @@ static void Reimpl_FencedToolStartup(void* self) {
 static HookInfo g_hookFencedToolShutdown2;
 typedef void (*fn_FencedToolShutdown2_t)(void* self);
 static void Reimpl_FencedToolShutdown2(void* self) {
+    g_lastHook = "FencedTool::FencedToolShutdown2";
     ((fn_FencedToolShutdown2_t)g_hookFencedToolShutdown2.trampoline)(self);
 }
 
@@ -53,6 +56,7 @@ static void Reimpl_FencedToolShutdown2(void* self) {
 static HookInfo g_hookFencedToolOnKey;
 typedef void (*fn_FencedToolOnKey_t)(void* self);
 static void Reimpl_FencedToolOnKey(void* self) {
+    g_lastHook = "FencedTool::FencedToolOnKey";
     ((fn_FencedToolOnKey_t)g_hookFencedToolOnKey.trampoline)(self);
 }
 
@@ -60,6 +64,7 @@ static void Reimpl_FencedToolOnKey(void* self) {
 static HookInfo g_hookFencedToolSerialize;
 typedef void (*fn_FencedToolSerialize_t)(void* self);
 static void Reimpl_FencedToolSerialize(void* self) {
+    g_lastHook = "FencedTool::FencedToolSerialize";
     ((fn_FencedToolSerialize_t)g_hookFencedToolSerialize.trampoline)(self);
 }
 
@@ -67,6 +72,7 @@ static void Reimpl_FencedToolSerialize(void* self) {
 static HookInfo g_hookFencedToolDraw;
 typedef void (*fn_FencedToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_FencedToolDraw(void* self, void* context, char param) {
+    g_lastHook = "FencedTool::FencedToolDraw";
     ((fn_FencedToolDraw_t)g_hookFencedToolDraw.trampoline)(self, context, param);
 }
 
@@ -74,6 +80,7 @@ static void Reimpl_FencedToolDraw(void* self, void* context, char param) {
 static HookInfo g_hookFencedToolShutdown;
 typedef void (*fn_FencedToolShutdown_t)(void* self);
 static void Reimpl_FencedToolShutdown(void* self) {
+    g_lastHook = "FencedTool::FencedToolShutdown";
     ((fn_FencedToolShutdown_t)g_hookFencedToolShutdown.trampoline)(self);
 }
 
@@ -81,6 +88,7 @@ static void Reimpl_FencedToolShutdown(void* self) {
 static HookInfo g_hookFencedToolCalcPath;
 typedef uint64_t (*fn_FencedToolCalcPath_t)(void* self, int x, int z);
 static uint64_t Reimpl_FencedToolCalcPath(void* self, int x, int z) {
+    g_lastHook = "FencedTool::FencedToolCalcPath";
     return ((fn_FencedToolCalcPath_t)g_hookFencedToolCalcPath.trampoline)(self, x, z);
 }
 
@@ -88,6 +96,7 @@ static uint64_t Reimpl_FencedToolCalcPath(void* self, int x, int z) {
 static HookInfo g_hookFencedToolCalcCost;
 typedef uint64_t (*fn_FencedToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d);
 static uint64_t Reimpl_FencedToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d) {
+    g_lastHook = "FencedTool::FencedToolCalcCost";
     return ((fn_FencedToolCalcCost_t)g_hookFencedToolCalcCost.trampoline)(self, x, z, a, b, c, d);
 }
 

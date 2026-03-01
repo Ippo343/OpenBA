@@ -47,11 +47,13 @@ static HookInfo g_hookSerialize;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "UIComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "UIComponent::Serialize";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookSerialize.trampoline)(self);
 }

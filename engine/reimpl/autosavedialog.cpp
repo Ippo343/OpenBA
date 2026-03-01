@@ -41,18 +41,21 @@ static HookInfo g_hookSlot7;
 // Slot0 Dtor (0x140010780) — scalar deleting destructor
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "AutoSaveDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot6 (0x14005DFC0) — Draw: checks SaveLoad::GetOperation, toggles save/load UI
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
+    g_lastHook = "AutoSaveDialog::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 
 // Slot7 (0x14005E090) — Update: time-based rotation accumulator
 typedef void (*fn_Slot7_t)(void* self, void* time);
 static void Reimpl_Slot7(void* self, void* time) {
+    g_lastHook = "AutoSaveDialog::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self, time);
 }
 

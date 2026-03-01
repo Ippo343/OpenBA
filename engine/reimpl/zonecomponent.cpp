@@ -59,6 +59,7 @@ static HookInfo g_hookOnCreate;
 // registers the owning entity into the zone map at GameState+0xF0.
 // ============================================================
 static void Reimpl_Shutdown(ZoneComponent* self, void* stream) {
+    g_lastHook = "ZoneComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer[24];
@@ -80,6 +81,7 @@ static void Reimpl_Shutdown(ZoneComponent* self, void* stream) {
 // extraction from entity data, and calls to zone rendering system.
 // ============================================================
 static void Passthrough_Draw(ZoneComponent* self) {
+    g_lastHook = "ZoneComponent::Draw";
     typedef void (*orig_t)(ZoneComponent*);
     ((orig_t)g_hookDraw.trampoline)(self);
 }
@@ -90,6 +92,7 @@ static void Passthrough_Draw(ZoneComponent* self) {
 // check, calls zone rendering setup, and walks a tree structure.
 // ============================================================
 static void Passthrough_OnCreate(ZoneComponent* self) {
+    g_lastHook = "ZoneComponent::OnCreate";
     typedef void (*orig_t)(ZoneComponent*);
     ((orig_t)g_hookOnCreate.trampoline)(self);
 }
@@ -132,7 +135,7 @@ void InstallZoneComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401302F0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[ZoneComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

@@ -64,6 +64,7 @@ static HookInfo g_hookOnVideoError;
 typedef void (*LoaderLoop_Startup_t)(LoaderLoop* self);
 
 static void Reimpl_Startup(LoaderLoop* self) {
+    g_lastHook = "LoaderLoop::Startup";
 #ifdef _DEBUG
     printf("[LoaderLoop::Startup] self=%p nextLoop=%p\n", (void*)self, (void*)self->m_nextLoop);
 #endif
@@ -78,6 +79,7 @@ static void Reimpl_Startup(LoaderLoop* self) {
 typedef void (*LoaderLoop_Shutdown_t)(LoaderLoop* self);
 
 static void Reimpl_Shutdown(LoaderLoop* self) {
+    g_lastHook = "LoaderLoop::Shutdown";
 #ifdef _DEBUG
     printf("[LoaderLoop::Shutdown] self=%p, waiting for loader completion...\n", (void*)self);
 #endif
@@ -100,6 +102,7 @@ static void Reimpl_Shutdown(LoaderLoop* self) {
 typedef bool (*LoaderLoop_Update_t)(LoaderLoop* self, Time* dt);
 
 static bool Reimpl_Update(LoaderLoop* self, Time* dt) {
+    g_lastHook = "LoaderLoop::Update";
     // Sleep ~14ms per frame to avoid spinning CPU during loading
     fn_App_SleepThread(*g_pAppSingleton, 14);
 
@@ -135,6 +138,7 @@ static bool Reimpl_Update(LoaderLoop* self, Time* dt) {
 typedef void (*LoaderLoop_Draw_t)(LoaderLoop* self, float alpha);
 
 static void Reimpl_Draw(LoaderLoop* /*self*/, float /*alpha*/) {
+    g_lastHook = "LoaderLoop::Draw";
     MainLoop* mainLoop = *g_pMainLoopSingleton;
     uint8_t* ctx = reinterpret_cast<uint8_t*>(mainLoop->m_context);
 
@@ -158,6 +162,7 @@ static void Reimpl_Draw(LoaderLoop* /*self*/, float /*alpha*/) {
 typedef void (*LoaderLoop_Exit_t)(LoaderLoop* self);
 
 static void Reimpl_Exit(LoaderLoop* self) {
+    g_lastHook = "LoaderLoop::Exit";
 #ifdef _DEBUG
     printf("[LoaderLoop::Exit] Force transition to nextLoop=%p\n", (void*)self->m_nextLoop);
 #endif
@@ -174,6 +179,7 @@ static void Reimpl_Exit(LoaderLoop* self) {
 typedef bool (*LoaderLoop_IsFinished_t)(LoaderLoop* self);
 
 static bool Reimpl_IsFinished(LoaderLoop* self) {
+    g_lastHook = "LoaderLoop::IsFinished";
     if ((*g_pLoaderFlags & 1) == 0 &&
         self->m_delayTicks <= self->m_elapsedTicks)
     {
@@ -191,6 +197,7 @@ static bool Reimpl_IsFinished(LoaderLoop* self) {
 typedef void (*LoaderLoop_OnVideoError_t)(LoaderLoop* self);
 
 static void Reimpl_OnVideoError(LoaderLoop* /*self*/) {
+    g_lastHook = "LoaderLoop::OnVideoError";
 #ifdef _DEBUG
     printf("[LoaderLoop::OnVideoError] Waiting for loader completion...\n");
 #endif

@@ -63,6 +63,7 @@ static uint32_t g_typeId = 0;
 //   + validate IsDerivedFrom, clear if invalid
 // ============================================================
 static void Reimpl_Serialize(LocationWork* self, void* stream) {
+    g_lastHook = "LocationWork::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -96,36 +97,42 @@ static void Reimpl_Serialize(LocationWork* self, void* stream) {
 // Slot4 (0x1400ef880) — complex pathfinding/pickup logic
 typedef uint64_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint64_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "LocationWork::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 // Slot6 (0x1400ef850) — clears +0x48 to null InternalBasePtr
 typedef uint64_t (*fn_Slot6_t)(void* self);
 static uint64_t Reimpl_Slot6(void* self) {
+    g_lastHook = "LocationWork::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 
 // Slot7 (0x1400ef820) — clears +0x48 to null InternalBasePtr
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "LocationWork::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
 // Slot8 (0x1400efaf0) — cleanup via subsystem call
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "LocationWork::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 // Slot9 (0x1400ef7c0) — validates target, calls helper
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "LocationWork::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 // Slot10 (0x1400efb40) — gets entity sub-object
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "LocationWork::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -233,7 +240,7 @@ void RemoveLocationWorkSlot9() { RemoveHook(&g_hookSlot9); }
 void InstallLocationWorkSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400efb40);
     // Prologue: MOV [RSP+0x10],RBX(5) + PUSH RDI(2) + SUB RSP,0x20(4) + LEA RBX,[RCX+0x10](4) = 15
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 17);
 #ifdef _DEBUG
     printf("[LocationWork] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

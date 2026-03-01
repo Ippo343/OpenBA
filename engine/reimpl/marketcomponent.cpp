@@ -43,6 +43,7 @@ static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 // an empty Serializer block (version 0).
 // ============================================================
 static void Reimpl_Shutdown(MarketComponent* self, void* stream) {
+    g_lastHook = "MarketComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

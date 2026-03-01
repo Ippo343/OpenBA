@@ -36,16 +36,19 @@ static HookInfo g_hookCleanup;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "CreatePlacedDescription::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CreatePlacedDescription::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "CreatePlacedDescription::Cleanup";
     ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
 }
 
@@ -63,7 +66,7 @@ void RemoveCreatePlacedDescriptionDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallCreatePlacedDescriptionSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401198d0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 14);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[CreatePlacedDescription] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -72,7 +75,7 @@ void RemoveCreatePlacedDescriptionSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallCreatePlacedDescriptionCleanup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140032ab0);
-    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 13);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 14);
 #ifdef _DEBUG
     printf("[CreatePlacedDescription] Cleanup hooked at %p\n", (void*)target);
 #endif

@@ -43,24 +43,28 @@ static HookInfo g_hookSlot7;
 // Slot0 Dtor (0x140011AF0)
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "FollowDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x140069340) — Setup: initializes follow camera UI
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "FollowDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot6 (0x140068F70) — Draw: updates follow camera display
 typedef void (*fn_Slot6_t)(void* self, void* p2, void* p3, void* p4);
 static void Reimpl_Slot6(void* self, void* p2, void* p3, void* p4) {
+    g_lastHook = "FollowDialog::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self, p2, p3, p4);
 }
 
 // Slot7 (0x140069250) — Update: checks followed entity state
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "FollowDialog::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 

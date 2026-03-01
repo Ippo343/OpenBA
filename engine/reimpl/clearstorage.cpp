@@ -58,6 +58,7 @@ static fn_BST_Serialize_t fn_BST_Serialize = nullptr;
 // Pattern: Work_Serialize + Serializer(v0) + BST_Serialize(+0x58)
 // ============================================================
 static void Reimpl_Serialize(ClearStorage* self, void* stream) {
+    g_lastHook = "ClearStorage::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -81,26 +82,31 @@ static void Reimpl_Serialize(ClearStorage* self, void* stream) {
 
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "ClearStorage::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 typedef uint8_t (*fn_Slot6_t)(void* self, void* param2);
 static uint8_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "ClearStorage::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "ClearStorage::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "ClearStorage::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "ClearStorage::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -154,7 +160,7 @@ void RemoveClearStorageSlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallClearStorageSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e6c30);
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 12);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 13);
 #ifdef _DEBUG
     printf("[ClearStorage] Slot6 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -174,7 +180,7 @@ void RemoveClearStorageSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallClearStorageSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e69f0);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 15);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
 #ifdef _DEBUG
     printf("[ClearStorage] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -184,7 +190,7 @@ void RemoveClearStorageSlot9() { RemoveHook(&g_hookSlot9); }
 
 void InstallClearStorageSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e7330);
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 18);
 #ifdef _DEBUG
     printf("[ClearStorage] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

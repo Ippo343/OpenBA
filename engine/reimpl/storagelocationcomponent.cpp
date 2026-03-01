@@ -49,6 +49,7 @@ static void** g_pGameState = nullptr;
 // Component_Serialize + two empty Serializer blocks (version 0)
 // ============================================================
 static void Reimpl_Shutdown(StorageLocationComponent* self, void* stream) {
+    g_lastHook = "StorageLocationComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -75,6 +76,7 @@ static void Reimpl_Shutdown(StorageLocationComponent* self, void* stream) {
 // Gets entity ptr from self+0x10, registers on gameState->+0xf0 list.
 // ============================================================
 static void Reimpl_OnCreate(StorageLocationComponent* self) {
+    g_lastHook = "StorageLocationComponent::OnCreate";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

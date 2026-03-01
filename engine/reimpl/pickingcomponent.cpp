@@ -32,6 +32,7 @@ typedef void (*PickingShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "PickingComponent::Shutdown";
     ((PickingShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -55,6 +56,7 @@ typedef void (*PickingOnCreate_t)(void* self);
 static HookInfo g_hookOnCreate;
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "PickingComponent::OnCreate";
     ((PickingOnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 

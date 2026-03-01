@@ -55,6 +55,7 @@ static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(QuarryComponent* self, void* stream) {
+    g_lastHook = "QuarryComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer[16];
@@ -82,7 +83,7 @@ void InstallQuarryComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x140055230);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG
     printf("[QuarryComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

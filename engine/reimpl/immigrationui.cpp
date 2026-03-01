@@ -37,21 +37,25 @@ static HookInfo g_hookSlot9;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "ImmigrationUI::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "ImmigrationUI::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "ImmigrationUI::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
 typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4, int param5, int param6);
 static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int param5, int param6) {
+    g_lastHook = "ImmigrationUI::Slot9";
     ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
 }
 
@@ -69,7 +73,7 @@ void RemoveImmigrationUIDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallImmigrationUISlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006B330);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 17);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 23);
 #ifdef _DEBUG
     printf("[ImmigrationUI] Slot4 hooked at %p\n", (void*)target);
 #endif
@@ -78,7 +82,7 @@ void RemoveImmigrationUISlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallImmigrationUISlot7() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006B130);
-    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 16);
+    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 24);
 #ifdef _DEBUG
     printf("[ImmigrationUI] Slot7 hooked at %p\n", (void*)target);
 #endif

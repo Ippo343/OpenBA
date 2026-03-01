@@ -66,6 +66,7 @@ static HookInfo g_hookGetTarget;
 // Serializes: status(+0x18), entity(+0x20), entity(+0x28), bool(+0x30)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "RemoveNaturalResource::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -101,6 +102,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 typedef uint64_t (*fn_RNRPurecall_t)(void* self);
 
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "RemoveNaturalResource::Purecall";
     return ((fn_RNRPurecall_t)g_hookPurecall.trampoline)(self);
 }
 
@@ -109,6 +111,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 // Clears "in use" bit (bit 20) on entity's model component at +0x28.
 // ============================================================
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "RemoveNaturalResource::CheckEntity";
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
@@ -134,6 +137,7 @@ static void Reimpl_CheckEntity(void* self) {
 // Returns true if param matches entity at +0x28 or entity at +0x20's parent.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "RemoveNaturalResource::GetTarget";
     uint8_t* s = (uint8_t*)self;
 
     fn_CheckPtr(s + 0x28);
@@ -179,7 +183,7 @@ void RemoveRemoveNaturalResourceSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallRemoveNaturalResourcePurecall() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400cab10);
-    InstallHook(target, (void*)Reimpl_Purecall, &g_hookPurecall, 13);
+    InstallHook(target, (void*)Reimpl_Purecall, &g_hookPurecall, 15);
 #ifdef _DEBUG
     printf("[RemoveNaturalResource] Purecall hooked (passthrough) at %p\n", (void*)target);
 #endif
@@ -188,7 +192,7 @@ void RemoveRemoveNaturalResourcePurecall() { RemoveHook(&g_hookPurecall); }
 
 void InstallRemoveNaturalResourceCheckEntity() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400caaa0);
-    InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 12);
+    InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 13);
 #ifdef _DEBUG
     printf("[RemoveNaturalResource] CheckEntity hooked at %p\n", (void*)target);
 #endif
@@ -197,7 +201,7 @@ void RemoveRemoveNaturalResourceCheckEntity() { RemoveHook(&g_hookCheckEntity); 
 
 void InstallRemoveNaturalResourceGetTarget() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400caa20);
-    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 13);
+    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 15);
 #ifdef _DEBUG
     printf("[RemoveNaturalResource] GetTarget hooked at %p\n", (void*)target);
 #endif

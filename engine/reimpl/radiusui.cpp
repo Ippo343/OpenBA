@@ -37,16 +37,19 @@ static HookInfo g_hookSlot6;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "RadiusUI::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Slot5_t)(void* self);
 static void Reimpl_Slot5(void* self) {
+    g_lastHook = "RadiusUI::Slot5";
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
 }
 
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
+    g_lastHook = "RadiusUI::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 

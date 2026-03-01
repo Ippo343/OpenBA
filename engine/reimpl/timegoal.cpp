@@ -46,22 +46,27 @@ typedef void* (*fn_Slot11_t)(void* self, uint32_t flags);
 // Passthrough wrappers
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "TimeGoal::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 static void Reimpl_Slot5(void* self, void* stream) {
+    g_lastHook = "TimeGoal::Slot5";
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {
+    g_lastHook = "TimeGoal::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 
 static void Reimpl_Slot10(void* self) {
+    g_lastHook = "TimeGoal::Slot10";
     ((fn_Slot10_t)g_hookSlot10.trampoline)(self);
 }
 
 static void* Reimpl_Slot11(void* self, uint32_t flags) {
+    g_lastHook = "TimeGoal::Slot11";
     return ((fn_Slot11_t)g_hookSlot11.trampoline)(self, flags);
 }
 
@@ -71,7 +76,7 @@ static void* Reimpl_Slot11(void* self, uint32_t flags) {
 void InstallTimeGoalDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140026850);
     // Prologue: mov [rsp+8],rcx(5) + push rdi(2) + sub rsp,0x30(4) + mov qword,-2(9) = 15
-    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 15);
+    InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 19);
 #ifdef _DEBUG
     printf("[TimeGoal] Dtor hooked at %p\n", (void*)target);
 #endif
@@ -111,7 +116,7 @@ void RemoveTimeGoalSlot10() { RemoveHook(&g_hookSlot10); }
 void InstallTimeGoalSlot11() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140026800);
     // Prologue: mov [rsp+8],rcx(5) + push rdi(2) + sub rsp,0x30(4) + mov qword,-2(9) = 15
-    InstallHook(target, (void*)Reimpl_Slot11, &g_hookSlot11, 15);
+    InstallHook(target, (void*)Reimpl_Slot11, &g_hookSlot11, 19);
 #ifdef _DEBUG
     printf("[TimeGoal] Slot11 hooked at %p\n", (void*)target);
 #endif

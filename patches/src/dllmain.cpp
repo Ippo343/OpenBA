@@ -69,7 +69,7 @@ static DWORD WINAPI InitThread(LPVOID) {
 }
 
 // ============================================================
-// Crash handler — catches unhandled exceptions, writes to log
+// Vectored Exception Handler — catches crashes, logs diagnostics
 // ============================================================
 
 static const char* ExceptionCodeToString(DWORD code) {
@@ -90,9 +90,21 @@ static const char* ExceptionCodeToString(DWORD code) {
     }
 }
 
-static LPTOP_LEVEL_EXCEPTION_FILTER g_prevExceptionFilter = nullptr;
+static PVOID g_vehHandle = nullptr;
 
-static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
+static LONG CALLBACK VectoredCrashHandler(EXCEPTION_POINTERS* ep) {
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+
+    // Only handle fatal exceptions — skip breakpoints, C++ exceptions, etc.
+    if (code != EXCEPTION_ACCESS_VIOLATION &&
+        code != EXCEPTION_ILLEGAL_INSTRUCTION &&
+        code != EXCEPTION_STACK_OVERFLOW &&
+        code != EXCEPTION_INT_DIVIDE_BY_ZERO &&
+        code != EXCEPTION_PRIV_INSTRUCTION &&
+        code != EXCEPTION_IN_PAGE_ERROR) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
     // Write to both stdout (patch_debug.log) and a dedicated crash file
     std::string crashPath = GameDirPath("patch_crash.log");
     FILE* crashFile = fopen(crashPath.c_str(), "w");
@@ -107,9 +119,17 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
         fprintf(f, "[BanishedPatch] *** CRASH DETECTED ***\n");
         fprintf(f, "========================================\n");
 
-        DWORD code = ep->ExceptionRecord->ExceptionCode;
         fprintf(f, "Exception: 0x%08lX (%s)\n", code, ExceptionCodeToString(code));
         fprintf(f, "Address:   %p\n", ep->ExceptionRecord->ExceptionAddress);
+
+        // Breadcrumb: last hook that was entered
+        fprintf(f, "Last hook: %s\n", (const char*)g_lastHook);
+
+        // Try to match faulting address to a registered hook trampoline
+        const char* hookMatch = FindHookByAddress((uintptr_t)ep->ExceptionRecord->ExceptionAddress);
+        if (hookMatch) {
+            fprintf(f, "Hook match: %s (faulting address matches hook target/trampoline)\n", hookMatch);
+        }
 
         if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
             const char* op = ep->ExceptionRecord->ExceptionInformation[0] == 0 ? "READ" :
@@ -199,23 +219,23 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
 
     if (crashFile) fclose(crashFile);
 
-    // Chain to previous handler if any
-    if (g_prevExceptionFilter)
-        return g_prevExceptionFilter(ep);
-
+    // Let the OS handle it (crash dialog, debugger attach, etc.)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
 static void InstallCrashHandler() {
-    g_prevExceptionFilter = SetUnhandledExceptionFilter(CrashHandler);
+    // Use VEH (first-chance handler) so we see exceptions before any SEH unwinds the stack
+    g_vehHandle = AddVectoredExceptionHandler(1, VectoredCrashHandler);
 #ifdef _DEBUG
-    printf("[BanishedPatch] Crash handler installed\n");
+    printf("[BanishedPatch] Vectored exception handler installed\n");
 #endif
 }
 
 static void RemoveCrashHandler() {
-    SetUnhandledExceptionFilter(g_prevExceptionFilter);
-    g_prevExceptionFilter = nullptr;
+    if (g_vehHandle) {
+        RemoveVectoredExceptionHandler(g_vehHandle);
+        g_vehHandle = nullptr;
+    }
 }
 
 static void PatchInit() {

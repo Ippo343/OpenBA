@@ -32,6 +32,7 @@
 static HookInfo g_hookBridgeToolDtor;
 typedef void* (*fn_BridgeToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_BridgeToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "BridgeTool::BridgeToolDtor";
     return ((fn_BridgeToolDtor_t)g_hookBridgeToolDtor.trampoline)(self, flags);
 }
 
@@ -39,6 +40,7 @@ static void* Reimpl_BridgeToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookBridgeToolStartup;
 typedef void (*fn_BridgeToolStartup_t)(void* self);
 static void Reimpl_BridgeToolStartup(void* self) {
+    g_lastHook = "BridgeTool::BridgeToolStartup";
     ((fn_BridgeToolStartup_t)g_hookBridgeToolStartup.trampoline)(self);
 }
 
@@ -46,6 +48,7 @@ static void Reimpl_BridgeToolStartup(void* self) {
 static HookInfo g_hookBridgeToolCalcPath;
 typedef uint64_t (*fn_BridgeToolCalcPath_t)(void* self, int x, int z);
 static uint64_t Reimpl_BridgeToolCalcPath(void* self, int x, int z) {
+    g_lastHook = "BridgeTool::BridgeToolCalcPath";
     return ((fn_BridgeToolCalcPath_t)g_hookBridgeToolCalcPath.trampoline)(self, x, z);
 }
 
@@ -53,6 +56,7 @@ static uint64_t Reimpl_BridgeToolCalcPath(void* self, int x, int z) {
 static HookInfo g_hookBridgeToolCalcCost;
 typedef uint64_t (*fn_BridgeToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d);
 static uint64_t Reimpl_BridgeToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d) {
+    g_lastHook = "BridgeTool::BridgeToolCalcCost";
     return ((fn_BridgeToolCalcCost_t)g_hookBridgeToolCalcCost.trampoline)(self, x, z, a, b, c, d);
 }
 

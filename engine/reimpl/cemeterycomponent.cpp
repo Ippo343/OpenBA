@@ -65,6 +65,7 @@ static HookInfo g_hookOnCreate;
 // array of cemetery plot tile indices at +0x48/+0x50.
 // ============================================================
 static void Reimpl_Shutdown(CemeteryComponent* self, void* stream) {
+    g_lastHook = "CemeteryComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     // Empty serializer block (controller compat stub)
@@ -98,6 +99,7 @@ static void Reimpl_Shutdown(CemeteryComponent* self, void* stream) {
 // plot indices, builds plot grid based on entity rotation.
 // ============================================================
 static void Passthrough_Draw(CemeteryComponent* self) {
+    g_lastHook = "CemeteryComponent::Draw";
     typedef void (*orig_t)(CemeteryComponent*);
     ((orig_t)g_hookDraw.trampoline)(self);
 }
@@ -108,6 +110,7 @@ static void Passthrough_Draw(CemeteryComponent* self) {
 // to the cemetery list at GameState+0xF0+0x40.
 // ============================================================
 static void Reimpl_OnCreate(CemeteryComponent* self) {
+    g_lastHook = "CemeteryComponent::OnCreate";
     uint8_t ptrBuf[8];
     fn_InternalBasePtr_Ctor(ptrBuf, self->owner);
 
@@ -168,7 +171,7 @@ void InstallCemeteryComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400475C0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[CemeteryComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

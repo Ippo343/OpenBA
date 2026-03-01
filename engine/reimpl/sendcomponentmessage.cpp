@@ -42,6 +42,7 @@ typedef uint64_t (*SendComponentMessage_AbstractImpl_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "SendComponentMessage::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -59,6 +60,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self) {
+    g_lastHook = "SendComponentMessage::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

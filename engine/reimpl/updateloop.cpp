@@ -61,6 +61,7 @@ static HookInfo g_hookIsRunning;
 typedef bool (*UpdateLoop_IsRunning_t)(UpdateLoop* self);
 
 static bool Reimpl_IsRunning(UpdateLoop* self) {
+    g_lastHook = "UpdateLoop::IsRunning";
     if (!self) return false;
 
     MainLoop* mainLoop = *g_pMainLoopSingleton;
@@ -75,6 +76,7 @@ static bool Reimpl_IsRunning(UpdateLoop* self) {
 
 /* NOT HOOKED — function is 4 bytes (mov [rcx+0x24],edx; ret).
 static void Reimpl_SetLoadProgress(UpdateLoop* self, int32_t progress) {
+    g_lastHook = "UpdateLoop::SetLoadProgress";
     self->m_loadProgress = progress;
 }
 */
@@ -85,6 +87,7 @@ static void Reimpl_SetLoadProgress(UpdateLoop* self, int32_t progress) {
 
 /* NOT HOOKED — function is 4 bytes (mov eax,[rcx+0x24]; ret).
 static int32_t Reimpl_GetLoadProgress(UpdateLoop* self) {
+    g_lastHook = "UpdateLoop::GetLoadProgress";
     return self->m_loadProgress;
 }
 */
@@ -95,6 +98,7 @@ static int32_t Reimpl_GetLoadProgress(UpdateLoop* self) {
 
 /* NOT HOOKED — function is 4 bytes (mov eax,[rcx+0x20]; ret).
 static int32_t Reimpl_GetLoadBit(UpdateLoop* self) {
+    g_lastHook = "UpdateLoop::GetLoadBit";
     return self->m_loadBit;
 }
 */
@@ -110,6 +114,7 @@ static void* g_pUpdateLoopVtable = nullptr;
 static HookInfo g_hookUpdateLoopCtor;
 
 static UpdateLoop* Reimpl_UpdateLoopCtor(UpdateLoop* self) {
+    g_lastHook = "UpdateLoop::UpdateLoopCtor";
 #ifdef _DEBUG
     printf("[UpdateLoop::Ctor] self=%p\n", (void*)self);
 #endif
@@ -152,6 +157,7 @@ static UpdateLoop* Reimpl_UpdateLoopCtor(UpdateLoop* self) {
 static HookInfo g_hookUpdateLoopDtor;
 
 static void Reimpl_UpdateLoopDtor(UpdateLoop* self) {
+    g_lastHook = "UpdateLoop::UpdateLoopDtor";
 #ifdef _DEBUG
     printf("[UpdateLoop::Dtor] self=%p loadBit=%d\n", (void*)self, self->m_loadBit);
 #endif
@@ -191,6 +197,7 @@ static void Reimpl_UpdateLoopDtor(UpdateLoop* self) {
 
 /* NOT HOOKED — function is 3 bytes (ret 0x0).
 static void Reimpl_LoaderLoopLoad(void* self) {
+    g_lastHook = "UpdateLoop::LoaderLoopLoad";
     // no-op
 }
 */

@@ -63,6 +63,7 @@ static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(MineComponent* self, void* stream) {
+    g_lastHook = "MineComponent::Shutdown";
     // Base component serialization (owner ref, flags, etc.)
     fn_Component_Serialize(self, stream);
 
@@ -103,7 +104,7 @@ void InstallMineComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x14004f260);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG
     printf("[MineComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

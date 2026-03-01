@@ -41,31 +41,37 @@ static HookInfo g_hookUpdate;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TownHallUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "TownHallUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "TownHallUI::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 typedef void (*fn_OnCreate_t)(void* self);
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "TownHallUI::OnCreate";
     ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
+    g_lastHook = "TownHallUI::OnRemove";
     ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
 }
 
 typedef void (*fn_Update_t)(void* self, void* stream);
 static void Reimpl_Update(void* self, void* stream) {
+    g_lastHook = "TownHallUI::Update";
     ((fn_Update_t)g_hookUpdate.trampoline)(self, stream);
 }
 
@@ -92,7 +98,7 @@ void RemoveTownHallUISerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallTownHallUIStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007d550);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 13);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 14);
 #ifdef _DEBUG
     printf("[TownHallUI] Startup hooked at %p\n", (void*)target);
 #endif

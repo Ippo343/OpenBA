@@ -50,6 +50,7 @@ static HookInfo g_hookShutdown;
 typedef void (*fn_Shutdown_Orig_t)(CropFieldComponent* self, void* stream);
 
 static void Reimpl_Shutdown(CropFieldComponent* self, void* stream) {
+    g_lastHook = "CropFieldComponent::Shutdown";
     ((fn_Shutdown_Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 

@@ -45,6 +45,7 @@ typedef void (*HuntAnimal_Enter_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "HuntAnimal::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -62,6 +63,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static void Reimpl_Enter(void* self) {
+    g_lastHook = "HuntAnimal::Enter";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

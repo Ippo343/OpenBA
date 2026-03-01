@@ -62,6 +62,7 @@ static uint32_t* g_pSpawnTemplateTypeId = nullptr;
 // Parameters: RCX = this (SpawnComponent*), RDX = Time* (int64*)
 // ============================================================
 static void Reimpl_Update(SpawnComponent* self, int64_t* pDeltaTime) {
+    g_lastHook = "SpawnComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

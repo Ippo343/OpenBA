@@ -40,6 +40,7 @@ typedef void (*APW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "AutoPickupWork::Slot8";
     ((APW_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
@@ -63,6 +64,7 @@ typedef void* (*APW_Ctor_t)(void* self);
 static HookInfo g_hookCtor;
 
 static void* Reimpl_Ctor(void* self) {
+    g_lastHook = "AutoPickupWork::Ctor";
     return ((APW_Ctor_t)g_hookCtor.trampoline)(self);
 }
 

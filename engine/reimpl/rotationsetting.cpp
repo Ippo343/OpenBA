@@ -21,6 +21,7 @@
 static HookInfo g_hookRotationSettingDtor;
 typedef void* (*fn_RotationSettingDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_RotationSettingDtor(void* self, uint32_t flags) {
+    g_lastHook = "RotationSetting::RotationSettingDtor";
     return ((fn_RotationSettingDtor_t)g_hookRotationSettingDtor.trampoline)(self, flags);
 }
 

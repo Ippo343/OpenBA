@@ -47,6 +47,7 @@ static HookInfo g_hookSetupFileSystem;
 // ============================================================
 
 static int Reimpl_Find(const Modification* self, const void* filename) {
+    g_lastHook = "Modification::Find";
     // Get target filename's string data (System::Filename is same layout as String)
     const char* targetData = *reinterpret_cast<const char* const*>(filename);
     int targetLen = targetData ? *reinterpret_cast<const int32_t*>(targetData - 8) : 0;
@@ -86,6 +87,7 @@ static int Reimpl_Find(const Modification* self, const void* filename) {
 // ============================================================
 
 static void Reimpl_Enable(Modification* self, int index, bool enabled) {
+    g_lastHook = "Modification::Enable";
 #ifdef _DEBUG
     printf("[Modification::Enable] index=%d enabled=%d (count=%d)\n",
            index, enabled, self->m_count);
@@ -106,6 +108,7 @@ static void Reimpl_Enable(Modification* self, int index, bool enabled) {
 // ============================================================
 
 static void Reimpl_DisableAll(Modification* self) {
+    g_lastHook = "Modification::DisableAll";
 #ifdef _DEBUG
     printf("[Modification::DisableAll] disabling %d mods\n", self->m_count);
 #endif
@@ -125,6 +128,7 @@ static void Reimpl_DisableAll(Modification* self) {
 // ============================================================
 
 static void Reimpl_Swap(Modification* self, int idx1, int idx2) {
+    g_lastHook = "Modification::Swap";
 #ifdef _DEBUG
     printf("[Modification::Swap] idx1=%d idx2=%d (count=%d)\n",
            idx1, idx2, self->m_count);
@@ -160,6 +164,7 @@ static void Reimpl_Swap(Modification* self, int idx1, int idx2) {
 typedef void (*Modification_EnableSavingSettings_t)(Modification* self, bool enable);
 
 static void Reimpl_EnableSavingSettings(Modification* self, bool enable) {
+    g_lastHook = "Modification::EnableSavingSettings";
 #ifdef _DEBUG
     printf("[Modification::EnableSavingSettings] self=%p count=%d enable=%d\n",
            (void*)self, self->m_count, (int)enable);
@@ -185,6 +190,7 @@ static void Reimpl_EnableSavingSettings(Modification* self, bool enable) {
 // ============================================================
 
 static void Reimpl_SaveList(Modification* self) {
+    g_lastHook = "Modification::SaveList";
 #ifdef _DEBUG
     printf("[Modification::SaveList] self=%p count=%d dirty=%d savingEnabled=%d\n",
            (void*)self, self->m_count, self->m_dirty, self->m_savingEnabled);
@@ -246,6 +252,7 @@ static void Reimpl_SaveList(Modification* self) {
 typedef void (*Modification_RefreshList_t)(Modification* self);
 
 static void Reimpl_RefreshList(Modification* self) {
+    g_lastHook = "Modification::RefreshList";
 #ifdef _DEBUG
     printf("[Modification::RefreshList] self=%p count=%d\n",
            (void*)self, self->m_count);
@@ -280,6 +287,7 @@ static void Reimpl_RefreshList(Modification* self) {
 typedef void (*Modification_SetupFileSystem_t)(Modification* self);
 
 static void Reimpl_SetupFileSystem(Modification* self) {
+    g_lastHook = "Modification::SetupFileSystem";
 #ifdef _DEBUG
     printf("[Modification::SetupFileSystem] self=%p count=%d\n",
            (void*)self, self->m_count);

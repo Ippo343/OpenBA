@@ -45,6 +45,7 @@ static HookInfo g_hookSerialize;
 // Constructor (0x1400f50b0)
 // ============================================================
 static void* Reimpl_Ctor(PlantOrchard* self) {
+    g_lastHook = "PlantOrchard::Ctor";
     fn_ObjectInternal_Ctor(self);
 
     // Work base fields
@@ -76,6 +77,7 @@ static void* Reimpl_Ctor(PlantOrchard* self) {
 // ScalarDtor (0x14002c540) — passthrough
 // ============================================================
 static void* Reimpl_ScalarDtor(PlantOrchard* self, uint32_t flags) {
+    g_lastHook = "PlantOrchard::ScalarDtor";
     return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -83,6 +85,7 @@ static void* Reimpl_ScalarDtor(PlantOrchard* self, uint32_t flags) {
 // Serialize (0x1400f4f50) — passthrough
 // ============================================================
 static void Reimpl_Serialize(PlantOrchard* self, void* stream) {
+    g_lastHook = "PlantOrchard::Serialize";
     ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
 }
 

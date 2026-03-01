@@ -39,21 +39,25 @@ static HookInfo g_hookOnRemove;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "TutorialUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "TutorialUI::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
+    g_lastHook = "TutorialUI::OnRemove";
     ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
 }
 
@@ -71,7 +75,7 @@ void RemoveTutorialUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallTutorialUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e37a0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 22);
 #ifdef _DEBUG
     printf("[TutorialUI] Serialize hooked at %p\n", (void*)target);
 #endif

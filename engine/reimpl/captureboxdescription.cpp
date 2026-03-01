@@ -39,31 +39,37 @@ static HookInfo g_hookCreateInPlace;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "CaptureBoxDescription::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef int (*fn_Slot3_t)(void* self);
 static int Reimpl_Slot3(void* self) {
+    g_lastHook = "CaptureBoxDescription::Slot3";
     return ((fn_Slot3_t)g_hookSlot3.trampoline)(self);
 }
 
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "CaptureBoxDescription::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "CaptureBoxDescription::Cleanup";
     ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
 }
 
 typedef void (*fn_CreateElement_t)(void* self, void* stream);
 static void Reimpl_CreateElement(void* self, void* stream) {
+    g_lastHook = "CaptureBoxDescription::CreateElement";
     ((fn_CreateElement_t)g_hookCreateElement.trampoline)(self, stream);
 }
 
 typedef void* (*fn_CreateInPlace_t)(void* self);
 static void* Reimpl_CreateInPlace(void* self) {
+    g_lastHook = "CaptureBoxDescription::CreateInPlace";
     return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
 }
 

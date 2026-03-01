@@ -49,42 +49,49 @@ static HookInfo g_hookSlot17;
 // Slot0 Dtor (0x1400103F0) — scalar deleting destructor
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "AchievementDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x14005D490) — Setup: populates achievement table UI
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "AchievementDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot6 (0x14005D240) — Draw/Refresh: updates achievement display
 typedef void (*fn_Slot6_t)(void* self, void* p2, void* p3, void* p4);
 static void Reimpl_Slot6(void* self, void* p2, void* p3, void* p4) {
+    g_lastHook = "AchievementDialog::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self, p2, p3, p4);
 }
 
 // Slot8 (0x14005D440) — OnCommand: msg 0x12/id 100 = close
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
+    g_lastHook = "AchievementDialog::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
 }
 
 // Slot10 (0x140010560) — DialogController dtor (secondary vtable)
 typedef void* (*fn_Slot10_t)(void* self, uint32_t flags);
 static void* Reimpl_Slot10(void* self, uint32_t flags) {
+    g_lastHook = "AchievementDialog::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, flags);
 }
 
 // Slot14 (0x14005DD40) — Update: checks achievement element state
 typedef void (*fn_Slot14_t)(void* self);
 static void Reimpl_Slot14(void* self) {
+    g_lastHook = "AchievementDialog::Slot14";
     ((fn_Slot14_t)g_hookSlot14.trampoline)(self);
 }
 
 // Slot17 (0x14005DC50) — Draw2: gets entity name for display
 typedef void (*fn_Slot17_t)(void* self);
 static void Reimpl_Slot17(void* self) {
+    g_lastHook = "AchievementDialog::Slot17";
     ((fn_Slot17_t)g_hookSlot17.trampoline)(self);
 }
 
@@ -139,7 +146,7 @@ void RemoveAchievementDialogSlot10() { RemoveHook(&g_hookSlot10); }
 
 void InstallAchievementDialogSlot14() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14005DD40);
-    InstallHook(target, (void*)Reimpl_Slot14, &g_hookSlot14, 13);
+    InstallHook(target, (void*)Reimpl_Slot14, &g_hookSlot14, 16);
 #ifdef _DEBUG
     printf("[AchievementDialog] Slot14 hooked at %p\n", (void*)target);
 #endif

@@ -38,6 +38,7 @@ static HookInfo g_hookDtor;
 // Slot0 Dtor (0x140012840) — scalar deleting destructor
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "ModUploadDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 

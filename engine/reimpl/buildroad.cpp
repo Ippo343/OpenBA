@@ -46,6 +46,7 @@ static HookInfo g_hookSerialize;
 // Object::Internal::Internal() -> Work fields -> BuildRoad vtable + fields
 // ============================================================
 static void* Reimpl_Ctor(BuildRoad* self) {
+    g_lastHook = "BuildRoad::Ctor";
     fn_ObjectInternal_Ctor(self);
 
     // Work base fields
@@ -76,6 +77,7 @@ static void* Reimpl_Ctor(BuildRoad* self) {
 // ScalarDtor (0x1400295b0) — passthrough
 // ============================================================
 static void* Reimpl_ScalarDtor(BuildRoad* self, uint32_t flags) {
+    g_lastHook = "BuildRoad::ScalarDtor";
     return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -83,6 +85,7 @@ static void* Reimpl_ScalarDtor(BuildRoad* self, uint32_t flags) {
 // Serialize (0x1400e4980) — passthrough
 // ============================================================
 static void Reimpl_Serialize(BuildRoad* self, void* stream) {
+    g_lastHook = "BuildRoad::Serialize";
     ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
 }
 

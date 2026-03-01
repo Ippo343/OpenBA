@@ -140,6 +140,7 @@ static HookInfo g_hookRun;
 // ============================================================
 
 static void Reimpl_SetNextLoop(MainLoop* self, UpdateLoop* loop) {
+    g_lastHook = "MainLoop::SetNextLoop";
     self->m_nextLoop = loop;
 }
 
@@ -152,6 +153,7 @@ static void Reimpl_SetNextLoop(MainLoop* self, UpdateLoop* loop) {
 // ============================================================
 
 static bool Reimpl_Update(MainLoop* self, Time* dt) {
+    g_lastHook = "MainLoop::Update";
     UpdateLoop* current = self->m_currentLoop;
 
     // Tick the current loop's Update(dt) — returns true if it wants to keep running
@@ -202,6 +204,7 @@ static bool Reimpl_Update(MainLoop* self, Time* dt) {
 // ============================================================
 
 static void Reimpl_Draw(MainLoop* self, float alpha) {
+    g_lastHook = "MainLoop::Draw";
     uint8_t* ctx = reinterpret_cast<uint8_t*>(self->m_context);
 
     // Get the video device object: context+0x2160 → device ptr → vtable
@@ -326,6 +329,7 @@ static void CleanupAudioChannels(MainLoop* self) {
 // ============================================================
 
 static bool Reimpl_Frame(MainLoop* self, bool drawOnly) {
+    g_lastHook = "MainLoop::Frame";
     // --- Capture current time and update accumulator ---
     int64_t now = QPCToTicks(GetQPC());
     int64_t elapsed = now - self->m_lastTimestamp;
@@ -426,6 +430,7 @@ static bool Reimpl_Frame(MainLoop* self, bool drawOnly) {
 // ============================================================
 
 static void Reimpl_Run(MainLoop* self, UpdateLoop* loop) {
+    g_lastHook = "MainLoop::Run";
 #ifdef _DEBUG
     printf("[MainLoop::Run] ENTER self=%p loop=%p\n", (void*)self, (void*)loop);
     printf("[MainLoop::Run]   fn_InputDevice_Update  = %p\n", (void*)fn_InputDevice_Update);
@@ -526,6 +531,7 @@ static void Reimpl_Run(MainLoop* self, UpdateLoop* loop) {
 
 /* NOT HOOKED — function is 8 bytes (mov rax,[RIP+offset]; ret).
 static MainLoop* Reimpl_Get(void) {
+    g_lastHook = "MainLoop::Get";
     return *g_pMainLoopSingleton;
 }
 */
@@ -540,6 +546,7 @@ static MainLoop* Reimpl_Get(void) {
 static HookInfo g_hookIsRunningML;
 
 static bool Reimpl_IsRunningML(MainLoop* self, UpdateLoop* loop) {
+    g_lastHook = "MainLoop::IsRunningML";
     if (loop != nullptr && loop == self->m_currentLoop) {
         return true;
     }
@@ -553,6 +560,7 @@ static bool Reimpl_IsRunningML(MainLoop* self, UpdateLoop* loop) {
 
 /* NOT HOOKED — function is 5 bytes (mov rax,[rcx+0x10]; ret).
 static VideoContext* Reimpl_GetContext(MainLoop* self) {
+    g_lastHook = "MainLoop::GetContext";
     return self->m_context;
 }
 */
@@ -564,6 +572,7 @@ static VideoContext* Reimpl_GetContext(MainLoop* self) {
 
 /* NOT HOOKED — function is 5 bytes (mov rax,[rcx+0x20]; ret).
 static UpdateLoop* Reimpl_GetCurrentLoop(MainLoop* self) {
+    g_lastHook = "MainLoop::GetCurrentLoop";
     return self->m_currentLoop;
 }
 */
@@ -576,6 +585,7 @@ static UpdateLoop* Reimpl_GetCurrentLoop(MainLoop* self) {
 
 /* NOT HOOKED — function is 11 bytes.
 static void Reimpl_GetDeltaTime(MainLoop* self, int64_t* retval) {
+    g_lastHook = "MainLoop::GetDeltaTime";
     *retval = self->m_deltaTime;
 }
 */
@@ -586,6 +596,7 @@ static void Reimpl_GetDeltaTime(MainLoop* self, int64_t* retval) {
 
 /* NOT HOOKED — function is 11 bytes.
 static void Reimpl_GetFrameTime(MainLoop* self, int64_t* retval) {
+    g_lastHook = "MainLoop::GetFrameTime";
     *retval = self->m_frameTime;
 }
 */
@@ -596,6 +607,7 @@ static void Reimpl_GetFrameTime(MainLoop* self, int64_t* retval) {
 
 /* NOT HOOKED — function is 11 bytes.
 static void Reimpl_GetFrameStartTime(MainLoop* self, int64_t* retval) {
+    g_lastHook = "MainLoop::GetFrameStartTime";
     *retval = self->m_frameStartTime;
 }
 */
@@ -606,6 +618,7 @@ static void Reimpl_GetFrameStartTime(MainLoop* self, int64_t* retval) {
 
 /* NOT HOOKED — function is 11 bytes.
 static void Reimpl_GetFrameUpdateTime(MainLoop* self, int64_t* retval) {
+    g_lastHook = "MainLoop::GetFrameUpdateTime";
     *retval = self->m_frameUpdateTime;
 }
 */
@@ -618,6 +631,7 @@ static void Reimpl_GetFrameUpdateTime(MainLoop* self, int64_t* retval) {
 static HookInfo g_hookMarkFrameUpdateTime;
 
 static void Reimpl_MarkFrameUpdateTime(MainLoop* self) {
+    g_lastHook = "MainLoop::MarkFrameUpdateTime";
     int64_t now = QPCToTicks(GetQPC());
     self->m_frameUpdateTime = now - self->m_frameStartTime;
 }
@@ -630,6 +644,7 @@ static void Reimpl_MarkFrameUpdateTime(MainLoop* self) {
 static HookInfo g_hookAddPostUpdate;
 
 static void Reimpl_AddPostUpdate(MainLoop* self, void* funcPtr, void* userData) {
+    g_lastHook = "MainLoop::AddPostUpdate";
     PostCallback entry;
     entry.funcPtr = funcPtr;
     entry.userData = userData;
@@ -647,6 +662,7 @@ static void Reimpl_AddPostUpdate(MainLoop* self, void* funcPtr, void* userData) 
 static HookInfo g_hookAddPostDraw;
 
 static void Reimpl_AddPostDraw(MainLoop* self, void* funcPtr, void* userData) {
+    g_lastHook = "MainLoop::AddPostDraw";
     PostCallback entry;
     entry.funcPtr = funcPtr;
     entry.userData = userData;
@@ -664,6 +680,7 @@ static void Reimpl_AddPostDraw(MainLoop* self, void* funcPtr, void* userData) {
 static HookInfo g_hookRemovePostUpdate;
 
 static void Reimpl_RemovePostUpdate(MainLoop* self, void* funcPtr, void* userData) {
+    g_lastHook = "MainLoop::RemovePostUpdate";
     int i = 0;
     while (i < self->m_postUpdateCount) {
         PostCallback* arr = self->m_postUpdateCallbacks;
@@ -687,6 +704,7 @@ static void Reimpl_RemovePostUpdate(MainLoop* self, void* funcPtr, void* userDat
 static HookInfo g_hookRemovePostDraw;
 
 static void Reimpl_RemovePostDraw(MainLoop* self, void* funcPtr, void* userData) {
+    g_lastHook = "MainLoop::RemovePostDraw";
     int i = 0;
     while (i < self->m_postDrawCount) {
         PostCallback* arr = self->m_postDrawCallbacks;
@@ -709,6 +727,7 @@ static void Reimpl_RemovePostDraw(MainLoop* self, void* funcPtr, void* userData)
 static HookInfo g_hookOnVideoErrorStatic;
 
 static void Reimpl_OnVideoErrorStatic(void) {
+    g_lastHook = "MainLoop::OnVideoErrorStatic";
     MainLoop* ml = *g_pMainLoopSingleton;
     // Dispatch to the instance method (may be hooked or original)
     typedef void (*OnVideoError_t)(MainLoop*);
@@ -725,6 +744,7 @@ static void Reimpl_OnVideoErrorStatic(void) {
 static HookInfo g_hookOnVideoRestartStatic;
 
 static void Reimpl_OnVideoRestartStatic(void) {
+    g_lastHook = "MainLoop::OnVideoRestartStatic";
     MainLoop* ml = *g_pMainLoopSingleton;
     typedef void (*OnVideoRestart_t)(MainLoop*);
     OnVideoRestart_t fn = reinterpret_cast<OnVideoRestart_t>(
@@ -741,6 +761,7 @@ static void Reimpl_OnVideoRestartStatic(void) {
 static HookInfo g_hookCreateVideoCtx;
 
 static void Reimpl_CreateVideoContext(MainLoop* self) {
+    g_lastHook = "MainLoop::CreateVideoContext";
     // Destroy existing context
     if (self->m_context) {
         fn_VideoCtx_Dtor(self->m_context);
@@ -779,6 +800,7 @@ static void Reimpl_CreateVideoContext(MainLoop* self) {
 static HookInfo g_hookReleaseVideoCtx;
 
 static void Reimpl_ReleaseVideoContext(MainLoop* self) {
+    g_lastHook = "MainLoop::ReleaseVideoContext";
     if (self->m_context) {
         fn_VideoCtx_Dtor(self->m_context);
         fn_VideoCtx_Delete(self->m_context);
@@ -799,6 +821,7 @@ static double* g_pMaxAccumSeconds = nullptr;      // DAT_1801616b0
 static HookInfo g_hookCtor;
 
 static MainLoop* Reimpl_Ctor(MainLoop* self, EngineInstance* engine) {
+    g_lastHook = "MainLoop::Ctor";
 #ifdef _DEBUG
     printf("[MainLoop::Ctor] self=%p engine=%p\n", (void*)self, (void*)engine);
 #endif
@@ -846,6 +869,7 @@ static fn_ArrayCleanup_t fn_CleanupResources = nullptr;    // FUN_180033880
 static HookInfo g_hookDtor;
 
 static void Reimpl_Dtor(MainLoop* self) {
+    g_lastHook = "MainLoop::Dtor";
 #ifdef _DEBUG
     printf("[MainLoop::Dtor] self=%p\n", (void*)self);
 #endif

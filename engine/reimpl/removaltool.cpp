@@ -32,6 +32,7 @@
 static HookInfo g_hookRemovalToolDtor;
 typedef void* (*fn_RemovalToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_RemovalToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "RemovalTool::RemovalToolDtor";
     return ((fn_RemovalToolDtor_t)g_hookRemovalToolDtor.trampoline)(self, flags);
 }
 
@@ -39,6 +40,7 @@ static void* Reimpl_RemovalToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookRemovalToolStartup;
 typedef void (*fn_RemovalToolStartup_t)(void* self);
 static void Reimpl_RemovalToolStartup(void* self) {
+    g_lastHook = "RemovalTool::RemovalToolStartup";
     ((fn_RemovalToolStartup_t)g_hookRemovalToolStartup.trampoline)(self);
 }
 
@@ -46,6 +48,7 @@ static void Reimpl_RemovalToolStartup(void* self) {
 static HookInfo g_hookRemovalToolDraw;
 typedef void (*fn_RemovalToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_RemovalToolDraw(void* self, void* context, char param) {
+    g_lastHook = "RemovalTool::RemovalToolDraw";
     ((fn_RemovalToolDraw_t)g_hookRemovalToolDraw.trampoline)(self, context, param);
 }
 
@@ -53,6 +56,7 @@ static void Reimpl_RemovalToolDraw(void* self, void* context, char param) {
 static HookInfo g_hookRemovalToolCalcPath;
 typedef uint64_t (*fn_RemovalToolCalcPath_t)(void* self, int x, int z);
 static uint64_t Reimpl_RemovalToolCalcPath(void* self, int x, int z) {
+    g_lastHook = "RemovalTool::RemovalToolCalcPath";
     return ((fn_RemovalToolCalcPath_t)g_hookRemovalToolCalcPath.trampoline)(self, x, z);
 }
 
@@ -60,6 +64,7 @@ static uint64_t Reimpl_RemovalToolCalcPath(void* self, int x, int z) {
 static HookInfo g_hookRemovalToolCalcCost;
 typedef uint64_t (*fn_RemovalToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d);
 static uint64_t Reimpl_RemovalToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d) {
+    g_lastHook = "RemovalTool::RemovalToolCalcCost";
     return ((fn_RemovalToolCalcCost_t)g_hookRemovalToolCalcCost.trampoline)(self, x, z, a, b, c, d);
 }
 

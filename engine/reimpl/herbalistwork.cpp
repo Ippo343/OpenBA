@@ -36,6 +36,7 @@ typedef void* (*HW_ScalarDtor_t)(void* self, uint32_t flags);
 static HookInfo g_hookScalarDtor;
 
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "HerbalistWork::ScalarDtor";
     return ((HW_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -56,6 +57,7 @@ typedef void (*HW_Serialize_t)(void* self, void* stream);
 static HookInfo g_hookSerialize;
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "HerbalistWork::Serialize";
     ((HW_Serialize_t)g_hookSerialize.trampoline)(self, stream);
 }
 
@@ -77,6 +79,7 @@ typedef uint64_t (*HW_Slot4_t)(void* self, void* param2, uint64_t param3, uint64
 static HookInfo g_hookSlot4;
 
 static uint64_t Reimpl_Slot4(void* self, void* param2, uint64_t param3, uint64_t param4) {
+    g_lastHook = "HerbalistWork::Slot4";
     return ((HW_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3, param4);
 }
 
@@ -104,6 +107,7 @@ typedef void (*HW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "HerbalistWork::Slot8";
     ((HW_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
@@ -125,6 +129,7 @@ typedef bool (*HW_Slot9_t)(void* self, void* param2);
 static HookInfo g_hookSlot9;
 
 static bool Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "HerbalistWork::Slot9";
     return ((HW_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
@@ -146,6 +151,7 @@ typedef void* (*HW_Slot10_t)(void* self, void* outPtr);
 static HookInfo g_hookSlot10;
 
 static void* Reimpl_Slot10(void* self, void* outPtr) {
+    g_lastHook = "HerbalistWork::Slot10";
     return ((HW_Slot10_t)g_hookSlot10.trampoline)(self, outPtr);
 }
 

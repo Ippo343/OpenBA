@@ -38,16 +38,19 @@ static HookInfo g_hookStartup;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "StatusIconUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "StatusIconUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "StatusIconUI::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
@@ -65,7 +68,7 @@ void RemoveStatusIconUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallStatusIconUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007b270);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 13);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 20);
 #ifdef _DEBUG
     printf("[StatusIconUI] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -74,7 +77,7 @@ void RemoveStatusIconUISerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallStatusIconUIStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007b0a0);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 13);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 15);
 #ifdef _DEBUG
     printf("[StatusIconUI] Startup hooked at %p\n", (void*)target);
 #endif

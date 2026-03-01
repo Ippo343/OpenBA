@@ -61,6 +61,7 @@ static HookInfo g_hookOnCreate;
 // Serializes base component, then serializes floorFlag (bool at +0x28).
 // ============================================================
 static void Reimpl_Shutdown(FloorComponent* self, void* stream) {
+    g_lastHook = "FloorComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer[24];
@@ -74,6 +75,7 @@ static void Reimpl_Shutdown(FloorComponent* self, void* stream) {
 // Checks IsDerivedFrom on _unk18, conditionally calls FUN_14011F390.
 // ============================================================
 static void Passthrough_Draw(FloorComponent* self) {
+    g_lastHook = "FloorComponent::Draw";
     typedef void (*orig_t)(FloorComponent*);
     ((orig_t)g_hookDraw.trampoline)(self);
 }
@@ -84,6 +86,7 @@ static void Passthrough_Draw(FloorComponent* self) {
 // scene, then resets floorId to -1 and floorFlag to 0.
 // ============================================================
 static void Reimpl_OnCreate(FloorComponent* self) {
+    g_lastHook = "FloorComponent::OnCreate";
     if (self->floorId >= 0) {
         int* pScene = *(int**)((uintptr_t)*g_pGameState + 0xF8);
         fn_CheckPtr((void*)((uintptr_t)self + 0x10));  // check owner ptr
@@ -149,7 +152,7 @@ void InstallFloorComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011F560);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[FloorComponent] Shutdown hooked at %p\n", (void*)target);
 #endif
@@ -176,7 +179,7 @@ void InstallFloorComponentOnCreate() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011F2A0);
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 12);
+    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 13);
 #ifdef _DEBUG
     printf("[FloorComponent] OnCreate hooked at %p\n", (void*)target);
 #endif

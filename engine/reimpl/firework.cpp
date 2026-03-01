@@ -63,6 +63,7 @@ static fn_BST_Serialize296b0_t fn_BST_Serialize = nullptr;
 //          Serializer::Serialize(+0x48)
 // ============================================================
 static void Reimpl_Serialize(FireWork* self, void* stream) {
+    g_lastHook = "FireWork::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -95,24 +96,28 @@ static void Reimpl_Serialize(FireWork* self, void* stream) {
 // Slot4 (0x1400e9620) — complex fire suppression logic
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "FireWork::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 // Slot6 (0x1400e9600) — calls helper on +0x50, returns false
 typedef void (*fn_Slot6_t)(void* self, void* param2);
 static void Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "FireWork::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 // Slot8 (0x1400e99a0) — cleanup loop
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "FireWork::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 // Slot9 (0x1400e93c0) — complex fire AI validation
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "FireWork::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
@@ -195,7 +200,7 @@ void RemoveFireWorkSlot8() { RemoveHook(&g_hookSlot8); }
 void InstallFireWorkSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e93c0);
     // Prologue: MOV RAX,RSP(3) + PUSH RBP(2) + PUSH RSI(2) + PUSH RDI(2) + PUSH R12(2) + PUSH R13(2) = 13
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 13);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 14);
 #ifdef _DEBUG
     printf("[FireWork] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif

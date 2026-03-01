@@ -67,6 +67,7 @@ static void** g_pWorldManager = nullptr;
 // ============================================================
 
 static void Reimpl_Shutdown(WellComponent* self, void* stream) {
+    g_lastHook = "WellComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     // First empty serializer block (component section)
@@ -90,6 +91,7 @@ static void Reimpl_Shutdown(WellComponent* self, void* stream) {
 // ============================================================
 
 static void Reimpl_OnCreate(WellComponent* self) {
+    g_lastHook = "WellComponent::OnCreate";
     // Create InternalBasePtr on stack from owner entity (self+0x10 = owner)
     uint8_t basePtr[24];
     fn_InternalBasePtr_Ctor(basePtr, self->owner);
@@ -121,7 +123,7 @@ void InstallWellComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x14005cfa0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG
     printf("[WellComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

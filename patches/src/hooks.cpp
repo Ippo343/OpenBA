@@ -7,6 +7,51 @@
 #include <cstring>
 
 // ============================================================
+// Crash diagnostics breadcrumb
+// ============================================================
+
+volatile const char* g_lastHook = "none";
+
+// ============================================================
+// Hook registry for crash diagnostics
+// ============================================================
+
+struct HookRegistryEntry {
+    const char* name;
+    HookInfo* info;
+};
+
+static HookRegistryEntry g_hookRegistry[1024];
+static int g_hookRegistryCount = 0;
+
+void RegisterHookInfo(const char* name, HookInfo* info) {
+    if (g_hookRegistryCount < 1024) {
+        g_hookRegistry[g_hookRegistryCount].name = name;
+        g_hookRegistry[g_hookRegistryCount].info = info;
+        g_hookRegistryCount++;
+    }
+}
+
+const char* FindHookByAddress(uintptr_t addr) {
+    for (int i = 0; i < g_hookRegistryCount; i++) {
+        HookInfo* hi = g_hookRegistry[i].info;
+        if (!hi) continue;
+
+        // Check if addr matches the hooked target address
+        if (hi->target && (uintptr_t)hi->target == addr)
+            return g_hookRegistry[i].name;
+
+        // Check if addr is within the trampoline (64 bytes allocated)
+        if (hi->trampoline) {
+            uintptr_t tBase = (uintptr_t)hi->trampoline;
+            if (addr >= tBase && addr < tBase + 64)
+                return g_hookRegistry[i].name;
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================
 // Low-level hook infrastructure (unchanged)
 // ============================================================
 
@@ -3194,6 +3239,11 @@ static ReimplEntry g_reimplementations[] = {
 };
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);
+
+const ReimplEntry* GetReimplTable(int* outCount) {
+    if (outCount) *outCount = g_reimplCount;
+    return g_reimplementations;
+}
 
 // Set to -1 to install all hooks, or a specific index to stop after that many.
 // Use for bisecting crashes: try 30 (engine core only), then 100, 200, etc.

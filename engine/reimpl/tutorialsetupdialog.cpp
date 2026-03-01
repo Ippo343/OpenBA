@@ -41,18 +41,21 @@ static HookInfo g_hookOnEvent;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TutorialSetupDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 5: Shutdown(this, stream) — serialize/cleanup tutorial setup state
 typedef uint64_t (*fn_Shutdown_t)(void* self, void* stream);
 static uint64_t Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "TutorialSetupDialog::Shutdown";
     return ((fn_Shutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 // Slot 6: OnEvent(this) — delegate to vtable[0] dtor, then cleanup
 typedef void (*fn_OnEvent_t)(void* self);
 static void Reimpl_OnEvent(void* self) {
+    g_lastHook = "TutorialSetupDialog::OnEvent";
     ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self);
 }
 

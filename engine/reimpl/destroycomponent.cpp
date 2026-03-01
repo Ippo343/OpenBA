@@ -66,6 +66,7 @@ static HookInfo g_hookSerialize;
 //      destroyFlags at +0x50 (bool), field48 (Time)
 // ============================================================
 static void Reimpl_Shutdown(DestroyComponent* self, void* stream) {
+    g_lastHook = "DestroyComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     // Empty serializer block (controller format compat)
@@ -98,6 +99,7 @@ static void Reimpl_Shutdown(DestroyComponent* self, void* stream) {
 // into field60.
 // ============================================================
 static void Reimpl_Serialize(DestroyComponent* self) {
+    g_lastHook = "DestroyComponent::Serialize";
     void* baseObj = self->_unk18;
 
     bool isDerived = fn_IsDerivedFrom_d(baseObj, *g_pBuildingCompTypeId);
@@ -152,7 +154,7 @@ void InstallDestroyComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011DB50);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[DestroyComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

@@ -63,6 +63,7 @@ static HookInfo g_hookGetTarget;
 // Serializes: status(+0x18), entity ptr(+0x20) with type check, int(+0x28)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "ShowTool::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -88,6 +89,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Always returns 1 (action remains active / done in one tick).
 // ============================================================
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "ShowTool::Purecall";
     uint8_t* s = (uint8_t*)self;
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
@@ -107,6 +109,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 // Hides tool on the entity at +0x20.
 // ============================================================
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "ShowTool::CheckEntity";
     uint8_t* s = (uint8_t*)self;
     fn_CheckPtr(s + 0x20);
     fn_HideTool(*(void**)(s + 0x20));
@@ -117,6 +120,7 @@ static void Reimpl_CheckEntity(void* self) {
 // Returns true if entity at +0x20's parent (+0x10) matches the param.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "ShowTool::GetTarget";
     uint8_t* s = (uint8_t*)self;
     fn_CheckPtr(s + 0x20);
     void* entityParent = *(void**)(*(uint8_t**)(s + 0x20) + 0x10);
@@ -165,7 +169,7 @@ void RemoveShowToolPurecall() { RemoveHook(&g_hookPurecall); }
 
 void InstallShowToolCheckEntity() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400426d0);
-    InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 12);
+    InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 13);
 #ifdef _DEBUG
     printf("[ShowTool] CheckEntity hooked at %p\n", (void*)target);
 #endif
@@ -174,7 +178,7 @@ void RemoveShowToolCheckEntity() { RemoveHook(&g_hookCheckEntity); }
 
 void InstallShowToolGetTarget() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140042680);
-    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 13);
+    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 14);
 #ifdef _DEBUG
     printf("[ShowTool] GetTarget hooked at %p\n", (void*)target);
 #endif

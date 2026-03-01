@@ -50,6 +50,7 @@ static HookInfo g_hookGetTarget;
 // Serializes status(+0x18), entity(+0x20) with DAT_1401c7158, entity(+0x28) with ComponentEntity.
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "PickupRawMaterial::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -84,6 +85,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 typedef uint64_t (*fn_PickupPurecall_t)(void* self);
 
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "PickupRawMaterial::Purecall";
     return ((fn_PickupPurecall_t)g_hookPurecall.trampoline)(self);
 }
 
@@ -92,6 +94,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 // Returns true if param matches entity at +0x28 or entity at +0x20's parent.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "PickupRawMaterial::GetTarget";
     uint8_t* s = (uint8_t*)self;
 
     fn_CheckPtr(param);

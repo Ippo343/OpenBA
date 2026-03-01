@@ -71,6 +71,7 @@ static void** g_pGameState = nullptr;
 // ============================================================
 static void Reimpl_Shutdown(TradeComponent* self, void* stream,
                              uint64_t param3, uint64_t param4) {
+    g_lastHook = "TradeComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -95,6 +96,7 @@ static void Reimpl_Shutdown(TradeComponent* self, void* stream,
 //   TradeSetup(self)
 // ============================================================
 static void Reimpl_Draw(TradeComponent* self) {
+    g_lastHook = "TradeComponent::Draw";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -123,6 +125,7 @@ static void Reimpl_Draw(TradeComponent* self) {
 // Similar to StorageLocationComponent::OnCreate but at offset +0x30.
 // ============================================================
 static void Reimpl_OnCreate(TradeComponent* self) {
+    g_lastHook = "TradeComponent::OnCreate";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -147,7 +150,7 @@ static void Reimpl_OnCreate(TradeComponent* self) {
 void InstallTradeComponentShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14005bd50);
     // Prologue: PUSH RBP(1)+PUSH RSI(1)+PUSH RDI(1)+MOV RBP,RSP(3)+SUB RSP,0x50(4)+MOV qword,-0x2(8) = 18
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 18);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 19);
 #ifdef _DEBUG
     printf("[TradeComponent] Shutdown hooked at %p (prologue=18, passthrough)\n", (void*)target);
 #endif

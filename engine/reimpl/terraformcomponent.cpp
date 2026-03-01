@@ -56,6 +56,7 @@ static HookInfo g_hookOnCreate;
 //      if reading, resize array at +0x28, then serialize each Vector3
 // ============================================================
 static void Reimpl_Shutdown(TerraformComponent* self, void* stream) {
+    g_lastHook = "TerraformComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer[24];
@@ -93,6 +94,7 @@ static void Reimpl_Shutdown(TerraformComponent* self, void* stream) {
 // terrain rendering. Too many terrain subsystem dependencies.
 // ============================================================
 static void Passthrough_OnCreate(TerraformComponent* self) {
+    g_lastHook = "TerraformComponent::OnCreate";
     typedef void (*orig_t)(TerraformComponent*);
     ((orig_t)g_hookOnCreate.trampoline)(self);
 }
@@ -157,7 +159,7 @@ void InstallTerraformComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x140057500);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[TerraformComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

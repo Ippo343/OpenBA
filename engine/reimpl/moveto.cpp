@@ -72,6 +72,7 @@ typedef void (*MoveTo_CheckEntity_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "MoveTo::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -92,6 +93,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self, void* p2, void* p3, void* p4) {
+    g_lastHook = "MoveTo::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -111,6 +113,7 @@ static uint64_t Reimpl_AbstractImpl(void* self, void* p2, void* p3, void* p4) {
 // ============================================================
 
 static uint64_t Reimpl_Execute(void* self, void* param2) {
+    g_lastHook = "MoveTo::Execute";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {
@@ -130,6 +133,7 @@ static uint64_t Reimpl_Execute(void* self, void* param2) {
 // ============================================================
 
 static void Reimpl_Enter(void* self) {
+    g_lastHook = "MoveTo::Enter";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -148,6 +152,7 @@ static void Reimpl_Enter(void* self) {
 // ============================================================
 
 static void Reimpl_Exit(void* self) {
+    g_lastHook = "MoveTo::Exit";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -164,6 +169,7 @@ static void Reimpl_Exit(void* self) {
 // ============================================================
 
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "MoveTo::CheckEntity";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

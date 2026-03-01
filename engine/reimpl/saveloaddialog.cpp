@@ -40,24 +40,28 @@ static HookInfo g_hookLoad;
 // Slot 0: ScalarDtor(this, flags)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "SaveLoadDialog::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 // Slot 4: Startup(this) — build save/load UI, populate file list
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "SaveLoadDialog::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 // Slot 6: Update(this) — refresh file list, update preview
 typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
+    g_lastHook = "SaveLoadDialog::Update";
     ((fn_Update_t)g_hookUpdate.trampoline)(self);
 }
 
 // Slot 7: Load(this, time, loaderLoop, param4)
 typedef void (*fn_Load_t)(void* self, void* time, void** loaderLoop, uint64_t param4);
 static void Reimpl_Load(void* self, void* time, void** loaderLoop, uint64_t param4) {
+    g_lastHook = "SaveLoadDialog::Load";
     ((fn_Load_t)g_hookLoad.trampoline)(self, time, loaderLoop, param4);
 }
 

@@ -60,6 +60,7 @@ static HookInfo g_hookOnCreate;
 typedef void (*fn_Shutdown_Orig_t)(PastureComponent* self, void* stream);
 
 static void Reimpl_Shutdown(PastureComponent* self, void* stream) {
+    g_lastHook = "PastureComponent::Shutdown";
     ((fn_Shutdown_Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -75,6 +76,7 @@ static void Reimpl_Shutdown(PastureComponent* self, void* stream) {
 typedef void (*fn_Draw_Orig_t)(PastureComponent* self);
 
 static void Reimpl_Draw(PastureComponent* self) {
+    g_lastHook = "PastureComponent::Draw";
     ((fn_Draw_Orig_t)g_hookDraw.trampoline)(self);
 }
 
@@ -91,6 +93,7 @@ static void Reimpl_Draw(PastureComponent* self) {
 typedef void (*fn_OnCreate_Orig_t)(PastureComponent* self);
 
 static void Reimpl_OnCreate(PastureComponent* self) {
+    g_lastHook = "PastureComponent::OnCreate";
     ((fn_OnCreate_Orig_t)g_hookOnCreate.trampoline)(self);
 }
 
@@ -112,7 +115,7 @@ void RemovePastureComponentShutdown() {
 
 void InstallPastureComponentDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140127a30);
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 13);
+    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 14);
 #ifdef _DEBUG
     printf("[PastureComponent] Draw hooked (passthrough) at %p\n", (void*)target);
 #endif

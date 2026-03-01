@@ -51,6 +51,7 @@ static float* g_pTimeMultiplier = nullptr;
 // Parameters: RCX = this, RDX = Time (int64)
 // ============================================================
 static void Reimpl_Update(LivestockComponent* self, int64_t deltaTime) {
+    g_lastHook = "LivestockComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

@@ -26,6 +26,7 @@ typedef void (*ResidenceShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "ResidenceComponent::Shutdown";
     ((ResidenceShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -48,6 +49,7 @@ typedef void (*ResidenceSerialize_t)(void* self);
 static HookInfo g_hookSerialize;
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "ResidenceComponent::Serialize";
     ((ResidenceSerialize_t)g_hookSerialize.trampoline)(self);
 }
 
@@ -70,6 +72,7 @@ typedef void (*ResidenceOnCreate_t)(void* self);
 static HookInfo g_hookOnCreate;
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "ResidenceComponent::OnCreate";
     ((ResidenceOnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 

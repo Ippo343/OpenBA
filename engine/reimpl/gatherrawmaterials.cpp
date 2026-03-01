@@ -45,6 +45,7 @@ static HookInfo g_hookSerialize;
 // Constructor (0x1400ec8a0)
 // ============================================================
 static void* Reimpl_Ctor(GatherRawMaterials* self) {
+    g_lastHook = "GatherRawMaterials::Ctor";
     fn_ObjectInternal_Ctor(self);
 
     // Work base fields
@@ -77,6 +78,7 @@ static void* Reimpl_Ctor(GatherRawMaterials* self) {
 // ScalarDtor (0x14002a410) — passthrough
 // ============================================================
 static void* Reimpl_ScalarDtor(GatherRawMaterials* self, uint32_t flags) {
+    g_lastHook = "GatherRawMaterials::ScalarDtor";
     return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -84,6 +86,7 @@ static void* Reimpl_ScalarDtor(GatherRawMaterials* self, uint32_t flags) {
 // Serialize (0x1400ec560) — passthrough
 // ============================================================
 static void Reimpl_Serialize(GatherRawMaterials* self, void* stream) {
+    g_lastHook = "GatherRawMaterials::Serialize";
     ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
 }
 

@@ -41,6 +41,7 @@ typedef void (*AnimalComponent_Update_t)(void* self, int64_t* deltaTime);
 // ============================================================
 
 static void Reimpl_Update(void* self, int64_t* deltaTime) {
+    g_lastHook = "AnimalComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

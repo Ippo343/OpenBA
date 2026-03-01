@@ -71,6 +71,7 @@ static const float SMOOTH_INTERVAL_SECONDS = 300.0f;
 // Parameters: RCX = this, RDX = Time* (pointer to int64)
 // ============================================================
 static void Reimpl_Update(PopulationComponent* self, int64_t* pDeltaTime) {
+    g_lastHook = "PopulationComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

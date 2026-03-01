@@ -42,18 +42,21 @@ static HookInfo g_hookSlot8;
 // Slot0 Dtor (0x140012890)
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "ModDetailsDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x14006D700) — Setup: populates mod name, author, description, image
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "ModDetailsDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 // Slot8 (0x14006D6A0) — OnCommand: close(0), upload(1), delete(2) handlers
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
+    g_lastHook = "ModDetailsDialog::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
 }
 

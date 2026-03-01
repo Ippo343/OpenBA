@@ -57,6 +57,7 @@ typedef void (*fn_AmbientEnvUpdate_t)(AmbientEnvironmentComponent* self);
 // Note: No deltaTime parameter — single-arg Update.
 // ============================================================
 static void Reimpl_Update(AmbientEnvironmentComponent* self) {
+    g_lastHook = "AmbientEnvironmentComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

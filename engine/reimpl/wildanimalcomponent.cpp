@@ -26,6 +26,7 @@ typedef void (*WildAnimalShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "WildAnimalComponent::Shutdown";
     ((WildAnimalShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -51,6 +52,7 @@ typedef void (*WildAnimalOnCreate_t)(void* self);
 static HookInfo g_hookOnCreate;
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "WildAnimalComponent::OnCreate";
     ((WildAnimalOnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 

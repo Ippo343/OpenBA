@@ -49,6 +49,7 @@ static HookInfo g_hookOnCreate;
 // Too many dependencies for clean reimpl.
 // ============================================================
 static void Passthrough_Shutdown(MultiObjectComponent* self, void* stream) {
+    g_lastHook = "MultiObjectComponent::Shutdown";
     typedef void (*orig_t)(MultiObjectComponent*, void*);
     ((orig_t)g_hookShutdown.trampoline)(self, stream);
 }
@@ -60,6 +61,7 @@ static void Passthrough_Shutdown(MultiObjectComponent* self, void* stream) {
 // marked, calls MarkForRemoval and adds to removal queue.
 // ============================================================
 static void Reimpl_OnCreate(MultiObjectComponent* self) {
+    g_lastHook = "MultiObjectComponent::OnCreate";
     int count = *(int*)((uintptr_t)self + 0x50);
     void** array = *(void***)((uintptr_t)self + 0x48);
 
@@ -109,7 +111,7 @@ static bool ResolveHelpers() {
 // ============================================================
 void InstallMultiObjectComponentShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140125880);
-    InstallHook(target, (void*)Passthrough_Shutdown, &g_hookShutdown, 16);
+    InstallHook(target, (void*)Passthrough_Shutdown, &g_hookShutdown, 18);
 #ifdef _DEBUG
     printf("[MultiObjectComponent] Shutdown hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -125,7 +127,7 @@ void InstallMultiObjectComponentOnCreate() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401257C0);
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 14);
+    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 15);
 #ifdef _DEBUG
     printf("[MultiObjectComponent] OnCreate hooked at %p\n", (void*)target);
 #endif

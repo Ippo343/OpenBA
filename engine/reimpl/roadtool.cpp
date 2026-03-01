@@ -32,6 +32,7 @@
 static HookInfo g_hookRoadToolDtor;
 typedef void* (*fn_RoadToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_RoadToolDtor(void* self, uint32_t flags) {
+    g_lastHook = "RoadTool::RoadToolDtor";
     return ((fn_RoadToolDtor_t)g_hookRoadToolDtor.trampoline)(self, flags);
 }
 
@@ -39,6 +40,7 @@ static void* Reimpl_RoadToolDtor(void* self, uint32_t flags) {
 static HookInfo g_hookRoadToolStartup;
 typedef void (*fn_RoadToolStartup_t)(void* self);
 static void Reimpl_RoadToolStartup(void* self) {
+    g_lastHook = "RoadTool::RoadToolStartup";
     ((fn_RoadToolStartup_t)g_hookRoadToolStartup.trampoline)(self);
 }
 
@@ -46,6 +48,7 @@ static void Reimpl_RoadToolStartup(void* self) {
 static HookInfo g_hookRoadToolDraw;
 typedef void (*fn_RoadToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_RoadToolDraw(void* self, void* context, char param) {
+    g_lastHook = "RoadTool::RoadToolDraw";
     ((fn_RoadToolDraw_t)g_hookRoadToolDraw.trampoline)(self, context, param);
 }
 

@@ -61,6 +61,7 @@ static fn_BST_Serialize_t fn_BST_Serialize = nullptr;
 //          Serializer::Serialize(+0x58)
 // ============================================================
 static void Reimpl_Serialize(TendArea* self, void* stream) {
+    g_lastHook = "TendArea::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -90,26 +91,31 @@ static void Reimpl_Serialize(TendArea* self, void* stream) {
 
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "TendArea::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 typedef uint8_t (*fn_Slot6_t)(void* self, void* param2);
 static uint8_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "TendArea::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "TendArea::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "TendArea::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "TendArea::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -157,7 +163,7 @@ void RemoveTendAreaSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallTendAreaSlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5490);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 21);
 #ifdef _DEBUG
     printf("[TendArea] Slot4 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -167,7 +173,7 @@ void RemoveTendAreaSlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallTendAreaSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5470);
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 12);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 13);
 #ifdef _DEBUG
     printf("[TendArea] Slot6 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -187,7 +193,7 @@ void RemoveTendAreaSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallTendAreaSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5230);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 15);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
 #ifdef _DEBUG
     printf("[TendArea] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -197,7 +203,7 @@ void RemoveTendAreaSlot9() { RemoveHook(&g_hookSlot9); }
 
 void InstallTendAreaSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f58a0);
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 17);
 #ifdef _DEBUG
     printf("[TendArea] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

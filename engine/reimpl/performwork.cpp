@@ -57,6 +57,7 @@ typedef void (*PerformWork_CheckEntity_t)(void* self);
 // ============================================================
 
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "PerformWork::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -73,6 +74,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // ============================================================
 
 static uint64_t Reimpl_AbstractImpl(void* self) {
+    g_lastHook = "PerformWork::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -95,6 +97,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
 // ============================================================
 
 static uint8_t Reimpl_Execute(void* self, void* param2, int64_t* deltaTime) {
+    g_lastHook = "PerformWork::Execute";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {
@@ -111,6 +114,7 @@ static uint8_t Reimpl_Execute(void* self, void* param2, int64_t* deltaTime) {
 // ============================================================
 
 static void Reimpl_Exit(void* self) {
+    g_lastHook = "PerformWork::Exit";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -127,6 +131,7 @@ static void Reimpl_Exit(void* self) {
 // ============================================================
 
 static void Reimpl_CheckEntity(void* self) {
+    g_lastHook = "PerformWork::CheckEntity";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

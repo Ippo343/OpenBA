@@ -58,6 +58,7 @@ static fn_BST_Serialize_t fn_BST_Serialize = nullptr;
 // Pattern: Work_Serialize + Serializer(v0) + BST_Serialize(+0x48)
 // ============================================================
 static void Reimpl_Serialize(TradeWork* self, void* stream) {
+    g_lastHook = "TradeWork::Serialize";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -80,26 +81,31 @@ static void Reimpl_Serialize(TradeWork* self, void* stream) {
 
 typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
 static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+    g_lastHook = "TradeWork::Slot4";
     return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
 }
 
 typedef uint8_t (*fn_Slot6_t)(void* self, void* param2);
 static uint8_t Reimpl_Slot6(void* self, void* param2) {
+    g_lastHook = "TradeWork::Slot6";
     return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "TradeWork::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
+    g_lastHook = "TradeWork::Slot9";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
 typedef void* (*fn_Slot10_t)(void* self, void* param2);
 static void* Reimpl_Slot10(void* self, void* param2) {
+    g_lastHook = "TradeWork::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
 }
 
@@ -143,7 +149,7 @@ void RemoveTradeWorkSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallTradeWorkSlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5d40);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 16);
 #ifdef _DEBUG
     printf("[TradeWork] Slot4 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -153,7 +159,7 @@ void RemoveTradeWorkSlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallTradeWorkSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5d20);
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 12);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 13);
 #ifdef _DEBUG
     printf("[TradeWork] Slot6 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -173,7 +179,7 @@ void RemoveTradeWorkSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallTradeWorkSlot9() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5ae0);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 15);
+    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
 #ifdef _DEBUG
     printf("[TradeWork] Slot9 hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -183,7 +189,7 @@ void RemoveTradeWorkSlot9() { RemoveHook(&g_hookSlot9); }
 
 void InstallTradeWorkSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f6c50);
-    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 15);
+    InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 17);
 #ifdef _DEBUG
     printf("[TradeWork] Slot10 hooked at %p (passthrough)\n", (void*)target);
 #endif

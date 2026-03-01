@@ -17,6 +17,7 @@ namespace PlatformConfigureAddr {
 static HookInfo g_hook;
 
 static bool Reimpl_PlatformConfigure(void* /*engine*/, bool /*param1*/, void* /*hInstance*/) {
+    g_lastHook = "PlatformConfigure::PlatformConfigure";
 #ifdef _DEBUG
     printf("[PlatformConfigure] Skipping launcher dialog\n");
 #endif

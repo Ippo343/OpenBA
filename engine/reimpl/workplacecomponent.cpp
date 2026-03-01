@@ -27,6 +27,7 @@ typedef void (*WorkPlaceShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "WorkPlaceComponent::Shutdown";
     ((WorkPlaceShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -51,6 +52,7 @@ typedef void (*WorkPlaceOnCreate_t)(void* self);
 static HookInfo g_hookOnCreate;
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "WorkPlaceComponent::OnCreate";
     ((WorkPlaceOnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 

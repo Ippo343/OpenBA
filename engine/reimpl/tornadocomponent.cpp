@@ -41,16 +41,19 @@ static HookInfo g_hookOnRemove;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "TornadoComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "TornadoComponent::Serialize";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookSerialize.trampoline)(self);
 }
 
 static void Reimpl_OnRemove(void* self, void* time) {
+    g_lastHook = "TornadoComponent::OnRemove";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookOnRemove.trampoline)(self, time);
 }
@@ -69,7 +72,7 @@ void RemoveTornadoComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallTornadoComponentSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400585a0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 12);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 13);
 #ifdef _DEBUG
     printf("[TornadoComponent] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -78,7 +81,7 @@ void RemoveTornadoComponentSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallTornadoComponentOnRemove() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140057cd0);
-    InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 12);
+    InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 15);
 #ifdef _DEBUG
     printf("[TornadoComponent] OnRemove hooked at %p\n", (void*)target);
 #endif

@@ -52,6 +52,7 @@ static HookInfo g_hookOnCreate;
 // IsDerivedFrom validation. Too many entity array management deps.
 // ============================================================
 static void Passthrough_Shutdown(BuildComponent* self, void* stream) {
+    g_lastHook = "BuildComponent::Shutdown";
     typedef void (*orig_t)(BuildComponent*, void*);
     ((orig_t)g_hookShutdown.trampoline)(self, stream);
 }
@@ -65,6 +66,7 @@ static void Passthrough_Shutdown(BuildComponent* self, void* stream) {
 // bytes for the gate function, calls into 0x140108720 which is huge).
 // ============================================================
 static void Passthrough_Draw(BuildComponent* self) {
+    g_lastHook = "BuildComponent::Draw";
     typedef void (*orig_t)(BuildComponent*);
     ((orig_t)g_hookDraw.trampoline)(self);
 }
@@ -77,6 +79,7 @@ static void Passthrough_Draw(BuildComponent* self) {
 // decrements count.
 // ============================================================
 static void Reimpl_OnCreate(BuildComponent* self) {
+    g_lastHook = "BuildComponent::OnCreate";
     // Create InternalBasePtr on stack
     uint8_t ptrBuf[8];
     fn_InternalBasePtr_Ctor(ptrBuf, self->owner);
@@ -132,7 +135,7 @@ static bool ResolveHelpers() {
 // ============================================================
 void InstallBuildComponentShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140108D80);
-    InstallHook(target, (void*)Passthrough_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Passthrough_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[BuildComponent] Shutdown hooked at %p (passthrough)\n", (void*)target);
 #endif
@@ -157,7 +160,7 @@ void InstallBuildComponentOnCreate() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x140108CB0);
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 13);
+    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 14);
 #ifdef _DEBUG
     printf("[BuildComponent] OnCreate hooked at %p\n", (void*)target);
 #endif

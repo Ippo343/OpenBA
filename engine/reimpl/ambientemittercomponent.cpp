@@ -54,11 +54,13 @@ static HookInfo g_hookDraw;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "AmbientEmitterComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "AmbientEmitterComponent::Draw";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookDraw.trampoline)(self);
 }

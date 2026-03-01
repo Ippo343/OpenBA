@@ -45,6 +45,7 @@ static HookInfo g_hookSerialize;
 // Constructor (0x1400e5a90)
 // ============================================================
 static void* Reimpl_Ctor(BuildStructure* self) {
+    g_lastHook = "BuildStructure::Ctor";
     fn_ObjectInternal_Ctor(self);
 
     // Work base fields
@@ -75,6 +76,7 @@ static void* Reimpl_Ctor(BuildStructure* self) {
 // ScalarDtor (0x140029680) — passthrough
 // ============================================================
 static void* Reimpl_ScalarDtor(BuildStructure* self, uint32_t flags) {
+    g_lastHook = "BuildStructure::ScalarDtor";
     return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
 }
 
@@ -82,6 +84,7 @@ static void* Reimpl_ScalarDtor(BuildStructure* self, uint32_t flags) {
 // Serialize (0x1400e5850) — passthrough
 // ============================================================
 static void Reimpl_Serialize(BuildStructure* self, void* stream) {
+    g_lastHook = "BuildStructure::Serialize";
     ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
 }
 

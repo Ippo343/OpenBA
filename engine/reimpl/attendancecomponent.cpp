@@ -59,6 +59,7 @@ static fn_ProcessAttendanceQueue_t fn_ProcessAttendanceQueue = nullptr;
 // Note: This Update does NOT take a deltaTime parameter (single-arg).
 // ============================================================
 static void Reimpl_Update(AttendanceComponent* self) {
+    g_lastHook = "AttendanceComponent::Update";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

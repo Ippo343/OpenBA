@@ -46,36 +46,43 @@ static HookInfo g_hookSlot12;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "OrchardUI::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "OrchardUI::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "OrchardUI::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
+    g_lastHook = "OrchardUI::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4, int param5, int param6);
 static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int param5, int param6) {
+    g_lastHook = "OrchardUI::Slot9";
     ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
 }
 
 typedef void (*fn_Slot11_t)(void* self, int64_t param2);
 static void Reimpl_Slot11(void* self, int64_t param2) {
+    g_lastHook = "OrchardUI::Slot11";
     ((fn_Slot11_t)g_hookSlot11.trampoline)(self, param2);
 }
 
 typedef void (*fn_Slot12_t)(void* self, int64_t param2);
 static void Reimpl_Slot12(void* self, int64_t param2) {
+    g_lastHook = "OrchardUI::Slot12";
     ((fn_Slot12_t)g_hookSlot12.trampoline)(self, param2);
 }
 
@@ -138,7 +145,7 @@ void RemoveOrchardUISlot11() { RemoveHook(&g_hookSlot11); }
 
 void InstallOrchardUISlot12() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140075430);
-    InstallHook(target, (void*)Reimpl_Slot12, &g_hookSlot12, 15);
+    InstallHook(target, (void*)Reimpl_Slot12, &g_hookSlot12, 17);
 #ifdef _DEBUG
     printf("[OrchardUI] Slot12 hooked at %p\n", (void*)target);
 #endif

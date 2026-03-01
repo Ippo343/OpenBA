@@ -40,6 +40,7 @@ typedef void (*fn_StorageComponent_Draw_t)(StorageComponent* self);
 // Too critical for save/load to fully reimpl without extensive testing.
 // ============================================================
 static void Reimpl_Shutdown(StorageComponent* self, void* stream) {
+    g_lastHook = "StorageComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {
@@ -59,6 +60,7 @@ static void Reimpl_Shutdown(StorageComponent* self, void* stream) {
 // iterates template storage entries to populate internal arrays.
 // ============================================================
 static void Reimpl_Draw(StorageComponent* self) {
+    g_lastHook = "StorageComponent::Draw";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

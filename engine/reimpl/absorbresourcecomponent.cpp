@@ -43,6 +43,7 @@ static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 // Same pattern as MarketLocationComponent::Shutdown and StorageLocationComponent::Shutdown
 // ============================================================
 static void Reimpl_Shutdown(AbsorbResourceComponent* self, void* stream) {
+    g_lastHook = "AbsorbResourceComponent::Shutdown";
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 3) {

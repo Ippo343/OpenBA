@@ -32,6 +32,7 @@ typedef void (*AutoPickupShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "AutoPickupComponent::Shutdown";
     ((AutoPickupShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 
@@ -55,6 +56,7 @@ typedef void (*AutoPickupSerialize_t)(void* self);
 static HookInfo g_hookSerialize;
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "AutoPickupComponent::Serialize";
     ((AutoPickupSerialize_t)g_hookSerialize.trampoline)(self);
 }
 

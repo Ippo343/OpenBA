@@ -42,26 +42,31 @@ static HookInfo g_hookOnRemove;
 // Passthrough wrappers
 // ============================================================
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "ModelComponent::Shutdown";
     typedef void (*Orig_t)(void*, void*);
     ((Orig_t)g_hookShutdown.trampoline)(self, stream);
 }
 
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "ModelComponent::Serialize";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookSerialize.trampoline)(self);
 }
 
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "ModelComponent::Draw";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookDraw.trampoline)(self);
 }
 
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "ModelComponent::OnCreate";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookOnCreate.trampoline)(self);
 }
 
 static void Reimpl_OnRemove(void* self) {
+    g_lastHook = "ModelComponent::OnRemove";
     typedef void (*Orig_t)(void*);
     ((Orig_t)g_hookOnRemove.trampoline)(self);
 }
@@ -80,7 +85,7 @@ void RemoveModelComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallModelComponentSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140124ac0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 12);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
     printf("[ModelComponent] Serialize hooked at %p\n", (void*)target);
 #endif

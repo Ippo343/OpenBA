@@ -36,16 +36,19 @@ static HookInfo g_hookSlot7;
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "ProductionUI::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "ProductionUI::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
+    g_lastHook = "ProductionUI::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
@@ -63,7 +66,7 @@ void RemoveProductionUIDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallProductionUISlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140075DA0);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 16);
 #ifdef _DEBUG
     printf("[ProductionUI] Slot4 hooked at %p\n", (void*)target);
 #endif
@@ -72,7 +75,7 @@ void RemoveProductionUISlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallProductionUISlot7() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140075A20);
-    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 14);
+    InstallHook(target, (void*)Reimpl_Slot7, &g_hookSlot7, 16);
 #ifdef _DEBUG
     printf("[ProductionUI] Slot7 hooked at %p\n", (void*)target);
 #endif

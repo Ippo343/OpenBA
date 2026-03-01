@@ -43,12 +43,14 @@ static HookInfo g_hookSlot10;
 // Slot0 Dtor (0x140012A30) — calls cleanup, then conditional MemFree
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
+    g_lastHook = "ModDialog::Dtor";
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
 // Slot4 (0x14006F150) — Setup: populates mod list, thumbnails, descriptions
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
+    g_lastHook = "ModDialog::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
@@ -57,12 +59,14 @@ typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id,
                            uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id,
                          uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8) {
+    g_lastHook = "ModDialog::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id, p5, p6, p7, p8);
 }
 
 // Slot10 (0x1400129D0) — Secondary dtor (ImageBuffer cleanup)
 typedef void* (*fn_Slot10_t)(void* self, uint32_t flags);
 static void* Reimpl_Slot10(void* self, uint32_t flags) {
+    g_lastHook = "ModDialog::Slot10";
     return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, flags);
 }
 

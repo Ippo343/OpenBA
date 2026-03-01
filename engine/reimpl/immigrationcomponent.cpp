@@ -25,6 +25,7 @@ typedef void (*ImmigrationShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
 static void Reimpl_Shutdown(void* self, void* stream) {
+    g_lastHook = "ImmigrationComponent::Shutdown";
     ((ImmigrationShutdown_t)g_hookShutdown.trampoline)(self, stream);
 }
 

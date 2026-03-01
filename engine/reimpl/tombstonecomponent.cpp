@@ -82,6 +82,7 @@ static HookInfo g_hookUpdate;
 // double-length units).
 // ============================================================
 static void Reimpl_Shutdown(TombstoneComponent* self, void* stream) {
+    g_lastHook = "TombstoneComponent::Shutdown";
     fn_Component_Serialize(self, stream);
 
     uint8_t serializer[24];
@@ -105,6 +106,7 @@ static void Reimpl_Shutdown(TombstoneComponent* self, void* stream) {
 // generates random Time in that range.
 // ============================================================
 static void Reimpl_Serialize(TombstoneComponent* self) {
+    g_lastHook = "TombstoneComponent::Serialize";
     void* baseObj = self->_unk18;
 
     // IsDerivedFrom check for tombstone data type
@@ -136,6 +138,7 @@ static void Reimpl_Serialize(TombstoneComponent* self) {
 // it to the removal queue at GameState+0xE8.
 // ============================================================
 static void Reimpl_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
+    g_lastHook = "TombstoneComponent::Update";
     int64_t* pTimer = (int64_t*)&self->field28;
     *pTimer -= *pDeltaTime;
 
@@ -215,7 +218,7 @@ void InstallTombstoneComponentShutdown() {
     }
 
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400578E0);
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 13);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
     printf("[TombstoneComponent] Shutdown hooked at %p\n", (void*)target);
 #endif

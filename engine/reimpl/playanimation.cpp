@@ -77,6 +77,7 @@ static HookInfo g_hookGetTarget;
 // Serializes: status(+0x18), entity(+0x20) ComponentEntity, int(+0x28), Time(+0x30), Time(+0x38)
 // ============================================================
 static void Reimpl_Serialize(void* self, void* stream) {
+    g_lastHook = "PlayAnimation::Serialize";
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[16];
     uint8_t ser2[24];
@@ -104,6 +105,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Returns 1 (action stays active, Execute checks completion).
 // ============================================================
 static uint64_t Reimpl_Purecall(void* self) {
+    g_lastHook = "PlayAnimation::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* localIBP;
 
@@ -121,6 +123,7 @@ static uint64_t Reimpl_Purecall(void* self) {
 //   return (self->_field38 < self->_field30);
 // ============================================================
 static bool Reimpl_Execute(void* self, void* time_ptr) {
+    g_lastHook = "PlayAnimation::Execute";
     uint8_t* s = (uint8_t*)self;
     int64_t elapsed = *(int64_t*)time_ptr;
     *(int64_t*)(s + 0x38) += elapsed;
@@ -134,6 +137,7 @@ static bool Reimpl_Execute(void* self, void* time_ptr) {
 // Returns true if param matches entity at +0x20.
 // ============================================================
 static bool Reimpl_GetTarget(void* self, void* param) {
+    g_lastHook = "PlayAnimation::GetTarget";
     uint8_t* s = (uint8_t*)self;
     fn_CheckPtr(param);
     return *(void**)(s + 0x20) == *(void**)param;

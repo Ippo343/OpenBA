@@ -43,41 +43,49 @@ static HookInfo g_hookUpdate;
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
+    g_lastHook = "TradeUI::ScalarDtor";
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
+    g_lastHook = "TradeUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
 typedef void (*fn_Draw_t)(void* self);
 static void Reimpl_Draw(void* self) {
+    g_lastHook = "TradeUI::Draw";
     ((fn_Draw_t)g_hookDraw.trampoline)(self);
 }
 
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
+    g_lastHook = "TradeUI::Slot6";
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
+    g_lastHook = "TradeUI::Startup";
     ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 typedef void (*fn_OnCreate_t)(void* self);
 static void Reimpl_OnCreate(void* self) {
+    g_lastHook = "TradeUI::OnCreate";
     ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
+    g_lastHook = "TradeUI::OnRemove";
     ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
 }
 
 typedef void (*fn_Update_t)(void* self, void* stream, void* p3, int64_t p4);
 static void Reimpl_Update(void* self, void* stream, void* p3, int64_t p4) {
+    g_lastHook = "TradeUI::Update";
     ((fn_Update_t)g_hookUpdate.trampoline)(self, stream, p3, p4);
 }
 
@@ -95,7 +103,7 @@ void RemoveTradeUIScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallTradeUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140084dd0);
-    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
+    InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 18);
 #ifdef _DEBUG
     printf("[TradeUI] Serialize hooked at %p\n", (void*)target);
 #endif
@@ -113,7 +121,7 @@ void RemoveTradeUIDraw() { RemoveHook(&g_hookDraw); }
 
 void InstallTradeUISlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140082a00);
-    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 13);
+    InstallHook(target, (void*)Reimpl_Slot6, &g_hookSlot6, 16);
 #ifdef _DEBUG
     printf("[TradeUI] Slot6 hooked at %p\n", (void*)target);
 #endif
@@ -122,7 +130,7 @@ void RemoveTradeUISlot6() { RemoveHook(&g_hookSlot6); }
 
 void InstallTradeUIStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140082150);
-    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 15);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 17);
 #ifdef _DEBUG
     printf("[TradeUI] Startup hooked at %p\n", (void*)target);
 #endif
@@ -131,7 +139,7 @@ void RemoveTradeUIStartup() { RemoveHook(&g_hookStartup); }
 
 void InstallTradeUIOnCreate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400827b0);
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 13);
+    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 14);
 #ifdef _DEBUG
     printf("[TradeUI] OnCreate hooked at %p\n", (void*)target);
 #endif
@@ -149,7 +157,7 @@ void RemoveTradeUIOnRemove() { RemoveHook(&g_hookOnRemove); }
 
 void InstallTradeUIUpdate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400868c0);
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 13);
+    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 17);
 #ifdef _DEBUG
     printf("[TradeUI] Update hooked at %p\n", (void*)target);
 #endif
