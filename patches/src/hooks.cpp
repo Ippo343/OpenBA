@@ -66,15 +66,25 @@ bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t 
     info->target = (void*)targetAddr;
     info->patchSize = prologueSize;
 
-    // Allocate executable trampoline: original bytes + jump back
+    // Allocate executable trampoline: RSP fix prefix + original bytes + jump back
     info->trampoline = VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     if (!info->trampoline) return false;
 
-    // Copy original prologue bytes to trampoline
-    memcpy(info->trampoline, info->original, prologueSize);
+    uint8_t* t = (uint8_t*)info->trampoline;
+
+    // RSP fix: the CALL into the trampoline pushes a return address, shifting RSP
+    // by 8. Any prologue instruction referencing RSP (MOV [RSP+xx], MOV RAX,RSP,
+    // LEA RBP,[RSP+xx]) would operate on the wrong stack context. Fix: POP the
+    // return address into R10 (volatile, safe to clobber), then store it at [RSP]
+    // where the function's eventual RET will find it.
+    t[0] = 0x41; t[1] = 0x5A;                                 // POP R10
+    t[2] = 0x4C; t[3] = 0x89; t[4] = 0x14; t[5] = 0x24;     // MOV [RSP], R10
+
+    // Copy original prologue bytes after the RSP fix prefix
+    memcpy(t + 6, info->original, prologueSize);
 
     // Append jump back to (target + prologueSize)
-    uint8_t* jmpBack = (uint8_t*)info->trampoline + prologueSize;
+    uint8_t* jmpBack = t + 6 + prologueSize;
     jmpBack[0] = 0x48; jmpBack[1] = 0xB8; // mov rax, imm64
     *(uintptr_t*)(jmpBack + 2) = targetAddr + prologueSize;
     jmpBack[10] = 0xFF; jmpBack[11] = 0xE0; // jmp rax
@@ -2095,7 +2105,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HuntComponent::Update", InstallHuntComponentUpdate, RemoveHuntComponentUpdate, true },
 
     // --- DiseaseComponent reimplementations ---
-    { "DiseaseComponent::Update", InstallDiseaseComponentUpdate, RemoveDiseaseComponentUpdate, true },
+    { "DiseaseComponent::Update", InstallDiseaseComponentUpdate, RemoveDiseaseComponentUpdate, false }, // DISABLED: near Jcc + relative JMP in prologue
 
     // --- AttendanceComponent reimplementations ---
     { "AttendanceComponent::Update", InstallAttendanceComponentUpdate, RemoveAttendanceComponentUpdate, true },
@@ -2138,7 +2148,7 @@ static ReimplEntry g_reimplementations[] = {
     // ============================================================
 
     // --- AbsorbResourceComponent ---
-    { "AbsorbResourceComponent::Shutdown", InstallAbsorbResourceComponentShutdown, RemoveAbsorbResourceComponentShutdown, true },
+    { "AbsorbResourceComponent::Shutdown", InstallAbsorbResourceComponentShutdown, RemoveAbsorbResourceComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- AmbientEmitterComponent ---
     { "AmbientEmitterComponent::Shutdown", InstallAmbientEmitterComponentShutdown, RemoveAmbientEmitterComponentShutdown, true },
@@ -2165,7 +2175,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ClearAreaComponent::Shutdown", InstallClearAreaComponentShutdown, RemoveClearAreaComponentShutdown, true },
 
     // --- ClearResourceComponent ---
-    { "ClearResourceComponent::Shutdown", InstallClearResourceComponentShutdown, RemoveClearResourceComponentShutdown, true },
+    { "ClearResourceComponent::Shutdown", InstallClearResourceComponentShutdown, RemoveClearResourceComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- ConsumeProduceComponent ---
     { "ConsumeProduceComponent::Shutdown", InstallConsumeProduceComponentShutdown, RemoveConsumeProduceComponentShutdown, true },
@@ -2200,14 +2210,14 @@ static ReimplEntry g_reimplementations[] = {
     { "HappinessComponent::OnCreate", InstallHappinessComponentOnCreate, RemoveHappinessComponentOnCreate, true },
 
     // --- HealerComponent ---
-    { "HealerComponent::Shutdown", InstallHealerComponentShutdown, RemoveHealerComponentShutdown, true },
+    { "HealerComponent::Shutdown", InstallHealerComponentShutdown, RemoveHealerComponentShutdown, false }, // DISABLED: relative CALL in prologue
     { "HealerComponent::OnCreate", InstallHealerComponentOnCreate, RemoveHealerComponentOnCreate, true },
 
     // --- HerbalistComponent ---
-    { "HerbalistComponent::Shutdown", InstallHerbalistComponentShutdown, RemoveHerbalistComponentShutdown, true },
+    { "HerbalistComponent::Shutdown", InstallHerbalistComponentShutdown, RemoveHerbalistComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- HighlightComponent ---
-    { "HighlightComponent::Shutdown", InstallHighlightComponentShutdown, RemoveHighlightComponentShutdown, true },
+    { "HighlightComponent::Shutdown", InstallHighlightComponentShutdown, RemoveHighlightComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- ImmigrationComponent ---
     { "ImmigrationComponent::Shutdown", InstallImmigrationComponentShutdown, RemoveImmigrationComponentShutdown, true },
@@ -2222,14 +2232,14 @@ static ReimplEntry g_reimplementations[] = {
     { "MapComponent::OnCreate", InstallMapComponentOnCreate, RemoveMapComponentOnCreate, true },
 
     // --- MarketComponent ---
-    { "MarketComponent::Shutdown", InstallMarketComponentShutdown, RemoveMarketComponentShutdown, true },
+    { "MarketComponent::Shutdown", InstallMarketComponentShutdown, RemoveMarketComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- MarketLocationComponent ---
-    { "MarketLocationComponent::Shutdown", InstallMarketLocationComponentShutdown, RemoveMarketLocationComponentShutdown, true },
+    { "MarketLocationComponent::Shutdown", InstallMarketLocationComponentShutdown, RemoveMarketLocationComponentShutdown, false }, // DISABLED: relative CALL in prologue
     { "MarketLocationComponent::OnCreate", InstallMarketLocationComponentOnCreate, RemoveMarketLocationComponentOnCreate, true },
 
     // --- MineComponent ---
-    { "MineComponent::Shutdown", InstallMineComponentShutdown, RemoveMineComponentShutdown, true },
+    { "MineComponent::Shutdown", InstallMineComponentShutdown, RemoveMineComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- ModelComponent ---
     { "ModelComponent::Shutdown", InstallModelComponentShutdown, RemoveModelComponentShutdown, true },
@@ -2258,12 +2268,12 @@ static ReimplEntry g_reimplementations[] = {
     { "ParticleComponent::Draw", InstallParticleComponentDraw, RemoveParticleComponentDraw, true },
     { "ParticleComponent::OnCreate", InstallParticleComponentOnCreate, RemoveParticleComponentOnCreate, true },
     { "ParticleComponent::OnRemove", InstallParticleComponentOnRemove, RemoveParticleComponentOnRemove, true },
-    { "ParticleComponent::Serialize", InstallParticleComponentSerialize, RemoveParticleComponentSerialize, true },
+    { "ParticleComponent::Serialize", InstallParticleComponentSerialize, RemoveParticleComponentSerialize, false }, // relative CALL at +9 breaks trampoline
     { "ParticleComponent::OnUpdate2", InstallParticleComponentOnUpdate2, RemoveParticleComponentOnUpdate2, true },
 
     // --- PastureComponent ---
     { "PastureComponent::Shutdown", InstallPastureComponentShutdown, RemovePastureComponentShutdown, true },
-    { "PastureComponent::Draw", InstallPastureComponentDraw, RemovePastureComponentDraw, true },
+    { "PastureComponent::Draw", InstallPastureComponentDraw, RemovePastureComponentDraw, false }, // DISABLED: relative CALL in prologue
     { "PastureComponent::OnCreate", InstallPastureComponentOnCreate, RemovePastureComponentOnCreate, true },
 
     // --- PickingComponent ---
@@ -2271,7 +2281,7 @@ static ReimplEntry g_reimplementations[] = {
     { "PickingComponent::OnCreate", InstallPickingComponentOnCreate, RemovePickingComponentOnCreate, true },
 
     // --- QuarryComponent ---
-    { "QuarryComponent::Shutdown", InstallQuarryComponentShutdown, RemoveQuarryComponentShutdown, true },
+    { "QuarryComponent::Shutdown", InstallQuarryComponentShutdown, RemoveQuarryComponentShutdown, false }, // DISABLED: relative CALL in prologue
 
     // --- RawMaterialComponent ---
     { "RawMaterialComponent::Shutdown", InstallRawMaterialComponentShutdown, RemoveRawMaterialComponentShutdown, true },
@@ -2282,7 +2292,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- ResidenceComponent ---
     { "ResidenceComponent::Shutdown", InstallResidenceComponentShutdown, RemoveResidenceComponentShutdown, true },
     { "ResidenceComponent::Serialize", InstallResidenceComponentSerialize, RemoveResidenceComponentSerialize, true },
-    { "ResidenceComponent::OnCreate", InstallResidenceComponentOnCreate, RemoveResidenceComponentOnCreate, true },
+    { "ResidenceComponent::OnCreate", InstallResidenceComponentOnCreate, RemoveResidenceComponentOnCreate, false }, // DISABLED: relative CALL in prologue
 
     // --- StatusIconComponent ---
     { "StatusIconComponent::Shutdown", InstallStatusIconComponentShutdown, RemoveStatusIconComponentShutdown, true },
@@ -2295,14 +2305,14 @@ static ReimplEntry g_reimplementations[] = {
     { "StorageComponent::Draw", InstallStorageComponentDraw, RemoveStorageComponentDraw, true },
 
     // --- StorageDisplayComponent ---
-    { "StorageDisplayComponent::Shutdown", InstallStorageDisplayComponentShutdown, RemoveStorageDisplayComponentShutdown, true },
+    { "StorageDisplayComponent::Shutdown", InstallStorageDisplayComponentShutdown, RemoveStorageDisplayComponentShutdown, false }, // DISABLED: relative CALL in prologue
     { "StorageDisplayComponent::Draw", InstallStorageDisplayComponentDraw, RemoveStorageDisplayComponentDraw, true },
     { "StorageDisplayComponent::OnCreate", InstallStorageDisplayComponentOnCreate, RemoveStorageDisplayComponentOnCreate, true },
     { "StorageDisplayComponent::Update", InstallStorageDisplayComponentUpdate, RemoveStorageDisplayComponentUpdate, true },
     { "StorageDisplayComponent::OnUpdate2", InstallStorageDisplayComponentOnUpdate2, RemoveStorageDisplayComponentOnUpdate2, true },
 
     // --- StorageLocationComponent ---
-    { "StorageLocationComponent::Shutdown", InstallStorageLocationComponentShutdown, RemoveStorageLocationComponentShutdown, true },
+    { "StorageLocationComponent::Shutdown", InstallStorageLocationComponentShutdown, RemoveStorageLocationComponentShutdown, false }, // DISABLED: relative CALL in prologue
     { "StorageLocationComponent::OnCreate", InstallStorageLocationComponentOnCreate, RemoveStorageLocationComponentOnCreate, true },
 
     // --- TerraformComponent ---
@@ -2332,7 +2342,7 @@ static ReimplEntry g_reimplementations[] = {
     { "UIComponent::Serialize", InstallUIComponentSerialize, RemoveUIComponentSerialize, true },
 
     // --- WellComponent ---
-    { "WellComponent::Shutdown", InstallWellComponentShutdown, RemoveWellComponentShutdown, true },
+    { "WellComponent::Shutdown", InstallWellComponentShutdown, RemoveWellComponentShutdown, false }, // DISABLED: relative CALL in prologue
     { "WellComponent::OnCreate", InstallWellComponentOnCreate, RemoveWellComponentOnCreate, true },
 
     // --- WildAnimalComponent ---
@@ -2341,8 +2351,8 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- WorkComponent ---
     { "WorkComponent::Shutdown", InstallWorkComponentShutdown, RemoveWorkComponentShutdown, true },
-    { "WorkComponent::Draw", InstallWorkComponentDraw, RemoveWorkComponentDraw, true },
-    { "WorkComponent::OnCreate", InstallWorkComponentOnCreate, RemoveWorkComponentOnCreate, true },
+    { "WorkComponent::Draw", InstallWorkComponentDraw, RemoveWorkComponentDraw, false }, // DISABLED: relative CALL in prologue
+    { "WorkComponent::OnCreate", InstallWorkComponentOnCreate, RemoveWorkComponentOnCreate, false }, // DISABLED: relative CALL in prologue
 
     // --- WorkPlaceComponent ---
     { "WorkPlaceComponent::Shutdown", InstallWorkPlaceComponentShutdown, RemoveWorkPlaceComponentShutdown, true },
@@ -2385,7 +2395,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- ClearStorage ---
     { "ClearStorage::Serialize", InstallClearStorageSerialize, RemoveClearStorageSerialize, true },
     { "ClearStorage::Slot4", InstallClearStorageSlot4, RemoveClearStorageSlot4, true },
-    { "ClearStorage::Slot6", InstallClearStorageSlot6, RemoveClearStorageSlot6, true },
+    { "ClearStorage::Slot6", InstallClearStorageSlot6, RemoveClearStorageSlot6, false }, // DISABLED: relative CALL in prologue
     { "ClearStorage::Slot8", InstallClearStorageSlot8, RemoveClearStorageSlot8, true },
     { "ClearStorage::Slot9", InstallClearStorageSlot9, RemoveClearStorageSlot9, true },
     { "ClearStorage::Slot10", InstallClearStorageSlot10, RemoveClearStorageSlot10, false }, // RIP-relative in prologue
@@ -2426,7 +2436,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- FireWork ---
     { "FireWork::Serialize", InstallFireWorkSerialize, RemoveFireWorkSerialize, true },
     { "FireWork::Slot4", InstallFireWorkSlot4, RemoveFireWorkSlot4, true },
-    { "FireWork::Slot6", InstallFireWorkSlot6, RemoveFireWorkSlot6, true },
+    { "FireWork::Slot6", InstallFireWorkSlot6, RemoveFireWorkSlot6, false }, // DISABLED: relative CALL in prologue
     { "FireWork::Slot8", InstallFireWorkSlot8, RemoveFireWorkSlot8, true },
     { "FireWork::Slot9", InstallFireWorkSlot9, RemoveFireWorkSlot9, true },
 
@@ -2504,8 +2514,8 @@ static ReimplEntry g_reimplementations[] = {
     // --- MarketWork ---
     { "MarketWork::Serialize", InstallMarketWorkSerialize, RemoveMarketWorkSerialize, true },
     { "MarketWork::Slot4", InstallMarketWorkSlot4, RemoveMarketWorkSlot4, true },
-    { "MarketWork::Slot6", InstallMarketWorkSlot6, RemoveMarketWorkSlot6, true },
-    { "MarketWork::Slot8", InstallMarketWorkSlot8, RemoveMarketWorkSlot8, true },
+    { "MarketWork::Slot6", InstallMarketWorkSlot6, RemoveMarketWorkSlot6, false }, // DISABLED: relative CALL in prologue
+    { "MarketWork::Slot8", InstallMarketWorkSlot8, RemoveMarketWorkSlot8, false }, // DISABLED: short Jcc in prologue
     { "MarketWork::Slot9", InstallMarketWorkSlot9, RemoveMarketWorkSlot9, true },
     { "MarketWork::Slot10", InstallMarketWorkSlot10, RemoveMarketWorkSlot10, true },
 
@@ -2539,7 +2549,7 @@ static ReimplEntry g_reimplementations[] = {
     { "Pickup::Execute", InstallPickupExecute, RemovePickupExecute, true },
     { "Pickup::Slot6", InstallPickupSlot6, RemovePickupSlot6, true },
     { "Pickup::Slot7", InstallPickupSlot7, RemovePickupSlot7, true },
-    { "Pickup::Slot8", InstallPickupSlot8, RemovePickupSlot8, true },
+    { "Pickup::Slot8", InstallPickupSlot8, RemovePickupSlot8, false }, // DISABLED: short Jcc in prologue
     { "Pickup::Slot9", InstallPickupSlot9, RemovePickupSlot9, true },
     { "Pickup::Slot10", InstallPickupSlot10, RemovePickupSlot10, false }, // RIP-relative in prologue
 
@@ -2571,8 +2581,8 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- RemoveAnimal ---
     { "RemoveAnimal::Serialize", InstallRemoveAnimalSerialize, RemoveRemoveAnimalSerialize, true },
-    { "RemoveAnimal::Purecall", InstallRemoveAnimalPurecall, RemoveRemoveAnimalPurecall, true },
-    { "RemoveAnimal::CheckEntity", InstallRemoveAnimalCheckEntity, RemoveRemoveAnimalCheckEntity, true },
+    { "RemoveAnimal::Purecall", InstallRemoveAnimalPurecall, RemoveRemoveAnimalPurecall, false }, // DISABLED: RIP-relative MOV in prologue
+    { "RemoveAnimal::CheckEntity", InstallRemoveAnimalCheckEntity, RemoveRemoveAnimalCheckEntity, false }, // DISABLED: RIP-relative CALL in prologue
     { "RemoveAnimal::GetTarget", InstallRemoveAnimalGetTarget, RemoveRemoveAnimalGetTarget, true },
 
     // --- RemoveNaturalResource ---
@@ -2594,16 +2604,16 @@ static ReimplEntry g_reimplementations[] = {
     // --- TendArea ---
     { "TendArea::Serialize", InstallTendAreaSerialize, RemoveTendAreaSerialize, true },
     { "TendArea::Slot4", InstallTendAreaSlot4, RemoveTendAreaSlot4, true },
-    { "TendArea::Slot6", InstallTendAreaSlot6, RemoveTendAreaSlot6, true },
-    { "TendArea::Slot8", InstallTendAreaSlot8, RemoveTendAreaSlot8, true },
+    { "TendArea::Slot6", InstallTendAreaSlot6, RemoveTendAreaSlot6, false }, // DISABLED: relative CALL in prologue
+    { "TendArea::Slot8", InstallTendAreaSlot8, RemoveTendAreaSlot8, false }, // DISABLED: short Jcc in prologue
     { "TendArea::Slot9", InstallTendAreaSlot9, RemoveTendAreaSlot9, true },
     { "TendArea::Slot10", InstallTendAreaSlot10, RemoveTendAreaSlot10, true },
 
     // --- TradeWork ---
     { "TradeWork::Serialize", InstallTradeWorkSerialize, RemoveTradeWorkSerialize, true },
     { "TradeWork::Slot4", InstallTradeWorkSlot4, RemoveTradeWorkSlot4, true },
-    { "TradeWork::Slot6", InstallTradeWorkSlot6, RemoveTradeWorkSlot6, true },
-    { "TradeWork::Slot8", InstallTradeWorkSlot8, RemoveTradeWorkSlot8, true },
+    { "TradeWork::Slot6", InstallTradeWorkSlot6, RemoveTradeWorkSlot6, false }, // DISABLED: relative CALL in prologue
+    { "TradeWork::Slot8", InstallTradeWorkSlot8, RemoveTradeWorkSlot8, false }, // DISABLED: short Jcc in prologue
     { "TradeWork::Slot9", InstallTradeWorkSlot9, RemoveTradeWorkSlot9, true },
     { "TradeWork::Slot10", InstallTradeWorkSlot10, RemoveTradeWorkSlot10, true },
 
@@ -2624,7 +2634,7 @@ static ReimplEntry g_reimplementations[] = {
     { "BuildUI::Dtor", InstallBuildUIDtor, RemoveBuildUIDtor, true },
     { "BuildUI::Slot4", InstallBuildUISlot4, RemoveBuildUISlot4, true },
     { "BuildUI::Slot7", InstallBuildUISlot7, RemoveBuildUISlot7, true },
-    { "BuildUI::Slot9", InstallBuildUISlot9, RemoveBuildUISlot9, true },
+    { "BuildUI::Slot9", InstallBuildUISlot9, RemoveBuildUISlot9, false }, // DISABLED: near Jcc in prologue
 
     // --- CemeteryUI ---
     { "CemeteryUI::Dtor", InstallCemeteryUIDtor, RemoveCemeteryUIDtor, true },
@@ -2636,19 +2646,19 @@ static ReimplEntry g_reimplementations[] = {
     { "CitizenUI::Slot4", InstallCitizenUISlot4, RemoveCitizenUISlot4, true },
     { "CitizenUI::Slot6", InstallCitizenUISlot6, RemoveCitizenUISlot6, true },
     { "CitizenUI::Slot7", InstallCitizenUISlot7, RemoveCitizenUISlot7, true },
-    { "CitizenUI::Slot9", InstallCitizenUISlot9, RemoveCitizenUISlot9, true },
+    { "CitizenUI::Slot9", InstallCitizenUISlot9, RemoveCitizenUISlot9, false }, // DISABLED: short Jcc in prologue
 
     // --- ConsumeProduceUI ---
     { "ConsumeProduceUI::Dtor", InstallConsumeProduceUIDtor, RemoveConsumeProduceUIDtor, true },
     { "ConsumeProduceUI::Slot4", InstallConsumeProduceUISlot4, RemoveConsumeProduceUISlot4, true },
     { "ConsumeProduceUI::Slot7", InstallConsumeProduceUISlot7, RemoveConsumeProduceUISlot7, true },
-    { "ConsumeProduceUI::Slot9", InstallConsumeProduceUISlot9, RemoveConsumeProduceUISlot9, true },
+    { "ConsumeProduceUI::Slot9", InstallConsumeProduceUISlot9, RemoveConsumeProduceUISlot9, false }, // DISABLED: near Jcc in prologue
 
     // --- ControlUI ---
     { "ControlUI::Dtor", InstallControlUIDtor, RemoveControlUIDtor, true },
     { "ControlUI::Slot4", InstallControlUISlot4, RemoveControlUISlot4, true },
     { "ControlUI::Slot7", InstallControlUISlot7, RemoveControlUISlot7, true },
-    { "ControlUI::Slot9", InstallControlUISlot9, RemoveControlUISlot9, true },
+    { "ControlUI::Slot9", InstallControlUISlot9, RemoveControlUISlot9, false }, // DISABLED: short Jcc in prologue
 
     // --- CropUI ---
     { "CropUI::Dtor", InstallCropUIDtor, RemoveCropUIDtor, true },
@@ -2668,7 +2678,7 @@ static ReimplEntry g_reimplementations[] = {
     { "DestroyUI::Dtor", InstallDestroyUIDtor, RemoveDestroyUIDtor, true },
     { "DestroyUI::Slot4", InstallDestroyUISlot4, RemoveDestroyUISlot4, true },
     { "DestroyUI::Slot7", InstallDestroyUISlot7, RemoveDestroyUISlot7, true },
-    { "DestroyUI::Slot9", InstallDestroyUISlot9, RemoveDestroyUISlot9, true },
+    { "DestroyUI::Slot9", InstallDestroyUISlot9, RemoveDestroyUISlot9, false }, // DISABLED: near Jcc in prologue
 
     // --- EntityUI ---
     { "EntityUI::Dtor", InstallEntityUIDtor, RemoveEntityUIDtor, true },
@@ -2682,7 +2692,7 @@ static ReimplEntry g_reimplementations[] = {
     { "EventLogUI::Dtor", InstallEventLogUIDtor, RemoveEventLogUIDtor, true },
     { "EventLogUI::Slot5", InstallEventLogUISlot5, RemoveEventLogUISlot5, true },
     { "EventLogUI::Slot7", InstallEventLogUISlot7, RemoveEventLogUISlot7, true },
-    { "EventLogUI::Slot9", InstallEventLogUISlot9, RemoveEventLogUISlot9, true },
+    { "EventLogUI::Slot9", InstallEventLogUISlot9, RemoveEventLogUISlot9, false }, // DISABLED: short Jcc in prologue
 
     // --- HelpUI ---
     { "HelpUI::Dtor", InstallHelpUIDtor, RemoveHelpUIDtor, true },
@@ -2702,12 +2712,12 @@ static ReimplEntry g_reimplementations[] = {
     { "ImmigrationUI::Dtor", InstallImmigrationUIDtor, RemoveImmigrationUIDtor, true },
     { "ImmigrationUI::Slot4", InstallImmigrationUISlot4, RemoveImmigrationUISlot4, true },
     { "ImmigrationUI::Slot7", InstallImmigrationUISlot7, RemoveImmigrationUISlot7, true },
-    { "ImmigrationUI::Slot9", InstallImmigrationUISlot9, RemoveImmigrationUISlot9, true },
+    { "ImmigrationUI::Slot9", InstallImmigrationUISlot9, RemoveImmigrationUISlot9, false }, // DISABLED: short Jcc in prologue
 
     // --- MapUI ---
     { "MapUI::Dtor", InstallMapUIDtor, RemoveMapUIDtor, true },
     { "MapUI::Slot4", InstallMapUISlot4, RemoveMapUISlot4, false }, // RIP-relative in prologue
-    { "MapUI::Slot9", InstallMapUISlot9, RemoveMapUISlot9, true },
+    { "MapUI::Slot9", InstallMapUISlot9, RemoveMapUISlot9, false }, // DISABLED: near Jcc in prologue
 
     // --- ModBrowseUI ---
     { "ModBrowseUI::Dtor", InstallModBrowseUIDtor, RemoveModBrowseUIDtor, true },
@@ -2715,14 +2725,14 @@ static ReimplEntry g_reimplementations[] = {
     // --- NoiseUI ---
     { "NoiseUI::Dtor", InstallNoiseUIDtor, RemoveNoiseUIDtor, true },
     { "NoiseUI::Slot4", InstallNoiseUISlot4, RemoveNoiseUISlot4, true },
-    { "NoiseUI::Slot9", InstallNoiseUISlot9, RemoveNoiseUISlot9, true },
+    { "NoiseUI::Slot9", InstallNoiseUISlot9, RemoveNoiseUISlot9, false }, // DISABLED: short Jcc + near Jcc in prologue
 
     // --- OrchardUI ---
     { "OrchardUI::Dtor", InstallOrchardUIDtor, RemoveOrchardUIDtor, true },
     { "OrchardUI::Slot4", InstallOrchardUISlot4, RemoveOrchardUISlot4, true },
     { "OrchardUI::Slot7", InstallOrchardUISlot7, RemoveOrchardUISlot7, true },
     { "OrchardUI::Slot8", InstallOrchardUISlot8, RemoveOrchardUISlot8, true },
-    { "OrchardUI::Slot9", InstallOrchardUISlot9, RemoveOrchardUISlot9, true },
+    { "OrchardUI::Slot9", InstallOrchardUISlot9, RemoveOrchardUISlot9, false }, // DISABLED: short Jcc in prologue
     { "OrchardUI::Slot11", InstallOrchardUISlot11, RemoveOrchardUISlot11, true },
     { "OrchardUI::Slot12", InstallOrchardUISlot12, RemoveOrchardUISlot12, true },
 
@@ -2730,21 +2740,21 @@ static ReimplEntry g_reimplementations[] = {
     { "PageToggleUI::Dtor", InstallPageToggleUIDtor, RemovePageToggleUIDtor, true },
     { "PageToggleUI::Slot4", InstallPageToggleUISlot4, RemovePageToggleUISlot4, true },
     { "PageToggleUI::Slot7", InstallPageToggleUISlot7, RemovePageToggleUISlot7, true },
-    { "PageToggleUI::Slot9", InstallPageToggleUISlot9, RemovePageToggleUISlot9, true },
+    { "PageToggleUI::Slot9", InstallPageToggleUISlot9, RemovePageToggleUISlot9, false }, // DISABLED: short Jcc in prologue
 
     // --- PastureUI ---
     { "PastureUI::Dtor", InstallPastureUIDtor, RemovePastureUIDtor, true },
     { "PastureUI::Slot4", InstallPastureUISlot4, RemovePastureUISlot4, true },
     { "PastureUI::Slot7", InstallPastureUISlot7, RemovePastureUISlot7, true },
     { "PastureUI::Slot8", InstallPastureUISlot8, RemovePastureUISlot8, true },
-    { "PastureUI::Slot9", InstallPastureUISlot9, RemovePastureUISlot9, true },
+    { "PastureUI::Slot9", InstallPastureUISlot9, RemovePastureUISlot9, false }, // DISABLED: short Jcc in prologue
     { "PastureUI::Slot11", InstallPastureUISlot11, RemovePastureUISlot11, true },
     { "PastureUI::Slot12", InstallPastureUISlot12, RemovePastureUISlot12, true },
 
     // --- ProductionUI ---
     { "ProductionUI::Dtor", InstallProductionUIDtor, RemoveProductionUIDtor, true },
     { "ProductionUI::Slot4", InstallProductionUISlot4, RemoveProductionUISlot4, true },
-    { "ProductionUI::Slot7", InstallProductionUISlot7, RemoveProductionUISlot7, true },
+    { "ProductionUI::Slot7", InstallProductionUISlot7, RemoveProductionUISlot7, false }, // DISABLED: relative CALL in prologue
 
     // --- ProfessionUI ---
     { "ProfessionUI::Dtor", InstallProfessionUIDtor, RemoveProfessionUIDtor, true },
@@ -2761,13 +2771,13 @@ static ReimplEntry g_reimplementations[] = {
     { "ResidenceUI::Dtor", InstallResidenceUIDtor, RemoveResidenceUIDtor, true },
     { "ResidenceUI::Slot4", InstallResidenceUISlot4, RemoveResidenceUISlot4, true },
     { "ResidenceUI::Slot7", InstallResidenceUISlot7, RemoveResidenceUISlot7, true },
-    { "ResidenceUI::Slot9", InstallResidenceUISlot9, RemoveResidenceUISlot9, true },
+    { "ResidenceUI::Slot9", InstallResidenceUISlot9, RemoveResidenceUISlot9, false }, // DISABLED: short Jcc in prologue
 
     // --- ResourceLimitUI ---
     { "ResourceLimitUI::Dtor", InstallResourceLimitUIDtor, RemoveResourceLimitUIDtor, true },
     { "ResourceLimitUI::Slot4", InstallResourceLimitUISlot4, RemoveResourceLimitUISlot4, true },
     { "ResourceLimitUI::Slot7", InstallResourceLimitUISlot7, RemoveResourceLimitUISlot7, true },
-    { "ResourceLimitUI::Slot9", InstallResourceLimitUISlot9, RemoveResourceLimitUISlot9, true },
+    { "ResourceLimitUI::Slot9", InstallResourceLimitUISlot9, RemoveResourceLimitUISlot9, false }, // DISABLED: near Jcc in prologue
 
     // ============================================================
     // Phase 4: UI Panel Controllers (S-W)
@@ -2782,7 +2792,7 @@ static ReimplEntry g_reimplementations[] = {
     { "StatusBarUI::ScalarDtor", InstallStatusBarUIScalarDtor, RemoveStatusBarUIScalarDtor, true },
     { "StatusBarUI::Draw", InstallStatusBarUIDraw, RemoveStatusBarUIDraw, true },
     { "StatusBarUI::Startup", InstallStatusBarUIStartup, RemoveStatusBarUIStartup, true },
-    { "StatusBarUI::OnRemove", InstallStatusBarUIOnRemove, RemoveStatusBarUIOnRemove, true },
+    { "StatusBarUI::OnRemove", InstallStatusBarUIOnRemove, RemoveStatusBarUIOnRemove, false }, // DISABLED: short Jcc in prologue
 
     // --- StatusIconUI ---
     { "StatusIconUI::ScalarDtor", InstallStatusIconUIScalarDtor, RemoveStatusIconUIScalarDtor, true },
@@ -2812,9 +2822,9 @@ static ReimplEntry g_reimplementations[] = {
     // --- TownHallUI ---
     { "TownHallUI::ScalarDtor", InstallTownHallUIScalarDtor, RemoveTownHallUIScalarDtor, true },
     { "TownHallUI::Serialize", InstallTownHallUISerialize, RemoveTownHallUISerialize, true },
-    { "TownHallUI::Startup", InstallTownHallUIStartup, RemoveTownHallUIStartup, true },
-    { "TownHallUI::OnCreate", InstallTownHallUIOnCreate, RemoveTownHallUIOnCreate, true },
-    { "TownHallUI::OnRemove", InstallTownHallUIOnRemove, RemoveTownHallUIOnRemove, true },
+    { "TownHallUI::Startup", InstallTownHallUIStartup, RemoveTownHallUIStartup, false }, // DISABLED: relative CALL in prologue
+    { "TownHallUI::OnCreate", InstallTownHallUIOnCreate, RemoveTownHallUIOnCreate, false }, // DISABLED: RIP-relative MOV in prologue
+    { "TownHallUI::OnRemove", InstallTownHallUIOnRemove, RemoveTownHallUIOnRemove, false }, // DISABLED: short Jcc in prologue
     { "TownHallUI::Update", InstallTownHallUIUpdate, RemoveTownHallUIUpdate, true },
 
     // --- TradeUI ---
@@ -2831,18 +2841,18 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialUI::ScalarDtor", InstallTutorialUIScalarDtor, RemoveTutorialUIScalarDtor, true },
     { "TutorialUI::Serialize", InstallTutorialUISerialize, RemoveTutorialUISerialize, true },
     { "TutorialUI::Startup", InstallTutorialUIStartup, RemoveTutorialUIStartup, true },
-    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, true },
+    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, false }, // DISABLED: short Jcc in prologue
 
     // --- UpgradeUI ---
     { "UpgradeUI::ScalarDtor", InstallUpgradeUIScalarDtor, RemoveUpgradeUIScalarDtor, true },
     { "UpgradeUI::Serialize", InstallUpgradeUISerialize, RemoveUpgradeUISerialize, true },
-    { "UpgradeUI::OnRemove", InstallUpgradeUIOnRemove, RemoveUpgradeUIOnRemove, true },
+    { "UpgradeUI::OnRemove", InstallUpgradeUIOnRemove, RemoveUpgradeUIOnRemove, false }, // DISABLED: near Jcc in prologue
 
     // --- WorkPlaceUI ---
     { "WorkPlaceUI::ScalarDtor", InstallWorkPlaceUIScalarDtor, RemoveWorkPlaceUIScalarDtor, true },
     { "WorkPlaceUI::Serialize", InstallWorkPlaceUISerialize, RemoveWorkPlaceUISerialize, true },
     { "WorkPlaceUI::Startup", InstallWorkPlaceUIStartup, RemoveWorkPlaceUIStartup, true },
-    { "WorkPlaceUI::OnRemove", InstallWorkPlaceUIOnRemove, RemoveWorkPlaceUIOnRemove, true },
+    { "WorkPlaceUI::OnRemove", InstallWorkPlaceUIOnRemove, RemoveWorkPlaceUIOnRemove, false }, // DISABLED: near Jcc in prologue
 
     // ====================================================================
     // Phase 4: Dialog Controllers
@@ -2910,7 +2920,7 @@ static ReimplEntry g_reimplementations[] = {
     { "AchievementDialog::Dtor", InstallAchievementDialogDtor, RemoveAchievementDialogDtor, true },
     { "AchievementDialog::Slot4", InstallAchievementDialogSlot4, RemoveAchievementDialogSlot4, true },
     { "AchievementDialog::Slot6", InstallAchievementDialogSlot6, RemoveAchievementDialogSlot6, true },
-    { "AchievementDialog::Slot8", InstallAchievementDialogSlot8, RemoveAchievementDialogSlot8, true },
+    { "AchievementDialog::Slot8", InstallAchievementDialogSlot8, RemoveAchievementDialogSlot8, false }, // DISABLED: short Jcc in prologue
     { "AchievementDialog::Slot10", InstallAchievementDialogSlot10, RemoveAchievementDialogSlot10, true },
     { "AchievementDialog::Slot14", InstallAchievementDialogSlot14, RemoveAchievementDialogSlot14, false }, // RIP-relative in prologue
     { "AchievementDialog::Slot17", InstallAchievementDialogSlot17, RemoveAchievementDialogSlot17, true },
@@ -2921,7 +2931,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- EventPopupDialog ---
     { "EventPopupDialog::Dtor", InstallEventPopupDialogDtor, RemoveEventPopupDialogDtor, true },
     { "EventPopupDialog::Slot4", InstallEventPopupDialogSlot4, RemoveEventPopupDialogSlot4, true },
-    { "EventPopupDialog::Slot8", InstallEventPopupDialogSlot8, RemoveEventPopupDialogSlot8, true },
+    { "EventPopupDialog::Slot8", InstallEventPopupDialogSlot8, RemoveEventPopupDialogSlot8, false }, // DISABLED: short Jcc in prologue
     // --- FollowDialog ---
     { "FollowDialog::Dtor", InstallFollowDialogDtor, RemoveFollowDialogDtor, true },
     { "FollowDialog::Slot4", InstallFollowDialogSlot4, RemoveFollowDialogSlot4, true },
@@ -2931,7 +2941,7 @@ static ReimplEntry g_reimplementations[] = {
     { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },
     { "GoalDialog::Slot4", InstallGoalDialogSlot4, RemoveGoalDialogSlot4, true },
     { "GoalDialog::Slot6", InstallGoalDialogSlot6, RemoveGoalDialogSlot6, false }, // RIP-relative in prologue
-    { "GoalDialog::Slot8", InstallGoalDialogSlot8, RemoveGoalDialogSlot8, true },
+    { "GoalDialog::Slot8", InstallGoalDialogSlot8, RemoveGoalDialogSlot8, false }, // DISABLED: short Jcc in prologue
     // --- LoaderDialog ---
     { "LoaderDialog::Dtor", InstallLoaderDialogDtor, RemoveLoaderDialogDtor, true },
     { "LoaderDialog::Slot4", InstallLoaderDialogSlot4, RemoveLoaderDialogSlot4, true },
@@ -2941,7 +2951,7 @@ static ReimplEntry g_reimplementations[] = {
     { "MainMenuDialog::Dtor", InstallMainMenuDialogDtor, RemoveMainMenuDialogDtor, true },
     { "MainMenuDialog::Slot4", InstallMainMenuDialogSlot4, RemoveMainMenuDialogSlot4, true },
     { "MainMenuDialog::Slot5", InstallMainMenuDialogSlot5, RemoveMainMenuDialogSlot5, true },
-    { "MainMenuDialog::Slot8", InstallMainMenuDialogSlot8, RemoveMainMenuDialogSlot8, true },
+    { "MainMenuDialog::Slot8", InstallMainMenuDialogSlot8, RemoveMainMenuDialogSlot8, false }, // JNZ relative jump at +4 breaks trampoline
     { "MainMenuDialog::Slot10", InstallMainMenuDialogSlot10, RemoveMainMenuDialogSlot10, true },
     // --- MessageDialog ---
     { "MessageDialog::Dtor", InstallMessageDialogDtor, RemoveMessageDialogDtor, true },
@@ -2953,7 +2963,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- ModDetailsDialog ---
     { "ModDetailsDialog::Dtor", InstallModDetailsDialogDtor, RemoveModDetailsDialogDtor, true },
     { "ModDetailsDialog::Slot4", InstallModDetailsDialogSlot4, RemoveModDetailsDialogSlot4, true },
-    { "ModDetailsDialog::Slot8", InstallModDetailsDialogSlot8, RemoveModDetailsDialogSlot8, true },
+    { "ModDetailsDialog::Slot8", InstallModDetailsDialogSlot8, RemoveModDetailsDialogSlot8, false }, // DISABLED: short Jcc in prologue
     // --- ModUploadDialog ---
     { "ModUploadDialog::Dtor", InstallModUploadDialogDtor, RemoveModUploadDialogDtor, true },
     // --- ModDialog ---
@@ -3026,11 +3036,11 @@ static ReimplEntry g_reimplementations[] = {
     { "FrustumOutlineDesc::CreateInPlace", InstallFrustumOutlineDescriptionCreateInPlace, RemoveFrustumOutlineDescriptionCreateInPlace, true },
     // UI Elements
     { "CaptureBoxElement::Dtor", InstallCaptureBoxElementDtor, RemoveCaptureBoxElementDtor, true },
-    { "CaptureBoxElement::OnCreate", InstallCaptureBoxElementOnCreate, RemoveCaptureBoxElementOnCreate, true },
+    { "CaptureBoxElement::OnCreate", InstallCaptureBoxElementOnCreate, RemoveCaptureBoxElementOnCreate, false }, // DISABLED: short Jcc in prologue
     { "CaptureBoxElement::ComputeLayout", InstallCaptureBoxElementComputeLayout, RemoveCaptureBoxElementComputeLayout, true },
     { "CaptureBoxElement::Draw", InstallCaptureBoxElementDraw, RemoveCaptureBoxElementDraw, true },
     { "FrustumOutlineElement::Dtor", InstallFrustumOutlineElementDtor, RemoveFrustumOutlineElementDtor, true },
-    { "FrustumOutlineElement::OnCreate", InstallFrustumOutlineElementOnCreate, RemoveFrustumOutlineElementOnCreate, true },
+    { "FrustumOutlineElement::OnCreate", InstallFrustumOutlineElementOnCreate, RemoveFrustumOutlineElementOnCreate, false }, // DISABLED: short Jcc in prologue
     { "FrustumOutlineElement::ComputeLayout", InstallFrustumOutlineElementComputeLayout, RemoveFrustumOutlineElementComputeLayout, true },
     { "FrustumOutlineElement::Draw", InstallFrustumOutlineElementDraw, RemoveFrustumOutlineElementDraw, true },
 
@@ -3102,7 +3112,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialGoalCount::Serialize", InstallTutorialGoalCountSerialize, RemoveTutorialGoalCountSerialize, true },
     { "TutorialGoalCount::Cleanup", InstallTutorialGoalCountCleanup, RemoveTutorialGoalCountCleanup, true },
     { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, true },
-    { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, true },
+    { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, false }, // DISABLED: near Jcc in prologue
     { "TutorialGoalGameSpeed::Dtor", InstallTutorialGoalGameSpeedDtor, RemoveTutorialGoalGameSpeedDtor, true },
     { "TutorialGoalGameSpeed::Serialize", InstallTutorialGoalGameSpeedSerialize, RemoveTutorialGoalGameSpeedSerialize, true },
     { "TutorialGoalGameSpeed::Cleanup", InstallTutorialGoalGameSpeedCleanup, RemoveTutorialGoalGameSpeedCleanup, true },
@@ -3116,7 +3126,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialImageHotKey::Dtor", InstallTutorialImageHotKeyDtor, RemoveTutorialImageHotKeyDtor, true },
     { "TutorialImageHotKey::Serialize", InstallTutorialImageHotKeySerialize, RemoveTutorialImageHotKeySerialize, true },
     { "TutorialImageHotKey::Cleanup", InstallTutorialImageHotKeyCleanup, RemoveTutorialImageHotKeyCleanup, true },
-    { "TutorialImageHotKey::Ctor", InstallTutorialImageHotKeyCtor, RemoveTutorialImageHotKeyCtor, true },
+    { "TutorialImageHotKey::Ctor", InstallTutorialImageHotKeyCtor, RemoveTutorialImageHotKeyCtor, false }, // DISABLED: near Jcc in prologue
     { "TutorialImageHotKey::Slot9", InstallTutorialImageHotKeySlot9, RemoveTutorialImageHotKeySlot9, true },
     { "TutorialImageInputKey::Dtor", InstallTutorialImageInputKeyDtor, RemoveTutorialImageInputKeyDtor, true },
     { "TutorialImageInputKey::Serialize", InstallTutorialImageInputKeySerialize, RemoveTutorialImageInputKeySerialize, true },
@@ -3126,7 +3136,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialImageToolbarIcon::Dtor", InstallTutorialImageToolbarIconDtor, RemoveTutorialImageToolbarIconDtor, true },
     { "TutorialImageToolbarIcon::Serialize", InstallTutorialImageToolbarIconSerialize, RemoveTutorialImageToolbarIconSerialize, true },
     { "TutorialImageToolbarIcon::Cleanup", InstallTutorialImageToolbarIconCleanup, RemoveTutorialImageToolbarIconCleanup, true },
-    { "TutorialImageToolbarIcon::Ctor", InstallTutorialImageToolbarIconCtor, RemoveTutorialImageToolbarIconCtor, true },
+    { "TutorialImageToolbarIcon::Ctor", InstallTutorialImageToolbarIconCtor, RemoveTutorialImageToolbarIconCtor, false }, // DISABLED: near Jcc in prologue
     { "TutorialImageToolbarIcon::Slot9", InstallTutorialImageToolbarIconSlot9, RemoveTutorialImageToolbarIconSlot9, true },
     { "TutorialInstance::Dtor", InstallTutorialInstanceDtor, RemoveTutorialInstanceDtor, true },
     { "TutorialInstance::Serialize", InstallTutorialInstanceSerialize, RemoveTutorialInstanceSerialize, true },
@@ -3147,11 +3157,11 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialSetupRestrictPlayer::Cleanup", InstallTutorialSetupRestrictPlayerCleanup, RemoveTutorialSetupRestrictPlayerCleanup, true },
     { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, true },
     { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, false }, // RIP-relative in prologue
-    { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, true },
+    { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, false }, // DISABLED: near Jcc in prologue
     { "TutorialStep::Dtor", InstallTutorialStepDtor, RemoveTutorialStepDtor, true },
     { "TutorialStep::Serialize", InstallTutorialStepSerialize, RemoveTutorialStepSerialize, true },
     { "TutorialStep::Cleanup", InstallTutorialStepCleanup, RemoveTutorialStepCleanup, true },
-    { "TutorialStep::Init", InstallTutorialStepInit, RemoveTutorialStepInit, true },
+    { "TutorialStep::Init", InstallTutorialStepInit, RemoveTutorialStepInit, false }, // DISABLED: near Jcc in prologue
 
     // ================================================================
     // Phase 5: Achievement Goals
@@ -3180,7 +3190,7 @@ static ReimplEntry g_reimplementations[] = {
     { "StatGoal::Slot5", InstallStatGoalSlot5, RemoveStatGoalSlot5, true },
     { "StatGoal::Slot6", InstallStatGoalSlot6, RemoveStatGoalSlot6, true },
     { "StatGoal::Slot8", InstallStatGoalSlot8, RemoveStatGoalSlot8, true },
-    { "StatGoal::Slot10", InstallStatGoalSlot10, RemoveStatGoalSlot10, true },
+    { "StatGoal::Slot10", InstallStatGoalSlot10, RemoveStatGoalSlot10, false }, // DISABLED: near Jcc in prologue
     { "TimeGoal::Dtor", InstallTimeGoalDtor, RemoveTimeGoalDtor, true },
     { "TimeGoal::Slot5", InstallTimeGoalSlot5, RemoveTimeGoalSlot5, true },
     { "TimeGoal::Slot6", InstallTimeGoalSlot6, RemoveTimeGoalSlot6, true },
@@ -3197,15 +3207,15 @@ static ReimplEntry g_reimplementations[] = {
     { "MapGenerator::Dtor", InstallMapGeneratorDtor, RemoveMapGeneratorDtor, true },
     { "MapGenerator::Slot5", InstallMapGeneratorSlot5, RemoveMapGeneratorSlot5, true },
     { "MapGenerator::Slot6", InstallMapGeneratorSlot6, RemoveMapGeneratorSlot6, true },
-    { "MapGenerator::Slot8", InstallMapGeneratorSlot8, RemoveMapGeneratorSlot8, true },
+    { "MapGenerator::Slot8", InstallMapGeneratorSlot8, RemoveMapGeneratorSlot8, false }, // DISABLED: near Jcc in prologue
     { "TerrainGenerator::Dtor", InstallTerrainGeneratorDtor, RemoveTerrainGeneratorDtor, true },
     { "TerrainGenerator::Slot5", InstallTerrainGeneratorSlot5, RemoveTerrainGeneratorSlot5, true },
     { "TerrainGenerator::Slot6", InstallTerrainGeneratorSlot6, RemoveTerrainGeneratorSlot6, true },
-    { "TerrainGenerator::Slot8", InstallTerrainGeneratorSlot8, RemoveTerrainGeneratorSlot8, true },
+    { "TerrainGenerator::Slot8", InstallTerrainGeneratorSlot8, RemoveTerrainGeneratorSlot8, false }, // DISABLED: near Jcc in prologue
     { "ClimateGenerator::Dtor", InstallClimateGeneratorDtor, RemoveClimateGeneratorDtor, true },
     { "ClimateGenerator::Slot5", InstallClimateGeneratorSlot5, RemoveClimateGeneratorSlot5, true },
     { "ClimateGenerator::Slot6", InstallClimateGeneratorSlot6, RemoveClimateGeneratorSlot6, true },
-    { "ClimateGenerator::Slot8", InstallClimateGeneratorSlot8, RemoveClimateGeneratorSlot8, true },
+    { "ClimateGenerator::Slot8", InstallClimateGeneratorSlot8, RemoveClimateGeneratorSlot8, false }, // DISABLED: near Jcc in prologue
 
     // ================================================================
     // Phase 5: Miscellaneous Types
@@ -3218,7 +3228,7 @@ static ReimplEntry g_reimplementations[] = {
     { "Profession::Dtor", InstallProfessionDtor, RemoveProfessionDtor, true },
     { "Profession::Slot5", InstallProfessionSlot5, RemoveProfessionSlot5, true },
     { "Profession::Slot6", InstallProfessionSlot6, RemoveProfessionSlot6, true },
-    { "Profession::Slot8", InstallProfessionSlot8, RemoveProfessionSlot8, true },
+    { "Profession::Slot8", InstallProfessionSlot8, RemoveProfessionSlot8, false }, // DISABLED: near Jcc in prologue
     { "ProfessionList::Dtor", InstallProfessionListDtor, RemoveProfessionListDtor, true },
     { "ProfessionList::Slot5", InstallProfessionListSlot5, RemoveProfessionListSlot5, true },
     { "ProfessionList::Slot6", InstallProfessionListSlot6, RemoveProfessionListSlot6, true },
@@ -3231,11 +3241,11 @@ static ReimplEntry g_reimplementations[] = {
     { "Weather::Dtor", InstallWeatherDtor, RemoveWeatherDtor, true },
     { "Weather::Slot5", InstallWeatherSlot5, RemoveWeatherSlot5, true },
     { "Weather::Slot6", InstallWeatherSlot6, RemoveWeatherSlot6, true },
-    { "Weather::Slot8", InstallWeatherSlot8, RemoveWeatherSlot8, true },
+    { "Weather::Slot8", InstallWeatherSlot8, RemoveWeatherSlot8, false }, // DISABLED: near Jcc in prologue
     { "MenuScene::Dtor", InstallMenuSceneDtor, RemoveMenuSceneDtor, true },
     { "MenuScene::Slot5", InstallMenuSceneSlot5, RemoveMenuSceneSlot5, true },
     { "MenuScene::Slot6", InstallMenuSceneSlot6, RemoveMenuSceneSlot6, true },
-    { "MenuScene::Slot8", InstallMenuSceneSlot8, RemoveMenuSceneSlot8, true },
+    { "MenuScene::Slot8", InstallMenuSceneSlot8, RemoveMenuSceneSlot8, false }, // DISABLED: near Jcc in prologue
 };
 
 static constexpr int g_reimplCount = sizeof(g_reimplementations) / sizeof(g_reimplementations[0]);
