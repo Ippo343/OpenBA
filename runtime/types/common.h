@@ -1,0 +1,39 @@
+#pragma once
+// Forward declarations for Runtime-x64.dll types.
+// Shared by both engine/src/ (exe reimpl) and runtime/src/ (DLL reimpl).
+// Binary layouts defined in individual headers under runtime/types/<namespace>/.
+
+#include <cstdint>
+#include <cstddef>
+
+// ============================================================
+// Video namespace
+// ============================================================
+
+struct ImageBuffer;          // Video::ImageBuffer (0x68 bytes) — see video/ImageBuffer.h
+struct ImageBufferData;      // Video::ImageBufferData — platform-specific (DX11/DX9)
+struct VideoDevice;          // Video::Device
+struct RenderBuffer;         // Video::RenderBuffer
+struct VideoContext;          // Video::Context (already in engine/types/common.h)
+
+// ============================================================
+// Graphics namespace
+// ============================================================
+
+struct MaterialInstance;      // Graphics::MaterialInstance
+struct SpriteSheet;          // Graphics::SpriteSheet
+
+// ============================================================
+// Object namespace
+// ============================================================
+
+struct External;             // Object::External
+struct CompiledExternal;     // Object::CompiledExternal (0x20 bytes base)
+struct ExternalFactory;      // Object::ExternalFactory
+
+// ============================================================
+// System namespace
+// ============================================================
+
+struct MemoryAllocator;      // System::MemoryAllocator
+struct Filename;             // System::Filename

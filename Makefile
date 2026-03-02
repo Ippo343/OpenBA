@@ -13,7 +13,8 @@ LDFLAGS = -shared -static-libgcc -static-libstdc++
 LIBS = -luser32 -ldbghelp
 
 # Include paths: project root + all source directories
-INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs -Iengine/src
+INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs -Iengine/src \
+           -Iruntime/types -Iruntime/funcs
 
 # Directories
 BUILD_DIR = patches/build
@@ -36,7 +37,13 @@ ENGINE_REIMPL_SRCS = $(wildcard engine/reimpl/*.cpp)
 # Auto-discover clean game logic files (future standalone exe source)
 ENGINE_SRC_SRCS = $(wildcard engine/src/*/*.cpp)
 
-ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS) $(ENGINE_SRC_SRCS)
+# Runtime-x64.dll reimplementation sources
+RUNTIME_FUNC_SRCS = runtime/funcs/runtime_funcs.cpp
+RUNTIME_REIMPL_SRCS = $(wildcard runtime/reimpl/*.cpp)
+RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
+
+ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS) $(ENGINE_SRC_SRCS) \
+           $(RUNTIME_FUNC_SRCS) $(RUNTIME_REIMPL_SRCS) $(RUNTIME_SRC_SRCS)
 
 # Object files: flatten paths into OBJ_DIR to avoid collisions
 #   patches/src/dllmain.cpp -> patches/build/obj/patches__src__dllmain.o
@@ -91,6 +98,62 @@ $(OBJ_DIR)/engine__src__systems__%.o: engine/src/systems/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJ_DIR)/engine__src__core__%.o: engine/src/core/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Pattern rules for runtime/ directories
+$(OBJ_DIR)/runtime__funcs__%.o: runtime/funcs/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__reimpl__%.o: runtime/reimpl/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# Pattern rules for runtime/src subdirectories (18 namespaces)
+$(OBJ_DIR)/runtime__src__system__%.o: runtime/src/system/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__math__%.o: runtime/src/math/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__volume__%.o: runtime/src/volume/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__object__%.o: runtime/src/object/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__io__%.o: runtime/src/io/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__graphics__%.o: runtime/src/graphics/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__video__%.o: runtime/src/video/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__ui__%.o: runtime/src/ui/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__audio__%.o: runtime/src/audio/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__engine__%.o: runtime/src/engine/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__collision__%.o: runtime/src/collision/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__pathfinding__%.o: runtime/src/pathfinding/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__application__%.o: runtime/src/application/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__map__%.o: runtime/src/map/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__network__%.o: runtime/src/network/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/runtime__src__achievement__%.o: runtime/src/achievement/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 $(BUILD_DIR):

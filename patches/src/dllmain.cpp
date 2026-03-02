@@ -12,6 +12,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "runtime_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <string>
@@ -51,6 +52,7 @@ static DWORD WINAPI InitThread(LPVOID) {
                 printf("[BanishedPatch] WARNING: EngineFuncsInit failed (non-critical funcs missing)\n");
 #endif
             }
+            RuntimeFuncsInit();
 
             // Install hooks and reimplementation redirects
             InstallHooks();
@@ -253,6 +255,7 @@ static void PatchInit() {
     // Try immediate init (Runtime-x64.dll might already be loaded)
     if (ResolveInit()) {
         EngineFuncsInit();
+        RuntimeFuncsInit();
         InstallHooks();
     } else {
         // Not loaded yet — start background thread

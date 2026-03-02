@@ -719,6 +719,30 @@ typedef void (*fn_PastureUI_UpdateSlider_t)(void* self);
 extern fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider;
 
 // ============================================================
+// Video::ImageBuffer (Runtime DLL exports, used by MapUI/NoiseUI/SpriteCaptureUI)
+// ============================================================
+
+// ImageBuffer::ImageBuffer() — default ctor
+// ??0ImageBuffer@Video@@QEAA@XZ (0x1800f2580, ordinal 227)
+typedef void* (*fn_ImageBuffer_Ctor_t)(void* self);
+extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
+
+// ImageBuffer::~ImageBuffer() — virtual dtor
+// ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610, ordinal 609)
+typedef void (*fn_ImageBuffer_Dtor_t)(void* self);
+extern fn_ImageBuffer_Dtor_t fn_ImageBuffer_Dtor;
+
+// ImageBuffer::CopyToTexture(this, data, width, height) -> bool
+// ?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f3380, ordinal 1869)
+typedef bool (*fn_ImageBuffer_CopyToTexture_t)(void* self, void* data, int width, int height);
+extern fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture;
+
+// ImageBuffer::CopyFromTexture(this, data, width, height) -> bool
+// ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f33a0, ordinal 1866)
+typedef bool (*fn_ImageBuffer_CopyFromTexture_t)(void* self, void* data, int width, int height);
+extern fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture;
+
+// ============================================================
 // Initialization
 // ============================================================
 

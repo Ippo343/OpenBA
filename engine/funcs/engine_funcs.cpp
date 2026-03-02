@@ -299,6 +299,14 @@ fn_PastureCalcMaxCount_t fn_PastureCalcMaxCount = nullptr;
 fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider = nullptr;
 
 // ============================================================
+// Video::ImageBuffer (Runtime DLL exports)
+// ============================================================
+fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
+fn_ImageBuffer_Dtor_t fn_ImageBuffer_Dtor = nullptr;
+fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture = nullptr;
+fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture = nullptr;
+
+// ============================================================
 // Engine globals
 // ============================================================
 
@@ -1063,6 +1071,33 @@ bool EngineFuncsInit() {
     fn_PastureUI_UpdateSlider = reinterpret_cast<fn_PastureUI_UpdateSlider_t>(
         ResolveAddr(Module::Exe, 0x1400b4fa0));
 
+    // ================================================================
+    // Video::ImageBuffer (Runtime DLL exports — by mangled name, fallback to RVA)
+    // ================================================================
+    fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
+        ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
+    if (!fn_ImageBuffer_Ctor)
+        fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800f2580));
+
+    fn_ImageBuffer_Dtor = reinterpret_cast<fn_ImageBuffer_Dtor_t>(
+        ResolveExport("??1ImageBuffer@Video@@UEAA@XZ"));
+    if (!fn_ImageBuffer_Dtor)
+        fn_ImageBuffer_Dtor = reinterpret_cast<fn_ImageBuffer_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x1800f2610));
+
+    fn_ImageBuffer_CopyToTexture = reinterpret_cast<fn_ImageBuffer_CopyToTexture_t>(
+        ResolveExport("?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
+    if (!fn_ImageBuffer_CopyToTexture)
+        fn_ImageBuffer_CopyToTexture = reinterpret_cast<fn_ImageBuffer_CopyToTexture_t>(
+            ResolveAddr(Module::Runtime, 0x1800f3380));
+
+    fn_ImageBuffer_CopyFromTexture = reinterpret_cast<fn_ImageBuffer_CopyFromTexture_t>(
+        ResolveExport("?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z"));
+    if (!fn_ImageBuffer_CopyFromTexture)
+        fn_ImageBuffer_CopyFromTexture = reinterpret_cast<fn_ImageBuffer_CopyFromTexture_t>(
+            ResolveAddr(Module::Runtime, 0x1800f33a0));
+
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
     g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
@@ -1187,6 +1222,11 @@ bool EngineFuncsInit() {
     printf("  DestroyComp_Reclaim       = %p\n", (void*)fn_DestroyComponent_Reclaim);
     printf("  DestroyComp_Rebuild       = %p\n", (void*)fn_DestroyComponent_Rebuild);
     printf("  DestroyComp_Destroy       = %p\n", (void*)fn_DestroyComponent_Destroy);
+    printf("[EngineFuncs] Video::ImageBuffer:\n");
+    printf("  ImageBuffer::Ctor         = %p\n", (void*)fn_ImageBuffer_Ctor);
+    printf("  ImageBuffer::Dtor         = %p\n", (void*)fn_ImageBuffer_Dtor);
+    printf("  ImageBuffer::CopyToTex    = %p\n", (void*)fn_ImageBuffer_CopyToTexture);
+    printf("  ImageBuffer::CopyFromTex  = %p\n", (void*)fn_ImageBuffer_CopyFromTexture);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,
