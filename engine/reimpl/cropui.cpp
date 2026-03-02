@@ -37,32 +37,47 @@ static HookInfo g_hookSlot8;
 static HookInfo g_hookSlot9;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor (scalar deleting destructor) — REIMPLEMENTED
+// Original: 0x140013CA0. Sets vtable, calls base dtor, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CropUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, CropUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Slot4 (setup/refresh) — PASSTHROUGH (finds selectResource element, sets ID, calls helper)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "CropUI::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
+// Slot7 (update handler) — PASSTHROUGH (combo visibility based on entity state)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "CropUI::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
+// Slot8 (additional handler) — PASSTHROUGH (item count check, refresh on change)
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "CropUI::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
+// Slot9 (notification handler) — PASSTHROUGH
 typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "CropUI::Slot9";

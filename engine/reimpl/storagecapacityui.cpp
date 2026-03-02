@@ -34,20 +34,33 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookStartup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
+
+// ScalarDtor — REIMPLEMENTED
+// Original: 0x140014450. Sets vtable, calls base dtor, conditional free.
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "StorageCapacityUI::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, StorageCapacityUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Serialize — PASSTHROUGH (needs FindElementType + exe type ID, not same as FindElement by name)
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StorageCapacityUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
+// Startup — PASSTHROUGH (needs StorageComponent_QueryCount, ProgressElement::SetProgressTextParameter, exe float constants)
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "StorageCapacityUI::Startup";

@@ -33,20 +33,33 @@ static HookInfo g_hookSlot5;
 static HookInfo g_hookSlot6;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor (scalar deleting destructor) — REIMPLEMENTED
+// Original: 0x140013640. Sets vtable, calls base dtor, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "RadiusUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, RadiusUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Slot5 — PASSTHROUGH (complex deps: entity component lookup, coordinate math, exe globals)
 typedef void (*fn_Slot5_t)(void* self);
 static void Reimpl_Slot5(void* self) {
     g_lastHook = "RadiusUI::Slot5";
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
 }
 
+// Slot6 — PASSTHROUGH (depends on exe radius display function + global)
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "RadiusUI::Slot6";

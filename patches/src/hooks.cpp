@@ -2678,7 +2678,7 @@ static ReimplEntry g_reimplementations[] = {
     { "CropUI::Slot4", InstallCropUISlot4, RemoveCropUISlot4, true },
     { "CropUI::Slot7", InstallCropUISlot7, RemoveCropUISlot7, true },
     { "CropUI::Slot8", InstallCropUISlot8, RemoveCropUISlot8, true },
-    { "CropUI::Slot9", InstallCropUISlot9, RemoveCropUISlot9, true },
+    { "CropUI::Slot9", InstallCropUISlot9, RemoveCropUISlot9, false }, // DISABLED: relative JNZ+JZ in 13-byte prologue
 
     // --- DebugUI ---
     { "DebugUI::Dtor", InstallDebugUIDtor, RemoveDebugUIDtor, true },
@@ -3276,9 +3276,20 @@ static constexpr int DEBUG_MAX_HOOKS = -1;
 // Essential hooks (BuildNumber, PlatformConfigure) are always installed.
 // Set to nullptr to install all hooks normally.
 static const char* DEBUG_HOOK_FILTER[] = {
+    // Batch 1
     "HotKeyToolTipUI",
     "TitleDescToolTipUI",
     "ModBrowseUI",
+    // Batch 2
+    "RadiusUI",
+    "StorageCapacityUI",
+    "StatusIconUI",
+    "BuildRequirementUI",
+    // Batch 3
+    "ConsumeProduceUI",
+    "ProfessionUI",
+    "DestroyUI",
+    "CropUI",
     nullptr  // sentinel
 };
 

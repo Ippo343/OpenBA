@@ -33,26 +33,40 @@ static HookInfo g_hookSlot7;
 static HookInfo g_hookSlot9;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor (scalar deleting destructor) — REIMPLEMENTED
+// Original: 0x140010B90. Sets vtable, calls base dtor, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ConsumeProduceUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ConsumeProduceUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Slot4 (setup/refresh) — PASSTHROUGH (complex: entity component lookup, combo element setup with sprites)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ConsumeProduceUI::Slot4";
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
+// Slot7 (update handler) — PASSTHROUGH (progress bar update, exe float constants)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ConsumeProduceUI::Slot7";
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
+// Slot9 (notification handler) — PASSTHROUGH (combo selection → component write)
 typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "ConsumeProduceUI::Slot9";

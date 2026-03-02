@@ -34,20 +34,39 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookStartup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
+
+// ScalarDtor — REIMPLEMENTED
+// Original: 0x140014370. Sets vtable, frees icon element array, calls base dtor, conditional free.
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "StatusIconUI::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, StatusIconUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+
+    // Free dynamic icon element array (allocated by Serialize)
+    fn_MemFreeStatic(*(void**)((uintptr_t)self + 0x30));
+    *(uint64_t*)((uintptr_t)self + 0x30) = 0;
+    *(uint64_t*)((uintptr_t)self + 0x38) = 0;
+
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Serialize — PASSTHROUGH (needs ChildCount, Child, array resize function)
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StatusIconUI::Serialize";
     ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
+// Startup — PASSTHROUGH (complex: multiple component lookups, page element, bitfield visibility)
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "StatusIconUI::Startup";

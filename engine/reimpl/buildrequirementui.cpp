@@ -31,14 +31,37 @@ static HookInfo g_hookDtor;
 static HookInfo g_hookSlot4;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor (scalar deleting destructor) — REIMPLEMENTED
+// Original: 0x140010860. Sets vtable, frees two dynamic arrays, calls base dtor, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "BuildRequirementUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, BuildRequirementUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+
+    // Free requirement data array at +0x50
+    fn_MemFreeStatic(*(void**)((uintptr_t)self + 0x50));
+    *(uint64_t*)((uintptr_t)self + 0x50) = 0;
+    *(uint64_t*)((uintptr_t)self + 0x58) = 0;
+
+    // Free label element array at +0x40
+    fn_MemFreeStatic(*(void**)((uintptr_t)self + 0x40));
+    *(uint64_t*)((uintptr_t)self + 0x40) = 0;
+    *(uint64_t*)((uintptr_t)self + 0x48) = 0;
+
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Slot4 (setup/refresh) — PASSTHROUGH (very complex: entity lookup, sprite setup, dynamic array management)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "BuildRequirementUI::Slot4";
