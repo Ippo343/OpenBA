@@ -56,25 +56,23 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (setup/refresh) — PASSTHROUGH (finds selectResource element, sets ID, calls helper)
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 (setup/refresh) — REIMPLEMENTED (finds selectResource element, sets ID, populates combo)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "CropUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    CropUI_Slot4((CropUI*)self);
 }
 
-// Slot7 (update handler) — PASSTHROUGH (combo visibility based on entity state)
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 (update handler) — REIMPLEMENTED (enable/disable combo based on item count)
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "CropUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    CropUI_Slot7((CropUI*)self);
 }
 
-// Slot8 (additional handler) — PASSTHROUGH (item count check, refresh on change)
-typedef void (*fn_Slot8_t)(void* self);
+// Slot8 (additional handler) — REIMPLEMENTED (repopulate combo if count changed)
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "CropUI::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    CropUI_Slot8((CropUI*)self);
 }
 
 // Slot9 (notification handler) — PASSTHROUGH

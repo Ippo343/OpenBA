@@ -59,18 +59,17 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Serialize — PASSTHROUGH (needs ChildCount, Child, array resize function)
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize — REIMPLEMENTED (finds icons container, caches child elements)
+#include "ui/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StatusIconUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    StatusIconUI_Serialize((StatusIconUI*)self);
 }
 
-// Startup — PASSTHROUGH (complex: multiple component lookups, page element, bitfield visibility)
-typedef void (*fn_Startup_t)(void* self);
+// Startup — REIMPLEMENTED (icon visibility based on MeshInstance bitfield and page state)
 static void Reimpl_Startup(void* self) {
     g_lastHook = "StatusIconUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    StatusIconUI_Startup((StatusIconUI*)self);
 }
 
 // ============================================================

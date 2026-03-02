@@ -39,16 +39,17 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 — REIMPLEMENTED (finds progress element, sets max from cemetery capacity)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "CemeteryUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    CemeteryUI_Slot4((CemeteryUI*)self);
 }
 
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 — REIMPLEMENTED (updates progress with burial count and max text)
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "CemeteryUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    CemeteryUI_Slot7((CemeteryUI*)self);
 }
 
 // ============================================================

@@ -49,10 +49,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-typedef void (*fn_Slot6_t)(void* self);
+// Slot6 — REIMPLEMENTED (closes sub-dialog, clears reference)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "CitizenUI::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    CitizenUI_Slot6((CitizenUI*)self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);

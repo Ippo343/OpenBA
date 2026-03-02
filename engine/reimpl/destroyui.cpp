@@ -52,25 +52,23 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (setup/refresh) — PASSTHROUGH (finds 8 named elements, sets IDs, component checks)
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 (setup/refresh) — REIMPLEMENTED (finds elements, sets IDs, checks reclaim)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "DestroyUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    DestroyUI_Slot4((DestroyUI*)self);
 }
 
-// Slot7 (update handler) — PASSTHROUGH (complex visibility logic, progress bars, storage queries)
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 (update handler) — REIMPLEMENTED (visibility state machine for destroy/reclaim panel)
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "DestroyUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    DestroyUI_Slot7((DestroyUI*)self);
 }
 
-// Slot9 (notification handler) — PASSTHROUGH (button handlers: reclaim/rebuild/destroy)
-typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
+// Slot9 (notification handler) — REIMPLEMENTED (dispatches reclaim/rebuild/destroy)
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "DestroyUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    DestroyUI_Slot9((DestroyUI*)self, param2, param3, param4);
 }
 
 // ============================================================

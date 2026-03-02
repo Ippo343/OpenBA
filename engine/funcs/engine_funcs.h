@@ -338,6 +338,351 @@ typedef int (*fn_KeyMap_GetDeviceForId_t)(void* self, int id, int slot);
 extern fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId;
 
 // ============================================================
+// UI Widget Functions (Phase A1 — Runtime DLL exports)
+// ============================================================
+
+// --- UI::Element ---
+
+// Element::SetFlagsOnOff(this, hideFlags, showFlags)
+typedef void (*fn_Element_SetFlagsOnOff_t)(void* self, uint32_t hideFlags, uint32_t showFlags);
+extern fn_Element_SetFlagsOnOff_t fn_Element_SetFlagsOnOff;
+
+// Element::SetElementId(this, id)
+typedef void (*fn_Element_SetElementId_t)(void* self, int id);
+extern fn_Element_SetElementId_t fn_Element_SetElementId;
+
+// Element::SetName(this, String const&)
+typedef void (*fn_Element_SetName_t)(void* self, const void* str);
+extern fn_Element_SetName_t fn_Element_SetName;
+
+// Element::SetToolTip(this, Sprite) — by value (UI::Sprite is small)
+typedef void (*fn_Element_SetToolTip_t)(void* self, void* sprite);
+extern fn_Element_SetToolTip_t fn_Element_SetToolTip;
+
+// Element::SetToolTipString(this, String const&)
+typedef void (*fn_Element_SetToolTipString_t)(void* self, const void* str);
+extern fn_Element_SetToolTipString_t fn_Element_SetToolTipString;
+
+// Element::Child(this, index) -> InternalPtr<Element> (non-trivial return)
+// RCX=retval, RDX=this, R8=index
+typedef void* (*fn_Element_Child_t)(void* retval, void* self, int index);
+extern fn_Element_Child_t fn_Element_Child;
+
+// Element::ChildCount(this) -> int
+typedef int (*fn_Element_ChildCount_t)(const void* self);
+extern fn_Element_ChildCount_t fn_Element_ChildCount;
+
+// Element::FindElementType(this, typeId) -> InternalPtr<Element> (non-trivial return)
+// RCX=retval, RDX=this, R8=typeId
+typedef void* (*fn_Element_FindElementType_t)(void* retval, void* self, uint32_t typeId);
+extern fn_Element_FindElementType_t fn_Element_FindElementType;
+
+// Element::RemoveChildren(this)
+typedef void (*fn_Element_RemoveChildren_t)(void* self);
+extern fn_Element_RemoveChildren_t fn_Element_RemoveChildren;
+
+// Element::AddChild(this, InternalPtr<Element>)
+typedef void (*fn_Element_AddChild_t)(void* self, void* childPtr);
+extern fn_Element_AddChild_t fn_Element_AddChild;
+
+// --- UI::DialogInstance ---
+
+// DialogInstance::FindElement(this, String const&) -> InternalPtr<Element> (non-trivial return)
+// RCX=retval, RDX=this, R8=name
+typedef void* (*fn_DialogInstance_FindElement_t)(void* retval, void* self, const void* name);
+extern fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement;
+
+// DialogInstance::GetController(this, index) -> InternalPtr<DialogController> (non-trivial return)
+// RCX=retval, RDX=this, R8=index
+typedef void* (*fn_DialogInstance_GetController_t)(void* retval, const void* self, uint32_t index);
+extern fn_DialogInstance_GetController_t fn_DialogInstance_GetController;
+
+// DialogInstance::FindElementType(this, typeId) -> InternalPtr<Element> (non-trivial return)
+// RCX=retval, RDX=this, R8=typeId
+typedef void* (*fn_DialogInstance_FindElementType_t)(void* retval, void* self, uint32_t typeId);
+extern fn_DialogInstance_FindElementType_t fn_DialogInstance_FindElementType;
+
+// DialogInstance::SetFlagsOnOff(this, hideFlags, showFlags)
+typedef void (*fn_DialogInstance_SetFlagsOnOff_t)(void* self, uint32_t hideFlags, uint32_t showFlags);
+extern fn_DialogInstance_SetFlagsOnOff_t fn_DialogInstance_SetFlagsOnOff;
+
+// --- UI::ComboElement ---
+
+// ComboElement::AddItem(this, Sprite const&, String const&, userData) -> int
+typedef int (*fn_ComboElement_AddItem_t)(void* self, const void* sprite, const void* str, void* userData);
+extern fn_ComboElement_AddItem_t fn_ComboElement_AddItem;
+
+// ComboElement::SetCurrentItem(this, index)
+typedef void (*fn_ComboElement_SetCurrentItem_t)(void* self, int index);
+extern fn_ComboElement_SetCurrentItem_t fn_ComboElement_SetCurrentItem;
+
+// ComboElement::GetItemCount(this) -> int
+typedef int (*fn_ComboElement_GetItemCount_t)(const void* self);
+extern fn_ComboElement_GetItemCount_t fn_ComboElement_GetItemCount;
+
+// ComboElement::GetCurrentItem(this) -> int
+typedef int (*fn_ComboElement_GetCurrentItem_t)(const void* self);
+extern fn_ComboElement_GetCurrentItem_t fn_ComboElement_GetCurrentItem;
+
+// ComboElement::GetItemData(this, index) -> void*
+typedef void* (*fn_ComboElement_GetItemData_t)(const void* self, int index);
+extern fn_ComboElement_GetItemData_t fn_ComboElement_GetItemData;
+
+// ComboElement::RemoveAllItems(this)
+typedef void (*fn_ComboElement_RemoveAllItems_t)(void* self);
+extern fn_ComboElement_RemoveAllItems_t fn_ComboElement_RemoveAllItems;
+
+// --- UI::ProgressElement ---
+
+// ProgressElement::SetProgressTextParameter(this, index, String const&)
+typedef void (*fn_ProgressElement_SetProgressTextParameter_t)(void* self, int index, const void* str);
+extern fn_ProgressElement_SetProgressTextParameter_t fn_ProgressElement_SetProgressTextParameter;
+
+// ProgressElement::SetMaximumValue(this, float)
+typedef void (*fn_ProgressElement_SetMaximumValue_t)(void* self, float value);
+extern fn_ProgressElement_SetMaximumValue_t fn_ProgressElement_SetMaximumValue;
+
+// ProgressElement::SetCurrentValue(this, float)
+typedef void (*fn_ProgressElement_SetCurrentValue_t)(void* self, float value);
+extern fn_ProgressElement_SetCurrentValue_t fn_ProgressElement_SetCurrentValue;
+
+// --- UI::TableElement ---
+
+// TableElement::SetSize(this, rows, cols)
+typedef void (*fn_TableElement_SetSize_t)(void* self, int rows, int cols);
+extern fn_TableElement_SetSize_t fn_TableElement_SetSize;
+
+// TableElement::SetChild(this, elem, col, row)
+typedef void (*fn_TableElement_SetChild3_t)(void* self, void* elemPtr, int col, int row);
+extern fn_TableElement_SetChild3_t fn_TableElement_SetChild3;
+
+// TableElement::SetChild(this, elem, col) — single-index overload
+typedef void (*fn_TableElement_SetChild2_t)(void* self, void* elemPtr, int col);
+extern fn_TableElement_SetChild2_t fn_TableElement_SetChild2;
+
+// TableElement::GetRowCount(this) -> int
+typedef int (*fn_TableElement_GetRowCount_t)(const void* self);
+extern fn_TableElement_GetRowCount_t fn_TableElement_GetRowCount;
+
+// TableElement::GetColumnCount(this) -> int
+typedef int (*fn_TableElement_GetColumnCount_t)(const void* self);
+extern fn_TableElement_GetColumnCount_t fn_TableElement_GetColumnCount;
+
+// --- UI::NumberEditElement ---
+
+// NumberEditElement::SetValue(this, int)
+typedef void (*fn_NumberEditElement_SetValue_t)(void* self, int value);
+extern fn_NumberEditElement_SetValue_t fn_NumberEditElement_SetValue;
+
+// NumberEditElement::SetMinMax(this, min, max)
+typedef void (*fn_NumberEditElement_SetMinMax_t)(void* self, int minVal, int maxVal);
+extern fn_NumberEditElement_SetMinMax_t fn_NumberEditElement_SetMinMax;
+
+// NumberEditElement::GetValue(this) -> int
+typedef int (*fn_NumberEditElement_GetValue_t)(const void* self);
+extern fn_NumberEditElement_GetValue_t fn_NumberEditElement_GetValue;
+
+// --- UI::NumberElement ---
+
+// NumberElement::SetValue(this, int)
+typedef void (*fn_NumberElement_SetValueInt_t)(void* self, int value);
+extern fn_NumberElement_SetValueInt_t fn_NumberElement_SetValueInt;
+
+// NumberElement::SetValue(this, float)
+typedef void (*fn_NumberElement_SetValueFloat_t)(void* self, float value);
+extern fn_NumberElement_SetValueFloat_t fn_NumberElement_SetValueFloat;
+
+// --- UI::SpinnerElement ---
+
+// SpinnerElement::SetElementId(this, int)
+typedef void (*fn_SpinnerElement_SetElementId_t)(void* self, int id);
+extern fn_SpinnerElement_SetElementId_t fn_SpinnerElement_SetElementId;
+
+// SpinnerElement::SetValue(this, int)
+typedef void (*fn_SpinnerElement_SetValue_t)(void* self, int value);
+extern fn_SpinnerElement_SetValue_t fn_SpinnerElement_SetValue;
+
+// SpinnerElement::SetMinMax(this, min, max)
+typedef void (*fn_SpinnerElement_SetMinMax_t)(void* self, int minVal, int maxVal);
+extern fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax;
+
+// SpinnerElement::GetValue(this) -> int
+typedef int (*fn_SpinnerElement_GetValue_t)(const void* self);
+extern fn_SpinnerElement_GetValue_t fn_SpinnerElement_GetValue;
+
+// --- UI::ImageElement ---
+
+// ImageElement::SetSprite(this, Sprite) — by value
+typedef void (*fn_ImageElement_SetSprite_t)(void* self, void* sprite);
+extern fn_ImageElement_SetSprite_t fn_ImageElement_SetSprite;
+
+// ImageElement::SetWidthHeight(this, w, h)
+typedef void (*fn_ImageElement_SetWidthHeight_t)(void* self, int w, int h);
+extern fn_ImageElement_SetWidthHeight_t fn_ImageElement_SetWidthHeight;
+
+// --- UI::LabelElement ---
+
+// LabelElement::SetSprite(this, Sprite) — by value
+typedef void (*fn_LabelElement_SetSprite_t)(void* self, void* sprite);
+extern fn_LabelElement_SetSprite_t fn_LabelElement_SetSprite;
+
+// --- UI::TextElement ---
+
+// TextElement::SetText(this, String) — by value (UI::String wrapper)
+typedef void (*fn_TextElement_SetText_t)(void* self, void* str);
+extern fn_TextElement_SetText_t fn_TextElement_SetText;
+
+// ============================================================
+// Exe Type IDs (Phase A2 — .rdata pointers in Application-x64.exe)
+// ============================================================
+
+extern uint32_t* g_TypeId_ComponentEntity;       // DAT_1401c5d70
+extern uint32_t* g_TypeId_ProgressElement;       // exref at 0x1401515b8 (double-indirect)
+extern uint32_t* g_TypeId_BuildComponent;         // DAT_1401c7318
+extern uint32_t* g_TypeId_ConsumeProduceComponent;// DAT_1401c7388
+extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
+extern uint32_t* g_TypeId_BuildRequirementComponent;// DAT_1401c7f58
+extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
+extern uint32_t* g_TypeId_ResourceType;           // DAT_1401c7cb8
+extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0
+extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00
+extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
+extern uint32_t* g_TypeId_DestroyComponent;       // DAT_1401c7628
+extern uint32_t* g_TypeId_WorkplaceComponent;     // DAT_1401c80e0
+extern uint32_t* g_TypeId_StorageLocationComponent;// DAT_1401c8070
+extern uint32_t* g_TypeId_StorageComponent;       // (TBD)
+extern uint32_t* g_TypeId_StateMachineComponent;  // (TBD)
+extern uint32_t* g_TypeId_WorkplaceJobType;       // DAT_1401c80a8
+extern uint32_t* g_TypeId_AttendanceSubComp;      // DAT_1401c3f78
+extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
+
+// ============================================================
+// Game Singletons (Phase A3 — exe global pointers)
+// ============================================================
+
+// Game/World singleton — accessed by ~20 UI methods
+// Sub-fields: +0xB0 ProfessionList, +0xF0 CitizenList, +0xF8 WorldGrid,
+//             +0x100 ResourceTypeMap, +0x110 RadiusDisplayManager
+extern void** g_pGameWorldSingleton;  // DAT_1401c3dd8
+
+// Input::KeyMap singleton — used by HotKeyToolTipUI
+extern void** g_pKeyMapSingleton;     // DAT_1401c3de8
+
+// ============================================================
+// Common Exe Functions (Phase A4 — by RVA from Application-x64.exe)
+// ============================================================
+
+// Entity::FindComponent variants (template instantiations)
+// All have signature: void FindComponent(entity*, retval*)
+// RCX=entity, RDX=retval(InternalPtr*)
+typedef void (*fn_FindComponent_t)(void* entity, void* retval);
+
+extern fn_FindComponent_t fn_FindComponent_StateMachine;   // 0x14000b6f0
+extern fn_FindComponent_t fn_FindComponent_MeshInstance;   // 0x140002f90
+extern fn_FindComponent_t fn_FindComponent_Destroy;        // FUN_140005780
+extern fn_FindComponent_t fn_FindComponent_Build;          // FUN_140004680
+extern fn_FindComponent_t fn_FindComponent_ConsumeProduce; // TBD
+extern fn_FindComponent_t fn_FindComponent_Resource;       // TBD
+extern fn_FindComponent_t fn_FindComponent_Storage;        // TBD
+extern fn_FindComponent_t fn_FindComponent_Workplace;      // FUN_140003050
+extern fn_FindComponent_t fn_FindComponent_Radius;         // TBD
+extern fn_FindComponent_t fn_FindComponent_BuildState;     // FUN_140003ea0 (type DAT_1401c7d98)
+extern fn_FindComponent_t fn_FindComponent_Attendance;     // FUN_1400105e0
+extern fn_FindComponent_t fn_FindComponent_Cemetery;       // FUN_140010a00
+
+// Array resize/push helpers (exe-internal template instantiations)
+typedef void (*fn_ExeArrayResize_t)(void* arrayBase, int newCount);
+extern fn_ExeArrayResize_t fn_ExeArrayResize;   // FUN_1400032e0
+extern fn_ExeArrayResize_t fn_ExeArrayResize2;  // FUN_1400021d0
+
+typedef void (*fn_ExeArrayPush_t)(void* arrayBase, int newCount, void* element);
+extern fn_ExeArrayPush_t fn_ExeArrayPush;       // FUN_140003600
+
+// StorageComponent::QueryCount(storageComp) -> int
+typedef int (*fn_StorageComponent_QueryCount_t)(void* storageComp);
+extern fn_StorageComponent_QueryCount_t fn_StorageComponent_QueryCount;  // 0x14012cf10
+
+// Radius calculation helper
+typedef void (*fn_RadiusCalc_t)(void* component, int tileIndex);
+extern fn_RadiusCalc_t fn_RadiusCalc;           // FUN_140055430
+
+// RadiusDisplayManager::Remove(radiusMgr, index)
+typedef void (*fn_RadiusDisplay_Remove_t)(void* radiusMgr, int index);
+extern fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove;  // FUN_1400b0d00
+
+// DestroyComponent query functions
+typedef bool (*fn_DestroyQuery_t)(void* component);
+extern fn_DestroyQuery_t fn_DestroyComponent_CanReclaim;   // FUN_14011e690
+extern fn_DestroyQuery_t fn_DestroyComponent_CanRebuild;   // FUN_14011e600
+
+// DestroyComponent action functions
+typedef void (*fn_DestroyAction_t)(void* component);
+extern fn_DestroyAction_t fn_DestroyComponent_Reclaim;     // FUN_14011e400
+extern fn_DestroyAction_t fn_DestroyComponent_Rebuild;     // FUN_14011e470
+extern fn_DestroyAction_t fn_DestroyComponent_Destroy;     // FUN_14011e4d0
+
+// Get active product index from ConsumeProduce component
+typedef int (*fn_GetActiveProductIndex_t)(void* component);
+extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
+
+// Storage count query variant
+typedef int (*fn_StorageCountQuery_t)(void* component);
+extern fn_StorageCountQuery_t fn_StorageCountQuery;         // FUN_14012e5c0
+
+// CropUI helper functions
+typedef void (*fn_CropUIPopulate_t)(void* cropUI);
+extern fn_CropUIPopulate_t fn_CropUI_PopulateCombo;        // FUN_140078830
+typedef int (*fn_CropUIExpected_t)(void* cropUI);
+extern fn_CropUIExpected_t fn_CropUI_GetExpectedCount;     // FUN_140078a40
+
+// Cemetery burial count helper (iterates slots, counts occupied)
+typedef int (*fn_CemeteryBurialCount_t)(void* cemeteryComp);
+extern fn_CemeteryBurialCount_t fn_CemeteryGetBurialCount; // FUN_140046dd0
+
+// SpinnerElement::IsActive(this) -> bool
+typedef bool (*fn_SpinnerElement_IsActive_t)(const void* self);
+extern fn_SpinnerElement_IsActive_t fn_SpinnerElement_IsActive;
+
+// --- UI::PageElement ---
+
+// PageElement::GetActivePage(this) -> int
+typedef int (*fn_PageElement_GetActivePage_t)(const void* self);
+extern fn_PageElement_GetActivePage_t fn_PageElement_GetActivePage;
+
+// PageElement::SetActivePage(this, page)
+typedef void (*fn_PageElement_SetActivePage_t)(void* self, int page);
+extern fn_PageElement_SetActivePage_t fn_PageElement_SetActivePage;
+
+// --- UI::Element type IDs (exref, double-indirect) ---
+
+// CheckboxElement type ID at exref 0x1401516a8
+extern uint32_t* g_TypeId_CheckboxElement;
+
+// UI element base type ID at exref 0x1401514f8 (used by ControlUI)
+extern uint32_t* g_TypeId_UIElementBase;
+
+// ============================================================
+// Additional Exe Type IDs (Phase D additions)
+// ============================================================
+
+// ControlComponent type ID at DAT_1401c4e20 (direct)
+extern uint32_t* g_TypeId_ControlComponent;
+
+// ============================================================
+// Additional Exe Functions (Phase D additions)
+// ============================================================
+
+// FindComponentByTypeId(entity, retval, typeId) — searches entity component array
+// FUN_1400c3680: iterates entity+0x30 array (count at +0x38), matches vtable[2] to typeId
+typedef void* (*fn_FindComponentByTypeId_t)(void* entity, void* retval, int typeId);
+extern fn_FindComponentByTypeId_t fn_FindComponentByTypeId;
+
+// EntityTrackingSet_Remove(bstRoot, key) — removes entity from BST tracking set
+// FUN_14002c690: BST remove by InternalBasePtr key
+typedef void (*fn_EntityTrackingSet_Remove_t)(void* bstRoot, void* key);
+extern fn_EntityTrackingSet_Remove_t fn_EntityTrackingSet_Remove;
+
+// ============================================================
 // Initialization
 // ============================================================
 

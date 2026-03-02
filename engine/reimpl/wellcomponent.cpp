@@ -45,9 +45,7 @@ static fn_Serializer_Ctor_t fn_Serializer_Ctor = nullptr;
 typedef void (*fn_Serializer_Dtor_t)(void* self);
 static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 
-// Object::InternalBasePtr::InternalBasePtr(this, Internal*) — construct a smart pointer
-typedef void* (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
-static fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
+// fn_InternalBasePtr_Ctor — resolved globally in engine_funcs.cpp
 
 // FUN_140091ba0 — adds entity to a dynamic array (used by OnCreate to register with population)
 typedef void (*fn_ArrayPushEntity_t)(void* arrayBase, void* internalBasePtr);
@@ -134,8 +132,7 @@ void RemoveWellComponentShutdown() {
 }
 
 void InstallWellComponentOnCreate() {
-    fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152a90)));
+    // fn_InternalBasePtr_Ctor resolved globally in engine_funcs.cpp
     fn_ArrayPushEntity = reinterpret_cast<fn_ArrayPushEntity_t>(
         ResolveAddr(Module::Exe, 0x140091ba0));
     g_pWorldManager = reinterpret_cast<void**>(

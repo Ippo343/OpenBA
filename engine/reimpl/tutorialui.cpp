@@ -43,16 +43,17 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize — REIMPLEMENTED (finds named elements, sets button IDs, hides close)
+#include "ui/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TutorialUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    TutorialUI_Serialize((TutorialUI*)self);
 }
 
-typedef void (*fn_Startup_t)(void* self);
+// Startup — REIMPLEMENTED (toggles button visibility)
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TutorialUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    TutorialUI_Startup((TutorialUI*)self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);

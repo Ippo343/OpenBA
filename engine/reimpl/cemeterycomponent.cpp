@@ -42,9 +42,7 @@ static fn_Serializer_SerializeIntArray_t fn_Serializer_SerializeIntArray = nullp
 typedef void (*fn_ResizeIntArray_t)(void* arrayFieldPtr, int newCount);
 static fn_ResizeIntArray_t fn_ResizeIntArray = nullptr;
 
-// InternalBasePtr::InternalBasePtr(this, Internal*) — dispatched through [0x140152a90]
-typedef void (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
-static fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
+// fn_InternalBasePtr_Ctor — resolved globally in engine_funcs.cpp
 
 // FUN_140002cc0 — add InternalBasePtr to linked list
 typedef void (*fn_ListAdd_t)(void* listBase, void* ptrValue);
@@ -139,10 +137,7 @@ static bool ResolveHelpers() {
     fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(
         *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152ac8)));
 
-    // InternalBasePtr::InternalBasePtr — through import thunk
-    uintptr_t pInternalBasePtrCtorSlot = ResolveAddr(Module::Exe, 0x140152a90);
-    fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(pInternalBasePtrCtorSlot));
+    // fn_InternalBasePtr_Ctor resolved globally in engine_funcs.cpp
 
     // Serializer::Serialize(count, int*, name) for array serialization
     // From the decomp: IO::Serializer::Serialize(local_30, local_res8[0], *(int**)(param_1+0x48), nullptr)

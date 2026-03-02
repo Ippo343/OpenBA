@@ -53,18 +53,17 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Serialize — PASSTHROUGH (needs FindElementType + exe type ID, not same as FindElement by name)
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize — REIMPLEMENTED (finds ProgressElement by type, stores at +0x30)
+#include "ui/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StorageCapacityUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    StorageCapacityUI_Serialize((StorageCapacityUI*)self);
 }
 
-// Startup — PASSTHROUGH (needs StorageComponent_QueryCount, ProgressElement::SetProgressTextParameter, exe float constants)
-typedef void (*fn_Startup_t)(void* self);
+// Startup — REIMPLEMENTED (queries storage, updates progress bar)
 static void Reimpl_Startup(void* self) {
     g_lastHook = "StorageCapacityUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    StorageCapacityUI_Startup((StorageCapacityUI*)self);
 }
 
 // ============================================================

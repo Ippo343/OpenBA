@@ -59,11 +59,11 @@ static void Reimpl_Slot5(void* self) {
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
 }
 
-// Slot6 — PASSTHROUGH (depends on exe radius display function + global)
-typedef void (*fn_Slot6_t)(void* self);
+// Slot6 — REIMPLEMENTED (removes radius overlay, resets index)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "RadiusUI::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    RadiusUI_Slot6((RadiusUI*)self);
 }
 
 // ============================================================

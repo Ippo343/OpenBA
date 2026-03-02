@@ -49,10 +49,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 — REIMPLEMENTED (enables/disables prev/next buttons)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "HelpUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    HelpUI_Slot7((HelpUI*)self);
 }
 
 typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);

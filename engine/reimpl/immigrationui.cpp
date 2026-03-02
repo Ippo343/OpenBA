@@ -41,10 +41,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 — REIMPLEMENTED (finds text/button elements, sets IDs)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ImmigrationUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ImmigrationUI_Slot4((ImmigrationUI*)self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);

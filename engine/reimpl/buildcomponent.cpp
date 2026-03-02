@@ -27,10 +27,6 @@
 // Helper function pointers
 // ============================================================
 
-// InternalBasePtr::InternalBasePtr(this, Internal*) — dispatch [0x140152a90]
-typedef void (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
-static fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
-
 // FUN_140017550 — find index in removal queue (returns -1 if not found)
 typedef int (*fn_FindInQueue_t)(void* arrayBase, void* entityPtr);
 static fn_FindInQueue_t fn_FindInQueue = nullptr;
@@ -124,8 +120,7 @@ static bool ResolveHelpers() {
     g_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 
-    fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152a90)));
+    // fn_InternalBasePtr_Ctor resolved globally in engine_funcs.cpp
 
     return fn_InternalBasePtr_Ctor && fn_FindInQueue;
 }

@@ -43,22 +43,24 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 — REIMPLEMENTED (finds spinner, configures min/max/value)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ResourceLimitUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ResourceLimitUI_Slot4((ResourceLimitUI*)self);
 }
 
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 — REIMPLEMENTED (syncs spinner with current limit)
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ResourceLimitUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    ResourceLimitUI_Slot7((ResourceLimitUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4, int param5, int param6);
+// Slot9 — REIMPLEMENTED (writes spinner value to global limit)
 static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int param5, int param6) {
     g_lastHook = "ResourceLimitUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
+    (void)param5; (void)param6;
+    ResourceLimitUI_Slot9((ResourceLimitUI*)self, param2, param3, param4);
 }
 
 // ============================================================

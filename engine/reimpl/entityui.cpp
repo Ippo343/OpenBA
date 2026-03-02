@@ -53,10 +53,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-typedef void (*fn_Slot6_t)(void* self);
+// Slot6 — REIMPLEMENTED (removes entity from tracking set)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "EntityUI::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    EntityUI_Slot6((EntityUI*)self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);

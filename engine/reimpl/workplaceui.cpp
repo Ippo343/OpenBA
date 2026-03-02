@@ -43,10 +43,11 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize — REIMPLEMENTED (finds worker/job elements, sets IDs)
+#include "ui/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "WorkPlaceUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    WorkplaceUI_Serialize((WorkPlaceUI*)self);
 }
 
 typedef void (*fn_Startup_t)(void* self);

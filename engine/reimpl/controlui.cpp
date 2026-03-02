@@ -41,22 +41,23 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 — REIMPLEMENTED (finds checkbox, sub-component, sets state)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ControlUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ControlUI_Slot4((ControlUI*)self);
 }
 
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 — REIMPLEMENTED (updates checkbox from component)
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ControlUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    ControlUI_Slot7((ControlUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
+// Slot9 — REIMPLEMENTED (toggles component state on checkbox click)
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "ControlUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    ControlUI_Slot9((ControlUI*)self, param2, param3, param4);
 }
 
 // ============================================================

@@ -119,7 +119,7 @@ fn_Filename_GetPathFilename_t fn_Filename_GetPathFilename = nullptr;
 // Array<Mod> copy
 fn_ModArrayCopy_t fn_ModArrayCopy = nullptr;
 
-// UI infrastructure
+// UI infrastructure (existing)
 fn_DialogController_Dtor_t fn_DialogController_Dtor = nullptr;
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_FindElement_t fn_FindElement = nullptr;
@@ -128,6 +128,158 @@ fn_Element_GetUserData_t fn_Element_GetUserData = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
 fn_KeyMap_GetInputForId_t fn_KeyMap_GetInputForId = nullptr;
 fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId = nullptr;
+
+// ============================================================
+// UI Widget Functions (Phase A1)
+// ============================================================
+
+// Element
+fn_Element_SetFlagsOnOff_t fn_Element_SetFlagsOnOff = nullptr;
+fn_Element_SetElementId_t fn_Element_SetElementId = nullptr;
+fn_Element_SetName_t fn_Element_SetName = nullptr;
+fn_Element_SetToolTip_t fn_Element_SetToolTip = nullptr;
+fn_Element_SetToolTipString_t fn_Element_SetToolTipString = nullptr;
+fn_Element_Child_t fn_Element_Child = nullptr;
+fn_Element_ChildCount_t fn_Element_ChildCount = nullptr;
+fn_Element_FindElementType_t fn_Element_FindElementType = nullptr;
+fn_Element_RemoveChildren_t fn_Element_RemoveChildren = nullptr;
+fn_Element_AddChild_t fn_Element_AddChild = nullptr;
+
+// DialogInstance
+fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement = nullptr;
+fn_DialogInstance_GetController_t fn_DialogInstance_GetController = nullptr;
+fn_DialogInstance_FindElementType_t fn_DialogInstance_FindElementType = nullptr;
+fn_DialogInstance_SetFlagsOnOff_t fn_DialogInstance_SetFlagsOnOff = nullptr;
+
+// ComboElement
+fn_ComboElement_AddItem_t fn_ComboElement_AddItem = nullptr;
+fn_ComboElement_SetCurrentItem_t fn_ComboElement_SetCurrentItem = nullptr;
+fn_ComboElement_GetItemCount_t fn_ComboElement_GetItemCount = nullptr;
+fn_ComboElement_GetCurrentItem_t fn_ComboElement_GetCurrentItem = nullptr;
+fn_ComboElement_GetItemData_t fn_ComboElement_GetItemData = nullptr;
+fn_ComboElement_RemoveAllItems_t fn_ComboElement_RemoveAllItems = nullptr;
+
+// ProgressElement
+fn_ProgressElement_SetProgressTextParameter_t fn_ProgressElement_SetProgressTextParameter = nullptr;
+fn_ProgressElement_SetMaximumValue_t fn_ProgressElement_SetMaximumValue = nullptr;
+fn_ProgressElement_SetCurrentValue_t fn_ProgressElement_SetCurrentValue = nullptr;
+
+// TableElement
+fn_TableElement_SetSize_t fn_TableElement_SetSize = nullptr;
+fn_TableElement_SetChild3_t fn_TableElement_SetChild3 = nullptr;
+fn_TableElement_SetChild2_t fn_TableElement_SetChild2 = nullptr;
+fn_TableElement_GetRowCount_t fn_TableElement_GetRowCount = nullptr;
+fn_TableElement_GetColumnCount_t fn_TableElement_GetColumnCount = nullptr;
+
+// NumberEditElement
+fn_NumberEditElement_SetValue_t fn_NumberEditElement_SetValue = nullptr;
+fn_NumberEditElement_SetMinMax_t fn_NumberEditElement_SetMinMax = nullptr;
+fn_NumberEditElement_GetValue_t fn_NumberEditElement_GetValue = nullptr;
+
+// NumberElement
+fn_NumberElement_SetValueInt_t fn_NumberElement_SetValueInt = nullptr;
+fn_NumberElement_SetValueFloat_t fn_NumberElement_SetValueFloat = nullptr;
+
+// SpinnerElement
+fn_SpinnerElement_SetElementId_t fn_SpinnerElement_SetElementId = nullptr;
+fn_SpinnerElement_SetValue_t fn_SpinnerElement_SetValue = nullptr;
+fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax = nullptr;
+fn_SpinnerElement_GetValue_t fn_SpinnerElement_GetValue = nullptr;
+fn_SpinnerElement_IsActive_t fn_SpinnerElement_IsActive = nullptr;
+
+// PageElement
+fn_PageElement_GetActivePage_t fn_PageElement_GetActivePage = nullptr;
+fn_PageElement_SetActivePage_t fn_PageElement_SetActivePage = nullptr;
+
+// CheckboxElement type ID (exref)
+uint32_t* g_TypeId_CheckboxElement = nullptr;
+
+// UI element base type ID (exref)
+uint32_t* g_TypeId_UIElementBase = nullptr;
+
+// ControlComponent type ID (direct)
+uint32_t* g_TypeId_ControlComponent = nullptr;
+
+// FindComponentByTypeId (entity component array search)
+fn_FindComponentByTypeId_t fn_FindComponentByTypeId = nullptr;
+
+// EntityTrackingSet_Remove (BST remove)
+fn_EntityTrackingSet_Remove_t fn_EntityTrackingSet_Remove = nullptr;
+
+// ImageElement
+fn_ImageElement_SetSprite_t fn_ImageElement_SetSprite = nullptr;
+fn_ImageElement_SetWidthHeight_t fn_ImageElement_SetWidthHeight = nullptr;
+
+// LabelElement
+fn_LabelElement_SetSprite_t fn_LabelElement_SetSprite = nullptr;
+
+// TextElement
+fn_TextElement_SetText_t fn_TextElement_SetText = nullptr;
+
+// ============================================================
+// Exe Type IDs (Phase A2)
+// ============================================================
+uint32_t* g_TypeId_ComponentEntity = nullptr;
+uint32_t* g_TypeId_ProgressElement = nullptr;
+uint32_t* g_TypeId_BuildComponent = nullptr;
+uint32_t* g_TypeId_ConsumeProduceComponent = nullptr;
+uint32_t* g_TypeId_RadiusComponent = nullptr;
+uint32_t* g_TypeId_BuildRequirementComponent = nullptr;
+uint32_t* g_TypeId_ResourceComponent = nullptr;
+uint32_t* g_TypeId_ResourceType = nullptr;
+uint32_t* g_TypeId_DialogController = nullptr;
+uint32_t* g_TypeId_PageToggleUI = nullptr;
+uint32_t* g_TypeId_MeshInstanceComponent = nullptr;
+uint32_t* g_TypeId_DestroyComponent = nullptr;
+uint32_t* g_TypeId_WorkplaceComponent = nullptr;
+uint32_t* g_TypeId_StorageLocationComponent = nullptr;
+uint32_t* g_TypeId_StorageComponent = nullptr;
+uint32_t* g_TypeId_StateMachineComponent = nullptr;
+uint32_t* g_TypeId_WorkplaceJobType = nullptr;
+uint32_t* g_TypeId_AttendanceSubComp = nullptr;
+uint32_t* g_TypeId_ResourceLimitType = nullptr;
+
+// ============================================================
+// Game Singletons (Phase A3)
+// ============================================================
+void** g_pGameWorldSingleton = nullptr;
+void** g_pKeyMapSingleton = nullptr;
+
+// ============================================================
+// Common Exe Functions (Phase A4)
+// ============================================================
+fn_FindComponent_t fn_FindComponent_StateMachine = nullptr;
+fn_FindComponent_t fn_FindComponent_MeshInstance = nullptr;
+fn_FindComponent_t fn_FindComponent_Destroy = nullptr;
+fn_FindComponent_t fn_FindComponent_Build = nullptr;
+fn_FindComponent_t fn_FindComponent_ConsumeProduce = nullptr;
+fn_FindComponent_t fn_FindComponent_Resource = nullptr;
+fn_FindComponent_t fn_FindComponent_Storage = nullptr;
+fn_FindComponent_t fn_FindComponent_Workplace = nullptr;
+fn_FindComponent_t fn_FindComponent_Radius = nullptr;
+fn_FindComponent_t fn_FindComponent_BuildState = nullptr;
+fn_FindComponent_t fn_FindComponent_Attendance = nullptr;
+fn_FindComponent_t fn_FindComponent_Cemetery = nullptr;
+
+fn_ExeArrayResize_t fn_ExeArrayResize = nullptr;
+fn_ExeArrayResize_t fn_ExeArrayResize2 = nullptr;
+fn_ExeArrayPush_t fn_ExeArrayPush = nullptr;
+
+fn_StorageComponent_QueryCount_t fn_StorageComponent_QueryCount = nullptr;
+fn_RadiusCalc_t fn_RadiusCalc = nullptr;
+fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove = nullptr;
+
+fn_DestroyQuery_t fn_DestroyComponent_CanReclaim = nullptr;
+fn_DestroyQuery_t fn_DestroyComponent_CanRebuild = nullptr;
+fn_DestroyAction_t fn_DestroyComponent_Reclaim = nullptr;
+fn_DestroyAction_t fn_DestroyComponent_Rebuild = nullptr;
+fn_DestroyAction_t fn_DestroyComponent_Destroy = nullptr;
+
+fn_GetActiveProductIndex_t fn_GetActiveProductIndex = nullptr;
+fn_StorageCountQuery_t fn_StorageCountQuery = nullptr;
+fn_CropUIPopulate_t fn_CropUI_PopulateCombo = nullptr;
+fn_CropUIExpected_t fn_CropUI_GetExpectedCount = nullptr;
+fn_CemeteryBurialCount_t fn_CemeteryGetBurialCount = nullptr;
 
 // ============================================================
 // Engine globals
@@ -459,6 +611,409 @@ bool EngineFuncsInit() {
             ResolveAddr(Module::Runtime, 0x1800a7970));
     }
 
+    // ================================================================
+    // Phase A1: UI Widget Functions (Runtime DLL exports)
+    // ================================================================
+
+    // --- Element ---
+    fn_Element_SetFlagsOnOff = reinterpret_cast<fn_Element_SetFlagsOnOff_t>(
+        ResolveExport("?SetFlagsOnOff@Element@UI@@QEAAXII@Z"));
+    if (!fn_Element_SetFlagsOnOff)
+        fn_Element_SetFlagsOnOff = reinterpret_cast<fn_Element_SetFlagsOnOff_t>(
+            ResolveAddr(Module::Runtime, 0x180116160));
+
+    fn_Element_SetElementId = reinterpret_cast<fn_Element_SetElementId_t>(
+        ResolveExport("?SetElementId@Element@UI@@QEAAXH@Z"));
+    if (!fn_Element_SetElementId)
+        fn_Element_SetElementId = reinterpret_cast<fn_Element_SetElementId_t>(
+            ResolveAddr(Module::Runtime, 0x180115820));
+
+    fn_Element_SetName = reinterpret_cast<fn_Element_SetName_t>(
+        ResolveExport("?SetName@Element@UI@@QEAAXAEBVString@System@@@Z"));
+    if (!fn_Element_SetName)
+        fn_Element_SetName = reinterpret_cast<fn_Element_SetName_t>(
+            ResolveAddr(Module::Runtime, 0x1801154f0));
+
+    fn_Element_SetToolTip = reinterpret_cast<fn_Element_SetToolTip_t>(
+        ResolveExport("?SetToolTip@Element@UI@@QEAAXVString@2@@Z"));
+    if (!fn_Element_SetToolTip)
+        fn_Element_SetToolTip = reinterpret_cast<fn_Element_SetToolTip_t>(
+            ResolveAddr(Module::Runtime, 0x180035740));
+
+    fn_Element_SetToolTipString = reinterpret_cast<fn_Element_SetToolTipString_t>(
+        ResolveExport("?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z"));
+    if (!fn_Element_SetToolTipString)
+        fn_Element_SetToolTipString = reinterpret_cast<fn_Element_SetToolTipString_t>(
+            ResolveAddr(Module::Runtime, 0x1800356e0));
+
+    fn_Element_Child = reinterpret_cast<fn_Element_Child_t>(
+        ResolveExport("?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z"));
+    if (!fn_Element_Child)
+        fn_Element_Child = reinterpret_cast<fn_Element_Child_t>(
+            ResolveAddr(Module::Runtime, 0x180035540));
+
+    fn_Element_ChildCount = reinterpret_cast<fn_Element_ChildCount_t>(
+        ResolveExport("?ChildCount@Element@UI@@QEBAHXZ"));
+    if (!fn_Element_ChildCount)
+        fn_Element_ChildCount = reinterpret_cast<fn_Element_ChildCount_t>(
+            ResolveAddr(Module::Runtime, 0x180035530));
+
+    fn_Element_FindElementType = reinterpret_cast<fn_Element_FindElementType_t>(
+        ResolveExport("?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
+    if (!fn_Element_FindElementType)
+        fn_Element_FindElementType = reinterpret_cast<fn_Element_FindElementType_t>(
+            ResolveAddr(Module::Runtime, 0x180115760));
+
+    fn_Element_RemoveChildren = reinterpret_cast<fn_Element_RemoveChildren_t>(
+        ResolveExport("?RemoveChildren@Element@UI@@QEAAXXZ"));
+    if (!fn_Element_RemoveChildren)
+        fn_Element_RemoveChildren = reinterpret_cast<fn_Element_RemoveChildren_t>(
+            ResolveAddr(Module::Runtime, 0x180115570));
+
+    fn_Element_AddChild = reinterpret_cast<fn_Element_AddChild_t>(
+        ResolveExport("?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
+    if (!fn_Element_AddChild)
+        fn_Element_AddChild = reinterpret_cast<fn_Element_AddChild_t>(
+            ResolveAddr(Module::Runtime, 0x180115df0));
+
+    // --- DialogInstance ---
+    fn_DialogInstance_FindElement = reinterpret_cast<fn_DialogInstance_FindElement_t>(
+        ResolveExport("?FindElement@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
+    if (!fn_DialogInstance_FindElement)
+        fn_DialogInstance_FindElement = reinterpret_cast<fn_DialogInstance_FindElement_t>(
+            ResolveAddr(Module::Runtime, 0x180114c70));
+
+    fn_DialogInstance_GetController = reinterpret_cast<fn_DialogInstance_GetController_t>(
+        ResolveExport("?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z"));
+    if (!fn_DialogInstance_GetController)
+        fn_DialogInstance_GetController = reinterpret_cast<fn_DialogInstance_GetController_t>(
+            ResolveAddr(Module::Runtime, 0x180113320));
+
+    fn_DialogInstance_FindElementType = reinterpret_cast<fn_DialogInstance_FindElementType_t>(
+        ResolveExport("?FindElementType@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
+    if (!fn_DialogInstance_FindElementType)
+        fn_DialogInstance_FindElementType = reinterpret_cast<fn_DialogInstance_FindElementType_t>(
+            ResolveAddr(Module::Runtime, 0x1801140c0));
+
+    fn_DialogInstance_SetFlagsOnOff = reinterpret_cast<fn_DialogInstance_SetFlagsOnOff_t>(
+        ResolveExport("?SetFlagsOnOff@DialogInstance@UI@@QEAAXII@Z"));
+    if (!fn_DialogInstance_SetFlagsOnOff)
+        fn_DialogInstance_SetFlagsOnOff = reinterpret_cast<fn_DialogInstance_SetFlagsOnOff_t>(
+            ResolveAddr(Module::Runtime, 0x180114690));
+
+    // --- ComboElement ---
+    fn_ComboElement_AddItem = reinterpret_cast<fn_ComboElement_AddItem_t>(
+        ResolveExport("?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z"));
+    if (!fn_ComboElement_AddItem)
+        fn_ComboElement_AddItem = reinterpret_cast<fn_ComboElement_AddItem_t>(
+            ResolveAddr(Module::Runtime, 0x1800750b0));
+
+    fn_ComboElement_SetCurrentItem = reinterpret_cast<fn_ComboElement_SetCurrentItem_t>(
+        ResolveExport("?SetCurrentItem@ComboElement@UI@@QEAAXH@Z"));
+    if (!fn_ComboElement_SetCurrentItem)
+        fn_ComboElement_SetCurrentItem = reinterpret_cast<fn_ComboElement_SetCurrentItem_t>(
+            ResolveAddr(Module::Runtime, 0x180112540));
+
+    fn_ComboElement_GetItemCount = reinterpret_cast<fn_ComboElement_GetItemCount_t>(
+        ResolveExport("?GetItemCount@ComboElement@UI@@QEBAHXZ"));
+    if (!fn_ComboElement_GetItemCount)
+        fn_ComboElement_GetItemCount = reinterpret_cast<fn_ComboElement_GetItemCount_t>(
+            ResolveAddr(Module::Runtime, 0x180075180));
+
+    fn_ComboElement_GetCurrentItem = reinterpret_cast<fn_ComboElement_GetCurrentItem_t>(
+        ResolveExport("?GetCurrentItem@ComboElement@UI@@QEBAHXZ"));
+    if (!fn_ComboElement_GetCurrentItem)
+        fn_ComboElement_GetCurrentItem = reinterpret_cast<fn_ComboElement_GetCurrentItem_t>(
+            ResolveAddr(Module::Runtime, 0x180075160));
+
+    fn_ComboElement_GetItemData = reinterpret_cast<fn_ComboElement_GetItemData_t>(
+        ResolveExport("?GetItemData@ComboElement@UI@@QEBAPEAXH@Z"));
+    if (!fn_ComboElement_GetItemData)
+        fn_ComboElement_GetItemData = reinterpret_cast<fn_ComboElement_GetItemData_t>(
+            ResolveAddr(Module::Runtime, 0x180075170));
+
+    fn_ComboElement_RemoveAllItems = reinterpret_cast<fn_ComboElement_RemoveAllItems_t>(
+        ResolveExport("?RemoveAllItems@ComboElement@UI@@QEAAXXZ"));
+    if (!fn_ComboElement_RemoveAllItems)
+        fn_ComboElement_RemoveAllItems = reinterpret_cast<fn_ComboElement_RemoveAllItems_t>(
+            ResolveAddr(Module::Runtime, 0x180075120));
+
+    // --- ProgressElement ---
+    fn_ProgressElement_SetProgressTextParameter = reinterpret_cast<fn_ProgressElement_SetProgressTextParameter_t>(
+        ResolveExport("?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z"));
+    if (!fn_ProgressElement_SetProgressTextParameter)
+        fn_ProgressElement_SetProgressTextParameter = reinterpret_cast<fn_ProgressElement_SetProgressTextParameter_t>(
+            ResolveAddr(Module::Runtime, 0x180119b30));
+
+    fn_ProgressElement_SetMaximumValue = reinterpret_cast<fn_ProgressElement_SetMaximumValue_t>(
+        ResolveExport("?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z"));
+    if (!fn_ProgressElement_SetMaximumValue)
+        fn_ProgressElement_SetMaximumValue = reinterpret_cast<fn_ProgressElement_SetMaximumValue_t>(
+            ResolveAddr(Module::Runtime, 0x180077ec0));
+
+    fn_ProgressElement_SetCurrentValue = reinterpret_cast<fn_ProgressElement_SetCurrentValue_t>(
+        ResolveExport("?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z"));
+    if (!fn_ProgressElement_SetCurrentValue)
+        fn_ProgressElement_SetCurrentValue = reinterpret_cast<fn_ProgressElement_SetCurrentValue_t>(
+            ResolveAddr(Module::Runtime, 0x180077ed0));
+
+    // --- TableElement ---
+    fn_TableElement_SetSize = reinterpret_cast<fn_TableElement_SetSize_t>(
+        ResolveExport("?SetSize@TableElement@UI@@QEAAXHH@Z"));
+    if (!fn_TableElement_SetSize)
+        fn_TableElement_SetSize = reinterpret_cast<fn_TableElement_SetSize_t>(
+            ResolveAddr(Module::Runtime, 0x18011db90));
+
+    fn_TableElement_SetChild3 = reinterpret_cast<fn_TableElement_SetChild3_t>(
+        ResolveExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@HH@Z"));
+    if (!fn_TableElement_SetChild3)
+        fn_TableElement_SetChild3 = reinterpret_cast<fn_TableElement_SetChild3_t>(
+            ResolveAddr(Module::Runtime, 0x18011db50));
+
+    fn_TableElement_SetChild2 = reinterpret_cast<fn_TableElement_SetChild2_t>(
+        ResolveExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@H@Z"));
+    if (!fn_TableElement_SetChild2)
+        fn_TableElement_SetChild2 = reinterpret_cast<fn_TableElement_SetChild2_t>(
+            ResolveAddr(Module::Runtime, 0x18011daa0));
+
+    fn_TableElement_GetRowCount = reinterpret_cast<fn_TableElement_GetRowCount_t>(
+        ResolveExport("?GetRowCount@TableElement@UI@@QEBAHXZ"));
+    if (!fn_TableElement_GetRowCount)
+        fn_TableElement_GetRowCount = reinterpret_cast<fn_TableElement_GetRowCount_t>(
+            ResolveAddr(Module::Runtime, 0x180079450));
+
+    fn_TableElement_GetColumnCount = reinterpret_cast<fn_TableElement_GetColumnCount_t>(
+        ResolveExport("?GetColumnCount@TableElement@UI@@QEBAHXZ"));
+    if (!fn_TableElement_GetColumnCount)
+        fn_TableElement_GetColumnCount = reinterpret_cast<fn_TableElement_GetColumnCount_t>(
+            ResolveAddr(Module::Runtime, 0x180079460));
+
+    // --- NumberEditElement ---
+    fn_NumberEditElement_SetValue = reinterpret_cast<fn_NumberEditElement_SetValue_t>(
+        ResolveExport("?SetValue@NumberEditElement@UI@@QEAAXH@Z"));
+    if (!fn_NumberEditElement_SetValue)
+        fn_NumberEditElement_SetValue = reinterpret_cast<fn_NumberEditElement_SetValue_t>(
+            ResolveAddr(Module::Runtime, 0x1800d4bb0));
+
+    fn_NumberEditElement_SetMinMax = reinterpret_cast<fn_NumberEditElement_SetMinMax_t>(
+        ResolveExport("?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z"));
+    if (!fn_NumberEditElement_SetMinMax)
+        fn_NumberEditElement_SetMinMax = reinterpret_cast<fn_NumberEditElement_SetMinMax_t>(
+            ResolveAddr(Module::Runtime, 0x1800d4b70));
+
+    fn_NumberEditElement_GetValue = reinterpret_cast<fn_NumberEditElement_GetValue_t>(
+        ResolveExport("?GetValue@NumberEditElement@UI@@QEBAHXZ"));
+    if (!fn_NumberEditElement_GetValue)
+        fn_NumberEditElement_GetValue = reinterpret_cast<fn_NumberEditElement_GetValue_t>(
+            ResolveAddr(Module::Runtime, 0x1800d4b50));
+
+    // --- NumberElement ---
+    fn_NumberElement_SetValueInt = reinterpret_cast<fn_NumberElement_SetValueInt_t>(
+        ResolveExport("?SetValue@NumberElement@UI@@QEAAXH@Z"));
+    if (!fn_NumberElement_SetValueInt)
+        fn_NumberElement_SetValueInt = reinterpret_cast<fn_NumberElement_SetValueInt_t>(
+            ResolveAddr(Module::Runtime, 0x180118d50));
+
+    fn_NumberElement_SetValueFloat = reinterpret_cast<fn_NumberElement_SetValueFloat_t>(
+        ResolveExport("?SetValue@NumberElement@UI@@QEAAXM@Z"));
+    if (!fn_NumberElement_SetValueFloat)
+        fn_NumberElement_SetValueFloat = reinterpret_cast<fn_NumberElement_SetValueFloat_t>(
+            ResolveAddr(Module::Runtime, 0x180118db0));
+
+    // --- SpinnerElement ---
+    fn_SpinnerElement_SetElementId = reinterpret_cast<fn_SpinnerElement_SetElementId_t>(
+        ResolveExport("?SetElementId@SpinnerElement@UI@@QEAAXH@Z"));
+    if (!fn_SpinnerElement_SetElementId)
+        fn_SpinnerElement_SetElementId = reinterpret_cast<fn_SpinnerElement_SetElementId_t>(
+            ResolveAddr(Module::Runtime, 0x1800d7e10));
+
+    fn_SpinnerElement_SetValue = reinterpret_cast<fn_SpinnerElement_SetValue_t>(
+        ResolveExport("?SetValue@SpinnerElement@UI@@QEAAXH@Z"));
+    if (!fn_SpinnerElement_SetValue)
+        fn_SpinnerElement_SetValue = reinterpret_cast<fn_SpinnerElement_SetValue_t>(
+            ResolveAddr(Module::Runtime, 0x1800d7dc0));
+
+    fn_SpinnerElement_SetMinMax = reinterpret_cast<fn_SpinnerElement_SetMinMax_t>(
+        ResolveExport("?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z"));
+    if (!fn_SpinnerElement_SetMinMax)
+        fn_SpinnerElement_SetMinMax = reinterpret_cast<fn_SpinnerElement_SetMinMax_t>(
+            ResolveAddr(Module::Runtime, 0x1800d7d40));
+
+    fn_SpinnerElement_GetValue = reinterpret_cast<fn_SpinnerElement_GetValue_t>(
+        ResolveExport("?GetValue@SpinnerElement@UI@@QEBAHXZ"));
+    if (!fn_SpinnerElement_GetValue)
+        fn_SpinnerElement_GetValue = reinterpret_cast<fn_SpinnerElement_GetValue_t>(
+            ResolveAddr(Module::Runtime, 0x1800d7cf0));
+
+    fn_SpinnerElement_IsActive = reinterpret_cast<fn_SpinnerElement_IsActive_t>(
+        ResolveExport("?IsActive@SpinnerElement@UI@@QEBA_NXZ"));
+
+    // --- PageElement ---
+    fn_PageElement_GetActivePage = reinterpret_cast<fn_PageElement_GetActivePage_t>(
+        ResolveExport("?GetActivePage@PageElement@UI@@QEBAHXZ"));
+
+    fn_PageElement_SetActivePage = reinterpret_cast<fn_PageElement_SetActivePage_t>(
+        ResolveExport("?SetActivePage@PageElement@UI@@QEAAXH@Z"));
+
+    // --- ImageElement ---
+    fn_ImageElement_SetSprite = reinterpret_cast<fn_ImageElement_SetSprite_t>(
+        ResolveExport("?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z"));
+    if (!fn_ImageElement_SetSprite)
+        fn_ImageElement_SetSprite = reinterpret_cast<fn_ImageElement_SetSprite_t>(
+            ResolveAddr(Module::Runtime, 0x180118600));
+
+    fn_ImageElement_SetWidthHeight = reinterpret_cast<fn_ImageElement_SetWidthHeight_t>(
+        ResolveExport("?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z"));
+    if (!fn_ImageElement_SetWidthHeight)
+        fn_ImageElement_SetWidthHeight = reinterpret_cast<fn_ImageElement_SetWidthHeight_t>(
+            ResolveAddr(Module::Runtime, 0x180118260));
+
+    // --- LabelElement ---
+    fn_LabelElement_SetSprite = reinterpret_cast<fn_LabelElement_SetSprite_t>(
+        ResolveExport("?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z"));
+    if (!fn_LabelElement_SetSprite)
+        fn_LabelElement_SetSprite = reinterpret_cast<fn_LabelElement_SetSprite_t>(
+            ResolveAddr(Module::Runtime, 0x180042980));
+
+    // --- TextElement ---
+    fn_TextElement_SetText = reinterpret_cast<fn_TextElement_SetText_t>(
+        ResolveExport("?SetText@TextElement@UI@@QEAAXVString@2@@Z"));
+    if (!fn_TextElement_SetText)
+        fn_TextElement_SetText = reinterpret_cast<fn_TextElement_SetText_t>(
+            ResolveAddr(Module::Runtime, 0x180042070));
+
+    // ================================================================
+    // Phase A2: Exe Type IDs (.rdata pointers)
+    // ================================================================
+    g_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5d70));
+    // ProgressElement type ID: exref at 0x1401515b8 → pointer → uint32_t typeId
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401515b8));
+        if (exref && *exref) {
+            g_TypeId_ProgressElement = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    g_TypeId_BuildComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7318));
+    g_TypeId_ConsumeProduceComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7388));
+    g_TypeId_RadiusComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4870));
+    g_TypeId_BuildRequirementComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7f58));
+    g_TypeId_ResourceComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7040));
+    g_TypeId_ResourceType = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7cb8));
+    g_TypeId_DialogController = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c56e0));
+    g_TypeId_PageToggleUI = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4f00));
+    g_TypeId_MeshInstanceComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7e40));
+    g_TypeId_DestroyComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7628));
+    g_TypeId_WorkplaceComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c80e0));
+    g_TypeId_StorageLocationComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c8070));
+    g_TypeId_WorkplaceJobType = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c80a8));
+    g_TypeId_AttendanceSubComp = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c3f78));
+    g_TypeId_ResourceLimitType = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5520));
+    // CheckboxElement type ID: exref at 0x1401516a8 → pointer → uint32_t typeId
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
+        if (exref && *exref) {
+            g_TypeId_CheckboxElement = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    // UI element base type ID: exref at 0x1401514f8 (used by ControlUI::Slot4)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514f8));
+        if (exref && *exref) {
+            g_TypeId_UIElementBase = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    // ControlComponent type ID: direct uint32 at DAT_1401c4e20
+    g_TypeId_ControlComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4e20));
+
+    // ================================================================
+    // Phase A3: Game Singletons
+    // ================================================================
+    g_pGameWorldSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401c3dd8));
+    g_pKeyMapSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401c3de8));
+
+    // ================================================================
+    // Phase A4: Common Exe Functions (by RVA)
+    // ================================================================
+    fn_FindComponent_StateMachine = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x14000b6f0));
+    fn_FindComponent_Destroy = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140005780));
+    fn_FindComponent_Build = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
+    fn_FindComponent_MeshInstance = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140002f90));
+    fn_FindComponent_BuildState = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140003ea0));
+    fn_FindComponent_Workplace = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140003050));
+    fn_FindComponent_Attendance = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x1400105e0));
+    fn_FindComponent_Cemetery = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140010a00));
+
+    fn_ExeArrayResize = reinterpret_cast<fn_ExeArrayResize_t>(
+        ResolveAddr(Module::Exe, 0x1400032e0));
+    fn_ExeArrayResize2 = reinterpret_cast<fn_ExeArrayResize_t>(
+        ResolveAddr(Module::Exe, 0x1400021d0));
+    fn_ExeArrayPush = reinterpret_cast<fn_ExeArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140003600));
+
+    fn_StorageComponent_QueryCount = reinterpret_cast<fn_StorageComponent_QueryCount_t>(
+        ResolveAddr(Module::Exe, 0x14012cf10));
+    fn_RadiusCalc = reinterpret_cast<fn_RadiusCalc_t>(
+        ResolveAddr(Module::Exe, 0x140055430));
+    fn_RadiusDisplay_Remove = reinterpret_cast<fn_RadiusDisplay_Remove_t>(
+        ResolveAddr(Module::Exe, 0x1400b0d00));
+
+    fn_DestroyComponent_CanReclaim = reinterpret_cast<fn_DestroyQuery_t>(
+        ResolveAddr(Module::Exe, 0x14011e690));
+    fn_DestroyComponent_CanRebuild = reinterpret_cast<fn_DestroyQuery_t>(
+        ResolveAddr(Module::Exe, 0x14011e600));
+    fn_DestroyComponent_Reclaim = reinterpret_cast<fn_DestroyAction_t>(
+        ResolveAddr(Module::Exe, 0x14011e400));
+    fn_DestroyComponent_Rebuild = reinterpret_cast<fn_DestroyAction_t>(
+        ResolveAddr(Module::Exe, 0x14011e470));
+    fn_DestroyComponent_Destroy = reinterpret_cast<fn_DestroyAction_t>(
+        ResolveAddr(Module::Exe, 0x14011e4d0));
+
+    fn_GetActiveProductIndex = reinterpret_cast<fn_GetActiveProductIndex_t>(
+        ResolveAddr(Module::Exe, 0x140119470));
+    fn_StorageCountQuery = reinterpret_cast<fn_StorageCountQuery_t>(
+        ResolveAddr(Module::Exe, 0x14012e5c0));
+    fn_CropUI_PopulateCombo = reinterpret_cast<fn_CropUIPopulate_t>(
+        ResolveAddr(Module::Exe, 0x140078830));
+    fn_CropUI_GetExpectedCount = reinterpret_cast<fn_CropUIExpected_t>(
+        ResolveAddr(Module::Exe, 0x140078a40));
+    fn_CemeteryGetBurialCount = reinterpret_cast<fn_CemeteryBurialCount_t>(
+        ResolveAddr(Module::Exe, 0x140046dd0));
+
+    // FindComponentByTypeId — entity component array search (FUN_1400c3680)
+    fn_FindComponentByTypeId = reinterpret_cast<fn_FindComponentByTypeId_t>(
+        ResolveAddr(Module::Exe, 0x1400c3680));
+
+    // EntityTrackingSet_Remove — BST remove (FUN_14002c690)
+    fn_EntityTrackingSet_Remove = reinterpret_cast<fn_EntityTrackingSet_Remove_t>(
+        ResolveAddr(Module::Exe, 0x14002c690));
+
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
     g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
@@ -535,6 +1090,54 @@ bool EngineFuncsInit() {
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("  KeyMap::GetInputForId     = %p\n", (void*)fn_KeyMap_GetInputForId);
     printf("  KeyMap::GetDeviceForId    = %p\n", (void*)fn_KeyMap_GetDeviceForId);
+    printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
+    printf("  Elem::SetFlagsOnOff       = %p\n", (void*)fn_Element_SetFlagsOnOff);
+    printf("  Elem::SetElementId        = %p\n", (void*)fn_Element_SetElementId);
+    printf("  Elem::SetName             = %p\n", (void*)fn_Element_SetName);
+    printf("  Elem::SetToolTip          = %p\n", (void*)fn_Element_SetToolTip);
+    printf("  Elem::Child               = %p\n", (void*)fn_Element_Child);
+    printf("  Elem::ChildCount          = %p\n", (void*)fn_Element_ChildCount);
+    printf("  Elem::FindElementType     = %p\n", (void*)fn_Element_FindElementType);
+    printf("  DI::FindElement           = %p\n", (void*)fn_DialogInstance_FindElement);
+    printf("  DI::GetController         = %p\n", (void*)fn_DialogInstance_GetController);
+    printf("  DI::FindElementType       = %p\n", (void*)fn_DialogInstance_FindElementType);
+    printf("  DI::SetFlagsOnOff         = %p\n", (void*)fn_DialogInstance_SetFlagsOnOff);
+    printf("  Combo::AddItem            = %p\n", (void*)fn_ComboElement_AddItem);
+    printf("  Combo::SetCurrentItem     = %p\n", (void*)fn_ComboElement_SetCurrentItem);
+    printf("  Combo::GetItemCount       = %p\n", (void*)fn_ComboElement_GetItemCount);
+    printf("  Combo::GetCurrentItem     = %p\n", (void*)fn_ComboElement_GetCurrentItem);
+    printf("  Combo::RemoveAllItems     = %p\n", (void*)fn_ComboElement_RemoveAllItems);
+    printf("  Progress::SetTextParam    = %p\n", (void*)fn_ProgressElement_SetProgressTextParameter);
+    printf("  Progress::SetMaxValue     = %p\n", (void*)fn_ProgressElement_SetMaximumValue);
+    printf("  Progress::SetCurValue     = %p\n", (void*)fn_ProgressElement_SetCurrentValue);
+    printf("  Table::SetSize            = %p\n", (void*)fn_TableElement_SetSize);
+    printf("  Table::SetChild(3)        = %p\n", (void*)fn_TableElement_SetChild3);
+    printf("  NumEdit::SetValue         = %p\n", (void*)fn_NumberEditElement_SetValue);
+    printf("  NumElem::SetValue(int)    = %p\n", (void*)fn_NumberElement_SetValueInt);
+    printf("  Spinner::SetElementId     = %p\n", (void*)fn_SpinnerElement_SetElementId);
+    printf("  Image::SetSprite          = %p\n", (void*)fn_ImageElement_SetSprite);
+    printf("  Label::SetSprite          = %p\n", (void*)fn_LabelElement_SetSprite);
+    printf("  Text::SetText             = %p\n", (void*)fn_TextElement_SetText);
+    printf("[EngineFuncs] Phase A2 — Type IDs:\n");
+    printf("  BuildComponent            = %p -> 0x%x\n", (void*)g_TypeId_BuildComponent,
+           g_TypeId_BuildComponent ? *g_TypeId_BuildComponent : 0);
+    printf("  DestroyComponent          = %p -> 0x%x\n", (void*)g_TypeId_DestroyComponent,
+           g_TypeId_DestroyComponent ? *g_TypeId_DestroyComponent : 0);
+    printf("  MeshInstanceComponent     = %p -> 0x%x\n", (void*)g_TypeId_MeshInstanceComponent,
+           g_TypeId_MeshInstanceComponent ? *g_TypeId_MeshInstanceComponent : 0);
+    printf("[EngineFuncs] Phase A3 — Singletons:\n");
+    printf("  GameWorld                 = %p -> %p\n", (void*)g_pGameWorldSingleton,
+           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
+    printf("  KeyMap                    = %p -> %p\n", (void*)g_pKeyMapSingleton,
+           g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    printf("[EngineFuncs] Phase A4 — Exe Functions:\n");
+    printf("  FindComp_StateMachine     = %p\n", (void*)fn_FindComponent_StateMachine);
+    printf("  FindComp_Destroy          = %p\n", (void*)fn_FindComponent_Destroy);
+    printf("  FindComp_Build            = %p\n", (void*)fn_FindComponent_Build);
+    printf("  StorageQueryCount         = %p\n", (void*)fn_StorageComponent_QueryCount);
+    printf("  DestroyComp_Reclaim       = %p\n", (void*)fn_DestroyComponent_Reclaim);
+    printf("  DestroyComp_Rebuild       = %p\n", (void*)fn_DestroyComponent_Rebuild);
+    printf("  DestroyComp_Destroy       = %p\n", (void*)fn_DestroyComponent_Destroy);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,
