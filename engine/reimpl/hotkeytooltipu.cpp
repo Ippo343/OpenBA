@@ -30,14 +30,32 @@ static HookInfo g_hookDtor;
 static HookInfo g_hookSlot4;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor (scalar deleting destructor) — REIMPLEMENTED
+// Original: 0x140011E70. Sets vtable, calls base dtor, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "HotKeyToolTipUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+
+    // Cache resolved vtable address (exe .rdata, ASLR-adjusted)
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, HotKeyToolTipUIAddr::Vtable);
+
+    // Reset vtable to HotKeyToolTipUI vtable (C++ destruction order)
+    ((DialogController*)self)->vtable = s_vtable;
+
+    // Call base destructor
+    fn_DialogController_Dtor(self);
+
+    // Conditional free (scalar delete)
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
+// Slot4 (shutdown) — PASSTHROUGH (complex deps: KeyMap, key formatting, exe globals)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "HotKeyToolTipUI::Slot4";

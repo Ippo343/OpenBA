@@ -3272,30 +3272,64 @@ const ReimplEntry* GetReimplTable(int* outCount) {
 // Use for bisecting crashes: try 30 (engine core only), then 100, 200, etc.
 static constexpr int DEBUG_MAX_HOOKS = -1;
 
+// When non-null, only hooks whose name starts with one of these prefixes are installed.
+// Essential hooks (BuildNumber, PlatformConfigure) are always installed.
+// Set to nullptr to install all hooks normally.
+static const char* DEBUG_HOOK_FILTER[] = {
+    "HotKeyToolTipUI",
+    "TitleDescToolTipUI",
+    "ModBrowseUI",
+    nullptr  // sentinel
+};
+
+static bool HookPassesFilter(const char* name) {
+    // No filter = allow all
+    if (DEBUG_HOOK_FILTER[0] == nullptr) return true;
+    // Always allow essential system hooks
+    if (strncmp(name, "BuildNumber", 11) == 0) return true;
+    if (strncmp(name, "PlatformConfigure", 17) == 0) return true;
+    // Check against filter prefixes
+    for (int i = 0; DEBUG_HOOK_FILTER[i]; i++) {
+        size_t len = strlen(DEBUG_HOOK_FILTER[i]);
+        if (strncmp(name, DEBUG_HOOK_FILTER[i], len) == 0) return true;
+    }
+    return false;
+}
+
 void InstallHooks() {
     int limit = (DEBUG_MAX_HOOKS < 0) ? g_reimplCount : DEBUG_MAX_HOOKS;
     if (limit > g_reimplCount) limit = g_reimplCount;
 
 #ifdef _DEBUG
-    printf("[BanishedPatch] Installing %d/%d hooks/patches...\n", limit, g_reimplCount);
+    printf("[BanishedPatch] Installing hooks (filter %s)...\n",
+           DEBUG_HOOK_FILTER[0] ? "ACTIVE" : "off");
 #endif
 
+    int installed = 0;
     for (int i = 0; i < limit; i++) {
         auto& r = g_reimplementations[i];
-        if (r.enabled) {
-            r.install();
-#ifdef _DEBUG
-            printf("[BanishedPatch]   [%d] %s: installed\n", i, r.name);
-#endif
-        } else {
+        if (!r.enabled) {
 #ifdef _DEBUG
             printf("[BanishedPatch]   [%d] %s: DISABLED\n", i, r.name);
 #endif
+            continue;
         }
+        if (!HookPassesFilter(r.name)) {
+#ifdef _DEBUG
+            printf("[BanishedPatch]   [%d] %s: FILTERED\n", i, r.name);
+#endif
+            continue;
+        }
+        r.install();
+        installed++;
+#ifdef _DEBUG
+        printf("[BanishedPatch]   [%d] %s: installed\n", i, r.name);
+#endif
     }
 
 #ifdef _DEBUG
-    printf("[BanishedPatch] All hooks installed.\n");
+    printf("[BanishedPatch] %d hooks installed (%d total, %d filtered).\n",
+           installed, g_reimplCount, g_reimplCount - installed);
 #endif
 }
 

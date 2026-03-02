@@ -119,6 +119,16 @@ fn_Filename_GetPathFilename_t fn_Filename_GetPathFilename = nullptr;
 // Array<Mod> copy
 fn_ModArrayCopy_t fn_ModArrayCopy = nullptr;
 
+// UI infrastructure
+fn_DialogController_Dtor_t fn_DialogController_Dtor = nullptr;
+fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
+fn_FindElement_t fn_FindElement = nullptr;
+fn_TextElement_SetParameter_t fn_TextElement_SetParameter = nullptr;
+fn_Element_GetUserData_t fn_Element_GetUserData = nullptr;
+fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
+fn_KeyMap_GetInputForId_t fn_KeyMap_GetInputForId = nullptr;
+fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId = nullptr;
+
 // ============================================================
 // Engine globals
 // ============================================================
@@ -383,6 +393,72 @@ bool EngineFuncsInit() {
     fn_ModArrayCopy = reinterpret_cast<fn_ModArrayCopy_t>(
         ResolveAddr(Module::Runtime, 0x180010110));
 
+    // --- UI infrastructure ---
+
+    // UI::DialogController::~DialogController — virtual base dtor
+    fn_DialogController_Dtor = reinterpret_cast<fn_DialogController_Dtor_t>(
+        ResolveExport("??1DialogController@UI@@UEAA@XZ"));
+    if (!fn_DialogController_Dtor) {
+        fn_DialogController_Dtor = reinterpret_cast<fn_DialogController_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x1800cd2f0));
+    }
+
+    // System::MemoryAllocator::MemFree — static, single arg
+    fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
+        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+    if (!fn_MemFreeStatic) {
+        fn_MemFreeStatic = reinterpret_cast<fn_MemFreeStatic_t>(
+            ResolveAddr(Module::Runtime, 0x1800c7ad0));
+    }
+
+    // UI::Element::FindElement — non-trivial return ABI
+    fn_FindElement = reinterpret_cast<fn_FindElement_t>(
+        ResolveExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
+    if (!fn_FindElement) {
+        fn_FindElement = reinterpret_cast<fn_FindElement_t>(
+            ResolveAddr(Module::Runtime, 0x180115650));
+    }
+
+    // UI::TextElement::SetParameter
+    fn_TextElement_SetParameter = reinterpret_cast<fn_TextElement_SetParameter_t>(
+        ResolveExport("?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z"));
+    if (!fn_TextElement_SetParameter) {
+        fn_TextElement_SetParameter = reinterpret_cast<fn_TextElement_SetParameter_t>(
+            ResolveAddr(Module::Runtime, 0x18011e9b0));
+    }
+
+    // UI::Element::GetUserData
+    fn_Element_GetUserData = reinterpret_cast<fn_Element_GetUserData_t>(
+        ResolveExport("?GetUserData@Element@UI@@QEAAPEAVBase@Object@@XZ"));
+    if (!fn_Element_GetUserData) {
+        fn_Element_GetUserData = reinterpret_cast<fn_Element_GetUserData_t>(
+            ResolveAddr(Module::Runtime, 0x180115550));
+    }
+
+    // Object::InternalBasePtr::InternalBasePtr(Internal*)
+    fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
+        ResolveExport("??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z"));
+    if (!fn_InternalBasePtr_Ctor) {
+        fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800062a0));
+    }
+
+    // Input::KeyMap::GetInputForId
+    fn_KeyMap_GetInputForId = reinterpret_cast<fn_KeyMap_GetInputForId_t>(
+        ResolveExport("?GetInputForId@KeyMap@Input@@QEBAHHH@Z"));
+    if (!fn_KeyMap_GetInputForId) {
+        fn_KeyMap_GetInputForId = reinterpret_cast<fn_KeyMap_GetInputForId_t>(
+            ResolveAddr(Module::Runtime, 0x1800a7930));
+    }
+
+    // Input::KeyMap::GetDeviceForId
+    fn_KeyMap_GetDeviceForId = reinterpret_cast<fn_KeyMap_GetDeviceForId_t>(
+        ResolveExport("?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z"));
+    if (!fn_KeyMap_GetDeviceForId) {
+        fn_KeyMap_GetDeviceForId = reinterpret_cast<fn_KeyMap_GetDeviceForId_t>(
+            ResolveAddr(Module::Runtime, 0x1800a7970));
+    }
+
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
     g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
@@ -450,6 +526,15 @@ bool EngineFuncsInit() {
     printf("  Persistence::SetInt       = %p\n", (void*)fn_Persistence_SetInt);
     printf("  Filename::GetPathFilename = %p\n", (void*)fn_Filename_GetPathFilename);
     printf("  ModArrayCopy              = %p\n", (void*)fn_ModArrayCopy);
+    printf("[EngineFuncs] UI infrastructure:\n");
+    printf("  DialogController::~Dtor   = %p\n", (void*)fn_DialogController_Dtor);
+    printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
+    printf("  FindElement               = %p\n", (void*)fn_FindElement);
+    printf("  TextElement::SetParameter = %p\n", (void*)fn_TextElement_SetParameter);
+    printf("  Element::GetUserData      = %p\n", (void*)fn_Element_GetUserData);
+    printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
+    printf("  KeyMap::GetInputForId     = %p\n", (void*)fn_KeyMap_GetInputForId);
+    printf("  KeyMap::GetDeviceForId    = %p\n", (void*)fn_KeyMap_GetDeviceForId);
     printf("[EngineFuncs] Globals:\n");
     printf("  _loader                   = %p\n", g_pLoader);
     printf("  _loader.m_flags           = %p -> 0x%x\n", (void*)g_pLoaderFlags,

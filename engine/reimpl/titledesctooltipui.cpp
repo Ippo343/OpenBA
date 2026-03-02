@@ -33,18 +33,31 @@ static HookInfo g_hookScalarDtor;
 static HookInfo g_hookSerialize;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
-typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
+#include "ui/ui_panels.h"
+
+// ScalarDtor — REIMPLEMENTED
+// Original: 0x140014510. Sets vtable, calls base dtor, conditional free.
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "TitleDescToolTipUI::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, TitleDescToolTipUIAddr::Vtable);
+
+    ((DialogController*)self)->vtable = s_vtable;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize (vtable +0x20) — REIMPLEMENTED (clean code in engine/src/ui/)
+// Original: 0x14007b730. Reads user data and sets title/desc text elements.
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TitleDescToolTipUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    TitleDescToolTipUI_Serialize((TitleDescToolTipUI*)self);
 }
 
 // ============================================================

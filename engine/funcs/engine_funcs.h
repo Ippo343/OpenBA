@@ -298,6 +298,46 @@ extern HANDLE* g_pLoaderCompletionEvent;
 extern void** g_pAppSingleton;
 
 // ============================================================
+// UI infrastructure (DialogController, Element, TextElement)
+// ============================================================
+
+// UI::DialogController::~DialogController(this) — virtual base dtor
+// Resets vtable to DialogController, calls Internal::~Internal
+typedef void (*fn_DialogController_Dtor_t)(void* self);
+extern fn_DialogController_Dtor_t fn_DialogController_Dtor;
+
+// System::MemoryAllocator::MemFree(ptr) — static, gets singleton internally
+// Used by scalar deleting destructors for conditional free
+typedef void (*fn_MemFreeStatic_t)(void* ptr);
+extern fn_MemFreeStatic_t fn_MemFreeStatic;
+
+// UI::Element::FindElement(retval, this, stringName) — non-trivial return ABI
+// RCX=retval(InternalPtr<Element>*), RDX=this(Element*), R8=name(String const&)
+// Recursively searches element tree by name. Returns InternalPtr to found element.
+typedef void* (*fn_FindElement_t)(void* retval, void* thisElement, const void* stringName);
+extern fn_FindElement_t fn_FindElement;
+
+// UI::TextElement::SetParameter(this, index, string) — set text param by index
+typedef void (*fn_TextElement_SetParameter_t)(void* self, int index, const void* str);
+extern fn_TextElement_SetParameter_t fn_TextElement_SetParameter;
+
+// UI::Element::GetUserData(this) -> Base* — returns *(Base**)(this + 0x80)
+typedef void* (*fn_Element_GetUserData_t)(void* self);
+extern fn_Element_GetUserData_t fn_Element_GetUserData;
+
+// Object::InternalBasePtr::InternalBasePtr(this, Internal*) — stores ptr
+typedef void* (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
+extern fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor;
+
+// Input::KeyMap::GetInputForId(this, id, slot) -> int
+typedef int (*fn_KeyMap_GetInputForId_t)(void* self, int id, int slot);
+extern fn_KeyMap_GetInputForId_t fn_KeyMap_GetInputForId;
+
+// Input::KeyMap::GetDeviceForId(this, id, slot) -> int
+typedef int (*fn_KeyMap_GetDeviceForId_t)(void* self, int id, int slot);
+extern fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId;
+
+// ============================================================
 // Initialization
 // ============================================================
 
