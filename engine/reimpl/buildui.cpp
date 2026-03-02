@@ -38,7 +38,16 @@ static HookInfo g_hookSlot9;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "BuildUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, BuildUIAddr::Vtable);
+    ((DialogController*)self)->vtable = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0x30));
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Slot4_t)(void* self);
@@ -53,10 +62,11 @@ static void Reimpl_Slot7(void* self) {
     ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
+// Slot9 — REIMPLEMENTED (toggles workplace enabled state)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "BuildUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    BuildUI_Slot9((BuildUI*)self, param2, param3, param4);
 }
 
 // ============================================================

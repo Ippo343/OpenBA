@@ -40,14 +40,25 @@ static HookInfo g_hookSlot7;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "LoaderDialog::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, LoaderDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-// Slot4 (0x1400B2D90) — Setup: finds loadingImage element
+// Slot4 (0x1400B2D90) — Setup: finds "loadingImage" element, stores at +0xB8
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "LoaderDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t nameStr[8];
+    fn_String_Ctor_CStr(nameStr, "loadingImage");
+    uint8_t retBuf[16];
+    fn_DialogInstance_FindElement(retBuf, self, nameStr);
+    *(void**)(s + 0xB8) = *(void**)retBuf;
+    fn_String_Dtor(nameStr);
 }
 
 // Slot6 (0x1400B2D00) — Draw: applies rotation to loading spinner

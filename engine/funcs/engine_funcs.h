@@ -306,6 +306,11 @@ extern void** g_pAppSingleton;
 typedef void (*fn_DialogController_Dtor_t)(void* self);
 extern fn_DialogController_Dtor_t fn_DialogController_Dtor;
 
+// UI::DialogInstance::~DialogInstance(this) — virtual base dtor
+// Resets vtable to DialogInstance, cleans up dialog fields, calls Internal::~Internal
+typedef void (*fn_DialogInstance_Dtor_t)(void* self);
+extern fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor;
+
 // System::MemoryAllocator::MemFree(ptr) — static, gets singleton internally
 // Used by scalar deleting destructors for conditional free
 typedef void (*fn_MemFreeStatic_t)(void* ptr);
@@ -602,8 +607,8 @@ extern fn_ExeArrayPush_t fn_ExeArrayPush;       // FUN_140003600
 typedef int (*fn_StorageComponent_QueryCount_t)(void* storageComp);
 extern fn_StorageComponent_QueryCount_t fn_StorageComponent_QueryCount;  // 0x14012cf10
 
-// Radius calculation helper
-typedef void (*fn_RadiusCalc_t)(void* component, int tileIndex);
+// Radius calculation helper (returns radius display index)
+typedef int (*fn_RadiusCalc_t)(void* component, int tileIndex);
 extern fn_RadiusCalc_t fn_RadiusCalc;           // FUN_140055430
 
 // RadiusDisplayManager::Remove(radiusMgr, index)
@@ -681,6 +686,37 @@ extern fn_FindComponentByTypeId_t fn_FindComponentByTypeId;
 // FUN_14002c690: BST remove by InternalBasePtr key
 typedef void (*fn_EntityTrackingSet_Remove_t)(void* bstRoot, void* key);
 extern fn_EntityTrackingSet_Remove_t fn_EntityTrackingSet_Remove;
+
+// FindComponent_Immigration — finds ImmigrationComponent on entity (DAT_1401c4480)
+extern fn_FindComponent_t fn_FindComponent_Immigration;  // FUN_140012020
+
+// WorkplaceComponent_Toggle(comp, newState) — toggles workplace enabled/disabled
+// FUN_14012fc00: 166-line function, called as opaque function pointer
+typedef void (*fn_WorkplaceComponent_Toggle_t)(void* comp, bool newState);
+extern fn_WorkplaceComponent_Toggle_t fn_WorkplaceComponent_Toggle;
+
+// FindComponent_Orchard — finds OrchardComponent on entity (DAT_1401c46b0)
+// Searches entity component array at +0x30/+0x38 for OrchardComponent type ID.
+extern fn_FindComponent_t fn_FindComponent_Orchard;  // FUN_140005440
+
+// OrchardComponent_GetGrowth(comp) — returns average growth ratio as float [0.0, 1.0]
+// FUN_140051640: iterates orchard slots, averages growth values
+typedef float (*fn_OrchardGetGrowth_t)(void* comp);
+extern fn_OrchardGetGrowth_t fn_OrchardGetGrowth;
+
+// FindComponent_Pasture — finds PastureComponent on entity (DAT_1401c7ba0)
+// Searches entity component array at +0x30/+0x38 for PastureComponent type ID.
+extern fn_FindComponent_t fn_FindComponent_Pasture;  // FUN_140004fe0
+
+// PastureComponent_CalcMaxCount(comp) — calculates max animal count from pasture dimensions
+// FUN_140128570: reads build size, divides area by per-animal tile requirement
+typedef uint32_t (*fn_PastureCalcMaxCount_t)(void* comp);
+extern fn_PastureCalcMaxCount_t fn_PastureCalcMaxCount;
+
+// PastureUI_UpdateSlider(self) — updates slider min/max/value from component state
+// FUN_1400b4fa0: finds PastureComponent, sets slider element fields
+typedef void (*fn_PastureUI_UpdateSlider_t)(void* self);
+extern fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider;
 
 // ============================================================
 // Initialization

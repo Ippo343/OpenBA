@@ -18,8 +18,9 @@
 // ============================================================
 
 namespace AchievementDialogAddr {
-    constexpr uintptr_t Factory = 0x140010320;
-    constexpr uintptr_t Vtable  = 0x14015b020;
+    constexpr uintptr_t Factory          = 0x140010320;
+    constexpr uintptr_t Vtable           = 0x14015b020;
+    constexpr uintptr_t SecondaryVtable  = 0x14015b070; // DialogController secondary vtable
 }
 
 namespace AutoSaveDialogAddr {

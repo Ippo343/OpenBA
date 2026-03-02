@@ -47,7 +47,15 @@ static HookInfo g_hookSlot12;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "OrchardUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    static void* s_baseVtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, OrchardUIAddr::Vtable);
+    if (!s_baseVtable) s_baseVtable = (void*)ResolveAddr(Module::Exe, CropUIAddr::Vtable);
+    ((DialogController*)self)->vtable = s_vtable;
+    ((DialogController*)self)->vtable = s_baseVtable;  // SelectResourceUI base
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Slot4_t)(void* self);
@@ -56,10 +64,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 — REIMPLEMENTED (updates growth progress bar)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "OrchardUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    OrchardUI_Slot7((OrchardUI*)self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
@@ -74,16 +83,16 @@ static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int p
     ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
 }
 
-typedef void (*fn_Slot11_t)(void* self, int64_t param2);
+// Slot11 — REIMPLEMENTED (sets crop/resource type on component)
 static void Reimpl_Slot11(void* self, int64_t param2) {
     g_lastHook = "OrchardUI::Slot11";
-    ((fn_Slot11_t)g_hookSlot11.trampoline)(self, param2);
+    OrchardUI_Slot11((OrchardUI*)self, param2);
 }
 
-typedef void (*fn_Slot12_t)(void* self, int64_t param2);
-static void Reimpl_Slot12(void* self, int64_t param2) {
+// Slot12 — REIMPLEMENTED (gets crop/resource type from component)
+static void* Reimpl_Slot12(void* self, void* param2) {
     g_lastHook = "OrchardUI::Slot12";
-    ((fn_Slot12_t)g_hookSlot12.trampoline)(self, param2);
+    return OrchardUI_Slot12((OrchardUI*)self, param2);
 }
 
 // ============================================================

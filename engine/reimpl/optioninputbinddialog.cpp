@@ -44,10 +44,16 @@ static HookInfo g_hookOnButton3;
 // ============================================================
 
 // Slot 0: ScalarDtor(this, flags)
+// Sets MessageDialog vtable (parent class), no cleanup fields, calls DialogInstance dtor
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "OptionInputBindDialog::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, OptionInputBindDialogAddr::BaseVtable);
+    *(void**)self = s_vtable;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot 4: Startup(this) — set up input bind dialog UI

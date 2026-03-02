@@ -121,6 +121,7 @@ fn_ModArrayCopy_t fn_ModArrayCopy = nullptr;
 
 // UI infrastructure (existing)
 fn_DialogController_Dtor_t fn_DialogController_Dtor = nullptr;
+fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor = nullptr;
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_FindElement_t fn_FindElement = nullptr;
 fn_TextElement_SetParameter_t fn_TextElement_SetParameter = nullptr;
@@ -280,6 +281,22 @@ fn_StorageCountQuery_t fn_StorageCountQuery = nullptr;
 fn_CropUIPopulate_t fn_CropUI_PopulateCombo = nullptr;
 fn_CropUIExpected_t fn_CropUI_GetExpectedCount = nullptr;
 fn_CemeteryBurialCount_t fn_CemeteryGetBurialCount = nullptr;
+
+// FindComponent_Immigration (ImmigrationComponent, FUN_140012020)
+fn_FindComponent_t fn_FindComponent_Immigration = nullptr;
+// WorkplaceComponent_Toggle (FUN_14012fc00)
+fn_WorkplaceComponent_Toggle_t fn_WorkplaceComponent_Toggle = nullptr;
+
+// FindComponent_Orchard (OrchardComponent, FUN_140005440)
+fn_FindComponent_t fn_FindComponent_Orchard = nullptr;
+// OrchardComponent_GetGrowth (FUN_140051640)
+fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
+// FindComponent_Pasture (PastureComponent, FUN_140004fe0)
+fn_FindComponent_t fn_FindComponent_Pasture = nullptr;
+// PastureComponent_CalcMaxCount (FUN_140128570)
+fn_PastureCalcMaxCount_t fn_PastureCalcMaxCount = nullptr;
+// PastureUI_UpdateSlider (FUN_1400b4fa0)
+fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider = nullptr;
 
 // ============================================================
 // Engine globals
@@ -553,6 +570,14 @@ bool EngineFuncsInit() {
     if (!fn_DialogController_Dtor) {
         fn_DialogController_Dtor = reinterpret_cast<fn_DialogController_Dtor_t>(
             ResolveAddr(Module::Runtime, 0x1800cd2f0));
+    }
+
+    // UI::DialogInstance::~DialogInstance — virtual base dtor
+    fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
+        ResolveExport("??1DialogInstance@UI@@UEAA@XZ"));
+    if (!fn_DialogInstance_Dtor) {
+        fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x180114d40));
     }
 
     // System::MemoryAllocator::MemFree — static, single arg
@@ -1013,6 +1038,30 @@ bool EngineFuncsInit() {
     // EntityTrackingSet_Remove — BST remove (FUN_14002c690)
     fn_EntityTrackingSet_Remove = reinterpret_cast<fn_EntityTrackingSet_Remove_t>(
         ResolveAddr(Module::Exe, 0x14002c690));
+
+    // FindComponent_Immigration — FUN_140012020 (searches for DAT_1401c4480)
+    fn_FindComponent_Immigration = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140012020));
+
+    // WorkplaceComponent_Toggle — FUN_14012fc00 (toggles workplace enabled state)
+    fn_WorkplaceComponent_Toggle = reinterpret_cast<fn_WorkplaceComponent_Toggle_t>(
+        ResolveAddr(Module::Exe, 0x14012fc00));
+
+    // FindComponent_Orchard — FUN_140005440 (searches entity +0x30/+0x38 for DAT_1401c46b0)
+    fn_FindComponent_Orchard = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140005440));
+    // OrchardComponent_GetGrowth — FUN_140051640 (returns average growth ratio)
+    fn_OrchardGetGrowth = reinterpret_cast<fn_OrchardGetGrowth_t>(
+        ResolveAddr(Module::Exe, 0x140051640));
+    // FindComponent_Pasture — FUN_140004fe0 (searches for DAT_1401c7ba0)
+    fn_FindComponent_Pasture = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140004fe0));
+    // PastureComponent_CalcMaxCount — FUN_140128570
+    fn_PastureCalcMaxCount = reinterpret_cast<fn_PastureCalcMaxCount_t>(
+        ResolveAddr(Module::Exe, 0x140128570));
+    // PastureUI_UpdateSlider — FUN_1400b4fa0
+    fn_PastureUI_UpdateSlider = reinterpret_cast<fn_PastureUI_UpdateSlider_t>(
+        ResolveAddr(Module::Exe, 0x1400b4fa0));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

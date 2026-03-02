@@ -47,7 +47,15 @@ static HookInfo g_hookSlot12;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "PastureUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    static void* s_baseVtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, PastureUIAddr::Vtable);
+    if (!s_baseVtable) s_baseVtable = (void*)ResolveAddr(Module::Exe, CropUIAddr::Vtable);
+    ((DialogController*)self)->vtable = s_vtable;
+    ((DialogController*)self)->vtable = s_baseVtable;  // SelectResourceUI base
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Slot4_t)(void* self);
@@ -74,16 +82,17 @@ static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int p
     ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
 }
 
-typedef void (*fn_Slot11_t)(void* self, int64_t param2);
+// Slot11 — REIMPLEMENTED (sets animal/resource type, updates slider)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot11(void* self, int64_t param2) {
     g_lastHook = "PastureUI::Slot11";
-    ((fn_Slot11_t)g_hookSlot11.trampoline)(self, param2);
+    PastureUI_Slot11((PastureUI*)self, param2);
 }
 
-typedef void (*fn_Slot12_t)(void* self, int64_t param2);
-static void Reimpl_Slot12(void* self, int64_t param2) {
+// Slot12 — REIMPLEMENTED (gets animal/resource type from component)
+static void* Reimpl_Slot12(void* self, void* param2) {
     g_lastHook = "PastureUI::Slot12";
-    ((fn_Slot12_t)g_hookSlot12.trampoline)(self, param2);
+    return PastureUI_Slot12((PastureUI*)self, param2);
 }
 
 // ============================================================

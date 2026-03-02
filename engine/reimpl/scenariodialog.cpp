@@ -39,10 +39,20 @@ static HookInfo g_hookSlot8;
 // ============================================================
 
 // Slot0 Dtor (0x140013AF0)
+// Cleanup: free dynamic array at +0xD8, zero +0xD8/+0xE0
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ScenarioDialog::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ScenarioDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0xD8));
+    *(uint64_t*)(s + 0xD8) = 0;
+    *(uint64_t*)(s + 0xE0) = 0;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot4 (0x140078010) — Setup: populates scenario list with available scenarios

@@ -52,11 +52,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot5 — PASSTHROUGH (complex deps: entity component lookup, coordinate math, exe globals)
-typedef void (*fn_Slot5_t)(void* self);
+// Slot5 — REIMPLEMENTED (calculates radius overlay from building center)
+#include "ui/ui_panels.h"
 static void Reimpl_Slot5(void* self) {
     g_lastHook = "RadiusUI::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
+    RadiusUI_Slot5((RadiusUI*)self);
 }
 
 // Slot6 — REIMPLEMENTED (removes radius overlay, resets index)

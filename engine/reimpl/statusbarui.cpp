@@ -40,7 +40,25 @@ static HookInfo g_hookOnRemove;
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "StatusBarUI::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, StatusBarUIAddr::Vtable);
+    ((DialogController*)self)->vtable = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0x138));
+    *(uint64_t*)(s + 0x138) = 0;
+    *(uint64_t*)(s + 0x140) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0x128));
+    *(uint64_t*)(s + 0x128) = 0;
+    *(uint64_t*)(s + 0x130) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0x118));
+    *(uint64_t*)(s + 0x118) = 0;
+    *(uint64_t*)(s + 0x120) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0x108));
+    *(uint64_t*)(s + 0x108) = 0;
+    *(uint64_t*)(s + 0x110) = 0;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Draw_t)(void* self);

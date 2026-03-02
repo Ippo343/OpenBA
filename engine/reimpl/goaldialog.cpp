@@ -38,10 +38,20 @@ static HookInfo g_hookSlot8;
 // ============================================================
 
 // Slot0 Dtor (0x140011C10)
+// Cleanup: free dynamic array at +0xB8, zero +0xB8/+0xC0
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "GoalDialog::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, GoalDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0xB8));
+    *(uint64_t*)(s + 0xB8) = 0;
+    *(uint64_t*)(s + 0xC0) = 0;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot4 (0x140069810) — Setup: populates goal table with achievements/goals
@@ -62,7 +72,12 @@ static void Reimpl_Slot6(void* self) {
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
     g_lastHook = "GoalDialog::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
+    if (msg == 0x12 && id == 100) {
+        uintptr_t s = (uintptr_t)self;
+        uint8_t basePtr[16];
+        fn_InternalBasePtr_Ctor(basePtr, self);
+        fn_UI_CloseDialog(*(void**)(s + 0x10), basePtr);
+    }
 }
 
 // ============================================================

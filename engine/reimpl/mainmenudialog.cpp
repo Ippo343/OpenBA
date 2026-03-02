@@ -44,7 +44,12 @@ static HookInfo g_hookSlot10;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "MainMenuDialog::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, MainMenuDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot4 (0x1400B3CD0) — Setup: initializes main menu UI, buttons, events
@@ -68,11 +73,13 @@ static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
 }
 
-// Slot10 (0x140020CB0) — Secondary dtor
+// Slot10 (0x140020CB0) — Secondary dtor: DialogInstance dtor + conditional free
 typedef void* (*fn_Slot10_t)(void* self, uint32_t flags);
 static void* Reimpl_Slot10(void* self, uint32_t flags) {
     g_lastHook = "MainMenuDialog::Slot10";
-    return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, flags);
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // ============================================================

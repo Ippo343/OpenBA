@@ -19,6 +19,9 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self);
 // RadiusUI
 // ============================================================
 
+// Slot5 (vtable +0x28): Calculates radius overlay from building center tile.
+void RadiusUI_Slot5(RadiusUI* self);
+
 // Slot6 (vtable +0x30): Removes active radius overlay and resets index.
 void RadiusUI_Slot6(RadiusUI* self);
 
@@ -85,6 +88,9 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t param2, int param3, int param4);
 
 // Slot4 (vtable +0x20): Finds text/button elements, sets button IDs.
 void ImmigrationUI_Slot4(ImmigrationUI* self);
+
+// Slot7 (vtable +0x38): Updates immigration count, enables buttons when build complete.
+void ImmigrationUI_Slot7(ImmigrationUI* self);
 
 // ============================================================
 // WorkplaceUI
@@ -179,8 +185,38 @@ void ControlUI_Slot7(ControlUI* self);
 void ControlUI_Slot9(ControlUI* self, uint64_t param2, int param3, int param4);
 
 // ============================================================
+// BuildUI
+// ============================================================
+
+// Slot9 (vtable +0x48): On button click, toggles workplace enabled state.
+void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4);
+
+// ============================================================
 // EntityUI
 // ============================================================
 
 // Slot6 (vtable +0x30): Removes entity from world tracking set.
 void EntityUI_Slot6(EntityUI* self);
+
+// ============================================================
+// OrchardUI
+// ============================================================
+
+// Slot7 (vtable +0x38): Updates growth progress bar with percentage text.
+void OrchardUI_Slot7(OrchardUI* self);
+
+// Slot11 (vtable +0x58): Sets crop/resource type on OrchardComponent.
+void OrchardUI_Slot11(OrchardUI* self, int64_t param2);
+
+// Slot12 (vtable +0x60): Gets crop/resource type from OrchardComponent.
+void* OrchardUI_Slot12(OrchardUI* self, void* param2);
+
+// ============================================================
+// PastureUI
+// ============================================================
+
+// Slot11 (vtable +0x58): Sets animal/resource type, recalcs max count, updates slider.
+void PastureUI_Slot11(PastureUI* self, int64_t param2);
+
+// Slot12 (vtable +0x60): Gets animal/resource type from PastureComponent.
+void* PastureUI_Slot12(PastureUI* self, void* param2);

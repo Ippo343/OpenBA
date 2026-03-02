@@ -39,7 +39,16 @@ static HookInfo g_hookStartup;
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "StorageUI::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, StorageUIAddr::Vtable);
+    ((DialogController*)self)->vtable = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0x30));
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Serialize_t)(void* self);

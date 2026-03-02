@@ -40,7 +40,25 @@ static HookInfo g_hookSlot9;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CitizenUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, CitizenUIAddr::Vtable);
+    ((DialogController*)self)->vtable = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0xD0));
+    *(uint64_t*)(s + 0xD0) = 0;
+    *(uint64_t*)(s + 0xD8) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0xC0));
+    *(uint64_t*)(s + 0xC0) = 0;
+    *(uint64_t*)(s + 0xC8) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0xB0));
+    *(uint64_t*)(s + 0xB0) = 0;
+    *(uint64_t*)(s + 0xB8) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0xA0));
+    *(uint64_t*)(s + 0xA0) = 0;
+    *(uint64_t*)(s + 0xA8) = 0;
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Slot4_t)(void* self);

@@ -49,7 +49,12 @@ static HookInfo g_hookSlot13;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "MessageDialog::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, MessageDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot4 (0x14006D140) — Setup: finds button elements by name
@@ -59,29 +64,38 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
+// Helper: set dialog result at +0x24, then close via InternalBasePtr + CloseDialog
+static void MessageDialog_SetResultAndClose(void* self, int32_t result) {
+    uintptr_t s = (uintptr_t)self;
+    *(int32_t*)(s + 0x24) = result;
+    uint8_t basePtr[16];
+    fn_InternalBasePtr_Ctor(basePtr, self);
+    fn_UI_CloseDialog(*(void**)(s + 0x10), basePtr);
+}
+
 // Slot10 (0x14006CFF0) — ButtonOk: result=1, close
 typedef void (*fn_ButtonResult_t)(void* self);
 static void Reimpl_Slot10(void* self) {
     g_lastHook = "MessageDialog::Slot10";
-    ((fn_ButtonResult_t)g_hookSlot10.trampoline)(self);
+    MessageDialog_SetResultAndClose(self, 1);
 }
 
 // Slot11 (0x14006D030) — ButtonCancel: result=0, close
 static void Reimpl_Slot11(void* self) {
     g_lastHook = "MessageDialog::Slot11";
-    ((fn_ButtonResult_t)g_hookSlot11.trampoline)(self);
+    MessageDialog_SetResultAndClose(self, 0);
 }
 
 // Slot12 (0x14006CFB0) — ButtonYes: result=2, close
 static void Reimpl_Slot12(void* self) {
     g_lastHook = "MessageDialog::Slot12";
-    ((fn_ButtonResult_t)g_hookSlot12.trampoline)(self);
+    MessageDialog_SetResultAndClose(self, 2);
 }
 
 // Slot13 (0x14006CF70) — ButtonNo: result=3, close
 static void Reimpl_Slot13(void* self) {
     g_lastHook = "MessageDialog::Slot13";
-    ((fn_ButtonResult_t)g_hookSlot13.trampoline)(self);
+    MessageDialog_SetResultAndClose(self, 3);
 }
 
 // ============================================================

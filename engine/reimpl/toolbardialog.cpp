@@ -36,10 +36,26 @@ static HookInfo g_hookOnEvent;
 // ============================================================
 
 // Slot 0: ScalarDtor(this, flags)
+// Heavy cleanup: 3 dynamic arrays freed in reverse order (+0xF8, +0xD0, +0xC0)
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "ToolbarDialog::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ToolbarDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0xF8));
+    *(uint64_t*)(s + 0xF8) = 0;
+    *(uint64_t*)(s + 0x100) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0xD0));
+    *(uint64_t*)(s + 0xD0) = 0;
+    *(uint64_t*)(s + 0xD8) = 0;
+    fn_MemFreeStatic(*(void**)(s + 0xC0));
+    *(uint64_t*)(s + 0xC0) = 0;
+    *(uint64_t*)(s + 0xC8) = 0;
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot 6: Update(this, param2, param3, param4) — sync toolbar buttons with game state
