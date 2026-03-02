@@ -29,8 +29,8 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     fn_String_Ctor_CStr(nameBuf, "icons");
 
     uint64_t findResult = 0;
-    // fn_FindElement has non-trivial return: RCX=retval, RDX=this, R8=name
-    fn_FindElement(&findResult, dialogElem, nameBuf);
+    // fn_FindElement: member with non-trivial return: RCX=this, RDX=retval, R8=name
+    fn_FindElement(dialogElem, &findResult, nameBuf);
 
     // Dereference InternalPtr result to get raw Element*
     // The original does IsDerivedFrom check here, but we skip it
@@ -54,7 +54,7 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     for (int i = 0; i < storedCount; i++) {
         // Element::Child returns InternalPtr<Element> via non-trivial return
         uint64_t childResult = 0;
-        fn_Element_Child(&childResult, iconsElem, i);
+        fn_Element_Child(iconsElem, &childResult, i);
 
         // Copy 8-byte InternalPtr into array slot
         uint64_t* arrayBase = *(uint64_t**)((uintptr_t)self + 0x30);
@@ -100,7 +100,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
             // Get PageToggleUI controller from dialog instance
             void* dialogInst = *(void**)((uintptr_t)self + 0x18);
             uint64_t ctrlResult = 0;
-            fn_DialogInstance_GetController(&ctrlResult, dialogInst, 0);
+            fn_DialogInstance_GetController(dialogInst, &ctrlResult, 0);
 
             void* pageToggle = nullptr;
             if (ctrlResult != 0) {

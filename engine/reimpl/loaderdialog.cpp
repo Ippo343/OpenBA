@@ -56,7 +56,7 @@ static void Reimpl_Slot4(void* self) {
     uint8_t nameStr[8];
     fn_String_Ctor_CStr(nameStr, "loadingImage");
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(retBuf, self, nameStr);
+    fn_DialogInstance_FindElement(self, retBuf, nameStr);
     *(void**)(s + 0xB8) = *(void**)retBuf;
     fn_String_Dtor(nameStr);
 }

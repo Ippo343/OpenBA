@@ -994,6 +994,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140004680));
     fn_FindComponent_MeshInstance = reinterpret_cast<fn_FindComponent_t>(
         ResolveAddr(Module::Exe, 0x140002f90));
+    fn_FindComponent_Storage = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140006270));
     fn_FindComponent_BuildState = reinterpret_cast<fn_FindComponent_t>(
         ResolveAddr(Module::Exe, 0x140003ea0));
     fn_FindComponent_Workplace = reinterpret_cast<fn_FindComponent_t>(

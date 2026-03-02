@@ -16,7 +16,7 @@ static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
     fn_String_Ctor_CStr(nameBuf, name);
 
     uint64_t foundResult = 0;
-    fn_FindElement(&foundResult, (void*)*(uint64_t*)(self + 0x20), nameBuf);
+    fn_FindElement((void*)*(uint64_t*)(self + 0x20), &foundResult, nameBuf);
 
     void* found = (void*)foundResult;
     void* checked = nullptr;
@@ -51,7 +51,7 @@ void TutorialUI_Serialize(TutorialUI* self) {
     char closeName[8] = {};
     fn_String_Ctor_CStr(closeName, "buttonClose");
     uint64_t closeElem = 0;
-    fn_DialogInstance_FindElement(&closeElem, (void*)*(uint64_t*)(s + 0x18), closeName);
+    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &closeElem, closeName);
     // SetFlagsOnOff(elem, hideFlags=1, showFlags=0) — hide element
     fn_Element_SetFlagsOnOff((void*)closeElem, 1, 0);
     fn_String_Dtor(closeName);

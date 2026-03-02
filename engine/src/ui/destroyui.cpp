@@ -19,7 +19,7 @@ static uint64_t FindElemByName(void* dialogElem, const char* name) {
     fn_String_Ctor_CStr(nameBuf, name);
 
     uint64_t result = 0;
-    fn_FindElement(&result, dialogElem, nameBuf);
+    fn_FindElement(dialogElem, &result, nameBuf);
 
     fn_String_Dtor(nameBuf);
     return result;

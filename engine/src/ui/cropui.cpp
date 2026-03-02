@@ -30,7 +30,7 @@ void CropUI_Slot4(CropUI* self) {
     fn_String_Ctor_CStr(nameBuf, "selectResource");
 
     uint8_t elemBuf[8] = {0};
-    fn_DialogInstance_FindElement(elemBuf, dialogInst, nameBuf);
+    fn_DialogInstance_FindElement(dialogInst, elemBuf, nameBuf);
     void* foundElem = *(void**)elemBuf;
     fn_String_Dtor(nameBuf);
 

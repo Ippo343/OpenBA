@@ -16,7 +16,7 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
     // Find checkbox element by type ID in the dialog element tree
     uint32_t checkboxTypeId = g_TypeId_CheckboxElement ? *g_TypeId_CheckboxElement : 0;
     uint64_t foundElem = 0;
-    fn_Element_FindElementType(&foundElem, (void*)*(uint64_t*)(s + 0x20), checkboxTypeId);
+    fn_Element_FindElementType((void*)*(uint64_t*)(s + 0x20), &foundElem, checkboxTypeId);
 
     // IsDerivedFrom check + store at +0x30
     void* elemPtr = (void*)foundElem;
@@ -36,7 +36,7 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
     char nameBuf[8] = {};
     fn_String_Ctor_CStr(nameBuf, "pages");
     uint64_t pagesElem = 0;
-    fn_DialogInstance_FindElement(&pagesElem, (void*)*(uint64_t*)(s + 0x18), nameBuf);
+    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &pagesElem, nameBuf);
     *(uint64_t*)(s + 0x38) = pagesElem;
     fn_String_Dtor(nameBuf);
 

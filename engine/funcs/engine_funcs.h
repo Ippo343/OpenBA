@@ -316,10 +316,10 @@ extern fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor;
 typedef void (*fn_MemFreeStatic_t)(void* ptr);
 extern fn_MemFreeStatic_t fn_MemFreeStatic;
 
-// UI::Element::FindElement(retval, this, stringName) — non-trivial return ABI
-// RCX=retval(InternalPtr<Element>*), RDX=this(Element*), R8=name(String const&)
+// UI::Element::FindElement(this, retval, stringName) — member with non-trivial return
+// RCX=this(Element*), RDX=retval(InternalPtr<Element>*), R8=name(String const&)
 // Recursively searches element tree by name. Returns InternalPtr to found element.
-typedef void* (*fn_FindElement_t)(void* retval, void* thisElement, const void* stringName);
+typedef void* (*fn_FindElement_t)(void* thisElement, void* retval, const void* stringName);
 extern fn_FindElement_t fn_FindElement;
 
 // UI::TextElement::SetParameter(this, index, string) — set text param by index
@@ -368,18 +368,18 @@ extern fn_Element_SetToolTip_t fn_Element_SetToolTip;
 typedef void (*fn_Element_SetToolTipString_t)(void* self, const void* str);
 extern fn_Element_SetToolTipString_t fn_Element_SetToolTipString;
 
-// Element::Child(this, index) -> InternalPtr<Element> (non-trivial return)
-// RCX=retval, RDX=this, R8=index
-typedef void* (*fn_Element_Child_t)(void* retval, void* self, int index);
+// Element::Child(this, retval, index) -> InternalPtr<Element> (member, non-trivial return)
+// RCX=this, RDX=retval, R8=index
+typedef void* (*fn_Element_Child_t)(void* self, void* retval, int index);
 extern fn_Element_Child_t fn_Element_Child;
 
 // Element::ChildCount(this) -> int
 typedef int (*fn_Element_ChildCount_t)(const void* self);
 extern fn_Element_ChildCount_t fn_Element_ChildCount;
 
-// Element::FindElementType(this, typeId) -> InternalPtr<Element> (non-trivial return)
-// RCX=retval, RDX=this, R8=typeId
-typedef void* (*fn_Element_FindElementType_t)(void* retval, void* self, uint32_t typeId);
+// Element::FindElementType(this, retval, typeId) -> InternalPtr<Element> (member, non-trivial return)
+// RCX=this, RDX=retval, R8=typeId
+typedef void* (*fn_Element_FindElementType_t)(void* self, void* retval, uint32_t typeId);
 extern fn_Element_FindElementType_t fn_Element_FindElementType;
 
 // Element::RemoveChildren(this)
@@ -392,19 +392,19 @@ extern fn_Element_AddChild_t fn_Element_AddChild;
 
 // --- UI::DialogInstance ---
 
-// DialogInstance::FindElement(this, String const&) -> InternalPtr<Element> (non-trivial return)
-// RCX=retval, RDX=this, R8=name
-typedef void* (*fn_DialogInstance_FindElement_t)(void* retval, void* self, const void* name);
+// DialogInstance::FindElement(this, retval, name) -> InternalPtr<Element> (member, non-trivial return)
+// RCX=this, RDX=retval, R8=name
+typedef void* (*fn_DialogInstance_FindElement_t)(void* self, void* retval, const void* name);
 extern fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement;
 
-// DialogInstance::GetController(this, index) -> InternalPtr<DialogController> (non-trivial return)
-// RCX=retval, RDX=this, R8=index
-typedef void* (*fn_DialogInstance_GetController_t)(void* retval, const void* self, uint32_t index);
+// DialogInstance::GetController(this, retval, index) -> InternalPtr<DialogController> (member, non-trivial return)
+// RCX=this, RDX=retval, R8=index
+typedef void* (*fn_DialogInstance_GetController_t)(const void* self, void* retval, uint32_t index);
 extern fn_DialogInstance_GetController_t fn_DialogInstance_GetController;
 
-// DialogInstance::FindElementType(this, typeId) -> InternalPtr<Element> (non-trivial return)
-// RCX=retval, RDX=this, R8=typeId
-typedef void* (*fn_DialogInstance_FindElementType_t)(void* retval, void* self, uint32_t typeId);
+// DialogInstance::FindElementType(this, retval, typeId) -> InternalPtr<Element> (member, non-trivial return)
+// RCX=this, RDX=retval, R8=typeId
+typedef void* (*fn_DialogInstance_FindElementType_t)(void* self, void* retval, uint32_t typeId);
 extern fn_DialogInstance_FindElementType_t fn_DialogInstance_FindElementType;
 
 // DialogInstance::SetFlagsOnOff(this, hideFlags, showFlags)
@@ -588,7 +588,7 @@ extern fn_FindComponent_t fn_FindComponent_Destroy;        // FUN_140005780
 extern fn_FindComponent_t fn_FindComponent_Build;          // FUN_140004680
 extern fn_FindComponent_t fn_FindComponent_ConsumeProduce; // TBD
 extern fn_FindComponent_t fn_FindComponent_Resource;       // TBD
-extern fn_FindComponent_t fn_FindComponent_Storage;        // TBD
+extern fn_FindComponent_t fn_FindComponent_Storage;        // FUN_140006270
 extern fn_FindComponent_t fn_FindComponent_Workplace;      // FUN_140003050
 extern fn_FindComponent_t fn_FindComponent_Radius;         // TBD
 extern fn_FindComponent_t fn_FindComponent_BuildState;     // FUN_140003ea0 (type DAT_1401c7d98)

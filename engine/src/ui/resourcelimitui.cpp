@@ -21,7 +21,7 @@ static uint64_t FindElemByName(void* dialogElem, const char* name) {
     fn_String_Ctor_CStr(nameBuf, name);
 
     uint64_t result = 0;
-    fn_FindElement(&result, dialogElem, nameBuf);
+    fn_FindElement(dialogElem, &result, nameBuf);
 
     fn_String_Dtor(nameBuf);
     return result;
@@ -127,7 +127,7 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 
     if (sender != spinner) {
         uint64_t childResult = 0;
-        fn_Element_Child(&childResult, spinner, 0);
+        fn_Element_Child(spinner, &childResult, 0);
         void* child = (void*)childResult;
         if (sender != child) return;
     }

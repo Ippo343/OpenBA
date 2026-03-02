@@ -25,7 +25,7 @@ void AttendanceUI_Slot4(AttendanceUI* self) {
 
     // Find ProgressElement by type
     uint64_t result = 0;
-    fn_Element_FindElementType(&result, dialogElem, *g_TypeId_ProgressElement);
+    fn_Element_FindElementType(dialogElem, &result, *g_TypeId_ProgressElement);
     void* foundElem = (void*)result;
 
     // Type-check and wrap as InternalBasePtr

@@ -29,12 +29,12 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
         return;
 
     // --- Find "textTitle" element ---
-    // FindElement has non-trivial return ABI: RCX=retval, RDX=this, R8=name
+    // FindElement: member with non-trivial return: RCX=this, RDX=retval, R8=name
     uint8_t titleNameBuf[8];
     fn_String_Ctor_CStr(titleNameBuf, "textTitle");
 
     void* titleResult = nullptr;
-    fn_FindElement(&titleResult, dialogInstance, titleNameBuf);
+    fn_FindElement(dialogInstance, &titleResult, titleNameBuf);
     void* titleElement = titleResult;
 
     fn_String_Dtor(titleNameBuf);
@@ -44,7 +44,7 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
     fn_String_Ctor_CStr(descNameBuf, "textDesc");
 
     void* descResult = nullptr;
-    fn_FindElement(&descResult, dialogInstance, descNameBuf);
+    fn_FindElement(dialogInstance, &descResult, descNameBuf);
     void* descElement = descResult;
 
     fn_String_Dtor(descNameBuf);

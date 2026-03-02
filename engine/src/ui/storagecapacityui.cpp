@@ -25,7 +25,7 @@ void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
     // Find ProgressElement by type
     uint32_t typeId = g_TypeId_ProgressElement ? *g_TypeId_ProgressElement : 0;
     uint64_t findResult = 0;
-    fn_Element_FindElementType(&findResult, dialogElem, typeId);
+    fn_Element_FindElementType(dialogElem, &findResult, typeId);
 
     // Dereference InternalPtr to get raw Element*, type check, wrap in InternalBasePtr
     void* rawElem = (void*)findResult;
@@ -61,9 +61,9 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
     void* entityInternal = *(void**)entityBuf;
 
-    // Find storage-related component via FUN_14000b6f0
+    // Find StorageComponent via FUN_140006270
     void* component = nullptr;
-    fn_FindComponent_StateMachine(entityInternal, &component);
+    fn_FindComponent_Storage(entityInternal, &component);
 
     // Query current count
     int count = fn_StorageComponent_QueryCount(component);
