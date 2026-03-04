@@ -10,6 +10,234 @@
 #include <cstdint>
 
 // ============================================================
+// ScenarioDialog::Slot4 (vtable +0x20) — Setup
+// ============================================================
+// Populates the scenario selection table. For each scenario matching
+// the current difficulty (self+0xB8), creates a table row with icon,
+// title, description, and selection button. Stores 0x38-byte entries
+// in the dynamic array at +0xD8.
+//
+// Original: 0x140078010 (348 instructions, retail).
+// Profile: FUN_14005f490 — confirms element names:
+//   "buttonCancel", "buttonOk", "tableScenario", "imageIcon",
+//   "textTitle", "textDescription", "selectSave"
+// Assertion: "table->ChildCount() >= scenarioCount"
+// Source: Dialog\ScenarioDialog.cpp, line 0x3B
+
+void ScenarioDialog_Slot4(ScenarioDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    // --- Find "buttonCancel" → set element ID 100, set +0xC0 flag = 8 ---
+    {
+        uint8_t nameStr[8];
+        fn_String_Ctor_CStr(nameStr, "buttonCancel");
+        uint8_t retBuf[16];
+        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        void* cancelBtn = *(void**)retBuf;
+        fn_String_Dtor(nameStr);
+        fn_Element_SetElementId(cancelBtn, 100);
+        *(uint32_t*)((uintptr_t)cancelBtn + 0xC0) = 8;
+    }
+
+    // --- Find "buttonOk" → store at +0xD0, set ID 0x65 (101), disable it ---
+    {
+        uint8_t nameStr[8];
+        fn_String_Ctor_CStr(nameStr, "buttonOk");
+        uint8_t retBuf[16];
+        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        void* okBtn = *(void**)retBuf;
+        fn_String_Dtor(nameStr);
+
+        *(void**)(s + 0xD0) = okBtn;
+        fn_Element_SetElementId(okBtn, 0x65);
+
+        // Disable via vtable[8]: SetEnabled(false)
+        void** vtable = *(void***)okBtn;
+        typedef void (*fn_SetEnabled_t)(void*, bool);
+        ((fn_SetEnabled_t)vtable[8])(okBtn, false);
+    }
+
+    // --- Get scenario list from singleton at *g_pKeyMapSingleton + 8 ---
+    // The global at 0x1401c3de8 points to a management struct:
+    //   +0x00 = KeyMap, +0x08 = ExternalList (scenario list)
+    void* mgmtObj = *g_pKeyMapSingleton;
+    void* scenarioList = *(void**)((uintptr_t)mgmtObj + 8);
+
+    // --- Find "tableScenario" element ---
+    void* table = nullptr;
+    {
+        uint8_t nameStr[8];
+        fn_String_Ctor_CStr(nameStr, "tableScenario");
+        uint8_t retBuf[16];
+        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        table = *(void**)retBuf;
+        fn_String_Dtor(nameStr);
+    }
+
+    // --- Get scenario count and iterate ---
+    int scenarioCount = fn_ExternalList_GetResourceCount(scenarioList);
+    int entryIndex = 0;  // counts matched scenarios (for button IDs and array)
+
+    for (int i = 0; i < scenarioCount; i++) {
+        // Get resource[i] from ExternalList: *(array+0x20)[i*8]
+        void* resource = *(void**)(*(uintptr_t*)((uintptr_t)scenarioList + 0x20) + (uintptr_t)i * 8);
+
+        // Check IsDerivedFrom(Scenario)
+        if (!g_TypeId_Scenario) continue;
+        bool isScenario = fn_IsDerivedFrom(resource, *g_TypeId_Scenario);
+        void* scenario = isScenario ? resource : nullptr;
+        if (!scenario) continue;
+
+        // Filter by difficulty: scenario+0x69 must match self+0xB8
+        uint8_t scenDifficulty = *(uint8_t*)((uintptr_t)scenario + 0x69);
+        uint8_t selfDifficulty = *(uint8_t*)(s + 0xB8);
+        if (scenDifficulty != selfDifficulty) continue;
+
+        // --- Clone template element from Dialog ---
+        // GetTemplate(dialog, retval, 0)
+        uint8_t templateBuf[8];
+        fn_Dialog_GetTemplate(*(void**)(s + 0x18), templateBuf, 0);
+
+        // Clone via vtable[8]: templateObj->Clone(&cloneBuf, dialog)
+        void* templateObj = *(void**)templateBuf;
+        void** templateVt = *(void***)templateObj;
+        typedef void (*fn_Clone_t)(void*, void*, void*);
+        uint8_t cloneBuf[16];
+        ((fn_Clone_t)templateVt[8])(templateObj, cloneBuf, *(void**)(s + 0x18));
+        void* clonedElem = *(void**)cloneBuf;
+
+        // --- Insert clone into table ---
+        uint8_t clonePtr[8];
+        *(void**)clonePtr = clonedElem;
+        fn_TableElement_SetChild2(table, clonePtr, entryIndex);
+
+        // --- Build 0x38-byte entry ---
+        // Layout: +0x00 = element ptr, +0x08 = selectSave ptr,
+        //         +0x10 = imageIcon ptr, +0x18 = textTitle ptr,
+        //         +0x20 = textDescription ptr, +0x28 = scenario ptr,
+        //         +0x30 = resource index
+        uint8_t entry[0x38];
+        memset(entry, 0, 0x38);
+
+        // entry[0] = cloned element
+        *(void**)entry = clonedElem;
+
+        // Set element hidden initially (flags 0x10000 = hidden)
+        fn_Element_SetFlagsOnOff(clonedElem, 0x10000, 0);
+
+        // Set element ID = entryIndex + 1000
+        fn_Element_SetElementId(clonedElem, entryIndex + 1000);
+
+        // --- Find sub-elements in the clone ---
+
+        // "imageIcon" → entry[0x10]
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "imageIcon");
+            uint8_t retBuf[16];
+            fn_FindElement(clonedElem, retBuf, nameStr);
+            *(void**)(entry + 0x10) = *(void**)retBuf;
+            fn_String_Dtor(nameStr);
+        }
+
+        // "textTitle" → entry[0x18]
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "textTitle");
+            uint8_t retBuf[16];
+            fn_FindElement(clonedElem, retBuf, nameStr);
+            *(void**)(entry + 0x18) = *(void**)retBuf;
+            fn_String_Dtor(nameStr);
+        }
+
+        // "textDescription" → entry[0x20]
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "textDescription");
+            uint8_t retBuf[16];
+            fn_FindElement(clonedElem, retBuf, nameStr);
+            *(void**)(entry + 0x20) = *(void**)retBuf;
+            fn_String_Dtor(nameStr);
+        }
+
+        // "selectSave" → entry[0x08]
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "selectSave");
+            uint8_t retBuf[16];
+            fn_FindElement(clonedElem, retBuf, nameStr);
+            *(void**)(entry + 0x08) = *(void**)retBuf;
+            fn_String_Dtor(nameStr);
+        }
+
+        // Store scenario pointer and resource index
+        *(void**)(entry + 0x28) = scenario;
+        *(int*)(entry + 0x30) = i;
+
+        // --- Set icon sprite from scenario ---
+        // GetSpriteName returns String (non-trivial return: RCX=this, RDX=retval)
+        {
+            uint8_t spriteNameStr[8];
+            fn_Achievement_GetSpriteName(scenario, spriteNameStr);
+
+            // Create UI::Sprite(retval, spriteSheet, spriteName)
+            // spriteSheet = *(scenario + 0x38)
+            uint64_t spriteSheet = *(uint64_t*)((uintptr_t)scenario + 0x38);
+            uint8_t sprite[16];
+            fn_Sprite_Ctor(sprite, spriteSheet, spriteNameStr);
+
+            // SetSprite on imageIcon
+            void* imageIcon = *(void**)(entry + 0x10);
+            fn_ImageElement_SetSprite(imageIcon, sprite);
+
+            // Clean up sprite name string
+            fn_String_Dtor(spriteNameStr);
+        }
+
+        // --- Set title text from scenario ---
+        {
+            uint8_t titleStr[8];
+            fn_Achievement_GetTitle(scenario, titleStr);
+
+            // Create UI::String(retval, stringTable, titleStr)
+            // stringTable = *(scenario + 0x20)
+            uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
+            uint8_t uiStr[16];
+            fn_UIString_Ctor(uiStr, stringTable, titleStr);
+
+            // SetText on textTitle
+            void* textTitle = *(void**)(entry + 0x18);
+            fn_TextElement_SetText(textTitle, uiStr);
+
+            fn_String_Dtor(titleStr);
+        }
+
+        // --- Set description text from scenario ---
+        {
+            uint8_t descStr[8];
+            fn_Achievement_GetDescription(scenario, descStr);
+
+            // Create UI::String(retval, stringTable, descStr)
+            uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
+            uint8_t uiStr[16];
+            fn_UIString_Ctor(uiStr, stringTable, descStr);
+
+            // SetText on textDescription
+            void* textDesc = *(void**)(entry + 0x20);
+            fn_TextElement_SetText(textDesc, uiStr);
+
+            fn_String_Dtor(descStr);
+        }
+
+        // --- Push entry to dynamic array at self+0xD8 ---
+        int newCount = *(int*)(s + 0xE0) + 1;
+        fn_ScenarioDialog_ArrayPush((void*)(s + 0xD8), newCount, entry);
+
+        entryIndex++;
+    }
+}
+
+// ============================================================
 // ScenarioDialog::Slot6 (vtable +0x30) — Update entry visibility
 // ============================================================
 // Iterates scenario entries at +0xD8 (stride 0x38), shows entry matching

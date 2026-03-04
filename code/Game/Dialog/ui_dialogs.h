@@ -73,6 +73,10 @@ void MainMenuDialog_Slot5(MainMenuDialog* self);
 // ScenarioDialog
 // ============================================================
 
+// Slot4 (vtable +0x20): Setup — finds buttons, queries scenario list,
+// populates table with cloned template rows for each matching scenario.
+void ScenarioDialog_Slot4(ScenarioDialog* self);
+
 // Slot6 (vtable +0x30): Updates entry visibility based on selected index.
 void ScenarioDialog_Slot6(ScenarioDialog* self);
 
@@ -108,6 +112,11 @@ void FollowDialog_Slot7(FollowDialog* self);
 // GoalDialog
 // ============================================================
 
+// Slot4 (vtable +0x20): Setup — finds buttonOk, tableGoal, textScenario.
+// Creates rows from template for each goal, populates text, hides indicators.
+// Sets scenario title on textScenario or hides it.
+void GoalDialog_Slot4(GoalDialog* self);
+
 // Slot6 (vtable +0x30): Updates goal entry visibility (met/failed indicators).
 void GoalDialog_Slot6(GoalDialog* self);
 
@@ -133,3 +142,16 @@ void AchievementDialog_Slot14(AchievementDialog* self);
 
 // Slot17 (vtable +0x88): Reads attendance count, updates progress bar value and text.
 void AchievementDialog_Slot17(AchievementDialog* self);
+
+// ============================================================
+// ToolbarDialog
+// ============================================================
+
+// Slot6 (vtable +0x30): Update — syncs toolbar button states with game state.
+// Iterates items, updates checked/enabled based on speed, pause, group visibility.
+void ToolbarDialog_Update(void* self, uint64_t param2, uint64_t param3, uint64_t param4);
+
+// Slot8 (vtable +0x40): OnEvent — handles toolbar button clicks.
+// Dispatches to game actions: open sub-toolbar, toggle groups, change speed, etc.
+void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventData,
+                           uint64_t p5, uint64_t p6, int p7);

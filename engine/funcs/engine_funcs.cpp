@@ -389,6 +389,23 @@ fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount = nullptr;
 uint32_t* g_TypeId_Scenario = nullptr;
 fn_Element_SetPadding_t fn_Element_SetPadding = nullptr;
 fn_EventNotifyDialog_ArrayRemove_t fn_EventNotifyDialog_ArrayRemove = nullptr;
+fn_Sprite_Ctor_t fn_Sprite_Ctor = nullptr;
+fn_UIString_Ctor_t fn_UIString_Ctor = nullptr;
+fn_UIString_ToSystemString_t fn_UIString_ToSystemString = nullptr;
+fn_UI_AddDialog_t fn_UI_AddDialog = nullptr;
+fn_Element_GetPaddedSize_t fn_Element_GetPaddedSize = nullptr;
+fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio = nullptr;
+fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
+fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
+fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
+fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
+fn_Toolbar_FindEntity_t fn_Toolbar_FindEntity = nullptr;
+fn_Toolbar_CenterOnEntity_t fn_Toolbar_CenterOnEntity = nullptr;
+fn_ToolbarDialog_CloseSubDialog_t fn_ToolbarDialog_CloseSubDialog = nullptr;
+fn_ToolbarDialog_ChangeSpeed_t fn_ToolbarDialog_ChangeSpeed = nullptr;
+fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons = nullptr;
+uint32_t* g_TypeId_ToolbarElement = nullptr;
+uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 
 // ============================================================
 // Engine globals
@@ -1407,6 +1424,69 @@ bool EngineFuncsInit() {
         ResolveExport("?SetPadding@Element@UI@@QEAAXHHHH@Z"));
     fn_EventNotifyDialog_ArrayRemove = reinterpret_cast<fn_EventNotifyDialog_ArrayRemove_t>(
         ResolveAddr(Module::Exe, 0x140011670));
+
+    // Scenario type ID: exref at 0x140151510 -> pointer -> uint32_t typeId
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151510));
+        if (exref && *exref) {
+            g_TypeId_Scenario = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+
+    fn_Sprite_Ctor = reinterpret_cast<fn_Sprite_Ctor_t>(
+        ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z"));
+    fn_UIString_Ctor = reinterpret_cast<fn_UIString_Ctor_t>(
+        ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z"));
+    fn_UIString_ToSystemString = reinterpret_cast<fn_UIString_ToSystemString_t>(
+        ResolveExport("??BString@UI@@QEBA?AV0System@@XZ"));
+
+    // Phase F Wave 2B: ToolbarDialog
+    fn_UI_AddDialog = reinterpret_cast<fn_UI_AddDialog_t>(
+        ResolveExport("?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
+    if (!fn_UI_AddDialog) {
+        fn_UI_AddDialog = reinterpret_cast<fn_UI_AddDialog_t>(
+            ResolveAddr(Module::Runtime, 0x180120ee0));
+    }
+    fn_Element_GetPaddedSize = reinterpret_cast<fn_Element_GetPaddedSize_t>(
+        ResolveExport("?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z"));
+    if (!fn_Element_GetPaddedSize) {
+        fn_Element_GetPaddedSize = reinterpret_cast<fn_Element_GetPaddedSize_t>(
+            ResolveAddr(Module::Runtime, 0x180115f10));
+    }
+    fn_RadioElement_SetActiveRadio = reinterpret_cast<fn_RadioElement_SetActiveRadio_t>(
+        ResolveExport("?SetActiveRadio@RadioElement@UI@@QEAAXH@Z"));
+    if (!fn_RadioElement_SetActiveRadio) {
+        fn_RadioElement_SetActiveRadio = reinterpret_cast<fn_RadioElement_SetActiveRadio_t>(
+            ResolveAddr(Module::Runtime, 0x1800d56f0));
+    }
+    fn_ToolbarDialog_Ctor = reinterpret_cast<fn_ToolbarDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400b9910));
+    fn_Toolbar_ShowGroup = reinterpret_cast<fn_Toolbar_ShowGroup_t>(
+        ResolveAddr(Module::Exe, 0x140102b60));
+    fn_Toolbar_Utility = reinterpret_cast<fn_Toolbar_Utility_t>(
+        ResolveAddr(Module::Exe, 0x140101a80));
+    fn_Toolbar_ToggleAll = reinterpret_cast<fn_Toolbar_ToggleAll_t>(
+        ResolveAddr(Module::Exe, 0x140101ce0));
+    fn_Toolbar_FindEntity = reinterpret_cast<fn_Toolbar_FindEntity_t>(
+        ResolveAddr(Module::Exe, 0x140088d40));
+    fn_Toolbar_CenterOnEntity = reinterpret_cast<fn_Toolbar_CenterOnEntity_t>(
+        ResolveAddr(Module::Exe, 0x140103040));
+    fn_ToolbarDialog_CloseSubDialog = reinterpret_cast<fn_ToolbarDialog_CloseSubDialog_t>(
+        ResolveAddr(Module::Exe, 0x1400b9730));
+    fn_ToolbarDialog_ChangeSpeed = reinterpret_cast<fn_ToolbarDialog_ChangeSpeed_t>(
+        ResolveAddr(Module::Exe, 0x1400b91b0));
+    fn_ToolbarDialog_UpdateButtons = reinterpret_cast<fn_ToolbarDialog_UpdateButtons_t>(
+        ResolveAddr(Module::Exe, 0x1400b8fd0));
+    // ToolbarElement type ID: exref at 0x1401516a8, used in ToolbarDialog::Update/OnEvent for IsDerivedFrom
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
+        if (exref && *exref) {
+            g_TypeId_ToolbarElement = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    // ToolbarDialog parent type ID: direct uint32 at DAT_1401c5d38, used in case 5 (CenterOnPoint)
+    g_TypeId_ToolbarDialogParent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5d38));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

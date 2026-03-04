@@ -56,11 +56,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x140078010) — Setup: populates scenario list with available scenarios
+// Slot4 (0x140078010) — Setup: populates scenario list — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ScenarioDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ScenarioDialog_Slot4((ScenarioDialog*)self);
 }
 
 // Slot6 (0x140077BE0) — REIMPLEMENTED (updates entry visibility/selection)

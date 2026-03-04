@@ -55,11 +55,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x140069810) — Setup: populates goal table with achievements/goals
+// Slot4 (0x140069810) — Setup: populates goal table with achievements/goals — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "GoalDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    GoalDialog_Slot4((GoalDialog*)self);
 }
 
 // Slot6 (0x140069640) — Draw: updates goal progress indicators — REIMPLEMENTED

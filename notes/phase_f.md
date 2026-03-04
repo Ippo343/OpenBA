@@ -58,7 +58,7 @@ patterns (element lookup, simple state read/write, button dispatch).
 
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
-| [ ] PastureUI::Slot4 | ~30 | SelectResourceUI base Slot4 | Calls base + finds slider + updates |
+| [x] PastureUI::Slot4 | ~30 | SelectResourceUI base Slot4 | Calls base + finds slider + updates |
 | [x] EntityUI::Slot4 | ~65 | DAT_1401c5788 (1 new global) | Entity info setup |
 | [ ] HelpUI::Slot4 | ~40 | page navigation funcs | Find page/button elements, set IDs |
 | [ ] HelpUI::Slot9 | ~35 | page navigation funcs | Button click → page change |
@@ -85,19 +85,19 @@ conditional element construction, or multi-step update handlers.
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
 | [x] FollowDialog::Slot4 | ~60 | camera/entity tracking funcs | Setup follow target UI |
-| [~] FollowDialog::Slot7 | ~20 | fn_KeyMap_Pressed, close helper | Update camera pos, check Escape (FP staged) |
+| [x] FollowDialog::Slot7 | ~20 | fn_KeyMap_Pressed, close helper | Update camera pos, check Escape (reimplemented) |
 | [ ] FollowDialog::Slot9 | ~30 | camera funcs | Button dispatch (follow/unfollow) |
-| [ ] GoalDialog::Slot4 | ~120 | goal list iteration, table setup | Populate goals table (361 instr) |
+| [x] GoalDialog::Slot4 | ~120 | goal list iteration, table setup | Populate goals table (361 instr) |
 | [x] GoalDialog::Slot6 | ~60 | goal progress query | Update goal progress bars |
-| [ ] EventNotifyDialog::Slot4 | ~50 | event list access | Setup notification list |
+| [x] EventNotifyDialog::Slot4 | ~50 | event list access | Setup notification list |
 | [ ] EventNotifyDialog::Slot7 | ~40 | event state query | Update notification state |
 | [ ] EventNotifyDialog::Slot9 | ~30 | — | Button dispatch (dismiss/goto) |
-| [ ] ScenarioDialog::Slot4 | ~120 | scenario list, table | Populate scenario list (348 instr) |
+| [x] ScenarioDialog::Slot4 | ~120 | scenario list, table | Populate scenario list (348 instr) |
 | [x] ScenarioDialog::Slot6 | done | — | Moved from Wave 2 (was misclassified) |
 | [ ] ScenarioDialog::Slot7 | ~50 | scenario state query | Update selection state |
 | [ ] ScenarioDialog::Slot9 | ~30 | — | Button dispatch (select/back) |
-| [ ] ToolbarDialog::Slot7 | ~80 | toolbar button state sync | Update button states from game |
-| [ ] ToolbarDialog::Slot9 | ~60 | toolbar command dispatch | Handle toolbar button clicks |
+| [x] ToolbarDialog::Slot7 | ~80 | toolbar button state sync | Update button states from game |
+| [x] ToolbarDialog::Slot9 | ~60 | toolbar command dispatch | Handle toolbar button clicks |
 | [ ] ModDetailsDialog::Slot4 | ~50 | mod info query funcs | Populate mod details |
 | [ ] ModDetailsDialog::Slot9 | ~25 | — | Button handler |
 | [ ] TutorialGoalDialog::Slot4 | ~50 | tutorial goal list | Setup goal display |
@@ -111,18 +111,18 @@ conditional element construction, or multi-step update handlers.
 
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
-| [ ] ResidenceUI::Slot4 | ~80 | table setup, storage query | Populate residence info table |
+| [x] ResidenceUI::Slot4 | ~80 | table setup, storage query | Populate residence info table |
 | [ ] ResidenceUI::Slot7 | ~60 | storage iteration | Update resident list/counts |
 | [x] ResidenceUI::Slot9 | ~30 | — | Notification handler |
-| [ ] EventLogUI::Slot5 | ~80 | dynamic array access, event data | Event log population |
-| [ ] EventLogUI::Slot7 | ~60 | event state query | Update log entries |
+| [x] EventLogUI::Slot5 | ~80 | dynamic array access, event data | Event log population |
+| [x] EventLogUI::Slot7 | ~60 | event state query | Update log entries |
 | [x] EventLogUI::Slot9 | ~30 | — | Notification/click handler |
-| [ ] WorkplaceUI::Startup | ~80 | multi-component lookup | Initialize workplace panel |
-| [ ] WorkplaceUI::OnRemove | ~40 | cleanup funcs | Teardown workplace panel |
-| [ ] EntityUI::Slot5 | ~60 | entity info query | Entity detail update |
-| [ ] EntityUI::Slot7 | ~80 | entity state query | Full entity info refresh |
+| [x] WorkplaceUI::Startup | ~80 | multi-component lookup | Initialize workplace panel |
+| [x] WorkplaceUI::OnRemove | ~40 | cleanup funcs | Teardown workplace panel |
+| [x] EntityUI::Slot5 | ~60 | entity info query | Entity detail update |
+| [x] EntityUI::Slot7 | ~80 | entity state query | Full entity info refresh |
 | [ ] EntityUI::Slot8 | ~30 | — | Notification handler |
-| [ ] EntityUI::Slot9 | ~40 | — | Button/notification dispatch |
+| [x] EntityUI::Slot9 | ~40 | — | Button/notification dispatch |
 
 **Wave 2 Deps (resolved in-situ per method, ~15-20 new function pointers):**
 - Goal/scenario/tutorial list iteration functions
@@ -376,16 +376,16 @@ during each method's decompilation, same as all other waves.
 
 | Wave | Methods | Est. New FPs | Priority | Status |
 |------|---------|-------------|----------|--------|
-| Wave 1 | ~25 | 5-8 | HIGH | [~] In progress (~21 done) |
-| Wave 2 | ~35 | 15-20 | HIGH | [~] In progress (~6 done) |
+| Wave 1 | ~25 | 5-8 | HIGH | [~] In progress (~22 done) |
+| Wave 2 | ~35 | 15-20 | HIGH | [~] In progress (~18 done) |
 | Wave 3 | ~30 | 25-30 | MEDIUM | [ ] Not started |
 | Wave 4A | ~13 | 10-15 | MEDIUM | [ ] Not started |
 | Wave 4B | ~14 | 5-10 | MEDIUM | [ ] Not started |
 | Wave 5 | ~9 | 0 (reuse) | LOW | [ ] Not started |
 | Wave 6 | ~10 | ~5 | LOW | [ ] Not started |
-| **Subtotal** | **~136** | **~60** | | **~27 done** |
+| **Subtotal** | **~136** | **~60** | | **~40 done** |
 | Wave 4C | 6 | ~4 (resolved) | MEDIUM | [ ] Unblocked (ImageBuffer infra complete) |
-| **Grand Total** | **~142** | | | **~27 done, all unblocked** |
+| **Grand Total** | **~142** | | | **~40 done, all unblocked** |
 
 ### Completion Criteria
 

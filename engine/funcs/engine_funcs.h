@@ -1088,10 +1088,88 @@ extern uint32_t* g_TypeId_Scenario;  // from exref in ScenarioDialog::Slot4
 typedef void (*fn_Element_SetPadding_t)(void* self, int left, int top, int right, int bottom);
 extern fn_Element_SetPadding_t fn_Element_SetPadding;
 
+// UI::Sprite::Sprite(retval, ExternalPtr<SpriteSheet>, String const&) — non-trivial return
+// RCX=retval(Sprite*), RDX=spriteSheet, R8=spriteName(String const&)
+// ??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z
+typedef void* (*fn_Sprite_Ctor_t)(void* retval, uint64_t spriteSheet, const void* spriteName);
+extern fn_Sprite_Ctor_t fn_Sprite_Ctor;
+
+// UI::String::String(retval, ExternalPtr<StringTable>, String const&) — non-trivial return
+// RCX=retval(UIString*), RDX=stringTable, R8=stringName(String const&)
+// ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z
+typedef void* (*fn_UIString_Ctor_t)(void* retval, uint64_t stringTable, const void* stringName);
+extern fn_UIString_Ctor_t fn_UIString_Ctor;
+
+// UI::String::operator System::String() — converts UI::String to System::String
+// Member, non-trivial return: RCX=this(UIString*), RDX=retval(System::String*)
+// ??BString@UI@@QEBA?AV0System@@XZ (ordinal 1307)
+typedef void (*fn_UIString_ToSystemString_t)(void* self, void* retval);
+extern fn_UIString_ToSystemString_t fn_UIString_ToSystemString;
+
 // EventNotifyDialog array remove (FUN_140011670 in retail exe)
 // Removes entry at index from dynamic array (shifts remaining, decrements count).
 typedef void (*fn_EventNotifyDialog_ArrayRemove_t)(void* arrayBase, int index);
 extern fn_EventNotifyDialog_ArrayRemove_t fn_EventNotifyDialog_ArrayRemove;
+
+// UI::UserInterface::AddDialog(this, InternalPtr<DialogInstance>)
+// ?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+typedef void (*fn_UI_AddDialog_t)(void* self, void* dialogPtr);
+extern fn_UI_AddDialog_t fn_UI_AddDialog;
+
+// UI::Element::GetPaddedSize(this, int& width, int& height) — member function
+// ?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z
+typedef void (*fn_Element_GetPaddedSize_t)(void* self, int* outWidth, int* outHeight);
+extern fn_Element_GetPaddedSize_t fn_Element_GetPaddedSize;
+
+// UI::RadioElement::SetActiveRadio(this, int index)
+// ?SetActiveRadio@RadioElement@UI@@QEAAXH@Z
+typedef void (*fn_RadioElement_SetActiveRadio_t)(void* self, int index);
+extern fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio;
+
+// ToolbarDialog constructor (FUN_1400b9910 in retail exe)
+// Creates a child ToolbarDialog from parent + toolbar data
+typedef void* (*fn_ToolbarDialog_Ctor_t)(void* self, void* userInterface, void* dialog,
+                                         void* parentPtr, void* toolbarData);
+extern fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor;
+
+// ToolbarDialog game system dispatch functions (called from OnEvent)
+// Case 1: ShowGroup — toggle visibility of a game group
+typedef void (*fn_Toolbar_ShowGroup_t)(void* gameSubsys, int64_t groupId);
+extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
+
+// Case 2: Utility action
+typedef void (*fn_Toolbar_Utility_t)(void* gameSubsys, void* retBuf, uint64_t param);
+extern fn_Toolbar_Utility_t fn_Toolbar_Utility;
+
+// Case 3: Toggle all
+typedef void (*fn_Toolbar_ToggleAll_t)(void* gameSubsys);
+extern fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll;
+
+// Case 4: Focus entity
+typedef void* (*fn_Toolbar_FindEntity_t)(void* entityList, void* retBuf, uint64_t typeId, int index);
+extern fn_Toolbar_FindEntity_t fn_Toolbar_FindEntity;
+
+// Case 4: Center on entity
+typedef void (*fn_Toolbar_CenterOnEntity_t)(void* gameSubsys, void* parentPtr, void* entityPtr);
+extern fn_Toolbar_CenterOnEntity_t fn_Toolbar_CenterOnEntity;
+
+// ToolbarDialog close sub-dialog helper (FUN_1400b9730)
+typedef void (*fn_ToolbarDialog_CloseSubDialog_t)(void* self);
+extern fn_ToolbarDialog_CloseSubDialog_t fn_ToolbarDialog_CloseSubDialog;
+
+// ToolbarDialog change speed helper (FUN_1400b91b0)
+typedef void (*fn_ToolbarDialog_ChangeSpeed_t)(void* self, int direction);
+extern fn_ToolbarDialog_ChangeSpeed_t fn_ToolbarDialog_ChangeSpeed;
+
+// ToolbarDialog update button states helper (FUN_1400b8fd0)
+typedef void (*fn_ToolbarDialog_UpdateButtons_t)(void* self);
+extern fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons;
+
+// ToolbarDialog exref type — for IsDerivedFrom checks on toolbar elements
+extern uint32_t* g_TypeId_ToolbarElement;  // _typeInfo_exref in ToolbarDialog Update/OnEvent
+
+// ToolbarDialog parent type ID (DAT_1401c5d38) — for IsDerivedFrom in case 5 (CenterOnPoint)
+extern uint32_t* g_TypeId_ToolbarDialogParent;
 
 // ============================================================
 // Initialization

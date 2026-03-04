@@ -18,6 +18,7 @@
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -62,7 +63,7 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 typedef void (*fn_Update_t)(void* self, uint64_t param2, uint64_t param3, uint64_t param4);
 static void Reimpl_Update(void* self, uint64_t param2, uint64_t param3, uint64_t param4) {
     g_lastHook = "ToolbarDialog::Update";
-    ((fn_Update_t)g_hookUpdate.trampoline)(self, param2, param3, param4);
+    ToolbarDialog_Update(self, param2, param3, param4);
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData, p5, p6, p7) — handle toolbar clicks
@@ -71,7 +72,7 @@ typedef void (*fn_OnEvent_t)(void* self, void* element, int eventType, int event
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData,
                            uint64_t p5, uint64_t p6, int p7) {
     g_lastHook = "ToolbarDialog::OnEvent";
-    ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, element, eventType, eventData, p5, p6, p7);
+    ToolbarDialog_OnEvent(self, element, eventType, eventData, p5, p6, p7);
 }
 
 // ============================================================
