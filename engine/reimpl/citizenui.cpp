@@ -68,7 +68,7 @@ static void Reimpl_Slot4(void* self) {
 }
 
 // Slot6 — REIMPLEMENTED (closes sub-dialog, clears reference)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "CitizenUI::Slot6";
     CitizenUI_Slot6((CitizenUI*)self);

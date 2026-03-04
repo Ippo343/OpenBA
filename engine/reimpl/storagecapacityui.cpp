@@ -54,7 +54,7 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 }
 
 // Serialize — REIMPLEMENTED (finds ProgressElement by type, stores at +0x30)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StorageCapacityUI::Serialize";
     StorageCapacityUI_Serialize((StorageCapacityUI*)self);

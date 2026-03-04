@@ -25,6 +25,7 @@
 //   +0x18 (Slot3), +0x30 (Slot6), +0x38 (Slot7), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -57,11 +58,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x14006D140) — Setup: finds button elements by name
+// Slot4 (0x14006D140) — Setup: finds button elements by name — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "MessageDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    MessageDialog_Slot4((MessageDialog*)self);
 }
 
 // Helper: set dialog result at +0x24, then close via InternalBasePtr + CloseDialog

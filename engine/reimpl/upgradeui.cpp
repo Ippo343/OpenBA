@@ -20,6 +20,7 @@
 //   +0x50: 0x14003a978 — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -47,16 +48,16 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize — REIMPLEMENTED (finds button, creates sprite from BuildRequirementComponent)
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "UpgradeUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    UpgradeUI_Serialize((UpgradeUI*)self);
 }
 
-typedef void (*fn_OnRemove_t)(void* self, void* p2, int eventType, int eventId);
+// OnRemove — REIMPLEMENTED (button click starts upgrade)
 static void Reimpl_OnRemove(void* self, void* p2, int eventType, int eventId) {
     g_lastHook = "UpgradeUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, p2, eventType, eventId);
+    UpgradeUI_OnRemove((UpgradeUI*)self, p2, eventType, eventId);
 }
 
 // ============================================================

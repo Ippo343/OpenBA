@@ -21,6 +21,7 @@
 //   Secondary vtable: +0x58-0x98 (Slot11-19) all thunks
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -59,11 +60,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-// Slot5 (0x1400B3C60) — Shutdown: unpauses audio scenes (channels 2,3,4)
+// Slot5 (0x1400B3C60) — Shutdown: unpauses audio scenes — REIMPLEMENTED
 typedef void (*fn_Slot5_t)(void* self);
 static void Reimpl_Slot5(void* self) {
     g_lastHook = "MainMenuDialog::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
+    MainMenuDialog_Slot5((MainMenuDialog*)self);
 }
 
 // Slot8 (0x1400B3B50) — OnCommand: dispatches menu button clicks

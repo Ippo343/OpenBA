@@ -20,6 +20,7 @@
 //   +0x18 (Slot3), +0x28 (Slot5), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -62,18 +63,18 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-// Slot6 (0x140077BE0) — Draw: updates scenario entry UI elements
+// Slot6 (0x140077BE0) — REIMPLEMENTED (updates entry visibility/selection)
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "ScenarioDialog::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    ScenarioDialog_Slot6((ScenarioDialog*)self);
 }
 
-// Slot8 (0x140077F80) — OnCommand: handles list selection and confirm/close
+// Slot8 (0x140077F80) — OnCommand: selection/confirm/close — REIMPLEMENTED
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
     g_lastHook = "ScenarioDialog::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
+    ScenarioDialog_Slot8((ScenarioDialog*)self, (uint64_t)p2, msg, id);
 }
 
 // ============================================================

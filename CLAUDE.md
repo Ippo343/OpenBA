@@ -12,8 +12,8 @@ All 232 exe classes are covered with passthrough hooks (659 enabled, 132 disable
 Now converting passthroughs to real C++ game logic, module by module.
 
 ### Goals (in order):
-1. **Deep reimplementation** — convert all passthrough wrappers in `engine/reimpl/` to real C++ in `engine/src/`, organized by module. Decompile each function in Ghidra, write clean C++ equivalent.
-2. **Standalone exe** — once all game logic is in `engine/src/`, compile it as a replacement Application-x64.exe that links against Runtime-x64.dll + VideoDX11-x64.dll.
+1. **Deep reimplementation** — convert all passthrough wrappers in `engine/reimpl/` to real C++ in `code/Game/`, organized by module matching the original source tree. Decompile each function in Ghidra, write clean C++ equivalent.
+2. **Standalone exe** — once all game logic is in `code/Game/`, compile it as a replacement Application-x64.exe that links against Runtime-x64.dll + VideoDX11-x64.dll.
 3. **Runtime DLL** — after the exe is solid, start reimplementing Runtime-x64.dll functions.
 
 ### Module priority for deep reimpl:
@@ -131,29 +131,35 @@ mingw32-make clean     # remove build artifacts
 1. **Decompile** in Ghidra → rename, annotate, document struct layout
 2. **Type header** — add/update binary-compatible struct in `engine/types/` with `static_assert` on every field offset
 3. **Resolve deps** — add any engine functions the reimpl needs to `engine/funcs/engine_funcs.h`
-4. **Write clean C++** in `engine/src/<module>/` (e.g., `engine/src/components/animal.cpp`)
+4. **Write clean C++** in `code/Game/<Module>/` (e.g., `code/Game/Component/animal.cpp`)
 5. **Update hook wrapper** in `engine/reimpl/` to call the clean src function instead of trampoline
 6. **Test** — `mingw32-make deploy`, launch game, read `C:/GOG Games/Banished/patch_debug.log` for debug output
 
 ### Code Organization (two-layer architecture)
-```
-engine/src/          — Clean game logic (future standalone exe source)
-  components/        — ECS components (60 classes: AI, economy, building, etc.)
-  actions/           — StateMachine actions (17 classes: MoveTo, PerformWork, etc.)
-  work/              — Work classes (18 classes: BuildRoad, FishingWork, etc.)
-  ui/                — UI dialogs + panels (61 classes)
-  tools/             — Placement tools (12 classes: BridgeTool, RoadTool, etc.)
-  systems/           — Tutorial, Achievement, WorldGen, Weather, Scenario
-  core/              — ComponentEntity, Profession, ProfessionList
 
-engine/reimpl/       — Hook wrappers (thin, delegate to engine/src/ or trampoline)
+The `code/Game/` directory mirrors the original source tree structure discovered from
+profile build debug strings (project codename "Buildy", `C:\Projects\Buildy\code\Game\`).
+
+```
+code/Game/           — Clean game logic (mirrors original source tree, future standalone exe)
+  Action/            — StateMachine actions (17 classes: MoveTo, PerformWork, etc.)
+  Component/         — ECS components (60 classes: AI, economy, building, etc.)
+  Dialog/            — UI dialogs + panels (50+ classes)
+  Entity/            — ComponentEntity, CitizenBehavior, EntityList
+  Game/              — Core systems (Game, Map, Pathfinder, StateMachine, Weather, etc.)
+  Goal/              — Goal classes (BuildingGoal, PopulationGoal, etc.)
+  Player/            — Placement tools (9 classes: BridgeTool, PlacementTool, etc.)
+  Tutorial/          — Tutorial classes (17 classes)
+  Work/              — Work classes (21 classes: BuildRoad, FishingWork, etc.)
+
+engine/reimpl/       — Hook wrappers (thin, delegate to code/Game/ or trampoline)
 engine/types/        — Binary-compatible struct definitions (142 headers)
 engine/funcs/        — Resolved engine function pointers
 ```
 
 The reimpl layer is temporary scaffolding. As each function gets a real implementation
-in engine/src/, the reimpl wrapper switches from calling the trampoline to calling
-the clean code. When ALL functions are reimplemented, engine/src/ compiles as a
+in code/Game/, the reimpl wrapper switches from calling the trampoline to calling
+the clean code. When ALL functions are reimplemented, code/Game/ compiles as a
 standalone exe without the reimpl/hooks layer.
 
 ### Adding a new passthrough hook (for completeness)
@@ -366,6 +372,17 @@ untitled_rev_eng_project/
     build/
       version.dll                # compiled patch DLL (~288K debug)
       obj/                       # intermediate object files
+  code/
+    Game/                        # clean game logic (mirrors original source tree)
+      Action/                    # StateMachine actions (17 classes)
+      Component/                 # ECS components (60 classes)
+      Dialog/                    # UI dialogs + panels (50+ classes)
+      Entity/                    # ComponentEntity, CitizenBehavior, EntityList
+      Game/                      # Core systems (Game, Map, Pathfinder, Weather, etc.)
+      Goal/                      # Goal classes (5 classes)
+      Player/                    # Placement tools (9 classes)
+      Tutorial/                  # Tutorial classes (17 classes)
+      Work/                      # Work classes (21 classes)
   engine/
     types/                       # binary-compatible struct definitions (142 headers)
       common.h                   # Time, Vector3, PostCallback, forward decls
@@ -374,14 +391,6 @@ untitled_rev_eng_project/
     funcs/                       # resolved engine function pointers
       engine_funcs.h             # function pointer declarations
       engine_funcs.cpp           # runtime resolution (by name, RVA, or ordinal)
-    src/                         # clean game logic (future standalone exe)
-      components/                # ECS components (60 classes)
-      actions/                   # StateMachine actions (17 classes)
-      work/                      # Work classes (18 classes)
-      ui/                        # UI dialogs + panels (61 classes)
-      tools/                     # Placement tools (12 classes)
-      systems/                   # Tutorial, Achievement, WorldGen, Weather
-      core/                      # ComponentEntity, Profession, Scenario
     reimpl/                      # hook wrappers (232 files, auto-compiled by Makefile)
       mainloop.cpp               # Engine::MainLoop (Run, Frame, Update, Draw, SetNextLoop)
   docs/                          # function documentation exports

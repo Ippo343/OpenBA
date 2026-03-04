@@ -22,3 +22,6 @@ patches/build/
 # OS
 Thumbs.db
 .DS_Store
+
+#toolkit files
+/ToolKit/

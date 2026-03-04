@@ -63,7 +63,7 @@ static void Reimpl_Slot7(void* self) {
 }
 
 // Slot9 — REIMPLEMENTED (toggles workplace enabled state)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "BuildUI::Slot9";
     BuildUI_Slot9((BuildUI*)self, param2, param3, param4);

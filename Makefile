@@ -7,13 +7,16 @@
 #   make undeploy   - remove from Banished directory
 #   make clean      - remove build artifacts
 
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type
+# Enable parallel builds by default (override with make -j1 for sequential)
+MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4)
+
+CXX = ccache g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type -MMD -MP
 LDFLAGS = -shared -static-libgcc -static-libstdc++
 LIBS = -luser32 -ldbghelp
 
 # Include paths: project root + all source directories
-INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs -Iengine/src \
+INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs -Icode/Game \
            -Iruntime/types -Iruntime/funcs
 
 # Directories
@@ -34,15 +37,15 @@ ENGINE_FUNC_SRCS = \
 # Auto-discover reimplementation files (hook wrappers)
 ENGINE_REIMPL_SRCS = $(wildcard engine/reimpl/*.cpp)
 
-# Auto-discover clean game logic files (future standalone exe source)
-ENGINE_SRC_SRCS = $(wildcard engine/src/*/*.cpp)
+# Auto-discover clean game logic files (mirrors original source tree)
+GAME_SRC_SRCS = $(wildcard code/Game/*/*.cpp)
 
 # Runtime-x64.dll reimplementation sources
 RUNTIME_FUNC_SRCS = runtime/funcs/runtime_funcs.cpp
 RUNTIME_REIMPL_SRCS = $(wildcard runtime/reimpl/*.cpp)
 RUNTIME_SRC_SRCS = $(wildcard runtime/src/*/*.cpp)
 
-ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS) $(ENGINE_SRC_SRCS) \
+ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS) $(GAME_SRC_SRCS) \
            $(RUNTIME_FUNC_SRCS) $(RUNTIME_REIMPL_SRCS) $(RUNTIME_SRC_SRCS)
 
 # Object files: flatten paths into OBJ_DIR to avoid collisions
@@ -78,26 +81,32 @@ $(OBJ_DIR)/engine__funcs__%.o: engine/funcs/%.cpp | $(OBJ_DIR)
 $(OBJ_DIR)/engine__reimpl__%.o: engine/reimpl/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-# Pattern rules for engine/src subdirectories (clean game logic)
-$(OBJ_DIR)/engine__src__components__%.o: engine/src/components/%.cpp | $(OBJ_DIR)
+# Pattern rules for code/Game subdirectories (mirrors original source tree)
+$(OBJ_DIR)/code__Game__Action__%.o: code/Game/Action/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJ_DIR)/engine__src__actions__%.o: engine/src/actions/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/code__Game__Component__%.o: code/Game/Component/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJ_DIR)/engine__src__work__%.o: engine/src/work/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/code__Game__Dialog__%.o: code/Game/Dialog/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJ_DIR)/engine__src__ui__%.o: engine/src/ui/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/code__Game__Entity__%.o: code/Game/Entity/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJ_DIR)/engine__src__tools__%.o: engine/src/tools/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/code__Game__Game__%.o: code/Game/Game/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJ_DIR)/engine__src__systems__%.o: engine/src/systems/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/code__Game__Goal__%.o: code/Game/Goal/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(OBJ_DIR)/engine__src__core__%.o: engine/src/core/%.cpp | $(OBJ_DIR)
+$(OBJ_DIR)/code__Game__Player__%.o: code/Game/Player/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/code__Game__Tutorial__%.o: code/Game/Tutorial/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(OBJ_DIR)/code__Game__Work__%.o: code/Game/Work/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # Pattern rules for runtime/ directories
@@ -174,6 +183,9 @@ undeploy:
 run: deploy
 	cd "$(BANISHED_DIR)" && start Application-x64.exe
 	@echo "Launched Banished with patch"
+
+# Include auto-generated header dependency files
+-include $(OBJECTS:.o=.d)
 
 clean:
 	rm -rf $(BUILD_DIR)

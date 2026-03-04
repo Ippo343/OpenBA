@@ -560,6 +560,7 @@ extern uint32_t* g_TypeId_StateMachineComponent;  // (TBD)
 extern uint32_t* g_TypeId_WorkplaceJobType;       // DAT_1401c80a8
 extern uint32_t* g_TypeId_AttendanceSubComp;      // DAT_1401c3f78
 extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
+extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
 
 // ============================================================
 // Game Singletons (Phase A3 — exe global pointers)
@@ -719,6 +720,75 @@ typedef void (*fn_PastureUI_UpdateSlider_t)(void* self);
 extern fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider;
 
 // ============================================================
+// Phase F: Dialog/UI Runtime functions
+// ============================================================
+
+// ImageElement::SetRotation(this, angle) — sets rotation in degrees
+// ?SetRotation@ImageElement@UI@@QEAAXM@Z (0x1801182c0, ordinal 3952)
+typedef void (*fn_ImageElement_SetRotation_t)(void* self, float angle);
+extern fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation;
+
+// Time::AsSeconds(this) -> float — converts tick count to seconds
+// ?AsSeconds@Time@System@@QEBAMXZ (0x180007900, ordinal 1620)
+typedef float (*fn_Time_AsSeconds_t)(void* time);
+extern fn_Time_AsSeconds_t fn_Time_AsSeconds;
+
+// SaveLoad::GetOperation(this) -> int (enum Operation)
+// ?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ (0x1800c3c80, ordinal 2826)
+typedef int (*fn_SaveLoad_GetOperation_t)(void* saveLoad);
+extern fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation;
+
+// SaveLoad singleton — accessed via exe exref at 0x140151610 (double-indirect)
+extern void** g_pSaveLoadSingleton;
+
+// EditElement::SetText(this, String*) — sets edit field text
+// ?SetText@EditElement@UI@@QEAAXVString@2@@Z (0x180042070)
+typedef void (*fn_EditElement_SetText_t)(void* self, void* str);
+extern fn_EditElement_SetText_t fn_EditElement_SetText;
+
+// ImageElement::GetSprite(this, retval) — member, non-trivial return ABI
+// RCX=this, RDX=retval(Sprite*). Copies 16 bytes from +0xC0/+0xC8.
+// ?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ (0x1801182a0, ordinal 2926)
+typedef void (*fn_ImageElement_GetSprite_t)(void* self, void* retval);
+extern fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite;
+
+// SpriteSheet::GetSpriteIndexFromName(this, name) -> int
+// ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z (0x1800031f0, ordinal 2930)
+typedef int (*fn_SpriteSheet_GetSpriteIndexFromName_t)(void* sheet, void* name);
+extern fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName;
+
+// SliderElement::SetParameter(this, index, String const&)
+// ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z
+typedef void (*fn_SliderElement_SetParameter_t)(void* self, int index, const void* str);
+extern fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter;
+
+// Audio::Scene::Pause(this, channel, pause) — unpauses audio scene channels
+// Resolved from exe dispatch table at 0x140152030
+typedef void (*fn_Audio_Scene_Pause_t)(void* scene, int channel, bool pause);
+extern fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause;
+
+// ScenarioDialog helper: loads the selected scenario (FUN_140077cb0)
+typedef void (*fn_ScenarioDialog_LoadSelected_t)(void* self);
+extern fn_ScenarioDialog_LoadSelected_t fn_ScenarioDialog_LoadSelected;
+
+// ModDetailsDialog helpers
+typedef void (*fn_ModDetailsDialog_OpenUpdateDialog_t)(void* self);
+extern fn_ModDetailsDialog_OpenUpdateDialog_t fn_ModDetailsDialog_OpenUpdateDialog;
+
+typedef void (*fn_ModDetailsDialog_DeleteMod_t)(void* self);
+extern fn_ModDetailsDialog_DeleteMod_t fn_ModDetailsDialog_DeleteMod;
+
+// SelectResourceUI::GetResourceCount(self) -> int
+// FUN_140078a40 — counts expected resources for combo (shared by Orchard/Pasture)
+typedef int (*fn_SelectResourceUI_GetResourceCount_t)(void* self);
+extern fn_SelectResourceUI_GetResourceCount_t fn_SelectResourceUI_GetResourceCount;
+
+// SelectResourceUI::PopulateCombo(self)
+// FUN_140078830 — repopulates combo element with current resources
+typedef void (*fn_SelectResourceUI_PopulateCombo_t)(void* self);
+extern fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo;
+
+// ============================================================
 // Video::ImageBuffer (Runtime DLL exports, used by MapUI/NoiseUI/SpriteCaptureUI)
 // ============================================================
 
@@ -741,6 +811,287 @@ extern fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture;
 // ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f33a0, ordinal 1866)
 typedef bool (*fn_ImageBuffer_CopyFromTexture_t)(void* self, void* data, int width, int height);
 extern fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture;
+
+// ============================================================
+// Achievement::GoalList / GoalInstance (Runtime DLL exports)
+// ============================================================
+
+// GoalList::GetGoal(this, retval, index) — member, non-trivial return ABI
+// RCX=GoalList, RDX=hidden_retval (InternalPtr<GoalInstance>), R8=index
+// ?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z
+// (0x180001710, ordinal 2683)
+typedef void (*fn_GoalList_GetGoal_t)(void* self, void* retval, int index);
+extern fn_GoalList_GetGoal_t fn_GoalList_GetGoal;
+
+// GoalInstance::IsMet(this) -> bool — checks if goal is met (bit 0 of +0x10)
+// ?IsMet@GoalInstance@Achievement@@QEBA_NXZ (0x18009eed0, ordinal 3141)
+typedef bool (*fn_GoalInstance_IsMet_t)(void* self);
+extern fn_GoalInstance_IsMet_t fn_GoalInstance_IsMet;
+
+// GoalInstance::HasFailed(this) -> bool — checks if goal has failed (bit 1 of +0x10)
+// ?HasFailed@GoalInstance@Achievement@@QEBA_NXZ (0x18009eec0, ordinal 3046)
+typedef bool (*fn_GoalInstance_HasFailed_t)(void* self);
+extern fn_GoalInstance_HasFailed_t fn_GoalInstance_HasFailed;
+
+// AchievementManager singleton — double-indirect via .rdata dispatch at 0x1401514f0
+// Usage: void* manager = **g_ppAchievementManager;
+extern void*** g_ppAchievementManager;
+
+// AchievementManager::IsAchievementAwarded(this, index) -> bool
+// ?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z (0x1800079c0, ordinal 3091)
+typedef bool (*fn_AchievementManager_IsAchievementAwarded_t)(void* self, int index);
+extern fn_AchievementManager_IsAchievementAwarded_t fn_AchievementManager_IsAchievementAwarded;
+
+// ============================================================
+// FollowDialog helpers
+// ============================================================
+
+// FindComponent_Character — FUN_140003f60 (finds Character/CitizenAI component)
+// Same signature as other FindComponent variants: entity*, retval*
+extern fn_FindComponent_t fn_FindComponent_Character;  // FUN_140003f60
+
+// Input::KeyMap::Pressed(this, slot, keyId) -> bool
+// Resolved from exe dispatch table at 0x140151758
+typedef bool (*fn_KeyMap_Pressed_t)(void* self, int slot, int keyId);
+extern fn_KeyMap_Pressed_t fn_KeyMap_Pressed;
+
+// FollowDialog close helper — clears follow target, closes dialog
+// FUN_140068f00: (self)
+typedef void (*fn_FollowDialog_Close_t)(void* self);
+extern fn_FollowDialog_Close_t fn_FollowDialog_Close;
+
+// ============================================================
+// UpgradeUI helpers
+// ============================================================
+
+// UpgradeDescription type ID at DAT_1401c5868
+extern uint32_t* g_TypeId_UpgradeDescription;
+
+// DestroyComponent_StartUpgrade — drives state machine through upgrade transition
+// FUN_14011dfa0: complex 120+ line function, resolved as opaque function pointer
+typedef void (*fn_DestroyComponent_StartUpgrade_t)(void* destroyComp);
+extern fn_DestroyComponent_StartUpgrade_t fn_DestroyComponent_StartUpgrade;
+
+// ============================================================
+// ResidenceUI helpers
+// ============================================================
+
+// ResidenceUI_GoToCitizen(self, citizenIndex) — navigates camera to resident
+// FUN_1400b56a0: reads resident data from dynamic array, focuses camera
+typedef void (*fn_ResidenceUI_GoToCitizen_t)(void* self, int citizenIndex);
+extern fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen;
+
+// ResidenceUI array push (FUN_140021020) — resizes and copies 0x30-byte entries
+// Used by ResidenceUI::Slot4 to build the resident row element array.
+// Signature: (arrayBase*, newCount, elementPtr*)
+typedef void (*fn_ResidenceUI_ArrayPush_t)(void* arrayBase, int newCount, void* element);
+extern fn_ResidenceUI_ArrayPush_t fn_ResidenceUI_ArrayPush;
+
+// ============================================================
+// WorkplaceUI helpers
+// ============================================================
+
+// FindComponent for BuildState (type DAT_1401c8118)
+// FUN_140002e10: entity, retval*
+extern fn_FindComponent_t fn_FindComponent_BuildState2;  // FUN_140002e10
+
+// WorkplaceUI_AdjustWorkerCount(self, delta) — adjusts assigned worker count by +/-delta
+// FUN_140087610: called for jobCountUp (+1) and jobCountDown (-1) buttons
+typedef void (*fn_WorkplaceUI_AdjustWorkerCount_t)(void* self, int delta);
+extern fn_WorkplaceUI_AdjustWorkerCount_t fn_WorkplaceUI_AdjustWorkerCount;
+
+// WorkplaceUI_ToggleWorkplace(self) — toggles workplace enabled/disabled state
+// FUN_1400876d0: called when workPlaceButton is clicked (ID 0x1454)
+typedef void (*fn_WorkplaceUI_ToggleWorkplace_t)(void* self);
+extern fn_WorkplaceUI_ToggleWorkplace_t fn_WorkplaceUI_ToggleWorkplace;
+
+// CitizenList::RequestWorker(citizenList, professionId) — adds worker request
+// FUN_14008d100: called for workerCountUp (ID 0x1450)
+typedef void (*fn_CitizenList_RequestWorker_t)(void* citizenList, void* retval, uint64_t professionId);
+extern fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker;
+
+// CitizenList::AssignWorker(citizenList, retval, workerSlot, professionId) — assign worker
+// FUN_14008c3d0: called after requesting worker
+typedef void (*fn_CitizenList_AssignWorker_t)(void* citizenList, void* retval, void* workerSlot, uint64_t professionId);
+extern fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker;
+
+// CitizenList::RemoveWorker(citizenList, professionId) — removes worker assignment
+// FUN_140091180: called for workerCountDown (ID 0x1451)
+typedef void (*fn_CitizenList_RemoveWorker_t)(void* citizenList, uint64_t professionId);
+extern fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker;
+
+// FindComponent_Position — finds PositionComponent on entity
+// Searches entity component array for PositionComponent type ID.
+extern fn_FindComponent_t fn_FindComponent_Position;  // FUN_14000d6c0
+
+// EditTool type ID at g_TypeId_EditTool
+extern uint32_t* g_TypeId_EditTool;  // resolved from _typeInfo_exref for EditTool checks
+
+// ============================================================
+// EntityUI helpers
+// ============================================================
+
+// EntityUI_SetEditMode(playerController, mode) — sets edit tool selection mode
+// FUN_140102b60: sets player controller edit state
+typedef void (*fn_EntityUI_SetEditMode_t)(void* playerController, int mode);
+extern fn_EntityUI_SetEditMode_t fn_EntityUI_SetEditMode;
+
+// EntityUI_SelectEntity(playerController, entityPtr, x, y) — select entity for editing
+// FUN_140102e30: passes entity to edit tool's select
+typedef void (*fn_EntityUI_SelectEntity_t)(void* playerController, void* entityPtr, int x, int y);
+extern fn_EntityUI_SelectEntity_t fn_EntityUI_SelectEntity;
+
+// EditTool_GetSelected(editTool, retval) — gets currently selected entity
+// vtable[13] (offset 0x68): virtual call on EditTool, returns InternalPtr<ComponentEntity>
+// Used by EntityUI::Slot7 to check if current entity is selected
+
+// FindComponent_SM — finds StateMachine/animation component on entity
+// FUN_14000a170: entity, retval*
+extern fn_FindComponent_t fn_FindComponent_SM;  // FUN_14000a170
+
+// GetDescPage(entityDesc, retval) — gets default page from entity description
+// FUN_140011320: reads description fields, returns page-related struct ptr
+typedef void (*fn_GetDescPage_t)(void* entityDesc, void* retval);
+extern fn_GetDescPage_t fn_GetDescPage;
+
+// BuildComplete(posComp) -> bool — checks if build is complete
+// FUN_140109390: reads build progress from position component
+typedef bool (*fn_BuildComplete_t)(void* posComp);
+extern fn_BuildComplete_t fn_BuildComplete;
+
+// ============================================================
+// EventLogUI helpers
+// ============================================================
+
+// EventLogUI_ToggleNotification(self, buttonIndex) — toggles event notification flag
+// FUN_140067320: reads flag from button element, copies to event log global
+typedef void (*fn_EventLogUI_ToggleNotification_t)(void* self, int buttonIndex);
+extern fn_EventLogUI_ToggleNotification_t fn_EventLogUI_ToggleNotification;
+
+// EventLogUI_NavigateToEvent(self, rowIndex) — navigates camera to event location
+// FUN_140067370: computes map coords from event, sets camera target
+typedef void (*fn_EventLogUI_NavigateToEvent_t)(void* self, int rowIndex);
+extern fn_EventLogUI_NavigateToEvent_t fn_EventLogUI_NavigateToEvent;
+
+// ============================================================
+// Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
+// ============================================================
+
+// MapParamsDialog::OnOk — copies editName text to game world, closes dialog
+// FUN_14006b690
+typedef void (*fn_MapParamsDialog_OnOk_t)(void* self);
+extern fn_MapParamsDialog_OnOk_t fn_MapParamsDialog_OnOk;
+
+// MapParamsDialog::OnNewName — generates random name, sets editName text
+// FUN_14006b700
+typedef void (*fn_MapParamsDialog_OnNewName_t)(void* self);
+extern fn_MapParamsDialog_OnNewName_t fn_MapParamsDialog_OnNewName;
+
+// GameWorld_GetMapName — copies gameWorld+0x28 into String
+// FUN_140011f90: RCX=gameWorld, RDX=retval(String*), returns retval
+typedef void* (*fn_GameWorld_GetMapName_t)(void* gameWorld, void* retval);
+extern fn_GameWorld_GetMapName_t fn_GameWorld_GetMapName;
+
+// Element::SetUserData(this, Base*) — stores user data pointer
+typedef void (*fn_Element_SetUserData_t)(void* self, void* data);
+extern fn_Element_SetUserData_t fn_Element_SetUserData;
+
+// UpgradeUI::Serialize — complex setup (opaque passthrough via exe address)
+// 0x140086d90
+typedef void (*fn_UpgradeUI_Serialize_t)(void* self);
+extern fn_UpgradeUI_Serialize_t fn_UpgradeUI_Serialize;
+
+// UpgradeUI::OnRemove — button click starts upgrade
+// 0x140086c90
+typedef void (*fn_UpgradeUI_OnRemove_t)(void* self, void* p2, int eventType, int eventId);
+extern fn_UpgradeUI_OnRemove_t fn_UpgradeUI_OnRemove;
+
+// ConsumeProduceUI::Slot4 — combo setup with resource sprites
+// 0x14005F3D0
+typedef void (*fn_ConsumeProduceUI_Slot4_t)(void* self);
+extern fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4;
+
+// HelpUI::Slot4 — page navigation setup
+// 0x14006A500
+typedef void (*fn_HelpUI_Slot4_t)(void* self);
+extern fn_HelpUI_Slot4_t fn_HelpUI_Slot4;
+
+// HelpUI::Slot9 — button/combo event handler
+// 0x14006A290
+typedef void (*fn_HelpUI_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
+extern fn_HelpUI_Slot9_t fn_HelpUI_Slot9;
+
+// ============================================================
+// Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
+// ============================================================
+
+// GoalList::GetGoalCount(this) -> int — returns count at this+8
+// ?GetGoalCount@GoalList@Achievement@@QEBAHXZ (0x180001700, ordinal 2684)
+typedef int (*fn_GoalList_GetGoalCount_t)(void* self);
+extern fn_GoalList_GetGoalCount_t fn_GoalList_GetGoalCount;
+
+// UI::Dialog::GetTemplate(this, retval, index) -> ExternalPtr<ElementDescription>
+// Member, non-trivial return: RCX=this, RDX=retval, R8=index
+// ?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z
+// (0x1800388b0, ordinal 2956)
+typedef void (*fn_Dialog_GetTemplate_t)(void* self, void* retval, int index);
+extern fn_Dialog_GetTemplate_t fn_Dialog_GetTemplate;
+
+// Goal::GetText(this, retval) -> String — non-trivial return
+// RCX=this, RDX=retval(String*). Copies string at this+0x28 with refcount.
+// ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ (0x180001ba0, ordinal 2958)
+typedef void (*fn_Goal_GetText_t)(void* self, void* retval);
+extern fn_Goal_GetText_t fn_Goal_GetText;
+
+// Achievement::GetTitle(this, retval) -> String — non-trivial return
+// RCX=this, RDX=retval(String*). Copies string at this+0x28 with refcount.
+// ?GetTitle@Achievement@1@QEBA?AVString@System@@XZ (0x1800013e0, ordinal 2973)
+typedef void (*fn_Achievement_GetTitle_t)(void* self, void* retval);
+extern fn_Achievement_GetTitle_t fn_Achievement_GetTitle;
+
+// Achievement::GetDescription(this, retval) -> String — non-trivial return
+// RCX=this, RDX=retval(String*). Returns description string.
+// ?GetDescription@Achievement@1@QEBA?AVString@System@@XZ (0x180001420, ordinal)
+typedef void (*fn_Achievement_GetDescription_t)(void* self, void* retval);
+extern fn_Achievement_GetDescription_t fn_Achievement_GetDescription;
+
+// Achievement::GetSpriteName(this, retval) -> String — non-trivial return
+// ?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ (0x1800013a0)
+typedef void (*fn_Achievement_GetSpriteName_t)(void* self, void* retval);
+extern fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName;
+
+// GoalDialog dynamic array push (FUN_140011750 in retail exe)
+// Pushes a 0x18-byte entry (3 pointers: imageComplete, imageFail, textGoal) to goal array.
+// Signature: (arrayBase*, newCount, elementPtr*)
+typedef void (*fn_GoalDialog_ArrayPush_t)(void* arrayBase, int newCount, void* element);
+extern fn_GoalDialog_ArrayPush_t fn_GoalDialog_ArrayPush;
+
+// EventNotifyDialog dynamic array push (FUN_140011750 in retail exe — same function)
+// Pushes a 0x18-byte entry (3 pointers: group, image, button) to notification array.
+extern fn_GoalDialog_ArrayPush_t fn_EventNotifyDialog_ArrayPush;
+
+// ScenarioDialog dynamic array push (FUN_140013b60 in retail exe)
+// Pushes a 0x38-byte entry to scenario array.
+typedef void (*fn_ScenarioDialog_ArrayPush_t)(void* arrayBase, int newCount, void* element);
+extern fn_ScenarioDialog_ArrayPush_t fn_ScenarioDialog_ArrayPush;
+
+// ExternalList::GetResourceCount(this) -> int
+// ?GetResourceCount@ExternalList@Object@@QEBAHXZ (0x180007650)
+typedef int (*fn_ExternalList_GetResourceCount_t)(void* self);
+extern fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount;
+
+// Scenario type ID pointer (for IsDerivedFrom check in ScenarioDialog)
+extern uint32_t* g_TypeId_Scenario;  // from exref in ScenarioDialog::Slot4
+
+// UI::Element::SetPadding(this, left, top, right, bottom)
+// ?SetPadding@Element@UI@@QEAAXHHHH@Z
+typedef void (*fn_Element_SetPadding_t)(void* self, int left, int top, int right, int bottom);
+extern fn_Element_SetPadding_t fn_Element_SetPadding;
+
+// EventNotifyDialog array remove (FUN_140011670 in retail exe)
+// Removes entry at index from dynamic array (shifts remaining, decrements count).
+typedef void (*fn_EventNotifyDialog_ArrayRemove_t)(void* arrayBase, int index);
+extern fn_EventNotifyDialog_ArrayRemove_t fn_EventNotifyDialog_ArrayRemove;
 
 // ============================================================
 // Initialization

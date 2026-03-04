@@ -239,6 +239,7 @@ uint32_t* g_TypeId_StateMachineComponent = nullptr;
 uint32_t* g_TypeId_WorkplaceJobType = nullptr;
 uint32_t* g_TypeId_AttendanceSubComp = nullptr;
 uint32_t* g_TypeId_ResourceLimitType = nullptr;
+uint32_t* g_TypeId_ToolUI = nullptr;
 
 // ============================================================
 // Game Singletons (Phase A3)
@@ -305,6 +306,89 @@ fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
 fn_ImageBuffer_Dtor_t fn_ImageBuffer_Dtor = nullptr;
 fn_ImageBuffer_CopyToTexture_t fn_ImageBuffer_CopyToTexture = nullptr;
 fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture = nullptr;
+
+// ============================================================
+// Phase F: Dialog/UI Runtime functions
+// ============================================================
+fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation = nullptr;
+fn_Time_AsSeconds_t fn_Time_AsSeconds = nullptr;
+fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation = nullptr;
+void** g_pSaveLoadSingleton = nullptr;
+fn_EditElement_SetText_t fn_EditElement_SetText = nullptr;
+fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite = nullptr;
+fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName = nullptr;
+fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter = nullptr;
+fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
+fn_ScenarioDialog_LoadSelected_t fn_ScenarioDialog_LoadSelected = nullptr;
+fn_ModDetailsDialog_OpenUpdateDialog_t fn_ModDetailsDialog_OpenUpdateDialog = nullptr;
+fn_ModDetailsDialog_DeleteMod_t fn_ModDetailsDialog_DeleteMod = nullptr;
+fn_SelectResourceUI_GetResourceCount_t fn_SelectResourceUI_GetResourceCount = nullptr;
+fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo = nullptr;
+fn_GoalList_GetGoal_t fn_GoalList_GetGoal = nullptr;
+fn_GoalInstance_IsMet_t fn_GoalInstance_IsMet = nullptr;
+fn_GoalInstance_HasFailed_t fn_GoalInstance_HasFailed = nullptr;
+void*** g_ppAchievementManager = nullptr;
+fn_AchievementManager_IsAchievementAwarded_t fn_AchievementManager_IsAchievementAwarded = nullptr;
+// FollowDialog helpers
+fn_FindComponent_t fn_FindComponent_Character = nullptr;
+fn_KeyMap_Pressed_t fn_KeyMap_Pressed = nullptr;
+fn_FollowDialog_Close_t fn_FollowDialog_Close = nullptr;
+
+// UpgradeUI helpers
+uint32_t* g_TypeId_UpgradeDescription = nullptr;
+fn_DestroyComponent_StartUpgrade_t fn_DestroyComponent_StartUpgrade = nullptr;
+
+fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen = nullptr;
+fn_ResidenceUI_ArrayPush_t fn_ResidenceUI_ArrayPush = nullptr;
+fn_EventLogUI_ToggleNotification_t fn_EventLogUI_ToggleNotification = nullptr;
+fn_EventLogUI_NavigateToEvent_t fn_EventLogUI_NavigateToEvent = nullptr;
+
+// WorkplaceUI helpers
+fn_FindComponent_t fn_FindComponent_BuildState2 = nullptr;
+fn_WorkplaceUI_AdjustWorkerCount_t fn_WorkplaceUI_AdjustWorkerCount = nullptr;
+fn_WorkplaceUI_ToggleWorkplace_t fn_WorkplaceUI_ToggleWorkplace = nullptr;
+fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker = nullptr;
+fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker = nullptr;
+fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker = nullptr;
+fn_FindComponent_t fn_FindComponent_Position = nullptr;
+uint32_t* g_TypeId_EditTool = nullptr;
+
+// EntityUI helpers
+fn_EntityUI_SetEditMode_t fn_EntityUI_SetEditMode = nullptr;
+fn_EntityUI_SelectEntity_t fn_EntityUI_SelectEntity = nullptr;
+fn_FindComponent_t fn_FindComponent_SM = nullptr;
+fn_GetDescPage_t fn_GetDescPage = nullptr;
+fn_BuildComplete_t fn_BuildComplete = nullptr;
+
+// ============================================================
+// Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
+// ============================================================
+fn_MapParamsDialog_OnOk_t fn_MapParamsDialog_OnOk = nullptr;
+fn_MapParamsDialog_OnNewName_t fn_MapParamsDialog_OnNewName = nullptr;
+fn_GameWorld_GetMapName_t fn_GameWorld_GetMapName = nullptr;
+fn_Element_SetUserData_t fn_Element_SetUserData = nullptr;
+fn_UpgradeUI_Serialize_t fn_UpgradeUI_Serialize = nullptr;
+fn_UpgradeUI_OnRemove_t fn_UpgradeUI_OnRemove = nullptr;
+fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4 = nullptr;
+fn_HelpUI_Slot4_t fn_HelpUI_Slot4 = nullptr;
+fn_HelpUI_Slot9_t fn_HelpUI_Slot9 = nullptr;
+
+// ============================================================
+// Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
+// ============================================================
+fn_GoalList_GetGoalCount_t fn_GoalList_GetGoalCount = nullptr;
+fn_Dialog_GetTemplate_t fn_Dialog_GetTemplate = nullptr;
+fn_Goal_GetText_t fn_Goal_GetText = nullptr;
+fn_Achievement_GetTitle_t fn_Achievement_GetTitle = nullptr;
+fn_Achievement_GetDescription_t fn_Achievement_GetDescription = nullptr;
+fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName = nullptr;
+fn_GoalDialog_ArrayPush_t fn_GoalDialog_ArrayPush = nullptr;
+fn_GoalDialog_ArrayPush_t fn_EventNotifyDialog_ArrayPush = nullptr;
+fn_ScenarioDialog_ArrayPush_t fn_ScenarioDialog_ArrayPush = nullptr;
+fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount = nullptr;
+uint32_t* g_TypeId_Scenario = nullptr;
+fn_Element_SetPadding_t fn_Element_SetPadding = nullptr;
+fn_EventNotifyDialog_ArrayRemove_t fn_EventNotifyDialog_ArrayRemove = nullptr;
 
 // ============================================================
 // Engine globals
@@ -957,6 +1041,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c3f78));
     g_TypeId_ResourceLimitType = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5520));
+    g_TypeId_ToolUI = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5788));
     // CheckboxElement type ID: exref at 0x1401516a8 → pointer → uint32_t typeId
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
@@ -1099,6 +1185,228 @@ bool EngineFuncsInit() {
     if (!fn_ImageBuffer_CopyFromTexture)
         fn_ImageBuffer_CopyFromTexture = reinterpret_cast<fn_ImageBuffer_CopyFromTexture_t>(
             ResolveAddr(Module::Runtime, 0x1800f33a0));
+
+    // --- Phase F: Dialog/UI Runtime functions ---
+    fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
+        ResolveExport("?SetRotation@ImageElement@UI@@QEAAXM@Z"));
+    if (!fn_ImageElement_SetRotation)
+        fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
+            ResolveAddr(Module::Runtime, 0x1801182c0));
+
+    fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
+        ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
+    if (!fn_Time_AsSeconds)
+        fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
+            ResolveAddr(Module::Runtime, 0x180007900));
+
+    fn_SaveLoad_GetOperation = reinterpret_cast<fn_SaveLoad_GetOperation_t>(
+        ResolveExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ"));
+    if (!fn_SaveLoad_GetOperation)
+        fn_SaveLoad_GetOperation = reinterpret_cast<fn_SaveLoad_GetOperation_t>(
+            ResolveAddr(Module::Runtime, 0x1800c3c80));
+
+    // SaveLoad singleton: exe exref at 0x140151610 -> pointer to _singleton in Runtime
+    {
+        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151610));
+        if (exref && *exref) {
+            g_pSaveLoadSingleton = *exref;
+        }
+    }
+
+    fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
+        ResolveExport("?SetText@EditElement@UI@@QEAAXVString@2@@Z"));
+    if (!fn_EditElement_SetText)
+        fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
+            ResolveAddr(Module::Runtime, 0x180042070));
+
+    fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
+        ResolveExport("?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ"));
+    if (!fn_ImageElement_GetSprite)
+        fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
+            ResolveAddr(Module::Runtime, 0x1801182a0));
+
+    fn_SpriteSheet_GetSpriteIndexFromName = reinterpret_cast<fn_SpriteSheet_GetSpriteIndexFromName_t>(
+        ResolveExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"));
+    if (!fn_SpriteSheet_GetSpriteIndexFromName)
+        fn_SpriteSheet_GetSpriteIndexFromName = reinterpret_cast<fn_SpriteSheet_GetSpriteIndexFromName_t>(
+            ResolveAddr(Module::Runtime, 0x1800031f0));
+
+    // SliderElement::SetParameter
+    fn_SliderElement_SetParameter = reinterpret_cast<fn_SliderElement_SetParameter_t>(
+        ResolveExport("?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z"));
+
+    // Audio::Scene::Pause — resolved from exe dispatch table (indirect pointer)
+    fn_Audio_Scene_Pause = reinterpret_cast<fn_Audio_Scene_Pause_t>(
+        ResolveExport("?Pause@Scene@Audio@@QEAAXH_N@Z"));
+    if (!fn_Audio_Scene_Pause) {
+        uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140152030);
+        if (dispatchAddr)
+            fn_Audio_Scene_Pause = *reinterpret_cast<fn_Audio_Scene_Pause_t*>(dispatchAddr);
+    }
+
+    // ScenarioDialog helper — exe function at 0x140077cb0
+    fn_ScenarioDialog_LoadSelected = reinterpret_cast<fn_ScenarioDialog_LoadSelected_t>(
+        ResolveAddr(Module::Exe, 0x140077cb0));
+
+    // ModDetailsDialog helpers — exe functions
+    fn_ModDetailsDialog_OpenUpdateDialog = reinterpret_cast<fn_ModDetailsDialog_OpenUpdateDialog_t>(
+        ResolveAddr(Module::Exe, 0x14006d400));
+    fn_ModDetailsDialog_DeleteMod = reinterpret_cast<fn_ModDetailsDialog_DeleteMod_t>(
+        ResolveAddr(Module::Exe, 0x14006d550));
+
+    // SelectResourceUI helpers — exe functions (shared by Orchard/Pasture)
+    fn_SelectResourceUI_GetResourceCount = reinterpret_cast<fn_SelectResourceUI_GetResourceCount_t>(
+        ResolveAddr(Module::Exe, 0x140078a40));
+    fn_SelectResourceUI_PopulateCombo = reinterpret_cast<fn_SelectResourceUI_PopulateCombo_t>(
+        ResolveAddr(Module::Exe, 0x140078830));
+
+    // Achievement::GoalList / GoalInstance (Runtime DLL exports)
+    fn_GoalList_GetGoal = reinterpret_cast<fn_GoalList_GetGoal_t>(
+        ResolveExport("?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z"));
+    if (!fn_GoalList_GetGoal)
+        fn_GoalList_GetGoal = reinterpret_cast<fn_GoalList_GetGoal_t>(
+            ResolveAddr(Module::Runtime, 0x180001710));
+
+    fn_GoalInstance_IsMet = reinterpret_cast<fn_GoalInstance_IsMet_t>(
+        ResolveExport("?IsMet@GoalInstance@Achievement@@QEBA_NXZ"));
+    if (!fn_GoalInstance_IsMet)
+        fn_GoalInstance_IsMet = reinterpret_cast<fn_GoalInstance_IsMet_t>(
+            ResolveAddr(Module::Runtime, 0x18009eed0));
+
+    fn_GoalInstance_HasFailed = reinterpret_cast<fn_GoalInstance_HasFailed_t>(
+        ResolveExport("?HasFailed@GoalInstance@Achievement@@QEBA_NXZ"));
+    if (!fn_GoalInstance_HasFailed)
+        fn_GoalInstance_HasFailed = reinterpret_cast<fn_GoalInstance_HasFailed_t>(
+            ResolveAddr(Module::Runtime, 0x18009eec0));
+
+    // AchievementManager singleton (double-indirect .rdata dispatch at 0x1401514f0)
+    g_ppAchievementManager = reinterpret_cast<void***>(
+        ResolveAddr(Module::Exe, 0x1401514f0));
+
+    fn_AchievementManager_IsAchievementAwarded =
+        reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
+            ResolveExport("?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z"));
+    if (!fn_AchievementManager_IsAchievementAwarded)
+        fn_AchievementManager_IsAchievementAwarded =
+            reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
+                ResolveAddr(Module::Runtime, 0x1800079c0));
+
+    // FindComponent_Character — FUN_140003f60
+    fn_FindComponent_Character = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140003f60));
+
+    // Input::KeyMap::Pressed — from exe dispatch table at 0x140151758
+    fn_KeyMap_Pressed = reinterpret_cast<fn_KeyMap_Pressed_t>(
+        ResolveExport("?Pressed@KeyMap@Input@@QEBA_NHH@Z"));
+    if (!fn_KeyMap_Pressed) {
+        uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140151758);
+        if (dispatchAddr)
+            fn_KeyMap_Pressed = *reinterpret_cast<fn_KeyMap_Pressed_t*>(dispatchAddr);
+    }
+
+    // FollowDialog close helper — FUN_140068f00
+    fn_FollowDialog_Close = reinterpret_cast<fn_FollowDialog_Close_t>(
+        ResolveAddr(Module::Exe, 0x140068f00));
+
+    // UpgradeDescription type ID at DAT_1401c5868
+    g_TypeId_UpgradeDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5868));
+
+    // DestroyComponent_StartUpgrade — FUN_14011dfa0
+    fn_DestroyComponent_StartUpgrade = reinterpret_cast<fn_DestroyComponent_StartUpgrade_t>(
+        ResolveAddr(Module::Exe, 0x14011dfa0));
+
+    // ResidenceUI helper (exe function)
+    fn_ResidenceUI_GoToCitizen = reinterpret_cast<fn_ResidenceUI_GoToCitizen_t>(
+        ResolveAddr(Module::Exe, 0x1400b56a0));
+    // ResidenceUI array push (0x30-byte elements) — FUN_140021020
+    fn_ResidenceUI_ArrayPush = reinterpret_cast<fn_ResidenceUI_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140021020));
+
+    // EventLogUI helpers (exe functions)
+    fn_EventLogUI_ToggleNotification = reinterpret_cast<fn_EventLogUI_ToggleNotification_t>(
+        ResolveAddr(Module::Exe, 0x140067320));
+    fn_EventLogUI_NavigateToEvent = reinterpret_cast<fn_EventLogUI_NavigateToEvent_t>(
+        ResolveAddr(Module::Exe, 0x140067370));
+
+    // WorkplaceUI helpers
+    fn_FindComponent_BuildState2 = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+    fn_WorkplaceUI_AdjustWorkerCount = reinterpret_cast<fn_WorkplaceUI_AdjustWorkerCount_t>(
+        ResolveAddr(Module::Exe, 0x140087610));
+    fn_WorkplaceUI_ToggleWorkplace = reinterpret_cast<fn_WorkplaceUI_ToggleWorkplace_t>(
+        ResolveAddr(Module::Exe, 0x1400876d0));
+    fn_CitizenList_RequestWorker = reinterpret_cast<fn_CitizenList_RequestWorker_t>(
+        ResolveAddr(Module::Exe, 0x14008d100));
+    fn_CitizenList_AssignWorker = reinterpret_cast<fn_CitizenList_AssignWorker_t>(
+        ResolveAddr(Module::Exe, 0x14008c3d0));
+    fn_CitizenList_RemoveWorker = reinterpret_cast<fn_CitizenList_RemoveWorker_t>(
+        ResolveAddr(Module::Exe, 0x140091180));
+    fn_FindComponent_Position = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x14000d6c0));
+
+    // EditTool type ID — from the exe exref used in EntityUI
+    // The original uses _typeInfo_exref which is the same exref as EditTool's type
+    // We resolve it from the address seen in EntityUI::Slot7
+    g_TypeId_EditTool = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4158));
+
+    // EntityUI helpers
+    fn_EntityUI_SetEditMode = reinterpret_cast<fn_EntityUI_SetEditMode_t>(
+        ResolveAddr(Module::Exe, 0x140102b60));
+    fn_EntityUI_SelectEntity = reinterpret_cast<fn_EntityUI_SelectEntity_t>(
+        ResolveAddr(Module::Exe, 0x140102e30));
+    fn_FindComponent_SM = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x14000a170));
+    fn_GetDescPage = reinterpret_cast<fn_GetDescPage_t>(
+        ResolveAddr(Module::Exe, 0x140011320));
+    fn_BuildComplete = reinterpret_cast<fn_BuildComplete_t>(
+        ResolveAddr(Module::Exe, 0x140109390));
+
+    // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
+    fn_MapParamsDialog_OnOk = reinterpret_cast<fn_MapParamsDialog_OnOk_t>(
+        ResolveAddr(Module::Exe, 0x14006b690));
+    fn_MapParamsDialog_OnNewName = reinterpret_cast<fn_MapParamsDialog_OnNewName_t>(
+        ResolveAddr(Module::Exe, 0x14006b700));
+    fn_GameWorld_GetMapName = reinterpret_cast<fn_GameWorld_GetMapName_t>(
+        ResolveAddr(Module::Exe, 0x140011f90));
+    fn_Element_SetUserData = reinterpret_cast<fn_Element_SetUserData_t>(
+        ResolveAddr(Module::Runtime, 0x180115560));
+    fn_UpgradeUI_Serialize = reinterpret_cast<fn_UpgradeUI_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x140086d90));
+    fn_UpgradeUI_OnRemove = reinterpret_cast<fn_UpgradeUI_OnRemove_t>(
+        ResolveAddr(Module::Exe, 0x140086c90));
+    fn_ConsumeProduceUI_Slot4 = reinterpret_cast<fn_ConsumeProduceUI_Slot4_t>(
+        ResolveAddr(Module::Exe, 0x14005F3D0));
+    fn_HelpUI_Slot4 = reinterpret_cast<fn_HelpUI_Slot4_t>(
+        ResolveAddr(Module::Exe, 0x14006A500));
+    fn_HelpUI_Slot9 = reinterpret_cast<fn_HelpUI_Slot9_t>(
+        ResolveAddr(Module::Exe, 0x14006A290));
+
+    // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
+    fn_GoalList_GetGoalCount = reinterpret_cast<fn_GoalList_GetGoalCount_t>(
+        ResolveExport("?GetGoalCount@GoalList@Achievement@@QEBAHXZ"));
+    fn_Dialog_GetTemplate = reinterpret_cast<fn_Dialog_GetTemplate_t>(
+        ResolveExport("?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z"));
+    fn_Goal_GetText = reinterpret_cast<fn_Goal_GetText_t>(
+        ResolveExport("?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ"));
+    fn_Achievement_GetTitle = reinterpret_cast<fn_Achievement_GetTitle_t>(
+        ResolveExport("?GetTitle@Achievement@1@QEBA?AVString@System@@XZ"));
+    fn_Achievement_GetDescription = reinterpret_cast<fn_Achievement_GetDescription_t>(
+        ResolveExport("?GetDescription@Achievement@1@QEBA?AVString@System@@XZ"));
+    fn_Achievement_GetSpriteName = reinterpret_cast<fn_Achievement_GetSpriteName_t>(
+        ResolveExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ"));
+    fn_GoalDialog_ArrayPush = reinterpret_cast<fn_GoalDialog_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140011750));
+    fn_EventNotifyDialog_ArrayPush = fn_GoalDialog_ArrayPush;
+    fn_ScenarioDialog_ArrayPush = reinterpret_cast<fn_ScenarioDialog_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140013b60));
+    fn_ExternalList_GetResourceCount = reinterpret_cast<fn_ExternalList_GetResourceCount_t>(
+        ResolveExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ"));
+    fn_Element_SetPadding = reinterpret_cast<fn_Element_SetPadding_t>(
+        ResolveExport("?SetPadding@Element@UI@@QEAAXHHHH@Z"));
+    fn_EventNotifyDialog_ArrayRemove = reinterpret_cast<fn_EventNotifyDialog_ArrayRemove_t>(
+        ResolveAddr(Module::Exe, 0x140011670));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

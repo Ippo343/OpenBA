@@ -17,6 +17,7 @@
 //   +0x18 (Slot3), +0x28 (Slot5), +0x30 (Slot6), +0x38 (Slot7), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -46,11 +47,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x140068C20) — Setup: populates event popup text/image elements
+// Slot4 (0x140068C20) — Setup: populates event popup text/image elements — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "EventPopupDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    EventPopupDialog_Slot4((EventPopupDialog*)self);
 }
 
 // Slot8 (0x140068BD0) — OnCommand: msg=0x12, id=200 closes dialog

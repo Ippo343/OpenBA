@@ -15,12 +15,6 @@ Phases D and E due to complexity or many dependencies.
 type IDs) are resolved in-situ during each method's decompilation — the same workflow
 used in Phases B-E.
 
-**Former blocker (resolved 2026-03-02): Video::ImageBuffer** — affected 6 methods across
-3 classes (MapUI, NoiseUI, SpriteCaptureUI). Now unblocked: `runtime/` directory
-infrastructure created with binary-compatible type header (`runtime/types/video/ImageBuffer.h`,
-0x68 bytes) and 4 function pointers (Ctor, Dtor, CopyToTexture, CopyFromTexture) resolved
-in `engine/funcs/engine_funcs.h/.cpp`.
-
 ---
 
 ## Status Key
@@ -42,27 +36,34 @@ patterns (element lookup, simple state read/write, button dispatch).
 
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
-| [ ] MessageDialog::Slot4 | ~30 | fn_DialogInstance_FindElement | Find OK/Cancel/Yes/No buttons, set IDs |
-| [ ] EventPopupDialog::Slot4 | ~30 | fn_DialogInstance_FindElement | Populate popup text/image |
-| [ ] LoaderDialog::Slot6 | ~15 | Image rotation func | Rotate loading image element |
-| [ ] LoaderDialog::Slot7 | ~20 | none (uses existing) | Accumulate rotation angle |
-| [ ] AutoSaveDialog::Slot4 | ~20 | fn_DialogInstance_FindElement | Find elements, set IDs |
-| [ ] AutoSaveDialog::Slot9 | ~20 | fn_DialogInstance_Close | Button handler → close |
-| [ ] TutorialHighlightDialog::Slot9 | ~15 | fn_DialogInstance_Close | Button handler → close |
-| [ ] ModUploadDialog (remaining) | ~0 | — | Only dtor exists (already done) |
-| [ ] MapParamsDialog::Slot7 | ~30 | spinner/number read funcs | Update map param values |
-| [ ] MapParamsDialog::Slot9 | ~25 | spinner/number read funcs | Button dispatch |
+| [x] MessageDialog::Slot4 | ~30 | fn_DialogInstance_FindElement | Find OK/Cancel/Yes/No buttons, set IDs |
+| [x] EventPopupDialog::Slot4 | ~30 | fn_DialogInstance_FindElement | Populate popup text/image + sprite |
+| [x] LoaderDialog::Slot6 | ~15 | fn_ImageElement_SetRotation | Rotate loading image element |
+| [x] LoaderDialog::Slot7 | ~20 | fn_Time_AsSeconds | Accumulate rotation angle (180 deg/sec) |
+| [x] AutoSaveDialog::Slot6 | ~30 | fn_SaveLoad_GetOperation | Toggle save/load indicators, apply rotation |
+| [x] AutoSaveDialog::Slot7 | ~20 | fn_Time_AsSeconds | Accumulate rotation (90 deg/sec, wrap 360) |
+| [x] TutorialHighlightDialog::Startup | ~25 | fn_DialogInstance_FindElement | Find glowGroup/glow/arrow elements |
+| [x] MapParamsDialog::Update | ~20 | vtable call | Enable/disable OK button from name text |
+| N/A AutoSaveDialog::Slot4 | — | — | 5-byte JMP thunk, UNHOOKABLE |
+| N/A AutoSaveDialog::Slot9 | — | — | Runtime thunk, UNHOOKABLE |
+| N/A TutorialHighlightDialog::Slot9 | — | — | Runtime thunk, UNHOOKABLE |
+| [x] ModUploadDialog (remaining) | ~0 | — | Only dtor exists (already done) |
+| [x] MainMenuDialog::Slot5 | ~40 | audio unpause | Unpause audio scenes |
+| [x] ScenarioDialog::Slot8 | ~30 | — | OnCommand dispatch |
+| [x] ModDetailsDialog::Slot8 | ~30 | — | OnCommand dispatch |
+| [x] MapParamsDialog::Startup | ~100+ | many text/UI funcs | Complex text setup — reimplemented with inline UI::String |
+| [ ] MapParamsDialog::Slot8 | ~30 | spinner/number read funcs | OnEvent dispatch (UNHOOKABLE — rel branch at byte 4) |
 
 ### Wave 1B: Simple Panel Methods
 
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
 | [ ] PastureUI::Slot4 | ~30 | SelectResourceUI base Slot4 | Calls base + finds slider + updates |
-| [ ] EntityUI::Slot4 | ~65 | DAT_1401c5788 (1 new global) | Entity info setup |
+| [x] EntityUI::Slot4 | ~65 | DAT_1401c5788 (1 new global) | Entity info setup |
 | [ ] HelpUI::Slot4 | ~40 | page navigation funcs | Find page/button elements, set IDs |
 | [ ] HelpUI::Slot9 | ~35 | page navigation funcs | Button click → page change |
-| [ ] UpgradeUI::Slot4 | ~30 | fn_FindBuildComponent | Find elements, check upgrade state |
-| [ ] UpgradeUI::Slot9 | ~25 | UpgradeComponent funcs | Button click → trigger upgrade |
+| [x] UpgradeUI::Slot4 | ~30 | fn_FindBuildComponent | Sprite from BuildRequirementComponent |
+| [x] UpgradeUI::Slot9 | ~25 | UpgradeComponent funcs | Button click → trigger upgrade |
 | [ ] ConsumeProduceUI::Slot4 | ~100 | Sprite resolution funcs | Combo setup with resource sprites |
 | [ ] BuildRequirementUI::Slot9 | ~30 | fn_DialogInstance_Close | Button/notification handler |
 
@@ -83,15 +84,16 @@ conditional element construction, or multi-step update handlers.
 
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
-| [ ] FollowDialog::Slot4 | ~60 | camera/entity tracking funcs | Setup follow target UI |
-| [ ] FollowDialog::Slot7 | ~40 | position read funcs | Update follow position display |
+| [x] FollowDialog::Slot4 | ~60 | camera/entity tracking funcs | Setup follow target UI |
+| [~] FollowDialog::Slot7 | ~20 | fn_KeyMap_Pressed, close helper | Update camera pos, check Escape (FP staged) |
 | [ ] FollowDialog::Slot9 | ~30 | camera funcs | Button dispatch (follow/unfollow) |
 | [ ] GoalDialog::Slot4 | ~120 | goal list iteration, table setup | Populate goals table (361 instr) |
-| [ ] GoalDialog::Slot6 | ~60 | goal progress query | Update goal progress bars |
+| [x] GoalDialog::Slot6 | ~60 | goal progress query | Update goal progress bars |
 | [ ] EventNotifyDialog::Slot4 | ~50 | event list access | Setup notification list |
 | [ ] EventNotifyDialog::Slot7 | ~40 | event state query | Update notification state |
 | [ ] EventNotifyDialog::Slot9 | ~30 | — | Button dispatch (dismiss/goto) |
 | [ ] ScenarioDialog::Slot4 | ~120 | scenario list, table | Populate scenario list (348 instr) |
+| [x] ScenarioDialog::Slot6 | done | — | Moved from Wave 2 (was misclassified) |
 | [ ] ScenarioDialog::Slot7 | ~50 | scenario state query | Update selection state |
 | [ ] ScenarioDialog::Slot9 | ~30 | — | Button dispatch (select/back) |
 | [ ] ToolbarDialog::Slot7 | ~80 | toolbar button state sync | Update button states from game |
@@ -111,10 +113,10 @@ conditional element construction, or multi-step update handlers.
 |--------|-----------|-------------|-------|
 | [ ] ResidenceUI::Slot4 | ~80 | table setup, storage query | Populate residence info table |
 | [ ] ResidenceUI::Slot7 | ~60 | storage iteration | Update resident list/counts |
-| [ ] ResidenceUI::Slot9 | ~30 | — | Notification handler |
+| [x] ResidenceUI::Slot9 | ~30 | — | Notification handler |
 | [ ] EventLogUI::Slot5 | ~80 | dynamic array access, event data | Event log population |
 | [ ] EventLogUI::Slot7 | ~60 | event state query | Update log entries |
-| [ ] EventLogUI::Slot9 | ~30 | — | Notification/click handler |
+| [x] EventLogUI::Slot9 | ~30 | — | Notification/click handler |
 | [ ] WorkplaceUI::Startup | ~80 | multi-component lookup | Initialize workplace panel |
 | [ ] WorkplaceUI::OnRemove | ~40 | cleanup funcs | Teardown workplace panel |
 | [ ] EntityUI::Slot5 | ~60 | entity info query | Entity detail update |
@@ -160,12 +162,12 @@ complex state machines, or multi-tab panels.
 | Method | Est. Lines | Deps Needed | Notes |
 |--------|-----------|-------------|-------|
 | [ ] MainMenuDialog::Slot4 | ~200 | button setup, menu state | Init main menu (445 instr) |
-| [ ] MainMenuDialog::Slot5 | ~40 | audio unpause | Unpause audio on menu show |
+| [x] MainMenuDialog::Slot5 | ~40 | audio unpause | Unpause audio on menu show |
 | [ ] MainMenuDialog::Slot8 | ~100 | menu command dispatch | Handle menu button clicks |
 | [ ] AchievementDialog::Slot4 | ~150 | achievement list, table | Populate achievement table (372 instr) |
-| [ ] AchievementDialog::Slot6 | ~60 | achievement progress query | Refresh achievement state |
-| [ ] AchievementDialog::Slot14 | ~40 | — | Secondary handler |
-| [ ] AchievementDialog::Slot17 | ~40 | — | Secondary handler |
+| [x] AchievementDialog::Slot6 | ~60 | achievement progress query | Refresh achievement state |
+| [x] AchievementDialog::Slot14 | ~40 | — | Secondary handler |
+| [x] AchievementDialog::Slot17 | ~40 | — | Secondary handler |
 | [ ] SaveLoadDialog::Slot4 | ~150 | file list, save metadata | Populate save/load file list |
 | [ ] SaveLoadDialog::Slot7 | ~80 | save state query | Update save info display |
 | [ ] SaveLoadDialog::Slot9 | ~60 | save/load dispatch | Handle save/load/delete actions |
@@ -374,16 +376,16 @@ during each method's decompilation, same as all other waves.
 
 | Wave | Methods | Est. New FPs | Priority | Status |
 |------|---------|-------------|----------|--------|
-| Wave 1 | ~25 | 5-8 | HIGH | [ ] Not started |
-| Wave 2 | ~35 | 15-20 | HIGH | [ ] Not started |
+| Wave 1 | ~25 | 5-8 | HIGH | [~] In progress (~21 done) |
+| Wave 2 | ~35 | 15-20 | HIGH | [~] In progress (~6 done) |
 | Wave 3 | ~30 | 25-30 | MEDIUM | [ ] Not started |
 | Wave 4A | ~13 | 10-15 | MEDIUM | [ ] Not started |
 | Wave 4B | ~14 | 5-10 | MEDIUM | [ ] Not started |
 | Wave 5 | ~9 | 0 (reuse) | LOW | [ ] Not started |
 | Wave 6 | ~10 | ~5 | LOW | [ ] Not started |
-| **Subtotal** | **~136** | **~60** | | **All unblocked** |
+| **Subtotal** | **~136** | **~60** | | **~27 done** |
 | Wave 4C | 6 | ~4 (resolved) | MEDIUM | [ ] Unblocked (ImageBuffer infra complete) |
-| **Grand Total** | **~142** | | | **All unblocked** |
+| **Grand Total** | **~142** | | | **~27 done, all unblocked** |
 
 ### Completion Criteria
 

@@ -45,7 +45,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 — REIMPLEMENTED (finds progress element, sets max from attendance capacity)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "AttendanceUI::Slot4";
     AttendanceUI_Slot4((AttendanceUI*)self);

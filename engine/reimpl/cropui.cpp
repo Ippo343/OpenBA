@@ -57,7 +57,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 (setup/refresh) — REIMPLEMENTED (finds selectResource element, sets ID, populates combo)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "CropUI::Slot4";
     CropUI_Slot4((CropUI*)self);
@@ -75,11 +75,11 @@ static void Reimpl_Slot8(void* self) {
     CropUI_Slot8((CropUI*)self);
 }
 
-// Slot9 (notification handler) — PASSTHROUGH
+// Slot9 (notification handler) — REIMPLEMENTED (combo selection → set resource type)
 typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "CropUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    SelectResourceUI_Slot9(self, (void*)param2, param3, param4);
 }
 
 // ============================================================

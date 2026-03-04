@@ -18,6 +18,7 @@
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -46,11 +47,11 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot 4: Startup(this) — set up tutorial highlight overlay
+// Slot 4: Startup(this) — set up tutorial highlight overlay — REIMPLEMENTED
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TutorialHighlightDialog::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    TutorialHighlightDialog_Startup((TutorialHighlightDialog*)self);
 }
 
 // ============================================================

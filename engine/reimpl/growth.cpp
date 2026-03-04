@@ -37,9 +37,7 @@ static HookInfo g_hookUpdate;
 typedef void (*fn_CheckPtr_t)(void* ptrField);
 static fn_CheckPtr_t fn_CheckPtr = nullptr;
 
-// System::Time::AsSeconds(Time const*) -> float
-typedef float (*fn_Time_AsSeconds_t)(void* time);
-static fn_Time_AsSeconds_t fn_Time_AsSeconds = nullptr;
+// System::Time::AsSeconds — now resolved globally in engine_funcs.h
 
 // System::Time::Time(Time*, float) — construct Time from seconds
 typedef void (*fn_Time_Ctor_Float_t)(void* outTime, float seconds);
@@ -274,9 +272,7 @@ void InstallGrowthComponentUpdate() {
     // Object::InternalBasePtr::CheckPtr @ Runtime 0x1800c0290
     fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         ResolveAddr(Module::Runtime, 0x1800c0290));
-    // System::Time::AsSeconds @ Runtime 0x180007900
-    fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
-        ResolveAddr(Module::Runtime, 0x180007900));
+    // System::Time::AsSeconds — now resolved globally in engine_funcs
     // System::Time::Time(float) @ Runtime 0x1800078c0
     fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
         ResolveAddr(Module::Runtime, 0x1800078c0));

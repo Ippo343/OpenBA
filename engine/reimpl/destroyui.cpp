@@ -53,7 +53,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 (setup/refresh) — REIMPLEMENTED (finds elements, sets IDs, checks reclaim)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "DestroyUI::Slot4";
     DestroyUI_Slot4((DestroyUI*)self);

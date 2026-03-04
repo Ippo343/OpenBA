@@ -19,6 +19,7 @@
 //   +0x18 (Slot3), +0x28 (Slot5), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -61,11 +62,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-// Slot6 (0x140069640) — Draw: updates goal progress indicators
+// Slot6 (0x140069640) — Draw: updates goal progress indicators — REIMPLEMENTED
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "GoalDialog::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    GoalDialog_Slot6((GoalDialog*)self);
 }
 
 // Slot8 (0x1400697C0) — OnCommand: msg=0x12, id=100 closes dialog

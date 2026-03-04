@@ -35,7 +35,7 @@ static HookInfo g_hookSerialize;
 // ============================================================
 // Reimplemented wrappers
 // ============================================================
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 
 // ScalarDtor — REIMPLEMENTED
 // Original: 0x140014510. Sets vtable, calls base dtor, conditional free.

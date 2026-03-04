@@ -60,7 +60,7 @@ static void Reimpl_Slot4(void* self) {
 }
 
 // Slot7 (update handler) — REIMPLEMENTED (progress bar update)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ConsumeProduceUI::Slot7";
     ConsumeProduceUI_Slot7((ConsumeProduceUI*)self);

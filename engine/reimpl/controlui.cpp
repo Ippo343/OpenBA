@@ -47,7 +47,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 — REIMPLEMENTED (finds checkbox, sub-component, sets state)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ControlUI::Slot4";
     ControlUI_Slot4((ControlUI*)self);

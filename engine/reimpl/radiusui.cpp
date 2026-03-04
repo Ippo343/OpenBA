@@ -53,14 +53,14 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot5 — REIMPLEMENTED (calculates radius overlay from building center)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot5(void* self) {
     g_lastHook = "RadiusUI::Slot5";
     RadiusUI_Slot5((RadiusUI*)self);
 }
 
 // Slot6 — REIMPLEMENTED (removes radius overlay, resets index)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "RadiusUI::Slot6";
     RadiusUI_Slot6((RadiusUI*)self);

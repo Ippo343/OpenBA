@@ -25,6 +25,7 @@
 //   +0x78 (Slot15), +0x80 (Slot16), +0x90 (Slot18), +0x98 (Slot19)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -70,11 +71,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-// Slot6 (0x14005D240) — Draw/Refresh: updates achievement display
+// Slot6 (0x14005D240) — Draw/Refresh: updates achievement display — REIMPLEMENTED
 typedef void (*fn_Slot6_t)(void* self, void* p2, void* p3, void* p4);
 static void Reimpl_Slot6(void* self, void* p2, void* p3, void* p4) {
     g_lastHook = "AchievementDialog::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self, p2, p3, p4);
+    AchievementDialog_Slot6((AchievementDialog*)self);
 }
 
 // Slot8 (0x14005D440) — OnCommand: msg 0x12/id 100 = close
@@ -102,18 +103,18 @@ static void* Reimpl_Slot10(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot14 (0x14005DD40) — Update: checks achievement element state
+// Slot14 (0x14005DD40) — REIMPLEMENTED (finds progress element, sets attendance capacity)
 typedef void (*fn_Slot14_t)(void* self);
 static void Reimpl_Slot14(void* self) {
     g_lastHook = "AchievementDialog::Slot14";
-    ((fn_Slot14_t)g_hookSlot14.trampoline)(self);
+    AchievementDialog_Slot14((AchievementDialog*)self);
 }
 
-// Slot17 (0x14005DC50) — Draw2: gets entity name for display
+// Slot17 (0x14005DC50) — REIMPLEMENTED (updates attendance progress bar + text)
 typedef void (*fn_Slot17_t)(void* self);
 static void Reimpl_Slot17(void* self) {
     g_lastHook = "AchievementDialog::Slot17";
-    ((fn_Slot17_t)g_hookSlot17.trampoline)(self);
+    AchievementDialog_Slot17((AchievementDialog*)self);
 }
 
 // ============================================================

@@ -45,7 +45,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 — REIMPLEMENTED (finds progress element, sets max from cemetery capacity)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "CemeteryUI::Slot4";
     CemeteryUI_Slot4((CemeteryUI*)self);

@@ -18,6 +18,7 @@
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -43,11 +44,11 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
 }
 
-// Slot 4: Startup(this) — find UI elements, build notification array
+// Slot 4: Startup(this) — find UI elements, build notification array — REIMPLEMENTED
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "EventNotifyDialog::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    EventNotifyDialog_Slot4((EventNotifyDialog*)self);
 }
 
 // Slot 6: Update(this) — position ribbon, set sprites/flags

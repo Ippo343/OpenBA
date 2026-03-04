@@ -49,22 +49,25 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 }
 
 // Serialize — REIMPLEMENTED (finds worker/job elements, sets IDs)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "WorkPlaceUI::Serialize";
     WorkplaceUI_Serialize((WorkPlaceUI*)self);
 }
 
+// Startup — REIMPLEMENTED (worker count display update)
+#include "Dialog/ui_panels.h"
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "WorkPlaceUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    WorkplaceUI_Startup((WorkPlaceUI*)self);
 }
 
+// OnRemove — REIMPLEMENTED (button dispatch)
 typedef void (*fn_OnRemove_t)(void* self, void* p2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* p2, int eventType, int eventId) {
     g_lastHook = "WorkPlaceUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, p2, eventType, eventId);
+    WorkplaceUI_OnRemove((WorkPlaceUI*)self, p2, eventType, eventId);
 }
 
 // ============================================================

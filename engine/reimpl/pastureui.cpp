@@ -24,6 +24,7 @@
 //   +0x28: Slot5, +0x30: Slot6, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -58,32 +59,34 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
+// Slot4 — REIMPLEMENTED (initialize combo + slider elements)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "PastureUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    PastureUI_Slot4((PastureUI*)self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "PastureUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    PastureUI_Slot7((PastureUI*)self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "PastureUI::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    SelectResourceUI_Slot8(self);
 }
 
+// Slot9 — REIMPLEMENTED (combo selection + slider change handler)
 typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4, int param5, int param6);
 static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int param5, int param6) {
     g_lastHook = "PastureUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
+    PastureUI_Slot9((PastureUI*)self, param2, param3, param4);
 }
 
 // Slot11 — REIMPLEMENTED (sets animal/resource type, updates slider)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot11(void* self, int64_t param2) {
     g_lastHook = "PastureUI::Slot11";
     PastureUI_Slot11((PastureUI*)self, param2);

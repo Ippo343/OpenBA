@@ -59,7 +59,7 @@ static void Reimpl_Slot4(void* self) {
 }
 
 // Slot7 — REIMPLEMENTED (enables/disables prev/next buttons)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "HelpUI::Slot7";
     HelpUI_Slot7((HelpUI*)self);

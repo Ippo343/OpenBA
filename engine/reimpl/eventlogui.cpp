@@ -20,6 +20,7 @@
 //   +0x18: Slot3, +0x20: Slot4(stub), +0x40: Slot8, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -58,22 +59,25 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
+// Slot5 — REIMPLEMENTED (event log display setup)
 typedef void (*fn_Slot5_t)(void* self);
 static void Reimpl_Slot5(void* self) {
     g_lastHook = "EventLogUI::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self);
+    EventLogUI_Slot5((EventLogUI*)self);
 }
 
+// Slot7 — REIMPLEMENTED (event log entry update)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "EventLogUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    EventLogUI_Slot7((EventLogUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
-static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
+// Slot9 — REIMPLEMENTED (scroll/notification/navigate dispatch)
+typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4);
+static void Reimpl_Slot9(void* self, void* param2, int param3, int param4) {
     g_lastHook = "EventLogUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    EventLogUI_Slot9((EventLogUI*)self, param2, param3, param4);
 }
 
 // ============================================================

@@ -22,6 +22,7 @@
 //   Secondary vtable: +0x68-0x98 (Slot13-19) all thunks
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -58,11 +59,11 @@ static void Reimpl_Slot4(void* self) {
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
 }
 
-// Slot8 (0x14006D6A0) — OnCommand: close(0), upload(1), delete(2) handlers
+// Slot8 (0x14006D6A0) — OnCommand: close/upload/delete — REIMPLEMENTED
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
     g_lastHook = "ModDetailsDialog::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
+    ModDetailsDialog_Slot8((ModDetailsDialog*)self, (uint64_t)p2, msg, id);
 }
 
 // ============================================================

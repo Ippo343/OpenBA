@@ -47,7 +47,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 — REIMPLEMENTED (finds text/button elements, sets IDs)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ImmigrationUI::Slot4";
     ImmigrationUI_Slot4((ImmigrationUI*)self);

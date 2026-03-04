@@ -21,6 +21,7 @@
 //   +0x18 (Slot3), +0x28 (Slot5), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -50,18 +51,18 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot6 (0x14005DFC0) — Draw: checks SaveLoad::GetOperation, toggles save/load UI
+// Slot6 (0x14005DFC0) — Draw: checks SaveLoad::GetOperation, toggles save/load UI — REIMPLEMENTED
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "AutoSaveDialog::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    AutoSaveDialog_Slot6((AutoSaveDialog*)self);
 }
 
-// Slot7 (0x14005E090) — Update: time-based rotation accumulator
+// Slot7 (0x14005E090) — Update: time-based rotation accumulator — REIMPLEMENTED
 typedef void (*fn_Slot7_t)(void* self, void* time);
 static void Reimpl_Slot7(void* self, void* time) {
     g_lastHook = "AutoSaveDialog::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self, time);
+    AutoSaveDialog_Slot7((AutoSaveDialog*)self, time);
 }
 
 // ============================================================

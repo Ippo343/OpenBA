@@ -49,7 +49,7 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 }
 
 // Serialize — REIMPLEMENTED (finds named elements, sets button IDs, hides close)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TutorialUI::Serialize";
     TutorialUI_Serialize((TutorialUI*)self);

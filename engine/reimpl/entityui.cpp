@@ -22,6 +22,7 @@
 //   +0x28: Slot5, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -52,23 +53,24 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
+// Slot4 — REIMPLEMENTED (entity panel setup)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "EntityUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    EntityUI_Slot4((EntityUI*)self);
 }
 
 // Slot6 — REIMPLEMENTED (removes entity from tracking set)
-#include "ui/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "EntityUI::Slot6";
     EntityUI_Slot6((EntityUI*)self);
 }
 
+// Slot7 — REIMPLEMENTED (page switching logic)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "EntityUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    EntityUI_Slot7((EntityUI*)self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
@@ -77,10 +79,11 @@ static void Reimpl_Slot8(void* self) {
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
+// Slot9 — REIMPLEMENTED (button dispatch: close/center/pin)
 typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "EntityUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    EntityUI_Slot9((EntityUI*)self, (void*)param2, param3, param4);
 }
 
 // ============================================================

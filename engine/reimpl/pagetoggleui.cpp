@@ -48,7 +48,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 — REIMPLEMENTED (finds checkbox, pages element, restores active page)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "PageToggleUI::Slot4";
     PageToggleUI_Slot4((PageToggleUI*)self);

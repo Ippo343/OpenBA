@@ -22,6 +22,7 @@
 //   +0x18 (Slot3), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -52,11 +53,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x140069340) — Setup: initializes follow camera UI
+// Slot4 (0x140069340) — Setup: initializes follow camera UI — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "FollowDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    FollowDialog_Slot4((FollowDialog*)self);
 }
 
 // Slot6 (0x140068F70) — Draw: updates follow camera display
@@ -66,11 +67,11 @@ static void Reimpl_Slot6(void* self, void* p2, void* p3, void* p4) {
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self, p2, p3, p4);
 }
 
-// Slot7 (0x140069250) — Update: checks followed entity state
+// Slot7 (0x140069250) — Update: checks followed entity state — REIMPLEMENTED
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "FollowDialog::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    FollowDialog_Slot7((FollowDialog*)self);
 }
 
 // ============================================================

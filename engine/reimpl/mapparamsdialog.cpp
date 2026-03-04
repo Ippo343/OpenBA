@@ -18,6 +18,7 @@
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -47,18 +48,17 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot 4: Startup(this) — find UI elements, populate map params
-typedef void (*fn_Startup_t)(void* self);
+// Slot 4: Startup(this) — find UI elements, populate map params — REIMPLEMENTED
 static void Reimpl_Startup(void* self) {
     g_lastHook = "MapParamsDialog::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    MapParamsDialog_Startup((MapParamsDialog*)self);
 }
 
-// Slot 6: Update(this) — sync map parameters with UI
+// Slot 6: Update(this) — sync map parameters with UI — REIMPLEMENTED
 typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
     g_lastHook = "MapParamsDialog::Update";
-    ((fn_Update_t)g_hookUpdate.trampoline)(self);
+    MapParamsDialog_Update((MapParamsDialog*)self);
 }
 
 // ============================================================

@@ -60,7 +60,7 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 }
 
 // Serialize — REIMPLEMENTED (finds icons container, caches child elements)
-#include "ui/ui_panels.h"
+#include "Dialog/ui_panels.h"
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StatusIconUI::Serialize";
     StatusIconUI_Serialize((StatusIconUI*)self);

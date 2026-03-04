@@ -18,6 +18,7 @@
 //   +0x18 (Slot3), +0x28 (Slot5), +0x40 (Slot8), +0x48 (Slot9)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -61,18 +62,18 @@ static void Reimpl_Slot4(void* self) {
     fn_String_Dtor(nameStr);
 }
 
-// Slot6 (0x1400B2D00) — Draw: applies rotation to loading spinner
+// Slot6 (0x1400B2D00) — Draw: applies rotation to loading spinner — REIMPLEMENTED
 typedef void (*fn_Slot6_t)(void* self);
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "LoaderDialog::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    LoaderDialog_Slot6((LoaderDialog*)self);
 }
 
-// Slot7 (0x1400B2D50) — Update: accumulates rotation angle from elapsed time
+// Slot7 (0x1400B2D50) — Update: accumulates rotation angle from elapsed time — REIMPLEMENTED
 typedef void (*fn_Slot7_t)(void* self, void* time);
 static void Reimpl_Slot7(void* self, void* time) {
     g_lastHook = "LoaderDialog::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self, time);
+    LoaderDialog_Slot7((LoaderDialog*)self, time);
 }
 
 // ============================================================
