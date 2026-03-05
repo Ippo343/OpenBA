@@ -73,10 +73,11 @@ static void Reimpl_Slot7(void* self) {
     EntityUI_Slot7((EntityUI*)self);
 }
 
+// Slot8 — REIMPLEMENTED (input handler: mouse position, key 5 entity select)
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "EntityUI::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    EntityUI_Slot8((EntityUI*)self);
 }
 
 // Slot9 — REIMPLEMENTED (button dispatch: close/center/pin)

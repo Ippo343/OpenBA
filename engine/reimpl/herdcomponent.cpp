@@ -34,9 +34,7 @@ static HookInfo g_hookUpdate;
 typedef void (*fn_CheckPtr_t)(void* ptrField);
 static fn_CheckPtr_t fn_CheckPtr = nullptr;
 
-// System::Time::Time(float) @ Runtime 0x1800078c0
-typedef void* (*fn_Time_Ctor_Float_t)(void* outTime, float seconds);
-static fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
+// System::Time::Time(float) — now resolved globally in engine_funcs.h
 
 // System::Random::RandFloat(Random*) @ Runtime 0x1800c7d40
 typedef float (*fn_RandFloat_t)(void* random);
@@ -220,8 +218,7 @@ void InstallHerdComponentUpdate() {
     // Resolve Runtime functions
     fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         ResolveAddr(Module::Runtime, 0x1800c0290));
-    fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
-        ResolveAddr(Module::Runtime, 0x1800078c0));
+    // fn_Time_Ctor_Float — now resolved globally in EngineFuncsInit()
     fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(
         ResolveAddr(Module::Runtime, 0x1800c7d40));
 

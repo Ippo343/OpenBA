@@ -4,7 +4,7 @@
 Reverse engineer Banished (by Shining Rock Software) and **progressively replace game
 functions with clean, readable C++ source code**. Each decompiled function gets a
 binary-compatible type header and a reimplementation that hooks the original at runtime.
-The end goal is a readable C++ codebase that mirrors the game's logic and can be generatedyeah et into a replacement exe, similar to projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
+The end goal is a readable C++ codebase that mirrors the game's logic and can be compiled into a replacement exe, similar to projects like OpenRCT2, re3 (GTA III), and devilution (Diablo).
 
 ## Current Phase: Deep Reimplementation
 
@@ -162,11 +162,6 @@ in code/Game/, the reimpl wrapper switches from calling the trampoline to callin
 the clean code. When ALL functions are reimplemented, code/Game/ compiles as a
 standalone exe without the reimpl/hooks layer.
 
-### Adding a new passthrough hook (for completeness)
-1. **Reimplement** — passthrough wrapper in `engine/reimpl/`, calls trampoline
-2. **Register** — add `ReimplEntry` to the table in `hooks.cpp` (extern-declare Install/Remove)
-3. **Test** — `mingw32-make deploy`, launch game, check crash log
-
 ### Address Resolution
 - `ResolveAddr(Module::Exe, ghidra_addr)` — exe addresses (base 0x140000000)
 - `ResolveAddr(Module::Runtime, ghidra_addr)` — Runtime-x64.dll (base 0x180000000)
@@ -257,66 +252,16 @@ Defined in `.vscode/launch.json`:
 | **Launch Banished (with patch)** | launch | Builds, deploys DLL, launches game with GDB attached |
 | **Launch Banished (no debug)** | launch | Builds, deploys DLL, launches game without stopping on signals |
 
-### VS Code Build Tasks (`.vscode/tasks.json`)
-- **Build (Debug)** - default build task (Ctrl+Shift+B)
-- **Build (Release)** - optimized build
-- **Deploy to Banished** - build + copy DLL
-- **Remove from Banished** - delete proxy DLL from game dir
-- **Clean** - remove build artifacts
-
 ### Compiler & Toolchain
 - GCC 13.1 (MSYS2 UCRT64) at `C:\msys64\ucrt64\bin\`
 - `mingw32-make` for builds (full path: `/c/msys64/ucrt64/bin/mingw32-make.exe`)
 - C++17 standard, static-linked runtime
 
-### Debugging via MCP (Claude Code workflow)
-
-All debugger operations go through `vscode-debugger` MCP (rauschit/vscode-debugger-mcp-server).
-The `vscode` MCP is used only for launching the debug session (start_debug_session).
-
-**1. Set breakpoints** (`vscode-debugger`):
-```
-mcp__vscode-debugger__set_breakpoint(
-  file: "C:\\code\\GIT\\untitled_rev_eng_project\\patches\\src\\dllmain.cpp",
-  line: 221
-)
-```
-
-**2. Launch the game under GDB** (`vscode` MCP):
-```
-mcp__vscode__start_debug_session(
-  workspaceFolder: "c:\\code\\GIT\\untitled_rev_eng_project",   // lowercase drive letter!
-  configuration: {
-    "name": "Launch Banished (with patch)",
-    "type": "cppdbg",
-    "request": "launch",
-    "program": "C:/GOG Games/Banished/Application-x64.exe",
-    "cwd": "C:/GOG Games/Banished",
-    "MIMode": "gdb",
-    "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
-    "preLaunchTask": "Deploy to Banished",
-    "additionalSOLibSearchPath": "C:/code/GIT/untitled_rev_eng_project/patches/build",
-    "setupCommands": [{"description": "Enable pretty-printing", "text": "-enable-pretty-printing"}]
-  }
-)
-```
-Note: `workspaceFolder` must use **lowercase drive letter** (`c:\...`) or VS Code won't find it.
-
-**3. Debugger control** (`vscode-debugger`):
-- `continue`, `pause`, `step_over`, `step_in`, `step_out`, `stop`
-
-**4. Inspect state** (`vscode-debugger`):
-- `get_variables` — read locals/globals at current frame
-- `evaluate_expression` — eval any expression (including GDB `-exec` commands)
-- `get_stack_trace` — call stack
-- `get_threads`, `get_scopes` — thread/scope info
-- `add_watch` / `list_watches` — persistent watch expressions
-
-**5. Cleanup**:
-```
-mcp__vscode-debugger__clear_all_breakpoints()
-mcp__vscode__stop_debug_session(sessionName: "Launch Banished (with patch)")
-```
+### Debugging via MCP
+- Use `vscode-debugger` MCP for breakpoints, stepping, variables, stack traces
+- Use `vscode` MCP's `start_debug_session` to launch (config: "Launch Banished (with patch)")
+- **Important**: `workspaceFolder` must use lowercase drive letter (`c:\...`)
+- See `.vscode/launch.json` for full debug configurations
 
 ---
 
@@ -343,56 +288,4 @@ When renaming functions and data, use the recovered namespace style:
 - MSYS2 packages are outdated (stale signatures) - avoid `pacman -S` for new installs
 
 ## Project Structure
-```
-untitled_rev_eng_project/
-  CLAUDE.md                      # this file - project reference (architecture, tools, workflow)
-  DECOMP_STATUS.md               # full type/function inventory & decompilation status
-  HOW_TO_START_GHIDRA.md         # Ghidra startup guide
-  Makefile                       # build system (mingw32-make, multi-dir with obj files)
-  .mcp.json                      # MCP server config (3 servers)
-  .vscode/
-    tasks.json                   # build/deploy tasks
-    launch.json                  # debug launch configs (3 configs)
-    settings.json                # DebugMCP port, compiler settings
-    c_cpp_properties.json        # IntelliSense config
-    mcp.json                     # VS Code MCP server registry
-  tools/
-    ghidra_mcp/                  # GhidraMCP bridge + extension
-      bridge_mcp_ghidra.py       # MCP<->Ghidra HTTP bridge (179 tools)
-      GhidraMCP-3.0.0.zip        # Ghidra extension (install once)
-      requirements.txt           # Python deps (mcp, requests)
-      .venv/                     # Python 3.10 virtual environment
-  patches/
-    src/
-      dllmain.cpp                # proxy DLL entry point + init sequence
-      proxy.cpp / proxy.h        # version.dll forwarding (17 exports)
-      proxy.def                  # export definitions
-      resolve.cpp / resolve.h    # multi-binary address resolution (exe + DLLs)
-      hooks.cpp / hooks.h        # hook infrastructure + reimplementation registry
-    build/
-      version.dll                # compiled patch DLL (~288K debug)
-      obj/                       # intermediate object files
-  code/
-    Game/                        # clean game logic (mirrors original source tree)
-      Action/                    # StateMachine actions (17 classes)
-      Component/                 # ECS components (60 classes)
-      Dialog/                    # UI dialogs + panels (50+ classes)
-      Entity/                    # ComponentEntity, CitizenBehavior, EntityList
-      Game/                      # Core systems (Game, Map, Pathfinder, Weather, etc.)
-      Goal/                      # Goal classes (5 classes)
-      Player/                    # Placement tools (9 classes)
-      Tutorial/                  # Tutorial classes (17 classes)
-      Work/                      # Work classes (21 classes)
-  engine/
-    types/                       # binary-compatible struct definitions (142 headers)
-      common.h                   # Time, Vector3, PostCallback, forward decls
-      MainLoop.h                 # Engine::MainLoop (0xA0 bytes, all offsets verified)
-      UpdateLoop.h               # Engine::UpdateLoop base + vtable layout
-    funcs/                       # resolved engine function pointers
-      engine_funcs.h             # function pointer declarations
-      engine_funcs.cpp           # runtime resolution (by name, RVA, or ordinal)
-    reimpl/                      # hook wrappers (232 files, auto-compiled by Makefile)
-      mainloop.cpp               # Engine::MainLoop (Run, Frame, Update, Draw, SetNextLoop)
-  docs/                          # function documentation exports
-  notes/                         # daily RE session notes (NOTESMMDDYY.md)
-```
+Key directories: `code/Game/` (clean reimpl), `engine/reimpl/` (hook wrappers), `engine/types/` (structs), `engine/funcs/` (function pointers), `patches/src/` (DLL infrastructure). See filesystem for full layout.

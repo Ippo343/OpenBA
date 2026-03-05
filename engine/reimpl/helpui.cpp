@@ -23,6 +23,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Dialog/ui_panels.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -35,7 +36,7 @@ static HookInfo g_hookSlot7;
 static HookInfo g_hookSlot9;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
@@ -52,23 +53,24 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 — REIMPLEMENTED (setup: find elements, populate combo, load first page)
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "HelpUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    HelpUI_Slot4((HelpUI*)self);
 }
 
 // Slot7 — REIMPLEMENTED (enables/disables prev/next buttons)
-#include "Dialog/ui_panels.h"
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "HelpUI::Slot7";
     HelpUI_Slot7((HelpUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
-static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
+// Slot9 — REIMPLEMENTED (notification handler: links, back/forward, combo)
+// Note: Extended signature to capture 7th parameter (link click index)
+static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4,
+                          int param5, int param6, int param7) {
     g_lastHook = "HelpUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    HelpUI_Slot9((HelpUI*)self, param2, param3, param4, param5, param6, param7);
 }
 
 // ============================================================

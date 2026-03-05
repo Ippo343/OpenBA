@@ -29,6 +29,9 @@ void RadiusUI_Slot6(RadiusUI* self);
 // ConsumeProduceUI
 // ============================================================
 
+// Slot4 (vtable +0x20): Setup — finds combo/progress elements, populates combo with products.
+void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
+
 // Slot7 (vtable +0x38): Updates production progress bar with ratio and percentage.
 void ConsumeProduceUI_Slot7(ConsumeProduceUI* self);
 
@@ -123,8 +126,16 @@ void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId);
 // HelpUI
 // ============================================================
 
+// Slot4 (vtable +0x20): Finds UI elements, populates combo with help topics, loads first page.
+void HelpUI_Slot4(HelpUI* self);
+
 // Slot7 (vtable +0x38): Enables/disables prev/next buttons based on page index.
 void HelpUI_Slot7(HelpUI* self);
+
+// Slot9 (vtable +0x48): Handles document link clicks, back/forward navigation, combo changes.
+// linkIndex (7th param) carries the clicked link index for document link events.
+void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
+                   int param5, int param6, int linkIndex);
 
 // ============================================================
 // AttendanceUI
@@ -200,6 +211,10 @@ void CitizenUI_Slot6(CitizenUI* self);
 // textProfession), stores in dynamic array at +0x30.
 void ResidenceUI_Slot4(ResidenceUI* self);
 
+// Slot7 (vtable +0x38): Updates resident display — iterates storage component rooms,
+// shows gender icons, name, age, profession per occupied row. Hides unused rows.
+void ResidenceUI_Slot7(ResidenceUI* self);
+
 // Slot9 (vtable +0x48): Dispatches resident row clicks (ID 300+index) to navigate
 // camera to that citizen.
 void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id);
@@ -254,6 +269,10 @@ void EntityUI_Slot6(EntityUI* self);
 // Slot7 (vtable +0x38): Determines active page based on entity state
 // (build, destroy, profession). Updates ToolUI controller hint.
 void EntityUI_Slot7(EntityUI* self);
+
+// Slot8 (vtable +0x40): Input handler — reads mouse position, checks key 5 press,
+// selects entity in edit tool if mouse is over this dialog.
+void EntityUI_Slot8(EntityUI* self);
 
 // Slot9 (vtable +0x48): Button dispatch — close (1), center (0x65), pin (100).
 void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id);

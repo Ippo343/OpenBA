@@ -406,6 +406,41 @@ fn_ToolbarDialog_ChangeSpeed_t fn_ToolbarDialog_ChangeSpeed = nullptr;
 fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons = nullptr;
 uint32_t* g_TypeId_ToolbarElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
+uint32_t* g_TypeId_ComboElement = nullptr;
+fn_GetCurrentProductIndex_t fn_GetCurrentProductIndex = nullptr;
+fn_FindDialogByName_t fn_FindDialogByName = nullptr;
+fn_ResolveExternalByName_t fn_ResolveExternalByName = nullptr;
+fn_External_External_t fn_External_External = nullptr;
+
+// Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
+fn_KeyMap_GetValue_t fn_KeyMap_GetValue = nullptr;
+fn_UI_GetFirstContainedDialog_t fn_UI_GetFirstContainedDialog = nullptr;
+fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
+fn_FindComponent_t fn_FindComponent_Residence = nullptr;
+float* g_pAgeMultiplier = nullptr;
+float* g_pNotifyTimerDuration = nullptr;
+fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
+fn_String_SubString_t fn_String_SubString = nullptr;
+fn_String_Assign_t fn_String_Assign = nullptr;
+fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry = nullptr;
+fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor = nullptr;
+fn_Dialog_GetReference_t fn_Dialog_GetReference = nullptr;
+fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect = nullptr;
+void** g_EventPopupDialog_Vtable = nullptr;
+fn_StringTable_GetText_t fn_StringTable_GetText = nullptr;
+fn_DocumentTextElement_GetLink_t fn_DocumentTextElement_GetLink = nullptr;
+fn_DocumentTextElement_SetText_UIString_t fn_DocumentTextElement_SetText_UIString = nullptr;
+fn_DocumentTextElement_SetText_t fn_DocumentTextElement_SetText = nullptr;
+fn_ContainerElement_SetOffsets_t fn_ContainerElement_SetOffsets = nullptr;
+fn_UIString_Ctor_Index_t fn_UIString_Ctor_Index = nullptr;
+fn_String_Equal_t fn_String_Equal = nullptr;
+uint32_t* g_TypeId_StringTable = nullptr;
+uint32_t* g_TypeId_HelpFirstElem = nullptr;
+uint32_t* g_TypeId_HelpComboElem = nullptr;
+uint32_t* g_TypeId_HelpDocTextElem = nullptr;
+uint32_t* g_TypeId_HelpContainerElem = nullptr;
+uint32_t* g_TypeId_HelpButtonElem = nullptr;
+fn_HelpUI_ArrayResize_t fn_HelpUI_ArrayResize = nullptr;
 
 // ============================================================
 // Engine globals
@@ -1487,6 +1522,132 @@ bool EngineFuncsInit() {
     // ToolbarDialog parent type ID: direct uint32 at DAT_1401c5d38, used in case 5 (CenterOnPoint)
     g_TypeId_ToolbarDialogParent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5d38));
+    // ComboElement type ID: exref at 0x140151690 (double-indirect)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151690));
+        if (exref && *exref) {
+            g_TypeId_ComboElement = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    // ConsumeProduceUI helper: get current product index
+    fn_GetCurrentProductIndex = reinterpret_cast<fn_GetCurrentProductIndex_t>(
+        ResolveAddr(Module::Exe, 0x140119470));
+    // TutorialGoalDialog helpers
+    fn_FindDialogByName = reinterpret_cast<fn_FindDialogByName_t>(
+        ResolveAddr(Module::Exe, 0x1400e1600));
+    fn_ResolveExternalByName = reinterpret_cast<fn_ResolveExternalByName_t>(
+        ResolveAddr(Module::Exe, 0x14001b1d0));
+    // Object::External::External — runtime dispatch at 0x140151e98
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
+        if (dispatch && *dispatch) {
+            fn_External_External = reinterpret_cast<fn_External_External_t>(*dispatch);
+        }
+    }
+
+    // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
+    fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
+        ResolveExport("?GetValue@KeyMap@Input@@QEBAFHH@Z"));
+    if (!fn_KeyMap_GetValue) {
+        fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
+            ResolveAddr(Module::Runtime, 0x1800a7b60));
+    }
+    fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
+        ResolveExport("?GetFirstContainedDialog@UserInterface@UI@@QEAA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z"));
+    if (!fn_UI_GetFirstContainedDialog) {
+        fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
+            ResolveAddr(Module::Runtime, 0x18011fb00));
+    }
+    fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400fd3b0));
+    fn_FindComponent_Residence = fn_FindComponent_Storage;  // ResidenceUI uses StorageComponent
+    g_pAgeMultiplier = reinterpret_cast<float*>(
+        ResolveAddr(Module::Exe, 0x140172198));
+    g_pNotifyTimerDuration = reinterpret_cast<float*>(
+        ResolveAddr(Module::Exe, 0x1401721cc));
+    fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
+        ResolveExport("??0Time@System@@QEAA@M@Z"));
+    fn_String_SubString = reinterpret_cast<fn_String_SubString_t>(
+        ResolveExport("?SubString@String@System@@QEBA?AV12@H@Z"));
+    fn_String_Assign = reinterpret_cast<fn_String_Assign_t>(
+        ResolveExport("?operator=@String@System@@QEAAAEAV12@AEBV12@@Z"));
+    // UI::String::String(ExternalPtr<StringTable>) — single-arg ctor, dispatch at 0x140151300
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151300));
+        if (dispatch && *dispatch) {
+            fn_UIString_Ctor_Entry = reinterpret_cast<fn_UIString_Ctor_Entry_t>(*dispatch);
+        }
+    }
+    fn_Sprite_Default_Ctor = reinterpret_cast<fn_Sprite_Default_Ctor_t>(
+        ResolveExport("??0Sprite@UI@@QEAA@XZ"));
+    fn_Dialog_GetReference = reinterpret_cast<fn_Dialog_GetReference_t>(
+        ResolveExport("?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VDialogReference@UI@@@Object@@XZ"));
+    fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
+        ResolveExport("?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z"));
+    if (!fn_Audio_Scene_PlayEffect) {
+        fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
+            ResolveAddr(Module::Runtime, 0x1800def60));
+    }
+    g_EventPopupDialog_Vtable = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x14015bd80));
+
+    // --- HelpUI support functions ---
+    fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
+        ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z"));
+    if (!fn_StringTable_GetText)
+        fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
+            ResolveAddr(Module::Runtime, 0x180002550));
+    fn_DocumentTextElement_GetLink = reinterpret_cast<fn_DocumentTextElement_GetLink_t>(
+        ResolveExport("?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z"));
+    if (!fn_DocumentTextElement_GetLink)
+        fn_DocumentTextElement_GetLink = reinterpret_cast<fn_DocumentTextElement_GetLink_t>(
+            ResolveAddr(Module::Runtime, 0x18003c0c0));
+    fn_DocumentTextElement_SetText_UIString = reinterpret_cast<fn_DocumentTextElement_SetText_UIString_t>(
+        ResolveExport("?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z"));
+    if (!fn_DocumentTextElement_SetText_UIString)
+        fn_DocumentTextElement_SetText_UIString = reinterpret_cast<fn_DocumentTextElement_SetText_UIString_t>(
+            ResolveAddr(Module::Runtime, 0x18003bfd0));
+    fn_DocumentTextElement_SetText = reinterpret_cast<fn_DocumentTextElement_SetText_t>(
+        ResolveExport("?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z"));
+    if (!fn_DocumentTextElement_SetText)
+        fn_DocumentTextElement_SetText = reinterpret_cast<fn_DocumentTextElement_SetText_t>(
+            ResolveAddr(Module::Runtime, 0x18003c010));
+    fn_ContainerElement_SetOffsets = reinterpret_cast<fn_ContainerElement_SetOffsets_t>(
+        ResolveExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z"));
+    if (!fn_ContainerElement_SetOffsets)
+        fn_ContainerElement_SetOffsets = reinterpret_cast<fn_ContainerElement_SetOffsets_t>(
+            ResolveAddr(Module::Runtime, 0x1800cc1e0));
+    fn_UIString_Ctor_Index = reinterpret_cast<fn_UIString_Ctor_Index_t>(
+        ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z"));
+    if (!fn_UIString_Ctor_Index)
+        fn_UIString_Ctor_Index = reinterpret_cast<fn_UIString_Ctor_Index_t>(
+            ResolveAddr(Module::Runtime, 0x18011da20));
+    fn_String_Equal = reinterpret_cast<fn_String_Equal_t>(
+        ResolveExport("??8String@System@@QEBA_NAEBV01@@Z"));
+    fn_HelpUI_ArrayResize = reinterpret_cast<fn_HelpUI_ArrayResize_t>(
+        ResolveAddr(Module::Exe, 0x140011d50));
+
+    // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151488));
+        if (exref && *exref) {
+            g_TypeId_StringTable = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+
+    // HelpUI element type IDs from _typeInfo_exref addresses
+    {
+        auto resolveTypeId = [](uintptr_t exrefAddr) -> uint32_t* {
+            void** exref = reinterpret_cast<void**>(exrefAddr);
+            if (exref && *exref) return reinterpret_cast<uint32_t*>(*exref);
+            return nullptr;
+        };
+        g_TypeId_HelpFirstElem    = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517e8));
+        g_TypeId_HelpComboElem    = resolveTypeId(ResolveAddr(Module::Exe, 0x140151690));
+        g_TypeId_HelpDocTextElem  = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517f0));
+        g_TypeId_HelpContainerElem = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517f8));
+        g_TypeId_HelpButtonElem   = resolveTypeId(ResolveAddr(Module::Exe, 0x1401514f8));
+    }
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

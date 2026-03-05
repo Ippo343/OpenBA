@@ -34,7 +34,7 @@ static HookInfo g_hookOnInit;
 static HookInfo g_hookOnDestroy;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented / Passthrough wrappers
 // ============================================================
 
 // Slot 0: ScalarDtor(this, flags)
@@ -58,18 +58,99 @@ static void* Reimpl_OnEvent(void* self, uint64_t p2, uint64_t p3, uint64_t p4) {
     return ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, p2, p3, p4);
 }
 
-// Slot 8: OnInit(this) — initialize tutorial goal state
-typedef uint64_t (*fn_OnInit_t)(void* self);
+// Slot 8: OnInit(this) — REIMPLEMENTED
+// Finds a dialog by string name from +0x20, checks its user data against
+// the target description. Returns true(1) if the dialog's description
+// matches self->data38, or if data38 is null.
+//
+// Original: 0x1400DEEE0.
 static uint64_t Reimpl_OnInit(void* self) {
     g_lastHook = "TutorialGoalDialog::OnInit";
-    return ((fn_OnInit_t)g_hookOnInit.trampoline)(self);
+    uintptr_t s = (uintptr_t)self;
+
+    // Find dialog by string name at +0x20
+    uint64_t dialogPtr = 0;
+    fn_FindDialogByName(&dialogPtr, (void*)(s + 0x20));
+
+    if (dialogPtr == 0) {
+        return 0;  // dialog not found — return false
+    }
+
+    // Get dialog's user data at dialogInstance+0x30
+    void* userData = *(void**)(dialogPtr + 0x30);
+    void* description = nullptr;
+
+    if (userData != nullptr) {
+        // Check if it's a Description type (DAT_1401c7318 = g_TypeId_BuildComponent)
+        if (fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent)) {
+            // Direct Description — use as-is
+            if (fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent)) {
+                description = userData;
+            }
+        } else {
+            // Check if it's a ComponentEntity
+            if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
+                void* entity = nullptr;
+                if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
+                    entity = userData;
+                }
+                // Get Description from ComponentEntity at +0x28
+                description = *(void**)((uintptr_t)entity + 0x28);
+            }
+        }
+    }
+
+    // Resolve the target External name at +0x28
+    fn_ResolveExternalByName((void*)(s + 0x28));
+
+    // If self->data38 is set, compare with found description
+    void* target = *(void**)(s + 0x38);
+    if (target != nullptr) {
+        fn_ResolveExternalByName((void*)(s + 0x28));
+        if (target != description) {
+            return 0;  // mismatch — return false
+        }
+    }
+
+    return 1;  // match — return true
 }
 
-// Slot 9: OnDestroy(this) — cleanup tutorial goal dialog
-typedef void* (*fn_OnDestroy_t)(void* self);
+// Slot 9: OnDestroy(this) — REIMPLEMENTED
+// Reinitializes the TutorialGoalDialog to its default state by
+// calling the Object::External base constructor, then setting the
+// final vtable and zeroing all subclass fields.
+//
+// Original: 0x1400274B0.
 static void* Reimpl_OnDestroy(void* self) {
     g_lastHook = "TutorialGoalDialog::OnDestroy";
-    return ((fn_OnDestroy_t)g_hookOnDestroy.trampoline)(self);
+
+    if (self != nullptr) {
+        // Call Object::External::External(self) to reinit base
+        fn_External_External(self);
+
+        // Set final vtable (PTR_FUN_140160870)
+        // The disassembly shows two writes — intermediate then final vtable.
+        // We only need the final one since the intermediate is immediately overwritten.
+        static void* s_vtable = nullptr;
+        if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, 0x140160870);
+        *(void**)self = s_vtable;
+
+        uintptr_t s = (uintptr_t)self;
+
+        // Zero data20 (dialog name string — 8 bytes)
+        *(uint64_t*)(s + 0x20) = 0;
+
+        // Zero data28 (target entity string — 8 bytes)
+        *(uint64_t*)(s + 0x28) = 0;
+
+        // Set data30 = 0xFFFFFFFF (target index = -1)
+        *(uint32_t*)(s + 0x30) = 0xFFFFFFFF;
+
+        // Zero data38 (target pointer)
+        *(uint64_t*)(s + 0x38) = 0;
+    }
+
+    return self;
 }
 
 // ============================================================

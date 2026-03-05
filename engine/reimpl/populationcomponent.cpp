@@ -45,11 +45,7 @@ typedef void (*fn_ScanHabitability_t)(void* self, void* terrainGrid, int cellInd
 static fn_ScanHabitability_t fn_ScanHabitability = nullptr;
 
 // System::Time::Time(outTime*, float seconds)
-// Constructs a Time value (int64 ticks) from seconds.
-// Called via runtime dispatch at [0x140152b00] in the exe.
-// RCX = outTime (int64_t*), XMM1 = seconds (float)
-typedef int64_t* (*fn_Time_Ctor_Float_t)(int64_t* outTime, float seconds);
-static fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
+// System::Time::Time(float) — now resolved globally in engine_funcs.h
 
 // ============================================================
 // Globals
@@ -166,11 +162,7 @@ void InstallPopulationComponentUpdate() {
     fn_ScanHabitability = reinterpret_cast<fn_ScanHabitability_t>(
         ResolveAddr(Module::Exe, 0x140053b50));
 
-    // Resolve System::Time::Time(float) via runtime dispatch pointer
-    // The exe stores function pointers to Runtime DLL functions in .rdata.
-    // At 0x140152b00 there's a pointer that gets filled at startup.
-    uintptr_t dispatchSlot = ResolveAddr(Module::Exe, 0x140152b00);
-    fn_Time_Ctor_Float = *reinterpret_cast<fn_Time_Ctor_Float_t*>(dispatchSlot);
+    // fn_Time_Ctor_Float — now resolved globally in EngineFuncsInit()
 
     // Resolve game world global
     g_pGameWorld = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));

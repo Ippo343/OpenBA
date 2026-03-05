@@ -45,9 +45,7 @@ static fn_IsDerivedFrom_dispatch_t fn_IsDerivedFrom_d = nullptr;
 typedef float (*fn_RandFloat_t)(void* random);
 static fn_RandFloat_t fn_RandFloat = nullptr;
 
-// System::Time::Time(this, float seconds) — dispatched through [0x140152b00]
-typedef void* (*fn_Time_Ctor_Float_t)(void* self, float seconds);
-static fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
+// System::Time::Time(float) — now resolved globally in engine_funcs.h
 
 // InternalBasePtr::CheckPtr — dispatched through [0x140152ab0]
 typedef void (*fn_CheckPtr_t)(void* ptr);
@@ -195,8 +193,7 @@ static bool ResolveHelpers() {
         *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152a98)));
     fn_RandFloat = reinterpret_cast<fn_RandFloat_t>(
         *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x1401512f8)));
-    fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152b00)));
+    // fn_Time_Ctor_Float — now resolved globally in EngineFuncsInit()
     fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152ab0)));
 

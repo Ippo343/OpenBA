@@ -58,11 +58,11 @@ static void Reimpl_Update(void* self) {
     ((fn_Update_t)g_hookUpdate.trampoline)(self);
 }
 
-// Slot 7: Load(this, param2) — process events, handle button clicks
+// Slot 7: Load(this, param2) — REIMPLEMENTED (event processing, notification management)
 typedef void (*fn_Load_t)(void* self, void* param2);
 static void Reimpl_Load(void* self, void* param2) {
     g_lastHook = "EventNotifyDialog::Load";
-    ((fn_Load_t)g_hookLoad.trampoline)(self, param2);
+    EventNotifyDialog_Slot7((EventNotifyDialog*)self, param2);
 }
 
 // ============================================================

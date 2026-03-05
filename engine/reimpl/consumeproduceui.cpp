@@ -18,6 +18,7 @@
 //   +0x18: Slot3, +0x28: Slot5, +0x30: Slot6, +0x40: Slot8, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -52,15 +53,13 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (setup/refresh) — PASSTHROUGH (complex: entity component lookup, combo element setup with sprites)
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 (setup/refresh) — REIMPLEMENTED (combo population + progress element setup)
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ConsumeProduceUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ConsumeProduceUI_Slot4((ConsumeProduceUI*)self);
 }
 
 // Slot7 (update handler) — REIMPLEMENTED (progress bar update)
-#include "Dialog/ui_panels.h"
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ConsumeProduceUI::Slot7";
     ConsumeProduceUI_Slot7((ConsumeProduceUI*)self);

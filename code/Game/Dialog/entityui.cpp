@@ -224,6 +224,110 @@ void EntityUI_Slot7(EntityUI* self) {
 }
 
 // ============================================================
+// EntityUI::Slot8 (vtable +0x40) — Input handler
+// ============================================================
+// Reads mouse position from KeyMap, scales by dialog scale factor.
+// Gets ToolUI controller, sets +0x4C = 1, syncs map visibility mode.
+// On key 5 press: checks if mouse is over this dialog and entity exists,
+// then selects the entity in the edit tool (creating one if needed).
+//
+// Original: 0x140066AD0.
+
+void EntityUI_Slot8(EntityUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Get KeyMap singleton (double-indirect from exref)
+    void* keyMap = *g_pKeyMapSingleton;
+
+    // Get dialog element from +0x18 -> +0x10 (dialog root element)
+    void* dialogInst = *(void**)(s + 0x18);
+    void* dialogElem = *(void**)((uintptr_t)dialogInst + 0x10);
+
+    // Read mouse axes and scale by dialog scale factor (+0xDC on element)
+    short axisX = fn_KeyMap_GetValue(keyMap, 0, 0);
+    int mouseX = (int)((float)(int)axisX * *(float*)((uintptr_t)dialogElem + 0xDC));
+
+    // Re-read element since CheckPtr pattern accesses +0x18 again
+    dialogInst = *(void**)(s + 0x18);
+    dialogElem = *(void**)((uintptr_t)dialogInst + 0x10);
+    short axisY = fn_KeyMap_GetValue(keyMap, 0, 1);
+    int mouseY = (int)((float)(int)axisY * *(float*)((uintptr_t)dialogElem + 0xDC));
+
+    // Get ToolUI controller from dialog
+    dialogInst = *(void**)(s + 0x18);
+    uint8_t ctrlBuf[16];
+    fn_DialogInstance_GetController(dialogInst, ctrlBuf, *g_TypeId_ToolUI);
+    void* controller = *(void**)ctrlBuf;
+
+    void* toolUI = nullptr;
+    if (controller) {
+        bool isTool = fn_IsDerivedFrom(controller, *g_TypeId_ToolUI);
+        if (isTool) toolUI = controller;
+    }
+    uint8_t toolBuf[8];
+    fn_InternalBasePtr_Ctor(toolBuf, toolUI);
+    uintptr_t toolPtr = *(uintptr_t*)toolBuf;
+
+    // Set controller +0x4C = 1 (input active flag)
+    *(uint8_t*)(toolPtr + 0x4C) = 1;
+
+    // Sync map visibility mode: compare controller +0x40 with checkPin element +0xD8
+    char checkVal = *(char*)(*(uintptr_t*)(s + 0x38) + 0xD8);
+    char ctrlVal = *(char*)(toolPtr + 0x40);
+
+    if (ctrlVal != checkVal) {
+        *(char*)(*(uintptr_t*)(s + 0x38) + 0xD8) = ctrlVal;
+    }
+
+    // Check key 5 press (left mouse button / select)
+    if (!fn_KeyMap_Pressed(keyMap, 0, 5))
+        return;
+
+    // Get dialog at mouse position
+    dialogInst = *(void**)(s + 0x18);
+    void* userInterface = *(void**)((uintptr_t)dialogInst + 0x10);
+
+    uint8_t dialogAtPosBuf[16];
+    fn_UI_GetFirstContainedDialog(userInterface, dialogAtPosBuf, mouseX, mouseY);
+    void* dialogAtPos = *(void**)dialogAtPosBuf;
+
+    // Check if the dialog at mouse position is this dialog, and entity exists
+    dialogInst = *(void**)(s + 0x18);
+    if (dialogAtPos != dialogInst || *(uintptr_t*)(s + 0x30) == 0)
+        return;
+
+    // Get current tool from player controller
+    void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
+    void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
+
+    // Check if current tool is EditTool
+    bool isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
+    void* editTool = isEditTool ? currentTool : nullptr;
+
+    uint8_t editToolBuf[8];
+    fn_InternalBasePtr_Ctor(editToolBuf, editTool);
+    void* editToolPtr = *(void**)editToolBuf;
+
+    if (!editToolPtr) {
+        // No EditTool active — deselect first, then get new EditTool
+        fn_EntityUI_SetEditMode(playerController, 0);
+
+        // Re-read current tool after deselect
+        currentTool = *(void**)((uintptr_t)playerController + 0x28);
+        isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
+        void* newEditTool = isEditTool ? currentTool : nullptr;
+
+        uint8_t newBuf[8];
+        fn_InternalBasePtr_Ctor(newBuf, newEditTool);
+        editToolPtr = *(void**)newBuf;
+    }
+
+    // Select the entity in the edit tool
+    void* entityPtr = *(void**)(s + 0x30);
+    fn_EditTool_SelectEntity(editToolPtr, &entityPtr);
+}
+
+// ============================================================
 // EntityUI::Slot9 (vtable +0x48) — Button dispatch
 // ============================================================
 // Handles button clicks:

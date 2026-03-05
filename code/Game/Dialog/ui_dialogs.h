@@ -128,6 +128,11 @@ void GoalDialog_Slot6(GoalDialog* self);
 // builds notification entry array from children. Sets button IDs.
 void EventNotifyDialog_Slot4(EventNotifyDialog* self);
 
+// Slot7 (vtable +0x38): Event processing — decrements notification timers,
+// scans event log for new events, creates notification entries with icons/colors,
+// plays sound effect on new events.
+void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2);
+
 // ============================================================
 // AchievementDialog
 // ============================================================

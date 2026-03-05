@@ -1171,6 +1171,174 @@ extern uint32_t* g_TypeId_ToolbarElement;  // _typeInfo_exref in ToolbarDialog U
 // ToolbarDialog parent type ID (DAT_1401c5d38) — for IsDerivedFrom in case 5 (CenterOnPoint)
 extern uint32_t* g_TypeId_ToolbarDialogParent;
 
+// ComboElement type ID: exref at 0x140151690 — for IsDerivedFrom checks on combo elements
+extern uint32_t* g_TypeId_ComboElement;
+
+// GetCurrentProductIndex (FUN_140119470 in exe)
+// Reads +0x50 product index; if -1 does weighted random selection from +0x58 float array.
+typedef uint32_t (*fn_GetCurrentProductIndex_t)(void* component);
+extern fn_GetCurrentProductIndex_t fn_GetCurrentProductIndex;
+
+// FindDialogByName (FUN_1400e1600 in exe)
+// Parses dialog name string, searches UI for matching dialog instance.
+// Non-trivial return: RCX=retval(InternalBasePtr*), RDX=name(String*)
+typedef void* (*fn_FindDialogByName_t)(void* retval, void* name);
+extern fn_FindDialogByName_t fn_FindDialogByName;
+
+// ResolveExternalByName (FUN_14001b1d0 in exe)
+// Resolves and caches an External object by filename. Updates string+0x10 with result.
+typedef void (*fn_ResolveExternalByName_t)(void* nameString);
+extern fn_ResolveExternalByName_t fn_ResolveExternalByName;
+
+// Object::External::External(this) — base class constructor/reinit
+// Runtime function at dispatch table 0x140151e98
+typedef void (*fn_External_External_t)(void* self);
+extern fn_External_External_t fn_External_External;
+
+// ============================================================
+// Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
+// ============================================================
+
+// Input::KeyMap::GetValue(this, slot, axis) -> short (axis value, e.g. mouse X/Y)
+// ?GetValue@KeyMap@Input@@QEBAFHH@Z (0x1800a7b60)
+typedef short (*fn_KeyMap_GetValue_t)(void* self, int slot, int axis);
+extern fn_KeyMap_GetValue_t fn_KeyMap_GetValue;
+
+// UI::UserInterface::GetFirstContainedDialog(this, x, y) -> InternalPtr<DialogInstance>
+// Member, non-trivial return: RCX=this, RDX=retval, R8=x, R9=y
+// ?GetFirstContainedDialog@UserInterface@UI@@QEAA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z
+// (0x18011fb00)
+typedef void* (*fn_UI_GetFirstContainedDialog_t)(void* self, void* retval, int x, int y);
+extern fn_UI_GetFirstContainedDialog_t fn_UI_GetFirstContainedDialog;
+
+// EditTool_SelectEntity (FUN_1400fd3b0 in exe)
+// Selects an entity in the edit tool, opens entity dialog if needed.
+// RCX=editTool*, RDX=entityInternalBasePtr*
+typedef void (*fn_EditTool_SelectEntity_t)(void* editTool, void* entityPtr);
+extern fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity;
+
+// FindComponent_Residence — finds ResidenceComponent on entity (DAT for housing component)
+// Used by ResidenceUI::Slot7 to iterate residents.
+// Searches entity component array at +0x30/+0x38.
+extern fn_FindComponent_t fn_FindComponent_Residence;  // FUN_140006270 or similar
+
+// Age multiplier constant (DAT_140172198 = 5.0f) — converts game age ticks to display years
+extern float* g_pAgeMultiplier;
+
+// Notification timer duration constant (DAT_1401721cc = 30.0f) — seconds per notification
+extern float* g_pNotifyTimerDuration;
+
+// System::Time::Time(retval, float seconds) — construct Time from float seconds
+// ??0Time@System@@QEAA@M@Z
+typedef void* (*fn_Time_Ctor_Float_t)(void* retval, float seconds);
+extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
+
+// System::String::SubString(this, retval, startIndex) -> String (member, non-trivial return)
+// RCX=this, RDX=retval(String*), R8=startIndex
+// ?SubString@String@System@@QEBA?AV12@H@Z
+typedef void* (*fn_String_SubString_t)(void* self, void* retval, int startIndex);
+extern fn_String_SubString_t fn_String_SubString;
+
+// System::String::operator=(this, other) -> String& — string assignment
+// ?operator=@String@System@@QEAAAEAV12@AEBV12@@Z
+typedef void* (*fn_String_Assign_t)(void* self, const void* other);
+extern fn_String_Assign_t fn_String_Assign;
+
+// UI::String::String(retval, ExternalPtr<StringTable>) — single-arg ctor from string table entry
+// Non-trivial return: RCX=retval(UIString*, 16 bytes), RDX=externalPtr(8 bytes)
+// Resolved from exe dispatch table at 0x140151300.
+typedef void* (*fn_UIString_Ctor_Entry_t)(void* retval, uint64_t externalPtr);
+extern fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry;
+
+// UI::Sprite default ctor — UI::Sprite::Sprite(this)
+// ??0Sprite@UI@@QEAA@XZ
+typedef void* (*fn_Sprite_Default_Ctor_t)(void* retval);
+extern fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor;
+
+// UI::Dialog::GetReference(this, retval) -> ExternalPtr (member, non-trivial return)
+// RCX=this(Dialog*), RDX=retval
+// ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VDialogReference@UI@@@Object@@XZ
+typedef void* (*fn_Dialog_GetReference_t)(void* self, void* retval);
+extern fn_Dialog_GetReference_t fn_Dialog_GetReference;
+
+// Audio::Scene::PlayEffect(scene, soundEffect, soundType, time) -> uint
+// ?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z
+// (0x1800def60)
+typedef uint32_t (*fn_Audio_Scene_PlayEffect_t)(void* scene, uint64_t soundEffect, int soundType, void* timeParam);
+extern fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect;
+
+// EventNotifyDialog active event array push (FUN_140011750 — same as GoalDialog/EventNotifyDialog array push)
+// Already declared as fn_EventNotifyDialog_ArrayPush.
+
+// UI::DialogInstance::DialogInstance ctor — creates a dialog from parent+template
+// FUN_140067c30 uses this to create EventPopupDialog instances
+// Already available through fn_UI_AddDialog and MemAlloc.
+
+// EventPopupDialog vtable pointer (PTR_FUN_14015bd80)
+extern void** g_EventPopupDialog_Vtable;
+
+// ============================================================
+// HelpUI support functions
+// ============================================================
+
+// UI::StringTable::GetText(this, retval, textIndex) — member, non-trivial return
+// RCX=this(StringTable*), RDX=retval(String*), R8D=textIndex
+// ?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z
+typedef void (*fn_StringTable_GetText_t)(void* self, void* retval, int textIndex);
+extern fn_StringTable_GetText_t fn_StringTable_GetText;
+
+// UI::DocumentTextElement::GetLink(this, retval, linkIndex) — member, non-trivial return
+// RCX=this(DocumentTextElement*), RDX=retval(String*), R8D=linkIndex
+// ?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z
+typedef void (*fn_DocumentTextElement_GetLink_t)(void* self, void* retval, int linkIndex);
+extern fn_DocumentTextElement_GetLink_t fn_DocumentTextElement_GetLink;
+
+// UI::DocumentTextElement::SetText(this, UI::String) — takes UI::String (16 bytes) by value
+// RCX=this(DocumentTextElement*), RDX=uiString (pointer to 16-byte UI::String)
+// ?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z
+typedef void (*fn_DocumentTextElement_SetText_UIString_t)(void* self, const void* uiString);
+extern fn_DocumentTextElement_SetText_UIString_t fn_DocumentTextElement_SetText_UIString;
+
+// UI::DocumentTextElement::SetText(this, System::String const&)
+// RCX=this(DocumentTextElement*), RDX=text(String const&)
+// ?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z
+typedef void (*fn_DocumentTextElement_SetText_t)(void* self, const void* text);
+extern fn_DocumentTextElement_SetText_t fn_DocumentTextElement_SetText;
+
+// UI::ContainerElement::SetOffsets(this, offsetX, offsetY)
+// ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z
+typedef void (*fn_ContainerElement_SetOffsets_t)(void* self, int offsetX, int offsetY);
+extern fn_ContainerElement_SetOffsets_t fn_ContainerElement_SetOffsets;
+
+// UI::String::String(this, ExternalPtr<StringTable>, int textIndex) — ctor by index
+// RCX=this(UIString*, 16 bytes), RDX=stringTable(ExternalPtr), R8D=textIndex
+// ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z
+typedef void* (*fn_UIString_Ctor_Index_t)(void* self, uint64_t stringTable, int textIndex);
+extern fn_UIString_Ctor_Index_t fn_UIString_Ctor_Index;
+
+// System::String::operator==(this, other) -> bool — string equality
+// ??8String@System@@QEBA_NAEBV01@@Z
+typedef bool (*fn_String_Equal_t)(const void* self, const void* other);
+extern fn_String_Equal_t fn_String_Equal;
+
+// StringTable type ID — resolved from _typeInfo_exref at 0x140151488
+// Used for IsDerivedFrom checks on ExternalList entries
+extern uint32_t* g_TypeId_StringTable;
+
+// HelpUI element type IDs — resolved from _typeInfo_exref addresses in exe
+// Used by Slot4's FindElementType calls to find typed UI elements
+extern uint32_t* g_TypeId_HelpFirstElem;      // exref 0x1401517e8 -> +0x30
+extern uint32_t* g_TypeId_HelpComboElem;       // exref 0x140151690 -> +0x40
+extern uint32_t* g_TypeId_HelpDocTextElem;     // exref 0x1401517f0 -> +0x38
+extern uint32_t* g_TypeId_HelpContainerElem;   // exref 0x1401517f8 -> +0x58
+// Type ID used for IsDerivedFrom on named button elements (buttonBack/buttonForward)
+extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used in Slot9 back/fwd)
+
+// HelpUI history array resize helper (FUN_140011d50 in exe)
+// Resizes dynamic array: param1=array base (ptr+count+capacity), param2=new count
+typedef void (*fn_HelpUI_ArrayResize_t)(void* arrayBase, int newCount);
+extern fn_HelpUI_ArrayResize_t fn_HelpUI_ArrayResize;
+
 // ============================================================
 // Initialization
 // ============================================================

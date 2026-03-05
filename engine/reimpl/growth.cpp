@@ -39,9 +39,7 @@ static fn_CheckPtr_t fn_CheckPtr = nullptr;
 
 // System::Time::AsSeconds — now resolved globally in engine_funcs.h
 
-// System::Time::Time(Time*, float) — construct Time from seconds
-typedef void (*fn_Time_Ctor_Float_t)(void* outTime, float seconds);
-static fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
+// System::Time::Time(Time*, float) — now resolved globally in engine_funcs.h
 
 // FUN_1400c3470 — flag notification (notify entity of flag change)
 typedef void (*fn_FlagNotify_t)(void* entity);
@@ -272,10 +270,7 @@ void InstallGrowthComponentUpdate() {
     // Object::InternalBasePtr::CheckPtr @ Runtime 0x1800c0290
     fn_CheckPtr = reinterpret_cast<fn_CheckPtr_t>(
         ResolveAddr(Module::Runtime, 0x1800c0290));
-    // System::Time::AsSeconds — now resolved globally in engine_funcs
-    // System::Time::Time(float) @ Runtime 0x1800078c0
-    fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
-        ResolveAddr(Module::Runtime, 0x1800078c0));
+    // System::Time::AsSeconds, Time::Time(float) — now resolved globally in engine_funcs
     fn_FlagNotify = reinterpret_cast<fn_FlagNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
     fn_SpawnSubResource = reinterpret_cast<fn_SpawnSubResource_t>(

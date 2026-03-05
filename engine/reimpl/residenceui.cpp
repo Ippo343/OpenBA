@@ -59,10 +59,11 @@ static void Reimpl_Slot4(void* self) {
     ResidenceUI_Slot4((ResidenceUI*)self);
 }
 
+// Slot7 — REIMPLEMENTED (update resident display rows)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ResidenceUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    ResidenceUI_Slot7((ResidenceUI*)self);
 }
 
 // Slot9 — REIMPLEMENTED (dispatches resident row clicks)
