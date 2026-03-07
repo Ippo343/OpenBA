@@ -41,7 +41,7 @@ namespace DialogLoopAddr {
 // Resolved globals
 // ============================================================
 
-static MainLoop** g_pMainLoopSingleton = nullptr;
+// Uses g_pMainLoopSingleton from engine_funcs.h
 
 // ============================================================
 // Hook state
@@ -178,7 +178,7 @@ static void Reimpl_Draw(DialogLoopT* self, float /*alpha*/) {
     }
 #endif
 
-    MainLoop* mainLoop = *g_pMainLoopSingleton;
+    MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     uint8_t* ctx = reinterpret_cast<uint8_t*>(mainLoop->m_context);
 
     // Clear screen: device->Clear(flags=7, color=0xFF808080, depth=1.0f, stencil=0)
@@ -237,7 +237,7 @@ static void Reimpl_Load(uint8_t* self) {
 
 static void ResolveGlobals() {
     if (!g_pMainLoopSingleton) {
-        g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+        g_pMainLoopSingleton = reinterpret_cast<void**>(
             ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
     }
 }

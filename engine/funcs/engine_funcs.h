@@ -1634,15 +1634,8 @@ extern fn_VideoDevice_GetMultisampleModeCount_t fn_VideoDevice_GetMultisampleMod
 typedef bool (*fn_VideoDevice_IsMultisampleModeSupported_t)(void* self, int mode);
 extern fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupported;
 
-// OptionsDialog exe helpers — still calling into exe (not yet reimplemented)
-typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);
-
-// OptionsDialog::OnOk(self) — apply all settings, save, close dialog (FUN_140072930)
-extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnOk;
-// OptionsDialog::OnCancel(self) — revert settings, close dialog (FUN_140072840)
-extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnCancel;
-// OptionsDialog::OnApply(self) — apply all settings, save, keep dialog open (FUN_1400728e0)
-extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnApply;
+// OptionsDialog::OnOk/OnCancel/OnApply — REMOVED: reimplemented in code/Game/Dialog/optionsdialog.cpp
+typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);  // kept for PopulateInputBindList
 // OptionsDialog::PopulateInputBindList(self) — fills input binding list (FUN_140073580)
 extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList;
 // OptionsDialog::OnInputBindClick(self, element, bindIndex, slot) (FUN_1400729a0)
@@ -2344,6 +2337,204 @@ extern fn_Filename_Dtor_t fn_Filename_Dtor;
 typedef void* (*fn_String_Concat_t)(void* retval, const void* lhs, const void* rhs);
 extern fn_String_Concat_t fn_String_ConcatSS;  // String+String variant (dispatch 0x140151a10)
 extern fn_String_Concat_t fn_String_ConcatSS2; // String+String variant (dispatch 0x140151a08)
+
+// ============================================================
+// Stage 3: OptionsDialog Runtime exports
+// ============================================================
+
+// --- Audio::Configuration ---
+
+// Audio::Configuration::Save(this)
+// ?Save@Configuration@Audio@@QEAAXXZ
+typedef void (*fn_AudioConfig_Save_t)(void* self);
+extern fn_AudioConfig_Save_t fn_AudioConfig_Save;
+
+// Audio::Configuration::Startup(this) -> bool
+// ?Startup@Configuration@Audio@@QEAA_NXZ
+typedef bool (*fn_AudioConfig_Startup_t)(void* self);
+extern fn_AudioConfig_Startup_t fn_AudioConfig_Startup;
+
+// --- Video::Configuration ---
+
+// Video::Configuration::Save(this)
+// ?Save@Configuration@Video@@QEAAXXZ
+typedef void (*fn_VideoConfig_Save_t)(void* self);
+extern fn_VideoConfig_Save_t fn_VideoConfig_Save;
+
+// --- Input::Configuration ---
+
+// Input::Configuration::Save(this)
+// ?Save@Configuration@Input@@QEAAXXZ
+typedef void (*fn_InputConfig_Save_t)(void* self);
+extern fn_InputConfig_Save_t fn_InputConfig_Save;
+
+// Input::Configuration::Load(this)
+// ?Load@Configuration@Input@@QEAAXXZ
+typedef void (*fn_InputConfig_Load_t)(void* self);
+extern fn_InputConfig_Load_t fn_InputConfig_Load;
+
+// Input::Configuration::_singleton
+extern void** g_pInputConfigSingleton;
+
+// --- IO::Persistence ---
+
+// IO::Persistence::WriteSettings(this) const
+// ?WriteSettings@Persistence@IO@@QEBAXXZ
+typedef void (*fn_Persistence_WriteSettings_t)(const void* self);
+extern fn_Persistence_WriteSettings_t fn_Persistence_WriteSettings;
+
+// IO::Persistence::ReadSettings(this)
+// ?ReadSettings@Persistence@IO@@QEAAXXZ
+typedef void (*fn_Persistence_ReadSettings_t)(void* self);
+extern fn_Persistence_ReadSettings_t fn_Persistence_ReadSettings;
+
+// --- Input::Device ---
+
+// Input::Device::EnableMouseClipping(this, bool)
+// ?EnableMouseClipping@Device@Input@@QEAAX_N@Z
+typedef void (*fn_InputDevice_EnableMouseClipping_t)(void* self, bool enable);
+extern fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping;
+
+// Input::Device::ResetState(this)
+// ?ResetState@Device@Input@@QEAAXXZ
+typedef void (*fn_InputDevice_ResetState_t)(void* self);
+extern fn_InputDevice_ResetState_t fn_InputDevice_ResetState;
+
+// --- Video::Device ---
+
+// Video::Device::ApplyChangedSettings(this) -> bool
+// ?ApplyChangedSettings@Device@Video@@QEAA_NXZ
+typedef bool (*fn_VideoDevice_ApplyChangedSettings_t)(void* self);
+extern fn_VideoDevice_ApplyChangedSettings_t fn_VideoDevice_ApplyChangedSettings;
+
+// Video::Device::Startup(this) -> bool
+// ?Startup@Device@Video@@QEAA_NXZ
+typedef bool (*fn_VideoDevice_Startup_t)(void* self);
+extern fn_VideoDevice_Startup_t fn_VideoDevice_Startup;
+
+// Video::Device::RecreateDynamic(this)
+// ?RecreateDynamic@Device@Video@@QEAAXXZ
+typedef void (*fn_VideoDevice_RecreateDynamic_t)(void* self);
+extern fn_VideoDevice_RecreateDynamic_t fn_VideoDevice_RecreateDynamic;
+
+// Video::Device::ReleaseDynamic(this)
+// ?ReleaseDynamic@Device@Video@@QEAAXXZ
+typedef void (*fn_VideoDevice_ReleaseDynamic_t)(void* self);
+extern fn_VideoDevice_ReleaseDynamic_t fn_VideoDevice_ReleaseDynamic;
+
+// Video::Device::Shutdown(this)
+// ?Shutdown@Device@Video@@QEAAXXZ
+typedef void (*fn_VideoDevice_Shutdown_t)(void* self);
+extern fn_VideoDevice_Shutdown_t fn_VideoDevice_Shutdown;
+
+// --- Engine::MainLoop ---
+
+// Engine::MainLoop::OnVideoError(this)
+// ?OnVideoError@MainLoop@Engine@@QEAAXXZ
+typedef void (*fn_MainLoop_OnVideoError_t)(void* self);
+extern fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError;
+
+// Engine::MainLoop::OnVideoRestart(this)
+// ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ
+typedef void (*fn_MainLoop_OnVideoRestart_t)(void* self);
+extern fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart;
+
+// Engine::MainLoop::_singleton (protected)
+extern void** g_pMainLoopSingleton;
+
+// --- UI::UserInterface ---
+
+// UI::UserInterface::EnableCursor(this, bool)
+// ?EnableCursor@UserInterface@UI@@QEAAX_N@Z
+typedef void (*fn_UI_EnableCursor_t)(void* self, bool enable);
+extern fn_UI_EnableCursor_t fn_UI_EnableCursor;
+
+// Object::Internal type ID — exref at 0x140151660 in exe .rdata
+// Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData
+extern uint32_t* g_TypeId_ObjectInternal;
+
+// ============================================================
+// Stage 3: OptionsDialog Apply/Restore exe helpers
+// ============================================================
+
+// UI::UserInterface::GetFirstDialog(this, retval) — member, non-trivial return
+// Returns LinkedList<InternalPtr<DialogInstance>>::Iterator (8-byte ptr)
+// RCX=this, RDX=retval(Iterator*). Iterator+0x10 = next node.
+// ?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@...@Collection@@XZ (0x180031150, ordinal 2670)
+typedef void (*fn_UI_GetFirstDialog_t)(void* self, void* retval);
+extern fn_UI_GetFirstDialog_t fn_UI_GetFirstDialog;
+
+// UI::UserInterface::SetFullscreenFadeSprite(this, Sprite*) — sets fade sprite (16 bytes)
+// ?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z (0x18011f560, ordinal 3888)
+typedef void (*fn_UI_SetFullscreenFadeSprite_t)(void* self, void* sprite);
+extern fn_UI_SetFullscreenFadeSprite_t fn_UI_SetFullscreenFadeSprite;
+
+// SaveGameSettings(gameSettings) — persists all game settings to IO::Persistence
+// FUN_140098970 in exe (calls Persistence::Set for 16 entries)
+typedef void (*fn_SaveGameSettings_t)(int32_t* gameSettings);
+extern fn_SaveGameSettings_t fn_SaveGameSettings;
+
+// ReadGameSettings(gameSettings) — reads all game settings from IO::Persistence
+// FUN_140098b60 in exe (calls Persistence::Get for 16 entries)
+typedef void (*fn_ReadGameSettings_t)(int32_t* gameSettings);
+extern fn_ReadGameSettings_t fn_ReadGameSettings;
+
+// ApplyKeyMapToUI(keyMapSingleton, userInterface) — copies keymap config fields to UI
+// FUN_140099260 in exe: copies +0x58..+0x78, +0xA8/+0xB0 to UI, sets UI scale
+typedef void (*fn_ApplyKeyMapToUI_t)(void* keyMap, void* userInterface);
+extern fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI;
+
+// UpdateAutoSaveTimer(dialogInstance) — resets autosave timer based on g_pGameSettings[1]
+// FUN_14005e120 in exe: reads autosave interval, starts/stops timer 0
+typedef void (*fn_UpdateAutoSaveTimer_t)(void* dialogInstance);
+extern fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer;
+
+// Type ID DAT_1401c4d08 — used for IsDerivedFrom check in ApplyGameSettings dialog iteration
+extern uint32_t* g_TypeId_AutoSaveDialogType;
+
+// RegisterDefaultInputBindings — clears KeyMap, re-registers all default bindings, then loads saved config
+// FUN_1400992f0 in exe (standalone function, no parameters)
+typedef void (*fn_RegisterDefaultInputBindings_t)();
+extern fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings;
+
+// UI::UserInterface::ShowDialog(this, InternalPtr<DialogInstance>) -> int
+// ?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+// ABI: RCX=this, RDX=ptr to InternalPtr (non-trivial by-value), returns int result code
+typedef int (*fn_UI_ShowDialog_t)(void* self, void* dialogPtr);
+extern fn_UI_ShowDialog_t fn_UI_ShowDialog;
+
+// Object::InternalBasePtr::DeletePtr(this) — destroys internal object, nulls pointer
+// ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
+typedef void (*fn_InternalBasePtr_DeletePtr_t)(void* self);
+extern fn_InternalBasePtr_DeletePtr_t fn_InternalBasePtr_DeletePtr;
+
+// Input::KeyMap::SetInput(this, id, slot, device, key)
+// ?SetInput@KeyMap@Input@@QEAAXHHHH@Z
+typedef void (*fn_KeyMap_SetInput_t)(void* self, int id, int slot, int device, int key);
+extern fn_KeyMap_SetInput_t fn_KeyMap_SetInput;
+
+// Input::KeyMap::ClearInput(this, id, slot) — 2-param overload
+// ?ClearInput@KeyMap@Input@@QEAAXHH@Z
+typedef void (*fn_KeyMap_ClearInput2_t)(void* self, int id, int slot);
+extern fn_KeyMap_ClearInput2_t fn_KeyMap_ClearInput2;
+
+// Input::KeyMap::ClearInput(this, id, device, key) — 3-param overload
+// ?ClearInput@KeyMap@Input@@QEAAXHHH@Z
+typedef void (*fn_KeyMap_ClearInput3_t)(void* self, int id, int device, int key);
+extern fn_KeyMap_ClearInput3_t fn_KeyMap_ClearInput3;
+
+// Input::KeyMap::GetIdForDeviceInput(this, device, key) -> int
+// ?GetIdForDeviceInput@KeyMap@Input@@QEBAHH H@Z
+typedef int (*fn_KeyMap_GetIdForDeviceInput_t)(void* self, int device, int key);
+extern fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput;
+
+// OptionInputBindDialog ctor (0x140071d30) — creates 0xC8-byte dialog
+typedef void* (*fn_OptionInputBindDialog_Ctor_t)(void* mem);
+extern fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor;
+
+// MessageDialog ctor (0x14006d300) — creates 0xC0-byte dialog
+typedef void* (*fn_MessageDialog_Ctor_t)(void* mem);
+extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 
 // ============================================================
 // Initialization

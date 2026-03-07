@@ -38,7 +38,7 @@ namespace DialogLoaderLoopAddr {
 // Resolved globals
 // ============================================================
 
-static MainLoop** g_pMainLoopSingleton = nullptr;
+// Uses g_pMainLoopSingleton from engine_funcs.h
 
 // ============================================================
 // Hook state
@@ -173,7 +173,7 @@ static bool Reimpl_Update(DialogLoaderLoopT* self, Time* dt) {
         printf("[DialogLoaderLoopT::Update] Loading complete, transitioning to nextLoop=%p\n",
                (void*)self->m_nextLoop);
 #endif
-        MainLoop* mainLoop = *g_pMainLoopSingleton;
+        MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
         mainLoop->m_nextLoop = self->m_nextLoop;
     }
 
@@ -200,7 +200,7 @@ static void Reimpl_Draw(DialogLoaderLoopT* self, float /*alpha*/) {
         drawCount++;
     }
 #endif
-    MainLoop* mainLoop = *g_pMainLoopSingleton;
+    MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     uint8_t* ctx = reinterpret_cast<uint8_t*>(mainLoop->m_context);
 
     // Clear screen: device->Clear(flags=7, color=0, depth=1.0f, stencil=0)
@@ -287,7 +287,7 @@ static void Reimpl_Load(uint8_t* self) {
 
 static void ResolveGlobals() {
     if (!g_pMainLoopSingleton) {
-        g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+        g_pMainLoopSingleton = reinterpret_cast<void**>(
             ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
     }
 }

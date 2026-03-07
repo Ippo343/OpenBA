@@ -11,7 +11,6 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -97,6 +96,53 @@ enum OptionsElementId {
 // Helper: set checkbox state (byte at +0xD8)
 static inline void SetCheckState(void* elem, uint8_t val) {
     if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = val;
+}
+
+// Helper: get input key name as UI::String (replaces FUN_140099c20)
+// Converts device type (-1=unbound, 0=gamepad, 1=keyboard, 2=mouse) and key index
+// to a UI-display string like "Keyboard5" or "Unbound".
+// Returns a UI::String (16 bytes) in retval, using the KeyMap's string table at +0xD0.
+static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
+    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    if (!keyMap) return;
+
+    uint8_t tempStr[8];
+    if (deviceType < 0) {
+        fn_String_Ctor_CStr(tempStr, "Unbound");
+    } else {
+        const char* deviceNames[] = { "Gamepad", "Keyboard", "Mouse" };
+        const char* devName = (deviceType >= 0 && deviceType <= 2) ? deviceNames[deviceType] : "Unknown";
+        fn_String_Format(tempStr, "%s%i", devName, keyIndex);
+    }
+
+    // Construct UI::String from the KeyMap's string table at +0xD0
+    uint64_t stringTable = *(uint64_t*)((uintptr_t)keyMap + 0xD0);
+    fn_UIString_Ctor(retval, stringTable, tempStr);
+    fn_String_Dtor(tempStr);
+}
+
+// Helper: set the key name text on a button element (replaces FUN_140073490)
+// Finds "textInputKey" child in the element, formats device+key into display text.
+static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t keyIndex) {
+    // Find "textInputKey" in the element
+    uint8_t nameBuf[8];
+    fn_String_Ctor_CStr(nameBuf, "textInputKey");
+    uint64_t found = 0;
+    fn_FindElement(*(void**)elementPtr, &found, nameBuf);
+    fn_String_Dtor(nameBuf);
+
+    if (!found) return;
+
+    // Check it's a TextElement
+    void* foundObj = (void*)found;
+    if (g_TypeId_TextElement && !fn_IsDerivedFrom(foundObj, *g_TypeId_TextElement))
+        return;
+
+    // Get the key name as UI::String, then set as text
+    uint8_t uiStr[16];
+    GetInputKeyName(uiStr, deviceType, keyIndex);
+
+    fn_TextElement_SetText(foundObj, uiStr);
 }
 
 // Helper: set slider min/max/value (float fields at +0x118/+0x11c/+0x128)
@@ -451,12 +497,8 @@ void OptionsDialog_Startup(OptionsDialog* self) {
                         ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
     void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
 
-    // Input::Configuration singleton (exref 0x140151738)
-    void* inputCfg = nullptr;
-    {
-        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151738));
-        if (exref && *exref) inputCfg = *exref;
-    }
+    // Input::Configuration singleton (resolved via Runtime DLL export)
+    void* inputCfg = g_pInputConfigSingleton ? *g_pInputConfigSingleton : nullptr;
 
     // --- Audio sliders ---
     FIND_ELEMENT(self->sliderUI,     "sliderUI");
@@ -534,7 +576,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 
     // --- Input binding list ---
     FIND_ELEMENT(self->inputList,"inputList");
-    fn_OptionsDialog_PopulateInputBindList(self);
+    OptionsDialog_PopulateInputBindList(self);
 
     // --- Autosave combo ---
     FIND_ELEMENT(self->comboAutosave,"comboAutosave");
@@ -588,12 +630,8 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         SetSliderValue(self->sliderStatusIcon, (float)gs[2]);
 
         SetSliderRange(self->sliderStatusIconScale, 25.0f, 200.0f);
-        {
-            float* c1 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720c4));
-            float* c2 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172208));
-            if (c1 && c2) SetSliderValue(self->sliderStatusIconScale,
-                                          (float)gs[4] * (*c1) * (*c2));
-        }
+        // gs[4] * 0.01f * 100.0f = gs[4] * 1.0f (the two constants cancel out)
+        SetSliderValue(self->sliderStatusIconScale, (float)gs[4]);
     }
 
     // checkMouseClip: from Input::Configuration +0x08
@@ -611,6 +649,449 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 #undef FIND_ELEMENT
 
 // ============================================================
+// ApplyInputSettings (0x140072360)
+// ============================================================
+// Reads checkMouseClip and checkSoftwareMouse from UI, writes to
+// Input::Configuration singleton, enables/disables mouse clipping,
+// enables cursor, and saves input config.
+static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
+    void* inputCfg = g_pInputConfigSingleton ? *g_pInputConfigSingleton : nullptr;
+    if (!inputCfg) return;
+
+    // Read mouse clip checkbox -> Input::Configuration +0x08
+    fn_InternalBasePtr_CheckPtr(&self->checkMouseClip);
+    *(uint8_t*)((uintptr_t)inputCfg + 0x08) =
+        *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
+
+    // Read software mouse checkbox -> Input::Configuration +0x0A
+    fn_InternalBasePtr_CheckPtr(&self->checkSoftwareMouse);
+    *(uint8_t*)((uintptr_t)inputCfg + 0x0A) =
+        *(uint8_t*)((uintptr_t)*(void**)&self->checkSoftwareMouse + 0xD8);
+
+    // Enable cursor in UI
+    void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    if (fn_UI_EnableCursor) fn_UI_EnableCursor(userInterface, true);
+
+    // Enable/disable mouse clipping based on checkbox
+    fn_InternalBasePtr_CheckPtr(&self->checkMouseClip);
+    bool mouseClip = *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
+    void* inputDevice = g_pInputDeviceSingleton ? *g_pInputDeviceSingleton : nullptr;
+    if (fn_InputDevice_EnableMouseClipping && inputDevice)
+        fn_InputDevice_EnableMouseClipping(inputDevice, mouseClip);
+
+    // Save input configuration
+    if (fn_InputConfig_Save && inputCfg)
+        fn_InputConfig_Save(inputCfg);
+}
+
+// ============================================================
+// ApplyGameSettings (0x140072420)
+// ============================================================
+// Reads all game settings from UI controls, writes to g_pGameSettings,
+// updates autosave timers on all open dialogs, persists settings,
+// applies key map to UI, and updates UI scale.
+static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
+    if (!g_pGameSettings) return;
+    int32_t* gs = g_pGameSettings;
+
+    // UI scale slider -> gs[0]
+    fn_InternalBasePtr_CheckPtr(&self->sliderUIScale);
+    gs[0] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderUIScale + 0x128);
+
+    // Autosave combo -> gs[1]
+    fn_InternalBasePtr_CheckPtr(&self->comboAutosave);
+    gs[1] = *(int32_t*)((uintptr_t)*(void**)&self->comboAutosave + 0x118);
+
+    // Status icon checkbox -> gs[3] (byte at offset +0x0C)
+    fn_InternalBasePtr_CheckPtr(&self->checkStatusIcon);
+    *(uint8_t*)(&gs[3]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkStatusIcon + 0xD8);
+
+    // Status icon distance slider -> gs[2]
+    fn_InternalBasePtr_CheckPtr(&self->sliderStatusIcon);
+    gs[2] = (int32_t)*(float*)((uintptr_t)*(void**)&self->sliderStatusIcon + 0x128);
+
+    // Status icon scale slider -> gs[4]
+    // Original divides by 100.0f then multiplies by 100.0f (cancels out to identity)
+    fn_InternalBasePtr_CheckPtr(&self->sliderStatusIconScale);
+    {
+        float sliderVal = *(float*)((uintptr_t)*(void**)&self->sliderStatusIconScale + 0x128);
+        gs[4] = (int32_t)sliderVal;
+    }
+
+    // Edge scroll checkbox -> gs[5] (byte)
+    fn_InternalBasePtr_CheckPtr(&self->checkEdgeScroll);
+    *(uint8_t*)(&gs[5]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkEdgeScroll + 0xD8);
+
+    // Show celsius -> byte at gs+0x15
+    fn_InternalBasePtr_CheckPtr(&self->checkShowCelsius);
+    *(uint8_t*)((uintptr_t)gs + 0x15) =
+        *(uint8_t*)((uintptr_t)*(void**)&self->checkShowCelsius + 0xD8);
+
+    // Show weather -> byte at gs+0x16
+    fn_InternalBasePtr_CheckPtr(&self->checkShowWeather);
+    *(uint8_t*)((uintptr_t)gs + 0x16) =
+        *(uint8_t*)((uintptr_t)*(void**)&self->checkShowWeather + 0xD8);
+
+    // Auto slow -> byte at gs+0x17
+    fn_InternalBasePtr_CheckPtr(&self->checkAutoslow);
+    *(uint8_t*)((uintptr_t)gs + 0x17) =
+        *(uint8_t*)((uintptr_t)*(void**)&self->checkAutoslow + 0xD8);
+
+    // Auto pause -> gs[6] (byte)
+    fn_InternalBasePtr_CheckPtr(&self->checkAutopause);
+    *(uint8_t*)(&gs[6]) = *(uint8_t*)((uintptr_t)*(void**)&self->checkAutopause + 0xD8);
+
+    // Last active tab -> gs[7]
+    fn_InternalBasePtr_CheckPtr(&self->tabOptions);
+    gs[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+
+    // Iterate all open dialogs and update autosave timer on each
+    void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    if (fn_UI_GetFirstDialog && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
+        g_TypeId_AutoSaveDialogType) {
+        uint32_t typeId = *g_TypeId_AutoSaveDialogType;
+        void* iter = nullptr;
+        fn_UI_GetFirstDialog(userInterface, &iter);
+        while (iter != nullptr) {
+            fn_InternalBasePtr_CheckPtr(&iter);
+            void* dialog = *(void**)&iter;
+            bool isType = fn_IsDerivedFrom(dialog, typeId);
+            if (isType) {
+                fn_InternalBasePtr_CheckPtr(&iter);
+                void* dialogInst = *(void**)&iter;
+                bool isDerived = fn_IsDerivedFrom(dialogInst, typeId);
+                void* target = isDerived ? dialogInst : nullptr;
+                if (target) fn_UpdateAutoSaveTimer(target);
+            }
+            iter = *(void**)((uintptr_t)iter + 0x10);
+        }
+    }
+
+    // Persist game settings
+    if (fn_SaveGameSettings) fn_SaveGameSettings(gs);
+
+    // Apply key map config to UI (cursor speed, zoom, etc.)
+    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    if (keyMap && fn_ApplyKeyMapToUI) {
+        fn_ApplyKeyMapToUI(keyMap, userInterface);
+    } else if (keyMap) {
+        // Manual fallback: copy keymap fields to UserInterface
+        uintptr_t ui = (uintptr_t)userInterface;
+        uintptr_t km = (uintptr_t)keyMap;
+        *(uint64_t*)(ui + 0xA8) = *(uint64_t*)(km + 0x70);
+        *(uint64_t*)(ui + 0xB0) = *(uint64_t*)(km + 0x78);
+        *(uint64_t*)(ui + 0xB8) = *(uint64_t*)(km + 0x60);
+        *(uint64_t*)(ui + 0xC0) = *(uint64_t*)(km + 0x68);
+        *(uint64_t*)(ui + 0xC8) = *(uint64_t*)(km + 0x58);
+        // SetFullscreenFadeSprite
+        if (fn_UI_SetFullscreenFadeSprite) {
+            uint8_t sprite[16];
+            *(uint64_t*)&sprite[0] = *(uint64_t*)(km + 0xA8);
+            *(uint64_t*)&sprite[8] = *(uint64_t*)(km + 0xB0);
+            fn_UI_SetFullscreenFadeSprite(userInterface, sprite);
+        }
+    }
+
+    // Set UI scale: gs[0] is percentage (0-200), divide by 100.0f to get ratio
+    *(float*)((uintptr_t)userInterface + 0xDC) = (float)gs[0] / 100.0f;
+
+    // Notify game world of settings change (virtual call at vtable+0x18)
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (gameWorld) {
+        // System::Time::Time(0.0f)
+        uint8_t timeVal[8] = {};
+        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeVal, 0.0f);
+        // Virtual call: gameWorld->vtable[3](gameWorld, &time)
+        void** vtable = *(void***)gameWorld;
+        typedef void (*VCallUpdate_t)(void* self, void* time);
+        if (vtable && vtable[3])
+            ((VCallUpdate_t)vtable[3])(gameWorld, timeVal);
+    }
+}
+
+// ============================================================
+// ApplyVideoSettings (0x140071e10)
+// ============================================================
+// Reads all video combos/checkboxes, compares with current video config,
+// applies changes via Video::Device (shutdown/startup or apply changed),
+// and saves video config on success. Restores on failure.
+static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
+    if (!vidDev || !vidCfg) return;
+
+    // Save current config for potential rollback
+    int oldRenderer  = *(int*)((uintptr_t)vidDev + 0xF8);  // current renderer
+    int oldAdapter   = *(int*)((uintptr_t)vidCfg + 0x08);
+    int oldRefreshN  = *(int*)((uintptr_t)vidCfg + 0x38);
+    int oldRefreshD  = *(int*)((uintptr_t)vidCfg + 0x3C);
+    int oldWidth     = *(int*)((uintptr_t)vidCfg + 0x0C);
+    int oldHeight    = *(int*)((uintptr_t)vidCfg + 0x10);
+    int oldAntialias = *(int*)((uintptr_t)vidCfg + 0x24);
+    int oldFilter    = *(int*)((uintptr_t)vidCfg + 0x28);
+    int oldShadowRes = *(int*)((uintptr_t)vidCfg + 0x2C);
+    int oldShadowQ   = *(int*)((uintptr_t)vidCfg + 0x30);
+    int oldReflQ     = *(int*)((uintptr_t)vidCfg + 0x34);
+    uint8_t oldFullscreen = *(uint8_t*)((uintptr_t)vidCfg + 0x40);
+    uint8_t oldVsync      = *(uint8_t*)((uintptr_t)vidCfg + 0x41);
+
+    // Read new values from UI combos
+    // Renderer
+    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
+    int rendItem = *(int*)((uintptr_t)*(void**)&self->comboRenderer + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
+    int newRenderer = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboRenderer, rendItem);
+
+    // Adapter
+    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
+    int adpItem = *(int*)((uintptr_t)*(void**)&self->comboAdapter + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
+    int newAdapter = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboAdapter, adpItem);
+
+    // Resolution
+    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
+    int resItem = *(int*)((uintptr_t)*(void**)&self->comboResolution + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
+    void* resData = fn_ComboElement_GetItemData(*(void**)&self->comboResolution, resItem);
+
+    // Refresh
+    fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
+    int refItem = *(int*)((uintptr_t)*(void**)&self->comboRefresh + 0x118);
+
+    // Look up actual width/height/refresh from the video interface data
+    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, newRenderer);
+    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
+    intptr_t adapter = adapterArray + (intptr_t)newAdapter * 0x38;
+    intptr_t modes = *(intptr_t*)(adapter + 8);
+    intptr_t modeEntry = modes + (intptr_t)(int)(intptr_t)resData * 0x18;
+    intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
+    intptr_t refreshEntry = refreshArray + (intptr_t)refItem * 8;
+
+    int newRefreshN = *(int*)refreshEntry;
+    int newRefreshD = *(int*)(refreshEntry + 4);
+    int newWidth    = *(int*)modeEntry;
+    int newHeight   = *(int*)(modeEntry + 4);
+
+    // Antialias
+    fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
+    int aaItem = *(int*)((uintptr_t)*(void**)&self->comboAntialias + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
+    int newAntialias = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboAntialias, aaItem);
+
+    // Filter
+    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
+    int fltItem = *(int*)((uintptr_t)*(void**)&self->comboFilter + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
+    int newFilter = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboFilter, fltItem);
+
+    // Shadow res, shadow quality, reflection quality
+    fn_InternalBasePtr_CheckPtr(&self->comboShadowRes);
+    int newShadowRes = *(int*)((uintptr_t)*(void**)&self->comboShadowRes + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboShadowQuality);
+    int newShadowQ = *(int*)((uintptr_t)*(void**)&self->comboShadowQuality + 0x118);
+    fn_InternalBasePtr_CheckPtr(&self->comboReflectionQuality);
+    int newReflQ = *(int*)((uintptr_t)*(void**)&self->comboReflectionQuality + 0x118);
+
+    // Fullscreen / VSync checkboxes
+    fn_InternalBasePtr_CheckPtr(&self->checkFullscreen);
+    uint8_t newFullscreen = *(uint8_t*)((uintptr_t)*(void**)&self->checkFullscreen + 0xD8);
+    fn_InternalBasePtr_CheckPtr(&self->checkVSync);
+    uint8_t newVsync = *(uint8_t*)((uintptr_t)*(void**)&self->checkVSync + 0xD8);
+
+    // Check if anything changed. If nothing changed, return early.
+    bool rendererChanged = (oldRenderer != newRenderer);
+    bool adapterChanged = (oldAdapter != newAdapter);
+    bool needsFullRestart = rendererChanged || adapterChanged;
+
+    if (!rendererChanged) {
+        // Same renderer — check if resolution/antialias/fullscreen match
+        if (oldWidth == newWidth && oldHeight == newHeight &&
+            oldAntialias == newAntialias && oldFullscreen == newFullscreen) {
+            if (!adapterChanged) {
+                // Same adapter — check all remaining settings
+                if (oldRefreshN == newRefreshN && oldRefreshD == newRefreshD &&
+                    oldVsync == newVsync && oldFilter == newFilter &&
+                    oldShadowRes == newShadowRes && oldShadowQ == newShadowQ &&
+                    oldReflQ == newReflQ) {
+                    return;  // Nothing changed
+                }
+            }
+        }
+    }
+
+    // If renderer or adapter changed, need full shutdown/startup
+    if (needsFullRestart) {
+        void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
+        if (fn_MainLoop_OnVideoError && mainLoop)
+            fn_MainLoop_OnVideoError(mainLoop);
+        if (fn_VideoDevice_ReleaseDynamic) fn_VideoDevice_ReleaseDynamic(vidDev);
+        if (fn_VideoDevice_Shutdown) fn_VideoDevice_Shutdown(vidDev);
+    }
+
+    // Write new settings to video config
+    *(int*)((uintptr_t)vidCfg + 0x04) = newRenderer;
+    *(int*)((uintptr_t)vidCfg + 0x08) = newAdapter;
+    *(int*)((uintptr_t)vidCfg + 0x38) = newRefreshN;
+    *(int*)((uintptr_t)vidCfg + 0x0C) = newWidth;
+    *(int*)((uintptr_t)vidCfg + 0x10) = newHeight;
+    *(int*)((uintptr_t)vidCfg + 0x3C) = newRefreshD;
+    // Update windowed size if resolution changed
+    if (newWidth != oldWidth || newHeight != oldHeight) {
+        *(int*)((uintptr_t)vidCfg + 0x1C) = newWidth;
+        *(int*)((uintptr_t)vidCfg + 0x20) = newHeight;
+    }
+    *(uint8_t*)((uintptr_t)vidCfg + 0x41) = newVsync;
+    *(int*)((uintptr_t)vidCfg + 0x24) = newAntialias;
+    *(uint8_t*)((uintptr_t)vidCfg + 0x40) = newFullscreen;
+    *(int*)((uintptr_t)vidCfg + 0x28) = newFilter;
+    *(int*)((uintptr_t)vidCfg + 0x2C) = newShadowRes;
+    *(int*)((uintptr_t)vidCfg + 0x30) = newShadowQ;
+    *(int*)((uintptr_t)vidCfg + 0x34) = newReflQ;
+
+    bool success;
+    if (!needsFullRestart) {
+        // Same renderer+adapter: just apply changed settings
+        success = fn_VideoDevice_ApplyChangedSettings
+                  ? fn_VideoDevice_ApplyChangedSettings(vidDev) : false;
+    } else {
+        // Full restart
+        success = fn_VideoDevice_Startup ? fn_VideoDevice_Startup(vidDev) : false;
+        if (fn_VideoDevice_RecreateDynamic) fn_VideoDevice_RecreateDynamic(vidDev);
+        void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
+        if (fn_MainLoop_OnVideoRestart && mainLoop)
+            fn_MainLoop_OnVideoRestart(mainLoop);
+    }
+
+    if (success) {
+        // Save the new config
+        if (fn_VideoConfig_Save) fn_VideoConfig_Save(vidCfg);
+    } else {
+        // Rollback to old config
+        *(int*)((uintptr_t)vidCfg + 0x08) = oldAdapter;
+        *(int*)((uintptr_t)vidCfg + 0x0C) = oldWidth;
+        *(int*)((uintptr_t)vidCfg + 0x04) = oldRenderer;
+        *(int*)((uintptr_t)vidCfg + 0x10) = oldHeight;
+        *(int*)((uintptr_t)vidCfg + 0x38) = oldRefreshN;
+        *(int*)((uintptr_t)vidCfg + 0x3C) = oldRefreshD;
+        *(int*)((uintptr_t)vidCfg + 0x24) = oldAntialias;
+        *(uint8_t*)((uintptr_t)vidCfg + 0x40) = oldFullscreen;
+        *(uint8_t*)((uintptr_t)vidCfg + 0x41) = oldVsync;
+        *(int*)((uintptr_t)vidCfg + 0x28) = oldFilter;
+        *(int*)((uintptr_t)vidCfg + 0x2C) = oldShadowRes;
+        *(int*)((uintptr_t)vidCfg + 0x30) = oldShadowQ;
+        *(int*)((uintptr_t)vidCfg + 0x34) = oldReflQ;
+    }
+}
+
+// ============================================================
+// RestoreVideoSettings (0x1400727d0)
+// ============================================================
+// Restores video/game settings on cancel: re-reads from persistence,
+// restores last tab, and re-applies keymap config to UI.
+static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
+    // Re-read all settings from persistence
+    void* persistence = g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr;
+    if (fn_Persistence_ReadSettings && persistence)
+        fn_Persistence_ReadSettings(persistence);
+
+    // Re-read game settings from persistence
+    if (fn_ReadGameSettings && g_pGameSettings)
+        fn_ReadGameSettings(g_pGameSettings);
+
+    // Restore last tab
+    fn_InternalBasePtr_CheckPtr(&self->tabOptions);
+    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    if (g_pGameSettings)
+        g_pGameSettings[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+
+    // Re-apply keymap config to UI
+    void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    if (keyMap && fn_ApplyKeyMapToUI)
+        fn_ApplyKeyMapToUI(keyMap, userInterface);
+}
+
+// ============================================================
+// OnApply (0x1400728e0): Apply all settings and save (keep dialog open)
+// ============================================================
+// Calls ApplyVideoSettings, ApplyInputSettings, saves audio config,
+// applies game settings, and writes persistence settings.
+
+void OptionsDialog_OnApply(OptionsDialog* self) {
+    OptionsDialog_ApplyVideoSettings(self);
+    OptionsDialog_ApplyInputSettings(self);
+
+    // Save audio configuration
+    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton && fn_AudioConfig_Save)
+        fn_AudioConfig_Save(*g_pAudioConfigSingleton);
+
+    OptionsDialog_ApplyGameSettings(self);
+
+    // Write all settings to disk
+    if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_WriteSettings)
+        fn_Persistence_WriteSettings(*g_pPersistenceSingleton);
+}
+
+// ============================================================
+// OnOk (0x140072930): Apply all settings, save, and close dialog
+// ============================================================
+// Same as OnApply plus closes the dialog window.
+
+void OptionsDialog_OnOk(OptionsDialog* self) {
+    OptionsDialog_OnApply(self);
+
+    // Close dialog
+    uint8_t ibpBuf[8];
+    fn_InternalBasePtr_Ctor(ibpBuf, self);
+    void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    fn_UI_CloseDialog(userInterface, ibpBuf);
+}
+
+// ============================================================
+// OnCancel (0x140072840): Revert settings and close dialog
+// ============================================================
+// Reloads settings from disk, re-registers default input bindings,
+// restores video settings, and closes the dialog.
+
+void OptionsDialog_OnCancel(OptionsDialog* self) {
+    // Reload persistence settings from disk
+    if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_ReadSettings)
+        fn_Persistence_ReadSettings(*g_pPersistenceSingleton);
+
+    // Re-register default input bindings and load saved config
+    if (fn_RegisterDefaultInputBindings)
+        fn_RegisterDefaultInputBindings();
+
+    // Reload input configuration
+    if (g_pInputConfigSingleton && *g_pInputConfigSingleton && fn_InputConfig_Load)
+        fn_InputConfig_Load(*g_pInputConfigSingleton);
+
+    // Restore mouse clipping from input config byte at +0x08
+    if (g_pInputDeviceSingleton && *g_pInputDeviceSingleton &&
+        g_pInputConfigSingleton && *g_pInputConfigSingleton &&
+        fn_InputDevice_EnableMouseClipping) {
+        bool clipEnabled = *(bool*)((uintptr_t)*g_pInputConfigSingleton + 0x08);
+        fn_InputDevice_EnableMouseClipping(*g_pInputDeviceSingleton, clipEnabled);
+    }
+
+    // Reload persistence settings again (for audio config)
+    if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_ReadSettings)
+        fn_Persistence_ReadSettings(*g_pPersistenceSingleton);
+
+    // Reinitialize audio from saved config
+    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton && fn_AudioConfig_Startup)
+        fn_AudioConfig_Startup(*g_pAudioConfigSingleton);
+
+    // Restore video settings to pre-dialog state
+    OptionsDialog_RestoreVideoSettings(self);
+
+    // Close dialog
+    uint8_t ibpBuf[8];
+    fn_InternalBasePtr_Ctor(ibpBuf, self);
+    void* userInterface = *(void**)((uintptr_t)self + 0x10);
+    fn_UI_CloseDialog(userInterface, ibpBuf);
+}
+
+// ============================================================
 // OnEvent (0x140072f20): Handle options changes
 // ============================================================
 
@@ -619,15 +1100,15 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
     if (eventType == 0x12) {
         // --- Button click ---
         if (eventData == kButton_Ok) {
-            fn_OptionsDialog_OnOk(self);
+            OptionsDialog_OnOk(self);
             return;
         }
         if (eventData == kButton_Cancel) {
-            fn_OptionsDialog_OnCancel(self);
+            OptionsDialog_OnCancel(self);
             return;
         }
         if (eventData == kButton_Apply) {
-            fn_OptionsDialog_OnApply(self);
+            OptionsDialog_OnApply(self);
             return;
         }
         // Input bind button clicks: IDs >= 13
@@ -644,7 +1125,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             }
             int bindIndex = (int)offset / 2;
 
-            fn_OptionsDialog_OnInputBindClick(self, parentPtr, bindIndex, slot);
+            OptionsDialog_OnInputBindClick(self, parentPtr, bindIndex, slot);
         }
         return;
     }
@@ -771,4 +1252,275 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         audioVol[eventData] = (int32_t)*(float*)((uintptr_t)*sliderField + 0x128);
         return;
     }
+}
+
+// ============================================================
+// PopulateInputBindList (0x140073580): Fills input binding list
+// ============================================================
+// Iterates children of inputList in groups of 3:
+//   child[i*3+0] = row container (contains "textInputName" label)
+//   child[i*3+1] = bind button for slot 0
+//   child[i*3+2] = bind button for slot 1
+// Sets label text from KeyMap string table, sets button key name text,
+// assigns element IDs starting at kInputBind_Base (13).
+void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
+    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    if (!keyMap) return;
+
+    fn_InternalBasePtr_CheckPtr(&self->inputList);
+    void* inputList = self->inputList;
+    int childCount = fn_Element_ChildCount(inputList);
+
+    int numRows = childCount / 3;
+    if (numRows <= 0) return;
+
+    int elemId = kInputBind_Base;  // 13
+    int inputId = 5;  // KeyMap input IDs start at 5
+
+    for (int row = 0; row < numRows; row++, inputId++) {
+        // Get the 3 children for this row
+        fn_InternalBasePtr_CheckPtr(&self->inputList);
+        uint64_t rowChild = 0;
+        fn_Element_Child(self->inputList, &rowChild, row * 3);
+
+        // Find "textInputName" in the row container and set label
+        {
+            uint8_t nameBuf[8];
+            fn_String_Ctor_CStr(nameBuf, "textInputName");
+            uint64_t textElem = 0;
+            fn_InternalBasePtr_CheckPtr((void*)&rowChild);
+            fn_FindElement((void*)rowChild, &textElem, nameBuf);
+            fn_String_Dtor(nameBuf);
+
+            if (textElem) {
+                void* textObj = (void*)textElem;
+                if (g_TypeId_TextElement && fn_IsDerivedFrom(textObj, *g_TypeId_TextElement)) {
+                    // Get input name from KeyMap string table at +0xC8
+                    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMap + 0xC8);
+                    uint8_t uiStr[16];
+                    fn_UIString_Ctor_Index(uiStr, nameTable, inputId);
+                    fn_TextElement_SetText(textObj, uiStr);
+                }
+            }
+        }
+
+        // Set bind button texts and element IDs for slots 0 and 1
+        for (int slot = 0; slot < 2; slot++) {
+            fn_InternalBasePtr_CheckPtr(&self->inputList);
+            uint64_t btnChild = 0;
+            fn_Element_Child(self->inputList, &btnChild, row * 3 + 1 + slot);
+
+            // Get current device and key for this input binding
+            int device = fn_KeyMap_GetDeviceForId(keyMap, inputId, slot);
+            int key = fn_KeyMap_GetInputForId(keyMap, inputId, slot);
+
+            // Set the button's key name text
+            SetInputBindButtonText((void*)&btnChild, device, key);
+
+            // Assign element ID
+            fn_InternalBasePtr_CheckPtr((void*)&btnChild);
+            fn_Element_SetElementId((void*)btnChild, elemId + slot);
+        }
+
+        elemId += 2;
+    }
+}
+
+// ============================================================
+// OnInputBindClick (0x1400729a0): Shows rebind dialog
+// ============================================================
+// When user clicks a key bind button in the options:
+// 1. Creates OptionInputBindDialog from "Dialog/Options.rsc:inputBind"
+// 2. Sets the input name text as a parameter
+// 3. Shows the dialog modally (blocks until user presses a key)
+// 4. Reads the captured key from the dialog result
+// 5. If result=2 (clear), clears the binding
+// 6. If result=1 (bound), checks for conflicts and handles them
+// 7. Refreshes the input bind list
+void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot) {
+    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    if (!keyMap) return;
+
+    int inputId = bindIndex + 5;  // Convert bind index to KeyMap input ID
+
+    // Load the input bind dialog resource
+    uint8_t filenameBuf[8];
+    fn_String_Ctor_CStr(filenameBuf, "Dialog/Options.rsc:inputBind");
+    fn_Filename_AdjustDelimiters(filenameBuf);
+    (void)fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    fn_String_Dtor(filenameBuf);
+
+    // Allocate and construct OptionInputBindDialog
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 200, 8);  // 0xC8 = 200 bytes
+    void* dialog = nullptr;
+    if (mem) {
+        uint8_t nullPtr[8] = {};
+        fn_InternalBasePtr_Ctor(nullPtr, nullptr);
+        dialog = fn_OptionInputBindDialog_Ctor(mem);
+    }
+
+    // Wrap in InternalPtr
+    uint64_t dialogPtr = 0;
+    fn_InternalBasePtr_Ctor((void*)&dialogPtr, dialog);
+
+    // Set the input name text on the dialog
+    // Get input name from KeyMap string table at +0xC8
+    uint8_t inputNameUI[16];
+    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMap + 0xC8);
+    fn_UIString_Ctor_Index(inputNameUI, nameTable, inputId);
+
+    // Convert to System::String
+    uint8_t inputNameStr[8];
+    fn_UIString_ToSystemString(inputNameUI, inputNameStr);
+
+    // Find TextElement in dialog and set parameter 0
+    fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
+    if (g_TypeId_TextElement) {
+        uint64_t textElem = 0;
+        fn_DialogInstance_FindElementType((void*)dialogPtr, &textElem, *g_TypeId_TextElement);
+        if (textElem) {
+            fn_InternalBasePtr_CheckPtr((void*)&textElem);
+            fn_TextElement_SetParameter((void*)textElem, 0, inputNameStr);
+        }
+    }
+
+    // Show dialog modally — get result
+    void* userInterface = *(void**)((uintptr_t)&self->base + 0x10);
+    uint64_t showPtr = dialogPtr;
+    int result = fn_UI_ShowDialog(userInterface, &showPtr);
+
+    // Read captured key data from dialog before deleting
+    fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
+    int capturedDevice = *(int*)((uintptr_t)(void*)dialogPtr + 0xC4);
+    fn_InternalBasePtr_CheckPtr((void*)&dialogPtr);
+    int capturedKey = *(int*)((uintptr_t)(void*)dialogPtr + 0xC0);
+
+    // Check if the new binding conflicts with an existing one
+    int conflictId = fn_KeyMap_GetIdForDeviceInput(keyMap, capturedDevice, capturedKey);
+
+    // Delete the input bind dialog
+    fn_InternalBasePtr_DeletePtr((void*)&dialogPtr);
+
+    if (result == 2) {
+        // User chose "clear" — unbind this slot
+        fn_KeyMap_ClearInput2(keyMap, inputId, slot);
+        // Update button text to "Unbound"
+        uint64_t elemVal = *(uint64_t*)element;
+        SetInputBindButtonText((void*)&elemVal, -1, 0);
+        goto cleanup;
+    }
+
+    if (result != 1) goto cleanup;  // User cancelled
+
+    if (conflictId < 0) {
+        // No conflict — just set the new binding
+        goto set_binding;
+    }
+
+    // There IS a conflict — show the "already bound" confirmation dialog
+    {
+        // Load the inputBound dialog resource
+        uint8_t fnameBuf2[8];
+        fn_String_Ctor_CStr(fnameBuf2, "Dialog/Options.rsc:inputBound");
+        fn_Filename_AdjustDelimiters(fnameBuf2);
+        (void)fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf2);
+        fn_String_Dtor(fnameBuf2);
+
+        // Allocate and construct MessageDialog (0xC0 bytes)
+        void* mem2 = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+        void* dialog2 = nullptr;
+        if (mem2) {
+            uint8_t nullPtr2[8] = {};
+            fn_InternalBasePtr_Ctor(nullPtr2, nullptr);
+            dialog2 = fn_MessageDialog_Ctor(mem2);
+        }
+
+        uint64_t dialog2Ptr = 0;
+        fn_InternalBasePtr_Ctor((void*)&dialog2Ptr, dialog2);
+
+        // Get the name of the key that was pressed (new binding)
+        uint8_t newKeyUI[16];
+        GetInputKeyName(newKeyUI, capturedDevice, capturedKey);
+        uint8_t newKeyStr[8];
+        fn_UIString_ToSystemString(newKeyUI, newKeyStr);
+
+        // Get the name of the existing binding that conflicts
+        uint8_t conflictNameUI[16];
+        fn_UIString_Ctor_Index(conflictNameUI, nameTable, conflictId);
+        uint8_t conflictNameStr[8];
+        fn_UIString_ToSystemString(conflictNameUI, conflictNameStr);
+
+        // Check if the conflicting binding is the same as the current one
+        // (in which case no confirmation is needed)
+        bool sameBinding = false;
+        {
+            const char* str1 = *(const char**)inputNameStr;
+            const char* str2 = *(const char**)conflictNameStr;
+            if (str1 && str2) {
+                sameBinding = (strcmp(str1, str2) == 0);
+            } else {
+                sameBinding = (str1 == str2);
+            }
+        }
+
+        int confirmResult = 1;  // default: proceed
+        if (!sameBinding) {
+            // Set parameters on the confirmation dialog:
+            // param 0 = new key name, param 1 = conflicting binding name, param 2 = current input name
+            if (g_TypeId_TextElement) {
+                fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
+                uint64_t textElem2 = 0;
+                fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem2, *g_TypeId_TextElement);
+                if (textElem2) {
+                    fn_InternalBasePtr_CheckPtr((void*)&textElem2);
+                    fn_TextElement_SetParameter((void*)textElem2, 0, newKeyStr);
+                }
+
+                fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
+                uint64_t textElem3 = 0;
+                fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem3, *g_TypeId_TextElement);
+                if (textElem3) {
+                    fn_InternalBasePtr_CheckPtr((void*)&textElem3);
+                    fn_TextElement_SetParameter((void*)textElem3, 1, conflictNameStr);
+                }
+
+                fn_InternalBasePtr_CheckPtr((void*)&dialog2Ptr);
+                uint64_t textElem4 = 0;
+                fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem4, *g_TypeId_TextElement);
+                if (textElem4) {
+                    fn_InternalBasePtr_CheckPtr((void*)&textElem4);
+                    fn_TextElement_SetParameter((void*)textElem4, 2, inputNameStr);
+                }
+            }
+
+            // Show confirmation dialog
+            uint64_t show2Ptr = dialog2Ptr;
+            confirmResult = fn_UI_ShowDialog(userInterface, &show2Ptr);
+            fn_InternalBasePtr_DeletePtr((void*)&dialog2Ptr);
+        }
+
+        fn_String_Dtor(conflictNameStr);
+        fn_String_Dtor(newKeyStr);
+
+        if (confirmResult >= 1 && confirmResult <= 2) {
+            // User confirmed (OK or Yes) — clear the old conflicting binding
+            fn_KeyMap_ClearInput3(keyMap, conflictId, capturedDevice, capturedKey);
+            goto set_binding;
+        }
+        // User cancelled — don't change anything
+    }
+
+    // Refresh the input bind list display
+    OptionsDialog_PopulateInputBindList(self);
+    goto cleanup;
+
+set_binding:
+    fn_KeyMap_SetInput(keyMap, inputId, slot, capturedDevice, capturedKey);
+    fn_InputDevice_ResetState(*g_pInputDeviceSingleton);
+
+    // Refresh the entire input bind list
+    OptionsDialog_PopulateInputBindList(self);
+
+cleanup:
+    fn_String_Dtor(inputNameStr);
 }

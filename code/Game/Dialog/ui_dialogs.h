@@ -135,6 +135,21 @@ void OptionsDialog_Startup(OptionsDialog* self);
 // msg 0x17: slider value changes (UI/Music/Ambient/Effect volumes)
 void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, int eventData);
 
+// OnOk: Applies all settings, saves to disk, closes dialog.
+void OptionsDialog_OnOk(OptionsDialog* self);
+
+// OnCancel: Reverts all settings from disk, closes dialog.
+void OptionsDialog_OnCancel(OptionsDialog* self);
+
+// OnApply: Applies all settings, saves to disk (keeps dialog open).
+void OptionsDialog_OnApply(OptionsDialog* self);
+
+// PopulateInputBindList: Fills input binding list with key names and element IDs.
+void OptionsDialog_PopulateInputBindList(OptionsDialog* self);
+
+// OnInputBindClick: Shows input bind dialog, handles key rebinding.
+void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot);
+
 // ============================================================
 // SaveLoadDialog
 // ============================================================

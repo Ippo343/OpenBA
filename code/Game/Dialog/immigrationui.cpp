@@ -133,3 +133,67 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
     fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x38), 1, &worldNameStr);
     fn_String_Dtor(&worldNameStr);
 }
+
+// ============================================================
+// ImmigrationUI::Slot9 (vtable +0x48) — Button handler
+// ============================================================
+// Handles Allow (id=39000) and Deny (id=0x9859) button clicks.
+// Gets ImmigrationComponent, finds its sub-entity's BuildState,
+// then calls a StateMachine vtable method with mode 7 (allow)
+// or 8 (deny) to accept/reject nomads.
+//
+// Original: 0x14006B300.
+
+void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
+                          int param5, int param6) {
+    uintptr_t s = (uintptr_t)self;
+
+    if (msg != 0x12) return;
+
+    // Determine action mode: 7 = allow, 8 = deny
+    int mode;
+    if (id == 39000) {
+        mode = 7;
+    } else if (id == 0x9859) {
+        mode = 8;
+    } else {
+        return;
+    }
+
+    // Get entity from +0x28, check IsA ComponentEntity
+    void* entity = (void*)*(uint64_t*)(s + 0x28);
+    uint32_t entityTypeId = g_TypeId_ComponentEntity ? *g_TypeId_ComponentEntity : 0;
+    void* checkedEntity = nullptr;
+    if (fn_IsDerivedFrom(entity, entityTypeId)) {
+        checkedEntity = entity;
+    }
+
+    // Find ImmigrationComponent
+    uint64_t entityBasePtr = 0;
+    fn_InternalBasePtr_Ctor(&entityBasePtr, checkedEntity);
+    fn_InternalBasePtr_CheckPtr(&entityBasePtr);
+
+    uint64_t immigComp = 0;
+    fn_FindComponent_Immigration((void*)entityBasePtr, &immigComp);
+    fn_InternalBasePtr_CheckPtr(&immigComp);
+
+    // Get sub-entity from ImmigrationComponent+0x10
+    fn_InternalBasePtr_CheckPtr((void*)(immigComp + 0x10));
+
+    // Find BuildState component on sub-entity at +0x10
+    uint64_t buildState = 0;
+    fn_FindComponent_BuildState(*(void**)(immigComp + 0x10), &buildState);
+    fn_InternalBasePtr_CheckPtr(&buildState);
+
+    // Read the BuildState pointer value
+    uintptr_t bsPtr = *(uintptr_t*)&buildState;
+
+    // Get StateMachine sub-object at BuildState+0x48
+    void* smObj = *(void**)(bsPtr + 0x48);
+    void** smVtable = *(void***)smObj;
+
+    // Call vtable[2] (offset 0x10): RequestAction(self, &controllerSelf, currentState, mode)
+    typedef void (*fn_RequestAction_t)(void* self, void* controllerSelf, int currentState, int mode);
+    int currentState = (int)*(char*)(bsPtr + 0x51);
+    ((fn_RequestAction_t)smVtable[2])(smObj, (void*)(bsPtr + 0x48), currentState, mode);
+}

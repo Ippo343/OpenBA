@@ -61,11 +61,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (setup/refresh) — PASSTHROUGH (very complex: entity lookup, sprite setup, dynamic array management)
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 (setup/refresh) — REIMPLEMENTED (entity lookup, sprite setup, requirement display)
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "BuildRequirementUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    BuildRequirementUI_Slot4((BuildRequirementUI*)self);
 }
 
 // ============================================================

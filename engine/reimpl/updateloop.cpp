@@ -29,7 +29,7 @@
 // ============================================================
 
 // MainLoop singleton pointer (MainLoop** -> dereference to get MainLoop*)
-static MainLoop** g_pMainLoopSingleton = nullptr;
+// Uses g_pMainLoopSingleton from engine_funcs.h
 
 // ============================================================
 // UpdateLoop address constants
@@ -64,7 +64,7 @@ static bool Reimpl_IsRunning(UpdateLoop* self) {
     g_lastHook = "UpdateLoop::IsRunning";
     if (!self) return false;
 
-    MainLoop* mainLoop = *g_pMainLoopSingleton;
+    MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     if (!mainLoop) return false;
 
     return (self == mainLoop->m_currentLoop);
@@ -208,7 +208,7 @@ static void Reimpl_LoaderLoopLoad(void* self) {
 
 void InstallUpdateLoopIsRunning() {
     // Resolve MainLoop singleton pointer
-    g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+    g_pMainLoopSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, UpdateLoopAddr::IsRunning);

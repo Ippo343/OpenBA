@@ -198,6 +198,9 @@ uint32_t* g_TypeId_CheckboxElement = nullptr;
 // UI element base type ID (exref)
 uint32_t* g_TypeId_UIElementBase = nullptr;
 
+// Object::Internal type ID (exref 0x140151660)
+uint32_t* g_TypeId_ObjectInternal = nullptr;
+
 // UI::ImageElement type ID (exref 0x140151500)
 uint32_t* g_TypeId_ImageElement = nullptr;
 
@@ -479,12 +482,20 @@ fn_VideoDevice_ValidateConfiguration_t fn_VideoDevice_ValidateConfiguration = nu
 fn_VideoDevice_GetMultisampleModeCount_t fn_VideoDevice_GetMultisampleModeCount = nullptr;
 fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupported = nullptr;
 
-// OptionsDialog exe helpers — not yet reimplemented
-fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnOk = nullptr;
-fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnCancel = nullptr;
-fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnApply = nullptr;
+// OptionsDialog exe helpers — OnOk/OnCancel/OnApply reimplemented in code/Game/Dialog/optionsdialog.cpp
+// PopulateInputBindList and OnInputBindClick now reimplemented in code/Game/Dialog/optionsdialog.cpp
 fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList = nullptr;
 fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick = nullptr;
+
+// ShowDialog, DeletePtr, KeyMap input functions, dialog ctors
+fn_UI_ShowDialog_t fn_UI_ShowDialog = nullptr;
+fn_InternalBasePtr_DeletePtr_t fn_InternalBasePtr_DeletePtr = nullptr;
+fn_KeyMap_SetInput_t fn_KeyMap_SetInput = nullptr;
+fn_KeyMap_ClearInput2_t fn_KeyMap_ClearInput2 = nullptr;
+fn_KeyMap_ClearInput3_t fn_KeyMap_ClearInput3 = nullptr;
+fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput = nullptr;
+fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor = nullptr;
+fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
 void** g_pAudioConfigSingleton = nullptr;
 void** g_pVideoConfigSingleton = nullptr;
@@ -715,6 +726,37 @@ HANDLE* g_pLoaderCompletionEvent = nullptr;
 
 // Application::Application::_singleton @ 0x1801feb80
 void** g_pAppSingleton = nullptr;
+
+// ============================================================
+// Stage 3: OptionsDialog Runtime exports
+// ============================================================
+fn_AudioConfig_Save_t fn_AudioConfig_Save = nullptr;
+fn_AudioConfig_Startup_t fn_AudioConfig_Startup = nullptr;
+fn_VideoConfig_Save_t fn_VideoConfig_Save = nullptr;
+fn_InputConfig_Save_t fn_InputConfig_Save = nullptr;
+fn_InputConfig_Load_t fn_InputConfig_Load = nullptr;
+void** g_pInputConfigSingleton = nullptr;
+fn_Persistence_WriteSettings_t fn_Persistence_WriteSettings = nullptr;
+fn_Persistence_ReadSettings_t fn_Persistence_ReadSettings = nullptr;
+fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping = nullptr;
+fn_InputDevice_ResetState_t fn_InputDevice_ResetState = nullptr;
+fn_VideoDevice_ApplyChangedSettings_t fn_VideoDevice_ApplyChangedSettings = nullptr;
+fn_VideoDevice_Startup_t fn_VideoDevice_Startup = nullptr;
+fn_VideoDevice_RecreateDynamic_t fn_VideoDevice_RecreateDynamic = nullptr;
+fn_VideoDevice_ReleaseDynamic_t fn_VideoDevice_ReleaseDynamic = nullptr;
+fn_VideoDevice_Shutdown_t fn_VideoDevice_Shutdown = nullptr;
+fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError = nullptr;
+fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart = nullptr;
+void** g_pMainLoopSingleton = nullptr;
+fn_UI_EnableCursor_t fn_UI_EnableCursor = nullptr;
+fn_UI_GetFirstDialog_t fn_UI_GetFirstDialog = nullptr;
+fn_UI_SetFullscreenFadeSprite_t fn_UI_SetFullscreenFadeSprite = nullptr;
+fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
+fn_ReadGameSettings_t fn_ReadGameSettings = nullptr;
+fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI = nullptr;
+fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
+uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
+fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
 // ============================================================
 // Initialization
@@ -1367,6 +1409,13 @@ bool EngineFuncsInit() {
             g_TypeId_UIElementBase = reinterpret_cast<uint32_t*>(*exref);
         }
     }
+    // Object::Internal type ID: exref at 0x140151660 (used by BuildRequirementUI::Slot4)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151660));
+        if (exref && *exref) {
+            g_TypeId_ObjectInternal = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
     // UI::ImageElement type ID: exref at 0x140151500 (used by EventNotifyDialog::Update and others)
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151500));
@@ -1974,13 +2023,7 @@ bool EngineFuncsInit() {
     fn_VideoDevice_IsMultisampleModeSupported = reinterpret_cast<fn_VideoDevice_IsMultisampleModeSupported_t>(
         ResolveExport("?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z"));
 
-    // --- OptionsDialog exe helpers (not yet reimplemented) ---
-    fn_OptionsDialog_OnOk = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
-        ResolveAddr(Module::Exe, 0x140072930));
-    fn_OptionsDialog_OnCancel = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
-        ResolveAddr(Module::Exe, 0x140072840));
-    fn_OptionsDialog_OnApply = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
-        ResolveAddr(Module::Exe, 0x1400728e0));
+    // --- OptionsDialog exe helpers (OnOk/OnCancel/OnApply reimplemented) ---
     fn_OptionsDialog_PopulateInputBindList = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
         ResolveAddr(Module::Exe, 0x140073580));
     fn_OptionsDialog_OnInputBindClick = reinterpret_cast<fn_OptionsDialog_OnInputBindClick_t>(
@@ -2738,6 +2781,114 @@ bool EngineFuncsInit() {
         if (d2 && *d2)
             fn_String_ConcatSS2 = reinterpret_cast<fn_String_Concat_t>(*d2);
     }
+
+    // --- Stage 3: OptionsDialog Runtime exports ---
+
+    // Audio::Configuration
+    fn_AudioConfig_Save = reinterpret_cast<fn_AudioConfig_Save_t>(
+        ResolveExport("?Save@Configuration@Audio@@QEAAXXZ"));
+    fn_AudioConfig_Startup = reinterpret_cast<fn_AudioConfig_Startup_t>(
+        ResolveExport("?Startup@Configuration@Audio@@QEAA_NXZ"));
+
+    // Video::Configuration
+    fn_VideoConfig_Save = reinterpret_cast<fn_VideoConfig_Save_t>(
+        ResolveExport("?Save@Configuration@Video@@QEAAXXZ"));
+
+    // Input::Configuration
+    fn_InputConfig_Save = reinterpret_cast<fn_InputConfig_Save_t>(
+        ResolveExport("?Save@Configuration@Input@@QEAAXXZ"));
+    fn_InputConfig_Load = reinterpret_cast<fn_InputConfig_Load_t>(
+        ResolveExport("?Load@Configuration@Input@@QEAAXXZ"));
+
+    // Input::Configuration::_singleton
+    {
+        void** p = reinterpret_cast<void**>(
+            ResolveExport("?_singleton@Configuration@Input@@0PEAV12@EA"));
+        if (p)
+            g_pInputConfigSingleton = p;
+    }
+
+    // IO::Persistence
+    fn_Persistence_WriteSettings = reinterpret_cast<fn_Persistence_WriteSettings_t>(
+        ResolveExport("?WriteSettings@Persistence@IO@@QEBAXXZ"));
+    fn_Persistence_ReadSettings = reinterpret_cast<fn_Persistence_ReadSettings_t>(
+        ResolveExport("?ReadSettings@Persistence@IO@@QEAAXXZ"));
+
+    // Input::Device
+    fn_InputDevice_EnableMouseClipping = reinterpret_cast<fn_InputDevice_EnableMouseClipping_t>(
+        ResolveExport("?EnableMouseClipping@Device@Input@@QEAAX_N@Z"));
+    fn_InputDevice_ResetState = reinterpret_cast<fn_InputDevice_ResetState_t>(
+        ResolveExport("?ResetState@Device@Input@@QEAAXXZ"));
+
+    // Video::Device
+    fn_VideoDevice_ApplyChangedSettings = reinterpret_cast<fn_VideoDevice_ApplyChangedSettings_t>(
+        ResolveExport("?ApplyChangedSettings@Device@Video@@QEAA_NXZ"));
+    fn_VideoDevice_Startup = reinterpret_cast<fn_VideoDevice_Startup_t>(
+        ResolveExport("?Startup@Device@Video@@QEAA_NXZ"));
+    fn_VideoDevice_RecreateDynamic = reinterpret_cast<fn_VideoDevice_RecreateDynamic_t>(
+        ResolveExport("?RecreateDynamic@Device@Video@@QEAAXXZ"));
+    fn_VideoDevice_ReleaseDynamic = reinterpret_cast<fn_VideoDevice_ReleaseDynamic_t>(
+        ResolveExport("?ReleaseDynamic@Device@Video@@QEAAXXZ"));
+    fn_VideoDevice_Shutdown = reinterpret_cast<fn_VideoDevice_Shutdown_t>(
+        ResolveExport("?Shutdown@Device@Video@@QEAAXXZ"));
+
+    // Engine::MainLoop
+    fn_MainLoop_OnVideoError = reinterpret_cast<fn_MainLoop_OnVideoError_t>(
+        ResolveExport("?OnVideoError@MainLoop@Engine@@QEAAXXZ"));
+    fn_MainLoop_OnVideoRestart = reinterpret_cast<fn_MainLoop_OnVideoRestart_t>(
+        ResolveExport("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ"));
+
+    // Engine::MainLoop::_singleton (protected, @1)
+    {
+        void** p = reinterpret_cast<void**>(
+            ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
+        if (p)
+            g_pMainLoopSingleton = p;
+    }
+
+    // UI::UserInterface
+    fn_UI_EnableCursor = reinterpret_cast<fn_UI_EnableCursor_t>(
+        ResolveExport("?EnableCursor@UserInterface@UI@@QEAAX_N@Z"));
+    fn_UI_GetFirstDialog = reinterpret_cast<fn_UI_GetFirstDialog_t>(
+        ResolveExport("?GetFirstDialog@UserInterface@UI@@QEAA?AUIterator@?$LinkedList@V?$InternalPtr@VDialogInstance@UI@@@Object@@UDefaultAllocator@Collection@@@Collection@@XZ"));
+    fn_UI_SetFullscreenFadeSprite = reinterpret_cast<fn_UI_SetFullscreenFadeSprite_t>(
+        ResolveExport("?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z"));
+
+    // Stage 3: OptionsDialog exe helpers
+    fn_SaveGameSettings = reinterpret_cast<fn_SaveGameSettings_t>(
+        ResolveAddr(Module::Exe, 0x140098970));
+    fn_ReadGameSettings = reinterpret_cast<fn_ReadGameSettings_t>(
+        ResolveAddr(Module::Exe, 0x140098b60));
+    fn_ApplyKeyMapToUI = reinterpret_cast<fn_ApplyKeyMapToUI_t>(
+        ResolveAddr(Module::Exe, 0x140099260));
+    fn_UpdateAutoSaveTimer = reinterpret_cast<fn_UpdateAutoSaveTimer_t>(
+        ResolveAddr(Module::Exe, 0x14005e120));
+    g_TypeId_AutoSaveDialogType = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4d08));
+    fn_RegisterDefaultInputBindings = reinterpret_cast<fn_RegisterDefaultInputBindings_t>(
+        ResolveAddr(Module::Exe, 0x1400992f0));
+
+    // ShowDialog, DeletePtr — Runtime DLL exports
+    fn_UI_ShowDialog = reinterpret_cast<fn_UI_ShowDialog_t>(
+        ResolveExport("?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
+    fn_InternalBasePtr_DeletePtr = reinterpret_cast<fn_InternalBasePtr_DeletePtr_t>(
+        ResolveExport("?DeletePtr@InternalBasePtr@Object@@QEAAXXZ"));
+
+    // KeyMap input management — Runtime DLL exports
+    fn_KeyMap_SetInput = reinterpret_cast<fn_KeyMap_SetInput_t>(
+        ResolveExport("?SetInput@KeyMap@Input@@QEAAXHHHH@Z"));
+    fn_KeyMap_ClearInput2 = reinterpret_cast<fn_KeyMap_ClearInput2_t>(
+        ResolveExport("?ClearInput@KeyMap@Input@@QEAAXHH@Z"));
+    fn_KeyMap_ClearInput3 = reinterpret_cast<fn_KeyMap_ClearInput3_t>(
+        ResolveExport("?ClearInput@KeyMap@Input@@QEAAXHHH@Z"));
+    fn_KeyMap_GetIdForDeviceInput = reinterpret_cast<fn_KeyMap_GetIdForDeviceInput_t>(
+        ResolveExport("?GetIdForDeviceInput@KeyMap@Input@@QEBAHH@Z"));
+
+    // Dialog constructors — exe functions
+    fn_OptionInputBindDialog_Ctor = reinterpret_cast<fn_OptionInputBindDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x140071d30));
+    fn_MessageDialog_Ctor = reinterpret_cast<fn_MessageDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x14006d300));
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
     if (!fn_InputDevice_Update) {

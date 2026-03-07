@@ -41,7 +41,7 @@ namespace LoaderLoopAddr {
 // Resolved globals (set at install time)
 // ============================================================
 
-static MainLoop** g_pMainLoopSingleton = nullptr;
+// Uses g_pMainLoopSingleton from engine_funcs.h
 
 // ============================================================
 // Hook state
@@ -118,7 +118,7 @@ static bool Reimpl_Update(LoaderLoop* self, Time* dt) {
         printf("[LoaderLoop::Update] Loading complete, transitioning to nextLoop=%p\n",
                (void*)self->m_nextLoop);
 #endif
-        MainLoop* mainLoop = *g_pMainLoopSingleton;
+        MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
         mainLoop->m_nextLoop = self->m_nextLoop;
     }
 
@@ -139,7 +139,7 @@ typedef void (*LoaderLoop_Draw_t)(LoaderLoop* self, float alpha);
 
 static void Reimpl_Draw(LoaderLoop* /*self*/, float /*alpha*/) {
     g_lastHook = "LoaderLoop::Draw";
-    MainLoop* mainLoop = *g_pMainLoopSingleton;
+    MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     uint8_t* ctx = reinterpret_cast<uint8_t*>(mainLoop->m_context);
 
     // Get device data: context+0x2160 -> device ptr -> vtable
@@ -166,7 +166,7 @@ static void Reimpl_Exit(LoaderLoop* self) {
 #ifdef _DEBUG
     printf("[LoaderLoop::Exit] Force transition to nextLoop=%p\n", (void*)self->m_nextLoop);
 #endif
-    MainLoop* mainLoop = *g_pMainLoopSingleton;
+    MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     mainLoop->m_nextLoop = self->m_nextLoop;
 }
 
@@ -209,7 +209,7 @@ static void Reimpl_OnVideoError(LoaderLoop* /*self*/) {
 // ============================================================
 
 void InstallLoaderLoopStartup() {
-    g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+    g_pMainLoopSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Startup);
@@ -244,7 +244,7 @@ void RemoveLoaderLoopShutdown() {
 }
 
 void InstallLoaderLoopUpdate() {
-    g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+    g_pMainLoopSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Update);
@@ -263,7 +263,7 @@ void RemoveLoaderLoopUpdate() {
 }
 
 void InstallLoaderLoopDraw() {
-    g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+    g_pMainLoopSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Draw);
@@ -282,7 +282,7 @@ void RemoveLoaderLoopDraw() {
 }
 
 void InstallLoaderLoopExit() {
-    g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+    g_pMainLoopSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
 
     uintptr_t target = ResolveAddr(Module::Runtime, LoaderLoopAddr::Exit);

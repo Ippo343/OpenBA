@@ -59,10 +59,10 @@ static void Reimpl_Slot7(void* self) {
     ImmigrationUI_Slot7((ImmigrationUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4, int param5, int param6);
+// Slot9 — REIMPLEMENTED (allow/deny button dispatch)
 static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int param5, int param6) {
     g_lastHook = "ImmigrationUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
+    ImmigrationUI_Slot9((ImmigrationUI*)self, param2, param3, param4, param5, param6);
 }
 
 // ============================================================

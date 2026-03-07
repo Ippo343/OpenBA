@@ -2725,7 +2725,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ImmigrationUI::Dtor", InstallImmigrationUIDtor, RemoveImmigrationUIDtor, true },
     { "ImmigrationUI::Slot4", InstallImmigrationUISlot4, RemoveImmigrationUISlot4, true },
     { "ImmigrationUI::Slot7", InstallImmigrationUISlot7, RemoveImmigrationUISlot7, true },
-    { "ImmigrationUI::Slot9", InstallImmigrationUISlot9, RemoveImmigrationUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "ImmigrationUI::Slot9", InstallImmigrationUISlot9, RemoveImmigrationUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- MapUI ---
     { "MapUI::Dtor", InstallMapUIDtor, RemoveMapUIDtor, true },

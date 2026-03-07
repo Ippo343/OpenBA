@@ -26,6 +26,14 @@ void RadiusUI_Slot5(RadiusUI* self);
 void RadiusUI_Slot6(RadiusUI* self);
 
 // ============================================================
+// BuildRequirementUI
+// ============================================================
+
+// Slot4 (vtable +0x20): Resolves description, finds BuildRequirementComponent,
+// sets icon sprite and title text, populates label elements with resource requirements.
+void BuildRequirementUI_Slot4(BuildRequirementUI* self);
+
+// ============================================================
 // ConsumeProduceUI
 // ============================================================
 
@@ -94,6 +102,10 @@ void ImmigrationUI_Slot4(ImmigrationUI* self);
 
 // Slot7 (vtable +0x38): Updates immigration count, enables buttons when build complete.
 void ImmigrationUI_Slot7(ImmigrationUI* self);
+
+// Slot9 (vtable +0x48): Handles Allow/Deny button clicks, sends action to StateMachine.
+void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
+                          int param5, int param6);
 
 // ============================================================
 // WorkplaceUI

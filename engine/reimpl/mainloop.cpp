@@ -22,7 +22,7 @@
 // MainLoop singleton pointer (resolved at hook install time)
 // ============================================================
 
-static MainLoop** g_pMainLoopSingleton = nullptr;
+// Uses g_pMainLoopSingleton from engine_funcs.h
 
 // ============================================================
 // QPC / timing helpers
@@ -728,7 +728,7 @@ static HookInfo g_hookOnVideoErrorStatic;
 
 static void Reimpl_OnVideoErrorStatic(void) {
     g_lastHook = "MainLoop::OnVideoErrorStatic";
-    MainLoop* ml = *g_pMainLoopSingleton;
+    MainLoop* ml = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     // Dispatch to the instance method (may be hooked or original)
     typedef void (*OnVideoError_t)(MainLoop*);
     OnVideoError_t fn = reinterpret_cast<OnVideoError_t>(
@@ -745,7 +745,7 @@ static HookInfo g_hookOnVideoRestartStatic;
 
 static void Reimpl_OnVideoRestartStatic(void) {
     g_lastHook = "MainLoop::OnVideoRestartStatic";
-    MainLoop* ml = *g_pMainLoopSingleton;
+    MainLoop* ml = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
     typedef void (*OnVideoRestart_t)(MainLoop*);
     OnVideoRestart_t fn = reinterpret_cast<OnVideoRestart_t>(
         ResolveAddr(Module::Runtime, MainLoopAddr::OnVideoRestart));
@@ -995,7 +995,7 @@ void RemoveMainLoopRun() {
 // --- Helper: resolve g_pMainLoopSingleton if not yet done ---
 static void EnsureMainLoopSingleton() {
     if (!g_pMainLoopSingleton) {
-        g_pMainLoopSingleton = reinterpret_cast<MainLoop**>(
+        g_pMainLoopSingleton = reinterpret_cast<void**>(
             ResolveAddr(Module::Runtime, MainLoopAddr::Singleton));
     }
 }

@@ -33,7 +33,6 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include <cstdint>
 
 // ============================================================
@@ -387,13 +386,8 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
         void* pDlLoop = nullptr;
         if (dlLoop) {
-            // Build Time (DAT_14017214c = delay time constant for loading screen)
-            // Original: System::Time::Time(this_02, DAT_14017214c) — construct from float constant
-            // DAT_14017214c is resolved via fn_Time_Ctor_Float with the stored constant
-            // The original uses a float at 0x14017214c; we need to read it at runtime.
-            float* delayConst = reinterpret_cast<float*>(
-                ResolveAddr(Module::Exe, 0x14017214c));
-            float delayVal = delayConst ? *delayConst : 1.5f;
+            // Build Time from constant (originally DAT_14017214c = 1.0f)
+            float delayVal = 1.0f;
             uint64_t delayTime[1]; // 8-byte Time
             fn_Time_Ctor_Float((void*)delayTime, delayVal);
 
