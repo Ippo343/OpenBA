@@ -18,6 +18,7 @@
 //   +0x28: Slot5, +0x30: Slot6, +0x38: Slot7, +0x40: Slot8, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -40,16 +41,16 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4: Startup — REIMPLEMENTED
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "MapUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    MapUI_Slot4((MapUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, void* param2, int param3, int param4, int param5, int param6);
+// Slot9: Map click handler — REIMPLEMENTED
 static void Reimpl_Slot9(void* self, void* param2, int param3, int param4, int param5, int param6) {
     g_lastHook = "MapUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4, param5, param6);
+    MapUI_Slot9((MapUI*)self, param2, param3, param4, param5, param6);
 }
 
 // ============================================================

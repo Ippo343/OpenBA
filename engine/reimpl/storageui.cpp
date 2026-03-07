@@ -20,6 +20,7 @@
 //   +0x50: 0x14003a978 — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -51,16 +52,18 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
+// Serialize — REIMPLEMENTED (setup storage table, clone elements, cache row ptrs)
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "StorageUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    StorageUI_Serialize((StorageUI*)self);
 }
 
+// Startup — REIMPLEMENTED (populate storage contents table)
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "StorageUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    StorageUI_Startup((StorageUI*)self);
 }
 
 // ============================================================

@@ -19,6 +19,7 @@
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -48,18 +49,18 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot 4: Startup(this) — build new game UI with combos, seed, terrain
+// Slot 4: Startup(this) — REIMPLEMENTED: build new game UI with combos, seed, terrain
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "NewGameDialog::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    NewGameDialog_Slot4((NewGameDialog*)self);
 }
 
-// Slot 6: Update(this) — sync new game settings
+// Slot 6: Update(this) — REIMPLEMENTED: sync OK button enabled state
 typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
     g_lastHook = "NewGameDialog::Update";
-    ((fn_Update_t)g_hookUpdate.trampoline)(self);
+    NewGameDialog_Slot6((NewGameDialog*)self);
 }
 
 // ============================================================

@@ -61,29 +61,29 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-typedef void (*fn_Slot4_t)(void* self);
+// Slot4 — REIMPLEMENTED (element lookup and init)
+#include "Dialog/ui_panels.h"
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "CitizenUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    CitizenUI_Slot4((CitizenUI*)self);
 }
 
 // Slot6 — REIMPLEMENTED (closes sub-dialog, clears reference)
-#include "Dialog/ui_panels.h"
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "CitizenUI::Slot6";
     CitizenUI_Slot6((CitizenUI*)self);
 }
 
-typedef void (*fn_Slot7_t)(void* self);
+// Slot7 — REIMPLEMENTED (updates citizen info display)
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "CitizenUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    CitizenUI_Slot7((CitizenUI*)self);
 }
 
-typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
+// Slot9 — REIMPLEMENTED (button dispatch: profession/home/follow)
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "CitizenUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    CitizenUI_Slot9((CitizenUI*)self, param2, param3, param4);
 }
 
 // ============================================================

@@ -314,7 +314,18 @@ fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation = nullptr;
 fn_Time_AsSeconds_t fn_Time_AsSeconds = nullptr;
 fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
+fn_SaveLoad_SetSaveSprite_t fn_SaveLoad_SetSaveSprite = nullptr;
+fn_SaveLoad_SetMinOperationTime_t fn_SaveLoad_SetMinOperationTime = nullptr;
+fn_SaveLoad_SetOperation_t fn_SaveLoad_SetOperation = nullptr;
+fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount = nullptr;
+fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo = nullptr;
+fn_Sprite_IsValid_t fn_Sprite_IsValid = nullptr;
+fn_UI_Play_t fn_UI_Play = nullptr;
+fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
+fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList = nullptr;
 fn_EditElement_SetText_t fn_EditElement_SetText = nullptr;
+fn_Input_Device_Released_t fn_Input_Device_Released = nullptr;
+void** g_pInputDeviceSingleton = nullptr;
 fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite = nullptr;
 fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName = nullptr;
 fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter = nullptr;
@@ -382,6 +393,8 @@ fn_Goal_GetText_t fn_Goal_GetText = nullptr;
 fn_Achievement_GetTitle_t fn_Achievement_GetTitle = nullptr;
 fn_Achievement_GetDescription_t fn_Achievement_GetDescription = nullptr;
 fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName = nullptr;
+fn_AchievementManager_GetAchievementCount_t fn_AchievementManager_GetAchievementCount = nullptr;
+fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement = nullptr;
 fn_GoalDialog_ArrayPush_t fn_GoalDialog_ArrayPush = nullptr;
 fn_GoalDialog_ArrayPush_t fn_EventNotifyDialog_ArrayPush = nullptr;
 fn_ScenarioDialog_ArrayPush_t fn_ScenarioDialog_ArrayPush = nullptr;
@@ -441,6 +454,154 @@ uint32_t* g_TypeId_HelpDocTextElem = nullptr;
 uint32_t* g_TypeId_HelpContainerElem = nullptr;
 uint32_t* g_TypeId_HelpButtonElem = nullptr;
 fn_HelpUI_ArrayResize_t fn_HelpUI_ArrayResize = nullptr;
+
+// BuildUI support
+fn_CountOccupiedBuildTiles_t fn_CountOccupiedBuildTiles = nullptr;
+
+// NewGameDialog support
+void** g_pNewGameSettings = nullptr;
+fn_Random_Rand_t fn_Random_Rand = nullptr;
+fn_GenerateTownName_t fn_GenerateTownName = nullptr;
+fn_StartNewGame_t fn_StartNewGame = nullptr;
+uint32_t* g_TypeId_MapGenerator = nullptr;
+uint32_t* g_TypeId_ClimateGenerator = nullptr;
+uint32_t* g_TypeId_TerrainGenerator = nullptr;
+
+// OptionsDialog support
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateVideoComboBoxes = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAdapterCombo = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateResolutionCombo = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateRefreshCombo = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAntialiasCombo = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateFilterCombo = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateInputBindList = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_ValidateVideoConfig = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnOk = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnCancel = nullptr;
+fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnApply = nullptr;
+fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick = nullptr;
+
+void** g_pAudioConfigSingleton = nullptr;
+void** g_pVideoConfigSingleton = nullptr;
+fn_VideoDevice_GetInterface_t fn_VideoDevice_GetInterface = nullptr;
+fn_VideoDevice_GetInterfaceCount_t fn_VideoDevice_GetInterfaceCount = nullptr;
+fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor = nullptr;
+fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab = nullptr;
+fn_Element_GetParent_t fn_Element_GetParent = nullptr;
+int32_t* g_pGameSettings = nullptr;
+
+// StorageUI support
+fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext = nullptr;
+fn_StorageUI_SortItems_t fn_StorageUI_SortItems = nullptr;
+
+// MapUI helpers
+fn_MapUI_SetupImage_t fn_MapUI_SetupImage = nullptr;
+fn_MapUI_HandleClick_t fn_MapUI_HandleClick = nullptr;
+
+// ToolUI support
+fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft = nullptr;
+fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront = nullptr;
+fn_UIDesc_AddControllers_t fn_UIDesc_AddControllers = nullptr;
+uint32_t* g_TypeId_UIDescription = nullptr;
+
+// ModDetailsDialog support
+fn_Element_Hide_t fn_Element_Hide = nullptr;
+fn_Modification_Find_t fn_Modification_Find = nullptr;
+fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
+fn_String_AppendStr_t fn_String_AppendStr = nullptr;
+fn_String_Concat_t fn_String_Concat = nullptr;
+fn_Filename_Less_t fn_Filename_Less = nullptr;
+fn_ModDetails_StringArrayPush_t fn_ModDetails_StringArrayPush = nullptr;
+
+// CitizenUI helpers
+fn_FindComponent_t fn_FindComponent_CitizenAI = nullptr;
+uint32_t* g_TypeId_CitizenDescription = nullptr;
+uint32_t* g_TypeId_HappinessComponent = nullptr;
+uint32_t* g_TypeId_ProfessionComponent = nullptr;
+fn_CitizenUI_BuildIconArray_t fn_CitizenUI_BuildIconArray = nullptr;
+fn_CitizenUI_UpdateIconDisplay_t fn_CitizenUI_UpdateIconDisplay = nullptr;
+fn_FindProfessionComponent_t fn_FindProfessionComponent = nullptr;
+fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original = nullptr;
+fn_WorldGrid_FindEntity_t fn_WorldGrid_FindEntity = nullptr;
+
+// ProductionUI support
+fn_FindComponent_t fn_FindComponent_Tracker = nullptr;
+fn_TrackerComponent_Rebuild_t fn_TrackerComponent_Rebuild = nullptr;
+
+// ProfessionUI support
+fn_External_GetPath_t fn_External_GetPath = nullptr;
+fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier = nullptr;
+fn_BSTRebalance_t fn_BSTRebalance = nullptr;
+fn_ProfessionUI_HandleSpinner_t fn_ProfessionUI_HandleSpinner = nullptr;
+fn_ProfessionUI_HandleButton_t fn_ProfessionUI_HandleButton = nullptr;
+fn_CalcWorkerSlots_t fn_CalcWorkerSlots = nullptr;
+
+// MainMenuDialog support
+fn_App_Quit_t fn_App_Quit = nullptr;
+fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion = nullptr;
+fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId = nullptr;
+fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr = nullptr;
+fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor = nullptr;
+void** g_MainMenuDialog_BuildIdVtable = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenNewGame = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenLoad = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenSave = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenOptions = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_ReturnToMenu = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenAchievement = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenScenario = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenGoal = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenMap = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenTutorial = nullptr;
+fn_MainMenu_Handler_t fn_MainMenu_OpenMod = nullptr;
+
+// ModDialog support
+void** g_ppModificationSingleton = nullptr;
+fn_Modification_GetCount_t fn_Modification_GetCount = nullptr;
+fn_Modification_GetMod_t fn_Modification_GetMod = nullptr;
+fn_Modification_Swap_t fn_Modification_Swap = nullptr;
+fn_Modification_Enable_t fn_Modification_Enable = nullptr;
+fn_Modification_RefreshList_t fn_Modification_RefreshList = nullptr;
+fn_Modification_SaveList_t fn_Modification_SaveList = nullptr;
+fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
+fn_DialogInstance_AddController_t fn_DialogInstance_AddController = nullptr;
+fn_ModDialog_RefreshDisplay_t fn_ModDialog_RefreshDisplay = nullptr;
+fn_ModDialog_ToggleMod_t fn_ModDialog_ToggleMod = nullptr;
+fn_ModDialog_MoveToTop_t fn_ModDialog_MoveToTop = nullptr;
+fn_ModDialog_ShowDetails_t fn_ModDialog_ShowDetails = nullptr;
+fn_ModDialog_Apply_t fn_ModDialog_Apply = nullptr;
+
+// IO::Serializer (shared globals with g_ prefix)
+g_fn_Serializer_Ctor_t g_fn_Serializer_Ctor = nullptr;
+g_fn_Serializer_Dtor_t g_fn_Serializer_Dtor = nullptr;
+g_fn_Serialize_Int_t g_fn_Serialize_Int = nullptr;
+g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion = nullptr;
+
+// TownHallUI support
+uint32_t* g_TypeId_TabElement = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGeneral = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProfessions = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProduction = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGraph = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGraph = nullptr;
+
+// SpriteCaptureUI support
+uint32_t* g_TypeId_EditElement = nullptr;
+uint32_t* g_TypeId_CaptureBoxElement = nullptr;
+
+// TradeUI support
+fn_FindComponent_t fn_FindComponent_Building = nullptr;
+fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc = nullptr;
+fn_TradeUI_Serialize_t fn_TradeUI_Serialize = nullptr;
+fn_TradeUI_Startup_t fn_TradeUI_Startup = nullptr;
+fn_TradeUI_OnCreate_t fn_TradeUI_OnCreate = nullptr;
+fn_TradeUI_OnRemove_t fn_TradeUI_OnRemove = nullptr;
+fn_TradeUI_Update_t fn_TradeUI_Update = nullptr;
+uintptr_t g_NoiseUI_ImageBufferVtable = 0;
+fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage = nullptr;
+fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise = nullptr;
 
 // ============================================================
 // Engine globals
@@ -1265,11 +1426,50 @@ bool EngineFuncsInit() {
         }
     }
 
+    fn_SaveLoad_SetSaveSprite = reinterpret_cast<fn_SaveLoad_SetSaveSprite_t>(
+        ResolveExport("?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z"));
+
+    fn_SaveLoad_SetMinOperationTime = reinterpret_cast<fn_SaveLoad_SetMinOperationTime_t>(
+        ResolveExport("?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z"));
+
+    fn_SaveLoad_SetOperation = reinterpret_cast<fn_SaveLoad_SetOperation_t>(
+        ResolveExport("?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z"));
+
+    fn_SaveLoad_GetSaveCount = reinterpret_cast<fn_SaveLoad_GetSaveCount_t>(
+        ResolveExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ"));
+
+    fn_SaveLoad_GetSaveInfo = reinterpret_cast<fn_SaveLoad_GetSaveInfo_t>(
+        ResolveExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z"));
+
+    fn_Sprite_IsValid = reinterpret_cast<fn_Sprite_IsValid_t>(
+        ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ"));
+
+    fn_UI_Play = reinterpret_cast<fn_UI_Play_t>(
+        ResolveExport("?Play@UserInterface@UI@@QEAAXH@Z"));
+
+    fn_DateTime_AsString = reinterpret_cast<fn_DateTime_AsString_t>(
+        ResolveExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ"));
+
+    // SaveLoadDialog::PopulateFileList — exe function at 0x1400b6ce0
+    fn_SaveLoadDialog_PopulateFileList = reinterpret_cast<fn_SaveLoadDialog_PopulateFileList_t>(
+        ResolveAddr(Module::Exe, 0x1400b6ce0));
+
     fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
         ResolveExport("?SetText@EditElement@UI@@QEAAXVString@2@@Z"));
     if (!fn_EditElement_SetText)
         fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
             ResolveAddr(Module::Runtime, 0x180042070));
+
+    fn_Input_Device_Released = reinterpret_cast<fn_Input_Device_Released_t>(
+        ResolveExport("?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
+
+    // Input::Device singleton: exe exref at 0x140151b80 -> pointer to _singleton in Runtime
+    {
+        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b80));
+        if (exref && *exref) {
+            g_pInputDeviceSingleton = *exref;
+        }
+    }
 
     fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
         ResolveExport("?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ"));
@@ -1448,6 +1648,16 @@ bool EngineFuncsInit() {
         ResolveExport("?GetDescription@Achievement@1@QEBA?AVString@System@@XZ"));
     fn_Achievement_GetSpriteName = reinterpret_cast<fn_Achievement_GetSpriteName_t>(
         ResolveExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ"));
+    fn_AchievementManager_GetAchievementCount = reinterpret_cast<fn_AchievementManager_GetAchievementCount_t>(
+        ResolveExport("?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ"));
+    if (!fn_AchievementManager_GetAchievementCount)
+        fn_AchievementManager_GetAchievementCount = reinterpret_cast<fn_AchievementManager_GetAchievementCount_t>(
+            ResolveAddr(Module::Runtime, 0x1800079b0));
+    fn_AchievementManager_GetAchievement = reinterpret_cast<fn_AchievementManager_GetAchievement_t>(
+        ResolveExport("?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@VAchievement@1@@Object@@H@Z"));
+    if (!fn_AchievementManager_GetAchievement)
+        fn_AchievementManager_GetAchievement = reinterpret_cast<fn_AchievementManager_GetAchievement_t>(
+            ResolveAddr(Module::Runtime, 0x18009e8a0));
     fn_GoalDialog_ArrayPush = reinterpret_cast<fn_GoalDialog_ArrayPush_t>(
         ResolveAddr(Module::Exe, 0x140011750));
     fn_EventNotifyDialog_ArrayPush = fn_GoalDialog_ArrayPush;
@@ -1627,6 +1837,85 @@ bool EngineFuncsInit() {
     fn_HelpUI_ArrayResize = reinterpret_cast<fn_HelpUI_ArrayResize_t>(
         ResolveAddr(Module::Exe, 0x140011d50));
 
+    // --- BuildUI support ---
+    fn_CountOccupiedBuildTiles = reinterpret_cast<fn_CountOccupiedBuildTiles_t>(
+        ResolveAddr(Module::Exe, 0x140118330));
+
+    // --- OptionsDialog support ---
+    fn_OptionsDialog_PopulateVideoComboBoxes = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140074140));
+    fn_OptionsDialog_PopulateAdapterCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140074040));
+    fn_OptionsDialog_PopulateResolutionCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140073ec0));
+    fn_OptionsDialog_PopulateRefreshCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140073d20));
+    fn_OptionsDialog_PopulateAntialiasCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140073b10));
+    fn_OptionsDialog_PopulateFilterCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140073800));
+    fn_OptionsDialog_PopulateInputBindList = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140073580));
+    fn_OptionsDialog_ValidateVideoConfig = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140072eb0));
+    fn_OptionsDialog_OnOk = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140072930));
+    fn_OptionsDialog_OnCancel = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x140072840));
+    fn_OptionsDialog_OnApply = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+        ResolveAddr(Module::Exe, 0x1400728e0));
+    fn_OptionsDialog_OnInputBindClick = reinterpret_cast<fn_OptionsDialog_OnInputBindClick_t>(
+        ResolveAddr(Module::Exe, 0x1400729a0));
+    fn_VideoDevice_GetInterface = reinterpret_cast<fn_VideoDevice_GetInterface_t>(
+        ResolveExport("?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z"));
+    fn_VideoDevice_GetInterfaceCount = reinterpret_cast<fn_VideoDevice_GetInterfaceCount_t>(
+        ResolveExport("?GetInterfaceCount@Device@Video@@QEBAHXZ"));
+    fn_Sprite_DefaultCtor = reinterpret_cast<fn_Sprite_DefaultCtor_t>(
+        ResolveExport("??0Sprite@UI@@QEAA@XZ"));
+    fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
+        ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z"));
+    fn_TabElement_SetActiveTab = reinterpret_cast<fn_TabElement_SetActiveTab_t>(
+        ResolveExport("?SetActiveTab@TabElement@UI@@QEAAXH@Z"));
+    fn_Element_GetParent = reinterpret_cast<fn_Element_GetParent_t>(
+        ResolveAddr(Module::Exe, 0x140010460));
+    g_pGameSettings = reinterpret_cast<int32_t*>(ResolveAddr(Module::Exe, 0x1401c3de0));
+
+    // --- StorageUI support ---
+    fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
+        ResolveExport("?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z"));
+    if (!fn_ExternalFactory_FindNext) {
+        fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
+            ResolveAddr(Module::Runtime, 0x1800be9d0));
+    }
+    fn_StorageUI_SortItems = reinterpret_cast<fn_StorageUI_SortItems_t>(
+        ResolveAddr(Module::Exe, 0x1400213f0));
+
+    // --- MapUI helpers ---
+    fn_MapUI_SetupImage = reinterpret_cast<fn_MapUI_SetupImage_t>(
+        ResolveAddr(Module::Exe, 0x14006cb00));
+    fn_MapUI_HandleClick = reinterpret_cast<fn_MapUI_HandleClick_t>(
+        ResolveAddr(Module::Exe, 0x14006c850));
+
+    // --- CitizenUI helpers ---
+    fn_FindComponent_CitizenAI = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140009790));
+    g_TypeId_CitizenDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7190));
+    g_TypeId_HappinessComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7e08));
+    g_TypeId_ProfessionComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c70e8));
+    fn_CitizenUI_BuildIconArray = reinterpret_cast<fn_CitizenUI_BuildIconArray_t>(
+        ResolveAddr(Module::Exe, 0x14006abf0));
+    fn_CitizenUI_UpdateIconDisplay = reinterpret_cast<fn_CitizenUI_UpdateIconDisplay_t>(
+        ResolveAddr(Module::Exe, 0x14006aed0));
+    fn_FindProfessionComponent = reinterpret_cast<fn_FindProfessionComponent_t>(
+        ResolveAddr(Module::Exe, 0x140011050));
+    fn_WorldGrid_FindEntity = reinterpret_cast<fn_WorldGrid_FindEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400f9a60));
+    fn_CitizenUI_Slot9_Original = reinterpret_cast<fn_CitizenUI_Slot9_Original_t>(
+        ResolveAddr(Module::Exe, 0x1400650F0));
+
     // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151488));
@@ -1648,6 +1937,261 @@ bool EngineFuncsInit() {
         g_TypeId_HelpContainerElem = resolveTypeId(ResolveAddr(Module::Exe, 0x1401517f8));
         g_TypeId_HelpButtonElem   = resolveTypeId(ResolveAddr(Module::Exe, 0x1401514f8));
     }
+
+    // --- ProductionUI support ---
+    fn_FindComponent_Tracker = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140013320));
+    fn_TrackerComponent_Rebuild = reinterpret_cast<fn_TrackerComponent_Rebuild_t>(
+        ResolveAddr(Module::Exe, 0x14000d9d0));
+
+    // --- ProfessionUI support ---
+    fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
+        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
+    if (!fn_External_GetPath) {
+        fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
+            ResolveAddr(Module::Runtime, 0x18006a3e0));
+    }
+    fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
+        ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AVString@2@XZ"));
+    if (!fn_Filename_GetPathIdentifier) {
+        fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
+            ResolveAddr(Module::Runtime, 0x180069150));
+    }
+    fn_BSTRebalance = reinterpret_cast<fn_BSTRebalance_t>(
+        ResolveAddr(Module::Exe, 0x140013480));
+    fn_ProfessionUI_HandleSpinner = reinterpret_cast<fn_ProfessionUI_HandleSpinner_t>(
+        ResolveAddr(Module::Exe, 0x1400763c0));
+    fn_ProfessionUI_HandleButton = reinterpret_cast<fn_ProfessionUI_HandleButton_t>(
+        ResolveAddr(Module::Exe, 0x140076a30));
+    fn_CalcWorkerSlots = reinterpret_cast<fn_CalcWorkerSlots_t>(
+        ResolveAddr(Module::Exe, 0x14012e5c0));
+
+    // --- MainMenuDialog support ---
+    fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
+        ResolveExport("?Quit@Application@1@QEAAXXZ"));
+    if (!fn_App_Quit) {
+        fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
+            ResolveAddr(Module::Runtime, 0x18009f4d0));
+    }
+
+    fn_Configuration_CurrentVersion = reinterpret_cast<fn_Configuration_CurrentVersion_t>(
+        ResolveExport("?CurrentVersion@Configuration@System@@SA?AVString@2@XZ"));
+    if (!fn_Configuration_CurrentVersion) {
+        fn_Configuration_CurrentVersion = reinterpret_cast<fn_Configuration_CurrentVersion_t>(
+            ResolveAddr(Module::Runtime, 0x1800c4f40));
+    }
+
+    fn_Configuration_CurrentBuildId = reinterpret_cast<fn_Configuration_CurrentBuildId_t>(
+        ResolveExport("?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ"));
+    if (!fn_Configuration_CurrentBuildId) {
+        fn_Configuration_CurrentBuildId = reinterpret_cast<fn_Configuration_CurrentBuildId_t>(
+            ResolveAddr(Module::Runtime, 0x1800c4c60));
+    }
+
+    fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
+        ResolveExport("?CheckPtr@InternalBasePtr@Object@@QEAAXXZ"));
+    if (!fn_InternalBasePtr_CheckPtr) {
+        fn_InternalBasePtr_CheckPtr = reinterpret_cast<fn_InternalBasePtr_CheckPtr_t>(
+            ResolveAddr(Module::Runtime, 0x1800c0290));
+    }
+
+    fn_DialogInstance_Ctor = reinterpret_cast<fn_DialogInstance_Ctor_t>(
+        ResolveAddr(Module::Runtime, 0x180114870));
+
+    g_MainMenuDialog_BuildIdVtable = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x14015f5a0));
+
+    // MainMenuDialog Slot8 handler functions (private methods in exe)
+    fn_MainMenu_OpenNewGame    = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3620));
+    fn_MainMenu_OpenLoad       = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3770));
+    fn_MainMenu_OpenSave       = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B38B0));
+    fn_MainMenu_OpenOptions    = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3A10));
+    fn_MainMenu_ReturnToMenu   = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B4790));
+    fn_MainMenu_OpenAchievement = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B34C0));
+    fn_MainMenu_OpenScenario   = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3380));
+    fn_MainMenu_OpenGoal       = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3220));
+    fn_MainMenu_OpenMap        = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3120));
+    fn_MainMenu_OpenTutorial   = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B2FE0));
+    fn_MainMenu_OpenMod        = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B2EA0));
+
+    // --- NewGameDialog support ---
+    g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
+    fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
+        ResolveExport("?Rand@Random@System@@QEAAII@Z"));
+    if (!fn_Random_Rand) {
+        fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
+            ResolveAddr(Module::Runtime, 0x1800c8040));
+    }
+    fn_GenerateTownName = reinterpret_cast<fn_GenerateTownName_t>(
+        ResolveAddr(Module::Exe, 0x140099ac0));
+    fn_StartNewGame = reinterpret_cast<fn_StartNewGame_t>(
+        ResolveAddr(Module::Exe, 0x1400b4540));
+    g_TypeId_MapGenerator = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c59b8));
+    g_TypeId_ClimateGenerator = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5910));
+    g_TypeId_TerrainGenerator = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5b40));
+
+    // --- ToolUI support ---
+    fn_DialogInstance_SetUpperLeft = reinterpret_cast<fn_DialogInstance_SetUpperLeft_t>(
+        ResolveExport("?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z"));
+    if (!fn_DialogInstance_SetUpperLeft) {
+        fn_DialogInstance_SetUpperLeft = reinterpret_cast<fn_DialogInstance_SetUpperLeft_t>(
+            ResolveAddr(Module::Runtime, 0x180114a60));
+    }
+    fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
+        ResolveExport("?BringDialogToFront@UserInterface@UI@@QEAAXAEAV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
+    if (!fn_UI_BringDialogToFront) {
+        fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
+            ResolveAddr(Module::Runtime, 0x180120440));
+    }
+    fn_UIDesc_AddControllers = reinterpret_cast<fn_UIDesc_AddControllers_t>(
+        ResolveAddr(Module::Exe, 0x14012e100));
+    g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7f90));
+
+    // --- ModDetailsDialog support ---
+    fn_Element_Hide = reinterpret_cast<fn_Element_Hide_t>(
+        ResolveExport("?Hide@Element@UI@@QEAAX_N@Z"));
+    fn_Modification_Find = reinterpret_cast<fn_Modification_Find_t>(
+        ResolveExport("?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z"));
+    fn_Configuration_GetVersionString = reinterpret_cast<fn_Configuration_GetVersionString_t>(
+        ResolveExport("?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z"));
+
+    // String::operator+= — non-exported, resolve from exe dispatch table at 0x140151a00
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a00));
+        if (dispatch) fn_String_AppendStr = reinterpret_cast<fn_String_AppendStr_t>(*dispatch);
+    }
+    // System::operator+ — non-exported, resolve from exe dispatch table at 0x140151a08
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a08));
+        if (dispatch) fn_String_Concat = reinterpret_cast<fn_String_Concat_t>(*dispatch);
+    }
+    // Filename::operator< — non-exported, resolve from exe dispatch table at 0x140151a20
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a20));
+        if (dispatch) fn_Filename_Less = reinterpret_cast<fn_Filename_Less_t>(*dispatch);
+    }
+    fn_ModDetails_StringArrayPush = reinterpret_cast<fn_ModDetails_StringArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x14006e290));
+
+    // --- IO::Modification ---
+    g_ppModificationSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401519e8));
+    fn_Modification_GetCount = reinterpret_cast<fn_Modification_GetCount_t>(
+        ResolveAddr(Module::Runtime, 0x18000da90));
+    fn_Modification_GetMod = reinterpret_cast<fn_Modification_GetMod_t>(
+        ResolveAddr(Module::Runtime, 0x18000da80));
+    fn_Modification_Swap = reinterpret_cast<fn_Modification_Swap_t>(
+        ResolveAddr(Module::Runtime, 0x1800aeb20));
+    fn_Modification_Enable = reinterpret_cast<fn_Modification_Enable_t>(
+        ResolveAddr(Module::Runtime, 0x1800aeab0));
+    fn_Modification_RefreshList = reinterpret_cast<fn_Modification_RefreshList_t>(
+        ResolveAddr(Module::Runtime, 0x1800af5f0));
+    fn_Modification_SaveList = reinterpret_cast<fn_Modification_SaveList_t>(
+        ResolveAddr(Module::Runtime, 0x1800b05f0));
+
+    // --- DialogInstance::OnElementEvent (exe dispatch table) ---
+    fn_DialogInstance_OnElementEvent = reinterpret_cast<fn_DialogInstance_OnElementEvent_t>(
+        ResolveExport("?OnElementEvent@DialogInstance@UI@@UEAAXAEBVElementEvent@2@@Z"));
+    if (!fn_DialogInstance_OnElementEvent) {
+        // Fallback: resolve from exe dispatch table pointer
+        void** dispatchPtr = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a30));
+        if (dispatchPtr) fn_DialogInstance_OnElementEvent =
+            reinterpret_cast<fn_DialogInstance_OnElementEvent_t>(*dispatchPtr);
+    }
+
+    fn_DialogInstance_AddController = reinterpret_cast<fn_DialogInstance_AddController_t>(
+        ResolveExport("?AddController@DialogInstance@UI@@QEAAXIHHPEBVExternal@Object@@AEBVString@System@@@Z"));
+    if (!fn_DialogInstance_AddController) {
+        void** dispatchPtr = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a60));
+        if (dispatchPtr) fn_DialogInstance_AddController =
+            reinterpret_cast<fn_DialogInstance_AddController_t>(*dispatchPtr);
+    }
+
+    // --- ModDialog helper functions (exe-local) ---
+    fn_ModDialog_RefreshDisplay = reinterpret_cast<fn_ModDialog_RefreshDisplay_t>(
+        ResolveAddr(Module::Exe, 0x14006eec0));
+    fn_ModDialog_ToggleMod = reinterpret_cast<fn_ModDialog_ToggleMod_t>(
+        ResolveAddr(Module::Exe, 0x14006e930));
+    fn_ModDialog_MoveToTop = reinterpret_cast<fn_ModDialog_MoveToTop_t>(
+        ResolveAddr(Module::Exe, 0x14006e660));
+    fn_ModDialog_ShowDetails = reinterpret_cast<fn_ModDialog_ShowDetails_t>(
+        ResolveAddr(Module::Exe, 0x14006e490));
+    fn_ModDialog_Apply = reinterpret_cast<fn_ModDialog_Apply_t>(
+        ResolveAddr(Module::Exe, 0x14006ea70));
+
+    // --- IO::Serializer (shared globals) ---
+    g_fn_Serializer_Ctor = reinterpret_cast<g_fn_Serializer_Ctor_t>(
+        ResolveExport("?Serializer@IO@@QEAA@PEAVStream@1@H@Z"));
+    g_fn_Serializer_Dtor = reinterpret_cast<g_fn_Serializer_Dtor_t>(
+        ResolveExport("??1Serializer@IO@@QEAA@XZ"));
+    g_fn_Serialize_Int = reinterpret_cast<g_fn_Serialize_Int_t>(
+        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAint@PEBD@Z"));
+    g_fn_Serializer_GetVersion = reinterpret_cast<g_fn_Serializer_GetVersion_t>(
+        ResolveExport("?GetVersion@Serializer@IO@@QEAAHXZ"));
+
+    // --- TownHallUI support ---
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151de0));
+        if (exref && *exref) {
+            g_TypeId_TabElement = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    fn_TownHallUI_InitGeneral = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x1400807f0));
+    fn_TownHallUI_InitProfessions = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140080160));
+    fn_TownHallUI_InitProduction = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007fc30));
+    fn_TownHallUI_InitInventory = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007f660));
+    fn_TownHallUI_InitGraph = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007f0a0));
+    fn_TownHallUI_InitAgriculture = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007ebf0));
+    fn_TownHallUI_UpdateGraph = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007e5b0));
+
+    // --- SpriteCaptureUI support ---
+    // EditElement type ID: exref at 0x140151b50 (double-indirect)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151b50));
+        if (exref && *exref) g_TypeId_EditElement = reinterpret_cast<uint32_t*>(*exref);
+    }
+    // CaptureBoxElement type ID: direct dword at 0x1401c5638
+    g_TypeId_CaptureBoxElement = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5638));
+    // ButtonElement type ID: exref at 0x1401514f8 (shared with HelpUI)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514f8));
+        if (exref && *exref) g_TypeId_HelpButtonElem = reinterpret_cast<uint32_t*>(*exref);
+    }
+
+    // TradeUI support
+    fn_FindComponent_Building = reinterpret_cast<fn_FindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140015140));
+    fn_Element_SetNeedsSizeCalc = reinterpret_cast<fn_Element_SetNeedsSizeCalc_t>(
+        ResolveExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ"));
+    fn_TradeUI_Serialize = reinterpret_cast<fn_TradeUI_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x140084dd0));
+    fn_TradeUI_Startup = reinterpret_cast<fn_TradeUI_Startup_t>(
+        ResolveAddr(Module::Exe, 0x140082150));
+    fn_TradeUI_OnCreate = reinterpret_cast<fn_TradeUI_OnCreate_t>(
+        ResolveAddr(Module::Exe, 0x1400827b0));
+    fn_TradeUI_OnRemove = reinterpret_cast<fn_TradeUI_OnRemove_t>(
+        ResolveAddr(Module::Exe, 0x140081f20));
+    fn_TradeUI_Update = reinterpret_cast<fn_TradeUI_Update_t>(
+        ResolveAddr(Module::Exe, 0x1400868c0));
+
+    // --- NoiseUI helpers ---
+    g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
+    fn_NoiseUI_SetupImage = reinterpret_cast<fn_NoiseUI_SetupImage_t>(
+        ResolveAddr(Module::Exe, 0x140071890));
+    fn_NoiseUI_GenerateNoise = reinterpret_cast<fn_NoiseUI_GenerateNoise_t>(
+        ResolveAddr(Module::Exe, 0x1400711D0));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

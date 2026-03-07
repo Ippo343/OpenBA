@@ -533,66 +533,53 @@ static_assert(sizeof(SpriteCaptureUI) == 0x70, "SpriteCaptureUI size mismatch");
 
 // --- StatusBarUI (0x1D0) ---
 // Has separate Ctor (0x14007af20). Largest panel.
-// Inits +0x30..+0xF8=0, +0x100(u32)=0, +0x108..+0x1C8=0.
+// Original source: C:\Projects\Buildy\code\Game\Dialog/StatusBarUI.h
 struct StatusBarUI {
     DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-    uint64_t data50;           // +0x50
-    uint64_t data58;           // +0x58
-    uint64_t data60;           // +0x60
-    uint64_t data68;           // +0x68
-    uint64_t data70;           // +0x70
-    uint64_t data78;           // +0x78
-    uint64_t data80;           // +0x80
-    uint64_t data88;           // +0x88
-    uint64_t data90;           // +0x90
-    uint64_t data98;           // +0x98
-    uint64_t dataA0;           // +0xA0
-    uint64_t dataA8;           // +0xA8
-    uint64_t dataB0;           // +0xB0
-    uint64_t dataB8;           // +0xB8
-    uint64_t dataC0;           // +0xC0
-    uint64_t dataC8;           // +0xC8
-    uint64_t dataD0;           // +0xD0
-    uint64_t dataD8;           // +0xD8
-    uint64_t dataE0;           // +0xE0
-    uint64_t dataE8;           // +0xE8
-    uint64_t dataF0;           // +0xF0
-    uint64_t dataF8;           // +0xF8
-    uint32_t data100;          // +0x100: zeroed (u32 write)
+    void* labelTitleParam;     // +0x30: "labelTitleParam" TextElement
+    void* textSeason;          // +0x38: "textSeason" TextElement
+    void* numberYear;          // +0x40: "numberYear" NumberElement
+    void* textPopulation;      // +0x48: "textPopulation" TextElement
+    void* numberTemperature;   // +0x50: "numberTemperature" NumberElement
+    void* numberWood;          // +0x58: "numberWood" NumberElement
+    void* numberStone;         // +0x60: "numberStone" NumberElement
+    void* numberIron;          // +0x68: "numberIron" NumberElement
+    void* numberFireWood;      // +0x70: "numberFireWood" NumberElement
+    void* numberTools;         // +0x78: "numberTools" NumberElement
+    void* numberFood;          // +0x80: "numberFood" NumberElement
+    void* numberHerbs;         // +0x88: "numberHerbs" NumberElement
+    void* numberClothes;       // +0x90: "numberClothes" NumberElement
+    void* numberAlcohol;       // +0x98: "numberAlcohol" NumberElement
+    void* numberCoal;          // +0xA0: "numberCoal" NumberElement
+    void* numberTextile;       // +0xA8: "numberTextile" NumberElement
+    void* numberCustom[10];    // +0xB0..+0xF8: "numberCustom0".."numberCustom9"
+    uint32_t _pad100;          // +0x100: zeroed (u32)
     uint8_t  _pad104[4];       // +0x104: gap
-    uint64_t data108;          // +0x108
-    uint64_t data110;          // +0x110
-    uint64_t data118;          // +0x118
-    uint64_t data120;          // +0x120
-    uint64_t data128;          // +0x128
-    uint64_t data130;          // +0x130
-    uint64_t data138;          // +0x138
-    uint64_t data140;          // +0x140
-    uint64_t data148;          // +0x148
-    uint64_t data150;          // +0x150
-    uint64_t data158;          // +0x158
-    uint64_t data160;          // +0x160
-    uint64_t data168;          // +0x168
-    uint64_t data170;          // +0x170
-    uint64_t data178;          // +0x178
-    uint64_t data180;          // +0x180
-    uint64_t data188;          // +0x188
-    uint64_t data190;          // +0x190
-    uint64_t data198;          // +0x198
-    uint64_t data1A0;          // +0x1A0
-    uint64_t data1A8;          // +0x1A8
-    uint64_t data1B0;          // +0x1B0
-    uint64_t data1B8;          // +0x1B8
-    uint64_t data1C0;          // +0x1C0
-    uint64_t data1C8;          // +0x1C8
+    uint8_t  heartsIconArray[0x20]; // +0x108..+0x127: hearts icon array (built by FUN_14006abf0)
+    uint8_t  starsIconArray[0x20];  // +0x128..+0x147: stars icon array
+    void* imageStatusHome;     // +0x148
+    void* imageStatusFood;     // +0x150
+    void* imageStatusCold;     // +0x158
+    void* imageStatusJob;      // +0x160
+    void* imageStatusTool;     // +0x168
+    void* imageStatusDisease;  // +0x170
+    void* numberStatusHome;    // +0x178
+    void* numberStatusFood;    // +0x180
+    void* numberStatusCold;    // +0x188
+    void* numberStatusJob;     // +0x190
+    void* numberStatusTool;    // +0x198
+    void* numberStatusDisease; // +0x1A0
+    void* imageRain;           // +0x1A8
+    void* imageCloudy;         // +0x1B0
+    void* imagePartlySunny;    // +0x1B8
+    void* imageSunny;          // +0x1C0
+    void* imageSnow;           // +0x1C8
 };
 static_assert(sizeof(StatusBarUI) == 0x1D0, "StatusBarUI size mismatch");
-static_assert(offsetof(StatusBarUI, data30) == 0x30, "");
-static_assert(offsetof(StatusBarUI, data100) == 0x100, "");
+static_assert(offsetof(StatusBarUI, labelTitleParam) == 0x30, "");
+static_assert(offsetof(StatusBarUI, _pad100) == 0x100, "");
+static_assert(offsetof(StatusBarUI, imageStatusHome) == 0x148, "");
+static_assert(offsetof(StatusBarUI, imageRain) == 0x1A8, "");
 
 // --- StatusIconUI (0x40) ---
 struct StatusIconUI {
@@ -628,15 +615,18 @@ static_assert(sizeof(TitleDescToolTipUI) == 0x30, "TitleDescToolTipUI size misma
 // Factory inits: +0x30=0, +0x38=0, +0x40(u16)=0, +0x44(u64)=0, +0x4C(u16)=0, +0x50=0
 struct ToolUI {
     DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint16_t data40;           // +0x40: zeroed (u16 write)
+    void*    componentData;    // +0x30: BuildComponent or sub-component ptr
+    void*    labelTitle;       // +0x38: TextElement "labelTitle"
+    uint8_t  hasBorderTitle;   // +0x40: borderTitle element exists (enables title drag)
+    uint8_t  isDragging;       // +0x41: currently dragging dialog
     uint8_t  _pad42[2];        // +0x42: gap
-    uint32_t data44;           // +0x44: zeroed (lower of u64 at 0x44)
-    uint32_t data48;           // +0x48: zeroed (upper of u64 at 0x44)
-    uint16_t data4C;           // +0x4C: zeroed (u16 write)
+    int32_t  dragOffsetX;      // +0x44: mouse offset from dialog left
+    int32_t  dragOffsetY;      // +0x48: mouse offset from dialog top
+    uint8_t  hasTitleDragZone; // +0x4C: borderTitle has drag zone enabled
+    uint8_t  isDragPending;    // +0x4D: waiting for mouse movement threshold
     uint8_t  _pad4E[2];        // +0x4E: gap
-    uint64_t data50;           // +0x50: zeroed
+    int32_t  dragStartX;       // +0x50: drag start mouse X
+    int32_t  dragStartY;       // +0x54: drag start mouse Y
 };
 static_assert(sizeof(ToolUI) == 0x58, "ToolUI size mismatch");
 

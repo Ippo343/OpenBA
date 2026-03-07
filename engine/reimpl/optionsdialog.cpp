@@ -18,6 +18,7 @@
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -58,7 +59,14 @@ static void Reimpl_Startup(void* self) {
 typedef void (*fn_OnEvent_t)(void* self, void* element, int eventType, int eventData);
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
     g_lastHook = "OptionsDialog::OnEvent";
-    ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, element, eventType, eventData);
+    if (eventType == 0x17) {
+        // Slider changes need audio config singleton via _singleton_exref —
+        // delegate to trampoline (original code)
+        ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, element, eventType, eventData);
+    } else {
+        // Button clicks (0x12) and combo changes (0x14) — clean reimpl
+        OptionsDialog_OnEvent((OptionsDialog*)self, element, eventType, eventData);
+    }
 }
 
 // ============================================================

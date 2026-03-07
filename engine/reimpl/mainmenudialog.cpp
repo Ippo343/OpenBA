@@ -53,11 +53,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x1400B3CD0) — Setup: initializes main menu UI, buttons, events
+// Slot4 (0x1400B3CD0) — Setup: initializes main menu UI, buttons, events — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "MainMenuDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    MainMenuDialog_Slot4((MainMenuDialog*)self);
 }
 
 // Slot5 (0x1400B3C60) — Shutdown: unpauses audio scenes — REIMPLEMENTED
@@ -67,11 +67,11 @@ static void Reimpl_Slot5(void* self) {
     MainMenuDialog_Slot5((MainMenuDialog*)self);
 }
 
-// Slot8 (0x1400B3B50) — OnCommand: dispatches menu button clicks
+// Slot8 (0x1400B3B50) — OnCommand: dispatches menu button clicks — REIMPLEMENTED
 typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id);
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id) {
     g_lastHook = "MainMenuDialog::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id);
+    MainMenuDialog_Slot8((MainMenuDialog*)self, p2, msg, id);
 }
 
 // Slot10 (0x140020CB0) — Secondary dtor: DialogInstance dtor + conditional free

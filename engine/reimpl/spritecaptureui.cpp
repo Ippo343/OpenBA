@@ -20,6 +20,7 @@
 //   +0x50: 0x14003a978 — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -50,7 +51,7 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "SpriteCaptureUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    SpriteCaptureUI_Serialize((SpriteCaptureUI*)self);
 }
 
 typedef void (*fn_OnCreate_t)(void* self);

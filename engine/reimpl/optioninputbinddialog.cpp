@@ -22,6 +22,7 @@
 //   +0x68: 0x14006cf70 — OnButton3: set binding value=3, close (hookable, 13b)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -56,46 +57,40 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot 4: Startup(this) — set up input bind dialog UI
-typedef void (*fn_Startup_t)(void* self);
+// Slot 4: Startup(this) — REIMPLEMENTED
 static void Reimpl_Startup(void* self) {
     g_lastHook = "OptionInputBindDialog::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    OptionInputBindDialog_Startup((OptionInputBindDialog*)self);
 }
 
-// Slot 7: Load(this) — load input binding data
-typedef void (*fn_Load_t)(void* self);
+// Slot 7: Load(this) — REIMPLEMENTED
 static void Reimpl_Load(void* self) {
     g_lastHook = "OptionInputBindDialog::Load";
-    ((fn_Load_t)g_hookLoad.trampoline)(self);
+    OptionInputBindDialog_Load((OptionInputBindDialog*)self);
 }
 
-// Slot 10: OnOk(this) — set binding value=1, close dialog
-typedef void (*fn_OnOk_t)(void* self);
+// Slot 10: OnOk(this) — REIMPLEMENTED
 static void Reimpl_OnOk(void* self) {
     g_lastHook = "OptionInputBindDialog::OnOk";
-    ((fn_OnOk_t)g_hookOnOk.trampoline)(self);
+    OptionInputBindDialog_OnOk((OptionInputBindDialog*)self);
 }
 
-// Slot 11: OnCancel(this) — set binding value=0, close dialog
-typedef void (*fn_OnCancel_t)(void* self);
+// Slot 11: OnCancel(this) — REIMPLEMENTED
 static void Reimpl_OnCancel(void* self) {
     g_lastHook = "OptionInputBindDialog::OnCancel";
-    ((fn_OnCancel_t)g_hookOnCancel.trampoline)(self);
+    OptionInputBindDialog_OnCancel((OptionInputBindDialog*)self);
 }
 
-// Slot 12: OnButton2(this) — set binding value=2, close dialog
-typedef void (*fn_OnButton2_t)(void* self);
+// Slot 12: OnButton2(this) — REIMPLEMENTED
 static void Reimpl_OnButton2(void* self) {
     g_lastHook = "OptionInputBindDialog::OnButton2";
-    ((fn_OnButton2_t)g_hookOnButton2.trampoline)(self);
+    OptionInputBindDialog_OnButton2((OptionInputBindDialog*)self);
 }
 
-// Slot 13: OnButton3(this) — set binding value=3, close dialog
-typedef void (*fn_OnButton3_t)(void* self);
+// Slot 13: OnButton3(this) — REIMPLEMENTED
 static void Reimpl_OnButton3(void* self) {
     g_lastHook = "OptionInputBindDialog::OnButton3";
-    ((fn_OnButton3_t)g_hookOnButton3.trampoline)(self);
+    OptionInputBindDialog_OnButton3((OptionInputBindDialog*)self);
 }
 
 // ============================================================

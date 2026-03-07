@@ -18,6 +18,7 @@
 //   +0x18: Slot3, +0x28: Slot5, +0x30: Slot6, +0x40: Slot8, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -50,20 +51,21 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
+// Slot4 — REIMPLEMENTED (populates build storage table)
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "BuildUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    BuildUI_Slot4((BuildUI*)self);
 }
 
+// Slot7 — REIMPLEMENTED (updates build progress + materials)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "BuildUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    BuildUI_Slot7((BuildUI*)self);
 }
 
 // Slot9 — REIMPLEMENTED (toggles workplace enabled state)
-#include "Dialog/ui_panels.h"
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "BuildUI::Slot9";
     BuildUI_Slot9((BuildUI*)self, param2, param3, param4);

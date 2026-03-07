@@ -64,11 +64,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x14005D490) — Setup: populates achievement table UI
+// Slot4 (0x14005D490) — Setup: populates achievement table UI — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "AchievementDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    AchievementDialog_Slot4((AchievementDialog*)self);
 }
 
 // Slot6 (0x14005D240) — Draw/Refresh: updates achievement display — REIMPLEMENTED

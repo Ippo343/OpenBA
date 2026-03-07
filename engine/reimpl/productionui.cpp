@@ -18,6 +18,7 @@
 //   +0x28: Slot5, +0x30: Slot6, +0x40: Slot8, +0x48: Slot9, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -43,13 +44,13 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ProductionUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ProductionUI_Slot4((ProductionUI*)self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ProductionUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    ProductionUI_Slot7((ProductionUI*)self);
 }
 
 // ============================================================

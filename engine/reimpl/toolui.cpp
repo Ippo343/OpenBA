@@ -6,9 +6,9 @@
 //
 // Vtable overrides (exe-range functions):
 //   +0x00: 0x1400145f0 — ScalarDtor(self, flags) [19b prologue]
-//   +0x20: 0x14007bd70 — Serialize(self) [15b prologue]
-//   +0x40: 0x14007b9b0 — OnCreate(self) [13b prologue]
-//   +0x48: 0x14007bc30 — OnRemove(self, ?, eventType, eventId, p5, p6) [13b prologue]
+//   +0x20: 0x14007bd70 — Slot4/Serialize(self) [15b prologue]
+//   +0x40: 0x14007b9b0 — Slot8/OnCreate(self) [13b prologue]
+//   +0x48: 0x14007bc30 — Slot9/OnRemove(self, ?, eventType, eventId, p5, p6) [13b prologue]
 //
 // Unhookable (too small or thunk):
 //   +0x08: 0x140014570 — GetDescription, 8 bytes
@@ -20,6 +20,7 @@
 //   +0x50: 0x14003a978 — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -35,7 +36,7 @@ static HookInfo g_hookOnCreate;
 static HookInfo g_hookOnRemove;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers (delegate to code/Game/Dialog/toolui.cpp)
 // ============================================================
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
@@ -50,20 +51,20 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
-    g_lastHook = "ToolUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    g_lastHook = "ToolUI::Slot4";
+    ToolUI_Slot4((ToolUI*)self);
 }
 
 typedef void (*fn_OnCreate_t)(void* self);
 static void Reimpl_OnCreate(void* self) {
-    g_lastHook = "ToolUI::OnCreate";
-    ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
+    g_lastHook = "ToolUI::Slot8";
+    ToolUI_Slot8((ToolUI*)self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId, int p5, int p6);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId, int p5, int p6) {
-    g_lastHook = "ToolUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId, p5, p6);
+    g_lastHook = "ToolUI::Slot9";
+    ToolUI_Slot9((ToolUI*)self, param2, eventType, eventId, p5, p6);
 }
 
 // ============================================================
@@ -82,7 +83,7 @@ void InstallToolUISerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007bd70);
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 16);
 #ifdef _DEBUG
-    printf("[ToolUI] Serialize hooked at %p\n", (void*)target);
+    printf("[ToolUI] Slot4 hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveToolUISerialize() { RemoveHook(&g_hookSerialize); }
@@ -91,7 +92,7 @@ void InstallToolUIOnCreate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007b9b0);
     InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 15);
 #ifdef _DEBUG
-    printf("[ToolUI] OnCreate hooked at %p\n", (void*)target);
+    printf("[ToolUI] Slot8 hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveToolUIOnCreate() { RemoveHook(&g_hookOnCreate); }
@@ -100,7 +101,7 @@ void InstallToolUIOnRemove() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14007bc30);
     InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 13);
 #ifdef _DEBUG
-    printf("[ToolUI] OnRemove hooked at %p\n", (void*)target);
+    printf("[ToolUI] Slot9 hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveToolUIOnRemove() { RemoveHook(&g_hookOnRemove); }

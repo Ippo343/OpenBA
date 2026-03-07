@@ -20,6 +20,7 @@
 //   +0x30: 0x14003a966 — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -48,7 +49,7 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TownHallUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    TownHallUI_Serialize((TownHallUI*)self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
@@ -72,7 +73,7 @@ static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId
 typedef void (*fn_Update_t)(void* self, void* stream);
 static void Reimpl_Update(void* self, void* stream) {
     g_lastHook = "TownHallUI::Update";
-    ((fn_Update_t)g_hookUpdate.trampoline)(self, stream);
+    TownHallUI_Update((TownHallUI*)self, stream);
 }
 
 // ============================================================

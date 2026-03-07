@@ -741,10 +741,63 @@ extern fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation;
 // SaveLoad singleton — accessed via exe exref at 0x140151610 (double-indirect)
 extern void** g_pSaveLoadSingleton;
 
+// SaveLoad::SetSaveSprite(this, Sprite) — set the sprite used for save screenshots
+// ?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z
+typedef void (*fn_SaveLoad_SetSaveSprite_t)(void* saveLoad, void* sprite);
+extern fn_SaveLoad_SetSaveSprite_t fn_SaveLoad_SetSaveSprite;
+
+// SaveLoad::SetMinOperationTime(this, &Time) — set minimum time for save/load operation display
+// ?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
+typedef void (*fn_SaveLoad_SetMinOperationTime_t)(void* saveLoad, void* time);
+extern fn_SaveLoad_SetMinOperationTime_t fn_SaveLoad_SetMinOperationTime;
+
+// SaveLoad::SetOperation(this, Operation, int) — start a save/load/delete operation
+// ?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z
+typedef void (*fn_SaveLoad_SetOperation_t)(void* saveLoad, int operation, int param);
+extern fn_SaveLoad_SetOperation_t fn_SaveLoad_SetOperation;
+
+// SaveLoad::GetSaveCount(this) -> int — number of save files
+// ?GetSaveCount@SaveLoad@Save@@QEBAHXZ
+typedef int (*fn_SaveLoad_GetSaveCount_t)(void* saveLoad);
+extern fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount;
+
+// SaveLoad::GetSaveInfo(this, index) -> SaveInfo* — get info for save file at index
+// ?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z
+typedef void* (*fn_SaveLoad_GetSaveInfo_t)(void* saveLoad, int index);
+extern fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo;
+
+// Sprite::IsValid(this) -> bool
+// ?IsValid@Sprite@UI@@QEBA_NXZ
+typedef bool (*fn_Sprite_IsValid_t)(void* sprite);
+extern fn_Sprite_IsValid_t fn_Sprite_IsValid;
+
+// UserInterface::Play(this, soundId) — play a UI sound effect
+// ?Play@UserInterface@UI@@QEAAXH@Z
+typedef void (*fn_UI_Play_t)(void* ui, int soundId);
+extern fn_UI_Play_t fn_UI_Play;
+
+// DateTime::AsString(this, retval) -> String — format date+time as string (non-trivial return)
+// ?AsString@DateTime@System@@QEBA?AVString@2@XZ
+typedef void* (*fn_DateTime_AsString_t)(void* dateTime, void* retval);
+extern fn_DateTime_AsString_t fn_DateTime_AsString;
+
+// SaveLoadDialog helper: FUN_1400b6ce0 — populates the file list table (442 lines, exe function)
+typedef void (*fn_SaveLoadDialog_PopulateFileList_t)(void* self);
+extern fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList;
+
 // EditElement::SetText(this, String*) — sets edit field text
 // ?SetText@EditElement@UI@@QEAAXVString@2@@Z (0x180042070)
 typedef void (*fn_EditElement_SetText_t)(void* self, void* str);
 extern fn_EditElement_SetText_t fn_EditElement_SetText;
+
+// Input::Device::Released(this, InputDevice, 0, keyIndex) -> bool
+// ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z
+// InputDevice: 1=keyboard, 2=mouse
+typedef bool (*fn_Input_Device_Released_t)(void* device, int inputDevice, int param, int keyIndex);
+extern fn_Input_Device_Released_t fn_Input_Device_Released;
+
+// Input::Device singleton — accessed via exe exref at 0x140151b80 (double-indirect)
+extern void** g_pInputDeviceSingleton;
 
 // ImageElement::GetSprite(this, retval) — member, non-trivial return ABI
 // RCX=this, RDX=retval(Sprite*). Copies 16 bytes from +0xC0/+0xC8.
@@ -1060,6 +1113,18 @@ extern fn_Achievement_GetDescription_t fn_Achievement_GetDescription;
 typedef void (*fn_Achievement_GetSpriteName_t)(void* self, void* retval);
 extern fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName;
 
+// AchievementManager::GetAchievementCount(this) -> int
+// ?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ (0x1800079b0, ordinal 2434)
+typedef int (*fn_AchievementManager_GetAchievementCount_t)(void* self);
+extern fn_AchievementManager_GetAchievementCount_t fn_AchievementManager_GetAchievementCount;
+
+// AchievementManager::GetAchievement(this, retval, index) -> ExternalPtr<Achievement>
+// Member, non-trivial return: RCX=this, RDX=retval, R8=index
+// ?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@VAchievement@1@@Object@@H@Z
+// (0x18009e8a0, ordinal 2433)
+typedef void (*fn_AchievementManager_GetAchievement_t)(void* self, void* retval, int index);
+extern fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement;
+
 // GoalDialog dynamic array push (FUN_140011750 in retail exe)
 // Pushes a 0x18-byte entry (3 pointers: imageComplete, imageFail, textGoal) to goal array.
 // Signature: (arrayBase*, newCount, elementPtr*)
@@ -1338,6 +1403,544 @@ extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used i
 // Resizes dynamic array: param1=array base (ptr+count+capacity), param2=new count
 typedef void (*fn_HelpUI_ArrayResize_t)(void* arrayBase, int newCount);
 extern fn_HelpUI_ArrayResize_t fn_HelpUI_ArrayResize;
+
+// ============================================================
+// BuildUI support functions
+// ============================================================
+
+// FUN_140118330: Counts occupied build tiles for a StorageComponent.
+// Iterates the building footprint, counts tiles occupied by other entities.
+// param1 = StorageComponent ptr
+typedef int (*fn_CountOccupiedBuildTiles_t)(void* storageComp);
+extern fn_CountOccupiedBuildTiles_t fn_CountOccupiedBuildTiles;
+
+// ============================================================
+// CitizenUI helpers
+// ============================================================
+
+// FindComponent_CitizenAI — finds CitizenAIComponent on entity
+// FUN_140009790: entity(longlong), retval(InternalBasePtr*)
+extern fn_FindComponent_t fn_FindComponent_CitizenAI;  // 0x140009790
+
+// CitizenDescription type ID at DAT_1401c7190 (used for IsDerivedFrom in Slot7)
+extern uint32_t* g_TypeId_CitizenDescription;  // DAT_1401c7190
+
+// HappinessComponent type ID at DAT_1401c7e08 (used for FindComponent in StatusBarUI)
+extern uint32_t* g_TypeId_HappinessComponent;  // DAT_1401c7e08
+
+// ProfessionComponent type ID at DAT_1401c70e8 (used by FindProfessionComponent)
+extern uint32_t* g_TypeId_ProfessionComponent;  // DAT_1401c70e8
+
+// CitizenUI_BuildIconArray(self+offset, groupElement) — builds whole/half icon arrays
+// FUN_14006abf0: iterates children of group, finds "whole"/"half" sub-elements
+typedef void (*fn_CitizenUI_BuildIconArray_t)(void* iconArrayBase, void* groupElemPtr);
+extern fn_CitizenUI_BuildIconArray_t fn_CitizenUI_BuildIconArray;
+
+// CitizenUI_UpdateIconDisplay(iconArrayBase, currentVal, maxVal) — updates heart/star icons
+// FUN_14006aed0: shows/hides whole/half icons based on ratio
+typedef void (*fn_CitizenUI_UpdateIconDisplay_t)(void* iconArrayBase, float currentVal, float maxVal);
+extern fn_CitizenUI_UpdateIconDisplay_t fn_CitizenUI_UpdateIconDisplay;
+
+// FindProfessionComponent(entityPtr, retval) — finds ProfessionComponent on entity
+// FUN_140011050: searches component array for type DAT_1401c70e8
+typedef void* (*fn_FindProfessionComponent_t)(void* entity, void* retval);
+extern fn_FindProfessionComponent_t fn_FindProfessionComponent;
+
+// CitizenUI::Slot9 original — used as fallback for follow button (0x228)
+// The follow dialog construction has MSVC hidden stack parameters.
+typedef void (*fn_CitizenUI_Slot9_Original_t)(void* self, uint64_t p2, int p3, int p4);
+extern fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original;
+
+// Game world+0x118 lookup helper (FUN_1400f9a60)
+// Finds entity by tile index in the world grid
+typedef void* (*fn_WorldGrid_FindEntity_t)(void* worldGrid, void* retval, int tileIndex);
+extern fn_WorldGrid_FindEntity_t fn_WorldGrid_FindEntity;
+
+// ============================================================
+// ProductionUI support
+// ============================================================
+
+// FindComponent_Tracker: FUN_140013320 — searches entity components for TrackerComponent
+// (TypeInfo DAT_1401c4b10). Same FindComponent pattern as others.
+extern fn_FindComponent_t fn_FindComponent_Tracker;  // FUN_140013320
+
+// TrackerComponent rebuild: FUN_14000d9d0 — moves/rebuilds tracker item arrays
+// Called when game world item count changes.
+typedef void (*fn_TrackerComponent_Rebuild_t)(void* srcArray, void* dstArray);
+extern fn_TrackerComponent_Rebuild_t fn_TrackerComponent_Rebuild;
+
+// ============================================================
+// ProfessionUI support
+// ============================================================
+
+// Object::External::GetPath(this) -> Filename* (returns internal pointer)
+typedef void* (*fn_External_GetPath_t)(void* self);
+extern fn_External_GetPath_t fn_External_GetPath;
+
+// System::Filename::GetPathIdentifer(this, retval) -> String (member, non-trivial return)
+typedef void* (*fn_Filename_GetPathIdentifier_t)(void* self, void* retval);
+extern fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier;
+
+// BST rebalance after insert: FUN_140013480
+typedef void (*fn_BSTRebalance_t)(void* bstBase, void** insertedNode);
+extern fn_BSTRebalance_t fn_BSTRebalance;
+
+// Slot9 spinner handler: FUN_1400763c0 (complex citizen assignment)
+typedef void (*fn_ProfessionUI_HandleSpinner_t)(void* self, int profIndex);
+extern fn_ProfessionUI_HandleSpinner_t fn_ProfessionUI_HandleSpinner;
+
+// Slot9 button handler: FUN_140076a30 (find citizen, center camera)
+typedef void (*fn_ProfessionUI_HandleButton_t)(void* self, int profIndex);
+extern fn_ProfessionUI_HandleButton_t fn_ProfessionUI_HandleButton;
+
+// FUN_14012e5c0: Calculate worker slots from StorageLocationComponent
+typedef int (*fn_CalcWorkerSlots_t)(void* storageLocComp);
+extern fn_CalcWorkerSlots_t fn_CalcWorkerSlots;
+
+// ============================================================
+// MainMenuDialog support functions
+// ============================================================
+
+// Application::Application::Quit(this) — sets quit flag
+// ?Quit@Application@1@QEAAXXZ (ordinal 3437)
+typedef void (*fn_App_Quit_t)(void* self);
+extern fn_App_Quit_t fn_App_Quit;
+
+// System::Configuration::CurrentVersion() -> String (static, hidden ret ptr in RCX)
+// ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ
+typedef void (*fn_Configuration_CurrentVersion_t)(void* retStr);
+extern fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion;
+
+// System::Configuration::CurrentBuildId() -> String (static, hidden ret ptr in RCX)
+// ?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ
+typedef void (*fn_Configuration_CurrentBuildId_t)(void* retStr);
+extern fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId;
+
+// Object::InternalBasePtr::CheckPtr(this) — validates internal pointer
+// ?CheckPtr@InternalBasePtr@Object@@QEAAXXZ
+typedef void (*fn_InternalBasePtr_CheckPtr_t)(void* self);
+extern fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr;
+
+// UI::DialogInstance::DialogInstance(this, userInterface, externalResource, parentPtr, p4, p5, p6)
+// Full constructor for creating child dialog instances
+// Resolved from Runtime export
+typedef void* (*fn_DialogInstance_Ctor_t)(void* self, void* userInterface, void* externalRes,
+                                          void* parentPtr, int p4, int p5, int p6);
+extern fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor;
+
+// MainMenuDialog BuildId child dialog vtable (PTR_FUN_14015f5a0 in exe)
+extern void** g_MainMenuDialog_BuildIdVtable;
+
+// MainMenuDialog Slot8 private handler functions (resolved from exe)
+// Each opens a sub-dialog or performs a game action.
+typedef void (*fn_MainMenu_Handler_t)(void* self);
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenNewGame;      // 0x1400B3620
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenLoad;          // 0x1400B3770
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenSave;          // 0x1400B38B0
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenOptions;       // 0x1400B3A10
+extern fn_MainMenu_Handler_t fn_MainMenu_ReturnToMenu;      // 0x1400B4790
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenAchievement;   // 0x1400B34C0
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenScenario;      // 0x1400B3380
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenGoal;          // 0x1400B3220
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenMap;           // 0x1400B3120
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenTutorial;      // 0x1400B2FE0
+extern fn_MainMenu_Handler_t fn_MainMenu_OpenMod;           // 0x1400B2EA0
+
+// ============================================================
+// NewGameDialog support functions
+// ============================================================
+
+// Game settings pointer (DAT_1401c3de0 in exe .data section)
+// Allocated in GameMain, 0x34 bytes. Contains:
+//   +0x20: terrain generator combo index
+//   +0x24: terrain size combo index
+//   +0x28: climate combo index
+//   +0x2c: map condition/generator combo index
+//   +0x30: disaster combo index
+extern void** g_pNewGameSettings;  // DAT_1401c3de0
+
+// System::Random::Rand(this, maxVal) -> uint
+// ?Rand@Random@System@@QEAAII@Z (ordinal 3442, 0x1800c8040)
+typedef uint32_t (*fn_Random_Rand_t)(void* self, uint32_t maxVal);
+extern fn_Random_Rand_t fn_Random_Rand;
+
+// Name generator: FUN_140099ac0(unused, retStr, random, maxLen)
+// Loads "Game/Names/Cities.ndb", generates random name
+typedef void* (*fn_GenerateTownName_t)(uint64_t unused, void* retStr, void* random, int maxLen);
+extern fn_GenerateTownName_t fn_GenerateTownName;
+
+// Start game handler: FUN_1400b4540(worldSetupPtr, nameStr, seed, terrainSize, disasterOff, climate, terrain, mapGen, param9, retval)
+typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint64_t seed,
+                                   uint64_t terrainSize, int disasterOff, void* climate,
+                                   void* terrain, void* mapGen, int param9, void* retval);
+extern fn_StartNewGame_t fn_StartNewGame;
+
+// TypeInfo IDs for generator IsDerivedFrom checks
+extern uint32_t* g_TypeId_MapGenerator;      // DAT_1401c59b8
+extern uint32_t* g_TypeId_ClimateGenerator;  // DAT_1401c5910
+extern uint32_t* g_TypeId_TerrainGenerator;  // DAT_1401c5b40
+
+// ============================================================
+// OptionsDialog support functions (private helpers in exe)
+// ============================================================
+
+// OptionsDialog::PopulateVideoComboBoxes(self) — fills renderer, adapter, resolution, refresh, antialias, filter combos
+// FUN_140074140
+typedef void (*fn_OptionsDialog_PopulateVideoComboBoxes_t)(void* self);
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateVideoComboBoxes;
+
+// OptionsDialog::PopulateAdapterCombo(self) — refills adapter combo after renderer change
+// FUN_140074040
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAdapterCombo;
+
+// OptionsDialog::PopulateResolutionCombo(self) — refills resolution combo
+// FUN_140073ec0
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateResolutionCombo;
+
+// OptionsDialog::PopulateRefreshCombo(self) — refills refresh rate combo
+// FUN_140073d20
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateRefreshCombo;
+
+// OptionsDialog::PopulateAntialiasCombo(self) — refills antialias mode combo
+// FUN_140073b10
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAntialiasCombo;
+
+// OptionsDialog::PopulateFilterCombo(self) — refills texture filter combo
+// FUN_140073800
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateFilterCombo;
+
+// OptionsDialog::PopulateInputBindList(self) — fills input binding list
+// FUN_140073580
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateInputBindList;
+
+// OptionsDialog::ValidateVideoConfig(self) — validates and fixes config after combo changes
+// FUN_140072eb0
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_ValidateVideoConfig;
+
+// OptionsDialog::OnOk(self) — apply all settings, save, close dialog
+// FUN_140072930
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnOk;
+
+// OptionsDialog::OnCancel(self) — revert settings, close dialog
+// FUN_140072840
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnCancel;
+
+// OptionsDialog::OnApply(self) — apply all settings, save, keep dialog open
+// FUN_1400728e0
+extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnApply;
+
+// OptionsDialog::OnInputBindClick(self, element, bindIndex, slot) — handle input bind button
+// FUN_1400729a0
+typedef void (*fn_OptionsDialog_OnInputBindClick_t)(void* self, void* element, int bindIndex, int slot);
+extern fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick;
+
+// Video::Device singleton — needed for video config singletons
+// Already available as g_pVideoDeviceSingleton
+
+// Audio::Configuration singleton — _singleton_exref used in slider handlers
+// Points to int[4] array of volume levels at offsets 0, 4, 8, 0xC
+extern void** g_pAudioConfigSingleton;  // resolved from _singleton_exref in slider code
+
+// Video::Configuration singleton — contains current video settings
+extern void** g_pVideoConfigSingleton;  // resolved from _singleton_exref in Startup
+
+// Video::Device::GetInterface(this, index) -> GraphicsInterface*
+typedef void* (*fn_VideoDevice_GetInterface_t)(void* self, int index);
+extern fn_VideoDevice_GetInterface_t fn_VideoDevice_GetInterface;
+
+// Video::Device::GetInterfaceCount(this) -> int
+typedef int (*fn_VideoDevice_GetInterfaceCount_t)(void* self);
+extern fn_VideoDevice_GetInterfaceCount_t fn_VideoDevice_GetInterfaceCount;
+
+// UI::Sprite::Sprite() — default constructor, zeroes 16 bytes
+typedef void* (*fn_Sprite_DefaultCtor_t)(void* self);
+extern fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor;
+
+// UI::TabElement::SetActiveTab(this, tabIndex)
+typedef void (*fn_TabElement_SetActiveTab_t)(void* self, int tabIndex);
+extern fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab;
+
+// UI::Element::GetParent(elem) -> Element*
+// FUN_140010460 — returns parent element pointer
+typedef void* (*fn_Element_GetParent_t)(void* self);
+extern fn_Element_GetParent_t fn_Element_GetParent;
+
+// OptionsDialog game settings global — DAT_1401c3de0 in exe
+// int[8] array: [0]=uiScale, [1]=autosaveInterval, [2]=statusIconDist,
+// [3]=statusIconEnabled, [4]=statusIconScale, [5]=edgeScroll,
+// [6]=autopause, [7]=lastTab
+// Byte offsets: +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow
+extern int32_t* g_pGameSettings;  // DAT_1401c3de0
+
+// ============================================================
+// StorageUI support functions
+// ============================================================
+
+// ExternalFactory::FindNext(this, typeId, prevExternal) -> External const*
+// Iterates all loaded externals matching typeId. Pass nullptr to start.
+// ?FindNext@ExternalFactory@Object@@QEBAPEBVExternal@2@IPEBV32@@Z
+typedef void* (*fn_ExternalFactory_FindNext_t)(void* self, uint32_t typeId, void* prev);
+extern fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext;
+
+// StorageUI sort function (FUN_1400213f0) — sorts 0x18-byte entries by resource name.
+// Quicksort/introsort with inline comparator using UI::String → System::String.
+typedef void (*fn_StorageUI_SortItems_t)(void* items, int count, void* scratch, void* scratch2);
+extern fn_StorageUI_SortItems_t fn_StorageUI_SortItems;
+
+// MapUI helper: creates MaterialInstance + SpriteSheet from ImageBuffer, finds image element
+// FUN_14006cb00(self, imageBuffer, spriteSheetOut, materialOut, useBlend, elementName)
+typedef void (*fn_MapUI_SetupImage_t)(void* self, void* imageBuffer, void** spriteSheetOut,
+                                      void** materialOut, char useBlend, const char* elementName);
+extern fn_MapUI_SetupImage_t fn_MapUI_SetupImage;
+
+// MapUI helper: translates map click coordinates to camera position
+// FUN_14006c850(param1, clickX, clickY, mapWidth, mapHeight)
+typedef void (*fn_MapUI_HandleClick_t)(void* param1, int clickX, int clickY, int mapWidth, int mapHeight);
+extern fn_MapUI_HandleClick_t fn_MapUI_HandleClick;
+
+// ============================================================
+// ToolUI support functions
+// ============================================================
+
+// UI::DialogInstance::SetUpperLeft(this, x, y, animate)
+// ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z
+typedef void (*fn_DialogInstance_SetUpperLeft_t)(void* self, int x, int y, bool animate);
+extern fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft;
+
+// UI::UserInterface::BringDialogToFront(this, InternalPtr<DialogInstance>&)
+// ?BringDialogToFront@UserInterface@UI@@QEAAXAEAV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
+typedef void (*fn_UI_BringDialogToFront_t)(void* self, void* dialogPtr);
+extern fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront;
+
+// FUN_14012e100: UIDescription_AddControllers(uiDesc, dialogInstPtr, dataSource)
+// Iterates UIDescription entries and calls DialogInstance::AddController for each.
+typedef void (*fn_UIDesc_AddControllers_t)(void* uiDesc, void* dialogInstPtr, void* dataSource);
+extern fn_UIDesc_AddControllers_t fn_UIDesc_AddControllers;
+
+// TypeId for UIDescription — DAT_1401c7f90
+extern uint32_t* g_TypeId_UIDescription;
+
+// ============================================================
+// ModDetailsDialog support functions
+// ============================================================
+
+// UI::Element::Hide(this, hide) — sets/clears hidden flag
+// ?Hide@Element@UI@@QEAAX_N@Z
+typedef void (*fn_Element_Hide_t)(void* self, bool hide);
+extern fn_Element_Hide_t fn_Element_Hide;
+
+// IO::Modification::Find(this, Filename const&) -> int (mod index, -1 if not found)
+// ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z
+typedef int (*fn_Modification_Find_t)(void* self, const void* filename);
+extern fn_Modification_Find_t fn_Modification_Find;
+
+// System::Configuration::GetVersionString(retval, version, isBeta) -> String
+// Static with hidden return: RCX=retval(String*), RDX=version(uint), R8B=isBeta(bool)
+// ?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z
+typedef void* (*fn_Configuration_GetVersionString_t)(void* retval, uint32_t version, bool isBeta);
+extern fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString;
+
+// System::String::operator+=(this, String const&) — appends string in-place
+// Non-exported, resolved from exe dispatch table at 0x140151a00
+typedef void (*fn_String_AppendStr_t)(void* self, const void* other);
+extern fn_String_AppendStr_t fn_String_AppendStr;
+
+// System::operator+(lhs, rhs) -> String — free function, hidden ret ptr
+// Non-exported, resolved from exe dispatch table at 0x140151a08
+// RCX=retval(String*), RDX=lhs(String const&), R8=rhs(String const&)
+typedef void* (*fn_String_Concat_t)(void* retval, const void* lhs, const void* rhs);
+extern fn_String_Concat_t fn_String_Concat;
+
+// System::Filename::operator<(this, other) -> bool — lexicographic comparison
+// Non-exported, resolved from exe dispatch table at 0x140151a20
+typedef bool (*fn_Filename_Less_t)(const void* self, const void* other);
+extern fn_Filename_Less_t fn_Filename_Less;
+
+// FUN_14006e290: ModDetails string array push — appends a String copy to dynamic array
+// RCX=arrayBase(ptr+count+capacity), RDX=string(String const*)
+typedef void (*fn_ModDetails_StringArrayPush_t)(void* arrayBase, const void* str);
+extern fn_ModDetails_StringArrayPush_t fn_ModDetails_StringArrayPush;
+
+// ============================================================
+// IO::Modification (mod management singleton)
+// ============================================================
+
+// IO::Modification singleton pointer — exe .rdata at 0x1401519e8
+// Usage: Modification* mod = *(Modification**)g_ppModificationSingleton;
+extern void** g_ppModificationSingleton;
+
+// IO::Modification::GetCount(this) -> int
+// Too small to hook (4 bytes at 0x18000da90). Returns m_count.
+typedef int (*fn_Modification_GetCount_t)(void* self);
+extern fn_Modification_GetCount_t fn_Modification_GetCount;
+
+// IO::Modification::GetModification(this, index) -> Mod*
+// Too small to hook (12 bytes at 0x18000da80). Returns &m_mods[index].
+typedef void* (*fn_Modification_GetMod_t)(void* self, int index);
+extern fn_Modification_GetMod_t fn_Modification_GetMod;
+
+// IO::Modification::Swap(this, idx1, idx2)
+// Hooked at 0x1800aeb20. Swaps two mod entries by index.
+typedef void (*fn_Modification_Swap_t)(void* self, int idx1, int idx2);
+extern fn_Modification_Swap_t fn_Modification_Swap;
+
+// IO::Modification::Enable(this, index, enabled)
+// Hooked at 0x1800aeab0. Sets enabled flag.
+typedef void (*fn_Modification_Enable_t)(void* self, int index, bool enabled);
+extern fn_Modification_Enable_t fn_Modification_Enable;
+
+// IO::Modification::RefreshList(this)
+// Hooked at 0x1800af5f0. Scans filesystem for .pkm packages.
+typedef void (*fn_Modification_RefreshList_t)(void* self);
+extern fn_Modification_RefreshList_t fn_Modification_RefreshList;
+
+// IO::Modification::SaveList(this)
+// Hooked at 0x1800b05f0. Persists mod state.
+typedef void (*fn_Modification_SaveList_t)(void* self);
+extern fn_Modification_SaveList_t fn_Modification_SaveList;
+
+// ============================================================
+// UI::DialogInstance::OnElementEvent
+// ============================================================
+
+// DialogInstance::OnElementEvent(this, elementPtr, msg, id, p5, p6, p7, p8)
+// Base class event handler — exe dispatch at [0x140151a30]
+typedef void (*fn_DialogInstance_OnElementEvent_t)(void* self, void* elementPtr,
+    int msg, int id, uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8);
+extern fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent;
+
+// UI::DialogInstance::AddController(this, typeId, p3, p4, external, nameStr)
+// Adds a sub-controller to a dialog instance.
+typedef void (*fn_DialogInstance_AddController_t)(void* self, uint32_t typeId,
+    int p3, int p4, void* external, void* nameStr);
+extern fn_DialogInstance_AddController_t fn_DialogInstance_AddController;
+
+// ============================================================
+// ModDialog helper functions (exe-local)
+// ============================================================
+
+// FUN_14006eec0: Refresh mod list display (updates text, icons, thumbnails)
+typedef void (*fn_ModDialog_RefreshDisplay_t)(void* self);
+extern fn_ModDialog_RefreshDisplay_t fn_ModDialog_RefreshDisplay;
+
+// FUN_14006e930: Toggle mod enabled/disabled at index
+typedef void (*fn_ModDialog_ToggleMod_t)(void* self, int index);
+extern fn_ModDialog_ToggleMod_t fn_ModDialog_ToggleMod;
+
+// FUN_14006e660: Move mod to top of list
+typedef void (*fn_ModDialog_MoveToTop_t)(void* self, int index);
+extern fn_ModDialog_MoveToTop_t fn_ModDialog_MoveToTop;
+
+// FUN_14006e490: Show mod details dialog
+typedef void (*fn_ModDialog_ShowDetails_t)(void* self, int index);
+extern fn_ModDialog_ShowDetails_t fn_ModDialog_ShowDetails;
+
+// FUN_14006ea70: Apply mod changes (save, reload if needed)
+typedef void (*fn_ModDialog_Apply_t)(void* self);
+extern fn_ModDialog_Apply_t fn_ModDialog_Apply;
+
+// ============================================================
+// IO::Serializer — save/load serialization (shared globals)
+// ============================================================
+// Note: Many reimpl files define local statics with names like
+// fn_Serializer_Ctor. These shared globals use g_ prefix to avoid conflicts.
+
+typedef void (*g_fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+extern g_fn_Serializer_Ctor_t g_fn_Serializer_Ctor;
+
+typedef void (*g_fn_Serializer_Dtor_t)(void* self);
+extern g_fn_Serializer_Dtor_t g_fn_Serializer_Dtor;
+
+typedef void (*g_fn_Serialize_Int_t)(void* self, void* field, const char* name);
+extern g_fn_Serialize_Int_t g_fn_Serialize_Int;
+
+typedef int (*g_fn_Serializer_GetVersion_t)(void* self);
+extern g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion;
+
+// ============================================================
+// TownHallUI support functions
+// ============================================================
+
+// TabElement type ID: exref at 0x140151de0 (double-indirect)
+extern uint32_t* g_TypeId_TabElement;
+
+// TownHallUI::Serialize sub-functions (exe-local tab init)
+typedef void (*fn_TownHallUI_SubFunc_t)(void* self);
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGeneral;     // FUN_1400807f0
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProfessions; // FUN_140080160
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProduction;  // FUN_14007fc30
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory;   // FUN_14007f660
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGraph;       // FUN_14007f0a0
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture; // FUN_14007ebf0
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGraph;     // FUN_14007e5b0
+
+// ============================================================
+// SpriteCaptureUI support functions
+// ============================================================
+
+// EditElement type ID: exref at 0x140151b50 (double-indirect: ptr -> ptr -> typeId)
+extern uint32_t* g_TypeId_EditElement;
+
+// CaptureBoxElement type ID: DAT_1401c5638 (direct dword in .data)
+extern uint32_t* g_TypeId_CaptureBoxElement;
+
+// ============================================================
+// TradeUI support functions
+// ============================================================
+
+// FindComponent_Building — searches entity components for BuildingComponent (DAT_1401c4b80)
+// FUN_140015140(entity, retval) — same pattern as other FindComponent variants
+extern fn_FindComponent_t fn_FindComponent_Building;  // 0x140015140
+
+// UI::Element::SetNeedsSizeCalc(this) — marks element for layout recalculation
+// ?SetNeedsSizeCalc@Element@UI@@QEAAXXZ
+typedef void (*fn_Element_SetNeedsSizeCalc_t)(void* self);
+extern fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc;
+
+// TradeUI::Serialize (0x140084dd0) — complex setup: finds 15 elements, builds 4 table arrays,
+// enumerates ExternalFactory for resource types, populates trade tables with spinners
+typedef void (*fn_TradeUI_Serialize_t)(void* self);
+extern fn_TradeUI_Serialize_t fn_TradeUI_Serialize;
+
+// TradeUI::Startup (0x140082150) — complex: calculates sell/buy totals from order arrays,
+// checks storage capacity, shows/hides warning text, updates trade buttons
+typedef void (*fn_TradeUI_Startup_t)(void* self);
+extern fn_TradeUI_Startup_t fn_TradeUI_Startup;
+
+// TradeUI::OnCreate (0x1400827b0) — checks if order count changed, refreshes tables
+typedef void (*fn_TradeUI_OnCreate_t)(void* self);
+extern fn_TradeUI_OnCreate_t fn_TradeUI_OnCreate;
+
+// TradeUI::OnRemove (0x140081f20) — event dispatcher: handles button clicks, spinner changes,
+// combo selections based on event type and element ID ranges
+typedef void (*fn_TradeUI_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
+extern fn_TradeUI_OnRemove_t fn_TradeUI_OnRemove;
+
+// TradeUI::Update (0x1400868c0) — serializes/restores active tab and sort combo state
+typedef void (*fn_TradeUI_Update_t)(void* self, void* stream, void* p3, int64_t p4);
+extern fn_TradeUI_Update_t fn_TradeUI_Update;
+
+// ============================================================
+// NoiseUI helpers (Application-x64.exe)
+// ============================================================
+
+// NoiseUI ImageBuffer vtable (0x14015c8c0 in exe .rdata) — custom vtable
+// set on ImageBuffer after construction. Resolved at runtime.
+extern uintptr_t g_NoiseUI_ImageBufferVtable;
+
+// NoiseUI setup helper (0x140071890) — creates MaterialInstance + SpriteSheet
+// from ImageBuffer, finds "noiseImage" element, sets sprite.
+// Uses "UIMaterialNoBlend.rsc" hardcoded.
+// RCX=self(NoiseUI*), RDX=imageBuffer, R8=spriteSheetOut(longlong**), R9=materialOut(void**)
+typedef void (*fn_NoiseUI_SetupImage_t)(void* self, void* imageBuffer,
+                                        void** spriteSheetOut, void** materialOut);
+extern fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage;
+
+// NoiseUI noise generation (0x1400711D0) — reads slider values from UI elements,
+// generates Perlin noise, renders 256x256 texture to ImageBuffer at self+0x30.
+// RCX=self(NoiseUI*)
+typedef void (*fn_NoiseUI_GenerateNoise_t)(void* self);
+extern fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise;
 
 // ============================================================
 // Initialization

@@ -22,6 +22,7 @@
 //   Secondary vtable: +0x58-0x98 (Slot11-19) all thunks
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -60,7 +61,7 @@ typedef void (*fn_Slot8_t)(void* self, void* p2, int msg, int id,
 static void Reimpl_Slot8(void* self, void* p2, int msg, int id,
                          uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8) {
     g_lastHook = "ModDialog::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, p2, msg, id, p5, p6, p7, p8);
+    ModDialog_Slot8((ModDialog*)self, p2, msg, id, p5, p6, p7, p8);
 }
 
 // Slot10 (0x1400129D0) — Secondary dtor (ImageBuffer cleanup)

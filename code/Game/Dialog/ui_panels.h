@@ -186,6 +186,33 @@ void PageToggleUI_Slot7(PageToggleUI* self);
 void PageToggleUI_Slot9(PageToggleUI* self, void* param2, int param3, int param4);
 
 // ============================================================
+// ProfessionUI
+// ============================================================
+
+// Slot5 (vtable +0x28): Populates profession table with entries from game world,
+// sets up BST mapping, caches spinner/number elements.
+void ProfessionUI_Slot5(ProfessionUI* self);
+
+// Slot8 (vtable +0x40): Counts citizens per profession, updates spinner values
+// and worker-slot number displays.
+void ProfessionUI_Slot8(ProfessionUI* self);
+
+// Slot9 (vtable +0x48): Handles spinner changes (msg 0x12, reassign citizens)
+// and button clicks (msg 0x15, center camera on citizen).
+void ProfessionUI_Slot9(ProfessionUI* self, void* param2, int param3, int param4);
+
+// ============================================================
+// ProductionUI
+// ============================================================
+
+// Slot4 (vtable +0x20): Finds "production" container (fallback "production3"/"production4"),
+// caches "labelStorage"/"numberCount" element pairs for consumed and produced items.
+void ProductionUI_Slot4(ProductionUI* self);
+
+// Slot7 (vtable +0x38): Updates consumed and produced item displays from TrackerComponent.
+void ProductionUI_Slot7(ProductionUI* self);
+
+// ============================================================
 // TutorialUI
 // ============================================================
 
@@ -199,8 +226,24 @@ void TutorialUI_Startup(TutorialUI* self);
 // CitizenUI
 // ============================================================
 
+// Slot4 (vtable +0x20): Finds 15 named elements (imageMale/Female, textName,
+// numberAge, textProfession, textEducated*, textClothing, textTool, textNameIs,
+// textAction, groupHearts, groupStars, buttonProfession/Home/Follow).
+// Builds icon arrays for hearts/stars, sets button element IDs.
+void CitizenUI_Slot4(CitizenUI* self);
+
 // Slot6 (vtable +0x30): Closes sub-dialog if open, clears reference.
 void CitizenUI_Slot6(CitizenUI* self);
+
+// Slot7 (vtable +0x38): Updates citizen display — gender icons, name, age,
+// profession, education, clothing, tool, health hearts, happiness stars,
+// button states, action text.
+void CitizenUI_Slot7(CitizenUI* self);
+
+// Slot9 (vtable +0x48): Button dispatch — profession (0x227) navigates to
+// workplace, home (0x226) navigates to residence, follow (0x228) opens
+// follow dialog (delegated to original exe function).
+void CitizenUI_Slot9(CitizenUI* self, uint64_t param2, int param3, int param4);
 
 // ============================================================
 // ResidenceUI
@@ -251,6 +294,14 @@ void ControlUI_Slot9(ControlUI* self, uint64_t param2, int param3, int param4);
 // ============================================================
 // BuildUI
 // ============================================================
+
+// Slot4 (vtable +0x20): Setup — finds storage table, progress bar, button elements,
+// populates rows with resource sprites, names, and required amounts.
+void BuildUI_Slot4(BuildUI* self);
+
+// Slot7 (vtable +0x38): Updates build progress — queries StateMachine for delivered
+// material counts, calculates fill ratio, updates progress bar percentage.
+void BuildUI_Slot7(BuildUI* self);
 
 // Slot9 (vtable +0x48): On button click, toggles workplace enabled state.
 void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4);
@@ -324,3 +375,125 @@ void PastureUI_Slot11(PastureUI* self, int64_t param2);
 
 // Slot12 (vtable +0x60): Gets animal/resource type from PastureComponent.
 void* PastureUI_Slot12(PastureUI* self, void* param2);
+
+// ============================================================
+// StorageUI
+// ============================================================
+
+// Serialize (vtable +0x20): Finds storage table, counts resource types via
+// ExternalFactory, resizes table, clones template elements, caches row elements.
+void StorageUI_Serialize(StorageUI* self);
+
+// Startup (vtable +0x38): Queries StorageComponent entries, builds sorted
+// resource list, populates table rows with sprite/name/count, hides unused rows.
+void StorageUI_Startup(StorageUI* self);
+
+// ============================================================
+// ToolUI
+// ============================================================
+
+// Slot4 (vtable +0x20): Finds labelTitle/buttonClose/borderTitle elements,
+// gets BuildComponent or ComponentEntity data source, sets title text from
+// BuildRequirementComponent, configures sub-controllers from UIDescription.
+void ToolUI_Slot4(ToolUI* self);
+
+// Slot8 (vtable +0x40): Input handler — reads mouse position via KeyMap,
+// detects drag start (mouse movement threshold), drags dialog position,
+// updates entity position tracking BST.
+void ToolUI_Slot8(ToolUI* self);
+
+// Slot9 (vtable +0x48): Event dispatch — mouse click (msg=2) starts drag,
+// mouse up (msg=5) stops drag, focus events (msg=8-0xA) bring to front,
+// button click (msg=0x12, id=1) closes dialog and removes tracking entry.
+void ToolUI_Slot9(ToolUI* self, void* param2, int msg, int id,
+                  int mouseX, int mouseY);
+
+// ============================================================
+// MapUI
+// ============================================================
+
+// Slot4 (vtable +0x20): Creates MaterialInstance + SpriteSheet for terrain map
+// and overlay ImageBuffers, finds "imageMap"/"imageOverlay" elements, sets sprites.
+void MapUI_Slot4(MapUI* self);
+
+// Slot9 (vtable +0x48): Handles map click (msg==2, id==1000) — reads element
+// position/size, translates click to map coordinates, moves camera.
+void MapUI_Slot9(MapUI* self, void* param2, int msg, int id,
+                 int clickX, int clickY);
+
+// ============================================================
+// TradeUI
+// ============================================================
+
+// Draw (vtable +0x28): Marks sell/buy tables for layout recalc,
+// sets building dirty flag (+0x71) to 1.
+void TradeUI_Draw(TradeUI* self);
+
+// Slot6 (vtable +0x30): Clears building dirty flag (+0x71) to 0.
+void TradeUI_Slot6(TradeUI* self);
+
+// Serialize (vtable +0x20): Complex UI setup — finds 15+ elements,
+// builds table arrays, enumerates resource types. Delegated to exe.
+void TradeUI_Serialize(TradeUI* self);
+
+// Startup (vtable +0x38): Calculates trade values, checks storage,
+// shows/hides warning text, enables/disables buttons. Delegated to exe.
+void TradeUI_Startup(TradeUI* self);
+
+// OnCreate (vtable +0x40): Checks order count changes, refreshes tables.
+void TradeUI_OnCreate(TradeUI* self);
+
+// OnRemove (vtable +0x48): Event dispatcher — button clicks, spinner
+// changes, combo selections. Delegated to exe.
+void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId);
+
+// Update (vtable +0x50): Serializes/restores tab and sort combo state.
+void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4);
+
+// ============================================================
+// StatusBarUI
+// ============================================================
+
+// Draw (vtable +0x28): Finds all named UI elements (~35), builds icon arrays
+// for hearts/stars, sets element IDs on status icons, loads initial map name.
+void StatusBarUI_Draw(StatusBarUI* self);
+
+// Startup (vtable +0x38): Main HUD update — iterates citizens for status counts,
+// updates health/happiness icons, resource amounts, weather, temperature, date.
+void StatusBarUI_Startup(StatusBarUI* self);
+
+// ============================================================
+// NoiseUI
+// ============================================================
+
+// Slot4 (vtable +0x20): Allocates 256x256 ImageBuffer, fills black,
+// creates MaterialInstance/SpriteSheet, finds 5 slider elements
+// ("noisePersistance", "noiseOctaves", "noiseScale", "noiseCutOff",
+// "noiseGradient") and "buttonGenerate" button (ID 1000).
+void NoiseUI_Slot4(NoiseUI* self);
+
+// Slot9 (vtable +0x48): On button click (msg=0x12, id=1000),
+// regenerates Perlin noise texture using current slider values.
+void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
+                   int param5, int param6);
+
+// ============================================================
+// TownHallUI
+// ============================================================
+
+// Serialize (vtable +0x20): Finds "tabs" TabElement, stores at +0x30,
+// then calls 6 sub-functions to initialize each tab's UI elements.
+void TownHallUI_Serialize(TownHallUI* self);
+
+// Update (vtable +0x50): IO::Serializer save/load of tab index and
+// 5 combo box selections. On load, restores tab/combo states and
+// triggers graph update.
+void TownHallUI_Update(TownHallUI* self, void* stream);
+
+// ============================================================
+// SpriteCaptureUI
+// ============================================================
+
+// Serialize (vtable +0x20): Finds editCapture/buttonCapture/captureBox elements,
+// sets button ID 1000, sets default capture path, initializes capture state.
+void SpriteCaptureUI_Serialize(SpriteCaptureUI* self);

@@ -286,68 +286,77 @@ static_assert(sizeof(ModUploadDialog) == 0xB8, "ModUploadDialog size mismatch");
 // --- NewGameDialog (0xAE8) ---
 // Ctor inits: +0xB8..+0x110=0, Random@+0x118, +0xAE0=0
 // Largest dialog. Contains System::Random sub-object at +0x118.
+// Original source: C:\Projects\Buildy\code\Game\Dialog/NewGameDialog.h
 struct NewGameDialog {
     DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-    uint64_t dataD8;           // +0xD8: zeroed
-    uint64_t dataE0;           // +0xE0: zeroed
-    uint64_t dataE8;           // +0xE8: zeroed
-    uint64_t dataF0;           // +0xF0: zeroed
-    uint64_t dataF8;           // +0xF8: zeroed
-    uint64_t data100;          // +0x100: zeroed
-    uint64_t data108;          // +0x108: zeroed
-    uint64_t data110;          // +0x110: zeroed
-    uint8_t  random[0x9C0];   // +0x118: System::Random (initialized by Random::Random)
-                               //         extends to +0xAD8
-    uint64_t _pad_AD8;         // +0xAD8: gap
-    uint64_t dataAE0;          // +0xAE0: zeroed
+    void* comboTerrain;         // +0xB8: "comboTerrain" ComboElement
+    void* comboTerrainSize;     // +0xC0: "comboTerrainSize" ComboElement
+    void* comboClimate;         // +0xC8: "comboClimate" ComboElement (0xC8 = 200)
+    void* comboCondition;       // +0xD0: "comboCondition" ComboElement (map generator)
+    void* comboDisaster;        // +0xD8: "comboDisaster" ComboElement
+    void* editName;             // +0xE0: "editName" EditElement
+    void* editSeed;             // +0xE8: "editSeed" NumberEditElement
+    void* buttonOk;             // +0xF0: "buttonOk" ButtonElement
+    void* textDescription;      // +0xF8: "textDescription" TextElement
+    void* mapGeneratorList;     // +0x100: ExternalList* (DAT_1401c3de8+0x18)
+    void* climateGeneratorList; // +0x108: ExternalList* (DAT_1401c3de8+0x10)
+    void* terrainGeneratorList; // +0x110: ExternalList* (DAT_1401c3de8+0x20)
+    uint8_t  random[0x9C0];    // +0x118: System::Random sub-object
+                                //         extends to +0xAD8
+    uint64_t _pad_AD8;          // +0xAD8: gap
+    void*    worldSetup;        // +0xAE0: world setup ptr (used by StartGame)
 };
 static_assert(sizeof(NewGameDialog) == 0xAE8, "NewGameDialog size mismatch");
-static_assert(offsetof(NewGameDialog, dataB8) == 0xB8, "");
+static_assert(offsetof(NewGameDialog, comboTerrain) == 0xB8, "");
 static_assert(offsetof(NewGameDialog, random) == 0x118, "");
-static_assert(offsetof(NewGameDialog, dataAE0) == 0xAE0, "");
+static_assert(offsetof(NewGameDialog, worldSetup) == 0xAE0, "");
 
 // --- OptionsDialog (0x1C0) ---
 // Ctor inits: +0xB8..+0x188=0 (all zeroed), +0x1B0=0, +0x1B8=0
+// Original source: C:\Projects\Buildy\code\Game\Dialog/OptionsDialog.h
 struct OptionsDialog {
     DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0
-    uint64_t dataC8;           // +0xC8
-    uint64_t dataD0;           // +0xD0
-    uint64_t dataD8;           // +0xD8
-    uint64_t dataE0;           // +0xE0
-    uint64_t dataE8;           // +0xE8
-    uint64_t dataF0;           // +0xF0
-    uint64_t dataF8;           // +0xF8
-    uint64_t data100;          // +0x100
-    uint64_t data108;          // +0x108
-    uint64_t data110;          // +0x110
-    uint64_t data118;          // +0x118
-    uint64_t data120;          // +0x120
-    uint64_t data128;          // +0x128
-    uint64_t data130;          // +0x130
-    uint64_t data138;          // +0x138
-    uint64_t data140;          // +0x140
-    uint64_t data148;          // +0x148
-    uint64_t data150;          // +0x150
-    uint64_t data158;          // +0x158
-    uint64_t data160;          // +0x160
-    uint64_t data168;          // +0x168
-    uint64_t data170;          // +0x170
-    uint64_t data178;          // +0x178
-    uint64_t data180;          // +0x180
-    uint64_t data188;          // +0x188
-    uint8_t  _pad190[0x20];    // +0x190: gap (not init by ctor)
-    uint64_t data1B0;          // +0x1B0: zeroed
-    uint64_t data1B8;          // +0x1B8: zeroed
+    void* comboRenderer;       // +0xB8: "comboRenderer" ComboElement (ID 4)
+    void* comboAdapter;        // +0xC0: "comboAdapter" ComboElement (ID 5)
+    void* comboResolution;     // +0xC8: "comboResolution" ComboElement (ID 6)
+    void* comboRefresh;        // +0xD0: "comboRefresh" ComboElement (ID 7)
+    void* comboAntialias;      // +0xD8: "comboAntialias" ComboElement (ID 8)
+    void* checkFullscreen;     // +0xE0: "checkFullscreen" CheckboxElement
+    void* checkVSync;          // +0xE8: "checkVSync" CheckboxElement
+    void* comboFilter;         // +0xF0: "comboFilter" ComboElement (ID 9)
+    void* comboShadowRes;      // +0xF8: "comboShadowResolution" ComboElement
+    void* comboShadowQuality;  // +0x100: "comboShadowQuality" ComboElement
+    void* comboReflectionQuality; // +0x108: "comboReflectionQuality" ComboElement
+    void* inputList;           // +0x110: "inputList" Element (key bind list)
+    void* checkSoftwareMouse;  // +0x118: "checkSoftwareMouse" CheckboxElement
+    void* sliderUI;            // +0x120: "sliderUI" SliderElement (ID 0, audio UI volume)
+    void* sliderMusic;         // +0x128: "sliderMusic" SliderElement (ID 1)
+    void* sliderAmbient;       // +0x130: "sliderAmbient" SliderElement (ID 2)
+    void* sliderEffect;        // +0x138: "sliderEffect" SliderElement (ID 3)
+    void* sliderUIScale;       // +0x140: "sliderUIScale" SliderElement
+    void* comboAutosave;       // +0x148: "comboAutosave" ComboElement
+    void* checkStatusIcon;     // +0x150: "checkStatusIcon" CheckboxElement
+    void* sliderStatusIcon;    // +0x158: "sliderStatusIcon" SliderElement
+    void* sliderStatusIconScale; // +0x160: "sliderStatusIconScale" SliderElement
+    void* checkEdgeScroll;     // +0x168: "checkEdgeScroll" CheckboxElement
+    void* checkShowCelsius;    // +0x170: "checkShowCelsius" CheckboxElement
+    void* checkShowWeather;    // +0x178: "checkShowWeather" CheckboxElement
+    void* checkAutoslow;       // +0x180: "checkAutoslow" CheckboxElement
+    void* checkAutopause;      // +0x188: "checkAutopause" CheckboxElement
+    uint32_t savedRenderer;    // +0x190: saved renderer index (from VideoConfig+0x04)
+    uint32_t savedAdapter;     // +0x194: saved adapter index
+    uint32_t savedWidth;       // +0x198: saved resolution width
+    uint32_t savedHeight;      // +0x19C: saved resolution height
+    uint32_t savedRefreshNum;  // +0x1A0: saved refresh rate numerator
+    uint32_t savedRefreshDen;  // +0x1A4: saved refresh rate denominator
+    uint32_t savedAntialias;   // +0x1A8: saved antialias mode
+    uint32_t savedFilter;      // +0x1AC: saved texture filter mode
+    void* checkMouseClip;      // +0x1B0: "checkMouseClip" CheckboxElement
+    void* tabOptions;          // +0x1B8: "tabOptions" TabElement
 };
 static_assert(sizeof(OptionsDialog) == 0x1C0, "OptionsDialog size mismatch");
-static_assert(offsetof(OptionsDialog, dataB8) == 0xB8, "");
-static_assert(offsetof(OptionsDialog, data1B0) == 0x1B0, "");
+static_assert(offsetof(OptionsDialog, comboRenderer) == 0xB8, "");
+static_assert(offsetof(OptionsDialog, checkMouseClip) == 0x1B0, "");
 
 // --- OptionInputBindDialog (0xC8) ---
 // Extends MessageDialog (0xC0). Factory sets MessageDialog vtable then overrides.

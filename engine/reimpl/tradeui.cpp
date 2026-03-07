@@ -20,6 +20,7 @@
 //   +0x18: 0x14003a95a — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -83,46 +84,48 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize: REIMPLEMENTED (delegates to exe via function pointer)
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TradeUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    TradeUI_Serialize((TradeUI*)self);
 }
 
-typedef void (*fn_Draw_t)(void* self);
+// Draw: REIMPLEMENTED (full clean code)
 static void Reimpl_Draw(void* self) {
     g_lastHook = "TradeUI::Draw";
-    ((fn_Draw_t)g_hookDraw.trampoline)(self);
+    TradeUI_Draw((TradeUI*)self);
 }
 
-typedef void (*fn_Slot6_t)(void* self);
+// Slot6: REIMPLEMENTED (full clean code)
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "TradeUI::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    TradeUI_Slot6((TradeUI*)self);
 }
 
-typedef void (*fn_Startup_t)(void* self);
+// Startup: REIMPLEMENTED (delegates to exe via function pointer)
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TradeUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    TradeUI_Startup((TradeUI*)self);
 }
 
-typedef void (*fn_OnCreate_t)(void* self);
+// OnCreate: REIMPLEMENTED (delegates to exe via function pointer)
 static void Reimpl_OnCreate(void* self) {
     g_lastHook = "TradeUI::OnCreate";
-    ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
+    TradeUI_OnCreate((TradeUI*)self);
 }
 
+// OnRemove: REIMPLEMENTED (delegates to exe via function pointer)
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
     g_lastHook = "TradeUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
+    TradeUI_OnRemove((TradeUI*)self, param2, eventType, eventId);
 }
 
+// Update: REIMPLEMENTED (delegates to exe via function pointer)
 typedef void (*fn_Update_t)(void* self, void* stream, void* p3, int64_t p4);
 static void Reimpl_Update(void* self, void* stream, void* p3, int64_t p4) {
     g_lastHook = "TradeUI::Update";
-    ((fn_Update_t)g_hookUpdate.trampoline)(self, stream, p3, p4);
+    TradeUI_Update((TradeUI*)self, stream, p3, (int64_t)p4);
 }
 
 // ============================================================

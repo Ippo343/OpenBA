@@ -52,11 +52,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot4 (0x14006D700) — Setup: populates mod name, author, description, image
+// Slot4 (0x14006D700) — Setup: populates mod name, author, description, image — REIMPLEMENTED
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ModDetailsDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ModDetailsDialog_Slot4((ModDetailsDialog*)self);
 }
 
 // Slot8 (0x14006D6A0) — OnCommand: close/upload/delete — REIMPLEMENTED

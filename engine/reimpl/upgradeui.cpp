@@ -48,16 +48,18 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Serialize — REIMPLEMENTED (finds button, creates sprite from BuildRequirementComponent)
+// Serialize — passthrough (TODO: implement in code/Game/Dialog/upgradeui.cpp)
+typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "UpgradeUI::Serialize";
-    UpgradeUI_Serialize((UpgradeUI*)self);
+    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
-// OnRemove — REIMPLEMENTED (button click starts upgrade)
+// OnRemove — passthrough (TODO: implement in code/Game/Dialog/upgradeui.cpp)
+typedef void (*fn_OnRemove_t)(void* self, void* p2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* p2, int eventType, int eventId) {
     g_lastHook = "UpgradeUI::OnRemove";
-    UpgradeUI_OnRemove((UpgradeUI*)self, p2, eventType, eventId);
+    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, p2, eventType, eventId);
 }
 
 // ============================================================

@@ -20,6 +20,7 @@
 //   +0x50: 0x14003a978 — thunk (6b JMP)
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -64,13 +65,15 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 typedef void (*fn_Draw_t)(void* self);
 static void Reimpl_Draw(void* self) {
     g_lastHook = "StatusBarUI::Draw";
-    ((fn_Draw_t)g_hookDraw.trampoline)(self);
+    // REIMPLEMENTED — call clean code
+    StatusBarUI_Draw((StatusBarUI*)self);
 }
 
 typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "StatusBarUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    // REIMPLEMENTED — call clean code
+    StatusBarUI_Startup((StatusBarUI*)self);
 }
 
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
