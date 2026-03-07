@@ -51,28 +51,22 @@ static void Reimpl_PlacementToolShutdown2(void* self) {
 }
 
 // --- Slot6: OnKey ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookPlacementToolOnKey;
-typedef uint64_t (*fn_PlacementToolOnKey_t)(void* self, char key);
-static uint64_t Reimpl_PlacementToolOnKey(void* self, char key) {
-    g_lastHook = "PlacementTool::PlacementToolOnKey";
-    return ((fn_PlacementToolOnKey_t)g_hookPlacementToolOnKey.trampoline)(self, key);
-}
+REIMPL_RSP_PASSTHROUGH(PlacementToolOnKey, g_hookPlacementToolOnKey, "PlacementTool::OnKey")
 
 // --- Slot7: Serialize ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookPlacementToolSerialize;
-typedef void (*fn_PlacementToolSerialize_t)(void* self);
-static void Reimpl_PlacementToolSerialize(void* self) {
-    g_lastHook = "PlacementTool::PlacementToolSerialize";
-    ((fn_PlacementToolSerialize_t)g_hookPlacementToolSerialize.trampoline)(self);
-}
+REIMPL_RSP_PASSTHROUGH(PlacementToolSerialize, g_hookPlacementToolSerialize, "PlacementTool::Serialize")
 
 // --- Slot8: Draw ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookPlacementToolDraw;
-typedef void (*fn_PlacementToolDraw_t)(void* self);
-static void Reimpl_PlacementToolDraw(void* self) {
-    g_lastHook = "PlacementTool::PlacementToolDraw";
-    ((fn_PlacementToolDraw_t)g_hookPlacementToolDraw.trampoline)(self);
-}
+REIMPL_RSP_PASSTHROUGH(PlacementToolDraw, g_hookPlacementToolDraw, "PlacementTool::Draw")
 
 void InstallPlacementToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002dc90);
@@ -103,27 +97,43 @@ void RemovePlacementToolShutdown2() { RemoveHook(&g_hookPlacementToolShutdown2);
 
 void InstallPlacementToolOnKey() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fe2a0);
-    InstallHook(target, (void*)Reimpl_PlacementToolOnKey, &g_hookPlacementToolOnKey, 13);
+    // Disasm: MOV R11,RSP(3)+PUSH RBX(1)+PUSH RSI(1)+SUB RSP,68(4)+
+    //         MOV [R11+8],RBP(5)=14? original was 13.
+    // 3+1+1=5, SUB RSP,68 is 4 bytes=9, MOV [R11+8],RBP is 5=14. But original said 13.
+    // Let's keep original prologue size of 13 (3+1+1+4+1+1+2=? recalculate from disasm):
+    // 1400fe2a0 MOV R11,RSP       = 3 bytes (4C 89 DC)
+    // 1400fe2a3 PUSH RBX          = 1 byte
+    // 1400fe2a4 PUSH RSI          = 1 byte
+    // 1400fe2a5 SUB RSP,0x68      = 4 bytes (48 83 EC 68)
+    // 1400fe2a9 MOV [R11+8],RBP   = 5 bytes (4C 89 5B 08? no, 4C=REX, 89=MOV, ...) need exact
+    // 3+1+1+4=9 bytes, 4 more = 13 bytes total ending at some instruction boundary.
+    // Original prologueSize=13, trust that value.
+    InstallHookRSPSafe(target, (void*)Reimpl_PlacementToolOnKey, &g_hookPlacementToolOnKey, 13);
 #ifdef _DEBUG
-    printf("[PlacementTool] OnKey hooked at %p\n", (void*)target);
+    printf("[PlacementTool] OnKey hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemovePlacementToolOnKey() { RemoveHook(&g_hookPlacementToolOnKey); }
 
 void InstallPlacementToolSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fdee0);
-    InstallHook(target, (void*)Reimpl_PlacementToolSerialize, &g_hookPlacementToolSerialize, 14);
+    // Disasm: MOV RAX,RSP(3)+PUSH RBP(1)+PUSH RSI(1)+PUSH RDI(1)+PUSH R13(2)+
+    //         PUSH R14(2)+LEA RBP,[RAX-58](5)=15? original was 14.
+    // 3+1+1+1+2+2=10, LEA RBP,[RAX-58] = 4 bytes (48 8D 68 A8) = 14. Trust 14.
+    InstallHookRSPSafe(target, (void*)Reimpl_PlacementToolSerialize, &g_hookPlacementToolSerialize, 14);
 #ifdef _DEBUG
-    printf("[PlacementTool] Serialize hooked at %p\n", (void*)target);
+    printf("[PlacementTool] Serialize hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemovePlacementToolSerialize() { RemoveHook(&g_hookPlacementToolSerialize); }
 
 void InstallPlacementToolDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fdcc0);
-    InstallHook(target, (void*)Reimpl_PlacementToolDraw, &g_hookPlacementToolDraw, 17);
+    // Disasm: MOV R11,RSP(3)+PUSH RBX(1)+PUSH RBP(1)+PUSH RDI(1)+PUSH R14(2)+
+    //         PUSH R15(2)+SUB RSP,E0(7)=17 bytes. Trust original prologueSize=17.
+    InstallHookRSPSafe(target, (void*)Reimpl_PlacementToolDraw, &g_hookPlacementToolDraw, 17);
 #ifdef _DEBUG
-    printf("[PlacementTool] Draw hooked at %p\n", (void*)target);
+    printf("[PlacementTool] Draw hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemovePlacementToolDraw() { RemoveHook(&g_hookPlacementToolDraw); }

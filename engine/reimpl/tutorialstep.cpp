@@ -18,8 +18,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialStep.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookTutorialStepDtor;
@@ -73,18 +75,34 @@ void InstallTutorialStepCleanup() {
 void RemoveTutorialStepCleanup() { RemoveHook(&g_hookTutorialStepCleanup); }
 
 // --- Slot8: Ctor/Init ---
-static HookInfo g_hookTutorialStepInit;
+// RE-ENABLED: near Jcc wrapper at 0x140028c90. Use vtable patch on slot 8.
+// Vtable slot 8 (+0x40) of TutorialStep — the Init/Ctor wrapper.
+static void* g_savedTutorialStepInit = nullptr;
 typedef void* (*fn_Init_t)(void* self);
 static void* Reimpl_Init(void* self) {
     g_lastHook = "TutorialStep::Init";
-    return ((fn_Init_t)g_hookTutorialStepInit.trampoline)(self);
+    return ((fn_Init_t)g_savedTutorialStepInit)(self);
+}
+
+static void PatchVtableSlot_Step(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialStepAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialStepInit() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140028c90);
-    InstallHook(target, (void*)Reimpl_Init, &g_hookTutorialStepInit, 12);
+    PatchVtableSlot_Step(8, (void*)Reimpl_Init, &g_savedTutorialStepInit);
 #ifdef _DEBUG
-    printf("[TutorialStep] Init hooked at %p\n", (void*)target);
+    printf("[TutorialStep] Init vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialStepInit() { RemoveHook(&g_hookTutorialStepInit); }
+void RemoveTutorialStepInit() {
+    if (g_savedTutorialStepInit) {
+        PatchVtableSlot_Step(8, g_savedTutorialStepInit, nullptr);
+        g_savedTutorialStepInit = nullptr;
+    }
+}

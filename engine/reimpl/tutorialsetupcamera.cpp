@@ -21,8 +21,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialSetups.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookDtor;
@@ -76,21 +78,37 @@ void InstallTutorialSetupCameraCleanup() {
 void RemoveTutorialSetupCameraCleanup() { RemoveHook(&g_hookCleanup); }
 
 // --- Slot8: Slot8 ---
-static HookInfo g_hookSlot8;
+// RE-ENABLED: RIP-relative MOV at byte 4 in the 18-byte prologue. Use vtable patch.
+// TutorialSetupCamera vtable slot 8 (+0x40): sets camera position in game state.
+static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "TutorialSetupCamera::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    ((fn_Slot8_t)g_savedSlot8)(self);
+}
+
+static void PatchVtableSlot_Camera(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialSetupCameraAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialSetupCameraSlot8() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e20d0);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 18);
+    PatchVtableSlot_Camera(8, (void*)Reimpl_Slot8, &g_savedSlot8);
 #ifdef _DEBUG
-    printf("[TutorialSetupCamera] Slot8 hooked at %p\n", (void*)target);
+    printf("[TutorialSetupCamera] Slot8 vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialSetupCameraSlot8() { RemoveHook(&g_hookSlot8); }
+void RemoveTutorialSetupCameraSlot8() {
+    if (g_savedSlot8) {
+        PatchVtableSlot_Camera(8, g_savedSlot8, nullptr);
+        g_savedSlot8 = nullptr;
+    }
+}
 
 // --- Slot11: Ctor/Init ---
 static HookInfo g_hookCtor;

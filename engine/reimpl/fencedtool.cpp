@@ -61,20 +61,16 @@ static void Reimpl_FencedToolOnKey(void* self) {
 }
 
 // --- Slot7: Serialize ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookFencedToolSerialize;
-typedef void (*fn_FencedToolSerialize_t)(void* self);
-static void Reimpl_FencedToolSerialize(void* self) {
-    g_lastHook = "FencedTool::FencedToolSerialize";
-    ((fn_FencedToolSerialize_t)g_hookFencedToolSerialize.trampoline)(self);
-}
+REIMPL_RSP_PASSTHROUGH(FencedToolSerialize, g_hookFencedToolSerialize, "FencedTool::Serialize")
 
 // --- Slot8: Draw ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookFencedToolDraw;
-typedef void (*fn_FencedToolDraw_t)(void* self, void* context, char param);
-static void Reimpl_FencedToolDraw(void* self, void* context, char param) {
-    g_lastHook = "FencedTool::FencedToolDraw";
-    ((fn_FencedToolDraw_t)g_hookFencedToolDraw.trampoline)(self, context, param);
-}
+REIMPL_RSP_PASSTHROUGH(FencedToolDraw, g_hookFencedToolDraw, "FencedTool::Draw")
 
 // --- Slot9: Shutdown ---
 static HookInfo g_hookFencedToolShutdown;
@@ -85,20 +81,16 @@ static void Reimpl_FencedToolShutdown(void* self) {
 }
 
 // --- Slot13: CalcPath ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookFencedToolCalcPath;
-typedef uint64_t (*fn_FencedToolCalcPath_t)(void* self, int x, int z);
-static uint64_t Reimpl_FencedToolCalcPath(void* self, int x, int z) {
-    g_lastHook = "FencedTool::FencedToolCalcPath";
-    return ((fn_FencedToolCalcPath_t)g_hookFencedToolCalcPath.trampoline)(self, x, z);
-}
+REIMPL_RSP_PASSTHROUGH(FencedToolCalcPath, g_hookFencedToolCalcPath, "FencedTool::CalcPath")
 
 // --- Slot14: CalcCost ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookFencedToolCalcCost;
-typedef uint64_t (*fn_FencedToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d);
-static uint64_t Reimpl_FencedToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d) {
-    g_lastHook = "FencedTool::FencedToolCalcCost";
-    return ((fn_FencedToolCalcCost_t)g_hookFencedToolCalcCost.trampoline)(self, x, z, a, b, c, d);
-}
+REIMPL_RSP_PASSTHROUGH(FencedToolCalcCost, g_hookFencedToolCalcCost, "FencedTool::CalcCost")
 
 void InstallFencedToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140026930);
@@ -138,18 +130,20 @@ void RemoveFencedToolOnKey() { RemoveHook(&g_hookFencedToolOnKey); }
 
 void InstallFencedToolSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dcad0);
-    InstallHook(target, (void*)Reimpl_FencedToolSerialize, &g_hookFencedToolSerialize, 19);
+    // Disasm: MOV R11,RSP(3)+PUSH RBX(1)+SUB RSP,80(7)+MOV [R11-38],0(8)=19 bytes
+    InstallHookRSPSafe(target, (void*)Reimpl_FencedToolSerialize, &g_hookFencedToolSerialize, 19);
 #ifdef _DEBUG
-    printf("[FencedTool] Serialize hooked at %p\n", (void*)target);
+    printf("[FencedTool] Serialize hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveFencedToolSerialize() { RemoveHook(&g_hookFencedToolSerialize); }
 
 void InstallFencedToolDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dc440);
-    InstallHook(target, (void*)Reimpl_FencedToolDraw, &g_hookFencedToolDraw, 15);
+    // Disasm: MOV RAX,RSP(3)+MOV [RAX+18],R8B(4)+MOV [RAX+10],RDX(4)+MOV [RAX+8],RCX(4)=15
+    InstallHookRSPSafe(target, (void*)Reimpl_FencedToolDraw, &g_hookFencedToolDraw, 15);
 #ifdef _DEBUG
-    printf("[FencedTool] Draw hooked at %p\n", (void*)target);
+    printf("[FencedTool] Draw hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveFencedToolDraw() { RemoveHook(&g_hookFencedToolDraw); }
@@ -165,18 +159,25 @@ void RemoveFencedToolShutdown() { RemoveHook(&g_hookFencedToolShutdown); }
 
 void InstallFencedToolCalcPath() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dae00);
-    InstallHook(target, (void*)Reimpl_FencedToolCalcPath, &g_hookFencedToolCalcPath, 12);
+    // Disasm: MOV RAX,RSP(3)+PUSH RBP(1)+PUSH RSI(1)+PUSH RDI(1)+PUSH R12(2)+
+    //         PUSH R13(2)+PUSH R14(2)+PUSH R15(2)=14? Use 12 (next boundary after hook).
+    // Original prologueSize was 12. Disasm: first 4 instrs: 3+1+1+1=6, need >=12.
+    // PUSH R12(2)+PUSH R13(2)+PUSH R14(2)+PUSH R15(2)=14 total from start. Use 14.
+    InstallHookRSPSafe(target, (void*)Reimpl_FencedToolCalcPath, &g_hookFencedToolCalcPath, 14);
 #ifdef _DEBUG
-    printf("[FencedTool] CalcPath hooked at %p\n", (void*)target);
+    printf("[FencedTool] CalcPath hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveFencedToolCalcPath() { RemoveHook(&g_hookFencedToolCalcPath); }
 
 void InstallFencedToolCalcCost() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400db490);
-    InstallHook(target, (void*)Reimpl_FencedToolCalcCost, &g_hookFencedToolCalcCost, 13);
+    // Disasm: MOV RAX,RSP(3)+MOV [RAX+8],RCX(4)+PUSH RBP(1)+PUSH RBX(1)+
+    //         PUSH RSI(1)+PUSH RDI(1)+PUSH R12(2)+PUSH R13(2)=15? original said 13.
+    // 3+4+1+1+1+1=11 so need 2 more: PUSH R12(2)=13. Use 13.
+    InstallHookRSPSafe(target, (void*)Reimpl_FencedToolCalcCost, &g_hookFencedToolCalcCost, 13);
 #ifdef _DEBUG
-    printf("[FencedTool] CalcCost hooked at %p\n", (void*)target);
+    printf("[FencedTool] CalcCost hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveFencedToolCalcCost() { RemoveHook(&g_hookFencedToolCalcCost); }

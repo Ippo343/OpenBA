@@ -45,28 +45,22 @@ static void Reimpl_DragPlacementToolStartup(void* self) {
 }
 
 // --- Slot8: Draw ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookDragPlacementToolDraw;
-typedef void (*fn_DragPlacementToolDraw_t)(void* self, void* context, char param);
-static void Reimpl_DragPlacementToolDraw(void* self, void* context, char param) {
-    g_lastHook = "DragPlacementTool::DragPlacementToolDraw";
-    ((fn_DragPlacementToolDraw_t)g_hookDragPlacementToolDraw.trampoline)(self, context, param);
-}
+REIMPL_RSP_PASSTHROUGH(DragPlacementToolDraw, g_hookDragPlacementToolDraw, "DragPlacementTool::Draw")
 
 // --- Slot13: CalcPath ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookDragPlacementToolCalcPath;
-typedef uint64_t (*fn_DragPlacementToolCalcPath_t)(void* self, int x, int z);
-static uint64_t Reimpl_DragPlacementToolCalcPath(void* self, int x, int z) {
-    g_lastHook = "DragPlacementTool::DragPlacementToolCalcPath";
-    return ((fn_DragPlacementToolCalcPath_t)g_hookDragPlacementToolCalcPath.trampoline)(self, x, z);
-}
+REIMPL_RSP_PASSTHROUGH(DragPlacementToolCalcPath, g_hookDragPlacementToolCalcPath, "DragPlacementTool::CalcPath")
 
 // --- Slot14: CalcCost ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
 static HookInfo g_hookDragPlacementToolCalcCost;
-typedef uint64_t (*fn_DragPlacementToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, uint32_t* d);
-static uint64_t Reimpl_DragPlacementToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, uint32_t* d) {
-    g_lastHook = "DragPlacementTool::DragPlacementToolCalcCost";
-    return ((fn_DragPlacementToolCalcCost_t)g_hookDragPlacementToolCalcCost.trampoline)(self, x, z, a, b, c, d);
-}
+REIMPL_RSP_PASSTHROUGH(DragPlacementToolCalcCost, g_hookDragPlacementToolCalcCost, "DragPlacementTool::CalcCost")
 
 void InstallDragPlacementToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002d900);
@@ -88,27 +82,32 @@ void RemoveDragPlacementToolStartup() { RemoveHook(&g_hookDragPlacementToolStart
 
 void InstallDragPlacementToolDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fbe40);
-    InstallHook(target, (void*)Reimpl_DragPlacementToolDraw, &g_hookDragPlacementToolDraw, 15);
+    // Disasm: MOV RAX,RSP(3)+MOV [RAX+18],R8B(4)+MOV [RAX+10],RDX(4)+MOV [RAX+8],RCX(4)=15
+    InstallHookRSPSafe(target, (void*)Reimpl_DragPlacementToolDraw, &g_hookDragPlacementToolDraw, 15);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] Draw hooked at %p\n", (void*)target);
+    printf("[DragPlacementTool] Draw hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolDraw() { RemoveHook(&g_hookDragPlacementToolDraw); }
 
 void InstallDragPlacementToolCalcPath() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fb900);
-    InstallHook(target, (void*)Reimpl_DragPlacementToolCalcPath, &g_hookDragPlacementToolCalcPath, 19);
+    // Disasm: MOV R11,RSP(3)+PUSH RSI(1)+PUSH RDI(1)+PUSH R14(2)+SUB RSP,70(4)+
+    //         MOV [R11-30],-2(8)=19 bytes
+    InstallHookRSPSafe(target, (void*)Reimpl_DragPlacementToolCalcPath, &g_hookDragPlacementToolCalcPath, 19);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] CalcPath hooked at %p\n", (void*)target);
+    printf("[DragPlacementTool] CalcPath hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolCalcPath() { RemoveHook(&g_hookDragPlacementToolCalcPath); }
 
 void InstallDragPlacementToolCalcCost() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fbae0);
-    InstallHook(target, (void*)Reimpl_DragPlacementToolCalcCost, &g_hookDragPlacementToolCalcCost, 13);
+    // Disasm: MOV RAX,RSP(3)+MOV [RAX+8],RCX(4)+PUSH RBX(1)+PUSH RBP(1)+
+    //         PUSH RSI(1)+PUSH RDI(1)+PUSH R12(2)=13 bytes
+    InstallHookRSPSafe(target, (void*)Reimpl_DragPlacementToolCalcCost, &g_hookDragPlacementToolCalcCost, 13);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] CalcCost hooked at %p\n", (void*)target);
+    printf("[DragPlacementTool] CalcCost hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolCalcCost() { RemoveHook(&g_hookDragPlacementToolCalcCost); }

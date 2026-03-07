@@ -19,8 +19,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialImages.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookDtor;
@@ -74,21 +76,36 @@ void InstallTutorialImageHotKeyCleanup() {
 void RemoveTutorialImageHotKeyCleanup() { RemoveHook(&g_hookCleanup); }
 
 // --- Slot8: Ctor/Init ---
-static HookInfo g_hookCtor;
+// RE-ENABLED: near Jcc wrapper at 0x140027d40. Use vtable patch on slot 8.
+static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialImageHotKey::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    return ((fn_Ctor_t)g_savedCtor)(self);
+}
+
+static void PatchVtableSlot_HotKey(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialImageHotKeyAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialImageHotKeyCtor() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140027d40);
-    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 12);
+    PatchVtableSlot_HotKey(8, (void*)Reimpl_Ctor, &g_savedCtor);
 #ifdef _DEBUG
-    printf("[TutorialImageHotKey] Ctor hooked at %p\n", (void*)target);
+    printf("[TutorialImageHotKey] Ctor vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialImageHotKeyCtor() { RemoveHook(&g_hookCtor); }
+void RemoveTutorialImageHotKeyCtor() {
+    if (g_savedCtor) {
+        PatchVtableSlot_HotKey(8, g_savedCtor, nullptr);
+        g_savedCtor = nullptr;
+    }
+}
 
 // --- Slot9: Slot9 ---
 static HookInfo g_hookSlot9;

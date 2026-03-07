@@ -19,8 +19,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialGoals.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookDtor;
@@ -74,35 +76,57 @@ void InstallTutorialGoalCountCleanup() {
 void RemoveTutorialGoalCountCleanup() { RemoveHook(&g_hookCleanup); }
 
 // --- Slot8: Slot8 ---
-static HookInfo g_hookSlot8;
+// RE-ENABLED: MOV R11,RSP at byte 0 breaks trampoline. Use vtable patch instead.
+// Vtable slot 8 (+0x40) of TutorialGoalCount — stores g_savedSlot8 for removal.
+static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self, void* param1, void* param2);
 static void Reimpl_Slot8(void* self, void* param1, void* param2) {
     g_lastHook = "TutorialGoalCount::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, param1, param2);
+    ((fn_Slot8_t)g_savedSlot8)(self, param1, param2);
+}
+
+static void PatchVtableSlot_GoalCount(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialGoalCountAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialGoalCountSlot8() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400df290);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 14);
+    PatchVtableSlot_GoalCount(8, (void*)Reimpl_Slot8, &g_savedSlot8);
 #ifdef _DEBUG
-    printf("[TutorialGoalCount] Slot8 hooked at %p\n", (void*)target);
+    printf("[TutorialGoalCount] Slot8 vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialGoalCountSlot8() { RemoveHook(&g_hookSlot8); }
+void RemoveTutorialGoalCountSlot8() {
+    if (g_savedSlot8) {
+        PatchVtableSlot_GoalCount(8, g_savedSlot8, nullptr);
+        g_savedSlot8 = nullptr;
+    }
+}
 
 // --- Slot9: Ctor/Init ---
-static HookInfo g_hookCtor;
+// RE-ENABLED: near Jcc wrapper at 0x1400277f0. Hook the real Ctor body instead.
+// Vtable slot 9 (+0x48) — stores g_savedCtor for removal.
+static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialGoalCount::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    return ((fn_Ctor_t)g_savedCtor)(self);
 }
 
 void InstallTutorialGoalCountCtor() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400277f0);
-    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 12);
+    PatchVtableSlot_GoalCount(9, (void*)Reimpl_Ctor, &g_savedCtor);
 #ifdef _DEBUG
-    printf("[TutorialGoalCount] Ctor hooked at %p\n", (void*)target);
+    printf("[TutorialGoalCount] Ctor vtable-patched (slot 9)\n");
 #endif
 }
-void RemoveTutorialGoalCountCtor() { RemoveHook(&g_hookCtor); }
+void RemoveTutorialGoalCountCtor() {
+    if (g_savedCtor) {
+        PatchVtableSlot_GoalCount(9, g_savedCtor, nullptr);
+        g_savedCtor = nullptr;
+    }
+}

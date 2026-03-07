@@ -65,7 +65,7 @@ static_assert(sizeof(TutorialImageInputKey) == 0x38, "TutorialImageInputKey size
 namespace TutorialImageToolbarIconAddr {
     constexpr uintptr_t Ctor    = 0x1400e0c30;
     constexpr uintptr_t Factory = 0x140028020;
-    constexpr uintptr_t Vtable  = 0x140160bb0; // concrete vtable (set after base ctor)
+    constexpr uintptr_t Vtable  = 0x140160b90; // concrete vtable at 0x140160b90 (slot8=0x140028060, slot9=0x1400e0940)
 }
 
 // TutorialImageToolbarIcon has same size as TutorialImageHotKey (0x48)

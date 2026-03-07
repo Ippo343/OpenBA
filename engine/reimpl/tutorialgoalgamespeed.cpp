@@ -19,8 +19,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialGoals.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookDtor;
@@ -74,21 +76,37 @@ void InstallTutorialGoalGameSpeedCleanup() {
 void RemoveTutorialGoalGameSpeedCleanup() { RemoveHook(&g_hookCleanup); }
 
 // --- Slot8: Slot8 ---
-static HookInfo g_hookSlot8;
+// RE-ENABLED: RIP-relative at byte 0 breaks trampoline. Use vtable patch instead.
+// Vtable slot 8 (+0x40) of TutorialGoalGameSpeed.
+static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "TutorialGoalGameSpeed::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    ((fn_Slot8_t)g_savedSlot8)(self);
+}
+
+static void PatchVtableSlot_GameSpeed(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialGoalGameSpeedAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialGoalGameSpeedSlot8() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400df150);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 17);
+    PatchVtableSlot_GameSpeed(8, (void*)Reimpl_Slot8, &g_savedSlot8);
 #ifdef _DEBUG
-    printf("[TutorialGoalGameSpeed] Slot8 hooked at %p\n", (void*)target);
+    printf("[TutorialGoalGameSpeed] Slot8 vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialGoalGameSpeedSlot8() { RemoveHook(&g_hookSlot8); }
+void RemoveTutorialGoalGameSpeedSlot8() {
+    if (g_savedSlot8) {
+        PatchVtableSlot_GameSpeed(8, g_savedSlot8, nullptr);
+        g_savedSlot8 = nullptr;
+    }
+}
 
 // --- Slot9: Ctor/Init ---
 static HookInfo g_hookCtor;

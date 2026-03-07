@@ -21,8 +21,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialSetups.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookDtor;
@@ -76,21 +78,37 @@ void InstallTutorialSetupGameSpeedCleanup() {
 void RemoveTutorialSetupGameSpeedCleanup() { RemoveHook(&g_hookCleanup); }
 
 // --- Slot8: Slot8 ---
-static HookInfo g_hookSlot8;
+// RE-ENABLED: RIP-relative MOV at byte 0 in the 17-byte prologue. Use vtable patch.
+// Sets game speed in the update controller (g_scenario+0x120) from self->speed (+0x20).
+static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "TutorialSetupGameSpeed::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    ((fn_Slot8_t)g_savedSlot8)(self);
+}
+
+static void PatchVtableSlot_GSSpeed(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialSetupGameSpeedAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialSetupGameSpeedSlot8() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e2d60);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 17);
+    PatchVtableSlot_GSSpeed(8, (void*)Reimpl_Slot8, &g_savedSlot8);
 #ifdef _DEBUG
-    printf("[TutorialSetupGameSpeed] Slot8 hooked at %p\n", (void*)target);
+    printf("[TutorialSetupGameSpeed] Slot8 vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialSetupGameSpeedSlot8() { RemoveHook(&g_hookSlot8); }
+void RemoveTutorialSetupGameSpeedSlot8() {
+    if (g_savedSlot8) {
+        PatchVtableSlot_GSSpeed(8, g_savedSlot8, nullptr);
+        g_savedSlot8 = nullptr;
+    }
+}
 
 // --- Slot11: Ctor/Init ---
 static HookInfo g_hookCtor;

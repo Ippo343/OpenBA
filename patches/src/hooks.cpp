@@ -121,6 +121,62 @@ bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t 
     return true;
 }
 
+// ============================================================
+// RSP-safe hook installer (for MOV RAX/R11,RSP prologues)
+// ============================================================
+//
+// Builds a trampoline that is safe to reach by JMP (not CALL):
+//   - No ADD/SUB RSP adjustment needed: the JMP-based detour ensures RSP is
+//     exactly what the original caller had when the prologue runs.
+//   - Trampoline = original_prologue_bytes + JMP back to (target + prologueSize)
+//   - Same layout as regular InstallHook trampoline, but detourFunc must JMP
+//     (not CALL) into the trampoline.
+//
+// The hook patch at the target is identical (MOV RAX,detour; JMP RAX).
+// The difference is in how detourFunc is implemented: it must be a naked
+// function that JMPs to trampoline, never CALLs it.
+
+bool InstallHookRSPSafe(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t prologueSize) {
+    const size_t JUMP_SIZE = 12;
+
+    if (prologueSize < JUMP_SIZE) prologueSize = JUMP_SIZE;
+    if (prologueSize > sizeof(info->original)) return false;
+
+    memcpy(info->original, (void*)targetAddr, prologueSize);
+    info->target = (void*)targetAddr;
+    info->patchSize = prologueSize;
+
+    // Trampoline: original bytes + JMP back.
+    // Identical layout to InstallHook — the difference is that detourFunc
+    // must JMP here rather than CALL here, so RSP is caller-level when
+    // the MOV RAX/R11,RSP instruction executes.
+    info->trampoline = VirtualAlloc(NULL, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!info->trampoline) return false;
+
+    uint8_t* t = (uint8_t*)info->trampoline;
+    memcpy(t, info->original, prologueSize);
+
+    // Append: MOV R10, imm64 + JMP R10  (back to original body)
+    uint8_t* jmpBack = t + prologueSize;
+    jmpBack[0] = 0x49; jmpBack[1] = 0xBA; // mov r10, imm64
+    *(uintptr_t*)(jmpBack + 2) = targetAddr + prologueSize;
+    jmpBack[10] = 0x41; jmpBack[11] = 0xFF; jmpBack[12] = 0xE2; // jmp r10
+
+    // Patch target: MOV RAX, detour; JMP RAX
+    DWORD oldProtect;
+    VirtualProtect((void*)targetAddr, prologueSize, PAGE_EXECUTE_READWRITE, &oldProtect);
+
+    uint8_t* patch = (uint8_t*)targetAddr;
+    patch[0] = 0x48; patch[1] = 0xB8;
+    *(uintptr_t*)(patch + 2) = (uintptr_t)detourFunc;
+    patch[10] = 0xFF; patch[11] = 0xE0;
+    for (size_t i = JUMP_SIZE; i < prologueSize; i++) patch[i] = 0x90;
+
+    VirtualProtect((void*)targetAddr, prologueSize, oldProtect, &oldProtect);
+    FlushInstructionCache(GetCurrentProcess(), (void*)targetAddr, prologueSize);
+    return true;
+}
+
 void RemoveHook(HookInfo* info) {
     if (!info->target) return;
 
@@ -3104,13 +3160,13 @@ static ReimplEntry g_reimplementations[] = {
     { "DragTool::OnKey", InstallDragToolOnKey, RemoveDragToolOnKey, true },
     { "BridgeTool::Dtor", InstallBridgeToolDtor, RemoveBridgeToolDtor, true },
     { "BridgeTool::Startup", InstallBridgeToolStartup, RemoveBridgeToolStartup, true },
-    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
     { "BridgeTool::CalcCost", InstallBridgeToolCalcCost, RemoveBridgeToolCalcCost, true },
     { "DragPlacementTool::Dtor", InstallDragPlacementToolDtor, RemoveDragPlacementToolDtor, true },
     { "DragPlacementTool::Startup", InstallDragPlacementToolStartup, RemoveDragPlacementToolStartup, true },
-    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
     { "EditTool::Dtor", InstallEditToolDtor, RemoveEditToolDtor, true },
     { "EditTool::OnKey", InstallEditToolOnKey, RemoveEditToolOnKey, true },
     { "EditTool::Startup", InstallEditToolStartup, RemoveEditToolStartup, true },
@@ -3119,11 +3175,11 @@ static ReimplEntry g_reimplementations[] = {
     { "FencedTool::Startup", InstallFencedToolStartup, RemoveFencedToolStartup, true },
     { "FencedTool::Shutdown2", InstallFencedToolShutdown2, RemoveFencedToolShutdown2, true },
     { "FencedTool::OnKey", InstallFencedToolOnKey, RemoveFencedToolOnKey, true },
-    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
     { "FencedTool::Shutdown", InstallFencedToolShutdown, RemoveFencedToolShutdown, true },
-    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
     { "PathTool::Dtor", InstallPathToolDtor, RemovePathToolDtor, true },
     { "PathTool::OnKey", InstallPathToolOnKey, RemovePathToolOnKey, true },
     { "PathTool::Draw", InstallPathToolDraw, RemovePathToolDraw, true },
@@ -3131,9 +3187,9 @@ static ReimplEntry g_reimplementations[] = {
     { "PlacementTool::Dtor", InstallPlacementToolDtor, RemovePlacementToolDtor, true },
     { "PlacementTool::Startup", InstallPlacementToolStartup, RemovePlacementToolStartup, true },
     { "PlacementTool::Shutdown2", InstallPlacementToolShutdown2, RemovePlacementToolShutdown2, true },
-    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
     { "RemovalTool::Dtor", InstallRemovalToolDtor, RemoveRemovalToolDtor, true },
     { "RemovalTool::Startup", InstallRemovalToolStartup, RemoveRemovalToolStartup, true },
     { "RemovalTool::Draw", InstallRemovalToolDraw, RemoveRemovalToolDraw, true },
@@ -3160,12 +3216,12 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialGoalCount::Dtor", InstallTutorialGoalCountDtor, RemoveTutorialGoalCountDtor, true },
     { "TutorialGoalCount::Serialize", InstallTutorialGoalCountSerialize, RemoveTutorialGoalCountSerialize, true },
     { "TutorialGoalCount::Cleanup", InstallTutorialGoalCountCleanup, RemoveTutorialGoalCountCleanup, true },
-    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, false }, // DISABLED: near Jcc in prologue
+    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, true }, // RE-ENABLED: vtable patch (MOV R11,RSP broke trampoline)
+    { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, true }, // RE-ENABLED: vtable patch (near Jcc broke trampoline)
     { "TutorialGoalGameSpeed::Dtor", InstallTutorialGoalGameSpeedDtor, RemoveTutorialGoalGameSpeedDtor, true },
     { "TutorialGoalGameSpeed::Serialize", InstallTutorialGoalGameSpeedSerialize, RemoveTutorialGoalGameSpeedSerialize, true },
     { "TutorialGoalGameSpeed::Cleanup", InstallTutorialGoalGameSpeedCleanup, RemoveTutorialGoalGameSpeedCleanup, true },
-    { "TutorialGoalGameSpeed::Slot8", InstallTutorialGoalGameSpeedSlot8, RemoveTutorialGoalGameSpeedSlot8, false }, // RIP-relative in prologue
+    { "TutorialGoalGameSpeed::Slot8", InstallTutorialGoalGameSpeedSlot8, RemoveTutorialGoalGameSpeedSlot8, true }, // RE-ENABLED: vtable patch (RIP-relative broke trampoline)
     { "TutorialGoalGameSpeed::Ctor", InstallTutorialGoalGameSpeedCtor, RemoveTutorialGoalGameSpeedCtor, true },
     { "TutorialImage::Dtor", InstallTutorialImageDtor, RemoveTutorialImageDtor, true },
     { "TutorialImage::Serialize", InstallTutorialImageSerialize, RemoveTutorialImageSerialize, true },
@@ -3175,7 +3231,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialImageHotKey::Dtor", InstallTutorialImageHotKeyDtor, RemoveTutorialImageHotKeyDtor, true },
     { "TutorialImageHotKey::Serialize", InstallTutorialImageHotKeySerialize, RemoveTutorialImageHotKeySerialize, true },
     { "TutorialImageHotKey::Cleanup", InstallTutorialImageHotKeyCleanup, RemoveTutorialImageHotKeyCleanup, true },
-    { "TutorialImageHotKey::Ctor", InstallTutorialImageHotKeyCtor, RemoveTutorialImageHotKeyCtor, false }, // DISABLED: near Jcc in prologue
+    { "TutorialImageHotKey::Ctor", InstallTutorialImageHotKeyCtor, RemoveTutorialImageHotKeyCtor, true }, // RE-ENABLED: vtable patch (near Jcc broke trampoline)
     { "TutorialImageHotKey::Slot9", InstallTutorialImageHotKeySlot9, RemoveTutorialImageHotKeySlot9, true },
     { "TutorialImageInputKey::Dtor", InstallTutorialImageInputKeyDtor, RemoveTutorialImageInputKeyDtor, true },
     { "TutorialImageInputKey::Serialize", InstallTutorialImageInputKeySerialize, RemoveTutorialImageInputKeySerialize, true },
@@ -3185,7 +3241,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialImageToolbarIcon::Dtor", InstallTutorialImageToolbarIconDtor, RemoveTutorialImageToolbarIconDtor, true },
     { "TutorialImageToolbarIcon::Serialize", InstallTutorialImageToolbarIconSerialize, RemoveTutorialImageToolbarIconSerialize, true },
     { "TutorialImageToolbarIcon::Cleanup", InstallTutorialImageToolbarIconCleanup, RemoveTutorialImageToolbarIconCleanup, true },
-    { "TutorialImageToolbarIcon::Ctor", InstallTutorialImageToolbarIconCtor, RemoveTutorialImageToolbarIconCtor, false }, // DISABLED: near Jcc in prologue
+    { "TutorialImageToolbarIcon::Ctor", InstallTutorialImageToolbarIconCtor, RemoveTutorialImageToolbarIconCtor, true }, // RE-ENABLED: vtable patch (near Jcc broke trampoline)
     { "TutorialImageToolbarIcon::Slot9", InstallTutorialImageToolbarIconSlot9, RemoveTutorialImageToolbarIconSlot9, true },
     { "TutorialInstance::Dtor", InstallTutorialInstanceDtor, RemoveTutorialInstanceDtor, true },
     { "TutorialInstance::Serialize", InstallTutorialInstanceSerialize, RemoveTutorialInstanceSerialize, true },
@@ -3194,23 +3250,23 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialSetupCamera::Dtor", InstallTutorialSetupCameraDtor, RemoveTutorialSetupCameraDtor, true },
     { "TutorialSetupCamera::Serialize", InstallTutorialSetupCameraSerialize, RemoveTutorialSetupCameraSerialize, true },
     { "TutorialSetupCamera::Cleanup", InstallTutorialSetupCameraCleanup, RemoveTutorialSetupCameraCleanup, true },
-    { "TutorialSetupCamera::Slot8", InstallTutorialSetupCameraSlot8, RemoveTutorialSetupCameraSlot8, false }, // RIP-relative in prologue
+    { "TutorialSetupCamera::Slot8", InstallTutorialSetupCameraSlot8, RemoveTutorialSetupCameraSlot8, true }, // RE-ENABLED: vtable patch (RIP-relative broke trampoline)
     { "TutorialSetupCamera::Ctor", InstallTutorialSetupCameraCtor, RemoveTutorialSetupCameraCtor, true },
     { "TutorialSetupGameSpeed::Dtor", InstallTutorialSetupGameSpeedDtor, RemoveTutorialSetupGameSpeedDtor, true },
     { "TutorialSetupGameSpeed::Serialize", InstallTutorialSetupGameSpeedSerialize, RemoveTutorialSetupGameSpeedSerialize, true },
     { "TutorialSetupGameSpeed::Cleanup", InstallTutorialSetupGameSpeedCleanup, RemoveTutorialSetupGameSpeedCleanup, true },
-    { "TutorialSetupGameSpeed::Slot8", InstallTutorialSetupGameSpeedSlot8, RemoveTutorialSetupGameSpeedSlot8, false }, // RIP-relative in prologue
+    { "TutorialSetupGameSpeed::Slot8", InstallTutorialSetupGameSpeedSlot8, RemoveTutorialSetupGameSpeedSlot8, true }, // RE-ENABLED: vtable patch (RIP-relative broke trampoline)
     { "TutorialSetupGameSpeed::Ctor", InstallTutorialSetupGameSpeedCtor, RemoveTutorialSetupGameSpeedCtor, true },
     { "TutorialSetupRestrictPlayer::Dtor", InstallTutorialSetupRestrictPlayerDtor, RemoveTutorialSetupRestrictPlayerDtor, true },
     { "TutorialSetupRestrictPlayer::Serialize", InstallTutorialSetupRestrictPlayerSerialize, RemoveTutorialSetupRestrictPlayerSerialize, true },
     { "TutorialSetupRestrictPlayer::Cleanup", InstallTutorialSetupRestrictPlayerCleanup, RemoveTutorialSetupRestrictPlayerCleanup, true },
-    { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, false }, // RIP-relative in prologue
-    { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, false }, // DISABLED: near Jcc in prologue
+    { "TutorialSetupRestrictPlayer::Slot8", InstallTutorialSetupRestrictPlayerSlot8, RemoveTutorialSetupRestrictPlayerSlot8, true }, // RE-ENABLED: vtable patch (MOV R11,RSP broke trampoline)
+    { "TutorialSetupRestrictPlayer::Slot10", InstallTutorialSetupRestrictPlayerSlot10, RemoveTutorialSetupRestrictPlayerSlot10, true }, // RE-ENABLED: vtable patch (RIP-relative broke trampoline)
+    { "TutorialSetupRestrictPlayer::Ctor", InstallTutorialSetupRestrictPlayerCtor, RemoveTutorialSetupRestrictPlayerCtor, true }, // RE-ENABLED: vtable patch (near Jcc broke trampoline)
     { "TutorialStep::Dtor", InstallTutorialStepDtor, RemoveTutorialStepDtor, true },
     { "TutorialStep::Serialize", InstallTutorialStepSerialize, RemoveTutorialStepSerialize, true },
     { "TutorialStep::Cleanup", InstallTutorialStepCleanup, RemoveTutorialStepCleanup, true },
-    { "TutorialStep::Init", InstallTutorialStepInit, RemoveTutorialStepInit, false }, // DISABLED: near Jcc in prologue
+    { "TutorialStep::Init", InstallTutorialStepInit, RemoveTutorialStepInit, true }, // RE-ENABLED: vtable patch (near Jcc broke trampoline)
 
     // ================================================================
     // Phase 5: Achievement Goals
@@ -3312,21 +3368,7 @@ static constexpr int DEBUG_MAX_HOOKS = -1;
 // Essential hooks (BuildNumber, PlatformConfigure) are always installed.
 // Set to nullptr to install all hooks normally.
 static const char* DEBUG_HOOK_FILTER[] = {
-    // Batch 1
-    "HotKeyToolTipUI",
-    "TitleDescToolTipUI",
-    "ModBrowseUI",
-    // Batch 2
-    "RadiusUI",
-    "StorageCapacityUI",
-    "StatusIconUI",
-    "BuildRequirementUI",
-    // Batch 3
-    "ConsumeProduceUI",
-    "ProfessionUI",
-    "DestroyUI",
-    "CropUI",
-    nullptr  // sentinel
+    nullptr  // sentinel — all hooks installed
 };
 
 static bool HookPassesFilter(const char* name) {

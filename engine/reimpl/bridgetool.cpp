@@ -45,12 +45,12 @@ static void Reimpl_BridgeToolStartup(void* self) {
 }
 
 // --- Slot13: CalcPath ---
+// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
+// MOV RAX,RSP at prologue byte 0: standard trampoline broken (CALL shifts RSP).
+// InstallHookRSPSafe builds an identical trampoline but Reimpl JMPs (not CALLs)
+// into it, so RSP is caller-level when MOV RAX,RSP executes.
 static HookInfo g_hookBridgeToolCalcPath;
-typedef uint64_t (*fn_BridgeToolCalcPath_t)(void* self, int x, int z);
-static uint64_t Reimpl_BridgeToolCalcPath(void* self, int x, int z) {
-    g_lastHook = "BridgeTool::BridgeToolCalcPath";
-    return ((fn_BridgeToolCalcPath_t)g_hookBridgeToolCalcPath.trampoline)(self, x, z);
-}
+REIMPL_RSP_PASSTHROUGH(BridgeToolCalcPath, g_hookBridgeToolCalcPath, "BridgeTool::CalcPath")
 
 // --- Slot14: CalcCost ---
 static HookInfo g_hookBridgeToolCalcCost;
@@ -80,9 +80,12 @@ void RemoveBridgeToolStartup() { RemoveHook(&g_hookBridgeToolStartup); }
 
 void InstallBridgeToolCalcPath() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400f9cd0);
-    InstallHook(target, (void*)Reimpl_BridgeToolCalcPath, &g_hookBridgeToolCalcPath, 13);
+    // prologueSize=13: MOV RAX,RSP(3) + MOV [RAX+0x10],EDX(4) + MOV [RAX+0x8],RCX(4) = 11?
+    // Actually: 48 89 C4 (3) + 89 50 10 (3) + 48 89 48 08 (4) = 10 bytes, need >=12
+    // Disasm: 1400f9cd0 MOV RAX,RSP (3) + 1400f9cd3 MOV [RAX+10],EDX (3) + 1400f9cd6 MOV [RAX+8],RCX (4) = 10 + next: PUSH RBP (1) = 11, PUSH RSI (1) = 12. Use 13.
+    InstallHookRSPSafe(target, (void*)Reimpl_BridgeToolCalcPath, &g_hookBridgeToolCalcPath, 13);
 #ifdef _DEBUG
-    printf("[BridgeTool] CalcPath hooked at %p\n", (void*)target);
+    printf("[BridgeTool] CalcPath hooked (RSP-safe) at %p\n", (void*)target);
 #endif
 }
 void RemoveBridgeToolCalcPath() { RemoveHook(&g_hookBridgeToolCalcPath); }

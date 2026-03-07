@@ -19,8 +19,10 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TutorialImages.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 // --- Slot0: Dtor ---
 static HookInfo g_hookDtor;
@@ -74,21 +76,36 @@ void InstallTutorialImageToolbarIconCleanup() {
 void RemoveTutorialImageToolbarIconCleanup() { RemoveHook(&g_hookCleanup); }
 
 // --- Slot8: Ctor/Init ---
-static HookInfo g_hookCtor;
+// RE-ENABLED: near Jcc wrapper at 0x140028060. Use vtable patch on slot 8.
+static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialImageToolbarIcon::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    return ((fn_Ctor_t)g_savedCtor)(self);
+}
+
+static void PatchVtableSlot_ToolbarIcon(size_t slotIndex, void* newFunc, void** outOld) {
+    uintptr_t* entry = (uintptr_t*)(ResolveAddr(Module::Exe, TutorialImageToolbarIconAddr::Vtable) + slotIndex * 8);
+    DWORD oldProt;
+    VirtualProtect(entry, 8, PAGE_READWRITE, &oldProt);
+    if (outOld) *outOld = (void*)*entry;
+    *entry = (uintptr_t)newFunc;
+    VirtualProtect(entry, 8, oldProt, &oldProt);
+    FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
 void InstallTutorialImageToolbarIconCtor() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140028060);
-    InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 12);
+    PatchVtableSlot_ToolbarIcon(8, (void*)Reimpl_Ctor, &g_savedCtor);
 #ifdef _DEBUG
-    printf("[TutorialImageToolbarIcon] Ctor hooked at %p\n", (void*)target);
+    printf("[TutorialImageToolbarIcon] Ctor vtable-patched (slot 8)\n");
 #endif
 }
-void RemoveTutorialImageToolbarIconCtor() { RemoveHook(&g_hookCtor); }
+void RemoveTutorialImageToolbarIconCtor() {
+    if (g_savedCtor) {
+        PatchVtableSlot_ToolbarIcon(8, g_savedCtor, nullptr);
+        g_savedCtor = nullptr;
+    }
+}
 
 // --- Slot9: Slot9 ---
 static HookInfo g_hookSlot9;
