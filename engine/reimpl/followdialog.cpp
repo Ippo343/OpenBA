@@ -12,13 +12,7 @@
 //   +0x38 (Slot7):  0x140069250 — Update: checks followed entity state
 //   +0x40 (Slot8):  0x140069230 — 18 bytes, OnCommand for buttonClose (REIMPLEMENTED)
 //
-// Note on Slot5/Slot8 hookability:
-//   Slot5: prologue has RIP-relative MOV (bug class 2) — trampoline is broken,
-//     but since reimpl is a full replacement (trampoline never called), safe to hook
-//     with prologueSize=12 (minimum JMP size).
-//   Slot8: prologue has JNZ rel8 at offset 4 (bug class 2) — same rationale.
-//
-// Unhookable (too small — trampoline needed or insufficient prologue bytes):
+// Unhookable (too small — insufficient prologue bytes):
 //   +0x08 (Slot1):  0x140011A10 — 8 bytes, DtorVec
 //   +0x10 (Slot2):  0x140011A00 — 7 bytes, DtorBase
 //
@@ -67,7 +61,6 @@ static void Reimpl_Slot4(void* self) {
 }
 
 // Slot5 (0x140069320) — Shutdown: clears follow-active flag — REIMPLEMENTED
-// Note: prologue has RIP-relative MOV (trampoline broken), but trampoline never called.
 typedef void (*fn_Slot5_t)(void* self);
 static void Reimpl_Slot5(void* self) {
     g_lastHook = "FollowDialog::Slot5";
@@ -89,7 +82,6 @@ static void Reimpl_Slot7(void* self) {
 }
 
 // Slot8 (0x140069230) — OnCommand: handle buttonClose click — REIMPLEMENTED
-// Note: prologue has JNZ rel8 at offset 4 (trampoline broken), but trampoline never called.
 typedef void (*fn_Slot8_t)(void* self, void* param2, int param3, int param4);
 static void Reimpl_Slot8(void* self, void* param2, int param3, int param4) {
     g_lastHook = "FollowDialog::Slot8";
@@ -119,8 +111,7 @@ void InstallFollowDialogSlot4() {
 void RemoveFollowDialogSlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallFollowDialogSlot5() {
-    // prologueSize=12 (minimum JMP): prologue has RIP-relative MOV, trampoline broken
-    // but never called since this is a full reimpl.
+    // prologueSize=12 (minimum JMP): prologue has RIP-relative MOV.
     uintptr_t target = ResolveAddr(Module::Exe, 0x140069320);
     InstallHook(target, (void*)Reimpl_Slot5, &g_hookSlot5, 12);
 #ifdef _DEBUG
@@ -148,8 +139,7 @@ void InstallFollowDialogSlot7() {
 void RemoveFollowDialogSlot7() { RemoveHook(&g_hookSlot7); }
 
 void InstallFollowDialogSlot8() {
-    // prologueSize=12 (minimum JMP): prologue has JNZ rel8 at offset 4, trampoline broken
-    // but never called since this is a full reimpl.
+    // prologueSize=12 (minimum JMP): prologue has JNZ rel8 at offset 4.
     uintptr_t target = ResolveAddr(Module::Exe, 0x140069230);
     InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 12);
 #ifdef _DEBUG

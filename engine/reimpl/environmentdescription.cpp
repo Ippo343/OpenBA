@@ -3,9 +3,19 @@
 //
 // EnvironmentDescription (0x1b8 bytes), vtable at 0x14015e1f0.
 // Extends Object::External (0x20 bytes base).
-// Large struct: 12 weather entries at +0x38 (each 0x20 bytes, loop count 0xb+1=12).
-//
-// NOTE: Only 9 vtable slots (not 10). Slot8 is the last.
+// Fields:
+//   +0x20: ExternalPtr (name/path reference)
+//   +0x28: void* (dynamic array ptr, loaded from serialize)
+//   +0x30: uint32 (dynamic array count)
+//   +0x38..+0x1b8: 12 weather entries, each 0x20 bytes:
+//     +0x00: Color (ambient sky)
+//     +0x04: Color (ambient ground)
+//     +0x08: Color (ambient fog)
+//     +0x0c: float (fog start)
+//     +0x10: float (fog end)
+//     +0x14: float (sun intensity)
+//     +0x18: float (sun angle)
+//     +0x1c: float (sun spread)
 //
 // Vtable overrides (exe-range functions):
 //   +0x00: 0x140019190 — Slot0 Dtor(self, flags)
@@ -34,24 +44,112 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookCleanup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented functions
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: frees dynamic array at +0x28, zeroes +0x28/+0x30, calls External::~External
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "EnvironmentDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0x28));
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: ExternalPtr at +0x20, dynamic weather array at +0x28, 12 weather entries at +0x38
+// Ghidra: FUN_140094040
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "EnvironmentDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+
+    // Resolve exe helper functions
+    typedef void (*fn_ExternalPtrSerializeBuild_t)(void*, void*);
+    typedef void (*fn_WeatherResize_t)(void*, int);
+    typedef void (*fn_WeatherExternalSerialize_t)(void*, void*);
+    static fn_ExternalPtrSerializeBuild_t fn_ExternalPtrSerializeBuild = nullptr;
+    static fn_WeatherResize_t fn_WeatherResize = nullptr;
+    static fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize = nullptr;
+    if (!fn_ExternalPtrSerializeBuild)
+        fn_ExternalPtrSerializeBuild = (fn_ExternalPtrSerializeBuild_t)ResolveAddr(Module::Exe, 0x140002340);
+    if (!fn_WeatherResize)
+        fn_WeatherResize = (fn_WeatherResize_t)ResolveAddr(Module::Exe, 0x1400198a0);
+    if (!fn_WeatherExternalSerialize)
+        fn_WeatherExternalSerialize = (fn_WeatherExternalSerialize_t)ResolveAddr(Module::Exe, 0x1400196a0);
+
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // ExternalPtr at +0x20
+    fn_ExternalPtrSerializeBuild((void*)(s + 0x20), serializer);
+
+    // Serialize count at +0x30
+    uint32_t count = *(uint32_t*)(s + 0x30);
+    g_fn_Serialize_Int(serializer, (void*)&count, NULL);
+
+    // On read: resize array
+    if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
+        fn_WeatherResize((void*)(s + 0x28), (int)count);
+    }
+
+    // Loop through dynamic array entries (16 bytes each: 2x longlong)
+    uintptr_t* arrPtr = *(uintptr_t**)(s + 0x28);
+    for (uint32_t i = 0; i < count; i++) {
+        fn_WeatherExternalSerialize(arrPtr, serializer);
+        fn_ExternalPtrSerializeBuild(arrPtr + 1, serializer);
+        arrPtr += 2;
+    }
+
+    // Loop 12 weather entries at +0x38, each 0x20 bytes
+    // Each: 3 Colors (uint32) + 5 floats — all 4-byte serialize
+    uintptr_t entry = s + 0x38;
+    for (int i = 0; i < 12; i++) {
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x00), NULL); // Color: ambient sky
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x04), NULL); // Color: ambient ground
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x08), NULL); // Color: ambient fog
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x0c), NULL); // float: fog start
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x10), NULL); // float: fog end
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x14), NULL); // float: sun intensity
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x18), NULL); // float: sun angle
+        g_fn_Serialize_Int(serializer, (void*)(entry + 0x1c), NULL); // float: sun spread
+        entry += 0x20;
+    }
+
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(no-free) + re-construct (same as CreateInPlace body minus null check)
+// CreateInPlace: External::External, set vtable, zero +0x20/+0x28/+0x30, init 12 weather entries.
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "EnvironmentDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    // Call virtual dtor with flags=0 (destroy fields, don't free memory)
+    typedef void* (*fn_VDtor_t)(void*, uint32_t);
+    ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
+    // Re-construct: External::External + set vtable + init fields
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015e1f0);
+    *(void**)self = vtable;
+    *(uint64_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    // Init 12 weather entries at +0x38, each 0x20 bytes (default values from CreateInPlace)
+    uint32_t* w = (uint32_t*)(s + 0x38);
+    for (int i = 0; i < 12; ++i) {
+        w[0] = 0xff595965; // Color ambient sky
+        w[1] = 0xffcbcbbc; // Color ambient ground
+        w[2] = 0xffbfbff2; // Color ambient fog
+        w[3] = 0x42b40000; // float fog start = 90.0f
+        w[4] = 0x43610000; // float fog end = 225.0f
+        w[5] = 0x3f733333; // float sun intensity = 0.95f
+        w[6] = 0x42f00000; // float sun angle = 120.0f
+        w[7] = 0x42820000; // float sun spread = 65.0f
+        w += 8; // advance 0x20 bytes
+    }
 }
 
 // ============================================================

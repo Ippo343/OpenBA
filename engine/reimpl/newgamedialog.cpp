@@ -65,7 +65,6 @@ static void Reimpl_Update(void* self) {
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
-// No trampoline call — prologue has rel branch.
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
     g_lastHook = "NewGameDialog::OnEvent";
     NewGameDialog_OnEvent((NewGameDialog*)self, element, eventType, eventData);
@@ -102,9 +101,8 @@ void InstallNewGameDialogUpdate() {
 }
 void RemoveNewGameDialogUpdate() { RemoveHook(&g_hookUpdate); }
 
-// OnEvent (0x140070110) — short JZ at byte 13, full reimpl only (no trampoline call).
+// OnEvent (0x140070110) — short JZ at byte 13, full reimpl.
 // Prologue: PUSH RBX(2)+SUB RSP,0x30(4)+MOV RBX,RCX(3)+CMP R8d,0x12(4) = 13 bytes
-// JZ rel8 at byte 13 is copied to trampoline but never executed (no trampoline call).
 void InstallNewGameDialogOnEvent() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140070110);
     InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 13);

@@ -32,24 +32,95 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookCleanup;
 
 // ============================================================
-// Passthrough wrappers
+// Field layout:
+//   +0x20: uint32_t   flags/param0 (initialized to 0)
+//   +0x28: String     (8-byte COW string)
+//   +0x30: int*       ptr to int array (heap)
+//   +0x38: int        count of ints in array
+//   +0x40: int        (initialized to 0)
+//   +0x44: int        (initialized to 1)
+//   +0x48: int        (initialized to 1)
+//   +0x50: ExternalPtr (8-byte external pointer)
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: frees int array at +0x30, zeros +0x30/+0x38, String::~String at +0x28,
+//       External::~External, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreatePlacedDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0x30));
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    fn_String_Dtor((void*)(s + 0x28));
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: IO::Serializer, serialize External at +0x20 via encoding vcall,
+//            serialize count at +0x38, resize int array at +0x30, serialize each int,
+//            String::Serialize at +0x28, ints at +0x44/+0x48/+0x40,
+//            ExternalPtr at +0x50 via fn_ExternalPtr_Serialize3.
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreatePlacedDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // Serialize External base at +0x20 via encoding virtual call
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x20));
+
+    // Serialize count at +0x38; resize int array at +0x30 on load
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x38), nullptr);
+    uint32_t count = *(uint32_t*)(s + 0x38);  // re-read after possible load
+
+    void* encoding = *(void**)(serializer + 8);
+    int mode = *(int*)((uintptr_t)encoding + 8);
+    if (mode == 0) {
+        fn_ExeArrayResize2((void*)(s + 0x30), (int)count);
+    }
+
+    // Serialize each int in the array via encoding vcall
+    void* arr = *(void**)(s + 0x30);
+    for (uint32_t i = 0; i < count; i++) {
+        SerializerEncodingVCall(serializer, 0x98, (void*)((uintptr_t)arr + i * 4));
+    }
+
+    // String::Serialize at +0x28
+    g_fn_String_Serialize((void*)(s + 0x28), serializer);
+
+    // Serialize ints at +0x44, +0x48, +0x40
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x44), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x48), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x40), nullptr);
+
+    // ExternalPtr at +0x50
+    fn_ExternalPtr_Serialize3((void*)(s + 0x50), serializer);
+
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(self, 0) to destroy fields, then re-init.
+// Mirrors CreateInPlace (0x140032aa0): External::External + set vtable + init fields.
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreatePlacedDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162cf0);
+    *(void**)self = vtable;
+    *(uint32_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    *(uint32_t*)(s + 0x40) = 0;
+    *(uint32_t*)(s + 0x44) = 1;
+    *(uint32_t*)(s + 0x48) = 1;
+    *(uint64_t*)(s + 0x50) = 0;
 }
 
 // ============================================================

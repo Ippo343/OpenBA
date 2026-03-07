@@ -37,12 +37,19 @@ static HookInfo g_hookComputeLayout;
 static HookInfo g_hookDraw;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented functions
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: set vtable, Element::~Element, conditionally free
+// From decompile: sets vtable 0x14015c2a0, UI::Element::~Element(self), conditional free
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "FrustumOutlineElement::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015c2a0);
+    *(void**)self = vtable;
+    fn_Element_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // OnCreate: if bit 27 of self+0x34 is set (initial-size-pending flag),
@@ -60,10 +67,18 @@ static void Reimpl_OnCreate(void* self) {
     }
 }
 
-typedef void (*fn_ComputeLayout_t)(void* self, int a, int b, int c, int d);
-static void Reimpl_ComputeLayout(void* self, int a, int b, int c, int d) {
+// ComputeLayout: Element::ComputeLayout base, GetAlignedPosition, write rect fields
+// From decompile: identical pattern to CaptureBoxElement::ComputeLayout
+static void Reimpl_ComputeLayout(void* self, int x, int y, int w, int h) {
     g_lastHook = "FrustumOutlineElement::ComputeLayout";
-    ((fn_ComputeLayout_t)g_hookComputeLayout.trampoline)(self, a, b, c, d);
+    uintptr_t s = (uintptr_t)self;
+    fn_Element_ComputeLayout(self, x, y, w, h);
+    int outX[2], outY, outW, outH[2];
+    fn_Element_GetAlignedPosition(self, x, y, w, h, 0, 0, outX, &outY, &outW, outH, false, false);
+    *(int*)(s + 0x68) = outX[0];
+    *(int*)(s + 0x70) = outX[0] + outW;
+    *(int*)(s + 0x6c) = outY;
+    *(int*)(s + 0x74) = outY + outH[0];
 }
 
 // Draw: calls Element::Draw base, projects camera frustum corners to screen-space,

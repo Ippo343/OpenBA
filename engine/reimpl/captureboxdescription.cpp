@@ -35,46 +35,93 @@ static HookInfo g_hookCreateElement;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementations
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// CaptureBoxDescription::Dtor (0x140014010)
+// Sets vtable, destroys String at +0x70, calls ElementDescription dtor, optionally frees.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CaptureBoxDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015d4a0);
+    fn_String_Dtor((void*)((uintptr_t)self + 0x70));
+    fn_ElementDescription_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // GetSerializeVersion: calls ElementDescription::GetFileVersion() and ORs with 0x100
 // to indicate that this description class has a custom serialize format (version bit 8).
 // Original at 0x140079210: SUB RSP,28h; CALL [GetFileVersion]; BTS EAX,8; ADD RSP,28h; RET
-// Disabled because the prologue contains a RIP-relative CALL at offset 4 (hookable with clean reimpl).
 static uint32_t Reimpl_Slot3(void* self) {
     g_lastHook = "CaptureBoxDescription::Slot3";
     uint32_t ver = fn_ElementDescription_GetFileVersion(self);
     return ver | 0x100u;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
+// CaptureBoxDescription::Serialize (0x1400791a0)
+// Calls base Serialize, then serializes ExternalPtr at +0x68 and String at +0x70.
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CaptureBoxDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uint8_t serBuf[24];
+    fn_ElementDescription_Serialize(self, stream);
+    g_fn_Serializer_Ctor(serBuf, stream, 0);
+    fn_ExternalPtr_Serialize((void*)((uintptr_t)self + 0x68), serBuf);
+    g_fn_String_Serialize((void*)((uintptr_t)self + 0x70), serBuf);
+    g_fn_Serializer_Dtor(serBuf);
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// CaptureBoxDescription::Cleanup (0x140013e40)
+// Virtual dtor (no-free), then re-constructs as default CaptureBoxDescription.
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CaptureBoxDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_VDtor_t)(void*, uint32_t);
+    ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
+    fn_ElementDescription_Ctor(self);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015d4a0);
+    *(int64_t*)((uintptr_t)self + 0x68) = 0;
+    *(int64_t*)((uintptr_t)self + 0x70) = 0;
 }
 
-typedef void (*fn_CreateElement_t)(void* self, void* stream);
-static void Reimpl_CreateElement(void* self, void* stream) {
+// CaptureBoxDescription::CreateElement (0x1400790a0)
+// Allocates CaptureBoxElement (0xe0 bytes), constructs it, sets extra fields to 0,
+// wraps in InternalBasePtr, calls CreateInstance, copies Sprite from description.
+static void Reimpl_CreateElement(void* self, void* outPtr) {
     g_lastHook = "CaptureBoxDescription::CreateElement";
-    ((fn_CreateElement_t)g_hookCreateElement.trampoline)(self, stream);
+    void* elem = fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8);
+    if (elem) {
+        fn_Element_Ctor(elem);
+        *(void**)elem = (void*)ResolveAddr(Module::Exe, 0x14015d440);
+        fn_Sprite_DefaultCtor2((void*)((uintptr_t)elem + 0xc0));
+        *(int64_t*)((uintptr_t)elem + 0xd0) = 0;
+        *(int64_t*)((uintptr_t)elem + 0xd8) = 0;
+    }
+    // InternalBasePtr is a 16-byte struct; first field is the element pointer.
+    // After Ctor: localPtr[0] = elem (wrapped).
+    // CreateInstance may update localPtr[0] to the fully initialized element.
+    void* localPtr[2] = {nullptr, nullptr};
+    fn_InternalBasePtr_Ctor(localPtr, elem);
+    fn_ElementDescription_CreateInstance(self, localPtr);
+    fn_InternalBasePtr_CheckPtr(localPtr);
+    void* pElem = localPtr[0];
+    uint64_t spriteSheet = *(uint64_t*)((uintptr_t)self + 0x68);
+    void* spriteName = (void*)((uintptr_t)self + 0x70);
+    uint64_t spriteRetval[2] = {0, 0};
+    fn_Sprite_Sprite(spriteRetval, spriteSheet, spriteName);
+    *(uint64_t*)((uintptr_t)pElem + 0xc0) = spriteRetval[0];
+    *(uint64_t*)((uintptr_t)pElem + 0xc8) = spriteRetval[1];
+    *(void**)outPtr = localPtr[0];
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// CaptureBoxDescription::CreateInPlace (0x140013df0)
+// Default-constructs a CaptureBoxDescription in place (no alloc).
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "CaptureBoxDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_ElementDescription_Ctor(self);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015d4a0);
+    *(int64_t*)((uintptr_t)self + 0x68) = 0;
+    *(int64_t*)((uintptr_t)self + 0x70) = 0;
+    return self;
 }
 
 // ============================================================

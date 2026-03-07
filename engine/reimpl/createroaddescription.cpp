@@ -33,30 +33,65 @@ static HookInfo g_hookCleanup;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Field layout (0x30 bytes total):
+//   +0x20: bool       (initialized to 0)
+//   +0x28: ExternalPtr (8-byte external pointer)
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: no extra fields to destroy — just External::~External, conditional free.
+// (Decompilation only sets vtable and calls External::~External before free.)
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreateRoadDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: bool at +0x20, ExternalPtr at +0x28 via fn_ExternalPtr_Serialize3.
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreateRoadDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // bool at +0x20
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x20), nullptr);
+
+    // ExternalPtr at +0x28
+    fn_ExternalPtr_Serialize3((void*)(s + 0x28), serializer);
+
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(self, 0) to destroy fields, then re-init.
+// Decompilation calls External::External, sets vtable, zeros +0x20 and +0x28.
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateRoadDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162df0);
+    *(void**)self = vtable;
+    *(uint8_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// CreateInPlace: null check, External ctor, set vtable, zero fields.
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "CreateRoadDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162df0);
+    *(void**)self = vtable;
+    *(uint8_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    return self;
 }
 
 // ============================================================

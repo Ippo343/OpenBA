@@ -103,7 +103,6 @@ static void Reimpl_Update(void* self) {
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
-// No trampoline call — rel branch at byte 13.
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
     g_lastHook = "SaveLoadDialog::OnEvent";
     SaveLoadDialog_OnEvent((SaveLoadDialog*)self, element, eventType, eventData);

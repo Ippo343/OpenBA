@@ -33,30 +33,101 @@ static HookInfo g_hookCleanup;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Field layout:
+//   +0x20: bool       (initialized to 0)
+//   +0x28: void*      ptr to ExternalPtr array (heap, 8-byte elements)
+//   +0x30: int        count of ExternalPtrs in array
+//   +0x38: ExternalPtr (8-byte external pointer)
+//   +0x40: bool
+//   +0x41: bool
+//   +0x42: bool
+//   +0x43: bool
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: frees ptr array at +0x28, zeros +0x28/+0x30, External::~External, conditional free.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreateRemovalDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+    fn_MemFreeStatic(*(void**)(s + 0x28));
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: bool at +0x20, count at +0x30, resize ExternalPtr array at +0x28,
+//            serialize array via fn_ExternalRefArray_Serialize, ExternalPtr at +0x38,
+//            bools at +0x40/+0x41/+0x42/+0x43.
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreateRemovalDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // bool at +0x20
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x20), nullptr);
+
+    // int count at +0x30, resize 8-byte ExternalPtr array at +0x28 on load
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x30), nullptr);
+    int count = *(int*)(s + 0x30);
+
+    void* encoding = *(void**)(serializer + 8);
+    int mode = *(int*)((uintptr_t)encoding + 8);
+    if (mode == 0) {
+        fn_ExeArrayResize3((void*)(s + 0x28), count);
+    }
+
+    // Serialize ExternalPtr array
+    fn_ExternalRefArray_Serialize(serializer, count, *(void**)(s + 0x28), nullptr);
+
+    // ExternalPtr at +0x38
+    fn_ExternalPtr_Serialize3((void*)(s + 0x38), serializer);
+
+    // bools at +0x40/+0x41/+0x42/+0x43
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x40), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x41), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x42), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x43), nullptr);
+
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(self, 0) to destroy fields, then re-init.
+// Decompilation calls External::External, sets vtable, zeros all fields.
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateRemovalDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162d80);
+    *(void**)self = vtable;
+    *(uint8_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    *(uint32_t*)(s + 0x40) = 0;
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// CreateInPlace: null check, External ctor, set vtable, zero all fields.
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "CreateRemovalDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162d80);
+    *(void**)self = vtable;
+    *(uint8_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    *(uint32_t*)(s + 0x40) = 0;
+    return self;
 }
 
 // ============================================================

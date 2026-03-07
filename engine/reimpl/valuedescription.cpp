@@ -33,30 +33,77 @@ static HookInfo g_hookCleanup;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented functions
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: set vtable, ~String(+0x38), ~String(+0x28), External::~External, free
+// From decompile: sets vtable 0x14015add0, destroys strings, sets base vtable, calls ~External
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ValueDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015add0);
+    *(void**)self = vtable;
+    fn_String_Dtor((void*)(s + 0x38));
+    fn_String_Dtor((void*)(s + 0x28));
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: ExternalPtr at +0x20, String at +0x28, ExternalPtr2 at +0x30,
+// String at +0x38, Serialize int at +0x40, +0x44, +0x48
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "ValueDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+    fn_ExternalPtr_Serialize((void*)(s + 0x20), serializer);
+    g_fn_String_Serialize((void*)(s + 0x28), serializer);
+    fn_ExternalPtr_Serialize2((void*)(s + 0x30), serializer);
+    g_fn_String_Serialize((void*)(s + 0x38), serializer);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x40), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x44), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x48), nullptr);
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(no-free) + External::External + set vtable + zero fields
+// Note: +0x44 = 100 is the default (from CreateInPlace decompile: *(undefined8)(+0x44) = 100)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "ValueDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_VDtor_t)(void*, uint32_t);
+    ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015add0);
+    *(void**)self = vtable;
+    *(uint64_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    *(uint32_t*)(s + 0x40) = 0;
+    *(uint64_t*)(s + 0x44) = 100; // default min/max or step value
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// CreateInPlace: null check, External::External, set vtable, zero fields, +0x44=100
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "ValueDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015add0);
+    *(void**)self = vtable;
+    *(uint64_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    *(uint32_t*)(s + 0x40) = 0;
+    *(uint64_t*)(s + 0x44) = 100;
+    return self;
 }
 
 // ============================================================

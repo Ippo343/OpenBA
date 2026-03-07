@@ -3,6 +3,7 @@
 //
 // RadiusDescription (0x30 bytes), vtable at 0x14015a580.
 // Extends Object::External (0x20 bytes base).
+// Fields: +0x20 = ExternalPtr (8 bytes), +0x28 = int (default 0x1e = 30)
 //
 // Vtable overrides (exe-range functions):
 //   +0x00: 0x14000bb10 — Slot0 Dtor(self, flags)
@@ -33,30 +34,59 @@ static HookInfo g_hookCleanup;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented functions
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: sets vtable, calls External::~External, conditionally frees
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "RadiusDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: creates Serializer, serializes int at +0x28, ExternalPtr at +0x20
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "RadiusDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x28), nullptr);
+    fn_ExternalPtr_Serialize3((void*)(s + 0x20), serializer);
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(no-free) + re-construct
+// The Cleanup decompilation calls External::External then sets vtable and inits fields.
+// This IS the Ctor logic inline — we replicate it directly.
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "RadiusDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    // Virtual dtor with flags=0 (destroy fields, don't free memory)
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+    // Re-construct: External::External + set vtable + init fields
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015a580);
+    *(void**)self = vtable;
+    *(uint64_t*)(s + 0x20) = 0;        // ExternalPtr = null
+    *(uint32_t*)(s + 0x28) = 0x1e;     // int = 30
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// CreateInPlace: null check, External ctor, set vtable, init fields
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "RadiusDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015a580);
+    *(void**)self = vtable;
+    *(uint64_t*)(s + 0x20) = 0;
+    *(uint32_t*)(s + 0x28) = 0x1e;
+    return self;
 }
 
 // ============================================================

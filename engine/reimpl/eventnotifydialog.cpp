@@ -105,7 +105,6 @@ static void Reimpl_Load(void* self, void* param2) {
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
-// No trampoline call — branch at byte 4 (JNZ short after CMP R8d,0x12).
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
     g_lastHook = "EventNotifyDialog::OnEvent";
     EventNotifyDialog_OnEvent((EventNotifyDialog*)self, element, eventType, eventData);

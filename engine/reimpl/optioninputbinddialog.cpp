@@ -71,7 +71,6 @@ static void Reimpl_Load(void* self) {
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
-// No trampoline call — branch at byte 4 (JNZ short after CMP R8d,0x12).
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
     g_lastHook = "OptionInputBindDialog::OnEvent";
     OptionInputBindDialog_OnEvent((OptionInputBindDialog*)self, element, eventType, eventData);
@@ -132,7 +131,7 @@ void InstallOptionInputBindDialogLoad() {
 }
 void RemoveOptionInputBindDialogLoad() { RemoveHook(&g_hookLoad); }
 
-// OnEvent (0x14006d070) — branch at byte 4, full reimpl only (no trampoline call).
+// OnEvent (0x14006d070) — branch at byte 4, full reimpl.
 // Prologue: CMP R8d,0x12(4)+JNZ short(2)+TEST R9d,R9d(3)+JNZ short(2)+MOV RAX,[RCX](3) = 14 bytes
 void InstallOptionInputBindDialogOnEvent() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006d070);

@@ -32,24 +32,65 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookCleanup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementations
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: resets vtable to fenced then base, calls External::~External, conditionally frees
+// FUN_140004960 decompilation: sets vtables, External::~External(self), MemFree if flags&1
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreateFencedDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// SerializerEncodingVCall with extra int param (3-arg variant for Fenced encoding call)
+// Ghidra shows: (**(code **)(*encoding + 0x98))(encoding, field, 0)
+static inline void SerializerEncodingVCall3(void* serializer, int vtableOffset, void* field, int extra) {
+    void* encoding = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(serializer) + 8);
+    void* vtable = *reinterpret_cast<void**>(encoding);
+    typedef void (*VFunc_t)(void*, void*, int);
+    auto fn = *reinterpret_cast<VFunc_t*>(reinterpret_cast<uintptr_t>(vtable) + vtableOffset);
+    fn(encoding, field, extra);
+}
+
+// Serialize: wraps fields in Serializer
+// FUN_1400478f0: Serializer ctor/dtor, SerializerEncodingVCall3 (+0x20, extra=0),
+//                ExternalRefArray count=6 at +0x28, 4x Serialize_Int (+0x58,+0x5c,+0x60,+0x64),
+//                1x bool Serialize_Int (+0x68), FUN_140002340 (ExternalPtr helper) at +0x70
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreateFencedDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+    SerializerEncodingVCall3(serializer, 0x98, (void*)(s + 0x20), 0);
+    fn_ExternalRefArray_Serialize(serializer, 6, (void*)(s + 0x28), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x58), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x5c), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x60), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 100), nullptr);    // 0x64 = 100
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x68), nullptr);
+    // FUN_140002340: ExternalPtr<BuildingDescription> field serialize (checks DAT_1401c7318)
+    typedef void (*fn_ExternalPtr_Build_t)(void* field, void* serializer);
+    static fn_ExternalPtr_Build_t fn_BuildPtr_Serialize = nullptr;
+    if (!fn_BuildPtr_Serialize)
+        fn_BuildPtr_Serialize = (fn_ExternalPtr_Build_t)ResolveAddr(Module::Exe, 0x140002340);
+    fn_BuildPtr_Serialize((void*)(s + 0x70), serializer);
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: call vtable[0] dtor with flags=0, then call Ctor to reinitialize in place
+// FUN_140004930: (*(vtable[0]))(self, 0); CreateFencedDescription_Ctor(self);
+// Ctor = CreateInPlace at 0x140004920 (unhookable whole-function, resolve inline)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateFencedDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+    typedef void (*fn_Ctor_t)(void*);
+    static fn_Ctor_t fn_Ctor = nullptr;
+    if (!fn_Ctor) fn_Ctor = (fn_Ctor_t)ResolveAddr(Module::Exe, 0x140004920);
+    fn_Ctor(self);
 }
 
 // ============================================================

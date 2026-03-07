@@ -272,6 +272,7 @@ fn_FindComponent_t fn_FindComponent_Cemetery = nullptr;
 
 fn_ExeArrayResize_t fn_ExeArrayResize = nullptr;
 fn_ExeArrayResize_t fn_ExeArrayResize2 = nullptr;
+fn_ExeArrayResize_t fn_ExeArrayResize3 = nullptr;
 fn_ExeArrayPush_t fn_ExeArrayPush = nullptr;
 
 fn_StorageComponent_QueryCount_t fn_StorageComponent_QueryCount = nullptr;
@@ -765,6 +766,28 @@ fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine = nullptr;
 fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4 = nullptr;
 fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP = nullptr;
 fn_FrustumProject_t fn_FrustumProject = nullptr;
+
+// Description class reimpl support
+g_fn_String_Serialize_t g_fn_String_Serialize = nullptr;
+fn_ElementDescription_Serialize_t fn_ElementDescription_Serialize = nullptr;
+fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor = nullptr;
+fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor = nullptr;
+fn_ElementDescription_CreateInstance_t fn_ElementDescription_CreateInstance = nullptr;
+fn_Element_Ctor_t fn_Element_Ctor = nullptr;
+fn_Element_Dtor_t fn_Element_Dtor = nullptr;
+fn_Element_ComputeLayout_t fn_Element_ComputeLayout = nullptr;
+fn_Element_GetAlignedPosition_t fn_Element_GetAlignedPosition = nullptr;
+fn_Sprite_Sprite_t fn_Sprite_Sprite = nullptr;
+fn_Sprite_DefaultCtor2_t fn_Sprite_DefaultCtor2 = nullptr;
+fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
+fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2 = nullptr;
+fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3 = nullptr;
+fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize = nullptr;
+fn_Serializer_SerializeBulk_t fn_Serializer_SerializeBulk = nullptr;
+fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize = nullptr;
+fn_DynArray_Resize_t fn_DynArray_Resize = nullptr;
+fn_MemZeroFill_t fn_MemZeroFill = nullptr;
+fn_StringArray_Resize_t fn_StringArray_Resize = nullptr;
 
 // ============================================================
 // Initialization
@@ -1471,6 +1494,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400032e0));
     fn_ExeArrayResize2 = reinterpret_cast<fn_ExeArrayResize_t>(
         ResolveAddr(Module::Exe, 0x1400021d0));
+    fn_ExeArrayResize3 = reinterpret_cast<fn_ExeArrayResize_t>(
+        ResolveAddr(Module::Exe, 0x140001bb0));
     fn_ExeArrayPush = reinterpret_cast<fn_ExeArrayPush_t>(
         ResolveAddr(Module::Exe, 0x140003600));
 
@@ -2912,6 +2937,53 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140151910));
     fn_FrustumProject = reinterpret_cast<fn_FrustumProject_t>(
         ResolveAddr(Module::Exe, 0x14006c5b0));
+
+    // --- Description class reimpl support ---
+    // Dispatch table reads for Runtime DLL functions
+    g_fn_String_Serialize = *reinterpret_cast<g_fn_String_Serialize_t*>(
+        ResolveAddr(Module::Exe, 0x140151238));
+    fn_ElementDescription_Serialize = *reinterpret_cast<fn_ElementDescription_Serialize_t*>(
+        ResolveAddr(Module::Exe, 0x1401518c8));
+    fn_ElementDescription_Dtor = *reinterpret_cast<fn_ElementDescription_Dtor_t*>(
+        ResolveAddr(Module::Exe, 0x1401518b8));
+    fn_ElementDescription_Ctor = *reinterpret_cast<fn_ElementDescription_Ctor_t*>(
+        ResolveAddr(Module::Exe, 0x1401518b0));
+    fn_ElementDescription_CreateInstance = *reinterpret_cast<fn_ElementDescription_CreateInstance_t*>(
+        ResolveAddr(Module::Exe, 0x1401518d0));
+    fn_Element_Ctor = *reinterpret_cast<fn_Element_Ctor_t*>(
+        ResolveAddr(Module::Exe, 0x1401518d8));
+    fn_Element_Dtor = *reinterpret_cast<fn_Element_Dtor_t*>(
+        ResolveAddr(Module::Exe, 0x1401518e0));
+    fn_Element_ComputeLayout = *reinterpret_cast<fn_Element_ComputeLayout_t*>(
+        ResolveAddr(Module::Exe, 0x1401518e8));
+    fn_Element_GetAlignedPosition = *reinterpret_cast<fn_Element_GetAlignedPosition_t*>(
+        ResolveAddr(Module::Exe, 0x1401518f0));
+    fn_Serializer_SerializeBulk = *reinterpret_cast<fn_Serializer_SerializeBulk_t*>(
+        ResolveAddr(Module::Exe, 0x140152400));
+
+    // Direct exe function calls used by Description serializers
+    fn_ExternalPtr_Serialize = reinterpret_cast<fn_ExternalPtr_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x14000bd30));
+    fn_ExternalPtr_Serialize2 = reinterpret_cast<fn_ExternalPtr_Serialize2_t>(
+        ResolveAddr(Module::Exe, 0x14000bf40));
+    fn_ExternalPtr_Serialize3 = reinterpret_cast<fn_ExternalPtr_Serialize3_t>(
+        ResolveAddr(Module::Exe, 0x140007140));
+    fn_ExternalRefArray_Serialize = reinterpret_cast<fn_ExternalRefArray_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1400049c0));
+    fn_ComponentBase_Serialize = reinterpret_cast<fn_ComponentBase_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1401189b0));
+    fn_DynArray_Resize = reinterpret_cast<fn_DynArray_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14000a590));
+    fn_MemZeroFill = reinterpret_cast<fn_MemZeroFill_t>(
+        ResolveAddr(Module::Exe, 0x14003f010));
+    fn_StringArray_Resize = reinterpret_cast<fn_StringArray_Resize_t>(
+        ResolveAddr(Module::Exe, 0x140028860));
+
+    // Sprite ctors — dispatch table
+    fn_Sprite_Sprite = *reinterpret_cast<fn_Sprite_Sprite_t*>(
+        ResolveAddr(Module::Exe, 0x1401514c8));
+    fn_Sprite_DefaultCtor2 = *reinterpret_cast<fn_Sprite_DefaultCtor2_t*>(
+        ResolveAddr(Module::Exe, 0x140152b48));
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
     if (!fn_InputDevice_Update) {

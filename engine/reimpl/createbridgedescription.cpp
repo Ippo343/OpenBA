@@ -32,24 +32,48 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookCleanup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementations
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: resets vtable to bridge then base, calls External::~External, conditionally frees
+// FUN_1400328f0 decompilation: sets vtables, External::~External(self), MemFree if flags&1
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreateBridgeDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: wraps fields in Serializer, uses encoding vcall for ExternalPtr fields
+// FUN_1401195d0: Serializer ctor/dtor, 5x SerializerEncodingVCall (offsets +0x20,+0x28,+0x2c,+0x24,+0x30),
+//                Serialize_Int (+0x34), ExternalRefArray count=5 at +0x38
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreateBridgeDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x20));
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x28));
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x2c));
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x24));
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x30));
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x34), nullptr);
+    fn_ExternalRefArray_Serialize(serializer, 5, (void*)(s + 0x38), nullptr);
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: call vtable[0] dtor with flags=0, then call Ctor to reinitialize in place
+// FUN_1400328d0: (*(vtable[0]))(self, 0); CreateBridgeDescription_Ctor(self);
+// Ctor = CreateInPlace at 0x1400328c0 (unhookable whole-function, resolve inline)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateBridgeDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+    typedef void (*fn_Ctor_t)(void*);
+    static fn_Ctor_t fn_Ctor = nullptr;
+    if (!fn_Ctor) fn_Ctor = (fn_Ctor_t)ResolveAddr(Module::Exe, 0x1400328c0);
+    fn_Ctor(self);
 }
 
 // ============================================================

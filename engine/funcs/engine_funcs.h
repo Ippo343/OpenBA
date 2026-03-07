@@ -605,7 +605,8 @@ extern fn_FindComponent_t fn_FindComponent_Cemetery;       // FUN_140010a00
 // Array resize/push helpers (exe-internal template instantiations)
 typedef void (*fn_ExeArrayResize_t)(void* arrayBase, int newCount);
 extern fn_ExeArrayResize_t fn_ExeArrayResize;   // FUN_1400032e0
-extern fn_ExeArrayResize_t fn_ExeArrayResize2;  // FUN_1400021d0
+extern fn_ExeArrayResize_t fn_ExeArrayResize2;  // FUN_1400021d0 (4-byte elements)
+extern fn_ExeArrayResize_t fn_ExeArrayResize3;  // FUN_140001bb0 (8-byte elements)
 
 typedef void (*fn_ExeArrayPush_t)(void* arrayBase, int newCount, void* element);
 extern fn_ExeArrayPush_t fn_ExeArrayPush;       // FUN_140003600
@@ -2570,6 +2571,110 @@ extern fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP;
 // FUN_14006c5b0(outVec3Array) — reads camera frustum, projects 4 corners to screen-space
 typedef void (*fn_FrustumProject_t)(void* outVec3Array);
 extern fn_FrustumProject_t fn_FrustumProject;
+
+// ============================================================
+// Description class reimpl support (shared serialization helpers)
+// ============================================================
+
+// System::String::Serialize(this, Serializer*) — serialize/deserialize a String
+typedef void (*g_fn_String_Serialize_t)(void* thisStr, void* serializer);
+extern g_fn_String_Serialize_t g_fn_String_Serialize;
+
+// UI::ElementDescription::Serialize(this, Stream*) — base class serialize
+typedef void (*fn_ElementDescription_Serialize_t)(void* self, void* stream);
+extern fn_ElementDescription_Serialize_t fn_ElementDescription_Serialize;
+
+// UI::ElementDescription::~ElementDescription(this) — base destructor
+typedef void (*fn_ElementDescription_Dtor_t)(void* self);
+extern fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor;
+
+// UI::ElementDescription::ElementDescription(this) — base constructor
+typedef void (*fn_ElementDescription_Ctor_t)(void* self);
+extern fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor;
+
+// UI::ElementDescription::CreateInstance(this, InternalBasePtr*) — create element instance
+typedef void (*fn_ElementDescription_CreateInstance_t)(void* self, void* ptrRef);
+extern fn_ElementDescription_CreateInstance_t fn_ElementDescription_CreateInstance;
+
+// UI::Element::Element(this) — Element base constructor
+typedef void (*fn_Element_Ctor_t)(void* self);
+extern fn_Element_Ctor_t fn_Element_Ctor;
+
+// UI::Element::~Element(this) — Element base destructor (dispatch 0x1401518e0)
+typedef void (*fn_Element_Dtor_t)(void* self);
+extern fn_Element_Dtor_t fn_Element_Dtor;
+
+// UI::Element::ComputeLayout(this, x, y, w, h) — base layout (dispatch 0x1401518e8)
+typedef void (*fn_Element_ComputeLayout_t)(void* self, int x, int y, int w, int h);
+extern fn_Element_ComputeLayout_t fn_Element_ComputeLayout;
+
+// UI::Element::GetAlignedPosition(this, x, y, w, h, 0, 0, &outX, &outY, &outW, &outH, false, false)
+// (dispatch 0x1401518f0)
+typedef void (*fn_Element_GetAlignedPosition_t)(void* self, int x, int y, int w, int h,
+    int p6, int p7, int* outX, int* outY, int* outW, int* outH, bool p11, bool p12);
+extern fn_Element_GetAlignedPosition_t fn_Element_GetAlignedPosition;
+
+// UI::Sprite::Sprite(retval, spriteSheet, spriteName) — Sprite ctor from sheet+name (16 bytes)
+// Dispatch 0x1401514c8
+typedef void* (*fn_Sprite_Sprite_t)(void* retval, uint64_t spriteSheet, const void* spriteName);
+extern fn_Sprite_Sprite_t fn_Sprite_Sprite;
+
+// UI::Sprite::Sprite(self) — default ctor (dispatch 0x140152b48)
+typedef void (*fn_Sprite_DefaultCtor2_t)(void* self);
+extern fn_Sprite_DefaultCtor2_t fn_Sprite_DefaultCtor2;
+
+// Serializer encoding virtual dispatch helper.
+// The Serializer struct (24 bytes) has an encoding sub-object at offset +0x08.
+// Calling encoding->vtable[0x98/8](encoding, &field) serializes an ExternalPtr
+// through the serializer's encoding layer.
+// Usage: SerializerEncodingVCall(serializer_24bytes, 0x98, &field);
+inline void SerializerEncodingVCall(void* serializer, int vtableOffset, void* field) {
+    void* encoding = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(serializer) + 8);
+    void* vtable = *reinterpret_cast<void**>(encoding);
+    typedef void (*VFunc_t)(void*, void*);
+    auto fn = *reinterpret_cast<VFunc_t*>(reinterpret_cast<uintptr_t>(vtable) + vtableOffset);
+    fn(encoding, field);
+}
+
+// FUN_14000bd30(ExternalPtr*, Serializer*) — ExternalPtr serialize helper (exe function)
+typedef void (*fn_ExternalPtr_Serialize_t)(void* externPtrField, void* serializer);
+extern fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize;
+
+// FUN_14000bf40(ExternalPtr*, Serializer*) — ExternalPtr serialize variant (exe function)
+typedef void (*fn_ExternalPtr_Serialize2_t)(void* externPtrField, void* serializer);
+extern fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2;
+
+// FUN_140007140(ExternalPtr*, Serializer*) — another ExternalPtr serialize variant (exe)
+// Used by RadiusDescription, SelectDescription, ValueDescription
+typedef void (*fn_ExternalPtr_Serialize3_t)(void* externPtrField, void* serializer);
+extern fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3;
+
+// FUN_1400049c0(Serializer*, count, arrayBase, param4) — External reference array serialize (exe)
+typedef void (*fn_ExternalRefArray_Serialize_t)(void* serializer, int count, void* arrayBase, void* param4);
+extern fn_ExternalRefArray_Serialize_t fn_ExternalRefArray_Serialize;
+
+// IO::Serializer::Serialize(this, count, buffer, name) — bulk serialize bytes (exe dispatch)
+typedef void (*fn_Serializer_SerializeBulk_t)(void* self, int count, void* buffer, const char* name);
+extern fn_Serializer_SerializeBulk_t fn_Serializer_SerializeBulk;
+
+// Component_Serialize(this, Stream*) — Component base serialize (exe function 0x14012e2a0 or similar)
+typedef void (*fn_ComponentBase_Serialize_t)(void* self, void* stream);
+extern fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize;
+
+// FUN_14000a590(arrayPtr, newCount) — dynamic array resize (exe function)
+typedef void (*fn_DynArray_Resize_t)(void* arrayPtr, int newCount);
+extern fn_DynArray_Resize_t fn_DynArray_Resize;
+
+// FUN_14003f010(ptr, val, count) — memset-like zero fill (exe function)
+typedef void (*fn_MemZeroFill_t)(void* ptr, int val, int count);
+extern fn_MemZeroFill_t fn_MemZeroFill;
+
+// FUN_140028860(arrayPtr, newCount) — String array resize for ToolbarDescription (exe)
+typedef void (*fn_StringArray_Resize_t)(void* arrayPtr, int newCount);
+extern fn_StringArray_Resize_t fn_StringArray_Resize;
+
+// Object::Base::IsDerivedFrom(this, typeId) — already declared above but redeclared for clarity
+// extern fn_IsDerivedFrom_t fn_IsDerivedFrom;  // already at line 177
 
 // ============================================================
 // Initialization

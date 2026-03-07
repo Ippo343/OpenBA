@@ -32,24 +32,54 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookCleanup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementations
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: resets vtable to drag then base, calls External::~External, conditionally frees
+// FUN_1400329e0 decompilation: sets vtables, External::~External(self), MemFree if flags&1
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreateDragDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: wraps fields in Serializer
+// FUN_140119750: Serializer ctor/dtor, 1x SerializerEncodingVCall (+0x20),
+//                4x Serialize_Int (+0x28,+0x2c,+0x30,+0x34), 1x bool Serialize_Int (+0x24),
+//                FUN_140002340 (ExternalPtr serialize helper) at +0x38
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreateDragDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+    SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x20));
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x28), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x2c), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x30), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x34), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x24), nullptr);
+    // FUN_140002340: ExternalPtr<BuildingDescription> field serialize (checks DAT_1401c7318)
+    typedef void (*fn_ExternalPtr_Build_t)(void* field, void* serializer);
+    static fn_ExternalPtr_Build_t fn_BuildPtr_Serialize = nullptr;
+    if (!fn_BuildPtr_Serialize)
+        fn_BuildPtr_Serialize = (fn_ExternalPtr_Build_t)ResolveAddr(Module::Exe, 0x140002340);
+    fn_BuildPtr_Serialize((void*)(s + 0x38), serializer);
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: call vtable[0] dtor with flags=0, then call Ctor to reinitialize in place
+// FUN_1400329c0: (*(vtable[0]))(self, 0); CreateDragDescription_Ctor(self);
+// Ctor = CreateInPlace at 0x1400329b0 (unhookable whole-function, resolve inline)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateDragDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor_t)(void*, uint32_t);
+    ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
+    typedef void (*fn_Ctor_t)(void*);
+    static fn_Ctor_t fn_Ctor = nullptr;
+    if (!fn_Ctor) fn_Ctor = (fn_Ctor_t)ResolveAddr(Module::Exe, 0x1400329b0);
+    fn_Ctor(self);
 }
 
 // ============================================================

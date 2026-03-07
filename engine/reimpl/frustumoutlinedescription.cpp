@@ -35,46 +35,100 @@ static HookInfo g_hookCreateElement;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementations
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// FrustumOutlineDescription::Dtor (0x140012500)
+// Sets vtable, destroys String at +0x70, calls ElementDescription dtor, optionally frees.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "FrustumOutlineDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015c300);
+    fn_String_Dtor((void*)((uintptr_t)self + 0x70));
+    fn_ElementDescription_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // GetSerializeVersion: calls ElementDescription::GetFileVersion() and ORs with 0x100
 // to indicate a custom serialize format version bit.
 // Original at 0x14006c500: SUB RSP,28h; CALL [GetFileVersion]; BTS EAX,8; ADD RSP,28h; RET
-// Disabled because the prologue contains a RIP-relative CALL at offset 4.
 static uint32_t Reimpl_Slot3(void* self) {
     g_lastHook = "FrustumOutlineDescription::Slot3";
     uint32_t ver = fn_ElementDescription_GetFileVersion(self);
     return ver | 0x100u;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
+// FrustumOutlineDescription::Serialize (0x14006c460)
+// Calls base Serialize, then serializes ExternalPtr at +0x68, String at +0x70,
+// and two ints at +0x78 and +0x7c.
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "FrustumOutlineDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uint8_t serBuf[24];
+    fn_ElementDescription_Serialize(self, stream);
+    g_fn_Serializer_Ctor(serBuf, stream, 0);
+    fn_ExternalPtr_Serialize((void*)((uintptr_t)self + 0x68), serBuf);
+    g_fn_String_Serialize((void*)((uintptr_t)self + 0x70), serBuf);
+    g_fn_Serialize_Int(serBuf, (void*)((uintptr_t)self + 0x78), nullptr);
+    g_fn_Serialize_Int(serBuf, (void*)((uintptr_t)self + 0x7c), nullptr);
+    g_fn_Serializer_Dtor(serBuf);
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// FrustumOutlineDescription::Cleanup (0x140012390)
+// Virtual dtor (no-free), re-constructs as default FrustumOutlineDescription.
+// Extra: *(int64*)(self+0x78) = -1 (vs CaptureBox which zeroes +0x68 and +0x70 only)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "FrustumOutlineDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_VDtor_t)(void*, uint32_t);
+    ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
+    fn_ElementDescription_Ctor(self);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015c300);
+    *(int64_t*)((uintptr_t)self + 0x68) = 0;
+    *(int64_t*)((uintptr_t)self + 0x70) = 0;
+    *(int64_t*)((uintptr_t)self + 0x78) = (int64_t)-1;
 }
 
-typedef void (*fn_CreateElement_t)(void* self, void* stream);
-static void Reimpl_CreateElement(void* self, void* stream) {
+// FrustumOutlineDescription::CreateElement (0x14006c340)
+// Allocates FrustumOutlineElement (0xd8 bytes), constructs, sets +0xd0 = -1,
+// wraps in InternalBasePtr, calls CreateInstance, copies Sprite from description,
+// then copies two ints from description (+0x78, +0x7c) into element (+0xd0, +0xd4).
+static void Reimpl_CreateElement(void* self, void* outPtr) {
     g_lastHook = "FrustumOutlineDescription::CreateElement";
-    ((fn_CreateElement_t)g_hookCreateElement.trampoline)(self, stream);
+    void* elem = fn_MemAlloc(g_pMemAllocSingleton, 0xd8, 8);
+    if (elem) {
+        fn_Element_Ctor(elem);
+        *(void**)elem = (void*)ResolveAddr(Module::Exe, 0x14015c2a0);
+        fn_Sprite_DefaultCtor2((void*)((uintptr_t)elem + 0xc0));
+        *(int64_t*)((uintptr_t)elem + 0xd0) = (int64_t)-1;
+    }
+    void* localPtr[2] = {nullptr, nullptr};
+    fn_InternalBasePtr_Ctor(localPtr, elem);
+    fn_ElementDescription_CreateInstance(self, localPtr);
+    fn_InternalBasePtr_CheckPtr(localPtr);
+    void* pElem = localPtr[0];
+    uint64_t spriteSheet = *(uint64_t*)((uintptr_t)self + 0x68);
+    void* spriteName = (void*)((uintptr_t)self + 0x70);
+    uint64_t spriteRetval[2] = {0, 0};
+    fn_Sprite_Sprite(spriteRetval, spriteSheet, spriteName);
+    *(uint64_t*)((uintptr_t)pElem + 0xc0) = spriteRetval[0];
+    *(uint64_t*)((uintptr_t)pElem + 0xc8) = spriteRetval[1];
+    fn_InternalBasePtr_CheckPtr(localPtr);
+    *(int32_t*)((uintptr_t)localPtr[0] + 0xd0) = *(int32_t*)((uintptr_t)self + 0x78);
+    fn_InternalBasePtr_CheckPtr(localPtr);
+    *(int32_t*)((uintptr_t)localPtr[0] + 0xd4) = *(int32_t*)((uintptr_t)self + 0x7c);
+    *(void**)outPtr = localPtr[0];
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// FrustumOutlineDescription::CreateInPlace (0x140012330)
+// Default-constructs a FrustumOutlineDescription in place.
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "FrustumOutlineDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_ElementDescription_Ctor(self);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015c300);
+    *(int64_t*)((uintptr_t)self + 0x68) = 0;
+    *(int64_t*)((uintptr_t)self + 0x70) = 0;
+    *(int64_t*)((uintptr_t)self + 0x78) = (int64_t)-1;
+    return self;
 }
 
 // ============================================================

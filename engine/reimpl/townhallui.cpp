@@ -178,19 +178,19 @@ static void Reimpl_Serialize(void* self) {
     TownHallUI_Serialize((TownHallUI*)self);
 }
 
-// Startup: REIMPLEMENTED (full clean code — no trampoline needed)
+// Startup: REIMPLEMENTED
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TownHallUI::Startup";
     TownHallUI_Startup((TownHallUI*)self);
 }
 
-// OnCreate: REIMPLEMENTED (full clean code — no trampoline needed)
+// OnCreate: REIMPLEMENTED
 static void Reimpl_OnCreate(void* self) {
     g_lastHook = "TownHallUI::OnCreate";
     TownHallUI_OnCreate((TownHallUI*)self);
 }
 
-// OnRemove: REIMPLEMENTED (full clean code — no trampoline needed)
+// OnRemove: REIMPLEMENTED
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
     g_lastHook = "TownHallUI::OnRemove";

@@ -32,24 +32,84 @@ static HookInfo g_hookSerialize;
 static HookInfo g_hookCleanup;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented functions
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: calls FUN_14012db70 (complex inline cleanup helper), conditionally frees
+// FUN_14012db70: sets vtable, destroys String array at +0x50 (count at +0x58),
+// frees array, destroys Strings at +0x48/+0x40/+0x38/+0x28, sets base vtable, ~External
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ToolbarDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    typedef void (*fn_cleanup_t)(void*);
+    static fn_cleanup_t fn_cleanup = nullptr;
+    if (!fn_cleanup) fn_cleanup = (fn_cleanup_t)ResolveAddr(Module::Exe, 0x14012db70);
+    fn_cleanup(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: ExternalPtr at +0x20, String at +0x28, ExternalPtr2 at +0x30,
+// String at +0x38, String at +0x40, String at +0x48,
+// count at +0x58, resize String array at +0x50 if loading, serialize each string,
+// Serialize int at +0x64 (= decimal 100), int at +0x60
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "ToolbarDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    uintptr_t s = (uintptr_t)self;
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    fn_ExternalPtr_Serialize((void*)(s + 0x20), serializer);
+    g_fn_String_Serialize((void*)(s + 0x28), serializer);
+    fn_ExternalPtr_Serialize2((void*)(s + 0x30), serializer);
+    g_fn_String_Serialize((void*)(s + 0x38), serializer);
+    g_fn_String_Serialize((void*)(s + 0x40), serializer);
+    g_fn_String_Serialize((void*)(s + 0x48), serializer);
+
+    // Serialize count at +0x58, then resize if loading, then serialize each string in array
+    uint32_t count = *(uint32_t*)(s + 0x58);
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x58), nullptr);
+
+    // Check if loading (serializer internal mode == 0)
+    uintptr_t ser_obj = *(uintptr_t*)((uintptr_t)serializer);
+    if (*(int*)(ser_obj + 8) == 0) {
+        fn_StringArray_Resize((void*)(s + 0x50), count);
+    }
+
+    // Serialize each String in the array at +0x50 (ptr to String[count], each String = 8 bytes)
+    void* arr_ptr = *(void**)(s + 0x50);
+    for (uint32_t i = 0; i < count; ++i) {
+        g_fn_String_Serialize((uint8_t*)arr_ptr + i * 8, serializer);
+    }
+
+    g_fn_Serialize_Int(serializer, (void*)(s + 100), nullptr); // +0x64
+    g_fn_Serialize_Int(serializer, (void*)(s + 0x60), nullptr);
+
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
+// Cleanup: virtual dtor(no-free) + ToolbarDescription_Ctor (0x14012dc30)
+// From disassembly at 0x1400394e0: calls vtable[0](self,0) then JMP 0x14012dc30
+// ToolbarDescription_Ctor: External::External + set vtable + zero all fields + init defaults
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "ToolbarDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_VDtor_t)(void*, uint32_t);
+    ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
+    fn_External_External(self);
+    uintptr_t s = (uintptr_t)self;
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140164980);
+    *(void**)self = vtable;
+    *(uint64_t*)(s + 0x20) = 0;
+    *(uint64_t*)(s + 0x28) = 0;
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+    *(uint64_t*)(s + 0x40) = 0;
+    *(uint64_t*)(s + 0x48) = 0;
+    *(uint64_t*)(s + 0x50) = 0;
+    *(uint64_t*)(s + 0x58) = 0;
+    *(uint32_t*)(s + 0x60) = 0xffffffffu; // default -1
+    *(uint32_t*)(s + 100)  = 0;           // +0x64 = 0
 }
 
 // ============================================================

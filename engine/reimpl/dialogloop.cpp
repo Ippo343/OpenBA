@@ -279,8 +279,6 @@ void InstallDialogLoopDraw() {
     ResolveGlobals();
     uintptr_t target = ResolveAddr(Module::Runtime, DialogLoopAddr::Draw);
     // Prologue: MOV [RSP+8],RBX(5) + PUSH RDI(1) + SUB RSP,0x30(4) + MOV RAX,[RIP+...](7) = 17 bytes
-    // NOTE: byte 10 is RIP-relative MOV RAX,[RIP+offset] — trampoline is broken
-    // but we never call it (reimpl handles everything).
     InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 17);
 #ifdef _DEBUG
     printf("[DialogLoopT] Draw hooked at %p (prologue=17)\n", (void*)target);

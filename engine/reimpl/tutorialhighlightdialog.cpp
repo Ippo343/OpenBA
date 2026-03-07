@@ -12,14 +12,12 @@
 //   +0x18: 0x14003a948 — Runtime thunk (6b, unhookable)
 //   +0x20: 0x1400e0020 — Startup: set up highlight overlay (hookable, 13b)
 //   +0x28: 0x14003a94e — Runtime thunk (6b, unhookable)
-//   +0x30: 0x1400dffe0 — Update: rel branch at byte 8, UNHOOKABLE via trampoline
-//   +0x38: 0x1400e0000 — Load: 11b MOV+ADD+RET, too short for trampoline, UNHOOKABLE
+//   +0x30: 0x1400dffe0 — Update: rel branch at byte 8, UNHOOKABLE (vtable patch)
+//   +0x38: 0x1400e0000 — Load: 11b MOV+ADD+RET, UNHOOKABLE (vtable patch)
 //   +0x40: 0x14003aa1a — Runtime thunk (6b, unhookable)
 //   +0x48: 0x14003a954 — Runtime thunk (6b, unhookable)
 //
-// Update and Load use vtable slot patching instead of function trampolining
-// because they are too short or contain relative branches that would break
-// when copied to a trampoline buffer.
+// Update and Load use vtable slot patching (too short or contain rel branches).
 
 #include "ui/Dialogs.h"
 #include "Dialog/ui_dialogs.h"
@@ -117,7 +115,6 @@ static void Reimpl_Update(TutorialHighlightDialog* self) {
 
 // Slot 7 (+0x38): Load(this, param2) — REIMPLEMENTED via vtable patch
 // Original 0x1400e0000 is only 11 bytes (MOV RAX,[RDX]; ADD [RCX+0xB8],RAX; RET).
-// Too short for a 12-byte trampoline JMP.
 //
 // Accumulates delta-time ticks into self->dataB8 (a System::Time value).
 // param2 is a pointer to a Time tick count to add.
@@ -148,7 +145,7 @@ void InstallTutorialHighlightDialogStartup() {
 }
 void RemoveTutorialHighlightDialogStartup() { RemoveHook(&g_hookStartup); }
 
-// Slot 6: Update — vtable patch (unhookable via trampoline, rel branch at byte 8)
+// Slot 6: Update — vtable patch (rel branch at byte 8)
 void InstallTutorialHighlightDialogUpdate() {
     // Resolve exe helper functions at their Ghidra addresses.
     s_UpdateHelper_NoRect  = (fn_UpdateHelper_t)ResolveAddr(Module::Exe, 0x1400dfac0);
@@ -166,7 +163,7 @@ void RemoveTutorialHighlightDialogUpdate() {
     g_savedUpdate = nullptr;
 }
 
-// Slot 7: Load — vtable patch (unhookable via trampoline, only 11 bytes)
+// Slot 7: Load — vtable patch (only 11 bytes)
 void InstallTutorialHighlightDialogLoad() {
     uintptr_t vtable = ResolveAddr(Module::Exe, TutorialHighlightDialogAddr::Vtable);
     PatchVtableSlot(vtable, 7, (void*)Reimpl_Load, &g_savedLoad);

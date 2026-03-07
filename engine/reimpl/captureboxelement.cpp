@@ -37,12 +37,19 @@ static HookInfo g_hookComputeLayout;
 static HookInfo g_hookDraw;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented functions
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: set vtable, Element::~Element, conditionally free
+// From decompile: sets vtable 0x14015d440, UI::Element::~Element(self), conditional free
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CaptureBoxElement::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* vtable = nullptr;
+    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015d440);
+    *(void**)self = vtable;
+    fn_Element_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // OnCreate: if bit 27 of self+0x34 is set (initial-size-pending flag),
@@ -59,16 +66,49 @@ static void Reimpl_OnCreate(void* self) {
     }
 }
 
-typedef void (*fn_ComputeLayout_t)(void* self, int a, int b, int c, int d);
-static void Reimpl_ComputeLayout(void* self, int a, int b, int c, int d) {
+// ComputeLayout: Element::ComputeLayout base, GetAlignedPosition, write rect fields
+// From decompile: identical pattern to FrustumOutlineElement::ComputeLayout
+static void Reimpl_ComputeLayout(void* self, int x, int y, int w, int h) {
     g_lastHook = "CaptureBoxElement::ComputeLayout";
-    ((fn_ComputeLayout_t)g_hookComputeLayout.trampoline)(self, a, b, c, d);
+    uintptr_t s = (uintptr_t)self;
+    fn_Element_ComputeLayout(self, x, y, w, h);
+    int outX[2], outY, outW, outH[2];
+    fn_Element_GetAlignedPosition(self, x, y, w, h, 0, 0, outX, &outY, &outW, outH, false, false);
+    *(int*)(s + 0x68) = outX[0];
+    *(int*)(s + 0x70) = outX[0] + outW;
+    *(int*)(s + 0x6c) = outY;
+    *(int*)(s + 0x74) = outY + outH[0];
 }
 
-typedef void (*fn_Draw_t)(void* self, void* spriteCtx, uint8_t alpha);
+// Draw: Element::Draw base, compute color, draw 4 lines as a rect outline
+// From decompile: reads color from +0x38, checks bit 0x40000 of +0x34 for half-alpha,
+// draws left/right edges (+0xd0/+0xd8 for x, +0xd4/+0xdc for y range),
+// draws top/bottom edges (+0xd4/+0xdc for y, +0xd0/+0xd8 for x range)
 static void Reimpl_Draw(void* self, void* spriteCtx, uint8_t alpha) {
     g_lastHook = "CaptureBoxElement::Draw";
-    ((fn_Draw_t)g_hookDraw.trampoline)(self, spriteCtx, alpha);
+    uintptr_t s = (uintptr_t)self;
+    fn_Element_Draw(self, spriteCtx, alpha);
+    uint32_t packedColor = *(uint32_t*)(s + 0x38);
+    if (*(uint32_t*)(s + 0x34) & 0x40000u) {
+        alpha = alpha >> 1;
+    }
+    uint32_t color =
+        (((packedColor >> 8 & 0xffff0000u) * (uint32_t)alpha ^ packedColor) & 0xffffffu) ^
+        ((packedColor >> 8 & 0xff0000u) * (uint32_t)alpha);
+    void* sprite = (void*)(s + 0xc0);
+    // Draw rect outline: top edge, bottom edge, left edge, right edge
+    fn_SpriteContext_AddLine(spriteCtx, sprite,
+        *(int*)(s + 0xd0), *(int*)(s + 0xd4),
+        *(int*)(s + 0xd8), *(int*)(s + 0xd4), color);
+    fn_SpriteContext_AddLine(spriteCtx, sprite,
+        *(int*)(s + 0xd0), *(int*)(s + 0xdc),
+        *(int*)(s + 0xd8), *(int*)(s + 0xdc), color);
+    fn_SpriteContext_AddLine(spriteCtx, sprite,
+        *(int*)(s + 0xd0), *(int*)(s + 0xd4),
+        *(int*)(s + 0xd0), *(int*)(s + 0xdc), color);
+    fn_SpriteContext_AddLine(spriteCtx, sprite,
+        *(int*)(s + 0xd8), *(int*)(s + 0xd4),
+        *(int*)(s + 0xd8), *(int*)(s + 0xdc), color);
 }
 
 // ============================================================

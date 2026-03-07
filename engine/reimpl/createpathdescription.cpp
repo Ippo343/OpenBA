@@ -33,30 +33,54 @@ static HookInfo g_hookCleanup;
 static HookInfo g_hookCreateInPlace;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementations
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
+
+// Dtor: resets vtable to path then base, calls External::~External, conditionally frees
+// FUN_140004d30 decompilation: sets vtables, External::~External(self), MemFree if flags&1
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "CreatePathDescription::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    fn_External_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
-typedef void (*fn_Serialize_t)(void* self, void* stream);
-static void Reimpl_Serialize(void* self, void* stream) {
+// Serialize: CreatePath has no extra fields — just Serializer ctor/dtor, returns 1
+// FUN_140047a70 decompilation: Serializer ctor, Serializer dtor, return 1
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "CreatePathDescription::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    (void)self;
+    uint8_t serializer[32];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+    g_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
-typedef void (*fn_Cleanup_t)(void* self);
-static void Reimpl_Cleanup(void* self) {
+// Cleanup: call vtable[0] dtor (passes through all params), then External ctor + set vtable
+// FUN_140004ce0 decompilation:
+//   (*(vtable[0]))(self, 0, param_3, param_4, 0xFFFFFFFFFFFFFFFE);
+//   Object::External::External(self);
+//   vtable = PTR_FUN_1401629a0; vtable = PTR_FUN_140159210;
+// Note: actual function takes 4 params — pass them through to preserve ABI
+static void* Reimpl_Cleanup(void* self, uint64_t /*param2*/, uint64_t param3, uint64_t param4) {
     g_lastHook = "CreatePathDescription::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    typedef void* (*fn_Dtor5_t)(void*, uint32_t, uint64_t, uint64_t, int64_t);
+    ((fn_Dtor5_t)(*(void***)self)[0])(self, 0, param3, param4, (int64_t)-2);
+    fn_External_External(self);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x1401629a0);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x140159210);
+    return self;
 }
 
-typedef void* (*fn_CreateInPlace_t)(void* self);
+// CreateInPlace: allocate and initialize a CreatePathDescription in place
+// FUN_140004c90 decompilation: null check, External ctor, set vtable (base then path)
 static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "CreatePathDescription::CreateInPlace";
-    return ((fn_CreateInPlace_t)g_hookCreateInPlace.trampoline)(self);
+    if (!self) return nullptr;
+    fn_External_External(self);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x1401629a0);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x140159210);
+    return self;
 }
 
 // ============================================================
