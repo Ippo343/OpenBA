@@ -246,6 +246,7 @@ uint32_t* g_TypeId_ToolUI = nullptr;
 // ============================================================
 void** g_pGameWorldSingleton = nullptr;
 void** g_pKeyMapSingleton = nullptr;
+void** g_pEngineSingleton = nullptr;
 
 // ============================================================
 // Common Exe Functions (Phase A4)
@@ -424,6 +425,7 @@ fn_GetCurrentProductIndex_t fn_GetCurrentProductIndex = nullptr;
 fn_FindDialogByName_t fn_FindDialogByName = nullptr;
 fn_ResolveExternalByName_t fn_ResolveExternalByName = nullptr;
 fn_External_External_t fn_External_External = nullptr;
+fn_External_Dtor_t fn_External_Dtor = nullptr;
 
 // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
 fn_KeyMap_GetValue_t fn_KeyMap_GetValue = nullptr;
@@ -586,6 +588,15 @@ fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGraph = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGraph = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGeneral = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProfessions = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory = nullptr;
+fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll = nullptr;
+fn_TownHallUI_OnProfChange_t fn_TownHallUI_OnProfessionButton = nullptr;
+fn_TownHallUI_OnProfChange_t fn_TownHallUI_OnProfessionSpinner = nullptr;
+void** g_pGameSingleton = nullptr;
 
 // SpriteCaptureUI support
 uint32_t* g_TypeId_EditElement = nullptr;
@@ -599,9 +610,31 @@ fn_TradeUI_Startup_t fn_TradeUI_Startup = nullptr;
 fn_TradeUI_OnCreate_t fn_TradeUI_OnCreate = nullptr;
 fn_TradeUI_OnRemove_t fn_TradeUI_OnRemove = nullptr;
 fn_TradeUI_Update_t fn_TradeUI_Update = nullptr;
+fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateSellTotals = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateBuyTotals = nullptr;
 uintptr_t g_NoiseUI_ImageBufferVtable = 0;
 fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage = nullptr;
 fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise = nullptr;
+fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting = nullptr;
+uint32_t* g_TypeId_DiseaseDescription = nullptr;
+uint32_t* g_TypeId_DrawableType = nullptr;
+fn_Game_SpawnResources_t fn_Game_SpawnResources = nullptr;
+fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType = nullptr;
+fn_Game_KillAllCitizens_t fn_Game_KillAllCitizens = nullptr;
+fn_Game_SpawnItemsInStorage_t fn_Game_SpawnItemsInStorage = nullptr;
+fn_Game_SpawnCitizens_t fn_Game_SpawnCitizens = nullptr;
+fn_DebugUI_TriggerDisasterOnBuilding_t fn_DebugUI_TriggerDisasterOnBuilding = nullptr;
+fn_Game_StartRandomFire_t fn_Game_StartRandomFire = nullptr;
+fn_Game_SpawnTornado_t fn_Game_SpawnTornado = nullptr;
+fn_Game_InfectRandomCitizen_t fn_Game_InfectRandomCitizen = nullptr;
+fn_DebugUI_OnDiseaseComboChanged_t fn_DebugUI_OnDiseaseComboChanged = nullptr;
+fn_DebugUI_OnDrawComboChanged_t fn_DebugUI_OnDrawComboChanged = nullptr;
+fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
+fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
+fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
 
 // ============================================================
 // Engine globals
@@ -1281,6 +1314,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c3dd8));
     g_pKeyMapSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3de8));
+    g_pEngineSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140151440));
 
     // ================================================================
     // Phase A4: Common Exe Functions (by RVA)
@@ -1754,6 +1789,13 @@ bool EngineFuncsInit() {
             fn_External_External = reinterpret_cast<fn_External_External_t>(*dispatch);
         }
     }
+    // Object::External::~External — runtime dispatch at 0x140151ea0
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151ea0));
+        if (dispatch && *dispatch) {
+            fn_External_Dtor = reinterpret_cast<fn_External_Dtor_t>(*dispatch);
+        }
+    }
 
     // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
     fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
@@ -2154,6 +2196,24 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14007ebf0));
     fn_TownHallUI_UpdateGraph = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x14007e5b0));
+    fn_TownHallUI_UpdateGeneral = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007d030));
+    fn_TownHallUI_UpdateProfessions = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007ccb0));
+    fn_TownHallUI_UpdateProduction = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007c7f0));
+    fn_TownHallUI_UpdateAgriculture = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007c220));
+    fn_TownHallUI_UpdateInventory = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007def0));
+    fn_TownHallUI_UpdateAll = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x14007d590));
+    fn_TownHallUI_OnProfessionButton = reinterpret_cast<fn_TownHallUI_OnProfChange_t>(
+        ResolveAddr(Module::Exe, 0x14007dca0));
+    fn_TownHallUI_OnProfessionSpinner = reinterpret_cast<fn_TownHallUI_OnProfChange_t>(
+        ResolveAddr(Module::Exe, 0x14007dd10));
+    g_pGameSingleton = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401c3dd8));
 
     // --- SpriteCaptureUI support ---
     // EditElement type ID: exref at 0x140151b50 (double-indirect)
@@ -2185,6 +2245,16 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140081f20));
     fn_TradeUI_Update = reinterpret_cast<fn_TradeUI_Update_t>(
         ResolveAddr(Module::Exe, 0x1400868c0));
+    fn_TradeUI_RefreshDisplay = reinterpret_cast<fn_TradeUI_RefreshDisplay_t>(
+        ResolveAddr(Module::Exe, 0x1400846b0));
+    fn_TradeUI_RefreshSellTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140083c70));
+    fn_TradeUI_RefreshBuyTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140083100));
+    fn_TradeUI_UpdateSellTotals = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140082920));
+    fn_TradeUI_UpdateBuyTotals = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140082850));
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
@@ -2192,6 +2262,46 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140071890));
     fn_NoiseUI_GenerateNoise = reinterpret_cast<fn_NoiseUI_GenerateNoise_t>(
         ResolveAddr(Module::Exe, 0x1400711D0));
+
+    // --- DebugUI helpers ---
+    fn_DebugUI_SetDayLighting = reinterpret_cast<fn_DebugUI_SetDayLighting_t>(
+        ResolveAddr(Module::Exe, 0x140061780));
+    // DiseaseDescription type ID (DAT_1401c5948)
+    g_TypeId_DiseaseDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5948));
+    // DrawableType type ID (DAT_1401c47c8)
+    g_TypeId_DrawableType = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c47c8));
+
+    // --- DebugUI Slot9 sub-functions ---
+    fn_Game_SpawnResources = reinterpret_cast<fn_Game_SpawnResources_t>(
+        ResolveAddr(Module::Exe, 0x140091660));
+    fn_Game_TriggerDisasterByType = reinterpret_cast<fn_Game_TriggerDisasterByType_t>(
+        ResolveAddr(Module::Exe, 0x140060110));
+    fn_Game_KillAllCitizens = reinterpret_cast<fn_Game_KillAllCitizens_t>(
+        ResolveAddr(Module::Exe, 0x140060000));
+    fn_Game_SpawnItemsInStorage = reinterpret_cast<fn_Game_SpawnItemsInStorage_t>(
+        ResolveAddr(Module::Exe, 0x140060290));
+    fn_Game_SpawnCitizens = reinterpret_cast<fn_Game_SpawnCitizens_t>(
+        ResolveAddr(Module::Exe, 0x140060380));
+    fn_DebugUI_TriggerDisasterOnBuilding = reinterpret_cast<fn_DebugUI_TriggerDisasterOnBuilding_t>(
+        ResolveAddr(Module::Exe, 0x14005FF30));
+    fn_Game_StartRandomFire = reinterpret_cast<fn_Game_StartRandomFire_t>(
+        ResolveAddr(Module::Exe, 0x14005FEB0));
+    fn_Game_SpawnTornado = reinterpret_cast<fn_Game_SpawnTornado_t>(
+        ResolveAddr(Module::Exe, 0x14005FD20));
+    fn_Game_InfectRandomCitizen = reinterpret_cast<fn_Game_InfectRandomCitizen_t>(
+        ResolveAddr(Module::Exe, 0x14005FE10));
+    fn_DebugUI_OnDiseaseComboChanged = reinterpret_cast<fn_DebugUI_OnDiseaseComboChanged_t>(
+        ResolveAddr(Module::Exe, 0x14005FC60));
+    fn_DebugUI_OnDrawComboChanged = reinterpret_cast<fn_DebugUI_OnDrawComboChanged_t>(
+        ResolveAddr(Module::Exe, 0x1400608A0));
+    fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(
+        ResolveAddr(Module::Exe, 0x1400607E0));
+    fn_DebugUI_WriteLightingColors = reinterpret_cast<fn_DebugUI_WriteLightingColors_t>(
+        ResolveAddr(Module::Exe, 0x140061530));
+    fn_Game_GetMonthFromTime = reinterpret_cast<fn_Game_GetMonthFromTime_t>(
+        ResolveAddr(Module::Exe, 0x1400932A0));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
@@ -2309,6 +2419,8 @@ bool EngineFuncsInit() {
            g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
     printf("  KeyMap                    = %p -> %p\n", (void*)g_pKeyMapSingleton,
            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    printf("  EngineSingleton           = %p -> %p\n", (void*)g_pEngineSingleton,
+           g_pEngineSingleton ? *g_pEngineSingleton : nullptr);
     printf("[EngineFuncs] Phase A4 — Exe Functions:\n");
     printf("  FindComp_StateMachine     = %p\n", (void*)fn_FindComponent_StateMachine);
     printf("  FindComp_Destroy          = %p\n", (void*)fn_FindComponent_Destroy);

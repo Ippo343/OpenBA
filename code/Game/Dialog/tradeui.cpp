@@ -126,7 +126,7 @@ void TradeUI_Startup(TradeUI* self) {
 }
 
 // ============================================================
-// OnCreate (vtable +0x40): Refresh on order changes — delegated to exe
+// OnCreate (vtable +0x40): Refresh on order changes
 // ============================================================
 // Original: 0x1400827b0
 //
@@ -135,7 +135,35 @@ void TradeUI_Startup(TradeUI* self) {
 // refreshes sell, buy, and order tables.
 
 void TradeUI_OnCreate(TradeUI* self) {
-    fn_TradeUI_OnCreate(self);
+    uintptr_t s = (uintptr_t)self;
+
+    // Get owning entity and find BuildingComponent
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Check if order count changed
+    int selfOrderCount = *(int*)(s + 0x48);
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    int buildingOrderCount = *(int*)(buildingPtr[0] + 0x58);
+
+    if (selfOrderCount != buildingOrderCount) {
+        // Order count changed — refresh sell, buy, and order tables
+        fn_TradeUI_RefreshSellTable(self);
+        fn_TradeUI_RefreshBuyTable(self);
+        fn_TradeUI_RefreshDisplay(self, 0, 0, 0);
+    }
+
+    // Always update totals
+    fn_TradeUI_UpdateSellTotals(self);
+    fn_TradeUI_UpdateBuyTotals(self);
 }
 
 // ============================================================
@@ -155,14 +183,71 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
 }
 
 // ============================================================
-// Update (vtable +0x50): Serialize tab/sort state — delegated to exe
+// Update (vtable +0x50): Serialize tab/sort state
 // ============================================================
 // Original: 0x1400868c0
 //
 // Finds "tradeTabs" TabElement, serializes active tab index and
 // sortCombo selection via IO::Serializer. On load, restores tab
-// and combo state.
+// and combo state, then refreshes the sorted display.
 
 void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
-    fn_TradeUI_Update(self, stream, p3, p4);
+    uintptr_t s = (uintptr_t)self;
+
+    // Find "tradeTabs" TabElement
+    uint64_t strBuf[2] = {0, 0};
+    fn_String_Ctor_CStr(strBuf, "tradeTabs");
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+    uint64_t foundBuf[2] = {0, 0};
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+
+    fn_InternalBasePtr_CheckPtr(foundBuf);
+    void* element = *(void**)foundBuf;
+
+    // Cast to TabElement via IsDerivedFrom
+    void* tabElement = nullptr;
+    if (element && g_TypeId_TabElement) {
+        bool isDerived = fn_IsDerivedFrom(element, *g_TypeId_TabElement);
+        if (isDerived) tabElement = element;
+    }
+
+    uint64_t tabIBP = 0;
+    fn_InternalBasePtr_Ctor(&tabIBP, tabElement);
+
+    fn_String_Dtor(strBuf);
+
+    // Read current tab index from TabElement (+0xf8)
+    fn_InternalBasePtr_CheckPtr(&tabIBP);
+    int tabIndex = *(int*)(tabIBP + 0xf8);
+
+    // Read current sortCombo selection (+0x140 element, +0x118 = combo index)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x140));
+    uint32_t sortIndex = *(uint32_t*)(*(uintptr_t*)(s + 0x140) + 0x118);
+
+    // Create serializer
+    uint64_t serializer[3] = {0, 0, 0};
+    g_fn_Serializer_Ctor(serializer, stream, 1);
+
+    // Only serialize if version > 0 (newer save format)
+    int version = g_fn_Serializer_GetVersion(serializer);
+    if (version > 0) {
+        g_fn_Serialize_Int(serializer, (int*)&sortIndex, nullptr);
+        g_fn_Serialize_Int(serializer, &tabIndex, nullptr);
+    }
+
+    // On load (mode == 0), restore tab and combo state
+    if (*(int*)(serializer[0] + 8) == 0) {
+        fn_InternalBasePtr_CheckPtr(&tabIBP);
+        fn_TabElement_SetActiveTab((void*)tabIBP, tabIndex);
+
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x140));
+        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x140), sortIndex);
+
+        // Refresh sorted display
+        fn_TradeUI_RefreshDisplay(self, (uint64_t)sortIndex, 0, p4);
+    }
+
+    // Destroy serializer
+    g_fn_Serializer_Dtor(serializer);
 }

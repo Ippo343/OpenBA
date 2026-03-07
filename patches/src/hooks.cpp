@@ -2835,16 +2835,16 @@ static ReimplEntry g_reimplementations[] = {
     // --- TownHallUI ---
     { "TownHallUI::ScalarDtor", InstallTownHallUIScalarDtor, RemoveTownHallUIScalarDtor, true },
     { "TownHallUI::Serialize", InstallTownHallUISerialize, RemoveTownHallUISerialize, true },
-    { "TownHallUI::Startup", InstallTownHallUIStartup, RemoveTownHallUIStartup, false }, // DISABLED: relative CALL in prologue
-    { "TownHallUI::OnCreate", InstallTownHallUIOnCreate, RemoveTownHallUIOnCreate, false }, // DISABLED: RIP-relative MOV in prologue
-    { "TownHallUI::OnRemove", InstallTownHallUIOnRemove, RemoveTownHallUIOnRemove, false }, // DISABLED: short Jcc in prologue
+    { "TownHallUI::Startup", InstallTownHallUIStartup, RemoveTownHallUIStartup, true }, // RE-ENABLED: clean reimpl, no trampoline needed
+    { "TownHallUI::OnCreate", InstallTownHallUIOnCreate, RemoveTownHallUIOnCreate, true }, // RE-ENABLED: clean reimpl, no trampoline needed
+    { "TownHallUI::OnRemove", InstallTownHallUIOnRemove, RemoveTownHallUIOnRemove, true }, // RE-ENABLED: clean reimpl, no trampoline needed
     { "TownHallUI::Update", InstallTownHallUIUpdate, RemoveTownHallUIUpdate, true },
 
     // --- TradeUI ---
     { "TradeUI::ScalarDtor", InstallTradeUIScalarDtor, RemoveTradeUIScalarDtor, true },
     { "TradeUI::Serialize", InstallTradeUISerialize, RemoveTradeUISerialize, true },
     { "TradeUI::Draw", InstallTradeUIDraw, RemoveTradeUIDraw, true },
-    { "TradeUI::Slot6", InstallTradeUISlot6, RemoveTradeUISlot6, false }, // RIP-relative in prologue
+    { "TradeUI::Slot6", InstallTradeUISlot6, RemoveTradeUISlot6, true }, // RE-ENABLED: clean reimpl, no trampoline needed
     { "TradeUI::Startup", InstallTradeUIStartup, RemoveTradeUIStartup, true },
     { "TradeUI::OnCreate", InstallTradeUIOnCreate, RemoveTradeUIOnCreate, true },
     { "TradeUI::OnRemove", InstallTradeUIOnRemove, RemoveTradeUIOnRemove, true },

@@ -1,7 +1,7 @@
 # Phase F: UI Deep Reimplementation — Remaining Work
 
-**Progress: ~110 done, 13 N/A, ~22 remaining.**
-Waves 1-4 complete (except items below). Wave 6 already done as Runtime DLL methods.
+**Progress: ~128 done, 13 N/A, ~7 blocked.**
+Waves 1-4 complete. Wave 6 done as Runtime DLL methods. Waves 7-8 complete (except blocked items below).
 
 ---
 
@@ -14,7 +14,6 @@ Do after game logic for each class is done.
 | EventNotifyDialog::Dtor | Medium | Vector destructor iterator |
 | ModDialog::Dtor | Medium | Array with virtual dtors |
 | SaveLoadDialog::Dtor | Medium | 4 params + array cleanup |
-| TutorialGoalDialog::Dtor | Low-Med | Extends Object::External |
 | TownHallUI::ScalarDtor | High | 3 nested containers + 7 buffers + sub-func |
 | ProfessionUI::Dtor | High | BST node removal + 3 buffers |
 | ProductionUI::Dtor | Medium | MSVC vector destructor iterator |
@@ -23,31 +22,24 @@ Do after game logic for each class is done.
 
 ---
 
-## Outstanding TODO Methods
+## Wave 7: COMPLETE
 
-| Method | Notes |
-|--------|-------|
-| DebugUI (all slots) | BLOCKED: vtable addresses wrong — Factory/Ctor/Vtable in Panels.h point to SpriteCaptureUI/SelectResourceUI. Need Ghidra investigation to find real DebugUI. |
-| ModBrowseUI (remaining) | ~30 lines, small remaining methods |
-| UpgradeUI::Serialize | Reimpl wrapper calls unimplemented function — reverted to trampoline. Needs clean impl. |
-| UpgradeUI::OnRemove | Same as above — reverted to trampoline. Needs clean impl. |
+## Wave 8: Passthroughs
 
----
+### Still delegated to exe (enabled hooks, clean dispatch but sub-functions via fn pointers):
+| Method | Reason |
+|--------|--------|
+| TradeUI::Serialize | 500+ lines, builds 4 dynamic arrays, enumerates ExternalFactory |
+| TradeUI::Startup | 200+ lines, calculates trade values, manages warnings |
+| TradeUI::OnRemove | 80+ lines, event dispatcher calling 8 sub-functions |
 
-## Passthrough Candidates (low priority)
-
-These work correctly via trampoline or exe fn pointer delegation. Can be upgraded to clean C++ later if needed.
-
-| Method | Reason kept as passthrough |
-|--------|---------------------------|
-| SaveLoadDialog::Load | Creates UpdateLoop + LoaderLoop (MSVC ABI constructors) |
-| OptionsDialog::Startup | Deeply dependent on _singleton_exref relocations |
-| TownHallUI::Startup | Unhookable (relative CALL in prologue) |
-| TownHallUI::OnCreate | Unhookable (RIP-relative MOV in prologue) |
-| TownHallUI::OnRemove | Unhookable (short Jcc in prologue) |
-| TradeUI (5 methods) | Serialize/Startup/OnCreate/OnRemove/Update delegated to exe fn pointers (too complex) |
-| SpriteCaptureUI::OnCreate | 12 one-off deps (Input, FileSystem, Filename) |
-| ModDialog::Slot4 | 428 lines, ImageBuffer/MaterialInstance pipeline |
+### Blocked (cannot reimpl without significant new infrastructure):
+| Method | Blocker |
+|--------|---------|
+| SaveLoadDialog::Load | MSVC vtable construction (UpdateLoop/LoaderLoop/DialogLoaderLoopT ctors with 11 params) |
+| OptionsDialog::Startup | 352 lines, heavy _singleton_exref + StringTable dependencies |
+| SpriteCaptureUI::OnCreate | Needs ~6 new fn ptrs (Input::Device, FileSystem, External::SaveText) — feasible but low priority |
+| ModDialog::Slot4 | 428 lines, ImageBuffer/MaterialInstance/SpriteSheet construction pipeline |
 
 ---
 

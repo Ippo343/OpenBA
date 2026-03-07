@@ -21,6 +21,7 @@
 //   +0x18: Slot3, +0x28: Slot5, +0x50: Slot10
 
 #include "ui/Panels.h"
+#include "Dialog/ui_panels.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -53,25 +54,25 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "DebugUI::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    DebugUI_Slot4((DebugUI*)self);
 }
 
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "DebugUI::Slot7";
-    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
+    DebugUI_Slot7((DebugUI*)self);
 }
 
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "DebugUI::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    DebugUI_Slot8((DebugUI*)self);
 }
 
 typedef void (*fn_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
 static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
     g_lastHook = "DebugUI::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2, param3, param4);
+    DebugUI_Slot9((DebugUI*)self, param2, param3, param4);
 }
 
 // ============================================================

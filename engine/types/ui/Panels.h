@@ -286,43 +286,55 @@ static_assert(sizeof(CropUI) == 0x60, "CropUI size mismatch");
 static_assert(offsetof(CropUI, internalBasePtr) == 0x30, "");
 
 // --- DebugUI (0x130) ---
-// Has separate Ctor (0x140064630). Inits +0x30..+0x118=0 (all zeroed qwords).
+// Has separate Ctor (0x140064630). Inits 30 InternalBasePtrs at +0x30..+0x118.
+// Element names recovered from Slot4 decompilation (0x1400619E0).
+// Slot4 assigns elements via FindElement; Slot7/Slot8 read slider/number values.
 struct DebugUI {
     DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-    uint64_t data50;           // +0x50
-    uint64_t data58;           // +0x58
-    uint64_t data60;           // +0x60
-    uint64_t data68;           // +0x68
-    uint64_t data70;           // +0x70
-    uint64_t data78;           // +0x78
-    uint64_t data80;           // +0x80
-    uint64_t data88;           // +0x88
-    uint64_t data90;           // +0x90
-    uint64_t data98;           // +0x98
-    uint64_t dataA0;           // +0xA0
-    uint64_t dataA8;           // +0xA8
-    uint64_t dataB0;           // +0xB0
-    uint64_t dataB8;           // +0xB8
-    uint64_t dataC0;           // +0xC0
-    uint64_t dataC8;           // +0xC8
-    uint64_t dataD0;           // +0xD0
-    uint64_t dataD8;           // +0xD8
-    uint64_t dataE0;           // +0xE0
-    uint64_t dataE8;           // +0xE8
-    uint64_t dataF0;           // +0xF0
-    uint64_t dataF8;           // +0xF8
-    uint64_t data100;          // +0x100
-    uint64_t data108;          // +0x108
-    uint64_t data110;          // +0x110
-    uint64_t data118;          // +0x118
-    uint8_t  _pad120[0x10];    // +0x120: gap to reach 0x130
+    void* diseaseCombo;        // +0x30: "diseaseCombo" ComboElement
+    void* drawCombo;           // +0x38: "drawCombo" ComboElement
+    void* numberDrawCalls;     // +0x40: "numberDrawCalls" NumberElement
+    void* numberTriangles;     // +0x48: "numberTriangles" NumberElement
+    void* numberVertices;      // +0x50: "numberVertices" NumberElement
+    void* numberBatches;       // +0x58: "numberBatches" NumberElement
+    void* numberFPS;           // +0x60: "numberFPS" NumberElement (smoothed FPS, int)
+    void* numberFrameMS;       // +0x68: "numberFrameMS" NumberElement (smoothed frame ms, float)
+    void* numberTotalMS;       // +0x70: "numberTotalMS" NumberElement (smoothed total ms, float)
+    void* sliderDay;           // +0x78: "sliderDay" SliderElement (day of year)
+    void* valueSunR;           // +0x80: "valueSunR" SliderElement
+    void* valueSunG;           // +0x88: "valueSunG" SliderElement
+    void* valueSunB;           // +0x90: "valueSunB" SliderElement
+    void* valueAmbR;           // +0x98: "valueAmbR" SliderElement
+    void* valueAmbG;           // +0xA0: "valueAmbG" SliderElement
+    void* valueAmbB;           // +0xA8: "valueAmbB" SliderElement
+    void* valueFogR;           // +0xB0: "valueFogR" SliderElement
+    void* valueFogG;           // +0xB8: "valueFogG" SliderElement
+    void* valueFogB;           // +0xC0: "valueFogB" SliderElement
+    void* valueFogN;           // +0xC8: "valueFogN" SliderElement (fog near)
+    void* valueFogF;           // +0xD0: "valueFogF" SliderElement (fog far)
+    void* valueFogM;           // +0xD8: "valueFogM" SliderElement (fog max density)
+    void* valueSunH;           // +0xE0: "valueSunH" SliderElement (sun heading)
+    void* valueSunP;           // +0xE8: "valueSunP" SliderElement (sun pitch)
+    void* imageColorSun;       // +0xF0: "imageColorSun" ImageElement
+    void* imageColorAmb;       // +0xF8: "imageColorAmb" ImageElement
+    void* imageColorFog;       // +0x100: "imageColorFog" ImageElement
+    void* comboWeather;        // +0x108: "comboWeather" ComboElement
+    void* buttonSave;          // +0x110: "buttonSave" ButtonElement
+    void* buttonMenuScene;     // +0x118: "buttonMenuScene" ButtonElement
+    float smoothedFPS;         // +0x120: EMA FPS accumulator
+    float smoothedFrameMS;     // +0x124: EMA frame time accumulator
+    float smoothedTotalMS;     // +0x128: EMA total time accumulator
+    uint8_t _pad12C[4];        // +0x12C: gap to reach 0x130
 };
 static_assert(sizeof(DebugUI) == 0x130, "DebugUI size mismatch");
-static_assert(offsetof(DebugUI, data30) == 0x30, "");
+static_assert(offsetof(DebugUI, diseaseCombo) == 0x30, "");
+static_assert(offsetof(DebugUI, numberDrawCalls) == 0x40, "");
+static_assert(offsetof(DebugUI, numberFPS) == 0x60, "");
+static_assert(offsetof(DebugUI, sliderDay) == 0x78, "");
+static_assert(offsetof(DebugUI, valueSunH) == 0xE0, "");
+static_assert(offsetof(DebugUI, imageColorSun) == 0xF0, "");
+static_assert(offsetof(DebugUI, comboWeather) == 0x108, "");
+static_assert(offsetof(DebugUI, smoothedFPS) == 0x120, "");
 
 // --- DestroyUI (0x78) ---
 // Factory inits: +0x30..+0x70=0 (9 qwords)

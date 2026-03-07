@@ -5,16 +5,18 @@
 // Extends Object::External.
 //
 // Vtable layout (9 slots):
-//   +0x00: 0x140025020 — Dtor(self, flags)
+//   +0x00: 0x140025020 — Dtor(self, flags)              — REIMPLEMENTED
 //   +0x08: 0x140024fa0 — GetTypeInfo (8b, unhookable)
 //   +0x10: 0x140024f90 — GetTypeId (7b, unhookable)
 //   +0x18: 0x1400d3e40 — Slot3/Serialize? (6b, unhookable: mov eax,5; ret)
 //   +0x20: 0x14003a912 — Slot4 base (6b JMP thunk, unhookable)
-//   +0x28: 0x1400d3c90 — Slot5/Load
-//   +0x30: 0x140025000 — Slot6/Cleanup
+//   +0x28: 0x1400d3c90 — Slot5/Serialize                — passthrough (needs IO funcs)
+//   +0x30: 0x140025000 — Slot6/Cleanup                  — REIMPLEMENTED
 //   +0x38: 0x140001640 — Slot7 base (7b, unhookable)
-//   +0x40: 0x140024ff0 — Slot8/IsDerivedFrom
+//   +0x40: 0x140024ff0 — Slot8/Reset (DISABLED: near JCC in prologue)
 
+#include "Weather.h"
+#include "Game/weather_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -38,23 +40,28 @@ typedef void  (*fn_Slot6_t)(void* self);
 typedef void  (*fn_Slot8_t)(void* self);
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers
 // ============================================================
+
+// Dtor (0x140025020) — REIMPLEMENTED
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "Weather::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return Weather_Dtor((Weather*)self, flags);
 }
 
+// Slot5/Serialize (0x1400d3c90) — passthrough (requires IO::Serializer funcs)
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "Weather::Slot5";
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
 }
 
+// Slot6/Cleanup (0x140025000) — REIMPLEMENTED
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "Weather::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    Weather_Cleanup((Weather*)self);
 }
 
+// Slot8/Reset (0x140024ff0) — hook DISABLED (near JCC in prologue)
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "Weather::Slot8";
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);

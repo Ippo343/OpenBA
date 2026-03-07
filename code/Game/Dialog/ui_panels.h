@@ -485,6 +485,15 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
 // then calls 6 sub-functions to initialize each tab's UI elements.
 void TownHallUI_Serialize(TownHallUI* self);
 
+// Startup (vtable +0x38): Updates General/Professions/Production/Agriculture tabs.
+void TownHallUI_Startup(TownHallUI* self);
+
+// OnCreate (vtable +0x40): Checks game tick, updates graph + inventory.
+void TownHallUI_OnCreate(TownHallUI* self);
+
+// OnRemove (vtable +0x48): Event dispatcher — profession buttons/spinners, graph combos.
+void TownHallUI_OnRemove(TownHallUI* self, void* param2, int msg, int id);
+
 // Update (vtable +0x50): IO::Serializer save/load of tab index and
 // 5 combo box selections. On load, restores tab/combo states and
 // triggers graph update.
@@ -497,3 +506,28 @@ void TownHallUI_Update(TownHallUI* self, void* stream);
 // Serialize (vtable +0x20): Finds editCapture/buttonCapture/captureBox elements,
 // sets button ID 1000, sets default capture path, initializes capture state.
 void SpriteCaptureUI_Serialize(SpriteCaptureUI* self);
+
+// ============================================================
+// DebugUI
+// ============================================================
+
+// Slot4 (vtable +0x20): Finds 50+ UI elements, assigns element IDs,
+// populates disease/draw/weather combos, sets slider ranges,
+// initializes day lighting from game time.
+void DebugUI_Slot4(DebugUI* self);
+
+// Slot7 (vtable +0x38): Reads day slider and RGB color sliders,
+// formats day text, packs ARGB colors, updates 3 color preview swatches.
+void DebugUI_Slot7(DebugUI* self);
+
+// Slot8 (vtable +0x40): Reads 4 debug counters from engine state,
+// smooths FPS/frame timing with EMA (alpha=0.95), displays as numbers.
+void DebugUI_Slot8(DebugUI* self);
+
+// Slot9 (vtable +0x48): Event dispatch — handles button clicks (resource spawn,
+// disasters, debug toggles), combo changes (disease/draw), slider changes (day/colors).
+void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4);
+
+// ToggleDebugFlag: helper for checkbox cases in Slot9 — reads checkbox state,
+// sets/clears a bit in game world debug flags at game+0xD0.
+void DebugUI_ToggleDebugFlag(void* checkboxElement, uint32_t flag);

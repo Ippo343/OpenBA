@@ -574,6 +574,12 @@ extern void** g_pGameWorldSingleton;  // DAT_1401c3dd8
 // Input::KeyMap singleton — used by HotKeyToolTipUI
 extern void** g_pKeyMapSingleton;     // DAT_1401c3de8
 
+// Engine/UpdateLoop singleton — exref at 0x140151440 (double-indirect)
+// Sub-fields: +0x10 = engine state (debug counters at +0x2150..+0x215C)
+//             +0x58 = total time (Time ticks), +0x68 = frame time (Time ticks)
+// Used by DebugUI::Slot8 for performance counter display
+extern void** g_pEngineSingleton;     // exref 0x140151440
+
 // ============================================================
 // Common Exe Functions (Phase A4 — by RVA from Application-x64.exe)
 // ============================================================
@@ -1260,6 +1266,11 @@ extern fn_ResolveExternalByName_t fn_ResolveExternalByName;
 typedef void (*fn_External_External_t)(void* self);
 extern fn_External_External_t fn_External_External;
 
+// Object::External::~External(this) — base class destructor
+// Runtime function at dispatch table 0x140151ea0
+typedef void (*fn_External_Dtor_t)(void* self);
+extern fn_External_Dtor_t fn_External_Dtor;
+
 // ============================================================
 // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
 // ============================================================
@@ -1874,6 +1885,26 @@ extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGraph;       // FUN_14007f0a0
 extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture; // FUN_14007ebf0
 extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGraph;     // FUN_14007e5b0
 
+// TownHallUI::Startup sub-functions (tab update dispatchers)
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGeneral;      // FUN_14007d030
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProfessions;  // FUN_14007ccb0
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction;   // FUN_14007c7f0
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture;  // FUN_14007c220
+
+// TownHallUI::OnCreate sub-functions
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory;    // FUN_14007def0
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll;          // FUN_14007d590
+
+// TownHallUI::OnRemove sub-functions
+typedef void (*fn_TownHallUI_OnProfChange_t)(void* self, int index);
+extern fn_TownHallUI_OnProfChange_t fn_TownHallUI_OnProfessionButton;  // FUN_14007dca0
+extern fn_TownHallUI_OnProfChange_t fn_TownHallUI_OnProfessionSpinner; // FUN_14007dd10
+
+// Game singleton pointer: DAT_1401c3dd8 in exe .data section
+// Used by TownHallUI::OnCreate (+0xf0->+0x150->+8 = game time tick)
+// and OnRemove (+0xb0->+0x28 = profession count)
+extern void** g_pGameSingleton;  // 0x1401c3dd8
+
 // ============================================================
 // SpriteCaptureUI support functions
 // ============================================================
@@ -1920,6 +1951,17 @@ extern fn_TradeUI_OnRemove_t fn_TradeUI_OnRemove;
 typedef void (*fn_TradeUI_Update_t)(void* self, void* stream, void* p3, int64_t p4);
 extern fn_TradeUI_Update_t fn_TradeUI_Update;
 
+// TradeUI::RefreshSortedDisplay (0x1400846b0) — rebuilds sorted trade table display
+// Called after tab/sort change in Update, OnCreate, and at end of Serialize
+typedef void (*fn_TradeUI_RefreshDisplay_t)(void* self, uint64_t p2, uint64_t p3, int64_t p4);
+extern fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay;
+
+// TradeUI sub-functions: refresh tables and update totals
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable;   // FUN_140083c70 (381 lines)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable;    // FUN_140083100 (488 lines)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateSellTotals;   // FUN_140082920 (49 lines)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateBuyTotals;    // FUN_140082850 (47 lines)
+
 // ============================================================
 // NoiseUI helpers (Application-x64.exe)
 // ============================================================
@@ -1941,6 +1983,90 @@ extern fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage;
 // RCX=self(NoiseUI*)
 typedef void (*fn_NoiseUI_GenerateNoise_t)(void* self);
 extern fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise;
+
+// ============================================================
+// DebugUI support
+// ============================================================
+
+// DebugUI_SetDayLighting (FUN_140061780) — reads lighting data from weather table
+// for given month index, sets slider values on sun/amb/fog color elements.
+// RCX=self(DebugUI*), EDX=monthIndex(int)
+typedef void (*fn_DebugUI_SetDayLighting_t)(void* self, int monthIndex);
+extern fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting;
+
+// TypeId for DiseaseDescription — DAT_1401c5948
+extern uint32_t* g_TypeId_DiseaseDescription;
+
+// TypeId for DrawableType (used in drawCombo population) — DAT_1401c47c8
+extern uint32_t* g_TypeId_DrawableType;
+
+// ============================================================
+// DebugUI Slot9 sub-functions (Application-x64.exe)
+// ============================================================
+
+// Game_SpawnResources (0x140091660) — spawns resources into citizen storage
+// RCX=citizenList*, EDX=resourceFlag(uint), R8D=count(int)
+typedef void (*fn_Game_SpawnResources_t)(void* citizenList, uint32_t resourceFlag, int count);
+extern fn_Game_SpawnResources_t fn_Game_SpawnResources;
+
+// Game_TriggerDisasterByType (0x140060110) — triggers disaster by type index
+// EDX=type(int): 0/1/2
+typedef void (*fn_Game_TriggerDisasterByType_t)(int type);
+extern fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType;
+
+// Game_KillAllCitizens (0x140060000) — kills all citizens
+typedef void (*fn_Game_KillAllCitizens_t)(void);
+extern fn_Game_KillAllCitizens_t fn_Game_KillAllCitizens;
+
+// Game_SpawnItemsInStorage (0x140060290) — spawns items in storage buildings
+typedef void (*fn_Game_SpawnItemsInStorage_t)(void);
+extern fn_Game_SpawnItemsInStorage_t fn_Game_SpawnItemsInStorage;
+
+// Game_SpawnCitizens (0x140060380) — spawns new citizens at random buildings
+typedef void (*fn_Game_SpawnCitizens_t)(void);
+extern fn_Game_SpawnCitizens_t fn_Game_SpawnCitizens;
+
+// DebugUI_TriggerDisasterOnBuilding (0x14005FF30) — triggers disaster on random building
+// RCX=self(DebugUI*)
+typedef void (*fn_DebugUI_TriggerDisasterOnBuilding_t)(void* self);
+extern fn_DebugUI_TriggerDisasterOnBuilding_t fn_DebugUI_TriggerDisasterOnBuilding;
+
+// Game_StartRandomFire (0x14005FEB0) — ignites a random building
+typedef void (*fn_Game_StartRandomFire_t)(void);
+extern fn_Game_StartRandomFire_t fn_Game_StartRandomFire;
+
+// Game_SpawnTornado (0x14005FD20) — spawns a tornado entity
+typedef void (*fn_Game_SpawnTornado_t)(void);
+extern fn_Game_SpawnTornado_t fn_Game_SpawnTornado;
+
+// Game_InfectRandomCitizen (0x14005FE10) — infects a random citizen with disease
+typedef void (*fn_Game_InfectRandomCitizen_t)(void);
+extern fn_Game_InfectRandomCitizen_t fn_Game_InfectRandomCitizen;
+
+// DebugUI_OnDiseaseComboChanged (0x14005FC60) — handles disease combo selection
+// RCX=self(DebugUI*)
+typedef void (*fn_DebugUI_OnDiseaseComboChanged_t)(void* self);
+extern fn_DebugUI_OnDiseaseComboChanged_t fn_DebugUI_OnDiseaseComboChanged;
+
+// DebugUI_OnDrawComboChanged (0x1400608A0) — handles draw combo selection (scene/mesh)
+// RCX=self(DebugUI*)
+typedef void (*fn_DebugUI_OnDrawComboChanged_t)(void* self);
+extern fn_DebugUI_OnDrawComboChanged_t fn_DebugUI_OnDrawComboChanged;
+
+// DebugUI_OnDaySliderChanged (0x1400607E0) — handles day slider change, updates time/weather
+// RCX=self(DebugUI*)
+typedef void (*fn_DebugUI_OnDaySliderChanged_t)(void* self);
+extern fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged;
+
+// DebugUI_WriteLightingColors (0x140061530) — writes color slider values to weather table
+// RCX=self(DebugUI*), EDX=monthIndex(int)
+typedef void (*fn_DebugUI_WriteLightingColors_t)(void* self, int monthIndex);
+extern fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors;
+
+// Game_GetMonthFromTime (0x1400932A0) — converts game time to month index (0-11)
+// RCX=weatherMgr(void*)
+typedef int (*fn_Game_GetMonthFromTime_t)(void* weatherMgr);
+extern fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime;
 
 // ============================================================
 // Initialization

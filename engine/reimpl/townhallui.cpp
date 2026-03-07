@@ -52,22 +52,23 @@ static void Reimpl_Serialize(void* self) {
     TownHallUI_Serialize((TownHallUI*)self);
 }
 
-typedef void (*fn_Startup_t)(void* self);
+// Startup: REIMPLEMENTED (full clean code — no trampoline needed)
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TownHallUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    TownHallUI_Startup((TownHallUI*)self);
 }
 
-typedef void (*fn_OnCreate_t)(void* self);
+// OnCreate: REIMPLEMENTED (full clean code — no trampoline needed)
 static void Reimpl_OnCreate(void* self) {
     g_lastHook = "TownHallUI::OnCreate";
-    ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
+    TownHallUI_OnCreate((TownHallUI*)self);
 }
 
+// OnRemove: REIMPLEMENTED (full clean code — no trampoline needed)
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
     g_lastHook = "TownHallUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
+    TownHallUI_OnRemove((TownHallUI*)self, param2, eventType, eventId);
 }
 
 typedef void (*fn_Update_t)(void* self, void* stream);
