@@ -33,6 +33,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 
 // ============================================================
@@ -277,44 +278,65 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 // ============================================================
 // Original: 0x1400b79b0
 //
-// Timer/state machine. When operation active, accumulates rotation angle
-// (180 deg/sec). When operation completes (returns to 0), processes
-// deferred flags: delete -> re-list, save -> close and start game,
-// load -> close and start game, refresh -> update file list.
-// Creating LoaderLoop/DialogLoaderLoopT objects is complex, so this
-// delegates to the original trampoline for load transitions.
+// Timer/state machine called every frame.
+//
+// Phase 1 — While Save::SaveLoad operation is non-zero (file I/O in progress):
+//   Accumulate rotation angle at +0xC8 (180 deg/sec from time param).
+//
+// Phase 2 — When operation reaches 0 (I/O complete), process one deferred flag:
+//
+//   deleteFlag (+0xBC): delete completed.
+//     Write *(uint16_t*)(+0xBB) = 1 (sets +0xBB=1, +0xBC=0), start re-list operation.
+//
+//   refreshFlag (+0xBB): file list needs refresh.
+//     Update saveCount (+0xC4), clamp selectedIndex (+0xC0), populate file list, clear flag.
+//
+//   saveFlag (+0xB9): save completed.
+//     Close this dialog via UI::UserInterface::CloseDialog, clear flag.
+//
+//   loadFlag (+0xBA): load completed — transition to game.
+//     Close this dialog.
+//     Allocate GameUpdateLoop (0x160 bytes), construct via GameUpdateLoop ctor.
+//     Allocate GameLoadDialogLoopT (0xb60 bytes), construct via DialogLoaderLoopT base ctor,
+//       then patch vtable to exe subclass at PTR_FUN_140158800, set extra fields.
+//     Allocate outer LoaderLoop (0x48 bytes), construct via LoaderLoop ctor with 0.0s delay,
+//       patch vtable to PTR_FUN_1401588d0.
+//     Set the outer LoaderLoop as the next loop on the engine (via field +0xE0/+0xE8).
+//     Clear loadFlag.
+//
+// All constructors are available: GameUpdateLoop via exe address, LoaderLoop and
+// DialogLoaderLoopT via Runtime-x64.dll exports. Vtable patches replicate the
+// exe subclass polymorphism (the base Runtime ctors set the base vtable; exe code
+// overwrites with the subclass vtable immediately after).
 
-void SaveLoadDialog_Load(SaveLoadDialog* self, void* time) {
+void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut, uint64_t param4) {
+    (void)loaderLoopOut;
+    (void)param4;
     uintptr_t s = (uintptr_t)self;
     void* saveLoad = *g_pSaveLoadSingleton;
 
+    // Phase 1: accumulate spinner rotation while I/O is in progress
     int operation = fn_SaveLoad_GetOperation(saveLoad);
-
-    // Accumulate rotation when operation is active
     if (operation != 0) {
         float elapsed = fn_Time_AsSeconds(time);
         *(float*)(s + 0xC8) += elapsed * 180.0f;
     }
 
-    // Re-check operation (may have changed)
+    // Re-check — may have just completed this frame
     operation = fn_SaveLoad_GetOperation(saveLoad);
+    if (operation != 0) return;
 
-    if (operation != 0) return;  // Still in progress, wait
+    // Phase 2: I/O complete, process one deferred flag (priority order matches original)
 
-    // --- Operation completed, process deferred flags ---
-
-    // deleteFlag (+0xBC): delete completed, re-trigger list operation
+    // deleteFlag (+0xBC): re-trigger list scan
     if (*(uint8_t*)(s + 0xBC) != 0) {
-        // Set refreshFlag (+0xBB) = 1 and clear deleteFlag (+0xBC) = 0
-        // Original uses *(uint16_t*)(+0xBB) = 1 which sets both bytes
-        *(uint8_t*)(s + 0xBB) = 1;
-        *(uint8_t*)(s + 0xBC) = 0;
+        *(uint16_t*)(s + 0xBB) = 1;   // sets +0xBB=1 (refresh), +0xBC=0 (clear delete)
         uint8_t mode = *(uint8_t*)(s + 0xB8);
         fn_SaveLoad_SetOperation(saveLoad, 1, -2 - (int)(mode != 0));
         return;
     }
 
-    // refreshFlag (+0xBB): file list needs refresh
+    // refreshFlag (+0xBB): populate file list
     if (*(uint8_t*)(s + 0xBB) != 0) {
         int count = fn_SaveLoad_GetSaveCount(saveLoad);
         *(int*)(s + 0xC4) = count;
@@ -326,35 +348,104 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time) {
         return;
     }
 
-    // saveFlag (+0xB9): save completed, close dialog
+    // saveFlag (+0xB9): save done, close dialog (no game transition needed)
     if (*(uint8_t*)(s + 0xB9) != 0) {
         uint64_t basePtr = 0;
-        fn_InternalBasePtr_Ctor(&basePtr, self);
+        fn_InternalBasePtr_Ctor(&basePtr, (void*)s);
         void* ui = *(void**)(s + 0x10);
         fn_UI_CloseDialog(ui, &basePtr);
         *(uint8_t*)(s + 0xB9) = 0;
         return;
     }
 
-    // loadFlag (+0xBA): load completed — this creates LoaderLoop objects
-    // which is extremely complex (DialogLoaderLoopT construction etc.)
-    // Delegated to original function via trampoline stored elsewhere.
-    // The reimpl wrapper handles this by falling through to the trampoline
-    // when we don't handle it here. But since we fully override this function,
-    // we need to handle it. For now, just close the dialog if load flag set.
+    // loadFlag (+0xBA): load done — close dialog and transition to game load screen
     if (*(uint8_t*)(s + 0xBA) != 0) {
-        // This case creates a new game loader loop — extremely complex.
-        // We rely on the OnEvent handler (unhookable at +0x40) dispatching to
-        // the original exe functions FUN_1400b61e0 (load) which sets up all
-        // the loader infrastructure before setting this flag. So by the time
-        // we get here, the load has already been triggered through the
-        // unhookable OnEvent path. We just need to close and transition.
-        //
-        // IMPORTANT: This path is normally handled by the exe's original
-        // Load function which constructs UpdateLoop + DialogLoaderLoopT +
-        // LoaderLoop objects. Since those constructors have complex MSVC ABI
-        // dependencies, we keep this slot as a trampoline passthrough in the
-        // reimpl wrapper. This clean function is NOT called for Load.
+        // Close the SaveLoad dialog
+        uint64_t basePtr = 0;
+        fn_InternalBasePtr_Ctor(&basePtr, (void*)s);
+        void* ui = *(void**)(s + 0x10);
+        fn_UI_CloseDialog(ui, &basePtr);
+
+        // --- Step 1: Allocate and construct the inner GameUpdateLoop (0x160 bytes) ---
+        // This is the actual gameplay loop that will run after loading completes.
+        void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+        void* pGameLoop = nullptr;
+        if (gameLoop) {
+            uint64_t nameStr = 0;  // empty string
+            uint64_t loopPtrNull = 0;
+            void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
+            // Signature: (self, savedState, loaderLoopPtr, opFlag, nameStr, 0, 0, 1, 0, 0, 0)
+            // opFlag=0xffffffff, nameStr=empty string, param8='\x01'
+            fn_GameUpdateLoop_Ctor(gameLoop, savedState, (void*)&loopPtrNull,
+                                   0xffffffff, (void*)&nameStr, 0, 0, 1, 0, 0, 0);
+            fn_String_Dtor((void*)&nameStr);
+            pGameLoop = gameLoop;
+        }
+
+        // --- Step 2: Allocate and construct the GameLoadDialogLoopT (0xb60 bytes) ---
+        // Base: Engine::DialogLoaderLoopT (Runtime export), then patch exe subclass vtable.
+        void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
+        void* pDlLoop = nullptr;
+        if (dlLoop) {
+            // Build Time (DAT_14017214c = delay time constant for loading screen)
+            // Original: System::Time::Time(this_02, DAT_14017214c) — construct from float constant
+            // DAT_14017214c is resolved via fn_Time_Ctor_Float with the stored constant
+            // The original uses a float at 0x14017214c; we need to read it at runtime.
+            float* delayConst = reinterpret_cast<float*>(
+                ResolveAddr(Module::Exe, 0x14017214c));
+            float delayVal = delayConst ? *delayConst : 1.5f;
+            uint64_t delayTime[1]; // 8-byte Time
+            fn_Time_Ctor_Float((void*)delayTime, delayVal);
+
+            // Get the dialog filename string via fn_GetLoadingSoundString
+            // This formats "Dialog/Loading.rsc:gameLoad%i" with a random 0-11 variant
+            uint64_t dialogNameStr = 0;
+            fn_GetLoadingSoundString(0, (void*)&dialogNameStr, 0, 0);
+
+            // Construct base Engine::DialogLoaderLoopT
+            fn_DialogLoaderLoopT_Ctor(dlLoop, (void*)&dialogNameStr, pGameLoop, (void*)delayTime);
+
+            fn_String_Dtor((void*)&dialogNameStr);
+
+            // Patch vtable to exe subclass (GameLoadDialogLoopT)
+            *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
+
+            // Initialize extra fields added by exe subclass
+            uintptr_t dl = (uintptr_t)dlLoop;
+            *(uint32_t*)(dl + 0x188) = 0xff000000;
+            *(uint32_t*)(dl + 0x18c) = 0xff000000;
+            *(uint8_t*)(dl  + 0x190) = 0;  // [400]
+            // System::Random::Random at +0x194
+            fn_Random_Default_Ctor((void*)(dl + 0x194));
+            *(uint64_t*)(dl + 0xb58) = 0;
+            *(uint8_t*)(dl  + 0x40)  = 0;  // m_finished override = 0
+
+            pDlLoop = dlLoop;
+        }
+
+        // --- Step 3: Allocate and construct the outer LoaderLoop (0x48 bytes) ---
+        // Wraps the GameLoadDialogLoopT as its next loop with zero delay.
+        void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+        void* pOuterLoop = nullptr;
+        if (outerLoop) {
+            uint64_t zeroTime[1];
+            fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
+            fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
+            // Patch vtable to exe subclass (GameLoaderLoop)
+            *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
+            pOuterLoop = outerLoop;
+        }
+
+        // --- Step 4: Set the outer LoaderLoop as the engine's next loop ---
+        uintptr_t loaderLoop1 = *(uintptr_t*)(s + 0xE0);
+        if (loaderLoop1 == 0) {
+            // No existing dialog loader loop: set next loop on the engine singleton
+            fn_SetEngineNextLoop(*(uintptr_t*)(s + 0xE8), pOuterLoop);
+        } else {
+            // Inside a dialog loader loop: queue as its next transition
+            fn_SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
+        }
+
         *(uint8_t*)(s + 0xBA) = 0;
     }
 }

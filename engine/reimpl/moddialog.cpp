@@ -98,10 +98,9 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot4 (0x14006F150) — Setup: populates mod list, thumbnails, descriptions
-typedef void (*fn_Slot4_t)(void* self);
 static void Reimpl_Slot4(void* self) {
     g_lastHook = "ModDialog::Slot4";
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self);
+    ModDialog_Slot4((ModDialog*)self);
 }
 
 // Slot8 (0x14006ED40) — OnCommand: handles mod list interactions

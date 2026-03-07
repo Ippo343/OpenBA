@@ -49,10 +49,9 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
 }
 
 // Slot 4: Startup(this) — build options UI with tabs/controls
-typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "OptionsDialog::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    OptionsDialog_Startup((OptionsDialog*)self);
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData)

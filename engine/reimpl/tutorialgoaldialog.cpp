@@ -61,8 +61,7 @@ typedef void* (*fn_Filename_Ctor_t)(void* self);
 static fn_Filename_Ctor_t fn_Filename_Ctor = nullptr;
 
 // System::Filename::~Filename(this) — dtor
-typedef void (*fn_Filename_Dtor_t)(void* self);
-static fn_Filename_Dtor_t fn_Filename_Dtor = nullptr;
+// Note: fn_Filename_Dtor is now the global in engine_funcs.h; use it directly.
 
 // ResolveExternalByName(string*) — 0x14001b1d0 in exe
 // Resolves an External resource by looking up the string name in ExternalFactory.
@@ -99,9 +98,10 @@ static void ResolveTutorialGoalDialogFuncs() {
     uintptr_t exref_FilenameCtor = ResolveAddr(Module::Exe, 0x140151d40);
     if (exref_FilenameCtor) fn_Filename_Ctor = *(fn_Filename_Ctor_t*)exref_FilenameCtor;
 
-    // Filename::~Filename at exref 0x1401529e8
+    // Filename::~Filename — resolved globally via engine_funcs; also set local fallback
     uintptr_t exref_FilenameDtor = ResolveAddr(Module::Exe, 0x1401529e8);
-    if (exref_FilenameDtor) fn_Filename_Dtor = *(fn_Filename_Dtor_t*)exref_FilenameDtor;
+    if (!fn_Filename_Dtor && exref_FilenameDtor)
+        fn_Filename_Dtor = *(fn_Filename_Dtor_t*)exref_FilenameDtor;
 
     // ResolveExternalByName in exe at 0x14001b1d0
     fn_ResolveExternalByName_local = (fn_ResolveExternalByName_t)ResolveAddr(Module::Exe, 0x14001b1d0);

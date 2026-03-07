@@ -533,15 +533,35 @@ static_assert(sizeof(ResourceLimitUI) == 0x40, "ResourceLimitUI size mismatch");
 // vtable = 0x14015d330
 
 // --- SpriteCaptureUI (0x70) ---
-// Factory inits: +0x30=0, +0x38=0, +0x40=0
+// Serialize inits:
+//   editCapture@+0x30, buttonCapture@+0x38, captureBox@+0x40,
+//   curX@+0x48=0, curY@+0x4C=0, anchorX@+0x50=100, anchorY@+0x54=100,
+//   dragging@+0x58=0, pendingExternal@+0x60=0.
+// OnCreate: tracks mouse drag; on left-click+shift starts capture region;
+//   when pendingExternal@+0x60 != 0 and saveFrameCount@+0x68 == 1,
+//   calls EndSpriteCapture, builds save Filename, calls External::SaveText.
 struct SpriteCaptureUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint8_t  _pad48[0x28];     // +0x48: remaining (not initialized by factory)
+    DialogController base;     // +0x00 (0x30)
+    void*    editCapture;      // +0x30: EditElement* (InternalBasePtr)
+    void*    buttonCapture;    // +0x38: Element* (InternalBasePtr)
+    void*    captureBox;       // +0x40: Element* (InternalBasePtr)
+    int32_t  curX;             // +0x48: current drag mouse X
+    int32_t  curY;             // +0x4C: current drag mouse Y
+    int32_t  anchorX;          // +0x50: drag anchor X (init 100)
+    int32_t  anchorY;          // +0x54: drag anchor Y (init 100)
+    uint8_t  dragging;         // +0x58: 1 = left mouse button held, dragging
+    uint8_t  _pad59[7];        // +0x59: pad to +0x60
+    void*    pendingExternal;  // +0x60: External* awaiting save (set externally)
+    int32_t  saveFrameCount;   // +0x68: incremented each frame; triggers save at ==1
+    uint8_t  _pad6C[4];        // +0x6C: pad to 0x70
 };
 static_assert(sizeof(SpriteCaptureUI) == 0x70, "SpriteCaptureUI size mismatch");
+static_assert(offsetof(SpriteCaptureUI, editCapture) == 0x30, "");
+static_assert(offsetof(SpriteCaptureUI, curX) == 0x48, "");
+static_assert(offsetof(SpriteCaptureUI, anchorX) == 0x50, "");
+static_assert(offsetof(SpriteCaptureUI, dragging) == 0x58, "");
+static_assert(offsetof(SpriteCaptureUI, pendingExternal) == 0x60, "");
+static_assert(offsetof(SpriteCaptureUI, saveFrameCount) == 0x68, "");
 
 // --- StatusBarUI (0x1D0) ---
 // Has separate Ctor (0x14007af20). Largest panel.

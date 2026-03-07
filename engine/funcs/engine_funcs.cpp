@@ -320,6 +320,7 @@ fn_SaveLoad_SetMinOperationTime_t fn_SaveLoad_SetMinOperationTime = nullptr;
 fn_SaveLoad_SetOperation_t fn_SaveLoad_SetOperation = nullptr;
 fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount = nullptr;
 fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo = nullptr;
+fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState = nullptr;
 fn_Sprite_IsValid_t fn_Sprite_IsValid = nullptr;
 fn_UI_Play_t fn_UI_Play = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
@@ -615,9 +616,43 @@ fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateSellTotals = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateBuyTotals = nullptr;
+fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_OnDismissButton = nullptr;
+fn_TradeUI_OnOrderSpinner_t fn_TradeUI_OnOrderSpinner = nullptr;
+fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnPurchaseButton = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboPurchase = nullptr;
+fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboOrder = nullptr;
+fn_TradeUI_OnStorageSpinner_t fn_TradeUI_OnStorageSpinner = nullptr;
+fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnSellSpinner = nullptr;
+fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnBuySpinner = nullptr;
+fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnOrderAmountSpinner = nullptr;
+uint32_t* g_TypeId_TableElement = nullptr;
+uint32_t* g_TypeId_SpinnerElement = nullptr;
+uint32_t* g_TypeId_TextElement = nullptr;
+uint32_t* g_TypeId_SelectDescription = nullptr;
+fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderQuantityDisplay = nullptr;
+fn_TradeUI_SubFunc_t fn_TradeUI_RefreshSellSpinnerValues = nullptr;
+fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderDisplay = nullptr;
 uintptr_t g_NoiseUI_ImageBufferVtable = 0;
 fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage = nullptr;
 fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise = nullptr;
+// --- ModDialog::Slot4 support ---
+fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
+fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial = nullptr;
+fn_MaterialInstance_AddTexture_t fn_MaterialInstance_AddTexture = nullptr;
+fn_MaterialInstance_BuildParameters_t fn_MaterialInstance_BuildParameters = nullptr;
+fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor = nullptr;
+fn_SpriteSheet_AddSpriteInfo_t fn_SpriteSheet_AddSpriteInfo = nullptr;
+fn_SpriteSheet_SetSpriteInfo_t fn_SpriteSheet_SetSpriteInfo = nullptr;
+fn_Sprite_Ctor_ByIndex_t fn_Sprite_Ctor_ByIndex = nullptr;
+fn_ImageBuffer_Width_t fn_ImageBuffer_Width = nullptr;
+fn_ImageBuffer_Height_t fn_ImageBuffer_Height = nullptr;
+uintptr_t g_ModDialog_MaterialInstanceVtable = 0;
+uintptr_t g_ModDialog_SpriteSheetVtable = 0;
+fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
+uint32_t* g_TypeId_BrowserController = nullptr;
+uint32_t* g_TypeId_Material = nullptr;
+float* g_fUVScale = nullptr;
 fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting = nullptr;
 uint32_t* g_TypeId_DiseaseDescription = nullptr;
 uint32_t* g_TypeId_DrawableType = nullptr;
@@ -635,6 +670,30 @@ fn_DebugUI_OnDrawComboChanged_t fn_DebugUI_OnDrawComboChanged = nullptr;
 fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
 fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
 fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
+
+// --- SaveLoadDialog::Load helpers ---
+fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor = nullptr;
+fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor = nullptr;
+fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor = nullptr;
+fn_Random_Default_Ctor_t fn_Random_Default_Ctor = nullptr;
+void** g_GameLoadDialogLoopT_Vtable = nullptr;
+void** g_GameLoaderLoop_Vtable = nullptr;
+fn_SetEngineNextLoop_t fn_SetEngineNextLoop = nullptr;
+fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop = nullptr;
+fn_GetLoadingSoundString_t fn_GetLoadingSoundString = nullptr;
+
+// --- SpriteCaptureUI helpers ---
+fn_Input_Device_GetValue_t fn_Input_Device_GetValue = nullptr;
+fn_Input_Device_Pressed_t  fn_Input_Device_Pressed  = nullptr;
+fn_UI_EndSpriteCapture_t   fn_UI_EndSpriteCapture   = nullptr;
+void** g_pFileSystemSingleton = nullptr;
+fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory = nullptr;
+fn_External_SaveText_t     fn_External_SaveText     = nullptr;
+fn_Filename_CtorString_t   fn_Filename_CtorString   = nullptr;
+fn_Filename_CtorCStr_t     fn_Filename_CtorCStr     = nullptr;
+fn_Filename_Dtor_t         fn_Filename_Dtor         = nullptr;
+fn_String_Concat_t         fn_String_ConcatSS       = nullptr;
+fn_String_Concat_t         fn_String_ConcatSS2      = nullptr;
 
 // ============================================================
 // Engine globals
@@ -1475,6 +1534,12 @@ bool EngineFuncsInit() {
 
     fn_SaveLoad_GetSaveInfo = reinterpret_cast<fn_SaveLoad_GetSaveInfo_t>(
         ResolveExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z"));
+    fn_SaveLoad_GetSaveState = reinterpret_cast<fn_SaveLoad_GetSaveState_t>(
+        ResolveExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ"));
+    if (!fn_SaveLoad_GetSaveState) {
+        fn_SaveLoad_GetSaveState = reinterpret_cast<fn_SaveLoad_GetSaveState_t>(
+            ResolveAddr(Module::Runtime, 0x1800c3b50));
+    }
 
     fn_Sprite_IsValid = reinterpret_cast<fn_Sprite_IsValid_t>(
         ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ"));
@@ -1921,6 +1986,20 @@ bool EngineFuncsInit() {
     fn_Element_GetParent = reinterpret_cast<fn_Element_GetParent_t>(
         ResolveAddr(Module::Exe, 0x140010460));
     g_pGameSettings = reinterpret_cast<int32_t*>(ResolveAddr(Module::Exe, 0x1401c3de0));
+    // Audio::Configuration singleton: exe exref at 0x140151b78 -> pointer to singleton
+    {
+        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b78));
+        if (exref && *exref) {
+            g_pAudioConfigSingleton = *exref;
+        }
+    }
+    // Video::Configuration singleton: exe exref at 0x140151b70 -> pointer to singleton
+    {
+        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b70));
+        if (exref && *exref) {
+            g_pVideoConfigSingleton = *exref;
+        }
+    }
 
     // --- StorageUI support ---
     fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
@@ -2249,12 +2328,113 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400846b0));
     fn_TradeUI_RefreshSellTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140083c70));
+    fn_TradeUI_OnTradeButton = reinterpret_cast<fn_TradeUI_OnTradeButton_t>(
+        ResolveAddr(Module::Exe, 0x140081420));
+    fn_TradeUI_OnDismissButton = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140081950));
+    fn_TradeUI_OnOrderSpinner = reinterpret_cast<fn_TradeUI_OnOrderSpinner_t>(
+        ResolveAddr(Module::Exe, 0x140081d00));
+    fn_TradeUI_OnPurchaseButton = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
+        ResolveAddr(Module::Exe, 0x140081dd0));
+    fn_TradeUI_OnComboPurchase = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140081bc0));
+    fn_TradeUI_OnComboOrder = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140081e80));
+    fn_TradeUI_OnStorageSpinner = reinterpret_cast<fn_TradeUI_OnStorageSpinner_t>(
+        ResolveAddr(Module::Exe, 0x140081ab0));
+    fn_TradeUI_OnSellSpinner = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
+        ResolveAddr(Module::Exe, 0x140081a50));
+    fn_TradeUI_OnBuySpinner = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
+        ResolveAddr(Module::Exe, 0x1400819f0));
+    fn_TradeUI_OnOrderAmountSpinner = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
+        ResolveAddr(Module::Exe, 0x140081c50));
+    g_TypeId_TableElement = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x140151510));
+    g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401516c8));
+    // TextElement type ID — exref at 0x140151508
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151508));
+        if (exref && *exref) g_TypeId_TextElement = reinterpret_cast<uint32_t*>(*exref);
+    }
+    // SelectDescription type ID — DAT_1401c48a8
+    g_TypeId_SelectDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c48a8));
+    fn_TradeUI_RefreshOrderQuantityDisplay = reinterpret_cast<fn_TradeUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140082fb0));
+    fn_TradeUI_RefreshSellSpinnerValues = reinterpret_cast<fn_TradeUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140082d80));
+    fn_TradeUI_RefreshOrderDisplay = reinterpret_cast<fn_TradeUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140082b20));
     fn_TradeUI_RefreshBuyTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140083100));
     fn_TradeUI_UpdateSellTotals = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140082920));
     fn_TradeUI_UpdateBuyTotals = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140082850));
+
+    // --- ModDialog::Slot4 support (Graphics::MaterialInstance, UI::SpriteSheet, etc.) ---
+    // MaterialInstance ctor: dispatch at 0x140151838
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151838));
+        if (d && *d) fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(*d);
+    }
+    // MaterialInstance::SetMaterial: dispatch at 0x140151870
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151870));
+        if (d && *d) fn_MaterialInstance_SetMaterial = reinterpret_cast<fn_MaterialInstance_SetMaterial_t>(*d);
+    }
+    // MaterialInstance::AddTexture: dispatch at 0x140151878
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151878));
+        if (d && *d) fn_MaterialInstance_AddTexture = reinterpret_cast<fn_MaterialInstance_AddTexture_t>(*d);
+    }
+    // MaterialInstance::BuildParameters: dispatch at 0x140151880
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151880));
+        if (d && *d) fn_MaterialInstance_BuildParameters = reinterpret_cast<fn_MaterialInstance_BuildParameters_t>(*d);
+    }
+    // SpriteSheet ctor: dispatch at 0x140151848
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151848));
+        if (d && *d) fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(*d);
+    }
+    // SpriteSheet::AddSpriteInfo: dispatch at 0x140151978
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151978));
+        if (d && *d) fn_SpriteSheet_AddSpriteInfo = reinterpret_cast<fn_SpriteSheet_AddSpriteInfo_t>(*d);
+    }
+    // SpriteSheet::SetSpriteInfo: dispatch at 0x140151970
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151970));
+        if (d && *d) fn_SpriteSheet_SetSpriteInfo = reinterpret_cast<fn_SpriteSheet_SetSpriteInfo_t>(*d);
+    }
+    // Sprite ctor by index: dispatch at 0x140151898
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151898));
+        if (d && *d) fn_Sprite_Ctor_ByIndex = reinterpret_cast<fn_Sprite_Ctor_ByIndex_t>(*d);
+    }
+    // ImageBuffer::Width / Height — resolved by export name from Runtime
+    fn_ImageBuffer_Width = reinterpret_cast<fn_ImageBuffer_Width_t>(
+        ResolveExport("?Width@ImageBuffer@Video@@QEBAHXZ"));
+    fn_ImageBuffer_Height = reinterpret_cast<fn_ImageBuffer_Height_t>(
+        ResolveExport("?Height@ImageBuffer@Video@@QEBAHXZ"));
+    // Custom vtables for mod thumbnail objects
+    g_ModDialog_MaterialInstanceVtable = ResolveAddr(Module::Exe, 0x14015c400);
+    g_ModDialog_SpriteSheetVtable      = ResolveAddr(Module::Exe, 0x14015c3b0);
+    // ModDialog array push: FUN_140012a60
+    fn_ModDialog_ArrayPush = reinterpret_cast<fn_ModDialog_ArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140012a60));
+    // BrowserController type ID: DAT_1401c5210
+    g_TypeId_BrowserController = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5210));
+    // Material type ID: dispatch at 0x140151858 (double-indirect)
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151858));
+        if (d && *d) g_TypeId_Material = reinterpret_cast<uint32_t*>(*d);
+    }
+    // UV scale float: DAT_14017214c
+    g_fUVScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
@@ -2302,6 +2482,37 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140061530));
     fn_Game_GetMonthFromTime = reinterpret_cast<fn_Game_GetMonthFromTime_t>(
         ResolveAddr(Module::Exe, 0x1400932A0));
+
+    // --- SaveLoadDialog::Load helpers ---
+    fn_GameUpdateLoop_Ctor = reinterpret_cast<fn_GameUpdateLoop_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x140098060));
+    fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
+        ResolveExport("??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z"));
+    if (!fn_LoaderLoop_Ctor) {
+        fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800dc1e0));
+    }
+    fn_DialogLoaderLoopT_Ctor = reinterpret_cast<fn_DialogLoaderLoopT_Ctor_t>(
+        ResolveExport("??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z"));
+    if (!fn_DialogLoaderLoopT_Ctor) {
+        fn_DialogLoaderLoopT_Ctor = reinterpret_cast<fn_DialogLoaderLoopT_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800db0d0));
+    }
+    fn_Random_Default_Ctor = reinterpret_cast<fn_Random_Default_Ctor_t>(
+        ResolveExport("??0Random@System@@QEAA@XZ"));
+    if (!fn_Random_Default_Ctor) {
+        fn_Random_Default_Ctor = reinterpret_cast<fn_Random_Default_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800c7f20));
+    }
+    // Exe vtable pointers for subclasses of DialogLoaderLoopT and LoaderLoop
+    g_GameLoadDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140158800));
+    g_GameLoaderLoop_Vtable      = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401588d0));
+    fn_SetEngineNextLoop = reinterpret_cast<fn_SetEngineNextLoop_t>(
+        ResolveAddr(Module::Exe, 0x140097fb0));
+    fn_SetDialogLoaderNextLoop = reinterpret_cast<fn_SetDialogLoaderNextLoop_t>(
+        ResolveAddr(Module::Exe, 0x14009a8f0));
+    fn_GetLoadingSoundString = reinterpret_cast<fn_GetLoadingSoundString_t>(
+        ResolveAddr(Module::Exe, 0x140099130));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
@@ -2443,6 +2654,73 @@ bool EngineFuncsInit() {
     printf("  App::_singleton           = %p -> %p\n", (void*)g_pAppSingleton,
            g_pAppSingleton ? *g_pAppSingleton : nullptr);
 #endif
+
+    // --- SpriteCaptureUI support ---
+    fn_Input_Device_GetValue = reinterpret_cast<fn_Input_Device_GetValue_t>(
+        ResolveExport("?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z"));
+    if (!fn_Input_Device_GetValue)
+        fn_Input_Device_GetValue = reinterpret_cast<fn_Input_Device_GetValue_t>(
+            ResolveAddr(Module::Runtime, 0x1800e1660));
+
+    fn_Input_Device_Pressed = reinterpret_cast<fn_Input_Device_Pressed_t>(
+        ResolveExport("?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
+    if (!fn_Input_Device_Pressed)
+        fn_Input_Device_Pressed = reinterpret_cast<fn_Input_Device_Pressed_t>(
+            ResolveAddr(Module::Runtime, 0x1800e16c0));
+
+    fn_UI_EndSpriteCapture = reinterpret_cast<fn_UI_EndSpriteCapture_t>(
+        ResolveExport("?EndSpriteCapture@UserInterface@UI@@QEAAXXZ"));
+    if (!fn_UI_EndSpriteCapture)
+        fn_UI_EndSpriteCapture = reinterpret_cast<fn_UI_EndSpriteCapture_t>(
+            ResolveAddr(Module::Runtime, 0x18011f4a0));
+
+    // FileSystem singleton: exe exref at 0x140151d18 -> pointer to _singleton in Runtime
+    {
+        void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151d18));
+        if (exref && *exref)
+            g_pFileSystemSingleton = *exref;
+    }
+
+    fn_FileSystem_GetSourceDirectory = reinterpret_cast<fn_FileSystem_GetSourceDirectory_t>(
+        ResolveExport("?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ"));
+    if (!fn_FileSystem_GetSourceDirectory)
+        fn_FileSystem_GetSourceDirectory = reinterpret_cast<fn_FileSystem_GetSourceDirectory_t>(
+            ResolveAddr(Module::Runtime, 0x180007b90));
+
+    fn_External_SaveText = reinterpret_cast<fn_External_SaveText_t>(
+        ResolveExport("?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z"));
+    if (!fn_External_SaveText)
+        fn_External_SaveText = reinterpret_cast<fn_External_SaveText_t>(
+            ResolveAddr(Module::Runtime, 0x1800bb9d0));
+
+    fn_Filename_CtorString = reinterpret_cast<fn_Filename_CtorString_t>(
+        ResolveExport("??0Filename@System@@QEAA@AEBVString@1@@Z"));
+    if (!fn_Filename_CtorString)
+        fn_Filename_CtorString = reinterpret_cast<fn_Filename_CtorString_t>(
+            ResolveAddr(Module::Runtime, 0x18000c780));
+
+    fn_Filename_CtorCStr = reinterpret_cast<fn_Filename_CtorCStr_t>(
+        ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
+    if (!fn_Filename_CtorCStr)
+        fn_Filename_CtorCStr = reinterpret_cast<fn_Filename_CtorCStr_t>(
+            ResolveAddr(Module::Runtime, 0x180026cf0));
+
+    fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(
+        ResolveExport("??1Filename@System@@QEAA@XZ"));
+    if (!fn_Filename_Dtor)
+        fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x180006980));
+
+    // String concat operator+ via dispatch table (non-trivial return ABI, free functions)
+    // Dispatch at 0x140151a10 (ordinal 0x100) and 0x140151a08 (ordinal 0xff)
+    {
+        void** d1 = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a10));
+        if (d1 && *d1)
+            fn_String_ConcatSS = reinterpret_cast<fn_String_Concat_t>(*d1);
+        void** d2 = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a08));
+        if (d2 && *d2)
+            fn_String_ConcatSS2 = reinterpret_cast<fn_String_Concat_t>(*d2);
+    }
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
     if (!fn_InputDevice_Update) {

@@ -109,6 +109,11 @@ void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t param2,
 // ModDialog
 // ============================================================
 
+// Slot4 (vtable +0x20): Setup — populates mod list table with cloned template
+// rows, creates per-mod ImageBuffer/MaterialInstance/SpriteSheet thumbnail
+// objects, attaches browser controller from "Dialog/Mod.rsc:browser".
+void ModDialog_Slot4(ModDialog* self);
+
 // Slot8 (vtable +0x40): OnCommand — dispatches mod list button clicks.
 // Handles cancel(100), apply(101), toggle(1000+), up(2000+), down(3000+),
 // top(4000+), details(5000+). Always calls base OnElementEvent.
@@ -145,8 +150,9 @@ void SaveLoadDialog_Startup(SaveLoadDialog* self);
 void SaveLoadDialog_Update(SaveLoadDialog* self);
 
 // Load (vtable +0x38): Timer/state machine. Accumulates rotation, processes deferred
-// flags when operation completes (refresh file list, close on save/load, re-list on delete).
-void SaveLoadDialog_Load(SaveLoadDialog* self, void* time);
+// flags when operation completes (refresh file list, close on save/load, re-list on delete,
+// construct game loader loop chain on load completion).
+void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut, uint64_t param4);
 
 // ============================================================
 // FollowDialog

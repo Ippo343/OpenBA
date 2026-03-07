@@ -11,18 +11,370 @@
 //   +0xD0: zeroed
 //
 // Reimplemented:
+//   Slot4 (0x14006F150) — Setup: populates mod list table, thumbnail pipeline
 //   Slot8 (0x14006ED40) — OnCommand: handles all mod list button clicks
-//
-// Not reimplemented (too complex / heavy engine deps):
-//   Slot4 (0x14006F150) — Setup: 428 lines, ImageBuffer/MaterialInstance/SpriteSheet pipeline
 //
 // Not hookable (Runtime thunks):
 //   Slot7, Slot9 — 6-byte JMP [rip+xx] to Runtime, cannot be hooked
+//
+// Entry struct (0x58 bytes = 11 × 8):
+//   +0x00: textModName   InternalPtr<Element>
+//   +0x08: textModAuthor InternalPtr<Element>
+//   +0x10: textModVersion InternalPtr<Element>
+//   +0x18: textModDescription InternalPtr<Element>
+//   +0x20: checkLoaded   InternalPtr<Element>
+//   +0x28: vtChild       InternalPtr<Element>  (first child via vtable[0x58])
+//   +0x30: imageConflict InternalPtr<Element>
+//   +0x38: imageIcon     ImageElement* (InternalPtr)
+//   +0x40: ImageBuffer*
+//   +0x48: MaterialInstance*
+//   +0x50: SpriteSheet*
 
 #include "ui/Dialogs.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include <cstdint>
+
+// ============================================================
+// Helper types
+// ============================================================
+
+// Vtable call helpers for Element (via raw vtable pointer reads)
+typedef void* (*fn_ElementVt_Child_t)(void* self, void* retbuf, int index);
+typedef void  (*fn_ElementVt_Hide_t)(void* self, int hide);
+
+// ImageBuffer Create: vtable+0x48 (via g_NoiseUI_ImageBufferVtable)
+// Args: self, ?, colorFmt, pixFmt, stride, w, h, mip, ?, ?, ?, ?
+typedef void (*fn_ImageBuffer_Create_t)(void* self, int a1, int a2, int a3,
+                                        int stride, int w, int h,
+                                        int a8, int a9, int a10, int a11, int a12);
+
+// ============================================================
+// ModDialog::Slot4 — Setup (0x14006F150)
+// ============================================================
+//
+// Finds buttonCancel/buttonOk/tableMods, then for each installed mod:
+//   1. Clones the dialog template element and adds it to tableMods
+//   2. Finds 10 child elements by name, assigns IDs (1000+/2000+/3000+/4000+/5000+i)
+//   3. Hides buttonUp+buttonTop for first mod, buttonDown for last
+//   4. Builds 48x48 ImageBuffer + MaterialInstance + SpriteSheet thumbnail
+//   5. Pushes 0x58-byte entry struct into self->m_entries array
+// After loop: calls RefreshDisplay, loads browser controller, hides browse UI.
+
+void ModDialog_Slot4(ModDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    // --- buttonCancel (id=100, set +0xC0=8) ---
+    {
+        uint8_t retbuf[8];
+        fn_String_Ctor_CStr(retbuf, "buttonCancel");
+        uint8_t elemBuf[8];
+        fn_DialogInstance_FindElement(self, elemBuf, retbuf);
+        fn_InternalBasePtr_CheckPtr(elemBuf);
+        void* elem = *(void**)elemBuf;
+        fn_Element_SetElementId(elem, 100);
+        fn_InternalBasePtr_CheckPtr(elemBuf);
+        *(uint32_t*)(*(uintptr_t*)elemBuf + 0xC0) = 8;
+        fn_String_Dtor(retbuf);
+    }
+
+    // --- buttonOk (id=0x65) ---
+    uint8_t buttonOkBuf[8] = {};
+    {
+        uint8_t retbuf[8];
+        fn_String_Ctor_CStr(retbuf, "buttonOk");
+        uint8_t elemBuf[8];
+        fn_DialogInstance_FindElement(self, elemBuf, retbuf);
+        fn_InternalBasePtr_CheckPtr(elemBuf);
+        void* elem = *(void**)elemBuf;
+        fn_Element_SetElementId(elem, 0x65);
+        fn_String_Dtor(retbuf);
+        *(uint64_t*)buttonOkBuf = *(uint64_t*)elemBuf;
+    }
+    (void)buttonOkBuf;
+
+    // --- tableMods: find and store at self+0xC8 ---
+    {
+        uint8_t retbuf[8];
+        fn_String_Ctor_CStr(retbuf, "tableMods");
+        uint8_t elemBuf[8];
+        fn_DialogInstance_FindElement(self, elemBuf, retbuf);
+        fn_InternalBasePtr_CheckPtr(elemBuf);
+        void* elem = *(void**)elemBuf;
+        // Store InternalPtr at +0xC8
+        fn_InternalBasePtr_Ctor((void*)(s + 0xC8), elem);
+        fn_String_Dtor(retbuf);
+    }
+
+    void* modSingleton = *(void**)g_ppModificationSingleton;
+    int modCount = fn_Modification_GetCount(modSingleton);
+    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+
+    for (int i = 0; i < modCount; i++) {
+        // Clone template element from Dialog, add to tableMods
+        uint8_t templateBuf[8];
+        void* dialog = *(void**)(s + 0x18);
+        fn_Dialog_GetTemplate(dialog, templateBuf, 0);
+        void* templateObj = *(void**)templateBuf;
+
+        // Call vtable[8] (offset 0x40) to clone: (templateObj, retbuf, dialog)
+        typedef void* (*fn_Clone_t)(void* self, void* retbuf, void* dialog);
+        uint8_t cloneBuf[8];
+        ((fn_Clone_t)(*(void***)templateObj)[8])(templateObj, cloneBuf, dialog);
+        void* clonedElem = *(void**)cloneBuf;
+
+        // Add cloned element to tableMods
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
+        void* tableElem = *(void**)(s + 0xC8);
+        fn_Element_AddChild(tableElem, &clonedElem);
+
+        // Find child elements by name in the cloned row
+        uint8_t textModNameBuf[8] = {};
+        uint8_t textModAuthorBuf[8] = {};
+        uint8_t textModVersionBuf[8] = {};
+        uint8_t textModDescBuf[8] = {};
+        uint8_t checkLoadedBuf[8] = {};
+        uint8_t imageConflictBuf[8] = {};
+        uint8_t imageIconBuf[8] = {};
+        uint8_t buttonTopBuf[8] = {};
+        uint8_t buttonUpBuf[8] = {};
+        uint8_t buttonDownBuf[8] = {};
+        uint8_t buttonDetailsBuf[8] = {};
+
+        struct {
+            const char* name;
+            uint8_t* buf;
+        } findList[] = {
+            { "textModName",        textModNameBuf },
+            { "textModAuthor",      textModAuthorBuf },
+            { "textModDescription", textModDescBuf },
+            { "textModVersion",     textModVersionBuf },
+            { "checkLoaded",        checkLoadedBuf },
+            { "imageConflict",      imageConflictBuf },
+            { "imageIcon",          imageIconBuf },
+            { "buttonTop",          buttonTopBuf },
+            { "buttonUp",           buttonUpBuf },
+            { "buttonDown",         buttonDownBuf },
+            { "buttonDetails",      buttonDetailsBuf },
+        };
+
+        for (auto& e : findList) {
+            uint8_t strBuf[8];
+            fn_String_Ctor_CStr(strBuf, e.name);
+            fn_InternalBasePtr_CheckPtr(cloneBuf);
+            uint8_t retBuf[8];
+            fn_FindElement(clonedElem, retBuf, strBuf);
+            fn_InternalBasePtr_CheckPtr(retBuf);
+            void* found = *(void**)retBuf;
+            fn_InternalBasePtr_Ctor(e.buf, found);
+            fn_String_Dtor(strBuf);
+        }
+
+        // Get vtable[0x58] child (Child(0)) of cloned element
+        uint8_t vtChildBuf[8] = {};
+        {
+            fn_InternalBasePtr_CheckPtr(cloneBuf);
+            void** vt = *(void***)clonedElem;
+            // vtable[0x58/8] = vtable[11] = Element::Child(int)
+            typedef void* (*fn_Child_t)(void* self, void* retbuf, int index);
+            uint8_t childRetBuf[8];
+            ((fn_Child_t)vt[11])(clonedElem, childRetBuf, 0);
+            fn_InternalBasePtr_CheckPtr(childRetBuf);
+            void* child = *(void**)childRetBuf;
+            fn_InternalBasePtr_Ctor(vtChildBuf, child);
+        }
+
+        // Assign element IDs
+        fn_InternalBasePtr_CheckPtr(checkLoadedBuf);
+        fn_Element_SetElementId(*(void**)checkLoadedBuf, i + 1000);
+        fn_InternalBasePtr_CheckPtr(buttonTopBuf);
+        fn_Element_SetElementId(*(void**)buttonTopBuf, i + 4000);
+        fn_InternalBasePtr_CheckPtr(buttonDownBuf);
+        fn_Element_SetElementId(*(void**)buttonDownBuf, i + 3000);
+        fn_InternalBasePtr_CheckPtr(buttonUpBuf);
+        fn_Element_SetElementId(*(void**)buttonUpBuf, i + 2000);
+        fn_InternalBasePtr_CheckPtr(buttonDetailsBuf);
+        fn_Element_SetElementId(*(void**)buttonDetailsBuf, i + 5000);
+
+        // Hide Up+Top for first mod
+        if (i == 0) {
+            fn_InternalBasePtr_CheckPtr(buttonUpBuf);
+            void** upVt = *(void***)*(void**)buttonUpBuf;
+            ((fn_ElementVt_Hide_t)upVt[8])(*(void**)buttonUpBuf, 0);
+            fn_InternalBasePtr_CheckPtr(buttonTopBuf);
+            void** topVt = *(void***)*(void**)buttonTopBuf;
+            ((fn_ElementVt_Hide_t)topVt[8])(*(void**)buttonTopBuf, 0);
+        }
+        // Hide Down for last mod
+        if (i == modCount - 1) {
+            fn_InternalBasePtr_CheckPtr(buttonDownBuf);
+            void** downVt = *(void***)*(void**)buttonDownBuf;
+            ((fn_ElementVt_Hide_t)downVt[8])(*(void**)buttonDownBuf, 0);
+        }
+
+        // Build 0x58-byte entry struct (11 × 8 bytes of InternalPtrs + raw ptrs)
+        struct ModEntry {
+            uint64_t textModName;    // +0x00
+            uint64_t textModAuthor;  // +0x08
+            uint64_t textModVersion; // +0x10
+            uint64_t textModDesc;    // +0x18
+            uint64_t checkLoaded;    // +0x20
+            uint64_t vtChild;        // +0x28
+            uint64_t imageConflict;  // +0x30
+            uint64_t imageIcon;      // +0x38
+            void*    imageBuffer;    // +0x40
+            void*    matInstance;    // +0x48
+            void*    spriteSheet;    // +0x50
+        } entry;
+
+        entry.textModName   = *(uint64_t*)textModNameBuf;
+        entry.textModAuthor = *(uint64_t*)textModAuthorBuf;
+        entry.textModVersion = *(uint64_t*)textModVersionBuf;
+        entry.textModDesc   = *(uint64_t*)textModDescBuf;
+        entry.checkLoaded   = *(uint64_t*)checkLoadedBuf;
+        entry.vtChild       = *(uint64_t*)vtChildBuf;
+        entry.imageConflict = *(uint64_t*)imageConflictBuf;
+        entry.imageIcon     = *(uint64_t*)imageIconBuf;
+
+        // --- Create 48x48 ImageBuffer ---
+        void* imgBuf = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+        entry.imageBuffer = nullptr;
+        if (imgBuf) {
+            fn_ImageBuffer_Ctor(imgBuf);
+            *(uintptr_t*)imgBuf = g_NoiseUI_ImageBufferVtable; // same vtable as NoiseUI
+            // Create: vtable[0x48/8]=vtable[9](self, 0, 2, 5, stride=0, w=48, h=48, 1,1,1,1, 0)
+            void** ivt = *(void***)imgBuf;
+            typedef void (*fn_IB_Create_t)(void* self, int, int, int, int, int, int, int, int, int, int, int);
+            ((fn_IB_Create_t)ivt[9])(imgBuf, 0, 2, 5, 0, 0x30, 0x30, 1, 1, 1, 1, 0);
+            entry.imageBuffer = imgBuf;
+        }
+
+        // --- Create MaterialInstance (0x60 bytes) ---
+        void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+        entry.matInstance = nullptr;
+        if (matInst) {
+            fn_MaterialInstance_Ctor(matInst);
+            *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+            entry.matInstance = matInst;
+        }
+
+        // Load "Material/UI/UIMaterial.rsc", IsDerivedFrom Material, SetMaterial
+        {
+            uint8_t filenameBuf[8];
+            fn_Filename_CtorCStr(filenameBuf, "Material/UI/UIMaterial.rsc");
+            void* extFactory = *(void**)g_pExternalFactorySingleton;
+            void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+            void* material = nullptr;
+            if (ext) {
+                bool derived = fn_IsDerivedFrom(ext, g_TypeId_Material ? *g_TypeId_Material : 0);
+                if (derived) material = ext;
+            }
+            fn_MaterialInstance_SetMaterial(matInst, material);
+            fn_Filename_Dtor(filenameBuf);
+        }
+
+        // AddTexture("diffuse", imageBuffer)
+        {
+            uint8_t strBuf[8];
+            fn_String_Ctor_CStr(strBuf, "diffuse");
+            fn_MaterialInstance_AddTexture(matInst, strBuf, imgBuf);
+            fn_String_Dtor(strBuf);
+        }
+
+        fn_MaterialInstance_BuildParameters(matInst);
+
+        // --- Create SpriteSheet (0x58 bytes) ---
+        void* sprSheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+        entry.spriteSheet = nullptr;
+        if (sprSheet) {
+            fn_SpriteSheet_Ctor(sprSheet);
+            *(uintptr_t*)sprSheet = g_ModDialog_SpriteSheetVtable;
+            entry.spriteSheet = sprSheet;
+
+            // Set materialInstance at +0x30
+            *(void**)((uintptr_t)sprSheet + 0x30) = matInst;
+
+            // operator= empty strings at +0x38 and +0x40
+            uint64_t emptyStr1 = 0, emptyStr2 = 0;
+            fn_String_Assign((void*)((uintptr_t)sprSheet + 0x40), &emptyStr1);
+            fn_String_Assign((void*)((uintptr_t)sprSheet + 0x38), &emptyStr2);
+
+            // Set w/h at +0x48/+0x4c to 48 (0x30)
+            *(uint32_t*)((uintptr_t)sprSheet + 0x48) = 0x30;
+            *(uint32_t*)((uintptr_t)sprSheet + 0x4c) = 0x30;
+            // Zero +0x50
+            *(uint64_t*)((uintptr_t)sprSheet + 0x50) = 0;
+
+            // AddSpriteInfo(sheet, empty, empty, 0, 0, 48, 48)
+            uint64_t emptyA = 0, emptyB = 0;
+            fn_SpriteSheet_AddSpriteInfo(sprSheet, &emptyA, &emptyB, 0, 0, 0x30, 0x30);
+
+            // SetSpriteInfo(sheet, 0, 48, 48, 0.0, 0.0, uvScale, uvScale)
+            fn_SpriteSheet_SetSpriteInfo(sprSheet, 0, 0x30, 0x30, 0.0f, 0.0f, uvScale, uvScale);
+        }
+
+        // Create Sprite by index and SetSprite on imageIcon
+        {
+            uint8_t spriteBuf[16];
+            fn_Sprite_Ctor_ByIndex(spriteBuf, sprSheet, 0);
+            void* imageIconElem = *(void**)imageIconBuf;
+            fn_ImageElement_SetSprite(imageIconElem, spriteBuf);
+        }
+
+        // Push entry into self->m_entries (array at +0xB8, count at +0xC0)
+        int newCount = *(int*)(s + 0xC0) + 1;
+        fn_ModDialog_ArrayPush((void*)(s + 0xB8), newCount, &entry);
+    }
+
+    // --- Post-loop: refresh display, add browser controller, hide browse UI ---
+    fn_ModDialog_RefreshDisplay((void*)self);
+
+    // Load "Dialog/Mod.rsc:browser", add as controller with type g_TypeId_BrowserController
+    {
+        uint8_t filenameBuf[8];
+        fn_Filename_CtorCStr(filenameBuf, "Dialog/Mod.rsc:browser");
+        void* extFactory = *(void**)g_pExternalFactorySingleton;
+        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+
+        // Pass browser external directly; original has IsDerivedFrom check but the
+        // _typeInfo_exref is context-dependent (Ghidra merges refs) and the browser
+        // controller IS the right type — passing null would silently break the UI.
+        void* browserExt = ext;
+
+        fn_Filename_Dtor(filenameBuf);
+
+        // AddController(self, typeId, 0, 0, browserExt, "groupBrowse")
+        uint8_t groupStr[8];
+        fn_String_Ctor_CStr(groupStr, "groupBrowse");
+        uint32_t typeId = g_TypeId_BrowserController ? *g_TypeId_BrowserController : 0;
+        fn_DialogInstance_AddController(self, typeId, 0, 0, browserExt, groupStr);
+        fn_String_Dtor(groupStr);
+    }
+
+    // Hide "buttonBrowse"
+    {
+        uint8_t strBuf[8];
+        fn_String_Ctor_CStr(strBuf, "buttonBrowse");
+        uint8_t elemBuf[8];
+        fn_DialogInstance_FindElement(self, elemBuf, strBuf);
+        fn_InternalBasePtr_CheckPtr(elemBuf);
+        void* elem = *(void**)elemBuf;
+        fn_Element_Hide(elem, true);
+        fn_String_Dtor(strBuf);
+    }
+
+    // Hide "groupProgress"
+    {
+        uint8_t strBuf[8];
+        fn_String_Ctor_CStr(strBuf, "groupProgress");
+        uint8_t elemBuf[8];
+        fn_DialogInstance_FindElement(self, elemBuf, strBuf);
+        fn_InternalBasePtr_CheckPtr(elemBuf);
+        void* elem = *(void**)elemBuf;
+        fn_Element_Hide(elem, true);
+        fn_String_Dtor(strBuf);
+    }
+}
 
 // ============================================================
 // ModDialog::Slot8 — OnCommand handler (0x14006ED40)

@@ -101,13 +101,13 @@ static void Reimpl_Update(void* self) {
     SaveLoadDialog_Update((SaveLoadDialog*)self);
 }
 
-// Slot 7: Load(this, time, loaderLoop, param4)
-// Kept as passthrough — creates LoaderLoop/DialogLoaderLoopT objects
-// with complex MSVC constructors that can't easily be called from GCC.
+// Slot 7: Load(this, time, loaderLoop, param4) — REIMPLEMENTED
+// Accumulates spinner rotation, processes deferred flags, constructs game loader loop chain
+// on load completion. All constructor calls use resolved Runtime DLL exports.
 typedef void (*fn_Load_t)(void* self, void* time, void** loaderLoop, uint64_t param4);
 static void Reimpl_Load(void* self, void* time, void** loaderLoop, uint64_t param4) {
     g_lastHook = "SaveLoadDialog::Load";
-    ((fn_Load_t)g_hookLoad.trampoline)(self, time, loaderLoop, param4);
+    SaveLoadDialog_Load((SaveLoadDialog*)self, time, loaderLoop, param4);
 }
 
 // ============================================================

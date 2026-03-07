@@ -432,12 +432,14 @@ void TradeUI_Draw(TradeUI* self);
 // Slot6 (vtable +0x30): Clears building dirty flag (+0x71) to 0.
 void TradeUI_Slot6(TradeUI* self);
 
-// Serialize (vtable +0x20): Complex UI setup — finds 15+ elements,
-// builds table arrays, enumerates resource types. Delegated to exe.
+// Serialize (vtable +0x20): Full UI setup — finds 15 named elements,
+// builds 4 table arrays with row sub-elements, enumerates resource types
+// via ExternalFactory, clones template elements, sets element IDs.
 void TradeUI_Serialize(TradeUI* self);
 
-// Startup (vtable +0x38): Calculates trade values, checks storage,
-// shows/hides warning text, enables/disables buttons. Delegated to exe.
+// Startup (vtable +0x38): Calculates sell/buy totals from order arrays,
+// checks storage capacity, shows/hides warning text (textNoStorage,
+// textTooMuch, textNotEnough), enables/disables trade and dismiss buttons.
 void TradeUI_Startup(TradeUI* self);
 
 // OnCreate (vtable +0x40): Checks order count changes, refreshes tables.
@@ -506,6 +508,10 @@ void TownHallUI_Update(TownHallUI* self, void* stream);
 // Serialize (vtable +0x20): Finds editCapture/buttonCapture/captureBox elements,
 // sets button ID 1000, sets default capture path, initializes capture state.
 void SpriteCaptureUI_Serialize(SpriteCaptureUI* self);
+
+// OnCreate (vtable +0x40): Per-frame update — drag capture box with left mouse + key 0x3E.
+// When pendingExternal set and saveFrameCount reaches 1, EndSpriteCapture + SaveText.
+void SpriteCaptureUI_OnCreate(SpriteCaptureUI* self);
 
 // ============================================================
 // DebugUI

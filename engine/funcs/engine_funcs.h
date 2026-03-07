@@ -772,6 +772,12 @@ extern fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount;
 typedef void* (*fn_SaveLoad_GetSaveInfo_t)(void* saveLoad, int index);
 extern fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo;
 
+// SaveLoad::GetSaveState(this) -> SavedState* — returns save state ptr at this+0x40
+// Used by GameUpdateLoop ctor to set the save file to load.
+// ?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ (0x1800c3b50, ordinal 2891)
+typedef void* (*fn_SaveLoad_GetSaveState_t)(void* saveLoad);
+extern fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState;
+
 // Sprite::IsValid(this) -> bool
 // ?IsValid@Sprite@UI@@QEBA_NXZ
 typedef bool (*fn_Sprite_IsValid_t)(void* sprite);
@@ -1962,6 +1968,72 @@ extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable;    // FUN_140083100 (
 extern fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateSellTotals;   // FUN_140082920 (49 lines)
 extern fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateBuyTotals;    // FUN_140082850 (47 lines)
 
+// TradeUI::OnRemove sub-functions (called by the event dispatcher)
+// FUN_140081420: OnTradeButton(self, p2, p3, p4) — handles buttonTrade click (id 0x4e20)
+typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
+extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;    // 0x140081420
+
+// FUN_140081950: OnDismissButton(self) — handles buttonDismiss click (id 0x4e21)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_OnDismissButton;    // 0x140081950
+
+// FUN_140081d00: OnOrderSpinner(self, idx, idx_minus1) — order quantity spinner (id 0x1388+)
+typedef void (*fn_TradeUI_OnOrderSpinner_t)(void* self, int idx, int idx_minus1);
+extern fn_TradeUI_OnOrderSpinner_t fn_TradeUI_OnOrderSpinner;  // 0x140081d00
+
+// FUN_140081dd0: OnPurchaseButton(self, idx) — purchase button (id 0x1f40+)
+typedef void (*fn_TradeUI_OnPurchaseButton_t)(void* self, int idx);
+extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnPurchaseButton; // 0x140081dd0
+
+// FUN_140081bc0: OnComboPurchase(self) — comboPurchase change (id 0x4e22)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboPurchase;    // 0x140081bc0
+
+// FUN_140081e80: OnComboOrder(self) — comboOrder change (id 0x4e23)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboOrder;       // 0x140081e80
+
+// FUN_140081ab0: OnStorageSpinner(self, idx, reserved) — storage spinner (id 0x7d0+)
+typedef void (*fn_TradeUI_OnStorageSpinner_t)(void* self, int idx, void* reserved);
+extern fn_TradeUI_OnStorageSpinner_t fn_TradeUI_OnStorageSpinner; // 0x140081ab0
+
+// FUN_140081a50: OnSellSpinner(self, idx) — sell spinner (id 0xbb8+)
+extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnSellSpinner;    // 0x140081a50
+
+// FUN_1400819f0: OnBuySpinner(self, idx) — buy spinner (id 0xfa0+)
+extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnBuySpinner;     // 0x1400819f0
+
+// FUN_140081c50: OnOrderAmountSpinner(self, idx) — order amount spinner (id 0x1b58+)
+extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnOrderAmountSpinner; // 0x140081c50
+
+// TradeUI::Serialize sub-function type IDs used in IsDerivedFrom checks
+// These are the element type IDs used when finding typed elements in Serialize
+// _typeInfo_exref used in Serialize for IsDerivedFrom (ComboElement, TableElement, SpinnerElement, etc.)
+// TableElement type ID — exref 0x140151510
+extern uint32_t* g_TypeId_TableElement;
+
+// SpinnerElement / NumberElement type ID — exref 0x1401516c8
+extern uint32_t* g_TypeId_SpinnerElement;
+
+// TextElement type ID — exref 0x140151508
+extern uint32_t* g_TypeId_TextElement;
+
+// ButtonElement type ID — exref 0x1401514f8 (same as g_TypeId_HelpButtonElem)
+// Already available as g_TypeId_HelpButtonElem
+
+// ComboElement type ID — exref 0x140151690 (same as g_TypeId_HelpComboElem)
+// Already available as g_TypeId_HelpComboElem
+
+// SelectDescription type ID — DAT_1401c48a8
+// Used in Serialize ExternalFactory loop to count selectable build types
+extern uint32_t* g_TypeId_SelectDescription;
+
+// TradeUI::Startup end-sub-functions (called after main calculation)
+// FUN_140082fb0: RefreshOrderQuantityDisplay — updates order quantity NumberElements via StateMachine
+typedef void (*fn_TradeUI_SubFunc_t)(void* self);
+extern fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderQuantityDisplay;  // 0x140082fb0
+// FUN_140082d80: RefreshSellSpinnerValues — updates sell-order spinners (SetMinMax, SetIncrement)
+extern fn_TradeUI_SubFunc_t fn_TradeUI_RefreshSellSpinnerValues;     // 0x140082d80
+// FUN_140082b20: RefreshOrderDisplay — updates order table rows (spinner values, labels, sprites)
+extern fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderDisplay;          // 0x140082b20
+
 // ============================================================
 // NoiseUI helpers (Application-x64.exe)
 // ============================================================
@@ -2067,6 +2139,201 @@ extern fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors;
 // RCX=weatherMgr(void*)
 typedef int (*fn_Game_GetMonthFromTime_t)(void* weatherMgr);
 extern fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime;
+
+// ============================================================
+// SaveLoadDialog::Load — game load loop construction helpers
+// ============================================================
+
+// GameUpdateLoop ctor (FUN_140098060 in exe) — constructs the gameplay UpdateLoop (0x160 bytes).
+// 11 params: self, savedState, loaderLoopPtr, opFlag, nameStr, p6, p7, p8, p9, p10, p11
+// This is an exe-internal function that calls Engine::UpdateLoop::UpdateLoop then sets its vtable
+// to PTR_FUN_14015e2f0 and initializes all fields.
+typedef void* (*fn_GameUpdateLoop_Ctor_t)(void* self, void* savedState, void* loaderLoopPtr,
+                                           uint32_t opFlag, void* nameStr,
+                                           uint32_t p6, uint32_t p7, uint8_t p8,
+                                           uint64_t p9, uint64_t p10, uint64_t p11);
+extern fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor;
+
+// Engine::LoaderLoop ctor (Runtime 0x1800DC1E0)
+// RCX=self(LoaderLoop*), RDX=nextLoop(UpdateLoop*), R8=delayTime(Time const&)
+// ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z
+typedef void* (*fn_LoaderLoop_Ctor_t)(void* self, void* nextLoop, void* delayTime);
+extern fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor;
+
+// Engine::DialogLoaderLoopT ctor (Runtime 0x1800DB0D0)
+// RCX=self, RDX=dialogFilename(String const&), R8=nextLoop(UpdateLoop*), R9=delayTime(Time const&)
+// ??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z
+typedef void* (*fn_DialogLoaderLoopT_Ctor_t)(void* self, void* dialogFilename,
+                                              void* nextLoop, void* delayTime);
+extern fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor;
+
+// System::Random::Random() — default ctor (Runtime 0x1800c7f20), seeds from time(nullptr)
+// ??0Random@System@@QEAA@XZ
+typedef void* (*fn_Random_Default_Ctor_t)(void* self);
+extern fn_Random_Default_Ctor_t fn_Random_Default_Ctor;
+
+// Exe vtable pointer for GameLoadDialogLoopT (subclass of DialogLoaderLoopT).
+// PTR_FUN_140158800 — written to DialogLoaderLoopT after base ctor to override vtable.
+extern void** g_GameLoadDialogLoopT_Vtable;  // 0x140158800
+
+// Exe vtable pointer for GameLoaderLoop (subclass of LoaderLoop).
+// PTR_FUN_1401588d0 — written to outer LoaderLoop after base ctor to override vtable.
+extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
+
+// SetEngineNextLoop — sets next loop on the MainLoop engine singleton
+// FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr
+// Called when self->m_loaderLoop1 (+0xE0) is null (use engine at +0xE8).
+typedef void (*fn_SetEngineNextLoop_t)(uintptr_t enginePtr, void* loaderLoop);
+extern fn_SetEngineNextLoop_t fn_SetEngineNextLoop;
+
+// SetDialogLoaderNextLoop — sets next loop on a DialogLoaderLoopT
+// FUN_14009a8f0(dialogLoaderLoop, loaderLoop): sets fullscreen fade, stores next loop ptr
+// Called when self->m_loaderLoop1 (+0xE0) is non-null.
+typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
+extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
+
+// GetLoadingSoundString — formats "Dialog/Loading.rsc:gameLoad%i" for a random variant (0-11)
+// FUN_140099130(unused, retStr, unused, unused) — ignores all params except retStr
+// RDX=retStr(char* buffer of 8 bytes, used as System::String)
+typedef void* (*fn_GetLoadingSoundString_t)(uint64_t unused, void* retStr,
+                                             uint64_t unused2, uint64_t unused3);
+extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
+
+// ============================================================
+// ModDialog::Slot4 support (Application-x64.exe + Runtime-x64.dll)
+// ============================================================
+
+// Graphics::MaterialInstance::MaterialInstance(this) — ctor (0x60 bytes)
+// Dispatch table at 0x140151838 in exe
+typedef void* (*fn_MaterialInstance_Ctor_t)(void* self);
+extern fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor;
+
+// Graphics::MaterialInstance::SetMaterial(this, material)
+// Dispatch table at 0x140151870
+typedef void (*fn_MaterialInstance_SetMaterial_t)(void* self, void* material);
+extern fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial;
+
+// Graphics::MaterialInstance::AddTexture(this, name, imageBuffer)
+// Dispatch table at 0x140151878
+typedef void (*fn_MaterialInstance_AddTexture_t)(void* self, void* nameStr, void* imageBuffer);
+extern fn_MaterialInstance_AddTexture_t fn_MaterialInstance_AddTexture;
+
+// Graphics::MaterialInstance::BuildParameters(this)
+// Dispatch table at 0x140151880
+typedef void (*fn_MaterialInstance_BuildParameters_t)(void* self);
+extern fn_MaterialInstance_BuildParameters_t fn_MaterialInstance_BuildParameters;
+
+// UI::SpriteSheet::SpriteSheet(this) — ctor (0x58 bytes)
+// Dispatch table at 0x140151848
+typedef void* (*fn_SpriteSheet_Ctor_t)(void* self);
+extern fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor;
+
+// UI::SpriteSheet::AddSpriteInfo(this, name, groupName, x, y, w, h)
+// Dispatch table at 0x140151978
+typedef void (*fn_SpriteSheet_AddSpriteInfo_t)(void* self, void* nameStr, void* groupStr,
+                                                int x, int y, int w, int h);
+extern fn_SpriteSheet_AddSpriteInfo_t fn_SpriteSheet_AddSpriteInfo;
+
+// UI::SpriteSheet::SetSpriteInfo(this, index, w, h, u0, v0, u1, v1)
+// Dispatch table at 0x140151970
+typedef void (*fn_SpriteSheet_SetSpriteInfo_t)(void* self, int index,
+                                                int w, int h,
+                                                float u0, float v0, float u1, float v1);
+extern fn_SpriteSheet_SetSpriteInfo_t fn_SpriteSheet_SetSpriteInfo;
+
+// UI::Sprite::Sprite(retval, SpriteSheet*, int index) — by-index ctor
+// Dispatch table at 0x140151898
+// Returns retval (16-byte Sprite struct)
+typedef void* (*fn_Sprite_Ctor_ByIndex_t)(void* retval, void* spriteSheet, int index);
+extern fn_Sprite_Ctor_ByIndex_t fn_Sprite_Ctor_ByIndex;
+
+// Video::ImageBuffer::Width(this) -> int — returns pixel width
+// Dispatch table at 0x140151a00 (ordinal 0xD0)
+typedef int (*fn_ImageBuffer_Width_t)(void* self);
+extern fn_ImageBuffer_Width_t fn_ImageBuffer_Width;
+
+// Video::ImageBuffer::Height(this) -> int — returns pixel height
+// Dispatch table at 0x140151a08 (ordinal 0xCF)
+typedef int (*fn_ImageBuffer_Height_t)(void* self);
+extern fn_ImageBuffer_Height_t fn_ImageBuffer_Height;
+
+// Custom vtables set on per-mod thumbnail objects (exe .rdata)
+// ModDialog MaterialInstance vtable (0x14015c400)
+extern uintptr_t g_ModDialog_MaterialInstanceVtable;  // 0x14015c400
+// ModDialog SpriteSheet vtable (0x14015c3b0)
+extern uintptr_t g_ModDialog_SpriteSheetVtable;       // 0x14015c3b0
+
+// ModDialog thumbnail array push (FUN_140012a60) — 0x58-byte stride
+// Resizes and copies 0x58-byte entries into the mod cache array.
+// RCX=arrayHeader(ptr+count+capacity), RDX=newCount, R8=entry(0x58 bytes)
+typedef void (*fn_ModDialog_ArrayPush_t)(void* arrayHeader, int newCount, void* entry);
+extern fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush;  // 0x140012a60
+
+// Browser controller type ID — DAT_1401c5210
+// Used by AddController to attach the mod browser controller.
+extern uint32_t* g_TypeId_BrowserController;  // 0x1401c5210
+
+// Material type ID for IsDerivedFrom check in ModDialog (dispatch 0x140151858)
+extern uint32_t* g_TypeId_Material;
+
+// DAT_14017214c — UV scale constant (= 1.0f used in SpriteSheet::SetSpriteInfo)
+extern float* g_fUVScale;  // DAT_14017214c
+
+// ============================================================
+// SpriteCaptureUI support functions
+// ============================================================
+
+// Input::Device::GetValue(this, InputDevice, slot, axis) -> short
+// ?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z (0x1800e1660, ordinal 3004)
+// InputDevice: 1=keyboard, 2=mouse. axis 0=X, 1=Y, 4=left button.
+typedef short (*fn_Input_Device_GetValue_t)(void* self, int device, int slot, int axis);
+extern fn_Input_Device_GetValue_t fn_Input_Device_GetValue;
+
+// Input::Device::Pressed(this, InputDevice, slot, key) -> bool
+// ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z (0x1800e16c0, ordinal 3431)
+typedef bool (*fn_Input_Device_Pressed_t)(void* self, int device, int slot, int key);
+extern fn_Input_Device_Pressed_t fn_Input_Device_Pressed;
+
+// UI::UserInterface::EndSpriteCapture(this) — clears capture state
+// ?EndSpriteCapture@UserInterface@UI@@QEAAXXZ (0x18011f4a0, ordinal 2316)
+typedef void (*fn_UI_EndSpriteCapture_t)(void* self);
+extern fn_UI_EndSpriteCapture_t fn_UI_EndSpriteCapture;
+
+// IO::FileSystem singleton — exref at 0x140151d18 (ordinal 0x161 _singleton)
+extern void** g_pFileSystemSingleton;
+
+// IO::FileSystem::GetSourceDirectory(this, retval) — non-trivial return (Filename by value)
+// RCX=this(FileSystem*), RDX=retval(Filename*, 8 bytes). Returns retval ptr.
+// ?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ (0x180007b90, ordinal 2922)
+typedef void* (*fn_FileSystem_GetSourceDirectory_t)(void* self, void* retval);
+extern fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory;
+
+// Object::External::SaveText(this, path, subdir) -> bool
+// ?SaveText@External@Object@@QEAA_NAEBVFilename@System@@0@Z (0x1800bb9d0, ordinal 364)
+typedef bool (*fn_External_SaveText_t)(void* self, void* pathFilename, void* subdirFilename);
+extern fn_External_SaveText_t fn_External_SaveText;
+
+// System::Filename::Filename(this, String const&) — ctor from System::String
+// ??0Filename@System@@QEAA@AEBVString@1@@Z (0x18000c780, ordinal 192)
+typedef void* (*fn_Filename_CtorString_t)(void* self, const void* str);
+extern fn_Filename_CtorString_t fn_Filename_CtorString;
+
+// System::Filename::Filename(this, const char*) — ctor from C string
+// ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0, ordinal 193)
+typedef void* (*fn_Filename_CtorCStr_t)(void* self, const char* str);
+extern fn_Filename_CtorCStr_t fn_Filename_CtorCStr;
+
+// System::Filename::~Filename(this) — destructor (decrements refcount)
+// ??1Filename@System@@QEAA@XZ (0x180006980, ordinal 595)
+typedef void (*fn_Filename_Dtor_t)(void* self);
+extern fn_Filename_Dtor_t fn_Filename_Dtor;
+
+// System::operator+(retval, String const&, String const&) — non-trivial return
+// RCX=retval(String*, 8 bytes), RDX=lhs, R8=rhs. Returns retval ptr.
+// Dispatch table exref at 0x140151a10 (ordinal 0x100)
+typedef void* (*fn_String_Concat_t)(void* retval, const void* lhs, const void* rhs);
+extern fn_String_Concat_t fn_String_ConcatSS;  // String+String variant (dispatch 0x140151a10)
+extern fn_String_Concat_t fn_String_ConcatSS2; // String+String variant (dispatch 0x140151a08)
 
 // ============================================================
 // Initialization

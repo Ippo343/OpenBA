@@ -57,7 +57,7 @@ static void Reimpl_Serialize(void* self) {
 typedef void (*fn_OnCreate_t)(void* self);
 static void Reimpl_OnCreate(void* self) {
     g_lastHook = "SpriteCaptureUI::OnCreate";
-    ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
+    SpriteCaptureUI_OnCreate((SpriteCaptureUI*)self);
 }
 
 // ============================================================
