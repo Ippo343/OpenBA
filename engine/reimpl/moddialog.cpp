@@ -41,11 +41,60 @@ static HookInfo g_hookSlot10;
 // Passthrough wrappers
 // ============================================================
 
-// Slot0 Dtor (0x140012A30) — calls cleanup, then conditional MemFree
+// Virtual dtor call helper: vtable[0](obj, 1)
+typedef void* (*fn_VDtor_t)(void* self, uint32_t flags);
+static inline void VDtor_Delete(void* obj) {
+    if (obj) {
+        void** vtbl = *(void***)obj;
+        ((fn_VDtor_t)vtbl[0])(obj, 1);
+    }
+}
+
+// Slot0 Dtor (0x140012A30) — cleanup sub-objects, then DialogInstance dtor
+// Reimplements FUN_14006ff00 (cleanup) + the outer scalar deleting destructor
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ModDialog::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+
+    // Set vtable
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ModDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+
+    // Destroy array of mod entries at +0xB8 (count at +0xC0, stride 0x58 per entry)
+    // Each entry has 3 virtual objects at offsets +0x50, +0x48, +0x40
+    int32_t count = *(int32_t*)(s + 0xC0);
+    uintptr_t arrayBase = *(uintptr_t*)(s + 0xB8);
+    for (int32_t i = 0; i < count; i++) {
+        uintptr_t entryBase = arrayBase + (uintptr_t)i * 0x58;
+        VDtor_Delete(*(void**)(entryBase + 0x50));
+        VDtor_Delete(*(void**)(entryBase + 0x48));
+        VDtor_Delete(*(void**)(entryBase + 0x40));
+    }
+
+    // Free array, zero fields
+    fn_MemFreeStatic(*(void**)(s + 0xB8));
+    *(uint64_t*)(s + 0xB8) = 0;
+    *(uint64_t*)(s + 0xC0) = 0;
+
+    // Set +0xC8 and +0xD0 to null InternalBasePtr (via temp, matching original)
+    uint64_t tmp = 0;
+    fn_InternalBasePtr_Ctor(&tmp, nullptr);
+    *(uint64_t*)(s + 0xC8) = tmp;
+    fn_InternalBasePtr_Ctor(&tmp, nullptr);
+    *(uint64_t*)(s + 0xD0) = tmp;
+
+    // Free array again (matches original — redundant but binary-compatible)
+    fn_MemFreeStatic(*(void**)(s + 0xB8));
+    *(uint64_t*)(s + 0xB8) = 0;
+    *(uint64_t*)(s + 0xC0) = 0;
+
+    // Base class dtor
+    fn_DialogInstance_Dtor(self);
+
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot4 (0x14006F150) — Setup: populates mod list, thumbnails, descriptions
@@ -65,10 +114,13 @@ static void Reimpl_Slot8(void* self, void* p2, int msg, int id,
 }
 
 // Slot10 (0x1400129D0) — Secondary dtor (ImageBuffer cleanup)
+// self = ImageBuffer sub-object pointer, NOT the ModDialog itself
 typedef void* (*fn_Slot10_t)(void* self, uint32_t flags);
 static void* Reimpl_Slot10(void* self, uint32_t flags) {
     g_lastHook = "ModDialog::Slot10";
-    return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, flags);
+    fn_ImageBuffer_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // ============================================================

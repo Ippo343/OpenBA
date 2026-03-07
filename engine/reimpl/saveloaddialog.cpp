@@ -38,11 +38,55 @@ static HookInfo g_hookLoad;
 // Wrappers
 // ============================================================
 
-// Slot 0: ScalarDtor(this, flags) — passthrough
+// Slot 0: ScalarDtor(this, flags) — REIMPLEMENTED
+// Ghidra: FUN_1400211b0 -> FUN_1400b80f0
+// 1. Set vtable
+// 2. Iterate array at +0x110 (count at +0x118), 0x40-byte entries.
+//    For each entry: destroy vtable-object at +0x30 via ScalarDtor(1),
+//    then destroy vtable-object at +0x38 via ScalarDtor(1).
+// 3. MemFree +0x110 array, zero +0x110 and +0x118
+// 4. Call DialogInstance::~DialogInstance
+// 5. Conditional free
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "SaveLoadDialog::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, SaveLoadDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+
+    uintptr_t s = (uintptr_t)self;
+
+    // Destroy save file entry array at +0x110 (FUN_1400b80f0 logic)
+    int count = *(int*)(s + 0x118);
+    if (count > 0) {
+        uintptr_t arrBase = *(uintptr_t*)(s + 0x110);
+        uintptr_t offset = 0;
+        for (int i = 0; i < count; i++) {
+            // Destroy vtable-object at +0x30 in entry via ScalarDtor(obj, 1)
+            void** obj1 = *(void***)(arrBase + 0x30 + offset);
+            if (obj1 != nullptr) {
+                // Call through vtable[0] = ScalarDtor
+                typedef void* (*VDtor_t)(void*, uint32_t);
+                ((VDtor_t)(*(void***)obj1)[0])(obj1, 1);
+            }
+            // Destroy vtable-object at +0x38 in entry (only if +0x30 was non-null)
+            if (*(uintptr_t*)(arrBase + 0x30 + offset) != 0) {
+                void** obj2 = *(void***)(arrBase + 0x38 + offset);
+                if (obj2 != nullptr) {
+                    typedef void* (*VDtor_t)(void*, uint32_t);
+                    ((VDtor_t)(*(void***)obj2)[0])(obj2, 1);
+                }
+            }
+            offset += 0x40;
+        }
+    }
+    fn_MemFreeStatic(*(void**)(s + 0x110));
+    *(uint64_t*)(s + 0x110) = 0;
+    *(uint64_t*)(s + 0x118) = 0;
+
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot 4: Startup(this) — REIMPLEMENTED

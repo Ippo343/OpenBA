@@ -38,12 +38,138 @@ static HookInfo g_hookOnRemove;
 static HookInfo g_hookUpdate;
 
 // ============================================================
-// Passthrough wrappers
+// BST recursive free helpers (iterative post-order to avoid stack overflow)
 // ============================================================
+
+// Free BST nodes with children at +0x10/+0x18 (used by container at +0x1D8)
+static void FreeBST_10_18(void* node) {
+    if (!node) return;
+    FreeBST_10_18(*(void**)((uintptr_t)node + 0x10));
+    FreeBST_10_18(*(void**)((uintptr_t)node + 0x18));
+    fn_MemFreeStatic(node);
+}
+
+// Free BST nodes with children at +0x20/+0x28 (used by container at +0x138)
+static void FreeBST_20_28(void* node) {
+    if (!node) return;
+    FreeBST_20_28(*(void**)((uintptr_t)node + 0x20));
+    FreeBST_20_28(*(void**)((uintptr_t)node + 0x28));
+    fn_MemFreeStatic(node);
+}
+
+// Free BST nodes with children at +0x18/+0x20 (used by container at +0x50)
+static void FreeBST_18_20(void* node) {
+    if (!node) return;
+    FreeBST_18_20(*(void**)((uintptr_t)node + 0x18));
+    FreeBST_18_20(*(void**)((uintptr_t)node + 0x20));
+    fn_MemFreeStatic(node);
+}
+
+// ============================================================
+// Reimplemented wrappers
+// ============================================================
+
+// ScalarDtor: REIMPLEMENTED (0x1400146b0 -> inner dtor 0x1400810d0)
+// Inner dtor frees: BST at +0x1D8, buffer +0x1C8, BST at +0x138,
+// buffer +0x118, buffers +0xF0/+0xE0/+0xD0/+0xC0/+0xB0,
+// BST at +0x50, container at +0x40, then calls DialogController::~Dtor.
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "TownHallUI::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+
+    // Set vtable
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, 0x14015dce0);
+    *(void**)self = s_vtable;
+
+    // BST at +0x1D8 (children at +0x10/+0x18)
+    void* bstRoot1D8 = *(void**)(s + 0x1D8);
+    if (bstRoot1D8) {
+        FreeBST_10_18(*(void**)((uintptr_t)bstRoot1D8 + 0x10));
+        FreeBST_10_18(*(void**)((uintptr_t)bstRoot1D8 + 0x18));
+        fn_MemFreeStatic(bstRoot1D8);
+    }
+    *(uint64_t*)(s + 0x1D8) = 0;
+    *(uint32_t*)(s + 0x1E0) = 0;
+
+    // Buffer at +0x1C8
+    fn_MemFreeStatic(*(void**)(s + 0x1C8));
+    *(uint64_t*)(s + 0x1C8) = 0;
+    *(uint64_t*)(s + 0x1D0) = 0;
+
+    // BST at +0x138 (children at +0x20/+0x28)
+    void* bstRoot138 = *(void**)(s + 0x138);
+    if (bstRoot138) {
+        FreeBST_20_28(*(void**)((uintptr_t)bstRoot138 + 0x20));
+        FreeBST_20_28(*(void**)((uintptr_t)bstRoot138 + 0x28));
+        fn_MemFreeStatic(bstRoot138);
+    }
+    *(uint64_t*)(s + 0x138) = 0;
+    *(uint32_t*)(s + 0x140) = 0;
+
+    // Buffer at +0x118
+    fn_MemFreeStatic(*(void**)(s + 0x118));
+    *(uint64_t*)(s + 0x118) = 0;
+    *(uint64_t*)(s + 0x120) = 0;
+
+    // Buffer at +0xF0
+    fn_MemFreeStatic(*(void**)(s + 0xF0));
+    *(uint64_t*)(s + 0xF0) = 0;
+    *(uint64_t*)(s + 0xF8) = 0;
+
+    // Buffer at +0xE0
+    fn_MemFreeStatic(*(void**)(s + 0xE0));
+    *(uint64_t*)(s + 0xE0) = 0;
+    *(uint64_t*)(s + 0xE8) = 0;
+
+    // Buffer at +0xD0
+    fn_MemFreeStatic(*(void**)(s + 0xD0));
+    *(uint64_t*)(s + 0xD0) = 0;
+    *(uint64_t*)(s + 0xD8) = 0;
+
+    // Buffer at +0xC0
+    fn_MemFreeStatic(*(void**)(s + 0xC0));
+    *(uint64_t*)(s + 0xC0) = 0;
+    *(uint64_t*)(s + 0xC8) = 0;
+
+    // Buffer at +0xB0
+    fn_MemFreeStatic(*(void**)(s + 0xB0));
+    *(uint64_t*)(s + 0xB0) = 0;
+    *(uint64_t*)(s + 0xB8) = 0;
+
+    // BST at +0x50 (children at +0x18/+0x20)
+    void* bstRoot50 = *(void**)(s + 0x50);
+    if (bstRoot50) {
+        FreeBST_18_20(*(void**)((uintptr_t)bstRoot50 + 0x18));
+        FreeBST_18_20(*(void**)((uintptr_t)bstRoot50 + 0x20));
+        fn_MemFreeStatic(bstRoot50);
+    }
+    *(uint64_t*)(s + 0x50) = 0;
+    *(uint32_t*)(s + 0x58) = 0;
+
+    // Container at +0x40: FUN_140015930
+    // Iterates count=*(int*)(+0x48), for each element at base[i*0x40+0x30]
+    // frees that pointer and zeros it+next, then frees array at +0x40.
+    int containerCount = *(int*)(s + 0x48);
+    if (containerCount > 0) {
+        uintptr_t arrayBase = *(uintptr_t*)(s + 0x40);
+        for (int i = 0; i < containerCount; i++) {
+            uintptr_t elemPtr = arrayBase + (uintptr_t)i * 0x40 + 0x30;
+            fn_MemFreeStatic(*(void**)elemPtr);
+            *(uint64_t*)elemPtr = 0;
+            *(uint64_t*)(elemPtr + 8) = 0;
+        }
+    }
+    fn_MemFreeStatic(*(void**)(s + 0x40));
+    *(uint64_t*)(s + 0x40) = 0;
+    *(uint64_t*)(s + 0x48) = 0;
+
+    // Call base class destructor
+    fn_DialogController_Dtor(self);
+
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Serialize_t)(void* self);

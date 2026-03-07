@@ -1,28 +1,7 @@
 # Phase F: UI Deep Reimplementation — Remaining Work
 
-**Progress: ~128 done, 13 N/A, ~7 blocked.**
-Waves 1-4 complete. Wave 6 done as Runtime DLL methods. Waves 7-8 complete (except blocked items below).
-
----
-
-## Wave 5: Skipped Destructors (9 total)
-
-Do after game logic for each class is done.
-
-| Method | Complexity | Notes |
-|--------|-----------|-------|
-| EventNotifyDialog::Dtor | Medium | Vector destructor iterator |
-| ModDialog::Dtor | Medium | Array with virtual dtors |
-| SaveLoadDialog::Dtor | Medium | 4 params + array cleanup |
-| TownHallUI::ScalarDtor | High | 3 nested containers + 7 buffers + sub-func |
-| ProfessionUI::Dtor | High | BST node removal + 3 buffers |
-| ProductionUI::Dtor | Medium | MSVC vector destructor iterator |
-| MapUI::Dtor | Medium | Custom sub-function |
-| NoiseUI::Dtor | Medium | Custom sub-function |
-
----
-
-## Wave 7: COMPLETE
+**Progress: ~137 done, 13 N/A, ~7 blocked.**
+Waves 1-5 complete. Wave 6 done as Runtime DLL methods. Waves 7-8 complete (except blocked items below).
 
 ## Wave 8: Passthroughs
 

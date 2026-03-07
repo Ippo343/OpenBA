@@ -37,11 +37,49 @@ static HookInfo g_hookLoad;
 // Passthrough wrappers
 // ============================================================
 
-// Slot 0: ScalarDtor(this, flags)
+// Slot 0: ScalarDtor(this, flags) — REIMPLEMENTED
+// Ghidra: FUN_140011550
+// 1. Set vtable
+// 2. Call FUN_140011600 on +0xD8 — iterates 0x30-byte notification entries,
+//    dtors String at +0x20 in each, then frees the array buffer
+// 3. MemFree the pointer at +0xC8, zero +0xC8 and +0xD0
+// 4. Call DialogInstance::~DialogInstance
+// 5. Conditional free
 typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "EventNotifyDialog::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, EventNotifyDialogAddr::Vtable);
+    *(void**)self = s_vtable;
+
+    uintptr_t s = (uintptr_t)self;
+
+    // Destroy notification array at +0xD8 (FUN_140011600 logic)
+    // +0xD8 = array pointer, +0xE0 = count
+    // Each element is 0x30 bytes with a String at +0x20
+    {
+        void* arrPtr = *(void**)(s + 0xD8);
+        int count = *(int*)(s + 0xE0);
+        if (arrPtr && count > 0) {
+            uintptr_t elem = (uintptr_t)arrPtr;
+            for (int i = 0; i < count; i++) {
+                fn_String_Dtor((void*)(elem + 0x20));
+                elem += 0x30;
+            }
+        }
+        fn_MemFreeStatic(arrPtr);
+        *(uint64_t*)(s + 0xD8) = 0;
+        *(uint64_t*)(s + 0xE0) = 0;
+    }
+
+    // Free pointer at +0xC8, zero +0xC8 and +0xD0
+    fn_MemFreeStatic(*(void**)(s + 0xC8));
+    *(uint64_t*)(s + 0xC8) = 0;
+    *(uint64_t*)(s + 0xD0) = 0;
+
+    fn_DialogInstance_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 // Slot 4: Startup(this) — find UI elements, build notification array — REIMPLEMENTED

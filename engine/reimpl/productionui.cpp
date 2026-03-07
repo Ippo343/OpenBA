@@ -35,10 +35,34 @@ static HookInfo g_hookSlot7;
 // ============================================================
 // Passthrough wrappers
 // ============================================================
+// Dtor (0x1400132B0) — REIMPLEMENTED
+// Ghidra: FUN_1400132b0
+// 1. Set vtable
+// 2. Destroy 2 x 0x10-byte vector items at +0x30 (FUN_140001740: free [0], zero [0]+[1])
+// 3. Call DialogController::~DialogController
+// 4. Conditional free
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ProductionUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ProductionUIAddr::Vtable);
+    *(void**)self = s_vtable;
+
+    uintptr_t s = (uintptr_t)self;
+
+    // _eh_vector_destructor_iterator_ equivalent:
+    // Destroy 2 items of 0x10 bytes at +0x30, in reverse order
+    // Each item: free pointer at [0], zero [0] and [1]
+    for (int i = 1; i >= 0; i--) {
+        uintptr_t item = s + 0x30 + (i * 0x10);
+        fn_MemFreeStatic(*(void**)item);
+        *(uint64_t*)item = 0;
+        *(uint64_t*)(item + 8) = 0;
+    }
+
+    fn_DialogController_Dtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Slot4_t)(void* self);

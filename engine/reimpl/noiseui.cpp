@@ -35,10 +35,37 @@ static HookInfo g_hookSlot9;
 // ============================================================
 // Passthrough wrappers
 // ============================================================
+// Virtual dtor call helper: vtable[0](obj, 1)
+typedef void* (*fn_VDtor_t)(void* self, uint32_t flags);
+static inline void VDtor_Delete(void* obj) {
+    if (obj) {
+        void** vtbl = *(void***)obj;
+        ((fn_VDtor_t)vtbl[0])(obj, 1);
+    }
+}
+
+// Dtor (0x140012DA0) — cleanup sub-objects, then DialogController dtor
+// Reimplements FUN_140071bc0 (cleanup) + outer scalar deleting destructor
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "NoiseUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+
+    // Set vtable
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, NoiseUIAddr::Vtable);
+    *(void**)self = s_vtable;
+
+    // Destroy sub-objects (order matches original: +0x40, +0x38, +0x30)
+    VDtor_Delete(*(void**)(s + 0x40));
+    VDtor_Delete(*(void**)(s + 0x38));
+    VDtor_Delete(*(void**)(s + 0x30));
+
+    // Base class dtor
+    fn_DialogController_Dtor(self);
+
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 static void Reimpl_Slot4(void* self) {

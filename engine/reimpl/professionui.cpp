@@ -36,12 +36,62 @@ static HookInfo g_hookSlot8;
 static HookInfo g_hookSlot9;
 
 // ============================================================
-// Passthrough wrappers
+// BST recursive free helper (children at +0x18/+0x20)
 // ============================================================
+static void ProfUI_FreeBST(void* node) {
+    if (!node) return;
+    ProfUI_FreeBST(*(void**)((uintptr_t)node + 0x18));
+    ProfUI_FreeBST(*(void**)((uintptr_t)node + 0x20));
+    fn_MemFreeStatic(node);
+}
+
+// ============================================================
+// Reimplemented wrappers
+// ============================================================
+
+// Dtor: REIMPLEMENTED (0x140013450 -> inner dtor 0x1400774e0)
+// Inner dtor frees: BST at +0x60, buffers at +0x50/+0x40/+0x30,
+// then calls DialogController::~Dtor.
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ProfessionUI::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    uintptr_t s = (uintptr_t)self;
+
+    // Set vtable
+    static void* s_vtable = nullptr;
+    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, 0x14015d0f0);
+    *(void**)self = s_vtable;
+
+    // BST at +0x60 (children at +0x18/+0x20)
+    void* bstRoot = *(void**)(s + 0x60);
+    if (bstRoot) {
+        ProfUI_FreeBST(*(void**)((uintptr_t)bstRoot + 0x18));
+        ProfUI_FreeBST(*(void**)((uintptr_t)bstRoot + 0x20));
+        fn_MemFreeStatic(bstRoot);
+    }
+    *(uint64_t*)(s + 0x60) = 0;
+    *(uint32_t*)(s + 0x68) = 0;
+
+    // Buffer at +0x50
+    fn_MemFreeStatic(*(void**)(s + 0x50));
+    *(uint64_t*)(s + 0x50) = 0;
+    *(uint64_t*)(s + 0x58) = 0;
+
+    // Buffer at +0x40
+    fn_MemFreeStatic(*(void**)(s + 0x40));
+    *(uint64_t*)(s + 0x40) = 0;
+    *(uint64_t*)(s + 0x48) = 0;
+
+    // Buffer at +0x30
+    fn_MemFreeStatic(*(void**)(s + 0x30));
+    *(uint64_t*)(s + 0x30) = 0;
+    *(uint64_t*)(s + 0x38) = 0;
+
+    // Call base class destructor
+    fn_DialogController_Dtor(self);
+
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
 }
 
 typedef void (*fn_Slot5_t)(void* self);

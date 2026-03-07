@@ -78,6 +78,7 @@ namespace ModDetailsDialogAddr {
 namespace ModDialogAddr {
     constexpr uintptr_t Factory = 0x140012900;
     constexpr uintptr_t Vtable  = 0x14015c870;
+    constexpr uintptr_t SecondaryVtable = 0x14015c8C0; // vtable+0x50 (ImageBuffer secondary interface)
 }
 
 namespace ModUploadDialogAddr {
