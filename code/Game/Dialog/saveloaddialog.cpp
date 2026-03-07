@@ -33,6 +33,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 
 // ============================================================
@@ -441,5 +442,81 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         }
 
         *(uint8_t*)(s + 0xBA) = 0;
+    }
+}
+
+// ============================================================
+// SaveLoadDialog::OnEvent (0x1400b67e0) — Slot8
+// ============================================================
+// Handles button clicks and list selection changes.
+// eventType 2 = list selection change:
+//   eventData in (3, saveCount+4) → select entry at (eventData-4)
+// eventType 0x12 = button click:
+//   eventData 0 = buttonCancel → close dialog
+//   eventData 1 = buttonSave → save with optional confirm dialog
+//   eventData 2 = buttonLoad → load with optional confirm dialogs
+//   eventData 3 = buttonDelete → delete with confirm dialog
+//
+// Sub-functions (FUN_1400b61e0/5fd0/5e50) are complex confirm-dialog flows;
+// called directly from exe to avoid reimplementing them here.
+//
+// Original: 0x1400b67e0.
+
+// Helper: set selected index and play UI sound
+static void SaveLoadDialog_SelectEntry(SaveLoadDialog* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+    // FUN_1400b6790: if index changed, play sound 4 first
+    int oldIndex = *(int*)(s + 0xC0);
+    if (oldIndex != index) {
+        fn_UI_Play(*(void**)(s + 0x10), 4);
+    }
+    *(int*)(s + 0xC0) = index;
+}
+
+void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, int eventData) {
+    uintptr_t s = (uintptr_t)self;
+
+    if (eventType == 2) {
+        // List row selection change
+        int saveCount = *(int*)(s + 0xC4);
+        if (eventData > 3 && eventData < saveCount + 4) {
+            SaveLoadDialog_SelectEntry(self, eventData - 4);
+        }
+        return;
+    }
+
+    if (eventType == 0x12) {
+        if (eventData == 0) {
+            // buttonCancel: close dialog
+            void* ui = *(void**)(s + 0x10);
+            uint64_t basePtr[2];
+            fn_InternalBasePtr_Ctor(basePtr, self);
+            fn_UI_CloseDialog(ui, basePtr);
+            return;
+        }
+        if (eventData == 2) {
+            // buttonLoad: FUN_1400b61e0 (load with mod-check confirm dialogs)
+            typedef void (*fn_DoLoad_t)(void* self);
+            static fn_DoLoad_t s_fn = nullptr;
+            if (!s_fn) s_fn = (fn_DoLoad_t)ResolveAddr(Module::Exe, 0x1400b61e0);
+            if (s_fn) s_fn(self);
+            return;
+        }
+        if (eventData == 1) {
+            // buttonSave: FUN_1400b5fd0 (save with overwrite confirm dialog)
+            typedef void (*fn_DoSave_t)(void* self);
+            static fn_DoSave_t s_fn = nullptr;
+            if (!s_fn) s_fn = (fn_DoSave_t)ResolveAddr(Module::Exe, 0x1400b5fd0);
+            if (s_fn) s_fn(self);
+            return;
+        }
+        if (eventData == 3) {
+            // buttonDelete: FUN_1400b5e50 (delete with confirm dialog)
+            typedef void (*fn_DoDelete_t)(void* self);
+            static fn_DoDelete_t s_fn = nullptr;
+            if (!s_fn) s_fn = (fn_DoDelete_t)ResolveAddr(Module::Exe, 0x1400b5e50);
+            if (s_fn) s_fn(self);
+            return;
+        }
     }
 }

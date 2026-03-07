@@ -51,6 +51,17 @@ void AutoSaveDialog_Slot7(AutoSaveDialog* self, void* time);
 // and stores them at +0xC0, +0xC8, +0xD0.
 void TutorialHighlightDialog_Startup(TutorialHighlightDialog* self);
 
+// Update (vtable +0x30): Positions glow+arrow overlay each frame.
+//   If dataE8 != 0: positions arrow based on world-space rect stored in dataE8.
+//   If dataE8 == 0: positions glow+arrow based on the target UI element in dataE0.
+// Unhookable via trampoline (rel branch at byte 8); installed via vtable patch.
+void TutorialHighlightDialog_Update(TutorialHighlightDialog* self);
+
+// Load (vtable +0x38): Accumulates delta-time ticks into dataB8 (System::Time).
+// param2 is a pointer to the tick count to add. Original is only 11 bytes —
+// unhookable via trampoline; installed via vtable patch.
+void TutorialHighlightDialog_Load(TutorialHighlightDialog* self, void* param2);
+
 // ============================================================
 // MapParamsDialog
 // ============================================================
@@ -61,6 +72,10 @@ void MapParamsDialog_Startup(MapParamsDialog* self);
 
 // Update (vtable +0x30): Enables/disables OK button based on name field state.
 void MapParamsDialog_Update(MapParamsDialog* self);
+
+// OnEvent (vtable +0x40, exe 0x14006b5f0): Handles button clicks.
+// eventType 0x12 (button): 0=newName(randomize), 1=ok(save+close), 2=cancel(close)
+void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType, int eventData);
 
 // ============================================================
 // MainMenuDialog
@@ -169,6 +184,11 @@ void SaveLoadDialog_Update(SaveLoadDialog* self);
 // construct game loader loop chain on load completion).
 void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut, uint64_t param4);
 
+// OnEvent (vtable +0x40, exe 0x1400b67e0): Handles button clicks and list selection.
+// eventType 2 (list select): eventData in (3, saveCount+4) → select entry
+// eventType 0x12 (button): 0=cancel(close), 1=save, 2=load, 3=delete
+void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, int eventData);
+
 // ============================================================
 // FollowDialog
 // ============================================================
@@ -177,6 +197,9 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 // Sets followed entity name text and activates follow camera flag.
 void FollowDialog_Slot4(FollowDialog* self);
 
+// Slot5 (vtable +0x28): Shutdown — clears follow-active flag (gameWorld->+0x120->+0x38 = 0).
+void FollowDialog_Slot5(FollowDialog* self);
+
 // Slot6 (vtable +0x30): Draw — updates profession text (parameter 1 on textFollow)
 // and action text (textAction) each frame from citizen's current state.
 void FollowDialog_Slot6(FollowDialog* self, void* p2, void* p3, void* p4);
@@ -184,6 +207,10 @@ void FollowDialog_Slot6(FollowDialog* self, void* p2, void* p3, void* p4);
 // Slot7 (vtable +0x38): Update — reads character position, updates camera target.
 // Checks Escape key to close dialog.
 void FollowDialog_Slot7(FollowDialog* self);
+
+// Slot8 (vtable +0x40): OnCommand — handles buttonClose click (id 100).
+// Nulls back-reference on followed entity, closes dialog.
+void FollowDialog_Slot8(FollowDialog* self, void* param2, int param3, int param4);
 
 // ============================================================
 // NewGameDialog
@@ -197,6 +224,11 @@ void NewGameDialog_Slot4(NewGameDialog* self);
 // Slot6 (vtable +0x30): Update — enables/disables OK button based on
 // whether the name field has content.
 void NewGameDialog_Slot6(NewGameDialog* self);
+
+// OnEvent (vtable +0x40, exe 0x140070110): Handles button clicks and combo changes.
+// eventType 0x12 (button): 0=newName, 1=newSeed, 2=ok(startGame), 3=cancel(close)
+// eventType 0x14 (combo): 4=comboCondition (update description text)
+void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData);
 
 // ============================================================
 // TutorialSetupDialog
@@ -216,6 +248,19 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream);
 // OnEvent (vtable slot 6, exe 0x140028600):
 // Resets object by calling virtual dtor (no-free) then re-running Ctor.
 void TutorialSetupDialog_OnEvent(void* self);
+
+// Slot8 (vtable +0x40, exe 0x1400e25f0):
+// Runs setup helper + validate state; iterates 2nd string vector to find open dialogs.
+// For each: if entity IsA BuildComponent -> follow building; if ComponentEntity -> close.
+void TutorialSetupDialog_Slot8(void* self);
+
+// Slot9 (vtable +0x48, exe 0x1400e24c0):
+// Activates tutorial setup: runs setup helper then opens tutorial dialog (start mode).
+void TutorialSetupDialog_Slot9(void* self);
+
+// Slot10 (vtable +0x50, exe 0x1400e2460):
+// Shows all dialogs, finds current TutorialSetupDialog instance, closes it.
+void TutorialSetupDialog_Slot10(void* self);
 
 // ============================================================
 // AchievementDialog
@@ -257,6 +302,11 @@ void EventNotifyDialog_Update(EventNotifyDialog* self);
 // scans event log for new events, creates notification entries with icons/colors,
 // plays sound effect on new events.
 void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2);
+
+// OnEvent (vtable +0x40, exe 0x140068680): Handles notification button clicks.
+// eventType 0x12 (button): eventData in range [0x5DC, 0x5DC+activeCount) →
+//   navigate to event position on map (calls FUN_1400685a0).
+void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int eventType, int eventData);
 
 // ============================================================
 // AchievementDialog
@@ -309,3 +359,8 @@ void OptionInputBindDialog_OnButton2(OptionInputBindDialog* self);
 
 // OnButton3 (vtable +0x68): Sets result value 3, closes dialog.
 void OptionInputBindDialog_OnButton3(OptionInputBindDialog* self);
+
+// OnEvent (vtable +0x40, exe 0x14006d070): Dispatches button clicks to OnOk/OnCancel/etc.
+// eventType 0x12 (button): 0=cancel, 1=ok, 2=button2, 3=button3
+// Implemented by dispatching through vtable slots +0x58/+0x50/+0x60/+0x68.
+void OptionInputBindDialog_OnEvent(OptionInputBindDialog* self, void* element, int eventType, int eventData);

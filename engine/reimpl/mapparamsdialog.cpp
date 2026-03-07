@@ -31,6 +31,7 @@
 static HookInfo g_hookScalarDtor;
 static HookInfo g_hookStartup;
 static HookInfo g_hookUpdate;
+static HookInfo g_hookOnEvent;
 
 // ============================================================
 // Passthrough wrappers
@@ -59,6 +60,13 @@ typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
     g_lastHook = "MapParamsDialog::Update";
     MapParamsDialog_Update((MapParamsDialog*)self);
+}
+
+// Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
+// No trampoline call — rel branch at byte 4.
+static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
+    g_lastHook = "MapParamsDialog::OnEvent";
+    MapParamsDialog_OnEvent((MapParamsDialog*)self, element, eventType, eventData);
 }
 
 // ============================================================
@@ -91,3 +99,14 @@ void InstallMapParamsDialogUpdate() {
 #endif
 }
 void RemoveMapParamsDialogUpdate() { RemoveHook(&g_hookUpdate); }
+
+// OnEvent (0x14006b5f0) — short JNZ at byte 4, full reimpl only.
+// Prologue: CMP R8d,0x12(4)+JNZ short(2)+PUSH RBX(1)+SUB RSP,0x30(4)+MOV RBX,RCX(3) = 14 bytes
+void InstallMapParamsDialogOnEvent() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x14006b5f0);
+    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 14);
+#ifdef _DEBUG
+    printf("[MapParamsDialog] OnEvent hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveMapParamsDialogOnEvent() { RemoveHook(&g_hookOnEvent); }

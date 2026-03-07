@@ -144,3 +144,39 @@ void OptionInputBindDialog_OnButton3(OptionInputBindDialog* self) {
     void* ui = *(void**)(s + 0x10);
     fn_UI_CloseDialog(ui, &basePtr);
 }
+
+// ============================================================
+// OptionInputBindDialog::OnEvent (0x14006d070) — Slot8
+// ============================================================
+// Dispatches button clicks to the appropriate handler via vtable.
+// eventType 0x12 = button click:
+//   eventData 0 = buttonCancel → OnCancel (sets value=0, closes)
+//   eventData 1 = buttonOk     → OnOk (sets value=1, closes)
+//   eventData 2 = buttonYes    → OnButton2 (sets value=2, closes)
+//   eventData 3 = buttonNo     → OnButton3 (sets value=3, closes)
+//
+// Original: 0x14006d070 (reads as direct vtable dispatch bytecode).
+
+void OptionInputBindDialog_OnEvent(OptionInputBindDialog* self, void* element, int eventType, int eventData) {
+    if (eventType != 0x12) return;
+
+    // Dispatch through vtable to the appropriate handler
+    void** vtable = *(void***)self;
+    if (eventData == 0) {
+        // buttonCancel: vtable[+0x58/8 = slot 11] = OnCancel
+        typedef void (*fn_t)(void*);
+        ((fn_t)vtable[11])(self);
+    } else if (eventData == 1) {
+        // buttonOk: vtable[+0x50/8 = slot 10] = OnOk
+        typedef void (*fn_t)(void*);
+        ((fn_t)vtable[10])(self);
+    } else if (eventData == 2) {
+        // buttonYes/button2: vtable[+0x60/8 = slot 12] = OnButton2
+        typedef void (*fn_t)(void*);
+        ((fn_t)vtable[12])(self);
+    } else if (eventData == 3) {
+        // buttonNo/button3: vtable[+0x68/8 = slot 13] = OnButton3
+        typedef void (*fn_t)(void*);
+        ((fn_t)vtable[13])(self);
+    }
+}

@@ -32,6 +32,7 @@ static HookInfo g_hookScalarDtor;
 static HookInfo g_hookStartup;
 static HookInfo g_hookUpdate;
 static HookInfo g_hookLoad;
+static HookInfo g_hookOnEvent;
 
 // ============================================================
 // Passthrough wrappers
@@ -103,6 +104,13 @@ static void Reimpl_Load(void* self, void* param2) {
     EventNotifyDialog_Slot7((EventNotifyDialog*)self, param2);
 }
 
+// Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
+// No trampoline call — branch at byte 4 (JNZ short after CMP R8d,0x12).
+static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
+    g_lastHook = "EventNotifyDialog::OnEvent";
+    EventNotifyDialog_OnEvent((EventNotifyDialog*)self, element, eventType, eventData);
+}
+
 // ============================================================
 // Install / Remove
 // ============================================================
@@ -142,3 +150,14 @@ void InstallEventNotifyDialogLoad() {
 #endif
 }
 void RemoveEventNotifyDialogLoad() { RemoveHook(&g_hookLoad); }
+
+// OnEvent (0x140068680) — branch at byte 4 (JNZ short after CMP R8d,0x12), full reimpl only.
+// Prologue: CMP R8d,0x12(4)+JNZ short(2)+CMP R9d,0x5DC(7) = 13 bytes
+void InstallEventNotifyDialogOnEvent() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x140068680);
+    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 13);
+#ifdef _DEBUG
+    printf("[EventNotifyDialog] OnEvent hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveEventNotifyDialogOnEvent() { RemoveHook(&g_hookOnEvent); }

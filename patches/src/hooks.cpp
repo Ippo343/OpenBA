@@ -1553,6 +1553,8 @@ extern void InstallEventNotifyDialogUpdate();
 extern void RemoveEventNotifyDialogUpdate();
 extern void InstallEventNotifyDialogLoad();
 extern void RemoveEventNotifyDialogLoad();
+extern void InstallEventNotifyDialogOnEvent();
+extern void RemoveEventNotifyDialogOnEvent();
 
 // --- MapParamsDialog (engine/reimpl/mapparamsdialog.cpp) ---
 extern void InstallMapParamsDialogScalarDtor();
@@ -1561,6 +1563,8 @@ extern void InstallMapParamsDialogStartup();
 extern void RemoveMapParamsDialogStartup();
 extern void InstallMapParamsDialogUpdate();
 extern void RemoveMapParamsDialogUpdate();
+extern void InstallMapParamsDialogOnEvent();
+extern void RemoveMapParamsDialogOnEvent();
 
 // --- NewGameDialog (engine/reimpl/newgamedialog.cpp) ---
 extern void InstallNewGameDialogScalarDtor();
@@ -1569,6 +1573,8 @@ extern void InstallNewGameDialogStartup();
 extern void RemoveNewGameDialogStartup();
 extern void InstallNewGameDialogUpdate();
 extern void RemoveNewGameDialogUpdate();
+extern void InstallNewGameDialogOnEvent();
+extern void RemoveNewGameDialogOnEvent();
 
 // --- OptionsDialog (engine/reimpl/optionsdialog.cpp) ---
 extern void InstallOptionsDialogScalarDtor();
@@ -1585,6 +1591,8 @@ extern void InstallOptionInputBindDialogStartup();
 extern void RemoveOptionInputBindDialogStartup();
 extern void InstallOptionInputBindDialogLoad();
 extern void RemoveOptionInputBindDialogLoad();
+extern void InstallOptionInputBindDialogOnEvent();
+extern void RemoveOptionInputBindDialogOnEvent();
 extern void InstallOptionInputBindDialogOnOk();
 extern void RemoveOptionInputBindDialogOnOk();
 extern void InstallOptionInputBindDialogOnCancel();
@@ -1603,6 +1611,8 @@ extern void InstallSaveLoadDialogUpdate();
 extern void RemoveSaveLoadDialogUpdate();
 extern void InstallSaveLoadDialogLoad();
 extern void RemoveSaveLoadDialogLoad();
+extern void InstallSaveLoadDialogOnEvent();
+extern void RemoveSaveLoadDialogOnEvent();
 
 // --- ToolbarDialog (engine/reimpl/toolbardialog.cpp) ---
 extern void InstallToolbarDialogScalarDtor();
@@ -1617,6 +1627,10 @@ extern void InstallTutorialHighlightDialogScalarDtor();
 extern void RemoveTutorialHighlightDialogScalarDtor();
 extern void InstallTutorialHighlightDialogStartup();
 extern void RemoveTutorialHighlightDialogStartup();
+extern void InstallTutorialHighlightDialogUpdate();
+extern void RemoveTutorialHighlightDialogUpdate();
+extern void InstallTutorialHighlightDialogLoad();
+extern void RemoveTutorialHighlightDialogLoad();
 
 // --- TutorialGoalDialog (engine/reimpl/tutorialgoaldialog.cpp) ---
 extern void InstallTutorialGoalDialogScalarDtor();
@@ -1637,6 +1651,12 @@ extern void InstallTutorialSetupDialogShutdown();
 extern void RemoveTutorialSetupDialogShutdown();
 extern void InstallTutorialSetupDialogOnEvent();
 extern void RemoveTutorialSetupDialogOnEvent();
+extern void InstallTutorialSetupDialogSlot8();
+extern void RemoveTutorialSetupDialogSlot8();
+extern void InstallTutorialSetupDialogSlot9();
+extern void RemoveTutorialSetupDialogSlot9();
+extern void InstallTutorialSetupDialogSlot10();
+extern void RemoveTutorialSetupDialogSlot10();
 
 // ====================================================================
 // Phase 4: Simple Dialog Controllers (dialogs-simple)
@@ -1679,10 +1699,14 @@ extern void InstallFollowDialogDtor();
 extern void RemoveFollowDialogDtor();
 extern void InstallFollowDialogSlot4();
 extern void RemoveFollowDialogSlot4();
+extern void InstallFollowDialogSlot5();
+extern void RemoveFollowDialogSlot5();
 extern void InstallFollowDialogSlot6();
 extern void RemoveFollowDialogSlot6();
 extern void InstallFollowDialogSlot7();
 extern void RemoveFollowDialogSlot7();
+extern void InstallFollowDialogSlot8();
+extern void RemoveFollowDialogSlot8();
 
 // --- GoalDialog (engine/reimpl/goaldialog.cpp) ---
 extern void InstallGoalDialogDtor();
@@ -2876,16 +2900,19 @@ static ReimplEntry g_reimplementations[] = {
     { "EventNotifyDialog::Startup", InstallEventNotifyDialogStartup, RemoveEventNotifyDialogStartup, true },
     { "EventNotifyDialog::Update", InstallEventNotifyDialogUpdate, RemoveEventNotifyDialogUpdate, true },
     { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "EventNotifyDialog::OnEvent", InstallEventNotifyDialogOnEvent, RemoveEventNotifyDialogOnEvent, true }, // full reimpl, no trampoline
 
     // --- MapParamsDialog ---
     { "MapParamsDialog::ScalarDtor", InstallMapParamsDialogScalarDtor, RemoveMapParamsDialogScalarDtor, true },
     { "MapParamsDialog::Startup", InstallMapParamsDialogStartup, RemoveMapParamsDialogStartup, true },
     { "MapParamsDialog::Update", InstallMapParamsDialogUpdate, RemoveMapParamsDialogUpdate, true },
+    { "MapParamsDialog::OnEvent", InstallMapParamsDialogOnEvent, RemoveMapParamsDialogOnEvent, true }, // full reimpl, no trampoline
 
     // --- NewGameDialog ---
     { "NewGameDialog::ScalarDtor", InstallNewGameDialogScalarDtor, RemoveNewGameDialogScalarDtor, true },
     { "NewGameDialog::Startup", InstallNewGameDialogStartup, RemoveNewGameDialogStartup, true },
     { "NewGameDialog::Update", InstallNewGameDialogUpdate, RemoveNewGameDialogUpdate, true },
+    { "NewGameDialog::OnEvent", InstallNewGameDialogOnEvent, RemoveNewGameDialogOnEvent, true }, // full reimpl, no trampoline
 
     // --- OptionsDialog ---
     { "OptionsDialog::ScalarDtor", InstallOptionsDialogScalarDtor, RemoveOptionsDialogScalarDtor, true },
@@ -2896,6 +2923,7 @@ static ReimplEntry g_reimplementations[] = {
     { "OptionInputBindDialog::ScalarDtor", InstallOptionInputBindDialogScalarDtor, RemoveOptionInputBindDialogScalarDtor, true },
     { "OptionInputBindDialog::Startup", InstallOptionInputBindDialogStartup, RemoveOptionInputBindDialogStartup, true },
     { "OptionInputBindDialog::Load", InstallOptionInputBindDialogLoad, RemoveOptionInputBindDialogLoad, true },
+    { "OptionInputBindDialog::OnEvent", InstallOptionInputBindDialogOnEvent, RemoveOptionInputBindDialogOnEvent, true }, // full reimpl, no trampoline
     { "OptionInputBindDialog::OnOk", InstallOptionInputBindDialogOnOk, RemoveOptionInputBindDialogOnOk, true },
     { "OptionInputBindDialog::OnCancel", InstallOptionInputBindDialogOnCancel, RemoveOptionInputBindDialogOnCancel, true },
     { "OptionInputBindDialog::OnButton2", InstallOptionInputBindDialogOnButton2, RemoveOptionInputBindDialogOnButton2, true },
@@ -2906,6 +2934,7 @@ static ReimplEntry g_reimplementations[] = {
     { "SaveLoadDialog::Startup", InstallSaveLoadDialogStartup, RemoveSaveLoadDialogStartup, true },
     { "SaveLoadDialog::Update", InstallSaveLoadDialogUpdate, RemoveSaveLoadDialogUpdate, true },
     { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "SaveLoadDialog::OnEvent", InstallSaveLoadDialogOnEvent, RemoveSaveLoadDialogOnEvent, true }, // full reimpl, no trampoline
 
     // --- ToolbarDialog ---
     { "ToolbarDialog::ScalarDtor", InstallToolbarDialogScalarDtor, RemoveToolbarDialogScalarDtor, true },
@@ -2915,6 +2944,8 @@ static ReimplEntry g_reimplementations[] = {
     // --- TutorialHighlightDialog ---
     { "TutorialHighlightDialog::ScalarDtor", InstallTutorialHighlightDialogScalarDtor, RemoveTutorialHighlightDialogScalarDtor, true },
     { "TutorialHighlightDialog::Startup", InstallTutorialHighlightDialogStartup, RemoveTutorialHighlightDialogStartup, true },
+    { "TutorialHighlightDialog::Update", InstallTutorialHighlightDialogUpdate, RemoveTutorialHighlightDialogUpdate, true }, // vtable patch (rel branch at byte 8)
+    { "TutorialHighlightDialog::Load", InstallTutorialHighlightDialogLoad, RemoveTutorialHighlightDialogLoad, true },       // vtable patch (11b, too short)
 
     // --- TutorialGoalDialog ---
     { "TutorialGoalDialog::ScalarDtor", InstallTutorialGoalDialogScalarDtor, RemoveTutorialGoalDialogScalarDtor, true },
@@ -2927,6 +2958,9 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialSetupDialog::ScalarDtor", InstallTutorialSetupDialogScalarDtor, RemoveTutorialSetupDialogScalarDtor, true },
     { "TutorialSetupDialog::Shutdown", InstallTutorialSetupDialogShutdown, RemoveTutorialSetupDialogShutdown, true },
     { "TutorialSetupDialog::OnEvent", InstallTutorialSetupDialogOnEvent, RemoveTutorialSetupDialogOnEvent, true },
+    { "TutorialSetupDialog::Slot8", InstallTutorialSetupDialogSlot8, RemoveTutorialSetupDialogSlot8, true },
+    { "TutorialSetupDialog::Slot9", InstallTutorialSetupDialogSlot9, RemoveTutorialSetupDialogSlot9, true },
+    { "TutorialSetupDialog::Slot10", InstallTutorialSetupDialogSlot10, RemoveTutorialSetupDialogSlot10, true },
 
     // Phase 4: Simple Dialog Controllers
     // --- AchievementDialog ---
@@ -2948,8 +2982,10 @@ static ReimplEntry g_reimplementations[] = {
     // --- FollowDialog ---
     { "FollowDialog::Dtor", InstallFollowDialogDtor, RemoveFollowDialogDtor, true },
     { "FollowDialog::Slot4", InstallFollowDialogSlot4, RemoveFollowDialogSlot4, true },
+    { "FollowDialog::Slot5", InstallFollowDialogSlot5, RemoveFollowDialogSlot5, true }, // prologueSize=12, RIP-relative prologue but trampoline unused
     { "FollowDialog::Slot6", InstallFollowDialogSlot6, RemoveFollowDialogSlot6, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "FollowDialog::Slot7", InstallFollowDialogSlot7, RemoveFollowDialogSlot7, true },
+    { "FollowDialog::Slot8", InstallFollowDialogSlot8, RemoveFollowDialogSlot8, true }, // prologueSize=12, JNZ rel8 in prologue but trampoline unused
     // --- GoalDialog ---
     { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },
     { "GoalDialog::Slot4", InstallGoalDialogSlot4, RemoveGoalDialogSlot4, true },

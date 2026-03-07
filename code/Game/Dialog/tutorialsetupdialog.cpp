@@ -30,6 +30,61 @@
 #include <cstdint>
 
 // ============================================================
+// Locally resolved function pointers for Slot8/9/10
+// All helpers are exe-internal (not in engine_funcs.h).
+// ============================================================
+
+// FUN_1400e29f0 — slot9 setup helper: calls FUN_1400e2330(self, false) then
+// iterates first string vector at +0x20/+0x28, calling FUN_1400e2250 on each.
+typedef void (*fn_TSD_Slot9Helper_t)(void* self);
+static fn_TSD_Slot9Helper_t fn_TSD_Slot9Helper = nullptr;
+
+// FUN_1400e2700 — open-or-check dialog: param2=true -> start new tutorial dialog,
+// param2=false -> just validate state. Complex logic handles string-based and
+// external-based dialog resolution.
+typedef void (*fn_TSD_OpenDialog_t)(void* self, char param2);
+static fn_TSD_OpenDialog_t fn_TSD_OpenDialog = nullptr;
+
+// FUN_1400e2330 — iterate all open dialogs: set/clear the 0x1000000 hide flag on
+// every root element and each of its children (param2=true -> show, false -> hide).
+typedef void (*fn_TSD_SetDialogFlags_t)(void* self, char param2);
+static fn_TSD_SetDialogFlags_t fn_TSD_SetDialogFlags = nullptr;
+
+// FUN_1400e24f0 — find current TutorialSetupDialog instance in the open dialog list.
+// Writes InternalBasePtr to *param_out; returns null if not found.
+typedef void (*fn_TSD_FindInstance_t)(void* self, void* retval);
+static fn_TSD_FindInstance_t fn_TSD_FindInstance = nullptr;
+
+// FUN_1400e1600 — look up dialog instance by type string from a string vector entry.
+// (retval, string_ptr) -> sets retval to matching InternalBasePtr or null.
+typedef void (*fn_TSD_FindByString_t)(void* retval, void* string_ptr);
+static fn_TSD_FindByString_t fn_TSD_FindByString = nullptr;
+
+// FUN_140101a80 — set player controller's followed/selected building (BuildComponent).
+// (playerController, retval, entityAsUlong) — selects building for follow/inspection.
+typedef void (*fn_SetFollowBuilding_t)(void* playerController, void* retval, uint64_t entityPtr);
+static fn_SetFollowBuilding_t fn_SetFollowBuilding = nullptr;
+
+// FUN_140102b60 — set player controller edit mode (0 = none).
+// Used when dismissing an entity selection (e.g., not a building).
+typedef void (*fn_SetEditMode_t)(void* playerController, int mode);
+static fn_SetEditMode_t fn_SetEditMode = nullptr;
+
+static bool s_slot8FuncsResolved = false;
+
+static void ResolveTSDSlotFuncs() {
+    if (s_slot8FuncsResolved) return;
+    fn_TSD_Slot9Helper   = (fn_TSD_Slot9Helper_t)  ResolveAddr(Module::Exe, 0x1400e29f0);
+    fn_TSD_OpenDialog    = (fn_TSD_OpenDialog_t)    ResolveAddr(Module::Exe, 0x1400e2700);
+    fn_TSD_SetDialogFlags= (fn_TSD_SetDialogFlags_t)ResolveAddr(Module::Exe, 0x1400e2330);
+    fn_TSD_FindInstance  = (fn_TSD_FindInstance_t)  ResolveAddr(Module::Exe, 0x1400e24f0);
+    fn_TSD_FindByString  = (fn_TSD_FindByString_t)  ResolveAddr(Module::Exe, 0x1400e1600);
+    fn_SetFollowBuilding = (fn_SetFollowBuilding_t)  ResolveAddr(Module::Exe, 0x140101a80);
+    fn_SetEditMode       = (fn_SetEditMode_t)        ResolveAddr(Module::Exe, 0x140102b60);
+    s_slot8FuncsResolved = true;
+}
+
+// ============================================================
 // Locally resolved function pointers
 // (not yet in engine_funcs.h — resolved from exe exref table or direct addresses)
 // ============================================================
@@ -289,4 +344,101 @@ void TutorialSetupDialog_OnEvent(void* self) {
     static fn_TSDCtor_t fn_Ctor = nullptr;
     if (!fn_Ctor) fn_Ctor = (fn_TSDCtor_t)ResolveAddr(Module::Exe, TutorialSetupDialogAddr::Ctor);
     fn_Ctor(self);
+}
+
+// ============================================================
+// TutorialSetupDialog::Slot8 (vtable +0x40, exe 0x1400e25f0)
+// ============================================================
+//
+// Called when the player selects an entity from the tutorial setup list.
+// Calls setup helper (FUN_1400e29f0) then validates dialog state (FUN_1400e2700(self,false)).
+// Iterates the 2nd string vector (+0x30/+0x38): for each slot, looks up the matching
+// open dialog instance by type name string. If found, reads the Base* at instance+0x30:
+//   - If entity IsA BuildComponent: IsDerivedFrom check, calls fn_SetFollowBuilding
+//     to set the player's followed building entity on the playerController.
+//   - Else if entity IsA ComponentEntity: calls fn_SetEditMode(playerController, 0)
+//     to clear edit selection, then CloseDialog on the dialog instance.
+// This implements the "click on a tutorial target building" selection flow.
+void TutorialSetupDialog_Slot8(void* self) {
+    ResolveTSDSlotFuncs();
+    uintptr_t s = (uintptr_t)self;
+
+    fn_TSD_Slot9Helper(self);
+    fn_TSD_OpenDialog(self, '\0');
+
+    int count2 = *(int32_t*)(s + 0x38);
+    if (count2 <= 0) return;
+
+    uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);
+    void* playerController = *(void**)(gameSingleton + 0x120);
+    void* ui = *(void**)(gameSingleton + 0x98);
+
+    for (int i = 0; i < count2; ++i) {
+        uint64_t instance = 0;
+        void* strPtr = (void*)(*(uintptr_t*)(s + 0x30) + (uintptr_t)i * 8);
+        fn_TSD_FindByString(&instance, strPtr);
+        if (instance == 0) continue;
+
+        fn_InternalBasePtr_CheckPtr(&instance);
+        void* basePtr = *(void**)(instance + 0x30);
+
+        // IsA BuildComponent?
+        bool isBuild = fn_IsDerivedFrom(basePtr, *g_TypeId_BuildComponent);
+        if (isBuild) {
+            bool derived = fn_IsDerivedFrom(basePtr, *g_TypeId_BuildComponent);
+            void* entityForFollow = derived ? basePtr : nullptr;
+            uint64_t retval[2] = {0, 0};
+            fn_SetFollowBuilding(playerController, retval, (uint64_t)entityForFollow);
+        } else {
+            bool isEntity = fn_IsDerivedFrom(basePtr, *g_TypeId_ComponentEntity);
+            if (isEntity) {
+                fn_SetEditMode(playerController, 0);
+                fn_UI_CloseDialog(ui, &instance);
+            }
+        }
+    }
+}
+
+// ============================================================
+// TutorialSetupDialog::Slot9 (vtable +0x48, exe 0x1400e24c0)
+// ============================================================
+//
+// Called to activate the tutorial setup — runs setup helper then opens the dialog
+// with param=true (indicating a new setup/start rather than just validation).
+//
+// FUN_1400e29f0(self): resets all open dialogs to hidden (FUN_1400e2330(self, false)),
+//   then iterates the 1st string vector (+0x20/+0x28) and shows the matching ones.
+// FUN_1400e2700(self, true): checks/opens the tutorial setup dialog resource
+//   (reads +0x40/+0x50/+0x58/+0x68 fields) if GetAddDialogCount == 0.
+void TutorialSetupDialog_Slot9(void* self) {
+    ResolveTSDSlotFuncs();
+    fn_TSD_Slot9Helper(self);
+    fn_TSD_OpenDialog(self, '\x01');
+}
+
+// ============================================================
+// TutorialSetupDialog::Slot10 (vtable +0x50, exe 0x1400e2460)
+// ============================================================
+//
+// Closes the currently open TutorialSetupDialog instance.
+// Sets all dialogs to shown state (FUN_1400e2330(self, true)),
+// finds the current TutorialSetupDialog instance, and if found, calls
+// UI::UserInterface::CloseDialog on it.
+void TutorialSetupDialog_Slot10(void* self) {
+    ResolveTSDSlotFuncs();
+
+    // Show all dialogs (unhide)
+    fn_TSD_SetDialogFlags(self, '\x01');
+
+    // Find current TutorialSetupDialog instance
+    uint64_t instance = 0;
+    fn_TSD_FindInstance(self, &instance);
+
+    if (instance != 0) {
+        // CloseDialog
+        uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);
+        void* ui = *(void**)(gameSingleton + 0x98);
+        uint64_t instPtr = instance;
+        fn_UI_CloseDialog(ui, &instPtr);
+    }
 }

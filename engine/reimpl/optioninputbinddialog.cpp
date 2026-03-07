@@ -35,6 +35,7 @@
 static HookInfo g_hookScalarDtor;
 static HookInfo g_hookStartup;
 static HookInfo g_hookLoad;
+static HookInfo g_hookOnEvent;
 static HookInfo g_hookOnOk;
 static HookInfo g_hookOnCancel;
 static HookInfo g_hookOnButton2;
@@ -67,6 +68,13 @@ static void Reimpl_Startup(void* self) {
 static void Reimpl_Load(void* self) {
     g_lastHook = "OptionInputBindDialog::Load";
     OptionInputBindDialog_Load((OptionInputBindDialog*)self);
+}
+
+// Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
+// No trampoline call — branch at byte 4 (JNZ short after CMP R8d,0x12).
+static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
+    g_lastHook = "OptionInputBindDialog::OnEvent";
+    OptionInputBindDialog_OnEvent((OptionInputBindDialog*)self, element, eventType, eventData);
 }
 
 // Slot 10: OnOk(this) — REIMPLEMENTED
@@ -123,6 +131,17 @@ void InstallOptionInputBindDialogLoad() {
 #endif
 }
 void RemoveOptionInputBindDialogLoad() { RemoveHook(&g_hookLoad); }
+
+// OnEvent (0x14006d070) — branch at byte 4, full reimpl only (no trampoline call).
+// Prologue: CMP R8d,0x12(4)+JNZ short(2)+TEST R9d,R9d(3)+JNZ short(2)+MOV RAX,[RCX](3) = 14 bytes
+void InstallOptionInputBindDialogOnEvent() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x14006d070);
+    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 14);
+#ifdef _DEBUG
+    printf("[OptionInputBindDialog] OnEvent hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveOptionInputBindDialogOnEvent() { RemoveHook(&g_hookOnEvent); }
 
 void InstallOptionInputBindDialogOnOk() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14006cff0);

@@ -33,6 +33,7 @@ static HookInfo g_hookScalarDtor;
 static HookInfo g_hookStartup;
 static HookInfo g_hookUpdate;
 static HookInfo g_hookLoad;
+static HookInfo g_hookOnEvent;
 
 // ============================================================
 // Wrappers
@@ -101,6 +102,13 @@ static void Reimpl_Update(void* self) {
     SaveLoadDialog_Update((SaveLoadDialog*)self);
 }
 
+// Slot 8: OnEvent(this, element, eventType, eventData) — REIMPLEMENTED
+// No trampoline call — rel branch at byte 13.
+static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
+    g_lastHook = "SaveLoadDialog::OnEvent";
+    SaveLoadDialog_OnEvent((SaveLoadDialog*)self, element, eventType, eventData);
+}
+
 // Slot 7: Load(this, time, loaderLoop, param4) — REIMPLEMENTED
 // Accumulates spinner rotation, processes deferred flags, constructs game loader loop chain
 // on load completion. All constructor calls use resolved Runtime DLL exports.
@@ -149,3 +157,14 @@ void InstallSaveLoadDialogLoad() {
 #endif
 }
 void RemoveSaveLoadDialogLoad() { RemoveHook(&g_hookLoad); }
+
+// OnEvent (0x1400b67e0) — short JZ at byte 13, full reimpl only.
+// Prologue: PUSH RBX(2)+SUB RSP,0x30(4)+MOV RBX,RCX(3)+CMP R8d,2(4) = 13 bytes
+void InstallSaveLoadDialogOnEvent() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400b67e0);
+    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 13);
+#ifdef _DEBUG
+    printf("[SaveLoadDialog] OnEvent hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveSaveLoadDialogOnEvent() { RemoveHook(&g_hookOnEvent); }

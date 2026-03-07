@@ -178,6 +178,56 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
 }
 
 // ============================================================
+// FollowDialog::Slot5 (vtable +0x28) — Shutdown: clear follow-active flag
+// ============================================================
+// Clears the follow-active byte at gameWorld->+0x120->+0x38.
+// Mirror of Slot4 which sets it to 1; Slot5 clears it to 0 on shutdown.
+//
+// Original: 0x140069320 (19 bytes).
+
+void FollowDialog_Slot5(FollowDialog* /*self*/) {
+    void* gameWorld = *g_pGameWorldSingleton;
+    void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
+    *(uint8_t*)((uintptr_t)subsys + 0x38) = 0;
+}
+
+// ============================================================
+// FollowDialog::Slot8 (vtable +0x40) — OnCommand: handle buttonClose click
+// ============================================================
+// When msg==0x12 (button click) and id==100 (buttonClose):
+//   1. Validates InternalBasePtr at +0xC0 (the followed entity)
+//   2. Gets inner ptr from +0xC0, nulls out inner+0xE0 (back-reference to dialog)
+//   3. Wraps self in InternalBasePtr, calls UserInterface::CloseDialog.
+//
+// Original: 0x140069230 (18 bytes).
+
+void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int param4) {
+    if (param3 != 0x12 || param4 != 100)
+        return;
+
+    uintptr_t s = (uintptr_t)self;
+
+    // Validate and read the followed entity InternalBasePtr at +0xC0
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
+    uintptr_t inner = *(uintptr_t*)(s + 0xC0);
+
+    // Null out the back-reference: *(inner+0xE0) = null InternalBasePtr
+    {
+        uint8_t nullPtr[8] = {};
+        fn_InternalBasePtr_Ctor(nullPtr, nullptr);
+        *(uint64_t*)(inner + 0xE0) = *(uint64_t*)nullPtr;
+    }
+
+    // Close dialog: wrap self in InternalBasePtr, call CloseDialog
+    {
+        uint8_t selfIBP[8];
+        fn_InternalBasePtr_Ctor(selfIBP, (void*)self);
+        void* ui = *(void**)(s + 0x10);
+        fn_UI_CloseDialog(ui, selfIBP);
+    }
+}
+
+// ============================================================
 // FollowDialog::Slot7 (vtable +0x38) — Update: follow camera position
 // ============================================================
 // Reads position from the followed entity's CharacterComponent and

@@ -129,24 +129,24 @@ functions to the reimpl file, add hook entry to hooks.cpp.
 
 ### OnEvent handlers (5 dialogs) — highest priority
 
-- [ ] **NewGameDialog::OnEvent** (0x140070110) — rel branch in prologue. Handles randomize name/seed, start game, combo changes
-- [ ] **SaveLoadDialog::OnEvent** (0x1400b67e0) — rel branch in prologue. Handles save/load/delete button clicks
-- [ ] **MapParamsDialog::OnEvent** (0x14006b5f0) — rel branch at byte 4. Handles map parameter changes
-- [ ] **EventNotifyDialog::OnEvent** (0x140068680) — no prologue (branch at byte 0). Handles event notification clicks
-- [ ] **OptionInputBindDialog::OnEvent** (0x14006d070) — rel branch. Handles key binding input
+- [x] **NewGameDialog::OnEvent** (0x140070110) — full reimpl: randomize name/seed, start game, combo description update (2026-03-07)
+- [x] **SaveLoadDialog::OnEvent** (0x1400b67e0) — full reimpl: list selection, cancel/save/load/delete dispatch (2026-03-07)
+- [x] **MapParamsDialog::OnEvent** (0x14006b5f0) — full reimpl: randomize name, save+close, cancel (2026-03-07)
+- [x] **EventNotifyDialog::OnEvent** (0x140068680) — full reimpl: navigate to event position on map (2026-03-07)
+- [x] **OptionInputBindDialog::OnEvent** (0x14006d070) — full reimpl: vtable dispatch to OnOk/OnCancel/OnButton2/OnButton3 (2026-03-07)
 
 ### TutorialSetupDialog extra slots (3 functions)
 
-- [ ] **TutorialSetupDialog::Slot8** (0x1400e25f0) — rel CALL in prologue
-- [ ] **TutorialSetupDialog::Slot9** (0x1400e24c0) — rel CALL in prologue
-- [ ] **TutorialSetupDialog::Slot10** (0x1400e2460) — rel CALL in prologue
+- [x] **TutorialSetupDialog::Slot8** (0x1400e25f0) — rel CALL in prologue (2026-03-07)
+- [x] **TutorialSetupDialog::Slot9** (0x1400e24c0) — rel CALL in prologue (2026-03-07)
+- [x] **TutorialSetupDialog::Slot10** (0x1400e2460) — rel CALL in prologue (2026-03-07)
 
 ### TutorialHighlightDialog (2 functions)
 
-- [ ] **TutorialHighlightDialog::Update** (0x1400dffe0) — rel branch at byte 8. Tutorial overlay logic
-- [ ] **TutorialHighlightDialog::Load** (0x1400e0000) — 10b MOV+ADD+RET, too short for trampoline
+- [x] **TutorialHighlightDialog::Update** (0x1400dffe0) — vtable patch; dispatches to FUN_1400dfac0/FUN_1400dfda0 based on dataE8 (2026-03-07)
+- [x] **TutorialHighlightDialog::Load** (0x1400e0000) — vtable patch; dataB8 += *param2 time accumulator (2026-03-07)
 
 ### FollowDialog extra slots (2 functions)
 
-- [ ] **FollowDialog::Slot5** (0x140069320) — 19b, sets flag on followed entity
-- [ ] **FollowDialog::Slot8** (0x140069230) — 18b CMP+JNZ+CMP+JZ+RET pattern
+- [x] **FollowDialog::Slot5** (0x140069320) — clears follow-active flag (2026-03-07)
+- [x] **FollowDialog::Slot8** (0x140069230) — OnCommand buttonClose: null back-ref, close dialog (2026-03-07)

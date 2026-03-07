@@ -223,6 +223,78 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
 // MapParamsDialog::Update (0x14006b790) — Slot6
 // Checks if editName field has text; enables/disables OK button accordingly.
 // Calls button vtable[8](button, hasText) which is likely Element::SetEnabled.
+// ============================================================
+// MapParamsDialog::OnEvent (0x14006b5f0) — Slot8
+// ============================================================
+// Handles button clicks in the Map Parameters dialog.
+// eventType 0x12 = button click:
+//   eventData 0 = buttonNewName → generate random map name
+//   eventData 1 = buttonOk     → save name to game world, close
+//   eventData 2 = buttonCancel → close dialog (handled by engine via close flag)
+//
+// Original: 0x14006b5f0.
+
+void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType, int eventData) {
+    uintptr_t s = (uintptr_t)self;
+
+    if (eventType != 0x12) return;
+
+    if (eventData == 1) {
+        // buttonOk: save map name to game world (+0x28) and close
+        // FUN_14006b690: operator=(gameWorld+0x28, editName+0xC8)
+        void* gameWorld = *g_pGameWorldSingleton;
+        void* gameWorldName = (void*)((uintptr_t)gameWorld + 0x28);
+
+        // editName element at +0xB8, name String at editName+0xC8
+        void* editName = *(void**)(s + 0xB8);
+        if (editName) {
+            void* nameStr = (void*)((uintptr_t)editName + 0xC8);
+            fn_String_Assign(gameWorldName, nameStr);
+        }
+
+        // Close dialog
+        void* ui = *(void**)(s + 0x10);
+        uint64_t basePtr[2];
+        fn_InternalBasePtr_Ctor(basePtr, self);
+        fn_UI_CloseDialog(ui, basePtr);
+        return;
+    }
+
+    if (eventData == 2) {
+        // buttonCancel: close dialog
+        void* ui = *(void**)(s + 0x10);
+        uint64_t basePtr[2];
+        fn_InternalBasePtr_Ctor(basePtr, self);
+        fn_UI_CloseDialog(ui, basePtr);
+        return;
+    }
+
+    if (eventData == 0) {
+        // buttonNewName: generate random name using game world's random
+        // FUN_14006b700: reads editName element max char count, uses DAT_1401c3dd8+0xD8 as random
+        void* editName = *(void**)(s + 0xB8);
+        if (editName) {
+            // EditElement max char count at +0xD0
+            uint32_t maxLen = *(uint32_t*)((uintptr_t)editName + 0xD0);
+            int third = (int)maxLen / 3;
+            int signAdj = ((int)maxLen >> 31);
+            int divResult = third + signAdj;
+            int longDivAdj = (int)(((int64_t)(int)maxLen / 3 + ((int64_t)(int)maxLen >> 63)) & 0xFFFFFFFF);
+            int finalAdj = (int)((uint32_t)longDivAdj >> 31);
+            int nameLen = (divResult + finalAdj) * 2;
+
+            // Get game random: *g_pGameWorldSingleton + 0xD8
+            void* gameWorld = *g_pGameWorldSingleton;
+            void* random = *(void**)((uintptr_t)gameWorld + 0xD8);
+
+            uint8_t nameBuf[8];
+            fn_GenerateTownName(0, nameBuf, random, nameLen);
+            fn_EditElement_SetText(editName, nameBuf);
+            fn_String_Dtor(nameBuf);
+        }
+    }
+}
+
 void MapParamsDialog_Update(MapParamsDialog* self) {
     uintptr_t s = (uintptr_t)self;
 

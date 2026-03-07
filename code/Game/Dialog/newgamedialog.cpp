@@ -327,6 +327,125 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 // ============================================================
 // Enables buttonOk if editName has content, disables if empty.
 
+// ============================================================
+// NewGameDialog::OnEvent (0x140070110) — Slot8
+// ============================================================
+// Handles button clicks and combo changes in the New Game dialog.
+// eventType 0x12 = button click:
+//   eventData 0 = buttonNewName → generate random name
+//   eventData 1 = buttonNewSeed → generate random seed
+//   eventData 2 = buttonOk     → start new game
+//   eventData 3 = buttonCancel → close dialog
+// eventType 0x14 = combo change:
+//   eventData 4 = comboCondition → update description text
+//
+// Original: 0x140070110.
+
+static void NewGameDialog_StartGame(NewGameDialog* self) {
+    // Read combo indices from elements
+    // comboCondition at +0xD0, comboTerrain at +0xB8, comboClimate at +0xC8
+    // comboTerrainSize at +0xC0, comboDisaster at +0xD8
+
+    // Read combo selected items
+    fn_InternalBasePtr_CheckPtr(&self->comboCondition);
+    int condIdx = *(int*)((uintptr_t)self->comboCondition + 0x118);
+
+    fn_InternalBasePtr_CheckPtr(&self->comboClimate);
+    int climateIdx = *(int*)((uintptr_t)self->comboClimate + 0x118);
+
+    fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
+    int terrainIdx = *(int*)((uintptr_t)self->comboTerrain + 0x118);
+
+    // Get combo item data pointers from ExternalList arrays
+    fn_InternalBasePtr_CheckPtr(&self->comboCondition);
+    void* mapGenItem = fn_ComboElement_GetItemData(self->comboCondition, condIdx);
+    void** mapPtrArray = *(void***)(*(uintptr_t*)self->mapGeneratorList + 0x20);
+    void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
+    void* mapGen = nullptr;
+    if (fn_IsDerivedFrom(mapGenResource, *g_TypeId_MapGenerator)) mapGen = mapGenResource;
+
+    fn_InternalBasePtr_CheckPtr(&self->comboClimate);
+    void* climateItem = fn_ComboElement_GetItemData(self->comboClimate, climateIdx);
+    void** climatePtrArray = *(void***)(*(uintptr_t*)self->climateGeneratorList + 0x20);
+    void* climateResource = climatePtrArray[(intptr_t)climateItem];
+    void* climateGen = nullptr;
+    if (fn_IsDerivedFrom(climateResource, *g_TypeId_ClimateGenerator)) climateGen = climateResource;
+
+    fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
+    void* terrainItem = fn_ComboElement_GetItemData(self->comboTerrain, terrainIdx);
+    void** terrainPtrArray = *(void***)(*(uintptr_t*)self->terrainGeneratorList + 0x20);
+    void* terrainResource = terrainPtrArray[(intptr_t)terrainItem];
+    void* terrainGen = nullptr;
+    if (fn_IsDerivedFrom(terrainResource, *g_TypeId_TerrainGenerator)) terrainGen = terrainResource;
+
+    // Get terrain size index
+    fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
+    uint32_t terrainSize = *(uint32_t*)((uintptr_t)self->comboTerrainSize + 0x118);
+
+    // Get seed value
+    fn_InternalBasePtr_CheckPtr(&self->editSeed);
+    uint32_t seed = (uint32_t)fn_NumberEditElement_GetValue(self->editSeed);
+
+    // Get disaster enabled (0 = disasters on, nonzero = off)
+    fn_InternalBasePtr_CheckPtr(&self->comboDisaster);
+    int32_t disasterIdx = *(int32_t*)((uintptr_t)self->comboDisaster + 0x118);
+    int disasterOff = (disasterIdx == 0) ? 0 : 1;
+
+    // Get map name from editName element — String at editName+0xC8
+    fn_InternalBasePtr_CheckPtr(&self->editName);
+    void* nameStr = (void*)((uintptr_t)self->editName + 0xC8);
+
+    // Save combo selections to game settings
+    void* settings = *g_pNewGameSettings;
+    uintptr_t cfg = (uintptr_t)settings;
+    *(uint32_t*)(cfg + 0x2c) = (uint32_t)condIdx;
+    *(uint32_t*)(cfg + 0x20) = (uint32_t)terrainIdx;
+    *(uint32_t*)(cfg + 0x24) = terrainSize;
+    *(uint32_t*)(cfg + 0x28) = (uint32_t)climateIdx;
+    *(uint32_t*)(cfg + 0x30) = (uint32_t)disasterIdx;
+
+    // Invoke StartNewGame: FUN_1400b4540
+    // arg order: worldSetup, nameStr, seed, terrainSize, disasterOff, climate, terrain, mapGen, -1, &retval
+    void* retval = nullptr;
+    fn_StartNewGame(self->worldSetup, nameStr, (uint64_t)seed,
+                    (uint64_t)terrainSize, disasterOff,
+                    climateGen, terrainGen, mapGen, -1, &retval);
+}
+
+void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData) {
+    uintptr_t s = (uintptr_t)self;
+
+    if (eventType == 0x12) {
+        // Button click
+        if (eventData == 2) {
+            // buttonOk: start game
+            NewGameDialog_StartGame(self);
+            return;
+        }
+        if (eventData == 3) {
+            // buttonCancel: close dialog
+            void* ui = *(void**)(s + 0x10);
+            uint64_t basePtr[2];
+            fn_InternalBasePtr_Ctor(basePtr, self);
+            fn_UI_CloseDialog(ui, basePtr);
+            return;
+        }
+        if (eventData == 0) {
+            // buttonNewName: generate random name
+            GenerateRandomName(&self->editName, (void*)(s + 0x118));
+            return;
+        }
+        if (eventData == 1) {
+            // buttonNewSeed: generate random seed
+            GenerateRandomSeed(&self->editSeed, (void*)(s + 0x118));
+            return;
+        }
+    } else if (eventType == 0x14 && eventData == 4) {
+        // comboCondition selection changed: update description text
+        UpdateDescription(self);
+    }
+}
+
 void NewGameDialog_Slot6(NewGameDialog* self) {
     fn_InternalBasePtr_CheckPtr(&self->buttonOk);
     void* okBtn = self->buttonOk;

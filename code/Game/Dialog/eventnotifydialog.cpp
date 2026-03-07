@@ -19,6 +19,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 
 // ============================================================
@@ -612,5 +613,28 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         fn_Element_SetFlagsOnOff(imageElem,  0, 1);  // clear flag = show
         fn_InternalBasePtr_CheckPtr(&buttonElem);
         fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag = hide
+    }
+}
+
+// ============================================================
+// EventNotifyDialog::OnEvent (0x140068680) — Slot8
+// ============================================================
+// Handles notification button clicks (element IDs 1500..1500+count-1).
+// eventType 0x12 = button click, eventData in [0x5DC, 0x5DC+activeEventCount)
+// Calls FUN_1400685a0 to navigate to the event location on the map.
+//
+// Original: 0x140068680.
+
+void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int eventType, int eventData) {
+    if (eventType == 0x12) {
+        int activeCount = *(int*)((uintptr_t)self + 0xE0);
+        if (eventData > 0x5DB && eventData < activeCount + 0x5DC) {
+            // Navigate to event: FUN_1400685a0(self, eventData - 0x5DC)
+            // Call directly from exe
+            typedef void (*fn_NavigateToEvent_t)(void* self, int index);
+            static fn_NavigateToEvent_t s_fn = nullptr;
+            if (!s_fn) s_fn = (fn_NavigateToEvent_t)ResolveAddr(Module::Exe, 0x1400685a0);
+            if (s_fn) s_fn(self, eventData - 0x5DC);
+        }
     }
 }
