@@ -26,6 +26,11 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+static const uintptr_t kVtable_RadiusDescription = 0x14015a580;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -68,9 +73,7 @@ static void Reimpl_Cleanup(void* self) {
     // Re-construct: External::External + set vtable + init fields
     fn_External_External(self);
     uintptr_t s = (uintptr_t)self;
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015a580);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_RadiusDescription);
     *(uint64_t*)(s + 0x20) = 0;        // ExternalPtr = null
     *(uint32_t*)(s + 0x28) = 0x1e;     // int = 30
 }
@@ -81,9 +84,7 @@ static void* Reimpl_CreateInPlace(void* self) {
     if (!self) return nullptr;
     fn_External_External(self);
     uintptr_t s = (uintptr_t)self;
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015a580);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_RadiusDescription);
     *(uint64_t*)(s + 0x20) = 0;
     *(uint32_t*)(s + 0x28) = 0x1e;
     return self;

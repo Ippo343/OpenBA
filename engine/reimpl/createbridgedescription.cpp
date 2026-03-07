@@ -65,15 +65,12 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
 
 // Cleanup: call vtable[0] dtor with flags=0, then call Ctor to reinitialize in place
 // FUN_1400328d0: (*(vtable[0]))(self, 0); CreateBridgeDescription_Ctor(self);
-// Ctor = CreateInPlace at 0x1400328c0 (unhookable whole-function, resolve inline)
+// Ctor = CreateInPlace at 0x1400328c0 (unhookable whole-function, in engine_funcs)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateBridgeDescription::Cleanup";
     typedef void* (*fn_Dtor_t)(void*, uint32_t);
     ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
-    typedef void (*fn_Ctor_t)(void*);
-    static fn_Ctor_t fn_Ctor = nullptr;
-    if (!fn_Ctor) fn_Ctor = (fn_Ctor_t)ResolveAddr(Module::Exe, 0x1400328c0);
-    fn_Ctor(self);
+    fn_CreateBridgeDescription_Ctor(self);
 }
 
 // ============================================================

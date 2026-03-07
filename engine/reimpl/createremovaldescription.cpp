@@ -25,6 +25,11 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+static const uintptr_t kVtable_CreateRemovalDescription = 0x140162d80;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -103,9 +108,7 @@ static void Reimpl_Cleanup(void* self) {
 
     fn_External_External(self);
     uintptr_t s = (uintptr_t)self;
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162d80);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_CreateRemovalDescription);
     *(uint8_t*)(s + 0x20) = 0;
     *(uint64_t*)(s + 0x28) = 0;
     *(uint64_t*)(s + 0x30) = 0;
@@ -119,9 +122,7 @@ static void* Reimpl_CreateInPlace(void* self) {
     if (!self) return nullptr;
     fn_External_External(self);
     uintptr_t s = (uintptr_t)self;
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140162d80);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_CreateRemovalDescription);
     *(uint8_t*)(s + 0x20) = 0;
     *(uint64_t*)(s + 0x28) = 0;
     *(uint64_t*)(s + 0x30) = 0;

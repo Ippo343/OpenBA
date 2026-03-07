@@ -25,6 +25,12 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+static const uintptr_t kVtable_FrustumOutlineDescription = 0x14015c300;
+static const uintptr_t kVtable_FrustumOutlineElement     = 0x14015c2a0;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -42,7 +48,7 @@ static HookInfo g_hookCreateInPlace;
 // Sets vtable, destroys String at +0x70, calls ElementDescription dtor, optionally frees.
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "FrustumOutlineDescription::Dtor";
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015c300);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_FrustumOutlineDescription);
     fn_String_Dtor((void*)((uintptr_t)self + 0x70));
     fn_ElementDescription_Dtor(self);
     if (flags & 1) fn_MemFreeStatic(self);
@@ -81,7 +87,7 @@ static void Reimpl_Cleanup(void* self) {
     typedef void* (*fn_VDtor_t)(void*, uint32_t);
     ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
     fn_ElementDescription_Ctor(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015c300);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_FrustumOutlineDescription);
     *(int64_t*)((uintptr_t)self + 0x68) = 0;
     *(int64_t*)((uintptr_t)self + 0x70) = 0;
     *(int64_t*)((uintptr_t)self + 0x78) = (int64_t)-1;
@@ -96,7 +102,7 @@ static void Reimpl_CreateElement(void* self, void* outPtr) {
     void* elem = fn_MemAlloc(g_pMemAllocSingleton, 0xd8, 8);
     if (elem) {
         fn_Element_Ctor(elem);
-        *(void**)elem = (void*)ResolveAddr(Module::Exe, 0x14015c2a0);
+        *(void**)elem = (void*)ResolveAddr(Module::Exe, kVtable_FrustumOutlineElement);
         fn_Sprite_DefaultCtor2((void*)((uintptr_t)elem + 0xc0));
         *(int64_t*)((uintptr_t)elem + 0xd0) = (int64_t)-1;
     }
@@ -124,7 +130,7 @@ static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "FrustumOutlineDescription::CreateInPlace";
     if (!self) return nullptr;
     fn_ElementDescription_Ctor(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x14015c300);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_FrustumOutlineDescription);
     *(int64_t*)((uintptr_t)self + 0x68) = 0;
     *(int64_t*)((uintptr_t)self + 0x70) = 0;
     *(int64_t*)((uintptr_t)self + 0x78) = (int64_t)-1;

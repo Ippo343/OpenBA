@@ -8,7 +8,6 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include <cstdint>
 
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
@@ -101,12 +100,9 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
     void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
     void* pDlLoop = nullptr;
     if (dlLoop) {
-        // Build the delay time constant from exe (.rdata at 0x14017214c)
-        float* delayConst = reinterpret_cast<float*>(
-            ResolveAddr(Module::Exe, 0x14017214c));
-        float delayVal = delayConst ? *delayConst : 1.5f;
+        // Delay constant is 1.0f (DAT_14017214c — bytes 0x3f800000).
         uint64_t delayTime[1];
-        fn_Time_Ctor_Float((void*)delayTime, delayVal);
+        fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
         uint64_t loadingNameStr = 0;
         fn_String_Ctor_CStr(&loadingNameStr, "Dialog/Loading.rsc");

@@ -25,6 +25,13 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+// kVtable_Base: Object::External base vtable (set first, then overwritten by derived)
+static const uintptr_t kVtable_Base                 = 0x1401629a0;
+static const uintptr_t kVtable_CreatePathDescription = 0x140159210;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -67,8 +74,8 @@ static void* Reimpl_Cleanup(void* self, uint64_t /*param2*/, uint64_t param3, ui
     typedef void* (*fn_Dtor5_t)(void*, uint32_t, uint64_t, uint64_t, int64_t);
     ((fn_Dtor5_t)(*(void***)self)[0])(self, 0, param3, param4, (int64_t)-2);
     fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x1401629a0);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x140159210);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_Base);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_CreatePathDescription);
     return self;
 }
 
@@ -78,8 +85,8 @@ static void* Reimpl_CreateInPlace(void* self) {
     g_lastHook = "CreatePathDescription::CreateInPlace";
     if (!self) return nullptr;
     fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x1401629a0);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, 0x140159210);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_Base);
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_CreatePathDescription);
     return self;
 }
 

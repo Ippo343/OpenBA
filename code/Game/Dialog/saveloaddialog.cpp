@@ -33,7 +33,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "ui/Dialogs.h"
 #include <cstdint>
 
 // ============================================================
@@ -446,6 +446,241 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 }
 
 // ============================================================
+// Helper: create a confirm-style MessageDialog from a .rsc path string
+// ============================================================
+// Loads the External resource by filename, verifies it is a DialogInstance,
+// allocates a 0xC0-byte DialogInstance shell, constructs it, patches the vtable
+// to MessageDialog (0x14015c480), and calls UI::ShowDialog.
+// Returns the ShowDialog result (2 = confirmed/Yes, other = cancelled).
+//
+// This pattern appears identically in DoDelete, DoSave, and DoLoad.
+static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Load the .rsc External resource
+    uint8_t filename[8] = {};
+    fn_Filename_CtorCStr(filename, rscPath);
+    void* externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+    fn_Filename_Dtor(filename);
+
+    // IsDerivedFrom check — ensure it's a DialogInstance
+    void* checkedRes = nullptr;
+    if (externalRes) {
+        bool isDialog = fn_IsDerivedFrom(externalRes, *g_TypeId_DialogInstance);
+        if (isDialog) checkedRes = externalRes;
+    }
+
+    // Allocate 0xC0 bytes for a DialogInstance shell
+    void* dlg = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+    if (dlg) {
+        // Construct base DialogInstance(ui, externalRes, nullParent, 0, 0, 0)
+        uint64_t nullParent = 0;
+        fn_DialogInstance_Ctor(dlg, *(void**)(s + 0x10), checkedRes, &nullParent, 0, 0, 0);
+        // Patch vtable to MessageDialog
+        *(void**)dlg = (void*)MessageDialogAddr::Vtable;
+    }
+
+    // ShowDialog(ui, InternalPtr<DialogInstance>)
+    uint64_t dlgPtr = 0;
+    fn_InternalBasePtr_Ctor(&dlgPtr, dlg);
+    int result = fn_UI_ShowDialog(*(void**)(s + 0x10), &dlgPtr);
+    fn_InternalBasePtr_DeletePtr(&dlgPtr);
+    return result;
+}
+
+// ============================================================
+// DoDelete (0x1400b5e50): Show confirmDelete dialog, then trigger delete operation.
+// ============================================================
+// Shows "Dialog/SaveLoad.rsc:confirmDelete" dialog.
+// If user confirms (result == 2): sets deleteFlag (+0xBC = 1), starts operation 5.
+// Original: 0x1400b5e50.
+
+static void SaveLoadDialog_DoDelete(SaveLoadDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    int result = SaveLoad_ShowConfirmDialog(self, "Dialog/SaveLoad.rsc:confirmDelete");
+    if (result == 2) {
+        *(uint8_t*)(s + 0xBC) = 1;
+        void* saveLoad = *g_pSaveLoadSingleton;
+        fn_SaveLoad_SetOperation(saveLoad, 5, *(int*)(s + 0xC0));
+    }
+}
+
+// ============================================================
+// DoSave (0x1400b5fd0): Optional confirm-overwrite, then trigger save operation.
+// ============================================================
+// Sets min operation time (1.5f seconds).
+// Gets save info for selected index: if save slot already has data (validState >= 0),
+//   shows "Dialog/SaveLoad.rsc:confirmSave" dialog; if not confirmed, returns.
+// Sets saveFlag (+0xB9 = 1), copies save name from text element at +0xE8+0x28,
+//   calls SetSaveName, then SetOperation(4, selectedIndex).
+// Original: 0x1400b5fd0.
+
+static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+    void* saveLoad = *g_pSaveLoadSingleton;
+
+    // Set minimum operation time (1.5f seconds — DAT_140172160)
+    uint8_t minTime[8] = {};
+    fn_Time_Ctor_Float(minTime, 1.5f);
+    fn_SaveLoad_SetMinOperationTime(saveLoad, minTime);
+
+    // Check if the selected save slot already contains data
+    int selectedIdx = *(int*)(s + 0xC0);
+    void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+    int validState = *(int*)((uintptr_t)saveInfo + 0x40);
+    if (validState >= 0) {
+        // Slot is occupied — ask user to confirm overwrite
+        int result = SaveLoad_ShowConfirmDialog(self, "Dialog/SaveLoad.rsc:confirmSave");
+        if (result != 2) return;  // user cancelled
+    }
+
+    // Mark save pending
+    *(uint8_t*)(s + 0xB9) = 1;
+
+    // Copy save name from the text element at +0xE8 (the name input field)
+    // FUN_140011f90 inlined: String::String(retval, *(dialog+0xE8) + 0x28)
+    uint8_t saveName[8] = {};
+    void* nameSource = *(void**)(s + 0xE8);
+    fn_String_Ctor_Copy(saveName, (void*)((uintptr_t)nameSource + 0x28));
+    fn_SaveLoad_SetSaveName(saveLoad, saveName, 2);
+    fn_String_Dtor(saveName);
+
+    // Start save operation (4 = save, with selected slot index)
+    fn_SaveLoad_SetOperation(saveLoad, 4, selectedIdx);
+}
+
+// ============================================================
+// DoLoad (0x1400b61e0): Confirm load, check mod compatibility, then trigger load.
+// ============================================================
+// Sets min operation time (1.5f seconds).
+// If game world is loaded (DAT_1401c3dd8 != 0):
+//   Shows "Dialog/SaveLoad.rsc:confirmLoad" dialog; if not confirmed, returns.
+// Iterates through all mods in the selected save's mod list:
+//   For each mod with a non-zero CheckMod status, shows a mod-warning dialog
+//   ("modsOutOfDate", "modsVersion", "modsChanged", or "modsMissing") with
+//   mod name/version info set as TextElement parameters.
+//   If user declines any warning, returns without loading.
+// Sets loadFlag (+0xBA = 1), starts operation 2 (load) with selected index.
+// Original: 0x1400b61e0.
+
+static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+    void* saveLoad = *g_pSaveLoadSingleton;
+
+    // Set minimum operation time (1.5f seconds)
+    uint8_t minTime[8] = {};
+    fn_Time_Ctor_Float(minTime, 1.5f);
+    fn_SaveLoad_SetMinOperationTime(saveLoad, minTime);
+
+    // If game world is active, ask user to confirm leaving the current game
+    if (*g_pGameWorldSingleton != nullptr) {
+        int result = SaveLoad_ShowConfirmDialog(self, "Dialog/SaveLoad.rsc:confirmLoad");
+        if (result != 2) return;
+    }
+
+    // Iterate through mods in the selected save and warn about any incompatibilities
+    int selectedIdx = *(int*)(s + 0xC0);
+    void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+    int modCount = *(int*)((uintptr_t)saveInfo + 0x50);
+
+    for (int i = 0; i < modCount; i++) {
+        int modStatus = fn_SaveLoad_CheckMod(saveLoad, selectedIdx, i);
+        if (modStatus == 0) continue;  // mod is fine
+
+        // Get mod name string pointer: saveInfo->modList[i] (stride 0x20 from base at +0x48)
+        // saveInfo+0x48 = base of mod name array; each entry is 0x20 bytes; entry+0 = String
+        void* saveInfo2 = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+        void* modNameBase = *(void**)((uintptr_t)saveInfo2 + 0x48);
+        void* modNameStr = (void*)((uintptr_t)modNameBase + (uintptr_t)i * 0x20);  // String at stride 0x20
+
+        // Select the appropriate warning dialog based on mod status
+        const char* warnPath = nullptr;
+        if      (modStatus == 2) warnPath = "Dialog/SaveLoad.rsc:modsOutOfDate";
+        else if (modStatus == 3) warnPath = "Dialog/SaveLoad.rsc:modsVersion";
+        else if (modStatus == 4) warnPath = "Dialog/SaveLoad.rsc:modsChanged";
+        else                     warnPath = "Dialog/SaveLoad.rsc:modsMissing";
+
+        // Load the warning dialog External resource
+        uint8_t warnFilename[8] = {};
+        fn_Filename_CtorCStr(warnFilename, warnPath);
+        void* warnExt = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, warnFilename);
+        fn_Filename_Dtor(warnFilename);
+
+        void* checkedWarn = nullptr;
+        if (warnExt) {
+            if (fn_IsDerivedFrom(warnExt, *g_TypeId_DialogInstance)) {
+                checkedWarn = warnExt;
+            }
+        }
+
+        // Allocate and construct the warning DialogInstance shell
+        void* warnDlg = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+        if (warnDlg) {
+            uint64_t nullParent = 0;
+            fn_DialogInstance_Ctor(warnDlg, *(void**)(s + 0x10), checkedWarn, &nullParent, 0, 0, 0);
+            *(void**)warnDlg = (void*)MessageDialogAddr::Vtable;
+        }
+
+        // Find the TextElement inside the warning dialog and set mod info parameters
+        // FindElementType on the dialog InternalPtr returns a TextElement InternalPtr
+        uint64_t warnDlgPtr = 0;
+        fn_InternalBasePtr_Ctor(&warnDlgPtr, warnDlg);
+        fn_InternalBasePtr_CheckPtr(&warnDlgPtr);
+
+        // Find TextElement within dialog (uses g_TypeId_TextElement)
+        uint64_t textElemPtr = 0;
+        fn_DialogInstance_FindElementType((void*)warnDlgPtr, &textElemPtr, *g_TypeId_TextElement);
+        fn_InternalBasePtr_CheckPtr(&textElemPtr);
+
+        // Check IsDerivedFrom TextElement
+        void* rawElem = *(void**)&textElemPtr;
+        bool isText = fn_IsDerivedFrom(rawElem, *g_TypeId_TextElement);
+        void* textElem = isText ? rawElem : nullptr;
+
+        uint64_t textPtr = 0;
+        fn_InternalBasePtr_Ctor(&textPtr, textElem);
+        fn_InternalBasePtr_CheckPtr(&textPtr);
+
+        // SetParameter(0) = mod name, SetParameter(1) = mod name (again, as per decompilation)
+        fn_TextElement_SetParameter((void*)textPtr, 0, modNameStr);
+        fn_InternalBasePtr_CheckPtr(&textPtr);
+        fn_TextElement_SetParameter((void*)textPtr, 1, (void*)((uintptr_t)modNameStr + 8));
+
+        // SetParameter(2) = formatted version string "%i (%s)"
+        // saveInfo+0x14 = isBeta (uint, sub-field), saveInfo+0x18 = version int
+        // Configuration::GetVersionString returns a const String*
+        void* saveInfo3 = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+        void* modEntry = (void*)((uintptr_t)*(void**)((uintptr_t)saveInfo3 + 0x48) + (uintptr_t)i * 0x20);
+        uint32_t isBeta   = *(uint32_t*)((uintptr_t)modEntry + 0x14);
+        uint32_t modVer   = *(uint32_t*)((uintptr_t)modEntry + 0x18);
+        uint8_t verStrBuf[8] = {};
+        void* verStr = fn_Configuration_GetVersionString(verStrBuf, isBeta, (bool)(isBeta != 0));
+        uint8_t fmtBuf[8] = {};
+        fn_String_Format(fmtBuf, "%i (%s)", (unsigned)modVer, *(const char**)verStr);
+        fn_InternalBasePtr_CheckPtr(&textPtr);
+        fn_TextElement_SetParameter((void*)textPtr, 2, fmtBuf);
+        fn_String_Dtor(fmtBuf);
+        fn_String_Dtor(verStrBuf);
+
+        // Show the warning dialog and check if user confirmed
+        uint64_t showPtr = 0;
+        fn_InternalBasePtr_Ctor(&showPtr, warnDlg);  // re-wrap for ShowDialog
+        // Note: original passes warnDlgPtr (the dialog InternalPtr from +0x77 slot)
+        // which was constructed above from warnDlg. Re-use warnDlgPtr.
+        int warnResult = fn_UI_ShowDialog(*(void**)(s + 0x10), &warnDlgPtr);
+        fn_InternalBasePtr_DeletePtr(&warnDlgPtr);
+        fn_String_Dtor(&showPtr);  // cleanup the extra ptr we built
+
+        if (warnResult != 2) return;  // user declined mod warning — abort load
+    }
+
+    // All checks passed — trigger load operation
+    *(uint8_t*)(s + 0xBA) = 1;
+    fn_SaveLoad_SetOperation(saveLoad, 2, selectedIdx);
+}
+
+// ============================================================
 // SaveLoadDialog::OnEvent (0x1400b67e0) — Slot8
 // ============================================================
 // Handles button clicks and list selection changes.
@@ -456,9 +691,6 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 //   eventData 1 = buttonSave → save with optional confirm dialog
 //   eventData 2 = buttonLoad → load with optional confirm dialogs
 //   eventData 3 = buttonDelete → delete with confirm dialog
-//
-// Sub-functions (FUN_1400b61e0/5fd0/5e50) are complex confirm-dialog flows;
-// called directly from exe to avoid reimplementing them here.
 //
 // Original: 0x1400b67e0.
 
@@ -495,27 +727,15 @@ void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, 
             return;
         }
         if (eventData == 2) {
-            // buttonLoad: FUN_1400b61e0 (load with mod-check confirm dialogs)
-            typedef void (*fn_DoLoad_t)(void* self);
-            static fn_DoLoad_t s_fn = nullptr;
-            if (!s_fn) s_fn = (fn_DoLoad_t)ResolveAddr(Module::Exe, 0x1400b61e0);
-            if (s_fn) s_fn(self);
+            SaveLoadDialog_DoLoad(self);
             return;
         }
         if (eventData == 1) {
-            // buttonSave: FUN_1400b5fd0 (save with overwrite confirm dialog)
-            typedef void (*fn_DoSave_t)(void* self);
-            static fn_DoSave_t s_fn = nullptr;
-            if (!s_fn) s_fn = (fn_DoSave_t)ResolveAddr(Module::Exe, 0x1400b5fd0);
-            if (s_fn) s_fn(self);
+            SaveLoadDialog_DoSave(self);
             return;
         }
         if (eventData == 3) {
-            // buttonDelete: FUN_1400b5e50 (delete with confirm dialog)
-            typedef void (*fn_DoDelete_t)(void* self);
-            static fn_DoDelete_t s_fn = nullptr;
-            if (!s_fn) s_fn = (fn_DoDelete_t)ResolveAddr(Module::Exe, 0x1400b5e50);
-            if (s_fn) s_fn(self);
+            SaveLoadDialog_DoDelete(self);
             return;
         }
     }

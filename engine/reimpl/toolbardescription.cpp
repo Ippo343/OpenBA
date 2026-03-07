@@ -25,6 +25,11 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+static const uintptr_t kVtable_ToolbarDescription = 0x140164980;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -40,10 +45,7 @@ static HookInfo g_hookCleanup;
 // frees array, destroys Strings at +0x48/+0x40/+0x38/+0x28, sets base vtable, ~External
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ToolbarDescription::Dtor";
-    typedef void (*fn_cleanup_t)(void*);
-    static fn_cleanup_t fn_cleanup = nullptr;
-    if (!fn_cleanup) fn_cleanup = (fn_cleanup_t)ResolveAddr(Module::Exe, 0x14012db70);
-    fn_cleanup(self);
+    fn_ToolbarDescription_cleanup(self);
     if (flags & 1) fn_MemFreeStatic(self);
     return self;
 }
@@ -97,9 +99,7 @@ static void Reimpl_Cleanup(void* self) {
     ((fn_VDtor_t)(*(void***)self)[0])(self, 0);
     fn_External_External(self);
     uintptr_t s = (uintptr_t)self;
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x140164980);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_ToolbarDescription);
     *(uint64_t*)(s + 0x20) = 0;
     *(uint64_t*)(s + 0x28) = 0;
     *(uint64_t*)(s + 0x30) = 0;

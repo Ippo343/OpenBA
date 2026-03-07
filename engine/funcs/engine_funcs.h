@@ -2673,8 +2673,120 @@ extern fn_MemZeroFill_t fn_MemZeroFill;
 typedef void (*fn_StringArray_Resize_t)(void* arrayPtr, int newCount);
 extern fn_StringArray_Resize_t fn_StringArray_Resize;
 
+// FUN_140002340(field, serializer) — ExternalPtr<BuildingDescription> field serialize (exe)
+// Checks DAT_1401c7318 (BuildingDescription type id). Used by CreateDragDescription,
+// CreateFencedDescription, and EnvironmentDescription Serialize.
+typedef void (*fn_ExternalPtr_BuildSerialize_t)(void* field, void* serializer);
+extern fn_ExternalPtr_BuildSerialize_t fn_ExternalPtr_BuildSerialize;
+
+// FUN_1400198a0(arrayPtr, newCount) — Weather dynamic array resize (exe)
+// Used by EnvironmentDescription::Serialize on load.
+typedef void (*fn_WeatherResize_t)(void* arrayPtr, int newCount);
+extern fn_WeatherResize_t fn_WeatherResize;
+
+// FUN_1400196a0(entry, serializer) — Weather entry External serialize (exe)
+// Serializes a weather dynamic array entry (External reference).
+typedef void (*fn_WeatherExternalSerialize_t)(void* entry, void* serializer);
+extern fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize;
+
+// FUN_14012db70(self) — ToolbarDescription internal cleanup helper (exe, unhookable)
+// Sets vtable, destroys String array at +0x50, destroys strings at +0x48/+0x40/+0x38/+0x28,
+// resets base vtable, calls External::~External. Called from ToolbarDescription::Dtor.
+typedef void (*fn_ToolbarDescription_cleanup_t)(void* self);
+extern fn_ToolbarDescription_cleanup_t fn_ToolbarDescription_cleanup;
+
+// FUN_1400328c0(self) — CreateBridgeDescription::CreateInPlace (exe, unhookable, 12 bytes)
+// Called from CreateBridgeDescription::Cleanup to re-construct in place.
+typedef void (*fn_CreateBridgeDescription_Ctor_t)(void* self);
+extern fn_CreateBridgeDescription_Ctor_t fn_CreateBridgeDescription_Ctor;
+
+// FUN_1400329b0(self) — CreateDragDescription::CreateInPlace (exe, unhookable, 12 bytes)
+// Called from CreateDragDescription::Cleanup to re-construct in place.
+typedef void (*fn_CreateDragDescription_Ctor_t)(void* self);
+extern fn_CreateDragDescription_Ctor_t fn_CreateDragDescription_Ctor;
+
+// FUN_140004920(self) — CreateFencedDescription::CreateInPlace (exe, unhookable, 12 bytes)
+// Called from CreateFencedDescription::Cleanup to re-construct in place.
+typedef void (*fn_CreateFencedDescription_Ctor_t)(void* self);
+extern fn_CreateFencedDescription_Ctor_t fn_CreateFencedDescription_Ctor;
+
 // Object::Base::IsDerivedFrom(this, typeId) — already declared above but redeclared for clarity
 // extern fn_IsDerivedFrom_t fn_IsDerivedFrom;  // already at line 177
+
+// ============================================================
+// TutorialSetupDialog helpers (exe-internal, no Runtime export)
+// ============================================================
+
+// FUN_140028650(External** fieldPtr, Serializer*) — serialize External* as a reference
+// Handles reference-mode (id-based), path-based, and bool-presence modes.
+typedef void (*fn_SerializeExternalPtr_t)(void* fieldPtr, void* serializer);
+extern fn_SerializeExternalPtr_t fn_SerializeExternalPtr;
+
+// FUN_1400e29f0(self) — TSD slot9 setup helper
+// Calls SetDialogFlags(false) then shows each dialog in the 1st string vector.
+typedef void (*fn_TSD_Slot9Helper_t)(void* self);
+extern fn_TSD_Slot9Helper_t fn_TSD_Slot9Helper;
+
+// FUN_1400e2700(self, param2) — open or validate tutorial dialog
+// param2=true -> open dialog; false -> just validate state.
+typedef void (*fn_TSD_OpenDialog_t)(void* self, char param2);
+extern fn_TSD_OpenDialog_t fn_TSD_OpenDialog;
+
+// FUN_1400e2330(self, param2) — set/clear 0x1000000 hide flag on all open dialog roots
+// param2=true -> show (set flag); false -> hide (clear flag).
+typedef void (*fn_TSD_SetDialogFlags_t)(void* self, char param2);
+extern fn_TSD_SetDialogFlags_t fn_TSD_SetDialogFlags;
+
+// FUN_1400e24f0(self, retval) — find current TutorialSetupDialog instance in open dialog list
+// Writes InternalBasePtr to *retval; sets null if not found.
+typedef void (*fn_TSD_FindInstance_t)(void* self, void* retval);
+extern fn_TSD_FindInstance_t fn_TSD_FindInstance;
+
+// FUN_1400e1600(retval, string_ptr) — find open dialog instance by type string
+// Parses type name from string, walks open dialog list for matching IsA.
+typedef void (*fn_TSD_FindByString_t)(void* retval, void* string_ptr);
+extern fn_TSD_FindByString_t fn_TSD_FindByString;
+
+// FUN_140101a80(playerController, retval, entityAsUlong) — set player follow-building
+// Selects a building entity for the player's follow/inspection mode.
+typedef void (*fn_SetFollowBuilding_t)(void* playerController, void* retval, uint64_t entityPtr);
+extern fn_SetFollowBuilding_t fn_SetFollowBuilding;
+
+// FUN_140102b60(playerController, mode) — set player controller edit mode
+// mode=0 clears current selection/edit.
+typedef void (*fn_SetEditMode_t)(void* playerController, uint64_t mode);
+extern fn_SetEditMode_t fn_SetEditMode;
+
+// ============================================================
+// Phase G Wave 1: SaveLoadDialog DoLoad/DoSave/DoDelete + EventNotifyDialog NavigateToEvent
+// ============================================================
+
+// Save::SaveLoad::CheckMod(saveLoad, saveIndex, modIndex) — returns mod status code:
+//   0 = ok, 2 = out of date, 3 = version mismatch, 4 = changed, other = missing.
+// _singleton at 0x140152738 (Runtime export).
+typedef int (*fn_SaveLoad_CheckMod_t)(void* saveLoad, int saveIndex, int modIndex);
+extern fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod;
+
+// Save::SaveLoad::SetSaveName(saveLoad, String* name, int mode) — sets save name.
+// mode=2 sets in save-name slot. Called before SetOperation(4,...).
+// _singleton at 0x140151650 (Runtime export).
+typedef void (*fn_SaveLoad_SetSaveName_t)(void* saveLoad, void* nameStr, int mode);
+extern fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName;
+
+// DialogInstance type ID — used for IsDerivedFrom checks on loaded External resources
+// to verify they are DialogInstance (or subclass). _typeInfo_exref at 0x140151728.
+extern uint32_t* g_TypeId_DialogInstance;
+
+// FUN_14009f3e0(mapGrid, outPos3, inXY2, flag, outTri) — terrain/scene pick from 2D position.
+// Casts a ray from a 2D map position and returns the 3D terrain-intersection point.
+// mapGrid: pointer to the map grid struct (int* piVar2 = *(DAT_1401c3dd8 + 0xf8)).
+// outPos3: float[3] — receives (x, y, z) world position.
+// inXY2:   float[3] — input position as {worldX, worldY, 0.0f}.
+// flag:    '\0' = normal pick mode.
+// outTri:  can be nullptr (receives picked triangle; ignored).
+// Exe-only function at 0x14009f3e0.
+typedef float* (*fn_MapGetTerrainPos_t)(void* mapGrid, float* outPos3, float* inXY2, char flag, void* outTri);
+extern fn_MapGetTerrainPos_t fn_MapGetTerrainPos;
 
 // ============================================================
 // Initialization

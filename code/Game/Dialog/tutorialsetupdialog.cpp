@@ -9,7 +9,7 @@
 //   +0x08: Object::External base data (0x18 bytes)
 //   +0x20: void* — string array ptr (1st vector data)
 //   +0x28: uint32_t — count of 1st string vector
-//   +0x2C: uint32_t — capacity of 1st string vector (managed by FUN_140028860)
+//   +0x2C: uint32_t — capacity of 1st string vector (managed by fn_StringArray_Resize)
 //   +0x30: void* — string array ptr (2nd vector data)
 //   +0x38: uint32_t — count of 2nd string vector
 //   +0x3C: uint32_t — capacity of 2nd string vector
@@ -23,136 +23,14 @@
 //   +0x68: void* pointer field
 //   +0x70: uint32_t field
 //   +0x74: padding
+//
+// All exe function pointers (TSD slot helpers, SerializeExternalPtr, etc.) are
+// now resolved centrally in engine_funcs.cpp — no ResolveAddr in this file.
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-
-// ============================================================
-// Locally resolved function pointers for Slot8/9/10
-// All helpers are exe-internal (not in engine_funcs.h).
-// ============================================================
-
-// FUN_1400e29f0 — slot9 setup helper: calls FUN_1400e2330(self, false) then
-// iterates first string vector at +0x20/+0x28, calling FUN_1400e2250 on each.
-typedef void (*fn_TSD_Slot9Helper_t)(void* self);
-static fn_TSD_Slot9Helper_t fn_TSD_Slot9Helper = nullptr;
-
-// FUN_1400e2700 — open-or-check dialog: param2=true -> start new tutorial dialog,
-// param2=false -> just validate state. Complex logic handles string-based and
-// external-based dialog resolution.
-typedef void (*fn_TSD_OpenDialog_t)(void* self, char param2);
-static fn_TSD_OpenDialog_t fn_TSD_OpenDialog = nullptr;
-
-// FUN_1400e2330 — iterate all open dialogs: set/clear the 0x1000000 hide flag on
-// every root element and each of its children (param2=true -> show, false -> hide).
-typedef void (*fn_TSD_SetDialogFlags_t)(void* self, char param2);
-static fn_TSD_SetDialogFlags_t fn_TSD_SetDialogFlags = nullptr;
-
-// FUN_1400e24f0 — find current TutorialSetupDialog instance in the open dialog list.
-// Writes InternalBasePtr to *param_out; returns null if not found.
-typedef void (*fn_TSD_FindInstance_t)(void* self, void* retval);
-static fn_TSD_FindInstance_t fn_TSD_FindInstance = nullptr;
-
-// FUN_1400e1600 — look up dialog instance by type string from a string vector entry.
-// (retval, string_ptr) -> sets retval to matching InternalBasePtr or null.
-typedef void (*fn_TSD_FindByString_t)(void* retval, void* string_ptr);
-static fn_TSD_FindByString_t fn_TSD_FindByString = nullptr;
-
-// FUN_140101a80 — set player controller's followed/selected building (BuildComponent).
-// (playerController, retval, entityAsUlong) — selects building for follow/inspection.
-typedef void (*fn_SetFollowBuilding_t)(void* playerController, void* retval, uint64_t entityPtr);
-static fn_SetFollowBuilding_t fn_SetFollowBuilding = nullptr;
-
-// FUN_140102b60 — set player controller edit mode (0 = none).
-// Used when dismissing an entity selection (e.g., not a building).
-typedef void (*fn_SetEditMode_t)(void* playerController, int mode);
-static fn_SetEditMode_t fn_SetEditMode = nullptr;
-
-static bool s_slot8FuncsResolved = false;
-
-static void ResolveTSDSlotFuncs() {
-    if (s_slot8FuncsResolved) return;
-    fn_TSD_Slot9Helper   = (fn_TSD_Slot9Helper_t)  ResolveAddr(Module::Exe, 0x1400e29f0);
-    fn_TSD_OpenDialog    = (fn_TSD_OpenDialog_t)    ResolveAddr(Module::Exe, 0x1400e2700);
-    fn_TSD_SetDialogFlags= (fn_TSD_SetDialogFlags_t)ResolveAddr(Module::Exe, 0x1400e2330);
-    fn_TSD_FindInstance  = (fn_TSD_FindInstance_t)  ResolveAddr(Module::Exe, 0x1400e24f0);
-    fn_TSD_FindByString  = (fn_TSD_FindByString_t)  ResolveAddr(Module::Exe, 0x1400e1600);
-    fn_SetFollowBuilding = (fn_SetFollowBuilding_t)  ResolveAddr(Module::Exe, 0x140101a80);
-    fn_SetEditMode       = (fn_SetEditMode_t)        ResolveAddr(Module::Exe, 0x140102b60);
-    s_slot8FuncsResolved = true;
-}
-
-// ============================================================
-// Locally resolved function pointers
-// (not yet in engine_funcs.h — resolved from exe exref table or direct addresses)
-// ============================================================
-
-// IO::Serializer::Serializer(this, stream, mode) — via exref 0x140152ad8
-typedef void (*fn_SerializerCtor_t)(void* self, void* stream, int mode);
-static fn_SerializerCtor_t fn_SerializerCtor_local = nullptr;
-
-// IO::Serializer::~Serializer(this) — via exref 0x140152ad0
-typedef void (*fn_SerializerDtor_t)(void* self);
-static fn_SerializerDtor_t fn_SerializerDtor_local = nullptr;
-
-// IO::Serializer::Serialize(this, int* field, const char* name) — via exref 0x140152ac8
-typedef void (*fn_SerializeInt_t)(void* self, void* field, const char* name);
-static fn_SerializeInt_t fn_SerializeInt_local = nullptr;
-
-// System::String::Serialize(this, serializer) — via exref 0x140151238
-typedef void (*fn_StringSerialize_t)(void* self, void* serializer);
-static fn_StringSerialize_t fn_StringSerialize_local = nullptr;
-
-// System::Filename::Filename(this) — default ctor, via exref 0x140151d40
-typedef void (*fn_FilenameCtor_t)(void* self);
-static fn_FilenameCtor_t fn_FilenameCtor_local = nullptr;
-
-// System::Filename::~Filename(this) — dtor, via exref 0x1401529e8
-typedef void (*fn_FilenameDtor_t)(void* self);
-static fn_FilenameDtor_t fn_FilenameDtor_local = nullptr;
-
-// FUN_140028860 — string vector resize helper (exe-local)
-// Signature: (vector_ptr, new_count) — manages String[] array with ptr+count+cap layout
-typedef void (*fn_StringVectorResize_t)(void* vecPtr, uint32_t newCount);
-static fn_StringVectorResize_t fn_StringVectorResize_local = nullptr;
-
-// FUN_140028650 — serialize External pointer as a reference (exe-local)
-// Signature: (External** fieldPtr, Serializer*)
-typedef void (*fn_SerializeExternalPtr_t)(void* fieldPtr, void* serializer);
-static fn_SerializeExternalPtr_t fn_SerializeExternalPtr_local = nullptr;
-
-// FUN_14001b1d0 — ResolveExternalByName(String*) — resolve external resource by name
-typedef void (*fn_ResolveExternalByName_t)(void* str);
-static fn_ResolveExternalByName_t fn_ResolveExternalByName_local = nullptr;
-
-static bool s_localFuncsResolved = false;
-
-static void ResolveTutorialSetupDialogFuncs() {
-    if (s_localFuncsResolved) return;
-
-    // Resolve via exref table entries in exe .rdata
-    // Each exref is a void* slot filled at startup with the resolved runtime function ptr.
-    auto loadExref = [](uintptr_t addr) -> void* {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, addr));
-        return (slot && *slot) ? *slot : nullptr;
-    };
-
-    fn_SerializerCtor_local  = (fn_SerializerCtor_t) loadExref(0x140152ad8);
-    fn_SerializerDtor_local  = (fn_SerializerDtor_t) loadExref(0x140152ad0);
-    fn_SerializeInt_local    = (fn_SerializeInt_t)   loadExref(0x140152ac8);
-    fn_StringSerialize_local = (fn_StringSerialize_t)loadExref(0x140151238);
-    fn_FilenameCtor_local    = (fn_FilenameCtor_t)   loadExref(0x140151d40);
-    fn_FilenameDtor_local    = (fn_FilenameDtor_t)   loadExref(0x1401529e8);
-
-    // Direct exe addresses for inline helpers
-    fn_StringVectorResize_local   = (fn_StringVectorResize_t)  ResolveAddr(Module::Exe, 0x140028860);
-    fn_SerializeExternalPtr_local = (fn_SerializeExternalPtr_t)ResolveAddr(Module::Exe, 0x140028650);
-    fn_ResolveExternalByName_local= (fn_ResolveExternalByName_t)ResolveAddr(Module::Exe, 0x14001b1d0);
-
-    s_localFuncsResolved = true;
-}
 
 // ============================================================
 // TutorialSetupDialog::ScalarDtor (vtable slot 0, exe 0x140028620)
@@ -242,8 +120,59 @@ void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags) {
 // two int fields, and resolves external reference by name on load.
 //
 // Returns 1 (true) always.
+//
+// Serializer/String/Filename functions are resolved via exref dispatch table
+// at startup (in ResolveTutorialSetupDialogFuncs). StringArray_Resize,
+// SerializeExternalPtr, and ResolveExternalByName come from engine_funcs.h.
+
+// IO::Serializer::Serializer(this, stream, mode) — via exref 0x140152ad8
+typedef void (*fn_SerializerCtor_t)(void* self, void* stream, int mode);
+static fn_SerializerCtor_t fn_SerializerCtor_local = nullptr;
+
+// IO::Serializer::~Serializer(this) — via exref 0x140152ad0
+typedef void (*fn_SerializerDtor_t)(void* self);
+static fn_SerializerDtor_t fn_SerializerDtor_local = nullptr;
+
+// IO::Serializer::Serialize(this, int* field, const char* name) — via exref 0x140152ac8
+typedef void (*fn_SerializeInt_t)(void* self, void* field, const char* name);
+static fn_SerializeInt_t fn_SerializeInt_local = nullptr;
+
+// System::String::Serialize(this, serializer) — via exref 0x140151238
+typedef void (*fn_StringSerialize_t)(void* self, void* serializer);
+static fn_StringSerialize_t fn_StringSerialize_local = nullptr;
+
+// System::Filename::Filename(this) — default ctor, via exref 0x140151d40
+typedef void (*fn_FilenameCtor_t)(void* self);
+static fn_FilenameCtor_t fn_FilenameCtor_local = nullptr;
+
+// System::Filename::~Filename(this) — dtor, via exref 0x1401529e8
+typedef void (*fn_FilenameDtor_t)(void* self);
+static fn_FilenameDtor_t fn_FilenameDtor_local = nullptr;
+
+static bool s_serializerFuncsResolved = false;
+
+static void ResolveSerializerFuncs() {
+    if (s_serializerFuncsResolved) return;
+
+    // Resolve via exref table entries in exe .rdata
+    // Each exref is a void* slot filled at startup with the resolved runtime function ptr.
+    auto loadExref = [](uintptr_t addr) -> void* {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, addr));
+        return (slot && *slot) ? *slot : nullptr;
+    };
+
+    fn_SerializerCtor_local  = (fn_SerializerCtor_t) loadExref(0x140152ad8);
+    fn_SerializerDtor_local  = (fn_SerializerDtor_t) loadExref(0x140152ad0);
+    fn_SerializeInt_local    = (fn_SerializeInt_t)   loadExref(0x140152ac8);
+    fn_StringSerialize_local = (fn_StringSerialize_t)loadExref(0x140151238);
+    fn_FilenameCtor_local    = (fn_FilenameCtor_t)   loadExref(0x140151d40);
+    fn_FilenameDtor_local    = (fn_FilenameDtor_t)   loadExref(0x1401529e8);
+
+    s_serializerFuncsResolved = true;
+}
+
 uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
-    ResolveTutorialSetupDialogFuncs();
+    ResolveSerializerFuncs();
     uintptr_t s = (uintptr_t)self;
 
     // Create the serializer on the stack (24 bytes for Serializer object)
@@ -257,7 +186,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     // On load (serializer mode == 0): resize 1st vector to the loaded count
     void* serializerBase = *(void**)serializer;
     if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
-        fn_StringVectorResize_local((void*)(s + 0x20), count1);
+        fn_StringArray_Resize((void*)(s + 0x20), (int)count1);
     }
 
     // Serialize each string in 1st vector
@@ -275,7 +204,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     // On load: resize 2nd vector
     serializerBase = *(void**)serializer;
     if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
-        fn_StringVectorResize_local((void*)(s + 0x30), count2);
+        fn_StringArray_Resize((void*)(s + 0x30), (int)count2);
     }
 
     // Serialize each string in 2nd vector
@@ -290,7 +219,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     fn_StringSerialize_local((void*)(s + 0x40), serializer);
 
     // Serialize External* pointer at +0x50 (as external reference)
-    fn_SerializeExternalPtr_local((void*)(s + 0x50), serializer);
+    fn_SerializeExternalPtr((void*)(s + 0x50), serializer);
 
     // Serialize int32 at +0x48
     fn_SerializeInt_local(serializer, (void*)(s + 0x48), nullptr);
@@ -305,7 +234,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     // On load: resolve the external resource by name
     serializerBase = *(void**)serializer;
     if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
-        fn_ResolveExternalByName_local((void*)(s + 0x58));
+        fn_ResolveExternalByName((void*)(s + 0x58));
     }
 
     // Destroy temporary Filename
@@ -351,7 +280,8 @@ void TutorialSetupDialog_OnEvent(void* self) {
 // ============================================================
 //
 // Called when the player selects an entity from the tutorial setup list.
-// Calls setup helper (FUN_1400e29f0) then validates dialog state (FUN_1400e2700(self,false)).
+// Calls setup helper (fn_TSD_Slot9Helper) then validates dialog state
+// (fn_TSD_OpenDialog(self, false)).
 // Iterates the 2nd string vector (+0x30/+0x38): for each slot, looks up the matching
 // open dialog instance by type name string. If found, reads the Base* at instance+0x30:
 //   - If entity IsA BuildComponent: IsDerivedFrom check, calls fn_SetFollowBuilding
@@ -360,7 +290,6 @@ void TutorialSetupDialog_OnEvent(void* self) {
 //     to clear edit selection, then CloseDialog on the dialog instance.
 // This implements the "click on a tutorial target building" selection flow.
 void TutorialSetupDialog_Slot8(void* self) {
-    ResolveTSDSlotFuncs();
     uintptr_t s = (uintptr_t)self;
 
     fn_TSD_Slot9Helper(self);
@@ -406,12 +335,12 @@ void TutorialSetupDialog_Slot8(void* self) {
 // Called to activate the tutorial setup — runs setup helper then opens the dialog
 // with param=true (indicating a new setup/start rather than just validation).
 //
-// FUN_1400e29f0(self): resets all open dialogs to hidden (FUN_1400e2330(self, false)),
+// fn_TSD_Slot9Helper(self): resets all open dialogs to hidden
+//   (fn_TSD_SetDialogFlags(self, false)),
 //   then iterates the 1st string vector (+0x20/+0x28) and shows the matching ones.
-// FUN_1400e2700(self, true): checks/opens the tutorial setup dialog resource
+// fn_TSD_OpenDialog(self, true): checks/opens the tutorial setup dialog resource
 //   (reads +0x40/+0x50/+0x58/+0x68 fields) if GetAddDialogCount == 0.
 void TutorialSetupDialog_Slot9(void* self) {
-    ResolveTSDSlotFuncs();
     fn_TSD_Slot9Helper(self);
     fn_TSD_OpenDialog(self, '\x01');
 }
@@ -421,12 +350,10 @@ void TutorialSetupDialog_Slot9(void* self) {
 // ============================================================
 //
 // Closes the currently open TutorialSetupDialog instance.
-// Sets all dialogs to shown state (FUN_1400e2330(self, true)),
+// Sets all dialogs to shown state (fn_TSD_SetDialogFlags(self, true)),
 // finds the current TutorialSetupDialog instance, and if found, calls
 // UI::UserInterface::CloseDialog on it.
 void TutorialSetupDialog_Slot10(void* self) {
-    ResolveTSDSlotFuncs();
-
     // Show all dialogs (unhide)
     fn_TSD_SetDialogFlags(self, '\x01');
 

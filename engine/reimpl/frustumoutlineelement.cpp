@@ -29,6 +29,11 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+static const uintptr_t kVtable_FrustumOutlineElement = 0x14015c2a0;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -44,9 +49,7 @@ static HookInfo g_hookDraw;
 // From decompile: sets vtable 0x14015c2a0, UI::Element::~Element(self), conditional free
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "FrustumOutlineElement::Dtor";
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015c2a0);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_FrustumOutlineElement);
     fn_Element_Dtor(self);
     if (flags & 1) fn_MemFreeStatic(self);
     return self;

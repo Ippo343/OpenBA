@@ -19,7 +19,6 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include <cstdint>
 
 // ============================================================
@@ -625,16 +624,72 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 //
 // Original: 0x140068680.
 
+// ============================================================
+// EventNotifyDialog::NavigateToEvent (FUN_1400685a0)
+// ============================================================
+// Navigates the camera to the map location of the active event at [index].
+//
+// Steps:
+//  1. Get the event log from gameWorld+0x138. Get the event list data at +0x18.
+//     Each entry in this list is 0x28 bytes; field +0x18 = tile index (int).
+//  2. Look up the event log entry index from the activeEventArray:
+//     activeEventArray[index*0x30 + 0x8] = the event log entry index.
+//  3. Look up the tile index in the event log entry list.
+//  4. Convert tile index to world XY (centered at -0.5f per tile).
+//  5. Call fn_MapGetTerrainPos (terrain pick) to get the 3D camera target.
+//  6. Write result to cameraTarget (gameWorld+0xe0) at offsets +0x1c/+0x20/+0x24.
+//
+// Constant: DAT_140172114 = 0.5f (tile center offset).
+// Original: 0x1400685a0.
+static void EventNotifyDialog_NavigateToEvent(EventNotifyDialog* self, int index) {
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+
+    // Step 1+2: get event log entry index from active event array
+    uintptr_t activeEvents = *(uintptr_t*)((uintptr_t)self + 0xD8);
+    int eventLogEntryIdx = *(int*)(activeEvents + 8 + (uintptr_t)index * 0x30);
+
+    // Step 3: look up tile index in event log entry list
+    // eventLog = *(gameWorld+0x138); entryList = *(eventLog+0x18); entry = entryList + idx*0x28
+    uintptr_t eventLog   = *(uintptr_t*)(game + 0x138);
+    uintptr_t entryList  = *(uintptr_t*)(eventLog + 0x18);
+    int tileIdx = *(int*)(entryList + 0x18 + (uintptr_t)eventLogEntryIdx * 0x28);
+
+    if (tileIdx < 0) return;  // no valid tile position
+
+    // Step 4: convert tile index to world XY
+    // mapGrid = *(gameWorld+0xf8); gridSize = *mapGrid
+    int* mapGrid = *(int**)(game + 0xF8);
+    int gridSize = *mapGrid;
+    float halfSize = (float)(gridSize >> 1) - 0.5f;  // = (gridSize/2) - 0.5f (DAT_140172114)
+    float inXY[3] = {
+        (float)(tileIdx % gridSize) - halfSize,  // worldX
+        (float)(tileIdx / gridSize) - halfSize,  // worldY
+        0.0f
+    };
+
+    // Step 5: terrain pick — get actual 3D world position
+    float outPos[3] = {};
+    if (fn_MapGetTerrainPos) {
+        fn_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);
+    } else {
+        // Fallback: use 2D position directly (no height)
+        outPos[0] = inXY[0];
+        outPos[1] = inXY[1];
+        outPos[2] = 0.0f;
+    }
+
+    // Step 6: write to camera target at gameWorld+0xe0 (+0x1c/+0x20/+0x24)
+    uintptr_t camTarget = *(uintptr_t*)(game + 0xE0);
+    *(float*)(camTarget + 0x1C) = outPos[0];
+    *(float*)(camTarget + 0x20) = outPos[1];
+    *(float*)(camTarget + 0x24) = outPos[2];
+}
+
 void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int eventType, int eventData) {
     if (eventType == 0x12) {
         int activeCount = *(int*)((uintptr_t)self + 0xE0);
         if (eventData > 0x5DB && eventData < activeCount + 0x5DC) {
-            // Navigate to event: FUN_1400685a0(self, eventData - 0x5DC)
-            // Call directly from exe
-            typedef void (*fn_NavigateToEvent_t)(void* self, int index);
-            static fn_NavigateToEvent_t s_fn = nullptr;
-            if (!s_fn) s_fn = (fn_NavigateToEvent_t)ResolveAddr(Module::Exe, 0x1400685a0);
-            if (s_fn) s_fn(self, eventData - 0x5DC);
+            EventNotifyDialog_NavigateToEvent(self, eventData - 0x5DC);
         }
     }
 }

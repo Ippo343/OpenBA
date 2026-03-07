@@ -60,26 +60,19 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serializer, (void*)(s + 0x34), nullptr);
     g_fn_Serialize_Int(serializer, (void*)(s + 0x24), nullptr);
     // FUN_140002340: ExternalPtr<BuildingDescription> field serialize (checks DAT_1401c7318)
-    typedef void (*fn_ExternalPtr_Build_t)(void* field, void* serializer);
-    static fn_ExternalPtr_Build_t fn_BuildPtr_Serialize = nullptr;
-    if (!fn_BuildPtr_Serialize)
-        fn_BuildPtr_Serialize = (fn_ExternalPtr_Build_t)ResolveAddr(Module::Exe, 0x140002340);
-    fn_BuildPtr_Serialize((void*)(s + 0x38), serializer);
+    fn_ExternalPtr_BuildSerialize((void*)(s + 0x38), serializer);
     g_fn_Serializer_Dtor(serializer);
     return 1;
 }
 
 // Cleanup: call vtable[0] dtor with flags=0, then call Ctor to reinitialize in place
 // FUN_1400329c0: (*(vtable[0]))(self, 0); CreateDragDescription_Ctor(self);
-// Ctor = CreateInPlace at 0x1400329b0 (unhookable whole-function, resolve inline)
+// Ctor = CreateInPlace at 0x1400329b0 (unhookable whole-function, in engine_funcs)
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "CreateDragDescription::Cleanup";
     typedef void* (*fn_Dtor_t)(void*, uint32_t);
     ((fn_Dtor_t)(*(void***)self)[0])(self, 0);
-    typedef void (*fn_Ctor_t)(void*);
-    static fn_Ctor_t fn_Ctor = nullptr;
-    if (!fn_Ctor) fn_Ctor = (fn_Ctor_t)ResolveAddr(Module::Exe, 0x1400329b0);
-    fn_Ctor(self);
+    fn_CreateDragDescription_Ctor(self);
 }
 
 // ============================================================

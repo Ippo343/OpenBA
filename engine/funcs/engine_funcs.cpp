@@ -788,6 +788,29 @@ fn_ComponentBase_Serialize_t fn_ComponentBase_Serialize = nullptr;
 fn_DynArray_Resize_t fn_DynArray_Resize = nullptr;
 fn_MemZeroFill_t fn_MemZeroFill = nullptr;
 fn_StringArray_Resize_t fn_StringArray_Resize = nullptr;
+fn_ExternalPtr_BuildSerialize_t fn_ExternalPtr_BuildSerialize = nullptr;
+fn_WeatherResize_t fn_WeatherResize = nullptr;
+fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize = nullptr;
+fn_ToolbarDescription_cleanup_t fn_ToolbarDescription_cleanup = nullptr;
+fn_CreateBridgeDescription_Ctor_t fn_CreateBridgeDescription_Ctor = nullptr;
+fn_CreateDragDescription_Ctor_t fn_CreateDragDescription_Ctor = nullptr;
+fn_CreateFencedDescription_Ctor_t fn_CreateFencedDescription_Ctor = nullptr;
+
+// TutorialSetupDialog helpers
+fn_SerializeExternalPtr_t fn_SerializeExternalPtr = nullptr;
+fn_TSD_Slot9Helper_t fn_TSD_Slot9Helper = nullptr;
+fn_TSD_OpenDialog_t fn_TSD_OpenDialog = nullptr;
+fn_TSD_SetDialogFlags_t fn_TSD_SetDialogFlags = nullptr;
+fn_TSD_FindInstance_t fn_TSD_FindInstance = nullptr;
+fn_TSD_FindByString_t fn_TSD_FindByString = nullptr;
+fn_SetFollowBuilding_t fn_SetFollowBuilding = nullptr;
+fn_SetEditMode_t fn_SetEditMode = nullptr;
+
+// Phase G Wave 1: SaveLoadDialog + EventNotifyDialog
+fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod = nullptr;
+fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName = nullptr;
+uint32_t* g_TypeId_DialogInstance = nullptr;
+fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
 
 // ============================================================
 // Initialization
@@ -2978,6 +3001,61 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14003f010));
     fn_StringArray_Resize = reinterpret_cast<fn_StringArray_Resize_t>(
         ResolveAddr(Module::Exe, 0x140028860));
+    fn_ExternalPtr_BuildSerialize = reinterpret_cast<fn_ExternalPtr_BuildSerialize_t>(
+        ResolveAddr(Module::Exe, 0x140002340));
+    fn_WeatherResize = reinterpret_cast<fn_WeatherResize_t>(
+        ResolveAddr(Module::Exe, 0x1400198a0));
+    fn_WeatherExternalSerialize = reinterpret_cast<fn_WeatherExternalSerialize_t>(
+        ResolveAddr(Module::Exe, 0x1400196a0));
+    fn_ToolbarDescription_cleanup = reinterpret_cast<fn_ToolbarDescription_cleanup_t>(
+        ResolveAddr(Module::Exe, 0x14012db70));
+    fn_CreateBridgeDescription_Ctor = reinterpret_cast<fn_CreateBridgeDescription_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400328c0));
+    fn_CreateDragDescription_Ctor = reinterpret_cast<fn_CreateDragDescription_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400329b0));
+    fn_CreateFencedDescription_Ctor = reinterpret_cast<fn_CreateFencedDescription_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x140004920));
+
+    // TutorialSetupDialog helpers (exe-internal)
+    fn_SerializeExternalPtr = reinterpret_cast<fn_SerializeExternalPtr_t>(
+        ResolveAddr(Module::Exe, 0x140028650));
+    fn_TSD_Slot9Helper = reinterpret_cast<fn_TSD_Slot9Helper_t>(
+        ResolveAddr(Module::Exe, 0x1400e29f0));
+    fn_TSD_OpenDialog = reinterpret_cast<fn_TSD_OpenDialog_t>(
+        ResolveAddr(Module::Exe, 0x1400e2700));
+    fn_TSD_SetDialogFlags = reinterpret_cast<fn_TSD_SetDialogFlags_t>(
+        ResolveAddr(Module::Exe, 0x1400e2330));
+    fn_TSD_FindInstance = reinterpret_cast<fn_TSD_FindInstance_t>(
+        ResolveAddr(Module::Exe, 0x1400e24f0));
+    fn_TSD_FindByString = reinterpret_cast<fn_TSD_FindByString_t>(
+        ResolveAddr(Module::Exe, 0x1400e1600));
+    fn_SetFollowBuilding = reinterpret_cast<fn_SetFollowBuilding_t>(
+        ResolveAddr(Module::Exe, 0x140101a80));
+    fn_SetEditMode = reinterpret_cast<fn_SetEditMode_t>(
+        ResolveAddr(Module::Exe, 0x140102b60));
+
+    // Phase G Wave 1: SaveLoadDialog DoLoad/DoSave/DoDelete + EventNotifyDialog NavigateToEvent
+    // Save::SaveLoad::CheckMod — Runtime DLL export (via dispatch table at 0x140152738)
+    fn_SaveLoad_CheckMod = reinterpret_cast<fn_SaveLoad_CheckMod_t>(
+        ResolveExport("?CheckMod@SaveLoad@Save@@QEAAHHI@Z"));
+    if (!fn_SaveLoad_CheckMod) {
+        // Fallback: resolve via exe dispatch table
+        fn_SaveLoad_CheckMod = *reinterpret_cast<fn_SaveLoad_CheckMod_t*>(
+            ResolveAddr(Module::Exe, 0x140152738));
+    }
+    // Save::SaveLoad::SetSaveName — Runtime DLL export (via dispatch table at 0x140151650)
+    fn_SaveLoad_SetSaveName = reinterpret_cast<fn_SaveLoad_SetSaveName_t>(
+        ResolveExport("?SetSaveName@SaveLoad@Save@@QEAAXV?$String@D@System@@H@Z"));
+    if (!fn_SaveLoad_SetSaveName) {
+        fn_SaveLoad_SetSaveName = *reinterpret_cast<fn_SaveLoad_SetSaveName_t*>(
+            ResolveAddr(Module::Exe, 0x140151650));
+    }
+    // DialogInstance type ID — _typeInfo_exref at 0x140151728
+    g_TypeId_DialogInstance = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x140151728));
+    // FUN_14009f3e0 — terrain/scene pick from 2D map position (exe-only)
+    fn_MapGetTerrainPos = reinterpret_cast<fn_MapGetTerrainPos_t>(
+        ResolveAddr(Module::Exe, 0x14009f3e0));
 
     // Sprite ctors — dispatch table
     fn_Sprite_Sprite = *reinterpret_cast<fn_Sprite_Sprite_t*>(

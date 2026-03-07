@@ -37,6 +37,11 @@
 #include <cstdint>
 
 // ============================================================
+// Vtable addresses (exe .rdata, resolved once at runtime)
+// ============================================================
+static const uintptr_t kVtable_EnvironmentDescription = 0x14015e1f0;
+
+// ============================================================
 // Hook state
 // ============================================================
 static HookInfo g_hookDtor;
@@ -65,25 +70,11 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "EnvironmentDescription::Serialize";
     uintptr_t s = (uintptr_t)self;
 
-    // Resolve exe helper functions
-    typedef void (*fn_ExternalPtrSerializeBuild_t)(void*, void*);
-    typedef void (*fn_WeatherResize_t)(void*, int);
-    typedef void (*fn_WeatherExternalSerialize_t)(void*, void*);
-    static fn_ExternalPtrSerializeBuild_t fn_ExternalPtrSerializeBuild = nullptr;
-    static fn_WeatherResize_t fn_WeatherResize = nullptr;
-    static fn_WeatherExternalSerialize_t fn_WeatherExternalSerialize = nullptr;
-    if (!fn_ExternalPtrSerializeBuild)
-        fn_ExternalPtrSerializeBuild = (fn_ExternalPtrSerializeBuild_t)ResolveAddr(Module::Exe, 0x140002340);
-    if (!fn_WeatherResize)
-        fn_WeatherResize = (fn_WeatherResize_t)ResolveAddr(Module::Exe, 0x1400198a0);
-    if (!fn_WeatherExternalSerialize)
-        fn_WeatherExternalSerialize = (fn_WeatherExternalSerialize_t)ResolveAddr(Module::Exe, 0x1400196a0);
-
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
 
     // ExternalPtr at +0x20
-    fn_ExternalPtrSerializeBuild((void*)(s + 0x20), serializer);
+    fn_ExternalPtr_BuildSerialize((void*)(s + 0x20), serializer);
 
     // Serialize count at +0x30
     uint32_t count = *(uint32_t*)(s + 0x30);
@@ -98,7 +89,7 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     uintptr_t* arrPtr = *(uintptr_t**)(s + 0x28);
     for (uint32_t i = 0; i < count; i++) {
         fn_WeatherExternalSerialize(arrPtr, serializer);
-        fn_ExternalPtrSerializeBuild(arrPtr + 1, serializer);
+        fn_ExternalPtr_BuildSerialize(arrPtr + 1, serializer);
         arrPtr += 2;
     }
 
@@ -131,9 +122,7 @@ static void Reimpl_Cleanup(void* self) {
     // Re-construct: External::External + set vtable + init fields
     fn_External_External(self);
     uintptr_t s = (uintptr_t)self;
-    static void* vtable = nullptr;
-    if (!vtable) vtable = (void*)ResolveAddr(Module::Exe, 0x14015e1f0);
-    *(void**)self = vtable;
+    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable_EnvironmentDescription);
     *(uint64_t*)(s + 0x20) = 0;
     *(uint64_t*)(s + 0x28) = 0;
     *(uint64_t*)(s + 0x30) = 0;
