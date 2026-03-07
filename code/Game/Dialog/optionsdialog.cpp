@@ -40,56 +40,50 @@ enum OptionsElementId {
 };
 
 // ============================================================
-// Startup (0x1400742d0): Find all UI elements, assign IDs, populate initial values
+// Video device data structure layout (from Ghidra analysis)
 // ============================================================
-// Layout of audio config singleton (int[4]):
-//   +0x00: UI volume (sliderUI)
-//   +0x04: Music volume (sliderMusic)
-//   +0x08: Ambient volume (sliderAmbient)
-//   +0x0C: Effect volume (sliderEffect)
+// GraphicsInterface (from Video::Device::GetInterface):
+//   +0x00: name (System::String, 8 bytes — passed as String* for AddItem)
+//   +0x08: adapter array pointer
+//   +0x10: adapter count (int)
 //
-// Layout of video config singleton (relevant fields):
-//   +0x04: renderer index (savedRenderer)
-//   +0x08: adapter index (savedAdapter)
-//   +0x0C: resolution width (savedWidth)
-//   +0x10: resolution height (savedHeight)
-//   +0x24: antialias (savedAntialias)
-//   +0x28: filter (savedFilter)
-//   +0x2C: shadow resolution combo index
-//   +0x30: shadow quality combo index
-//   +0x34: reflection quality combo index
-//   +0x38: refresh rate numerator (savedRefreshNum)
-//   +0x3C: refresh rate denominator (savedRefreshDen)
-//   +0x40: fullscreen flag (bool)
-//   +0x41: vsync flag (bool)
+// Adapter (stride 0x38):
+//   +0x00: name (System::String, 8 bytes)
+//   +0x08: display mode array pointer
+//   +0x10: display mode count (int)
 //
-// Layout of g_pGameSettings (int32_t array, but some byte-sized fields):
-//   +0x00 [0]: UI scale value (sliderUIScale)
-//   +0x04 [1]: autosave interval (comboAutosave selection, 0-8)
-//   +0x08 [2]: status icon distance (sliderStatusIcon)
-//   +0x0C [3]: status icon enabled (checkStatusIcon byte)
-//   +0x10 [4]: status icon scale * conversion constant (sliderStatusIconScale)
-//   +0x14 [5]: edge scroll (checkEdgeScroll byte)
-//   +0x15:     show celsius (checkShowCelsius byte)
-//   +0x16:     show weather (checkShowWeather byte)
-//   +0x17:     autoslow (checkAutoslow byte)
-//   +0x18 [6]: autopause (checkAutopause byte)
-//   +0x1C [7]: last active tab (tabOptions)
+// DisplayMode (stride 0x18):
+//   +0x00: width (uint32_t)
+//   +0x04: height (uint32_t)
+//   +0x08: refresh rate array pointer
+//   +0x10: refresh rate count (int)
 //
-// Slider range constants (as hex float):
-//   0x42c80000 = 100.0f (slider max for audio and status icon distance)
-//   0x42960000 = 75.0f  (UI scale min)
-//   0x43160000 = 150.0f (UI scale max)
-//   0x41c80000 = 25.0f  (status icon scale min)
-//   0x43480000 = 200.0f (status icon scale max)
+// RefreshRate (stride 0x08):
+//   +0x00: numerator (uint32_t)
+//   +0x04: denominator (uint32_t)
+
+// ============================================================
+// Layout comments for singletons
+// ============================================================
+// Audio config singleton (int[4]):
+//   +0x00: UI volume, +0x04: Music, +0x08: Ambient, +0x0C: Effect
 //
-// Scale conversion: sliderStatusIconScale = (int)settings[4] * DAT_1401720c4 * DAT_140172208
-// (two float multiplier constants for converting integer to display scale)
+// Video config singleton:
+//   +0x04: renderer, +0x08: adapter, +0x0C: width, +0x10: height
+//   +0x24: antialias, +0x28: filter
+//   +0x2C: shadow res, +0x30: shadow quality, +0x34: reflection quality
+//   +0x38: refresh num, +0x3C: refresh den, +0x40: fullscreen, +0x41: vsync
+//
+// g_pGameSettings (int32_t[8]):
+//   [0]=uiScale, [1]=autosave, [2]=statusIconDist, [3]=statusIconEnabled
+//   [4]=statusIconScale, [5]=edgeScroll, [6]=autopause, [7]=lastTab
+//   Byte: +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow
+//
+// Video::Device:
+//   +0x98: anisotropic filter level count (int)
+//   +0xF8: current renderer index (int)
 
 // Helper macro: find a named element in the dialog and store in outField.
-// Uses the fn_DialogInstance_FindElement non-trivial-return ABI:
-//   RCX=self, RDX=&retval(uint64_t), R8=name(String const&)
-// Returns the raw Internal* pointer stored in the 8-byte InternalPtr result.
 #define FIND_ELEMENT(outField, name)                       \
     do {                                                    \
         uint8_t _nameBuf[8];                               \
@@ -115,6 +109,332 @@ static inline void SetSliderValue(void* elem, float val) {
     if (elem) *(float*)((uintptr_t)elem + 0x128) = val;
 }
 
+// Helper: load a StringTable resource by path
+static void* LoadStringTable(const char* path) {
+    uint8_t filenameBuf[8];
+    fn_String_Ctor_CStr(filenameBuf, path);
+    fn_Filename_AdjustDelimiters(filenameBuf);
+    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    fn_String_Dtor(filenameBuf);
+    if (ext && g_TypeId_StringTable && fn_IsDerivedFrom(ext, *g_TypeId_StringTable))
+        return ext;
+    return nullptr;
+}
+
+// ============================================================
+// Forward declarations for internal helper functions
+// ============================================================
+static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self);
+static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self);
+static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self);
+static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self);
+
+// ============================================================
+// ValidateVideoConfig (replaces FUN_140072eb0)
+// ============================================================
+// Calls Video::Device::ValidateConfiguration to fix up any invalid
+// combinations of renderer/adapter/resolution/antialias settings.
+static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
+    if (!fn_VideoDevice_ValidateConfiguration || !g_pVideoDeviceSingleton) return;
+    fn_VideoDevice_ValidateConfiguration(
+        *g_pVideoDeviceSingleton,
+        (int*)&self->savedRenderer, (int*)&self->savedAdapter,
+        (int*)&self->savedWidth,    (int*)&self->savedHeight,
+        (int*)&self->savedRefreshNum, (int*)&self->savedRefreshDen,
+        (int*)&self->savedAntialias, (int*)&self->savedAdapter);
+}
+
+// ============================================================
+// PopulateFilterCombo (replaces FUN_140073800)
+// ============================================================
+// Fills texture filter combo: "None", "Bilinear", then "Anisotropic Nx" for each level.
+static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    if (!vidDev) return;
+
+    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
+    fn_ComboElement_RemoveAllItems(self->comboFilter);
+
+    void* stringTable = LoadStringTable("Dialog/StringTable.rsc:textureFilter");
+    if (!stringTable) return;
+
+    // Item 0: "None" (filter -1)
+    {
+        uint8_t textBuf[8];
+        fn_String_Ctor_Default(textBuf);
+        fn_StringTable_GetText(stringTable, textBuf, 0);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, textBuf, (void*)(intptr_t)-1);
+        fn_String_Dtor(textBuf);
+    }
+
+    // Item 1: "Bilinear" (filter 0)
+    {
+        uint8_t textBuf[8];
+        fn_String_Ctor_Default(textBuf);
+        fn_StringTable_GetText(stringTable, textBuf, 1);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, textBuf, (void*)(intptr_t)0);
+        fn_String_Dtor(textBuf);
+    }
+
+    // Anisotropic filter levels: "Anisotropic 1x", "Anisotropic 2x", etc.
+    int anisoLevels = *(int*)((uintptr_t)vidDev + 0x98);
+    if (anisoLevels > 0) {
+        // First level: "Anisotropic 1x"
+        uint8_t textBuf[8];
+        fn_String_Ctor_Default(textBuf);
+        fn_StringTable_GetText(stringTable, textBuf, 2);
+        uint8_t fmtBuf[8];
+        fn_String_Format(fmtBuf, "%s 1x", *(void**)textBuf);
+        fn_String_Dtor(textBuf);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, fmtBuf, (void*)(intptr_t)1);
+        fn_String_Dtor(fmtBuf);
+    }
+    // Higher levels: "Anisotropic 2x", "Anisotropic 4x", etc.
+    for (int level = 2; level <= anisoLevels; level += 2) {
+        uint8_t textBuf[8];
+        fn_String_Ctor_Default(textBuf);
+        fn_StringTable_GetText(stringTable, textBuf, 2);
+        uint8_t fmtBuf[8];
+        fn_String_Format(fmtBuf, "%s %ix", *(void**)textBuf, level);
+        fn_String_Dtor(textBuf);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, fmtBuf, (void*)(intptr_t)level);
+        fn_String_Dtor(fmtBuf);
+    }
+
+    // Set current selection based on savedFilter
+    int filterVal = (int)self->savedFilter;
+    int selIdx;
+    if (filterVal == -1) selIdx = 0;
+    else if (filterVal == 0) selIdx = 1;
+    else if (filterVal == 1) selIdx = 2;
+    else selIdx = (filterVal >> 1) + 2;
+
+    fn_InternalBasePtr_CheckPtr(&self->comboFilter);
+    fn_ComboElement_SetCurrentItem(self->comboFilter, selIdx);
+}
+
+// ============================================================
+// PopulateAntialiasCombo (replaces FUN_140073b10)
+// ============================================================
+// Fills antialias combo: "None", then "Nx multisample" for each supported mode.
+static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    if (!vidDev) return;
+
+    fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
+    fn_ComboElement_RemoveAllItems(self->comboAntialias);
+
+    void* stringTable = LoadStringTable("Dialog/StringTable.rsc:multiSample");
+
+    int modeCount = fn_VideoDevice_GetMultisampleModeCount
+                    ? fn_VideoDevice_GetMultisampleModeCount(vidDev) : 0;
+
+    for (int i = 0; i < modeCount; i++) {
+        bool supported = fn_VideoDevice_IsMultisampleModeSupported
+                         ? fn_VideoDevice_IsMultisampleModeSupported(vidDev, i) : false;
+        if (!supported) continue;
+
+        int addedIdx;
+        if (i == 0) {
+            // "None"
+            uint8_t textBuf[8];
+            fn_String_Ctor_Default(textBuf);
+            if (stringTable) fn_StringTable_GetText(stringTable, textBuf, 0);
+            uint8_t spriteBuf[16] = {};
+            fn_Sprite_DefaultCtor(spriteBuf);
+            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, textBuf,
+                                               (void*)(intptr_t)0);
+            fn_String_Dtor(textBuf);
+        } else {
+            // "Nx multisample" — e.g. "2x Multisample"
+            uint8_t textBuf[8];
+            fn_String_Ctor_Default(textBuf);
+            if (stringTable) fn_StringTable_GetText(stringTable, textBuf, 1);
+            uint8_t fmtBuf[8];
+            fn_String_Format(fmtBuf, "%ix %s", i + 1, *(void**)textBuf);
+            fn_String_Dtor(textBuf);
+            uint8_t spriteBuf[16] = {};
+            fn_Sprite_DefaultCtor(spriteBuf);
+            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, fmtBuf,
+                                               (void*)(intptr_t)i);
+            fn_String_Dtor(fmtBuf);
+        }
+
+        if ((int)self->savedAntialias == i) {
+            fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
+            fn_ComboElement_SetCurrentItem(self->comboAntialias, addedIdx);
+        }
+    }
+}
+
+// ============================================================
+// PopulateRefreshCombo (replaces FUN_140073d20)
+// ============================================================
+// Fills refresh rate combo for the currently selected resolution.
+static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    if (!vidDev) return;
+
+    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
+    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
+    intptr_t adapter = adapterArray + (intptr_t)(int)self->savedAdapter * 0x38;
+
+    // Find display mode matching saved width/height
+    int modeCount = *(int*)(adapter + 0x10);
+    intptr_t modes = *(intptr_t*)(adapter + 8);
+    int modeIdx = -1;
+    for (int i = 0; i < modeCount; i++) {
+        uint32_t w = *(uint32_t*)(modes + i * 0x18);
+        uint32_t h = *(uint32_t*)(modes + i * 0x18 + 4);
+        if (w == self->savedWidth && h == self->savedHeight) {
+            modeIdx = i;
+            break;
+        }
+    }
+    if (modeIdx < 0) modeIdx = 0;
+
+    intptr_t modeEntry = modes + (intptr_t)modeIdx * 0x18;
+    intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
+    int refreshCount = *(int*)(modeEntry + 0x10);
+
+    fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
+    fn_ComboElement_RemoveAllItems(self->comboRefresh);
+
+    int currentIdx = -1;
+    for (int i = 0; i < refreshCount; i++) {
+        int* refreshEntry = (int*)(refreshArray + (intptr_t)i * 8);
+        int num = refreshEntry[0];
+        int den = refreshEntry[1];
+        int rate = (den != 0) ? (num / den) : 0;
+
+        uint8_t fmtBuf[8];
+        fn_String_Format(fmtBuf, "%i", rate);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
+        fn_ComboElement_AddItem(self->comboRefresh, spriteBuf, fmtBuf, (void*)(intptr_t)i);
+        fn_String_Dtor(fmtBuf);
+
+        if ((uint32_t)num == self->savedRefreshNum && (uint32_t)den == self->savedRefreshDen)
+            currentIdx = i;
+    }
+
+    fn_InternalBasePtr_CheckPtr(&self->comboRefresh);
+    fn_ComboElement_SetCurrentItem(self->comboRefresh, currentIdx);
+}
+
+// ============================================================
+// PopulateResolutionCombo (replaces FUN_140073ec0)
+// ============================================================
+// Fills resolution combo with "WxH" entries for the current adapter.
+static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    if (!vidDev) return;
+
+    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
+    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
+    intptr_t adapter = adapterArray + (intptr_t)(int)self->savedAdapter * 0x38;
+    int modeCount = *(int*)(adapter + 0x10);
+    intptr_t modes = *(intptr_t*)(adapter + 8);
+
+    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
+    fn_ComboElement_RemoveAllItems(self->comboResolution);
+
+    int currentIdx = -1;
+    for (int i = 0; i < modeCount; i++) {
+        uint32_t w = *(uint32_t*)(modes + i * 0x18);
+        uint32_t h = *(uint32_t*)(modes + i * 0x18 + 4);
+
+        uint8_t fmtBuf[8];
+        fn_String_Format(fmtBuf, "%ix%i", w, h);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_InternalBasePtr_CheckPtr(&self->comboResolution);
+        fn_ComboElement_AddItem(self->comboResolution, spriteBuf, fmtBuf, (void*)(intptr_t)i);
+        fn_String_Dtor(fmtBuf);
+
+        if (w == self->savedWidth && h == self->savedHeight)
+            currentIdx = i;
+    }
+
+    fn_InternalBasePtr_CheckPtr(&self->comboResolution);
+    fn_ComboElement_SetCurrentItem(self->comboResolution, currentIdx);
+
+    OptionsDialog_PopulateRefreshCombo(self);
+}
+
+// ============================================================
+// PopulateAdapterCombo (replaces FUN_140074040)
+// ============================================================
+// Fills adapter combo for the current renderer, then repopulates dependent combos.
+static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    if (!vidDev) return;
+
+    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
+    fn_ComboElement_RemoveAllItems(self->comboAdapter);
+
+    void* gfxIface = fn_VideoDevice_GetInterface(vidDev, (int)self->savedRenderer);
+    int adapterCount = *(int*)((uintptr_t)gfxIface + 0x10);
+    intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
+
+    for (int i = 0; i < adapterCount; i++) {
+        // Adapter name is a System::String at the start of each 0x38-byte entry
+        void* adapterName = (void*)(adapterArray + (intptr_t)i * 0x38);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
+        fn_ComboElement_AddItem(self->comboAdapter, spriteBuf, adapterName, (void*)(intptr_t)i);
+    }
+
+    fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
+    fn_ComboElement_SetCurrentItem(self->comboAdapter, (int)self->savedAdapter);
+
+    OptionsDialog_PopulateResolutionCombo(self);
+    OptionsDialog_PopulateAntialiasCombo(self);
+    OptionsDialog_PopulateFilterCombo(self);
+}
+
+// ============================================================
+// PopulateVideoComboBoxes (replaces FUN_140074140)
+// ============================================================
+// Fills all video combo boxes: renderer, adapter, resolution, refresh, antialias, filter.
+static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
+    void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+    if (!vidDev) return;
+
+    // --- Renderer combo ---
+    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
+    fn_ComboElement_RemoveAllItems(self->comboRenderer);
+
+    int ifaceCount = fn_VideoDevice_GetInterfaceCount(vidDev);
+    for (int i = 0; i < ifaceCount; i++) {
+        // GraphicsInterface starts with a System::String (the interface name)
+        void* gfxIface = fn_VideoDevice_GetInterface(vidDev, i);
+        uint8_t spriteBuf[16] = {};
+        fn_Sprite_DefaultCtor(spriteBuf);
+        fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
+        fn_ComboElement_AddItem(self->comboRenderer, spriteBuf, gfxIface, (void*)(intptr_t)i);
+    }
+
+    fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
+    fn_ComboElement_SetCurrentItem(self->comboRenderer, (int)self->savedRenderer);
+
+    // --- Adapter combo (also populates resolution/antialias/filter) ---
+    OptionsDialog_PopulateAdapterCombo(self);
+}
+
+// ============================================================
+// Startup (0x1400742d0)
+// ============================================================
 void OptionsDialog_Startup(OptionsDialog* self) {
     // --- Buttons: find, assign IDs, set buttonCancel's hidden flag ---
     void *buttonOk = nullptr, *buttonCancel = nullptr, *buttonApply = nullptr;
@@ -127,23 +447,18 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     fn_Element_SetElementId(buttonApply,  kButton_Apply);
 
     // --- Resolve singletons ---
-    // Audio::Configuration singleton: int[4] of volume levels (UI/Music/Ambient/Effect)
     int32_t* audioVol = g_pAudioConfigSingleton
                         ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
-
-    // Video::Configuration singleton: holds current video settings
     void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
 
-    // Input::Configuration singleton (exref 0x140151738):
-    //   +0x08: mouse clip flag (bool)
-    //   +0x0A: software mouse flag (bool)
+    // Input::Configuration singleton (exref 0x140151738)
     void* inputCfg = nullptr;
     {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151738));
         if (exref && *exref) inputCfg = *exref;
     }
 
-    // --- Audio sliders: find, assign IDs, set range [0,100], value from audio config ---
+    // --- Audio sliders ---
     FIND_ELEMENT(self->sliderUI,     "sliderUI");
     FIND_ELEMENT(self->sliderMusic,  "sliderMusic");
     FIND_ELEMENT(self->sliderAmbient,"sliderAmbient");
@@ -176,7 +491,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     fn_Element_SetElementId(self->comboAntialias,  kCombo_Antialias);
     fn_Element_SetElementId(self->comboFilter,     kCombo_Filter);
 
-    // --- Save current video config into OptionsDialog fields ---
+    // --- Save current video config ---
     if (vidCfg) {
         self->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
         self->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
@@ -188,10 +503,10 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         self->savedFilter     = *(uint32_t*)((uintptr_t)vidCfg + 0x28);
     }
 
-    // --- Populate renderer/adapter/resolution/refresh/antialias/filter combos ---
-    fn_OptionsDialog_PopulateVideoComboBoxes(self);
+    // --- Populate all video combo boxes ---
+    OptionsDialog_PopulateVideoComboBoxes(self);
 
-    // --- Shadow/reflection quality combos: find, then set from video config ---
+    // --- Shadow/reflection quality combos ---
     FIND_ELEMENT(self->comboShadowRes,        "comboShadowResolution");
     FIND_ELEMENT(self->comboShadowQuality,    "comboShadowQuality");
     FIND_ELEMENT(self->comboReflectionQuality,"comboReflectionQuality");
@@ -204,7 +519,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
             *(int32_t*)((uintptr_t)vidCfg + 0x34));
     }
 
-    // --- Fullscreen / VSync checkboxes: find and set from video config ---
+    // --- Fullscreen / VSync checkboxes ---
     FIND_ELEMENT(self->checkFullscreen,"checkFullscreen");
     FIND_ELEMENT(self->checkVSync,     "checkVSync");
     if (vidCfg) {
@@ -212,7 +527,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         SetCheckState(self->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
     }
 
-    // --- Software mouse checkbox: find and set from Input::Configuration +0x0A ---
+    // --- Software mouse checkbox ---
     FIND_ELEMENT(self->checkSoftwareMouse,"checkSoftwareMouse");
     if (inputCfg) SetCheckState(self->checkSoftwareMouse,
                                 *(uint8_t*)((uintptr_t)inputCfg + 0x0A));
@@ -221,20 +536,10 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     FIND_ELEMENT(self->inputList,"inputList");
     fn_OptionsDialog_PopulateInputBindList(self);
 
-    // --- Autosave combo: load StringTable, add 9 items, set from settings ---
+    // --- Autosave combo ---
     FIND_ELEMENT(self->comboAutosave,"comboAutosave");
     {
-        uint8_t filenameBuf[8];
-        fn_String_Ctor_CStr(filenameBuf, "Dialog/StringTable.rsc:autoSave");
-        fn_Filename_AdjustDelimiters(filenameBuf);
-        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
-        fn_String_Dtor(filenameBuf);
-
-        void* stringTable = nullptr;
-        if (ext && g_TypeId_StringTable) {
-            if (fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) stringTable = ext;
-        }
-
+        void* stringTable = LoadStringTable("Dialog/StringTable.rsc:autoSave");
         if (stringTable && self->comboAutosave) {
             for (int i = 0; i < 9; i++) {
                 uint8_t textBuf[8];
@@ -282,8 +587,6 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         SetSliderRange(self->sliderStatusIcon, 0.0f, 100.0f);
         SetSliderValue(self->sliderStatusIcon, (float)gs[2]);
 
-        // sliderStatusIconScale: range [25,200], value = gs[4] * c1 * c2
-        // c1 and c2 are float constants in exe .rdata (conversion factors for display scale)
         SetSliderRange(self->sliderStatusIconScale, 25.0f, 200.0f);
         {
             float* c1 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720c4));
@@ -297,7 +600,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     if (inputCfg) SetCheckState(self->checkMouseClip,
                                 *(uint8_t*)((uintptr_t)inputCfg + 0x08));
 
-    // --- Tab options: find and restore last active tab ---
+    // --- Tab options: restore last active tab ---
     FIND_ELEMENT(self->tabOptions,"tabOptions");
     if (self->tabOptions) {
         int lastTab = g_pGameSettings ? g_pGameSettings[7] : 0;
@@ -310,12 +613,6 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 // ============================================================
 // OnEvent (0x140072f20): Handle options changes
 // ============================================================
-// Dispatches events by type:
-//   0x12 (button click): OK applies+saves+closes, Cancel reverts+closes,
-//                        Apply applies+saves, input bind buttons open bind dialog
-//   0x14 (combo selection): reads new selection, updates saved settings,
-//                           validates config, repopulates dependent combos
-//   0x17 (slider change): writes float value back to audio config singleton
 
 void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, int eventData) {
 
@@ -340,8 +637,6 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             uint8_t parentPtr[16];
             fn_InternalBasePtr_Ctor(parentPtr, parent);
 
-            // Calculate bind index and slot from element ID
-            // Original: bindIndex = (id - 0xD) / 2, slot = (id - 0xD) & 1 (sign-preserving)
             unsigned int offset = (unsigned int)(eventData - kInputBind_Base);
             unsigned int slot = offset & 0x80000001;
             if ((int)slot < 0) {
@@ -357,31 +652,28 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
     if (eventType == 0x14) {
         // --- Combo selection change ---
         if (eventData == kCombo_Renderer) {
-            // Renderer changed: update saved index, validate, repopulate adapter chain
             fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
             int curItem = *(int*)((uintptr_t)self->comboRenderer + 0x118);
             fn_InternalBasePtr_CheckPtr(&self->comboRenderer);
             void* data = fn_ComboElement_GetItemData(self->comboRenderer, curItem);
             self->savedRenderer = (uint32_t)(intptr_t)data;
-            fn_OptionsDialog_ValidateVideoConfig(self);
-            fn_OptionsDialog_PopulateAdapterCombo(self);
+            OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_PopulateAdapterCombo(self);
             return;
         }
         if (eventData == kCombo_Adapter) {
-            // Adapter changed: update saved index, validate, repopulate dependent combos
             fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
             int curItem = *(int*)((uintptr_t)self->comboAdapter + 0x118);
             fn_InternalBasePtr_CheckPtr(&self->comboAdapter);
             void* data = fn_ComboElement_GetItemData(self->comboAdapter, curItem);
             self->savedAdapter = (uint32_t)(intptr_t)data;
-            fn_OptionsDialog_ValidateVideoConfig(self);
-            fn_OptionsDialog_PopulateAntialiasCombo(self);
-            fn_OptionsDialog_PopulateFilterCombo(self);
-            fn_OptionsDialog_PopulateResolutionCombo(self);
+            OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_PopulateAntialiasCombo(self);
+            OptionsDialog_PopulateFilterCombo(self);
+            OptionsDialog_PopulateResolutionCombo(self);
             return;
         }
         if (eventData == kCombo_Resolution) {
-            // Resolution changed: read width/height from adapter display mode
             fn_InternalBasePtr_CheckPtr(&self->comboResolution);
             int curItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
             fn_InternalBasePtr_CheckPtr(&self->comboResolution);
@@ -391,8 +683,6 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             void* gfxIface = fn_VideoDevice_GetInterface(*g_pVideoDeviceSingleton, self->savedRenderer);
             int adapterIdx2 = self->savedAdapter;
 
-            // adapter[adapterIdx].displayModes[resolutionIdx] = {width, height, ...}
-            // Adapter stride = 0x38, mode list at adapter+8, mode stride = 0x18
             intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             intptr_t displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx * 0x38 + 8);
             intptr_t modeEntry = displayModes + (intptr_t)(int)(intptr_t)resData * 0x18;
@@ -404,12 +694,11 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx2 * 0x38 + 8);
             self->savedHeight = *(uint32_t*)(displayModes + (intptr_t)(int)(intptr_t)resData * 0x18 + 4);
 
-            fn_OptionsDialog_ValidateVideoConfig(self);
-            fn_OptionsDialog_PopulateRefreshCombo(self);
+            OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_PopulateRefreshCombo(self);
             return;
         }
         if (eventData == kCombo_Refresh) {
-            // Refresh changed: read numerator/denominator from refresh array
             fn_InternalBasePtr_CheckPtr(&self->comboResolution);
             int resItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
             fn_InternalBasePtr_CheckPtr(&self->comboResolution);
@@ -439,27 +728,25 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             refreshArray = *(intptr_t*)(modeEntry + 8);
             self->savedRefreshDen = *(uint32_t*)(refreshArray + (intptr_t)(int)(intptr_t)refData * 8 + 4);
 
-            fn_OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_ValidateVideoConfig(self);
             return;
         }
         if (eventData == kCombo_Antialias) {
-            // Antialias changed: store new value
             fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
             int curItem = *(int*)((uintptr_t)self->comboAntialias + 0x118);
             fn_InternalBasePtr_CheckPtr(&self->comboAntialias);
             void* data = fn_ComboElement_GetItemData(self->comboAntialias, curItem);
             self->savedAntialias = (uint32_t)(intptr_t)data;
-            fn_OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_ValidateVideoConfig(self);
             return;
         }
         if (eventData == kCombo_Filter) {
-            // Filter changed: store new value
             fn_InternalBasePtr_CheckPtr(&self->comboFilter);
             int curItem = *(int*)((uintptr_t)self->comboFilter + 0x118);
             fn_InternalBasePtr_CheckPtr(&self->comboFilter);
             void* data = fn_ComboElement_GetItemData(self->comboFilter, curItem);
             self->savedFilter = (uint32_t)(intptr_t)data;
-            fn_OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_ValidateVideoConfig(self);
             return;
         }
         return;
@@ -467,10 +754,21 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 
     if (eventType == 0x17) {
         // --- Slider value change ---
-        // Audio volume sliders write their float value (cast to int) to the
-        // audio configuration singleton. The singleton is accessed via
-        // _singleton_exref which we can't replicate here.
-        // This path is handled by the trampoline fallback in the hook wrapper.
+        int32_t* audioVol = g_pAudioConfigSingleton
+                            ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
+        if (!audioVol) return;
+
+        void** sliderField = nullptr;
+        switch (eventData) {
+            case kSlider_UI:      sliderField = &self->sliderUI; break;
+            case kSlider_Music:   sliderField = &self->sliderMusic; break;
+            case kSlider_Ambient: sliderField = &self->sliderAmbient; break;
+            case kSlider_Effect:  sliderField = &self->sliderEffect; break;
+            default: return;
+        }
+
+        fn_InternalBasePtr_CheckPtr(sliderField);
+        audioVol[eventData] = (int32_t)*(float*)((uintptr_t)*sliderField + 0x128);
         return;
     }
 }

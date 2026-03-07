@@ -222,6 +222,10 @@ void TutorialUI_Serialize(TutorialUI* self);
 // Startup (vtable +0x38): Toggles visibility of next/quit buttons based on current flags.
 void TutorialUI_Startup(TutorialUI* self);
 
+// OnRemove (vtable +0x48): On quitButton click (eventType=0x12, id=0x579), destroys SaveLoad
+// singleton at game+0x140 and transitions back to main menu through loading screen.
+void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int eventId);
+
 // ============================================================
 // CitizenUI
 // ============================================================
@@ -463,6 +467,12 @@ void StatusBarUI_Draw(StatusBarUI* self);
 // Startup (vtable +0x38): Main HUD update — iterates citizens for status counts,
 // updates health/happiness icons, resource amounts, weather, temperature, date.
 void StatusBarUI_Startup(StatusBarUI* self);
+
+// OnRemove (vtable +0x48): Status icon click handler — cycles to next citizen
+// with the clicked status problem (home/food/cold/job/tool/disease),
+// navigates camera and opens CitizenUI for them.
+// Icon IDs 100-105 map to statusBit (1<<0)..(1<<5).
+void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int eventId);
 
 // ============================================================
 // NoiseUI

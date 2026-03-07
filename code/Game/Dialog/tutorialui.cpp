@@ -8,6 +8,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
@@ -55,6 +56,94 @@ void TutorialUI_Serialize(TutorialUI* self) {
     // SetFlagsOnOff(elem, hideFlags=1, showFlags=0) — hide element
     fn_Element_SetFlagsOnOff((void*)closeElem, 1, 0);
     fn_String_Dtor(closeName);
+}
+
+// OnRemove (vtable +0x48): Quit tutorial button handler.
+// On button click (eventType=0x12) for quitButton (id=0x579):
+//   - Destroys the SaveLoad singleton stored at game+0x140.
+//   - Allocates and constructs three nested loop objects:
+//       MenuDialogLoopT (0xc00): "Dialog/MainMenu.rsc" — the main menu dialog loop
+//       GameLoadDialogLoopT (0xb60): "Dialog/Loading.rsc" — loading screen wrapper
+//       GameLoaderLoop (0x48): outermost loader, queued as engine's next loop
+//   - Sets fullscreen fade to black and transitions back to main menu.
+// Called from reimpl/tutorialui.cpp Reimpl_OnRemove.
+void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int eventId) {
+    (void)self;
+    (void)param2;
+    if (eventType != 0x12 || eventId != 0x579)
+        return;
+
+    // Grab the engine singleton (DAT_1401c3dd8 = *g_pGameWorldSingleton)
+    uintptr_t eng = (uintptr_t)*g_pGameWorldSingleton;
+
+    // Destroy and free the SaveLoad object stored at eng+0x140
+    void* saveLoad = *(void**)(eng + 0x140);
+    if (saveLoad) {
+        fn_SaveLoad_Dtor(saveLoad);
+        fn_MemFreeStatic(saveLoad);
+    }
+    *(void**)(eng + 0x140) = nullptr;
+
+    // --- Step 1: Allocate and construct the MenuDialogLoopT (0xc00 bytes) ---
+    // This is the main menu dialog loop that will display after the loading screen.
+    void* menuLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xc00, 8);
+    void* pMenuLoop = nullptr;
+    if (menuLoop) {
+        uint64_t menuNameStr = 0;
+        fn_String_Ctor_CStr(&menuNameStr, "Dialog/MainMenu.rsc");
+        fn_MenuDialogLoopT_Ctor(menuLoop, &menuNameStr);
+        fn_String_Dtor(&menuNameStr);
+        pMenuLoop = menuLoop;
+    }
+
+    // --- Step 2: Allocate and construct the GameLoadDialogLoopT (0xb60 bytes) ---
+    // Wraps the menu loop; shows "Dialog/Loading.rsc" while the menu is loading.
+    void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
+    void* pDlLoop = nullptr;
+    if (dlLoop) {
+        // Build the delay time constant from exe (.rdata at 0x14017214c)
+        float* delayConst = reinterpret_cast<float*>(
+            ResolveAddr(Module::Exe, 0x14017214c));
+        float delayVal = delayConst ? *delayConst : 1.5f;
+        uint64_t delayTime[1];
+        fn_Time_Ctor_Float((void*)delayTime, delayVal);
+
+        uint64_t loadingNameStr = 0;
+        fn_String_Ctor_CStr(&loadingNameStr, "Dialog/Loading.rsc");
+        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingNameStr, pMenuLoop, (void*)delayTime);
+        fn_String_Dtor(&loadingNameStr);
+
+        // Patch vtable to exe subclass (GameLoadDialogLoopT)
+        *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
+
+        // Initialize extra fields added by the exe subclass
+        uintptr_t dl = (uintptr_t)dlLoop;
+        *(uint32_t*)(dl + 0x188) = 0xff000000;
+        *(uint32_t*)(dl + 0x18c) = 0xff000000;
+        *(uint8_t*)(dl  + 0x190) = 0;   // [400] = 0
+        fn_Random_Default_Ctor((void*)(dl + 0x194));
+        *(uint64_t*)(dl + 0xb58) = 0;
+        *(uint8_t*)(dl  + 0x40)  = 0;   // m_finished override = 0
+
+        pDlLoop = dlLoop;
+    }
+
+    // --- Step 3: Allocate and construct the outer GameLoaderLoop (0x48 bytes) ---
+    // Wraps the GameLoadDialogLoopT with a zero-delay outer loader.
+    void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+    void* pOuterLoop = nullptr;
+    if (outerLoop) {
+        uint64_t zeroTime[1];
+        fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
+        fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
+        // Patch vtable to exe subclass (GameLoaderLoop)
+        *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
+        pOuterLoop = outerLoop;
+    }
+
+    // --- Step 4: Set cursor, fullscreen fade to black, and queue next loop ---
+    // Uses fn_SetEngineNextLoop which does SetCursor + SetFullscreenFade + store next loop.
+    fn_SetEngineNextLoop(eng, pOuterLoop);
 }
 
 // Startup (vtable +0x38): Toggle visibility of next/quit buttons.

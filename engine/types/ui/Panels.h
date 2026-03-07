@@ -585,8 +585,8 @@ struct StatusBarUI {
     void* numberCoal;          // +0xA0: "numberCoal" NumberElement
     void* numberTextile;       // +0xA8: "numberTextile" NumberElement
     void* numberCustom[10];    // +0xB0..+0xF8: "numberCustom0".."numberCustom9"
-    uint32_t _pad100;          // +0x100: zeroed (u32)
-    uint8_t  _pad104[4];       // +0x104: gap
+    uint32_t statusCitizenIndex; // +0x100: cycling index for next-citizen-with-status navigation
+    uint8_t  _pad104[4];         // +0x104: gap
     uint8_t  heartsIconArray[0x20]; // +0x108..+0x127: hearts icon array (built by FUN_14006abf0)
     uint8_t  starsIconArray[0x20];  // +0x128..+0x147: stars icon array
     void* imageStatusHome;     // +0x148
@@ -609,7 +609,7 @@ struct StatusBarUI {
 };
 static_assert(sizeof(StatusBarUI) == 0x1D0, "StatusBarUI size mismatch");
 static_assert(offsetof(StatusBarUI, labelTitleParam) == 0x30, "");
-static_assert(offsetof(StatusBarUI, _pad100) == 0x100, "");
+static_assert(offsetof(StatusBarUI, statusCitizenIndex) == 0x100, "");
 static_assert(offsetof(StatusBarUI, imageStatusHome) == 0x148, "");
 static_assert(offsetof(StatusBarUI, imageRain) == 0x1A8, "");
 

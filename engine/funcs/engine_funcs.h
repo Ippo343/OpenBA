@@ -673,6 +673,10 @@ extern uint32_t* g_TypeId_CheckboxElement;
 // UI element base type ID at exref 0x1401514f8 (used by ControlUI)
 extern uint32_t* g_TypeId_UIElementBase;
 
+// UI::ImageElement type ID at exref 0x140151500 (used by EventNotifyDialog::Update,
+// ScenarioDialog, and many other dialog Update functions to check child element types)
+extern uint32_t* g_TypeId_ImageElement;
+
 // ============================================================
 // Additional Exe Type IDs (Phase D additions)
 // ============================================================
@@ -738,6 +742,11 @@ extern fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation;
 // ?AsSeconds@Time@System@@QEBAMXZ (0x180007900, ordinal 1620)
 typedef float (*fn_Time_AsSeconds_t)(void* time);
 extern fn_Time_AsSeconds_t fn_Time_AsSeconds;
+
+// SaveLoad::~SaveLoad(this) — destructor (clears _singleton, releases refs)
+// ??1SaveLoad@Save@@QEAA@XZ (0x1800c3c90, ordinal 666)
+typedef void (*fn_SaveLoad_Dtor_t)(void* saveLoad);
+extern fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor;
 
 // SaveLoad::GetOperation(this) -> int (enum Operation)
 // ?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ (0x1800c3c80, ordinal 2826)
@@ -1468,6 +1477,14 @@ extern fn_FindProfessionComponent_t fn_FindProfessionComponent;
 typedef void (*fn_CitizenUI_Slot9_Original_t)(void* self, uint64_t p2, int p3, int p4);
 extern fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original;
 
+// StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
+// Called from StatusBarUI::OnRemove (0x14007a3a0) via tail-call with icon index in EDX.
+// Iterates citizens starting at self->statusCitizenIndex, finds next citizen whose
+// HappinessComponent status bits include the clicked icon's bit, then navigates to them.
+// self = StatusBarUI*, iconIndex = 0..5 (home/food/cold/job/tool/disease)
+typedef void (*fn_StatusBarUI_StatusIconHandler_t)(void* self, int iconIndex);
+extern fn_StatusBarUI_StatusIconHandler_t fn_StatusBarUI_StatusIconHandler;
+
 // Game world+0x118 lookup helper (FUN_1400f9a60)
 // Finds entity by tile index in the world grid
 typedef void* (*fn_WorldGrid_FindEntity_t)(void* worldGrid, void* retval, int tileIndex);
@@ -1598,56 +1615,37 @@ extern uint32_t* g_TypeId_ClimateGenerator;  // DAT_1401c5910
 extern uint32_t* g_TypeId_TerrainGenerator;  // DAT_1401c5b40
 
 // ============================================================
-// OptionsDialog support functions (private helpers in exe)
+// OptionsDialog support — Runtime DLL exports for video/audio config
 // ============================================================
 
-// OptionsDialog::PopulateVideoComboBoxes(self) — fills renderer, adapter, resolution, refresh, antialias, filter combos
-// FUN_140074140
-typedef void (*fn_OptionsDialog_PopulateVideoComboBoxes_t)(void* self);
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateVideoComboBoxes;
+// Video::Device::ValidateConfiguration(this, &renderer, &adapter, &width, &height,
+//                                       &refreshNum, &refreshDen, &antialias, &adapter2)
+// ?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z
+typedef void (*fn_VideoDevice_ValidateConfiguration_t)(void* self, int*, int*, int*, int*, int*, int*, int*, int*);
+extern fn_VideoDevice_ValidateConfiguration_t fn_VideoDevice_ValidateConfiguration;
 
-// OptionsDialog::PopulateAdapterCombo(self) — refills adapter combo after renderer change
-// FUN_140074040
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAdapterCombo;
+// Video::Device::GetMultisampleModeCount(this) -> int
+// ?GetMultisampleModeCount@Device@Video@@QEBAHXZ
+typedef int (*fn_VideoDevice_GetMultisampleModeCount_t)(void* self);
+extern fn_VideoDevice_GetMultisampleModeCount_t fn_VideoDevice_GetMultisampleModeCount;
 
-// OptionsDialog::PopulateResolutionCombo(self) — refills resolution combo
-// FUN_140073ec0
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateResolutionCombo;
+// Video::Device::IsMultisampleModeSupported(this, mode) -> bool
+// ?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z
+typedef bool (*fn_VideoDevice_IsMultisampleModeSupported_t)(void* self, int mode);
+extern fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupported;
 
-// OptionsDialog::PopulateRefreshCombo(self) — refills refresh rate combo
-// FUN_140073d20
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateRefreshCombo;
+// OptionsDialog exe helpers — still calling into exe (not yet reimplemented)
+typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);
 
-// OptionsDialog::PopulateAntialiasCombo(self) — refills antialias mode combo
-// FUN_140073b10
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAntialiasCombo;
-
-// OptionsDialog::PopulateFilterCombo(self) — refills texture filter combo
-// FUN_140073800
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateFilterCombo;
-
-// OptionsDialog::PopulateInputBindList(self) — fills input binding list
-// FUN_140073580
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateInputBindList;
-
-// OptionsDialog::ValidateVideoConfig(self) — validates and fixes config after combo changes
-// FUN_140072eb0
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_ValidateVideoConfig;
-
-// OptionsDialog::OnOk(self) — apply all settings, save, close dialog
-// FUN_140072930
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnOk;
-
-// OptionsDialog::OnCancel(self) — revert settings, close dialog
-// FUN_140072840
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnCancel;
-
-// OptionsDialog::OnApply(self) — apply all settings, save, keep dialog open
-// FUN_1400728e0
-extern fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnApply;
-
-// OptionsDialog::OnInputBindClick(self, element, bindIndex, slot) — handle input bind button
-// FUN_1400729a0
+// OptionsDialog::OnOk(self) — apply all settings, save, close dialog (FUN_140072930)
+extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnOk;
+// OptionsDialog::OnCancel(self) — revert settings, close dialog (FUN_140072840)
+extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnCancel;
+// OptionsDialog::OnApply(self) — apply all settings, save, keep dialog open (FUN_1400728e0)
+extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnApply;
+// OptionsDialog::PopulateInputBindList(self) — fills input binding list (FUN_140073580)
+extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList;
+// OptionsDialog::OnInputBindClick(self, element, bindIndex, slot) (FUN_1400729a0)
 typedef void (*fn_OptionsDialog_OnInputBindClick_t)(void* self, void* element, int bindIndex, int slot);
 extern fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick;
 
@@ -2179,6 +2177,18 @@ extern void** g_GameLoadDialogLoopT_Vtable;  // 0x140158800
 // Exe vtable pointer for GameLoaderLoop (subclass of LoaderLoop).
 // PTR_FUN_1401588d0 — written to outer LoaderLoop after base ctor to override vtable.
 extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
+
+// MenuDialogLoopT ctor — FUN_14009bb00(self, dialogFilename)
+// Calls Engine::DialogLoopT::DialogLoopT(self, filename), then patches vtable to
+// PTR_FUN_14015ed00 (MenuDialogLoopT subclass vtable) and zeroes extra fields (+0xb68..+0xbf8).
+// Also constructs System::Random at +0x168 and Audio::Scene at +0xb30.
+// Allocate 0xc00 bytes before calling. Used to create the MainMenu/tutorial dialog loop.
+typedef void* (*fn_MenuDialogLoopT_Ctor_t)(void* self, void* dialogFilename);
+extern fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor;
+
+// Exe vtable pointer for MenuDialogLoopT (subclass of Engine::DialogLoopT).
+// PTR_FUN_14015ed00 — written to DialogLoopT after MenuDialogLoopT_Ctor.
+extern void** g_MenuDialogLoopT_Vtable;  // 0x14015ed00
 
 // SetEngineNextLoop — sets next loop on the MainLoop engine singleton
 // FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr

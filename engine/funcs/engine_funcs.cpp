@@ -198,6 +198,9 @@ uint32_t* g_TypeId_CheckboxElement = nullptr;
 // UI element base type ID (exref)
 uint32_t* g_TypeId_UIElementBase = nullptr;
 
+// UI::ImageElement type ID (exref 0x140151500)
+uint32_t* g_TypeId_ImageElement = nullptr;
+
 // ControlComponent type ID (direct)
 uint32_t* g_TypeId_ControlComponent = nullptr;
 
@@ -313,6 +316,7 @@ fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture = nullptr;
 // ============================================================
 fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation = nullptr;
 fn_Time_AsSeconds_t fn_Time_AsSeconds = nullptr;
+fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
 fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
 fn_SaveLoad_SetSaveSprite_t fn_SaveLoad_SetSaveSprite = nullptr;
@@ -470,18 +474,16 @@ uint32_t* g_TypeId_MapGenerator = nullptr;
 uint32_t* g_TypeId_ClimateGenerator = nullptr;
 uint32_t* g_TypeId_TerrainGenerator = nullptr;
 
-// OptionsDialog support
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateVideoComboBoxes = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAdapterCombo = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateResolutionCombo = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateRefreshCombo = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateAntialiasCombo = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateFilterCombo = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_PopulateInputBindList = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_ValidateVideoConfig = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnOk = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnCancel = nullptr;
-fn_OptionsDialog_PopulateVideoComboBoxes_t fn_OptionsDialog_OnApply = nullptr;
+// OptionsDialog support — Runtime DLL exports
+fn_VideoDevice_ValidateConfiguration_t fn_VideoDevice_ValidateConfiguration = nullptr;
+fn_VideoDevice_GetMultisampleModeCount_t fn_VideoDevice_GetMultisampleModeCount = nullptr;
+fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupported = nullptr;
+
+// OptionsDialog exe helpers — not yet reimplemented
+fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnOk = nullptr;
+fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnCancel = nullptr;
+fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_OnApply = nullptr;
+fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList = nullptr;
 fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick = nullptr;
 
 void** g_pAudioConfigSingleton = nullptr;
@@ -525,6 +527,7 @@ fn_CitizenUI_BuildIconArray_t fn_CitizenUI_BuildIconArray = nullptr;
 fn_CitizenUI_UpdateIconDisplay_t fn_CitizenUI_UpdateIconDisplay = nullptr;
 fn_FindProfessionComponent_t fn_FindProfessionComponent = nullptr;
 fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original = nullptr;
+fn_StatusBarUI_StatusIconHandler_t fn_StatusBarUI_StatusIconHandler = nullptr;
 fn_WorldGrid_FindEntity_t fn_WorldGrid_FindEntity = nullptr;
 
 // ProductionUI support
@@ -681,6 +684,8 @@ void** g_GameLoaderLoop_Vtable = nullptr;
 fn_SetEngineNextLoop_t fn_SetEngineNextLoop = nullptr;
 fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop = nullptr;
 fn_GetLoadingSoundString_t fn_GetLoadingSoundString = nullptr;
+fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor = nullptr;
+void** g_MenuDialogLoopT_Vtable = nullptr;
 
 // --- SpriteCaptureUI helpers ---
 fn_Input_Device_GetValue_t fn_Input_Device_GetValue = nullptr;
@@ -1362,6 +1367,13 @@ bool EngineFuncsInit() {
             g_TypeId_UIElementBase = reinterpret_cast<uint32_t*>(*exref);
         }
     }
+    // UI::ImageElement type ID: exref at 0x140151500 (used by EventNotifyDialog::Update and others)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151500));
+        if (exref && *exref) {
+            g_TypeId_ImageElement = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
     // ControlComponent type ID: direct uint32 at DAT_1401c4e20
     g_TypeId_ControlComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c4e20));
@@ -1505,6 +1517,12 @@ bool EngineFuncsInit() {
     if (!fn_Time_AsSeconds)
         fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
             ResolveAddr(Module::Runtime, 0x180007900));
+
+    fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
+        ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
+    if (!fn_SaveLoad_Dtor)
+        fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
+            ResolveAddr(Module::Runtime, 0x1800c3c90));
 
     fn_SaveLoad_GetOperation = reinterpret_cast<fn_SaveLoad_GetOperation_t>(
         ResolveExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ"));
@@ -1948,29 +1966,23 @@ bool EngineFuncsInit() {
     fn_CountOccupiedBuildTiles = reinterpret_cast<fn_CountOccupiedBuildTiles_t>(
         ResolveAddr(Module::Exe, 0x140118330));
 
-    // --- OptionsDialog support ---
-    fn_OptionsDialog_PopulateVideoComboBoxes = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140074140));
-    fn_OptionsDialog_PopulateAdapterCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140074040));
-    fn_OptionsDialog_PopulateResolutionCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140073ec0));
-    fn_OptionsDialog_PopulateRefreshCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140073d20));
-    fn_OptionsDialog_PopulateAntialiasCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140073b10));
-    fn_OptionsDialog_PopulateFilterCombo = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140073800));
-    fn_OptionsDialog_PopulateInputBindList = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140073580));
-    fn_OptionsDialog_ValidateVideoConfig = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
-        ResolveAddr(Module::Exe, 0x140072eb0));
-    fn_OptionsDialog_OnOk = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+    // --- OptionsDialog support — Runtime DLL exports ---
+    fn_VideoDevice_ValidateConfiguration = reinterpret_cast<fn_VideoDevice_ValidateConfiguration_t>(
+        ResolveExport("?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z"));
+    fn_VideoDevice_GetMultisampleModeCount = reinterpret_cast<fn_VideoDevice_GetMultisampleModeCount_t>(
+        ResolveExport("?GetMultisampleModeCount@Device@Video@@QEBAHXZ"));
+    fn_VideoDevice_IsMultisampleModeSupported = reinterpret_cast<fn_VideoDevice_IsMultisampleModeSupported_t>(
+        ResolveExport("?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z"));
+
+    // --- OptionsDialog exe helpers (not yet reimplemented) ---
+    fn_OptionsDialog_OnOk = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
         ResolveAddr(Module::Exe, 0x140072930));
-    fn_OptionsDialog_OnCancel = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+    fn_OptionsDialog_OnCancel = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
         ResolveAddr(Module::Exe, 0x140072840));
-    fn_OptionsDialog_OnApply = reinterpret_cast<fn_OptionsDialog_PopulateVideoComboBoxes_t>(
+    fn_OptionsDialog_OnApply = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
         ResolveAddr(Module::Exe, 0x1400728e0));
+    fn_OptionsDialog_PopulateInputBindList = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
+        ResolveAddr(Module::Exe, 0x140073580));
     fn_OptionsDialog_OnInputBindClick = reinterpret_cast<fn_OptionsDialog_OnInputBindClick_t>(
         ResolveAddr(Module::Exe, 0x1400729a0));
     fn_VideoDevice_GetInterface = reinterpret_cast<fn_VideoDevice_GetInterface_t>(
@@ -2036,6 +2048,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400f9a60));
     fn_CitizenUI_Slot9_Original = reinterpret_cast<fn_CitizenUI_Slot9_Original_t>(
         ResolveAddr(Module::Exe, 0x1400650F0));
+    fn_StatusBarUI_StatusIconHandler = reinterpret_cast<fn_StatusBarUI_StatusIconHandler_t>(
+        ResolveAddr(Module::Exe, 0x14007a120));
 
     // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
     {
@@ -2513,6 +2527,9 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14009a8f0));
     fn_GetLoadingSoundString = reinterpret_cast<fn_GetLoadingSoundString_t>(
         ResolveAddr(Module::Exe, 0x140099130));
+    fn_MenuDialogLoopT_Ctor = reinterpret_cast<fn_MenuDialogLoopT_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x14009bb00));
+    g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
 
     // --- Engine globals (direct memory addresses) ---
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));

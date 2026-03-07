@@ -162,6 +162,10 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 // Sets followed entity name text and activates follow camera flag.
 void FollowDialog_Slot4(FollowDialog* self);
 
+// Slot6 (vtable +0x30): Draw — updates profession text (parameter 1 on textFollow)
+// and action text (textAction) each frame from citizen's current state.
+void FollowDialog_Slot6(FollowDialog* self, void* p2, void* p3, void* p4);
+
 // Slot7 (vtable +0x38): Update — reads character position, updates camera target.
 // Checks Escape key to close dialog.
 void FollowDialog_Slot7(FollowDialog* self);
@@ -178,6 +182,25 @@ void NewGameDialog_Slot4(NewGameDialog* self);
 // Slot6 (vtable +0x30): Update — enables/disables OK button based on
 // whether the name field has content.
 void NewGameDialog_Slot6(NewGameDialog* self);
+
+// ============================================================
+// TutorialSetupDialog
+// ============================================================
+
+// ScalarDtor (vtable slot 0, exe 0x140028620):
+// Restores vtable, destroys string vectors and inline strings,
+// calls External::~External, conditionally frees memory.
+void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags);
+
+// Shutdown (vtable slot 5, exe 0x1400e2a60):
+// Serializes/deserializes tutorial setup state: two String vectors,
+// two inline Strings, one External pointer, two int fields.
+// Returns 1 always.
+uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream);
+
+// OnEvent (vtable slot 6, exe 0x140028600):
+// Resets object by calling virtual dtor (no-free) then re-running Ctor.
+void TutorialSetupDialog_OnEvent(void* self);
 
 // ============================================================
 // AchievementDialog
@@ -207,6 +230,13 @@ void GoalDialog_Slot6(GoalDialog* self);
 // Slot4 (vtable +0x20): Startup — finds ribbonNotify, notifyContent,
 // builds notification entry array from children. Sets button IDs.
 void EventNotifyDialog_Slot4(EventNotifyDialog* self);
+
+// Slot6 (vtable +0x30): Update — smoothly positions the notification ribbon
+// relative to the toolbar, updates per-slot sprites/flags/colors/text.
+// For active slots: sets icon sprite, toggles button/image visibility based on
+// popup state, sets color on button controller and its children.
+// For empty slots: clears color, hides image, shows button, clears text.
+void EventNotifyDialog_Update(EventNotifyDialog* self);
 
 // Slot7 (vtable +0x38): Event processing — decrements notification timers,
 // scans event log for new events, creates notification entries with icons/colors,

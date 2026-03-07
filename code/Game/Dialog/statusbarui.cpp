@@ -7,7 +7,7 @@
 // Vtable layout (reimpl names -> actual function):
 //   +0x28 (Draw/Slot5):     0x14007a3d0 — element finding/init (319 lines)
 //   +0x38 (Startup/Slot7):  0x1400798d0 — main HUD update (299 lines)
-//   +0x48 (OnRemove/Slot9): 0x14007a3a0 — status icon click handler (passthrough)
+//   +0x48 (OnRemove/Slot9): 0x14007a3a0 — status icon click handler (reimplemented)
 //
 // Original source: C:\Projects\Buildy\code\Game\Dialog/StatusBarUI.h
 //                  Dialog\StatusBarUI.cpp
@@ -514,4 +514,44 @@ found_happiness:
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
     fn_String_Dtor(mapName);
+}
+
+// ============================================================
+// StatusBarUI_OnRemove (0x14007a3a0, vtable +0x48):
+// Status icon click handler.
+//
+// Called when an element is activated (eventType == 2 = element click).
+// Status icons imageStatusHome..imageStatusDisease have element IDs 100-105
+// (set during Draw/Startup initialization).
+//
+// On each click of icon N, cycles to the NEXT citizen whose HappinessComponent
+// status bits include bit N (1 << N), increments self->statusCitizenIndex,
+// navigates camera and opens CitizenUI for that citizen.
+//
+// The actual citizen search + navigation is done by the shared helper at
+// 0x14007a120 (fn_StatusBarUI_StatusIconHandler), which:
+//   1. Checks game state flag (bails if paused/locked)
+//   2. Increments and wraps self->statusCitizenIndex within citizen count
+//   3. Iterates citizens starting at that index, finds HappinessComponent
+//   4. Tests status & (1 << iconIndex)
+//   5. On match: calls FUN_140103040 (navigate camera, open CitizenUI)
+// ============================================================
+
+void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int eventId) {
+    (void)param2;
+
+    // Only handle click events (eventType == 2)
+    if (eventType != 2) return;
+
+    // Status icons have element IDs 100-105 (set in Draw via fn_Element_SetElementId)
+    // Icon 0 = home (bit 0), icon 1 = food (bit 1), ..., icon 5 = disease (bit 5)
+    int iconIndex = eventId - 100;
+    if (iconIndex < 0 || iconIndex >= 6) return;
+
+    // Delegate to the shared helper which handles citizen search and navigation.
+    // The helper expects (self, iconIndex) and uses self->statusCitizenIndex (+0x100)
+    // to cycle through citizens with the given status problem.
+    if (fn_StatusBarUI_StatusIconHandler) {
+        fn_StatusBarUI_StatusIconHandler(self, iconIndex);
+    }
 }

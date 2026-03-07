@@ -61,10 +61,10 @@ static void Reimpl_Startup(void* self) {
     TutorialUI_Startup((TutorialUI*)self);
 }
 
-typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
+// OnRemove — REIMPLEMENTED (quitButton: destroy SaveLoad, transition to main menu)
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
     g_lastHook = "TutorialUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
+    TutorialUI_OnRemove((TutorialUI*)self, param2, eventType, eventId);
 }
 
 // ============================================================

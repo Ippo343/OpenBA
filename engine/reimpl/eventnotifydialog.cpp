@@ -89,11 +89,11 @@ static void Reimpl_Startup(void* self) {
     EventNotifyDialog_Slot4((EventNotifyDialog*)self);
 }
 
-// Slot 6: Update(this) — position ribbon, set sprites/flags
+// Slot 6: Update(this) — position ribbon, set sprites/flags — REIMPLEMENTED
 typedef void (*fn_Update_t)(void* self);
 static void Reimpl_Update(void* self) {
     g_lastHook = "EventNotifyDialog::Update";
-    ((fn_Update_t)g_hookUpdate.trampoline)(self);
+    EventNotifyDialog_Update((EventNotifyDialog*)self);
 }
 
 // Slot 7: Load(this, param2) — REIMPLEMENTED (event processing, notification management)

@@ -55,17 +55,9 @@ static void Reimpl_Startup(void* self) {
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData)
-typedef void (*fn_OnEvent_t)(void* self, void* element, int eventType, int eventData);
 static void Reimpl_OnEvent(void* self, void* element, int eventType, int eventData) {
     g_lastHook = "OptionsDialog::OnEvent";
-    if (eventType == 0x17) {
-        // Slider changes need audio config singleton via _singleton_exref —
-        // delegate to trampoline (original code)
-        ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self, element, eventType, eventData);
-    } else {
-        // Button clicks (0x12) and combo changes (0x14) — clean reimpl
-        OptionsDialog_OnEvent((OptionsDialog*)self, element, eventType, eventData);
-    }
+    OptionsDialog_OnEvent((OptionsDialog*)self, element, eventType, eventData);
 }
 
 // ============================================================

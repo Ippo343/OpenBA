@@ -60,11 +60,11 @@ static void Reimpl_Slot4(void* self) {
     FollowDialog_Slot4((FollowDialog*)self);
 }
 
-// Slot6 (0x140068F70) — Draw: updates follow camera display
+// Slot6 (0x140068F70) — Draw: updates profession and action text — REIMPLEMENTED
 typedef void (*fn_Slot6_t)(void* self, void* p2, void* p3, void* p4);
 static void Reimpl_Slot6(void* self, void* p2, void* p3, void* p4) {
     g_lastHook = "FollowDialog::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self, p2, p3, p4);
+    FollowDialog_Slot6((FollowDialog*)self, p2, p3, p4);
 }
 
 // Slot7 (0x140069250) — Update: checks followed entity state — REIMPLEMENTED

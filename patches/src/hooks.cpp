@@ -2804,8 +2804,8 @@ static ReimplEntry g_reimplementations[] = {
     // --- StatusBarUI ---
     { "StatusBarUI::ScalarDtor", InstallStatusBarUIScalarDtor, RemoveStatusBarUIScalarDtor, true },
     { "StatusBarUI::Draw", InstallStatusBarUIDraw, RemoveStatusBarUIDraw, true },
-    { "StatusBarUI::Startup", InstallStatusBarUIStartup, RemoveStatusBarUIStartup, false }, // DISABLED: MOV RAX/R11,RSP in prologue
-    { "StatusBarUI::OnRemove", InstallStatusBarUIOnRemove, RemoveStatusBarUIOnRemove, false }, // DISABLED: short Jcc in prologue
+    { "StatusBarUI::Startup", InstallStatusBarUIStartup, RemoveStatusBarUIStartup, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "StatusBarUI::OnRemove", InstallStatusBarUIOnRemove, RemoveStatusBarUIOnRemove, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- StatusIconUI ---
     { "StatusIconUI::ScalarDtor", InstallStatusIconUIScalarDtor, RemoveStatusIconUIScalarDtor, true },
@@ -2854,7 +2854,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialUI::ScalarDtor", InstallTutorialUIScalarDtor, RemoveTutorialUIScalarDtor, true },
     { "TutorialUI::Serialize", InstallTutorialUISerialize, RemoveTutorialUISerialize, true },
     { "TutorialUI::Startup", InstallTutorialUIStartup, RemoveTutorialUIStartup, true },
-    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, false }, // DISABLED: short Jcc in prologue
+    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- UpgradeUI ---
     { "UpgradeUI::ScalarDtor", InstallUpgradeUIScalarDtor, RemoveUpgradeUIScalarDtor, true },
@@ -2948,7 +2948,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- FollowDialog ---
     { "FollowDialog::Dtor", InstallFollowDialogDtor, RemoveFollowDialogDtor, true },
     { "FollowDialog::Slot4", InstallFollowDialogSlot4, RemoveFollowDialogSlot4, true },
-    { "FollowDialog::Slot6", InstallFollowDialogSlot6, RemoveFollowDialogSlot6, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "FollowDialog::Slot6", InstallFollowDialogSlot6, RemoveFollowDialogSlot6, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "FollowDialog::Slot7", InstallFollowDialogSlot7, RemoveFollowDialogSlot7, true },
     // --- GoalDialog ---
     { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },

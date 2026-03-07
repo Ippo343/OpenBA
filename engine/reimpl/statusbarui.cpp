@@ -79,7 +79,8 @@ static void Reimpl_Startup(void* self) {
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
     g_lastHook = "StatusBarUI::OnRemove";
-    ((fn_OnRemove_t)g_hookOnRemove.trampoline)(self, param2, eventType, eventId);
+    // REIMPLEMENTED — call clean code
+    StatusBarUI_OnRemove((StatusBarUI*)self, param2, eventType, eventId);
 }
 
 // ============================================================

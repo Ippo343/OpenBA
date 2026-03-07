@@ -21,6 +21,7 @@
 //   +0x58: 0x1400285f0 — Slot11: TEST+branch (12b, unhookable)
 
 #include "ui/Dialogs.h"
+#include "Dialog/ui_dialogs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -35,28 +36,25 @@ static HookInfo g_hookShutdown;
 static HookInfo g_hookOnEvent;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers (delegate to code/Game/Dialog/tutorialsetupdialog.cpp)
 // ============================================================
 
-// Slot 0: ScalarDtor(this, flags)
-typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
+// Slot 0: ScalarDtor(this, flags) — REIMPLEMENTED
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialSetupDialog::ScalarDtor";
-    return ((fn_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    return TutorialSetupDialog_ScalarDtor(self, flags);
 }
 
-// Slot 5: Shutdown(this, stream) — serialize/cleanup tutorial setup state
-typedef uint64_t (*fn_Shutdown_t)(void* self, void* stream);
+// Slot 5: Shutdown(this, stream) — REIMPLEMENTED
 static uint64_t Reimpl_Shutdown(void* self, void* stream) {
     g_lastHook = "TutorialSetupDialog::Shutdown";
-    return ((fn_Shutdown_t)g_hookShutdown.trampoline)(self, stream);
+    return TutorialSetupDialog_Shutdown(self, stream);
 }
 
-// Slot 6: OnEvent(this) — delegate to vtable[0] dtor, then cleanup
-typedef void (*fn_OnEvent_t)(void* self);
+// Slot 6: OnEvent(this) — REIMPLEMENTED
 static void Reimpl_OnEvent(void* self) {
     g_lastHook = "TutorialSetupDialog::OnEvent";
-    ((fn_OnEvent_t)g_hookOnEvent.trampoline)(self);
+    TutorialSetupDialog_OnEvent(self);
 }
 
 // ============================================================

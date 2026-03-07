@@ -352,3 +352,265 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
     // Update last processed event index
     *(int*)(s + 0xC4) = totalEvents;
 }
+
+// ============================================================
+// EventNotifyDialog::Update (vtable +0x30) — Ribbon position and slot sync
+// ============================================================
+// Each frame:
+//   1. Compute target Y for the ribbon: (parentRoot.y - selfRoot.y) + 44
+//      — positions the ribbon just below the parent dialog (toolbar).
+//   2. Lerp the smoothed Y toward target: smoothedY = smoothedY*0.8 + targetY*0.2
+//   3. Apply smoothedY as top padding on the self root element.
+//   4. Show the ribbonNotify container element.
+//   5. For each active notification slot (0..activeEventCount-1):
+//      - Copy the event's icon sprite to the slot's imageElem.
+//      - Get child[4] of buttonElem; if it is an ImageElement, copy sprite to it too.
+//      - Check event log entry popup field at eventEntry+0x18:
+//          if < 0 (no popup): hide button, show image.
+//          if >= 0 (popup active): show button, hide image.
+//      - Obtain button's controller via vtable[0x58/8=11], call vtable[0x50/8=10](color).
+//      - Also call vtable[0x50] on each of the 4 button children with the same color.
+//      - Copy the event's text string into the group element's string at +0x58.
+//   6. For empty slots (activeEventCount..capacity-1):
+//      - Reset button controller color and direct button element color to 0xFFFFFFFF.
+//      - Clear the group element's string at +0x58.
+//      - Hide image element (turn off visibility flag 1).
+//      - Show button element (turn on visibility flag 1).
+//
+// Key offsets on EventNotifyDialog:
+//   +0xB8: parent dialog InternalBasePtr (dereference to get DialogInstance*)
+//   +0xC0: float smoothedYOffset
+//   +0xC8: notifyEntryArray (stride 0x18: {void* group, void* image, void* button})
+//   +0xD0: int32 notifyEntryCapacity (max slots)
+//   +0xD8: activeEventArray (stride 0x30, see Slot7 for layout)
+//   +0xE0: int32 activeEventCount
+//   +0xE8: void* ribbonNotifyElement (the ribbon container)
+//
+// Active event entry layout (0x30 bytes):
+//   +0x00: int64 timer
+//   +0x08: int32 event_index (into game event log)
+//   +0x10: Sprite (16 bytes) — icon sprite
+//   +0x20: System::String — display text
+//   +0x28: uint32 color (ARGB, set from severity in Slot7)
+//
+// Event log entry layout (0x28 bytes, at gameWorld+0x138 data):
+//   +0x18: int32 popup_ref (-1 if no popup, >=0 if popup dialog active)
+//
+// Original: 0x1400680c0
+void EventNotifyDialog_Update(EventNotifyDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    // -------------------------------------------------------
+    // Step 1-3: Compute target Y and lerp smoothed position
+    // -------------------------------------------------------
+
+    // Parent dialog is stored as InternalBasePtr at self+0xB8.
+    // CheckPtr validates the InternalBasePtr, then dereference to get the DialogInstance*.
+    // DialogInstance::GetRoot() is equivalent to reading *(void**)(dlg + 0x50).
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
+    void* parentDlg  = *(void**)(s + 0xB8);
+    // GetRoot on parentDlg: CheckPtr on the returned InternalBasePtr, then read elem ptr.
+    // (GetRoot returns an InternalBasePtr wrapping the root element.)
+    // In practice, root = *(void**)(dlg + 0x50) directly.
+    void* parentRoot = *(void**)((uintptr_t)parentDlg + 0x50);
+    int   parentY    = *(int*)((uintptr_t)parentRoot + 0x60);
+
+    // GetRoot on self:
+    void* selfRoot = *(void**)(s + 0x50);
+    int   selfY    = *(int*)((uintptr_t)selfRoot + 0x60);
+
+    int targetY = parentY - selfY + 44;  // 0x2c = 44
+
+    // fVar16 = final target based on active count
+    float fVar16 = 0.0f;
+    int activeCount = *(int*)(s + 0xE0);
+    if (activeCount == 1) {
+        fVar16 = (float)targetY;
+    } else if (activeCount > 1) {
+        // Additional entries add 40.0f spacing (DAT_1401721dc = 0x42200000 = 40.0f)
+        fVar16 = (float)(activeCount - 1) * 40.0f + (float)targetY;
+    }
+
+    // Lerp: smoothedY = smoothedY * 0.8 + fVar16 * 0.2
+    // DAT_140172128 = 0.8f, DAT_1401720f8 = 0.2f
+    float smoothedY = *(float*)(s + 0xC0);
+    smoothedY = smoothedY * 0.8f + fVar16 * 0.2f;
+    *(float*)(s + 0xC0) = smoothedY;
+
+    // Apply as top padding on self root: floor(smoothedY + 0.5f)
+    // DAT_140172114 = 0.5f (rounding)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x50));
+    fn_Element_SetPadding(selfRoot, 0, (int)(smoothedY + 0.5f), 0, 2);
+
+    // -------------------------------------------------------
+    // Step 4: Show ribbonNotify element
+    // -------------------------------------------------------
+    uintptr_t eventLogPtr = *(uintptr_t*)(*(uintptr_t*)(uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+    uintptr_t eventArray  = *(uintptr_t*)(eventLogPtr + 0x18);
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xE8));
+    fn_Element_SetFlagsOnOff(*(void**)(s + 0xE8), 0, 1);  // clear flag 1 = show
+
+    // -------------------------------------------------------
+    // Steps 5 & 6: Sync notification slots
+    // -------------------------------------------------------
+    uintptr_t notifyEntryBase = *(uintptr_t*)(s + 0xC8);  // array of 0x18-byte entries
+    uintptr_t activeBase      = *(uintptr_t*)(s + 0xD8);  // array of 0x30-byte entries
+    int capacity              = *(int*)(s + 0xD0);
+
+    // --- Active slots ---
+    for (int i = 0; i < activeCount; i++) {
+        uintptr_t activeEntry = activeBase + (uintptr_t)i * 0x30;
+        uintptr_t slotEntry   = notifyEntryBase + (uintptr_t)i * 0x18;
+
+        void* groupElem  = *(void**)(slotEntry + 0x00);
+        void* imageElem  = *(void**)(slotEntry + 0x08);
+        void* buttonElem = *(void**)(slotEntry + 0x10);
+
+        // Event index stored at active_entry+0x08
+        int eventIndex = *(int*)(activeEntry + 0x08);
+
+        // Sprite stored at active_entry+0x10 (16 bytes)
+        uint8_t sprite[16];
+        *(uint64_t*)(sprite + 0)  = *(uint64_t*)(activeEntry + 0x10);
+        *(uint64_t*)(sprite + 8)  = *(uint64_t*)(activeEntry + 0x18);
+
+        // Set icon sprite on image element
+        fn_InternalBasePtr_CheckPtr(&imageElem);
+        fn_ImageElement_SetSprite(imageElem, sprite);
+
+        // Get child[4] of button element — may be an ImageElement for embedded icon
+        uint8_t childBuf[16];
+        fn_InternalBasePtr_CheckPtr(&buttonElem);
+        void* child4 = *(void**)fn_Element_Child(buttonElem, childBuf, 4);
+
+        // Check if child4 is an ImageElement; if so, copy sprite to it as well
+        {
+            bool isImage = fn_IsDerivedFrom(child4, g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0u);
+            void* imgChild = isImage ? child4 : nullptr;
+            // Construct InternalBasePtr for imgChild on stack
+            uint8_t imgChildPtr[16];
+            fn_InternalBasePtr_Ctor(imgChildPtr, imgChild);
+            // Copy same sprite from active_entry+0x10
+            uint8_t sprite2[16];
+            *(uint64_t*)(sprite2 + 0) = *(uint64_t*)(activeEntry + 0x10);
+            *(uint64_t*)(sprite2 + 8) = *(uint64_t*)(activeEntry + 0x18);
+            fn_InternalBasePtr_CheckPtr(imgChildPtr);
+            // SetSprite on imgChild (only if non-null after CheckPtr)
+            void* imgElemResolved = *(void**)imgChildPtr;
+            if (imgElemResolved) {
+                fn_ImageElement_SetSprite(imgElemResolved, sprite2);
+            }
+        }
+
+        // Determine popup state: check event log entry at eventIndex, popup field at +0x18
+        int popupField = *(int*)(eventArray + (uintptr_t)eventIndex * 0x28 + 0x18);
+        bool noPopup   = (popupField < 0);
+
+        fn_InternalBasePtr_CheckPtr(&buttonElem);
+        fn_InternalBasePtr_CheckPtr(&imageElem);
+        if (noPopup) {
+            // No popup: hide button, show image
+            fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag 1 = hide
+            fn_Element_SetFlagsOnOff(imageElem,  0, 1);  // clear flag 1 = show
+        } else {
+            // Popup active: show button, hide image
+            fn_Element_SetFlagsOnOff(buttonElem, 0, 1);  // clear flag 1 = show
+            fn_Element_SetFlagsOnOff(imageElem,  1, 0);  // set flag 1 = hide
+        }
+
+        // Color from active_entry+0x28
+        uint32_t color = *(uint32_t*)(activeEntry + 0x28);
+
+        // Set color on button's controller: buttonElem->vtable[11](retBuf) → controller,
+        // then controller->vtable[10](color).
+        // vtable[11] = vtable offset 0x58 = GetController / GetPressColor sub-object.
+        // vtable[10] = vtable offset 0x50 = SetColor(uint32_t).
+        {
+            fn_InternalBasePtr_CheckPtr(&buttonElem);
+            uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
+            typedef void* (*GetController_t)(void* self, void* retBuf);
+            GetController_t getCtrl = (GetController_t)(btnVtable[0x58 / 8]);
+            uint8_t ctrlBuf[16];
+            void* ctrl = getCtrl(buttonElem, ctrlBuf);
+            fn_InternalBasePtr_CheckPtr(ctrl);
+            void* ctrlResolved = *(void**)ctrl;
+            uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
+            typedef void (*SetColor_t)(void* self, uint32_t c);
+            ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, color);
+        }
+
+        // Also set color on each of the 4 children of the button element.
+        // Each child's SetColor is at vtable offset 0x50.
+        for (int c = 0; c < 4; c++) {
+            fn_InternalBasePtr_CheckPtr(&buttonElem);
+            uint8_t kidBuf[16];
+            void* kid = *(void**)fn_Element_Child(buttonElem, kidBuf, c);
+            fn_InternalBasePtr_CheckPtr(&kid);
+            void* kidResolved = *(void**)&kid;
+            uintptr_t* kidVtable = *(uintptr_t**)kidResolved;
+            typedef void (*SetColor_t)(void* self, uint32_t c);
+            ((SetColor_t)(kidVtable[0x50 / 8]))(kidResolved, color);
+        }
+
+        // Copy event text string to the group element's embedded string at +0x58.
+        // activeEntry+0x20 = System::String (display text).
+        fn_InternalBasePtr_CheckPtr(&groupElem);
+        {
+            void* groupResolved = groupElem;
+            void* groupStr = (void*)((uintptr_t)groupResolved + 0x58);
+            void* srcStr   = (void*)(activeEntry + 0x20);
+            fn_String_Assign(groupStr, srcStr);
+        }
+    }
+
+    // --- Empty slots (activeCount..capacity-1): reset color, clear text, show empty image ---
+    for (int i = activeCount; i < capacity; i++) {
+        uintptr_t slotEntry = notifyEntryBase + (uintptr_t)i * 0x18;
+
+        void* groupElem  = *(void**)(slotEntry + 0x00);
+        void* imageElem  = *(void**)(slotEntry + 0x08);
+        void* buttonElem = *(void**)(slotEntry + 0x10);
+
+        // Reset button controller color to 0xFFFFFFFF (white = no tint)
+        {
+            fn_InternalBasePtr_CheckPtr(&buttonElem);
+            uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
+            typedef void* (*GetController_t)(void* self, void* retBuf);
+            GetController_t getCtrl = (GetController_t)(btnVtable[0x58 / 8]);
+            uint8_t ctrlBuf[16];
+            void* ctrl = getCtrl(buttonElem, ctrlBuf);
+            fn_InternalBasePtr_CheckPtr(ctrl);
+            void* ctrlResolved = *(void**)ctrl;
+            uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
+            typedef void (*SetColor_t)(void* self, uint32_t c);
+            ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, 0xFFFFFFFFu);
+        }
+
+        // Also reset color on button element itself (direct vtable[10] call)
+        {
+            fn_InternalBasePtr_CheckPtr(&buttonElem);
+            uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
+            typedef void (*SetColor_t)(void* self, uint32_t c);
+            ((SetColor_t)(btnVtable[0x50 / 8]))(buttonElem, 0xFFFFFFFFu);
+        }
+
+        // Clear group element's embedded string at +0x58 (assign null = empty string)
+        {
+            fn_InternalBasePtr_CheckPtr(&groupElem);
+            void* groupResolved = groupElem;
+            void* groupStr = (void*)((uintptr_t)groupResolved + 0x58);
+            void* nullStr  = nullptr;
+            fn_String_Assign(groupStr, &nullStr);
+            // Note: the original calls String::~String on the temporary after the assign.
+            // The assign takes a const String* (pointing to null), so the empty string dtor is safe.
+        }
+
+        // Show image element (clear flag 1), hide button element (set flag 1).
+        // Empty image slots display nothing (no sprite set); button hidden to prevent clicks.
+        fn_InternalBasePtr_CheckPtr(&imageElem);
+        fn_Element_SetFlagsOnOff(imageElem,  0, 1);  // clear flag = show
+        fn_InternalBasePtr_CheckPtr(&buttonElem);
+        fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag = hide
+    }
+}
