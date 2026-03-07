@@ -72,52 +72,52 @@ Grouped by class.
 
 ### Dialog Controllers (12 disabled hooks)
 
-- [ ] **EventNotifyDialog::Load** — MOV RAX/R11,RSP in prologue
-- [ ] **SaveLoadDialog::Load** — MOV RAX/R11,RSP in prologue
-- [ ] **ToolbarDialog::OnEvent** — MOV RAX/R11,RSP in prologue
-- [ ] **AchievementDialog::Slot8** — Short Jcc in prologue
-- [ ] **AchievementDialog::Slot14** — RIP-relative in prologue
-- [ ] **AutoSaveDialog::Slot6** — RIP-relative in prologue
-- [ ] **EventPopupDialog::Slot8** — Short Jcc in prologue
-- [ ] **GoalDialog::Slot6** — RIP-relative in prologue
-- [ ] **GoalDialog::Slot8** — Short Jcc in prologue
-- [ ] **MainMenuDialog::Slot8** — JNZ relative jump at byte +4
-- [ ] **ModDetailsDialog::Slot8** — Short Jcc in prologue
-- [ ] **ModDialog::Slot4** — MOV RAX/R11,RSP in prologue
+- [x] **EventNotifyDialog::Load** — MOV RAX/R11,RSP in prologue (2026-03-07)
+- [x] **SaveLoadDialog::Load** — MOV RAX/R11,RSP in prologue (2026-03-07)
+- [x] **ToolbarDialog::OnEvent** — MOV RAX/R11,RSP in prologue (2026-03-07)
+- [x] **AchievementDialog::Slot8** — Short Jcc in prologue (2026-03-07)
+- [x] **AchievementDialog::Slot14** — RIP-relative in prologue (2026-03-07)
+- [x] **AutoSaveDialog::Slot6** — RIP-relative in prologue (2026-03-07)
+- [x] **EventPopupDialog::Slot8** — Short Jcc in prologue (2026-03-07)
+- [x] **GoalDialog::Slot6** — RIP-relative in prologue (2026-03-07)
+- [x] **GoalDialog::Slot8** — Short Jcc in prologue (2026-03-07)
+- [x] **MainMenuDialog::Slot8** — JNZ relative jump at byte +4 (2026-03-07)
+- [x] **ModDetailsDialog::Slot8** — Short Jcc in prologue (2026-03-07)
+- [x] **ModDialog::Slot4** — MOV RAX/R11,RSP in prologue (2026-03-07)
 
 ### UI Panel Controllers (23 disabled hooks)
 
-- [ ] **AttendanceUI::Slot4** — RIP-relative in prologue
-- [ ] **BuildUI::Slot9** — Near Jcc in prologue
-- [ ] **CemeteryUI::Slot4** — RIP-relative in prologue
-- [ ] **CitizenUI::Slot9** — Short Jcc in prologue
-- [ ] **ConsumeProduceUI::Slot9** — Near Jcc in prologue
-- [ ] **ControlUI::Slot9** — Short Jcc in prologue
-- [ ] **CropUI::Slot9** — Relative JNZ+JZ in 13-byte prologue
-- [ ] **DebugUI::Slot8** — RIP-relative in prologue
-- [ ] **DestroyUI::Slot9** — Near Jcc in prologue
-- [ ] **EntityUI::Slot9** — RIP-relative in prologue
-- [ ] **EventLogUI::Slot9** — Short Jcc in prologue
-- [ ] **HelpUI::Slot9** — MOV RAX/R11,RSP in prologue
-- [ ] **MapUI::Slot4** — RIP-relative in prologue
-- [ ] **MapUI::Slot9** — Near Jcc in prologue
-- [ ] **NoiseUI::Slot9** — Short Jcc + near Jcc in prologue
-- [ ] **OrchardUI::Slot9** — Short Jcc in prologue
-- [ ] **PageToggleUI::Slot9** — Short Jcc in prologue
-- [ ] **PastureUI::Slot9** — Short Jcc in prologue
-- [ ] **ProductionUI::Slot7** — Relative CALL in prologue
-- [ ] **ResidenceUI::Slot9** — Short Jcc in prologue
-- [ ] **ResourceLimitUI::Slot9** — Near Jcc in prologue
-- [ ] **UpgradeUI::OnRemove** — Near Jcc in prologue
-- [ ] **WorkPlaceUI::OnRemove** — Near Jcc in prologue
+- [x] **AttendanceUI::Slot4** — RIP-relative in prologue (2026-03-07)
+- [x] **BuildUI::Slot9** — Near Jcc in prologue (2026-03-07)
+- [x] **CemeteryUI::Slot4** — RIP-relative in prologue (2026-03-07)
+- [x] **CitizenUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **ConsumeProduceUI::Slot9** — Near Jcc in prologue (2026-03-07)
+- [x] **ControlUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **CropUI::Slot9** — Relative JNZ+JZ in 13-byte prologue (2026-03-07)
+- [x] **DebugUI::Slot8** — RIP-relative in prologue (2026-03-07)
+- [x] **DestroyUI::Slot9** — Near Jcc in prologue (2026-03-07)
+- [x] **EntityUI::Slot9** — RIP-relative in prologue (2026-03-07)
+- [x] **EventLogUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **HelpUI::Slot9** — MOV RAX/R11,RSP in prologue (2026-03-07)
+- [x] **MapUI::Slot4** — RIP-relative in prologue (2026-03-07)
+- [x] **MapUI::Slot9** — Near Jcc in prologue (2026-03-07)
+- [x] **NoiseUI::Slot9** — Short Jcc + near Jcc in prologue (2026-03-07)
+- [x] **OrchardUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **PageToggleUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **PastureUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **ProductionUI::Slot7** — Relative CALL in prologue (2026-03-07)
+- [x] **ResidenceUI::Slot9** — Short Jcc in prologue (2026-03-07)
+- [x] **ResourceLimitUI::Slot9** — Near Jcc in prologue (2026-03-07)
+- [x] **UpgradeUI::OnRemove** — Near Jcc in prologue (2026-03-07)
+- [x] **WorkPlaceUI::OnRemove** — Near Jcc in prologue (2026-03-07)
 
 ### UI Description/Element (5 disabled hooks)
 
-- [ ] **CaptureBoxDesc::Slot3** — RIP-relative in prologue
-- [ ] **FrustumOutlineDesc::Slot3** — RIP-relative in prologue
-- [ ] **CaptureBoxElement::OnCreate** — Short Jcc in prologue
-- [ ] **FrustumOutlineElement::OnCreate** — Short Jcc in prologue
-- [ ] **FrustumOutlineElement::Draw** — MOV RAX/R11,RSP in prologue
+- [x] **CaptureBoxDesc::Slot3** — RIP-relative in prologue (2026-03-07)
+- [x] **FrustumOutlineDesc::Slot3** — RIP-relative in prologue (2026-03-07)
+- [x] **CaptureBoxElement::OnCreate** — Short Jcc in prologue (2026-03-07)
+- [x] **FrustumOutlineElement::OnCreate** — Short Jcc in prologue (2026-03-07)
+- [x] **FrustumOutlineElement::Draw** — MOV RAX/R11,RSP in prologue (2026-03-07)
 
 ---
 

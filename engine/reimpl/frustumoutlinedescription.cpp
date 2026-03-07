@@ -43,10 +43,14 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef int (*fn_Slot3_t)(void* self);
-static int Reimpl_Slot3(void* self) {
+// GetSerializeVersion: calls ElementDescription::GetFileVersion() and ORs with 0x100
+// to indicate a custom serialize format version bit.
+// Original at 0x14006c500: SUB RSP,28h; CALL [GetFileVersion]; BTS EAX,8; ADD RSP,28h; RET
+// Disabled because the prologue contains a RIP-relative CALL at offset 4.
+static uint32_t Reimpl_Slot3(void* self) {
     g_lastHook = "FrustumOutlineDescription::Slot3";
-    return ((fn_Slot3_t)g_hookSlot3.trampoline)(self);
+    uint32_t ver = fn_ElementDescription_GetFileVersion(self);
+    return ver | 0x100u;
 }
 
 typedef void (*fn_Serialize_t)(void* self, void* stream);

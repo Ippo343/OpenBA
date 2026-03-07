@@ -2537,6 +2537,41 @@ typedef void* (*fn_MessageDialog_Ctor_t)(void* mem);
 extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 
 // ============================================================
+// CaptureBoxElement / FrustumOutlineElement support
+// (dispatch table reads from Application-x64.exe .rdata)
+// ============================================================
+
+// UI::ElementDescription::GetFileVersion(this) -> uint
+// Called via exe dispatch table at 0x1401518c0 (Runtime export)
+typedef uint32_t (*fn_ElementDescription_GetFileVersion_t)(void* self);
+extern fn_ElementDescription_GetFileVersion_t fn_ElementDescription_GetFileVersion;
+
+// UI::Element::Draw(this, SpriteContext*, byte alpha)
+// Called via exe dispatch table at 0x1401518f8
+typedef void (*fn_Element_Draw_t)(void* self, void* spriteCtx, uint8_t alpha);
+extern fn_Element_Draw_t fn_Element_Draw;
+
+// UI::SpriteContext::AddLine(this, Sprite*, x1, y1, x2, y2, color)
+// Called via exe dispatch table at 0x140151908
+typedef void (*fn_SpriteContext_AddLine_t)(void* self, void* sprite, int x1, int y1, int x2, int y2, uint32_t color);
+extern fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine;
+
+// UI::SpriteContext::SetScissor(this, x, y, w, h) — 4-param overload
+// Called via exe dispatch table at 0x140151900
+typedef void (*fn_SpriteContext_SetScissor4_t)(void* self, int x, int y, int w, int h);
+extern fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4;
+
+// UI::SpriteContext::SetScissor(this, Viewport*) — restore-from-viewport overload
+// Called via exe dispatch table at 0x140151910
+typedef void (*fn_SpriteContext_SetScissorVP_t)(void* self, void* viewport);
+extern fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP;
+
+// FrustumOutlineElement frustum-to-screen projection helper (exe function)
+// FUN_14006c5b0(outVec3Array) — reads camera frustum, projects 4 corners to screen-space
+typedef void (*fn_FrustumProject_t)(void* outVec3Array);
+extern fn_FrustumProject_t fn_FrustumProject;
+
+// ============================================================
 // Initialization
 // ============================================================
 

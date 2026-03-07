@@ -45,10 +45,18 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
 }
 
-typedef void (*fn_OnCreate_t)(void* self);
+// OnCreate: if bit 27 of self+0x34 is set (initial-size-pending flag),
+// write 1 to self+0x60 and self+0x64 (initial width/height = 1),
+// then clear bit 27 from self+0x34.
+// Disabled because the prologue contains a short Jcc at byte 10 (SHORT_JCC bug).
 static void Reimpl_OnCreate(void* self) {
     g_lastHook = "CaptureBoxElement::OnCreate";
-    ((fn_OnCreate_t)g_hookOnCreate.trampoline)(self);
+    uint32_t flags = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x34);
+    if ((flags >> 27) & 1u) {
+        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x60) = 1;
+        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x64) = 1;
+        *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x34) = flags & ~(1u << 27);
+    }
 }
 
 typedef void (*fn_ComputeLayout_t)(void* self, int a, int b, int c, int d);

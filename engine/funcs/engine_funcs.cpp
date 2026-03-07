@@ -758,6 +758,14 @@ fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
 uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
 fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
+// CaptureBoxElement / FrustumOutlineElement support
+fn_ElementDescription_GetFileVersion_t fn_ElementDescription_GetFileVersion = nullptr;
+fn_Element_Draw_t fn_Element_Draw = nullptr;
+fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine = nullptr;
+fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4 = nullptr;
+fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP = nullptr;
+fn_FrustumProject_t fn_FrustumProject = nullptr;
+
 // ============================================================
 // Initialization
 // ============================================================
@@ -2889,6 +2897,21 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140071d30));
     fn_MessageDialog_Ctor = reinterpret_cast<fn_MessageDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14006d300));
+
+    // CaptureBoxElement / FrustumOutlineElement — read from exe dispatch table
+    // These slots are already filled by the runtime at startup.
+    fn_ElementDescription_GetFileVersion = *reinterpret_cast<fn_ElementDescription_GetFileVersion_t*>(
+        ResolveAddr(Module::Exe, 0x1401518c0));
+    fn_Element_Draw = *reinterpret_cast<fn_Element_Draw_t*>(
+        ResolveAddr(Module::Exe, 0x1401518f8));
+    fn_SpriteContext_AddLine = *reinterpret_cast<fn_SpriteContext_AddLine_t*>(
+        ResolveAddr(Module::Exe, 0x140151908));
+    fn_SpriteContext_SetScissor4 = *reinterpret_cast<fn_SpriteContext_SetScissor4_t*>(
+        ResolveAddr(Module::Exe, 0x140151900));
+    fn_SpriteContext_SetScissorVP = *reinterpret_cast<fn_SpriteContext_SetScissorVP_t*>(
+        ResolveAddr(Module::Exe, 0x140151910));
+    fn_FrustumProject = reinterpret_cast<fn_FrustumProject_t>(
+        ResolveAddr(Module::Exe, 0x14006c5b0));
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
     if (!fn_InputDevice_Update) {

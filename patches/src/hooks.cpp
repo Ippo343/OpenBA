@@ -2636,7 +2636,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- AttendanceUI ---
     { "AttendanceUI::Dtor", InstallAttendanceUIDtor, RemoveAttendanceUIDtor, true },
-    { "AttendanceUI::Slot4", InstallAttendanceUISlot4, RemoveAttendanceUISlot4, false }, // RIP-relative in prologue
+    { "AttendanceUI::Slot4", InstallAttendanceUISlot4, RemoveAttendanceUISlot4, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "AttendanceUI::Slot7", InstallAttendanceUISlot7, RemoveAttendanceUISlot7, true },
 
     // --- BuildRequirementUI ---
@@ -2647,11 +2647,11 @@ static ReimplEntry g_reimplementations[] = {
     { "BuildUI::Dtor", InstallBuildUIDtor, RemoveBuildUIDtor, true },
     { "BuildUI::Slot4", InstallBuildUISlot4, RemoveBuildUISlot4, true },
     { "BuildUI::Slot7", InstallBuildUISlot7, RemoveBuildUISlot7, true },
-    { "BuildUI::Slot9", InstallBuildUISlot9, RemoveBuildUISlot9, false }, // DISABLED: near Jcc in prologue
+    { "BuildUI::Slot9", InstallBuildUISlot9, RemoveBuildUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- CemeteryUI ---
     { "CemeteryUI::Dtor", InstallCemeteryUIDtor, RemoveCemeteryUIDtor, true },
-    { "CemeteryUI::Slot4", InstallCemeteryUISlot4, RemoveCemeteryUISlot4, false }, // RIP-relative in prologue
+    { "CemeteryUI::Slot4", InstallCemeteryUISlot4, RemoveCemeteryUISlot4, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "CemeteryUI::Slot7", InstallCemeteryUISlot7, RemoveCemeteryUISlot7, true },
 
     // --- CitizenUI ---
@@ -2659,39 +2659,39 @@ static ReimplEntry g_reimplementations[] = {
     { "CitizenUI::Slot4", InstallCitizenUISlot4, RemoveCitizenUISlot4, true },
     { "CitizenUI::Slot6", InstallCitizenUISlot6, RemoveCitizenUISlot6, true },
     { "CitizenUI::Slot7", InstallCitizenUISlot7, RemoveCitizenUISlot7, true },
-    { "CitizenUI::Slot9", InstallCitizenUISlot9, RemoveCitizenUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "CitizenUI::Slot9", InstallCitizenUISlot9, RemoveCitizenUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ConsumeProduceUI ---
     { "ConsumeProduceUI::Dtor", InstallConsumeProduceUIDtor, RemoveConsumeProduceUIDtor, true },
     { "ConsumeProduceUI::Slot4", InstallConsumeProduceUISlot4, RemoveConsumeProduceUISlot4, true },
     { "ConsumeProduceUI::Slot7", InstallConsumeProduceUISlot7, RemoveConsumeProduceUISlot7, true },
-    { "ConsumeProduceUI::Slot9", InstallConsumeProduceUISlot9, RemoveConsumeProduceUISlot9, false }, // DISABLED: near Jcc in prologue
+    { "ConsumeProduceUI::Slot9", InstallConsumeProduceUISlot9, RemoveConsumeProduceUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ControlUI ---
     { "ControlUI::Dtor", InstallControlUIDtor, RemoveControlUIDtor, true },
     { "ControlUI::Slot4", InstallControlUISlot4, RemoveControlUISlot4, true },
     { "ControlUI::Slot7", InstallControlUISlot7, RemoveControlUISlot7, true },
-    { "ControlUI::Slot9", InstallControlUISlot9, RemoveControlUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "ControlUI::Slot9", InstallControlUISlot9, RemoveControlUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- CropUI ---
     { "CropUI::Dtor", InstallCropUIDtor, RemoveCropUIDtor, true },
     { "CropUI::Slot4", InstallCropUISlot4, RemoveCropUISlot4, true },
     { "CropUI::Slot7", InstallCropUISlot7, RemoveCropUISlot7, true },
     { "CropUI::Slot8", InstallCropUISlot8, RemoveCropUISlot8, true },
-    { "CropUI::Slot9", InstallCropUISlot9, RemoveCropUISlot9, false }, // DISABLED: relative JNZ+JZ in 13-byte prologue
+    { "CropUI::Slot9", InstallCropUISlot9, RemoveCropUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- DebugUI ---
     { "DebugUI::Dtor", InstallDebugUIDtor, RemoveDebugUIDtor, true },
     { "DebugUI::Slot4", InstallDebugUISlot4, RemoveDebugUISlot4, true },
     { "DebugUI::Slot7", InstallDebugUISlot7, RemoveDebugUISlot7, true },
-    { "DebugUI::Slot8", InstallDebugUISlot8, RemoveDebugUISlot8, false }, // RIP-relative in prologue
+    { "DebugUI::Slot8", InstallDebugUISlot8, RemoveDebugUISlot8, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "DebugUI::Slot9", InstallDebugUISlot9, RemoveDebugUISlot9, true },
 
     // --- DestroyUI ---
     { "DestroyUI::Dtor", InstallDestroyUIDtor, RemoveDestroyUIDtor, true },
     { "DestroyUI::Slot4", InstallDestroyUISlot4, RemoveDestroyUISlot4, true },
     { "DestroyUI::Slot7", InstallDestroyUISlot7, RemoveDestroyUISlot7, true },
-    { "DestroyUI::Slot9", InstallDestroyUISlot9, RemoveDestroyUISlot9, false }, // DISABLED: near Jcc in prologue
+    { "DestroyUI::Slot9", InstallDestroyUISlot9, RemoveDestroyUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- EntityUI ---
     { "EntityUI::Dtor", InstallEntityUIDtor, RemoveEntityUIDtor, true },
@@ -2699,19 +2699,19 @@ static ReimplEntry g_reimplementations[] = {
     { "EntityUI::Slot6", InstallEntityUISlot6, RemoveEntityUISlot6, true },
     { "EntityUI::Slot7", InstallEntityUISlot7, RemoveEntityUISlot7, true },
     { "EntityUI::Slot8", InstallEntityUISlot8, RemoveEntityUISlot8, true },
-    { "EntityUI::Slot9", InstallEntityUISlot9, RemoveEntityUISlot9, false }, // RIP-relative in prologue
+    { "EntityUI::Slot9", InstallEntityUISlot9, RemoveEntityUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- EventLogUI ---
     { "EventLogUI::Dtor", InstallEventLogUIDtor, RemoveEventLogUIDtor, true },
     { "EventLogUI::Slot5", InstallEventLogUISlot5, RemoveEventLogUISlot5, true },
     { "EventLogUI::Slot7", InstallEventLogUISlot7, RemoveEventLogUISlot7, true },
-    { "EventLogUI::Slot9", InstallEventLogUISlot9, RemoveEventLogUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "EventLogUI::Slot9", InstallEventLogUISlot9, RemoveEventLogUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- HelpUI ---
     { "HelpUI::Dtor", InstallHelpUIDtor, RemoveHelpUIDtor, true },
     { "HelpUI::Slot4", InstallHelpUISlot4, RemoveHelpUISlot4, true },
     { "HelpUI::Slot7", InstallHelpUISlot7, RemoveHelpUISlot7, true },
-    { "HelpUI::Slot9", InstallHelpUISlot9, RemoveHelpUISlot9, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "HelpUI::Slot9", InstallHelpUISlot9, RemoveHelpUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // ============================================================
     // Phase 4: UI Panel Controllers (H-R)
@@ -2729,8 +2729,8 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- MapUI ---
     { "MapUI::Dtor", InstallMapUIDtor, RemoveMapUIDtor, true },
-    { "MapUI::Slot4", InstallMapUISlot4, RemoveMapUISlot4, false }, // RIP-relative in prologue
-    { "MapUI::Slot9", InstallMapUISlot9, RemoveMapUISlot9, false }, // DISABLED: near Jcc in prologue
+    { "MapUI::Slot4", InstallMapUISlot4, RemoveMapUISlot4, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "MapUI::Slot9", InstallMapUISlot9, RemoveMapUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ModBrowseUI ---
     { "ModBrowseUI::Dtor", InstallModBrowseUIDtor, RemoveModBrowseUIDtor, true },
@@ -2738,14 +2738,14 @@ static ReimplEntry g_reimplementations[] = {
     // --- NoiseUI ---
     { "NoiseUI::Dtor", InstallNoiseUIDtor, RemoveNoiseUIDtor, true },
     { "NoiseUI::Slot4", InstallNoiseUISlot4, RemoveNoiseUISlot4, true },
-    { "NoiseUI::Slot9", InstallNoiseUISlot9, RemoveNoiseUISlot9, false }, // DISABLED: short Jcc + near Jcc in prologue
+    { "NoiseUI::Slot9", InstallNoiseUISlot9, RemoveNoiseUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- OrchardUI ---
     { "OrchardUI::Dtor", InstallOrchardUIDtor, RemoveOrchardUIDtor, true },
     { "OrchardUI::Slot4", InstallOrchardUISlot4, RemoveOrchardUISlot4, true },
     { "OrchardUI::Slot7", InstallOrchardUISlot7, RemoveOrchardUISlot7, true },
     { "OrchardUI::Slot8", InstallOrchardUISlot8, RemoveOrchardUISlot8, true },
-    { "OrchardUI::Slot9", InstallOrchardUISlot9, RemoveOrchardUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "OrchardUI::Slot9", InstallOrchardUISlot9, RemoveOrchardUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "OrchardUI::Slot11", InstallOrchardUISlot11, RemoveOrchardUISlot11, true },
     { "OrchardUI::Slot12", InstallOrchardUISlot12, RemoveOrchardUISlot12, true },
 
@@ -2753,21 +2753,21 @@ static ReimplEntry g_reimplementations[] = {
     { "PageToggleUI::Dtor", InstallPageToggleUIDtor, RemovePageToggleUIDtor, true },
     { "PageToggleUI::Slot4", InstallPageToggleUISlot4, RemovePageToggleUISlot4, true },
     { "PageToggleUI::Slot7", InstallPageToggleUISlot7, RemovePageToggleUISlot7, true },
-    { "PageToggleUI::Slot9", InstallPageToggleUISlot9, RemovePageToggleUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "PageToggleUI::Slot9", InstallPageToggleUISlot9, RemovePageToggleUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- PastureUI ---
     { "PastureUI::Dtor", InstallPastureUIDtor, RemovePastureUIDtor, true },
     { "PastureUI::Slot4", InstallPastureUISlot4, RemovePastureUISlot4, true },
     { "PastureUI::Slot7", InstallPastureUISlot7, RemovePastureUISlot7, true },
     { "PastureUI::Slot8", InstallPastureUISlot8, RemovePastureUISlot8, true },
-    { "PastureUI::Slot9", InstallPastureUISlot9, RemovePastureUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "PastureUI::Slot9", InstallPastureUISlot9, RemovePastureUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "PastureUI::Slot11", InstallPastureUISlot11, RemovePastureUISlot11, true },
     { "PastureUI::Slot12", InstallPastureUISlot12, RemovePastureUISlot12, true },
 
     // --- ProductionUI ---
     { "ProductionUI::Dtor", InstallProductionUIDtor, RemoveProductionUIDtor, true },
     { "ProductionUI::Slot4", InstallProductionUISlot4, RemoveProductionUISlot4, true },
-    { "ProductionUI::Slot7", InstallProductionUISlot7, RemoveProductionUISlot7, false }, // DISABLED: relative CALL in prologue
+    { "ProductionUI::Slot7", InstallProductionUISlot7, RemoveProductionUISlot7, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ProfessionUI ---
     { "ProfessionUI::Dtor", InstallProfessionUIDtor, RemoveProfessionUIDtor, true },
@@ -2784,13 +2784,13 @@ static ReimplEntry g_reimplementations[] = {
     { "ResidenceUI::Dtor", InstallResidenceUIDtor, RemoveResidenceUIDtor, true },
     { "ResidenceUI::Slot4", InstallResidenceUISlot4, RemoveResidenceUISlot4, true },
     { "ResidenceUI::Slot7", InstallResidenceUISlot7, RemoveResidenceUISlot7, true },
-    { "ResidenceUI::Slot9", InstallResidenceUISlot9, RemoveResidenceUISlot9, false }, // DISABLED: short Jcc in prologue
+    { "ResidenceUI::Slot9", InstallResidenceUISlot9, RemoveResidenceUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ResourceLimitUI ---
     { "ResourceLimitUI::Dtor", InstallResourceLimitUIDtor, RemoveResourceLimitUIDtor, true },
     { "ResourceLimitUI::Slot4", InstallResourceLimitUISlot4, RemoveResourceLimitUISlot4, true },
     { "ResourceLimitUI::Slot7", InstallResourceLimitUISlot7, RemoveResourceLimitUISlot7, true },
-    { "ResourceLimitUI::Slot9", InstallResourceLimitUISlot9, RemoveResourceLimitUISlot9, false }, // DISABLED: near Jcc in prologue
+    { "ResourceLimitUI::Slot9", InstallResourceLimitUISlot9, RemoveResourceLimitUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // ============================================================
     // Phase 4: UI Panel Controllers (S-W)
@@ -2859,13 +2859,13 @@ static ReimplEntry g_reimplementations[] = {
     // --- UpgradeUI ---
     { "UpgradeUI::ScalarDtor", InstallUpgradeUIScalarDtor, RemoveUpgradeUIScalarDtor, true },
     { "UpgradeUI::Serialize", InstallUpgradeUISerialize, RemoveUpgradeUISerialize, true },
-    { "UpgradeUI::OnRemove", InstallUpgradeUIOnRemove, RemoveUpgradeUIOnRemove, false }, // DISABLED: near Jcc in prologue
+    { "UpgradeUI::OnRemove", InstallUpgradeUIOnRemove, RemoveUpgradeUIOnRemove, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- WorkPlaceUI ---
     { "WorkPlaceUI::ScalarDtor", InstallWorkPlaceUIScalarDtor, RemoveWorkPlaceUIScalarDtor, true },
     { "WorkPlaceUI::Serialize", InstallWorkPlaceUISerialize, RemoveWorkPlaceUISerialize, true },
     { "WorkPlaceUI::Startup", InstallWorkPlaceUIStartup, RemoveWorkPlaceUIStartup, true },
-    { "WorkPlaceUI::OnRemove", InstallWorkPlaceUIOnRemove, RemoveWorkPlaceUIOnRemove, false }, // DISABLED: near Jcc in prologue
+    { "WorkPlaceUI::OnRemove", InstallWorkPlaceUIOnRemove, RemoveWorkPlaceUIOnRemove, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // ====================================================================
     // Phase 4: Dialog Controllers
@@ -2875,7 +2875,7 @@ static ReimplEntry g_reimplementations[] = {
     { "EventNotifyDialog::ScalarDtor", InstallEventNotifyDialogScalarDtor, RemoveEventNotifyDialogScalarDtor, true },
     { "EventNotifyDialog::Startup", InstallEventNotifyDialogStartup, RemoveEventNotifyDialogStartup, true },
     { "EventNotifyDialog::Update", InstallEventNotifyDialogUpdate, RemoveEventNotifyDialogUpdate, true },
-    { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- MapParamsDialog ---
     { "MapParamsDialog::ScalarDtor", InstallMapParamsDialogScalarDtor, RemoveMapParamsDialogScalarDtor, true },
@@ -2905,12 +2905,12 @@ static ReimplEntry g_reimplementations[] = {
     { "SaveLoadDialog::ScalarDtor", InstallSaveLoadDialogScalarDtor, RemoveSaveLoadDialogScalarDtor, true },
     { "SaveLoadDialog::Startup", InstallSaveLoadDialogStartup, RemoveSaveLoadDialogStartup, true },
     { "SaveLoadDialog::Update", InstallSaveLoadDialogUpdate, RemoveSaveLoadDialogUpdate, true },
-    { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ToolbarDialog ---
     { "ToolbarDialog::ScalarDtor", InstallToolbarDialogScalarDtor, RemoveToolbarDialogScalarDtor, true },
     { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, true },
-    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- TutorialHighlightDialog ---
     { "TutorialHighlightDialog::ScalarDtor", InstallTutorialHighlightDialogScalarDtor, RemoveTutorialHighlightDialogScalarDtor, true },
@@ -2933,18 +2933,18 @@ static ReimplEntry g_reimplementations[] = {
     { "AchievementDialog::Dtor", InstallAchievementDialogDtor, RemoveAchievementDialogDtor, true },
     { "AchievementDialog::Slot4", InstallAchievementDialogSlot4, RemoveAchievementDialogSlot4, true },
     { "AchievementDialog::Slot6", InstallAchievementDialogSlot6, RemoveAchievementDialogSlot6, true },
-    { "AchievementDialog::Slot8", InstallAchievementDialogSlot8, RemoveAchievementDialogSlot8, false }, // DISABLED: short Jcc in prologue
+    { "AchievementDialog::Slot8", InstallAchievementDialogSlot8, RemoveAchievementDialogSlot8, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "AchievementDialog::Slot10", InstallAchievementDialogSlot10, RemoveAchievementDialogSlot10, true },
-    { "AchievementDialog::Slot14", InstallAchievementDialogSlot14, RemoveAchievementDialogSlot14, false }, // RIP-relative in prologue
+    { "AchievementDialog::Slot14", InstallAchievementDialogSlot14, RemoveAchievementDialogSlot14, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "AchievementDialog::Slot17", InstallAchievementDialogSlot17, RemoveAchievementDialogSlot17, true },
     // --- AutoSaveDialog ---
     { "AutoSaveDialog::Dtor", InstallAutoSaveDialogDtor, RemoveAutoSaveDialogDtor, true },
-    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, false }, // RIP-relative in prologue
+    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "AutoSaveDialog::Slot7", InstallAutoSaveDialogSlot7, RemoveAutoSaveDialogSlot7, true },
     // --- EventPopupDialog ---
     { "EventPopupDialog::Dtor", InstallEventPopupDialogDtor, RemoveEventPopupDialogDtor, true },
     { "EventPopupDialog::Slot4", InstallEventPopupDialogSlot4, RemoveEventPopupDialogSlot4, true },
-    { "EventPopupDialog::Slot8", InstallEventPopupDialogSlot8, RemoveEventPopupDialogSlot8, false }, // DISABLED: short Jcc in prologue
+    { "EventPopupDialog::Slot8", InstallEventPopupDialogSlot8, RemoveEventPopupDialogSlot8, true }, // RE-ENABLED: reimpl doesn't use trampoline
     // --- FollowDialog ---
     { "FollowDialog::Dtor", InstallFollowDialogDtor, RemoveFollowDialogDtor, true },
     { "FollowDialog::Slot4", InstallFollowDialogSlot4, RemoveFollowDialogSlot4, true },
@@ -2953,8 +2953,8 @@ static ReimplEntry g_reimplementations[] = {
     // --- GoalDialog ---
     { "GoalDialog::Dtor", InstallGoalDialogDtor, RemoveGoalDialogDtor, true },
     { "GoalDialog::Slot4", InstallGoalDialogSlot4, RemoveGoalDialogSlot4, true },
-    { "GoalDialog::Slot6", InstallGoalDialogSlot6, RemoveGoalDialogSlot6, false }, // RIP-relative in prologue
-    { "GoalDialog::Slot8", InstallGoalDialogSlot8, RemoveGoalDialogSlot8, false }, // DISABLED: short Jcc in prologue
+    { "GoalDialog::Slot6", InstallGoalDialogSlot6, RemoveGoalDialogSlot6, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "GoalDialog::Slot8", InstallGoalDialogSlot8, RemoveGoalDialogSlot8, true }, // RE-ENABLED: reimpl doesn't use trampoline
     // --- LoaderDialog ---
     { "LoaderDialog::Dtor", InstallLoaderDialogDtor, RemoveLoaderDialogDtor, true },
     { "LoaderDialog::Slot4", InstallLoaderDialogSlot4, RemoveLoaderDialogSlot4, true },
@@ -2964,7 +2964,7 @@ static ReimplEntry g_reimplementations[] = {
     { "MainMenuDialog::Dtor", InstallMainMenuDialogDtor, RemoveMainMenuDialogDtor, true },
     { "MainMenuDialog::Slot4", InstallMainMenuDialogSlot4, RemoveMainMenuDialogSlot4, true },
     { "MainMenuDialog::Slot5", InstallMainMenuDialogSlot5, RemoveMainMenuDialogSlot5, true },
-    { "MainMenuDialog::Slot8", InstallMainMenuDialogSlot8, RemoveMainMenuDialogSlot8, false }, // JNZ relative jump at +4 breaks trampoline
+    { "MainMenuDialog::Slot8", InstallMainMenuDialogSlot8, RemoveMainMenuDialogSlot8, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "MainMenuDialog::Slot10", InstallMainMenuDialogSlot10, RemoveMainMenuDialogSlot10, true },
     // --- MessageDialog ---
     { "MessageDialog::Dtor", InstallMessageDialogDtor, RemoveMessageDialogDtor, true },
@@ -2976,12 +2976,12 @@ static ReimplEntry g_reimplementations[] = {
     // --- ModDetailsDialog ---
     { "ModDetailsDialog::Dtor", InstallModDetailsDialogDtor, RemoveModDetailsDialogDtor, true },
     { "ModDetailsDialog::Slot4", InstallModDetailsDialogSlot4, RemoveModDetailsDialogSlot4, true },
-    { "ModDetailsDialog::Slot8", InstallModDetailsDialogSlot8, RemoveModDetailsDialogSlot8, false }, // DISABLED: short Jcc in prologue
+    { "ModDetailsDialog::Slot8", InstallModDetailsDialogSlot8, RemoveModDetailsDialogSlot8, true }, // RE-ENABLED: reimpl doesn't use trampoline
     // --- ModUploadDialog ---
     { "ModUploadDialog::Dtor", InstallModUploadDialogDtor, RemoveModUploadDialogDtor, true },
     // --- ModDialog ---
     { "ModDialog::Dtor", InstallModDialogDtor, RemoveModDialogDtor, true },
-    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "ModDialog::Slot8", InstallModDialogSlot8, RemoveModDialogSlot8, true },
     { "ModDialog::Slot10", InstallModDialogSlot10, RemoveModDialogSlot10, true },
     // --- ScenarioDialog ---
@@ -3036,26 +3036,26 @@ static ReimplEntry g_reimplementations[] = {
     { "EnvironmentDesc::Serialize", InstallEnvironmentDescriptionSerialize, RemoveEnvironmentDescriptionSerialize, true },
     { "EnvironmentDesc::Cleanup", InstallEnvironmentDescriptionCleanup, RemoveEnvironmentDescriptionCleanup, true },
     { "CaptureBoxDesc::Dtor", InstallCaptureBoxDescriptionDtor, RemoveCaptureBoxDescriptionDtor, true },
-    { "CaptureBoxDesc::Slot3", InstallCaptureBoxDescriptionSlot3, RemoveCaptureBoxDescriptionSlot3, false }, // RIP-relative in prologue
+    { "CaptureBoxDesc::Slot3", InstallCaptureBoxDescriptionSlot3, RemoveCaptureBoxDescriptionSlot3, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "CaptureBoxDesc::Serialize", InstallCaptureBoxDescriptionSerialize, RemoveCaptureBoxDescriptionSerialize, true },
     { "CaptureBoxDesc::Cleanup", InstallCaptureBoxDescriptionCleanup, RemoveCaptureBoxDescriptionCleanup, true },
     { "CaptureBoxDesc::CreateElement", InstallCaptureBoxDescriptionCreateElement, RemoveCaptureBoxDescriptionCreateElement, true },
     { "CaptureBoxDesc::CreateInPlace", InstallCaptureBoxDescriptionCreateInPlace, RemoveCaptureBoxDescriptionCreateInPlace, true },
     { "FrustumOutlineDesc::Dtor", InstallFrustumOutlineDescriptionDtor, RemoveFrustumOutlineDescriptionDtor, true },
-    { "FrustumOutlineDesc::Slot3", InstallFrustumOutlineDescriptionSlot3, RemoveFrustumOutlineDescriptionSlot3, false }, // RIP-relative in prologue
+    { "FrustumOutlineDesc::Slot3", InstallFrustumOutlineDescriptionSlot3, RemoveFrustumOutlineDescriptionSlot3, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "FrustumOutlineDesc::Serialize", InstallFrustumOutlineDescriptionSerialize, RemoveFrustumOutlineDescriptionSerialize, true },
     { "FrustumOutlineDesc::Cleanup", InstallFrustumOutlineDescriptionCleanup, RemoveFrustumOutlineDescriptionCleanup, true },
     { "FrustumOutlineDesc::CreateElement", InstallFrustumOutlineDescriptionCreateElement, RemoveFrustumOutlineDescriptionCreateElement, true },
     { "FrustumOutlineDesc::CreateInPlace", InstallFrustumOutlineDescriptionCreateInPlace, RemoveFrustumOutlineDescriptionCreateInPlace, true },
     // UI Elements
     { "CaptureBoxElement::Dtor", InstallCaptureBoxElementDtor, RemoveCaptureBoxElementDtor, true },
-    { "CaptureBoxElement::OnCreate", InstallCaptureBoxElementOnCreate, RemoveCaptureBoxElementOnCreate, false }, // DISABLED: short Jcc in prologue
+    { "CaptureBoxElement::OnCreate", InstallCaptureBoxElementOnCreate, RemoveCaptureBoxElementOnCreate, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "CaptureBoxElement::ComputeLayout", InstallCaptureBoxElementComputeLayout, RemoveCaptureBoxElementComputeLayout, true },
     { "CaptureBoxElement::Draw", InstallCaptureBoxElementDraw, RemoveCaptureBoxElementDraw, true },
     { "FrustumOutlineElement::Dtor", InstallFrustumOutlineElementDtor, RemoveFrustumOutlineElementDtor, true },
-    { "FrustumOutlineElement::OnCreate", InstallFrustumOutlineElementOnCreate, RemoveFrustumOutlineElementOnCreate, false }, // DISABLED: short Jcc in prologue
+    { "FrustumOutlineElement::OnCreate", InstallFrustumOutlineElementOnCreate, RemoveFrustumOutlineElementOnCreate, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "FrustumOutlineElement::ComputeLayout", InstallFrustumOutlineElementComputeLayout, RemoveFrustumOutlineElementComputeLayout, true },
-    { "FrustumOutlineElement::Draw", InstallFrustumOutlineElementDraw, RemoveFrustumOutlineElementDraw, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "FrustumOutlineElement::Draw", InstallFrustumOutlineElementDraw, RemoveFrustumOutlineElementDraw, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // ================================================================
     // Phase 5: Tools & Placement
