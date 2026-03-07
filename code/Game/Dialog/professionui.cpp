@@ -38,6 +38,201 @@
 #include <cstdio>
 
 // ============================================================
+// File-local helper: CalcWorkerSlots (FUN_14012e5c0)
+// ============================================================
+// Given a StorageLocationComponent (param_1):
+//   - Checks that param_1+0x18 is a WorkplaceJobType (DAT_1401c80a8)
+//   - If no attendance override (pBVar3[0x34]==0): return pBVar3[0x24] (base max workers)
+//   - Otherwise: look up BuildComponent on the entity at param_1+0x10,
+//     compute scaled slots = floor(buildComp.occupants * buildComp.maxOccupants / jobType.totalSlots
+//                                   * maxWorkers + 1.0f), clamped to [1, maxWorkers].
+//
+// StorageLocationComponent (param_1):
+//   +0x10: InternalBasePtr -> entity
+//   +0x18: InternalBasePtr -> WorkplaceJobType object
+//
+// WorkplaceJobType (pBVar3) fields used:
+//   +0x24: int maxWorkers
+//   +0x30: int totalSlots
+//   +0x34: byte hasAttendance (0 = no, else yes)
+//
+// BuildComponent used for attendance scaling:
+//   +0x2c: int16 maxOccupants
+//   +0x2e: int16 currentOccupants
+//
+// Original: FUN_14012e5c0.
+//
+static int CalcWorkerSlots_Impl(uintptr_t storageLocComp) {
+    // Get WorkplaceJobType object from +0x18 (InternalBasePtr)
+    fn_InternalBasePtr_CheckPtr((void*)(storageLocComp + 0x18));
+    void* jobType = *(void**)(storageLocComp + 0x18);
+    if (!jobType) return 0;
+
+    // IsDerivedFrom check
+    bool isJobType = fn_IsDerivedFrom(jobType, *g_TypeId_WorkplaceJobType);
+    if (!isJobType) return 0;
+
+    uintptr_t jt = (uintptr_t)jobType;
+    int maxWorkers = *(int*)(jt + 0x24);
+
+    // If no attendance scaling, just return base max
+    if (*(uint8_t*)(jt + 0x34) == 0) {
+        return maxWorkers;
+    }
+
+    // Find BuildComponent on the entity at +0x10
+    fn_InternalBasePtr_CheckPtr((void*)(storageLocComp + 0x10));
+    uintptr_t entity = *(uintptr_t*)(storageLocComp + 0x10);
+
+    uint64_t buildCompRet = 0;
+    fn_FindComponent_Build((void*)entity, &buildCompRet);
+    fn_InternalBasePtr_CheckPtr((void*)&buildCompRet);
+    uintptr_t buildComp = buildCompRet;
+
+    if (!buildComp) return maxWorkers > 0 ? maxWorkers : 1;
+
+    // Scale: (currentOccupants * maxOccupants / totalSlots) * maxWorkers + 1.0f
+    int16_t maxOcc     = *(int16_t*)(buildComp + 0x2c);
+    int16_t curOcc     = *(int16_t*)(buildComp + 0x2e);
+    int     totalSlots = *(int*)(jt + 0x30);
+    // DAT_14017214c = 1.0f
+    int result = (int)(((float)(curOcc * maxOcc) / (float)totalSlots) * (float)maxWorkers + 1.0f);
+    if (result > maxWorkers) result = maxWorkers;
+    if (result < 1)          result = 1;
+    return result;
+}
+
+// ============================================================
+// File-local helpers: AVL BST rotations + rebalance
+// ============================================================
+// BST node layout (used by the profession BST at self+0x60):
+//   +0x00: void* key  (ExternalPtr to profession description)
+//   +0x08: int   index
+//   +0x10: void* parent
+//   +0x18: void* left (field called "left" / "18" in Ghidra)
+//   +0x20: void* right (field called "right" / "20" in Ghidra)
+//   +0x28: int16 balance  (right_height - left_height)
+//   +0x2a: int16 height   (max(left_h, right_h) + 1, or 0 if null)
+//
+// FUN_14000e580: promotes node's +0x18 child to this node's position (right-rotation)
+// FUN_14000e450: promotes node's +0x20 child to this node's position (left-rotation)
+
+static void BST_UpdateNode(uintptr_t n) {
+    // Recompute balance and height from children.
+    int16_t lh = 0, rh = 0;
+    uintptr_t lc = *(uintptr_t*)(n + 0x18);
+    uintptr_t rc = *(uintptr_t*)(n + 0x20);
+    if (lc) lh = (int16_t)(*(int16_t*)(lc + 0x2a) + 1);
+    if (rc) rh = (int16_t)(*(int16_t*)(rc + 0x2a) + 1);
+    *(int16_t*)(n + 0x28) = (int16_t)(rh - lh);
+    *(int16_t*)(n + 0x2a) = (rh > lh) ? rh : lh;
+}
+
+// FUN_14000e580 — promotes node->left (+0x18) child (right-rotation at node)
+static uintptr_t BST_RotateRight_e580(uintptr_t* rootPtr, uintptr_t node) {
+    uintptr_t parent = *(uintptr_t*)(node + 0x10);
+    uintptr_t pivot  = *(uintptr_t*)(node + 0x18);  // left child becomes new root
+
+    if (node == *rootPtr) *rootPtr = pivot;
+    if (parent) {
+        if (*(uintptr_t*)(parent + 0x18) == node) *(uintptr_t*)(parent + 0x18) = pivot;
+        else                                        *(uintptr_t*)(parent + 0x20) = pivot;
+    }
+    *(uintptr_t*)(pivot + 0x10) = parent;
+
+    // node.left = pivot.right; if pivot.right, reparent it
+    uintptr_t pivotRight = *(uintptr_t*)(pivot + 0x20);
+    *(uintptr_t*)(node + 0x18) = pivotRight;
+    if (pivotRight) *(uintptr_t*)(pivotRight + 0x10) = node;
+
+    *(uintptr_t*)(pivot + 0x20) = node;
+    *(uintptr_t*)(node  + 0x10) = pivot;
+
+    // Update heights in correct order
+    uintptr_t pr = *(uintptr_t*)(pivot + 0x18);
+    if (pr) BST_UpdateNode(pr);
+    uintptr_t pr2 = *(uintptr_t*)(pivot + 0x20);
+    if (pr2) BST_UpdateNode(pr2);
+    BST_UpdateNode(pivot);
+    return pivot;
+}
+
+// FUN_14000e450 — promotes node->right (+0x20) child (left-rotation at node)
+static uintptr_t BST_RotateLeft_e450(uintptr_t* rootPtr, uintptr_t node) {
+    uintptr_t parent = *(uintptr_t*)(node + 0x10);
+    uintptr_t pivot  = *(uintptr_t*)(node + 0x20);  // right child becomes new root
+
+    if (node == *rootPtr) *rootPtr = pivot;
+    if (parent) {
+        if (*(uintptr_t*)(parent + 0x18) == node) *(uintptr_t*)(parent + 0x18) = pivot;
+        else                                        *(uintptr_t*)(parent + 0x20) = pivot;
+    }
+    *(uintptr_t*)(pivot + 0x10) = parent;
+
+    // node.right = pivot.left; if pivot.left, reparent it
+    uintptr_t pivotLeft = *(uintptr_t*)(pivot + 0x18);
+    *(uintptr_t*)(node + 0x20) = pivotLeft;
+    if (pivotLeft) *(uintptr_t*)(pivotLeft + 0x10) = node;
+
+    *(uintptr_t*)(pivot + 0x18) = node;
+    *(uintptr_t*)(node  + 0x10) = pivot;
+
+    uintptr_t pl = *(uintptr_t*)(pivot + 0x18);
+    if (pl) BST_UpdateNode(pl);
+    uintptr_t pl2 = *(uintptr_t*)(pivot + 0x20);
+    if (pl2) BST_UpdateNode(pl2);
+    BST_UpdateNode(pivot);
+    return pivot;
+}
+
+// BSTRebalance_Impl (FUN_140013480): Walk up from startNode, updating heights/balance
+// and performing AVL rotations as needed.
+// treeRootPtr: pointer to the BST root field (e.g. &self->bstRoot)
+// startNodePtr: pointer to the node to begin from (advances to parent each iteration)
+static void BSTRebalance_Impl(uintptr_t* treeRootPtr, uintptr_t* startNodePtr) {
+    uintptr_t cur = *startNodePtr;
+    while (cur != 0) {
+        uintptr_t curNode = *startNodePtr;
+        uintptr_t nextParent = *(uintptr_t*)(curNode + 0x10);
+
+        // Recompute balance/height
+        int16_t lh = 0, rh = 0;
+        uintptr_t lc = *(uintptr_t*)(curNode + 0x18);
+        uintptr_t rc = *(uintptr_t*)(curNode + 0x20);
+        if (lc) lh = (int16_t)(*(int16_t*)(lc + 0x2a) + 1);
+        if (rc) rh = (int16_t)(*(int16_t*)(rc + 0x2a) + 1);
+        *(int16_t*)(curNode + 0x28) = (int16_t)(rh - lh);
+        *(int16_t*)(curNode + 0x2a) = (rh > lh) ? rh : lh;
+
+        // Right-heavy (balance > 1): need left-rotation
+        uintptr_t pivot = *(uintptr_t*)(curNode + 0x20);
+        if (*(int16_t*)(curNode + 0x28) > 1 && pivot != 0) {
+            // If right child is left-heavy (balance < 0): double rotation (right-left)
+            if (*(int16_t*)(pivot + 0x28) < 1 && *(int16_t*)(pivot + 0x28) < 0) {
+                BST_RotateRight_e580(treeRootPtr, pivot);
+                curNode = *startNodePtr;
+            }
+            BST_RotateLeft_e450(treeRootPtr, curNode);
+        }
+
+        curNode = *startNodePtr;
+        // Left-heavy (balance < -1): need right-rotation
+        pivot = *(uintptr_t*)(curNode + 0x18);
+        if (*(int16_t*)(curNode + 0x28) < -1 && pivot != 0) {
+            // If left child is right-heavy (balance > 0): double rotation (left-right)
+            if (*(int16_t*)(pivot + 0x28) > -1 && *(int16_t*)(pivot + 0x28) > 0) {
+                BST_RotateLeft_e450(treeRootPtr, pivot);
+                curNode = *startNodePtr;
+            }
+            BST_RotateRight_e580(treeRootPtr, curNode);
+        }
+
+        *startNodePtr = nextParent;
+        cur = nextParent;
+    }
+}
+
+// ============================================================
 // Dynamic array push helpers (8-byte element arrays)
 // ============================================================
 static void PushToArray8(uintptr_t self, int ptrOffset, uint64_t value) {
@@ -253,8 +448,8 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
                     }
                 }
                 if (*(void**)(newNode + 0x10) != nullptr) {
-                    void* nodePtr = newNode;
-                    fn_BSTRebalance((void*)(s + 0x60), &nodePtr);
+                    uintptr_t nodePtr = (uintptr_t)newNode;
+                    BSTRebalance_Impl((uintptr_t*)(s + 0x60), &nodePtr);
                 }
             }
         }
@@ -475,7 +670,7 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
                     if (storageLocComp) {
                         int workerSlots = *(int*)(storageLocComp + 0x30);
                         if (workerSlots == 0) {
-                            workerSlots = fn_CalcWorkerSlots((void*)storageLocComp);
+                            workerSlots = CalcWorkerSlots_Impl(storageLocComp);
                             *(int*)(storageLocComp + 0x30) = workerSlots;
                         }
                         totalWorkers += workerSlots;

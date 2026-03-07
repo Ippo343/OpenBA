@@ -18,6 +18,131 @@
 #include <cstdio>
 
 // ============================================================
+// CitizenUI_UpdateIconDisplay (0x14006aed0) — local copy for statusbarui
+// Updates icon array fill/half icons based on currentVal/maxVal ratio.
+static void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float currentVal, float maxVal)
+{
+    uintptr_t* wholeArr = *(uintptr_t**)(iconArrayBase);
+    int         count    = *(int*)(iconArrayBase + 8);
+    uintptr_t* halfArr  = *(uintptr_t**)(iconArrayBase + 0x10);
+
+    if (count <= 0) return;
+
+    int fillLevel = (int)((currentVal / maxVal) * (float)(count * 2) + 0.5f);
+
+    int iVar2 = 1;
+    for (int i = 0; i < count; i++) {
+        uintptr_t offset = (uintptr_t)i * 8;
+        {
+            uintptr_t ibpAddr = (uintptr_t)wholeArr + offset;
+            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
+            void* elem = *(void**)ibpAddr;
+            fn_Element_SetFlagsOnOff(elem,
+                (iVar2 >= fillLevel) ? 1 : 0,
+                (iVar2 < fillLevel) ? 1 : 0);
+        }
+        {
+            uintptr_t ibpAddr = (uintptr_t)halfArr + offset;
+            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
+            void* elem = *(void**)ibpAddr;
+            fn_Element_SetFlagsOnOff(elem,
+                (iVar2 != fillLevel) ? 1 : 0,
+                (iVar2 == fillLevel) ? 1 : 0);
+        }
+        iVar2 += 2;
+    }
+}
+
+// CitizenUI_BuildIconArray (0x14006abf0) — local copy for statusbarui
+// Builds whole[] and half[] InternalBasePtr arrays from group element children.
+static void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemIBP)
+{
+    fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
+    void* groupElem = *(void**)groupElemIBP;
+    int childCount = fn_Element_ChildCount(groupElem);
+    if (childCount <= 0) return;
+
+    for (int childIdx = 0; childIdx < childCount; childIdx++) {
+        // --- Whole icon ---
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "whole");
+            uint8_t childBuf[16];
+            fn_Element_Child(groupElem, childBuf, childIdx);
+            fn_InternalBasePtr_CheckPtr((void*)childBuf);
+            void* childElem = *(void**)childBuf;
+            uint8_t foundBuf[16] = {};
+            fn_FindElement(childElem, foundBuf, nameStr);
+            fn_String_Dtor(nameStr);
+            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
+            void* wholeElem = *(void**)foundBuf;
+            uint8_t ibpBuf[8];
+            fn_InternalBasePtr_Ctor(ibpBuf, wholeElem);
+
+            uint32_t oldCount = *(uint32_t*)(param1 + 8);
+            uint32_t newCount = oldCount + 1;
+            void*    oldPtr   = *(void**)(param1);
+            *(uint32_t*)(param1 + 8) = newCount;
+            int oldCap = *(int*)(param1 + 12);
+            if (oldCap < (int)newCount) {
+                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
+                *(int*)(param1 + 12) = newCap;
+                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                *(void**)(param1) = newBuf;
+            }
+            void* curPtr = *(void**)(param1);
+            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
+            for (int k = copyStart; k < (int)newCount; k++) {
+                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
+                if (dst) { *dst = 0; *dst = (k < (int)oldCount) ? *(uint64_t*)((uintptr_t)oldPtr + k * 8) : *(uint64_t*)ibpBuf; }
+            }
+            if (oldPtr != curPtr) fn_MemFreeStatic(oldPtr);
+        }
+        // --- Half icon ---
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "half");
+            fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
+            void* groupElem2 = *(void**)groupElemIBP;
+            uint8_t childBuf[16];
+            fn_Element_Child(groupElem2, childBuf, childIdx);
+            fn_InternalBasePtr_CheckPtr((void*)childBuf);
+            void* childElem = *(void**)childBuf;
+            uint8_t foundBuf[16] = {};
+            fn_FindElement(childElem, foundBuf, nameStr);
+            fn_String_Dtor(nameStr);
+            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
+            void* halfElem = *(void**)foundBuf;
+            uint8_t ibpBuf[8];
+            fn_InternalBasePtr_Ctor(ibpBuf, halfElem);
+
+            uintptr_t halfBase = param1 + 0x10;
+            uint32_t oldCount = *(uint32_t*)(halfBase + 8);
+            uint32_t newCount = oldCount + 1;
+            void*    oldPtr   = *(void**)(halfBase);
+            *(uint32_t*)(halfBase + 8) = newCount;
+            int oldCap = *(int*)(halfBase + 12);
+            if (oldCap < (int)newCount) {
+                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
+                *(int*)(halfBase + 12) = newCap;
+                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                *(void**)(halfBase) = newBuf;
+            }
+            void* curPtr = *(void**)(halfBase);
+            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
+            for (int k = copyStart; k < (int)newCount; k++) {
+                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
+                if (dst) { *dst = 0; *dst = (k < (int)oldCount) ? *(uint64_t*)((uintptr_t)oldPtr + k * 8) : *(uint64_t*)ibpBuf; }
+            }
+            if (oldPtr != curPtr) fn_MemFreeStatic(oldPtr);
+        }
+        fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
+        groupElem = *(void**)groupElemIBP;
+        childCount = fn_Element_ChildCount(groupElem);
+    }
+}
+
+// ============================================================
 // Constants from exe .rdata
 // ============================================================
 static constexpr float kMaxHealth       = 1.0f;   // DAT_14017214c
@@ -134,7 +259,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         }
         uint8_t groupPtr[16];
         fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
-        fn_CitizenUI_BuildIconArray((void*)(s + 0x108), groupPtr);
+        CitizenUI_BuildIconArray_Impl(s + 0x108, (uintptr_t)groupPtr);
         fn_String_Dtor(nameStr);
     }
     {
@@ -153,7 +278,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         }
         uint8_t groupPtr[16];
         fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
-        fn_CitizenUI_BuildIconArray((void*)(s + 0x128), groupPtr);
+        CitizenUI_BuildIconArray_Impl(s + 0x128, (uintptr_t)groupPtr);
         fn_String_Dtor(nameStr);
     }
 
@@ -181,7 +306,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // --- Set initial title text from map name ---
     void* gameWorld = *g_pGameWorldSingleton;
     uint8_t mapName[8];
-    fn_GameWorld_GetMapName(gameWorld, mapName);
+    fn_String_Ctor_Copy(mapName, (void*)((uintptr_t)gameWorld + 0x28));  // FUN_140011f90: copies gameWorld+0x28 String
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
     fn_String_Dtor(mapName);
@@ -297,7 +422,7 @@ found_happiness:
     // --- Update hearts (health) icon display ---
     float maxHappy = kMaxHealth;  // default if no citizens
     if (citizenCount == 0) {
-        fn_CitizenUI_UpdateIconDisplay((void*)(s + 0x108), 0.0f, kMaxHealth);
+        CitizenUI_UpdateIconDisplay_Impl(s + 0x108, 0.0f, kMaxHealth);
         happySum = 0.0f;
     } else {
         // Get max health from first citizen's description
@@ -308,9 +433,9 @@ found_happiness:
         if (fn_IsDerivedFrom(desc, *g_TypeId_CitizenDescription)) {
             citizenDesc = desc;
         }
-        fn_CitizenUI_UpdateIconDisplay((void*)(s + 0x108),
-                                       healthSum / (float)citizenCount,
-                                       *(float*)((uintptr_t)citizenDesc + 0x70));
+        CitizenUI_UpdateIconDisplay_Impl(s + 0x108,
+                                        healthSum / (float)citizenCount,
+                                        *(float*)((uintptr_t)citizenDesc + 0x70));
 
         // Get max happiness from first citizen's description
         firstCitizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0));
@@ -325,7 +450,7 @@ found_happiness:
     }
 
     // --- Update stars (happiness) icon display ---
-    fn_CitizenUI_UpdateIconDisplay((void*)(s + 0x128), happySum, maxHappy);
+    CitizenUI_UpdateIconDisplay_Impl(s + 0x128, happySum, maxHappy);
 
     // --- Update status icon visibility and counts ---
     // Original iterates from numberStatus (+0x178), uses offset -0x30 for imageStatus
@@ -510,7 +635,7 @@ found_happiness:
 
     // --- Update title text (map name) ---
     uint8_t mapName[8];
-    fn_GameWorld_GetMapName(gameWorld, mapName);
+    fn_String_Ctor_Copy(mapName, (void*)((uintptr_t)gameWorld + 0x28));  // FUN_140011f90: copies gameWorld+0x28 String
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
     fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
     fn_String_Dtor(mapName);

@@ -48,6 +48,113 @@ enum MainMenuButtonId {
 };
 
 // ============================================================
+// Helper: open a dialog using a typed ctor function pointer
+// ============================================================
+// Used by the Open* handlers below. Loads the .rsc resource,
+// allocates the dialog buffer, calls the ctor, wraps in
+// InternalBasePtr, and calls AddDialog.
+//
+// param_1 = self (MainMenuDialog*)
+// rscPath  = e.g. "Dialog/NewGame.rsc"
+// ctorSize = byte size of the dialog object to allocate
+// ctorFn   = function pointer to the specific dialog ctor (takes only `self`)
+// passParent = true if the ctor needs self as the parent ptr
+static void MainMenuDialog_OpenDialog(MainMenuDialog* param_1,
+                                      const char* rscPath,
+                                      uint64_t ctorSize,
+                                      void* (*ctorFn)(void*))
+{
+    // Load .rsc resource
+    uint8_t filenameBuf[8];
+    fn_Filename_CtorCStr(filenameBuf, rscPath);
+    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    void* extRes = nullptr;
+    if (resource && fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
+        extRes = resource;
+    }
+    fn_Filename_Dtor(filenameBuf);
+
+    // Allocate and construct the dialog
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, ctorSize, 8);
+    void* dlgObj = nullptr;
+    if (dlgMem) {
+        // Most ctors set up their own parent via saved register or take no parent
+        (void)extRes;  // ctor reads extRes from stack — but we can't pass it here easily.
+        // For these Open* functions, the original just calls the ctor with param_1 on stack
+        // as a saved register. We call via fn_* pointer which was resolved earlier.
+        dlgObj = ctorFn(dlgMem);
+    }
+
+    // Wrap in InternalBasePtr and call AddDialog
+    uint8_t ibp[8];
+    fn_InternalBasePtr_Ctor(ibp, dlgObj);
+    fn_UI_AddDialog(*(void**)((uintptr_t)param_1 + 0x10), ibp);
+}
+
+// ============================================================
+// MainMenuDialog Open* handler implementations
+// ============================================================
+// These are called from Slot8 (OnCommand) when menu buttons are clicked.
+// Each opens a sub-dialog by loading the .rsc resource, allocating and
+// constructing the dialog object, then calling AddDialog.
+//
+// Pattern observed from decompile:
+//   Load rsc -> MemAlloc(size) -> call ctor(mem) -> InternalBasePtr -> AddDialog
+//
+// The ctor functions set up the specific dialog state (vtable, fields, etc.).
+// The resource pointer is passed as part of the ctor arguments via the calling
+// convention's stack frame -- the original code passes it via SavedRegister/local.
+//
+// Since we cannot pass the rsc pointer directly to these ctor fn_* pointers
+// without re-implementing the full ctor, we keep these as fn_* pointer calls
+// which are already resolved at runtime. The fn_* pointers call directly into
+// the original exe functions.
+
+void MainMenuDialog_OpenNewGame(MainMenuDialog* self) {
+    fn_MainMenu_OpenNewGame(self);
+}
+
+void MainMenuDialog_OpenLoad(MainMenuDialog* self) {
+    fn_MainMenu_OpenLoad(self);
+}
+
+void MainMenuDialog_OpenSave(MainMenuDialog* self) {
+    fn_MainMenu_OpenSave(self);
+}
+
+void MainMenuDialog_OpenOptions(MainMenuDialog* self) {
+    fn_MainMenu_OpenOptions(self);
+}
+
+void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
+    fn_MainMenu_ReturnToMenu(self);
+}
+
+void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
+    fn_MainMenu_OpenAchievement(self);
+}
+
+void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
+    fn_MainMenu_OpenScenario(self);
+}
+
+void MainMenuDialog_OpenGoal(MainMenuDialog* self) {
+    fn_MainMenu_OpenGoal(self);
+}
+
+void MainMenuDialog_OpenMap(MainMenuDialog* self) {
+    fn_MainMenu_OpenMap(self);
+}
+
+void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
+    fn_MainMenu_OpenTutorial(self);
+}
+
+void MainMenuDialog_OpenMod(MainMenuDialog* self) {
+    fn_MainMenu_OpenMod(self);
+}
+
+// ============================================================
 // Slot4 (0x1400B3CD0): Setup — initialize main menu UI
 // ============================================================
 // Finds all menu buttons by name, assigns element IDs.

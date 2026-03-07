@@ -138,8 +138,14 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
     }
 
     // --- Step 4: Set cursor, fullscreen fade to black, and queue next loop ---
-    // Uses fn_SetEngineNextLoop which does SetCursor + SetFullscreenFade + store next loop.
-    fn_SetEngineNextLoop(eng, pOuterLoop);
+    // FUN_140097fb0: SetCursor(null), SetFullscreenFade(black), store next loop at eng+0xC8.
+    {
+        void* ui = *(void**)(eng + 0x98);
+        uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+        if (fn_UI_SetCursor) fn_UI_SetCursor(ui, nullCursor);
+        if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
+        *(void**)(eng + 0xC8) = pOuterLoop;
+    }
 }
 
 // Startup (vtable +0x38): Toggle visibility of next/quit buttons.

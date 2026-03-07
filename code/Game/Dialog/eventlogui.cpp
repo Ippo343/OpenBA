@@ -267,11 +267,53 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
         *scrollOffset = 0;
     } else if (id >= 0x67 && id <= 0x6B) {
         // Notification toggle buttons (5 categories)
-        fn_EventLogUI_ToggleNotification(self, id - 0x67);
+        // FUN_140067320: reads flag from button element at +0xD8, copies to event log global +0x10+index
+        {
+            int btnIdx = id - 0x67;
+            // Button ptr is stored in the notification array at +0x70 (array of 8-byte ptrs)
+            void* ibp = (void*)(*(uintptr_t*)(s + 0x70) + (uintptr_t)btnIdx * 8);
+            fn_InternalBasePtr_CheckPtr(ibp);
+            void* btnElem = *(void**)ibp;
+            // Read button's flag from +0xD8 and write to event log singleton +0x10+btnIdx
+            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+            *(uint8_t*)(eventLog + 0x10 + btnIdx) = *(uint8_t*)((uintptr_t)btnElem + 0xD8);
+        }
         return;
     } else if (id >= 0x6C) {
         // Display row click — navigate camera to event location
-        fn_EventLogUI_NavigateToEvent(self, id - 0x6C);
+        // FUN_140067370: computes tile index from event log, calls terrain pick, sets camera target
+        {
+            int rowIdx = id - 0x6C;
+            // Get event log
+            uintptr_t eventLog = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+            int totalEvents = *(int*)(eventLog + 0x20);
+            int displayCount = *(int*)(s + 0x58);
+            int scrollOffset = *(int*)(s + 0x48);
+            int eventIdx = (totalEvents - displayCount - scrollOffset) + rowIdx;
+            // Get tile index from event entry at entryArray + eventIdx*0x28 + 0x18
+            uintptr_t entryArray = *(uintptr_t*)(eventLog + 0x18);
+            int tileIdx = *(int*)(entryArray + 0x18 + (uintptr_t)eventIdx * 0x28);
+            if (tileIdx >= 0) {
+                int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xF8);
+                int gridSize = *mapGrid;
+                float halfSize = (float)(gridSize >> 1) - 0.5f;
+                float inXY[3] = {
+                    (float)(tileIdx % gridSize) - halfSize,
+                    (float)(tileIdx / gridSize) - halfSize,
+                    0.0f
+                };
+                float outPos[3] = {};
+                if (fn_MapGetTerrainPos) {
+                    fn_MapGetTerrainPos(mapGrid, outPos, inXY, '\0', nullptr);
+                } else {
+                    outPos[0] = inXY[0]; outPos[1] = inXY[1]; outPos[2] = 0.0f;
+                }
+                uintptr_t camTarget = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0xE0);
+                *(float*)(camTarget + 0x1C) = outPos[0];
+                *(float*)(camTarget + 0x20) = outPos[1];
+                *(float*)(camTarget + 0x24) = outPos[2];
+            }
+        }
         return;
     }
 

@@ -13,6 +13,54 @@
 #include <cstring>
 
 // ============================================================
+// File-local helper: GoalDialog_ArrayPush_Impl
+// ============================================================
+// Resizes dynamic array at +0xB8 to newCount entries (stride 0x18 bytes).
+// Entry layout: 3 × void* (imageComplete, imageFail, textGoal) = 0x18 bytes.
+// The actual GoalDialog::Slot4 inlines this logic; it does NOT use FUN_140011750.
+// (FUN_140011750 has 0x30 stride with String at +0x20 — different from this.)
+//
+// arrayBase layout: [data* 8][count int32][capacity int32]
+static void GoalDialog_ArrayPush_Impl(void* arrayBase, int newCount, void* entry3) {
+    uintptr_t* dataPtr  = (uintptr_t*)arrayBase;
+    int* countPtr       = (int*)((uintptr_t)arrayBase + 8);
+    int* capacityPtr    = (int*)((uintptr_t)arrayBase + 0xc);
+    int oldCount        = *countPtr;
+
+    if (newCount == oldCount) return;
+
+    void* oldData = (void*)*dataPtr;
+    *countPtr = newCount;
+
+    if (*capacityPtr < newCount) {
+        *capacityPtr = newCount;
+        if (oldCount != 0 && newCount == oldCount + 1) {
+            *capacityPtr = newCount * 3;
+        }
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)*capacityPtr * 0x18, 8);
+        *dataPtr = (uintptr_t)newData;
+    }
+
+    // Copy entries: [startCopy..newCount-1] from old buffer or from entry3 template
+    int startCopy = (oldData == (void*)*dataPtr) ? oldCount : 0;
+    for (int i = startCopy; i < newCount; i++) {
+        uint64_t* dst = (uint64_t*)(*dataPtr + (uintptr_t)i * 0x18);
+        if (dst != nullptr) {
+            uint64_t* src = (i < oldCount)
+                ? (uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 0x18)
+                : (uint64_t*)entry3;
+            dst[0] = src[0];
+            dst[1] = src[1];
+            dst[2] = src[2];
+        }
+    }
+
+    if (oldData != (void*)*dataPtr) {
+        fn_MemFree(g_pMemAllocSingleton, oldData);
+    }
+}
+
+// ============================================================
 // GoalDialog::Slot4 (vtable +0x20) — Setup: populate goal table
 // ============================================================
 // Finds "buttonOk" (ID 100), "tableGoal", and "textScenario".
@@ -164,7 +212,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
             entry[2] = (uint64_t)textGoal;
 
             int newCount = *(int*)(s + 0xC0) + 1;
-            fn_GoalDialog_ArrayPush((void*)(s + 0xB8), newCount, entry);
+            GoalDialog_ArrayPush_Impl((void*)(s + 0xB8), newCount, entry);
         }
     }
 

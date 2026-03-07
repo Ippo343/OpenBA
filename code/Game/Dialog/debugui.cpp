@@ -17,6 +17,173 @@
 #include <cstdio>
 
 // ============================================================
+// Static inline implementations (replaces fn_* exe pointer calls)
+// ============================================================
+
+// Game_GetMonthFromTime (FUN_1400932A0)
+// Converts weather manager time to month index 0-11.
+// param_1 = weatherMgr ptr; time stored at +8.
+static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
+    float seconds = fn_Time_AsSeconds((void*)((uintptr_t)weatherMgr + 8));
+    int month = (int)((seconds / 25200.0f) * 12.0f);  // 25200s/yr, 12 months
+    if (month > 11) month = 0;
+    return month;
+}
+
+// DebugUI_SetDayLighting (FUN_140061780)
+// Reads per-month lighting data from weather table, writes to slider elements.
+// Weather table = **(gameWorld+0x130); entry stride = 0x20; month=param_2.
+// Entry layout (+month*0x20): [+0x38]=R [+0x3d]=G [+0x3c]=B sun byte channels
+// Sun: [0x3e]=R [0x3d]=G [0x3c]=B; Amb: [0x3a]=R [0x39]=G [0x38]=B;
+// Fog: [0x42]=R [0x41]=G [0x40]=B; sun H/P at [0x50/0x54]; fog N/F/M at [0x44/0x48/0x4c]
+static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
+    uintptr_t s = (uintptr_t)self;
+    // weatherTable = **(gameWorld+0x130)
+    void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
+    uintptr_t weatherTable = *(uintptr_t*)weatherListPtr;
+    uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
+    *(float*)(*(uintptr_t*)(s + 0x80) + 0x128) = (float)*(uint8_t*)(entry + 0x3e); // sunR
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x88));
+    *(float*)(*(uintptr_t*)(s + 0x88) + 0x128) = (float)*(uint8_t*)(entry + 0x3d); // sunG
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
+    *(float*)(*(uintptr_t*)(s + 0x90) + 0x128) = (float)*(uint8_t*)(entry + 0x3c); // sunB
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe0));
+    *(uint32_t*)(*(uintptr_t*)(s + 0xe0) + 0x128) = *(uint32_t*)(entry + 0x50);    // sunH (float)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe8));
+    *(uint32_t*)(*(uintptr_t*)(s + 0xe8) + 0x128) = *(uint32_t*)(entry + 0x54);    // sunP (float)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
+    *(float*)(*(uintptr_t*)(s + 0x98) + 0x128) = (float)*(uint8_t*)(entry + 0x3a); // ambR
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
+    *(float*)(*(uintptr_t*)(s + 0xa0) + 0x128) = (float)*(uint8_t*)(entry + 0x39); // ambG
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa8));
+    *(float*)(*(uintptr_t*)(s + 0xa8) + 0x128) = (float)*(uint8_t*)(entry + 0x38); // ambB
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb0));
+    *(float*)(*(uintptr_t*)(s + 0xb0) + 0x128) = (float)*(uint8_t*)(entry + 0x42); // fogR
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb8));
+    *(float*)(*(uintptr_t*)(s + 0xb8) + 0x128) = (float)*(uint8_t*)(entry + 0x41); // fogG
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc0));
+    *(float*)(*(uintptr_t*)(s + 0xc0) + 0x128) = (float)*(uint8_t*)(entry + 0x40); // fogB
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc8));
+    *(uint32_t*)(*(uintptr_t*)(s + 0xc8) + 0x128) = *(uint32_t*)(entry + 0x44);    // fogN (float)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd0));
+    *(uint32_t*)(*(uintptr_t*)(s + 0xd0) + 0x128) = *(uint32_t*)(entry + 0x48);    // fogF (float)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd8));
+    *(float*)(*(uintptr_t*)(s + 0xd8) + 0x128) =
+        *(float*)(entry + 0x4c) * 255.0f;  // fogM (normalize)
+}
+
+// DebugUI_WriteLightingColors (FUN_140061530)
+// Reads slider values from UI elements, writes packed ARGB colors to weather table.
+// Inverse of SetDayLighting: slider → weather table.
+static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
+    uintptr_t s = (uintptr_t)self;
+    void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
+    uintptr_t weatherTable = *(uintptr_t*)weatherListPtr;
+    uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
+    float sunR = *(float*)(*(uintptr_t*)(s + 0x80) + 0x128);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x88));
+    float sunG = *(float*)(*(uintptr_t*)(s + 0x88) + 0x128);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
+    // Pack sun ARGB at entry+0x3c
+    *(uint32_t*)(entry + 0x3c) = ((int)sunR << 8 | (int)sunG) << 8
+        | (int)*(float*)(*(uintptr_t*)(s + 0x90) + 0x128) | 0xFF000000;
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
+    float ambR = *(float*)(*(uintptr_t*)(s + 0x98) + 0x128);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
+    float ambG = *(float*)(*(uintptr_t*)(s + 0xa0) + 0x128);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xa8));
+    // Pack amb ARGB at entry+0x38
+    *(uint32_t*)(entry + 0x38) = ((int)ambR << 8 | (int)ambG) << 8
+        | (int)*(float*)(*(uintptr_t*)(s + 0xa8) + 0x128) | 0xFF000000;
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb0));
+    float fogR = *(float*)(*(uintptr_t*)(s + 0xb0) + 0x128);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xb8));
+    float fogG = *(float*)(*(uintptr_t*)(s + 0xb8) + 0x128);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc0));
+    // Pack fog ARGB at entry+0x40
+    *(uint32_t*)(entry + 0x40) = ((int)fogR << 8 | (int)fogG) << 8
+        | (int)*(float*)(*(uintptr_t*)(s + 0xc0) + 0x128) | 0xFF000000;
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe0));
+    *(uint32_t*)(entry + 0x50) = *(uint32_t*)(*(uintptr_t*)(s + 0xe0) + 0x128); // sunH
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xe8));
+    *(uint32_t*)(entry + 0x54) = *(uint32_t*)(*(uintptr_t*)(s + 0xe8) + 0x128); // sunP
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xc8));
+    *(uint32_t*)(entry + 0x44) = *(uint32_t*)(*(uintptr_t*)(s + 0xc8) + 0x128); // fogN
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd0));
+    *(uint32_t*)(entry + 0x48) = *(uint32_t*)(*(uintptr_t*)(s + 0xd0) + 0x128); // fogF
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xd8));
+    *(float*)(entry + 0x4c) = *(float*)(*(uintptr_t*)(s + 0xd8) + 0x128) / 255.0f; // fogM
+}
+
+// DebugUI_OnDaySliderChanged (FUN_1400607E0)
+// Reads slider value (0-359), converts to game time, resets weather, sets lighting.
+// DAT_140172238 = 360.0f (slider range), DAT_14017225c = 25200.0f (seconds/year)
+// DAT_1401721cc = 30.0f (days/month for month index calc)
+static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
+    uintptr_t s = (uintptr_t)self;
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
+    float sliderVal = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
+
+    // Convert slider (0-359) to game time in ticks
+    int64_t timeTicks;
+    fn_Time_Ctor_Float(&timeTicks, (sliderVal / 360.0f) * 25200.0f);
+
+    // Set game world time
+    *(int64_t*)(*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x128) + 8) = timeTicks;
+
+    // Reset weather time to 0
+    int64_t zeroTick;
+    fn_Time_Ctor_Float(&zeroTick, 0.0f);
+    void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
+    if (fn_Weather_ResetTime) fn_Weather_ResetTime(weatherListPtr, &zeroTick);
+
+    // Update lighting sliders for the new month
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
+    int monthIdx = (int)(sliderVal / 30.0f);  // 30 days/month
+    DebugUI_SetDayLighting_Impl(self, monthIdx);
+}
+
+// DebugUI_OnDiseaseComboChanged (FUN_14005FC60)
+// Handles disease combo selection — updates internal pointer.
+// self+0x38 = diseaseCombo (InternalBasePtr); combo item data is the disease entity.
+static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
+    uintptr_t s = (uintptr_t)self;
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
+    int selIdx = *(int*)(*(uintptr_t*)(s + 0x38) + 0x118);  // selected item index
+    if (selIdx > 3) {
+        // Only take action if index > 3 (first 3 are non-disease entries)
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
+        void* comboElem = *(void**)(s + 0x38);
+        void* itemData = fn_ComboElement_GetItemData(comboElem, selIdx);
+        // Construct InternalBasePtr from item data — used internally by disease system
+        uint8_t basePtrBuf[8];
+        fn_InternalBasePtr_Ctor(basePtrBuf, itemData);
+        // (result discarded — original function only constructs local_res8 on stack)
+    }
+}
+
+// SetEngineNextLoop (FUN_140097fb0)
+// Sets cursor to null, fades to black, stores next loop ptr at engine+0xC8.
+// enginePtr = engine instance (e.g., game->m_engine), loaderLoop = next loop to run.
+static void SetEngineNextLoop_Impl(uintptr_t enginePtr, void* loaderLoop) {
+    void* ui = *(void**)(enginePtr + 0x98);
+    // Set cursor to null (cursor ptr from KeyMap singleton+0x38)
+    uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+    if (fn_UI_SetCursor) fn_UI_SetCursor(ui, nullCursor);
+    // Fade to black (fadeIn=true, color=0xFF000000, reverse=false)
+    if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
+    // Store next loop ptr at engine+0xC8
+    *(void**)(enginePtr + 0xC8) = loaderLoop;
+}
+
+// ============================================================
 // DebugUI::Slot8 (vtable +0x40) -- Update performance counters
 // ============================================================
 // Reads 4 debug counters from engine state, updates NumberElements.
@@ -196,9 +363,9 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     if (param3 == 0x14) {
         if (param4 == 0x166) {
             // Disease combo changed
-            fn_DebugUI_OnDiseaseComboChanged(self);
+            DebugUI_OnDiseaseComboChanged_Impl(self);
         } else if (param4 == 0x163) {
-            // Draw combo changed (select visible scene/mesh)
+            // Draw combo changed (select visible scene/mesh) — NEEDS OPUS
             fn_DebugUI_OnDrawComboChanged(self);
         }
         return;
@@ -208,13 +375,12 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     if (param3 == 0x17) {
         if (param4 == 0x154) {
             // Day slider changed → update game time and lighting
-            fn_DebugUI_OnDaySliderChanged(self);
+            DebugUI_OnDaySliderChanged_Impl(self);
         } else if ((unsigned)(param4 - 0x155) <= 0xD) {
             // Color sliders (0x155-0x162) changed → write lighting colors
-            // Get current month from game time, then write slider values to weather table
             void* weatherMgr = *(void**)((uintptr_t)game + 0x128);
-            int month = fn_Game_GetMonthFromTime(weatherMgr);
-            fn_DebugUI_WriteLightingColors(self, month);
+            int month = DebugUI_GetMonthFromTime_Impl(weatherMgr);
+            DebugUI_WriteLightingColors_Impl(self, month);
         }
         return;
     }
@@ -588,7 +754,7 @@ void DebugUI_Slot4(DebugUI* self) {
         if (monthIndex > 11) monthIndex = 0;
 
         *(float*)((uintptr_t)self->sliderDay + 0x128) = (float)(monthIndex * 30);
-        fn_DebugUI_SetDayLighting(self, monthIndex);
+        DebugUI_SetDayLighting_Impl(self, monthIndex);
     }
 
     // ==========================================================

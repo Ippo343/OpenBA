@@ -231,10 +231,24 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     // Serialize inline String at +0x58 (external path)
     fn_StringSerialize_local((void*)(s + 0x58), serializer);
 
-    // On load: resolve the external resource by name
+    // On load: resolve the external resource by name (FUN_14001b1d0).
+    // Checks factory revision stamp at param+8 vs factory+8; if changed,
+    // does Find+IsDerivedFrom(BuildComponent), stores result at param+0x10.
     serializerBase = *(void**)serializer;
     if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
-        fn_ResolveExternalByName((void*)(s + 0x58));
+        void* namePtr = (void*)(s + 0x58);   // System::String at self+0x58
+        void* factory = *g_pExternalFactorySingleton;
+        if (*(int32_t*)((uintptr_t)namePtr + 8) != *(int32_t*)((uintptr_t)factory + 8)) {
+            // Construct Filename from the String and look it up in the factory
+            uint8_t filenameBuf[8];
+            fn_Filename_CtorString(filenameBuf, namePtr);
+            void* found = fn_ExternalFactory_Find ? fn_ExternalFactory_Find(factory, filenameBuf) : nullptr;
+            fn_Filename_Dtor(filenameBuf);
+            // Cache the result if it passes the BuildComponent type check
+            bool valid = found && g_TypeId_BuildComponent && fn_IsDerivedFrom(found, *g_TypeId_BuildComponent);
+            *(void**)((uintptr_t)namePtr + 0x10) = valid ? found : nullptr;
+            *(int32_t*)((uintptr_t)namePtr + 8) = *(int32_t*)((uintptr_t)factory + 8);
+        }
     }
 
     // Destroy temporary Filename

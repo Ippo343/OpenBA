@@ -135,10 +135,10 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     void* gameWorld = *g_pGameWorldSingleton;
     uintptr_t gw = (uintptr_t)gameWorld;
 
-    // Set map name on editName: fn_GameWorld_GetMapName copies gameWorld+0x28 → String
+    // Set map name on editName: FUN_140011f90 copies System::String at gameWorld+0x28
     {
         uint8_t nameBuf[8];
-        fn_GameWorld_GetMapName(gameWorld, nameBuf);
+        fn_String_Ctor_Copy(nameBuf, (void*)((uintptr_t)gameWorld + 0x28));
         void* editName = *(void**)(s + 0xB8);
         if (editName) fn_EditElement_SetText(editName, nameBuf);
         fn_String_Dtor(nameBuf);

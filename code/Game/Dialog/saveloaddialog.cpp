@@ -434,8 +434,14 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         // --- Step 4: Set the outer LoaderLoop as the engine's next loop ---
         uintptr_t loaderLoop1 = *(uintptr_t*)(s + 0xE0);
         if (loaderLoop1 == 0) {
-            // No existing dialog loader loop: set next loop on the engine singleton
-            fn_SetEngineNextLoop(*(uintptr_t*)(s + 0xE8), pOuterLoop);
+            // No existing dialog loader loop: set next loop on the engine singleton.
+            // FUN_140097fb0: SetCursor(null), SetFullscreenFade(black), store next loop.
+            uintptr_t engPtr = *(uintptr_t*)(s + 0xE8);
+            void* ui = *(void**)(engPtr + 0x98);
+            uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
+            if (fn_UI_SetCursor) fn_UI_SetCursor(ui, nullCursor);
+            if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
+            *(void**)(engPtr + 0xC8) = pOuterLoop;
         } else {
             // Inside a dialog loader loop: queue as its next transition
             fn_SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);

@@ -168,6 +168,11 @@ extern void** g_pExternalFactorySingleton;
 typedef void* (*fn_ExternalFactory_FindOrLoad_t)(void* self, const void* filename);
 extern fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad;
 
+// ExternalFactory::Find(this, Filename const&) -> External const*
+// Ordinal 2337: ?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z
+typedef void* (*fn_ExternalFactory_Find_t)(void* self, const void* filename);
+extern fn_ExternalFactory_Find_t fn_ExternalFactory_Find;
+
 // ExternalFactory::Clean(this) — cleanup resources for freed bits
 typedef void (*fn_ExternalFactory_Clean_t)(void* self);
 extern fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean;
@@ -329,6 +334,10 @@ extern fn_TextElement_SetParameter_t fn_TextElement_SetParameter;
 // UI::Element::GetUserData(this) -> Base* — returns *(Base**)(this + 0x80)
 typedef void* (*fn_Element_GetUserData_t)(void* self);
 extern fn_Element_GetUserData_t fn_Element_GetUserData;
+
+// UI::Element::SetUserData(this, data) — sets *(Base**)(this + 0x80) = data
+typedef void (*fn_Element_SetUserData_t)(void* self, void* data);
+extern fn_Element_SetUserData_t fn_Element_SetUserData;
 
 // Object::InternalBasePtr::InternalBasePtr(this, Internal*) — stores ptr
 typedef void* (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
@@ -515,6 +524,14 @@ extern fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax;
 typedef int (*fn_SpinnerElement_GetValue_t)(const void* self);
 extern fn_SpinnerElement_GetValue_t fn_SpinnerElement_GetValue;
 
+// SpinnerElement::GetMaxValue(this) -> int
+typedef int (*fn_SpinnerElement_GetMaxValue_t)(const void* self);
+extern fn_SpinnerElement_GetMaxValue_t fn_SpinnerElement_GetMaxValue;
+
+// SpinnerElement::SetIncrement(this, int)
+typedef void (*fn_SpinnerElement_SetIncrement_t)(void* self, int increment);
+extern fn_SpinnerElement_SetIncrement_t fn_SpinnerElement_SetIncrement;
+
 // --- UI::ImageElement ---
 
 // ImageElement::SetSprite(this, Sprite) — by value
@@ -581,39 +598,198 @@ extern void** g_pKeyMapSingleton;     // DAT_1401c3de8
 extern void** g_pEngineSingleton;     // exref 0x140151440
 
 // ============================================================
-// Common Exe Functions (Phase A4 — by RVA from Application-x64.exe)
+// Common Exe Functions (Phase A4 — Reimplemented in clean C++)
 // ============================================================
+// These were previously exe-resolved function pointers.
+// Now implemented as clean C++ using type ID globals + InternalBasePtr.
+// No exe address resolution needed.
 
-// Entity::FindComponent variants (template instantiations)
-// All have signature: void FindComponent(entity*, retval*)
-// RCX=entity, RDX=retval(InternalPtr*)
+// Entity::FindComponent — generic implementation (in engine_funcs.cpp).
+// Searches entity component array at +0x30 (ptr) / +0x38 (count).
+// Calls vtable[2] (+0x10) on each component to get type ID, confirms with IsDerivedFrom.
+// Stores result via InternalBasePtr::InternalBasePtr(retval, found).
+// REIMPLEMENTED: decompiled from all FindComponent_X variants (identical algorithm).
+void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr);
+
+// Type ID globals used by FindComponent variants.
+// Resolved from exe .rdata (direct DAT_ addresses, not double-indirect exrefs).
+// Names reflect which component each FindComponent function actually searches for.
+extern uint32_t* g_TypeId_BuildComponent_Slot4;     // DAT_1401c79e0 (fn_FindComponent_Build)
+extern uint32_t* g_TypeId_BuildStateComponent;      // DAT_1401c7d98 (fn_FindComponent_BuildState)
+extern uint32_t* g_TypeId_StateMachineComponent_FC; // DAT_1401c7350 (fn_FindComponent_StateMachine)
+extern uint32_t* g_TypeId_PositionComponent;        // DAT_1401c7008 (fn_FindComponent_Position)
+extern uint32_t* g_TypeId_DestroyComponent_FC;      // DAT_1401c75f0 (fn_FindComponent_Destroy)
+extern uint32_t* g_TypeId_BuildingComponent;        // DAT_1401c4b80 (fn_FindComponent_Building)
+extern uint32_t* g_TypeId_AttendanceComponent;      // DAT_1401c3f40 (fn_FindComponent_Attendance)
+extern uint32_t* g_TypeId_PastureComponent;         // DAT_1401c7ba0 (fn_FindComponent_Pasture)
+extern uint32_t* g_TypeId_AnimalDescription;        // DAT_1401c6fd0 (used by PastureCalcMaxCount)
+extern uint32_t* g_TypeId_OrchardComponent;         // DAT_1401c46b0 (fn_FindComponent_Orchard)
+extern uint32_t* g_TypeId_SMComponent;              // DAT_1401c71c8 (fn_FindComponent_SM)
+extern uint32_t* g_TypeId_CitizenAIComponent_FC;    // DAT_1401c7158 (fn_FindComponent_CitizenAI)
+extern uint32_t* g_TypeId_StorageComponent_FC;      // DAT_1401c7e78 (fn_FindComponent_Storage/Residence)
+extern uint32_t* g_TypeId_CemeteryComponent;        // DAT_1401c4090 (fn_FindComponent_Cemetery)
+extern uint32_t* g_TypeId_TombstoneComponent;       // DAT_1401c4a30
+extern uint32_t* g_TypeId_ImmigrationComponent;     // DAT_1401c4480 (fn_FindComponent_Immigration)
+extern uint32_t* g_TypeId_TrackerComponent;         // DAT_1401c4b10 (fn_FindComponent_Tracker)
+extern uint32_t* g_TypeId_CharacterComponent;       // DAT_1401c7a50 (fn_FindComponent_Character)
+
+// Typedef kept for any existing code that uses fn_FindComponent_t as a type.
 typedef void (*fn_FindComponent_t)(void* entity, void* retval);
 
-extern fn_FindComponent_t fn_FindComponent_StateMachine;   // 0x14000b6f0
-extern fn_FindComponent_t fn_FindComponent_MeshInstance;   // 0x140002f90
-extern fn_FindComponent_t fn_FindComponent_Destroy;        // FUN_140005780
-extern fn_FindComponent_t fn_FindComponent_Build;          // FUN_140004680
-extern fn_FindComponent_t fn_FindComponent_ConsumeProduce; // TBD
-extern fn_FindComponent_t fn_FindComponent_Resource;       // TBD
-extern fn_FindComponent_t fn_FindComponent_Storage;        // FUN_140006270
-extern fn_FindComponent_t fn_FindComponent_Workplace;      // FUN_140003050
-extern fn_FindComponent_t fn_FindComponent_Radius;         // TBD
-extern fn_FindComponent_t fn_FindComponent_BuildState;     // FUN_140003ea0 (type DAT_1401c7d98)
-extern fn_FindComponent_t fn_FindComponent_Attendance;     // FUN_1400105e0
-extern fn_FindComponent_t fn_FindComponent_Cemetery;       // FUN_140010a00
+// FindComponent inline wrappers — call Entity_FindComponentByExeTypeId with correct type ID.
+// Original exe functions (FUN_140XXXXXX) are no longer needed.
 
-// Array resize/push helpers (exe-internal template instantiations)
-typedef void (*fn_ExeArrayResize_t)(void* arrayBase, int newCount);
-extern fn_ExeArrayResize_t fn_ExeArrayResize;   // FUN_1400032e0
-extern fn_ExeArrayResize_t fn_ExeArrayResize2;  // FUN_1400021d0 (4-byte elements)
-extern fn_ExeArrayResize_t fn_ExeArrayResize3;  // FUN_140001bb0 (8-byte elements)
+// fn_FindComponent_Build — DAT_1401c79e0 (BuildComponent), original FUN_140004680
+inline void fn_FindComponent_Build(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildComponent_Slot4);
+}
+// fn_FindComponent_BuildState — DAT_1401c7d98, original FUN_140003ea0
+inline void fn_FindComponent_BuildState(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildStateComponent);
+}
+// fn_FindComponent_StateMachine — DAT_1401c7350, original FUN_14000b6f0
+inline void fn_FindComponent_StateMachine(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StateMachineComponent_FC);
+}
+// fn_FindComponent_Position — DAT_1401c7008, original FUN_14000d6c0
+inline void fn_FindComponent_Position(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_PositionComponent);
+}
+// fn_FindComponent_Destroy — DAT_1401c75f0, original FUN_140005780
+inline void fn_FindComponent_Destroy(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_DestroyComponent_FC);
+}
+// fn_FindComponent_Building — DAT_1401c4b80, original FUN_140015140
+inline void fn_FindComponent_Building(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_BuildingComponent);
+}
+// fn_FindComponent_Workplace — DAT_1401c8070 (= g_TypeId_StorageLocationComponent), original FUN_140003050
+inline void fn_FindComponent_Workplace(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StorageLocationComponent);
+}
+// fn_FindComponent_Attendance — DAT_1401c3f40, original FUN_1400105e0
+inline void fn_FindComponent_Attendance(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_AttendanceComponent);
+}
+// fn_FindComponent_Pasture — DAT_1401c7ba0, original FUN_140004fe0
+inline void fn_FindComponent_Pasture(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_PastureComponent);
+}
+// fn_FindComponent_Orchard — DAT_1401c46b0, original FUN_140005440
+inline void fn_FindComponent_Orchard(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_OrchardComponent);
+}
+// fn_FindComponent_BuildState2 — DAT_1401c80e0 (= g_TypeId_WorkplaceComponent), original FUN_140002e10
+inline void fn_FindComponent_BuildState2(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_WorkplaceComponent);
+}
+// fn_FindComponent_SM — DAT_1401c71c8, original FUN_14000a170
+inline void fn_FindComponent_SM(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_SMComponent);
+}
+// fn_FindComponent_CitizenAI — DAT_1401c7158, original FUN_140009790
+inline void fn_FindComponent_CitizenAI(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenAIComponent_FC);
+}
+// fn_FindComponent_Storage — DAT_1401c7e78, original FUN_140006270
+// NOTE: same function as fn_FindComponent_Residence (same type ID search)
+inline void fn_FindComponent_Storage(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StorageComponent_FC);
+}
+// fn_FindComponent_Residence — same as fn_FindComponent_Storage (same type ID)
+inline void fn_FindComponent_Residence(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_StorageComponent_FC);
+}
+// fn_FindComponent_Cemetery — DAT_1401c4090, original FUN_140010a00
+inline void fn_FindComponent_Cemetery(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CemeteryComponent);
+}
+// fn_FindComponent_Immigration — DAT_1401c4480, original FUN_140012020
+inline void fn_FindComponent_Immigration(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ImmigrationComponent);
+}
+// fn_FindComponent_Tracker — DAT_1401c4b10, original FUN_140013320
+inline void fn_FindComponent_Tracker(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_TrackerComponent);
+}
+// Forward declarations needed by inline helpers below (defined later in this file)
+extern uint32_t* g_TypeId_HappinessComponent;
+extern uint32_t* g_TypeId_ProfessionComponent;
+// fn_FindComponent_MeshInstance — DAT_1401c7e08 (= g_TypeId_HappinessComponent), original FUN_140002f90
+inline void fn_FindComponent_MeshInstance(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_HappinessComponent);
+}
+// fn_FindComponent_Character — DAT_1401c7a50, original FUN_140003f60
+inline void fn_FindComponent_Character(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CharacterComponent);
+}
+// fn_FindProfessionComponent — DAT_1401c70e8 (= g_TypeId_ProfessionComponent), original FUN_140011050
+inline void fn_FindProfessionComponent(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ProfessionComponent);
+}
 
-typedef void (*fn_ExeArrayPush_t)(void* arrayBase, int newCount, void* element);
-extern fn_ExeArrayPush_t fn_ExeArrayPush;       // FUN_140003600
+// ============================================================
+// Dynamic array helpers — Reimplemented in clean C++
+// (previously resolved from Application-x64.exe)
+// All use fn_MemAlloc / fn_MemFreeStatic from Runtime-x64.dll.
+// Array header layout: [0]=ptr(void*), [1..low32]=count(int), [0xc..low32]=capacity(int)
+// ============================================================
+
+// ExeArrayResize: 8-byte elements. Zeroes new entries, copies existing.
+// Capacity grows 3x when adding one beyond current capacity.
+// Original: FUN_1400032e0 (6 uses)
+void fn_ExeArrayResize(void* arrayBase, int newCount);
+
+// ExeArrayResize2: 4-byte elements. Copies existing only (no zero-init for new).
+// Original: FUN_1400021d0 (2 uses)
+void fn_ExeArrayResize2(void* arrayBase, int newCount);
+
+// ExeArrayResize3: 8-byte elements. Copies existing, zeroes new entries.
+// Original: FUN_140001bb0 (1 use)
+void fn_ExeArrayResize3(void* arrayBase, int newCount);
+
+// ExeArrayPush: 4-byte elements. Resizes to newCount, fills new slot with *elementPtr.
+// Original: FUN_140003600 (3 uses)
+void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr);
 
 // StorageComponent::QueryCount(storageComp) -> int
-typedef int (*fn_StorageComponent_QueryCount_t)(void* storageComp);
-extern fn_StorageComponent_QueryCount_t fn_StorageComponent_QueryCount;  // 0x14012cf10
+// FUN_14012cf10: iterates +0x28 item array (count at +0x30). Each slot is 0x10 bytes:
+//   [0..7] = ptr to "item" struct (has +0x28=component ptr array, +0x30=comp count)
+//   [8..11] = item quantity count
+// For each item: scan its component array for ResourceType (type ID check at vtable+0x10,
+// then IsDerivedFrom). Accumulate ResourceType.quantity(+0x48) * item.count.
+inline int fn_StorageComponent_QueryCount(void* storageComp) {
+    uintptr_t sc = (uintptr_t)storageComp;
+    int slotCount = *(int*)(sc + 0x30);
+    int total = 0;
+    uintptr_t itemArray = *(uintptr_t*)(sc + 0x28);
+    for (int i = 0; i < slotCount; i++) {
+        uintptr_t slotBase = itemArray + (uintptr_t)i * 0x10;
+        uintptr_t item = *(uintptr_t*)slotBase;
+        int itemQty = *(int*)(slotBase + 0x8);
+        // Scan item's component array for ResourceType
+        int compCount = *(int*)(item + 0x30);
+        uintptr_t compArray = *(uintptr_t*)(item + 0x28);
+        void* resourceType = nullptr;
+        for (int j = 0; j < compCount; j++) {
+            void* comp = *(void**)(compArray + (uintptr_t)j * 8);
+            // GetTypeId via vtable slot +0x10
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (typeId == *g_TypeId_ResourceType) {
+                if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType)) {
+                    resourceType = comp;
+                }
+                break;
+            }
+        }
+        if (resourceType) {
+            int quantity = *(int*)((uintptr_t)resourceType + 0x48);
+            total += quantity * itemQty;
+        }
+    }
+    return total;
+}
 
 // Radius calculation helper (returns radius display index)
 typedef int (*fn_RadiusCalc_t)(void* component, int tileIndex);
@@ -623,24 +799,12 @@ extern fn_RadiusCalc_t fn_RadiusCalc;           // FUN_140055430
 typedef void (*fn_RadiusDisplay_Remove_t)(void* radiusMgr, int index);
 extern fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove;  // FUN_1400b0d00
 
-// DestroyComponent query functions
-typedef bool (*fn_DestroyQuery_t)(void* component);
-extern fn_DestroyQuery_t fn_DestroyComponent_CanReclaim;   // FUN_14011e690
-extern fn_DestroyQuery_t fn_DestroyComponent_CanRebuild;   // FUN_14011e600
-
-// DestroyComponent action functions
-typedef void (*fn_DestroyAction_t)(void* component);
-extern fn_DestroyAction_t fn_DestroyComponent_Reclaim;     // FUN_14011e400
-extern fn_DestroyAction_t fn_DestroyComponent_Rebuild;     // FUN_14011e470
-extern fn_DestroyAction_t fn_DestroyComponent_Destroy;     // FUN_14011e4d0
-
 // Get active product index from ConsumeProduce component
 typedef int (*fn_GetActiveProductIndex_t)(void* component);
 extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 
-// Storage count query variant
-typedef int (*fn_StorageCountQuery_t)(void* component);
-extern fn_StorageCountQuery_t fn_StorageCountQuery;         // FUN_14012e5c0
+// fn_StorageCountQuery / fn_CalcWorkerSlots — inline defined later (after fn_InternalBasePtr_CheckPtr)
+// FUN_14012e5c0: Calculate worker slot count for a StorageLocationComponent/WorkplaceComponent.
 
 // CropUI helper functions
 typedef void (*fn_CropUIPopulate_t)(void* cropUI);
@@ -648,9 +812,7 @@ extern fn_CropUIPopulate_t fn_CropUI_PopulateCombo;        // FUN_140078830
 typedef int (*fn_CropUIExpected_t)(void* cropUI);
 extern fn_CropUIExpected_t fn_CropUI_GetExpectedCount;     // FUN_140078a40
 
-// Cemetery burial count helper (iterates slots, counts occupied)
-typedef int (*fn_CemeteryBurialCount_t)(void* cemeteryComp);
-extern fn_CemeteryBurialCount_t fn_CemeteryGetBurialCount; // FUN_140046dd0
+// CemeteryGetBurialCount — now inline in cemeteryui.cpp (CemeteryGetBurialCount_Impl)
 
 // SpinnerElement::IsActive(this) -> bool
 typedef bool (*fn_SpinnerElement_IsActive_t)(const void* self);
@@ -694,41 +856,22 @@ extern uint32_t* g_TypeId_ControlComponent;
 typedef void* (*fn_FindComponentByTypeId_t)(void* entity, void* retval, int typeId);
 extern fn_FindComponentByTypeId_t fn_FindComponentByTypeId;
 
-// EntityTrackingSet_Remove(bstRoot, key) — removes entity from BST tracking set
-// FUN_14002c690: BST remove by InternalBasePtr key
-typedef void (*fn_EntityTrackingSet_Remove_t)(void* bstRoot, void* key);
-extern fn_EntityTrackingSet_Remove_t fn_EntityTrackingSet_Remove;
-
-// FindComponent_Immigration — finds ImmigrationComponent on entity (DAT_1401c4480)
-extern fn_FindComponent_t fn_FindComponent_Immigration;  // FUN_140012020
+// EntityTrackingSet_BST_Delete(root, node) — AVL/BST node deletion helper
+// FUN_140025740: called by EntityTrackingSet_Remove to delete found node
+typedef void (*fn_EntityTrackingSet_BST_Delete_t)(void* root, void* node);
+extern fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete;
 
 // WorkplaceComponent_Toggle(comp, newState) — toggles workplace enabled/disabled
 // FUN_14012fc00: 166-line function, called as opaque function pointer
 typedef void (*fn_WorkplaceComponent_Toggle_t)(void* comp, bool newState);
 extern fn_WorkplaceComponent_Toggle_t fn_WorkplaceComponent_Toggle;
 
-// FindComponent_Orchard — finds OrchardComponent on entity (DAT_1401c46b0)
-// Searches entity component array at +0x30/+0x38 for OrchardComponent type ID.
-extern fn_FindComponent_t fn_FindComponent_Orchard;  // FUN_140005440
-
 // OrchardComponent_GetGrowth(comp) — returns average growth ratio as float [0.0, 1.0]
 // FUN_140051640: iterates orchard slots, averages growth values
 typedef float (*fn_OrchardGetGrowth_t)(void* comp);
 extern fn_OrchardGetGrowth_t fn_OrchardGetGrowth;
 
-// FindComponent_Pasture — finds PastureComponent on entity (DAT_1401c7ba0)
-// Searches entity component array at +0x30/+0x38 for PastureComponent type ID.
-extern fn_FindComponent_t fn_FindComponent_Pasture;  // FUN_140004fe0
-
-// PastureComponent_CalcMaxCount(comp) — calculates max animal count from pasture dimensions
-// FUN_140128570: reads build size, divides area by per-animal tile requirement
-typedef uint32_t (*fn_PastureCalcMaxCount_t)(void* comp);
-extern fn_PastureCalcMaxCount_t fn_PastureCalcMaxCount;
-
-// PastureUI_UpdateSlider(self) — updates slider min/max/value from component state
-// FUN_1400b4fa0: finds PastureComponent, sets slider element fields
-typedef void (*fn_PastureUI_UpdateSlider_t)(void* self);
-extern fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider;
+// PastureCalcMaxCount, PastureUI_UpdateSlider — now inline in pastureui.cpp
 
 // ============================================================
 // Phase F: Dialog/UI Runtime functions
@@ -921,19 +1064,12 @@ extern fn_AchievementManager_IsAchievementAwarded_t fn_AchievementManager_IsAchi
 // FollowDialog helpers
 // ============================================================
 
-// FindComponent_Character — FUN_140003f60 (finds Character/CitizenAI component)
-// Same signature as other FindComponent variants: entity*, retval*
-extern fn_FindComponent_t fn_FindComponent_Character;  // FUN_140003f60
-
 // Input::KeyMap::Pressed(this, slot, keyId) -> bool
 // Resolved from exe dispatch table at 0x140151758
 typedef bool (*fn_KeyMap_Pressed_t)(void* self, int slot, int keyId);
 extern fn_KeyMap_Pressed_t fn_KeyMap_Pressed;
 
-// FollowDialog close helper — clears follow target, closes dialog
-// FUN_140068f00: (self)
-typedef void (*fn_FollowDialog_Close_t)(void* self);
-extern fn_FollowDialog_Close_t fn_FollowDialog_Close;
+// fn_FollowDialog_Close — now inline in followdialog.cpp Slot7 (Escape key handler)
 
 // ============================================================
 // UpgradeUI helpers
@@ -956,29 +1092,16 @@ extern fn_DestroyComponent_StartUpgrade_t fn_DestroyComponent_StartUpgrade;
 typedef void (*fn_ResidenceUI_GoToCitizen_t)(void* self, int citizenIndex);
 extern fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen;
 
-// ResidenceUI array push (FUN_140021020) — resizes and copies 0x30-byte entries
-// Used by ResidenceUI::Slot4 to build the resident row element array.
-// Signature: (arrayBase*, newCount, elementPtr*)
-typedef void (*fn_ResidenceUI_ArrayPush_t)(void* arrayBase, int newCount, void* element);
-extern fn_ResidenceUI_ArrayPush_t fn_ResidenceUI_ArrayPush;
+// ResidenceUI array push — now inline as ResidenceUI_ArrayPush_Impl in residenceui.cpp
 
 // ============================================================
 // WorkplaceUI helpers
 // ============================================================
 
-// FindComponent for BuildState (type DAT_1401c8118)
-// FUN_140002e10: entity, retval*
-extern fn_FindComponent_t fn_FindComponent_BuildState2;  // FUN_140002e10
-
-// WorkplaceUI_AdjustWorkerCount(self, delta) — adjusts assigned worker count by +/-delta
-// FUN_140087610: called for jobCountUp (+1) and jobCountDown (-1) buttons
-typedef void (*fn_WorkplaceUI_AdjustWorkerCount_t)(void* self, int delta);
-extern fn_WorkplaceUI_AdjustWorkerCount_t fn_WorkplaceUI_AdjustWorkerCount;
-
-// WorkplaceUI_ToggleWorkplace(self) — toggles workplace enabled/disabled state
-// FUN_1400876d0: called when workPlaceButton is clicked (ID 0x1454)
-typedef void (*fn_WorkplaceUI_ToggleWorkplace_t)(void* self);
-extern fn_WorkplaceUI_ToggleWorkplace_t fn_WorkplaceUI_ToggleWorkplace;
+// WorkplaceComp_SetMaxWorkers(workplaceComp, newMax) — sets max worker count and evicts excess
+// FUN_14012fb00: called by WorkplaceUI_AdjustWorkerCount
+typedef void (*fn_WorkplaceComp_SetMaxWorkers_t)(void* workplaceComp, int newMax);
+extern fn_WorkplaceComp_SetMaxWorkers_t fn_WorkplaceComp_SetMaxWorkers;
 
 // CitizenList::RequestWorker(citizenList, professionId) — adds worker request
 // FUN_14008d100: called for workerCountUp (ID 0x1450)
@@ -994,10 +1117,6 @@ extern fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker;
 // FUN_140091180: called for workerCountDown (ID 0x1451)
 typedef void (*fn_CitizenList_RemoveWorker_t)(void* citizenList, uint64_t professionId);
 extern fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker;
-
-// FindComponent_Position — finds PositionComponent on entity
-// Searches entity component array for PositionComponent type ID.
-extern fn_FindComponent_t fn_FindComponent_Position;  // FUN_14000d6c0
 
 // EditTool type ID at g_TypeId_EditTool
 extern uint32_t* g_TypeId_EditTool;  // resolved from _typeInfo_exref for EditTool checks
@@ -1020,81 +1139,26 @@ extern fn_EntityUI_SelectEntity_t fn_EntityUI_SelectEntity;
 // vtable[13] (offset 0x68): virtual call on EditTool, returns InternalPtr<ComponentEntity>
 // Used by EntityUI::Slot7 to check if current entity is selected
 
-// FindComponent_SM — finds StateMachine/animation component on entity
-// FUN_14000a170: entity, retval*
-extern fn_FindComponent_t fn_FindComponent_SM;  // FUN_14000a170
-
-// GetDescPage(entityDesc, retval) — gets default page from entity description
-// FUN_140011320: reads description fields, returns page-related struct ptr
-typedef void (*fn_GetDescPage_t)(void* entityDesc, void* retval);
-extern fn_GetDescPage_t fn_GetDescPage;
-
-// BuildComplete(posComp) -> bool — checks if build is complete
-// FUN_140109390: reads build progress from position component
-typedef bool (*fn_BuildComplete_t)(void* posComp);
-extern fn_BuildComplete_t fn_BuildComplete;
-
-// ============================================================
-// EventLogUI helpers
-// ============================================================
-
-// EventLogUI_ToggleNotification(self, buttonIndex) — toggles event notification flag
-// FUN_140067320: reads flag from button element, copies to event log global
-typedef void (*fn_EventLogUI_ToggleNotification_t)(void* self, int buttonIndex);
-extern fn_EventLogUI_ToggleNotification_t fn_EventLogUI_ToggleNotification;
-
-// EventLogUI_NavigateToEvent(self, rowIndex) — navigates camera to event location
-// FUN_140067370: computes map coords from event, sets camera target
-typedef void (*fn_EventLogUI_NavigateToEvent_t)(void* self, int rowIndex);
-extern fn_EventLogUI_NavigateToEvent_t fn_EventLogUI_NavigateToEvent;
+// EventLogUI_ToggleNotification — now inline in eventlogui.cpp Slot9
+// EventLogUI_NavigateToEvent — now inline in eventlogui.cpp Slot9
 
 // ============================================================
 // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
 // ============================================================
 
-// MapParamsDialog::OnOk — copies editName text to game world, closes dialog
-// FUN_14006b690
-typedef void (*fn_MapParamsDialog_OnOk_t)(void* self);
-extern fn_MapParamsDialog_OnOk_t fn_MapParamsDialog_OnOk;
-
-// MapParamsDialog::OnNewName — generates random name, sets editName text
-// FUN_14006b700
-typedef void (*fn_MapParamsDialog_OnNewName_t)(void* self);
-extern fn_MapParamsDialog_OnNewName_t fn_MapParamsDialog_OnNewName;
-
-// GameWorld_GetMapName — copies gameWorld+0x28 into String
-// FUN_140011f90: RCX=gameWorld, RDX=retval(String*), returns retval
-typedef void* (*fn_GameWorld_GetMapName_t)(void* gameWorld, void* retval);
-extern fn_GameWorld_GetMapName_t fn_GameWorld_GetMapName;
-
-// Element::SetUserData(this, Base*) — stores user data pointer
-typedef void (*fn_Element_SetUserData_t)(void* self, void* data);
-extern fn_Element_SetUserData_t fn_Element_SetUserData;
-
-// UpgradeUI::Serialize — complex setup (opaque passthrough via exe address)
-// 0x140086d90
-typedef void (*fn_UpgradeUI_Serialize_t)(void* self);
-extern fn_UpgradeUI_Serialize_t fn_UpgradeUI_Serialize;
-
-// UpgradeUI::OnRemove — button click starts upgrade
-// 0x140086c90
-typedef void (*fn_UpgradeUI_OnRemove_t)(void* self, void* p2, int eventType, int eventId);
-extern fn_UpgradeUI_OnRemove_t fn_UpgradeUI_OnRemove;
+// fn_MapParamsDialog_OnOk — now inline in mapparamsdialog.cpp MapParamsDialog_OnEvent (eventData==1)
+// fn_MapParamsDialog_OnNewName — now inline in mapparamsdialog.cpp MapParamsDialog_OnEvent (eventData==0)
+// fn_GameWorld_GetMapName — now inline where needed (direct access to gameWorld+0x28)
+// fn_UpgradeUI_Serialize — now inline as UpgradeUI_Serialize in upgradeui.cpp
+// fn_UpgradeUI_OnRemove — now inline as UpgradeUI_OnRemove in upgradeui.cpp
 
 // ConsumeProduceUI::Slot4 — combo setup with resource sprites
 // 0x14005F3D0
 typedef void (*fn_ConsumeProduceUI_Slot4_t)(void* self);
 extern fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4;
 
-// HelpUI::Slot4 — page navigation setup
-// 0x14006A500
-typedef void (*fn_HelpUI_Slot4_t)(void* self);
-extern fn_HelpUI_Slot4_t fn_HelpUI_Slot4;
-
-// HelpUI::Slot9 — button/combo event handler
-// 0x14006A290
-typedef void (*fn_HelpUI_Slot9_t)(void* self, uint64_t param2, int param3, int param4);
-extern fn_HelpUI_Slot9_t fn_HelpUI_Slot9;
+// HelpUI_Slot4 — now inline as HelpUI_Slot4 in helpui.cpp
+// HelpUI_Slot9 — now inline as HelpUI_Slot9 in helpui.cpp
 
 // ============================================================
 // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
@@ -1147,20 +1211,9 @@ extern fn_AchievementManager_GetAchievementCount_t fn_AchievementManager_GetAchi
 typedef void (*fn_AchievementManager_GetAchievement_t)(void* self, void* retval, int index);
 extern fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement;
 
-// GoalDialog dynamic array push (FUN_140011750 in retail exe)
-// Pushes a 0x18-byte entry (3 pointers: imageComplete, imageFail, textGoal) to goal array.
-// Signature: (arrayBase*, newCount, elementPtr*)
-typedef void (*fn_GoalDialog_ArrayPush_t)(void* arrayBase, int newCount, void* element);
-extern fn_GoalDialog_ArrayPush_t fn_GoalDialog_ArrayPush;
-
-// EventNotifyDialog dynamic array push (FUN_140011750 in retail exe — same function)
-// Pushes a 0x18-byte entry (3 pointers: group, image, button) to notification array.
-extern fn_GoalDialog_ArrayPush_t fn_EventNotifyDialog_ArrayPush;
-
-// ScenarioDialog dynamic array push (FUN_140013b60 in retail exe)
-// Pushes a 0x38-byte entry to scenario array.
-typedef void (*fn_ScenarioDialog_ArrayPush_t)(void* arrayBase, int newCount, void* element);
-extern fn_ScenarioDialog_ArrayPush_t fn_ScenarioDialog_ArrayPush;
+// GoalDialog_ArrayPush — now inline as GoalDialog_ArrayPush_Impl in goaldialog.cpp
+// EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
+// ScenarioDialog_ArrayPush — now inline as ScenarioDialog_ArrayPush_Impl in scenariodialog.cpp
 
 // ExternalList::GetResourceCount(this) -> int
 // ?GetResourceCount@ExternalList@Object@@QEBAHXZ (0x180007650)
@@ -1193,10 +1246,7 @@ extern fn_UIString_Ctor_t fn_UIString_Ctor;
 typedef void (*fn_UIString_ToSystemString_t)(void* self, void* retval);
 extern fn_UIString_ToSystemString_t fn_UIString_ToSystemString;
 
-// EventNotifyDialog array remove (FUN_140011670 in retail exe)
-// Removes entry at index from dynamic array (shifts remaining, decrements count).
-typedef void (*fn_EventNotifyDialog_ArrayRemove_t)(void* arrayBase, int index);
-extern fn_EventNotifyDialog_ArrayRemove_t fn_EventNotifyDialog_ArrayRemove;
+// fn_EventNotifyDialog_ArrayRemove — now inline as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 
 // UI::UserInterface::AddDialog(this, InternalPtr<DialogInstance>)
 // ?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
@@ -1232,21 +1282,13 @@ extern fn_Toolbar_Utility_t fn_Toolbar_Utility;
 typedef void (*fn_Toolbar_ToggleAll_t)(void* gameSubsys);
 extern fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll;
 
-// Case 4: Focus entity
-typedef void* (*fn_Toolbar_FindEntity_t)(void* entityList, void* retBuf, uint64_t typeId, int index);
-extern fn_Toolbar_FindEntity_t fn_Toolbar_FindEntity;
-
-// Case 4: Center on entity
+// fn_Toolbar_FindEntity — now inline as Toolbar_FindEntity_Impl in toolbardialog.cpp
+// fn_Toolbar_CenterOnEntity — still a passthrough (complex exe function)
 typedef void (*fn_Toolbar_CenterOnEntity_t)(void* gameSubsys, void* parentPtr, void* entityPtr);
 extern fn_Toolbar_CenterOnEntity_t fn_Toolbar_CenterOnEntity;
 
-// ToolbarDialog close sub-dialog helper (FUN_1400b9730)
-typedef void (*fn_ToolbarDialog_CloseSubDialog_t)(void* self);
-extern fn_ToolbarDialog_CloseSubDialog_t fn_ToolbarDialog_CloseSubDialog;
-
-// ToolbarDialog change speed helper (FUN_1400b91b0)
-typedef void (*fn_ToolbarDialog_ChangeSpeed_t)(void* self, int direction);
-extern fn_ToolbarDialog_ChangeSpeed_t fn_ToolbarDialog_ChangeSpeed;
+// fn_ToolbarDialog_CloseSubDialog — now inline as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
+// fn_ToolbarDialog_ChangeSpeed — now inline as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 
 // ToolbarDialog update button states helper (FUN_1400b8fd0)
 typedef void (*fn_ToolbarDialog_UpdateButtons_t)(void* self);
@@ -1261,10 +1303,8 @@ extern uint32_t* g_TypeId_ToolbarDialogParent;
 // ComboElement type ID: exref at 0x140151690 — for IsDerivedFrom checks on combo elements
 extern uint32_t* g_TypeId_ComboElement;
 
-// GetCurrentProductIndex (FUN_140119470 in exe)
-// Reads +0x50 product index; if -1 does weighted random selection from +0x58 float array.
-typedef uint32_t (*fn_GetCurrentProductIndex_t)(void* component);
-extern fn_GetCurrentProductIndex_t fn_GetCurrentProductIndex;
+// fn_GetCurrentProductIndex — inline defined later (after fn_Random_RandFloat)
+// FUN_140119470: if +0x50 != 0xffffffff return it; else weighted random pick from +0x58 array.
 
 // FindDialogByName (FUN_1400e1600 in exe)
 // Parses dialog name string, searches UI for matching dialog instance.
@@ -1312,8 +1352,6 @@ extern fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity;
 // FindComponent_Residence — finds ResidenceComponent on entity (DAT for housing component)
 // Used by ResidenceUI::Slot7 to iterate residents.
 // Searches entity component array at +0x30/+0x38.
-extern fn_FindComponent_t fn_FindComponent_Residence;  // FUN_140006270 or similar
-
 // Age multiplier constant (DAT_140172198 = 5.0f) — converts game age ticks to display years
 extern float* g_pAgeMultiplier;
 
@@ -1359,8 +1397,7 @@ extern fn_Dialog_GetReference_t fn_Dialog_GetReference;
 typedef uint32_t (*fn_Audio_Scene_PlayEffect_t)(void* scene, uint64_t soundEffect, int soundType, void* timeParam);
 extern fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect;
 
-// EventNotifyDialog active event array push (FUN_140011750 — same as GoalDialog/EventNotifyDialog array push)
-// Already declared as fn_EventNotifyDialog_ArrayPush.
+// EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
 
 // UI::DialogInstance::DialogInstance ctor — creates a dialog from parent+template
 // FUN_140067c30 uses this to create EventPopupDialog instances
@@ -1426,20 +1463,11 @@ extern uint32_t* g_TypeId_HelpContainerElem;   // exref 0x1401517f8 -> +0x58
 // Type ID used for IsDerivedFrom on named button elements (buttonBack/buttonForward)
 extern uint32_t* g_TypeId_HelpButtonElem;      // exref 0x1401514f8 (same used in Slot9 back/fwd)
 
-// HelpUI history array resize helper (FUN_140011d50 in exe)
-// Resizes dynamic array: param1=array base (ptr+count+capacity), param2=new count
-typedef void (*fn_HelpUI_ArrayResize_t)(void* arrayBase, int newCount);
-extern fn_HelpUI_ArrayResize_t fn_HelpUI_ArrayResize;
+// HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
 // ============================================================
 // BuildUI support functions
 // ============================================================
-
-// FUN_140118330: Counts occupied build tiles for a StorageComponent.
-// Iterates the building footprint, counts tiles occupied by other entities.
-// param1 = StorageComponent ptr
-typedef int (*fn_CountOccupiedBuildTiles_t)(void* storageComp);
-extern fn_CountOccupiedBuildTiles_t fn_CountOccupiedBuildTiles;
 
 // ============================================================
 // CitizenUI helpers
@@ -1447,8 +1475,6 @@ extern fn_CountOccupiedBuildTiles_t fn_CountOccupiedBuildTiles;
 
 // FindComponent_CitizenAI — finds CitizenAIComponent on entity
 // FUN_140009790: entity(longlong), retval(InternalBasePtr*)
-extern fn_FindComponent_t fn_FindComponent_CitizenAI;  // 0x140009790
-
 // CitizenDescription type ID at DAT_1401c7190 (used for IsDerivedFrom in Slot7)
 extern uint32_t* g_TypeId_CitizenDescription;  // DAT_1401c7190
 
@@ -1457,21 +1483,6 @@ extern uint32_t* g_TypeId_HappinessComponent;  // DAT_1401c7e08
 
 // ProfessionComponent type ID at DAT_1401c70e8 (used by FindProfessionComponent)
 extern uint32_t* g_TypeId_ProfessionComponent;  // DAT_1401c70e8
-
-// CitizenUI_BuildIconArray(self+offset, groupElement) — builds whole/half icon arrays
-// FUN_14006abf0: iterates children of group, finds "whole"/"half" sub-elements
-typedef void (*fn_CitizenUI_BuildIconArray_t)(void* iconArrayBase, void* groupElemPtr);
-extern fn_CitizenUI_BuildIconArray_t fn_CitizenUI_BuildIconArray;
-
-// CitizenUI_UpdateIconDisplay(iconArrayBase, currentVal, maxVal) — updates heart/star icons
-// FUN_14006aed0: shows/hides whole/half icons based on ratio
-typedef void (*fn_CitizenUI_UpdateIconDisplay_t)(void* iconArrayBase, float currentVal, float maxVal);
-extern fn_CitizenUI_UpdateIconDisplay_t fn_CitizenUI_UpdateIconDisplay;
-
-// FindProfessionComponent(entityPtr, retval) — finds ProfessionComponent on entity
-// FUN_140011050: searches component array for type DAT_1401c70e8
-typedef void* (*fn_FindProfessionComponent_t)(void* entity, void* retval);
-extern fn_FindProfessionComponent_t fn_FindProfessionComponent;
 
 // CitizenUI::Slot9 original — used as fallback for follow button (0x228)
 // The follow dialog construction has MSVC hidden stack parameters.
@@ -1486,23 +1497,45 @@ extern fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original;
 typedef void (*fn_StatusBarUI_StatusIconHandler_t)(void* self, int iconIndex);
 extern fn_StatusBarUI_StatusIconHandler_t fn_StatusBarUI_StatusIconHandler;
 
-// Game world+0x118 lookup helper (FUN_1400f9a60)
-// Finds entity by tile index in the world grid
-typedef void* (*fn_WorldGrid_FindEntity_t)(void* worldGrid, void* retval, int tileIndex);
-extern fn_WorldGrid_FindEntity_t fn_WorldGrid_FindEntity;
-
 // ============================================================
 // ProductionUI support
 // ============================================================
 
-// FindComponent_Tracker: FUN_140013320 — searches entity components for TrackerComponent
-// (TypeInfo DAT_1401c4b10). Same FindComponent pattern as others.
-extern fn_FindComponent_t fn_FindComponent_Tracker;  // FUN_140013320
-
 // TrackerComponent rebuild: FUN_14000d9d0 — moves/rebuilds tracker item arrays
 // Called when game world item count changes.
-typedef void (*fn_TrackerComponent_Rebuild_t)(void* srcArray, void* dstArray);
-extern fn_TrackerComponent_Rebuild_t fn_TrackerComponent_Rebuild;
+// param_1 = dst array descriptor (uint64_t[2]: ptr, count+capacity)
+// param_2 = src array descriptor (uint64_t[2]: ptr, count+capacity)
+// Frees old dst buffer, allocates count*16 bytes, copies 16-byte entries from src.
+inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
+    if (dstArray == srcArray) return;
+    uint64_t* dst = (uint64_t*)dstArray;
+    uint64_t* src = (uint64_t*)srcArray;
+    fn_MemFreeStatic((void*)*dst);
+    dst[1] = 0;
+    dst[0] = 0;
+    int count = (int)(uint32_t)src[1];  // low 32 bits of src[1]
+    dst[1] = (uint64_t)(uint32_t)count;
+    if (count > 0) {
+        // High word of dst[1]+4 = capacity (same as count on fresh alloc)
+        *(int*)((uintptr_t)dst + 0xc) = count;
+        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 16, 8);
+        *dst = (uint64_t)newBuf;
+    }
+    // Copy entries
+    if ((int)(uint32_t)dst[1] > 0) {
+        uint8_t* dstBuf = (uint8_t*)*dst;
+        uint8_t* srcBuf = (uint8_t*)*src;
+        int n = (int)(uint32_t)dst[1];
+        for (int i = 0; i < n; i++) {
+            if (dstBuf) {
+                uint64_t* d = (uint64_t*)(dstBuf + (uintptr_t)i * 16);
+                uint64_t* s = (uint64_t*)(srcBuf + (uintptr_t)i * 16);
+                d[0] = s[0];
+                d[1] = s[1];
+            }
+        }
+    }
+}
 
 // ============================================================
 // ProfessionUI support
@@ -1516,9 +1549,7 @@ extern fn_External_GetPath_t fn_External_GetPath;
 typedef void* (*fn_Filename_GetPathIdentifier_t)(void* self, void* retval);
 extern fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier;
 
-// BST rebalance after insert: FUN_140013480
-typedef void (*fn_BSTRebalance_t)(void* bstBase, void** insertedNode);
-extern fn_BSTRebalance_t fn_BSTRebalance;
+// BSTRebalance — now inline in professionui.cpp (BSTRebalance_Impl)
 
 // Slot9 spinner handler: FUN_1400763c0 (complex citizen assignment)
 typedef void (*fn_ProfessionUI_HandleSpinner_t)(void* self, int profIndex);
@@ -1527,10 +1558,6 @@ extern fn_ProfessionUI_HandleSpinner_t fn_ProfessionUI_HandleSpinner;
 // Slot9 button handler: FUN_140076a30 (find citizen, center camera)
 typedef void (*fn_ProfessionUI_HandleButton_t)(void* self, int profIndex);
 extern fn_ProfessionUI_HandleButton_t fn_ProfessionUI_HandleButton;
-
-// FUN_14012e5c0: Calculate worker slots from StorageLocationComponent
-typedef int (*fn_CalcWorkerSlots_t)(void* storageLocComp);
-extern fn_CalcWorkerSlots_t fn_CalcWorkerSlots;
 
 // ============================================================
 // MainMenuDialog support functions
@@ -1598,6 +1625,70 @@ extern void** g_pNewGameSettings;  // DAT_1401c3de0
 // ?Rand@Random@System@@QEAAII@Z (ordinal 3442, 0x1800c8040)
 typedef uint32_t (*fn_Random_Rand_t)(void* self, uint32_t maxVal);
 extern fn_Random_Rand_t fn_Random_Rand;
+
+// System::Random::RandFloat(this) -> float
+// ?RandFloat@Random@System@@QEAAMXZ (ordinal 3444, Runtime 0x1800c7d40)
+// Returns a uniform float in [0.0, 1.0).
+typedef float (*fn_Random_RandFloat_t)(void* self);
+extern fn_Random_RandFloat_t fn_Random_RandFloat;
+
+// GetCurrentProductIndex (FUN_140119470 in exe)
+// Reads +0x50 product index; if not -1 (0xffffffff), returns it directly.
+// If -1, performs weighted random selection from +0x58 float array (count at +0x60)
+// using System::Random::RandFloat on the game singleton's Random at +0xd8.
+inline uint32_t fn_GetCurrentProductIndex(void* component) {
+    uintptr_t c = (uintptr_t)component;
+    uint32_t idx = *(uint32_t*)(c + 0x50);
+    if ((int)idx < 0) {
+        if (idx != 0xffffffff) return 0;
+        int count = *(int*)(c + 0x60);
+        float* weights = *(float**)(c + 0x58);
+        float totalWeight = 0.0f;
+        for (int i = 0; i < count; i++) totalWeight += weights[i];
+        void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+        float randVal = fn_Random_RandFloat(randomPtr);
+        float accum = 0.0f;
+        for (int i = 0; i < count; i++) {
+            accum += weights[i];
+            if (randVal * totalWeight < accum) return (uint32_t)i;
+        }
+        return 0;
+    }
+    return idx;
+}
+
+// FUN_14012e5c0: Calculate worker slot count for a StorageLocationComponent/WorkplaceComponent.
+// param_1+0x18 = entity ptr (checks IsDerivedFrom WorkplaceJobType at DAT_1401c80a8).
+// If jobType[0x34]==0: return jobType[0x24] (fixed count).
+// Else: scale by building tile area (building at param_1+0x10).
+// Used as fn_StorageCountQuery in workplaceui, fn_CalcWorkerSlots in professionui.
+inline int fn_StorageCountQuery(void* component) {
+    uintptr_t c = (uintptr_t)component;
+    void* base = *(void**)(c + 0x18);
+    void* jobType = fn_IsDerivedFrom(base, *g_TypeId_WorkplaceJobType) ? base : nullptr;
+    if (!jobType) return 0;
+    uintptr_t jt = (uintptr_t)jobType;
+    if (*(uint8_t*)(jt + 0x34) == 0) {
+        return *(int*)(jt + 0x24);
+    }
+    fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
+    uint64_t buildBP = 0;
+    fn_FindComponent_Build(*(void**)(c + 0x10), &buildBP);
+    fn_InternalBasePtr_CheckPtr(&buildBP);
+    uintptr_t build = (uintptr_t)buildBP;
+    int maxWorkers = *(int*)(jt + 0x24);
+    int tileArea   = *(int*)(jt + 0x30);
+    int width      = (int)*(short*)(build + 0x2c);
+    int height     = (int)*(short*)(build + 0x2e);
+    int result = (int)(((float)(width * height) / (float)tileArea) * (float)maxWorkers + 1.0f);
+    if (result > maxWorkers) result = maxWorkers;
+    if (result < 1)          result = 1;
+    return result;
+}
+// Alias used by professionui.cpp
+inline int fn_CalcWorkerSlots(void* storageLocComp) {
+    return fn_StorageCountQuery(storageLocComp);
+}
 
 // Name generator: FUN_140099ac0(unused, retStr, random, maxLen)
 // Loads "Game/Names/Cities.ndb", generates random name
@@ -1669,10 +1760,7 @@ extern fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor;
 typedef void (*fn_TabElement_SetActiveTab_t)(void* self, int tabIndex);
 extern fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab;
 
-// UI::Element::GetParent(elem) -> Element*
-// FUN_140010460 — returns parent element pointer
-typedef void* (*fn_Element_GetParent_t)(void* self);
-extern fn_Element_GetParent_t fn_Element_GetParent;
+// fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 
 // OptionsDialog game settings global — DAT_1401c3de0 in exe
 // int[8] array: [0]=uiScale, [1]=autosaveInterval, [2]=statusIconDist,
@@ -1765,10 +1853,7 @@ extern fn_String_Concat_t fn_String_Concat;
 typedef bool (*fn_Filename_Less_t)(const void* self, const void* other);
 extern fn_Filename_Less_t fn_Filename_Less;
 
-// FUN_14006e290: ModDetails string array push — appends a String copy to dynamic array
-// RCX=arrayBase(ptr+count+capacity), RDX=string(String const*)
-typedef void (*fn_ModDetails_StringArrayPush_t)(void* arrayBase, const void* str);
-extern fn_ModDetails_StringArrayPush_t fn_ModDetails_StringArrayPush;
+// ModDetails_StringArrayPush — now inline in moddetailsdialog.cpp (ModDetails_StringArrayPush_Impl)
 
 // ============================================================
 // IO::Modification (mod management singleton)
@@ -1917,87 +2002,25 @@ extern uint32_t* g_TypeId_CaptureBoxElement;
 // TradeUI support functions
 // ============================================================
 
-// FindComponent_Building — searches entity components for BuildingComponent (DAT_1401c4b80)
-// FUN_140015140(entity, retval) — same pattern as other FindComponent variants
-extern fn_FindComponent_t fn_FindComponent_Building;  // 0x140015140
-
 // UI::Element::SetNeedsSizeCalc(this) — marks element for layout recalculation
 // ?SetNeedsSizeCalc@Element@UI@@QEAAXXZ
 typedef void (*fn_Element_SetNeedsSizeCalc_t)(void* self);
 extern fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc;
 
-// TradeUI::Serialize (0x140084dd0) — complex setup: finds 15 elements, builds 4 table arrays,
-// enumerates ExternalFactory for resource types, populates trade tables with spinners
-typedef void (*fn_TradeUI_Serialize_t)(void* self);
-extern fn_TradeUI_Serialize_t fn_TradeUI_Serialize;
-
-// TradeUI::Startup (0x140082150) — complex: calculates sell/buy totals from order arrays,
-// checks storage capacity, shows/hides warning text, updates trade buttons
-typedef void (*fn_TradeUI_Startup_t)(void* self);
-extern fn_TradeUI_Startup_t fn_TradeUI_Startup;
-
-// TradeUI::OnCreate (0x1400827b0) — checks if order count changed, refreshes tables
-typedef void (*fn_TradeUI_OnCreate_t)(void* self);
-extern fn_TradeUI_OnCreate_t fn_TradeUI_OnCreate;
-
-// TradeUI::OnRemove (0x140081f20) — event dispatcher: handles button clicks, spinner changes,
-// combo selections based on event type and element ID ranges
-typedef void (*fn_TradeUI_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
-extern fn_TradeUI_OnRemove_t fn_TradeUI_OnRemove;
-
-// TradeUI::Update (0x1400868c0) — serializes/restores active tab and sort combo state
-typedef void (*fn_TradeUI_Update_t)(void* self, void* stream, void* p3, int64_t p4);
-extern fn_TradeUI_Update_t fn_TradeUI_Update;
-
 // TradeUI::RefreshSortedDisplay (0x1400846b0) — rebuilds sorted trade table display
-// Called after tab/sort change in Update, OnCreate, and at end of Serialize
+// (needs opus — 336 lines)
 typedef void (*fn_TradeUI_RefreshDisplay_t)(void* self, uint64_t p2, uint64_t p3, int64_t p4);
 extern fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay;
 
-// TradeUI sub-functions: refresh tables and update totals
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable;   // FUN_140083c70 (381 lines)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable;    // FUN_140083100 (488 lines)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateSellTotals;   // FUN_140082920 (49 lines)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateBuyTotals;    // FUN_140082850 (47 lines)
+// TradeUI table refresh sub-functions (needs opus — 381/488 lines each)
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable;   // FUN_140083c70
+extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable;    // FUN_140083100
 
-// TradeUI::OnRemove sub-functions (called by the event dispatcher)
-// FUN_140081420: OnTradeButton(self, p2, p3, p4) — handles buttonTrade click (id 0x4e20)
+// TradeUI::OnTradeButton — executes trade (needs opus — ~160 lines)
 typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
-extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;    // 0x140081420
+extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;   // 0x140081420
 
-// FUN_140081950: OnDismissButton(self) — handles buttonDismiss click (id 0x4e21)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_OnDismissButton;    // 0x140081950
-
-// FUN_140081d00: OnOrderSpinner(self, idx, idx_minus1) — order quantity spinner (id 0x1388+)
-typedef void (*fn_TradeUI_OnOrderSpinner_t)(void* self, int idx, int idx_minus1);
-extern fn_TradeUI_OnOrderSpinner_t fn_TradeUI_OnOrderSpinner;  // 0x140081d00
-
-// FUN_140081dd0: OnPurchaseButton(self, idx) — purchase button (id 0x1f40+)
-typedef void (*fn_TradeUI_OnPurchaseButton_t)(void* self, int idx);
-extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnPurchaseButton; // 0x140081dd0
-
-// FUN_140081bc0: OnComboPurchase(self) — comboPurchase change (id 0x4e22)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboPurchase;    // 0x140081bc0
-
-// FUN_140081e80: OnComboOrder(self) — comboOrder change (id 0x4e23)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboOrder;       // 0x140081e80
-
-// FUN_140081ab0: OnStorageSpinner(self, idx, reserved) — storage spinner (id 0x7d0+)
-typedef void (*fn_TradeUI_OnStorageSpinner_t)(void* self, int idx, void* reserved);
-extern fn_TradeUI_OnStorageSpinner_t fn_TradeUI_OnStorageSpinner; // 0x140081ab0
-
-// FUN_140081a50: OnSellSpinner(self, idx) — sell spinner (id 0xbb8+)
-extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnSellSpinner;    // 0x140081a50
-
-// FUN_1400819f0: OnBuySpinner(self, idx) — buy spinner (id 0xfa0+)
-extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnBuySpinner;     // 0x1400819f0
-
-// FUN_140081c50: OnOrderAmountSpinner(self, idx) — order amount spinner (id 0x1b58+)
-extern fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnOrderAmountSpinner; // 0x140081c50
-
-// TradeUI::Serialize sub-function type IDs used in IsDerivedFrom checks
-// These are the element type IDs used when finding typed elements in Serialize
-// _typeInfo_exref used in Serialize for IsDerivedFrom (ComboElement, TableElement, SpinnerElement, etc.)
+// TradeUI type IDs used in IsDerivedFrom checks
 // TableElement type ID — exref 0x140151510
 extern uint32_t* g_TypeId_TableElement;
 
@@ -2017,14 +2040,31 @@ extern uint32_t* g_TypeId_TextElement;
 // Used in Serialize ExternalFactory loop to count selectable build types
 extern uint32_t* g_TypeId_SelectDescription;
 
-// TradeUI::Startup end-sub-functions (called after main calculation)
-// FUN_140082fb0: RefreshOrderQuantityDisplay — updates order quantity NumberElements via StateMachine
-typedef void (*fn_TradeUI_SubFunc_t)(void* self);
-extern fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderQuantityDisplay;  // 0x140082fb0
-// FUN_140082d80: RefreshSellSpinnerValues — updates sell-order spinners (SetMinMax, SetIncrement)
-extern fn_TradeUI_SubFunc_t fn_TradeUI_RefreshSellSpinnerValues;     // 0x140082d80
-// FUN_140082b20: RefreshOrderDisplay — updates order table rows (spinner values, labels, sprites)
-extern fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderDisplay;          // 0x140082b20
+// FUN_14005a520: Building_GetSellableCount(building, resource_entity) -> int
+// Queries available sell count for a given resource at a building.
+// Used by UpdateSellTotals and RefreshSellSpinnerValues.
+typedef int (*fn_Building_GetSellableCount_t)(void* building, void* resourceEntity);
+extern fn_Building_GetSellableCount_t fn_Building_GetSellableCount;  // 0x14005a520
+
+// FUN_14000e1c0: StorageTree_Insert(tree*, retval*, entry*) — insert into storage BST
+// Used by OnStorageSpinner to track storage resource assignments.
+typedef void* (*fn_StorageTree_Insert_t)(void* tree, void* retval, void* entry);
+extern fn_StorageTree_Insert_t fn_StorageTree_Insert;  // 0x14000e1c0
+
+// FUN_14005baa0: Building_RemoveBuyOrder(building, resource_entity, qty) — remove buy order
+// Used by OnStorageSpinner when removing an item from buy list.
+typedef void (*fn_Building_RemoveBuyOrder_t)(void* building, void* resourceEntity, int qty);
+extern fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder;  // 0x14005baa0
+
+// FUN_14005ace0: Building_AddBuyToStorage(building, resource_entity, qty)
+// Used by OnStorageSpinner when a storage resource is assigned for buying.
+typedef void (*fn_Building_AddBuyToStorage_t)(void* building, void* resourceEntity, int qty);
+extern fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage;  // 0x14005ace0
+
+// FUN_140059490: Building_AddPurchaseOrder(building, resource_entity, enabled)
+// Sets/updates a purchase order entry. Used by OnPurchaseButton.
+typedef void (*fn_Building_AddPurchaseOrder_t)(void* building, void* resourceEntity, int8_t enabled);
+extern fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder;  // 0x140059490
 
 // ============================================================
 // NoiseUI helpers (Application-x64.exe)
@@ -2051,6 +2091,22 @@ extern fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise;
 // ============================================================
 // DebugUI support
 // ============================================================
+
+// Weather_ResetTime (0x1400944e0) — resets weather to a given time, updates all active weather
+// entries (geometry fade, audio, lightning), recalculates day index and time transition.
+// RCX=weatherMgrPtr(longlong*), RDX=timePtr(longlong*)
+typedef void (*fn_Weather_ResetTime_t)(void* weatherMgrPtr, void* timePtr);
+extern fn_Weather_ResetTime_t fn_Weather_ResetTime;
+
+// UI::UserInterface::SetCursor(this, ExternalPtr<Cursor>) — sets active cursor
+// Ordinal 3865: ?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z
+typedef void (*fn_UI_SetCursor_t)(void* self, uint64_t cursorPtr);
+extern fn_UI_SetCursor_t fn_UI_SetCursor;
+
+// UI::UserInterface::SetFullscreenFade(this, fadeIn, color, reverse) — controls fade overlay
+// Ordinal 3887: ?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z
+typedef void (*fn_UI_SetFullscreenFade_t)(void* self, bool fadeIn, uint32_t color, bool reverse);
+extern fn_UI_SetFullscreenFade_t fn_UI_SetFullscreenFade;
 
 // DebugUI_SetDayLighting (FUN_140061780) — reads lighting data from weather table
 // for given month index, sets slider values on sun/amb/fog color elements.

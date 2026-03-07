@@ -1114,7 +1114,10 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         // Input bind button clicks: IDs >= 13
         if (eventData >= kInputBind_Base) {
             fn_InternalBasePtr_CheckPtr(&element);
-            void* parent = fn_Element_GetParent(*(void**)element);
+            // FUN_140010460: IsDerivedFrom(elem, UIElementBase type) — returns elem if valid, else null
+            void* clickedElem = *(void**)element;
+            bool isUIElement = g_TypeId_UIElementBase && fn_IsDerivedFrom(clickedElem, *g_TypeId_UIElementBase);
+            void* parent = isUIElement ? clickedElem : nullptr;
             uint8_t parentPtr[16];
             fn_InternalBasePtr_Ctor(parentPtr, parent);
 

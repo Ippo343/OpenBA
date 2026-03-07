@@ -14,6 +14,38 @@
 #include <cstring>
 
 // ============================================================
+// WorldGrid_FindEntity (0x1400f9a60)
+// ============================================================
+// BST search by tile index. worldGrid+0x30 = root node ptr.
+// Node: *node = key (int), *(node+6) = left ptr, *(node+8) = right ptr
+// On match: copies *(node+2) into retval (InternalBasePtr).
+static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIndex)
+{
+    int* node = *(int**)((uintptr_t)worldGrid + 0x30);
+    while (true) {
+        if (node == nullptr) {
+            fn_InternalBasePtr_Ctor(retval, nullptr);
+            return retval;
+        }
+        if (*node <= tileIndex) {
+            if (tileIndex <= *node) {
+                // Exact match
+                if (node != nullptr) {
+                    *(uint64_t*)retval = 0;
+                    *(uint64_t*)retval = *(uint64_t*)(node + 2);
+                    return retval;
+                }
+                fn_InternalBasePtr_Ctor(retval, nullptr);
+                return retval;
+            }
+            node = *(int**)(node + 8);  // right child
+        } else {
+            node = *(int**)(node + 6);  // left child
+        }
+    }
+}
+
+// ============================================================
 // FollowDialog::Slot4 (vtable +0x20) — Setup follow camera UI
 // ============================================================
 // Finds buttonClose (ID 100), textFollow (+0xC8), textAction (+0xD0).
@@ -145,7 +177,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
             // Look up entity at home tile in world grid at gameWorld+0x118
             void* worldGrid = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118);
             uint64_t foundRef = 0;
-            fn_WorldGrid_FindEntity(worldGrid, &foundRef, homeTile);
+            WorldGrid_FindEntity_Impl(worldGrid, &foundRef, homeTile);
             homeRef = foundRef;
         }
         if (homeRef != 0) {
@@ -260,9 +292,26 @@ void FollowDialog_Slot7(FollowDialog* self) {
     *(uint32_t*)(cameraSys + 0x20) = posZ;
     *(uint32_t*)(cameraSys + 0x24) = 0;
 
-    // Check Escape key (key ID 8) — if pressed, close the follow dialog
+    // Check Escape key (key ID 8) — if pressed, close the follow dialog.
+    // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on self.
     void* keyMap = *(void**)*g_pKeyMapSingleton;
     if (fn_KeyMap_Pressed(keyMap, 0, 8)) {
-        fn_FollowDialog_Close(self);
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
+        uintptr_t followedInner = *(uintptr_t*)(s + 0xC0);
+
+        // Null out back-reference: *(followedInner+0xE0) = null InternalBasePtr
+        {
+            uint8_t nullPtr[8] = {};
+            fn_InternalBasePtr_Ctor(nullPtr, nullptr);
+            *(uint64_t*)(followedInner + 0xE0) = *(uint64_t*)nullPtr;
+        }
+
+        // Close dialog: wrap self, call CloseDialog
+        {
+            uint8_t selfIBP[8];
+            fn_InternalBasePtr_Ctor(selfIBP, (void*)self);
+            void* ui = *(void**)(s + 0x10);
+            fn_UI_CloseDialog(ui, selfIBP);
+        }
     }
 }

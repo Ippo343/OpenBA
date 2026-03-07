@@ -13,6 +13,108 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// ============================================================
+// WorkplaceUI_AdjustWorkerCount (0x140087610)
+// ============================================================
+// Adjusts the max worker count on the entity's WorkplaceComponent by delta.
+// Finds the WorkplaceComponent on the entity at panel+0x28, then finds
+// the StorageLocationComponent on workplaceComp+0x10's entity (inner entity),
+// lazy-initializes its cached max count at +0x30, then calls SetMaxWorkers
+// with (cachedMax + delta).
+//
+// param_1 = WorkplaceUI* (self), param_2 = delta (+1 or -1)
+static void WorkplaceUI_AdjustWorkerCount_Impl(void* self, int delta)
+{
+    uintptr_t s = (uintptr_t)self;
+
+    // Get entity from panel+0x28
+    void* dataSource = *(void**)(s + 0x28);
+    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    void* entity = isEntity ? dataSource : nullptr;
+    uint8_t entityBuf[8];
+    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    fn_InternalBasePtr_CheckPtr((void*)entityBuf);
+    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+
+    // Find WorkplaceComponent (FUN_140002e10 = BuildState2/WorkplaceComponent)
+    uint64_t workComp = 0;
+    fn_FindComponent_BuildState2((void*)entityPtr, &workComp);
+    fn_InternalBasePtr_CheckPtr((void*)&workComp);
+    uintptr_t wc = workComp;
+
+    // Find StorageLocationComponent on the inner entity at workComp+0x10
+    fn_InternalBasePtr_CheckPtr((void*)(wc + 0x10));
+    uintptr_t innerEntity = *(uintptr_t*)(wc + 0x10);
+    uint64_t slComp = 0;
+    fn_FindComponent_Workplace((void*)innerEntity, &slComp);
+    fn_InternalBasePtr_CheckPtr((void*)&slComp);
+    uintptr_t slc = slComp;
+
+    // Lazy-init cached max count at slComp+0x30
+    if (*(int*)(slc + 0x30) == 0) {
+        int count = fn_StorageCountQuery((void*)slc);
+        *(int*)(slc + 0x30) = count;
+    }
+    int currentMax = *(int*)(slc + 0x30);
+
+    // Set new max workers on the workplace component
+    fn_WorkplaceComp_SetMaxWorkers((void*)wc, currentMax + delta);
+}
+
+// ============================================================
+// WorkplaceUI_ToggleWorkplace (0x1400876d0)
+// ============================================================
+// Cycles through the workplace list, advancing the panel's current
+// workplace index (at panel+0x60) and centering the camera on it.
+// WorkplaceComponent at workComp+0x58 = workplace ptr array,
+// workComp+0x60 = workplace count.
+//
+// param_1 = WorkplaceUI* (self)
+static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
+{
+    uintptr_t s = (uintptr_t)self;
+
+    // Get entity from panel+0x28
+    void* dataSource = *(void**)(s + 0x28);
+    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    void* entity = isEntity ? dataSource : nullptr;
+    uint8_t entityBuf[8];
+    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    fn_InternalBasePtr_CheckPtr((void*)entityBuf);
+    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+
+    // Find WorkplaceComponent
+    uint64_t workComp = 0;
+    fn_FindComponent_BuildState2((void*)entityPtr, &workComp);
+    fn_InternalBasePtr_CheckPtr((void*)&workComp);
+    uintptr_t wc = workComp;
+
+    // Check if any workplaces exist
+    if (*(int*)(wc + 0x60) == 0) return;
+
+    // Advance panel's workplace index, wrap around
+    *(int*)(s + 0x60) += 1;
+    fn_InternalBasePtr_CheckPtr((void*)&workComp);
+    if (*(int*)(wc + 0x60) <= *(int*)(s + 0x60)) {
+        *(int*)(s + 0x60) = 0;
+    }
+
+    // Get the workplace entity at workplaceArray[panelIndex]
+    fn_InternalBasePtr_CheckPtr((void*)&workComp);
+    uintptr_t workplaceArrayBase = *(uintptr_t*)(wc + 0x58);
+    uint64_t workplaceRef = *(uint64_t*)(workplaceArrayBase + (uintptr_t)*(int*)(s + 0x60) * 8);
+
+    // Get inner entity ptr from workplaceRef+0x10
+    fn_InternalBasePtr_CheckPtr((void*)&workplaceRef);
+    uint64_t workplaceEntityInner = *(uint64_t*)(workplaceRef + 0x10);
+
+    // Center camera: fn_Toolbar_CenterOnEntity(gameWorld+0x120, panel+0x18, workplaceEntityInner)
+    void* gameWorld = *g_pGameWorldSingleton;
+    void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
+    uint64_t parentRef = *(uint64_t*)(s + 0x18);
+    fn_Toolbar_CenterOnEntity(subsys, &parentRef, &workplaceEntityInner);
+}
+
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
     uint8_t nameBuf[8];
@@ -334,12 +436,12 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
         fn_CitizenList_RemoveWorker(citizenList, profId);
     } else if (id == 0x1452) {
         // jobCountUp — increase job count
-        fn_WorkplaceUI_AdjustWorkerCount(self, 1);
+        WorkplaceUI_AdjustWorkerCount_Impl(self, 1);
     } else if (id == 0x1453) {
         // jobCountDown — decrease job count
-        fn_WorkplaceUI_AdjustWorkerCount(self, -1);
+        WorkplaceUI_AdjustWorkerCount_Impl(self, -1);
     } else if (id == 0x1454) {
         // workPlaceButton — toggle workplace enabled state
-        fn_WorkplaceUI_ToggleWorkplace(self);
+        WorkplaceUI_ToggleWorkplace_Impl(self);
     }
 }

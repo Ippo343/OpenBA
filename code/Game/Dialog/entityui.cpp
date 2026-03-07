@@ -9,6 +9,127 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// ============================================================
+// EntityTrackingSet_Remove (0x14002c690)
+// ============================================================
+// BST remove: walks tree to find node with key == param_2, calls BST_Delete.
+// param_1 = pointer to BST root (root = *param_1)
+// param_2 = InternalBasePtr key to remove
+//
+// BST node layout (at ptr 'this'):
+//   +0x00: key (InternalBasePtr, uint64_t)
+//   +0x20: left child ptr (node**)  [+0x20/8 = offset 4 from uint64_t* = offset 0x20]
+//   +0x28: right child ptr (node**) [+0x28/8 = offset 5 = +0x28]
+static void EntityTrackingSet_Remove_Impl(void* bstRoot, void* key)
+{
+    // param_1 is longlong* (root node double-ptr)
+    uint8_t** rootPtr = (uint8_t**)bstRoot;
+    uint8_t* node = (uint8_t*)*rootPtr;
+
+    while (node != nullptr) {
+        fn_InternalBasePtr_CheckPtr((void*)node);
+        uint64_t nodeKey = *(uint64_t*)node;
+        uint64_t searchKey = *(uint64_t*)key;
+
+        fn_InternalBasePtr_CheckPtr(key);
+        if (searchKey < nodeKey) {
+            // Go left: *(node+0x20) = left child
+            node = *(uint8_t**)(node + 0x20);
+        } else if (searchKey <= nodeKey) {
+            // Found the node — delete it
+            fn_EntityTrackingSet_BST_Delete(bstRoot, (void*)node);
+            return;
+        } else {
+            // Go right: *(node+0x28) = right child
+            node = *(uint8_t**)(node + 0x28);
+        }
+    }
+    // Not found — nothing to do
+}
+
+// ============================================================
+// GetDescPage (0x140011320)
+// ============================================================
+// Searches entity description's component array (+0x28 = ptr, +0x30 = count)
+// for a component with type ID == g_TypeId_UIDescription (DAT_1401c7f90).
+// Returns the found component in retval. Component field +0x40 = page index.
+static void GetDescPage_Impl(void* entityDesc, void* retval)
+{
+    void* result = nullptr;
+    if (!entityDesc) { *(void**)retval = result; return; }
+
+    int count = *(int*)((uintptr_t)entityDesc + 0x30);
+    void** compArray = *(void***)((uintptr_t)entityDesc + 0x28);
+
+    for (int i = 0; i < count; i++) {
+        void* comp = compArray ? compArray[i] : nullptr;
+        if (!comp) continue;
+
+        // vtable[2] = GetTypeId (returns int typeId)
+        void** vtable = *(void***)comp;
+        typedef int (*fn_GetTypeId_t)(void*);
+        int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
+
+        if (typeId == (int)*g_TypeId_UIDescription) {
+            if (fn_IsDerivedFrom(comp, *g_TypeId_UIDescription)) {
+                result = comp;
+            }
+            break;
+        }
+    }
+
+    *(void**)retval = result;
+}
+
+// ============================================================
+// BuildComplete (0x140109390)
+// ============================================================
+// Returns true if build is complete: ResourceComponent.totalRequired * multiplier <= delivered
+// posComp+0x18 = description (checked as ResourceComponent)
+// ResourceComponent+0x30 = totalRequired
+// posComp+0x4C = multiplier (build count), posComp+0x48 = delivered count
+static bool BuildComplete_Impl(void* posComp)
+{
+    if (!posComp) return false;
+
+    void* desc = *(void**)((uintptr_t)posComp + 0x18);
+    bool isResource = fn_IsDerivedFrom(desc, *g_TypeId_ResourceComponent);
+    void* resourceComp = isResource ? desc : nullptr;
+
+    if (!resourceComp) return false;
+
+    int totalRequired = *(int*)((uintptr_t)resourceComp + 0x30);
+    int multiplier    = *(int*)((uintptr_t)posComp + 0x4C);
+    int delivered     = *(int*)((uintptr_t)posComp + 0x48);
+
+    return totalRequired * multiplier <= delivered;
+}
+
+// ============================================================
+// EntityUI_SetEditMode — NEEDS OPUS (0x140102b60)
+// ============================================================
+// 100+ lines: walks BST, calls Factory::CreateObject, creates ToolSetting objects.
+// Kept as passthrough via fn_EntityUI_SetEditMode.
+
+// ============================================================
+// EntityUI_SelectEntity — BST insert/update (0x140102e30)
+// ============================================================
+// Inserts or updates entity in tracking BST at playerController+0x60.
+// Also increments count at playerController+0x68.
+// BST node (0x38 bytes): key(8), x(4), y(4), active(4), _pad(4),
+//   left(8), right(8), parent(8), balance(4)
+//
+// Calls FUN_140025920 to rebalance after insert.
+// Since FUN_140025920 is complex AVL rebalancing, keep as sub-function.
+// NOTE: This function is used in both entityui.cpp and toolui.cpp.
+
+// ============================================================
+// EditTool_SelectEntity — NEEDS OPUS (0x1400fd3b0)
+// ============================================================
+// 100+ lines: iterates all dialogs finding ToolUI controllers,
+// creates DialogInstance if entity doesn't have one yet.
+// Kept as passthrough via fn_EditTool_SelectEntity.
+
 // Slot4 (0x1400670D0): Startup — find elements, get entity, reset ToolUI flags.
 void EntityUI_Slot4(EntityUI* self) {
     uintptr_t s = (uintptr_t)self;
@@ -89,7 +210,7 @@ void EntityUI_Slot6(EntityUI* self) {
     void* subObj = *(void**)((uintptr_t)worldSingleton + 0x120);
     void* bstRoot = (void*)((uintptr_t)subObj + 0x60);
 
-    fn_EntityTrackingSet_Remove(bstRoot, &entityKey);
+    EntityTrackingSet_Remove_Impl(bstRoot, &entityKey);
 }
 
 // ============================================================
@@ -188,7 +309,7 @@ void EntityUI_Slot7(EntityUI* self) {
             // Get default page from entity's description
             void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
             void* descResult = nullptr;
-            fn_GetDescPage(entityDesc, &descResult);
+            GetDescPage_Impl(entityDesc, &descResult);
             pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
         } else {
             pageIdx = 2;
@@ -199,14 +320,14 @@ void EntityUI_Slot7(EntityUI* self) {
             pageIdx = 3;
         } else if (posComp != 0) {
             // Check if build is complete
-            bool complete = fn_BuildComplete(posComp);
+            bool complete = BuildComplete_Impl(posComp);
             if (!complete) {
                 pageIdx = 2;
             } else if (pageIdx != 0) {
                 // Use entity description page or keep current page if pinned (page 4)
                 void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
                 void* descResult = nullptr;
-                fn_GetDescPage(entityDesc, &descResult);
+                GetDescPage_Impl(entityDesc, &descResult);
 
                 int activePage = fn_PageElement_GetActivePage(*(void**)(s + 0x40));
                 if (activePage != 4) {
@@ -417,7 +538,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         // If unpinned, remove entity from tracking set
         if (*(char*)(*(uintptr_t*)(s + 0x38) + 0xd8) == 0) {
             uint64_t entityKey = *(uint64_t*)(s + 0x30);
-            fn_EntityTrackingSet_Remove(
+            EntityTrackingSet_Remove_Impl(
                 (void*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120)) + 0x60),
                 &entityKey);
             return;

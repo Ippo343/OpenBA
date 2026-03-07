@@ -12,6 +12,73 @@
 #include <cstdint>
 
 // ============================================================
+// File-local helper: CemeteryGetBurialCount (FUN_140046dd0)
+// ============================================================
+// Counts the number of graves in a CemeteryComponent that have a
+// TombstoneComponent present (meaning they are occupied by a buried citizen).
+//
+// CemeteryComponent (param_1) fields:
+//   +0x48: void* graveIndexArray   (int32[] of entity-slot indices)
+//   +0x50: int32 graveCount
+//
+// Entity storage (accessed via gameWorld+0xf8):
+//   entityStore = *(gameWorld + 0xf8)
+//   entitySlot  = *(entityStore + 0x80) (the flat entity slot array)
+//   entity      = *(entitySlot + 8 + graveIndex*0x30)  -- InternalPtr value
+//
+// Entity component search: looks through entity's component list (+0x30, count +0x38)
+//   for a component with TypeId == TombstoneComponent (DAT_1401c4a30).
+//
+// Original: FUN_140046dd0.
+//
+static int CemeteryGetBurialCount_Impl(void* cemeteryComp) {
+    uintptr_t cem = (uintptr_t)cemeteryComp;
+    int count = *(int*)(cem + 0x50);
+    if (count <= 0) return 0;
+
+    uintptr_t entityStore = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xF8);
+    uintptr_t* graveIdxArray = *(uintptr_t**)(cem + 0x48);
+    int burials = 0;
+
+    for (int i = 0; i < count; i++) {
+        int graveIdx = ((int*)graveIdxArray)[i];
+
+        // Get entity InternalPtr from entity slot array
+        uintptr_t entitySlot = *(uintptr_t*)(entityStore + 0x80);
+        uintptr_t entityIPtr = *(uintptr_t*)(entitySlot + 8 + (uintptr_t)graveIdx * 0x30);
+        if (entityIPtr == 0) continue;
+
+        fn_InternalBasePtr_CheckPtr((void*)&entityIPtr);
+        uintptr_t entity = entityIPtr;
+        if (!entity) continue;
+
+        // Search entity's component list for TombstoneComponent
+        int compCount = *(int*)(entity + 0x38);
+        uintptr_t* compArray = *(uintptr_t**)(entity + 0x30);
+        uint32_t tombTypeId = g_TypeId_TombstoneComponent ? *g_TypeId_TombstoneComponent : 0;
+
+        bool found = false;
+        for (int c = 0; c < compCount; c++) {
+            uintptr_t compIPtr = compArray[c];
+            fn_InternalBasePtr_CheckPtr((void*)&compIPtr);
+            void* comp = (void*)compIPtr;
+            if (!comp) continue;
+
+            // Check TypeId via vtable[2]
+            typedef int (*GetTypeId_t)(void* self);
+            uintptr_t* vtbl = *(uintptr_t**)comp;
+            int typeId = ((GetTypeId_t)(vtbl[2]))(comp);
+            if (typeId == (int)tombTypeId) {
+                bool isTomb = fn_IsDerivedFrom(comp, tombTypeId);
+                if (isTomb) { found = true; break; }
+            }
+        }
+        if (found) burials++;
+    }
+    return burials;
+}
+
+// ============================================================
 // CemeteryUI::Slot4 (vtable +0x20) — Setup/refresh
 // ============================================================
 // Finds ProgressElement by type, stores at +0x30.
@@ -75,7 +142,7 @@ void CemeteryUI_Slot7(CemeteryUI* self) {
     void* progress = (void*)self->data30;
 
     // Get burial count and set as progress current value
-    int burialCount = fn_CemeteryGetBurialCount(cemetComp);
+    int burialCount = CemeteryGetBurialCount_Impl(cemetComp);
     *(float*)((uintptr_t)progress + 0x128) = (float)burialCount;
 
     // Set text param 0: burial count

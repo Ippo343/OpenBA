@@ -17,6 +17,61 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// ============================================================
+// CountOccupiedBuildTiles (0x140118330)
+// ============================================================
+// Counts tiles in the entity's building footprint that are occupied
+// by other entities (not self). Uses the BuildComponent footprint
+// to iterate the tile grid and checks each tile's occupant.
+//
+// param: smComp = StorageComponent ptr (smComp in BuildUI_Slot7)
+// Returns: count of occupied tiles not owned by self.
+static int CountOccupiedBuildTiles_Impl(void* smComp)
+{
+    uintptr_t sc = (uintptr_t)smComp;
+
+    // Entity InternalBasePtr at smComp+0x10
+    fn_InternalBasePtr_CheckPtr((void*)(sc + 0x10));
+    uintptr_t entityRef = *(uintptr_t*)(sc + 0x10);  // inner ptr value = self identity
+
+    // Find BuildComponent on entity
+    uint64_t buildComp = 0;
+    fn_FindComponent_Build((void*)entityRef, &buildComp);
+    fn_InternalBasePtr_CheckPtr((void*)&buildComp);
+    uintptr_t bc = buildComp;
+
+    // BuildComponent footprint fields:
+    //   +0x28 = originX (short), +0x2a = originY (short)
+    //   +0x2c = width (short),   +0x2e = height (short)
+    int originX = (int)*(int16_t*)(bc + 0x28);
+    int originY = (int)*(int16_t*)(bc + 0x2a);
+    int width   = (int)*(int16_t*)(bc + 0x2c);
+    int height  = (int)*(int16_t*)(bc + 0x2e);
+
+    // WorldGrid at gameWorld+0xF8
+    // piVar3 = *(int**)(gameWorld + 0xF8)
+    // *piVar3 = mapWidth (int), *(piVar3+0x20) = tile array base ptr
+    void* gameWorld = *g_pGameWorldSingleton;
+    int* piVar3 = *(int**)((uintptr_t)gameWorld + 0xF8);
+    int mapWidth = *piVar3;
+    uintptr_t tileArrayBase = *(uintptr_t*)((uintptr_t)piVar3 + 0x20 * sizeof(int));
+
+    int count = 0;
+    for (int row = 0; row < height; ++row) {
+        for (int col = 0; col < width; ++col) {
+            // Each tile entry is 0x30 bytes; occupant ptr is at offset +8
+            int tileIndex = (originY + row) * mapWidth + originX + col;
+            uintptr_t occupant = *(uintptr_t*)(tileArrayBase + 8 + (uintptr_t)tileIndex * 0x30);
+            // Count tiles occupied by other entities (not self, not null)
+            fn_InternalBasePtr_CheckPtr((void*)(sc + 0x10));
+            if (occupant != *(uintptr_t*)(sc + 0x10) && occupant != 0) {
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
 // Helper: find element by name in parent element, returns raw InternalPtr value
 static void* BuildUI_FindChildElem(void* parentElem, const char* name) {
     uint8_t nameStr[8], retBuf[16];
@@ -321,7 +376,7 @@ void BuildUI_Slot7(BuildUI* self) {
 
     // Calculate remaining capacity: capacity - occupied tiles
     int capacity = *(int*)(smComp + 0x48);
-    int occupied = fn_CountOccupiedBuildTiles((void*)smComp);
+    int occupied = CountOccupiedBuildTiles_Impl((void*)smComp);
     uint32_t remaining = (uint32_t)(capacity - occupied);
 
     // Update header textTotal param 0 with remaining count

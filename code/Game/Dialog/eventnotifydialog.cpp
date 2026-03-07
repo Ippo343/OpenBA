@@ -22,6 +22,134 @@
 #include <cstdint>
 
 // ============================================================
+// File-local helper: EventNotifyDialog_ArrayPush (FUN_140011750)
+// ============================================================
+// General-purpose array set-count/resize for 0x30-byte stride arrays with
+// an embedded System::String at offset +0x20 within each element.
+//
+// arrayBase layout: [data* at +0][count int32 at +8][capacity int32 at +0xc]
+// param_2 = new desired count (usually oldCount+1 for push)
+// param_3 = pointer to new entry to copy into the last slot (when growing)
+//
+// Behavior:
+//   - If new count == old count: no-op.
+//   - If capacity < new count: reallocate (triple capacity for single-element grows).
+//   - If realloc happened: copy existing elements [0..oldCount) from old buf + append param_3.
+//     Dtor and free old buf.
+//   - If no realloc: copy/move elements in place (copy param_3 into position newCount-1
+//     for a grow, or dtor excess elements for a shrink).
+//
+// Original: FUN_140011750.
+//
+static void EventNotifyDialog_ArrayPush_Impl(void* arrayBasePtr, int newCount, void* newEntry) {
+    uintptr_t* base = (uintptr_t*)arrayBasePtr;
+    uintptr_t  oldData     = *base;
+    int*       countPtr    = (int*)((uintptr_t)base + 8);
+    int*       capacityPtr = (int*)((uintptr_t)base + 0xC);
+
+    int oldCount = *countPtr;
+    if (newCount == oldCount)
+        return;
+
+    *countPtr = newCount;
+
+    uintptr_t newData = oldData;
+
+    // Realloc if needed
+    if (*capacityPtr < newCount) {
+        *capacityPtr = newCount;
+        // Triple-capacity heuristic when growing by exactly 1
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *capacityPtr = newCount * 3;
+        }
+        void* alloc = fn_MemAlloc(g_pMemAllocSingleton, (uintptr_t)*capacityPtr * 0x30, 8);
+        *base = (uintptr_t)alloc;
+        newData = (uintptr_t)alloc;
+    }
+
+    // Determine range to copy: if no realloc, copy from old position [0..min(oldCount,newCount))
+    // If realloc, we must copy all preserved entries from the old buffer.
+    int copyFrom = (oldData == newData) ? oldCount : 0;  // if same buf, start = oldCount (no copy of old)
+    // Actually: if same buffer, copy range is [oldCount..newCount) from param_3 for grows
+    // or just update count for shrinks. If different buffer: copy [0..min(oldCount,newCount)) then append.
+
+    // Rebuilt from decompiler trace:
+    // uVar3 = (pvVar6 == *param_1) ? uVar1 : 0  i.e. if same buf, startIdx = oldCount else 0
+    int startIdx = (oldData == newData) ? oldCount : 0;
+
+    if (startIdx < newCount) {
+        uintptr_t srcBase = oldData + (uintptr_t)startIdx * 0x30;
+        uintptr_t dstBase = newData + (uintptr_t)startIdx * 0x30;
+        for (int i = startIdx; i < newCount; i++, srcBase += 0x30, dstBase += 0x30) {
+            // Source: old entry if i < oldCount, otherwise param_3
+            void* src = (i < oldCount) ? (void*)srcBase : newEntry;
+            void* dst = (void*)dstBase;
+            // Copy non-String fields
+            *(uint64_t*)((uintptr_t)dst + 0x00) = *(uint64_t*)((uintptr_t)src + 0x00);
+            *(uint32_t*)((uintptr_t)dst + 0x08) = *(uint32_t*)((uintptr_t)src + 0x08);
+            *(uint64_t*)((uintptr_t)dst + 0x10) = *(uint64_t*)((uintptr_t)src + 0x10);
+            *(uint64_t*)((uintptr_t)dst + 0x18) = *(uint64_t*)((uintptr_t)src + 0x18);
+            // Copy String at +0x20 with copy ctor
+            fn_String_Ctor_Copy((void*)((uintptr_t)dst + 0x20), (void*)((uintptr_t)src + 0x20));
+            *(uint32_t*)((uintptr_t)dst + 0x28) = *(uint32_t*)((uintptr_t)src + 0x28);
+        }
+    }
+
+    // If same buffer: dtor excess entries [newCount..oldCount) on shrink
+    if (oldData == newData) {
+        if (newCount < oldCount) {
+            for (int i = newCount; i < oldCount; i++) {
+                fn_String_Dtor((void*)(oldData + (uintptr_t)i * 0x30 + 0x20));
+            }
+        }
+    } else {
+        // Different buffer: dtor all entries in old buf and free it
+        for (int i = 0; i < oldCount; i++) {
+            fn_String_Dtor((void*)(oldData + (uintptr_t)i * 0x30 + 0x20));
+        }
+        fn_MemFreeStatic((void*)oldData);
+    }
+}
+
+// ============================================================
+// File-local helper: EventNotifyDialog_ArrayRemove (FUN_140011670)
+// ============================================================
+// Removes element at [param_2] from a dynamic array with 0x30-byte stride.
+// The element has a System::String at offset +0x20 that must be dtored.
+// Shifts all subsequent elements down by one slot.
+// arrayBase layout: [data*, count, capacity] at [0], [8], [0xc]
+//
+// Original: 0x140011670.
+//
+static void EventNotifyDialog_ArrayRemove_Impl(void* arrayBasePtr, int removeIndex) {
+    // arrayBasePtr points to layout: [data* 8][count int32][capacity int32]
+    uintptr_t data = *(uintptr_t*)arrayBasePtr;
+    int* countPtr  = (int*)((uintptr_t)arrayBasePtr + 8);
+    int count      = *countPtr;
+
+    if (removeIndex < count) {
+        // Dtor the String at +0x20 within the removed element
+        fn_String_Dtor((void*)(data + (uintptr_t)removeIndex * 0x30 + 0x20));
+
+        // Shift subsequent entries down (removeIndex+1 ... count-1 -> removeIndex ... count-2)
+        for (int i = removeIndex + 1; i < count; i++) {
+            uintptr_t dst = data + (uintptr_t)(i - 1) * 0x30;
+            uintptr_t src = data + (uintptr_t)i * 0x30;
+            // Copy non-String fields
+            *(uint64_t*)(dst + 0x00) = *(uint64_t*)(src + 0x00);
+            *(uint32_t*)(dst + 0x08) = *(uint32_t*)(src + 0x08);
+            *(uint64_t*)(dst + 0x10) = *(uint64_t*)(src + 0x10);
+            *(uint64_t*)(dst + 0x18) = *(uint64_t*)(src + 0x18);
+            // Copy String field at +0x20 using String copy ctor
+            fn_String_Ctor_Copy((void*)(dst + 0x20), (void*)(src + 0x20));
+            *(uint32_t*)(dst + 0x28) = *(uint32_t*)(src + 0x28);
+        }
+    }
+    // Decrement count
+    *countPtr = count - 1;
+}
+
+// ============================================================
 // EventNotifyDialog::Slot4 (vtable +0x20) — Startup
 // ============================================================
 // Finds "ribbonNotify" -> stores at +0xE8.
@@ -113,9 +241,8 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
         fn_Element_SetElementId((void*)entry[2], i + 0x5DC);
 
         // Push entry into dynamic array at +0xC8
-        // The array push function: (arrayBase, newCount, entryPtr)
         int newCount = *(int*)(s + 0xD0) + 1;
-        fn_EventNotifyDialog_ArrayPush((void*)(s + 0xC8), newCount, entry);
+        EventNotifyDialog_ArrayPush_Impl((void*)(s + 0xC8), newCount, entry);
     }
 
     // Copy event log counter: self+0xC4 = *(*(world+0x138) + 0x20)
@@ -162,7 +289,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
 
             // If timer expired (< 1), remove this entry
             if (*(int64_t*)(offset + *(uintptr_t*)(s + 0xD8)) < 1) {
-                fn_EventNotifyDialog_ArrayRemove((void*)(s + 0xD8), idx);
+                EventNotifyDialog_ArrayRemove_Impl((void*)(s + 0xD8), idx);
                 idx--;
                 offset -= 0x30;
             }
@@ -315,7 +442,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
 
                         // Push entry to active array at +0xD8
                         int newCount = *(int*)(s + 0xE0) + 1;
-                        fn_EventNotifyDialog_ArrayPush((void*)(s + 0xD8), newCount, notifyEntry);
+                        EventNotifyDialog_ArrayPush_Impl((void*)(s + 0xD8), newCount, notifyEntry);
 
                         hasNewEvents = true;
 
@@ -333,7 +460,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
         // Trim excess entries if beyond display capacity (+0xD0)
         if (*(int*)(s + 0xD0) < *(int*)(s + 0xE0)) {
             do {
-                fn_EventNotifyDialog_ArrayRemove((void*)(s + 0xD8), 0);
+                EventNotifyDialog_ArrayRemove_Impl((void*)(s + 0xD8), 0);
             } while (*(int*)(s + 0xD0) < *(int*)(s + 0xE0));
         }
 

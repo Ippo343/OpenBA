@@ -13,6 +13,182 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// ============================================================
+// DestroyComponent_CanReclaim (0x14011e690)
+// ============================================================
+// Returns true if BuildState state byte is 6 (damaged) or 7.
+// Reads state byte from buildState+0x52; if negative, uses +0x50.
+static bool DestroyComponent_CanReclaim_Impl(void* destroyComp)
+{
+    if (!destroyComp) return false;
+
+    // Get entity at +0x10
+    void* entity = *(void**)((uintptr_t)destroyComp + 0x10);
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+
+    // Find BuildState component on entity
+    uint64_t bsRef = 0;
+    fn_FindComponent_BuildState(entity, &bsRef);
+    if (!bsRef) return false;
+
+    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
+    uintptr_t buildState = bsRef;
+
+    int8_t stateByte = *(int8_t*)(buildState + 0x52);
+    if (stateByte < 0) {
+        stateByte = *(int8_t*)(buildState + 0x50);
+    }
+
+    if (stateByte != 6) {
+        // Check again (second pass from decompile)
+        fn_InternalBasePtr_CheckPtr((void*)&bsRef);
+        stateByte = *(int8_t*)(buildState + 0x52);
+        if (stateByte < 0) stateByte = *(int8_t*)(buildState + 0x50);
+        if (stateByte != 7) return false;
+    }
+    return true;
+}
+
+// ============================================================
+// DestroyComponent_CanRebuild (0x14011e600)
+// ============================================================
+// Returns true if upgrade is pending (destroyComp+0x60 points to upgrade target).
+// Checks that destroyComp+0x60 != entity.descState AND != desc+0x20.
+//
+// destroyComp+0x18 = description (checked as DAT_1401c7628 = g_TypeId_DestroyComponent)
+// destroyComp+0x60 = upgrade description reference (int64/ptr)
+// destroyComp+0x10 = entity (checked via CheckPtr)
+static bool DestroyComponent_CanRebuild_Impl(void* destroyComp)
+{
+    if (!destroyComp) return false;
+
+    // Check if description is of upgrade type
+    void* desc = *(void**)((uintptr_t)destroyComp + 0x18);
+    bool isType = fn_IsDerivedFrom(desc, *g_TypeId_DestroyComponent);
+    void* typedDesc = isType ? desc : nullptr;
+
+    // Also check separately (decompile does it twice)
+    fn_IsDerivedFrom(*(void**)((uintptr_t)destroyComp + 0x18), *g_TypeId_DestroyComponent);
+
+    int64_t upgradeRef = *(int64_t*)((uintptr_t)destroyComp + 0x60);
+
+    // Get entity
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+    uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
+
+    // Return: upgradeRef != entity.stateDesc (at entity+0x28) AND upgradeRef != desc+0x20
+    if (upgradeRef == *(int64_t*)(entity + 0x28)) {
+        return false;  // matches entity state
+    }
+    uintptr_t descUpgradeTarget = typedDesc ? *(uintptr_t*)((uintptr_t)typedDesc + 0x20) : 0;
+    if ((uintptr_t)upgradeRef == descUpgradeTarget) {
+        return false;  // matches description's upgrade target
+    }
+    return true;
+}
+
+// ============================================================
+// DestroyComponent action helpers (common pattern)
+// ============================================================
+// Reclaim/Rebuild/Destroy all call the StateMachine at BuildState+0x48:
+//   vtable[2](sm, sm_ref, current_state_byte, param)
+// where param = 0 (reclaim/rebuild) or 1 (destroy).
+//
+// Reclaim (14011e400): also calls destroyComp->vtable[4](self)
+// Rebuild (14011e470): finds BuildState on entity at destroyComp+0x10
+// Destroy (14011e4d0): same but param=1
+
+static void DestroyComp_CallBuildStateAction(void* destroyComp_entity_field, int last_param)
+{
+    // entity at +0x10 (passed as the entity ptr for FindBuildState)
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp_entity_field));
+
+    // Find BuildState on entity
+    uint64_t bsRef = 0;
+    uintptr_t entity = *(uintptr_t*)destroyComp_entity_field;
+    fn_FindComponent_BuildState((void*)entity, &bsRef);
+    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
+
+    uintptr_t buildState = bsRef;
+    int8_t stateFrom = *(int8_t*)(buildState + 0x51);  // current sub-state
+
+    // Get StateMachine at buildState+0x48, call vtable[2]
+    uintptr_t smPtrAddr = buildState + 0x48;
+    uintptr_t smPtr = *(uintptr_t*)smPtrAddr;
+    void** smVtable = *(void***)smPtr;
+
+    typedef int (*fn_StateTransition_t)(uintptr_t sm, uintptr_t smRef, int fromState, int param);
+    ((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (int)stateFrom, last_param);
+}
+
+static void DestroyComponent_Reclaim_Impl(void* destroyComp)
+{
+    if (!destroyComp) return;
+    // Find BuildState on entity (param_1+0x10 in decompile, where param_1 is longlong*)
+    // param_1[2] = *(param_1 + 0x10) = *(destroyComp + 0x10)
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+    uint64_t bsRef = 0;
+    uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
+    fn_FindComponent_BuildState((void*)entity, &bsRef);
+    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
+
+    uintptr_t buildState = bsRef;
+    int8_t stateFrom = *(int8_t*)(buildState + 0x51);
+    uintptr_t smPtrAddr = buildState + 0x48;
+    uintptr_t smPtr = *(uintptr_t*)smPtrAddr;
+    void** smVtable = *(void***)smPtr;
+    typedef int (*fn_StateTransition_t)(uintptr_t sm, uintptr_t smRef, int fromState, int param);
+    ((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (int)stateFrom, 0);
+
+    // Also call destroyComp->vtable[4](self) — the "Reclaim" notification
+    void** selfVtable = *(void***)destroyComp;
+    typedef void (*fn_SelfNotify_t)(void* self);
+    ((fn_SelfNotify_t)selfVtable[4])(destroyComp);
+}
+
+static void DestroyComponent_Rebuild_Impl(void* destroyComp)
+{
+    if (!destroyComp) return;
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+    uint64_t bsRef = 0;
+    uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
+    fn_FindComponent_BuildState((void*)entity, &bsRef);
+    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
+
+    uintptr_t buildState = bsRef;
+    int8_t stateFrom = *(int8_t*)(buildState + 0x51);
+    uintptr_t smPtrAddr = buildState + 0x48;
+    uintptr_t smPtr = *(uintptr_t*)smPtrAddr;
+    void** smVtable = *(void***)smPtr;
+    typedef int (*fn_StateTransition_t)(uintptr_t sm, uintptr_t smRef, int fromState, int param);
+    ((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (int)stateFrom, 0);
+}
+
+static void DestroyComponent_Destroy_Impl(void* destroyComp)
+{
+    if (!destroyComp) return;
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+    uint64_t bsRef = 0;
+    uintptr_t entity = *(uintptr_t*)((uintptr_t)destroyComp + 0x10);
+    fn_FindComponent_BuildState((void*)entity, &bsRef);
+    fn_InternalBasePtr_CheckPtr((void*)&bsRef);
+
+    uintptr_t buildState = bsRef;
+    int8_t stateFrom = *(int8_t*)(buildState + 0x51);
+    uintptr_t smPtrAddr = buildState + 0x48;
+    uintptr_t smPtr = *(uintptr_t*)smPtrAddr;
+    void** smVtable = *(void***)smPtr;
+    typedef int (*fn_StateTransition_t)(uintptr_t sm, uintptr_t smRef, int fromState, int param);
+    ((fn_StateTransition_t)smVtable[2])(smPtr, smPtrAddr, (int)stateFrom, 1);
+}
+
+// ============================================================
+// DestroyComponent_StartUpgrade — NEEDS OPUS (0x14011dfa0)
+// ============================================================
+// 177 lines: complex state machine transition with multiple phases,
+// calls StateMachine_Tick and many internal state machine functions.
+// Kept as passthrough via fn_DestroyComponent_StartUpgrade.
+
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
     uint8_t nameBuf[8];
@@ -93,7 +269,7 @@ void DestroyUI_Slot4(DestroyUI* self) {
     void* destroyComp = nullptr;
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
 
-    bool canReclaim = fn_DestroyComponent_CanReclaim(destroyComp);
+    bool canReclaim = DestroyComponent_CanReclaim_Impl(destroyComp);
     bool compFlag = *(uint8_t*)((uintptr_t)destroyComp + 0x50) != 0;
 
     if (canReclaim || compFlag) {
@@ -131,7 +307,7 @@ void DestroyUI_Slot7(DestroyUI* self) {
     fn_FindComponent_Destroy(entityInternal, &destroyComp);
 
     // Check if building can be reclaimed
-    bool canReclaim = fn_DestroyComponent_CanReclaim(destroyComp);
+    bool canReclaim = DestroyComponent_CanReclaim_Impl(destroyComp);
 
     // Element pointers for convenience
     void* progressRemove  = (void*)self->data30;
@@ -226,7 +402,7 @@ void DestroyUI_Slot7(DestroyUI* self) {
             hideAtEnd = textUpgrade;
         } else {
             // Check if building can be rebuilt (upgraded)
-            bool canRebuild = fn_DestroyComponent_CanRebuild(destroyComp);
+            bool canRebuild = DestroyComponent_CanRebuild_Impl(destroyComp);
             if (!canRebuild) {
                 // Regular removal: show textRemove
                 fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
@@ -319,10 +495,10 @@ void DestroyUI_Slot9(DestroyUI* self, uint64_t /*param2*/, int param3, int param
 
     // Dispatch based on button ID
     if (param4 == 0x1771) {
-        fn_DestroyComponent_Reclaim(destroyComp);
+        DestroyComponent_Reclaim_Impl(destroyComp);
     } else if (param4 == 0x1772) {
-        fn_DestroyComponent_Rebuild(destroyComp);
+        DestroyComponent_Rebuild_Impl(destroyComp);
     } else if (param4 == 0x1773) {
-        fn_DestroyComponent_Destroy(destroyComp);
+        DestroyComponent_Destroy_Impl(destroyComp);
     }
 }

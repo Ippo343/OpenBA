@@ -25,6 +25,49 @@
 // File-local helpers
 // ============================================================
 
+// HelpUI_ArrayResize_Impl (FUN_140011d50) — generic 8-byte-element array resize.
+// Resizes dynamic array at arrayBase (layout: [data* 8][count int32][capacity int32])
+// to newCount entries. Copies existing entries if buffer changed, frees old buffer.
+// Original: 0x140011d50.
+static void HelpUI_ArrayResize_Impl(void* arrayBase, int newCount) {
+    uintptr_t* dataPtr  = (uintptr_t*)arrayBase;
+    int* countPtr       = (int*)((uintptr_t)arrayBase + 8);
+    int* capacityPtr    = (int*)((uintptr_t)arrayBase + 0xc);
+    int oldCount        = *countPtr;
+
+    if (newCount == oldCount) return;
+
+    void* oldData = (void*)*dataPtr;
+    *countPtr = newCount;
+
+    if (*capacityPtr < newCount) {
+        *capacityPtr = newCount;
+        if (oldCount != 0 && newCount == oldCount + 1) {
+            *capacityPtr = newCount * 3;
+        }
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)*capacityPtr * 8, 4);
+        *dataPtr = (uintptr_t)newData;
+    }
+
+    // Copy existing entries that fit
+    int startCopy = 0;
+    if (oldData == (void*)*dataPtr) {
+        startCopy = oldCount;
+    }
+    for (int i = startCopy; i < newCount; i++) {
+        uint64_t* dst = (uint64_t*)(*dataPtr + (uintptr_t)i * 8);
+        if (dst != nullptr) {
+            if (i < oldCount) {
+                *dst = *(uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 8);
+            }
+        }
+    }
+
+    if (oldData != (void*)*dataPtr) {
+        fn_MemFree(g_pMemAllocSingleton, oldData);
+    }
+}
+
 // Get the help topics ExternalList from the game world singleton
 static void* GetHelpExternalList() {
     void* world = *g_pGameWorldSingleton;
@@ -73,9 +116,9 @@ static void HelpUI_LoadPage(HelpUI* self) {
     // Store current page resource index
     *(int*)(s + 0x60) = pageResIndex;
 
-    // Resize history array to (historyIndex + 1) entries
+    // Resize (truncate) history array to (historyIndex + 1) entries — removes forward history
     int historyIndex = *(int*)(s + 0x64);
-    fn_HelpUI_ArrayResize((void*)(s + 0x68), historyIndex + 1);
+    HelpUI_ArrayResize_Impl((void*)(s + 0x68), historyIndex + 1);
 
     // Push new history entry: {pageResIndex, scrollY=0.0f} at the new end
     int count = *(int*)(s + 0x70);

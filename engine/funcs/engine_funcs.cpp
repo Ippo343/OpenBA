@@ -86,6 +86,7 @@ fn_String_Ctor_Copy_t fn_String_Ctor_Copy = nullptr;
 // ExternalFactory
 void** g_pExternalFactorySingleton = nullptr;
 fn_ExternalFactory_FindOrLoad_t fn_ExternalFactory_FindOrLoad = nullptr;
+fn_ExternalFactory_Find_t fn_ExternalFactory_Find = nullptr;
 fn_ExternalFactory_Clean_t fn_ExternalFactory_Clean = nullptr;
 fn_IsDerivedFrom_t fn_IsDerivedFrom = nullptr;
 uint32_t* g_pExternalTypeId = nullptr;
@@ -186,6 +187,8 @@ fn_SpinnerElement_SetElementId_t fn_SpinnerElement_SetElementId = nullptr;
 fn_SpinnerElement_SetValue_t fn_SpinnerElement_SetValue = nullptr;
 fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax = nullptr;
 fn_SpinnerElement_GetValue_t fn_SpinnerElement_GetValue = nullptr;
+fn_SpinnerElement_GetMaxValue_t fn_SpinnerElement_GetMaxValue = nullptr;
+fn_SpinnerElement_SetIncrement_t fn_SpinnerElement_SetIncrement = nullptr;
 fn_SpinnerElement_IsActive_t fn_SpinnerElement_IsActive = nullptr;
 
 // PageElement
@@ -210,8 +213,8 @@ uint32_t* g_TypeId_ControlComponent = nullptr;
 // FindComponentByTypeId (entity component array search)
 fn_FindComponentByTypeId_t fn_FindComponentByTypeId = nullptr;
 
-// EntityTrackingSet_Remove (BST remove)
-fn_EntityTrackingSet_Remove_t fn_EntityTrackingSet_Remove = nullptr;
+// EntityTrackingSet_BST_Delete (AVL node deleter, sub-function of _Remove)
+fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete = nullptr;
 
 // ImageElement
 fn_ImageElement_SetSprite_t fn_ImageElement_SetSprite = nullptr;
@@ -255,57 +258,43 @@ void** g_pKeyMapSingleton = nullptr;
 void** g_pEngineSingleton = nullptr;
 
 // ============================================================
-// Common Exe Functions (Phase A4)
+// Common Exe Functions (Phase A4) — type ID globals for reimplemented FindComponent
 // ============================================================
-fn_FindComponent_t fn_FindComponent_StateMachine = nullptr;
-fn_FindComponent_t fn_FindComponent_MeshInstance = nullptr;
-fn_FindComponent_t fn_FindComponent_Destroy = nullptr;
-fn_FindComponent_t fn_FindComponent_Build = nullptr;
-fn_FindComponent_t fn_FindComponent_ConsumeProduce = nullptr;
-fn_FindComponent_t fn_FindComponent_Resource = nullptr;
-fn_FindComponent_t fn_FindComponent_Storage = nullptr;
-fn_FindComponent_t fn_FindComponent_Workplace = nullptr;
-fn_FindComponent_t fn_FindComponent_Radius = nullptr;
-fn_FindComponent_t fn_FindComponent_BuildState = nullptr;
-fn_FindComponent_t fn_FindComponent_Attendance = nullptr;
-fn_FindComponent_t fn_FindComponent_Cemetery = nullptr;
+// FindComponent functions are now inline C++ (see engine_funcs.h).
+// These globals are resolved directly from exe .rdata addresses.
+uint32_t* g_TypeId_BuildComponent_Slot4     = nullptr;  // DAT_1401c79e0
+uint32_t* g_TypeId_BuildStateComponent      = nullptr;  // DAT_1401c7d98
+uint32_t* g_TypeId_StateMachineComponent_FC = nullptr;  // DAT_1401c7350
+uint32_t* g_TypeId_PositionComponent        = nullptr;  // DAT_1401c7008
+uint32_t* g_TypeId_DestroyComponent_FC      = nullptr;  // DAT_1401c75f0
+uint32_t* g_TypeId_BuildingComponent        = nullptr;  // DAT_1401c4b80
+uint32_t* g_TypeId_AttendanceComponent      = nullptr;  // DAT_1401c3f40
+uint32_t* g_TypeId_PastureComponent         = nullptr;  // DAT_1401c7ba0
+uint32_t* g_TypeId_AnimalDescription        = nullptr;  // DAT_1401c6fd0
+uint32_t* g_TypeId_OrchardComponent         = nullptr;  // DAT_1401c46b0
+uint32_t* g_TypeId_SMComponent              = nullptr;  // DAT_1401c71c8
+uint32_t* g_TypeId_CitizenAIComponent_FC    = nullptr;  // DAT_1401c7158
+uint32_t* g_TypeId_StorageComponent_FC      = nullptr;  // DAT_1401c7e78
+uint32_t* g_TypeId_CemeteryComponent        = nullptr;  // DAT_1401c4090
+uint32_t* g_TypeId_TombstoneComponent       = nullptr;  // DAT_1401c4a30
+uint32_t* g_TypeId_ImmigrationComponent     = nullptr;  // DAT_1401c4480
+uint32_t* g_TypeId_TrackerComponent         = nullptr;  // DAT_1401c4b10
+uint32_t* g_TypeId_CharacterComponent       = nullptr;  // DAT_1401c7a50
 
-fn_ExeArrayResize_t fn_ExeArrayResize = nullptr;
-fn_ExeArrayResize_t fn_ExeArrayResize2 = nullptr;
-fn_ExeArrayResize_t fn_ExeArrayResize3 = nullptr;
-fn_ExeArrayPush_t fn_ExeArrayPush = nullptr;
-
-fn_StorageComponent_QueryCount_t fn_StorageComponent_QueryCount = nullptr;
 fn_RadiusCalc_t fn_RadiusCalc = nullptr;
 fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove = nullptr;
 
-fn_DestroyQuery_t fn_DestroyComponent_CanReclaim = nullptr;
-fn_DestroyQuery_t fn_DestroyComponent_CanRebuild = nullptr;
-fn_DestroyAction_t fn_DestroyComponent_Reclaim = nullptr;
-fn_DestroyAction_t fn_DestroyComponent_Rebuild = nullptr;
-fn_DestroyAction_t fn_DestroyComponent_Destroy = nullptr;
-
 fn_GetActiveProductIndex_t fn_GetActiveProductIndex = nullptr;
-fn_StorageCountQuery_t fn_StorageCountQuery = nullptr;
 fn_CropUIPopulate_t fn_CropUI_PopulateCombo = nullptr;
 fn_CropUIExpected_t fn_CropUI_GetExpectedCount = nullptr;
-fn_CemeteryBurialCount_t fn_CemeteryGetBurialCount = nullptr;
+// CemeteryGetBurialCount — now static inline in cemeteryui.cpp
 
-// FindComponent_Immigration (ImmigrationComponent, FUN_140012020)
-fn_FindComponent_t fn_FindComponent_Immigration = nullptr;
 // WorkplaceComponent_Toggle (FUN_14012fc00)
 fn_WorkplaceComponent_Toggle_t fn_WorkplaceComponent_Toggle = nullptr;
 
-// FindComponent_Orchard (OrchardComponent, FUN_140005440)
-fn_FindComponent_t fn_FindComponent_Orchard = nullptr;
 // OrchardComponent_GetGrowth (FUN_140051640)
 fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
-// FindComponent_Pasture (PastureComponent, FUN_140004fe0)
-fn_FindComponent_t fn_FindComponent_Pasture = nullptr;
-// PastureComponent_CalcMaxCount (FUN_140128570)
-fn_PastureCalcMaxCount_t fn_PastureCalcMaxCount = nullptr;
-// PastureUI_UpdateSlider (FUN_1400b4fa0)
-fn_PastureUI_UpdateSlider_t fn_PastureUI_UpdateSlider = nullptr;
+// PastureCalcMaxCount, PastureUI_UpdateSlider — now static inline in pastureui.cpp
 
 // ============================================================
 // Video::ImageBuffer (Runtime DLL exports)
@@ -351,48 +340,40 @@ fn_GoalInstance_HasFailed_t fn_GoalInstance_HasFailed = nullptr;
 void*** g_ppAchievementManager = nullptr;
 fn_AchievementManager_IsAchievementAwarded_t fn_AchievementManager_IsAchievementAwarded = nullptr;
 // FollowDialog helpers
-fn_FindComponent_t fn_FindComponent_Character = nullptr;
 fn_KeyMap_Pressed_t fn_KeyMap_Pressed = nullptr;
-fn_FollowDialog_Close_t fn_FollowDialog_Close = nullptr;
+// fn_FollowDialog_Close — inlined in followdialog.cpp Slot7
 
 // UpgradeUI helpers
 uint32_t* g_TypeId_UpgradeDescription = nullptr;
 fn_DestroyComponent_StartUpgrade_t fn_DestroyComponent_StartUpgrade = nullptr;
 
 fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen = nullptr;
-fn_ResidenceUI_ArrayPush_t fn_ResidenceUI_ArrayPush = nullptr;
-fn_EventLogUI_ToggleNotification_t fn_EventLogUI_ToggleNotification = nullptr;
-fn_EventLogUI_NavigateToEvent_t fn_EventLogUI_NavigateToEvent = nullptr;
+// fn_ResidenceUI_ArrayPush — now inline as ResidenceUI_ArrayPush_Impl in residenceui.cpp
+// fn_EventLogUI_ToggleNotification — now inline in eventlogui.cpp Slot9
+// fn_EventLogUI_NavigateToEvent — now inline in eventlogui.cpp Slot9
 
 // WorkplaceUI helpers
-fn_FindComponent_t fn_FindComponent_BuildState2 = nullptr;
-fn_WorkplaceUI_AdjustWorkerCount_t fn_WorkplaceUI_AdjustWorkerCount = nullptr;
-fn_WorkplaceUI_ToggleWorkplace_t fn_WorkplaceUI_ToggleWorkplace = nullptr;
+fn_WorkplaceComp_SetMaxWorkers_t fn_WorkplaceComp_SetMaxWorkers = nullptr;
 fn_CitizenList_RequestWorker_t fn_CitizenList_RequestWorker = nullptr;
 fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker = nullptr;
 fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker = nullptr;
-fn_FindComponent_t fn_FindComponent_Position = nullptr;
 uint32_t* g_TypeId_EditTool = nullptr;
 
 // EntityUI helpers
 fn_EntityUI_SetEditMode_t fn_EntityUI_SetEditMode = nullptr;
 fn_EntityUI_SelectEntity_t fn_EntityUI_SelectEntity = nullptr;
-fn_FindComponent_t fn_FindComponent_SM = nullptr;
-fn_GetDescPage_t fn_GetDescPage = nullptr;
-fn_BuildComplete_t fn_BuildComplete = nullptr;
-
 // ============================================================
 // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
 // ============================================================
-fn_MapParamsDialog_OnOk_t fn_MapParamsDialog_OnOk = nullptr;
-fn_MapParamsDialog_OnNewName_t fn_MapParamsDialog_OnNewName = nullptr;
-fn_GameWorld_GetMapName_t fn_GameWorld_GetMapName = nullptr;
+// fn_MapParamsDialog_OnOk — inlined in mapparamsdialog.cpp
+// fn_MapParamsDialog_OnNewName — inlined in mapparamsdialog.cpp
+// fn_GameWorld_GetMapName — inlined in mapparamsdialog.cpp
 fn_Element_SetUserData_t fn_Element_SetUserData = nullptr;
-fn_UpgradeUI_Serialize_t fn_UpgradeUI_Serialize = nullptr;
-fn_UpgradeUI_OnRemove_t fn_UpgradeUI_OnRemove = nullptr;
+// fn_UpgradeUI_Serialize — inlined as UpgradeUI_Serialize in upgradeui.cpp
+// fn_UpgradeUI_OnRemove — inlined as UpgradeUI_OnRemove in upgradeui.cpp
 fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4 = nullptr;
-fn_HelpUI_Slot4_t fn_HelpUI_Slot4 = nullptr;
-fn_HelpUI_Slot9_t fn_HelpUI_Slot9 = nullptr;
+// fn_HelpUI_Slot4 — now inline as HelpUI_Slot4 in helpui.cpp
+// fn_HelpUI_Slot9 — now inline as HelpUI_Slot9 in helpui.cpp
 
 // ============================================================
 // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
@@ -405,13 +386,13 @@ fn_Achievement_GetDescription_t fn_Achievement_GetDescription = nullptr;
 fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName = nullptr;
 fn_AchievementManager_GetAchievementCount_t fn_AchievementManager_GetAchievementCount = nullptr;
 fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement = nullptr;
-fn_GoalDialog_ArrayPush_t fn_GoalDialog_ArrayPush = nullptr;
-fn_GoalDialog_ArrayPush_t fn_EventNotifyDialog_ArrayPush = nullptr;
-fn_ScenarioDialog_ArrayPush_t fn_ScenarioDialog_ArrayPush = nullptr;
+// fn_GoalDialog_ArrayPush — now inline as GoalDialog_ArrayPush_Impl in goaldialog.cpp
+// fn_EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
+// fn_ScenarioDialog_ArrayPush — now inline as ScenarioDialog_ArrayPush_Impl in scenariodialog.cpp
 fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount = nullptr;
 uint32_t* g_TypeId_Scenario = nullptr;
 fn_Element_SetPadding_t fn_Element_SetPadding = nullptr;
-fn_EventNotifyDialog_ArrayRemove_t fn_EventNotifyDialog_ArrayRemove = nullptr;
+// fn_EventNotifyDialog_ArrayRemove — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 fn_Sprite_Ctor_t fn_Sprite_Ctor = nullptr;
 fn_UIString_Ctor_t fn_UIString_Ctor = nullptr;
 fn_UIString_ToSystemString_t fn_UIString_ToSystemString = nullptr;
@@ -422,15 +403,14 @@ fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
 fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
-fn_Toolbar_FindEntity_t fn_Toolbar_FindEntity = nullptr;
+// fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
 fn_Toolbar_CenterOnEntity_t fn_Toolbar_CenterOnEntity = nullptr;
-fn_ToolbarDialog_CloseSubDialog_t fn_ToolbarDialog_CloseSubDialog = nullptr;
-fn_ToolbarDialog_ChangeSpeed_t fn_ToolbarDialog_ChangeSpeed = nullptr;
+// fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
+// fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons = nullptr;
 uint32_t* g_TypeId_ToolbarElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
-fn_GetCurrentProductIndex_t fn_GetCurrentProductIndex = nullptr;
 fn_FindDialogByName_t fn_FindDialogByName = nullptr;
 fn_ResolveExternalByName_t fn_ResolveExternalByName = nullptr;
 fn_External_External_t fn_External_External = nullptr;
@@ -440,7 +420,6 @@ fn_External_Dtor_t fn_External_Dtor = nullptr;
 fn_KeyMap_GetValue_t fn_KeyMap_GetValue = nullptr;
 fn_UI_GetFirstContainedDialog_t fn_UI_GetFirstContainedDialog = nullptr;
 fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
-fn_FindComponent_t fn_FindComponent_Residence = nullptr;
 float* g_pAgeMultiplier = nullptr;
 float* g_pNotifyTimerDuration = nullptr;
 fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
@@ -464,14 +443,12 @@ uint32_t* g_TypeId_HelpComboElem = nullptr;
 uint32_t* g_TypeId_HelpDocTextElem = nullptr;
 uint32_t* g_TypeId_HelpContainerElem = nullptr;
 uint32_t* g_TypeId_HelpButtonElem = nullptr;
-fn_HelpUI_ArrayResize_t fn_HelpUI_ArrayResize = nullptr;
-
-// BuildUI support
-fn_CountOccupiedBuildTiles_t fn_CountOccupiedBuildTiles = nullptr;
+// fn_HelpUI_ArrayResize — now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
 // NewGameDialog support
 void** g_pNewGameSettings = nullptr;
 fn_Random_Rand_t fn_Random_Rand = nullptr;
+fn_Random_RandFloat_t fn_Random_RandFloat = nullptr;
 fn_GenerateTownName_t fn_GenerateTownName = nullptr;
 fn_StartNewGame_t fn_StartNewGame = nullptr;
 uint32_t* g_TypeId_MapGenerator = nullptr;
@@ -504,7 +481,7 @@ fn_VideoDevice_GetInterface_t fn_VideoDevice_GetInterface = nullptr;
 fn_VideoDevice_GetInterfaceCount_t fn_VideoDevice_GetInterfaceCount = nullptr;
 fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor = nullptr;
 fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab = nullptr;
-fn_Element_GetParent_t fn_Element_GetParent = nullptr;
+// fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 int32_t* g_pGameSettings = nullptr;
 
 // StorageUI support
@@ -528,31 +505,24 @@ fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
 fn_String_AppendStr_t fn_String_AppendStr = nullptr;
 fn_String_Concat_t fn_String_Concat = nullptr;
 fn_Filename_Less_t fn_Filename_Less = nullptr;
-fn_ModDetails_StringArrayPush_t fn_ModDetails_StringArrayPush = nullptr;
+// ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
 // CitizenUI helpers
-fn_FindComponent_t fn_FindComponent_CitizenAI = nullptr;
 uint32_t* g_TypeId_CitizenDescription = nullptr;
 uint32_t* g_TypeId_HappinessComponent = nullptr;
 uint32_t* g_TypeId_ProfessionComponent = nullptr;
-fn_CitizenUI_BuildIconArray_t fn_CitizenUI_BuildIconArray = nullptr;
-fn_CitizenUI_UpdateIconDisplay_t fn_CitizenUI_UpdateIconDisplay = nullptr;
-fn_FindProfessionComponent_t fn_FindProfessionComponent = nullptr;
 fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original = nullptr;
 fn_StatusBarUI_StatusIconHandler_t fn_StatusBarUI_StatusIconHandler = nullptr;
-fn_WorldGrid_FindEntity_t fn_WorldGrid_FindEntity = nullptr;
 
 // ProductionUI support
-fn_FindComponent_t fn_FindComponent_Tracker = nullptr;
-fn_TrackerComponent_Rebuild_t fn_TrackerComponent_Rebuild = nullptr;
+// fn_TrackerComponent_Rebuild — inline in engine_funcs.h
 
 // ProfessionUI support
 fn_External_GetPath_t fn_External_GetPath = nullptr;
 fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier = nullptr;
-fn_BSTRebalance_t fn_BSTRebalance = nullptr;
+// BSTRebalance — now static inline in professionui.cpp
 fn_ProfessionUI_HandleSpinner_t fn_ProfessionUI_HandleSpinner = nullptr;
 fn_ProfessionUI_HandleButton_t fn_ProfessionUI_HandleButton = nullptr;
-fn_CalcWorkerSlots_t fn_CalcWorkerSlots = nullptr;
 
 // MainMenuDialog support
 fn_App_Quit_t fn_App_Quit = nullptr;
@@ -619,35 +589,20 @@ uint32_t* g_TypeId_EditElement = nullptr;
 uint32_t* g_TypeId_CaptureBoxElement = nullptr;
 
 // TradeUI support
-fn_FindComponent_t fn_FindComponent_Building = nullptr;
 fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc = nullptr;
-fn_TradeUI_Serialize_t fn_TradeUI_Serialize = nullptr;
-fn_TradeUI_Startup_t fn_TradeUI_Startup = nullptr;
-fn_TradeUI_OnCreate_t fn_TradeUI_OnCreate = nullptr;
-fn_TradeUI_OnRemove_t fn_TradeUI_OnRemove = nullptr;
-fn_TradeUI_Update_t fn_TradeUI_Update = nullptr;
 fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateSellTotals = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_UpdateBuyTotals = nullptr;
 fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_OnDismissButton = nullptr;
-fn_TradeUI_OnOrderSpinner_t fn_TradeUI_OnOrderSpinner = nullptr;
-fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnPurchaseButton = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboPurchase = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_OnComboOrder = nullptr;
-fn_TradeUI_OnStorageSpinner_t fn_TradeUI_OnStorageSpinner = nullptr;
-fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnSellSpinner = nullptr;
-fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnBuySpinner = nullptr;
-fn_TradeUI_OnPurchaseButton_t fn_TradeUI_OnOrderAmountSpinner = nullptr;
 uint32_t* g_TypeId_TableElement = nullptr;
 uint32_t* g_TypeId_SpinnerElement = nullptr;
 uint32_t* g_TypeId_TextElement = nullptr;
 uint32_t* g_TypeId_SelectDescription = nullptr;
-fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderQuantityDisplay = nullptr;
-fn_TradeUI_SubFunc_t fn_TradeUI_RefreshSellSpinnerValues = nullptr;
-fn_TradeUI_SubFunc_t fn_TradeUI_RefreshOrderDisplay = nullptr;
+fn_Building_GetSellableCount_t fn_Building_GetSellableCount = nullptr;
+fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
+fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder = nullptr;
+fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage = nullptr;
+fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder = nullptr;
 uintptr_t g_NoiseUI_ImageBufferVtable = 0;
 fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage = nullptr;
 fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise = nullptr;
@@ -668,6 +623,9 @@ fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
 uint32_t* g_TypeId_BrowserController = nullptr;
 uint32_t* g_TypeId_Material = nullptr;
 float* g_fUVScale = nullptr;
+fn_Weather_ResetTime_t fn_Weather_ResetTime = nullptr;
+fn_UI_SetCursor_t fn_UI_SetCursor = nullptr;
+fn_UI_SetFullscreenFade_t fn_UI_SetFullscreenFade = nullptr;
 fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting = nullptr;
 uint32_t* g_TypeId_DiseaseDescription = nullptr;
 uint32_t* g_TypeId_DrawableType = nullptr;
@@ -811,6 +769,200 @@ fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod = nullptr;
 fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName = nullptr;
 uint32_t* g_TypeId_DialogInstance = nullptr;
 fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
+
+// ============================================================
+// Phase A4: Entity::FindComponent and Array Utility Implementations
+// ============================================================
+// These were previously resolved from Application-x64.exe.
+// Now implemented as clean C++ using Runtime DLL primitives.
+// ============================================================
+
+// Entity_FindComponentByExeTypeId -- searches entity component array for a component
+// matching the given type ID. Stores found component (or null) via InternalBasePtr.
+//
+// Entity layout (from decompilation of all FindComponent variants):
+//   entity+0x30 = component pointer array (void**)
+//   entity+0x38 = component count (int32)
+//
+// Each component's vtable slot +0x10 (index 2) returns its type ID (int).
+// IsDerivedFrom confirms the match before storing.
+//
+// Decompiled from FUN_140004680 (fn_FindComponent_Build) and confirmed identical
+// across all 20+ FindComponent_X variants.
+void Entity_FindComponentByExeTypeId(void* entity, void* retval, uint32_t* typeIdPtr) {
+    // Zero out retval (InternalBasePtr = nullptr)
+    *(void**)retval = nullptr;
+    if (!entity || !typeIdPtr) return;
+
+    uint32_t targetTypeId = *typeIdPtr;
+
+    // Component array at entity+0x30 (ptr), count at entity+0x38
+    void** compArray = *(void***)((uintptr_t)entity + 0x30);
+    int    compCount = *(int*)   ((uintptr_t)entity + 0x38);
+
+    void* found = nullptr;
+    for (int i = 0; i < compCount; i++) {
+        void* comp = compArray[i];
+        if (!comp) continue;
+
+        // vtable slot +0x10 (index 2) returns the component's type ID
+        void** vtable = *(void***)comp;
+        typedef int (*fn_GetTypeId_t)(void*);
+        int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
+
+        if ((uint32_t)compTypeId == targetTypeId) {
+            // Confirm with IsDerivedFrom
+            if (fn_IsDerivedFrom(comp, targetTypeId)) {
+                found = comp;
+            }
+            break;
+        }
+    }
+
+    // Store result via InternalBasePtr::InternalBasePtr(retval, found)
+    fn_InternalBasePtr_Ctor(retval, found);
+}
+
+// ============================================================
+// Dynamic Array Utility Implementations (Phase A4)
+// ============================================================
+// Array header layout (all variants):
+//   +0x00: data pointer (void*)  -- points to element data
+//   +0x08: count        (int32)  -- current element count
+//   +0x0C: capacity     (int32)  -- allocated capacity
+//
+// Capacity growth: when newCount == oldCount + 1 and oldCount != 0:
+//   new capacity = newCount * 3
+// Otherwise capacity = newCount (exact fit or shrink).
+//
+// Memory: fn_MemAlloc(g_pMemAllocSingleton, size, alignment) / fn_MemFreeStatic(ptr)
+
+// fn_ExeArrayResize: 8-byte elements. Copies existing, zeroes new entries.
+// Original: FUN_1400032e0 (6 uses)
+void fn_ExeArrayResize(void* arrayBase, int newCount) {
+    uint8_t* base   = (uint8_t*)arrayBase;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+
+    int oldCount = *pCount;
+    int oldCap   = *pCap;
+
+    if (newCount > oldCap) {
+        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+        if (*pData && oldCount > 0) {
+            uint64_t* src = (uint64_t*)*pData;
+            uint64_t* dst = (uint64_t*)newData;
+            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
+        }
+        if (newData) {
+            uint64_t* dst = (uint64_t*)newData;
+            for (int i = oldCount; i < newCap; i++) dst[i] = 0;
+        }
+        fn_MemFreeStatic(*pData);
+        *pData = newData;
+        *pCap  = newCap;
+    } else if (newCount < oldCount) {
+        if (*pData) {
+            uint64_t* dst = (uint64_t*)*pData;
+            for (int i = newCount; i < oldCount; i++) dst[i] = 0;
+        }
+    }
+    *pCount = newCount;
+}
+
+// fn_ExeArrayResize2: 4-byte elements. Copies existing only (no zero-init for new).
+// Original: FUN_1400021d0 (2 uses)
+void fn_ExeArrayResize2(void* arrayBase, int newCount) {
+    uint8_t* base   = (uint8_t*)arrayBase;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+
+    int oldCount = *pCount;
+    int oldCap   = *pCap;
+
+    if (newCount > oldCap) {
+        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 4, 4);
+        if (*pData && oldCount > 0) {
+            uint32_t* src = (uint32_t*)*pData;
+            uint32_t* dst = (uint32_t*)newData;
+            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
+        }
+        fn_MemFreeStatic(*pData);
+        *pData = newData;
+        *pCap  = newCap;
+    }
+    *pCount = newCount;
+}
+
+// fn_ExeArrayResize3: 8-byte elements. Copies existing, zeroes new entries.
+// Original: FUN_140001bb0 (1 use)
+void fn_ExeArrayResize3(void* arrayBase, int newCount) {
+    uint8_t* base   = (uint8_t*)arrayBase;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+
+    int oldCount = *pCount;
+    int oldCap   = *pCap;
+
+    if (newCount > oldCap) {
+        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+        if (*pData && oldCount > 0) {
+            uint64_t* src = (uint64_t*)*pData;
+            uint64_t* dst = (uint64_t*)newData;
+            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
+        }
+        if (newData) {
+            uint64_t* dst = (uint64_t*)newData;
+            for (int i = oldCount; i < newCap; i++) dst[i] = 0;
+        }
+        fn_MemFreeStatic(*pData);
+        *pData = newData;
+        *pCap  = newCap;
+    } else if (newCount < oldCount) {
+        if (*pData) {
+            uint64_t* dst = (uint64_t*)*pData;
+            for (int i = newCount; i < oldCount; i++) dst[i] = 0;
+        }
+    }
+    *pCount = newCount;
+}
+
+// fn_ExeArrayPush: 4-byte elements. Resizes to newCount, fills new slot with *elementPtr.
+// Original: FUN_140003600 (3 uses)
+void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
+    uint8_t* base   = (uint8_t*)arrayBase;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+
+    int oldCount = *pCount;
+    int oldCap   = *pCap;
+
+    if (newCount > oldCap) {
+        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 4, 4);
+        if (*pData && oldCount > 0) {
+            uint32_t* src = (uint32_t*)*pData;
+            uint32_t* dst = (uint32_t*)newData;
+            for (int i = 0; i < oldCount; i++) dst[i] = src[i];
+        }
+        fn_MemFreeStatic(*pData);
+        *pData = newData;
+        *pCap  = newCap;
+    }
+
+    // Fill new slot (at index newCount-1) from elementPtr
+    if (*pData && newCount > 0 && elementPtr) {
+        ((uint32_t*)*pData)[newCount - 1] = *(uint32_t*)elementPtr;
+    }
+    *pCount = newCount;
+}
 
 // ============================================================
 // Initialization
@@ -973,6 +1125,13 @@ bool EngineFuncsInit() {
     if (!fn_ExternalFactory_FindOrLoad) {
         fn_ExternalFactory_FindOrLoad = reinterpret_cast<fn_ExternalFactory_FindOrLoad_t>(
             ResolveAddr(Module::Runtime, 0x1800bf320));
+    }
+
+    fn_ExternalFactory_Find = reinterpret_cast<fn_ExternalFactory_Find_t>(
+        ResolveExport("?Find@ExternalFactory@Object@@QEBAPEBVExternal@2@AEBVFilename@System@@@Z"));
+    if (!fn_ExternalFactory_Find) {
+        fn_ExternalFactory_Find = reinterpret_cast<fn_ExternalFactory_Find_t>(
+            ResolveAddr(Module::Runtime, 0x1800bdeb0));
     }
 
     fn_ExternalFactory_Clean = reinterpret_cast<fn_ExternalFactory_Clean_t>(
@@ -1368,6 +1527,12 @@ bool EngineFuncsInit() {
         fn_SpinnerElement_GetValue = reinterpret_cast<fn_SpinnerElement_GetValue_t>(
             ResolveAddr(Module::Runtime, 0x1800d7cf0));
 
+    fn_SpinnerElement_GetMaxValue = reinterpret_cast<fn_SpinnerElement_GetMaxValue_t>(
+        ResolveExport("?GetMaxValue@SpinnerElement@UI@@QEBAHXZ"));
+
+    fn_SpinnerElement_SetIncrement = reinterpret_cast<fn_SpinnerElement_SetIncrement_t>(
+        ResolveExport("?SetIncrement@SpinnerElement@UI@@QEAAXH@Z"));
+
     fn_SpinnerElement_IsActive = reinterpret_cast<fn_SpinnerElement_IsActive_t>(
         ResolveExport("?IsActive@SpinnerElement@UI@@QEBA_NXZ"));
 
@@ -1492,96 +1657,66 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140151440));
 
     // ================================================================
-    // Phase A4: Common Exe Functions (by RVA)
+    // Phase A4: FindComponent type IDs (resolved from exe .rdata)
+    // The old exe function pointers (fn_FindComponent_X) are eliminated.
+    // All FindComponent variants are now inline C++ in engine_funcs.h.
+    // fn_ExeArrayResize/2/3/Push are now pure C++ -- no exe resolution needed.
     // ================================================================
-    fn_FindComponent_StateMachine = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x14000b6f0));
-    fn_FindComponent_Destroy = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140005780));
-    fn_FindComponent_Build = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
-    fn_FindComponent_MeshInstance = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140002f90));
-    fn_FindComponent_Storage = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140006270));
-    fn_FindComponent_BuildState = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140003ea0));
-    fn_FindComponent_Workplace = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
-    fn_FindComponent_Attendance = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x1400105e0));
-    fn_FindComponent_Cemetery = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140010a00));
+    g_TypeId_BuildComponent_Slot4     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    g_TypeId_BuildStateComponent      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7d98));
+    g_TypeId_StateMachineComponent_FC = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
+    g_TypeId_PositionComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
+    g_TypeId_DestroyComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75f0));
+    g_TypeId_BuildingComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b80));
+    g_TypeId_AttendanceComponent      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f40));
+    g_TypeId_PastureComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ba0));
+    g_TypeId_AnimalDescription        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6fd0));
+    g_TypeId_OrchardComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
+    g_TypeId_SMComponent              = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c71c8));
+    g_TypeId_CitizenAIComponent_FC    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
+    g_TypeId_StorageComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
+    g_TypeId_CemeteryComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4090));
+    g_TypeId_TombstoneComponent       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4a30));
+    g_TypeId_ImmigrationComponent     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4480));
+    g_TypeId_TrackerComponent         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b10));
+    g_TypeId_CharacterComponent       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
 
-    fn_ExeArrayResize = reinterpret_cast<fn_ExeArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x1400032e0));
-    fn_ExeArrayResize2 = reinterpret_cast<fn_ExeArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x1400021d0));
-    fn_ExeArrayResize3 = reinterpret_cast<fn_ExeArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x140001bb0));
-    fn_ExeArrayPush = reinterpret_cast<fn_ExeArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140003600));
-
-    fn_StorageComponent_QueryCount = reinterpret_cast<fn_StorageComponent_QueryCount_t>(
-        ResolveAddr(Module::Exe, 0x14012cf10));
     fn_RadiusCalc = reinterpret_cast<fn_RadiusCalc_t>(
         ResolveAddr(Module::Exe, 0x140055430));
     fn_RadiusDisplay_Remove = reinterpret_cast<fn_RadiusDisplay_Remove_t>(
         ResolveAddr(Module::Exe, 0x1400b0d00));
 
-    fn_DestroyComponent_CanReclaim = reinterpret_cast<fn_DestroyQuery_t>(
-        ResolveAddr(Module::Exe, 0x14011e690));
-    fn_DestroyComponent_CanRebuild = reinterpret_cast<fn_DestroyQuery_t>(
-        ResolveAddr(Module::Exe, 0x14011e600));
-    fn_DestroyComponent_Reclaim = reinterpret_cast<fn_DestroyAction_t>(
-        ResolveAddr(Module::Exe, 0x14011e400));
-    fn_DestroyComponent_Rebuild = reinterpret_cast<fn_DestroyAction_t>(
-        ResolveAddr(Module::Exe, 0x14011e470));
-    fn_DestroyComponent_Destroy = reinterpret_cast<fn_DestroyAction_t>(
-        ResolveAddr(Module::Exe, 0x14011e4d0));
+    // DestroyComponent_CanReclaim/CanRebuild/Reclaim/Rebuild/Destroy: now static impls in destroyui.cpp
 
     fn_GetActiveProductIndex = reinterpret_cast<fn_GetActiveProductIndex_t>(
         ResolveAddr(Module::Exe, 0x140119470));
-    fn_StorageCountQuery = reinterpret_cast<fn_StorageCountQuery_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
     fn_CropUI_PopulateCombo = reinterpret_cast<fn_CropUIPopulate_t>(
         ResolveAddr(Module::Exe, 0x140078830));
     fn_CropUI_GetExpectedCount = reinterpret_cast<fn_CropUIExpected_t>(
         ResolveAddr(Module::Exe, 0x140078a40));
-    fn_CemeteryGetBurialCount = reinterpret_cast<fn_CemeteryBurialCount_t>(
-        ResolveAddr(Module::Exe, 0x140046dd0));
+    // CemeteryGetBurialCount — now static inline in cemeteryui.cpp
 
     // FindComponentByTypeId — entity component array search (FUN_1400c3680)
     fn_FindComponentByTypeId = reinterpret_cast<fn_FindComponentByTypeId_t>(
         ResolveAddr(Module::Exe, 0x1400c3680));
 
-    // EntityTrackingSet_Remove — BST remove (FUN_14002c690)
-    fn_EntityTrackingSet_Remove = reinterpret_cast<fn_EntityTrackingSet_Remove_t>(
-        ResolveAddr(Module::Exe, 0x14002c690));
+    // EntityTrackingSet_BST_Delete — AVL node deleter (FUN_140025740)
+    fn_EntityTrackingSet_BST_Delete = reinterpret_cast<fn_EntityTrackingSet_BST_Delete_t>(
+        ResolveAddr(Module::Exe, 0x140025740));
 
-    // FindComponent_Immigration — FUN_140012020 (searches for DAT_1401c4480)
-    fn_FindComponent_Immigration = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140012020));
+    // EntityTrackingSet_Remove: now a static impl in citizenui.cpp
 
+    // fn_FindComponent_Immigration — inline in engine_funcs.h (uses g_TypeId_ImmigrationComponent)
     // WorkplaceComponent_Toggle — FUN_14012fc00 (toggles workplace enabled state)
     fn_WorkplaceComponent_Toggle = reinterpret_cast<fn_WorkplaceComponent_Toggle_t>(
         ResolveAddr(Module::Exe, 0x14012fc00));
 
-    // FindComponent_Orchard — FUN_140005440 (searches entity +0x30/+0x38 for DAT_1401c46b0)
-    fn_FindComponent_Orchard = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140005440));
+    // fn_FindComponent_Orchard — inline in engine_funcs.h (uses g_TypeId_OrchardComponent)
     // OrchardComponent_GetGrowth — FUN_140051640 (returns average growth ratio)
     fn_OrchardGetGrowth = reinterpret_cast<fn_OrchardGetGrowth_t>(
         ResolveAddr(Module::Exe, 0x140051640));
-    // FindComponent_Pasture — FUN_140004fe0 (searches for DAT_1401c7ba0)
-    fn_FindComponent_Pasture = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140004fe0));
-    // PastureComponent_CalcMaxCount — FUN_140128570
-    fn_PastureCalcMaxCount = reinterpret_cast<fn_PastureCalcMaxCount_t>(
-        ResolveAddr(Module::Exe, 0x140128570));
-    // PastureUI_UpdateSlider — FUN_1400b4fa0
-    fn_PastureUI_UpdateSlider = reinterpret_cast<fn_PastureUI_UpdateSlider_t>(
-        ResolveAddr(Module::Exe, 0x1400b4fa0));
+    // fn_FindComponent_Pasture — inline in engine_funcs.h (uses g_TypeId_PastureComponent)
+    // PastureCalcMaxCount, PastureUI_UpdateSlider — now static inline in pastureui.cpp
 
     // ================================================================
     // Video::ImageBuffer (Runtime DLL exports — by mangled name, fallback to RVA)
@@ -1766,10 +1901,7 @@ bool EngineFuncsInit() {
             reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
                 ResolveAddr(Module::Runtime, 0x1800079c0));
 
-    // FindComponent_Character — FUN_140003f60
-    fn_FindComponent_Character = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140003f60));
-
+    // fn_FindComponent_Character — inline in engine_funcs.h (uses g_TypeId_CharacterComponent)
     // Input::KeyMap::Pressed — from exe dispatch table at 0x140151758
     fn_KeyMap_Pressed = reinterpret_cast<fn_KeyMap_Pressed_t>(
         ResolveExport("?Pressed@KeyMap@Input@@QEBA_NHH@Z"));
@@ -1779,9 +1911,7 @@ bool EngineFuncsInit() {
             fn_KeyMap_Pressed = *reinterpret_cast<fn_KeyMap_Pressed_t*>(dispatchAddr);
     }
 
-    // FollowDialog close helper — FUN_140068f00
-    fn_FollowDialog_Close = reinterpret_cast<fn_FollowDialog_Close_t>(
-        ResolveAddr(Module::Exe, 0x140068f00));
+    // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7 (FUN_140068f00)
 
     // UpgradeDescription type ID at DAT_1401c5868
     g_TypeId_UpgradeDescription = reinterpret_cast<uint32_t*>(
@@ -1794,32 +1924,20 @@ bool EngineFuncsInit() {
     // ResidenceUI helper (exe function)
     fn_ResidenceUI_GoToCitizen = reinterpret_cast<fn_ResidenceUI_GoToCitizen_t>(
         ResolveAddr(Module::Exe, 0x1400b56a0));
-    // ResidenceUI array push (0x30-byte elements) — FUN_140021020
-    fn_ResidenceUI_ArrayPush = reinterpret_cast<fn_ResidenceUI_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140021020));
+    // ResidenceUI_ArrayPush now inline in residenceui.cpp
+    // EventLogUI_ToggleNotification and NavigateToEvent now inline in eventlogui.cpp
 
-    // EventLogUI helpers (exe functions)
-    fn_EventLogUI_ToggleNotification = reinterpret_cast<fn_EventLogUI_ToggleNotification_t>(
-        ResolveAddr(Module::Exe, 0x140067320));
-    fn_EventLogUI_NavigateToEvent = reinterpret_cast<fn_EventLogUI_NavigateToEvent_t>(
-        ResolveAddr(Module::Exe, 0x140067370));
-
-    // WorkplaceUI helpers
-    fn_FindComponent_BuildState2 = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140002e10));
-    fn_WorkplaceUI_AdjustWorkerCount = reinterpret_cast<fn_WorkplaceUI_AdjustWorkerCount_t>(
-        ResolveAddr(Module::Exe, 0x140087610));
-    fn_WorkplaceUI_ToggleWorkplace = reinterpret_cast<fn_WorkplaceUI_ToggleWorkplace_t>(
-        ResolveAddr(Module::Exe, 0x1400876d0));
+    // WorkplaceUI_AdjustWorkerCount/ToggleWorkplace: now static impls in workplaceui.cpp
+    // fn_FindComponent_BuildState2 — inline in engine_funcs.h (uses g_TypeId_BuildStateComponent)
+    fn_WorkplaceComp_SetMaxWorkers = reinterpret_cast<fn_WorkplaceComp_SetMaxWorkers_t>(
+        ResolveAddr(Module::Exe, 0x14012fb00));
     fn_CitizenList_RequestWorker = reinterpret_cast<fn_CitizenList_RequestWorker_t>(
         ResolveAddr(Module::Exe, 0x14008d100));
     fn_CitizenList_AssignWorker = reinterpret_cast<fn_CitizenList_AssignWorker_t>(
         ResolveAddr(Module::Exe, 0x14008c3d0));
     fn_CitizenList_RemoveWorker = reinterpret_cast<fn_CitizenList_RemoveWorker_t>(
         ResolveAddr(Module::Exe, 0x140091180));
-    fn_FindComponent_Position = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x14000d6c0));
-
+    // fn_FindComponent_Position — inline in engine_funcs.h (uses g_TypeId_PositionComponent)
     // EditTool type ID — from the exe exref used in EntityUI
     // The original uses _typeInfo_exref which is the same exref as EditTool's type
     // We resolve it from the address seen in EntityUI::Slot7
@@ -1831,32 +1949,19 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140102b60));
     fn_EntityUI_SelectEntity = reinterpret_cast<fn_EntityUI_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x140102e30));
-    fn_FindComponent_SM = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x14000a170));
-    fn_GetDescPage = reinterpret_cast<fn_GetDescPage_t>(
-        ResolveAddr(Module::Exe, 0x140011320));
-    fn_BuildComplete = reinterpret_cast<fn_BuildComplete_t>(
-        ResolveAddr(Module::Exe, 0x140109390));
+    // fn_GetDescPage/fn_BuildComplete: now static impls in buildui.cpp
 
     // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
-    fn_MapParamsDialog_OnOk = reinterpret_cast<fn_MapParamsDialog_OnOk_t>(
-        ResolveAddr(Module::Exe, 0x14006b690));
-    fn_MapParamsDialog_OnNewName = reinterpret_cast<fn_MapParamsDialog_OnNewName_t>(
-        ResolveAddr(Module::Exe, 0x14006b700));
-    fn_GameWorld_GetMapName = reinterpret_cast<fn_GameWorld_GetMapName_t>(
-        ResolveAddr(Module::Exe, 0x140011f90));
+    // fn_MapParamsDialog_OnOk (0x14006b690) — inlined in mapparamsdialog.cpp
+    // fn_MapParamsDialog_OnNewName (0x14006b700) — inlined in mapparamsdialog.cpp
+    // fn_GameWorld_GetMapName (0x140011f90) — inlined in mapparamsdialog.cpp
     fn_Element_SetUserData = reinterpret_cast<fn_Element_SetUserData_t>(
         ResolveAddr(Module::Runtime, 0x180115560));
-    fn_UpgradeUI_Serialize = reinterpret_cast<fn_UpgradeUI_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140086d90));
-    fn_UpgradeUI_OnRemove = reinterpret_cast<fn_UpgradeUI_OnRemove_t>(
-        ResolveAddr(Module::Exe, 0x140086c90));
+    // fn_UpgradeUI_Serialize (0x140086d90) — inlined in upgradeui.cpp
+    // fn_UpgradeUI_OnRemove (0x140086c90) — inlined in upgradeui.cpp
     fn_ConsumeProduceUI_Slot4 = reinterpret_cast<fn_ConsumeProduceUI_Slot4_t>(
         ResolveAddr(Module::Exe, 0x14005F3D0));
-    fn_HelpUI_Slot4 = reinterpret_cast<fn_HelpUI_Slot4_t>(
-        ResolveAddr(Module::Exe, 0x14006A500));
-    fn_HelpUI_Slot9 = reinterpret_cast<fn_HelpUI_Slot9_t>(
-        ResolveAddr(Module::Exe, 0x14006A290));
+    // HelpUI_Slot4 and HelpUI_Slot9 now inline in helpui.cpp
 
     // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
     fn_GoalList_GetGoalCount = reinterpret_cast<fn_GoalList_GetGoalCount_t>(
@@ -1881,17 +1986,13 @@ bool EngineFuncsInit() {
     if (!fn_AchievementManager_GetAchievement)
         fn_AchievementManager_GetAchievement = reinterpret_cast<fn_AchievementManager_GetAchievement_t>(
             ResolveAddr(Module::Runtime, 0x18009e8a0));
-    fn_GoalDialog_ArrayPush = reinterpret_cast<fn_GoalDialog_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140011750));
-    fn_EventNotifyDialog_ArrayPush = fn_GoalDialog_ArrayPush;
-    fn_ScenarioDialog_ArrayPush = reinterpret_cast<fn_ScenarioDialog_ArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x140013b60));
+    // GoalDialog_ArrayPush, EventNotifyDialog_ArrayPush, ScenarioDialog_ArrayPush
+    // now inline in their respective .cpp files
     fn_ExternalList_GetResourceCount = reinterpret_cast<fn_ExternalList_GetResourceCount_t>(
         ResolveExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ"));
     fn_Element_SetPadding = reinterpret_cast<fn_Element_SetPadding_t>(
         ResolveExport("?SetPadding@Element@UI@@QEAAXHHHH@Z"));
-    fn_EventNotifyDialog_ArrayRemove = reinterpret_cast<fn_EventNotifyDialog_ArrayRemove_t>(
-        ResolveAddr(Module::Exe, 0x140011670));
+    // fn_EventNotifyDialog_ArrayRemove (0x140011670) — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 
     // Scenario type ID: exref at 0x140151510 -> pointer -> uint32_t typeId
     {
@@ -1935,14 +2036,11 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140101a80));
     fn_Toolbar_ToggleAll = reinterpret_cast<fn_Toolbar_ToggleAll_t>(
         ResolveAddr(Module::Exe, 0x140101ce0));
-    fn_Toolbar_FindEntity = reinterpret_cast<fn_Toolbar_FindEntity_t>(
-        ResolveAddr(Module::Exe, 0x140088d40));
+    // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
     fn_Toolbar_CenterOnEntity = reinterpret_cast<fn_Toolbar_CenterOnEntity_t>(
         ResolveAddr(Module::Exe, 0x140103040));
-    fn_ToolbarDialog_CloseSubDialog = reinterpret_cast<fn_ToolbarDialog_CloseSubDialog_t>(
-        ResolveAddr(Module::Exe, 0x1400b9730));
-    fn_ToolbarDialog_ChangeSpeed = reinterpret_cast<fn_ToolbarDialog_ChangeSpeed_t>(
-        ResolveAddr(Module::Exe, 0x1400b91b0));
+    // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
+    // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
     fn_ToolbarDialog_UpdateButtons = reinterpret_cast<fn_ToolbarDialog_UpdateButtons_t>(
         ResolveAddr(Module::Exe, 0x1400b8fd0));
     // ToolbarElement type ID: exref at 0x1401516a8, used in ToolbarDialog::Update/OnEvent for IsDerivedFrom
@@ -1962,9 +2060,7 @@ bool EngineFuncsInit() {
             g_TypeId_ComboElement = reinterpret_cast<uint32_t*>(*exref);
         }
     }
-    // ConsumeProduceUI helper: get current product index
-    fn_GetCurrentProductIndex = reinterpret_cast<fn_GetCurrentProductIndex_t>(
-        ResolveAddr(Module::Exe, 0x140119470));
+    // ConsumeProduceUI helper: get current product index — inline in engine_funcs.h
     // TutorialGoalDialog helpers
     fn_FindDialogByName = reinterpret_cast<fn_FindDialogByName_t>(
         ResolveAddr(Module::Exe, 0x1400e1600));
@@ -2000,7 +2096,7 @@ bool EngineFuncsInit() {
     }
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
-    fn_FindComponent_Residence = fn_FindComponent_Storage;  // ResidenceUI uses StorageComponent
+    // fn_FindComponent_Residence — inline in engine_funcs.h (uses g_TypeId_StorageComponent_FC, same as Storage)
     g_pAgeMultiplier = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172198));
     g_pNotifyTimerDuration = reinterpret_cast<float*>(
@@ -2064,12 +2160,7 @@ bool EngineFuncsInit() {
             ResolveAddr(Module::Runtime, 0x18011da20));
     fn_String_Equal = reinterpret_cast<fn_String_Equal_t>(
         ResolveExport("??8String@System@@QEBA_NAEBV01@@Z"));
-    fn_HelpUI_ArrayResize = reinterpret_cast<fn_HelpUI_ArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x140011d50));
-
-    // --- BuildUI support ---
-    fn_CountOccupiedBuildTiles = reinterpret_cast<fn_CountOccupiedBuildTiles_t>(
-        ResolveAddr(Module::Exe, 0x140118330));
+    // HelpUI_ArrayResize now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
     // --- OptionsDialog support — Runtime DLL exports ---
     fn_VideoDevice_ValidateConfiguration = reinterpret_cast<fn_VideoDevice_ValidateConfiguration_t>(
@@ -2094,8 +2185,7 @@ bool EngineFuncsInit() {
         ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z"));
     fn_TabElement_SetActiveTab = reinterpret_cast<fn_TabElement_SetActiveTab_t>(
         ResolveExport("?SetActiveTab@TabElement@UI@@QEAAXH@Z"));
-    fn_Element_GetParent = reinterpret_cast<fn_Element_GetParent_t>(
-        ResolveAddr(Module::Exe, 0x140010460));
+    // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call)
     g_pGameSettings = reinterpret_cast<int32_t*>(ResolveAddr(Module::Exe, 0x1401c3de0));
     // Audio::Configuration singleton: exe exref at 0x140151b78 -> pointer to singleton
     {
@@ -2129,22 +2219,14 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14006c850));
 
     // --- CitizenUI helpers ---
-    fn_FindComponent_CitizenAI = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140009790));
+    // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent_FC)
     g_TypeId_CitizenDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7190));
     g_TypeId_HappinessComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7e08));
     g_TypeId_ProfessionComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c70e8));
-    fn_CitizenUI_BuildIconArray = reinterpret_cast<fn_CitizenUI_BuildIconArray_t>(
-        ResolveAddr(Module::Exe, 0x14006abf0));
-    fn_CitizenUI_UpdateIconDisplay = reinterpret_cast<fn_CitizenUI_UpdateIconDisplay_t>(
-        ResolveAddr(Module::Exe, 0x14006aed0));
-    fn_FindProfessionComponent = reinterpret_cast<fn_FindProfessionComponent_t>(
-        ResolveAddr(Module::Exe, 0x140011050));
-    fn_WorldGrid_FindEntity = reinterpret_cast<fn_WorldGrid_FindEntity_t>(
-        ResolveAddr(Module::Exe, 0x1400f9a60));
+    // fn_FindProfessionComponent — inline in engine_funcs.h (uses g_TypeId_ProfessionComponent)
     fn_CitizenUI_Slot9_Original = reinterpret_cast<fn_CitizenUI_Slot9_Original_t>(
         ResolveAddr(Module::Exe, 0x1400650F0));
     fn_StatusBarUI_StatusIconHandler = reinterpret_cast<fn_StatusBarUI_StatusIconHandler_t>(
@@ -2173,10 +2255,8 @@ bool EngineFuncsInit() {
     }
 
     // --- ProductionUI support ---
-    fn_FindComponent_Tracker = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140013320));
-    fn_TrackerComponent_Rebuild = reinterpret_cast<fn_TrackerComponent_Rebuild_t>(
-        ResolveAddr(Module::Exe, 0x14000d9d0));
+    // fn_FindComponent_Tracker — inline in engine_funcs.h (uses g_TypeId_TrackerComponent)
+    // fn_TrackerComponent_Rebuild — inline in engine_funcs.h
 
     // --- ProfessionUI support ---
     fn_External_GetPath = reinterpret_cast<fn_External_GetPath_t>(
@@ -2191,14 +2271,11 @@ bool EngineFuncsInit() {
         fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
             ResolveAddr(Module::Runtime, 0x180069150));
     }
-    fn_BSTRebalance = reinterpret_cast<fn_BSTRebalance_t>(
-        ResolveAddr(Module::Exe, 0x140013480));
+    // BSTRebalance — now static inline in professionui.cpp (BSTRebalance_Impl)
     fn_ProfessionUI_HandleSpinner = reinterpret_cast<fn_ProfessionUI_HandleSpinner_t>(
         ResolveAddr(Module::Exe, 0x1400763c0));
     fn_ProfessionUI_HandleButton = reinterpret_cast<fn_ProfessionUI_HandleButton_t>(
         ResolveAddr(Module::Exe, 0x140076a30));
-    fn_CalcWorkerSlots = reinterpret_cast<fn_CalcWorkerSlots_t>(
-        ResolveAddr(Module::Exe, 0x14012e5c0));
 
     // --- MainMenuDialog support ---
     fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
@@ -2256,6 +2333,12 @@ bool EngineFuncsInit() {
         fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
             ResolveAddr(Module::Runtime, 0x1800c8040));
     }
+    fn_Random_RandFloat = reinterpret_cast<fn_Random_RandFloat_t>(
+        ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
+    if (!fn_Random_RandFloat) {
+        fn_Random_RandFloat = reinterpret_cast<fn_Random_RandFloat_t>(
+            ResolveAddr(Module::Runtime, 0x1800c7d40));
+    }
     fn_GenerateTownName = reinterpret_cast<fn_GenerateTownName_t>(
         ResolveAddr(Module::Exe, 0x140099ac0));
     fn_StartNewGame = reinterpret_cast<fn_StartNewGame_t>(
@@ -2308,8 +2391,7 @@ bool EngineFuncsInit() {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a20));
         if (dispatch) fn_Filename_Less = reinterpret_cast<fn_Filename_Less_t>(*dispatch);
     }
-    fn_ModDetails_StringArrayPush = reinterpret_cast<fn_ModDetails_StringArrayPush_t>(
-        ResolveAddr(Module::Exe, 0x14006e290));
+    // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
     // --- IO::Modification ---
     g_ppModificationSingleton = reinterpret_cast<void**>(
@@ -2423,44 +2505,17 @@ bool EngineFuncsInit() {
     }
 
     // TradeUI support
-    fn_FindComponent_Building = reinterpret_cast<fn_FindComponent_t>(
-        ResolveAddr(Module::Exe, 0x140015140));
+    // fn_FindComponent_Building — inline in engine_funcs.h (uses g_TypeId_BuildingComponent)
     fn_Element_SetNeedsSizeCalc = reinterpret_cast<fn_Element_SetNeedsSizeCalc_t>(
         ResolveExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ"));
-    fn_TradeUI_Serialize = reinterpret_cast<fn_TradeUI_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140084dd0));
-    fn_TradeUI_Startup = reinterpret_cast<fn_TradeUI_Startup_t>(
-        ResolveAddr(Module::Exe, 0x140082150));
-    fn_TradeUI_OnCreate = reinterpret_cast<fn_TradeUI_OnCreate_t>(
-        ResolveAddr(Module::Exe, 0x1400827b0));
-    fn_TradeUI_OnRemove = reinterpret_cast<fn_TradeUI_OnRemove_t>(
-        ResolveAddr(Module::Exe, 0x140081f20));
-    fn_TradeUI_Update = reinterpret_cast<fn_TradeUI_Update_t>(
-        ResolveAddr(Module::Exe, 0x1400868c0));
     fn_TradeUI_RefreshDisplay = reinterpret_cast<fn_TradeUI_RefreshDisplay_t>(
         ResolveAddr(Module::Exe, 0x1400846b0));
     fn_TradeUI_RefreshSellTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140083c70));
+    fn_TradeUI_RefreshBuyTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
+        ResolveAddr(Module::Exe, 0x140083100));
     fn_TradeUI_OnTradeButton = reinterpret_cast<fn_TradeUI_OnTradeButton_t>(
         ResolveAddr(Module::Exe, 0x140081420));
-    fn_TradeUI_OnDismissButton = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140081950));
-    fn_TradeUI_OnOrderSpinner = reinterpret_cast<fn_TradeUI_OnOrderSpinner_t>(
-        ResolveAddr(Module::Exe, 0x140081d00));
-    fn_TradeUI_OnPurchaseButton = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
-        ResolveAddr(Module::Exe, 0x140081dd0));
-    fn_TradeUI_OnComboPurchase = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140081bc0));
-    fn_TradeUI_OnComboOrder = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140081e80));
-    fn_TradeUI_OnStorageSpinner = reinterpret_cast<fn_TradeUI_OnStorageSpinner_t>(
-        ResolveAddr(Module::Exe, 0x140081ab0));
-    fn_TradeUI_OnSellSpinner = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
-        ResolveAddr(Module::Exe, 0x140081a50));
-    fn_TradeUI_OnBuySpinner = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
-        ResolveAddr(Module::Exe, 0x1400819f0));
-    fn_TradeUI_OnOrderAmountSpinner = reinterpret_cast<fn_TradeUI_OnPurchaseButton_t>(
-        ResolveAddr(Module::Exe, 0x140081c50));
     g_TypeId_TableElement = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x140151510));
     g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(
@@ -2473,18 +2528,16 @@ bool EngineFuncsInit() {
     // SelectDescription type ID — DAT_1401c48a8
     g_TypeId_SelectDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c48a8));
-    fn_TradeUI_RefreshOrderQuantityDisplay = reinterpret_cast<fn_TradeUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140082fb0));
-    fn_TradeUI_RefreshSellSpinnerValues = reinterpret_cast<fn_TradeUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140082d80));
-    fn_TradeUI_RefreshOrderDisplay = reinterpret_cast<fn_TradeUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140082b20));
-    fn_TradeUI_RefreshBuyTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140083100));
-    fn_TradeUI_UpdateSellTotals = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140082920));
-    fn_TradeUI_UpdateBuyTotals = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140082850));
+    fn_Building_GetSellableCount = reinterpret_cast<fn_Building_GetSellableCount_t>(
+        ResolveAddr(Module::Exe, 0x14005a520));
+    fn_StorageTree_Insert = reinterpret_cast<fn_StorageTree_Insert_t>(
+        ResolveAddr(Module::Exe, 0x14000e1c0));
+    fn_Building_RemoveBuyOrder = reinterpret_cast<fn_Building_RemoveBuyOrder_t>(
+        ResolveAddr(Module::Exe, 0x14005baa0));
+    fn_Building_AddBuyToStorage = reinterpret_cast<fn_Building_AddBuyToStorage_t>(
+        ResolveAddr(Module::Exe, 0x14005ace0));
+    fn_Building_AddPurchaseOrder = reinterpret_cast<fn_Building_AddPurchaseOrder_t>(
+        ResolveAddr(Module::Exe, 0x140059490));
 
     // --- ModDialog::Slot4 support (Graphics::MaterialInstance, UI::SpriteSheet, etc.) ---
     // MaterialInstance ctor: dispatch at 0x140151838
@@ -2557,6 +2610,15 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400711D0));
 
     // --- DebugUI helpers ---
+    // Weather_ResetTime (exe 0x1400944e0)
+    fn_Weather_ResetTime = reinterpret_cast<fn_Weather_ResetTime_t>(
+        ResolveAddr(Module::Exe, 0x1400944e0));
+    // UI::UserInterface::SetCursor — ordinal 3865
+    fn_UI_SetCursor = reinterpret_cast<fn_UI_SetCursor_t>(
+        ResolveExport("?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z"));
+    // UI::UserInterface::SetFullscreenFade — ordinal 3887
+    fn_UI_SetFullscreenFade = reinterpret_cast<fn_UI_SetFullscreenFade_t>(
+        ResolveExport("?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z"));
     fn_DebugUI_SetDayLighting = reinterpret_cast<fn_DebugUI_SetDayLighting_t>(
         ResolveAddr(Module::Exe, 0x140061780));
     // DiseaseDescription type ID (DAT_1401c5948)
@@ -2748,14 +2810,12 @@ bool EngineFuncsInit() {
            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     printf("  EngineSingleton           = %p -> %p\n", (void*)g_pEngineSingleton,
            g_pEngineSingleton ? *g_pEngineSingleton : nullptr);
-    printf("[EngineFuncs] Phase A4 — Exe Functions:\n");
-    printf("  FindComp_StateMachine     = %p\n", (void*)fn_FindComponent_StateMachine);
-    printf("  FindComp_Destroy          = %p\n", (void*)fn_FindComponent_Destroy);
-    printf("  FindComp_Build            = %p\n", (void*)fn_FindComponent_Build);
-    printf("  StorageQueryCount         = %p\n", (void*)fn_StorageComponent_QueryCount);
-    printf("  DestroyComp_Reclaim       = %p\n", (void*)fn_DestroyComponent_Reclaim);
-    printf("  DestroyComp_Rebuild       = %p\n", (void*)fn_DestroyComponent_Rebuild);
-    printf("  DestroyComp_Destroy       = %p\n", (void*)fn_DestroyComponent_Destroy);
+    printf("[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):\n");
+    printf("  BuildComponent_Slot4      = %p -> 0x%x\n", (void*)g_TypeId_BuildComponent_Slot4,
+           g_TypeId_BuildComponent_Slot4 ? *g_TypeId_BuildComponent_Slot4 : 0);
+    printf("  CemeteryComponent         = %p -> 0x%x\n", (void*)g_TypeId_CemeteryComponent,
+           g_TypeId_CemeteryComponent ? *g_TypeId_CemeteryComponent : 0);
+    // DestroyComponent_Reclaim/Rebuild/Destroy: now implemented as statics in destroyui.cpp
     printf("[EngineFuncs] Video::ImageBuffer:\n");
     printf("  ImageBuffer::Ctor         = %p\n", (void*)fn_ImageBuffer_Ctor);
     printf("  ImageBuffer::Dtor         = %p\n", (void*)fn_ImageBuffer_Dtor);

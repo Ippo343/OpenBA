@@ -26,6 +26,261 @@
 #include <cstdint>
 
 // ============================================================
+// CitizenUI_UpdateIconDisplay (0x14006aed0)
+// ============================================================
+// Updates a status icon array (health hearts or happiness stars).
+// param_1: icon array base (layout: ptr@+0, count@+8int, _, ptr2@+16, count2@+24int, _)
+//   Two arrays: "whole" icons (fully filled) and "half" icons (half-filled).
+//   Each array entry is an InternalBasePtr (8 bytes).
+// param_2: currentVal  (current stat value, e.g. health 0..maxVal)
+// param_3: maxVal      (e.g. description's max health)
+//
+// fillLevel = round((currentVal / maxVal) * (iconCount * 2))
+// For icon index i (1-based, step 2):
+//   whole array[i]: visible if i >= fillLevel (full or partial icon)
+//   half  array[i]: visible if i == fillLevel (exactly half-filled icon)
+static void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float currentVal, float maxVal)
+{
+    // iconArray layout:
+    //   +0x00 ptr to whole-icon InternalBasePtr array
+    //   +0x08 count (int32 at +0x8)
+    //   +0x10 (capacity, unused)
+    //   +0x10 ptr to half-icon InternalBasePtr array (at +0x10? see layout)
+    //
+    // From decompile: param_1[0] = whole array base, param_1[1] = count
+    //                 param_1[2] = half array base,  param_1[3] = count2
+    // But the layout is packed: 0x20 bytes total per icon group:
+    //   int64 ptr (8), int32 count (4), int32 cap (4), int64 ptr2 (8), int32 cnt2 (4), int32 cap2 (4)
+    // So: ptr=iconArrayBase+0, count=iconArrayBase+8, ptr2=iconArrayBase+16, count2=iconArrayBase+24
+
+    uintptr_t* wholeArr = *(uintptr_t**)(iconArrayBase);           // ptr to InternalBasePtr[]
+    int         count    = *(int*)(iconArrayBase + 8);             // number of icon slots
+    uintptr_t* halfArr  = *(uintptr_t**)(iconArrayBase + 0x10);   // ptr to InternalBasePtr[]
+
+    if (count <= 0) return;
+
+    // fillLevel = (int)((currentVal / maxVal) * (count * 2) + 0.5f)
+    // Note: DAT_140172114 = 0.5f (rounding constant)
+    int fillLevel = (int)((currentVal / maxVal) * (float)(count * 2) + 0.5f);
+
+    int iVar2 = 1;      // current icon "double-index" (1-based, increments by 2)
+    for (int i = 0; i < count; i++) {
+        uintptr_t offset = (uintptr_t)i * 8;
+
+        // Whole icon: show (flag off bit1) if iVar2 < fillLevel; hide if iVar2 >= fillLevel
+        {
+            uintptr_t ibpAddr = (uintptr_t)wholeArr + offset;
+            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
+            void* elem = *(void**)ibpAddr;
+            fn_Element_SetFlagsOnOff(elem,
+                (iVar2 >= fillLevel) ? 1 : 0,
+                (iVar2 < fillLevel) ? 1 : 0);
+        }
+
+        // Half icon: show if iVar2 == fillLevel; hide otherwise
+        {
+            uintptr_t ibpAddr = (uintptr_t)halfArr + offset;
+            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
+            void* elem = *(void**)ibpAddr;
+            fn_Element_SetFlagsOnOff(elem,
+                (iVar2 != fillLevel) ? 1 : 0,
+                (iVar2 == fillLevel) ? 1 : 0);
+        }
+
+        iVar2 += 2;
+    }
+}
+
+// ============================================================
+// CitizenUI_BuildIconArray (0x14006abf0)
+// ============================================================
+// Builds two InternalBasePtr arrays (whole-icon and half-icon) from
+// a group element's children. Each child has sub-elements named
+// "whole" and "half" found via FindElement.
+//
+// Layout of param_1 (iconArrayBase, 0x20 bytes):
+//   +0x00: ptr to whole[] (InternalBasePtr)
+//   +0x08: count (int32) at int offset 1 of longlong* (i.e. +0x08)
+//   +0x0C: capacity (int32) at +0x0C
+//   +0x10: ptr to half[]
+//   +0x18: count2 (int32)
+//   +0x1C: cap2 (int32)
+static void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemIBP)
+{
+    fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
+    void* groupElem = *(void**)groupElemIBP;
+    int childCount = fn_Element_ChildCount(groupElem);
+    if (childCount <= 0) return;
+
+    // Layout of param1 (two dynamic arrays, each: ptr@+0,count@+4(in an int),cap@+4next):
+    // From decompile: param_1 is longlong*, param_1[1] has count in lower 32 bits
+    //   param_1[0] = whole ptr, lower int of param_1[1] = whole count, upper int of param_1[1] = whole cap
+    //   param_1[2] = half ptr,  lower int of param_1[3] = half count,  upper int of param_1[3] = half cap
+    // Actually the struct is 0x20 bytes:
+    //   +0x00 ptr64, +0x08 count32+cap32, +0x10 ptr64, +0x18 count32+cap32
+
+    for (int childIdx = 0; childIdx < childCount; childIdx++) {
+        // --- Whole icon element ---
+        {
+            // Build String "whole"
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "whole");
+
+            // Get child element by index
+            uint8_t childBuf[16];
+            fn_Element_Child(groupElem, childBuf, childIdx);
+            fn_InternalBasePtr_CheckPtr((void*)childBuf);
+            void* childElem = *(void**)childBuf;
+
+            // FindElement "whole" in child
+            uint8_t foundBuf[16] = {};
+            fn_FindElement(childElem, foundBuf, nameStr);
+            fn_String_Dtor(nameStr);
+
+            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
+            void* wholeElem = *(void**)foundBuf;
+
+            // Check IsDerivedFrom Element (use g_TypeId_ToolUI as placeholder — actually
+            // the original checks _typeInfo_exref which resolves to Element type)
+            // We skip the IsDerivedFrom check and trust the element is valid.
+            // Wrap in InternalBasePtr
+            uint8_t ibpBuf[8];
+            fn_InternalBasePtr_Ctor(ibpBuf, wholeElem);
+
+            // Push to whole array (dynamic array at param1+0):
+            // count at param1+8 (int), cap at param1+12 (int), ptr at param1+0
+            uint32_t oldCount = *(uint32_t*)(param1 + 8);
+            uint32_t newCount = oldCount + 1;
+            void*    oldPtr   = *(void**)(param1);
+            *(uint32_t*)(param1 + 8) = newCount;
+
+            int oldCap = *(int*)(param1 + 12);
+            if (oldCap < (int)newCount) {
+                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
+                *(int*)(param1 + 12) = newCap;
+                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                *(void**)(param1) = newBuf;
+            }
+
+            void* curPtr = *(void**)(param1);
+            // Copy old + write new entry
+            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
+            for (int k = copyStart; k < (int)newCount; k++) {
+                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
+                if (dst) {
+                    *dst = 0;
+                    if (k < (int)oldCount) {
+                        *dst = *(uint64_t*)((uintptr_t)oldPtr + k * 8);
+                    } else {
+                        *dst = *(uint64_t*)ibpBuf;
+                    }
+                }
+            }
+            if (oldPtr != curPtr) {
+                fn_MemFreeStatic(oldPtr);
+            }
+        }
+
+        // --- Half icon element ---
+        {
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "half");
+
+            // Re-fetch child (CheckPtr pattern)
+            fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
+            void* groupElem2 = *(void**)groupElemIBP;
+            uint8_t childBuf[16];
+            fn_Element_Child(groupElem2, childBuf, childIdx);
+            fn_InternalBasePtr_CheckPtr((void*)childBuf);
+            void* childElem = *(void**)childBuf;
+
+            uint8_t foundBuf[16] = {};
+            fn_FindElement(childElem, foundBuf, nameStr);
+            fn_String_Dtor(nameStr);
+
+            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
+            void* halfElem = *(void**)foundBuf;
+
+            uint8_t ibpBuf[8];
+            fn_InternalBasePtr_Ctor(ibpBuf, halfElem);
+
+            // Push to half array (at param1+16)
+            uintptr_t halfBase = param1 + 0x10;
+            uint32_t oldCount = *(uint32_t*)(halfBase + 8);
+            uint32_t newCount = oldCount + 1;
+            void*    oldPtr   = *(void**)(halfBase);
+            *(uint32_t*)(halfBase + 8) = newCount;
+
+            int oldCap = *(int*)(halfBase + 12);
+            if (oldCap < (int)newCount) {
+                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
+                *(int*)(halfBase + 12) = newCap;
+                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                *(void**)(halfBase) = newBuf;
+            }
+
+            void* curPtr = *(void**)(halfBase);
+            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
+            for (int k = copyStart; k < (int)newCount; k++) {
+                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
+                if (dst) {
+                    *dst = 0;
+                    if (k < (int)oldCount) {
+                        *dst = *(uint64_t*)((uintptr_t)oldPtr + k * 8);
+                    } else {
+                        *dst = *(uint64_t*)ibpBuf;
+                    }
+                }
+            }
+            if (oldPtr != curPtr) {
+                fn_MemFreeStatic(oldPtr);
+            }
+        }
+
+        // Re-check child count for loop condition
+        fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
+        groupElem = *(void**)groupElemIBP;
+        childCount = fn_Element_ChildCount(groupElem);
+    }
+}
+
+// ============================================================
+// WorldGrid_FindEntity (0x1400f9a60)
+// ============================================================
+// BST search: finds entity at tile index param_3 in world grid tree.
+// worldGrid+0x30 = root node ptr.
+// Node layout (piVar1): *piVar1 = key (tile index), *(piVar1+6) = left, *(piVar1+8) = right
+// On match: retval = *(piVar1+2) (entity InternalBasePtr, 8 bytes)
+// Returns param_2 (retval ptr).
+static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIndex)
+{
+    int* piVar1 = *(int**)((uintptr_t)worldGrid + 0x30);
+    while (true) {
+        if (piVar1 == nullptr) {
+            fn_InternalBasePtr_Ctor(retval, nullptr);
+            return retval;
+        }
+        if (*piVar1 <= tileIndex) {
+            if (tileIndex <= *piVar1) {
+                // Match
+                if (piVar1 != nullptr) {
+                    *(uint64_t*)retval = 0;
+                    *(uint64_t*)retval = *(uint64_t*)(piVar1 + 2);
+                    return retval;
+                }
+                fn_InternalBasePtr_Ctor(retval, nullptr);
+                return retval;
+            }
+            // Go right
+            piVar1 = *(int**)(piVar1 + 8);
+        } else {
+            // Go left
+            piVar1 = *(int**)(piVar1 + 6);
+        }
+    }
+}
+
+// ============================================================
 // Helper: Find element by name in dialog instance, return InternalPtr value
 // ============================================================
 static uint64_t FindDialogElem(void* dialogInst, const char* name) {
@@ -82,11 +337,11 @@ void CitizenUI_Slot4(CitizenUI* self) {
     // --- Icon groups (heart/star arrays built from group children) ---
     {
         uint64_t groupHearts = FindElemInTree(parentElem, "groupHearts");
-        fn_CitizenUI_BuildIconArray((void*)(s + 0xA0), &groupHearts);
+        CitizenUI_BuildIconArray_Impl(s + 0xA0, (uintptr_t)&groupHearts);
     }
     {
         uint64_t groupStars = FindElemInTree(parentElem, "groupStars");
-        fn_CitizenUI_BuildIconArray((void*)(s + 0xC0), &groupStars);
+        CitizenUI_BuildIconArray_Impl(s + 0xC0, (uintptr_t)&groupStars);
     }
 
     // --- Button elements (found via DialogInstance, with element IDs) ---
@@ -272,9 +527,9 @@ void CitizenUI_Slot7(CitizenUI* self) {
     }
 
     // --- Health hearts and happiness stars ---
-    fn_CitizenUI_UpdateIconDisplay((void*)(s + 0xA0),
+    CitizenUI_UpdateIconDisplay_Impl(s + 0xA0,
         *(float*)(ai + 0x50), *(float*)((uintptr_t)citizenDesc + 0x70));
-    fn_CitizenUI_UpdateIconDisplay((void*)(s + 0xC0),
+    CitizenUI_UpdateIconDisplay_Impl(s + 0xC0,
         *(float*)(ai + 0x80), *(float*)((uintptr_t)citizenDesc + 0xA4));
 
     // --- Profession button enabled state ---
@@ -318,7 +573,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             // Look up entity at home tile via world grid
             void* worldGrid = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118);
             uint64_t foundRef = 0;
-            fn_WorldGrid_FindEntity(worldGrid, &foundRef, homeTile);
+            WorldGrid_FindEntity_Impl(worldGrid, &foundRef, homeTile);
             homeRef = foundRef;
         }
         if (homeRef != 0) {

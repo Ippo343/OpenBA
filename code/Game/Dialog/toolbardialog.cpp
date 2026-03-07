@@ -32,6 +32,81 @@
 #include <cstdint>
 
 // ============================================================
+// Static inline implementations (replaces fn_* exe pointer calls)
+// ============================================================
+
+// ToolbarDialog_CloseSubDialog (FUN_1400b9730)
+// Closes the active sub-dialog if present, resets radio selection.
+// self+0xE8 = InternalBasePtr to sub-dialog, self+0xF0 = open sub index, self+0xB8 = radio.
+static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
+    uintptr_t s = (uintptr_t)self;
+    uint64_t subDialogPtr = *(uint64_t*)(s + 0xE8);
+    if (subDialogPtr != 0) {
+        void* ui = *(void**)(s + 0x10);
+        fn_UI_CloseDialog(ui, (void*)(s + 0xE8));
+        // Null out the sub-dialog ptr
+        uint8_t nullBuf[8];
+        fn_InternalBasePtr_Ctor(nullBuf, nullptr);
+        *(uint64_t*)(s + 0xE8) = *(uint64_t*)nullBuf;
+        // Reset sub-dialog index to -1
+        *(int32_t*)(s + 0xF0) = -1;
+        // Reset radio selection
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
+        void* radioElem = *(void**)(s + 0xB8);
+        fn_RadioElement_SetActiveRadio(radioElem, -1);
+    }
+}
+
+// ToolbarDialog_ChangeSpeed (FUN_1400b91b0)
+// Changes game speed by direction (+1 or -1), updates speed singleton.
+// self+0xF8 = speed value array, self+0x100 = speed count, self+0xF4 = current index.
+// Speed singleton at gameWorld+0x120 (+0x34 = current speed value).
+static void ToolbarDialog_ChangeSpeed_Impl(void* self, int direction) {
+    uintptr_t s = (uintptr_t)self;
+    void* gameWorld = *g_pGameWorldSingleton;
+    uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
+    int32_t speedVal = *(int32_t*)(gameSys + 0x34);
+    int32_t count = *(int32_t*)(s + 0x100);
+    int32_t* speedArr = *(int32_t**)(s + 0xF8);
+    // Find current speed in array
+    int32_t idx = 0;
+    for (int i = 0; i < count; i++) {
+        if (speedArr[i] == speedVal) { idx = i; break; }
+    }
+    // Apply direction, clamp to [0, count-1]
+    idx += direction;
+    if (idx < 0) idx = 0;
+    *(int32_t*)(s + 0xF4) = idx;
+    if (count <= idx) {
+        *(int32_t*)(s + 0xF4) = count - 1;
+    }
+    // Write new speed value
+    *(int32_t*)(gameSys + 0x34) = speedArr[*(int32_t*)(s + 0xF4)];
+}
+
+// Toolbar_FindEntity (FUN_140088d40)
+// BST search: walks tree at entityList+0x160 looking for typeId match.
+// Returns InternalBasePtr to found entity, or null.
+static void* Toolbar_FindEntity_Impl(void* entityList, void* retBuf, uint64_t typeId, int index) {
+    uintptr_t* node = *(uintptr_t**)((uintptr_t)entityList + 0x160);
+    while (node != nullptr) {
+        if (*node > typeId) {
+            node = (uintptr_t*)node[4];  // left child
+        } else if (*node < typeId) {
+            node = (uintptr_t*)node[5];  // right child
+        } else {
+            // Found matching typeId — fetch entity at index from node[1] array
+            uint64_t entityArray = node[1];
+            *(void**)retBuf = (void*)*(uint64_t*)(entityArray + (uint64_t)index * 8);
+            return *(void**)retBuf;
+        }
+    }
+    // Not found: return null
+    fn_InternalBasePtr_Ctor(retBuf, nullptr);
+    return nullptr;
+}
+
+// ============================================================
 // ToolbarDialog::Update (vtable +0x30) — Sync button states
 // ============================================================
 // Iterates toolbar items, updates button checked/enabled states
@@ -308,7 +383,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
 
             // Find entity by type
             uint8_t entityBuf[16];
-            void* entity = fn_Toolbar_FindEntity(
+            void* entity = Toolbar_FindEntity_Impl(
                 (void*)entityList, entityBuf,
                 *(uint64_t*)(item + 0x58), 0
             );
@@ -342,12 +417,12 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             void* parentDialog = *(void**)(s + 0x28);
             bool isDerivedParent = fn_IsDerivedFrom(parentDialog, *g_TypeId_ToolbarDialogParent);
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
-            fn_ToolbarDialog_CloseSubDialog(typedParent);
+            ToolbarDialog_CloseSubDialog_Impl(typedParent);
             break;
         }
         case 6: {
             // SpeedDown
-            fn_ToolbarDialog_ChangeSpeed(self, -1);
+            ToolbarDialog_ChangeSpeed_Impl(self, -1);
             break;
         }
         case 7: {
@@ -362,7 +437,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         }
         case 9: {
             // SpeedUp
-            fn_ToolbarDialog_ChangeSpeed(self, 1);
+            ToolbarDialog_ChangeSpeed_Impl(self, 1);
             break;
         }
         }

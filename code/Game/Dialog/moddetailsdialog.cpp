@@ -21,6 +21,52 @@
 #include <cstdint>
 
 // ============================================================
+// File-local helper: ModDetails_StringArrayPush (FUN_14006e290)
+// ============================================================
+// Appends each byte of a System::String to a 1-byte-stride dynamic array,
+// then destructs the string (takes ownership).
+//
+// arrayBase layout: [data* at +0][count int32 at +8][capacity int32 at +0xc]
+// Equivalent to: for each char in str, push it as a byte; then dtor str.
+//
+// Original: FUN_14006e290.
+//
+static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, void* strPtr) {
+    uintptr_t* base = (uintptr_t*)arrayBasePtr;
+    uintptr_t strData = *(uintptr_t*)strPtr;
+    int strLen = 0;
+    if (strData) {
+        strLen = *(int*)(strData - 8);
+    }
+    for (int i = 0; i < strLen; i++) {
+        char ch = *(char*)(strData + i);
+        // Byte-array push of one element
+        void* oldData = (void*)*base;
+        int* countPtr    = (int*)((uintptr_t)base + 8);
+        int* capacityPtr = (int*)((uintptr_t)base + 0xC);
+        int oldCount = *countPtr;
+        int newCount = oldCount + 1;
+        *countPtr = newCount;
+        if (*capacityPtr < newCount) {
+            int newCap = newCount;
+            if (newCount == oldCount + 1 && oldCount != 0)
+                newCap = newCount * 3;
+            *capacityPtr = newCap;
+            void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uintptr_t)newCap, 1);
+            if (oldData && oldData != newData) {
+                for (int j = 0; j < oldCount; j++)
+                    ((char*)newData)[j] = ((char*)oldData)[j];
+                fn_MemFreeStatic(oldData);
+            }
+            *base = (uintptr_t)newData;
+        }
+        ((char*)*base)[oldCount] = ch;
+    }
+    // Dtor the string (function takes ownership)
+    fn_String_Dtor(strPtr);
+}
+
+// ============================================================
 // Helper: find element by name, cast to typed pointer
 // ============================================================
 static void* FindElem(void* dialog, const char* name) {
@@ -217,7 +263,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     {
         uint8_t hdr[8];
         fn_String_Ctor_CStr(hdr, "^jl^f0^c0^lb");
-        fn_ModDetails_StringArrayPush(resArray, hdr);
+        ModDetails_StringArrayPush_Impl(resArray, hdr);
     }
 
     // Traverse resource BST in-order
@@ -261,8 +307,8 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
             uint8_t entryStr[8];
             fn_String_Format(entryStr, "%s%s^n", (uint64_t)(uintptr_t)prefix,
                              (uint64_t)(uintptr_t)filename);
-            fn_ModDetails_StringArrayPush(resArray, entryStr);
-            fn_String_Dtor(entryStr);
+            ModDetails_StringArrayPush_Impl(resArray, entryStr);
+            // Note: ModDetails_StringArrayPush_Impl takes ownership and dtors strPtr.
 
             node = BSTNext(node);
         }
@@ -272,7 +318,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     {
         uint8_t ftr[8];
         fn_String_Ctor_CStr(ftr, "^le");
-        fn_ModDetails_StringArrayPush(resArray, ftr);
+        ModDetails_StringArrayPush_Impl(resArray, ftr);
     }
 
     // Null-terminate the byte buffer (original code does this inline after last push)

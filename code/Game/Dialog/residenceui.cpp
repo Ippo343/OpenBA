@@ -19,6 +19,50 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// ============================================================
+// File-local helper: ResidenceUI_ArrayPush_Impl (FUN_140021020)
+// ============================================================
+// Resizes dynamic array to newCount entries (stride 0x30 bytes, no String fields).
+// Entry layout: 6 × void* (imageMale, imageFemale, textName, textAge, textProfession, buttonGoto).
+// arrayBase layout: [data* 8][count int32][capacity int32]
+// Original: 0x140021020.
+static void ResidenceUI_ArrayPush_Impl(void* arrayBase, int newCount, void* entry6) {
+    uintptr_t* dataPtr  = (uintptr_t*)arrayBase;
+    int* countPtr       = (int*)((uintptr_t)arrayBase + 8);
+    int* capacityPtr    = (int*)((uintptr_t)arrayBase + 0xc);
+    int oldCount        = *countPtr;
+
+    if (newCount == oldCount) return;
+
+    void* oldData = (void*)*dataPtr;
+    *countPtr = newCount;
+
+    if (*capacityPtr < newCount) {
+        *capacityPtr = newCount;
+        if (oldCount != 0 && newCount == oldCount + 1) {
+            *capacityPtr = newCount * 3;
+        }
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)*capacityPtr * 0x30, 8);
+        *dataPtr = (uintptr_t)newData;
+    }
+
+    int startCopy = (oldData == (void*)*dataPtr) ? oldCount : 0;
+    for (int i = startCopy; i < newCount; i++) {
+        uint64_t* dst = (uint64_t*)(*dataPtr + (uintptr_t)i * 0x30);
+        if (dst != nullptr) {
+            uint64_t* src = (i < oldCount)
+                ? (uint64_t*)((uintptr_t)oldData + (uintptr_t)i * 0x30)
+                : (uint64_t*)entry6;
+            dst[0] = src[0]; dst[1] = src[1]; dst[2] = src[2];
+            dst[3] = src[3]; dst[4] = src[4]; dst[5] = src[5];
+        }
+    }
+
+    if (oldData != (void*)*dataPtr) {
+        fn_MemFree(g_pMemAllocSingleton, oldData);
+    }
+}
+
 // Helper: find element by name in parent element, returns raw InternalPtr value
 static void* FindChildElem(void* parentElem, const char* name) {
     uint8_t nameStr[8], retBuf[16];
@@ -104,7 +148,7 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
 
         // Push entry into dynamic array at +0x30
         // FUN_140021020: array resize/push with 0x30-byte elements
-        fn_ResidenceUI_ArrayPush((void*)(s + 0x30), *(int*)(s + 0x38) + 1, entry);
+        ResidenceUI_ArrayPush_Impl((void*)(s + 0x30), *(int*)(s + 0x38) + 1, entry);
     }
 }
 

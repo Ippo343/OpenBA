@@ -62,6 +62,18 @@ Not trampolines, but still read data from the exe address space.
 - [x] **optionsdialog.cpp** — Float constants (0x1401720c4=0.01f, 0x140172208=100.0f) for status icon scale conversion → replaced with literal constants (2026-03-07)
 - [x] **saveloaddialog.cpp** — Float constant (0x14017214c=1.0f) → replaced with literal constant (2026-03-07)
 
+## Stage 5b — exe-resolved fn_* pointer inlining (2026-03-07)
+
+Decompile simple fn_* exe function pointers and replace with inline C++ in engine_funcs.h.
+Removes ResolveAddr calls and exe dependency for each.
+
+- [x] **fn_StorageComponent_QueryCount** (0x14012cf10) — inline in engine_funcs.h; used in destroyui.cpp, storagecapacityui.cpp, tradeui.cpp (2026-03-07)
+- [x] **fn_StorageCountQuery / fn_CalcWorkerSlots** (0x14012e5c0) — inline in engine_funcs.h; used in workplaceui.cpp, professionui.cpp (2026-03-07)
+- [x] **fn_TrackerComponent_Rebuild** (0x14000d9d0) — inline in engine_funcs.h; used in productionui.cpp (2026-03-07)
+- [x] **fn_GetCurrentProductIndex** (0x140119470) — inline in engine_funcs.h; uses new fn_Random_RandFloat (Runtime ordinal 3444); used in consumeproduceui.cpp (2026-03-07)
+- [ ] **fn_StorageUI_SortItems** (0x1400213f0) — needs opus: 100+ line introsort/quicksort; leave as fn_* pointer
+- [ ] **TownHallUI fn_* sub-functions** (14 functions) — needs opus: 50-150+ lines each with many unresolved sub-calls (FUN_140090f20, FUN_14006abf0, FUN_14006aed0, FUN_140015800, FUN_1400159b0, FUN_1400149a0, etc.)
+
 ---
 
 ## Stage 6 — Disabled UI/Dialog hooks (35 hooks needing reimpl to enable)

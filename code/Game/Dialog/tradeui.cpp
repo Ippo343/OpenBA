@@ -842,9 +842,9 @@ void TradeUI_Startup(TradeUI* self) {
     fn_Element_SetNeedsSizeCalc(*(void**)(s + 0xD0));
 
     // --- Refresh table displays ---
-    fn_TradeUI_RefreshOrderQuantityDisplay(self);
-    fn_TradeUI_RefreshSellSpinnerValues(self);
-    fn_TradeUI_RefreshOrderDisplay(self);
+    TradeUI_RefreshOrderQuantityDisplay(self);
+    TradeUI_RefreshSellSpinnerValues(self);
+    TradeUI_RefreshOrderDisplay(self);
 }
 
 // ============================================================
@@ -884,8 +884,8 @@ void TradeUI_OnCreate(TradeUI* self) {
     }
 
     // Always update totals
-    fn_TradeUI_UpdateSellTotals(self);
-    fn_TradeUI_UpdateBuyTotals(self);
+    TradeUI_UpdateSellTotals(self);
+    TradeUI_UpdateBuyTotals(self);
 }
 
 // ============================================================
@@ -916,14 +916,14 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
             return;
         }
         if (eventId == 0x4e21) {
-            fn_TradeUI_OnDismissButton(self);
+            TradeUI_OnDismissButton(self);
             return;
         }
         // orderUp spinners: id range [0x1388, 0x1388 + orderCount]
         {
             int orderCount = *(int*)(s + 0x98);
             if (eventId >= 0x1388 && eventId <= orderCount + 0x1388) {
-                fn_TradeUI_OnOrderSpinner(self, eventId - 0x1388, eventId - 0x1389);
+                TradeUI_OnOrderSpinner(self, eventId - 0x1388, eventId - 0x1389);
                 goto check_type14;
             }
         }
@@ -932,7 +932,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
             int orderCount = *(int*)(s + 0x98);
             if (eventId >= 0x1770 && eventId <= orderCount + 0x1770) {
                 // Note: second arg is idx+1 relative to base (idx-0x176f = idx-0x1770+1)
-                fn_TradeUI_OnOrderSpinner(self, eventId - 0x1770, eventId - 0x176f);
+                TradeUI_OnOrderSpinner(self, eventId - 0x1770, eventId - 0x176f);
                 goto check_type14;
             }
         }
@@ -940,7 +940,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         {
             int purchaseCount = *(int*)(s + 0xa8);
             if (eventId >= 0x1f40 && eventId <= purchaseCount + 0x1f40) {
-                fn_TradeUI_OnPurchaseButton(self, eventId - 0x1f40);
+                TradeUI_OnPurchaseButton(self, eventId - 0x1f40);
                 goto check_type14;
             }
         }
@@ -964,7 +964,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     {
         int storageCount = *(int*)(s + 0x58);
         if (eventId >= 0x7d0 && eventId < storageCount + 0x7d0) {
-            fn_TradeUI_OnStorageSpinner(self, eventId - 0x7d0, param2);
+            TradeUI_OnStorageSpinner(self, eventId - 0x7d0, param2);
             return;
         }
     }
@@ -974,7 +974,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         void* tableSell = *(void**)(s + 0xC8);
         int sellChildCount = *(int*)((uintptr_t)tableSell + 0xC0);
         if (eventId < sellChildCount + 0xbb8) {
-            fn_TradeUI_OnSellSpinner(self, eventId - 0xbb8);
+            TradeUI_OnSellSpinner(self, eventId - 0xbb8);
             return;
         }
     }
@@ -984,7 +984,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
         void* tableBuy = *(void**)(s + 0xD0);
         int buyChildCount = *(int*)((uintptr_t)tableBuy + 0xC0);
         if (eventId < buyChildCount + 0xfa0) {
-            fn_TradeUI_OnBuySpinner(self, eventId - 0xfa0);
+            TradeUI_OnBuySpinner(self, eventId - 0xfa0);
             return;
         }
     }
@@ -992,7 +992,7 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
     {
         int orderCount = *(int*)(s + 0x98);
         if (eventId >= 0x1b58 && eventId < orderCount + 0x1b58) {
-            fn_TradeUI_OnOrderAmountSpinner(self, eventId - 0x1b58);
+            TradeUI_OnOrderAmountSpinner(self, eventId - 0x1b58);
         }
     }
     return;
@@ -1000,11 +1000,11 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId) {
 check_type14:
     // Shared check for combo/sort events (reached from type 0x12 and 0x14)
     if (eventId == 0x4e22) {
-        fn_TradeUI_OnComboPurchase(self);
+        TradeUI_OnComboPurchase(self);
         return;
     }
     if (eventId == 0x4e23) {
-        fn_TradeUI_OnComboOrder(self);
+        TradeUI_OnComboOrder(self);
         return;
     }
     if (eventId == 0xc7) {
@@ -1081,3 +1081,691 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
     // Destroy serializer
     g_fn_Serializer_Dtor(serializer);
 }
+
+// ============================================================
+// UpdateBuyTotals (FUN_140082850): Sum buy order values into numberBuyTotal
+// ============================================================
+// Iterates all buy orders (ptr at self+0x40, count at self+0x48, stride 0x18).
+// Each entry: +0x10 = quantity. Resource value = building's resource value table:
+//   building+0x50 = resource type ptr array (sorted), stride 0x10
+//   For entry i: value at *(building+0x50)[stride*i - 8]
+// Then sets numberBuyTotal (+0x108) to the accumulated total.
+
+void TradeUI_UpdateBuyTotals(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Iterate buy orders: ptr at +0x40, count at +0x48, stride 0x18
+    // Each entry: [0]=resource entity ptr, [+0x10]=quantity int
+    // Resource value = building's type-indexed price table:
+    //   building+0x50 = ptr to struct of resource types (sorted set/tree?)
+    //   Ghidra: *(int *)(pIVar3 + *(longlong *)(local_res10 + 0x50) + -8)
+    //   where pIVar3 increments by 0x10 per iteration starting at 0
+    int total = 0;
+    int buyCount = *(int*)(s + 0x48);
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t building = buildingPtr[0];
+
+    uintptr_t resourceTypeBase = *(uintptr_t*)(building + 0x50);
+    uintptr_t buyBase = *(uintptr_t*)(s + 0x40);
+    for (int i = 0; i < buyCount; i++) {
+        uintptr_t entry = buyBase + (uintptr_t)i * 0x18;
+        int qty = *(int*)(entry + 0x10);
+        if (qty != 0) {
+            // Price is at resourceTypeBase + i*0x10 - 8 (relative to i-th type)
+            // This is a sorted/indexed structure: each 0x10-byte slot has price at offset -8
+            // Note: pIVar3 starts at 0, increments by 0x10, so at iteration i:
+            //   offset = i*0x10, value at resourceTypeBase + i*0x10 - 8 = resourceTypeBase - 8 + i*0x10
+            int price = *(int*)(resourceTypeBase - 8 + (uintptr_t)i * 0x10);
+            total += price * qty;
+        }
+    }
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
+    fn_NumberElement_SetValueInt(*(void**)(s + 0x108), total);
+}
+
+// ============================================================
+// UpdateSellTotals (FUN_140082920): Sum sell order values into numberSellTotal
+// ============================================================
+// Iterates all sell orders (ptr at self+0x30, count at self+0x38, stride 0x20).
+// Each entry: +0x18 = quantity. Uses Building_GetSellableCount to get unit value.
+// Sets numberSellTotal (+0x100) to accumulated total.
+
+void TradeUI_UpdateSellTotals(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    int total = 0;
+    int sellCount = *(int*)(s + 0x38);
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t building = buildingPtr[0];
+
+    uintptr_t sellBase = *(uintptr_t*)(s + 0x30);
+    for (int i = 0; i < sellCount; i++) {
+        uintptr_t entry = sellBase + (uintptr_t)i * 0x20;
+        int qty = *(int*)(entry + 0x18);
+        if (qty != 0) {
+            void* resourceEntity = *(void**)(entry);
+            // FUN_14005a520: gets available sell value for this resource at the building
+            int unitVal = fn_Building_GetSellableCount((void*)building, resourceEntity);
+            total += qty * unitVal;
+        }
+    }
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x100));
+    fn_NumberElement_SetValueInt(*(void**)(s + 0x100), total);
+}
+
+// ============================================================
+// OnBuySpinner (FUN_1400819f0): Store buy spinner value into buy order entry
+// ============================================================
+// Reads spinner value from buy entry [idx].spinner (+0x10 in 0x20-stride buyEntries array).
+// Stores to buy orders (+0x40 base, stride 0x18, offset +0x10 for qty).
+// Then calls UpdateBuyTotals.
+
+void TradeUI_OnBuySpinner(TradeUI* self, int idx) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Buy entries at self+0x70, stride 0x20, spinner at +0x10
+    uintptr_t entryBase = *(uintptr_t*)(s + 0x70);
+    uintptr_t entry = entryBase + (uintptr_t)idx * 0x20;
+
+    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x10));
+    int val = fn_SpinnerElement_GetValue(*(void**)(entry + 0x10));
+
+    // Store to buy order qty at (buyOrdersBase + idx*0x18 + 0x10)
+    uintptr_t buyOrders = *(uintptr_t*)(s + 0x40);
+    *(int*)(buyOrders + (uintptr_t)idx * 0x18 + 0x10) = val;
+
+    TradeUI_UpdateBuyTotals(self);
+}
+
+// ============================================================
+// OnSellSpinner (FUN_140081a50): Store sell spinner value into sell order entry
+// ============================================================
+// Reads spinner value from sell entry [idx].spinner (+0x18 in 0x20-stride sellEntries).
+// Stores to sell orders (+0x30 base, stride 0x20, offset +0x18 for qty).
+// Then calls UpdateSellTotals.
+
+void TradeUI_OnSellSpinner(TradeUI* self, int idx) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Sell entries at self+0x60, stride 0x20, spinner at +0x18
+    uintptr_t entryBase = *(uintptr_t*)(s + 0x60);
+    uintptr_t entry = entryBase + (uintptr_t)idx * 0x20;
+
+    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x18));
+    int val = fn_SpinnerElement_GetValue(*(void**)(entry + 0x18));
+
+    // Store to sell order qty at (sellOrdersBase + idx*0x20 + 0x18)
+    uintptr_t sellOrders = *(uintptr_t*)(s + 0x30);
+    *(int*)(sellOrders + (uintptr_t)idx * 0x20 + 0x18) = val;
+
+    TradeUI_UpdateSellTotals(self);
+}
+
+// ============================================================
+// OnComboPurchase (FUN_140081bc0): Save comboPurchase selection to building
+// ============================================================
+// Reads comboPurchase (+0x138) current item index (+0x118).
+// Stores it to building component's field at +0x28.
+
+void TradeUI_OnComboPurchase(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Read combo selection
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x138));
+    uint32_t comboIdx = *(uint32_t*)(*(uintptr_t*)(s + 0x138) + 0x118);
+
+    // Store to building +0x28
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    *(uint32_t*)(buildingPtr[0] + 0x28) = comboIdx;
+}
+
+// ============================================================
+// OnComboOrder (FUN_140081e80): Save comboOrder selection to building's order record
+// ============================================================
+// Reads comboOrder (+0xC0) current item index (+0x118).
+// Stores to building's order slot at: orders_ptr + (curOrderSlot * 0x20 + 8)
+// where curOrderSlot = building +0x2c.
+
+void TradeUI_OnComboOrder(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Read comboOrder selection
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
+    uint32_t comboIdx = *(uint32_t*)(*(uintptr_t*)(s + 0xC0) + 0x118);
+
+    // Store to building's current order slot +8
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t building = buildingPtr[0];
+    int curSlot = *(int*)(building + 0x2c);
+    uintptr_t ordersBase = *(uintptr_t*)(building + 0x30);
+    *(uint32_t*)(ordersBase + (uintptr_t)(uint32_t)curSlot * 0x20 + 8) = comboIdx;
+}
+
+// ============================================================
+// OnOrderAmountSpinner (FUN_140081c50): Save order amount to building order table
+// ============================================================
+// Reads order amount spinner from orderEntries (+0x90, stride 0x20, spinner at +0x18).
+// Stores to building's order amount at: building.orders (+0x40) + idx*0xc + 8.
+
+void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Read spinner value from orderEntries[idx].spinner (at +0x18 in 0x20-stride array)
+    uintptr_t orderEntryBase = *(uintptr_t*)(s + 0x90);
+    uintptr_t entry = orderEntryBase + (uintptr_t)idx * 0x20;
+
+    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x18));
+    int val = fn_SpinnerElement_GetValue(*(void**)(entry + 0x18));
+
+    // Store to building's order amount table: building.ordersAmt (+0x40) + idx*0xc + 8
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t ordersAmt = *(uintptr_t*)(buildingPtr[0] + 0x40);
+    *(int*)(ordersAmt + (uintptr_t)idx * 0xc + 8) = val;
+}
+
+// ============================================================
+// OnOrderSpinner (FUN_140081d00): Swap two order entries in building's order table
+// ============================================================
+// Swaps entries at indices param_2 and param_3 in building's 0xc-stride order array (+0x40).
+// Used when up/down order spinner buttons are clicked.
+
+void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t ordersBase = *(uintptr_t*)(buildingPtr[0] + 0x40);
+
+    // Swap 12-byte entries at idx and idx2 (stride 0xc)
+    uintptr_t a = ordersBase + (uintptr_t)idx  * 0xc;
+    uintptr_t b = ordersBase + (uintptr_t)idx2 * 0xc;
+
+    uint32_t a0 = *(uint32_t*)(a + 0);
+    uint32_t a1 = *(uint32_t*)(a + 4);
+    uint32_t a2 = *(uint32_t*)(a + 8);
+
+    *(uint32_t*)(a + 0) = *(uint32_t*)(b + 0);
+    *(uint32_t*)(a + 4) = *(uint32_t*)(b + 4);
+    *(uint32_t*)(a + 8) = *(uint32_t*)(b + 8);
+
+    *(uint32_t*)(b + 0) = a0;
+    *(uint32_t*)(b + 4) = a1;
+    *(uint32_t*)(b + 8) = a2;
+}
+
+// ============================================================
+// OnDismissButton (FUN_140081950): Dismiss the merchant
+// ============================================================
+// Finds BuildState component on the owning entity. Reads merchant
+// state from +0x51 (or +0x50 if +0x51 is 0). Then calls
+// RefreshDisplay with that state info and refreshes sell/buy tables.
+
+void TradeUI_OnDismissButton(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    // Find BuildState component (FUN_140003ea0)
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildStatePtr[2] = {0, 0};
+    fn_FindComponent_BuildState((void*)entityPtr[0], buildStatePtr);
+
+    fn_InternalBasePtr_CheckPtr(buildStatePtr);
+    uintptr_t buildState = buildStatePtr[0];
+
+    // Read merchant state byte from +0x51 (fall back to +0x50 if zero)
+    uint8_t stateByte = *(uint8_t*)(buildState + 0x51);
+    if (stateByte == 0) {
+        stateByte = *(uint8_t*)(buildState + 0x50);
+    }
+    uintptr_t stateAddr = buildState + 0x48;
+    uint64_t stateVal = (uint64_t)(uint32_t)stateByte;
+
+    // Call vtable[2] on +0x48 (some state notification call)
+    // Original: (**(code **)(**(longlong **)(lVar1 + 0x48) + 0x10))()
+    void** vtbl = *(void***)(buildState + 0x48);
+    typedef void (*StateCall_t)();
+    ((StateCall_t)(vtbl[2]))();
+
+    // Refresh display and tables
+    fn_TradeUI_RefreshDisplay(self, stateAddr, stateVal, 10);
+    fn_TradeUI_RefreshSellTable(self);
+    fn_TradeUI_RefreshBuyTable(self);
+}
+
+// ============================================================
+// OnPurchaseButton (FUN_140081dd0): Toggle a purchase order entry
+// ============================================================
+// Reads the checked state of the purchase button at index param_2 (+0xd8 = checked byte).
+// Gets the corresponding resource entity from self's purchaseReserved (+0xb0, stride 8).
+// Calls Building_AddPurchaseOrder(building, resource, checkedState).
+
+void TradeUI_OnPurchaseButton(TradeUI* self, int idx) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Get purchase button element from purchaseEntries (+0xA0, stride 8)
+    uintptr_t purchaseBase = *(uintptr_t*)(s + 0xA0);
+    uintptr_t buttonPtr = purchaseBase + (uintptr_t)idx * 8;
+    fn_InternalBasePtr_CheckPtr((void*)buttonPtr);
+    void* button = *(void**)buttonPtr;
+
+    // Read checked state byte at +0xd8
+    int8_t checked = *(int8_t*)((uintptr_t)button + 0xd8);
+
+    // Get corresponding resource entity from purchaseReserved (+0xb0, stride 8)
+    uintptr_t reservedBase = *(uintptr_t*)(s + 0xB0);
+    void* resourceEntity = *(void**)(reservedBase + (uintptr_t)idx * 8);
+
+    // Call Building_AddPurchaseOrder
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    fn_Building_AddPurchaseOrder((void*)buildingPtr[0], resourceEntity, checked);
+}
+
+// ============================================================
+// OnStorageSpinner (FUN_140081ab0): Update storage resource assignment
+// ============================================================
+// Reads the new storage spinner value for resource at idx.
+// Looks up resource entity from self's storageOrdersArray (+0x50, stride 0x18).
+// Searches building's storage BST (+0x60) for the resource.
+// If found: update quantity. If not found: insert new entry.
+// Then refreshes sell table and display.
+
+void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
+    uintptr_t s = (uintptr_t)self;
+
+    // storageEntries at self+0x80, stride 0x18, spinner at +0x08
+    uintptr_t storageEntries = *(uintptr_t*)(s + 0x80);
+    uintptr_t entryOffset = (uintptr_t)idx * 0x18;
+    fn_InternalBasePtr_CheckPtr((void*)(storageEntries + 0x08 + entryOffset));
+    int newVal = fn_SpinnerElement_GetValue(*(void**)(storageEntries + 0x08 + entryOffset));
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Get resource entity ptr from storageOrdersArray (+0x50, stride 0x18, first field)
+    uintptr_t storageOrders = *(uintptr_t*)(s + 0x50);
+    void* resourceEntity = *(void**)(storageOrders + entryOffset);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t building = buildingPtr[0];
+    uintptr_t storageBST = building + 0x60;  // BST root pointer at building+0x60
+
+    // Search BST for existing entry and update or insert
+    // The insert/update logic (FUN_14000e1c0) handles both cases:
+    // If resource already in BST: update quantity
+    // If not found: insert new leaf
+    uint64_t newEntry[2] = { (uint64_t)resourceEntity, (uint64_t)(uint32_t)newVal };
+    void* retval = nullptr;
+    fn_StorageTree_Insert((void*)storageBST, &retval, newEntry);
+
+    // If we got a result back (found existing), update its qty
+    if (retval) {
+        *(int*)((uintptr_t)retval + 8) = newVal;
+    }
+
+    fn_TradeUI_RefreshSellTable(self);
+    fn_TradeUI_RefreshDisplay(self, (uint64_t)retval, (uint64_t)newEntry, (int64_t)building);
+}
+
+// ============================================================
+// RefreshOrderQuantityDisplay (FUN_140082fb0): Update order quantity spinners
+// ============================================================
+// For each storage entry (count at self+0x58, storageArray at self+0x50, stride 0x18):
+//   - Gets resource entity from storageArray[i] (offset 0)
+//   - Searches StateMachine's storage list (at +0x28/+0x30) for matching entity
+//   - Sets NumberElement value (storageEntries[i].numberElement at +0x10) to found qty
+// Note: StateMachine is found via entity+FindComponent_StateMachine.
+
+void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    // Check building's base type — used later for sprite/text lookups
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    // IsDerivedFrom call on building's type desc at +0x18 — just a type check, result unused here
+    // fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t smPtr[2] = {0, 0};
+    fn_FindComponent_StateMachine((void*)entityPtr[0], &smPtr);
+
+    int storageCount = *(int*)(s + 0x58);
+    uintptr_t storageOrders = *(uintptr_t*)(s + 0x50);  // resource entity ptrs, stride 0x18
+    uintptr_t storageEntries = *(uintptr_t*)(s + 0x80);  // UI entries, stride 0x18, numberElem at +0x10
+
+    for (int i = 0; i < storageCount; i++) {
+        uintptr_t orderOffset = (uintptr_t)i * 0x18;
+        void* resourceEntity = *(void**)(storageOrders + orderOffset);
+
+        // Search StateMachine's storage list for this resource entity
+        // StateMachine storage list: ptr at smPtr[0]+0x28, count at smPtr[0]+0x30
+        // List entries: pairs [resource_entity_ptr, qty] each 0x10 bytes (2 x 8-byte)
+        fn_InternalBasePtr_CheckPtr(&smPtr);
+        uintptr_t sm = smPtr[0];
+        int smCount = *(int*)(sm + 0x30);
+        void** smList = *(void***)(sm + 0x28);
+
+        int foundQty = 0;
+        for (int j = 0; j < smCount; j++) {
+            if (smList[j * 2] == resourceEntity) {
+                foundQty = (int)(uintptr_t)smList[j * 2 + 1];
+                break;
+            }
+        }
+
+        // Set NumberElement value
+        fn_InternalBasePtr_CheckPtr((void*)(storageEntries + orderOffset + 0x10));
+        fn_NumberElement_SetValueInt(*(void**)(storageEntries + orderOffset + 0x10), foundQty);
+    }
+}
+
+// ============================================================
+// RefreshSellSpinnerValues (FUN_140082d80): Update sell spinners with available amounts
+// ============================================================
+// For each sell order entry (count at self+0x38, sellOrders at self+0x30, stride 0x20):
+//   - Gets available resource count via Building_GetSellableCount
+//   - Searches StateMachine storage for current qty
+//   - Sets NumberElement (+0x08) to found qty
+//   - Sets SpinnerElement (+0x18) min=0 max=availableCount
+//   - Sets spinner increment (1 if max<21, 5 if max<51, 20 otherwise)
+// Also checks merchant state: if not arrived, force max=0 (spinners disabled).
+
+void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    // Type check on building's class info at +0x18 (unused result, but done in original)
+    // fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), DAT_1401c4bb8);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t smPtr[2] = {0, 0};
+    fn_FindComponent_StateMachine((void*)entityPtr[0], &smPtr);
+
+    int sellCount = *(int*)(s + 0x38);
+
+    // Check merchant state: Find BuildState component
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildStatePtr[2] = {0, 0};
+    fn_FindComponent_BuildState((void*)entityPtr[0], buildStatePtr);
+
+    fn_InternalBasePtr_CheckPtr(buildStatePtr);
+    int8_t stateByte = *(int8_t*)(buildStatePtr[0] + 0x52);
+    if (stateByte < 0) stateByte = *(int8_t*)(buildStatePtr[0] + 0x50);
+    bool merchantArrived = (stateByte == 0x13);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t building = buildingPtr[0];
+
+    uintptr_t sellOrders  = *(uintptr_t*)(s + 0x30);   // resource entities, stride 0x20
+    uintptr_t sellEntries = *(uintptr_t*)(s + 0x60);   // UI entries, stride 0x20
+
+    fn_InternalBasePtr_CheckPtr(&smPtr);
+    uintptr_t sm = smPtr[0];
+
+    for (int i = 0; i < sellCount; i++) {
+        uintptr_t sellOffset = (uintptr_t)i * 0x20;
+        void* resourceEntity = *(void**)(sellOrders + sellOffset);
+
+        // Get available sell count
+        int available = fn_Building_GetSellableCount((void*)building, resourceEntity);
+
+        // Search StateMachine storage list for current stored qty
+        int smCount = *(int*)(sm + 0x30);
+        void** smList = *(void***)(sm + 0x28);
+        int storedQty = 0;
+        for (int j = 0; j < smCount; j++) {
+            if (smList[j * 2] == resourceEntity) {
+                storedQty = (int)(uintptr_t)smList[j * 2 + 1];
+                break;
+            }
+        }
+
+        // Set NumberElement (+0x08) to storedQty
+        fn_InternalBasePtr_CheckPtr((void*)(sellEntries + sellOffset + 0x08));
+        fn_NumberElement_SetValueInt(*(void**)(sellEntries + sellOffset + 0x08), storedQty);
+
+        // Set SpinnerElement (+0x18) min=0, max=available (or 0 if no merchant)
+        int maxVal = merchantArrived ? available : 0;
+        fn_InternalBasePtr_CheckPtr((void*)(sellEntries + sellOffset + 0x18));
+        void* spinner = *(void**)(sellEntries + sellOffset + 0x18);
+        fn_SpinnerElement_SetMinMax(spinner, 0, maxVal);
+
+        // Set increment based on max value
+        if (fn_SpinnerElement_GetMaxValue) {
+            int actualMax = fn_SpinnerElement_GetMaxValue(spinner);
+            int increment;
+            if (actualMax < 0x15)      increment = 1;
+            else if (actualMax < 0x33) increment = 5;
+            else if (actualMax < 0x65) increment = 20;
+            else                       increment = 1;  // fallback
+            if (fn_SpinnerElement_SetIncrement) {
+                fn_InternalBasePtr_CheckPtr((void*)(sellEntries + sellOffset + 0x18));
+                fn_SpinnerElement_SetIncrement(*(void**)(sellEntries + sellOffset + 0x18), increment);
+            }
+        }
+    }
+}
+
+// ============================================================
+// RefreshOrderDisplay (FUN_140082b20): Update order table UI rows
+// ============================================================
+// For each active order in building.orders (+0x40, count at building+0x48, stride 0xc):
+//   entry +0 = type index, entry +4 = resource type index, entry +8 = amount
+// Gets sprite from BuildType description sprite sheet and sets it on LabelElement.
+// Gets name text from BuildType string table and sets it on TextElement/LabelElement.
+// Sets SpinnerElement value (order amount).
+// Also handles enable/disable on the last element differently.
+// NOTE: This function requires UI::Sprite and UI::String constructors — calls via
+//       existing fn_LabelElement_SetSprite and fn_TextElement_SetText as raw vtable calls.
+
+void TradeUI_RefreshOrderDisplay(TradeUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    void* entity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    uintptr_t building = buildingPtr[0];
+
+    // Get building's class descriptor at +0x18 (BuildTypeDescription)
+    void* buildTypeDesc = *(void**)(building + 0x18);
+    // Cast via IsDerivedFrom check (DAT_1401c4bb8)
+    // Result used for sprite sheet lookups below
+
+    int orderCount = *(int*)(building + 0x48);
+    if (orderCount <= 0) return;
+
+    uintptr_t ordersAmt = *(uintptr_t*)(building + 0x40);  // order entries, stride 0xc
+    uintptr_t orderEntries = *(uintptr_t*)(s + 0x90);      // UI entries, stride 0x20
+
+    for (int i = 0; i < orderCount; i++) {
+        uintptr_t uiEntry = orderEntries + (uintptr_t)i * 0x20;
+        uintptr_t orderSlot = ordersAmt + (uintptr_t)i * 0xc;
+
+        int amount   = *(int*)(orderSlot + 8);
+        int typeIdx  = *(int*)(orderSlot + 4);
+
+        // Set spinner value (order amount)
+        fn_InternalBasePtr_CheckPtr((void*)(uiEntry + 0x18));
+        fn_SpinnerElement_SetValue(*(void**)(uiEntry + 0x18), amount);
+
+        // Set sprite on LabelElement (+0x10) from buildTypeDesc sprite sheet
+        // buildTypeDesc+0x20 = spriteSheet ptr, buildTypeDesc+0x38 = entries array base
+        // Sprite at entries[typeIdx*3 + 1] * 8 = entries array offset
+        if (buildTypeDesc) {
+            void* spriteSheet = *(void**)((uintptr_t)buildTypeDesc + 0x20);
+            uintptr_t entriesBase = *(uintptr_t*)((uintptr_t)buildTypeDesc + 0x38);
+            uintptr_t spritePtr = entriesBase + ((uintptr_t)(uint32_t)(typeIdx * 3 + 1)) * 8;
+
+            // Construct UI::Sprite on stack: {spriteSheet, spritePtr}
+            // Then call fn_LabelElement_SetSprite
+            uint64_t sprite[4] = { (uint64_t)spriteSheet, (uint64_t)spritePtr, 0, 0 };
+            fn_InternalBasePtr_CheckPtr((void*)(uiEntry + 0x10));
+            fn_LabelElement_SetSprite(*(void**)(uiEntry + 0x10), sprite);
+
+            // Set text on TextElement (+0x10) from buildTypeDesc string table
+            // buildTypeDesc+0x28 = stringTable ptr, entries[typeIdx*3] (name)
+            void* stringTable = *(void**)((uintptr_t)buildTypeDesc + 0x28);
+            uintptr_t namePtr = entriesBase + (uintptr_t)(uint32_t)(typeIdx) * 0x18 + 0x10;
+
+            // Construct UI::String: {stringTable, namePtr}
+            uint64_t uiStr[4] = { (uint64_t)stringTable, (uint64_t)namePtr, 0, 0 };
+            fn_InternalBasePtr_CheckPtr((void*)(uiEntry + 0x10));
+            fn_TextElement_SetText(*(void**)(uiEntry + 0x10), uiStr);
+        }
+
+        // Enable/disable logic:
+        // - Entry 0 is disabled (first row always disabled)
+        // - Last entry (i == orderCount-1) also disabled differently
+        if (i == 0) {
+            fn_InternalBasePtr_CheckPtr((void*)(uiEntry));
+            void** vtbl = *(void***)(*(uintptr_t*)(uiEntry));
+            typedef void (*SetEnabled_t)(void* self, int enabled);
+            ((SetEnabled_t)(vtbl[0x40/8]))(*(void**)(uiEntry), 0);
+        } else if (i == orderCount - 1) {
+            fn_InternalBasePtr_CheckPtr((void*)(uiEntry + 8));
+            void** vtbl = *(void***)(*(uintptr_t*)(uiEntry + 8));
+            typedef void (*SetEnabled_t)(void* self, int enabled);
+            ((SetEnabled_t)(vtbl[0x40/8]))(*(void**)(uiEntry + 8), 0);
+        }
+    }
+}
+
+// ============================================================
+// NOTE: The following functions are too complex for this pass (100+ lines
+// with many unknown sub-calls) and are marked "needs opus":
+//
+//   fn_TradeUI_OnTradeButton   (0x140081420, ~160 lines)
+//     — executes the actual trade: moves sell items to StateMachine,
+//       processes buy orders (destroys/removes/spawns entities),
+//       updates totals, refreshes all tables
+//
+//   fn_TradeUI_RefreshDisplay  (0x1400846b0, 336 lines)
+//     — rebuilds sorted trade table display from ExternalFactory order list
+//
+//   fn_TradeUI_RefreshSellTable (0x140083c70, 381 lines)
+//     — populates sell table UI elements with resource info, amounts, icons
+//
+//   fn_TradeUI_RefreshBuyTable  (0x140083100, 488 lines)
+//     — populates buy table UI elements with resource/buildtype info
+// ============================================================

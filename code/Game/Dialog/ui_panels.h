@@ -468,6 +468,22 @@ void TradeUI_OnRemove(TradeUI* self, void* param2, int eventType, int eventId);
 // Update (vtable +0x50): Serializes/restores tab and sort combo state.
 void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4);
 
+// Sub-functions (called by event handlers and Startup):
+void TradeUI_UpdateBuyTotals(TradeUI* self);
+void TradeUI_UpdateSellTotals(TradeUI* self);
+void TradeUI_OnBuySpinner(TradeUI* self, int idx);
+void TradeUI_OnSellSpinner(TradeUI* self, int idx);
+void TradeUI_OnComboPurchase(TradeUI* self);
+void TradeUI_OnComboOrder(TradeUI* self);
+void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx);
+void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2);
+void TradeUI_OnDismissButton(TradeUI* self);
+void TradeUI_OnPurchaseButton(TradeUI* self, int idx);
+void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* reserved);
+void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self);
+void TradeUI_RefreshSellSpinnerValues(TradeUI* self);
+void TradeUI_RefreshOrderDisplay(TradeUI* self);
+
 // ============================================================
 // StatusBarUI
 // ============================================================
