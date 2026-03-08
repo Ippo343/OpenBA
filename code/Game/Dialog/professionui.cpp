@@ -686,6 +686,209 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 }
 
 // ============================================================
+// ProfessionUI_HandleSpinner (was FUN_1400763c0)
+// ============================================================
+// Handles spinner value change for profession assignment.
+// When user adjusts the spinner for a profession:
+//   - If new value > current count: add citizens to that profession
+//     (tries idle -> working -> student -> any fallback)
+//   - If new value < current count: remove citizens from that profession
+// Then refreshes the display via Slot8 (vtable +0x40).
+//
+// Original: 0x1400763c0.
+
+static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
+    uintptr_t s = (uintptr_t)self;
+    int64_t idx = (int64_t)profIndex;
+
+    // Get spinner element at this index and read desired value
+    uintptr_t spinnerArray = *(uintptr_t*)(s + 0x40);
+    void* spinnerElem = *(void**)(spinnerArray + idx * 8);
+    fn_InternalBasePtr_CheckPtr(&spinnerElem);
+    int desired = fn_NumberEditElement_GetValue(spinnerElem);
+
+    // Get current count from counts array
+    int* counts = *(int**)(s + 0x30);
+    int current = counts[profIndex];
+
+    // Add citizens if desired > current
+    if (current < desired) {
+        int toAdd = desired - current;
+        for (int i = 0; i < toAdd; i++) {
+            void* citizenList = *(void**)(*(uintptr_t*)*g_pGameWorldSingleton + 0xF0);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0) + 0x20 + idx * 8);
+
+            // Shuffle entity list to randomize which citizen gets assigned
+            fn_CitizenList_ShuffleEntities(citizenList, profId);
+
+            // Request a worker slot
+            uint64_t retBuf[2] = {0, 0};
+            fn_CitizenList_RequestWorker(citizenList, retBuf, profId);
+            uint64_t slot = retBuf[0];
+
+            // Try to find a citizen: idle -> working -> student -> any
+            uint64_t slotCopy = slot;
+            uint8_t findBuf[8] = {0};
+            void* result = fn_CitizenList_FindIdle(citizenList, findBuf, &slotCopy, profId);
+            uint64_t found = *(uint64_t*)result;
+
+            if (found == 0) {
+                if (slot != 0) {
+                    slotCopy = slot;
+                    uint8_t fb2[8] = {0};
+                    result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
+                    found = *(uint64_t*)result;
+                    if (found != 0) continue;
+                }
+                slotCopy = slot;
+                uint8_t fb3[8] = {0};
+                result = fn_CitizenList_FindStudent(citizenList, fb3, &slotCopy, profId);
+                found = *(uint64_t*)result;
+
+                if (found == 0) {
+                    slotCopy = slot;
+                    uint64_t anyBuf = 0;
+                    fn_CitizenList_FindAny(citizenList, &anyBuf, &slotCopy, profId);
+                }
+            }
+        }
+    }
+
+    // Remove citizens if desired < current
+    if (desired < current) {
+        int toRemove = current - desired;
+        for (int i = 0; i < toRemove; i++) {
+            void* citizenList = *(void**)(*(uintptr_t*)*g_pGameWorldSingleton + 0xF0);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0) + 0x20 + idx * 8);
+            fn_CitizenList_RemoveWorker(citizenList, profId);
+        }
+    }
+
+    // Refresh display: call Slot8 (vtable +0x40) with Time(0.0)
+    uint8_t timeBuf[8];
+    fn_Time_Ctor_Float(timeBuf, 0.0f);
+    typedef void (*fn_VSlot8_t)(void* self, void* time);
+    void** vtbl = *(void***)self;
+    ((fn_VSlot8_t)vtbl[8])(self, timeBuf);
+}
+
+// ============================================================
+// ProfessionUI_HandleButton (was FUN_140076a30)
+// ============================================================
+// Handles button click to find and center camera on a citizen of
+// the given profession. Cycles through eligible citizens using
+// a rotation index (self+0x70) that wraps around.
+//
+// Only considers adult, alive citizens (age >= birthAge, death ptr == 0).
+// Calls Toolbar_CenterOnEntity_Impl to snap the camera and select
+// the citizen in the EditTool.
+//
+// Original: 0x140076a30.
+
+static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
+    uintptr_t s = (uintptr_t)self;
+    uintptr_t game = *(uintptr_t*)*g_pGameWorldSingleton;
+
+    void* citizenList = *(void**)(game + 0xF0);
+    uintptr_t citizenMgr = (uintptr_t)citizenList;
+    int citizenCount = *(int*)(citizenMgr + 0xA8);
+    uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
+
+    // Get the profession ID for this index
+    uint64_t profId = *(uint64_t*)(*(uintptr_t*)(game + 0xB0) + 0x20 + (int64_t)profIndex * 8);
+
+    // Count eligible (adult, alive) citizens
+    int eligible = 0;
+    for (int i = 0; i < citizenCount; i++) {
+        uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
+        fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)i * 8));
+
+        // Check adult: age >= birthAge (desc+0x44)
+        uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
+        float birthAge = *(float*)(citizenDesc + 0x44);
+        float currentAge = *(float*)(citizen + 0x3C);
+        if (currentAge < birthAge) continue;
+
+        // Check alive: death ptr at +0x208 must be 0
+        if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
+
+        eligible++;
+    }
+
+    if (eligible == 0) return;
+
+    // Advance rotation index
+    int* rotIdx = (int*)(s + 0x70);
+    (*rotIdx)++;
+    if (*rotIdx < 0) *rotIdx = 0;
+
+    // Search for next matching citizen (same profession, adult, alive)
+    int scanned = 0;
+    while (true) {
+        if (*rotIdx >= citizenCount) {
+            *rotIdx = 0;
+        }
+
+        uintptr_t citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+        fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
+
+        // Check if citizen matches this profession
+        if (*(uint64_t*)(citizen + 0x1F0) == profId) {
+            fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
+            citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+
+            // Check adult and alive
+            uintptr_t citizenDesc = *(uintptr_t*)(citizen + 0x288);
+            float birthAge = *(float*)(citizenDesc + 0x44);
+            float currentAge = *(float*)(citizen + 0x3C);
+
+            if (currentAge >= birthAge && *(uintptr_t*)(citizen + 0x208) == 0) {
+                // Found matching citizen -- check if same profession still (re-read after CheckPtr)
+                fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
+                citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+                if (*(uint64_t*)(citizen + 0x1F0) != profId) {
+                    // Profession changed between checks -- still go to this citizen
+                    return;
+                }
+
+                // Get citizen's entity (at +0x10)
+                fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
+                citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+                uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
+
+                // Center camera on this citizen
+                uint64_t dialogInst = *(uint64_t*)(s + 0x18);
+                uintptr_t toolController = *(uintptr_t*)(game + 0x120);
+                Toolbar_CenterOnEntity_Impl((void*)toolController, &dialogInst, &entityPtr);
+                return;
+            }
+        }
+
+        if (scanned >= eligible) {
+            // Exhausted all eligible citizens without finding a match in this profession
+            // Fall through to go to the current rotation citizen anyway
+            fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
+            citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+            if (*(uint64_t*)(citizen + 0x1F0) != profId) {
+                return;
+            }
+
+            fn_InternalBasePtr_CheckPtr((void*)(citizenArray + (uintptr_t)*rotIdx * 8));
+            citizen = *(uintptr_t*)(citizenArray + (uintptr_t)*rotIdx * 8);
+            uint64_t entityPtr = *(uint64_t*)(citizen + 0x10);
+
+            uint64_t dialogInst = *(uint64_t*)(s + 0x18);
+            uintptr_t toolController = *(uintptr_t*)(game + 0x120);
+            Toolbar_CenterOnEntity_Impl((void*)toolController, &dialogInst, &entityPtr);
+            return;
+        }
+
+        (*rotIdx)++;
+        scanned++;
+    }
+}
+
+// ============================================================
 // ProfessionUI::Slot9 (vtable +0x48) -- Event handler
 // ============================================================
 // Handles spinner changes (msg 0x12) and button clicks (msg 0x15).
@@ -703,18 +906,14 @@ void ProfessionUI_Slot9(ProfessionUI* self, void* param2,
     if (param3 == 0x12) {
         // Spinner value changed -- reassign citizens
         if (param4 >= 300 && param4 <= profCount + 300) {
-            if (fn_ProfessionUI_HandleSpinner) {
-                fn_ProfessionUI_HandleSpinner(self, param4 - 300);
-            }
+            ProfessionUI_HandleSpinner(self, param4 - 300);
         }
     }
 
     if (param3 == 0x15) {
         // Button clicked -- find and center on citizen
         if (param4 > 499 && param4 <= profCount + 500) {
-            if (fn_ProfessionUI_HandleButton) {
-                fn_ProfessionUI_HandleButton(self, param4 - 500);
-            }
+            ProfessionUI_HandleButton(self, param4 - 500);
         }
     }
 }

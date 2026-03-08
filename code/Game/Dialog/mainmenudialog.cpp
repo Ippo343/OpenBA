@@ -186,7 +186,7 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     if (menuMem) {
         uint8_t menuStr[8];
         fn_String_Ctor_CStr(menuStr, "Dialog/MainMenu.rsc");
-        menuLoop = fn_MenuDialogLoopT_Ctor(menuMem, menuStr);
+        menuLoop = MenuDialogLoopT_Ctor(menuMem, menuStr);
         fn_String_Dtor(menuStr);
     }
 

@@ -328,6 +328,68 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     }
 }
 
+// ============================================================
+// ResidenceUI_GoToCitizen — navigate camera to resident citizen
+// ============================================================
+// Iterates storage component rooms to find the citizen at the given
+// flat index, then centers the camera on that citizen entity.
+//
+// Storage layout: +0x50 = room array ptr (0x10-byte entries: ptr, count),
+//                 +0x58 = room count.
+// Each room entry: [citizenListPtr 8][count 4][pad 4].
+// citizenListPtr -> array of citizen entity pointers (8 bytes each).
+// Citizen entity +0x10 = InternalBasePtr self-reference.
+//
+// Original: 0x1400B56A0.
+
+static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Get entity from data source +0x28
+    void* dataSource = *(void**)(s + 0x28);
+    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    void* entity = isEntity ? dataSource : nullptr;
+    uint8_t entityBuf[8];
+    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    uintptr_t entityPtr = *(uintptr_t*)entityBuf;
+
+    // Find StorageComponent on the residence entity
+    uintptr_t storageComp = 0;
+    fn_FindComponent_Storage((void*)entityPtr, &storageComp);
+
+    // Iterate storage room groups to find citizen at flat index
+    int flatIdx = 0;
+    int groupCount = *(int*)(storageComp + 0x58);
+
+    for (int g = 0; g < groupCount; g++) {
+        uintptr_t groupArrayBase = *(uintptr_t*)(storageComp + 0x50);
+        int residentCount = *(int*)(groupArrayBase + 8 + (uintptr_t)g * 0x10);
+
+        for (int r = 0; r < residentCount; r++) {
+            if (flatIdx == citizenIndex) {
+                // Found the target citizen — re-read storageComp after CheckPtr
+                fn_InternalBasePtr_CheckPtr(&storageComp);
+                uintptr_t citizenPtr = *(uintptr_t*)(
+                    *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
+                    + (uintptr_t)r * 8);
+
+                fn_InternalBasePtr_CheckPtr(&citizenPtr);
+
+                // Get citizen's InternalBasePtr self-reference at +0x10
+                uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);
+                // Get parent dialog ptr from self+0x18
+                uint64_t parentDialog = *(uint64_t*)(s + 0x18);
+
+                // Center camera on this citizen via toolController (gameWorld+0x120)
+                void* toolController = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x120);
+                Toolbar_CenterOnEntity_Impl(toolController, &parentDialog, &citizenBP);
+                return;
+            }
+            flatIdx++;
+        }
+    }
+}
+
 void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
     (void)param2;
     uintptr_t s = (uintptr_t)self;
@@ -336,6 +398,6 @@ void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
 
     int count = *(int*)(s + 0x38);
     if (id >= 300 && id < 300 + count) {
-        fn_ResidenceUI_GoToCitizen(self, id - 300);
+        ResidenceUI_GoToCitizen(self, id - 300);
     }
 }

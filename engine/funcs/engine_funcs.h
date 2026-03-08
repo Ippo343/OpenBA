@@ -867,10 +867,29 @@ extern uint32_t* g_TypeId_ControlComponent;
 // Additional Exe Functions (Phase D additions)
 // ============================================================
 
-// FindComponentByTypeId(entity, retval, typeId) — searches entity component array
-// FUN_1400c3680: iterates entity+0x30 array (count at +0x38), matches vtable[2] to typeId
-typedef void* (*fn_FindComponentByTypeId_t)(void* entity, void* retval, int typeId);
-extern fn_FindComponentByTypeId_t fn_FindComponentByTypeId;
+// FindComponentByTypeId(entity, typeId) — searches entity component array
+// Reimplemented from FUN_1400c3680: iterates entity+0x30 array (count at +0x38),
+// calls GetTypeId() via vtable[2] (offset 0x10) on each component, returns first match.
+// Original used hidden return pointer (InternalBasePtr); this inline returns void* directly.
+inline void* FindComponentByTypeId(void* entity, int typeId) {
+    if (!entity) return nullptr;
+    uintptr_t e = (uintptr_t)entity;
+    int count = *(int*)(e + 0x38);
+    uintptr_t arr = *(uintptr_t*)(e + 0x30);  // array of InternalBasePtr (8 bytes each)
+    for (int i = 0; i < count; i++) {
+        void* compPtr = *(void**)(arr + (uintptr_t)i * 8);  // InternalBasePtr value = Internal*
+        if (!compPtr) continue;
+        // CheckPtr validates the pointer; for our purposes we just null-check above.
+        // GetTypeId: vtable[2] at offset 0x10
+        void** vtable = *(void***)compPtr;
+        typedef int (*GetTypeId_t)(void*);
+        int id = ((GetTypeId_t)vtable[2])(compPtr);
+        if (id == typeId) {
+            return compPtr;
+        }
+    }
+    return nullptr;
+}
 
 // EntityTrackingSet_BST_Delete(root, node) — AVL/BST node deletion helper
 // FUN_140025740: called by EntityTrackingSet_Remove to delete found node
@@ -1133,10 +1152,7 @@ void DestroyComponent_StartUpgrade_Impl(void* destroyComp);
 // ResidenceUI helpers
 // ============================================================
 
-// ResidenceUI_GoToCitizen(self, citizenIndex) — navigates camera to resident
-// FUN_1400b56a0: reads resident data from dynamic array, focuses camera
-typedef void (*fn_ResidenceUI_GoToCitizen_t)(void* self, int citizenIndex);
-extern fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen;
+// fn_ResidenceUI_GoToCitizen — now inline in residenceui.cpp ResidenceUI_GoToCitizen
 
 // ResidenceUI array push — now inline as ResidenceUI_ArrayPush_Impl in residenceui.cpp
 
@@ -1711,13 +1727,8 @@ extern fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier;
 
 // BSTRebalance — now inline in professionui.cpp (BSTRebalance_Impl)
 
-// Slot9 spinner handler: FUN_1400763c0 (complex citizen assignment)
-typedef void (*fn_ProfessionUI_HandleSpinner_t)(void* self, int profIndex);
-extern fn_ProfessionUI_HandleSpinner_t fn_ProfessionUI_HandleSpinner;
-
-// Slot9 button handler: FUN_140076a30 (find citizen, center camera)
-typedef void (*fn_ProfessionUI_HandleButton_t)(void* self, int profIndex);
-extern fn_ProfessionUI_HandleButton_t fn_ProfessionUI_HandleButton;
+// fn_ProfessionUI_HandleSpinner — reimplemented inline in professionui.cpp (ProfessionUI_HandleSpinner)
+// fn_ProfessionUI_HandleButton — reimplemented inline in professionui.cpp (ProfessionUI_HandleButton)
 
 // ============================================================
 // MainMenuDialog support functions
@@ -2297,6 +2308,11 @@ extern fn_CitizenList_FindStudent_t fn_CitizenList_FindStudent;  // FUN_14008c5f
 typedef void (*fn_CitizenList_FindAny_t)(void* citizenList, void* retval, void* profSlot, uint64_t profId);
 extern fn_CitizenList_FindAny_t fn_CitizenList_FindAny;  // FUN_14008c4b0
 
+// FUN_140089470: Shuffle entity list for a profession (randomizes assignment order)
+// citizenList = CitizenList (gameWorld+0xF0), profId = profession ExternalPtr value
+typedef void (*fn_CitizenList_ShuffleEntities_t)(void* citizenList, uint64_t profId);
+extern fn_CitizenList_ShuffleEntities_t fn_CitizenList_ShuffleEntities;  // FUN_140089470
+
 // --- Profession array push helpers (exe) ---
 // FUN_140015800: Push 0x40-byte profession entry into dynamic array at (ptr, count|cap).
 typedef void (*fn_ProfArrayPush_t)(void* arrayBase, int newCount, void* entry);
@@ -2741,17 +2757,47 @@ extern void** g_GameLoadDialogLoopT_Vtable;  // 0x140158800
 // PTR_FUN_1401588d0 — written to outer LoaderLoop after base ctor to override vtable.
 extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
 
-// MenuDialogLoopT ctor — FUN_14009bb00(self, dialogFilename)
-// Calls Engine::DialogLoopT::DialogLoopT(self, filename), then patches vtable to
-// PTR_FUN_14015ed00 (MenuDialogLoopT subclass vtable) and zeroes extra fields (+0xb68..+0xbf8).
-// Also constructs System::Random at +0x168 and Audio::Scene at +0xb30.
-// Allocate 0xc00 bytes before calling. Used to create the MainMenu/tutorial dialog loop.
-typedef void* (*fn_MenuDialogLoopT_Ctor_t)(void* self, void* dialogFilename);
-extern fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor;
+// Engine::DialogLoopT::DialogLoopT(self, dialogFilename) — Runtime base ctor
+// ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z (Runtime 0x1800db3f0)
+// Calls UpdateLoop::UpdateLoop, patches DialogLoopT vtable, copies string, inits UI::UserInterface.
+typedef void* (*fn_DialogLoopT_Ctor_t)(void* self, void* dialogFilename);
+extern fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor;
+
+// Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
+// ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
+typedef void* (*fn_AudioScene_Ctor_t)(void* self);
+extern fn_AudioScene_Ctor_t fn_AudioScene_Ctor;
 
 // Exe vtable pointer for MenuDialogLoopT (subclass of Engine::DialogLoopT).
 // PTR_FUN_14015ed00 — written to DialogLoopT after MenuDialogLoopT_Ctor.
 extern void** g_MenuDialogLoopT_Vtable;  // 0x14015ed00
+
+// MenuDialogLoopT_Ctor — FUN_14009bb00 — NOW REIMPLEMENTED INLINE
+// Calls Engine::DialogLoopT::DialogLoopT(self, filename), then patches vtable to
+// PTR_FUN_14015ed00 (MenuDialogLoopT subclass vtable), constructs System::Random at +0x168
+// and Audio::Scene at +0xb30, then zeroes extra fields (+0xb68..+0xbf8).
+// Allocate 0xc00 bytes before calling. Used to create the MainMenu/tutorial dialog loop.
+// Old typedef kept for reference:
+// typedef void* (*fn_MenuDialogLoopT_Ctor_t)(void* self, void* dialogFilename);
+// extern fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor;
+inline void* MenuDialogLoopT_Ctor(void* self, void* dialogFilename) {
+    // 1. Call base Engine::DialogLoopT ctor (initializes UpdateLoop, UI::UserInterface, etc.)
+    fn_DialogLoopT_Ctor(self, dialogFilename);
+
+    // 2. Patch vtable to MenuDialogLoopT exe subclass
+    *(void**)self = (void*)g_MenuDialogLoopT_Vtable;
+
+    // 3. Construct embedded sub-objects
+    fn_Random_Default_Ctor((void*)((uintptr_t)self + 0x168));   // System::Random at +0x168
+    fn_AudioScene_Ctor((void*)((uintptr_t)self + 0xb30));       // Audio::Scene at +0xb30
+
+    // 4. Zero-init MenuDialogLoopT-specific fields (+0xb68..+0xbf8)
+    uintptr_t s = (uintptr_t)self;
+    for (uintptr_t off = 0xb68; off <= 0xbf8; off += 8)
+        *(uint64_t*)(s + off) = 0;
+
+    return self;
+}
 
 // SetEngineNextLoop — sets next loop on the MainLoop engine singleton
 // FUN_140097fb0(enginePtr, loaderLoop): sets UI cursor, fullscreen fade, stores next loop ptr

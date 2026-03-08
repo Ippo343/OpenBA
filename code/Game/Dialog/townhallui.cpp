@@ -1416,7 +1416,7 @@ static void* AgriBST_Next(void* node) {
 }
 
 // Find entity component by type ID (inline helper matching Ghidra pattern)
-static void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
+static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
     int compCount = *(int*)(entity + 0x30);
     uintptr_t compArray = *(uintptr_t*)(entity + 0x28);
     for (int i = 0; i < compCount; i++) {
@@ -1499,7 +1499,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint64_t entityPtr = *(uint64_t*)n;
 
             // Find ResourceType component on entity
-            void* resourceComp = FindComponentByTypeId(entityPtr, *g_TypeId_ResourceType);
+            void* resourceComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_ResourceType);
 
             // Read counter value at selected index
             int counterVal = *(int*)(n + counterOffset);
@@ -1557,7 +1557,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint64_t entityPtr = entries[i].entityPtr;
 
             // Find ValueDescription component on entity
-            void* valDesc = FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
+            void* valDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
 
             // Create sprite from ValueDescription+0x20 (spriteSheet) and +0x28 (spriteName)
             uint8_t spriteBuf[16];
@@ -1723,7 +1723,7 @@ next_entity: ;
 
             if (found) {
                 // Find SelectDescription component (DAT_1401c48a8) on entity
-                void* selectDesc = FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
+                void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
 
                 if (selectDesc) {
                     // Create sprite from SelectDescription+0x20/+0x28
@@ -1866,7 +1866,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             uintptr_t entity = entityPtr;
 
             // Find WorkplaceComponent (DAT_1401c80e0)
-            void* workplaceComp = FindComponentByTypeId(entity, *g_TypeId_WorkplaceComponent);
+            void* workplaceComp = TownHall_FindComponentByTypeId(entity, *g_TypeId_WorkplaceComponent);
 
             uint64_t wpBP = 0;
             fn_InternalBasePtr_Ctor(&wpBP, workplaceComp);
@@ -1879,7 +1879,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uintptr_t entity2 = entityPtr;
 
                 // Find WorkplaceComponent again to get StorageLocationComponent
-                void* workplaceComp2 = FindComponentByTypeId(entity2, *g_TypeId_WorkplaceComponent);
+                void* workplaceComp2 = TownHall_FindComponentByTypeId(entity2, *g_TypeId_WorkplaceComponent);
 
                 uint64_t wpBP2 = 0;
                 fn_InternalBasePtr_Ctor(&wpBP2, workplaceComp2);
@@ -1890,7 +1890,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uintptr_t parentEntity = *(uintptr_t*)(wpBP2 + 0x10);
 
                 // Find StorageLocationComponent (DAT_1401c8070)
-                void* storageLocComp = FindComponentByTypeId(parentEntity, *g_TypeId_StorageLocationComponent);
+                void* storageLocComp = TownHall_FindComponentByTypeId(parentEntity, *g_TypeId_StorageLocationComponent);
 
                 uint64_t slBP = 0;
                 fn_InternalBasePtr_Ctor(&slBP, storageLocComp);
@@ -2059,13 +2059,13 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
 
         // Find StorageComponent_FC (DAT_1401c7e78)
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-        void* storageComp = FindComponentByTypeId(entityPtr, *g_TypeId_StorageComponent_FC);
+        void* storageComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_StorageComponent_FC);
         uint64_t storageBP = 0;
         fn_InternalBasePtr_Ctor(&storageBP, storageComp);
 
         // Find BuildStateComponent (DAT_1401c7cf0)
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-        void* buildStateComp = FindComponentByTypeId(entityPtr, *g_TypeId_BuildStateComponent);
+        void* buildStateComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_BuildStateComponent);
         uint64_t buildStateBP = 0;
         fn_InternalBasePtr_Ctor(&buildStateBP, buildStateComp);
 
@@ -2075,7 +2075,7 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         } else {
             // Check for BuildingComponent (DAT_1401c4b80)
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-            void* buildingComp = FindComponentByTypeId(entityPtr, *g_TypeId_BuildingComponent);
+            void* buildingComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_BuildingComponent);
             uint64_t buildingBP = 0;
             fn_InternalBasePtr_Ctor(&buildingBP, buildingComp);
             if (buildingBP != 0)

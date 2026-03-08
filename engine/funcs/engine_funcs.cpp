@@ -215,8 +215,7 @@ uint32_t* g_TypeId_ImageElement = nullptr;
 // ControlComponent type ID (direct)
 uint32_t* g_TypeId_ControlComponent = nullptr;
 
-// FindComponentByTypeId (entity component array search)
-fn_FindComponentByTypeId_t fn_FindComponentByTypeId = nullptr;
+// FindComponentByTypeId — now inline in engine_funcs.h (reimplemented from FUN_1400c3680)
 
 // EntityTrackingSet_BST_Delete (AVL node deleter, sub-function of _Remove)
 fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete = nullptr;
@@ -357,7 +356,7 @@ fn_KeyMap_Pressed_t fn_KeyMap_Pressed = nullptr;
 uint32_t* g_TypeId_UpgradeDescription = nullptr;
 // fn_DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
-fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen = nullptr;
+// fn_ResidenceUI_GoToCitizen — now inline in residenceui.cpp ResidenceUI_GoToCitizen
 // fn_ResidenceUI_ArrayPush — now inline as ResidenceUI_ArrayPush_Impl in residenceui.cpp
 // fn_EventLogUI_ToggleNotification — now inline in eventlogui.cpp Slot9
 // fn_EventLogUI_NavigateToEvent — now inline in eventlogui.cpp Slot9
@@ -556,8 +555,8 @@ void** g_FollowDialog_Vtable = nullptr;
 fn_External_GetPath_t fn_External_GetPath = nullptr;
 fn_Filename_GetPathIdentifier_t fn_Filename_GetPathIdentifier = nullptr;
 // BSTRebalance — now static inline in professionui.cpp
-fn_ProfessionUI_HandleSpinner_t fn_ProfessionUI_HandleSpinner = nullptr;
-fn_ProfessionUI_HandleButton_t fn_ProfessionUI_HandleButton = nullptr;
+// fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
+// fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
 
 // MainMenuDialog support
 fn_App_Quit_t fn_App_Quit = nullptr;
@@ -637,6 +636,7 @@ fn_CitizenList_FindIdle_t fn_CitizenList_FindIdle = nullptr;
 fn_CitizenList_FindWorking_t fn_CitizenList_FindWorking = nullptr;
 fn_CitizenList_FindStudent_t fn_CitizenList_FindStudent = nullptr;
 fn_CitizenList_FindAny_t fn_CitizenList_FindAny = nullptr;
+fn_CitizenList_ShuffleEntities_t fn_CitizenList_ShuffleEntities = nullptr;
 // Array push helpers
 fn_ProfArrayPush_t fn_ProfArrayPush = nullptr;
 fn_ProdArrayPush_t fn_ProdArrayPush = nullptr;
@@ -758,7 +758,9 @@ void** g_GameLoaderLoop_Vtable = nullptr;
 // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
 // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
 // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
-fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor = nullptr;
+fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor = nullptr;
+fn_AudioScene_Ctor_t fn_AudioScene_Ctor = nullptr;
+// fn_MenuDialogLoopT_Ctor — REMOVED, now reimplemented as inline MenuDialogLoopT_Ctor() in engine_funcs.h
 void** g_MenuDialogLoopT_Vtable = nullptr;
 
 // --- SpriteCaptureUI helpers ---
@@ -1815,9 +1817,7 @@ bool EngineFuncsInit() {
     // fn_CropUI_GetExpectedCount — REIMPLEMENTED in code/Game/Dialog/cropui.cpp
     // CemeteryGetBurialCount — now static inline in cemeteryui.cpp
 
-    // FindComponentByTypeId — entity component array search (FUN_1400c3680)
-    fn_FindComponentByTypeId = reinterpret_cast<fn_FindComponentByTypeId_t>(
-        ResolveAddr(Module::Exe, 0x1400c3680));
+    // FindComponentByTypeId — now inline in engine_funcs.h (reimplemented from FUN_1400c3680)
 
     // EntityTrackingSet_BST_Delete — AVL node deleter (FUN_140025740)
     fn_EntityTrackingSet_BST_Delete = reinterpret_cast<fn_EntityTrackingSet_BST_Delete_t>(
@@ -2042,9 +2042,7 @@ bool EngineFuncsInit() {
 
     // DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
-    // ResidenceUI helper (exe function)
-    fn_ResidenceUI_GoToCitizen = reinterpret_cast<fn_ResidenceUI_GoToCitizen_t>(
-        ResolveAddr(Module::Exe, 0x1400b56a0));
+    // fn_ResidenceUI_GoToCitizen — now inline in residenceui.cpp ResidenceUI_GoToCitizen
     // ResidenceUI_ArrayPush now inline in residenceui.cpp
     // EventLogUI_ToggleNotification and NavigateToEvent now inline in eventlogui.cpp
 
@@ -2420,10 +2418,8 @@ bool EngineFuncsInit() {
             ResolveAddr(Module::Runtime, 0x180069150));
     }
     // BSTRebalance — now static inline in professionui.cpp (BSTRebalance_Impl)
-    fn_ProfessionUI_HandleSpinner = reinterpret_cast<fn_ProfessionUI_HandleSpinner_t>(
-        ResolveAddr(Module::Exe, 0x1400763c0));
-    fn_ProfessionUI_HandleButton = reinterpret_cast<fn_ProfessionUI_HandleButton_t>(
-        ResolveAddr(Module::Exe, 0x140076a30));
+    // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
+    // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
 
     // --- MainMenuDialog support ---
     fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
@@ -2695,6 +2691,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14008c5f0));
     fn_CitizenList_FindAny = reinterpret_cast<fn_CitizenList_FindAny_t>(
         ResolveAddr(Module::Exe, 0x14008c4b0));
+    fn_CitizenList_ShuffleEntities = reinterpret_cast<fn_CitizenList_ShuffleEntities_t>(
+        ResolveAddr(Module::Exe, 0x140089470));
 
     // --- Array push helpers ---
     fn_ProfArrayPush = reinterpret_cast<fn_ProfArrayPush_t>(
@@ -2991,8 +2989,20 @@ bool EngineFuncsInit() {
     // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
     // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
     // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
-    fn_MenuDialogLoopT_Ctor = reinterpret_cast<fn_MenuDialogLoopT_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x14009bb00));
+    // fn_MenuDialogLoopT_Ctor — REIMPLEMENTED as inline MenuDialogLoopT_Ctor() in engine_funcs.h
+    // Now resolve its inner dependencies:
+    fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
+        ResolveExport("??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z"));
+    if (!fn_DialogLoopT_Ctor) {
+        fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800db3f0));
+    }
+    fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
+        ResolveExport("??0Scene@Audio@@QEAA@XZ"));
+    if (!fn_AudioScene_Ctor) {
+        fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800e0160));
+    }
     g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
 
     // --- Engine globals (direct memory addresses) ---

@@ -43,9 +43,8 @@ void ControlUI_Slot4(ControlUI* self) {
     if (fn_IsDerivedFrom(entity, entityTypeId)) {
         entityChecked = entity;
     }
-    uint64_t subComp = 0;
-    fn_FindComponentByTypeId(entityChecked, &subComp, subTypeKey);
-    *(uint64_t*)(s + 0x38) = subComp;
+    void* subComp = FindComponentByTypeId(entityChecked, subTypeKey);
+    *(uint64_t*)(s + 0x38) = (uint64_t)subComp;
 
     // If element at +0x30 IsA CheckboxElement, set initial checkbox state
     uint32_t checkboxTypeId = g_TypeId_CheckboxElement ? *g_TypeId_CheckboxElement : 0;

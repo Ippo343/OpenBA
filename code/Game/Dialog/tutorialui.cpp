@@ -90,7 +90,7 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
     if (menuLoop) {
         uint64_t menuNameStr = 0;
         fn_String_Ctor_CStr(&menuNameStr, "Dialog/MainMenu.rsc");
-        fn_MenuDialogLoopT_Ctor(menuLoop, &menuNameStr);
+        MenuDialogLoopT_Ctor(menuLoop, &menuNameStr);
         fn_String_Dtor(&menuNameStr);
         pMenuLoop = menuLoop;
     }
