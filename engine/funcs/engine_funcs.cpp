@@ -409,7 +409,12 @@ fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
 fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
-fn_Toolbar_CenterOnEntity_t fn_Toolbar_CenterOnEntity = nullptr;
+// fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
+uint32_t* g_TypeId_MultiObjectComponent = nullptr;
+fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking = nullptr;
+fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform = nullptr;
+fn_Transform_AsTransform3_t fn_Transform_AsTransform3 = nullptr;
+fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld = nullptr;
 // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons = nullptr;
@@ -613,8 +618,7 @@ fn_BST_FreeNodes_t fn_BST_FreeNodes = nullptr;
 // Inventory sort
 fn_InventorySort_Asc_t fn_InventorySort_Asc = nullptr;
 fn_InventorySort_Desc_t fn_InventorySort_Desc = nullptr;
-// GoToEntity
-fn_GoToEntity_t fn_GoToEntity = nullptr;
+// fn_GoToEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
 
 // SpriteCaptureUI support
 uint32_t* g_TypeId_EditElement = nullptr;
@@ -2080,8 +2084,18 @@ bool EngineFuncsInit() {
     fn_Toolbar_ToggleAll = reinterpret_cast<fn_Toolbar_ToggleAll_t>(
         ResolveAddr(Module::Exe, 0x140101ce0));
     // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
-    fn_Toolbar_CenterOnEntity = reinterpret_cast<fn_Toolbar_CenterOnEntity_t>(
-        ResolveAddr(Module::Exe, 0x140103040));
+    // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
+    // Sub-dependencies:
+    g_TypeId_MultiObjectComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7ac0));
+    fn_EntityPanel_SyncTracking = reinterpret_cast<fn_EntityPanel_SyncTracking_t>(
+        ResolveAddr(Module::Exe, 0x1400666b0));
+    fn_CameraSys_ComputeViewTransform = reinterpret_cast<fn_CameraSys_ComputeViewTransform_t>(
+        ResolveAddr(Module::Exe, 0x1400983f0));
+    fn_Transform_AsTransform3 = reinterpret_cast<fn_Transform_AsTransform3_t>(
+        ResolveAddr(Module::Runtime, 0x18001fcd0));
+    fn_Camera_SetCameraToWorld = reinterpret_cast<fn_Camera_SetCameraToWorld_t>(
+        ResolveAddr(Module::Runtime, 0x1800feb00));
     // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
     // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
     fn_ToolbarDialog_UpdateButtons = reinterpret_cast<fn_ToolbarDialog_UpdateButtons_t>(
@@ -2575,9 +2589,7 @@ bool EngineFuncsInit() {
     fn_InventorySort_Desc = reinterpret_cast<fn_InventorySort_Desc_t>(
         ResolveAddr(Module::Exe, 0x140015500));
 
-    // --- GoToEntity ---
-    fn_GoToEntity = reinterpret_cast<fn_GoToEntity_t>(
-        ResolveAddr(Module::Exe, 0x140103040));
+    // fn_GoToEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
 
     // --- SpriteCaptureUI support ---
     // EditElement type ID: exref at 0x140151b50 (double-indirect)

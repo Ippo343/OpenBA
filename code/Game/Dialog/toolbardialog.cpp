@@ -389,7 +389,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             );
 
             // Center camera on entity
-            fn_Toolbar_CenterOnEntity((void*)gameSys, &parentRef, entity);
+            Toolbar_CenterOnEntity_Impl((void*)gameSys, &parentRef, entity);
             break;
         }
         case 5: {

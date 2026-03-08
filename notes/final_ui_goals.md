@@ -84,8 +84,8 @@ Thin wrappers (fn_* kept — too complex, deep BST/component traversal):
 
 ### Remaining — kept as exe pointers (too deep)
 
-- [ ] `fn_Toolbar_CenterOnEntity` (0x140103040) — 4 uses (~100 lines, ~15 sub-calls into 3D math, Camera, Transform, EditTool — not worth the dependency chain)
-- [ ] `fn_CitizenUI_Slot9_Original` (0x1400650f0) — 1 use, blocked on Toolbar_CenterOnEntity for 0x228 follow case. 0x226/0x227 cases already reimplemented.
+- [x] `fn_Toolbar_CenterOnEntity` (0x140103040) — DONE: reimplemented as `Toolbar_CenterOnEntity_Impl` in engine_funcs.h. 5 sub-function pointers resolved (MultiObjectComponent, EntityPanel_SyncTracking, CameraSys_ComputeViewTransform, Transform_AsTransform3, Camera_SetCameraToWorld). Also replaces fn_GoToEntity. 5 callers updated.
+- [ ] `fn_CitizenUI_Slot9_Original` (0x1400650f0) — 1 use, 0x228 follow case still delegates to exe (FollowDialog ctor needs assembly glue). 0x226/0x227 cases already reimplemented.
 - [ ] `fn_TradeUI_RefreshDisplay` (0x1400846b0) — 4 uses (336 lines, massive entity iteration + UI binding, deferred)
 
 ### Remaining — already inlined / no action needed

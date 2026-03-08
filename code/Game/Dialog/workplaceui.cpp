@@ -108,11 +108,11 @@ static void WorkplaceUI_ToggleWorkplace_Impl(void* self)
     fn_InternalBasePtr_CheckPtr((void*)&workplaceRef);
     uint64_t workplaceEntityInner = *(uint64_t*)(workplaceRef + 0x10);
 
-    // Center camera: fn_Toolbar_CenterOnEntity(gameWorld+0x120, panel+0x18, workplaceEntityInner)
+    // Center camera on workplace entity
     void* gameWorld = *g_pGameWorldSingleton;
     void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
     uint64_t parentRef = *(uint64_t*)(s + 0x18);
-    fn_Toolbar_CenterOnEntity(subsys, &parentRef, &workplaceEntityInner);
+    Toolbar_CenterOnEntity_Impl(subsys, &parentRef, &workplaceEntityInner);
 }
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)

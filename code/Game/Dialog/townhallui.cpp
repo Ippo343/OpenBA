@@ -678,7 +678,7 @@ void TownHallUI_OnProfessionButton(TownHallUI* self, int index) {
     uint64_t entityPtr = *(uint64_t*)(*(uintptr_t*)(entryBase + 0x30) + (uintptr_t)cycleIdx * 8);
     uint64_t dialogInst = *(uint64_t*)(s + 0x18);
     uintptr_t entityController = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0x120);
-    fn_GoToEntity((void*)entityController, &dialogInst, &entityPtr);
+    Toolbar_CenterOnEntity_Impl((void*)entityController, &dialogInst, &entityPtr);
 }
 
 // ============================================================

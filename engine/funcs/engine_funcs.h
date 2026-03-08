@@ -1304,12 +1304,40 @@ typedef void (*fn_Toolbar_ToggleAll_t)(void* gameSubsys);
 extern fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll;
 
 // fn_Toolbar_FindEntity — now inline as Toolbar_FindEntity_Impl in toolbardialog.cpp
-// fn_Toolbar_CenterOnEntity (FUN_140103040) — kept as fn_* pointer (too complex for inline)
-// Centers camera on entity: resolves entity position from map grid coordinates,
-// computes world-space center, sets camera transform, then selects entity in EditTool.
-// ~100 lines with 3D math (Transform, Vector3, Camera) and many unresolved sub-calls.
-typedef void (*fn_Toolbar_CenterOnEntity_t)(void* gameSubsys, void* parentPtr, void* entityPtr);
-extern fn_Toolbar_CenterOnEntity_t fn_Toolbar_CenterOnEntity;
+// fn_Toolbar_CenterOnEntity (FUN_140103040) — now inline as Toolbar_CenterOnEntity_Impl below
+
+// --- Sub-dependencies for Toolbar_CenterOnEntity_Impl ---
+
+// MultiObjectComponent type ID — DAT_1401c7ac0 (multi-tile buildings: Cemetery, Pasture, Tunnel, Bridge)
+extern uint32_t* g_TypeId_MultiObjectComponent;
+
+// FindComponent_MultiObject — inline wrapper for MultiObjectComponent lookup
+inline void fn_FindComponent_MultiObject(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_MultiObjectComponent);
+}
+
+// EntityPanel_SyncTracking (FUN_1400666b0) — syncs tracking/follow flag to dialog controller
+typedef void (*fn_EntityPanel_SyncTracking_t)(void* panelController);
+extern fn_EntityPanel_SyncTracking_t fn_EntityPanel_SyncTracking;
+
+// CameraSys_ComputeViewTransform (FUN_1400983f0) — computes camera look-at transform
+// Reads target position from cameraSys+0x1C, yaw at +0x28, distance at +0x30.
+// Writes compact Transform (7 dwords = 0x1C bytes) to output buffer and cameraSys[0..6].
+typedef void* (*fn_CameraSys_ComputeViewTransform_t)(void* cameraSys, void* outTransform);
+extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
+
+// Math::Transform::AsTransform3 — converts compact Transform (0x1C bytes) to Transform3 (48 bytes)
+// Non-trivial return: RCX=this(Transform*), RDX=retval(Transform3*)
+// Runtime export: ?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ
+typedef void* (*fn_Transform_AsTransform3_t)(void* self, void* retval);
+extern fn_Transform_AsTransform3_t fn_Transform_AsTransform3;
+
+// Graphics::Camera::SetCameraToWorld — sets camera world transform from Transform3
+// Runtime export: ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
+typedef void (*fn_Camera_SetCameraToWorld_t)(void* camera, void* transform3);
+extern fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld;
+
+// Toolbar_CenterOnEntity_Impl — defined at end of file (needs all declarations above it)
 
 // fn_ToolbarDialog_CloseSubDialog — now inline as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — now inline as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
@@ -2141,10 +2169,7 @@ extern fn_InventorySort_Asc_t fn_InventorySort_Asc;  // FUN_140015200
 typedef void (*fn_InventorySort_Desc_t)(void* items, int count, void* scratch1, void* scratch2);
 extern fn_InventorySort_Desc_t fn_InventorySort_Desc;  // FUN_140015500
 
-// --- Go-to entity for profession button ---
-// FUN_140103040: Navigate camera/selection to entity
-typedef void (*fn_GoToEntity_t)(void* entityController, void* dialogInst, void* entityPtr);
-extern fn_GoToEntity_t fn_GoToEntity;  // FUN_140103040
+// fn_GoToEntity — now inline as Toolbar_CenterOnEntity_Impl (FUN_140103040)
 
 // Game singleton pointer: DAT_1401c3dd8 in exe .data section
 // Used by TownHallUI::OnCreate (+0xf0->+0x150->+8 = game time tick)
@@ -3484,6 +3509,212 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
     }
 
     if (matchArr) fn_MemFreeStatic(matchArr);
+}
+
+// ============================================================
+// Toolbar_CenterOnEntity_Impl — centers camera on entity and selects it in EditTool
+// ============================================================
+// Reimplemented from FUN_140103040 (fn_Toolbar_CenterOnEntity / fn_GoToEntity).
+//
+// toolController = PlayerController (gameWorld+0x120)
+// parentDialogPtr = InternalBasePtr* to parent dialog (may be null-ptr)
+// entityPtr = InternalBasePtr* to target entity
+//
+// Logic:
+// 1. If parent dialog has a PageToggleUI controller, enable entity tracking
+// 2. Get entity world position:
+//    - Entities with ModelComponent but no MultiObjectComponent: use model's
+//      Math::Transform position (offset +0x158 = +0x148 transform + 0x10 position)
+//    - Multi-object buildings: calculate center from BuildComponent grid footprint
+// 3. Set camera target and snap camera to new position
+// 4. Get/create EditTool and select entity in it
+//
+// NOTE: g_TypeId_CharacterComponent (DAT_1401c7a50) is actually ModelComponent's TypeInfo,
+// not CharacterComponent. fn_FindComponent_Character finds ModelComponent.
+
+inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialogPtr, void* entityPtr) {
+    uintptr_t tc = (uintptr_t)toolController;
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+
+    // === Section 1: Enable tracking on EntityPanel controller ===
+    if (*(uintptr_t*)parentDialogPtr != 0) {
+        fn_InternalBasePtr_CheckPtr(parentDialogPtr);
+
+        // Get controller from dialog instance
+        uint8_t controllerBuf[16] = {};
+        fn_DialogInstance_GetController(*(void**)parentDialogPtr, controllerBuf, 0);
+
+        uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
+        void* panelController = nullptr;
+        if (controllerRaw != 0) {
+            fn_InternalBasePtr_CheckPtr(controllerBuf);
+            if (fn_IsDerivedFrom((void*)controllerRaw, *g_TypeId_PageToggleUI)) {
+                panelController = (void*)controllerRaw;
+            }
+        }
+
+        uint64_t ctrlRef = 0;
+        fn_InternalBasePtr_Ctor(&ctrlRef, panelController);
+
+        if (ctrlRef != 0) {
+            fn_InternalBasePtr_CheckPtr(&ctrlRef);
+            uintptr_t ctrl = (uintptr_t)ctrlRef;
+            fn_InternalBasePtr_CheckPtr((void*)(ctrl + 0x38));
+            uintptr_t trackedEntity = *(uintptr_t*)(ctrl + 0x38);
+
+            if (*(uint8_t*)(trackedEntity + 0xd8) == 0) {
+                // Enable tracking flag
+                fn_InternalBasePtr_CheckPtr(&ctrlRef);
+                ctrl = (uintptr_t)ctrlRef;
+                fn_InternalBasePtr_CheckPtr((void*)(ctrl + 0x38));
+                *(uint8_t*)(*(uintptr_t*)(ctrl + 0x38) + 0xd8) = 1;
+
+                if (fn_EntityPanel_SyncTracking) {
+                    fn_EntityPanel_SyncTracking((void*)ctrl);
+                }
+            }
+        }
+    }
+
+    // === Section 2: Get entity world position ===
+    float targetPos[3] = {0.0f, 0.0f, 0.0f};
+
+    fn_InternalBasePtr_CheckPtr(entityPtr);
+    uintptr_t entityRaw = *(uintptr_t*)entityPtr;
+
+    // Try ModelComponent (DAT_1401c7a50 — misnamed as g_TypeId_CharacterComponent)
+    uint64_t modelRef = 0;
+    fn_FindComponent_Character((void*)entityRaw, &modelRef);
+
+    bool gotPosition = false;
+    if (modelRef != 0) {
+        // Has ModelComponent — check for MultiObjectComponent
+        uint64_t multiRef = 0;
+        fn_FindComponent_MultiObject((void*)entityRaw, &multiRef);
+
+        if (multiRef == 0) {
+            // Single object (citizen/animal/tree): use model's transform position
+            uint64_t modelRef2 = 0;
+            fn_FindComponent_Character((void*)entityRaw, &modelRef2);
+            fn_InternalBasePtr_CheckPtr(&modelRef2);
+            uintptr_t model = (uintptr_t)modelRef2;
+
+            // Math::Transform at ModelComponent+0x148 is {quat(16 bytes), pos(12 bytes)}
+            // Position starts at +0x10 within the 0x1C-byte Transform = ModelComponent+0x158
+            targetPos[0] = *(float*)(model + 0x158);
+            targetPos[1] = *(float*)(model + 0x15C);
+            targetPos[2] = *(float*)(model + 0x160);
+            gotPosition = true;
+        }
+    }
+
+    if (!gotPosition) {
+        // Building/multi-object: calculate center from BuildComponent grid footprint
+        fn_InternalBasePtr_CheckPtr(entityPtr);
+        uint64_t buildRef = 0;
+        fn_FindComponent_Build(*(void**)entityPtr, &buildRef);
+        fn_InternalBasePtr_CheckPtr(&buildRef);
+        uintptr_t build = (uintptr_t)buildRef;
+
+        int* mapGrid = *(int**)(game + 0xF8);
+        int gridSize = *mapGrid;
+        float halfGrid = (float)(gridSize >> 1);
+
+        int16_t posX = *(int16_t*)(build + 0x28);
+        int16_t posY = *(int16_t*)(build + 0x2a);
+        int16_t extX = *(int16_t*)(build + 0x2c);
+        int16_t extY = *(int16_t*)(build + 0x2e);
+
+        // Far corner of footprint
+        int idx1 = (int)extX + ((int)extY + (int)posY) * gridSize + (int)posX;
+        float inXY1[3] = {
+            (float)(idx1 % gridSize) - halfGrid,
+            (float)(idx1 / gridSize) - halfGrid,
+            0.0f
+        };
+        float pos1[3];
+        fn_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);
+
+        // Origin corner of footprint
+        int idx2 = gridSize * (int)posY + (int)posX;
+        float inXY2[3] = {
+            (float)(idx2 % gridSize) - halfGrid,
+            (float)(idx2 / gridSize) - halfGrid,
+            0.0f
+        };
+        float pos2[3];
+        fn_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);
+
+        // Midpoint of origin and far corner = footprint center
+        targetPos[0] = (pos1[0] + pos2[0]) * 0.5f;
+        targetPos[1] = (pos1[1] + pos2[1]) * 0.5f;
+        targetPos[2] = (pos1[2] + pos2[2]) * 0.5f;
+    }
+
+    // === Section 3: Snap camera to entity position ===
+    uintptr_t cameraSys = *(uintptr_t*)(game + 0xE0);
+
+    // Set camera target position
+    *(float*)(cameraSys + 0x1C) = targetPos[0];
+    *(float*)(cameraSys + 0x20) = targetPos[1];
+    *(float*)(cameraSys + 0x24) = targetPos[2];
+
+    // Zero-duration time for instant snap (matches original)
+    if (fn_Time_Ctor_Float) {
+        uint64_t timeVal;
+        fn_Time_Ctor_Float(&timeVal, 0.0f);
+    }
+
+    // Compute camera view transform and apply
+    if (fn_CameraSys_ComputeViewTransform) {
+        uint32_t transformBuf[7] = {}; // 0x1C bytes = compact Math::Transform
+        void* result = fn_CameraSys_ComputeViewTransform((void*)cameraSys, transformBuf);
+
+        if (fn_Transform_AsTransform3 && fn_Camera_SetCameraToWorld) {
+            uint32_t transform3[12] = {}; // 48 bytes = Math::Transform3
+            fn_Transform_AsTransform3(result, transform3);
+            // Camera object embedded at cameraSys + 0x34 (offset 0xD * sizeof(uint32_t))
+            fn_Camera_SetCameraToWorld((void*)(cameraSys + 0x34), transform3);
+        }
+    }
+
+    // === Section 4: Select entity in EditTool ===
+    void* currentTool = *(void**)(tc + 0x28);
+    void* editTool = nullptr;
+
+    if (currentTool) {
+        fn_InternalBasePtr_CheckPtr(&currentTool);
+        if (fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool)) {
+            editTool = currentTool;
+        }
+    }
+
+    uint64_t editToolRef = 0;
+    fn_InternalBasePtr_Ctor(&editToolRef, editTool);
+
+    if (editToolRef == 0) {
+        // Switch to EditTool mode
+        fn_EntityUI_SetEditMode(toolController, 0);
+
+        // Re-read current tool after mode switch
+        void* newTool = *(void**)(tc + 0x28);
+        editTool = nullptr;
+        if (newTool) {
+            fn_InternalBasePtr_CheckPtr(&newTool);
+            if (fn_IsDerivedFrom(newTool, *g_TypeId_EditTool)) {
+                editTool = newTool;
+            }
+        }
+        editToolRef = 0;
+        fn_InternalBasePtr_Ctor(&editToolRef, editTool);
+    }
+
+    // Select the entity in the EditTool
+    if (editToolRef != 0) {
+        void* entityRefCopy = *(void**)entityPtr;
+        fn_InternalBasePtr_CheckPtr(&editToolRef);
+        fn_EditTool_SelectEntity((void*)(uintptr_t)editToolRef, &entityRefCopy);
+    }
 }
 
 // ============================================================

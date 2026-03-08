@@ -400,8 +400,8 @@ void CitizenUI_Slot7(CitizenUI* self) {
 // - buttonHome (0x226): Navigate camera to citizen's home building
 // - buttonFollow (0x228): Open follow dialog to track this citizen
 //
-// Navigation uses fn_Toolbar_CenterOnEntity (FUN_140103040) which moves
-// the camera to the entity's build footprint center.
+// Navigation uses Toolbar_CenterOnEntity_Impl (FUN_140103040) which moves
+// the camera to the entity's world position or build footprint center.
 
 void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param4) {
     // Only handle event type 0x12 (button click)
@@ -437,7 +437,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         }
 
         void* gameSubsys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x120);
-        fn_Toolbar_CenterOnEntity(gameSubsys, &dialogRef, &targetRef);
+        Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
     }
     else if (param4 == 0x226) {
         // --- buttonHome: go to home building ---
@@ -457,7 +457,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         uint64_t targetRef = homeEntity;
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
         void* gameSubsys = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x120);
-        fn_Toolbar_CenterOnEntity(gameSubsys, &dialogRef, &targetRef);
+        Toolbar_CenterOnEntity_Impl(gameSubsys, &dialogRef, &targetRef);
     }
     else if (param4 == 0x228) {
         // --- buttonFollow: open follow dialog ---

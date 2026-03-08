@@ -639,9 +639,7 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 uintptr_t dialogRef = *(uintptr_t*)((uintptr_t)self + 0x18);
                 void* entityController = *(void**)((uintptr_t)gameWorld + 0x120);
 
-                if (fn_Toolbar_CenterOnEntity) {
-                    fn_Toolbar_CenterOnEntity(entityController, &dialogRef, &entityRef);
-                }
+                Toolbar_CenterOnEntity_Impl(entityController, &dialogRef, &entityRef);
                 return;
             }
         }
