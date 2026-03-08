@@ -198,39 +198,757 @@ void TownHallUI_InitGraph(TownHallUI* self) {
 }
 
 // ============================================================
+// Helper: cast element via IsDerivedFrom check
+// ============================================================
+static void* CastElement(void* elem, uint32_t* typeIdPtr) {
+    if (!elem || !typeIdPtr) return nullptr;
+    if (fn_IsDerivedFrom(elem, *typeIdPtr)) return elem;
+    return nullptr;
+}
+
+// ============================================================
 // TownHallUI::InitProfessions (was FUN_140080160)
 // ============================================================
-// Exe-resolved due to complex BST insertion and profession entry
-// array management with vtable-based row cloning.
+// Sets up the professions table: finds "tableProfessions", sizes it
+// to profession count, clones rows from template, extracts child
+// elements (label, numberEdit, number, spinner, button) per row,
+// inserts profession type into BST, sets text/sprite/tooltip/IDs,
+// and pushes profession entries into the dynamic array at +0x40.
 void TownHallUI_InitProfessions(TownHallUI* self) {
-    fn_TownHallUI_InitProfessions(self);
+    uintptr_t s = (uintptr_t)self;
+
+    // Find "tableProfessions" and cast to TableElement
+    uint8_t strBuf[8];
+    fn_String_Ctor_CStr(strBuf, "tableProfessions");
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+
+    uint64_t foundBuf[2] = {0, 0};
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_InternalBasePtr_CheckPtr(foundBuf);
+    void* foundElem = *(void**)foundBuf;
+    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    uint64_t tablePtr = 0;
+    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    fn_String_Dtor(strBuf);
+
+    // Get profession list from game singleton
+    uintptr_t profList = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
+
+    // Get template row (Child(0)) and its vtable clone function
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    uint64_t childBuf[2] = {0, 0};
+    fn_Element_Child((void*)tablePtr, childBuf, 0);
+    fn_InternalBasePtr_CheckPtr(childBuf);
+    uintptr_t templateChild = *(uintptr_t*)childBuf;
+    uintptr_t cloneVtable = *(uintptr_t*)(*(uintptr_t*)(templateChild) + 0xb8);
+
+    // Set table size to profession count x 1
+    int profCount = *(int*)(profList + 0x28);
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    fn_TableElement_SetSize((void*)tablePtr, profCount, 1);
+
+    // Iterate rows
+    for (int i = 0; i < profCount; i++) {
+        // Clone template row into table slot
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+        uintptr_t dialogInst = *(uintptr_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
+
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+        void* tbl = (void*)tablePtr;
+
+        // Call vtable clone: CloneChild(cloneVtable, retBuf, dialogInst)
+        typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
+        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneVtable + 0x40);
+        uint8_t cloneBuf[16];
+        void* clonedElem = cloneFunc((void*)cloneVtable, cloneBuf, dialogInst);
+
+        fn_TableElement_SetChild3(tbl, clonedElem, i, 0);
+
+        // Get the cloned row element
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+        uint64_t rowBuf[2] = {0, 0};
+        fn_Element_Child((void*)tablePtr, rowBuf, i);
+        fn_InternalBasePtr_CheckPtr(rowBuf);
+        void* rowElem = *(void**)rowBuf;
+
+        // Get row's child(1) — the spinner/content container
+        fn_InternalBasePtr_CheckPtr(rowBuf);
+        uint64_t contentBuf[2] = {0, 0};
+        fn_Element_Child(rowElem, contentBuf, 1);
+        fn_InternalBasePtr_CheckPtr(contentBuf);
+        void* contentElem = *(void**)contentBuf;
+
+        // Profession entry struct (0x40 bytes for ProfArrayPush):
+        // +0x00: profession index (int)
+        // +0x08: label element (InternalBasePtr) — LabelElement
+        // +0x10: numberEdit element (InternalBasePtr) — NumberEditElement
+        // +0x18: number element (InternalBasePtr) — NumberElement
+        // +0x20: spinner element (InternalBasePtr) — NumberElement
+        // +0x28: button element (InternalBasePtr) — ButtonElement
+        // +0x30: entity list ptr
+        // +0x38: entity list count
+        uint8_t profEntry[0x40];
+        memset(profEntry, 0, sizeof(profEntry));
+
+        // Row child 0: LabelElement (profession icon/name)
+        fn_InternalBasePtr_CheckPtr(rowBuf);
+        uint64_t c0Buf[2] = {0, 0};
+        fn_Element_Child(rowElem, c0Buf, 0);
+        fn_InternalBasePtr_CheckPtr(c0Buf);
+        void* c0Elem = CastElement(*(void**)c0Buf, g_TypeId_LabelElement);
+        uint64_t labelIBP = 0;
+        fn_InternalBasePtr_Ctor(&labelIBP, c0Elem);
+        *(uint64_t*)(profEntry + 0x08) = labelIBP;
+
+        // Content child 0: NumberEditElement (desired worker count spinner)
+        fn_InternalBasePtr_CheckPtr(contentBuf);
+        uint64_t c1Buf[2] = {0, 0};
+        fn_Element_Child(contentElem, c1Buf, 0);
+        fn_InternalBasePtr_CheckPtr(c1Buf);
+        void* c1Elem = CastElement(*(void**)c1Buf, g_TypeId_NumberEditElement);
+        uint64_t numEditIBP = 0;
+        fn_InternalBasePtr_Ctor(&numEditIBP, c1Elem);
+        *(uint64_t*)(profEntry + 0x10) = numEditIBP;
+
+        // Row child 2: NumberElement (current count display)
+        fn_InternalBasePtr_CheckPtr(rowBuf);
+        uint64_t c2Buf[2] = {0, 0};
+        fn_Element_Child(rowElem, c2Buf, 2);
+        fn_InternalBasePtr_CheckPtr(c2Buf);
+        void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_SpinnerElement);
+        uint64_t numIBP = 0;
+        fn_InternalBasePtr_Ctor(&numIBP, c2Elem);
+        *(uint64_t*)(profEntry + 0x18) = numIBP;
+
+        // Row child 3: NumberElement (another counter)
+        fn_InternalBasePtr_CheckPtr(rowBuf);
+        uint64_t c3Buf[2] = {0, 0};
+        fn_Element_Child(rowElem, c3Buf, 3);
+        fn_InternalBasePtr_CheckPtr(c3Buf);
+        void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_SpinnerElement);
+        uint64_t spinIBP = 0;
+        fn_InternalBasePtr_Ctor(&spinIBP, c3Elem);
+        *(uint64_t*)(profEntry + 0x20) = spinIBP;
+
+        // Row child 4: ButtonElement (go-to button)
+        fn_InternalBasePtr_CheckPtr(rowBuf);
+        uint64_t c4Buf[2] = {0, 0};
+        fn_Element_Child(rowElem, c4Buf, 4);
+        fn_InternalBasePtr_CheckPtr(c4Buf);
+        void* c4Elem = CastElement(*(void**)c4Buf, g_TypeId_HelpButtonElem);
+        uint64_t btnIBP = 0;
+        fn_InternalBasePtr_Ctor(&btnIBP, c4Elem);
+        *(uint64_t*)(profEntry + 0x28) = btnIBP;
+
+        // Get profession type entry: profList->types[i]
+        uint64_t profTypeId = *(uint64_t*)(*(uintptr_t*)(profList + 0x20) + (uintptr_t)i * 8);
+        *(int*)(profEntry + 0x00) = i;  // profession index
+
+        // Insert into profession BST at +0x50
+        uint64_t* pBSTRoot = (uint64_t*)(s + 0x50);
+        uint64_t* curNode = (uint64_t*)*pBSTRoot;
+
+        if (curNode == nullptr) {
+            // Allocate first BST node (0x30 bytes)
+            uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+            if (newNode) {
+                newNode[0] = profTypeId;          // +0x00: key
+                newNode[1] = (uint64_t)i;         // +0x08: index
+                newNode[2] = 0;                    // +0x10: parent
+                newNode[3] = 0;                    // +0x18: left
+                newNode[4] = 0;                    // +0x20: right
+                *(uint32_t*)(newNode + 5) = 0;     // +0x28: pad
+            }
+            *pBSTRoot = (uint64_t)newNode;
+        } else {
+            // Walk BST and insert
+            uint64_t* parent = nullptr;
+            bool inserted = false;
+            while (!inserted) {
+                parent = curNode;
+                if (profTypeId < curNode[0]) {
+                    // Go left
+                    if (curNode[3] == 0) {
+                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+                        if (newNode) {
+                            newNode[0] = profTypeId;
+                            newNode[1] = (uint64_t)i;
+                            newNode[2] = (uint64_t)parent;
+                            newNode[3] = 0;
+                            newNode[4] = 0;
+                            *(uint32_t*)(newNode + 5) = 0;
+                        }
+                        parent[3] = (uint64_t)newNode;
+                        // Rebalance
+                        fn_BST_Rebalance_0x30((void*)pBSTRoot, (void*)&curNode);
+                        inserted = true;
+                    } else {
+                        curNode = (uint64_t*)curNode[3];
+                    }
+                } else if (profTypeId > curNode[0]) {
+                    // Go right
+                    if (curNode[4] == 0) {
+                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+                        if (newNode) {
+                            newNode[0] = profTypeId;
+                            newNode[1] = (uint64_t)i;
+                            newNode[2] = (uint64_t)parent;
+                            newNode[3] = 0;
+                            newNode[4] = 0;
+                            *(uint32_t*)(newNode + 5) = 0;
+                        }
+                        parent[4] = (uint64_t)newNode;
+                        fn_BST_Rebalance_0x30((void*)pBSTRoot, (void*)&curNode);
+                        inserted = true;
+                    } else {
+                        curNode = (uint64_t*)curNode[4];
+                    }
+                } else {
+                    // Equal — duplicate, skip (go to label setup)
+                    inserted = true;
+                }
+            }
+        }
+        *(int*)(s + 0x58) = *(int*)(s + 0x58) + 1;
+
+        // Set label text from profession description
+        // profTypeId points to profession type object:
+        //   +0x20 = StringTable pointer
+        //   +0x28 = SpriteSheet pointer
+        //   +0x30 = name key (System::String within object)
+        //   +0x38 = tooltip key (System::String within object)
+        uint8_t uiStr[16];
+        fn_UIString_Ctor(uiStr, *(uint64_t*)(profTypeId + 0x20), (void*)(profTypeId + 0x30));
+        uint8_t uiStrCopy[16];
+        memcpy(uiStrCopy, uiStr, 16);
+        fn_InternalBasePtr_CheckPtr((void*)&labelIBP);
+        fn_TextElement_SetText((void*)labelIBP, uiStrCopy);
+
+        // Set sprite on label
+        uint8_t sprBuf[16];
+        fn_Sprite_Ctor(sprBuf, *(uint64_t*)(profTypeId + 0x28), (void*)(profTypeId + 0x30));
+        uint8_t sprCopy[16];
+        memcpy(sprCopy, sprBuf, 16);
+        fn_InternalBasePtr_CheckPtr((void*)&labelIBP);
+        fn_LabelElement_SetSprite((void*)labelIBP, sprCopy);
+
+        // Set tooltip
+        uint8_t ttStr[16];
+        fn_UIString_Ctor(ttStr, *(uint64_t*)(profTypeId + 0x20), (void*)(profTypeId + 0x38));
+        uint8_t ttCopy[16];
+        memcpy(ttCopy, ttStr, 16);
+        fn_InternalBasePtr_CheckPtr((void*)&labelIBP);
+        fn_Element_SetToolTip((void*)labelIBP, ttCopy);
+
+        // Set spinner element IDs on the content container (child 1 of row)
+        fn_InternalBasePtr_CheckPtr(contentBuf);
+        fn_SpinnerElement_SetElementId(contentElem, i + 0x1966);
+
+        // Set inner child(0) of content container with same ID
+        fn_InternalBasePtr_CheckPtr(contentBuf);
+        uint64_t spinChildBuf[2] = {0, 0};
+        fn_Element_Child(contentElem, spinChildBuf, 0);
+        fn_InternalBasePtr_CheckPtr(spinChildBuf);
+        fn_Element_SetElementId(*(void**)spinChildBuf, i + 0x1966);
+
+        // Set button element ID
+        fn_InternalBasePtr_CheckPtr((void*)&btnIBP);
+        fn_Element_SetElementId((void*)btnIBP, i + 0x1999);
+
+        // Push profession entry into dynamic array at +0x40
+        fn_ProfArrayPush((void*)(s + 0x40), *(int*)(s + 0x48) + 1, profEntry);
+
+        // Free entity list if allocated (profEntry+0x30 was zeroed, so nothing to free)
+        fn_MemFreeStatic(*(void**)(profEntry + 0x30));
+        *(uint64_t*)(profEntry + 0x30) = 0;
+        *(uint64_t*)(profEntry + 0x38) = 0;
+    }
 }
 
 // ============================================================
 // TownHallUI::InitProduction (was FUN_14007fc30)
 // ============================================================
-// Exe-resolved due to complex child iteration with IsDerivedFrom
-// checks and production array push operations.
+// Sets up the production limits table. Finds "limits" TableElement,
+// iterates its rows (linear children in groups of colCount),
+// extracting 5 NumberElement columns per row into the production
+// limits array at +0xF0. Then finds combo elements and populates
+// the production year combo from the graphYears string table.
 void TownHallUI_InitProduction(TownHallUI* self) {
-    fn_TownHallUI_InitProduction(self);
+    uintptr_t s = (uintptr_t)self;
+
+    // Find "limits" and cast to TableElement
+    uint8_t strBuf[8];
+    fn_String_Ctor_CStr(strBuf, "limits");
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+    uint64_t foundBuf[2] = {0, 0};
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_InternalBasePtr_CheckPtr(foundBuf);
+    void* foundElem = *(void**)foundBuf;
+    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    uint64_t tablePtr = 0;
+    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    fn_String_Dtor(strBuf);
+
+    // Read column count from table
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
+
+    // Iterate rows of the table
+    // Children are laid out linearly. Each "row" spans colCount children.
+    // Column 0 = row label (skipped), columns 1-5 = NumberElements.
+    // childBase starts at 2 (first data column after header row),
+    // increments by colCount each row.
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int totalChildren = *(int*)((uintptr_t)tablePtr + 0xc0);
+    int childBase = 2;  // starts at child index 2 (skip first row header)
+
+    for (int row = 0; row < totalChildren; row++) {
+        uint8_t entry[0x28];  // 5 * 8 = 0x28 bytes per production entry
+        memset(entry, 0, sizeof(entry));
+
+        // 5 NumberElement columns per row at indices:
+        //   childBase-1, childBase, childBase+1, childBase+2, childBase+3
+        int indices[5] = {childBase - 1, childBase, childBase + 1, childBase + 2, childBase + 3};
+        for (int col = 0; col < 5; col++) {
+            fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+            uint64_t cBuf[2] = {0, 0};
+            fn_Element_Child((void*)tablePtr, cBuf, indices[col]);
+            fn_InternalBasePtr_CheckPtr(cBuf);
+            void* cElem = CastElement(*(void**)cBuf, g_TypeId_SpinnerElement);
+            uint64_t ibp = 0;
+            fn_InternalBasePtr_Ctor(&ibp, cElem);
+            *(uint64_t*)(entry + col * 8) = ibp;
+        }
+
+        // Push entry into production limits array at +0xF0
+        fn_ProdArrayPush((void*)(s + 0xf0), *(int*)(s + 0xf8) + 1, entry);
+
+        childBase += colCount;  // advance to next row
+    }
+
+    // Find "productionCombo" ComboElement
+    self->productionCombo = TownHall_FindElem(
+        *(void**)(s + 0x20), "productionCombo", *g_TypeId_ComboElement);
+
+    // Find "limitPrevUsedHeader" TextElement
+    self->limitPrevUsedHdr = TownHall_FindElem(
+        *(void**)(s + 0x20), "limitPrevUsedHeader", *g_TypeId_TextElement);
+
+    // Find "limitPrevProducedHeader" TextElement
+    self->limitPrevProdHdr = TownHall_FindElem(
+        *(void**)(s + 0x20), "limitPrevProducedHeader", *g_TypeId_TextElement);
+
+    // Load graphYears string table and populate combo
+    uint8_t fnameBuf[16];
+    fn_Filename_CtorCStr(fnameBuf, "Dialog/StringTable.rsc:graphYears");
+    void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
+    uint64_t yearsTable = 0;
+    if (ext && fn_IsDerivedFrom(ext, *g_TypeId_StringTable)) {
+        yearsTable = (uint64_t)ext;
+    }
+    fn_Filename_Dtor(fnameBuf);
+
+    // Add 7 combo items from graphYears string table
+    for (int i = 0; i < 7; i++) {
+        uint8_t uiStrBuf[16];
+        fn_UIString_Ctor_Index(uiStrBuf, yearsTable, i);
+        uint8_t sysStrBuf[8];
+        fn_String_Ctor_Copy(sysStrBuf, uiStrBuf);
+        fn_String_Dtor(uiStrBuf);
+        fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
+        uint8_t emptySprite[16];
+        fn_Sprite_Default_Ctor(emptySprite);
+        fn_ComboElement_AddItem((void*)self->productionCombo, emptySprite, sysStrBuf, nullptr);
+        fn_String_Dtor(sysStrBuf);
+    }
+    fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
+    fn_ComboElement_SetCurrentItem((void*)self->productionCombo, 0);
 }
 
 // ============================================================
 // TownHallUI::InitInventory (was FUN_14007f660)
 // ============================================================
-// Exe-resolved due to complex table setup with dynamic array
-// management and vtable-based row cloning.
+// Sets up the inventory table. Finds "inventoryTable" TableElement,
+// counts resource types via ExternalFactory, sizes/clones table rows,
+// extracts LabelElement + NumberElement pairs from each cell,
+// pushes them into the inventory table array at +0x118.
+// Then finds and populates inventoryCombo and sortCombo.
 void TownHallUI_InitInventory(TownHallUI* self) {
-    fn_TownHallUI_InitInventory(self);
+    uintptr_t s = (uintptr_t)self;
+
+    // Find "inventoryTable" and cast to TableElement
+    uint8_t strBuf[8];
+    fn_String_Ctor_CStr(strBuf, "inventoryTable");
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+    uint64_t foundBuf[2] = {0, 0};
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_InternalBasePtr_CheckPtr(foundBuf);
+    void* foundElem = *(void**)foundBuf;
+    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    uint64_t tablePtr = 0;
+    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    fn_String_Dtor(strBuf);
+
+    // Count resource types via ExternalFactory::FindNext
+    int resourceCount = 0;
+    void* factory = *g_pExternalFactorySingleton;
+    uint32_t resTypeId = *(uint32_t*)g_TypeId_ResourceType;
+    void* extIter = fn_ExternalFactory_FindNext(factory, resTypeId, nullptr);
+    while (extIter) {
+        resourceCount++;
+        extIter = fn_ExternalFactory_FindNext(factory, resTypeId, extIter);
+    }
+
+    // Get column count and template row clone vtable
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
+
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    uint64_t childBuf[2] = {0, 0};
+    fn_Element_Child((void*)tablePtr, childBuf, 0);
+    fn_InternalBasePtr_CheckPtr(childBuf);
+    uintptr_t templateChild = *(uintptr_t*)childBuf;
+    uintptr_t cloneVtable = *(uintptr_t*)(*(uintptr_t*)(templateChild) + 0xb8);
+
+    // Size table: ceil(resourceCount / colCount) rows
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int rowCount = ((colCount - 1 + resourceCount) / colCount * colCount) / colCount;
+    fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
+
+    // Clone template rows into all cells
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    for (int i = 0; i < totalChildren; i++) {
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+        uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
+
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+
+        typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
+        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneVtable + 0x40);
+        uint8_t cloneBuf[16];
+        void* clonedElem = cloneFunc((void*)cloneVtable, cloneBuf, dialogInst);
+
+        fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
+
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    }
+
+    // Extract label + number elements from each cell
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    for (int i = 0; i < totalChildren; i++) {
+        // Get cell child
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+        uint64_t cellBuf[2] = {0, 0};
+        fn_Element_Child((void*)tablePtr, cellBuf, i);
+        fn_InternalBasePtr_CheckPtr(cellBuf);
+
+        // Get cell->child(0)->child(0) = LabelElement
+        uint64_t sub0[2] = {0, 0};
+        fn_Element_Child(*(void**)cellBuf, sub0, 0);
+        fn_InternalBasePtr_CheckPtr(sub0);
+        void* labelElem = CastElement(*(void**)sub0, g_TypeId_LabelElement);
+        uint64_t labelIBP = 0;
+        fn_InternalBasePtr_Ctor(&labelIBP, labelElem);
+
+        // Get cell->child(0)->child(1) = NumberElement
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+        uint64_t cellBuf2[2] = {0, 0};
+        fn_Element_Child((void*)tablePtr, cellBuf2, i);
+        fn_InternalBasePtr_CheckPtr(cellBuf2);
+        uint64_t sub1[2] = {0, 0};
+        fn_Element_Child(*(void**)cellBuf2, sub1, 1);
+        fn_InternalBasePtr_CheckPtr(sub1);
+        void* numElem = CastElement(*(void**)sub1, g_TypeId_SpinnerElement);
+        uint64_t numIBP = 0;
+        fn_InternalBasePtr_Ctor(&numIBP, numElem);
+
+        // Push 0x10-byte entry (label, number) into inventory table array at +0x118
+        // Manual dynamic array growth (matching decompiled pattern)
+        uint32_t count = *(uint32_t*)(s + 0x120);
+        uint32_t newCount = count + 1;
+        if (newCount != count) {
+            void* oldBuf = *(void**)(s + 0x118);
+            *(uint32_t*)(s + 0x120) = newCount;
+            if (*(int*)(s + 0x124) < (int)newCount) {
+                uint32_t newCap = newCount;
+                if (count != 0) newCap = newCount * 3;
+                *(uint32_t*)(s + 0x124) = newCap;
+                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 16, 8);
+                *(void**)(s + 0x118) = newBuf;
+            }
+            // Copy old entries and append new
+            int copyStart = 0;
+            if (oldBuf == *(void**)(s + 0x118)) {
+                copyStart = (int)count;
+            }
+            for (int j = copyStart; j < (int)newCount; j++) {
+                uint64_t* dst = (uint64_t*)(*(uintptr_t*)(s + 0x118) + (uintptr_t)j * 16);
+                if (dst) {
+                    if (j < (int)count) {
+                        // Copy from old buffer
+                        uint64_t* src = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)j * 16);
+                        dst[0] = src[0];
+                        dst[1] = src[1];
+                    } else {
+                        // New entry
+                        dst[0] = labelIBP;
+                        dst[1] = numIBP;
+                    }
+                }
+            }
+            if (oldBuf != *(void**)(s + 0x118)) {
+                fn_MemFreeStatic(oldBuf);
+            }
+        }
+    }
+
+    // Load inventoryType string table
+    uint8_t fnameBuf[16];
+    fn_Filename_CtorCStr(fnameBuf, "Dialog/StringTable.rsc:inventoryType");
+    void* extST = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
+    uint64_t invTypeTable = 0;
+    if (extST && fn_IsDerivedFrom(extST, *g_TypeId_StringTable)) {
+        invTypeTable = (uint64_t)extST;
+    }
+    fn_Filename_Dtor(fnameBuf);
+
+    // Find "inventoryCombo" ComboElement
+    self->inventoryCombo = TownHall_FindElem(
+        *(void**)(s + 0x20), "inventoryCombo", *g_TypeId_ComboElement);
+
+    // Populate inventory combo with 3 items
+    for (int i = 0; i < 3; i++) {
+        uint8_t uiStrBuf[16];
+        fn_UIString_Ctor_Index(uiStrBuf, invTypeTable, i);
+        uint8_t sysStrBuf[8];
+        fn_String_Ctor_Copy(sysStrBuf, uiStrBuf);
+        fn_String_Dtor(uiStrBuf);
+        fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
+        uint8_t emptySprite[16];
+        fn_Sprite_Default_Ctor(emptySprite);
+        fn_ComboElement_AddItem((void*)self->inventoryCombo, emptySprite, sysStrBuf, nullptr);
+        fn_String_Dtor(sysStrBuf);
+    }
+    fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
+    fn_ComboElement_SetCurrentItem((void*)self->inventoryCombo, 0);
+
+    // Find "sortCombo" ComboElement
+    self->sortCombo = TownHall_FindElem(
+        *(void**)(s + 0x20), "sortCombo", *g_TypeId_ComboElement);
+    fn_InternalBasePtr_CheckPtr((void*)&self->sortCombo);
+    fn_ComboElement_SetCurrentItem((void*)self->sortCombo, 0);
 }
 
 // ============================================================
 // TownHallUI::InitAgriculture (was FUN_14007ebf0)
 // ============================================================
-// Exe-resolved due to complex BST insertion and external factory
-// iteration with component type queries.
+// Sets up the agriculture table. Iterates ExternalFactory for
+// BuildComponent entities, finds SelectDescription sub-components,
+// inserts matching building descriptions into BST at +0x1D8.
+// Then sizes/clones table rows and extracts LabelElement from
+// each cell into the dynamic array at +0x1C8.
 void TownHallUI_InitAgriculture(TownHallUI* self) {
-    fn_TownHallUI_InitAgriculture(self);
+    uintptr_t s = (uintptr_t)self;
+
+    // Find "agriTable" and cast to TableElement
+    uint8_t strBuf[8];
+    fn_String_Ctor_CStr(strBuf, "agriTable");
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+    uint64_t foundBuf[2] = {0, 0};
+    fn_FindElement(*(void**)(s + 0x20), foundBuf, strBuf);
+    fn_InternalBasePtr_CheckPtr(foundBuf);
+    void* foundElem = *(void**)foundBuf;
+    void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
+    uint64_t tablePtr = 0;
+    fn_InternalBasePtr_Ctor(&tablePtr, (void*)tableElem);
+    fn_String_Dtor(strBuf);
+
+    // Iterate ExternalFactory for BuildComponent entities
+    void* factory = *g_pExternalFactorySingleton;
+    uint32_t buildTypeId = *g_TypeId_BuildComponent;
+    uint32_t selectDescId = *g_TypeId_SelectDescription;
+
+    void* buildDesc = fn_ExternalFactory_FindNext(factory, buildTypeId, nullptr);
+    while (buildDesc) {
+        // Cast to BuildComponent (IsDerivedFrom check)
+        void* buildComp = nullptr;
+        if (fn_IsDerivedFrom(buildDesc, buildTypeId)) {
+            buildComp = buildDesc;
+        }
+
+        if (buildComp) {
+            // Iterate sub-components to find SelectDescription
+            int subCount = *(int*)((uintptr_t)buildComp + 0x30);
+            uintptr_t subArray = *(uintptr_t*)((uintptr_t)buildComp + 0x28);
+
+            for (int j = 0; j < subCount; j++) {
+                uintptr_t subComp = *(uintptr_t*)(subArray + (uintptr_t)j * 8);
+                // Check if sub-component's type matches SelectDescription
+                // Virtual call at vtable+0x10 returns type ID
+                typedef int (*GetTypeId_t)(void*);
+                GetTypeId_t getTypeId = *(GetTypeId_t*)(*(uintptr_t*)subComp + 0x10);
+                int subTypeId = getTypeId((void*)subComp);
+
+                if (subTypeId == (int)selectDescId) {
+                    // Found a SelectDescription sub-component
+                    void* subObj = *(void**)(subArray + (uintptr_t)j * 8);
+                    if (fn_IsDerivedFrom(subObj, selectDescId) && subObj) {
+                        // Insert buildComp into agriculture BST at +0x1D8
+                        uint64_t* pBSTRoot = (uint64_t*)(s + 0x1D8);
+                        uint64_t key = (uint64_t)buildComp;
+                        uint64_t* curNode = (uint64_t*)*pBSTRoot;
+
+                        if (curNode == nullptr) {
+                            // First node (0x28 bytes)
+                            uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+                            if (newNode) {
+                                newNode[0] = key;
+                                newNode[1] = 0;  // parent
+                                newNode[2] = 0;  // left
+                                newNode[3] = 0;  // right
+                                *(uint32_t*)(newNode + 4) = 0;
+                            }
+                            *pBSTRoot = (uint64_t)newNode;
+                            *(int*)(s + 0x1E0) = *(int*)(s + 0x1E0) + 1;
+                        } else {
+                            // Walk BST and insert
+                            uint64_t* parent = nullptr;
+                            bool inserted = false;
+                            while (!inserted) {
+                                parent = curNode;
+                                if (key < curNode[0]) {
+                                    if (curNode[2] == 0) {
+                                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+                                        if (newNode) {
+                                            newNode[0] = key;
+                                            newNode[1] = (uint64_t)parent;
+                                            newNode[2] = 0;
+                                            newNode[3] = 0;
+                                            *(uint32_t*)(newNode + 4) = 0;
+                                        }
+                                        parent[2] = (uint64_t)newNode;
+                                        fn_BST_Rebalance_0x28((void*)pBSTRoot, (void*)&curNode);
+                                        inserted = true;
+                                    } else {
+                                        curNode = (uint64_t*)curNode[2];
+                                    }
+                                } else if (key > curNode[0]) {
+                                    if (curNode[3] == 0) {
+                                        uint64_t* newNode = (uint64_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+                                        if (newNode) {
+                                            newNode[0] = key;
+                                            newNode[1] = (uint64_t)parent;
+                                            newNode[2] = 0;
+                                            newNode[3] = 0;
+                                            *(uint32_t*)(newNode + 4) = 0;
+                                        }
+                                        parent[3] = (uint64_t)newNode;
+                                        fn_BST_Rebalance_0x28((void*)pBSTRoot, (void*)&curNode);
+                                        inserted = true;
+                                    } else {
+                                        curNode = (uint64_t*)curNode[3];
+                                    }
+                                } else {
+                                    // Duplicate — already in BST
+                                    inserted = true;
+                                }
+                            }
+                            *(int*)(s + 0x1E0) = *(int*)(s + 0x1E0) + 1;
+                        }
+                    }
+                    break;  // Found matching sub-component, stop inner loop
+                }
+            }
+        }
+
+        buildDesc = fn_ExternalFactory_FindNext(factory, buildTypeId, buildDesc);
+    }
+
+    // Now set up the table with agriculture BST count
+    int agriCount = *(int*)(s + 0x1E0);
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
+
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    uint64_t templateBuf[2] = {0, 0};
+    fn_Element_Child((void*)tablePtr, templateBuf, 0);
+    fn_InternalBasePtr_CheckPtr(templateBuf);
+    uintptr_t templateChild = *(uintptr_t*)templateBuf;
+    uintptr_t cloneVtable = *(uintptr_t*)(*(uintptr_t*)(templateChild) + 0xb8);
+
+    // Size table: ceil(agriCount / colCount) rows
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int rowCount = ((colCount - 1 + agriCount) / colCount * colCount) / colCount;
+    fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
+
+    // Clone template rows into all cells
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    int totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    for (int i = 0; i < totalChildren; i++) {
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+        uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
+
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+
+        typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
+        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneVtable + 0x40);
+        uint8_t cloneBuf[16];
+        void* clonedElem = cloneFunc((void*)cloneVtable, cloneBuf, dialogInst);
+
+        fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
+
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    }
+
+    // Extract LabelElement from each cell into array at +0x1C8
+    fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+    totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    for (int i = 0; i < totalChildren; i++) {
+        fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
+        uint64_t cellBuf[2] = {0, 0};
+        fn_Element_Child((void*)tablePtr, cellBuf, i);
+        fn_InternalBasePtr_CheckPtr(cellBuf);
+
+        // Cast child to LabelElement
+        void* labelElem = CastElement(*(void**)cellBuf, g_TypeId_LabelElement);
+        uint64_t labelIBP = 0;
+        fn_InternalBasePtr_Ctor(&labelIBP, labelElem);
+
+        // Push into dynamic array at +0x1C8 (8-byte entries)
+        uint32_t count = *(uint32_t*)(s + 0x1D0);
+        uint32_t newCount = count + 1;
+        if (newCount != count) {
+            void* oldBuf = *(void**)(s + 0x1C8);
+            *(uint32_t*)(s + 0x1D0) = newCount;
+            if (*(int*)(s + 0x1D4) < (int)newCount) {
+                uint32_t newCap = newCount;
+                if (count != 0) newCap = newCount * 3;
+                *(uint32_t*)(s + 0x1D4) = newCap;
+                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+                *(void**)(s + 0x1C8) = newBuf;
+            }
+            int copyStart = 0;
+            if (oldBuf == *(void**)(s + 0x1C8)) {
+                copyStart = (int)count;
+            }
+            for (int j = copyStart; j < (int)newCount; j++) {
+                uint64_t* dst = (uint64_t*)(*(uintptr_t*)(s + 0x1C8) + (uintptr_t)j * 8);
+                if (dst) {
+                    if (j < (int)count) {
+                        uint64_t* src = (uint64_t*)((uintptr_t)oldBuf + (uintptr_t)j * 8);
+                        *dst = *src;
+                    } else {
+                        *dst = labelIBP;
+                    }
+                }
+            }
+            if (oldBuf != *(void**)(s + 0x1C8)) {
+                fn_MemFreeStatic(oldBuf);
+            }
+        }
+    }
 }
 
 // ============================================================

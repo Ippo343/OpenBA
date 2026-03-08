@@ -73,14 +73,14 @@ Fully reimplemented (fn_* removed):
 - [x] `fn_TownHallUI_OnProfessionSpinner` (0x14007dd10)
 
 Thin wrappers (fn_* kept — too complex, deep BST/component traversal):
-- [ ] `fn_TownHallUI_InitProfessions` (0x140080160)
-- [ ] `fn_TownHallUI_InitProduction` (0x14007fc30)
-- [ ] `fn_TownHallUI_InitInventory` (0x14007f660)
-- [ ] `fn_TownHallUI_InitAgriculture` (0x14007ebf0)
-- [ ] `fn_TownHallUI_UpdateProduction` (0x14007c7f0)
-- [ ] `fn_TownHallUI_UpdateAgriculture` (0x14007c220)
-- [ ] `fn_TownHallUI_UpdateInventory` (0x14007def0)
-- [ ] `fn_TownHallUI_UpdateAll` (0x14007d590)
+- [x] `fn_TownHallUI_InitProfessions` (0x140080160)
+- [x] `fn_TownHallUI_InitProduction` (0x14007fc30)
+- [x] `fn_TownHallUI_InitInventory` (0x14007f660)
+- [x] `fn_TownHallUI_InitAgriculture` (0x14007ebf0)
+- [x] `fn_TownHallUI_UpdateProduction` (0x14007c7f0)
+- [x] `fn_TownHallUI_UpdateAgriculture` (0x14007c220)
+- [x] `fn_TownHallUI_UpdateInventory` (0x14007def0)
+- [x] `fn_TownHallUI_UpdateAll` (0x14007d590)
 
 ### Remaining — kept as exe pointers (too deep)
 

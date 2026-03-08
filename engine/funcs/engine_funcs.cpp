@@ -280,6 +280,7 @@ uint32_t* g_TypeId_OrchardComponent         = nullptr;  // DAT_1401c46b0
 uint32_t* g_TypeId_SMComponent              = nullptr;  // DAT_1401c71c8
 uint32_t* g_TypeId_CitizenAIComponent_FC    = nullptr;  // DAT_1401c7158
 uint32_t* g_TypeId_StorageComponent_FC      = nullptr;  // DAT_1401c7e78
+uint32_t* g_TypeId_ResidenceComponent       = nullptr;  // DAT_1401c7cf0
 uint32_t* g_TypeId_CemeteryComponent        = nullptr;  // DAT_1401c4090
 uint32_t* g_TypeId_TombstoneComponent       = nullptr;  // DAT_1401c4a30
 uint32_t* g_TypeId_ImmigrationComponent     = nullptr;  // DAT_1401c4480
@@ -638,6 +639,8 @@ fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
 uint32_t* g_TypeId_TableElement = nullptr;
 uint32_t* g_TypeId_SpinnerElement = nullptr;
 uint32_t* g_TypeId_TextElement = nullptr;
+uint32_t* g_TypeId_LabelElement = nullptr;
+uint32_t* g_TypeId_NumberEditElement = nullptr;
 uint32_t* g_TypeId_SelectDescription = nullptr;
 fn_Building_GetSellableCount_t fn_Building_GetSellableCount = nullptr;
 fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
@@ -1731,6 +1734,8 @@ bool EngineFuncsInit() {
     g_TypeId_SMComponent              = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c71c8));
     g_TypeId_CitizenAIComponent_FC    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     g_TypeId_StorageComponent_FC      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
+    g_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7cf0));
     g_TypeId_CemeteryComponent        = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4090));
     g_TypeId_TombstoneComponent       = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4a30));
     g_TypeId_ImmigrationComponent     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4480));
@@ -2637,6 +2642,16 @@ bool EngineFuncsInit() {
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151508));
         if (exref && *exref) g_TypeId_TextElement = reinterpret_cast<uint32_t*>(*exref);
+    }
+    // LabelElement type ID — exref at 0x140151668
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151668));
+        if (exref && *exref) g_TypeId_LabelElement = reinterpret_cast<uint32_t*>(*exref);
+    }
+    // NumberEditElement type ID — exref at 0x140151cb0
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151cb0));
+        if (exref && *exref) g_TypeId_NumberEditElement = reinterpret_cast<uint32_t*>(*exref);
     }
     // SelectDescription type ID — DAT_1401c48a8
     g_TypeId_SelectDescription = reinterpret_cast<uint32_t*>(

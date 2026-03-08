@@ -642,6 +642,7 @@ extern uint32_t* g_TypeId_OrchardComponent;         // DAT_1401c46b0 (fn_FindCom
 extern uint32_t* g_TypeId_SMComponent;              // DAT_1401c71c8 (fn_FindComponent_SM)
 extern uint32_t* g_TypeId_CitizenAIComponent_FC;    // DAT_1401c7158 (fn_FindComponent_CitizenAI)
 extern uint32_t* g_TypeId_StorageComponent_FC;      // DAT_1401c7e78 (fn_FindComponent_Storage/Residence)
+extern uint32_t* g_TypeId_ResidenceComponent;        // DAT_1401c7cf0
 extern uint32_t* g_TypeId_CemeteryComponent;        // DAT_1401c4090 (fn_FindComponent_Cemetery)
 extern uint32_t* g_TypeId_TombstoneComponent;       // DAT_1401c4a30
 extern uint32_t* g_TypeId_ImmigrationComponent;     // DAT_1401c4480 (fn_FindComponent_Immigration)
@@ -2237,6 +2238,12 @@ extern uint32_t* g_TypeId_SpinnerElement;
 
 // TextElement type ID — exref 0x140151508
 extern uint32_t* g_TypeId_TextElement;
+
+// LabelElement type ID — exref 0x140151668
+extern uint32_t* g_TypeId_LabelElement;
+
+// NumberEditElement type ID — exref 0x140151cb0
+extern uint32_t* g_TypeId_NumberEditElement;
 
 // ButtonElement type ID — exref 0x1401514f8 (same as g_TypeId_HelpButtonElem)
 // Already available as g_TypeId_HelpButtonElem
