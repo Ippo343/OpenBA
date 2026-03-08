@@ -173,6 +173,352 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
 // (was static SetEngineNextLoop_Impl here, promoted to shared inline)
 
 // ============================================================
+// Game_KillAllCitizens (FUN_140060000)
+// Iterates ExternalFactory for all entities with BuildComponent (DAT_1401c7318).
+// For each entity, searches components for CitizenComponent (DAT_1401c7cb8).
+// If found, destroys the entity via Game_DestroyEntity.
+// ============================================================
+static void Game_KillAllCitizens_Impl() {
+    void* factory = *g_pExternalFactorySingleton;
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    void* entityList = *(void**)(game + 0xF0);
+
+    // Iterate all entities with BuildComponent type
+    void* entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, nullptr);
+    while (entity) {
+        // Verify this entity is actually a BuildComponent entity
+        bool isBuild = fn_IsDerivedFrom(entity, *g_TypeId_BuildComponent);
+        void* buildEntity = isBuild ? entity : nullptr;
+
+        if (buildEntity) {
+            // Search entity's components for a CitizenComponent
+            uintptr_t e = (uintptr_t)buildEntity;
+            int compCount = *(int*)(e + 0x30);
+            void** compArray = *(void***)(e + 0x28);
+
+            for (int i = 0; i < compCount; i++) {
+                void* comp = compArray[i];
+                // Get component type via vtable[2] (+0x10)
+                typedef int (*fn_GetTypeId_t)(void*);
+                int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                if (typeId == (int)*g_TypeId_CitizenComponent) {
+                    // Confirm with IsDerivedFrom
+                    bool isCitizen = fn_IsDerivedFrom(comp, *g_TypeId_CitizenComponent);
+                    if (isCitizen && comp != nullptr) {
+                        fn_Game_DestroyEntity(entityList, buildEntity);
+                    }
+                    break;
+                }
+            }
+        }
+
+        entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, entity);
+    }
+}
+
+// ============================================================
+// Game_SpawnItemsInStorage (FUN_140060290)
+// Iterates the storage list at gameWorld+0xF0, sub-list at +0x90/+0x98.
+// For each storage, spawns up to 5 items if current count < capacity.
+// ============================================================
+static void Game_SpawnItemsInStorage_Impl() {
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+    int storageCount = *(int*)(entityListBase + 0x98);
+    void** storageArray = *(void***)(entityListBase + 0x90);
+
+    for (int i = 0; i < storageCount; i++) {
+        void* storage = storageArray[i];
+        fn_InternalBasePtr_CheckPtr(&storage);
+
+        // Check if storage has items to spawn (component+0x28 != 0)
+        if (*(uintptr_t*)((uintptr_t)storage + 0x28) == 0) continue;
+
+        for (int j = 0; j < 5; j++) {
+            fn_InternalBasePtr_CheckPtr(&storage);
+            int currentCount = *(int*)((uintptr_t)storage + 0x38);
+            int capacity = fn_StorageComponent_GetCapacity(storage);
+            if (capacity <= currentCount) break;
+
+            // Spawn one item
+            uint8_t retBuf[8] = {0};
+            fn_InternalBasePtr_Ctor(retBuf, nullptr);
+            fn_InternalBasePtr_CheckPtr(&storage);
+            fn_StorageComponent_SpawnItem(storage, retBuf);
+        }
+    }
+}
+
+// ============================================================
+// Game_SpawnCitizens (FUN_140060380)
+// Spawns up to 4 new citizens at random buildings that have residence
+// components with available capacity. Loads Template/Citizen.rsc,
+// creates entity, finds CitizenAI component, sets up citizen.
+// ============================================================
+static void Game_SpawnCitizens_Impl() {
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    void* randomPtr = *(void**)(game + 0xD8);
+    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+    int buildingCount = (int)*(int64_t*)(entityListBase + 8);
+
+    if (buildingCount == 0) return;
+
+    int spawnedTotal = 0;
+    for (int attempt = 0; attempt < buildingCount && spawnedTotal < 4; attempt++) {
+        // Get building from list
+        void* building = *(void**)(*(uintptr_t*)entityListBase + (uintptr_t)attempt * 8);
+        if (!building) continue;
+
+        fn_InternalBasePtr_CheckPtr(&building);
+
+        // Find ResidenceComponent on this building
+        void* residenceComp = nullptr;
+        {
+            uintptr_t b = (uintptr_t)building;
+            int compCount = *(int*)(b + 0x38);
+            void** compArr = *(void***)(b + 0x30);
+            for (int c = 0; c < compCount; c++) {
+                void* comp = compArr[c];
+                fn_InternalBasePtr_CheckPtr(&comp);
+                typedef int (*fn_GetTypeId_t)(void*);
+                int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                if (typeId == (int)*g_TypeId_ResidenceComponent_FC) {
+                    fn_InternalBasePtr_CheckPtr(&comp);
+                    bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_ResidenceComponent_FC);
+                    residenceComp = isRes ? comp : nullptr;
+                    break;
+                }
+            }
+        }
+
+        if (!residenceComp) continue;
+
+        // Get max capacity from description
+        void* desc = *(void**)((uintptr_t)residenceComp + 0x18);
+        bool isResDesc = fn_IsDerivedFrom(desc, *g_TypeId_ResidenceDescription);
+        void* resDesc = isResDesc ? desc : nullptr;
+        if (!resDesc) continue;
+        int maxCapacity = *(int*)((uintptr_t)resDesc + 0x30);
+
+        // Sum current occupants across all sub-slots
+        int currentOccupants = 0;
+        int subCount = *(int*)((uintptr_t)residenceComp + 0x30);
+        void** subArray = *(void***)((uintptr_t)residenceComp + 0x28);
+        for (int s = 0; s < subCount; s++) {
+            void* sub = subArray[s];
+            fn_InternalBasePtr_CheckPtr(&sub);
+            int occ = fn_ResidenceComponent_GetOccupantCount(sub, 0);
+            currentOccupants += occ;
+        }
+
+        if (currentOccupants >= maxCapacity) continue;
+
+        // Spawn citizen at this building
+        // Get spawn point
+        uint8_t spawnPos[16] = {0};
+        fn_ResidenceComponent_GetSpawnPoint(residenceComp, spawnPos, 0, currentOccupants, nullptr);
+
+        if (spawnedTotal >= 4) break;
+        spawnedTotal++;
+
+        // Random gender
+        uint32_t gender = fn_Random_Rand(randomPtr, 2);
+
+        // Load citizen template
+        uint8_t filenameBuf[16];
+        fn_Filename_CtorCStr(filenameBuf, "Template/Citizen.rsc");
+        void* factory = *g_pExternalFactorySingleton;
+        void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
+        fn_Filename_Dtor(filenameBuf);
+
+        void* entityDesc = nullptr;
+        if (extTemplate) {
+            bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
+            entityDesc = isEntityDesc ? extTemplate : nullptr;
+        }
+        if (!entityDesc) entityDesc = extTemplate;
+
+        // Allocate and create entity (0x48 bytes)
+        void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+        void* newEntity = nullptr;
+        if (memBlock) {
+            newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
+        }
+
+        // Find CitizenAI component on the new entity
+        uint8_t aiCompBuf[8] = {0};
+        fn_InternalBasePtr_Ctor(aiCompBuf, nullptr);
+        if (newEntity) {
+            uintptr_t ne = (uintptr_t)newEntity;
+            int compCount = *(int*)(ne + 0x38);
+            void** compArr = *(void***)(ne + 0x30);
+            for (int c = 0; c < compCount; c++) {
+                void* comp = compArr[c];
+                fn_InternalBasePtr_CheckPtr(&comp);
+                typedef int (*fn_GetTypeId_t)(void*);
+                int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                if (typeId == (int)*g_TypeId_CitizenAIComponent_FC) {
+                    fn_InternalBasePtr_CheckPtr(&comp);
+                    bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenAIComponent_FC);
+                    void* aiComp = isAI ? comp : nullptr;
+                    fn_InternalBasePtr_Ctor(aiCompBuf, aiComp);
+                    break;
+                }
+            }
+        }
+
+        void* citizenAI = *(void**)aiCompBuf;
+        if (citizenAI) {
+            // Get citizen description
+            void* citizenDesc = *(void**)((uintptr_t)citizenAI + 0x18);
+            bool isCitDesc = fn_IsDerivedFrom(citizenDesc, *g_TypeId_CitizenDescription);
+            void* citDesc = isCitDesc ? citizenDesc : nullptr;
+
+            // Get age range from description
+            float minAge = *(float*)((uintptr_t)citDesc + 0x50);
+            float maxAge = *(float*)((uintptr_t)citDesc + 0x54);
+            float randAge = fn_Random_RandFloat(randomPtr);
+            float age = randAge * (maxAge - minAge) + minAge;
+
+            // Get profession list from game
+            void* profList = *(void**)(*(uintptr_t*)(game + 0xB0) + 0x30);
+
+            // Setup citizen
+            uint8_t parentBuf[8] = {0};
+            fn_InternalBasePtr_Ctor(parentBuf, nullptr);
+            fn_CitizenComponent_Setup(citizenAI, spawnPos, (gender != 0) ? 1 : 0, '\0',
+                                      age, '\x01', parentBuf, profList);
+        }
+
+        // Register entity
+        void* entityMgr = *(void**)(game + 0xE8);
+        void* entityRef = newEntity;
+        if (entityDesc) {
+            fn_EntityList_RegisterEntity(entityMgr, &entityRef, *(int*)((uintptr_t)entityDesc + 0x20));
+        }
+    }
+}
+
+// ============================================================
+// DebugUI_TriggerDisasterOnBuilding (FUN_14005FF30)
+// Picks a random building from the building list, reads disease
+// combo selection, and applies disease disaster to the building.
+// ============================================================
+static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
+    uintptr_t s = (uintptr_t)self;
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+
+    // Pick random building from the building list
+    int buildingCount = *(int*)(entityListBase + 0xA8);
+    void* randomPtr = *(void**)(game + 0xD8);
+    uint32_t randIdx = fn_Random_Rand(randomPtr, buildingCount);
+
+    // Get disease description from combo selection
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
+    int diseaseIdx = *(int*)(*(uintptr_t*)(s + 0x30) + 0x118);
+    void* descList = *(void**)(*(uintptr_t*)(game + 0xA8) + 0x20);
+    void* diseaseEntry = *(void**)((uintptr_t)descList + (uintptr_t)diseaseIdx * 8);
+    bool isDisease = fn_IsDerivedFrom(diseaseEntry, *g_TypeId_DiseaseDescription);
+    void* diseaseDesc = isDisease ? diseaseEntry : nullptr;
+
+    // Get building entity
+    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0xA0) + (uintptr_t)randIdx * 8);
+    fn_InternalBasePtr_CheckPtr(&building);
+
+    // Apply disease to building
+    fn_DisasterComponent_Infect(building, diseaseDesc);
+}
+
+// ============================================================
+// Game_StartRandomFire (FUN_14005FEB0)
+// Picks a random building, finds its FireComponent, ignites it.
+// ============================================================
+static void Game_StartRandomFire_Impl() {
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+    uint32_t buildingCount = *(uint32_t*)(entityListBase + 0x28);
+
+    if (buildingCount == 0) return;
+
+    void* randomPtr = *(void**)(game + 0xD8);
+    uint32_t randIdx = fn_Random_Rand(randomPtr, buildingCount);
+
+    // Get random building entity
+    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0x20) + (uintptr_t)randIdx * 8);
+    fn_InternalBasePtr_CheckPtr(&building);
+
+    // Find FireComponent on the building
+    uint8_t fireCompBuf[8] = {0};
+    fn_FindComponent_Fire(building, fireCompBuf);
+
+    // Ignite
+    void* fireComp = *(void**)fireCompBuf;
+    fn_InternalBasePtr_CheckPtr(&fireComp);
+    fn_FireComponent_Ignite(fireComp);
+}
+
+// ============================================================
+// Game_SpawnTornado (FUN_14005FD20)
+// Loads Template/Tornado.rsc, creates entity, registers it.
+// ============================================================
+static void Game_SpawnTornado_Impl() {
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+
+    // Load tornado template
+    uint8_t filenameBuf[16];
+    fn_Filename_CtorCStr(filenameBuf, "Template/Tornado.rsc");
+    void* factory = *g_pExternalFactorySingleton;
+    void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
+    fn_Filename_Dtor(filenameBuf);
+
+    // Cast to entity description
+    void* entityDesc = nullptr;
+    if (extTemplate) {
+        bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
+        entityDesc = isEntityDesc ? extTemplate : nullptr;
+    }
+    if (!entityDesc) entityDesc = extTemplate;
+
+    // Allocate and create entity (0x48 bytes)
+    void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* newEntity = nullptr;
+    if (memBlock) {
+        newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
+    }
+
+    // Register entity with entity manager
+    uint8_t entityBuf[8];
+    fn_InternalBasePtr_Ctor(entityBuf, newEntity);
+    void* entityRef = *(void**)entityBuf;
+    void* entityMgr = *(void**)(game + 0xE8);
+    fn_EntityList_RegisterEntity(entityMgr, &entityRef,
+                                  *(int*)((uintptr_t)entityDesc + 0x20));
+}
+
+// ============================================================
+// Game_InfectRandomCitizen (FUN_14005FE10)
+// Picks a random citizen from the citizen list, infects them.
+// ============================================================
+static void Game_InfectRandomCitizen_Impl() {
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
+
+    void* randomPtr = *(void**)(game + 0xD8);
+    uint32_t citizenCount = *(uint32_t*)(entityListBase + 0xF8);
+    uint32_t randIdx = fn_Random_Rand(randomPtr, citizenCount);
+
+    // Get random citizen
+    void* citizen = *(void**)(*(uintptr_t*)(entityListBase + 0xF0) + (uintptr_t)randIdx * 8);
+    fn_InternalBasePtr_CheckPtr(&citizen);
+
+    // Infect citizen's disease component
+    fn_DiseaseComponent_Infect(citizen);
+
+    // Original has a spurious MemFree(nullptr) — skip it
+}
+
+// ============================================================
 // DebugUI::Slot8 (vtable +0x40) -- Update performance counters
 // ============================================================
 // Reads 4 debug counters from engine state, updates NumberElements.
@@ -414,13 +760,13 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     case 321:  Game_TriggerDisasterByType_Impl(0); return;  // Trigger disaster type 0
     case 322:  Game_TriggerDisasterByType_Impl(1); return;  // Trigger disaster type 1
     case 323:  Game_TriggerDisasterByType_Impl(2); return;  // Trigger disaster type 2
-    case 324:  fn_Game_KillAllCitizens();        return;  // Kill all citizens
-    case 325:  fn_Game_SpawnItemsInStorage();     return;  // Spawn items in all storage
-    case 326:  fn_Game_SpawnCitizens();           return;  // Spawn new citizens
-    case 327:  fn_DebugUI_TriggerDisasterOnBuilding(self); return;  // Disaster on random building
-    case 328:  fn_Game_StartRandomFire();         return;  // Start random fire
-    case 329:  fn_Game_SpawnTornado();            return;  // Spawn tornado
-    case 330:  fn_Game_InfectRandomCitizen();     return;  // Infect random citizen
+    case 324:  Game_KillAllCitizens_Impl();        return;  // Kill all citizens
+    case 325:  Game_SpawnItemsInStorage_Impl();    return;  // Spawn items in all storage
+    case 326:  Game_SpawnCitizens_Impl();          return;  // Spawn new citizens
+    case 327:  DebugUI_TriggerDisasterOnBuilding_Impl(self); return;  // Disaster on random building
+    case 328:  Game_StartRandomFire_Impl();        return;  // Start random fire
+    case 329:  Game_SpawnTornado_Impl();           return;  // Spawn tornado
+    case 330:  Game_InfectRandomCitizen_Impl();    return;  // Infect random citizen
 
     // --- Debug render flag toggles (checkboxes) ---
     // param2 points to the checkbox element; flag is OR'd/AND'd into game+0xD0

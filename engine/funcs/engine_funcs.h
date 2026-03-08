@@ -1005,16 +1005,40 @@ extern fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter;
 typedef void (*fn_Audio_Scene_Pause_t)(void* scene, int channel, bool pause);
 extern fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause;
 
-// ScenarioDialog helper: loads the selected scenario (FUN_140077cb0)
-typedef void (*fn_ScenarioDialog_LoadSelected_t)(void* self);
-extern fn_ScenarioDialog_LoadSelected_t fn_ScenarioDialog_LoadSelected;
+// ScenarioDialog helper: loads the selected scenario — NOW REIMPLEMENTED
+// fn_ScenarioDialog_LoadSelected replaced by inline code in scenariodialog.cpp
+
+// SaveLoad::Update(this, Time*) — advance save/load operation
+// ?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
+typedef void (*fn_SaveLoad_Update_t)(void* saveLoad, void* time);
+extern fn_SaveLoad_Update_t fn_SaveLoad_Update;
+
+// IO::Persistence::GetSavePath(this) -> Filename* (returns address of internal field)
+// ?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ
+typedef void* (*fn_Persistence_GetSavePath_t)(void* self);
+extern fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath;
+
+// IO::FileSystem::GetDataDirectory(this) -> String* (returns address of internal field)
+// ?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ
+typedef void* (*fn_FileSystem_GetDataDirectory_t)(void* self);
+extern fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory;
+
+// IO::FileSystem singleton
+extern void** g_pFileSystemSingleton2;  // separate exref for GetDataDirectory calls
+
+// LoadScenarioFromSave: FUN_1400b49f0(worldSetup, savedState, scenarioIdx, retvalPtr)
+// Called from ScenarioDialog_LoadSelected when loading a saved scenario.
+// Constructs GameUpdateLoop with saved state, then GameLoadDialogLoopT, then LoaderLoop.
+typedef void (*fn_LoadScenarioFromSave_t)(void* worldSetup, void* savedState,
+                                           void* scenarioIdx, void* retvalPtr);
+extern fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave;
 
 // ModDetailsDialog helpers
-typedef void (*fn_ModDetailsDialog_OpenUpdateDialog_t)(void* self);
-extern fn_ModDetailsDialog_OpenUpdateDialog_t fn_ModDetailsDialog_OpenUpdateDialog;
+// REPLACED: now inline ModDetailsDialog_OpenUpdateDialog_Impl() in moddetailsdialog.cpp
+// REPLACED: now inline ModDetailsDialog_DeleteMod_Impl() in moddetailsdialog.cpp
 
-typedef void (*fn_ModDetailsDialog_DeleteMod_t)(void* self);
-extern fn_ModDetailsDialog_DeleteMod_t fn_ModDetailsDialog_DeleteMod;
+// ModUpdateDialog vtable pointer (PTR_FUN_14015c6c0 in exe .rdata)
+extern uintptr_t g_ModUpdateDialog_Vtable;
 
 // SelectResourceUI::GetResourceCount(self) -> int
 // FUN_140078a40 — counts expected resources for combo (shared by Orchard/Pasture)
@@ -1286,23 +1310,61 @@ typedef void (*fn_RadioElement_SetActiveRadio_t)(void* self, int index);
 extern fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio;
 
 // ToolbarDialog constructor (FUN_1400b9910 in retail exe)
+// REPLACED: now ToolbarDialog_Ctor_Impl() in code/Game/Dialog/toolbardialog.cpp
 // Creates a child ToolbarDialog from parent + toolbar data
 typedef void* (*fn_ToolbarDialog_Ctor_t)(void* self, void* userInterface, void* dialog,
                                          void* parentPtr, void* toolbarData);
+// NOTE: kept as extern for sub-dialog recursive creation
 extern fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor;
 
 // ToolbarDialog game system dispatch functions (called from OnEvent)
 // Case 1: ShowGroup — toggle visibility of a game group
+// REPLACED: now Toolbar_ShowGroup_Impl() in code/Game/Dialog/toolbardialog.cpp
 typedef void (*fn_Toolbar_ShowGroup_t)(void* gameSubsys, int64_t groupId);
 extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
 
 // Case 2: Utility action
+// REPLACED: now Toolbar_Utility_Impl() in code/Game/Dialog/toolbardialog.cpp
 typedef void (*fn_Toolbar_Utility_t)(void* gameSubsys, void* retBuf, uint64_t param);
 extern fn_Toolbar_Utility_t fn_Toolbar_Utility;
 
 // Case 3: Toggle all
+// REPLACED: now Toolbar_ToggleAll_Impl() in code/Game/Dialog/toolbardialog.cpp
 typedef void (*fn_Toolbar_ToggleAll_t)(void* gameSubsys);
 extern fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll;
+
+// ToolbarDialog vtable pointer (PTR_FUN_14015fa00 in exe .rdata)
+extern uintptr_t g_ToolbarDialog_Vtable;
+
+// PauseDialog vtable pointer (PTR_FUN_14015f550 in exe .rdata)
+extern uintptr_t g_PauseDialog_Vtable;
+
+// ToolUI child dialog vtable (PTR_FUN_14015f5a0 in exe .rdata) — used by Toolbar_Utility
+extern uintptr_t g_ToolUI_ChildDialog_Vtable;
+
+// Object::Factory::CreateObject(this, typeId) -> Base*
+// ?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z
+typedef void* (*fn_Factory_CreateObject_t)(void* self, uint32_t typeId);
+extern fn_Factory_CreateObject_t fn_Factory_CreateObject;
+
+// ToolController type ID — DAT_1401c6eb8 (used in Toolbar_ShowGroup for IsDerivedFrom)
+extern uint32_t* g_TypeId_ToolController;
+
+// ToolSetting type ID — used in Toolbar_ShowGroup for IsDerivedFrom
+extern uint32_t* g_TypeId_ToolSetting;
+
+// Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
+typedef void (*fn_ToolbarSort_t)(void* array, int count);
+extern fn_ToolbarSort_t fn_ToolbarSort;
+
+// TypeInfo for Toolbar external — used by ExternalFactory::FindNext
+extern uint32_t* g_TypeId_ToolbarExternal;
+
+// FUN_140100270: Find open dialog by controller type matching group ID
+// Searches all open dialogs for one whose controller matches a specific type
+// and whose +0x30 field equals the given param. Returns InternalBasePtr.
+typedef void (*fn_FindDialogByControllerType_t)(void* toolController, void* retBuf, uint64_t param);
+extern fn_FindDialogByControllerType_t fn_FindDialogByControllerType;
 
 // fn_Toolbar_FindEntity — now inline as Toolbar_FindEntity_Impl in toolbardialog.cpp
 // fn_Toolbar_CenterOnEntity (FUN_140103040) — now inline as Toolbar_CenterOnEntity_Impl below
@@ -1344,8 +1406,7 @@ extern fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld;
 // fn_ToolbarDialog_ChangeSpeed — now inline as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 
 // ToolbarDialog update button states helper (FUN_1400b8fd0)
-typedef void (*fn_ToolbarDialog_UpdateButtons_t)(void* self);
-extern fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons;
+// REPLACED: now ToolbarDialog_UpdateButtons_Impl() in code/Game/Dialog/toolbardialog.cpp
 
 // ToolbarDialog exref type — for IsDerivedFrom checks on toolbar elements
 extern uint32_t* g_TypeId_ToolbarElement;  // _typeInfo_exref in ToolbarDialog Update/OnEvent
@@ -1685,20 +1746,55 @@ extern fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor;
 // MainMenuDialog BuildId child dialog vtable (PTR_FUN_14015f5a0 in exe)
 extern void** g_MainMenuDialog_BuildIdVtable;
 
-// MainMenuDialog Slot8 private handler functions (resolved from exe)
-// Each opens a sub-dialog or performs a game action.
-typedef void (*fn_MainMenu_Handler_t)(void* self);
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenNewGame;      // 0x1400B3620
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenLoad;          // 0x1400B3770
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenSave;          // 0x1400B38B0
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenOptions;       // 0x1400B3A10
-extern fn_MainMenu_Handler_t fn_MainMenu_ReturnToMenu;      // 0x1400B4790
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenAchievement;   // 0x1400B34C0
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenScenario;      // 0x1400B3380
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenGoal;          // 0x1400B3220
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenMap;           // 0x1400B3120
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenTutorial;      // 0x1400B2FE0
-extern fn_MainMenu_Handler_t fn_MainMenu_OpenMod;           // 0x1400B2EA0
+// MainMenuDialog Slot8 private handler functions — NOW REIMPLEMENTED
+// All 11 Open* functions are reimplemented inline in mainmenudialog.cpp.
+// They use dialog-specific ctor function pointers and vtable addresses below.
+
+// Dialog-specific constructor function pointers (called from Open* handlers)
+// These are exe-internal ctors that call DialogInstance::DialogInstance then set subclass vtable.
+
+// NewGameDialog ctor: FUN_140071040(self, ui, extRes, nullParent, parentPtr)
+// Ctor sig: (self, ui, extRes, parentIBP, stack: parentMenuIBP)
+// Allocates 0xAE8 bytes. Passes MainMenuDialog as parent via stack arg.
+typedef void* (*fn_NewGameDialog_Ctor_t)(void* self, void* ui, void* extRes, void* nullParent,
+                                          void* parentMenuIBP);
+extern fn_NewGameDialog_Ctor_t fn_NewGameDialog_Ctor;  // 0x140071040
+
+// SaveLoadDialog ctor: FUN_1400b8270(self, ui, extRes, nullParent, mode, enginePtr, gameWorldPtr)
+// mode: 0=save, 1=load. enginePtr from MainMenuDialog+0xC0, gameWorldPtr from +0xB8.
+typedef void* (*fn_SaveLoadDialog_Ctor_t)(void* self, void* ui, void* extRes, void* nullParent,
+                                           uint8_t mode, void* enginePtr, void* gameWorldPtr);
+extern fn_SaveLoadDialog_Ctor_t fn_SaveLoadDialog_Ctor;  // 0x1400b8270
+
+// OptionsDialog ctor: FUN_140075150(self, ui, extRes, nullParent, stack: 0,0,0)
+// Standard DialogInstance ctor args, no extra params. Allocates 0x1C0 bytes.
+typedef void* (*fn_OptionsDialog_Ctor_t)(void* self, void* ui, void* extRes, void* nullParent);
+extern fn_OptionsDialog_Ctor_t fn_OptionsDialog_Ctor;  // 0x140075150
+
+// ScenarioDialog ctor: FUN_1400786b0(self, ui, extRes, parentIBP, difficulty, parentMenuIBP)
+// difficulty = byte at MainMenuDialog+0xB8 area. Also used for TutorialDialog.
+typedef void* (*fn_ScenarioDialog_Ctor_t)(void* self, void* ui, void* extRes, void* parentIBP,
+                                           uint8_t difficulty, void* parentMenuIBP);
+extern fn_ScenarioDialog_Ctor_t fn_ScenarioDialog_Ctor;  // 0x1400786b0
+
+// MapParamsDialog ctor: FUN_14006bd80(self, ui, extRes, nullParent)
+// Allocates 0xF8 bytes. Standard args.
+typedef void* (*fn_MapParamsDialog_Ctor_t)(void* self, void* ui, void* extRes, void* nullParent);
+extern fn_MapParamsDialog_Ctor_t fn_MapParamsDialog_Ctor;  // 0x14006bd80
+
+// ModDialog ctor: FUN_140070030(self, ui, extRes, parentIBP, parentMenuIBP)
+// Allocates 0xD8 bytes. Passes parent via stack.
+typedef void* (*fn_ModDialog_Ctor_t)(void* self, void* ui, void* extRes, void* parentIBP,
+                                      void* parentMenuIBP);
+extern fn_ModDialog_Ctor_t fn_ModDialog_Ctor;  // 0x140070030
+
+// AchievementDialog vtable: PTR_FUN_14015b020. Uses DialogInstance_Ctor directly + vtable patch.
+// Size 0xD0. Extra fields zeroed: +0xB8, +0xC0, +0xC8.
+extern void** g_AchievementDialog_Vtable;  // 0x14015b020
+
+// GoalDialog vtable: PTR_FUN_14015beb0. Uses DialogInstance_Ctor directly + vtable patch.
+// Size 0xC8 (200 decimal). Extra fields zeroed: +0xB8, +0xC0.
+extern void** g_GoalDialog_Vtable;  // 0x14015beb0
 
 // ============================================================
 // NewGameDialog support functions
@@ -1782,16 +1878,37 @@ inline int fn_CalcWorkerSlots(void* storageLocComp) {
     return fn_StorageCountQuery(storageLocComp);
 }
 
-// Name generator: FUN_140099ac0(unused, retStr, random, maxLen)
-// Loads "Game/Names/Cities.ndb", generates random name
-typedef void* (*fn_GenerateTownName_t)(uint64_t unused, void* retStr, void* random, int maxLen);
-extern fn_GenerateTownName_t fn_GenerateTownName;
+// Name generator: FUN_140099ac0 — NOW REIMPLEMENTED in newgamedialog.cpp
+// Loads "Game/Names/Cities.ndb", generates name, trims "vill" suffix.
+// Old typedef kept for reference:
+// typedef void* (*fn_GenerateTownName_t)(uint64_t unused, void* retStr, void* random, int maxLen);
+// extern fn_GenerateTownName_t fn_GenerateTownName;
 
-// Start game handler: FUN_1400b4540(worldSetupPtr, nameStr, seed, terrainSize, disasterOff, climate, terrain, mapGen, param9, retval)
-typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint64_t seed,
-                                   uint64_t terrainSize, int disasterOff, void* climate,
-                                   void* terrain, void* mapGen, int param9, void* retval);
-extern fn_StartNewGame_t fn_StartNewGame;
+// Inner name generator: FUN_1400a4b30(retStr, nameDB, random, minSyllables, maxChars)
+// Generates random name from NameDatabase with retry loop (up to 50 attempts).
+typedef void* (*fn_NameDB_GenerateName_t)(void* retStr, void* nameDB, void* random,
+                                           int minSyllables, int maxChars);
+extern fn_NameDB_GenerateName_t fn_NameDB_GenerateName;  // 0x1400a4b30
+
+// TypeInfo for NameDatabase IsDerivedFrom check
+extern uint32_t* g_TypeId_NameDatabase;  // DAT_1401c5a60
+
+// fn_String_SubString already declared above (line ~1490)
+
+// System::String::operator==(this, cstr) -> bool
+typedef bool (*fn_String_Equals_t)(void* self, const char* cstr);
+extern fn_String_Equals_t fn_String_Equals;
+
+// System::String::operator+=(this, cstr)
+typedef void (*fn_String_Append_t)(void* self, const char* cstr);
+extern fn_String_Append_t fn_String_Append;
+
+// Start game handler: FUN_1400b4540 — NOW REIMPLEMENTED in newgamedialog.cpp
+// Old typedef kept for reference:
+// typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint64_t seed,
+//                                    uint64_t terrainSize, int disasterOff, void* climate,
+//                                    void* terrain, void* mapGen, int param9, void* retval);
+// extern fn_StartNewGame_t fn_StartNewGame;
 
 // TypeInfo IDs for generator IsDerivedFrom checks
 extern uint32_t* g_TypeId_MapGenerator;      // DAT_1401c59b8
@@ -2011,20 +2128,38 @@ extern fn_DialogInstance_AddController_t fn_DialogInstance_AddController;
 typedef void (*fn_ModDialog_RefreshDisplay_t)(void* self);  // kept for reference
 
 // FUN_14006e930: Toggle mod enabled/disabled at index
-typedef void (*fn_ModDialog_ToggleMod_t)(void* self, int index);
-extern fn_ModDialog_ToggleMod_t fn_ModDialog_ToggleMod;
+// REPLACED: now inline ModDialog_ToggleMod_Impl() in code/Game/Dialog/moddialog.cpp
 
 // FUN_14006e660: Move mod to top of list
-typedef void (*fn_ModDialog_MoveToTop_t)(void* self, int index);
-extern fn_ModDialog_MoveToTop_t fn_ModDialog_MoveToTop;
+// REPLACED: now inline ModDialog_MoveToTop_Impl() in code/Game/Dialog/moddialog.cpp
 
 // FUN_14006e490: Show mod details dialog
-typedef void (*fn_ModDialog_ShowDetails_t)(void* self, int index);
-extern fn_ModDialog_ShowDetails_t fn_ModDialog_ShowDetails;
+// REPLACED: now inline ModDialog_ShowDetails_Impl() in code/Game/Dialog/moddialog.cpp
 
 // FUN_14006ea70: Apply mod changes (save, reload if needed)
-typedef void (*fn_ModDialog_Apply_t)(void* self);
-extern fn_ModDialog_Apply_t fn_ModDialog_Apply;
+// REPLACED: now inline ModDialog_Apply_Impl() in code/Game/Dialog/moddialog.cpp
+
+// ModDetailsDialog vtable pointer (PTR_FUN_14015c670 in exe .rdata)
+extern uintptr_t g_ModDetailsDialog_Vtable;
+
+// ModDialog_CloseAndReload (FUN_14006e9b0) — closes dialog and triggers UI reload
+typedef void (*fn_ModDialog_CloseAndReload_t)(void* self);
+extern fn_ModDialog_CloseAndReload_t fn_ModDialog_CloseAndReload;
+
+// MainMenu_Reload (FUN_1400b4790) — reloads from main menu context
+typedef void (*fn_MainMenu_Reload_t)(void* self);
+extern fn_MainMenu_Reload_t fn_MainMenu_Reload;
+
+// Game_ReloadWithSave (FUN_1400b49f0) — saves then reloads from in-game context
+typedef void (*fn_Game_ReloadWithSave_t)(void* self, void* savedState, void* param, void* nullRef);
+extern fn_Game_ReloadWithSave_t fn_Game_ReloadWithSave;
+
+// Save::SavedState::SavedState() — default ctor (0x10 bytes)
+typedef void* (*fn_SavedState_Ctor_t)(void* self);
+extern fn_SavedState_Ctor_t fn_SavedState_Ctor;
+
+// ReloadDialog vtable pointer (PTR_FUN_14015c480 in exe .rdata)
+extern uintptr_t g_ReloadDialog_Vtable;
 
 // ============================================================
 // IO::Serializer — save/load serialization (shared globals)
@@ -2414,18 +2549,121 @@ typedef int (*fn_Game_GetMonthFromTime_t)(void* weatherMgr);
 extern fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime;
 
 // ============================================================
+// DebugUI deep-reimpl helper functions (exe sub-functions)
+// ============================================================
+
+// FireComponent type ID — DAT_1401c41e0 (used by FindComponent_Fire)
+extern uint32_t* g_TypeId_FireComponent;
+
+// fn_FindComponent_Fire — searches entity for FireComponent (DAT_1401c41e0)
+inline void fn_FindComponent_Fire(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_FireComponent);
+}
+
+// CitizenComponent type ID — DAT_1401c7cb8 (used by KillAllCitizens)
+// NOTE: same as g_TypeId_ResourceType; this is the CitizenComponent (not ResourceType)
+// Ghidra uses DAT_1401c7cb8 in KillAllCitizens to find citizen components on entities
+extern uint32_t* g_TypeId_CitizenComponent;
+
+// fn_FindComponent_Citizen — searches entity for CitizenComponent (DAT_1401c7cb8)
+inline void fn_FindComponent_Citizen(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenComponent);
+}
+
+// Game_DestroyEntity (FUN_1400c3ec0 in exe) — destroys an entity from the entity list
+// RCX=entityList, RDX=entity
+typedef void (*fn_Game_DestroyEntity_t)(void* entityList, void* entity);
+extern fn_Game_DestroyEntity_t fn_Game_DestroyEntity;
+
+// FireComponent_Ignite (0x140049610 in exe) — sets a building on fire
+// RCX=fireComponent
+typedef void (*fn_FireComponent_Ignite_t)(void* self);
+extern fn_FireComponent_Ignite_t fn_FireComponent_Ignite;
+
+// DiseaseComponent_Infect (exe) — infects a citizen with disease
+// RCX=diseaseComponent
+typedef void (*fn_DiseaseComponent_Infect_t)(void* self);
+extern fn_DiseaseComponent_Infect_t fn_DiseaseComponent_Infect;
+
+// StorageComponent_GetCapacity (FUN_140128570) — returns storage capacity
+// RCX=storageComponent
+typedef int (*fn_StorageComponent_GetCapacity_t)(void* self);
+extern fn_StorageComponent_GetCapacity_t fn_StorageComponent_GetCapacity;
+
+// StorageComponent_SpawnItem (FUN_140128670) — spawns one item in storage
+// RCX=storageComponent, RDX=retval (InternalBasePtr)
+typedef void (*fn_StorageComponent_SpawnItem_t)(void* self, void* retval);
+extern fn_StorageComponent_SpawnItem_t fn_StorageComponent_SpawnItem;
+
+// EntityFactory_CreateEntity (FUN_1400c3720) — creates a new entity from an external template
+// RCX=memBlock(allocated 0x48 bytes), RDX=externalTemplate
+typedef void* (*fn_EntityFactory_CreateEntity_t)(void* memBlock, void* externalTemplate);
+extern fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity;
+
+// EntityList_RegisterEntity (FUN_1400c48a0) — registers entity with the entity list
+// RCX=entityList, RDX=entityPtrRef(InternalBasePtr*), R8D=categoryId
+typedef void (*fn_EntityList_RegisterEntity_t)(void* entityList, void* entityPtrRef, int categoryId);
+extern fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity;
+
+// ResidenceComponent type ID — DAT_1401c7900 (used by SpawnCitizens)
+extern uint32_t* g_TypeId_ResidenceComponent_FC;
+
+// fn_FindComponent_ResidenceFC — searches entity for ResidenceComponent (DAT_1401c7900)
+inline void fn_FindComponent_ResidenceFC(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_ResidenceComponent_FC);
+}
+
+// ResidenceDescription type ID — DAT_1401c7938 (used by SpawnCitizens)
+extern uint32_t* g_TypeId_ResidenceDescription;
+
+// ResidenceComponent_GetOccupantCount (FUN_140123070) — returns current occupant count
+// RCX=residenceComponent, EDX=mode(0=current)
+typedef int (*fn_ResidenceComponent_GetOccupantCount_t)(void* self, int mode);
+extern fn_ResidenceComponent_GetOccupantCount_t fn_ResidenceComponent_GetOccupantCount;
+
+// ResidenceComponent_GetSpawnPoint (FUN_140122e20) — gets spawn point for citizen creation
+// RCX=residenceComponent, RDX=outVec3, R8D=param3, R9D=idx, [rsp+0x28]=outPtr
+typedef void (*fn_ResidenceComponent_GetSpawnPoint_t)(void* self, void* outVec3, int p3, int idx, float* outParam);
+extern fn_ResidenceComponent_GetSpawnPoint_t fn_ResidenceComponent_GetSpawnPoint;
+
+// CitizenComponent_Setup (FUN_140117080) — initializes a new citizen entity
+// Complex signature: self, position, gender, p4, age, p6, parentPtr, descPtr
+typedef void (*fn_CitizenComponent_Setup_t)(void* self, void* pos, uint32_t gender, char p4, float age, char p6, void* parentPtr, void* descPtr);
+extern fn_CitizenComponent_Setup_t fn_CitizenComponent_Setup;
+
+// Random::RandFloat (already declared as fn_Random_RandFloat)
+// Random::RandFloatTol — not needed here
+
+// DisasterComponent_Infect (FUN_140116b90) — applies disease disaster to a building
+// RCX=building, RDX=diseaseDescription
+typedef void (*fn_DisasterComponent_Infect_t)(void* building, void* diseaseDesc);
+extern fn_DisasterComponent_Infect_t fn_DisasterComponent_Infect;
+
+// FUN_1400893c0 — checks if building list has a condition (used by TriggerDisasterOnBuilding)
+typedef bool (*fn_BuildingList_CheckCondition_t)(void* buildingList);
+extern fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition;
+
+// ============================================================
 // SaveLoadDialog::Load — game load loop construction helpers
 // ============================================================
 
-// GameUpdateLoop ctor (FUN_140098060 in exe) — constructs the gameplay UpdateLoop (0x160 bytes).
-// 11 params: self, savedState, loaderLoopPtr, opFlag, nameStr, p6, p7, p8, p9, p10, p11
-// This is an exe-internal function that calls Engine::UpdateLoop::UpdateLoop then sets its vtable
-// to PTR_FUN_14015e2f0 and initializes all fields.
-typedef void* (*fn_GameUpdateLoop_Ctor_t)(void* self, void* savedState, void* loaderLoopPtr,
-                                           uint32_t opFlag, void* nameStr,
-                                           uint32_t p6, uint32_t p7, uint8_t p8,
-                                           uint64_t p9, uint64_t p10, uint64_t p11);
-extern fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor;
+// GameUpdateLoop ctor (FUN_140098060 in exe) — NOW REIMPLEMENTED in saveloaddialog.cpp
+// Constructs the gameplay UpdateLoop (0x160 bytes).
+// Calls Engine::UpdateLoop::UpdateLoop then sets vtable to PTR_FUN_14015e2f0.
+// Old typedef kept for reference:
+// typedef void* (*fn_GameUpdateLoop_Ctor_t)(void* self, void* savedState, void* loaderLoopPtr,
+//                                            uint32_t opFlag, void* nameStr,
+//                                            uint32_t p6, uint32_t p7, uint8_t p8,
+//                                            uint64_t p9, uint64_t p10, uint64_t p11);
+// extern fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor;
+
+// Engine::UpdateLoop::UpdateLoop(this) — base ctor from Runtime DLL
+// ??0UpdateLoop@Engine@@QEAA@XZ
+typedef void* (*fn_UpdateLoop_Ctor_t)(void* self);
+extern fn_UpdateLoop_Ctor_t fn_UpdateLoop_Ctor;
+
+// GameUpdateLoop vtable: PTR_FUN_14015e2f0 — written after UpdateLoop base ctor
+extern void** g_GameUpdateLoop_Vtable;  // 0x14015e2f0
 
 // Engine::LoaderLoop ctor (Runtime 0x1800DC1E0)
 // RCX=self(LoaderLoop*), RDX=nextLoop(UpdateLoop*), R8=delayTime(Time const&)
@@ -2482,18 +2720,29 @@ inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
     *(void**)(enginePtr + 0xC8) = loaderLoop;
 }
 
-// SetDialogLoaderNextLoop — sets next loop on a DialogLoaderLoopT
-// FUN_14009a8f0(dialogLoaderLoop, loaderLoop): sets fullscreen fade, stores next loop ptr
-// Called when self->m_loaderLoop1 (+0xE0) is non-null.
-typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
-extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
+// SetDialogLoaderNextLoop — FUN_14009a8f0 — NOW REIMPLEMENTED INLINE
+// Sets fullscreen fade on DialogLoaderLoopT's UI (+0x40), stores next loop at +0xb68.
+// Old typedef kept for reference:
+// typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
+// extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
+inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop) {
+    fn_UI_SetFullscreenFade((void*)(dialogLoaderLoop + 0x40), true, 0xFF000000, false);
+    *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;
+}
 
-// GetLoadingSoundString — formats "Dialog/Loading.rsc:gameLoad%i" for a random variant (0-11)
-// FUN_140099130(unused, retStr, unused, unused) — ignores all params except retStr
-// RDX=retStr(char* buffer of 8 bytes, used as System::String)
-typedef void* (*fn_GetLoadingSoundString_t)(uint64_t unused, void* retStr,
-                                             uint64_t unused2, uint64_t unused3);
-extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
+// GetLoadingSoundString — FUN_140099130 — NOW REIMPLEMENTED INLINE
+// Creates a Random, generates rand 0-11, formats "Dialog/Loading.rsc:gameLoad%i".
+// Old typedef kept for reference:
+// typedef void* (*fn_GetLoadingSoundString_t)(uint64_t unused, void* retStr,
+//                                              uint64_t unused2, uint64_t unused3);
+// extern fn_GetLoadingSoundString_t fn_GetLoadingSoundString;
+inline void* GetLoadingSoundString(void* retStr) {
+    uint8_t rng[2520];  // System::Random is large (~2512 bytes)
+    fn_Random_Default_Ctor(rng);
+    uint32_t variant = fn_Random_Rand(rng, 12);
+    fn_String_Format(retStr, "Dialog/Loading.rsc:gameLoad%i", variant);
+    return retStr;
+}
 
 // ============================================================
 // ModDialog::Slot4 support (Application-x64.exe + Runtime-x64.dll)

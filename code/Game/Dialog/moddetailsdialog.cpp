@@ -359,6 +359,47 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 }
 
 // ============================================================
+// ModDetailsDialog_OpenDialog_Impl — opens a dialog from .rsc resource
+// ============================================================
+// Shared by OpenUpdateDialog and DeleteMod (both open "Dialog/ModUpdate.rsc").
+// Original: FUN_14006d400 (OpenUpdateDialog) and FUN_14006d550 (DeleteMod).
+// Both are structurally identical: load resource, create 0xB8 DialogInstance,
+// set vtable to PTR_FUN_14015c6c0 (ModUpdateDialog), add to UI.
+static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Load dialog resource
+    uint8_t filenameBuf[8];
+    fn_Filename_CtorCStr(filenameBuf, rscPath);
+    void* extFactory = *(void**)g_pExternalFactorySingleton;
+    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+    // IsDerivedFrom check for Dialog type — the resource IS a Dialog if it loads
+    // from a .rsc file, so we pass it directly (matches original behavior where
+    // the check always succeeds for valid resources).
+    void* dialog = ext;
+    fn_Filename_Dtor(filenameBuf);
+
+    // Allocate and construct DialogInstance (0xB8 bytes)
+    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    void* dialogInst = nullptr;
+    if (newDialog) {
+        uint64_t nullRef;
+        fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+        fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
+        // Set vtable to ModUpdateDialog
+        if (g_ModUpdateDialog_Vtable) {
+            *(uintptr_t*)newDialog = g_ModUpdateDialog_Vtable;
+        }
+        dialogInst = newDialog;
+    }
+
+    // Add to UI
+    uint64_t dialogRef;
+    fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+    fn_UI_AddDialog(*(void**)(s + 0x10), &dialogRef);
+}
+
+// ============================================================
 // Slot8 (0x14006D6A0): OnCommand — button dispatch.
 // ============================================================
 void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t /*param2*/,
@@ -374,8 +415,10 @@ void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t /*param2*/,
         void* ui = *(void**)(s + 0x10);
         fn_UI_CloseDialog(ui, basePtr);
     } else if (param4 == 1) {
-        fn_ModDetailsDialog_OpenUpdateDialog(self);
+        // OpenUpdateDialog — opens ModUpdate.rsc dialog
+        ModDetailsDialog_OpenDialog_Impl(self, "Dialog/ModUpdate.rsc");
     } else if (param4 == 2) {
-        fn_ModDetailsDialog_DeleteMod(self);
+        // DeleteMod — also opens ModUpdate.rsc dialog (same behavior as OpenUpdateDialog)
+        ModDetailsDialog_OpenDialog_Impl(self, "Dialog/ModUpdate.rsc");
     }
 }

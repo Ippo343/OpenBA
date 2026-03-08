@@ -513,6 +513,208 @@ void ModDialog_Slot4(ModDialog* self) {
 }
 
 // ============================================================
+// ModDialog_ToggleMod_Impl (was fn_ModDialog_ToggleMod, FUN_14006e930)
+//
+// Toggles the enabled state of a mod at the given index.
+// Reads the current checkbox state from entry+0x28 element's +0xD8 byte,
+// calls Modification::Enable with the inverted state, then refreshes display.
+// ============================================================
+static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+    void* modSingleton = *(void**)g_ppModificationSingleton;
+
+    // entry = base + index * 0x58; checkbox element is at entry+0x28
+    uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)index * 0x58;
+    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
+    // Current checked state from UI element at +0xD8
+    bool currentChecked = *(uint8_t*)(*(uintptr_t*)(entry + 0x28) + 0xD8) != 0;
+
+    // Enable(modSingleton, index, !currentChecked)
+    // The original inverts the state: if checkbox shows checked, disable; vice versa
+    fn_Modification_Enable(modSingleton, index, currentChecked);
+
+    ModDialog_RefreshDisplay_Impl(self);
+}
+
+// ============================================================
+// ModDialog_MoveToTop_Impl (was fn_ModDialog_MoveToTop, FUN_14006e660)
+//
+// Moves a mod to position 0 by repeatedly swapping with the entry above.
+// Then does a full refresh display (same as ModDialog_RefreshDisplay_Impl).
+// ============================================================
+static void ModDialog_MoveToTop_Impl(ModDialog* self, int index) {
+    void* modSingleton = *(void**)g_ppModificationSingleton;
+
+    // Swap up to top
+    while (index > 0) {
+        fn_Modification_Swap(modSingleton, index, index - 1);
+        index--;
+    }
+
+    ModDialog_RefreshDisplay_Impl(self);
+}
+
+// ============================================================
+// ModDialog_ShowDetails_Impl (was fn_ModDialog_ShowDetails, FUN_14006e490)
+//
+// Opens the ModDetailsDialog for a specific mod index.
+// Loads "Dialog/ModDetails.rsc", creates a ModDetailsDialog (0xC8 bytes),
+// sets vtable to PTR_FUN_14015c670, copies sprite handle from entry+0x50,
+// stores mod index at +0xC0, then adds the dialog to the UI.
+// ============================================================
+static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Load dialog resource
+    uint8_t filenameBuf[8];
+    fn_Filename_CtorCStr(filenameBuf, "Dialog/ModDetails.rsc");
+    void* extFactory = *(void**)g_pExternalFactorySingleton;
+    void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+    // IsDerivedFrom check — resource is always valid Dialog if load succeeds
+    void* dialog = ext;
+    fn_Filename_Dtor(filenameBuf);
+
+    // Allocate ModDetailsDialog (0xC8 = 200 bytes)
+    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+    void* dialogInst = nullptr;
+    if (newDialog) {
+        // Get sprite handle from entry+0x50 (SpriteSheet ptr)
+        uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)index * 0x58;
+        uint64_t spriteHandle = *(uint64_t*)(entry + 0x50);
+
+        // Construct DialogInstance base (0xB8)
+        uint64_t nullRef;
+        fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+        fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
+
+        // Set vtable to ModDetailsDialog
+        if (g_ModDetailsDialog_Vtable) {
+            *(uintptr_t*)newDialog = g_ModDetailsDialog_Vtable;
+        }
+
+        // ModDetailsDialog fields: +0xB8 = sprite handle, +0xC0 = mod index
+        *(uint64_t*)((uintptr_t)newDialog + 0xB8) = spriteHandle;
+        *(int32_t*)((uintptr_t)newDialog + 0xC0) = index;
+
+        dialogInst = newDialog;
+    }
+
+    // Add to UI
+    uint64_t dialogRef;
+    fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+    fn_UI_AddDialog(*(void**)(s + 0x10), &dialogRef);
+}
+
+// ============================================================
+// ModDialog_Apply_Impl (was fn_ModDialog_Apply, FUN_14006ea70)
+//
+// Applies mod changes: checks if mods have been modified (dirty flag),
+// shows appropriate reload dialog (menu vs in-game), saves mod list,
+// handles reload/restart sequence, then closes the dialog.
+//
+// Flow:
+//   1. Check dirty flag at Modification[0] (first byte of singleton)
+//   2. If dirty:
+//      a. If gameWorld == nullptr: menu context -> load "Dialog/Reload.rsc:menu"
+//      b. Else: game context -> load "Dialog/Reload.rsc:game"
+//      c. Create ReloadDialog (0xC0 bytes, vtable PTR_FUN_14015c480)
+//      d. ShowDialog() — blocks until user responds
+//      e. If result 1 or 2 (OK/confirm):
+//         - SaveList(), CloseAndReload()
+//         - Menu: MainMenu_Reload(self+0xD0)
+//         - Game: create SavedState, call game reload
+//      f. If other: RefreshList (cancel)
+//   3. Close dialog
+// ============================================================
+static void ModDialog_Apply_Impl(ModDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+    void* modSingleton = *(void**)g_ppModificationSingleton;
+
+    // Check dirty flag — first byte of Modification singleton
+    if (*(uint8_t*)modSingleton != 0) {
+        void* gameWorld = *g_pGameWorldSingleton;
+
+        // Load reload dialog resource based on context (menu vs in-game)
+        uint8_t filenameBuf[8];
+        if (gameWorld == nullptr) {
+            fn_Filename_CtorCStr(filenameBuf, "Dialog/Reload.rsc:menu");
+        } else {
+            fn_Filename_CtorCStr(filenameBuf, "Dialog/Reload.rsc:game");
+        }
+        void* extFactory = *(void**)g_pExternalFactorySingleton;
+        void* ext = fn_ExternalFactory_FindOrLoad(extFactory, filenameBuf);
+        void* dialog = ext;  // IsDerivedFrom check always passes for valid .rsc
+        fn_Filename_Dtor(filenameBuf);
+
+        // Create ReloadDialog (0xC0 bytes)
+        void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+        void* dialogInst = nullptr;
+        if (newDialog) {
+            uint64_t nullRef;
+            fn_InternalBasePtr_Ctor(&nullRef, nullptr);
+            fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
+            if (g_ReloadDialog_Vtable) {
+                *(uintptr_t*)newDialog = g_ReloadDialog_Vtable;
+            }
+            dialogInst = newDialog;
+        }
+
+        // ShowDialog (modal) — blocks until user responds
+        uint64_t dialogRef;
+        fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+        int result = fn_UI_ShowDialog(*(void**)(s + 0x10), &dialogRef);
+        fn_InternalBasePtr_DeletePtr(&dialogRef);
+
+        if ((unsigned)(result - 1) < 2) {
+            // User confirmed: save and reload
+            fn_Modification_SaveList(modSingleton);
+            fn_ModDialog_CloseAndReload((void*)self);
+
+            if (gameWorld == nullptr) {
+                // Menu context: simple reload via +0xD0 controller
+                fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
+                fn_MainMenu_Reload(*(void**)(s + 0xD0));
+            } else {
+                // Game context: allocate SavedState (0x10 bytes), construct it
+                void* savedState = fn_MemAlloc(g_pMemAllocSingleton, 0x10, 4);
+                void* statePtr = nullptr;
+                if (savedState && fn_SavedState_Ctor) {
+                    statePtr = fn_SavedState_Ctor(savedState);
+                }
+
+                // Call vtable[7] on the object at Factory singleton +0x20
+                // to prepare the game for reload
+                void* factorySingleton = *g_pFactorySingleton;
+                if (factorySingleton) {
+                    uintptr_t inner = *(uintptr_t*)((uintptr_t)factorySingleton + 0x20);
+                    if (inner) {
+                        typedef void (*fn_PrepareReload_t)(void* self);
+                        fn_PrepareReload_t fn = (fn_PrepareReload_t)(*(uintptr_t*)(*(uintptr_t*)inner + 0x38));
+                        fn((void*)inner);
+                    }
+                }
+
+                // Build null InternalBasePtr
+                uint64_t nullRef2;
+                fn_InternalBasePtr_Ctor(&nullRef2, nullptr);
+
+                // Trigger game reload with saved state
+                fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
+                fn_Game_ReloadWithSave(*(void**)(s + 0xD0), statePtr, (void*)(uintptr_t)-1, &nullRef2);
+            }
+        } else {
+            // User cancelled: refresh list to undo changes
+            fn_Modification_RefreshList(modSingleton);
+        }
+    }
+
+    // Close the mod dialog
+    uint64_t closeRef;
+    fn_InternalBasePtr_Ctor(&closeRef, (void*)self);
+    fn_UI_CloseDialog(*(void**)(s + 0x10), &closeRef);
+}
+
+// ============================================================
 // ModDialog::Slot8 — OnCommand handler (0x14006ED40)
 // ============================================================
 //
@@ -548,14 +750,14 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
         }
 
         if (id == 0x65) {
-            // OK/Apply — delegate to complex apply handler
-            fn_ModDialog_Apply((void*)self);
+            // OK/Apply
+            ModDialog_Apply_Impl(self);
             goto done;
         }
 
         if (id >= 1000 && id < 2000) {
             // Toggle mod checkbox
-            fn_ModDialog_ToggleMod((void*)self, id - 1000);
+            ModDialog_ToggleMod_Impl(self, id - 1000);
             goto done;
         }
 
@@ -575,13 +777,13 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
 
         if (id >= 4000 && id < 5000) {
             // Move to top
-            fn_ModDialog_MoveToTop((void*)self, id - 4000);
+            ModDialog_MoveToTop_Impl(self, id - 4000);
             goto done;
         }
 
         if (id >= 5000 && id < 6000) {
             // Show details
-            fn_ModDialog_ShowDetails((void*)self, id - 5000);
+            ModDialog_ShowDetails_Impl(self, id - 5000);
         }
     }
 

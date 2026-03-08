@@ -107,6 +107,178 @@ static void* Toolbar_FindEntity_Impl(void* entityList, void* retBuf, uint64_t ty
 }
 
 // ============================================================
+// ToolbarDialog_UpdateButtons_Impl (was fn_ToolbarDialog_UpdateButtons, FUN_1400b8fd0)
+//
+// Secondary update for ShowGroup (case 1) and FocusEntity (case 4) buttons.
+// For each toolbar item:
+//   - ShowGroup: enables button if the group has entities in the entity list BST
+//     (checks item+0x58 type against entity count in BST at entityList+0x160)
+//   - FocusEntity: enables button if entities of that type exist
+// Uses the same entity BST search as Toolbar_FindEntity_Impl.
+// ============================================================
+static void ToolbarDialog_UpdateButtons_Impl(void* self) {
+    uintptr_t s = (uintptr_t)self;
+    uintptr_t entityList = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+
+    int32_t itemCount = *(int32_t*)(s + 0xD8);
+    if (itemCount <= 0) return;
+
+    int64_t* itemArray = *(int64_t**)(s + 0xD0);
+
+    for (int i = 0; i < itemCount; i++) {
+        uintptr_t item = (uintptr_t)itemArray[i];
+        uint64_t typeId = *(uint64_t*)(item + 0x58);
+
+        if (typeId == 0) continue;
+
+        // Search sub-items (item+0x58 -> data with +0x28 array, +0x30 count)
+        // to find the matching component type for this toolbar item.
+        // This traverses the toolbar item's typed sub-list.
+        int32_t subCount = 0;
+        uintptr_t subData = typeId;
+        if (subData != 0) {
+            subCount = *(int32_t*)(subData + 0x30);
+        }
+
+        // Find the component type matching g_TypeId_BuildRequirementComponent
+        void* matchedComponent = nullptr;
+        if (g_TypeId_BuildRequirementComponent && subCount > 0) {
+            uint32_t targetType = *g_TypeId_BuildRequirementComponent;
+            for (int j = 0; j < subCount; j++) {
+                void* subItem = *(void**)(*(uintptr_t*)(subData + 0x28) + (int64_t)j * 8);
+                if (!subItem) continue;
+                // vtable[2] (offset 0x10) = GetTypeId, returns uint32_t
+                typedef uint32_t (*GetTypeId_t)(void* self);
+                uint32_t subType = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+                if (subType == targetType) {
+                    bool isDerived = fn_IsDerivedFrom(subItem, targetType);
+                    if (isDerived) matchedComponent = subItem;
+                    break;
+                }
+            }
+        }
+
+        int32_t actionType = *(int32_t*)(item + 0x48);
+
+        if (actionType == 1) {
+            // ShowGroup: check if group count meets entity requirement
+            bool enabled;
+            if (matchedComponent == nullptr || *(int32_t*)((uintptr_t)matchedComponent + 0x60) < 0) {
+                enabled = true;
+            } else {
+                // Search entity BST for typeId count
+                int entityCount = 0;
+                uintptr_t* node = *(uintptr_t**)(entityList + 0x160);
+                while (node != nullptr) {
+                    if (typeId < *node) {
+                        node = (uintptr_t*)node[4];
+                    } else if (typeId > *node) {
+                        node = (uintptr_t*)node[5];
+                    } else {
+                        entityCount = (int)node[2];
+                        break;
+                    }
+                }
+                enabled = entityCount >= *(int32_t*)((uintptr_t)matchedComponent + 0x60);
+            }
+
+            // Set button enabled via vtable[8] (offset 0x40)
+            void** buttonArray = *(void***)(s + 0xC0);
+            fn_InternalBasePtr_CheckPtr((void*)&buttonArray[i]);
+            void* elem = buttonArray[i];
+            typedef void (*SetEnabled_t)(void* self, bool enabled);
+            SetEnabled_t fn = (SetEnabled_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
+            fn(elem, enabled);
+        }
+        else if (actionType == 4) {
+            // FocusEntity: check if any entities of that type exist
+            void** buttonArray = *(void***)(s + 0xC0);
+            fn_InternalBasePtr_CheckPtr((void*)&buttonArray[i]);
+            void* elem = buttonArray[i];
+
+            // Search entity BST for typeId count
+            int entityCount = 0;
+            uintptr_t* node = *(uintptr_t**)(entityList + 0x160);
+            while (node != nullptr) {
+                if (typeId < *node) {
+                    node = (uintptr_t*)node[4];
+                } else if (typeId > *node) {
+                    node = (uintptr_t*)node[5];
+                } else {
+                    entityCount = (int)node[2];
+                    break;
+                }
+            }
+
+            bool enabled = entityCount > 0;
+            typedef void (*SetEnabled_t)(void* self, bool enabled);
+            SetEnabled_t fn = (SetEnabled_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
+            fn(elem, enabled);
+        }
+    }
+}
+
+// ============================================================
+// Toolbar_ShowGroup_Impl (was fn_Toolbar_ShowGroup, FUN_140102b60)
+//
+// Shows/hides a tool group dialog. Called with gameSubsys (ToolController at
+// gameWorld+0x120) and a groupId (toolbar item type ID).
+//
+// Logic:
+//   1. If lockToggle flag (+0x80) is set and groupId != 0, use locked group (+0x88)
+//   2. If same group is already shown (+0x20 == groupId), close it
+//   3. If different group or no group: close old, look up new group in BST (+0x50),
+//      create ToolController via Factory, create ToolSetting if needed,
+//      configure and start the controller
+//
+// The BST at +0x10/+0x50 maps typeId -> {typeId, toolSettingRef, toolXY, ...}
+// ============================================================
+static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
+    // This function is very complex with BST traversal, Factory::CreateObject,
+    // ToolController/ToolSetting management. Use the original exe function
+    // which is still resolved and correct.
+    if (fn_Toolbar_ShowGroup) {
+        fn_Toolbar_ShowGroup(gameSubsys, groupId);
+    }
+}
+
+// ============================================================
+// Toolbar_Utility_Impl (was fn_Toolbar_Utility, FUN_140101a80)
+//
+// Opens a utility dialog. Searches for an existing open dialog matching
+// the utility type, closes it if found, or opens a new one.
+// ============================================================
+static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param) {
+    // This function has complex dialog lifecycle management with
+    // FindDialogByControllerType, Factory::CreateObject, BST lookups.
+    // Use the original exe function which is still resolved.
+    if (fn_Toolbar_Utility) {
+        fn_Toolbar_Utility(gameSubsys, retBuf, param);
+    }
+}
+
+// ============================================================
+// Toolbar_ToggleAll_Impl (was fn_Toolbar_ToggleAll, FUN_140101ce0)
+//
+// "Toggle All" button handler: closes all open tool groups, creates
+// the pause/overview dialog.
+//
+// Flow:
+//   1. If tool controller at +0x28 is active, call its Close (vtable[9])
+//   2. Call ShowGroup(gameSubsys, 0) to clear current group
+//   3. Reset camera to overview position
+//   4. Load "Dialog/Pause.rsc" and create PauseDialog (0xC8 bytes)
+//   5. Add dialog to UI
+// ============================================================
+static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
+    // This function requires Camera/Transform manipulation plus
+    // PauseDialog creation with a specific vtable. Use the original.
+    if (fn_Toolbar_ToggleAll) {
+        fn_Toolbar_ToggleAll(gameSubsys);
+    }
+}
+
+// ============================================================
 // ToolbarDialog::Update (vtable +0x30) — Sync button states
 // ============================================================
 // Iterates toolbar items, updates button checked/enabled states
@@ -233,7 +405,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
     }
 
     // Call secondary update helper — handles ShowGroup and FocusEntity button enable states
-    fn_ToolbarDialog_UpdateButtons(self);
+    ToolbarDialog_UpdateButtons_Impl(self);
 }
 
 // ============================================================
@@ -359,18 +531,18 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             if (localElemRef != 0 && *(uint8_t*)(localElemRef + 0xD8) != 0) {
                 groupId = *(void**)(item + 0x58);
             }
-            fn_Toolbar_ShowGroup((void*)gameSys, (int64_t)groupId);
+            Toolbar_ShowGroup_Impl((void*)gameSys, (int64_t)groupId);
             break;
         }
         case 2: {
             // Utility action
             uint8_t retBuf[16];
-            fn_Toolbar_Utility((void*)gameSys, retBuf, *(uint64_t*)(item + 0x58));
+            Toolbar_Utility_Impl((void*)gameSys, retBuf, *(uint64_t*)(item + 0x58));
             break;
         }
         case 3: {
             // Toggle all groups
-            fn_Toolbar_ToggleAll((void*)gameSys);
+            Toolbar_ToggleAll_Impl((void*)gameSys);
             break;
         }
         case 4: {

@@ -335,9 +335,13 @@ fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite = nullptr;
 fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName = nullptr;
 fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter = nullptr;
 fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
-fn_ScenarioDialog_LoadSelected_t fn_ScenarioDialog_LoadSelected = nullptr;
-fn_ModDetailsDialog_OpenUpdateDialog_t fn_ModDetailsDialog_OpenUpdateDialog = nullptr;
-fn_ModDetailsDialog_DeleteMod_t fn_ModDetailsDialog_DeleteMod = nullptr;
+// fn_ScenarioDialog_LoadSelected — REMOVED, now reimplemented in scenariodialog.cpp
+fn_SaveLoad_Update_t fn_SaveLoad_Update = nullptr;
+fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath = nullptr;
+fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory = nullptr;
+void** g_pFileSystemSingleton2 = nullptr;
+fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
+uintptr_t g_ModUpdateDialog_Vtable = 0;  // PTR_FUN_14015c6c0
 fn_SelectResourceUI_GetResourceCount_t fn_SelectResourceUI_GetResourceCount = nullptr;
 fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo = nullptr;
 fn_GoalList_GetGoal_t fn_GoalList_GetGoal = nullptr;
@@ -409,6 +413,15 @@ fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
 fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
+uintptr_t g_ToolbarDialog_Vtable = 0;   // PTR_FUN_14015fa00
+uintptr_t g_PauseDialog_Vtable = 0;     // PTR_FUN_14015f550
+uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
+fn_Factory_CreateObject_t fn_Factory_CreateObject = nullptr;
+uint32_t* g_TypeId_ToolController = nullptr;  // DAT_1401c6eb8
+uint32_t* g_TypeId_ToolSetting = nullptr;
+fn_ToolbarSort_t fn_ToolbarSort = nullptr;
+uint32_t* g_TypeId_ToolbarExternal = nullptr;
+fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
 // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
 uint32_t* g_TypeId_MultiObjectComponent = nullptr;
@@ -418,7 +431,7 @@ fn_Transform_AsTransform3_t fn_Transform_AsTransform3 = nullptr;
 fn_Camera_SetCameraToWorld_t fn_Camera_SetCameraToWorld = nullptr;
 // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
-fn_ToolbarDialog_UpdateButtons_t fn_ToolbarDialog_UpdateButtons = nullptr;
+// fn_ToolbarDialog_UpdateButtons — inlined as ToolbarDialog_UpdateButtons_Impl in toolbardialog.cpp
 uint32_t* g_TypeId_ToolbarElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
@@ -460,8 +473,13 @@ uint32_t* g_TypeId_HelpButtonElem = nullptr;
 void** g_pNewGameSettings = nullptr;
 fn_Random_Rand_t fn_Random_Rand = nullptr;
 fn_Random_RandFloat_t fn_Random_RandFloat = nullptr;
-fn_GenerateTownName_t fn_GenerateTownName = nullptr;
-fn_StartNewGame_t fn_StartNewGame = nullptr;
+// fn_GenerateTownName — REMOVED, now reimplemented in newgamedialog.cpp
+fn_NameDB_GenerateName_t fn_NameDB_GenerateName = nullptr;
+uint32_t* g_TypeId_NameDatabase = nullptr;
+// fn_String_SubString already defined above
+fn_String_Equals_t fn_String_Equals = nullptr;
+fn_String_Append_t fn_String_Append = nullptr;
+// fn_StartNewGame — REMOVED, now reimplemented in newgamedialog.cpp
 uint32_t* g_TypeId_MapGenerator = nullptr;
 uint32_t* g_TypeId_ClimateGenerator = nullptr;
 uint32_t* g_TypeId_TerrainGenerator = nullptr;
@@ -543,17 +561,16 @@ fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId = nullptr;
 fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr = nullptr;
 fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor = nullptr;
 void** g_MainMenuDialog_BuildIdVtable = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenNewGame = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenLoad = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenSave = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenOptions = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_ReturnToMenu = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenAchievement = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenScenario = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenGoal = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenMap = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenTutorial = nullptr;
-fn_MainMenu_Handler_t fn_MainMenu_OpenMod = nullptr;
+// fn_MainMenu_* handlers — REMOVED, now reimplemented in mainmenudialog.cpp
+// Dialog ctor function pointers (used by reimplemented Open* handlers)
+fn_NewGameDialog_Ctor_t fn_NewGameDialog_Ctor = nullptr;
+fn_SaveLoadDialog_Ctor_t fn_SaveLoadDialog_Ctor = nullptr;
+fn_OptionsDialog_Ctor_t fn_OptionsDialog_Ctor = nullptr;
+fn_ScenarioDialog_Ctor_t fn_ScenarioDialog_Ctor = nullptr;
+fn_MapParamsDialog_Ctor_t fn_MapParamsDialog_Ctor = nullptr;
+fn_ModDialog_Ctor_t fn_ModDialog_Ctor = nullptr;
+void** g_AchievementDialog_Vtable = nullptr;
+void** g_GoalDialog_Vtable = nullptr;
 
 // ModDialog support
 void** g_ppModificationSingleton = nullptr;
@@ -566,10 +583,16 @@ fn_Modification_SaveList_t fn_Modification_SaveList = nullptr;
 fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
 fn_DialogInstance_AddController_t fn_DialogInstance_AddController = nullptr;
 // fn_ModDialog_RefreshDisplay — REPLACED with static ModDialog_RefreshDisplay_Impl() in moddialog.cpp
-fn_ModDialog_ToggleMod_t fn_ModDialog_ToggleMod = nullptr;
-fn_ModDialog_MoveToTop_t fn_ModDialog_MoveToTop = nullptr;
-fn_ModDialog_ShowDetails_t fn_ModDialog_ShowDetails = nullptr;
-fn_ModDialog_Apply_t fn_ModDialog_Apply = nullptr;
+// fn_ModDialog_ToggleMod — REPLACED with inline impl in moddialog.cpp
+// fn_ModDialog_MoveToTop — REPLACED with inline impl in moddialog.cpp
+// fn_ModDialog_ShowDetails — REPLACED with inline impl in moddialog.cpp
+// fn_ModDialog_Apply — REPLACED with inline impl in moddialog.cpp
+uintptr_t g_ModDetailsDialog_Vtable = 0;  // PTR_FUN_14015c670
+fn_ModDialog_CloseAndReload_t fn_ModDialog_CloseAndReload = nullptr;
+fn_MainMenu_Reload_t fn_MainMenu_Reload = nullptr;
+fn_Game_ReloadWithSave_t fn_Game_ReloadWithSave = nullptr;
+fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
+uintptr_t g_ReloadDialog_Vtable = 0;  // PTR_FUN_14015c480
 
 // IO::Serializer (shared globals with g_ prefix)
 g_fn_Serializer_Ctor_t g_fn_Serializer_Ctor = nullptr;
@@ -695,16 +718,36 @@ fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
 fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
 fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
 
+// --- DebugUI deep-reimpl helpers ---
+uint32_t* g_TypeId_FireComponent = nullptr;
+uint32_t* g_TypeId_CitizenComponent = nullptr;
+fn_Game_DestroyEntity_t fn_Game_DestroyEntity = nullptr;
+fn_FireComponent_Ignite_t fn_FireComponent_Ignite = nullptr;
+fn_DiseaseComponent_Infect_t fn_DiseaseComponent_Infect = nullptr;
+fn_StorageComponent_GetCapacity_t fn_StorageComponent_GetCapacity = nullptr;
+fn_StorageComponent_SpawnItem_t fn_StorageComponent_SpawnItem = nullptr;
+fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity = nullptr;
+fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity = nullptr;
+uint32_t* g_TypeId_ResidenceComponent_FC = nullptr;
+uint32_t* g_TypeId_ResidenceDescription = nullptr;
+fn_ResidenceComponent_GetOccupantCount_t fn_ResidenceComponent_GetOccupantCount = nullptr;
+fn_ResidenceComponent_GetSpawnPoint_t fn_ResidenceComponent_GetSpawnPoint = nullptr;
+fn_CitizenComponent_Setup_t fn_CitizenComponent_Setup = nullptr;
+fn_DisasterComponent_Infect_t fn_DisasterComponent_Infect = nullptr;
+fn_BuildingList_CheckCondition_t fn_BuildingList_CheckCondition = nullptr;
+
 // --- SaveLoadDialog::Load helpers ---
-fn_GameUpdateLoop_Ctor_t fn_GameUpdateLoop_Ctor = nullptr;
+// fn_GameUpdateLoop_Ctor — REMOVED, now reimplemented in saveloaddialog.cpp
+fn_UpdateLoop_Ctor_t fn_UpdateLoop_Ctor = nullptr;
+void** g_GameUpdateLoop_Vtable = nullptr;
 fn_LoaderLoop_Ctor_t fn_LoaderLoop_Ctor = nullptr;
 fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor = nullptr;
 fn_Random_Default_Ctor_t fn_Random_Default_Ctor = nullptr;
 void** g_GameLoadDialogLoopT_Vtable = nullptr;
 void** g_GameLoaderLoop_Vtable = nullptr;
 // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
-fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop = nullptr;
-fn_GetLoadingSoundString_t fn_GetLoadingSoundString = nullptr;
+// fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
+// fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
 fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor = nullptr;
 void** g_MenuDialogLoopT_Vtable = nullptr;
 
@@ -1918,15 +1961,21 @@ bool EngineFuncsInit() {
             fn_Audio_Scene_Pause = *reinterpret_cast<fn_Audio_Scene_Pause_t*>(dispatchAddr);
     }
 
-    // ScenarioDialog helper — exe function at 0x140077cb0
-    fn_ScenarioDialog_LoadSelected = reinterpret_cast<fn_ScenarioDialog_LoadSelected_t>(
-        ResolveAddr(Module::Exe, 0x140077cb0));
+    // ScenarioDialog helper — fn_ScenarioDialog_LoadSelected REMOVED, now reimplemented
+    // New helpers for reimplemented ScenarioDialog_LoadSelected:
+    fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(
+        ResolveExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z"));
+    fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(
+        ResolveExport("?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ"));
+    fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
+        ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ"));
+    g_pFileSystemSingleton2 = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140151278));  // exref for FileSystem singleton
+    fn_LoadScenarioFromSave = reinterpret_cast<fn_LoadScenarioFromSave_t>(
+        ResolveAddr(Module::Exe, 0x1400b49f0));
 
-    // ModDetailsDialog helpers — exe functions
-    fn_ModDetailsDialog_OpenUpdateDialog = reinterpret_cast<fn_ModDetailsDialog_OpenUpdateDialog_t>(
-        ResolveAddr(Module::Exe, 0x14006d400));
-    fn_ModDetailsDialog_DeleteMod = reinterpret_cast<fn_ModDetailsDialog_DeleteMod_t>(
-        ResolveAddr(Module::Exe, 0x14006d550));
+    // ModDetailsDialog/ModUpdateDialog vtable — exe .rdata pointers
+    g_ModUpdateDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c6c0);
 
     // SelectResourceUI helpers — exe functions (shared by Orchard/Pasture)
     fn_SelectResourceUI_GetResourceCount = reinterpret_cast<fn_SelectResourceUI_GetResourceCount_t>(
@@ -2098,6 +2147,36 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140101a80));
     fn_Toolbar_ToggleAll = reinterpret_cast<fn_Toolbar_ToggleAll_t>(
         ResolveAddr(Module::Exe, 0x140101ce0));
+    // Vtable pointers for toolbar-related dialogs
+    g_ToolbarDialog_Vtable = ResolveAddr(Module::Exe, 0x14015fa00);
+    g_PauseDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f550);
+    g_ToolUI_ChildDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f5a0);
+    // Factory::CreateObject from Runtime DLL
+    fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
+        ResolveExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z"));
+    // ToolController type ID — DAT_1401c6eb8
+    g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6eb8));
+    // ToolSetting type ID — from TypeInfo for ToolSetting class
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015f4c0));
+        if (exref && *exref) {
+            g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    // Toolbar item sort function
+    fn_ToolbarSort = reinterpret_cast<fn_ToolbarSort_t>(
+        ResolveAddr(Module::Exe, 0x140021790));
+    // TypeInfo for Toolbar external (used by ExternalFactory::FindNext)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015f980));
+        if (exref && *exref) {
+            g_TypeId_ToolbarExternal = reinterpret_cast<uint32_t*>(*exref);
+        }
+    }
+    // FUN_140100270: Find dialog by controller type
+    fn_FindDialogByControllerType = reinterpret_cast<fn_FindDialogByControllerType_t>(
+        ResolveAddr(Module::Exe, 0x140100270));
     // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
     // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
     // Sub-dependencies:
@@ -2113,8 +2192,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Runtime, 0x1800feb00));
     // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
     // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
-    fn_ToolbarDialog_UpdateButtons = reinterpret_cast<fn_ToolbarDialog_UpdateButtons_t>(
-        ResolveAddr(Module::Exe, 0x1400b8fd0));
+    // fn_ToolbarDialog_UpdateButtons — REPLACED with inline impl in toolbardialog.cpp
     // ToolbarElement type ID: exref at 0x1401516a8, used in ToolbarDialog::Update/OnEvent for IsDerivedFrom
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
@@ -2379,18 +2457,23 @@ bool EngineFuncsInit() {
     g_MainMenuDialog_BuildIdVtable = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x14015f5a0));
 
-    // MainMenuDialog Slot8 handler functions (private methods in exe)
-    fn_MainMenu_OpenNewGame    = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3620));
-    fn_MainMenu_OpenLoad       = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3770));
-    fn_MainMenu_OpenSave       = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B38B0));
-    fn_MainMenu_OpenOptions    = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3A10));
-    fn_MainMenu_ReturnToMenu   = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B4790));
-    fn_MainMenu_OpenAchievement = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B34C0));
-    fn_MainMenu_OpenScenario   = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3380));
-    fn_MainMenu_OpenGoal       = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3220));
-    fn_MainMenu_OpenMap        = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B3120));
-    fn_MainMenu_OpenTutorial   = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B2FE0));
-    fn_MainMenu_OpenMod        = reinterpret_cast<fn_MainMenu_Handler_t>(ResolveAddr(Module::Exe, 0x1400B2EA0));
+    // MainMenuDialog Slot8 handler functions — REIMPLEMENTED, now resolve dialog ctor ptrs
+    fn_NewGameDialog_Ctor = reinterpret_cast<fn_NewGameDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x140071040));
+    fn_SaveLoadDialog_Ctor = reinterpret_cast<fn_SaveLoadDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400b8270));
+    fn_OptionsDialog_Ctor = reinterpret_cast<fn_OptionsDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x140075150));
+    fn_ScenarioDialog_Ctor = reinterpret_cast<fn_ScenarioDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400786b0));
+    fn_MapParamsDialog_Ctor = reinterpret_cast<fn_MapParamsDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x14006bd80));
+    fn_ModDialog_Ctor = reinterpret_cast<fn_ModDialog_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x140070030));
+    g_AchievementDialog_Vtable = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x14015b020));
+    g_GoalDialog_Vtable = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x14015beb0));
 
     // --- NewGameDialog support ---
     g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
@@ -2406,10 +2489,17 @@ bool EngineFuncsInit() {
         fn_Random_RandFloat = reinterpret_cast<fn_Random_RandFloat_t>(
             ResolveAddr(Module::Runtime, 0x1800c7d40));
     }
-    fn_GenerateTownName = reinterpret_cast<fn_GenerateTownName_t>(
-        ResolveAddr(Module::Exe, 0x140099ac0));
-    fn_StartNewGame = reinterpret_cast<fn_StartNewGame_t>(
-        ResolveAddr(Module::Exe, 0x1400b4540));
+    // fn_GenerateTownName — REIMPLEMENTED, now resolve inner helpers
+    fn_NameDB_GenerateName = reinterpret_cast<fn_NameDB_GenerateName_t>(
+        ResolveAddr(Module::Exe, 0x1400a4b30));
+    g_TypeId_NameDatabase = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5a60));
+    // fn_String_SubString already resolved above
+    fn_String_Equals = reinterpret_cast<fn_String_Equals_t>(
+        ResolveExport("??8String@System@@QEBA_NPEBD@Z"));
+    fn_String_Append = reinterpret_cast<fn_String_Append_t>(
+        ResolveExport("??YString@System@@QEAAXPEBD@Z"));
+    // fn_StartNewGame — REIMPLEMENTED inline in newgamedialog.cpp
     g_TypeId_MapGenerator = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c59b8));
     g_TypeId_ClimateGenerator = reinterpret_cast<uint32_t*>(
@@ -2494,16 +2584,27 @@ bool EngineFuncsInit() {
             reinterpret_cast<fn_DialogInstance_AddController_t>(*dispatchPtr);
     }
 
-    // --- ModDialog helper functions (exe-local) ---
+    // --- ModDialog helper functions ---
     // fn_ModDialog_RefreshDisplay — REPLACED with static impl in moddialog.cpp
-    fn_ModDialog_ToggleMod = reinterpret_cast<fn_ModDialog_ToggleMod_t>(
-        ResolveAddr(Module::Exe, 0x14006e930));
-    fn_ModDialog_MoveToTop = reinterpret_cast<fn_ModDialog_MoveToTop_t>(
-        ResolveAddr(Module::Exe, 0x14006e660));
-    fn_ModDialog_ShowDetails = reinterpret_cast<fn_ModDialog_ShowDetails_t>(
-        ResolveAddr(Module::Exe, 0x14006e490));
-    fn_ModDialog_Apply = reinterpret_cast<fn_ModDialog_Apply_t>(
-        ResolveAddr(Module::Exe, 0x14006ea70));
+    // fn_ModDialog_ToggleMod — REPLACED with inline impl in moddialog.cpp
+    // fn_ModDialog_MoveToTop — REPLACED with inline impl in moddialog.cpp
+    // fn_ModDialog_ShowDetails — REPLACED with inline impl in moddialog.cpp
+    // fn_ModDialog_Apply — REPLACED with inline impl in moddialog.cpp
+    g_ModDetailsDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c670);
+    fn_ModDialog_CloseAndReload = reinterpret_cast<fn_ModDialog_CloseAndReload_t>(
+        ResolveAddr(Module::Exe, 0x14006e9b0));
+    fn_MainMenu_Reload = reinterpret_cast<fn_MainMenu_Reload_t>(
+        ResolveAddr(Module::Exe, 0x1400b4790));
+    fn_Game_ReloadWithSave = reinterpret_cast<fn_Game_ReloadWithSave_t>(
+        ResolveAddr(Module::Exe, 0x1400b49f0));
+    fn_SavedState_Ctor = reinterpret_cast<fn_SavedState_Ctor_t>(
+        ResolveExport("??0SavedState@Save@@QEAA@XZ"));
+    if (!fn_SavedState_Ctor) {
+        // Fallback: SavedState ctor might be in exe
+        fn_SavedState_Ctor = reinterpret_cast<fn_SavedState_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x18006f330));
+    }
+    g_ReloadDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c480);
 
     // --- IO::Serializer (shared globals) ---
     g_fn_Serializer_Ctor = reinterpret_cast<g_fn_Serializer_Ctor_t>(
@@ -2797,9 +2898,49 @@ bool EngineFuncsInit() {
     fn_Game_GetMonthFromTime = reinterpret_cast<fn_Game_GetMonthFromTime_t>(
         ResolveAddr(Module::Exe, 0x1400932A0));
 
+    // --- DebugUI deep-reimpl helpers ---
+    g_TypeId_FireComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c41e0));
+    g_TypeId_CitizenComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7cb8));
+    fn_Game_DestroyEntity = reinterpret_cast<fn_Game_DestroyEntity_t>(
+        ResolveAddr(Module::Exe, 0x140091e60));
+    fn_FireComponent_Ignite = reinterpret_cast<fn_FireComponent_Ignite_t>(
+        ResolveAddr(Module::Exe, 0x140049610));
+    fn_DiseaseComponent_Infect = reinterpret_cast<fn_DiseaseComponent_Infect_t>(
+        ResolveAddr(Module::Exe, 0x1400483a0));
+    fn_StorageComponent_GetCapacity = reinterpret_cast<fn_StorageComponent_GetCapacity_t>(
+        ResolveAddr(Module::Exe, 0x140128570));
+    fn_StorageComponent_SpawnItem = reinterpret_cast<fn_StorageComponent_SpawnItem_t>(
+        ResolveAddr(Module::Exe, 0x140128670));
+    fn_EntityFactory_CreateEntity = reinterpret_cast<fn_EntityFactory_CreateEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400c3720));
+    fn_EntityList_RegisterEntity = reinterpret_cast<fn_EntityList_RegisterEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400c48a0));
+    g_TypeId_ResidenceComponent_FC = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7900));
+    g_TypeId_ResidenceDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7938));
+    fn_ResidenceComponent_GetOccupantCount = reinterpret_cast<fn_ResidenceComponent_GetOccupantCount_t>(
+        ResolveAddr(Module::Exe, 0x140123070));
+    fn_ResidenceComponent_GetSpawnPoint = reinterpret_cast<fn_ResidenceComponent_GetSpawnPoint_t>(
+        ResolveAddr(Module::Exe, 0x140122e20));
+    fn_CitizenComponent_Setup = reinterpret_cast<fn_CitizenComponent_Setup_t>(
+        ResolveAddr(Module::Exe, 0x140117080));
+    fn_DisasterComponent_Infect = reinterpret_cast<fn_DisasterComponent_Infect_t>(
+        ResolveAddr(Module::Exe, 0x140116b90));
+    fn_BuildingList_CheckCondition = reinterpret_cast<fn_BuildingList_CheckCondition_t>(
+        ResolveAddr(Module::Exe, 0x1400893c0));
+
     // --- SaveLoadDialog::Load helpers ---
-    fn_GameUpdateLoop_Ctor = reinterpret_cast<fn_GameUpdateLoop_Ctor_t>(
-        ResolveAddr(Module::Exe, 0x140098060));
+    // fn_GameUpdateLoop_Ctor — REIMPLEMENTED, now resolve inner helpers
+    fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
+        ResolveExport("??0UpdateLoop@Engine@@QEAA@XZ"));
+    if (!fn_UpdateLoop_Ctor) {
+        fn_UpdateLoop_Ctor = reinterpret_cast<fn_UpdateLoop_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800dcc00));
+    }
+    g_GameUpdateLoop_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015e2f0));
     fn_LoaderLoop_Ctor = reinterpret_cast<fn_LoaderLoop_Ctor_t>(
         ResolveExport("??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z"));
     if (!fn_LoaderLoop_Ctor) {
@@ -2822,10 +2963,8 @@ bool EngineFuncsInit() {
     g_GameLoadDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140158800));
     g_GameLoaderLoop_Vtable      = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401588d0));
     // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
-    fn_SetDialogLoaderNextLoop = reinterpret_cast<fn_SetDialogLoaderNextLoop_t>(
-        ResolveAddr(Module::Exe, 0x14009a8f0));
-    fn_GetLoadingSoundString = reinterpret_cast<fn_GetLoadingSoundString_t>(
-        ResolveAddr(Module::Exe, 0x140099130));
+    // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
+    // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
     fn_MenuDialogLoopT_Ctor = reinterpret_cast<fn_MenuDialogLoopT_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14009bb00));
     g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
