@@ -2527,14 +2527,10 @@ bool EngineFuncsInit() {
     // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
     // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
-    fn_TownHallUI_UpdateProduction = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007c7f0));
-    fn_TownHallUI_UpdateAgriculture = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007c220));
-    fn_TownHallUI_UpdateInventory = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007def0));
-    fn_TownHallUI_UpdateAll = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007d590));
+    // fn_TownHallUI_UpdateProduction — reimplemented in townhallui.cpp
+    // fn_TownHallUI_UpdateAgriculture — reimplemented in townhallui.cpp
+    // fn_TownHallUI_UpdateInventory — reimplemented in townhallui.cpp
+    // fn_TownHallUI_UpdateAll — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionButton — reimplemented in townhallui.cpp
     // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
     g_pGameSingleton = reinterpret_cast<void**>(

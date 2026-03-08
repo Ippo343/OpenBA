@@ -2077,10 +2077,14 @@ extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProfessions; // FUN_140080160
 extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProduction;  // FUN_14007fc30
 extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory;   // FUN_14007f660
 extern fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture; // FUN_14007ebf0
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction;   // FUN_14007c7f0
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture;  // FUN_14007c220
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory;    // FUN_14007def0
-extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll;          // FUN_14007d590
+// fn_TownHallUI_UpdateProduction — reimplemented in townhallui.cpp (FUN_14007c7f0)
+// fn_TownHallUI_UpdateAgriculture — reimplemented in townhallui.cpp (FUN_14007c220)
+// fn_TownHallUI_UpdateInventory — reimplemented in townhallui.cpp (FUN_14007def0)
+// fn_TownHallUI_UpdateAll — reimplemented in townhallui.cpp (FUN_14007d590)
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction;   // kept for reference, nullptr
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture;  // kept for reference, nullptr
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory;    // kept for reference, nullptr
+extern fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll;          // kept for reference, nullptr
 
 // --- GroupRating helpers (hearts/stars display) ---
 // FUN_14006abf0: Init group rating element — iterates children of a group element,

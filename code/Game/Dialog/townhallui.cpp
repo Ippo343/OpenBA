@@ -4,19 +4,14 @@
 // TownHallUI (0x1E8 bytes), vtable at 0x14015dce0.
 // Extends DialogController (0x30 base). Multi-tab town overview panel.
 //
-// All 12 previously exe-resolved fn_TownHallUI_* functions are now
-// reimplemented as clean C++ or thin wrappers below.
+// All 15 TownHallUI methods are now fully reimplemented as clean C++.
+// No exe fn_* pointers remain — all game logic is in this file.
 //
-// Fully reimplemented (no exe fn_* pointers):
+// Fully reimplemented:
 //   InitGeneral, InitGraph, InitProfessions, InitProduction,
 //   InitInventory, InitAgriculture, UpdateGraph, UpdateGeneral,
-//   UpdateProfessions, OnProfessionButton, OnProfessionSpinner
-//
-// Thin wrappers (still call exe via fn_* pointers due to extreme complexity):
-//   UpdateInventory, UpdateAll, UpdateAgriculture, UpdateProduction
-//
-// These 4 involve deep BST traversal, component type queries, and
-// dynamic array management that requires more analysis to safely reimplement.
+//   UpdateProfessions, UpdateProduction, UpdateAgriculture,
+//   UpdateInventory, UpdateAll, OnProfessionButton, OnProfessionSpinner
 
 #include "ui/Panels.h"
 #include "engine_funcs.h"
@@ -628,36 +623,770 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
 }
 
 // ============================================================
+// BST in-order traversal helpers for TownHallUI
+// ============================================================
+
+// invBST node layout (0x38 bytes, node children at +0x20/+0x28):
+//   [0x00] key (entity ptr / uint64_t)
+//   [0x08] count0 (int32) — used count
+//   [0x0C] count1 (int32) — produced count
+//   [0x10] count2 (int32) — storage count
+//   [0x14] pad
+//   [0x18] parent (ptr)  -- actually data2 in some layouts
+//   [0x20] left child (ptr)
+//   [0x28] right child (ptr)
+//   [0x30] balance/color (uint32)
+
+// agriBST node layout (0x28 bytes, node children at +0x10/+0x18):
+//   [0x00] key (entity ptr)
+//   [0x08] parent (ptr)
+//   [0x10] left child (ptr)
+//   [0x18] right child (ptr)
+//   [0x20] balance (uint32)
+
+// Go to leftmost node of a BST subtree (children at leftOff/rightOff)
+static void* BST_Leftmost(void* node, int leftOff) {
+    if (!node) return nullptr;
+    while (*(void**)((uintptr_t)node + leftOff))
+        node = *(void**)((uintptr_t)node + leftOff);
+    return node;
+}
+
+// In-order successor for invBST (left=+0x20, right=+0x28, parent=+0x18)
+static void* InvBST_Next(void* node) {
+    if (!node) return nullptr;
+    uintptr_t n = (uintptr_t)node;
+    void* right = *(void**)(n + 0x28);
+    if (right) {
+        return BST_Leftmost(right, 0x20);
+    }
+    // Go up: find first ancestor where we came from the left
+    void* parent = *(void**)(n + 0x18);
+    while (parent) {
+        uintptr_t p = (uintptr_t)parent;
+        if (*(void**)(p + 0x20) == node) return parent; // came from left child
+        if (*(void**)(p + 0x28) == node) {
+            node = parent;
+            parent = *(void**)(p + 0x18);
+        } else {
+            break;
+        }
+    }
+    return nullptr;
+}
+
+// In-order successor for agriBST (left=+0x10, right=+0x18, parent=+0x08)
+static void* AgriBST_Next(void* node) {
+    if (!node) return nullptr;
+    uintptr_t n = (uintptr_t)node;
+    void* right = *(void**)(n + 0x18);
+    if (right) {
+        return BST_Leftmost(right, 0x10);
+    }
+    void* parent = *(void**)(n + 0x08);
+    while (parent) {
+        uintptr_t p = (uintptr_t)parent;
+        if (*(void**)(p + 0x10) == node) return parent;
+        if (*(void**)(p + 0x18) == node) {
+            node = parent;
+            parent = *(void**)(p + 0x08);
+        } else {
+            break;
+        }
+    }
+    return nullptr;
+}
+
+// Find entity component by type ID (inline helper matching Ghidra pattern)
+static void* FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
+    int compCount = *(int*)(entity + 0x30);
+    uintptr_t compArray = *(uintptr_t*)(entity + 0x28);
+    for (int i = 0; i < compCount; i++) {
+        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
+        // vtable[+0x10] = GetTypeId()
+        int id = (*(int (**)(void*))(**(uintptr_t**)&comp + 0x10))(comp);
+        if (id == (int)typeId) {
+            if (fn_IsDerivedFrom(comp, typeId))
+                return comp;
+        }
+    }
+    return nullptr;
+}
+
+// Look up a key in invBST (+0x138). Returns node or nullptr.
+static void* InvBST_Find(void* root, uint64_t key) {
+    void* node = root;
+    while (node) {
+        uint64_t nodeKey = *(uint64_t*)node;
+        if (key < nodeKey)
+            node = *(void**)((uintptr_t)node + 0x20);
+        else if (key > nodeKey)
+            node = *(void**)((uintptr_t)node + 0x28);
+        else
+            return node;
+    }
+    return nullptr;
+}
+
+// Element vtable call at +0x50 (SetValueLimit/SetDisplayMode)
+static void Element_VCall50(void* elem, int val) {
+    uintptr_t vtable = *(uintptr_t*)elem;
+    auto fn = *(void (**)(void*, int))(vtable + 0x50);
+    fn(elem, val);
+}
+
+// Element vtable call at +0x40 (SetVisible/SetEnabled)
+static void Element_VCall40(void* elem, int val) {
+    uintptr_t vtable = *(uintptr_t*)elem;
+    auto fn = *(void (**)(void*, int))(vtable + 0x40);
+    fn(elem, val);
+}
+
+// ============================================================
 // TownHallUI::UpdateProduction (was FUN_14007c7f0)
 // ============================================================
-// Exe-resolved due to extreme complexity (BST traversal,
-// component type queries, sorting, dynamic array management).
+// Traverses invBST (+0x138) in-order, collects entries with
+// ResourceType components, sorts them, then updates the
+// inventory table UI elements (+0x118 array).
 void TownHallUI_UpdateProduction(TownHallUI* self) {
-    fn_TownHallUI_UpdateProduction(self);
-}
+    uintptr_t s = (uintptr_t)self;
 
-// ============================================================
-// TownHallUI::UpdateInventory (was FUN_14007def0)
-// ============================================================
-// Exe-resolved due to extreme complexity.
-void TownHallUI_UpdateInventory(TownHallUI* self) {
-    fn_TownHallUI_UpdateInventory(self);
-}
+    // Read combo selections
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x128));
+    int invComboIdx = *(int*)(*(uintptr_t*)(s + 0x128) + 0x118);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x130));
+    int sortComboIdx = *(int*)(*(uintptr_t*)(s + 0x130) + 0x118);
 
-// ============================================================
-// TownHallUI::UpdateAll (was FUN_14007d590)
-// ============================================================
-// Exe-resolved due to extreme complexity.
-void TownHallUI_UpdateAll(TownHallUI* self) {
-    fn_TownHallUI_UpdateAll(self);
+    // Byte offset into BST node for the selected counter
+    int counterOffset = invComboIdx * 4 + 8;
+
+    // Collect entries from invBST in-order traversal
+    struct ProdEntry {
+        uint64_t entityPtr;
+        void*    resourceTypeComp;
+        int      value;
+        int      _pad;
+    };
+
+    ProdEntry* entries = nullptr;
+    int entryCount = 0;
+    int entryCap = 0;
+
+    void* bstRoot = *(void**)(s + 0x138);
+    if (bstRoot) {
+        // Start at leftmost node
+        void* node = BST_Leftmost(bstRoot, 0x20);
+        while (node) {
+            uintptr_t n = (uintptr_t)node;
+            uint64_t entityPtr = *(uint64_t*)n;
+
+            // Find ResourceType component on entity
+            void* resourceComp = FindComponentByTypeId(entityPtr, *g_TypeId_ResourceType);
+
+            // Read counter value at selected index
+            int counterVal = *(int*)(n + counterOffset);
+
+            // Push entry into dynamic array
+            int newCount = entryCount + 1;
+            if (newCount != entryCount) {
+                if (entryCap < newCount) {
+                    entryCap = newCount;
+                    if (entryCount != 0) entryCap = newCount * 3;
+                    ProdEntry* newBuf = (ProdEntry*)fn_MemAlloc(g_pMemAllocSingleton,
+                        (uint64_t)entryCap * (uint64_t)sizeof(ProdEntry), 8);
+                    int copyStart = 0;
+                    if (entries == newBuf) copyStart = entryCount;
+                    for (int i = copyStart; i < newCount; i++) {
+                        ProdEntry* dst = &newBuf[i];
+                        if (i < entryCount) {
+                            *dst = entries[i];
+                        } else {
+                            dst->entityPtr = entityPtr;
+                            dst->resourceTypeComp = resourceComp;
+                            dst->value = counterVal;
+                            dst->_pad = 0;
+                        }
+                    }
+                    if (entries != newBuf) fn_MemFreeStatic(entries);
+                    entries = newBuf;
+                } else {
+                    entries[entryCount].entityPtr = entityPtr;
+                    entries[entryCount].resourceTypeComp = resourceComp;
+                    entries[entryCount].value = counterVal;
+                    entries[entryCount]._pad = 0;
+                }
+                entryCount = newCount;
+            }
+
+            node = InvBST_Next(node);
+        }
+    }
+
+    // Sort entries
+    if (sortComboIdx == 0) {
+        if (entryCount > 1)
+            fn_InventorySort_Asc(entries, entryCount, &sortComboIdx, nullptr);
+    } else {
+        if (entryCount > 1)
+            fn_InventorySort_Desc(entries, entryCount, &sortComboIdx, nullptr);
+    }
+
+    // Update UI elements for each entry
+    int displayIdx = 0;
+    if (entryCount > 0) {
+        int64_t elemOff = 0;
+        for (int i = 0; i < entryCount; i++) {
+            uint64_t entityPtr = entries[i].entityPtr;
+
+            // Find ValueDescription component on entity
+            void* valDesc = FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
+
+            // Create sprite from ValueDescription+0x20 (spriteSheet) and +0x28 (spriteName)
+            uint8_t spriteBuf[16];
+            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valDesc + 0x20),
+                          (void*)((uintptr_t)valDesc + 0x28));
+
+            // Set sprite on label element
+            void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
+            fn_InternalBasePtr_CheckPtr(&labelElem);
+            fn_LabelElement_SetSprite(labelElem, spriteBuf);
+
+            // Create UIString from ValueDescription+0x30 (stringTable) and +0x38 (stringName)
+            uint8_t uiStrBuf[16];
+            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valDesc + 0x30),
+                            (void*)((uintptr_t)valDesc + 0x38));
+
+            // Set text on label element
+            void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
+            fn_InternalBasePtr_CheckPtr(&labelElem2);
+            fn_TextElement_SetText(labelElem2, uiStrBuf);
+
+            // Set number value on the number element (+8 from label)
+            uintptr_t tableBase = *(uintptr_t*)(s + 0x118);
+            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
+            fn_NumberElement_SetValueInt(*(void**)(tableBase + elemOff + 8), entries[i].value);
+
+            // Set active flag (vtable +0x50 with -1)
+            tableBase = *(uintptr_t*)(s + 0x118);
+            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
+            void* numElem = *(void**)(tableBase + elemOff + 8);
+            Element_VCall50(numElem, -1);
+
+            elemOff += 0x10;
+        }
+        displayIdx = entryCount;
+    }
+
+    // Clear remaining entries
+    if (displayIdx < (int)self->invTableCount) {
+        int64_t elemOff = (int64_t)displayIdx << 4;
+        for (int i = displayIdx; i < (int)self->invTableCount; i++) {
+            // Empty sprite
+            uint8_t emptySprite[16];
+            fn_Sprite_Default_Ctor(emptySprite);
+            void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
+            fn_InternalBasePtr_CheckPtr(&labelElem);
+            fn_LabelElement_SetSprite(labelElem, emptySprite);
+
+            // Empty string
+            uint8_t emptyStr[16];
+            fn_UIString_Ctor(emptyStr, 0, nullptr);
+            void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
+            fn_InternalBasePtr_CheckPtr(&labelElem2);
+            fn_TextElement_SetText(labelElem2, emptyStr);
+
+            // Set value to 0
+            uintptr_t tableBase = *(uintptr_t*)(s + 0x118);
+            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
+            fn_NumberElement_SetValueInt(*(void**)(tableBase + elemOff + 8), 0);
+
+            // Set inactive flag (vtable +0x50 with 0)
+            tableBase = *(uintptr_t*)(s + 0x118);
+            fn_InternalBasePtr_CheckPtr((void*)(tableBase + elemOff + 8));
+            void* numElem = *(void**)(tableBase + elemOff + 8);
+            Element_VCall50(numElem, 0);
+
+            elemOff += 0x10;
+        }
+    }
+
+    fn_MemFreeStatic(entries);
 }
 
 // ============================================================
 // TownHallUI::UpdateAgriculture (was FUN_14007c220)
 // ============================================================
-// Exe-resolved due to extreme complexity.
+// Builds temp BST from entity list, traverses agriBST (+0x1D8)
+// in-order, updates agriculture label elements with sprites
+// and text from SelectDescription components.
 void TownHallUI_UpdateAgriculture(TownHallUI* self) {
-    fn_TownHallUI_UpdateAgriculture(self);
+    uintptr_t s = (uintptr_t)self;
+    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+
+    // Build temporary BST from entity list at gameData+0x120/+0x128
+    // agriBST nodes: key=entityPtr, left=+0x10, right=+0x18, parent=+0x08
+    void* tempBSTRoot = nullptr;
+    int tempBSTCount = 0;
+    int entityCount = *(int*)(gameData + 0x128);
+
+    for (int i = 0; i < entityCount; i++) {
+        uint64_t entityPtr = *(uint64_t*)(*(uintptr_t*)(gameData + 0x120) + (uintptr_t)i * 8);
+
+        if (!tempBSTRoot) {
+            // First node — allocate root
+            void* node = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            if (node) {
+                *(uint64_t*)node = entityPtr;
+                *(uint64_t*)((uintptr_t)node + 0x08) = 0; // parent
+                *(uint64_t*)((uintptr_t)node + 0x10) = 0; // left
+                *(uint64_t*)((uintptr_t)node + 0x18) = 0; // right
+                *(uint32_t*)((uintptr_t)node + 0x20) = 0; // balance
+                tempBSTRoot = node;
+            }
+        } else {
+            // Insert into existing BST
+            void* current = tempBSTRoot;
+            void* parent = nullptr;
+            while (current) {
+                uint64_t curKey = *(uint64_t*)current;
+                if (entityPtr == curKey) goto next_entity; // already exists
+                parent = current;
+                if (entityPtr < curKey)
+                    current = *(void**)((uintptr_t)current + 0x10);
+                else
+                    current = *(void**)((uintptr_t)current + 0x18);
+            }
+            // Allocate new node
+            void* node = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+            if (node) {
+                *(uint64_t*)node = entityPtr;
+                *(uint64_t*)((uintptr_t)node + 0x08) = (uint64_t)parent;
+                *(uint64_t*)((uintptr_t)node + 0x10) = 0;
+                *(uint64_t*)((uintptr_t)node + 0x18) = 0;
+                *(uint32_t*)((uintptr_t)node + 0x20) = 0;
+                if (entityPtr < *(uint64_t*)parent)
+                    *(void**)((uintptr_t)parent + 0x10) = node;
+                else
+                    *(void**)((uintptr_t)parent + 0x18) = node;
+                // Rebalance
+                uint64_t newNodeAddr = (uint64_t)node;
+                fn_BST_Rebalance_0x28(&tempBSTRoot, (void*)&newNodeAddr);
+            }
+        }
+        tempBSTCount++;
+next_entity: ;
+    }
+
+    // Traverse agriBST (+0x1D8) in-order
+    void* agriBSTRoot = *(void**)(s + 0x1D8);
+    int displayIdx = 0;
+
+    if (agriBSTRoot) {
+        // Go to leftmost node (children at +0x10/+0x18)
+        void* node = BST_Leftmost(agriBSTRoot, 0x10);
+
+        while (node) {
+            uint64_t entityPtr = *(uint64_t*)node;
+
+            // Look up entity in temp BST
+            void* found = nullptr;
+            void* searchNode = tempBSTRoot;
+            while (searchNode) {
+                uint64_t sk = *(uint64_t*)searchNode;
+                if (entityPtr < sk)
+                    searchNode = *(void**)((uintptr_t)searchNode + 0x10);
+                else if (entityPtr > sk)
+                    searchNode = *(void**)((uintptr_t)searchNode + 0x18);
+                else {
+                    found = searchNode;
+                    break;
+                }
+            }
+
+            if (found) {
+                // Find SelectDescription component (DAT_1401c48a8) on entity
+                void* selectDesc = FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
+
+                if (selectDesc) {
+                    // Create sprite from SelectDescription+0x20/+0x28
+                    uint8_t spriteBuf[16];
+                    fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x20),
+                                  (void*)((uintptr_t)selectDesc + 0x28));
+
+                    uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+                    fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+                    fn_LabelElement_SetSprite(*(void**)labelPtr, spriteBuf);
+
+                    // Create UIString from SelectDescription+0x30/+0x38
+                    uint8_t uiStrBuf[16];
+                    fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x30),
+                                    (void*)((uintptr_t)selectDesc + 0x38));
+
+                    labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+                    fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+                    fn_TextElement_SetText(*(void**)labelPtr, uiStrBuf);
+
+                    // Vtable +0x50 call (SetDisplayMode)
+                    labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+                    fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+                    Element_VCall50(*(void**)labelPtr, 0);
+                }
+            }
+
+            // Show element (SetFlagsOnOff hide=0, show=1)
+            uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+            fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+            fn_Element_SetFlagsOnOff(*(void**)labelPtr, 0, 1);
+
+            displayIdx++;
+
+            // Move to next node in-order (children at +0x10/+0x18, parent at +0x08)
+            node = AgriBST_Next(node);
+        }
+    }
+
+    // Hide remaining label elements
+    if (displayIdx < *(int*)(s + 0x1D0)) {
+        for (int i = displayIdx; i < *(int*)(s + 0x1D0); i++) {
+            uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)i * 8;
+            fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+            fn_Element_SetFlagsOnOff(*(void**)labelPtr, 1, 0);
+        }
+    }
+
+    // Free temporary BST
+    if (tempBSTRoot) {
+        fn_BST_FreeNodes(&tempBSTRoot, *(void**)((uintptr_t)tempBSTRoot + 0x10));
+        fn_BST_FreeNodes(&tempBSTRoot, *(void**)((uintptr_t)tempBSTRoot + 0x18));
+        fn_MemFreeStatic(tempBSTRoot);
+    }
+}
+
+// ============================================================
+// TownHallUI::UpdateInventory (was FUN_14007def0)
+// ============================================================
+// For each profession, zeros counters, resizes entity arrays,
+// iterates entities to count workers per profession, finds
+// WorkplaceComponent/StorageLocationComponent to calculate
+// max worker slots, updates NumberEditElement values.
+void TownHallUI_UpdateInventory(TownHallUI* self) {
+    uintptr_t s = (uintptr_t)self;
+    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xb0);
+    int profCount = *(int*)(profListBase + 0x28);
+
+    // Phase 1: Zero counters and resize entity arrays for each profession
+    for (int p = 0; p < profCount; p++) {
+        uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + (uintptr_t)p * 0x40;
+        *(int*)(profEntry + 0x00) = 0;  // worker count = 0
+        *(int*)(profEntry + 0x04) = 0;  // secondary count = 0
+        // Resize entity ptr array at +0x30 to 0 elements
+        fn_DynArray_Resize((void*)(profEntry + 0x30), 0);
+    }
+
+    // Phase 2: For each profession, iterate entity BST at gameData+0x100
+    // to find entities matching profession type, count worker slots
+    for (int p = 0; p < profCount; p++) {
+        int64_t profEntryOff = (int64_t)p * 0x40;
+        uint64_t profTypeId = *(uint64_t*)(*(uintptr_t*)(profListBase + 0x20) + (uintptr_t)p * 8);
+
+        // Look up profession type in entity BST at gameData+0x100
+        void* bstNode = *(void**)(gameData + 0x100);
+        while (bstNode) {
+            uint64_t nodeKey = *(uint64_t*)bstNode;
+            if (profTypeId < nodeKey)
+                bstNode = *(void**)((uintptr_t)bstNode + 0x20);
+            else if (profTypeId > nodeKey)
+                bstNode = *(void**)((uintptr_t)bstNode + 0x28);
+            else
+                break;
+        }
+
+        int slotCount = 0;
+        if (bstNode) {
+            slotCount = (int)*(uint64_t*)((uintptr_t)bstNode + 0x10);
+        }
+
+        // For each slot in the profession BST node
+        for (int slot = 0; slot < slotCount; slot++) {
+            uintptr_t entityPtr = *(uintptr_t*)(*(uintptr_t*)((uintptr_t)bstNode + 0x08) +
+                                                (uintptr_t)slot * 8);
+
+            // Push entity into profession entry's entity array
+            uintptr_t profEntry = *(uintptr_t*)(s + 0x40);
+            int curCount = *(int*)(profEntry + 0x38 + profEntryOff);
+            int newCount = curCount + 1;
+            if (newCount != curCount) {
+                void* oldArr = *(void**)(profEntry + 0x30 + profEntryOff);
+                *(int*)(profEntry + 0x38 + profEntryOff) = newCount;
+                if (*(int*)(profEntry + 0x3c + profEntryOff) < newCount) {
+                    int newCap = newCount;
+                    if (newCount == curCount + 1 && curCount != 0)
+                        newCap = newCount * 3;
+                    *(int*)(profEntry + 0x3c + profEntryOff) = newCap;
+                    void* newArr = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
+                    *(void**)(profEntry + 0x30 + profEntryOff) = newArr;
+                }
+                int copyStart = 0;
+                if (oldArr == *(void**)(profEntry + 0x30 + profEntryOff))
+                    copyStart = curCount;
+                void* dstArr = *(void**)(profEntry + 0x30 + profEntryOff);
+                for (int i = copyStart; i < newCount; i++) {
+                    uint64_t* dst = (uint64_t*)((uintptr_t)dstArr + (uintptr_t)i * 8);
+                    *dst = 0;
+                    if (i < curCount)
+                        *dst = *(uint64_t*)((uintptr_t)oldArr + (uintptr_t)i * 8);
+                    else
+                        *dst = entityPtr;
+                }
+                if (oldArr != *(void**)(profEntry + 0x30 + profEntryOff))
+                    fn_MemFreeStatic(oldArr);
+            }
+
+            // Check entity for WorkplaceComponent -> active flag + worker count
+            fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
+            uintptr_t entity = entityPtr;
+
+            // Find WorkplaceComponent (DAT_1401c80e0)
+            void* workplaceComp = FindComponentByTypeId(entity, *g_TypeId_WorkplaceComponent);
+
+            uint64_t wpBP = 0;
+            fn_InternalBasePtr_Ctor(&wpBP, workplaceComp);
+            fn_InternalBasePtr_CheckPtr(&wpBP);
+
+            // Check if entity is active (workplace+0x50 != 0)
+            if (*(uint8_t*)(wpBP + 0x50) != 0) {
+                uintptr_t profEntryBase = *(uintptr_t*)(s + 0x40);
+                fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
+                uintptr_t entity2 = entityPtr;
+
+                // Find WorkplaceComponent again to get StorageLocationComponent
+                void* workplaceComp2 = FindComponentByTypeId(entity2, *g_TypeId_WorkplaceComponent);
+
+                uint64_t wpBP2 = 0;
+                fn_InternalBasePtr_Ctor(&wpBP2, workplaceComp2);
+                fn_InternalBasePtr_CheckPtr(&wpBP2);
+
+                // Get parent entity (wpBP2+0x10)
+                fn_InternalBasePtr_CheckPtr((void*)(wpBP2 + 0x10));
+                uintptr_t parentEntity = *(uintptr_t*)(wpBP2 + 0x10);
+
+                // Find StorageLocationComponent (DAT_1401c8070)
+                void* storageLocComp = FindComponentByTypeId(parentEntity, *g_TypeId_StorageLocationComponent);
+
+                uint64_t slBP = 0;
+                fn_InternalBasePtr_Ctor(&slBP, storageLocComp);
+                fn_InternalBasePtr_CheckPtr(&slBP);
+
+                // Get max count
+                int maxCount = *(int*)(slBP + 0x30);
+                if (maxCount == 0) {
+                    maxCount = fn_StorageCountQuery((void*)slBP);
+                    *(int*)(slBP + 0x30) = maxCount;
+                }
+
+                int* counterPtr = (int*)(profEntryBase + 4 + profEntryOff);
+                *counterPtr += maxCount;
+            }
+        }
+
+        // Update number+count display
+        uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + profEntryOff;
+        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x18));
+        fn_NumberElement_SetValueInt(*(void**)(profEntry + 0x18), *(int*)(profEntry + 0x04));
+
+        int entityArrayCount = *(int*)(profEntry + 0x38);
+        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x20));
+        fn_NumberElement_SetValueInt(*(void**)(profEntry + 0x20), entityArrayCount);
+
+        // Set visibility via vtable+0x40
+        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x28));
+        void* visElem = *(void**)(profEntry + 0x28);
+        Element_VCall40(visElem, entityArrayCount > 0 ? 1 : 0);
+    }
+
+    // Phase 3: Count adult citizens per profession
+    int citizenCount = *(int*)(gameData + 0xa8);
+    for (int c = 0; c < citizenCount; c++) {
+        uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)(gameData + 0xa0) + (uintptr_t)c * 8);
+        fn_InternalBasePtr_CheckPtr((void*)&citizen);
+
+        float age = *(float*)(citizen + 0x3c);
+        float adultAge = *(float*)(*(uintptr_t*)(citizen + 0x288) + 0x44);
+        uintptr_t school = *(uintptr_t*)(citizen + 0x208);
+
+        if (age >= adultAge && school == 0) {
+            // Adult citizen — look up profession in profBST (+0x50)
+            fn_InternalBasePtr_CheckPtr((void*)&citizen);
+            uint64_t profId = *(uint64_t*)(citizen + 0x1f0);
+            void* profNode = *(void**)(s + 0x50);
+            while (profNode) {
+                uint64_t nodeKey = *(uint64_t*)profNode;
+                if (profId < nodeKey)
+                    profNode = *(void**)((uintptr_t)profNode + 0x18);
+                else if (profId > nodeKey)
+                    profNode = *(void**)((uintptr_t)profNode + 0x20);
+                else
+                    break;
+            }
+            if (profNode) {
+                int profIdx = (int)*(uint64_t*)((uintptr_t)profNode + 0x08);
+                int* counterPtr = (int*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)profIdx * 0x40);
+                *counterPtr += 1;
+            }
+        }
+    }
+
+    // Phase 4: Update spinner elements with final counts
+    // First profession entry
+    int* firstEntry = *(int**)(s + 0x40);
+    fn_InternalBasePtr_CheckPtr((void*)(firstEntry + 4));
+    fn_NumberEditElement_SetValue(*(void**)(firstEntry + 4), *firstEntry);
+    firstEntry = *(int**)(s + 0x40);
+    fn_InternalBasePtr_CheckPtr((void*)(firstEntry + 4));
+    fn_NumberEditElement_SetMinMax(*(void**)(firstEntry + 4), *firstEntry, *firstEntry);
+
+    // Remaining profession entries
+    int totalProfs = *(int*)(s + 0x48);
+    for (int p = 1; p < totalProfs; p++) {
+        uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + (uintptr_t)p * 0x40;
+        fn_InternalBasePtr_CheckPtr((void*)(profEntry + 0x10));
+        fn_NumberEditElement_SetValue(*(void**)(profEntry + 0x10), *(int*)(profEntry));
+
+        int* firstEntryPtr = *(int**)(s + 0x40);
+        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40 + 0x10));
+        fn_NumberEditElement_SetMinMax(
+            *(void**)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40 + 0x10),
+            0, *firstEntryPtr + *(int*)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40));
+    }
+}
+
+// ============================================================
+// TownHallUI::UpdateAll (was FUN_14007d590)
+// ============================================================
+// Collects entities from 4 entity lists in game data, zeros
+// and populates invBST counters, then updates inventory and
+// agriculture table UI based on component types.
+void TownHallUI_UpdateAll(TownHallUI* self) {
+    uintptr_t s = (uintptr_t)self;
+    uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
+    uintptr_t* gdPtr = (uintptr_t*)gameData;
+
+    // Phase 1: For each tracked entity (gameData+0x110/+0x118),
+    // zero or insert entry in invBST
+    int trackedCount = *(int*)(gameData + 0x118);
+    for (int i = 0; i < trackedCount; i++) {
+        uint64_t entityPtr = *(uint64_t*)(*(uintptr_t*)(gameData + 0x110) + (uintptr_t)i * 8);
+
+        // Look up in invBST
+        void* bstNode = InvBST_Find(*(void**)(s + 0x138), entityPtr);
+        if (bstNode) {
+            // Zero the counters
+            *(uint64_t*)((uintptr_t)bstNode + 0x08) = 0;
+            *(uint32_t*)((uintptr_t)bstNode + 0x10) = 0;
+        } else {
+            // Insert new node with zeroed counters
+            struct { uint64_t key; uint64_t val1; uint32_t val2; } entry;
+            entry.key = entityPtr;
+            entry.val1 = 0;
+            entry.val2 = 0;
+            uint64_t retNode = 0;
+            fn_BST_Insert_0x14((void*)(s + 0x138), &retNode, &entry);
+        }
+    }
+
+    // Phase 2: Collect all entities from 4 entity lists
+    // Each list is at gameData[i*2] = array ptr, gameData[i*2+1] = count
+    void* entityBuf = nullptr;
+    int entityCount = 0;
+    int entityCap = 0;
+
+    for (int listIdx = 0; listIdx < 4; listIdx++) {
+        uintptr_t arrayPtr = gdPtr[listIdx * 2];
+        int listCount = (int)gdPtr[listIdx * 2 + 1];
+
+        for (int j = 0; j < listCount; j++) {
+            uint64_t entityPtr = *(uint64_t*)(arrayPtr + (uintptr_t)j * 8);
+            int newCount = entityCount + 1;
+            if (newCount != entityCount) {
+                if (entityCap < newCount) {
+                    int newCap = newCount;
+                    if (entityCount != 0) newCap = newCount * 3;
+                    entityCap = newCap;
+                    void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
+                    int copyStart = 0;
+                    if (entityBuf == newBuf) copyStart = entityCount;
+                    for (int k = copyStart; k < newCount; k++) {
+                        uint64_t* dst = (uint64_t*)((uintptr_t)newBuf + (uintptr_t)k * 8);
+                        *dst = 0;
+                        if (k < entityCount)
+                            *dst = *(uint64_t*)((uintptr_t)entityBuf + (uintptr_t)k * 8);
+                        else
+                            *dst = entityPtr;
+                    }
+                    if (entityBuf != newBuf) fn_MemFreeStatic(entityBuf);
+                    entityBuf = newBuf;
+                } else {
+                    *(uint64_t*)((uintptr_t)entityBuf + (uintptr_t)entityCount * 8) = entityPtr;
+                }
+                entityCount = newCount;
+            }
+        }
+    }
+
+    // Phase 3: For each collected entity, find components and update BST counters
+    uint64_t* entities = (uint64_t*)entityBuf;
+    for (int i = 0; i < entityCount; i++) {
+        uint64_t entityPtr = entities[i];
+
+        // Find StorageComponent_FC (DAT_1401c7e78)
+        fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
+        void* storageComp = FindComponentByTypeId(entityPtr, *g_TypeId_StorageComponent_FC);
+        uint64_t storageBP = 0;
+        fn_InternalBasePtr_Ctor(&storageBP, storageComp);
+
+        // Find BuildStateComponent (DAT_1401c7cf0)
+        fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
+        void* buildStateComp = FindComponentByTypeId(entityPtr, *g_TypeId_BuildStateComponent);
+        uint64_t buildStateBP = 0;
+        fn_InternalBasePtr_Ctor(&buildStateBP, buildStateComp);
+
+        int counterIndex; // which of the 3 counters to increment (offset = counterIndex*4 + 8)
+        if (buildStateBP != 0) {
+            counterIndex = 2; // under construction
+        } else {
+            // Check for BuildingComponent (DAT_1401c4b80)
+            fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
+            void* buildingComp = FindComponentByTypeId(entityPtr, *g_TypeId_BuildingComponent);
+            uint64_t buildingBP = 0;
+            fn_InternalBasePtr_Ctor(&buildingBP, buildingComp);
+            if (buildingBP != 0)
+                counterIndex = 1; // has building component
+            else
+                counterIndex = 0; // basic entity
+        }
+
+        // Iterate StorageComponent resource entries
+        fn_InternalBasePtr_CheckPtr(&storageBP);
+        if (storageBP == 0) continue;
+        int resourceCount = (int)*(uint64_t*)(storageBP + 0x30);
+
+        for (int r = 0; r < resourceCount; r++) {
+            fn_InternalBasePtr_CheckPtr(&storageBP);
+            uint64_t resourceEntity = *(uint64_t*)(*(uintptr_t*)(storageBP + 0x28) + (uintptr_t)r * 0x10);
+            int resourceQty = *(int*)(*(uintptr_t*)(storageBP + 0x28) + (uintptr_t)r * 0x10 + 8);
+
+            // Look up resource entity in invBST
+            void* bstNode = InvBST_Find(*(void**)(s + 0x138), resourceEntity);
+            if (bstNode) {
+                // Increment the appropriate counter
+                int* counterPtr = (int*)((uintptr_t)bstNode + counterIndex * 4 + 8);
+                *counterPtr += resourceQty;
+            }
+        }
+    }
+
+    fn_MemFreeStatic(entityBuf);
 }
 
 // ============================================================
