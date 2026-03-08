@@ -2494,13 +2494,13 @@ bool EngineFuncsInit() {
 
     // --- IO::Serializer (shared globals) ---
     g_fn_Serializer_Ctor = reinterpret_cast<g_fn_Serializer_Ctor_t>(
-        ResolveExport("?Serializer@IO@@QEAA@PEAVStream@1@H@Z"));
+        ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z"));
     g_fn_Serializer_Dtor = reinterpret_cast<g_fn_Serializer_Dtor_t>(
         ResolveExport("??1Serializer@IO@@QEAA@XZ"));
     g_fn_Serialize_Int = reinterpret_cast<g_fn_Serialize_Int_t>(
-        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAint@PEBD@Z"));
+        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z"));
     g_fn_Serializer_GetVersion = reinterpret_cast<g_fn_Serializer_GetVersion_t>(
-        ResolveExport("?GetVersion@Serializer@IO@@QEAAHXZ"));
+        ResolveExport("?GetVersion@Serializer@IO@@QEBAHXZ"));
 
     // --- TownHallUI support ---
     {

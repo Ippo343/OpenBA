@@ -67,20 +67,22 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_fn_String_Serialize((void*)(s + 0x40), serializer);
     g_fn_String_Serialize((void*)(s + 0x48), serializer);
 
-    // Serialize count at +0x58, then resize if loading, then serialize each string in array
+    // Serialize count into a LOCAL copy (original does NOT serialize directly into +0x58)
     uint32_t count = *(uint32_t*)(s + 0x58);
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x58), nullptr);
+    g_fn_Serialize_Int(serializer, (void*)&count, nullptr);
 
-    // Check if loading (serializer internal mode == 0)
+    // Check if loading (serializer internal mode == 0) — resize array with deserialized count
     uintptr_t ser_obj = *(uintptr_t*)((uintptr_t)serializer);
     if (*(int*)(ser_obj + 8) == 0) {
         fn_StringArray_Resize((void*)(s + 0x50), count);
     }
 
-    // Serialize each String in the array at +0x50 (ptr to String[count], each String = 8 bytes)
+    // Re-read array pointer AFTER potential resize, iterate with deserialized count
     void* arr_ptr = *(void**)(s + 0x50);
-    for (uint32_t i = 0; i < count; ++i) {
-        g_fn_String_Serialize((uint8_t*)arr_ptr + i * 8, serializer);
+    if ((int)count > 0) {
+        for (uint32_t i = 0; i < count; ++i) {
+            g_fn_String_Serialize((uint8_t*)arr_ptr + i * 8, serializer);
+        }
     }
 
     g_fn_Serialize_Int(serializer, (void*)(s + 100), nullptr); // +0x64
