@@ -221,25 +221,230 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
 // ============================================================
 // Toolbar_ShowGroup_Impl (was fn_Toolbar_ShowGroup, FUN_140102b60)
 //
-// Shows/hides a tool group dialog. Called with gameSubsys (ToolController at
+// Shows/hides a tool group dialog. Called with gameSubsys (PlayerController at
 // gameWorld+0x120) and a groupId (toolbar item type ID).
 //
 // Logic:
 //   1. If lockToggle flag (+0x80) is set and groupId != 0, use locked group (+0x88)
-//   2. If same group is already shown (+0x20 == groupId), close it
-//   3. If different group or no group: close old, look up new group in BST (+0x50),
-//      create ToolController via Factory, create ToolSetting if needed,
-//      configure and start the controller
+//   2. If same group already shown AND controller exists AND groupId != 0: early return
+//   3. Otherwise: store new groupId, close existing controller, find matching
+//      tool node in BST, create ToolController + ToolSetting, configure & start
 //
-// The BST at +0x10/+0x50 maps typeId -> {typeId, toolSettingRef, toolXY, ...}
+// PlayerController layout (relevant fields):
+//   +0x10: BST root node (tool registry, red-black tree of ToolNode)
+//   +0x20: int64_t activeGroupId (currently active tool group)
+//   +0x28: InternalBasePtr activeController (current ToolController)
+//   +0x80: uint8_t lockToggle (if set, forces locked group)
+//   +0x88: int64_t lockedGroupId (the locked group to use)
+//
+// ToolNode (BST node, 0x30 bytes, red-black tree):
+//   +0x00: uint32_t typeId (key)
+//   +0x08: uint32_t factoryTypeId (passed to Factory::CreateObject)
+//   +0x10: InternalBasePtr toolSetting (cached ToolSetting, lazily created)
+//   +0x18: ToolNode* parent
+//   +0x20: ToolNode* left
+//   +0x28: ToolNode* right
+//
+// GroupData (pointed to by activeGroupId):
+//   +0x28: void** subItems (array of component pointers)
+//   +0x30: int32_t subItemCount
+//
+// ToolController vtable:
+//   +0x20: Start()
+//   +0x28: Close()
+//   +0x58: GetToolSettingTypeId(retBuf) -> int* (returns ptr to typeId, 0 = none)
+//
+// ToolController instance fields (set before Start):
+//   +0x10: void* playerController (back-pointer)
+//   +0x18: InternalBasePtr toolSetting
+//   +0x20: int64_t groupId
 // ============================================================
 static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
-    // This function is very complex with BST traversal, Factory::CreateObject,
-    // ToolController/ToolSetting management. Use the original exe function
-    // which is still resolved and correct.
-    if (fn_Toolbar_ShowGroup) {
-        fn_Toolbar_ShowGroup(gameSubsys, groupId);
+    uintptr_t pc = (uintptr_t)gameSubsys;
+
+    // Step 1: If lockToggle is set and groupId is non-zero, override with locked group
+    if (*(uint8_t*)(pc + 0x80) != 0 && groupId != 0) {
+        groupId = *(int64_t*)(pc + 0x88);
     }
+
+    // Step 2: Early return if same group is already active with a live controller
+    int64_t activeGroup = *(int64_t*)(pc + 0x20);
+    if (activeGroup == groupId && *(int64_t*)(pc + 0x28) != 0 && groupId != 0) {
+        return;
+    }
+
+    // Step 3: Store new group, close existing controller if any
+    *(int64_t*)(pc + 0x20) = groupId;
+
+    if (*(int64_t*)(pc + 0x28) != 0) {
+        // CheckPtr on the InternalBasePtr
+        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+        // Call controller->Close() via vtable[5] (offset 0x28)
+        void* controller = *(void**)(pc + 0x28);
+        typedef void (*Close_t)(void* self);
+        Close_t closeFn = (Close_t)(*(uintptr_t*)(*(uintptr_t*)controller + 0x28));
+        closeFn(controller);
+        // DeletePtr releases the reference
+        fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
+    }
+
+    // Step 4: In-order BST traversal to find the matching tool node typeId.
+    // The BST at pc+0x10 maps typeIds to tool factory/setting info.
+    // We scan all nodes, checking each node's typeId against the group data's
+    // sub-item component list. The first match sets foundTypeId.
+    uint32_t foundTypeId = 0;
+
+    // Navigate to the in-order minimum (leftmost node)
+    uintptr_t node = *(uintptr_t*)(pc + 0x10);
+    if (node != 0) {
+        // Go to leftmost
+        while (*(uintptr_t*)(node + 0x20) != 0) {
+            node = *(uintptr_t*)(node + 0x20);
+        }
+
+        // In-order traversal
+        while (node != 0) {
+            // Check if this node's typeId matches a sub-item in the group data
+            int64_t groupData = *(int64_t*)(pc + 0x20);
+            if (groupData != 0) {
+                uint32_t nodeTypeId = *(uint32_t*)node;
+                int32_t subCount = *(int32_t*)(groupData + 0x30);
+                for (int i = 0; i < subCount; i++) {
+                    void* subItem = *(void**)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8);
+                    // Call vtable[2] (GetTypeId) on the sub-item
+                    typedef uint32_t (*GetTypeId_t)(void* self);
+                    uint32_t subTypeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+                    if (subTypeId == nodeTypeId) {
+                        // Verify sub-item pointer is non-null (redundant but matches original)
+                        if (*(uintptr_t*)(*(uintptr_t*)(groupData + 0x28) + (uintptr_t)i * 8) != 0) {
+                            foundTypeId = nodeTypeId;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // In-order successor: if right child exists, go to its leftmost descendant
+            uintptr_t right = *(uintptr_t*)(node + 0x28);
+            if (right != 0) {
+                node = right;
+                while (*(uintptr_t*)(node + 0x20) != 0) {
+                    node = *(uintptr_t*)(node + 0x20);
+                }
+            } else {
+                // Walk up to find ancestor where we came from the left
+                uintptr_t parent = *(uintptr_t*)(node + 0x18);
+                if (parent != 0) {
+                    if (*(uintptr_t*)(parent + 0x20) == node) {
+                        // We are the left child — parent is successor
+                        node = parent;
+                    } else {
+                        // We are the right child — walk up
+                        while (parent != 0 && *(uintptr_t*)(parent + 0x28) == node) {
+                            node = parent;
+                            parent = *(uintptr_t*)(parent + 0x18);
+                        }
+                        node = *(uintptr_t*)(node + 0x18);
+                    }
+                } else {
+                    // No parent — we were at root, done
+                    node = 0;
+                }
+            }
+        }
+    }
+
+    // Step 5: BST search for the foundTypeId to get the matching ToolNode
+    uintptr_t foundNode = 0;
+    uintptr_t searchNode = *(uintptr_t*)(pc + 0x10);
+    while (searchNode != 0) {
+        uint32_t key = *(uint32_t*)searchNode;
+        if (foundTypeId < key) {
+            searchNode = *(uintptr_t*)(searchNode + 0x20); // left
+        } else if (foundTypeId > key) {
+            searchNode = *(uintptr_t*)(searchNode + 0x28); // right
+        } else {
+            foundNode = searchNode;
+            break;
+        }
+    }
+    // If not found exactly, foundNode stays 0 — but the original code uses
+    // the last "less-or-equal" node (lower_bound). Match that behavior:
+    if (foundNode == 0) {
+        // Re-do search tracking lower_bound (last node where key <= foundTypeId)
+        searchNode = *(uintptr_t*)(pc + 0x10);
+        while (searchNode != 0) {
+            uint32_t key = *(uint32_t*)searchNode;
+            if (foundTypeId < key) {
+                searchNode = *(uintptr_t*)(searchNode + 0x20);
+            } else {
+                foundNode = searchNode;
+                if (foundTypeId <= key) break;
+                searchNode = *(uintptr_t*)(searchNode + 0x28);
+            }
+        }
+    }
+
+    // Step 6: Create ToolController via Factory::CreateObject
+    uint32_t factoryTypeId = *(uint32_t*)(foundNode + 0x08);
+    void* newObj = fn_Factory_CreateObject(*g_pFactorySingleton, factoryTypeId);
+
+    // IsDerivedFrom check for ToolController type
+    bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
+    void* toolController = isToolCtrl ? newObj : nullptr;
+
+    // Store as InternalBasePtr at pc+0x28
+    uint64_t ctrlRef = 0;
+    fn_InternalBasePtr_Ctor(&ctrlRef, toolController);
+    *(uint64_t*)(pc + 0x28) = ctrlRef;
+
+    // Step 7: Create ToolSetting if needed (lazy init on the ToolNode)
+    if (*(int64_t*)(foundNode + 0x10) == 0) {
+        // Ask the controller for its tool setting type via vtable[11] (offset 0x58)
+        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+        void* ctrl = *(void**)(pc + 0x28);
+
+        typedef int* (*GetSettingTypeId_t)(void* self, void* retBuf);
+        uint64_t settingBuf = 0;
+        GetSettingTypeId_t getSettingFn = (GetSettingTypeId_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x58));
+        int* settingTypePtr = getSettingFn(ctrl, &settingBuf);
+
+        if (*settingTypePtr != 0) {
+            // Re-query (matches original's double-call pattern)
+            fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+            ctrl = *(void**)(pc + 0x28);
+            getSettingFn = (GetSettingTypeId_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x58));
+            uint32_t* typeIdPtr = (uint32_t*)getSettingFn(ctrl, &settingBuf);
+            uint32_t settingFactoryId = *typeIdPtr;
+
+            // Create the ToolSetting object
+            void* settingObj = fn_Factory_CreateObject(*g_pFactorySingleton, settingFactoryId);
+            bool isToolSetting = fn_IsDerivedFrom(settingObj, *g_TypeId_ToolSetting);
+            void* toolSetting = isToolSetting ? settingObj : nullptr;
+
+            uint64_t settingRef = 0;
+            fn_InternalBasePtr_Ctor(&settingRef, toolSetting);
+            *(uint64_t*)(foundNode + 0x10) = settingRef;
+        }
+    }
+
+    // Step 8: Configure and start the controller
+    uint64_t toolSettingRef = *(uint64_t*)(foundNode + 0x10);
+    fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+    void* ctrl = *(void**)(pc + 0x28);
+
+    // Set controller fields
+    uintptr_t c = (uintptr_t)ctrl;
+    *(uintptr_t*)(c + 0x10) = pc;                             // back-pointer to PlayerController
+    *(int64_t*)(c + 0x20) = *(int64_t*)(pc + 0x20);          // groupId
+    *(uint64_t*)(c + 0x18) = toolSettingRef;                  // ToolSetting ref
+
+    // Call controller->Start() via vtable[4] (offset 0x20)
+    fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+    ctrl = *(void**)(pc + 0x28);
+    typedef void (*Start_t)(void* self);
+    Start_t startFn = (Start_t)(*(uintptr_t*)(*(uintptr_t*)ctrl + 0x20));
+    startFn(ctrl);
 }
 
 // ============================================================
