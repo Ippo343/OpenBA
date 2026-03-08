@@ -822,11 +822,11 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 // fn_StorageCountQuery / fn_CalcWorkerSlots — inline defined later (after fn_InternalBasePtr_CheckPtr)
 // FUN_14012e5c0: Calculate worker slot count for a StorageLocationComponent/WorkplaceComponent.
 
-// CropUI helper functions
-typedef void (*fn_CropUIPopulate_t)(void* cropUI);
-extern fn_CropUIPopulate_t fn_CropUI_PopulateCombo;        // FUN_140078830
-typedef int (*fn_CropUIExpected_t)(void* cropUI);
-extern fn_CropUIExpected_t fn_CropUI_GetExpectedCount;     // FUN_140078a40
+// CropUI helper functions — REIMPLEMENTED in code/Game/Dialog/cropui.cpp
+// typedef void (*fn_CropUIPopulate_t)(void* cropUI);
+// extern fn_CropUIPopulate_t fn_CropUI_PopulateCombo;        // FUN_140078830
+// typedef int (*fn_CropUIExpected_t)(void* cropUI);
+// extern fn_CropUIExpected_t fn_CropUI_GetExpectedCount;     // FUN_140078a40
 
 // CemeteryGetBurialCount — now inline in cemeteryui.cpp (CemeteryGetBurialCount_Impl)
 
@@ -1820,11 +1820,11 @@ extern fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleM
 
 // OptionsDialog::OnOk/OnCancel/OnApply — REMOVED: reimplemented in code/Game/Dialog/optionsdialog.cpp
 typedef void (*fn_OptionsDialog_SimpleFunc_t)(void* self);  // kept for PopulateInputBindList
-// OptionsDialog::PopulateInputBindList(self) — fills input binding list (FUN_140073580)
-extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList;
-// OptionsDialog::OnInputBindClick(self, element, bindIndex, slot) (FUN_1400729a0)
-typedef void (*fn_OptionsDialog_OnInputBindClick_t)(void* self, void* element, int bindIndex, int slot);
-extern fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick;
+// OptionsDialog::PopulateInputBindList — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
+// extern fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList;
+// OptionsDialog::OnInputBindClick — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
+// typedef void (*fn_OptionsDialog_OnInputBindClick_t)(void* self, void* element, int bindIndex, int slot);
+// extern fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick;
 
 // Video::Device singleton — needed for video config singletons
 // Already available as g_pVideoDeviceSingleton
@@ -1879,16 +1879,14 @@ extern fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext;
 // Original: FUN_1400213f0 (introsort) + FUN_1400b8370 (comparator) + FUN_140015ad0 (insertion sort)
 void StorageUI_SortItems(void* items, int count, void* scratch, void* scratch2);
 
-// MapUI helper: creates MaterialInstance + SpriteSheet from ImageBuffer, finds image element
-// FUN_14006cb00(self, imageBuffer, spriteSheetOut, materialOut, useBlend, elementName)
-typedef void (*fn_MapUI_SetupImage_t)(void* self, void* imageBuffer, void** spriteSheetOut,
-                                      void** materialOut, char useBlend, const char* elementName);
-extern fn_MapUI_SetupImage_t fn_MapUI_SetupImage;
+// MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp
+// fn_MapUI_SetupImage (FUN_14006cb00) — now MapUI_SetupImage()
+// fn_MapUI_HandleClick (FUN_14006c850) — now MapUI_HandleClick()
 
-// MapUI helper: translates map click coordinates to camera position
-// FUN_14006c850(param1, clickX, clickY, mapWidth, mapHeight)
-typedef void (*fn_MapUI_HandleClick_t)(void* param1, int clickX, int clickY, int mapWidth, int mapHeight);
-extern fn_MapUI_HandleClick_t fn_MapUI_HandleClick;
+// MapUI ground projection helper (FUN_14006c5b0) — projects camera frustum corners
+// to ground plane. Used internally by MapUI_HandleClick.
+typedef void (*fn_MapUI_ProjectCornersToGround_t)(void* outputCorners);
+extern fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround;
 
 // ============================================================
 // ToolUI support functions
@@ -2289,19 +2287,29 @@ extern fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder;  // 0x140059
 // set on ImageBuffer after construction. Resolved at runtime.
 extern uintptr_t g_NoiseUI_ImageBufferVtable;
 
-// NoiseUI setup helper (0x140071890) — creates MaterialInstance + SpriteSheet
-// from ImageBuffer, finds "noiseImage" element, sets sprite.
-// Uses "UIMaterialNoBlend.rsc" hardcoded.
-// RCX=self(NoiseUI*), RDX=imageBuffer, R8=spriteSheetOut(longlong**), R9=materialOut(void**)
-typedef void (*fn_NoiseUI_SetupImage_t)(void* self, void* imageBuffer,
-                                        void** spriteSheetOut, void** materialOut);
-extern fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage;
+// NoiseUI helpers — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
+// fn_NoiseUI_SetupImage (0x140071890) — now NoiseUI_SetupImage()
+// fn_NoiseUI_GenerateNoise (0x1400711D0) — now NoiseUI_GenerateNoise()
 
-// NoiseUI noise generation (0x1400711D0) — reads slider values from UI elements,
-// generates Perlin noise, renders 256x256 texture to ImageBuffer at self+0x30.
-// RCX=self(NoiseUI*)
-typedef void (*fn_NoiseUI_GenerateNoise_t)(void* self);
-extern fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise;
+// NoiseUI runtime dependencies (resolved from Runtime-x64.dll exports)
+// Utility::PerlinNoise::PerlinNoise(float, float, int, int)
+typedef void* (*fn_PerlinNoise_Ctor_t)(void* self, float persistance, float octaves,
+                                        int seed1, int seed2);
+extern fn_PerlinNoise_Ctor_t fn_PerlinNoise_Ctor;
+
+// Utility::PerlinNoise::Generate(float, float) const -> float
+typedef float (*fn_PerlinNoise_Generate_t)(const void* self, float x, float y);
+extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
+
+// System::Random::Random() — default ctor (seeds from time), uses fn_Random_Default_Ctor
+
+// System::Random::RandTol(int) -> int — returns random in [-range, +range]
+typedef int (*fn_Random_RandTol_t)(void* self, int range);
+extern fn_Random_RandTol_t fn_Random_RandTol;
+
+// System::String::ToFloat(const char*) -> float — static, parses string to float
+typedef float (*fn_String_ToFloat_t)(const char* str);
+extern fn_String_ToFloat_t fn_String_ToFloat;
 
 // ============================================================
 // DebugUI support

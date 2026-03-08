@@ -291,8 +291,8 @@ fn_RadiusCalc_t fn_RadiusCalc = nullptr;
 fn_RadiusDisplay_Remove_t fn_RadiusDisplay_Remove = nullptr;
 
 fn_GetActiveProductIndex_t fn_GetActiveProductIndex = nullptr;
-fn_CropUIPopulate_t fn_CropUI_PopulateCombo = nullptr;
-fn_CropUIExpected_t fn_CropUI_GetExpectedCount = nullptr;
+// fn_CropUI_PopulateCombo — REIMPLEMENTED in code/Game/Dialog/cropui.cpp
+// fn_CropUI_GetExpectedCount — REIMPLEMENTED in code/Game/Dialog/cropui.cpp
 // CemeteryGetBurialCount — now static inline in cemeteryui.cpp
 
 // WorkplaceComponent_Toggle (FUN_14012fc00)
@@ -473,8 +473,8 @@ fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupp
 
 // OptionsDialog exe helpers — OnOk/OnCancel/OnApply reimplemented in code/Game/Dialog/optionsdialog.cpp
 // PopulateInputBindList and OnInputBindClick now reimplemented in code/Game/Dialog/optionsdialog.cpp
-fn_OptionsDialog_SimpleFunc_t fn_OptionsDialog_PopulateInputBindList = nullptr;
-fn_OptionsDialog_OnInputBindClick_t fn_OptionsDialog_OnInputBindClick = nullptr;
+// fn_OptionsDialog_PopulateInputBindList — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
+// fn_OptionsDialog_OnInputBindClick — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
 
 // ShowDialog, DeletePtr, KeyMap input functions, dialog ctors
 fn_UI_ShowDialog_t fn_UI_ShowDialog = nullptr;
@@ -499,9 +499,10 @@ int32_t* g_pGameSettings = nullptr;
 fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext = nullptr;
 // fn_StorageUI_SortItems — reimplemented as StorageUI_SortItems() in storageui.cpp
 
-// MapUI helpers
-fn_MapUI_SetupImage_t fn_MapUI_SetupImage = nullptr;
-fn_MapUI_HandleClick_t fn_MapUI_HandleClick = nullptr;
+// MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp
+// fn_MapUI_SetupImage — now MapUI_SetupImage()
+// fn_MapUI_HandleClick — now MapUI_HandleClick()
+fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround = nullptr;
 
 // ToolUI support
 fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft = nullptr;
@@ -648,8 +649,14 @@ fn_Building_RemoveBuyOrder_t fn_Building_RemoveBuyOrder = nullptr;
 fn_Building_AddBuyToStorage_t fn_Building_AddBuyToStorage = nullptr;
 fn_Building_AddPurchaseOrder_t fn_Building_AddPurchaseOrder = nullptr;
 uintptr_t g_NoiseUI_ImageBufferVtable = 0;
-fn_NoiseUI_SetupImage_t fn_NoiseUI_SetupImage = nullptr;
-fn_NoiseUI_GenerateNoise_t fn_NoiseUI_GenerateNoise = nullptr;
+// fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
+// fn_NoiseUI_GenerateNoise — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
+// NoiseUI runtime dependencies
+fn_PerlinNoise_Ctor_t fn_PerlinNoise_Ctor = nullptr;
+fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
+// Random default ctor: uses existing fn_Random_Default_Ctor
+fn_Random_RandTol_t fn_Random_RandTol = nullptr;
+fn_String_ToFloat_t fn_String_ToFloat = nullptr;
 // --- ModDialog::Slot4 support ---
 fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
 fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial = nullptr;
@@ -1751,10 +1758,8 @@ bool EngineFuncsInit() {
 
     fn_GetActiveProductIndex = reinterpret_cast<fn_GetActiveProductIndex_t>(
         ResolveAddr(Module::Exe, 0x140119470));
-    fn_CropUI_PopulateCombo = reinterpret_cast<fn_CropUIPopulate_t>(
-        ResolveAddr(Module::Exe, 0x140078830));
-    fn_CropUI_GetExpectedCount = reinterpret_cast<fn_CropUIExpected_t>(
-        ResolveAddr(Module::Exe, 0x140078a40));
+    // fn_CropUI_PopulateCombo — REIMPLEMENTED in code/Game/Dialog/cropui.cpp
+    // fn_CropUI_GetExpectedCount — REIMPLEMENTED in code/Game/Dialog/cropui.cpp
     // CemeteryGetBurialCount — now static inline in cemeteryui.cpp
 
     // FindComponentByTypeId — entity component array search (FUN_1400c3680)
@@ -2236,11 +2241,9 @@ bool EngineFuncsInit() {
     fn_VideoDevice_IsMultisampleModeSupported = reinterpret_cast<fn_VideoDevice_IsMultisampleModeSupported_t>(
         ResolveExport("?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z"));
 
-    // --- OptionsDialog exe helpers (OnOk/OnCancel/OnApply reimplemented) ---
-    fn_OptionsDialog_PopulateInputBindList = reinterpret_cast<fn_OptionsDialog_SimpleFunc_t>(
-        ResolveAddr(Module::Exe, 0x140073580));
-    fn_OptionsDialog_OnInputBindClick = reinterpret_cast<fn_OptionsDialog_OnInputBindClick_t>(
-        ResolveAddr(Module::Exe, 0x1400729a0));
+    // --- OptionsDialog exe helpers — all REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp ---
+    // fn_OptionsDialog_PopulateInputBindList — reimplemented
+    // fn_OptionsDialog_OnInputBindClick — reimplemented
     fn_VideoDevice_GetInterface = reinterpret_cast<fn_VideoDevice_GetInterface_t>(
         ResolveExport("?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z"));
     fn_VideoDevice_GetInterfaceCount = reinterpret_cast<fn_VideoDevice_GetInterfaceCount_t>(
@@ -2277,11 +2280,11 @@ bool EngineFuncsInit() {
     }
     // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
 
-    // --- MapUI helpers ---
-    fn_MapUI_SetupImage = reinterpret_cast<fn_MapUI_SetupImage_t>(
-        ResolveAddr(Module::Exe, 0x14006cb00));
-    fn_MapUI_HandleClick = reinterpret_cast<fn_MapUI_HandleClick_t>(
-        ResolveAddr(Module::Exe, 0x14006c850));
+    // --- MapUI helpers — REIMPLEMENTED in code/Game/Dialog/mapui.cpp ---
+    // fn_MapUI_SetupImage — reimplemented as MapUI_SetupImage()
+    // fn_MapUI_HandleClick — reimplemented as MapUI_HandleClick()
+    fn_MapUI_ProjectCornersToGround = reinterpret_cast<fn_MapUI_ProjectCornersToGround_t>(
+        ResolveAddr(Module::Exe, 0x14006c5b0));
 
     // --- CitizenUI helpers ---
     // fn_FindComponent_CitizenAI — inline in engine_funcs.h (uses g_TypeId_CitizenAIComponent_FC)
@@ -2732,10 +2735,18 @@ bool EngineFuncsInit() {
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
-    fn_NoiseUI_SetupImage = reinterpret_cast<fn_NoiseUI_SetupImage_t>(
-        ResolveAddr(Module::Exe, 0x140071890));
-    fn_NoiseUI_GenerateNoise = reinterpret_cast<fn_NoiseUI_GenerateNoise_t>(
-        ResolveAddr(Module::Exe, 0x1400711D0));
+    // fn_NoiseUI_SetupImage — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
+    // fn_NoiseUI_GenerateNoise — REIMPLEMENTED in code/Game/Dialog/noiseui.cpp
+    // NoiseUI runtime dependencies
+    fn_PerlinNoise_Ctor = reinterpret_cast<fn_PerlinNoise_Ctor_t>(
+        ResolveExport("??0PerlinNoise@Utility@@QEAA@MMHH@Z"));
+    fn_PerlinNoise_Generate = reinterpret_cast<fn_PerlinNoise_Generate_t>(
+        ResolveExport("?Generate@PerlinNoise@Utility@@QEBAMMM@Z"));
+    // Random default ctor — already resolved as fn_Random_Default_Ctor above
+    fn_Random_RandTol = reinterpret_cast<fn_Random_RandTol_t>(
+        ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));
+    fn_String_ToFloat = reinterpret_cast<fn_String_ToFloat_t>(
+        ResolveExport("?ToFloat@String@System@@SAMPEBD@Z"));
 
     // --- DebugUI helpers ---
     // Weather_ResetTime (exe 0x1400944e0)
