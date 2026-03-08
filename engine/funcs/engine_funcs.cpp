@@ -527,8 +527,11 @@ fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround = nullptr;
 // ToolUI support
 fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft = nullptr;
 fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront = nullptr;
-fn_UIDesc_AddControllers_t fn_UIDesc_AddControllers = nullptr;
+// fn_UIDesc_AddControllers removed — reimplemented as UIDesc_AddControllers_Impl()
 uint32_t* g_TypeId_UIDescription = nullptr;
+fn_TabElement_AddTab_t fn_TabElement_AddTab = nullptr;
+fn_DialogInstance_AddControllerTab_t fn_DialogInstance_AddControllerTab = nullptr;
+fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6 = nullptr;
 
 // ModDetailsDialog support
 fn_Element_Hide_t fn_Element_Hide = nullptr;
@@ -2520,10 +2523,26 @@ bool EngineFuncsInit() {
         fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
             ResolveAddr(Module::Runtime, 0x180120440));
     }
-    fn_UIDesc_AddControllers = reinterpret_cast<fn_UIDesc_AddControllers_t>(
-        ResolveAddr(Module::Exe, 0x14012e100));
+    // fn_UIDesc_AddControllers — REIMPLEMENTED as UIDesc_AddControllers_Impl()
     g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7f90));
+    // TabElement::AddTab — dispatch table at 0x1401529c8
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529c8));
+        if (dispatch) fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(*dispatch);
+    }
+    // DialogInstance::AddController (5-arg, tab) — dispatch table at 0x1401529d0
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529d0));
+        if (dispatch) fn_DialogInstance_AddControllerTab =
+            reinterpret_cast<fn_DialogInstance_AddControllerTab_t>(*dispatch);
+    }
+    // DialogInstance::AddController (6-arg, non-tab) — dispatch table at 0x140151a90
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a90));
+        if (dispatch) fn_DialogInstance_AddController6 =
+            reinterpret_cast<fn_DialogInstance_AddController6_t>(*dispatch);
+    }
 
     // --- ModDetailsDialog support ---
     fn_Element_Hide = reinterpret_cast<fn_Element_Hide_t>(

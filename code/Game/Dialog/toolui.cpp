@@ -27,6 +27,110 @@ extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
                                         uint32_t x, uint32_t y);
 
 // ============================================================
+// UIDesc_AddControllers_Impl (was FUN_14012e100)
+// ============================================================
+// Iterates the controller entries in a UIDescription and registers each one
+// with the dialog instance. Each entry is 0x28 bytes:
+//   +0x00: uint32_t controllerTypeId
+//   +0x08: ExternalPtr<ElementDescription> elementDesc
+//   +0x10: ExternalPtr<DialogControllerConfig> config
+//   +0x18: ExternalPtr<ElementDescription> tabDesc
+//   +0x20: System::String elementName (8 bytes)
+//
+// For each entry, looks up the named element in the dialog. If the element
+// is a TabElement, creates a new tab page via AddTab and uses the 5-arg
+// AddController overload with the tab page. Otherwise, uses the 6-arg
+// AddController overload with the element description and name string.
+//
+// UIDescription layout:
+//   +0x30: void* entries array pointer
+//   +0x38: int entry count
+
+void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource) {
+    uintptr_t desc = (uintptr_t)uiDesc;
+    int count = *(int*)(desc + 0x38);
+    if (count <= 0) return;
+
+    uintptr_t entries = *(uintptr_t*)(desc + 0x30);
+
+    for (int i = 0; i < count; i++) {
+        uintptr_t entry = entries + (uintptr_t)i * 0x28;
+
+        // Look up the named element in the dialog
+        fn_InternalBasePtr_CheckPtr(dialogInstPtr);
+        void* dialogInst = *(void**)dialogInstPtr;
+
+        void* foundElement = nullptr;
+        void* nameStr = (void*)(entry + 0x20);
+        fn_DialogInstance_FindElement(dialogInst, &foundElement, nameStr);
+
+        if (foundElement == nullptr) {
+            // No matching element found — use 6-arg AddController (non-tab path)
+            uint32_t typeId = *(uint32_t*)entry;
+            fn_InternalBasePtr_CheckPtr(dialogInstPtr);
+            dialogInst = *(void**)dialogInstPtr;
+            fn_DialogInstance_AddController6(
+                dialogInst,
+                typeId,
+                dataSource,
+                *(void**)(entry + 0x10),   // controllerConfig
+                *(void**)(entry + 0x08),   // elementDesc
+                (void*)(entry + 0x20));    // nameStr
+            continue;
+        }
+
+        // Check if the found element is a TabElement
+        fn_InternalBasePtr_CheckPtr(&foundElement);
+        bool isTabElement = fn_IsA(foundElement, *g_TypeId_TabElement);
+
+        if (!isTabElement) {
+            // Not a tab — use 6-arg AddController (non-tab path)
+            uint32_t typeId = *(uint32_t*)entry;
+            fn_InternalBasePtr_CheckPtr(dialogInstPtr);
+            dialogInst = *(void**)dialogInstPtr;
+            fn_DialogInstance_AddController6(
+                dialogInst,
+                typeId,
+                dataSource,
+                *(void**)(entry + 0x10),   // controllerConfig
+                *(void**)(entry + 0x08),   // elementDesc
+                (void*)(entry + 0x20));    // nameStr
+            continue;
+        }
+
+        // Element is a TabElement — cast via IsDerivedFrom and use tab path
+        fn_InternalBasePtr_CheckPtr(&foundElement);
+        bool derived = fn_IsDerivedFrom(foundElement, *g_TypeId_TabElement);
+        void* tabElement = derived ? foundElement : nullptr;
+
+        // Wrap in InternalBasePtr
+        void* tabPtr = nullptr;
+        fn_InternalBasePtr_Ctor(&tabPtr, tabElement);
+
+        // Create a new tab page: AddTab(tabElement, retval, tabDesc, elementDesc)
+        // Non-trivial return ABI: this=RCX, retval=RDX, tabDesc=R8, elementDesc=R9
+        fn_InternalBasePtr_CheckPtr(&tabPtr);
+        void* tabPage = nullptr;
+        fn_TabElement_AddTab(
+            tabPtr,              // this (TabElement)
+            &tabPage,            // hidden return: InternalPtr<Element>
+            *(void**)(entry + 0x18),  // tabDesc
+            *(void**)(entry + 0x08)); // elementDesc
+
+        // Use 5-arg AddController with the tab page element
+        uint32_t typeId = *(uint32_t*)entry;
+        fn_InternalBasePtr_CheckPtr(dialogInstPtr);
+        dialogInst = *(void**)dialogInstPtr;
+        fn_DialogInstance_AddControllerTab(
+            dialogInst,
+            typeId,
+            dataSource,
+            *(void**)(entry + 0x10),  // controllerConfig
+            &tabPage);                // tab page element
+    }
+}
+
+// ============================================================
 // ToolUI::Slot4 (vtable +0x20) — Setup/populate tool panel
 // ============================================================
 // Checks data source type: if BuildComponent, stores directly at +0x30.
@@ -162,8 +266,8 @@ void ToolUI_Slot4(ToolUI* self) {
 
                 // Register sub-controllers from UIDescription
                 void* dialogInstPtr = (void*)(s + 0x18);
-                fn_UIDesc_AddControllers(entry, dialogInstPtr,
-                                         *(void**)(s + 0x28));
+                UIDesc_AddControllers_Impl(entry, dialogInstPtr,
+                                           *(void**)(s + 0x28));
                 return;
             }
         }

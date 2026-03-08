@@ -2026,13 +2026,34 @@ extern fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft;
 typedef void (*fn_UI_BringDialogToFront_t)(void* self, void* dialogPtr);
 extern fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront;
 
-// FUN_14012e100: UIDescription_AddControllers(uiDesc, dialogInstPtr, dataSource)
-// Iterates UIDescription entries and calls DialogInstance::AddController for each.
-typedef void (*fn_UIDesc_AddControllers_t)(void* uiDesc, void* dialogInstPtr, void* dataSource);
-extern fn_UIDesc_AddControllers_t fn_UIDesc_AddControllers;
+// FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
+// Iterates UIDescription controller entries, checks for TabElement targets,
+// and calls the appropriate AddController overload for each entry.
+// Old fn_* pointer removed; replaced by UIDesc_AddControllers_Impl().
+void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSource);
 
 // TypeId for UIDescription — DAT_1401c7f90
 extern uint32_t* g_TypeId_UIDescription;
+
+// UI::TabElement::AddTab(this, retval, tabDesc, elementDesc) -> InternalPtr<Element>
+// Non-trivial return ABI: RCX=this, RDX=retval, R8=tabDesc, R9=elementDesc
+// Resolved from exe dispatch table at 0x1401529c8
+typedef void* (*fn_TabElement_AddTab_t)(void* self, void* retval, void* tabDesc, void* elementDesc);
+extern fn_TabElement_AddTab_t fn_TabElement_AddTab;
+
+// UI::DialogInstance::AddController (5-arg, tab variant)
+// (this, typeId, dataSource, controllerConfig, tabPageElement)
+// Resolved from exe dispatch table at 0x1401529d0
+typedef void (*fn_DialogInstance_AddControllerTab_t)(void* self, uint32_t typeId,
+    void* dataSource, void* controllerConfig, void* tabPageElement);
+extern fn_DialogInstance_AddControllerTab_t fn_DialogInstance_AddControllerTab;
+
+// UI::DialogInstance::AddController (6-arg, non-tab variant)
+// (this, typeId, dataSource, controllerConfig, elementDesc, nameStr)
+// Resolved from exe dispatch table at 0x140151a90
+typedef void (*fn_DialogInstance_AddController6_t)(void* self, uint32_t typeId,
+    void* dataSource, void* controllerConfig, void* elementDesc, void* nameStr);
+extern fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6;
 
 // ============================================================
 // ModDetailsDialog support functions
