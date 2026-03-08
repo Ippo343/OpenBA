@@ -521,7 +521,7 @@ fn_Filename_Less_t fn_Filename_Less = nullptr;
 uint32_t* g_TypeId_CitizenDescription = nullptr;
 uint32_t* g_TypeId_HappinessComponent = nullptr;
 uint32_t* g_TypeId_ProfessionComponent = nullptr;
-fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original = nullptr;
+void** g_FollowDialog_Vtable = nullptr;
 // fn_StatusBarUI_StatusIconHandler — REPLACED with static StatusBarUI_StatusIconHandler_Impl() in statusbarui.cpp
 
 // ProductionUI support
@@ -2282,8 +2282,8 @@ bool EngineFuncsInit() {
     g_TypeId_ProfessionComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c70e8));
     // fn_FindProfessionComponent — inline in engine_funcs.h (uses g_TypeId_ProfessionComponent)
-    fn_CitizenUI_Slot9_Original = reinterpret_cast<fn_CitizenUI_Slot9_Original_t>(
-        ResolveAddr(Module::Exe, 0x1400650F0));
+    g_FollowDialog_Vtable = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x14015be00));
     // fn_StatusBarUI_StatusIconHandler — REPLACED with static impl in statusbarui.cpp
 
     // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId

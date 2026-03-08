@@ -1577,12 +1577,9 @@ extern uint32_t* g_TypeId_HappinessComponent;  // DAT_1401c7e08
 // ProfessionComponent type ID at DAT_1401c70e8 (used by FindProfessionComponent)
 extern uint32_t* g_TypeId_ProfessionComponent;  // DAT_1401c70e8
 
-// CitizenUI::Slot9 original — used as fallback for follow button (0x228)
-// The follow dialog construction has MSVC hidden stack parameters.
-// KEPT AS POINTER: FollowDialog ctor (FUN_1400695a0) uses MSVC hidden stack params
-// that cannot be reproduced from GCC without assembly glue. See citizenui.cpp.
-typedef void (*fn_CitizenUI_Slot9_Original_t)(void* self, uint64_t p2, int p3, int p4);
-extern fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original;
+// FollowDialog vtable pointer (resolved from 0x14015be00)
+// Used by CitizenUI_Slot9 to manually construct FollowDialog instances.
+extern void** g_FollowDialog_Vtable;
 
 // StatusBarUI_StatusIconHandler (FUN_14007a120) — status icon click handler
 // REPLACED: now static StatusBarUI_StatusIconHandler_Impl() in code/Game/Dialog/statusbarui.cpp

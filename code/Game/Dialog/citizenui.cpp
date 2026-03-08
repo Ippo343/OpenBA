@@ -461,13 +461,68 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
     }
     else if (param4 == 0x228) {
         // --- buttonFollow: open follow dialog ---
-        // This creates a FollowDialog (0xD8 bytes) from Dialog/Follow.rsc and adds
-        // it to the UI. The FollowDialog constructor (FUN_1400695a0) requires hidden
-        // stack parameters (entity ptr + null ptr) due to MSVC calling convention,
-        // making it impractical to call from GCC without assembly glue.
-        // Delegated to the original exe function.
-        if (fn_CitizenUI_Slot9_Original) {
-            fn_CitizenUI_Slot9_Original(self, 0, param3, param4);
+        // Creates a FollowDialog (0xD8 bytes) from Dialog/Follow.rsc and adds it to the UI.
+        // Manually constructs the object: DialogInstance base ctor + FollowDialog vtable + fields.
+        void* entityBase = *(void**)(s + 0x28);
+        bool isEntity = fn_IsDerivedFrom(entityBase, *g_TypeId_ComponentEntity);
+        void* entity = isEntity ? entityBase : nullptr;
+        uint64_t entityRef = 0;
+        fn_InternalBasePtr_Ctor(&entityRef, entity);
+        fn_InternalBasePtr_CheckPtr(&entityRef);
+
+        // Find CitizenAI component on entity
+        uint64_t citizenAIRef = 0;
+        fn_FindComponent_CitizenAI((void*)entityRef, &citizenAIRef);
+
+        // Load Dialog/Follow.rsc resource
+        uint8_t filename[8];
+        fn_Filename_CtorCStr(filename, "Dialog/Follow.rsc");
+        void* extResource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+
+        // Type-check the resource
+        void* checkedRes = nullptr;
+        if (extResource) {
+            bool isExternal = fn_IsDerivedFrom(extResource, *g_pExternalTypeId);
+            if (isExternal) checkedRes = extResource;
         }
+        fn_Filename_Dtor(filename);
+
+        // Allocate and construct FollowDialog (0xD8 bytes)
+        void* followDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
+        void* resultPtr = nullptr;
+        if (followDialog) {
+            // Construct base DialogInstance(self, userInterface, resource, nullParent, 0, 0, 0)
+            uint64_t nullParent = 0;
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+            void* userInterface = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
+            fn_DialogInstance_Ctor(followDialog, userInterface, checkedRes, &nullParent, 0, 0, 0);
+
+            // Patch vtable to FollowDialog
+            *(void**)followDialog = (void*)g_FollowDialog_Vtable;
+
+            // Set FollowDialog-specific fields
+            uintptr_t fd = (uintptr_t)followDialog;
+            *(uint64_t*)(fd + 0xB8) = citizenAIRef;   // entity to follow (CitizenAI IBP)
+
+            uint64_t selfRef = 0;
+            fn_InternalBasePtr_Ctor(&selfRef, (void*)self);
+            *(uint64_t*)(fd + 0xC0) = selfRef;         // controller back-reference
+
+            *(uint64_t*)(fd + 0xC8) = 0;               // textFollow (set by Slot4)
+            *(uint64_t*)(fd + 0xD0) = 0;               // textAction (set by Slot4)
+
+            resultPtr = followDialog;
+        }
+
+        // Store dialog ref at CitizenUI+0xE0
+        uint64_t dialogIBP = 0;
+        fn_InternalBasePtr_Ctor(&dialogIBP, resultPtr);
+        *(uint64_t*)(s + 0xE0) = dialogIBP;
+
+        // Add dialog to UI
+        uint64_t dialogRef = dialogIBP;
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+        void* ui = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
+        fn_UI_AddDialog(ui, &dialogRef);
     }
 }
