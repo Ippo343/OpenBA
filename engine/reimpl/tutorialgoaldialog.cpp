@@ -63,16 +63,9 @@ static fn_Filename_Ctor_t fn_Filename_Ctor = nullptr;
 // System::Filename::~Filename(this) — dtor
 // Note: fn_Filename_Dtor is now the global in engine_funcs.h; use it directly.
 
-// ResolveExternalByName(string*) — 0x14001b1d0 in exe
-// Resolves an External resource by looking up the string name in ExternalFactory.
-typedef void (*fn_ResolveExternalByName_t)(void* str);
-static fn_ResolveExternalByName_t fn_ResolveExternalByName_local = nullptr;
+// ResolveExternalByName — now using global inline ResolveExternalByName_Impl from engine_funcs.h
 
-// FindDialogByName(retval, nameStr) — 0x1400e1600 in exe
-// Parses dialog name string, looks up first matching dialog by type ID.
-// Uses non-trivial return ABI: retval is InternalBasePtr* passed as first arg.
-typedef void* (*fn_FindDialogByName_t)(void* retval, void* nameStr);
-static fn_FindDialogByName_t fn_FindDialogByName_local = nullptr;
+// FindDialogByName — using global fn_FindDialogByName from engine_funcs.h
 
 static bool s_localFuncsResolved = false;
 static void ResolveTutorialGoalDialogFuncs() {
@@ -103,11 +96,8 @@ static void ResolveTutorialGoalDialogFuncs() {
     if (!fn_Filename_Dtor && exref_FilenameDtor)
         fn_Filename_Dtor = *(fn_Filename_Dtor_t*)exref_FilenameDtor;
 
-    // ResolveExternalByName in exe at 0x14001b1d0
-    fn_ResolveExternalByName_local = (fn_ResolveExternalByName_t)ResolveAddr(Module::Exe, 0x14001b1d0);
-
-    // FindDialogByName in exe at 0x1400e1600
-    fn_FindDialogByName_local = (fn_FindDialogByName_t)ResolveAddr(Module::Exe, 0x1400e1600);
+    // ResolveExternalByName — now inline in engine_funcs.h (ResolveExternalByName_Impl)
+    // FindDialogByName — now using global fn_FindDialogByName from engine_funcs.h
 
     s_localFuncsResolved = true;
 #ifdef _DEBUG
@@ -115,7 +105,7 @@ static void ResolveTutorialGoalDialogFuncs() {
            (void*)fn_External_Dtor, (void*)fn_External_External,
            (void*)fn_Serializer_Ctor, (void*)fn_Serializer_Dtor,
            (void*)fn_String_Serialize, (void*)fn_Filename_Ctor, (void*)fn_Filename_Dtor,
-           (void*)fn_ResolveExternalByName_local);
+           (void*)ResolveExternalByName_Impl);
 #endif
 }
 
@@ -189,7 +179,7 @@ static uint64_t Reimpl_Shutdown(void* self, void* stream) {
     // If loading (serializer mode at +0x08 == 0), resolve external by name
     int serializerMode = *(int*)(*(uintptr_t*)serializer2 + 0x8);
     if (serializerMode == 0) {
-        fn_ResolveExternalByName_local((void*)(s + 0x28));
+        ResolveExternalByName_Impl((void*)(s + 0x28));
     }
 
     // Cleanup
@@ -251,7 +241,7 @@ static uint64_t Reimpl_OnInit(void* self) {
 
     // Find dialog by string name at +0x20
     uint64_t dialogPtr = 0;
-    fn_FindDialogByName_local(&dialogPtr, (void*)(s + 0x20));
+    FindDialogByName_Impl(&dialogPtr, (void*)(s + 0x20));
 
     if (dialogPtr == 0) {
         return 0;  // dialog not found — return false
@@ -282,12 +272,12 @@ static uint64_t Reimpl_OnInit(void* self) {
     }
 
     // Resolve the target External name at +0x28
-    fn_ResolveExternalByName_local((void*)(s + 0x28));
+    ResolveExternalByName_Impl((void*)(s + 0x28));
 
     // If self->data38 is set, compare with found description
     void* target = *(void**)(s + 0x38);
     if (target != nullptr) {
-        fn_ResolveExternalByName_local((void*)(s + 0x28));
+        ResolveExternalByName_Impl((void*)(s + 0x28));
         if (target != description) {
             return 0;  // mismatch — return false
         }

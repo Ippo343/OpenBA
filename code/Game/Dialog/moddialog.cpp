@@ -34,6 +34,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstring>
 
 // ============================================================
 // Helper types
@@ -48,6 +49,141 @@ typedef void  (*fn_ElementVt_Hide_t)(void* self, int hide);
 typedef void (*fn_ImageBuffer_Create_t)(void* self, int a1, int a2, int a3,
                                         int stride, int w, int h,
                                         int a8, int a9, int a10, int a11, int a12);
+
+// ============================================================
+// Filename equality check — compares two System::Filename/String objects
+// by their underlying string data. Both are 8-byte COW pointers.
+// ============================================================
+static bool Filename_Equals(const void* filenameA, const void* filenameB) {
+    const char* a = *(const char**)filenameA;
+    const char* b = *(const char**)filenameB;
+    if (a == b) return true;
+    if (!a || !b) return false;
+    // Compare using C string comparison (null-terminated)
+    return strcmp(a, b) == 0;
+}
+
+// ============================================================
+// ModDialog_RefreshDisplay_Impl (was fn_ModDialog_RefreshDisplay, FUN_14006eec0)
+//
+// Updates the mod list UI display. For each mod entry in the table:
+//   1. Sets name, author, description, version text parameters
+//   2. Checks for conflicts (same filename dependency in another enabled mod)
+//   3. Shows/hides conflict icon
+//   4. Copies thumbnail texture from mod data
+//
+// Entry struct (0x58 bytes) layout — see file header comment.
+// ============================================================
+static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+    void* modSingleton = *(void**)g_ppModificationSingleton;
+    if (!modSingleton) return;
+
+    int modCount = fn_Modification_GetCount(modSingleton);
+    if (modCount <= 0) return;
+
+    uintptr_t entriesBase = *(uintptr_t*)(s + 0xB8);  // mod entry array
+
+    for (int i = 0; i < modCount; i++) {
+        uintptr_t entry = entriesBase + (uintptr_t)i * 0x58;
+
+        // Get mod data
+        void* mod = fn_Modification_GetMod(modSingleton, i);
+        if (!mod) continue;
+
+        uintptr_t m = (uintptr_t)mod;
+
+        // Check for conflicts: another enabled mod depends on a file from this mod
+        bool hasConflict = false;
+        uint8_t enabled = *(uint8_t*)(m + 0x50);  // mod->m_enabled
+
+        if (enabled != 0) {
+            for (int j = 0; j < modCount; j++) {
+                if (j == i) continue;
+
+                void* otherMod = fn_Modification_GetMod(modSingleton, j);
+                uintptr_t om = (uintptr_t)otherMod;
+                uint8_t otherEnabled = *(uint8_t*)(om + 0x50);
+                if (otherEnabled == 0) continue;
+
+                // Check if this mod's filename appears in the other mod's dependency list
+                int depCount = *(int*)(m + 0x78);  // mod->m_filenameArrayCount
+                if (depCount <= 0) continue;
+
+                uintptr_t depArray = *(uintptr_t*)(m + 0x70);  // mod->m_filenameArrayData
+                for (int k = 0; k < depCount; k++) {
+                    // Compare other mod's filename (+0x58) with this mod's dependency[k]
+                    void* depFilename = (void*)(depArray + (int64_t)k * 8);
+                    if (Filename_Equals((void*)(om + 0x58), depFilename)) {
+                        hasConflict = true;
+                        goto conflict_done;
+                    }
+                }
+            }
+        }
+conflict_done:
+
+        // Set text parameters: name, author, description
+        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x00));
+        fn_TextElement_SetParameter(*(void**)(entry + 0x00), 0, (void*)m);  // mod->m_name
+
+        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x08));
+        fn_TextElement_SetParameter(*(void**)(entry + 0x08), 0, (void*)(m + 0x08));  // mod->m_author
+
+        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x18));
+        fn_TextElement_SetParameter(*(void**)(entry + 0x18), 0, (void*)(m + 0x10));  // mod->m_description
+
+        // Format version string: "versionMinor (versionString)"
+        {
+            uint32_t versionMajor = *(uint32_t*)(m + 0x18);
+            uint32_t versionMinor = *(uint32_t*)(m + 0x1C);
+
+            // GetVersionString returns a String for the version major (as game build version)
+            uint8_t buildStr[8] = {};
+            fn_Configuration_GetVersionString(buildStr, versionMajor, false);
+
+            uint8_t formatted[8] = {};
+            fn_String_Format(formatted, "%i (%s)", (uint64_t)versionMinor, *(const char**)buildStr);
+
+            fn_InternalBasePtr_CheckPtr((void*)(entry + 0x10));
+            fn_TextElement_SetParameter(*(void**)(entry + 0x10), 0, formatted);
+
+            fn_String_Dtor(formatted);
+            fn_String_Dtor(buildStr);
+        }
+
+        // Set enabled checkbox state: entry+0x28 element, +0xD8 = enabled byte
+        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
+        *(uint8_t*)(*(uintptr_t*)(entry + 0x28) + 0xD8) = enabled;
+
+        // Update child element (vtable call at +0x50 — some kind of refresh/layout)
+        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x30));
+        {
+            void* elem = *(void**)(entry + 0x30);
+            void** vtable = *(void***)elem;
+            typedef void (*fn_Refresh_t)(void*);
+            ((fn_Refresh_t)vtable[10])(elem);  // vtable[10] = offset +0x50
+        }
+
+        // Show/hide conflict icon
+        fn_InternalBasePtr_CheckPtr((void*)(entry + 0x20));
+        fn_Element_SetFlagsOnOff(*(void**)(entry + 0x20),
+                                  hasConflict ? 0 : 1,    // hideFlags: hide if no conflict
+                                  hasConflict ? 1 : 0);   // showFlags: show if conflict
+
+        // Copy thumbnail texture (48x48)
+        if (fn_VideoDevice_Lock && fn_VideoDevice_Unlock && fn_ImageBuffer_CopyToTexture) {
+            void* videoDevice = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
+            if (videoDevice) {
+                fn_VideoDevice_Lock(videoDevice);
+                void* imageBuffer = *(void**)(entry + 0x40);
+                void* thumbnailData = *(void**)(m + 0x30);  // mod->m_intArrayData (thumbnail pixels)
+                fn_ImageBuffer_CopyToTexture(imageBuffer, thumbnailData, 0x30, 0x30);
+                fn_VideoDevice_Unlock(videoDevice);
+            }
+        }
+    }
+}
 
 // ============================================================
 // ModDialog::Slot4 — Setup (0x14006F150)
@@ -327,7 +463,7 @@ void ModDialog_Slot4(ModDialog* self) {
     }
 
     // --- Post-loop: refresh display, add browser controller, hide browse UI ---
-    fn_ModDialog_RefreshDisplay((void*)self);
+    ModDialog_RefreshDisplay_Impl(self);
 
     // Load "Dialog/Mod.rsc:browser", add as controller with type g_TypeId_BrowserController
     {
@@ -426,14 +562,14 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
         if (id >= 2000 && id < 3000) {
             // Move up: swap(id-2000, id-2001)
             fn_Modification_Swap(modSingleton, id - 2000, id - 2001);
-            fn_ModDialog_RefreshDisplay((void*)self);
+            ModDialog_RefreshDisplay_Impl(self);
             goto done;
         }
 
         if (id >= 3000 && id < 4000) {
             // Move down: swap(id-3000, id-2999)
             fn_Modification_Swap(modSingleton, id - 3000, id - 2999);
-            fn_ModDialog_RefreshDisplay((void*)self);
+            ModDialog_RefreshDisplay_Impl(self);
             goto done;
         }
 

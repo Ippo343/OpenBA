@@ -13,134 +13,14 @@
 //                  Dialog\StatusBarUI.cpp
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
 
-// ============================================================
-// CitizenUI_UpdateIconDisplay (0x14006aed0) — local copy for statusbarui
-// Updates icon array fill/half icons based on currentVal/maxVal ratio.
-static void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float currentVal, float maxVal)
-{
-    uintptr_t* wholeArr = *(uintptr_t**)(iconArrayBase);
-    int         count    = *(int*)(iconArrayBase + 8);
-    uintptr_t* halfArr  = *(uintptr_t**)(iconArrayBase + 0x10);
-
-    if (count <= 0) return;
-
-    int fillLevel = (int)((currentVal / maxVal) * (float)(count * 2) + 0.5f);
-
-    int iVar2 = 1;
-    for (int i = 0; i < count; i++) {
-        uintptr_t offset = (uintptr_t)i * 8;
-        {
-            uintptr_t ibpAddr = (uintptr_t)wholeArr + offset;
-            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-            void* elem = *(void**)ibpAddr;
-            fn_Element_SetFlagsOnOff(elem,
-                (iVar2 >= fillLevel) ? 1 : 0,
-                (iVar2 < fillLevel) ? 1 : 0);
-        }
-        {
-            uintptr_t ibpAddr = (uintptr_t)halfArr + offset;
-            fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
-            void* elem = *(void**)ibpAddr;
-            fn_Element_SetFlagsOnOff(elem,
-                (iVar2 != fillLevel) ? 1 : 0,
-                (iVar2 == fillLevel) ? 1 : 0);
-        }
-        iVar2 += 2;
-    }
-}
-
-// CitizenUI_BuildIconArray (0x14006abf0) — local copy for statusbarui
-// Builds whole[] and half[] InternalBasePtr arrays from group element children.
-static void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemIBP)
-{
-    fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
-    void* groupElem = *(void**)groupElemIBP;
-    int childCount = fn_Element_ChildCount(groupElem);
-    if (childCount <= 0) return;
-
-    for (int childIdx = 0; childIdx < childCount; childIdx++) {
-        // --- Whole icon ---
-        {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "whole");
-            uint8_t childBuf[16];
-            fn_Element_Child(groupElem, childBuf, childIdx);
-            fn_InternalBasePtr_CheckPtr((void*)childBuf);
-            void* childElem = *(void**)childBuf;
-            uint8_t foundBuf[16] = {};
-            fn_FindElement(childElem, foundBuf, nameStr);
-            fn_String_Dtor(nameStr);
-            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
-            void* wholeElem = *(void**)foundBuf;
-            uint8_t ibpBuf[8];
-            fn_InternalBasePtr_Ctor(ibpBuf, wholeElem);
-
-            uint32_t oldCount = *(uint32_t*)(param1 + 8);
-            uint32_t newCount = oldCount + 1;
-            void*    oldPtr   = *(void**)(param1);
-            *(uint32_t*)(param1 + 8) = newCount;
-            int oldCap = *(int*)(param1 + 12);
-            if (oldCap < (int)newCount) {
-                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
-                *(int*)(param1 + 12) = newCap;
-                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-                *(void**)(param1) = newBuf;
-            }
-            void* curPtr = *(void**)(param1);
-            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
-            for (int k = copyStart; k < (int)newCount; k++) {
-                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
-                if (dst) { *dst = 0; *dst = (k < (int)oldCount) ? *(uint64_t*)((uintptr_t)oldPtr + k * 8) : *(uint64_t*)ibpBuf; }
-            }
-            if (oldPtr != curPtr) fn_MemFreeStatic(oldPtr);
-        }
-        // --- Half icon ---
-        {
-            uint8_t nameStr[8];
-            fn_String_Ctor_CStr(nameStr, "half");
-            fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
-            void* groupElem2 = *(void**)groupElemIBP;
-            uint8_t childBuf[16];
-            fn_Element_Child(groupElem2, childBuf, childIdx);
-            fn_InternalBasePtr_CheckPtr((void*)childBuf);
-            void* childElem = *(void**)childBuf;
-            uint8_t foundBuf[16] = {};
-            fn_FindElement(childElem, foundBuf, nameStr);
-            fn_String_Dtor(nameStr);
-            fn_InternalBasePtr_CheckPtr((void*)foundBuf);
-            void* halfElem = *(void**)foundBuf;
-            uint8_t ibpBuf[8];
-            fn_InternalBasePtr_Ctor(ibpBuf, halfElem);
-
-            uintptr_t halfBase = param1 + 0x10;
-            uint32_t oldCount = *(uint32_t*)(halfBase + 8);
-            uint32_t newCount = oldCount + 1;
-            void*    oldPtr   = *(void**)(halfBase);
-            *(uint32_t*)(halfBase + 8) = newCount;
-            int oldCap = *(int*)(halfBase + 12);
-            if (oldCap < (int)newCount) {
-                int newCap = (oldCount != 0) ? (int)newCount * 3 : (int)newCount;
-                *(int*)(halfBase + 12) = newCap;
-                void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
-                *(void**)(halfBase) = newBuf;
-            }
-            void* curPtr = *(void**)(halfBase);
-            int copyStart = (oldPtr == curPtr) ? (int)oldCount : 0;
-            for (int k = copyStart; k < (int)newCount; k++) {
-                uint64_t* dst = (uint64_t*)((uintptr_t)curPtr + k * 8);
-                if (dst) { *dst = 0; *dst = (k < (int)oldCount) ? *(uint64_t*)((uintptr_t)oldPtr + k * 8) : *(uint64_t*)ibpBuf; }
-            }
-            if (oldPtr != curPtr) fn_MemFreeStatic(oldPtr);
-        }
-        fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
-        groupElem = *(void**)groupElemIBP;
-        childCount = fn_Element_ChildCount(groupElem);
-    }
-}
+// CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
+// are now in the shared header: Dialog/citizen_icon_helpers.h
+// (removed local copies — see git history for originals)
 
 // ============================================================
 // Constants from exe .rdata
@@ -642,6 +522,140 @@ found_happiness:
 }
 
 // ============================================================
+// StatusBarUI_StatusIconHandler_Impl (was fn_StatusBarUI_StatusIconHandler, FUN_14007a120)
+//
+// Cycles through citizens to find the next one with the given status problem.
+// Uses self->statusCitizenIndex (+0x100) to remember position between clicks.
+// On match, navigates camera to the citizen (opens CitizenUI).
+//
+// iconIndex: 0=home, 1=food, 2=cold, 3=job, 4=tool, 5=disease
+// Bitmask: 1 << iconIndex tested against HappinessComponent status bits (+0xF0).
+// ============================================================
+static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex) {
+    void* gameWorld = *g_pGameWorldSingleton;
+    if (!gameWorld) return;
+
+    // Check game state flag: bit 10 of flags at game+0xD0 = locked/paused
+    uint32_t gameFlags = *(uint32_t*)((uintptr_t)gameWorld + 0xD0);
+    if ((gameFlags >> 10) & 1) return;
+
+    // Get citizen list entity from game world +0xF0
+    uintptr_t citizenList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
+    if (!citizenList) return;
+
+    // Citizen count at citizenList+0xA8, array at citizenList+0xA0
+    int citizenCount = *(int*)(citizenList + 0xA8);
+    if (citizenCount <= 0) return;
+
+    uintptr_t citizenArray = *(uintptr_t*)(citizenList + 0xA0);
+    uint32_t bitMask = 1u << (iconIndex & 0x1F);
+
+    // Increment cycling index
+    self->statusCitizenIndex++;
+    int checked = 0;
+
+    // Wrap if past end
+    if ((int)self->statusCitizenIndex >= citizenCount) {
+        self->statusCitizenIndex = 0;
+    }
+
+    while (true) {
+        int idx = (int)self->statusCitizenIndex;
+        if (idx >= citizenCount) {
+            self->statusCitizenIndex = 0;
+            // Continue outer loop (wrap and keep searching)
+        }
+
+        // Get citizen entity ptr at citizenArray[idx]
+        uintptr_t entityPtr = *(uintptr_t*)(citizenArray + (int64_t)self->statusCitizenIndex * 8);
+        if (!entityPtr) goto next;
+
+        // CheckPtr on entity (InternalBasePtr validation)
+        fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
+
+        {
+            // Get component entity at entity+0x10
+            uintptr_t compEntity = *(uintptr_t*)(entityPtr + 0x10);
+            fn_InternalBasePtr_CheckPtr((void*)&compEntity);
+
+            // Search components for HappinessComponent (DAT_1401c7e08)
+            void** compArray = *(void***)(compEntity + 0x30);
+            int compCount = *(int*)(compEntity + 0x38);
+            void* happinessComp = nullptr;
+
+            for (int i = 0; i < compCount; i++) {
+                void* comp = compArray[i];
+                if (!comp) continue;
+
+                // vtable slot +0x10 (index 2) returns type ID
+                void** vtable = *(void***)comp;
+                typedef int (*fn_GetTypeId_t)(void*);
+                int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
+
+                if (g_TypeId_HappinessComponent && (uint32_t)compTypeId == *g_TypeId_HappinessComponent) {
+                    // Confirm with IsDerivedFrom
+                    if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *g_TypeId_HappinessComponent)) {
+                        happinessComp = comp;
+                    }
+                    break;
+                }
+            }
+
+            // If no HappinessComponent found, store null
+            uintptr_t happinessPtr = (uintptr_t)happinessComp;
+            fn_InternalBasePtr_Ctor(&happinessPtr, happinessComp);
+
+            fn_InternalBasePtr_CheckPtr((void*)&happinessPtr);
+
+            // Check status bits at HappinessComponent+0xF0
+            uint32_t statusBits = happinessPtr ? *(uint32_t*)(happinessPtr + 0xF0) : 0;
+
+            if ((statusBits & bitMask) != 0 || checked >= citizenCount) {
+                // Found a match (or exhausted all citizens)
+                // Re-fetch entity for navigation
+                uintptr_t navEntity = *(uintptr_t*)(citizenArray + (int64_t)self->statusCitizenIndex * 8);
+                fn_InternalBasePtr_CheckPtr((void*)&navEntity);
+
+                uintptr_t navCompEntity = *(uintptr_t*)(navEntity + 0x10);
+                fn_InternalBasePtr_CheckPtr((void*)&navCompEntity);
+
+                // FindComponent_MeshInstance (uses same type ID DAT_1401c7e08)
+                uintptr_t meshComp = 0;
+                fn_FindComponent_MeshInstance((void*)navCompEntity, &meshComp);
+                fn_InternalBasePtr_CheckPtr((void*)&meshComp);
+
+                // Double-check: if meshComp's status doesn't have our bit, bail
+                if (meshComp) {
+                    uint32_t meshStatus = *(uint32_t*)(meshComp + 0xF0);
+                    if ((meshStatus & bitMask) == 0) return;
+                }
+
+                // Navigate to the citizen entity
+                // FUN_140103040(game+0x120, &dialogRef, &entityRef)
+                uintptr_t navEntity2 = *(uintptr_t*)(citizenArray + (int64_t)self->statusCitizenIndex * 8);
+                fn_InternalBasePtr_CheckPtr((void*)&navEntity2);
+                uintptr_t entityRef = *(uintptr_t*)(navEntity2 + 0x10);
+
+                uintptr_t dialogRef = *(uintptr_t*)((uintptr_t)self + 0x18);
+                void* entityController = *(void**)((uintptr_t)gameWorld + 0x120);
+
+                if (fn_Toolbar_CenterOnEntity) {
+                    fn_Toolbar_CenterOnEntity(entityController, &dialogRef, &entityRef);
+                }
+                return;
+            }
+        }
+
+next:
+        self->statusCitizenIndex++;
+        checked++;
+        if ((int)self->statusCitizenIndex >= citizenCount) {
+            self->statusCitizenIndex = 0;
+        }
+    }
+}
+
+// ============================================================
 // StatusBarUI_OnRemove (0x14007a3a0, vtable +0x48):
 // Status icon click handler.
 //
@@ -673,10 +687,9 @@ void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int ev
     int iconIndex = eventId - 100;
     if (iconIndex < 0 || iconIndex >= 6) return;
 
-    // Delegate to the shared helper which handles citizen search and navigation.
-    // The helper expects (self, iconIndex) and uses self->statusCitizenIndex (+0x100)
-    // to cycle through citizens with the given status problem.
-    if (fn_StatusBarUI_StatusIconHandler) {
-        fn_StatusBarUI_StatusIconHandler(self, iconIndex);
-    }
+    // Inline reimplementation of FUN_14007a120 (fn_StatusBarUI_StatusIconHandler).
+    // Cycles through citizens starting at self->statusCitizenIndex, finds the next
+    // citizen whose HappinessComponent status bits include (1 << iconIndex), then
+    // navigates the camera to that citizen and opens CitizenUI.
+    StatusBarUI_StatusIconHandler_Impl(self, iconIndex);
 }

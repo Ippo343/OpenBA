@@ -75,10 +75,15 @@ void* g_pMemAllocSingleton = nullptr;
 // Video::Device singleton
 void** g_pVideoDeviceSingleton = nullptr;
 
+// Video::Device Lock/Unlock
+fn_VideoDevice_Lock_t fn_VideoDevice_Lock = nullptr;
+fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock = nullptr;
+
 // String functions
 fn_String_Set_t fn_String_Set = nullptr;
 fn_String_Format_t fn_String_Format = nullptr;
 fn_String_Dtor_t fn_String_Dtor = nullptr;
+fn_String_LessThan_t fn_String_LessThan = nullptr;
 fn_String_Ctor_Default_t fn_String_Ctor_Default = nullptr;
 fn_String_Ctor_CStr_t fn_String_Ctor_CStr = nullptr;
 fn_String_Ctor_Copy_t fn_String_Ctor_Copy = nullptr;
@@ -321,7 +326,7 @@ fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState = nullptr;
 fn_Sprite_IsValid_t fn_Sprite_IsValid = nullptr;
 fn_UI_Play_t fn_UI_Play = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
-fn_SaveLoadDialog_PopulateFileList_t fn_SaveLoadDialog_PopulateFileList = nullptr;
+// fn_SaveLoadDialog_PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
 fn_EditElement_SetText_t fn_EditElement_SetText = nullptr;
 fn_Input_Device_Released_t fn_Input_Device_Released = nullptr;
 void** g_pInputDeviceSingleton = nullptr;
@@ -345,7 +350,7 @@ fn_KeyMap_Pressed_t fn_KeyMap_Pressed = nullptr;
 
 // UpgradeUI helpers
 uint32_t* g_TypeId_UpgradeDescription = nullptr;
-fn_DestroyComponent_StartUpgrade_t fn_DestroyComponent_StartUpgrade = nullptr;
+// fn_DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
 fn_ResidenceUI_GoToCitizen_t fn_ResidenceUI_GoToCitizen = nullptr;
 // fn_ResidenceUI_ArrayPush — now inline as ResidenceUI_ArrayPush_Impl in residenceui.cpp
@@ -412,7 +417,7 @@ uint32_t* g_TypeId_ToolbarElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
 fn_FindDialogByName_t fn_FindDialogByName = nullptr;
-fn_ResolveExternalByName_t fn_ResolveExternalByName = nullptr;
+// fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
 fn_External_External_t fn_External_External = nullptr;
 fn_External_Dtor_t fn_External_Dtor = nullptr;
 
@@ -486,7 +491,7 @@ int32_t* g_pGameSettings = nullptr;
 
 // StorageUI support
 fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext = nullptr;
-fn_StorageUI_SortItems_t fn_StorageUI_SortItems = nullptr;
+// fn_StorageUI_SortItems — reimplemented as StorageUI_SortItems() in storageui.cpp
 
 // MapUI helpers
 fn_MapUI_SetupImage_t fn_MapUI_SetupImage = nullptr;
@@ -512,7 +517,7 @@ uint32_t* g_TypeId_CitizenDescription = nullptr;
 uint32_t* g_TypeId_HappinessComponent = nullptr;
 uint32_t* g_TypeId_ProfessionComponent = nullptr;
 fn_CitizenUI_Slot9_Original_t fn_CitizenUI_Slot9_Original = nullptr;
-fn_StatusBarUI_StatusIconHandler_t fn_StatusBarUI_StatusIconHandler = nullptr;
+// fn_StatusBarUI_StatusIconHandler — REPLACED with static StatusBarUI_StatusIconHandler_Impl() in statusbarui.cpp
 
 // ProductionUI support
 // fn_TrackerComponent_Rebuild — inline in engine_funcs.h
@@ -553,7 +558,7 @@ fn_Modification_RefreshList_t fn_Modification_RefreshList = nullptr;
 fn_Modification_SaveList_t fn_Modification_SaveList = nullptr;
 fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
 fn_DialogInstance_AddController_t fn_DialogInstance_AddController = nullptr;
-fn_ModDialog_RefreshDisplay_t fn_ModDialog_RefreshDisplay = nullptr;
+// fn_ModDialog_RefreshDisplay — REPLACED with static ModDialog_RefreshDisplay_Impl() in moddialog.cpp
 fn_ModDialog_ToggleMod_t fn_ModDialog_ToggleMod = nullptr;
 fn_ModDialog_MoveToTop_t fn_ModDialog_MoveToTop = nullptr;
 fn_ModDialog_ShowDetails_t fn_ModDialog_ShowDetails = nullptr;
@@ -567,22 +572,49 @@ g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion = nullptr;
 
 // TownHallUI support
 uint32_t* g_TypeId_TabElement = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGeneral = nullptr;
+// fn_TownHallUI_InitGeneral — reimplemented as TownHallUI_InitGeneral() in townhallui.cpp
 fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProfessions = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_InitProduction = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_InitInventory = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_InitGraph = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_InitAgriculture = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGraph = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateGeneral = nullptr;
-fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProfessions = nullptr;
+// fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
+// fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
+// fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
 fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateProduction = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAgriculture = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateInventory = nullptr;
 fn_TownHallUI_SubFunc_t fn_TownHallUI_UpdateAll = nullptr;
-fn_TownHallUI_OnProfChange_t fn_TownHallUI_OnProfessionButton = nullptr;
-fn_TownHallUI_OnProfChange_t fn_TownHallUI_OnProfessionSpinner = nullptr;
+// fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
 void** g_pGameSingleton = nullptr;
+// GroupRating helpers
+fn_GroupRating_Init_t fn_GroupRating_Init = nullptr;
+fn_GroupRating_Update_t fn_GroupRating_Update = nullptr;
+// GraphElement functions
+fn_GraphElement_RemoveGraphs_t fn_GraphElement_RemoveGraphs = nullptr;
+fn_GraphElement_AddGraph_t fn_GraphElement_AddGraph = nullptr;
+fn_GraphElement_AddGraphPoint_t fn_GraphElement_AddGraphPoint = nullptr;
+// StringTable
+fn_StringTable_GetCount_t fn_StringTable_GetCount = nullptr;
+// Production stat query
+fn_QueryProductionStat_t fn_QueryProductionStat = nullptr;
+// Citizen assignment (spinner)
+fn_CitizenList_FindIdle_t fn_CitizenList_FindIdle = nullptr;
+fn_CitizenList_FindWorking_t fn_CitizenList_FindWorking = nullptr;
+fn_CitizenList_FindStudent_t fn_CitizenList_FindStudent = nullptr;
+fn_CitizenList_FindAny_t fn_CitizenList_FindAny = nullptr;
+// Array push helpers
+fn_ProfArrayPush_t fn_ProfArrayPush = nullptr;
+fn_ProdArrayPush_t fn_ProdArrayPush = nullptr;
+// BST helpers
+fn_BST_Rebalance_0x30_t fn_BST_Rebalance_0x30 = nullptr;
+fn_BST_Rebalance_0x28_t fn_BST_Rebalance_0x28 = nullptr;
+fn_BST_Insert_0x14_t fn_BST_Insert_0x14 = nullptr;
+fn_BST_FreeNodes_t fn_BST_FreeNodes = nullptr;
+// Inventory sort
+fn_InventorySort_Asc_t fn_InventorySort_Asc = nullptr;
+fn_InventorySort_Desc_t fn_InventorySort_Desc = nullptr;
+// GoToEntity
+fn_GoToEntity_t fn_GoToEntity = nullptr;
 
 // SpriteCaptureUI support
 uint32_t* g_TypeId_EditElement = nullptr;
@@ -651,7 +683,7 @@ fn_DialogLoaderLoopT_Ctor_t fn_DialogLoaderLoopT_Ctor = nullptr;
 fn_Random_Default_Ctor_t fn_Random_Default_Ctor = nullptr;
 void** g_GameLoadDialogLoopT_Vtable = nullptr;
 void** g_GameLoaderLoop_Vtable = nullptr;
-fn_SetEngineNextLoop_t fn_SetEngineNextLoop = nullptr;
+// fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
 fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop = nullptr;
 fn_GetLoadingSoundString_t fn_GetLoadingSoundString = nullptr;
 fn_MenuDialogLoopT_Ctor_t fn_MenuDialogLoopT_Ctor = nullptr;
@@ -769,6 +801,11 @@ fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod = nullptr;
 fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName = nullptr;
 uint32_t* g_TypeId_DialogInstance = nullptr;
 fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
+
+// Phase H: Sub-dependency blockers
+fn_Factory_GetTypeIdFromName_t fn_Factory_GetTypeIdFromName = nullptr;
+void** g_pFactorySingleton = nullptr;
+fn_IsA_t fn_IsA = nullptr;
 
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
@@ -1070,6 +1107,12 @@ bool EngineFuncsInit() {
     g_pVideoDeviceSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fe7a8));
 
+    // Video::Device Lock/Unlock (ordinals 3214 / 4462)
+    fn_VideoDevice_Lock = reinterpret_cast<fn_VideoDevice_Lock_t>(
+        ResolveOrdinal(3214));
+    fn_VideoDevice_Unlock = reinterpret_cast<fn_VideoDevice_Unlock_t>(
+        ResolveOrdinal(4462));
+
     // --- String functions ---
     fn_String_Set = reinterpret_cast<fn_String_Set_t>(
         ResolveExport("?Set@String@System@@QEAAXPEBD@Z"));
@@ -1091,6 +1134,10 @@ bool EngineFuncsInit() {
         fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
             ResolveAddr(Module::Runtime, 0x180006c80));
     }
+
+    // String::operator< — lexicographic comparison
+    fn_String_LessThan = reinterpret_cast<fn_String_LessThan_t>(
+        ResolveExport("?operator<@String@System@@QEBA_NAEBV12@@Z"));
 
     // String::String() — default ctor
     fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(
@@ -1808,9 +1855,7 @@ bool EngineFuncsInit() {
     fn_DateTime_AsString = reinterpret_cast<fn_DateTime_AsString_t>(
         ResolveExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ"));
 
-    // SaveLoadDialog::PopulateFileList — exe function at 0x1400b6ce0
-    fn_SaveLoadDialog_PopulateFileList = reinterpret_cast<fn_SaveLoadDialog_PopulateFileList_t>(
-        ResolveAddr(Module::Exe, 0x1400b6ce0));
+    // SaveLoadDialog::PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
 
     fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
         ResolveExport("?SetText@EditElement@UI@@QEAAXVString@2@@Z"));
@@ -1917,9 +1962,7 @@ bool EngineFuncsInit() {
     g_TypeId_UpgradeDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5868));
 
-    // DestroyComponent_StartUpgrade — FUN_14011dfa0
-    fn_DestroyComponent_StartUpgrade = reinterpret_cast<fn_DestroyComponent_StartUpgrade_t>(
-        ResolveAddr(Module::Exe, 0x14011dfa0));
+    // DestroyComponent_StartUpgrade — REMOVED, now reimplemented in destroyui.cpp
 
     // ResidenceUI helper (exe function)
     fn_ResidenceUI_GoToCitizen = reinterpret_cast<fn_ResidenceUI_GoToCitizen_t>(
@@ -2064,8 +2107,7 @@ bool EngineFuncsInit() {
     // TutorialGoalDialog helpers
     fn_FindDialogByName = reinterpret_cast<fn_FindDialogByName_t>(
         ResolveAddr(Module::Exe, 0x1400e1600));
-    fn_ResolveExternalByName = reinterpret_cast<fn_ResolveExternalByName_t>(
-        ResolveAddr(Module::Exe, 0x14001b1d0));
+    // fn_ResolveExternalByName — REPLACED with inline ResolveExternalByName_Impl in engine_funcs.h
     // Object::External::External — runtime dispatch at 0x140151e98
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
@@ -2209,8 +2251,7 @@ bool EngineFuncsInit() {
         fn_ExternalFactory_FindNext = reinterpret_cast<fn_ExternalFactory_FindNext_t>(
             ResolveAddr(Module::Runtime, 0x1800be9d0));
     }
-    fn_StorageUI_SortItems = reinterpret_cast<fn_StorageUI_SortItems_t>(
-        ResolveAddr(Module::Exe, 0x1400213f0));
+    // fn_StorageUI_SortItems — reimplemented in storageui.cpp as StorageUI_SortItems()
 
     // --- MapUI helpers ---
     fn_MapUI_SetupImage = reinterpret_cast<fn_MapUI_SetupImage_t>(
@@ -2229,8 +2270,7 @@ bool EngineFuncsInit() {
     // fn_FindProfessionComponent — inline in engine_funcs.h (uses g_TypeId_ProfessionComponent)
     fn_CitizenUI_Slot9_Original = reinterpret_cast<fn_CitizenUI_Slot9_Original_t>(
         ResolveAddr(Module::Exe, 0x1400650F0));
-    fn_StatusBarUI_StatusIconHandler = reinterpret_cast<fn_StatusBarUI_StatusIconHandler_t>(
-        ResolveAddr(Module::Exe, 0x14007a120));
+    // fn_StatusBarUI_StatusIconHandler — REPLACED with static impl in statusbarui.cpp
 
     // StringTable type ID: exref at 0x140151488 -> pointer -> uint32_t typeId
     {
@@ -2428,8 +2468,7 @@ bool EngineFuncsInit() {
     }
 
     // --- ModDialog helper functions (exe-local) ---
-    fn_ModDialog_RefreshDisplay = reinterpret_cast<fn_ModDialog_RefreshDisplay_t>(
-        ResolveAddr(Module::Exe, 0x14006eec0));
+    // fn_ModDialog_RefreshDisplay — REPLACED with static impl in moddialog.cpp
     fn_ModDialog_ToggleMod = reinterpret_cast<fn_ModDialog_ToggleMod_t>(
         ResolveAddr(Module::Exe, 0x14006e930));
     fn_ModDialog_MoveToTop = reinterpret_cast<fn_ModDialog_MoveToTop_t>(
@@ -2456,24 +2495,19 @@ bool EngineFuncsInit() {
             g_TypeId_TabElement = reinterpret_cast<uint32_t*>(*exref);
         }
     }
-    fn_TownHallUI_InitGeneral = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x1400807f0));
+    // fn_TownHallUI_InitGeneral — reimplemented in townhallui.cpp
     fn_TownHallUI_InitProfessions = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140080160));
     fn_TownHallUI_InitProduction = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x14007fc30));
     fn_TownHallUI_InitInventory = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x14007f660));
-    fn_TownHallUI_InitGraph = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007f0a0));
+    // fn_TownHallUI_InitGraph — reimplemented in townhallui.cpp
     fn_TownHallUI_InitAgriculture = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x14007ebf0));
-    fn_TownHallUI_UpdateGraph = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007e5b0));
-    fn_TownHallUI_UpdateGeneral = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007d030));
-    fn_TownHallUI_UpdateProfessions = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x14007ccb0));
+    // fn_TownHallUI_UpdateGraph — reimplemented in townhallui.cpp
+    // fn_TownHallUI_UpdateGeneral — reimplemented in townhallui.cpp
+    // fn_TownHallUI_UpdateProfessions — reimplemented in townhallui.cpp
     fn_TownHallUI_UpdateProduction = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x14007c7f0));
     fn_TownHallUI_UpdateAgriculture = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
@@ -2482,12 +2516,68 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14007def0));
     fn_TownHallUI_UpdateAll = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x14007d590));
-    fn_TownHallUI_OnProfessionButton = reinterpret_cast<fn_TownHallUI_OnProfChange_t>(
-        ResolveAddr(Module::Exe, 0x14007dca0));
-    fn_TownHallUI_OnProfessionSpinner = reinterpret_cast<fn_TownHallUI_OnProfChange_t>(
-        ResolveAddr(Module::Exe, 0x14007dd10));
+    // fn_TownHallUI_OnProfessionButton — reimplemented in townhallui.cpp
+    // fn_TownHallUI_OnProfessionSpinner — reimplemented in townhallui.cpp
     g_pGameSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
+
+    // --- GroupRating helpers ---
+    fn_GroupRating_Init = reinterpret_cast<fn_GroupRating_Init_t>(
+        ResolveAddr(Module::Exe, 0x14006abf0));
+    fn_GroupRating_Update = reinterpret_cast<fn_GroupRating_Update_t>(
+        ResolveAddr(Module::Exe, 0x14006aed0));
+
+    // --- GraphElement functions (Runtime DLL exports) ---
+    fn_GraphElement_RemoveGraphs = reinterpret_cast<fn_GraphElement_RemoveGraphs_t>(
+        ResolveExport("?RemoveGraphs@GraphElement@UI@@QEAAXXZ"));
+    fn_GraphElement_AddGraph = reinterpret_cast<fn_GraphElement_AddGraph_t>(
+        ResolveExport("?AddGraph@GraphElement@UI@@QEAAXK@Z"));
+    fn_GraphElement_AddGraphPoint = reinterpret_cast<fn_GraphElement_AddGraphPoint_t>(
+        ResolveExport("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z"));
+
+    // --- StringTable::GetCount (Runtime DLL) ---
+    fn_StringTable_GetCount = reinterpret_cast<fn_StringTable_GetCount_t>(
+        ResolveExport("?GetCount@StringTable@UI@@QEBAHXZ"));
+
+    // --- Production stat query ---
+    fn_QueryProductionStat = reinterpret_cast<fn_QueryProductionStat_t>(
+        ResolveAddr(Module::Exe, 0x140090f20));
+
+    // --- Citizen assignment (spinner) ---
+    fn_CitizenList_FindIdle = reinterpret_cast<fn_CitizenList_FindIdle_t>(
+        ResolveAddr(Module::Exe, 0x14008cbf0));
+    fn_CitizenList_FindWorking = reinterpret_cast<fn_CitizenList_FindWorking_t>(
+        ResolveAddr(Module::Exe, 0x14008ca20));
+    fn_CitizenList_FindStudent = reinterpret_cast<fn_CitizenList_FindStudent_t>(
+        ResolveAddr(Module::Exe, 0x14008c5f0));
+    fn_CitizenList_FindAny = reinterpret_cast<fn_CitizenList_FindAny_t>(
+        ResolveAddr(Module::Exe, 0x14008c4b0));
+
+    // --- Array push helpers ---
+    fn_ProfArrayPush = reinterpret_cast<fn_ProfArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x140015800));
+    fn_ProdArrayPush = reinterpret_cast<fn_ProdArrayPush_t>(
+        ResolveAddr(Module::Exe, 0x1400159b0));
+
+    // --- BST helpers ---
+    fn_BST_Rebalance_0x30 = reinterpret_cast<fn_BST_Rebalance_0x30_t>(
+        ResolveAddr(Module::Exe, 0x140013480));
+    fn_BST_Rebalance_0x28 = reinterpret_cast<fn_BST_Rebalance_0x28_t>(
+        ResolveAddr(Module::Exe, 0x1400149a0));
+    fn_BST_Insert_0x14 = reinterpret_cast<fn_BST_Insert_0x14_t>(
+        ResolveAddr(Module::Exe, 0x140014890));
+    fn_BST_FreeNodes = reinterpret_cast<fn_BST_FreeNodes_t>(
+        ResolveAddr(Module::Exe, 0x140014c30));
+
+    // --- Inventory sort ---
+    fn_InventorySort_Asc = reinterpret_cast<fn_InventorySort_Asc_t>(
+        ResolveAddr(Module::Exe, 0x140015200));
+    fn_InventorySort_Desc = reinterpret_cast<fn_InventorySort_Desc_t>(
+        ResolveAddr(Module::Exe, 0x140015500));
+
+    // --- GoToEntity ---
+    fn_GoToEntity = reinterpret_cast<fn_GoToEntity_t>(
+        ResolveAddr(Module::Exe, 0x140103040));
 
     // --- SpriteCaptureUI support ---
     // EditElement type ID: exref at 0x140151b50 (double-indirect)
@@ -2682,8 +2772,7 @@ bool EngineFuncsInit() {
     // Exe vtable pointers for subclasses of DialogLoaderLoopT and LoaderLoop
     g_GameLoadDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140158800));
     g_GameLoaderLoop_Vtable      = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401588d0));
-    fn_SetEngineNextLoop = reinterpret_cast<fn_SetEngineNextLoop_t>(
-        ResolveAddr(Module::Exe, 0x140097fb0));
+    // fn_SetEngineNextLoop — REPLACED with inline SetEngineNextLoop() in engine_funcs.h
     fn_SetDialogLoaderNextLoop = reinterpret_cast<fn_SetDialogLoaderNextLoop_t>(
         ResolveAddr(Module::Exe, 0x14009a8f0));
     fn_GetLoadingSoundString = reinterpret_cast<fn_GetLoadingSoundString_t>(
@@ -3122,6 +3211,38 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401514c8));
     fn_Sprite_DefaultCtor2 = *reinterpret_cast<fn_Sprite_DefaultCtor2_t*>(
         ResolveAddr(Module::Exe, 0x140152b48));
+
+    // --- Phase H: Sub-dependency blockers ---
+    // Factory::GetTypeIdFromName — Runtime DLL export
+    fn_Factory_GetTypeIdFromName = reinterpret_cast<fn_Factory_GetTypeIdFromName_t>(
+        ResolveExport("?GetTypeIdFromName@Factory@Object@@QEBAIPEBD_N@Z"));
+    if (!fn_Factory_GetTypeIdFromName) {
+        fn_Factory_GetTypeIdFromName = reinterpret_cast<fn_Factory_GetTypeIdFromName_t>(
+            ResolveOrdinal(2991));
+    }
+    // Factory singleton — dispatch table at 0x140152760 (double-indirect)
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152760));
+        if (dispatch) {
+            g_pFactorySingleton = dispatch;
+        }
+    }
+    // Object::Base::IsA(uint) — Runtime DLL export
+    fn_IsA = reinterpret_cast<fn_IsA_t>(
+        ResolveExport("?IsA@Base@Object@@QEBA_NI@Z"));
+    if (!fn_IsA) {
+        fn_IsA = reinterpret_cast<fn_IsA_t>(
+            ResolveOrdinal(3089));
+    }
+#ifdef _DEBUG
+    if (fn_Factory_GetTypeIdFromName && g_pFactorySingleton && fn_IsA) {
+        printf("[EngineFuncs] Phase H: Factory::GetTypeIdFromName + IsA + Factory singleton resolved\n");
+    }
+    if (fn_Factory_GetTypeIdFromName) {
+        printf("[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, "
+               "Game_SpawnResources_Impl now available as inline replacements\n");
+    }
+#endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
     if (!fn_InputDevice_Update) {

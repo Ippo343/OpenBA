@@ -169,19 +169,8 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
     }
 }
 
-// SetEngineNextLoop (FUN_140097fb0)
-// Sets cursor to null, fades to black, stores next loop ptr at engine+0xC8.
-// enginePtr = engine instance (e.g., game->m_engine), loaderLoop = next loop to run.
-static void SetEngineNextLoop_Impl(uintptr_t enginePtr, void* loaderLoop) {
-    void* ui = *(void**)(enginePtr + 0x98);
-    // Set cursor to null (cursor ptr from KeyMap singleton+0x38)
-    uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
-    if (fn_UI_SetCursor) fn_UI_SetCursor(ui, nullCursor);
-    // Fade to black (fadeIn=true, color=0xFF000000, reverse=false)
-    if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
-    // Store next loop ptr at engine+0xC8
-    *(void**)(enginePtr + 0xC8) = loaderLoop;
-}
+// SetEngineNextLoop — now inline in engine_funcs.h as SetEngineNextLoop()
+// (was static SetEngineNextLoop_Impl here, promoted to shared inline)
 
 // ============================================================
 // DebugUI::Slot8 (vtable +0x40) -- Update performance counters
@@ -399,32 +388,32 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     switch (param4) {
     // --- Resource spawn buttons ---
     // Each calls Game_SpawnResources(citizenList, resourceFlag, count)
-    case 300:  fn_Game_SpawnResources(citizenList, 0x400,     50);   return;  // Logs
-    case 301:  fn_Game_SpawnResources(citizenList, 0x800,     50);   return;  // Food
-    case 302:  fn_Game_SpawnResources(citizenList, 0x1000,    50);   return;  // Herbs
-    case 303:  fn_Game_SpawnResources(citizenList, 0x80,      50);   return;  // Stone
-    case 304:  fn_Game_SpawnResources(citizenList, 0x100,     50);   return;  // Iron
-    case 305:  fn_Game_SpawnResources(citizenList, 0x200,     50);   return;  // Firewood
-    case 306:  fn_Game_SpawnResources(citizenList, 0x20,      1000); return;  // Tool
-    case 307:  fn_Game_SpawnResources(citizenList, 0x2000,    25);   return;  // Coat
-    case 308:  fn_Game_SpawnResources(citizenList, 0x4000,    25);   return;  // Leather coat
-    case 309:  fn_Game_SpawnResources(citizenList, 0x10000,   50);   return;  // Herbs2
-    case 310:  fn_Game_SpawnResources(citizenList, 0x20000,   100);  return;  // Ale
-    case 311:  fn_Game_SpawnResources(citizenList, 0x40000,   100);  return;  // Resource type 18
-    case 312:  fn_Game_SpawnResources(citizenList, 0x80000,   100);  return;  // Resource type 19
-    case 313:  fn_Game_SpawnResources(citizenList, 0x100000,  100);  return;  // Resource type 20
-    case 314:  fn_Game_SpawnResources(citizenList, 0x200000,  100);  return;  // Resource type 21
-    case 315:  fn_Game_SpawnResources(citizenList, 0x400000,  100);  return;  // Resource type 22
-    case 316:  fn_Game_SpawnResources(citizenList, 0x800000,  100);  return;  // Resource type 23
-    case 317:  fn_Game_SpawnResources(citizenList, 0x1000000, 100);  return;  // Resource type 24
-    case 318:  fn_Game_SpawnResources(citizenList, 0x2000000, 100);  return;  // Resource type 25
-    case 319:  fn_Game_SpawnResources(citizenList, 0x4000000, 100);  return;  // Resource type 26
-    case 320:  fn_Game_SpawnResources(citizenList, 0x8000000, 100);  return;  // Resource type 27
+    case 300:  Game_SpawnResources_Impl(citizenList, 0x400,     50);   return;  // Logs
+    case 301:  Game_SpawnResources_Impl(citizenList, 0x800,     50);   return;  // Food
+    case 302:  Game_SpawnResources_Impl(citizenList, 0x1000,    50);   return;  // Herbs
+    case 303:  Game_SpawnResources_Impl(citizenList, 0x80,      50);   return;  // Stone
+    case 304:  Game_SpawnResources_Impl(citizenList, 0x100,     50);   return;  // Iron
+    case 305:  Game_SpawnResources_Impl(citizenList, 0x200,     50);   return;  // Firewood
+    case 306:  Game_SpawnResources_Impl(citizenList, 0x20,      1000); return;  // Tool
+    case 307:  Game_SpawnResources_Impl(citizenList, 0x2000,    25);   return;  // Coat
+    case 308:  Game_SpawnResources_Impl(citizenList, 0x4000,    25);   return;  // Leather coat
+    case 309:  Game_SpawnResources_Impl(citizenList, 0x10000,   50);   return;  // Herbs2
+    case 310:  Game_SpawnResources_Impl(citizenList, 0x20000,   100);  return;  // Ale
+    case 311:  Game_SpawnResources_Impl(citizenList, 0x40000,   100);  return;  // Resource type 18
+    case 312:  Game_SpawnResources_Impl(citizenList, 0x80000,   100);  return;  // Resource type 19
+    case 313:  Game_SpawnResources_Impl(citizenList, 0x100000,  100);  return;  // Resource type 20
+    case 314:  Game_SpawnResources_Impl(citizenList, 0x200000,  100);  return;  // Resource type 21
+    case 315:  Game_SpawnResources_Impl(citizenList, 0x400000,  100);  return;  // Resource type 22
+    case 316:  Game_SpawnResources_Impl(citizenList, 0x800000,  100);  return;  // Resource type 23
+    case 317:  Game_SpawnResources_Impl(citizenList, 0x1000000, 100);  return;  // Resource type 24
+    case 318:  Game_SpawnResources_Impl(citizenList, 0x2000000, 100);  return;  // Resource type 25
+    case 319:  Game_SpawnResources_Impl(citizenList, 0x4000000, 100);  return;  // Resource type 26
+    case 320:  Game_SpawnResources_Impl(citizenList, 0x8000000, 100);  return;  // Resource type 27
 
     // --- Disaster / entity manipulation buttons ---
-    case 321:  fn_Game_TriggerDisasterByType(0); return;  // Trigger disaster type 0
-    case 322:  fn_Game_TriggerDisasterByType(1); return;  // Trigger disaster type 1
-    case 323:  fn_Game_TriggerDisasterByType(2); return;  // Trigger disaster type 2
+    case 321:  Game_TriggerDisasterByType_Impl(0); return;  // Trigger disaster type 0
+    case 322:  Game_TriggerDisasterByType_Impl(1); return;  // Trigger disaster type 1
+    case 323:  Game_TriggerDisasterByType_Impl(2); return;  // Trigger disaster type 2
     case 324:  fn_Game_KillAllCitizens();        return;  // Kill all citizens
     case 325:  fn_Game_SpawnItemsInStorage();     return;  // Spawn items in all storage
     case 326:  fn_Game_SpawnCitizens();           return;  // Spawn new citizens

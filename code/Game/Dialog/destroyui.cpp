@@ -11,6 +11,7 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 
 // ============================================================
@@ -183,11 +184,289 @@ static void DestroyComponent_Destroy_Impl(void* destroyComp)
 }
 
 // ============================================================
-// DestroyComponent_StartUpgrade — NEEDS OPUS (0x14011dfa0)
+// StateMachine_Tick — resolved locally for StartUpgrade
 // ============================================================
-// 177 lines: complex state machine transition with multiple phases,
-// calls StateMachine_Tick and many internal state machine functions.
-// Kept as passthrough via fn_DestroyComponent_StartUpgrade.
+// Located at 0x1400a9660 in Application-x64.exe.
+// Signature: (stateMachine*, Time, bool processTransitions, bool processActions)
+typedef void (*fn_StateMachine_Tick_Local_t)(void* stateMachine, int64_t deltaTime,
+                                             char param3, char param4);
+static fn_StateMachine_Tick_Local_t g_StateMachine_Tick = nullptr;
+
+// ============================================================
+// State machine node vtable layout (linked list at BuildState+0x48)
+// ============================================================
+// Each node in the state machine linked list has:
+//   vtable+0x00: CanHandle(node, fromState) -> int (state index, or -1 if can't handle)
+//   vtable+0x08: (next pointer access, offset +0x08 = node->prev)
+//   vtable+0x10: (linked list next, offset +0x10 = node->next)
+//   vtable+0x18: HasExitHandler(node, smRef) -> bool
+//   vtable+0x20: CanTransition(node, smRef) -> bool
+//   vtable+0x28: DoTransition(node, smRef, fromState [, targetState]) -> void
+//   vtable+0x30: OnFirstEntry(node, smRef [, time]) -> bool
+//
+// State bytes in BuildState:
+//   +0x50: previousState (int8)
+//   +0x51: currentSubState (int8) — returned by CanHandle
+//   +0x52: targetState (int8) — -1 (0xFF) = needs processing
+//   +0x53: transitionTarget (int8)
+
+// ============================================================
+// ProcessStateMachine — inner state machine transition loop
+// ============================================================
+// Runs the state machine through its transition cycle.
+// This is the core loop that appears twice in StartUpgrade:
+// once to exit the current state, and once to enter the new state.
+//
+// Parameters:
+//   buildState: pointer to BuildState component
+//   smPtrAddr: address of the state machine head pointer (BuildState+0x48)
+//   isFirstCall: true on first invocation (triggers OnFirstEntry call)
+//   time: optional Time value (only used with OnFirstEntry on second call)
+static void ProcessStateMachine(uintptr_t buildState, uintptr_t* smPtrAddr,
+                                 bool isFirstCall, void* time) {
+    if (*(int8_t*)(buildState + 0x52) < 0) goto first_entry_check;
+
+    do {
+        do {
+            // --- Exit current state if state is valid ---
+            if (*(int8_t*)(buildState + 0x50) >= 0) {
+                int subState = (int)*(int8_t*)(buildState + 0x51);
+                uintptr_t node = *smPtrAddr;
+
+                // Walk linked list to find handler that can handle current state
+                // and has CanTransition returning true
+                while (true) {
+                    if (subState >= 0) {
+                        // vtable+0x20: CanTransition(node, smRef) -> bool
+                        typedef bool (*fn_CanTransition_t)(void* node, void* smRef);
+                        bool canTrans = ((fn_CanTransition_t)(*(void**)(*(uintptr_t*)node + 0x20)))
+                                        ((void*)node, (void*)smPtrAddr);
+                        if (canTrans) break;
+                    }
+                    // Move to next node in linked list (offset +0x08)
+                    node = *(uintptr_t*)(node + 0x08);
+                    if (node == 0) break;
+                    // vtable+0x00: CanHandle(node, fromState) -> int
+                    typedef int (*fn_CanHandle_t)(void* node, int fromState);
+                    subState = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)node)))
+                               ((void*)node, (int)*(int8_t*)(buildState + 0x50));
+                }
+
+                // If target state is valid, call DoTransition
+                if (*(int8_t*)(buildState + 0x53) >= 0) {
+                    // vtable+0x28: DoTransition(node, smRef, fromState [, targetState])
+                    typedef void (*fn_DoTransition_t)(void* node, void* smRef,
+                                                       int fromState, int targetState);
+                    uintptr_t headNode = *smPtrAddr;
+                    ((fn_DoTransition_t)(*(void**)(*(uintptr_t*)headNode + 0x28)))
+                        ((void*)headNode, (void*)smPtrAddr,
+                         (int)*(int8_t*)(buildState + 0x51),
+                         (int)*(int8_t*)(buildState + 0x53));
+                }
+            }
+
+            // --- Update previousState from targetState ---
+            *(int8_t*)(buildState + 0x50) = *(int8_t*)(buildState + 0x52);
+
+            // --- Walk to tail of linked list ---
+            uintptr_t current = *smPtrAddr;
+            uintptr_t next = *(uintptr_t*)(current + 0x10);  // offset +0x10 = next
+            while (next != 0) {
+                current = next;
+                next = *(uintptr_t*)(current + 0x10);
+            }
+            *smPtrAddr = current;
+
+            // --- Call CanHandle on tail node with targetState ---
+            {
+                typedef int8_t (*fn_CanHandle_t)(void* node, int fromState);
+                int8_t result = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)current)))
+                                ((void*)current, (int)*(int8_t*)(buildState + 0x52));
+                *(int8_t*)(buildState + 0x51) = result;
+
+                // If can't handle, walk back through prev pointers
+                while (result < 0) {
+                    uintptr_t prev = *(uintptr_t*)(*smPtrAddr + 0x08);
+                    *smPtrAddr = prev;
+                    result = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)prev)))
+                             ((void*)prev, (int)*(int8_t*)(buildState + 0x50));
+                    *(int8_t*)(buildState + 0x51) = result;
+                }
+            }
+
+            // --- Walk list to check HasExitHandler for new state ---
+            {
+                int subState = (int)*(int8_t*)(buildState + 0x51);
+                uintptr_t node = *smPtrAddr;
+                *(uint16_t*)(buildState + 0x52) = 0xFFFF;  // reset target+transition
+
+                while (true) {
+                    if (subState >= 0) {
+                        // vtable+0x18: HasExitHandler(node, smRef) -> bool
+                        typedef bool (*fn_HasExit_t)(void* node, void* smRef);
+                        bool hasExit = ((fn_HasExit_t)(*(void**)(*(uintptr_t*)node + 0x18)))
+                                       ((void*)node, (void*)smPtrAddr);
+                        if (hasExit) break;
+                    }
+                    node = *(uintptr_t*)(node + 0x08);
+                    if (node == 0) break;
+                    typedef int (*fn_CanHandle_t)(void* node, int fromState);
+                    subState = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)node)))
+                               ((void*)node, (int)*(int8_t*)(buildState + 0x50));
+                }
+            }
+        } while (*(int8_t*)(buildState + 0x52) >= 0);
+
+first_entry_check:
+        // --- OnFirstEntry callback (only on first invocation) ---
+        if (isFirstCall && *(int8_t*)(buildState + 0x50) >= 0) {
+            int subState = (int)*(int8_t*)(buildState + 0x51);
+            uintptr_t node = *smPtrAddr;
+
+            while (true) {
+                if (subState >= 0) {
+                    // vtable+0x30: OnFirstEntry(node, smRef [, time]) -> bool
+                    typedef bool (*fn_OnFirstEntry_t)(void* node, void* smRef, ...);
+                    bool result;
+                    if (time) {
+                        result = ((fn_OnFirstEntry_t)(*(void**)(*(uintptr_t*)node + 0x30)))
+                                 ((void*)node, (void*)smPtrAddr, time);
+                    } else {
+                        result = ((fn_OnFirstEntry_t)(*(void**)(*(uintptr_t*)node + 0x30)))
+                                 ((void*)node, (void*)smPtrAddr);
+                    }
+                    if (result) break;
+                }
+                node = *(uintptr_t*)(node + 0x08);
+                if (node == 0) break;
+                typedef int (*fn_CanHandle_t)(void* node, int fromState);
+                subState = ((fn_CanHandle_t)(*(void**)(*(uintptr_t*)node)))
+                           ((void*)node, (int)*(int8_t*)(buildState + 0x50));
+            }
+            isFirstCall = false;
+        }
+    } while (*(int8_t*)(buildState + 0x52) >= 0);
+}
+
+// ============================================================
+// DestroyComponent_StartUpgrade (0x14011dfa0)
+// ============================================================
+// Initiates an upgrade on a building by forcing its BuildState
+// state machine to transition to upgrade state (state 3).
+//
+// Logic:
+// 1. Find BuildState on the entity at destroyComp+0x10
+// 2. Read current state byte:
+//    - If state == 6 (damaged): check again, if still 6 or 7, call Destroy instead
+//    - Otherwise: proceed with upgrade transition
+// 3. Run the state machine exit sequence (process current state exit)
+// 4. If sub-state is negative after exit: call StateMachine_Tick to settle
+// 5. Request transition to state 3 (upgrade) via sm->vtable[1]
+// 6. Run the state machine entry sequence (process new state entry)
+//
+// Original: 0x14011dfa0 (177 lines in Ghidra).
+void DestroyComponent_StartUpgrade_Impl(void* destroyComp) {
+    // --- Resolve StateMachine_Tick if not already done ---
+    if (!g_StateMachine_Tick) {
+        g_StateMachine_Tick = reinterpret_cast<fn_StateMachine_Tick_Local_t>(
+            ResolveAddr(Module::Exe, 0x1400a9660));
+    }
+
+    // --- Find BuildState component on entity ---
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+    uint64_t bsRef = 0;
+    fn_FindComponent_BuildState(*(void**)((uintptr_t)destroyComp + 0x10), &bsRef);
+    fn_InternalBasePtr_CheckPtr(&bsRef);
+
+    uintptr_t buildState = bsRef;
+
+    // --- Read current state byte ---
+    int8_t stateByte = *(int8_t*)(buildState + 0x52);
+    if (stateByte < 0) {
+        stateByte = *(int8_t*)(buildState + 0x50);
+    }
+
+    if (stateByte == 6) {
+        // State is 6 (damaged) — double-check
+        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+        fn_FindComponent_BuildState(*(void**)((uintptr_t)destroyComp + 0x10), &bsRef);
+        fn_InternalBasePtr_CheckPtr(&bsRef);
+        buildState = bsRef;
+
+        stateByte = *(int8_t*)(buildState + 0x52);
+        if (stateByte < 0) {
+            stateByte = *(int8_t*)(buildState + 0x50);
+        }
+
+        if (stateByte == 6) {
+            // Still state 6 — check for state 7
+            fn_InternalBasePtr_CheckPtr(&bsRef);
+            stateByte = *(int8_t*)(buildState + 0x52);
+            if (stateByte < 0) {
+                stateByte = *(int8_t*)(buildState + 0x50);
+            }
+            if (stateByte != 7) {
+                // Not state 7 either — proceed with upgrade (fall through below)
+                goto do_upgrade;
+            }
+        }
+        // State is 6 or 7 — destroy instead of upgrade
+        DestroyComponent_Destroy_Impl(destroyComp);
+        return;
+    }
+
+do_upgrade:
+    // --- Phase 1: Exit current state ---
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)destroyComp + 0x10));
+    uint64_t bsRef2 = 0;
+    fn_FindComponent_BuildState(*(void**)((uintptr_t)destroyComp + 0x10), &bsRef2);
+
+    // Create zero Time for state machine operations
+    int64_t zeroTime = 0;
+    fn_Time_Ctor_Float((void*)&zeroTime, 0.0f);
+
+    fn_InternalBasePtr_CheckPtr(&bsRef2);
+    buildState = bsRef2;
+    uintptr_t* smPtrAddr = (uintptr_t*)(buildState + 0x48);
+
+    // Run the state machine exit sequence
+    ProcessStateMachine(buildState, smPtrAddr, true, nullptr);
+
+    // --- Phase 2: Settle state machine if sub-state is negative ---
+    fn_InternalBasePtr_CheckPtr(&bsRef2);
+    buildState = bsRef2;
+
+    if (*(int8_t*)(buildState + 0x51) < 0) {
+        int64_t tickTime = 0;
+        fn_Time_Ctor_Float((void*)&tickTime, 0.0f);
+        if (g_StateMachine_Tick) {
+            g_StateMachine_Tick((void*)(buildState + 0x48), tickTime, 0, 0);
+        }
+    }
+
+    // --- Phase 3: Request transition to state 3 (upgrade) ---
+    int targetState = 3;
+    // vtable[1]: RequestTransition(node, currentSubState, &targetState)
+    uintptr_t headNode = *(uintptr_t*)(buildState + 0x48);
+    typedef int (*fn_RequestTransition_t)(void* node, int currentState, int* targetState);
+    int result = ((fn_RequestTransition_t)(*(void**)(*(uintptr_t*)headNode + 0x08)))
+                 ((void*)headNode, (int)*(int8_t*)(buildState + 0x51), &targetState);
+
+    if (result >= 0) {
+        *(int8_t*)(buildState + 0x53) = (int8_t)result;
+        *(int8_t*)(buildState + 0x52) = (int8_t)targetState;
+    }
+
+    // --- Phase 4: Enter new state ---
+    int64_t entryTime = 0;
+    fn_Time_Ctor_Float((void*)&entryTime, 0.0f);
+
+    fn_InternalBasePtr_CheckPtr(&bsRef2);
+    buildState = bsRef2;
+    smPtrAddr = (uintptr_t*)(buildState + 0x48);
+
+    ProcessStateMachine(buildState, smPtrAddr, true, &entryTime);
+}
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {

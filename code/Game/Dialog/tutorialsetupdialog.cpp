@@ -319,7 +319,7 @@ void TutorialSetupDialog_Slot8(void* self) {
     for (int i = 0; i < count2; ++i) {
         uint64_t instance = 0;
         void* strPtr = (void*)(*(uintptr_t*)(s + 0x30) + (uintptr_t)i * 8);
-        fn_TSD_FindByString(&instance, strPtr);
+        FindDialogByName_Impl(&instance, strPtr);
         if (instance == 0) continue;
 
         fn_InternalBasePtr_CheckPtr(&instance);

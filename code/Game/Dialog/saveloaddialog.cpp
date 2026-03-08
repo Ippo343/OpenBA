@@ -35,6 +35,7 @@
 #include "engine_funcs.h"
 #include "ui/Dialogs.h"
 #include <cstdint>
+#include <cstring>
 
 // ============================================================
 // Helper: Find element by name in dialog instance
@@ -46,6 +47,418 @@ static uint64_t FindDialogElem(void* dialogInst, const char* name) {
     fn_DialogInstance_FindElement(dialogInst, &result, nameStr);
     fn_String_Dtor(nameStr);
     return result;
+}
+
+// ============================================================
+// Helper: Find element by name in an Element tree, return InternalBasePtr
+// ============================================================
+static uint64_t FindChildElem(void* parentElem, const char* name) {
+    uint8_t nameStr[8];
+    fn_String_Ctor_CStr(nameStr, name);
+    uint64_t resultPtr = 0;
+    fn_FindElement(parentElem, &resultPtr, nameStr);
+    fn_InternalBasePtr_CheckPtr(&resultPtr);
+    void* rawElem = (void*)resultPtr;
+    // Wrap in InternalBasePtr
+    uint64_t basePtr = 0;
+    fn_InternalBasePtr_Ctor(&basePtr, rawElem);
+    fn_String_Dtor(nameStr);
+    return basePtr;
+}
+
+// ============================================================
+// Helper: Virtual call to Element::SetColor(this, color) — vtable[10]
+// ============================================================
+static void Element_SetColor(void* elem, uint32_t color) {
+    fn_InternalBasePtr_CheckPtr(&elem);
+    void* rawElem = *(void**)&elem;
+    typedef void (*fn_SetColor_t)(void* self, uint32_t color);
+    void** vtable = *(void***)rawElem;
+    ((fn_SetColor_t)vtable[10])(rawElem, color);
+}
+
+// ============================================================
+// Save entry structure (0x40 bytes per entry in the file list)
+// ============================================================
+// +0x00 labelSaveName  (InternalBasePtr: TextElement)
+// +0x08 labelSaveDate  (InternalBasePtr: TextElement)
+// +0x10 imageSaveIcon  (InternalBasePtr: ImageElement)
+// +0x18 borderSave     (InternalBasePtr: Element)
+// +0x20 selectSave     (InternalBasePtr: Element — not used here, used in Update)
+// +0x28 imageCorrupt   (InternalBasePtr: Element)
+// +0x30 materialInst   (MaterialInstance* — owned, destroyed on cleanup)
+// +0x38 spriteSheet    (SpriteSheet* — owned, destroyed on cleanup)
+
+// ============================================================
+// Dynamic array resize for 0x40-byte save entries
+// ============================================================
+// Equivalent to FUN_1400211e0: resizes the entry array at (self+0x110),
+// copying existing entries and initializing new ones from a template.
+static void SaveEntryArray_Resize(void* arrayBase, int newCount, void* templateEntry) {
+    uintptr_t a = (uintptr_t)arrayBase;
+    void*& data = *(void**)a;
+    int& count = *(int*)(a + 8);
+    int& capacity = *(int*)(a + 12);
+
+    int oldCount = count;
+    if (newCount == oldCount) return;
+
+    void* oldData = data;
+    count = newCount;
+
+    if (capacity < newCount) {
+        capacity = newCount;
+        // Growth heuristic: if growing by exactly 1, triple capacity
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            capacity = newCount * 3;
+        }
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)capacity * 0x40, 8);
+        data = newData;
+    }
+
+    // Copy/initialize entries
+    int copyStart = (oldData == data) ? oldCount : 0;
+    for (int i = copyStart; i < newCount; i++) {
+        uint8_t* dst = (uint8_t*)data + (uintptr_t)i * 0x40;
+        uint8_t* src = (i < oldCount) ? ((uint8_t*)oldData + (uintptr_t)i * 0x40)
+                                      : (uint8_t*)templateEntry;
+        // Copy 0x40 bytes (8 uint64_t fields)
+        for (int j = 0; j < 8; j++) {
+            ((uint64_t*)dst)[j] = ((uint64_t*)src)[j];
+        }
+    }
+
+    if (oldData != data) {
+        fn_MemFreeStatic(oldData);
+    }
+}
+
+// ============================================================
+// PopulateFileList (0x1400b6ce0): Build/refresh the save file list UI
+// ============================================================
+// Called after the save scan operation completes. Clears the old entry
+// array, resizes the table element, then for each save file:
+//   1. Clones the dialog template row element
+//   2. Finds child elements (name, date, icon, border, etc.)
+//   3. If save has a valid thumbnail: sets sprite directly from SaveInfo
+//   4. If save has raw image data: creates MaterialInstance + SpriteSheet,
+//      wraps the image as a texture, builds a Sprite and assigns it
+//   5. Sets save name and date text parameters
+//   6. Fills remaining empty rows with dimmed placeholder entries
+//
+// Original: 0x1400b6ce0 (442 lines in Ghidra).
+
+void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    // --- Phase 1: Destroy old entries (cleanup MaterialInstance/SpriteSheet objects) ---
+    int oldEntryCount = *(int*)(s + 0x118);
+    uintptr_t oldEntryData = *(uintptr_t*)(s + 0x110);
+
+    for (int i = 0; i < oldEntryCount; i++) {
+        uintptr_t entryBase = oldEntryData + (uintptr_t)i * 0x40;
+
+        // Destroy MaterialInstance at +0x30 (scalar deleting destructor, vtable[0])
+        void* matInst = *(void**)(entryBase + 0x30);
+        if (matInst) {
+            typedef void (*fn_Dtor_t)(void* self, int flags);
+            void** vtable = *(void***)matInst;
+            ((fn_Dtor_t)vtable[0])(matInst, 1);  // 1 = free memory
+        }
+
+        // Destroy SpriteSheet at +0x38 if materialInstance was non-null
+        if (*(void**)(entryBase + 0x30) != nullptr) {
+            void* sheet = *(void**)(entryBase + 0x38);
+            if (sheet) {
+                typedef void (*fn_Dtor_t)(void* self, int flags);
+                void** vtable = *(void***)sheet;
+                ((fn_Dtor_t)vtable[0])(sheet, 1);
+            }
+        }
+    }
+
+    // Free the entry array and reset
+    fn_MemFreeStatic(*(void**)(s + 0x110));
+    *(void**)(s + 0x110) = nullptr;
+    *(uint64_t*)(s + 0x118) = 0;  // count + capacity = 0
+
+    // --- Phase 2: Calculate table dimensions ---
+    int saveCount = *(int*)(s + 0xC4);
+    int minSlots = (saveCount < 6) ? 6 : saveCount;
+    int totalSlots = minSlots + 2;
+    // Round up to nearest multiple of 3
+    totalSlots = ((totalSlots / 3) + ((totalSlots % 3) != 0 ? 1 : 0)) * 3;
+    // Actually match the original: (n/3 + rounding) * 3
+    // Original: (iVar10 / 3 + (iVar10 >> 0x1f) + (int)(((longlong)iVar10 / 3 + ...) >> 0x1f)) * 3
+    // For positive values this is just: ((n + 2) / 3) * 3 = round up to multiple of 3
+    // But actually looking more carefully: the original does integer division rounding
+    // which for positive ints is just n / 3 * 3 (round DOWN to multiple of 3)
+    totalSlots = (totalSlots / 3) * 3;
+
+    // Set table size: (totalSlots/3 + 1) rows, 3 columns
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
+    void* tableElem = *(void**)(s + 0x108);
+    fn_TableElement_SetSize(tableElem, totalSlots / 3 + 1, 3);
+
+    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    void* saveLoad = *g_pSaveLoadSingleton;
+
+    // --- Phase 3: Populate save file entries ---
+    for (int i = 0; i < saveCount; i++) {
+        void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, i);
+
+        // Clone template element from dialog
+        uint8_t templateBuf[16] = {};
+        fn_Dialog_GetTemplate(*(void**)(s + 0x18), templateBuf, 0);
+        void* templateObj = *(void**)templateBuf;
+
+        // Clone via vtable[8]: templateObj->Clone(&cloneBuf, dialog)
+        typedef void* (*fn_Clone_t)(void* self, void* retbuf, void* dialog);
+        uint8_t cloneBuf[16] = {};
+        ((fn_Clone_t)(*(void***)templateObj)[8])(templateObj, cloneBuf, *(void**)(s + 0x18));
+        void* clonedElem = *(void**)cloneBuf;
+
+        // Add cloned element to table at index i
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
+        fn_TableElement_SetChild2(*(void**)(s + 0x108), &clonedElem, i);
+
+        // Initialize entry struct (8 fields, all zero initially)
+        uint64_t entry[8] = {};
+
+        // Find child elements in the cloned row
+        fn_InternalBasePtr_CheckPtr(&clonedElem);
+        entry[0] = FindChildElem((void*)clonedElem, "labelSaveName");   // +0x00: TextElement
+        entry[1] = FindChildElem((void*)clonedElem, "labelSaveDate");   // +0x08: TextElement
+        entry[2] = FindChildElem((void*)clonedElem, "imageSaveIcon");   // +0x10: ImageElement
+        entry[3] = FindChildElem((void*)clonedElem, "borderSave");      // +0x18: Element
+        entry[4] = FindChildElem((void*)clonedElem, "selectSave");      // +0x20: Element
+        entry[5] = FindChildElem((void*)clonedElem, "imageCorrupt");    // +0x28: Element
+
+        // Set imageSaveIcon flags: disable mouse-over highlight (0x10000)
+        fn_InternalBasePtr_CheckPtr(&entry[2]);
+        fn_Element_SetFlagsOnOff((void*)entry[2], 0x10000, 0);
+
+        // Set imageSaveIcon element ID for selection tracking (ID = i + 4)
+        fn_InternalBasePtr_CheckPtr(&entry[2]);
+        fn_Element_SetElementId((void*)entry[2], i + 4);
+
+        // Check if SaveInfo has a valid Sprite (thumbnail)
+        bool hasSpriteThumb = fn_Sprite_IsValid(saveInfo);
+
+        if (hasSpriteThumb) {
+            // --- Direct sprite from save info ---
+            // Copy the 16-byte Sprite from SaveInfo
+            uint8_t sprite[16];
+            memcpy(sprite, saveInfo, 16);
+
+            fn_InternalBasePtr_CheckPtr(&entry[2]);
+            fn_ImageElement_SetSprite((void*)entry[2], sprite);
+
+            // Hide imageCorrupt overlay
+            fn_InternalBasePtr_CheckPtr(&entry[5]);
+            fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
+        } else {
+            // --- Build sprite from raw image data ---
+            // Allocate MaterialInstance (0x60 bytes)
+            void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+            void* matInstFinal = nullptr;
+            if (matInst) {
+                fn_MaterialInstance_Ctor(matInst);
+                // Patch vtable to exe subclass
+                *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+                matInstFinal = matInst;
+            }
+            entry[6] = (uint64_t)matInstFinal;
+
+            // Load UIMaterialNoBlend material
+            uint8_t matFilename[8] = {};
+            fn_Filename_CtorCStr(matFilename, "Material/UI/UIMaterialNoBlend.rsc");
+            void* matExternal = fn_ExternalFactory_FindOrLoad(
+                *g_pExternalFactorySingleton, matFilename);
+
+            void* matResource = nullptr;
+            if (matExternal) {
+                // IsDerivedFrom check for Material type
+                if (fn_IsDerivedFrom(matExternal, *g_TypeId_TextElement)) {
+                    matResource = matExternal;
+                }
+            }
+            // Note: the IsDerivedFrom check in the original uses the same _typeInfo_exref
+            // for all checks, but here we need the Material type. Since the original code
+            // works correctly, the ExternalFactory::FindOrLoad result is passed directly.
+            // The IsDerivedFrom is checking MaterialExternal type.
+            fn_MaterialInstance_SetMaterial(matInstFinal,
+                matExternal ? matExternal : nullptr);
+            fn_Filename_Dtor(matFilename);
+
+            // Add texture: "diffuse" -> saveInfo's ImageBuffer at +0x18
+            uint8_t diffuseStr[8] = {};
+            fn_String_Ctor_CStr(diffuseStr, "diffuse");
+            fn_MaterialInstance_AddTexture(matInstFinal, diffuseStr,
+                *(void**)((uintptr_t)saveInfo + 0x18));
+            fn_String_Dtor(diffuseStr);
+
+            fn_MaterialInstance_BuildParameters(matInstFinal);
+
+            // Allocate SpriteSheet (0x58 bytes)
+            void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+            void* sheetFinal = nullptr;
+            if (sheet) {
+                fn_SpriteSheet_Ctor(sheet);
+                *(uintptr_t*)sheet = g_ModDialog_SpriteSheetVtable;
+                sheetFinal = sheet;
+            }
+
+            // Set material on spritesheet
+            *(void**)((uintptr_t)sheetFinal + 0x30) = matInstFinal;
+
+            // Get image dimensions
+            void* imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
+            int imgHeight = fn_ImageBuffer_Height(imageBuffer);
+            int imgWidth = fn_ImageBuffer_Width(imageBuffer);
+
+            // Set spritesheet dimensions
+            uint8_t emptyStr1[8] = {};
+            uint8_t emptyStr2[8] = {};
+            fn_String_Ctor_CStr(emptyStr1, "");
+            fn_String_Ctor_CStr(emptyStr2, "");
+            fn_String_Assign((void*)((uintptr_t)sheetFinal + 0x40), emptyStr1);
+            fn_String_Assign((void*)((uintptr_t)sheetFinal + 0x38), emptyStr2);
+            *(int*)((uintptr_t)sheetFinal + 0x48) = imgWidth;
+            *(int*)((uintptr_t)sheetFinal + 0x4C) = imgHeight;
+            *(uint64_t*)((uintptr_t)sheetFinal + 0x50) = 0;
+            fn_String_Dtor(emptyStr2);
+            fn_String_Dtor(emptyStr1);
+
+            // Add sprite info (full image as single sprite)
+            uint8_t nameStr1[8] = {};
+            uint8_t nameStr2[8] = {};
+            fn_String_Ctor_CStr(nameStr1, "");
+            fn_String_Ctor_CStr(nameStr2, "");
+
+            imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
+            imgHeight = fn_ImageBuffer_Height(imageBuffer);
+            imgWidth = fn_ImageBuffer_Width(imageBuffer);
+            fn_SpriteSheet_AddSpriteInfo(sheetFinal, nameStr1, nameStr2,
+                                          0, 0, imgWidth, imgHeight);
+            fn_String_Dtor(nameStr1);
+            fn_String_Dtor(nameStr2);
+
+            // Set sprite info with UV coordinates
+            imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
+            int h = fn_ImageBuffer_Height(imageBuffer);
+            int w = fn_ImageBuffer_Width(imageBuffer);
+            fn_SpriteSheet_SetSpriteInfo(sheetFinal, 0, w, h,
+                                          0.0f, 0.0f, uvScale, uvScale);
+
+            // Create Sprite from SpriteSheet
+            uint8_t spriteBuf[16] = {};
+            fn_Sprite_Ctor_ByIndex(spriteBuf, sheetFinal, 0);
+
+            fn_InternalBasePtr_CheckPtr(&entry[2]);
+            fn_ImageElement_SetSprite((void*)entry[2], spriteBuf);
+
+            entry[7] = (uint64_t)sheetFinal;
+
+            // Check save validity: status at saveInfo+0x44
+            if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
+                // Valid save: hide imageCorrupt overlay
+                fn_InternalBasePtr_CheckPtr(&entry[5]);
+                fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
+            } else {
+                // Invalid/corrupt: dim the icon
+                fn_InternalBasePtr_CheckPtr(&entry[2]);
+                typedef void (*fn_SetColor_t)(void* self, uint32_t color);
+                void** vtable = *(void***)(void*)entry[2];
+                ((fn_SetColor_t)vtable[10])((void*)entry[2], 0xff808080);
+            }
+        }
+
+        // --- Set text parameters if save has valid data ---
+        if (*(int*)((uintptr_t)saveInfo + 0x40) >= 0) {
+            if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
+                // Valid save: show formatted date string
+                uint8_t dateStr[8] = {};
+                fn_DateTime_AsString((void*)((uintptr_t)saveInfo + 0x30), dateStr);
+                fn_InternalBasePtr_CheckPtr(&entry[1]);
+                fn_TextElement_SetParameter((void*)entry[1], 0, dateStr);
+                fn_String_Dtor(dateStr);
+            } else {
+                // Corrupt save: show "Corrupt" text from string table
+                uint8_t corruptKey[8] = {};
+                fn_String_Ctor_CStr(corruptKey, "Corrupt");
+                uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
+                uint8_t uiStr[16] = {};
+                fn_UIString_Ctor(uiStr, *(uint64_t*)(keyMapObj + 0xD8), corruptKey);
+                uint8_t sysStr[8] = {};
+                fn_UIString_ToSystemString(uiStr, sysStr);
+                fn_InternalBasePtr_CheckPtr(&entry[1]);
+                fn_TextElement_SetParameter((void*)entry[1], 0, sysStr);
+                fn_String_Dtor(sysStr);
+                fn_String_Dtor(corruptKey);
+            }
+
+            // Set save name: saveInfo+0x10 is the name String
+            fn_InternalBasePtr_CheckPtr(&entry[0]);
+            fn_TextElement_SetParameter((void*)entry[0], 0,
+                                         (void*)((uintptr_t)saveInfo + 0x10));
+        }
+
+        // Push entry into array
+        SaveEntryArray_Resize((void*)(s + 0x110),
+                               *(int*)(s + 0x118) + 1, entry);
+    }
+
+    // --- Phase 4: Fill remaining empty rows ---
+    for (int i = saveCount; i < totalSlots; i++) {
+        // Clone template element
+        uint8_t templateBuf[16] = {};
+        fn_Dialog_GetTemplate(*(void**)(s + 0x18), templateBuf, 0);
+        void* templateObj = *(void**)templateBuf;
+
+        typedef void* (*fn_Clone_t)(void* self, void* retbuf, void* dialog);
+        uint8_t cloneBuf[16] = {};
+        ((fn_Clone_t)(*(void***)templateObj)[8])(templateObj, cloneBuf, *(void**)(s + 0x18));
+        void* clonedElem = *(void**)cloneBuf;
+
+        // Add to table
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
+        fn_TableElement_SetChild2(*(void**)(s + 0x108), &clonedElem, i);
+
+        // Initialize empty entry struct
+        uint64_t entry[8] = {};
+
+        // Find child elements (same 7 lookups)
+        fn_InternalBasePtr_CheckPtr(&clonedElem);
+        entry[0] = FindChildElem((void*)clonedElem, "labelSaveName");
+        entry[1] = FindChildElem((void*)clonedElem, "labelSaveDate");
+        entry[2] = FindChildElem((void*)clonedElem, "imageSaveIcon");
+        entry[3] = FindChildElem((void*)clonedElem, "borderSave");
+        entry[4] = FindChildElem((void*)clonedElem, "selectSave");
+        entry[5] = FindChildElem((void*)clonedElem, "imageCorrupt");
+
+        // Hide imageCorrupt and selectSave overlays for empty slots
+        fn_InternalBasePtr_CheckPtr(&entry[5]);
+        fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
+        fn_InternalBasePtr_CheckPtr(&entry[4]);
+        fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
+
+        // Dim border (SetColor via vtable[10] = 0x80ffffff)
+        fn_InternalBasePtr_CheckPtr(&entry[3]);
+        {
+            typedef void (*fn_SetColor_t)(void* self, uint32_t color);
+            void** vtable = *(void***)(void*)entry[3];
+            ((fn_SetColor_t)vtable[10])((void*)entry[3], 0x80ffffff);
+        }
+
+        // Dim icon (SetColor via vtable[10] = 0x20ffffff)
+        fn_InternalBasePtr_CheckPtr(&entry[2]);
+        {
+            typedef void (*fn_SetColor_t)(void* self, uint32_t color);
+            void** vtable = *(void***)(void*)entry[2];
+            ((fn_SetColor_t)vtable[10])((void*)entry[2], 0x20ffffff);
+        }
+    }
 }
 
 // ============================================================
@@ -343,7 +756,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         if (count <= *(int*)(s + 0xC0)) {
             *(int*)(s + 0xC0) = count - 1;
         }
-        fn_SaveLoadDialog_PopulateFileList((void*)s);
+        SaveLoadDialog_PopulateFileList(self);
         *(uint8_t*)(s + 0xBB) = 0;
         return;
     }

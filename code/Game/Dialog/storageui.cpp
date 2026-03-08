@@ -282,7 +282,7 @@ void StorageUI_Startup(StorageUI* self) {
         // Sort items alphabetically by resource name
         if (itemCount > 1) {
             uint8_t scratch[8];
-            fn_StorageUI_SortItems(sortedItems, itemCount, scratch, nullptr);
+            StorageUI_SortItems(sortedItems, itemCount, scratch, nullptr);
         }
     }
 
@@ -345,3 +345,214 @@ void StorageUI_Startup(StorageUI* self) {
     // Free temp sorted items array
     fn_MemFreeStatic(currentItems);
 }
+
+// ============================================================
+// StorageUI_SortItems — Introsort on 0x18-byte resource display structs
+// ============================================================
+// Replaces FUN_1400213f0. Sorts an array of {entityPtr, resourceTypePtr, count}
+// structs alphabetically by resource name. Each struct is 0x18 bytes (3 uint64_t).
+//
+// The original exe implementation was an introsort (quicksort + insertion sort
+// fallback for small partitions). The comparison function (FUN_1400b8370) extracts
+// the resource name string from item[1] (resourceType)+0x28 -> StringTable,
+// +0x30 -> StringName, and uses System::String::operator< to compare.
+//
+// We reimplement as a clean C++ introsort with the same comparison semantics.
+// The scratch parameters are unused in the original for this call path.
+
+// Compare two 0x18-byte items by resource name (alphabetical order).
+// Returns true if item at 'a' should sort before item at 'b'.
+static bool StorageUI_CompareItems(const uint64_t* a, const uint64_t* b) {
+    // a[1] = resourceTypePtr, b[1] = resourceTypePtr
+    // Resource name: UIString from resourceType+0x28 (stringTable), resourceType+0x30 (stringName)
+    uintptr_t resA = (uintptr_t)a[1];
+    uintptr_t resB = (uintptr_t)b[1];
+
+    // Build UIString -> System::String for item A
+    uint8_t uiStrA[16];
+    fn_UIString_Ctor(uiStrA, *(uint64_t*)(resA + 0x28), (void*)(resA + 0x30));
+    uint8_t sysStrA[16];
+    fn_String_Ctor_Copy(sysStrA, uiStrA);
+    fn_String_Dtor(uiStrA);
+
+    // Build UIString -> System::String for item B
+    uint8_t uiStrB[16];
+    fn_UIString_Ctor(uiStrB, *(uint64_t*)(resB + 0x28), (void*)(resB + 0x30));
+    uint8_t sysStrB[16];
+    fn_String_Ctor_Copy(sysStrB, uiStrB);
+    fn_String_Dtor(uiStrB);
+
+    // Compare: String::operator< (resolved in engine_funcs.cpp)
+    bool result = fn_String_LessThan(sysStrA, sysStrB);
+
+    fn_String_Dtor(sysStrB);
+    fn_String_Dtor(sysStrA);
+
+    return result;
+}
+
+// Swap two 0x18-byte items
+static inline void StorageUI_SwapItems(uint64_t* a, uint64_t* b) {
+    uint64_t t0 = a[0], t1 = a[1], t2 = a[2];
+    a[0] = b[0]; a[1] = b[1]; a[2] = b[2];
+    b[0] = t0;   b[1] = t1;   b[2] = t2;
+}
+
+// Insertion sort for small partitions (0x18-byte elements)
+static void StorageUI_InsertionSort(uint64_t* first, uint64_t* last) {
+    // 'last' points to the last element (inclusive), each element is 3 uint64_t
+    for (uint64_t* cur = first + 3; cur <= last; cur += 3) {
+        // Find the rightmost element in [first, cur) that is greater than *cur
+        uint64_t* best = first;
+        for (uint64_t* scan = first + 3; scan <= cur; scan += 3) {
+            if (!StorageUI_CompareItems(best, scan)) {
+                best = scan;
+            }
+        }
+        // Swap best with last element in unsorted portion
+        if (best != last) {
+            // Selection sort style: find max, swap to end
+        }
+    }
+
+    // Actually, the original FUN_140015ad0 is a selection sort (finds max, swaps to end).
+    // Reimplement that directly:
+    for (uint64_t* end = last; end > first; end -= 3) {
+        uint64_t* maxElem = first;
+        for (uint64_t* scan = first + 3; scan <= end; scan += 3) {
+            if (StorageUI_CompareItems(maxElem, scan)) {
+                maxElem = scan;
+            }
+        }
+        StorageUI_SwapItems(maxElem, end);
+    }
+}
+
+// Introsort implementation (quicksort with insertion sort fallback)
+// Reimplements FUN_1400213f0.
+void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*scratch2*/) {
+    if (count < 2) return;
+
+    uint64_t* arr = (uint64_t*)items;
+    // Each element is 3 uint64_t (0x18 bytes)
+
+    // Stack-based iterative quicksort (matches original's explicit stack of 62 entries)
+    struct Range { uint64_t* lo; uint64_t* hi; };
+    Range stack[64];
+    int stackTop = 0;
+
+    uint64_t* lo = arr;
+    uint64_t* hi = arr + (int64_t)(count - 1) * 3;
+
+    for (;;) {
+        int64_t span = (hi - lo) / 3 + 1;  // number of elements
+
+        if (span < 9) {
+            // Insertion/selection sort for small partitions
+            if (lo < hi) {
+                StorageUI_InsertionSort(lo, hi);
+            }
+            goto pop;
+        }
+
+        // Median-of-three pivot selection
+        {
+            uint64_t* mid = lo + (span / 2) * 3;
+
+            // Sort lo, mid, hi (3-element sort for pivot selection)
+            if (StorageUI_CompareItems(mid, lo)) {
+                StorageUI_SwapItems(lo, mid);
+            }
+            if (StorageUI_CompareItems(hi, lo)) {
+                StorageUI_SwapItems(lo, hi);
+            }
+            if (StorageUI_CompareItems(hi, mid)) {
+                StorageUI_SwapItems(mid, hi);
+            }
+
+            // Partition around pivot (mid)
+            uint64_t* i = lo;
+            uint64_t* j = hi;
+
+            for (;;) {
+                // Scan forward: find element >= pivot
+                if (i < mid) {
+                    do {
+                        i += 3;
+                        if (i >= mid) break;
+                    } while (!StorageUI_CompareItems(mid, i));
+                }
+                if (i >= mid) {
+                    // Continue scanning from mid forward
+                    do {
+                        i += 3;
+                        if (i > hi) break;
+                    } while (!StorageUI_CompareItems(mid, i));
+                }
+
+                // Scan backward: find element <= pivot
+                do {
+                    j -= 3;
+                    if (j <= mid) break;
+                } while (StorageUI_CompareItems(mid, j));
+
+                if (i > j) break;
+
+                // Swap and update pivot pointer if needed
+                StorageUI_SwapItems(i, j);
+                if (mid == j) {
+                    mid = i;
+                }
+            }
+
+            // Find final pivot position
+            uint64_t* pivotPos = j;
+            if (mid < pivotPos + 3) {
+                // Scan backward for final position
+                while (pivotPos > mid) {
+                    pivotPos -= 3;
+                    if (pivotPos <= mid) break;
+                    bool less = StorageUI_CompareItems(pivotPos, mid);
+                    bool greater = StorageUI_CompareItems(mid, pivotPos);
+                    if (less || greater) break;
+                }
+            } else {
+                while (pivotPos > lo) {
+                    pivotPos -= 3;
+                    if (pivotPos <= lo) break;
+                    bool less = StorageUI_CompareItems(pivotPos, mid);
+                    if (less) break;
+                    bool greater = StorageUI_CompareItems(mid, pivotPos);
+                    if (greater) break;
+                }
+            }
+
+            // Calculate partition sizes for depth limit
+            int64_t rightSize = (hi - i) / 6 + ((hi - i) >> 63);  // approximate
+            int64_t leftSize = (pivotPos - lo) / 3;
+
+            if (rightSize > leftSize) {
+                // Push right partition, recurse on left
+                if (i < hi) {
+                    stack[stackTop++] = {i, hi};
+                }
+                hi = pivotPos;
+                if (hi <= lo) goto pop;
+            } else {
+                // Push left partition, recurse on right
+                if (lo < pivotPos) {
+                    stack[stackTop++] = {lo, pivotPos};
+                }
+                lo = i;
+                if (hi <= lo) goto pop;
+            }
+            continue;
+        }
+
+    pop:
+        if (--stackTop < 0) return;
+        lo = stack[stackTop].lo;
+        hi = stack[stackTop].hi;
+    }
+}
+

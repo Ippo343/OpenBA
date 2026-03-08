@@ -154,5 +154,7 @@ void UpgradeUI_OnRemove(UpgradeUI* self, void* p2, int eventType, int eventId) {
     *(uint64_t*)((uintptr_t)destroyComp + 0x60) = *(uint64_t*)((uintptr_t)desc + 0x20);
 
     // Start the upgrade process
-    fn_DestroyComponent_StartUpgrade(destroyComp);
+    // Call our clean reimplementation instead of exe function pointer
+    extern void DestroyComponent_StartUpgrade_Impl(void* destroyComp);
+    DestroyComponent_StartUpgrade_Impl(destroyComp);
 }

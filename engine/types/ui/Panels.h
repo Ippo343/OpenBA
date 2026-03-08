@@ -666,71 +666,86 @@ static_assert(sizeof(ToolUI) == 0x58, "ToolUI size mismatch");
 // Has separate Ctor (0x140081280). Second-largest panel.
 // Ctor inits: +0x30..+0x58 (mixed u32/u64), +0x60..+0x138=0,
 //   +0x140(u32)=0, +0x150..+0x1E0=0
+//
+// Tab layout:
+//   General:     +0x60..+0xD8 (numberYear, textMonth, numberHomes, etc., groupHearts/Stars)
+//   Professions: +0x40..+0x58 (profession BST + entry array with 0x40-byte entries)
+//   Production:  +0xF0..+0x110 (limits table entries + combo + header elems)
+//   Inventory:   +0x118..+0x130 (table entries array + inventoryCombo + sortCombo)
+//   Graph:       +0x148..+0x1C8 (graphData, timeCombo, graphCombo, number0-4, label0-3, stringTables)
+//   Agriculture: +0x1C8..+0x1E0 (agri label array + agri BST + count)
 struct TownHallUI {
     DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint32_t data38;           // +0x38: zeroed (u32 write)
+    uint64_t tabElement;       // +0x30: InternalBasePtr to TabElement
+    uint32_t profButtonIdx;    // +0x38: current profession button cycle index
     uint8_t  _pad3C[4];        // +0x3C: gap
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-    uint64_t data50;           // +0x50
-    uint32_t data58;           // +0x58: zeroed (u32 write)
+    uint64_t profEntryArray;   // +0x40: dynamic array ptr (0x40-byte profession entries)
+    uint64_t profEntryMeta;    // +0x48: [low32]=count, [high32]=capacity
+    uint64_t profBST;          // +0x50: profession BST root (sorted by type ID)
+    uint32_t profBSTCount;     // +0x58: profession BST node count
     uint8_t  _pad5C[4];        // +0x5C: gap
-    uint64_t data60;           // +0x60
-    uint64_t data68;           // +0x68
-    uint64_t data70;           // +0x70
-    uint64_t data78;           // +0x78
-    uint64_t data80;           // +0x80
-    uint64_t data88;           // +0x88
-    uint64_t data90;           // +0x90
-    uint64_t data98;           // +0x98
-    uint64_t dataA0;           // +0xA0
-    uint64_t dataA8;           // +0xA8
-    uint64_t dataB0;           // +0xB0
-    uint64_t dataB8;           // +0xB8
-    uint64_t dataC0;           // +0xC0
-    uint64_t dataC8;           // +0xC8
-    uint64_t dataD0;           // +0xD0
-    uint64_t dataD8;           // +0xD8
-    uint64_t dataE0;           // +0xE0
-    uint64_t dataE8;           // +0xE8
-    uint64_t dataF0;           // +0xF0
-    uint64_t dataF8;           // +0xF8
-    uint64_t data100;          // +0x100
-    uint64_t data108;          // +0x108
-    uint64_t data110;          // +0x110
-    uint64_t data118;          // +0x118
-    uint64_t data120;          // +0x120
-    uint64_t data128;          // +0x128
-    uint64_t data130;          // +0x130
-    uint64_t data138;          // +0x138
-    uint32_t data140;          // +0x140: zeroed (u32 write)
-    uint8_t  _pad144[0xC];     // +0x144: gap
-    uint64_t data150;          // +0x150
-    uint64_t data158;          // +0x158
-    uint64_t data160;          // +0x160
-    uint64_t data168;          // +0x168
-    uint64_t data170;          // +0x170
-    uint64_t data178;          // +0x178
-    uint64_t data180;          // +0x180
-    uint64_t data188;          // +0x188
-    uint64_t data190;          // +0x190
-    uint64_t data198;          // +0x198
-    uint64_t data1A0;          // +0x1A0
-    uint64_t data1A8;          // +0x1A8
-    uint64_t data1B0;          // +0x1B0
-    uint64_t data1B8;          // +0x1B8
-    uint64_t data1C0;          // +0x1C0
-    uint64_t data1C8;          // +0x1C8
-    uint64_t data1D0;          // +0x1D0
-    uint64_t data1D8;          // +0x1D8
-    uint32_t data1E0;          // +0x1E0: zeroed (u32 write)
+    // --- General tab elements ---
+    uint64_t numberYear;       // +0x60: NumberElement
+    uint64_t textMonth;        // +0x68: TextElement (label with sprite)
+    uint64_t numberHomes;      // +0x70: NumberElement
+    uint64_t numberFamily;     // +0x78: NumberElement
+    uint64_t numberCitizens;   // +0x80: NumberElement
+    uint64_t numberAdults;     // +0x88: NumberElement
+    uint64_t numberStudents;   // +0x90: NumberElement
+    uint64_t numberChildren;   // +0x98: NumberElement
+    uint64_t percentClothed;   // +0xA0: TextElement (formatted %)
+    uint64_t percentEducated;  // +0xA8: TextElement (formatted %)
+    uint64_t groupHearts[4];   // +0xB0: {wholeArray, wholeCount|wholeCap, halfArray, halfCount|halfCap}
+    uint64_t groupStars[4];    // +0xD0: {wholeArray, wholeCount|wholeCap, halfArray, halfCount|halfCap}
+    // --- Production tab elements ---
+    uint64_t prodLimitsArray;  // +0xF0: dynamic array ptr (0x28-byte limit entries)
+    uint64_t prodLimitsMeta;   // +0xF8: [low32]=count, [high32]=capacity
+    uint64_t productionCombo;  // +0x100: ComboElement
+    uint64_t limitPrevUsedHdr; // +0x108: TextElement
+    uint64_t limitPrevProdHdr; // +0x110: TextElement
+    // --- Inventory tab elements ---
+    uint64_t invTableArray;    // +0x118: dynamic array ptr (0x10-byte entries: label, number)
+    uint32_t invTableCount;    // +0x120: count
+    uint32_t invTableCap;      // +0x124: capacity
+    uint64_t inventoryCombo;   // +0x128: ComboElement
+    uint64_t sortCombo;        // +0x130: ComboElement (sort order)
+    uint64_t invBST;           // +0x138: inventory BST root
+    uint32_t invBSTDummy;      // +0x140: zeroed (u32 write)
+    uint8_t  _pad144[4];       // +0x144: gap
+    int32_t  cachedGameTick;   // +0x148: cached game time tick for graph refresh
+    uint8_t  _pad14C[4];       // +0x14C: gap
+    // --- Graph tab elements ---
+    uint64_t graphYearsTable;  // +0x150: StringTable (graphYears)
+    uint64_t graphTypesTable;  // +0x158: StringTable (graphTypes)
+    uint64_t graphData;        // +0x160: GraphElement
+    uint64_t timeCombo;        // +0x168: ComboElement (time range)
+    uint64_t graphCombo;       // +0x170: ComboElement (graph data type)
+    uint64_t textXMin;         // +0x178: TextElement (x-axis min label)
+    uint64_t number0;          // +0x180: NumberElement (y-axis max)
+    uint64_t number1;          // +0x188: NumberElement (y-axis 3/4)
+    uint64_t number2;          // +0x190: NumberElement (y-axis 1/2)
+    uint64_t number3;          // +0x198: NumberElement (y-axis 1/4)
+    uint64_t number4;          // +0x1A0: NumberElement (y-axis min) — unused?
+    uint64_t label0;           // +0x1A8: LabelElement (graph legend 0)
+    uint64_t label1;           // +0x1B0: LabelElement (graph legend 1)
+    uint64_t label2;           // +0x1B8: LabelElement (graph legend 2)
+    uint64_t label3;           // +0x1C0: LabelElement (graph legend 3)
+    // --- Agriculture tab elements ---
+    uint64_t agriLabelArray;   // +0x1C8: dynamic array ptr (8-byte label ptrs)
+    uint32_t agriLabelCount;   // +0x1D0: count
+    uint32_t agriLabelCap;     // +0x1D4: capacity
+    uint64_t agriBST;          // +0x1D8: agriculture BST root (sorted by entity ptr)
+    uint32_t agriBSTCount;     // +0x1E0: agriculture BST item count
     uint8_t  _pad1E4[4];       // +0x1E4: gap
 };
 static_assert(sizeof(TownHallUI) == 0x1E8, "TownHallUI size mismatch");
-static_assert(offsetof(TownHallUI, data30) == 0x30, "");
-static_assert(offsetof(TownHallUI, data140) == 0x140, "");
-static_assert(offsetof(TownHallUI, data1E0) == 0x1E0, "");
+static_assert(offsetof(TownHallUI, tabElement) == 0x30, "");
+static_assert(offsetof(TownHallUI, numberYear) == 0x60, "");
+static_assert(offsetof(TownHallUI, productionCombo) == 0x100, "");
+static_assert(offsetof(TownHallUI, inventoryCombo) == 0x128, "");
+static_assert(offsetof(TownHallUI, cachedGameTick) == 0x148, "");
+static_assert(offsetof(TownHallUI, graphData) == 0x160, "");
+static_assert(offsetof(TownHallUI, agriBSTCount) == 0x1E0, "");
 
 // --- TradeUI (0x148) ---
 // Has separate Ctor (0x140086b80). Inits +0x30..+0x140=0 (all zeroed qwords).
