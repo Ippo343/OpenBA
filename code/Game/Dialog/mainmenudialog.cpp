@@ -345,19 +345,20 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
     fn_InternalBasePtr_Ctor(textElemPtr, textBuildNotice);
     fn_String_Dtor(nameStr);
 
-    // Set parameter 0 = CurrentVersion
-    uint8_t versionStr[8];
-    fn_Configuration_CurrentVersion(versionStr);
-    fn_InternalBasePtr_CheckPtr(textElemPtr);
-    fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
-    fn_String_Dtor(versionStr);
+    // Set parameter 0 = CurrentVersion, parameter 1 = CurrentBuildId
+    if (textBuildNotice) {
+        uint8_t versionStr[8];
+        fn_Configuration_CurrentVersion(versionStr);
+        fn_InternalBasePtr_CheckPtr(textElemPtr);
+        fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
+        fn_String_Dtor(versionStr);
 
-    // Set parameter 1 = CurrentBuildId
-    uint8_t buildIdStr[8];
-    fn_Configuration_CurrentBuildId(buildIdStr);
-    fn_InternalBasePtr_CheckPtr(textElemPtr);
-    fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
-    fn_String_Dtor(buildIdStr);
+        uint8_t buildIdStr[8];
+        fn_Configuration_CurrentBuildId(buildIdStr);
+        fn_InternalBasePtr_CheckPtr(textElemPtr);
+        fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
+        fn_String_Dtor(buildIdStr);
+    }
 }
 
 // ============================================================

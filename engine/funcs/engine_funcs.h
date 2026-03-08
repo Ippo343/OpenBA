@@ -2192,15 +2192,29 @@ extern uint32_t* g_TypeId_CaptureBoxElement;
 typedef void (*fn_Element_SetNeedsSizeCalc_t)(void* self);
 extern fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc;
 
-// TradeUI::RefreshSortedDisplay (FUN_1400846b0) — kept as fn_* pointer (too complex for inline)
-// 336 lines: iterates trade entities, finds ResourceComponent/StorageLocationComponent on each,
-// builds sorted display array (0x18-byte entries), sets sprites/text/spinners per row,
-// looks up inventory counts via BST traversal, handles sort by name vs quantity.
-// Depends on: ComponentEntity iteration, IsDerivedFrom for 4+ component types,
-// UI::Sprite, LabelElement::SetSprite, TextElement::SetText, SpinnerElement::SetValue/SetMinMax,
-// NumberElement::SetValue, two sort helpers (FUN_1400162d0, FUN_1400165d0).
+// TradeUI::RefreshSortedDisplay (FUN_1400846b0) — REPLACED with TradeUI_RefreshDisplay in tradeui.cpp
+// fn_TradeUI_RefreshDisplay pointer kept for reference / fallback only.
 typedef void (*fn_TradeUI_RefreshDisplay_t)(void* self, uint64_t p2, uint64_t p3, int64_t p4);
 extern fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay;
+
+// ValueDescription type ID — DAT_1401c4bf0 (sprite + name on trade entity descriptions)
+extern uint32_t* g_TypeInfo_ValueDescription;
+
+// TradeDescription type ID — DAT_1401c4bb8 (trade order data on TradeComponent)
+extern uint32_t* g_TypeInfo_TradeDescription;
+
+// DynArray clear for 0x18-byte stride arrays (FUN_140016200)
+// Resets count to 0. arrayStruct = pointer to {dataPtr, ..., count(+8), capacity(+C)}.
+typedef void (*fn_DynArray_Clear_0x18_t)(void* arrayStruct);
+extern fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18;
+
+// Introsort by name (FUN_1400162d0) — sorts 0x18-byte entries, name-based comparator
+typedef void (*fn_IntroSort_ByName_t)(void* array, int count, void* context, int64_t param4);
+extern fn_IntroSort_ByName_t fn_IntroSort_ByName;
+
+// Introsort by component (FUN_1400165d0) — sorts 0x18-byte entries, component-based comparator
+typedef void (*fn_IntroSort_ByComponent_t)(void* array, int count, void* context);
+extern fn_IntroSort_ByComponent_t fn_IntroSort_ByComponent;
 
 // TradeUI table refresh sub-functions (needs opus — 381/488 lines each)
 extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable;   // FUN_140083c70

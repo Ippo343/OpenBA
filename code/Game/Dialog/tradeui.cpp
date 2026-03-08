@@ -640,7 +640,7 @@ void TradeUI_Serialize(TradeUI* self) {
     }
 
     // --- Phase 5: Call refresh functions ---
-    fn_TradeUI_RefreshDisplay(self, 0, 0, 0);
+    TradeUI_RefreshDisplay(self, 0, 0, 0);
     fn_TradeUI_RefreshSellTable(self);
     fn_TradeUI_RefreshBuyTable(self);
 }
@@ -880,7 +880,7 @@ void TradeUI_OnCreate(TradeUI* self) {
         // Order count changed — refresh sell, buy, and order tables
         fn_TradeUI_RefreshSellTable(self);
         fn_TradeUI_RefreshBuyTable(self);
-        fn_TradeUI_RefreshDisplay(self, 0, 0, 0);
+        TradeUI_RefreshDisplay(self, 0, 0, 0);
     }
 
     // Always update totals
@@ -1008,7 +1008,7 @@ check_type14:
         return;
     }
     if (eventId == 0xc7) {
-        fn_TradeUI_RefreshDisplay(self, 0, 0, 0);
+        TradeUI_RefreshDisplay(self, 0, 0, 0);
     }
 }
 
@@ -1075,7 +1075,7 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
         fn_ComboElement_SetCurrentItem(*(void**)(s + 0x140), sortIndex);
 
         // Refresh sorted display
-        fn_TradeUI_RefreshDisplay(self, (uint64_t)sortIndex, 0, p4);
+        TradeUI_RefreshDisplay(self, (uint64_t)sortIndex, 0, p4);
     }
 
     // Destroy serializer
@@ -1400,7 +1400,7 @@ void TradeUI_OnDismissButton(TradeUI* self) {
     ((StateCall_t)(vtbl[2]))();
 
     // Refresh display and tables
-    fn_TradeUI_RefreshDisplay(self, stateAddr, stateVal, 10);
+    TradeUI_RefreshDisplay(self, stateAddr, stateVal, 10);
     fn_TradeUI_RefreshSellTable(self);
     fn_TradeUI_RefreshBuyTable(self);
 }
@@ -1495,7 +1495,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     }
 
     fn_TradeUI_RefreshSellTable(self);
-    fn_TradeUI_RefreshDisplay(self, (uint64_t)retval, (uint64_t)newEntry, (int64_t)building);
+    TradeUI_RefreshDisplay(self, (uint64_t)retval, (uint64_t)newEntry, (int64_t)building);
 }
 
 // ============================================================
@@ -1752,6 +1752,229 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
 }
 
 // ============================================================
+// RefreshDisplay (FUN_1400846b0): Rebuild sorted storage table display
+// ============================================================
+// Original: 0x1400846b0 (336 lines)
+//
+// Iterates the global trade entity list (game world +0xF0), finds
+// ResourceType and ValueDescription sub-objects on each entity,
+// builds a display array (stride 0x18: {entity, resourceComp, valueDescComp}).
+//
+// Finds TradeComponent and StorageComponent on the owning building entity.
+// Sorts entries by name (sort combo == 0) or by quantity (sort combo != 0).
+//
+// For each entry: sets sprite icon + name text on label element, looks up
+// inventory count from StorageComponent's item array, looks up order amount
+// from TradeComponent's BST, sets NumberElement and SpinnerElement values.
+// Clears remaining UI rows beyond the data.
+
+// Helper: find a sub-object on a description/external entity (array at +0x28, count at +0x30)
+static void* FindDescSubObject(void* descEntity, uint32_t* typeIdPtr) {
+    if (!descEntity || !typeIdPtr) return nullptr;
+    uint32_t target = *typeIdPtr;
+    void** compArray = *(void***)((uintptr_t)descEntity + 0x28);
+    int compCount = *(int*)((uintptr_t)descEntity + 0x30);
+    for (int i = 0; i < compCount; i++) {
+        void* comp = compArray[i];
+        if (!comp) continue;
+        void** vtable = *(void***)comp;
+        typedef int (*fn_GetTypeId_t)(void*);
+        int typeId = ((fn_GetTypeId_t)vtable[2])(comp);
+        if ((uint32_t)typeId == target) {
+            if (fn_IsDerivedFrom(comp, target))
+                return comp;
+            break;
+        }
+    }
+    return nullptr;
+}
+
+void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Get trade entity list from game world singleton (+0xF0)
+    uintptr_t tradeList = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+    int entityCount = *(int*)(tradeList + 0x118);
+
+    // Clear display entries array at self+0x50
+    fn_DynArray_Clear_0x18((void*)(s + 0x50));
+
+    // Build display entries: for each trade entity, find ResourceType + ValueDescription
+    for (int i = 0; i < entityCount; i++) {
+        uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)(tradeList + 0x110) + (uintptr_t)i * 8);
+
+        void* resourceComp = FindDescSubObject((void*)entity, g_TypeId_ResourceType);
+        void* valueComp = FindDescSubObject((void*)entity, g_TypeInfo_ValueDescription);
+
+        // Push 0x18-byte entry: {entity, resourceComp, valueComp}
+        uint64_t entry[3] = {entity, (uint64_t)resourceComp, (uint64_t)valueComp};
+        TradeUI_DynArrayPush(s, 0x50, 0x58, 0x5C, entry, 0x18);
+    }
+
+    // Get owning entity -> TradeComponent + StorageComponent
+    void* ownerEntity = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(ownerEntity, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? ownerEntity : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    // Find TradeComponent (uses g_TypeId_BuildingComponent = DAT_1401c4b80)
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t tradePtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &tradePtr);
+
+    // Validate TradeDescription derivation (result unused — validation only)
+    fn_InternalBasePtr_CheckPtr(&tradePtr);
+    fn_IsDerivedFrom(*(void**)(tradePtr[0] + 0x18), *g_TypeInfo_TradeDescription);
+
+    // Find StorageComponent
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t storagePtr[2] = {0, 0};
+    fn_FindComponent_Storage((void*)entityPtr[0], &storagePtr);
+
+    // Sort entries based on sort combo selection (+0x140 = sortCombo element)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x140));
+    int entryCount = *(int*)(s + 0x58);
+    int sortMode = *(int*)(*(uintptr_t*)(s + 0x140) + 0x118);
+
+    if (sortMode == 0) {
+        // Sort by name
+        if (entryCount > 1) {
+            uint64_t sortCtx = (uint64_t)tradeList;
+            fn_IntroSort_ByName(*(void**)(s + 0x50), entryCount, &sortCtx, p4);
+        }
+    } else {
+        // Sort by quantity (uses TradeComponent as context)
+        uint64_t sortCtx = tradePtr[0];
+        fn_IntroSort_ByComponent(*(void**)(s + 0x50), entryCount, &sortCtx);
+    }
+
+    // Re-read count (may have been modified)
+    entryCount = *(int*)(s + 0x58);
+
+    // --- Display loop: populate UI rows with data ---
+    for (int i = 0; i < entryCount; i++) {
+        int byteOff = i * 0x18;
+        uintptr_t* entry = (uintptr_t*)(*(uintptr_t*)(s + 0x50) + byteOff);
+        uintptr_t* uiRow = (uintptr_t*)(*(uintptr_t*)(s + 0x80) + byteOff);
+
+        uintptr_t valueDesc = entry[2];  // ValueDescription component
+
+        // Set sprite icon from ValueDescription (+0x20=spriteSheet, +0x28=spriteName)
+        uint8_t spriteTmp[32] = {};
+        fn_Sprite_Sprite(spriteTmp, *(uint64_t*)(valueDesc + 0x20), (void*)(valueDesc + 0x28));
+        uint64_t spriteVal[2] = {((uint64_t*)spriteTmp)[0], ((uint64_t*)spriteTmp)[1]};
+        fn_InternalBasePtr_CheckPtr(uiRow);
+        fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
+
+        // Set text name from ValueDescription (+0x30 = name string)
+        uint64_t strBuf[2] = {0, 0};
+        fn_String_Ctor_Copy(strBuf, (void*)(valueDesc + 0x30));
+        uint64_t strVal[2] = {strBuf[0], strBuf[1]};
+        fn_InternalBasePtr_CheckPtr(uiRow);
+        fn_TextElement_SetText(*(void**)uiRow, strVal);
+
+        // Lookup inventory count from StorageComponent item array (+0x28/+0x30)
+        // Each item is 0x10 bytes: {key(uint64), countA(int32), countB(int32)}
+        // Result = countA - countB (available = total - committed)
+        int invCount = 0;
+        fn_InternalBasePtr_CheckPtr(&storagePtr);
+        uintptr_t scAddr = storagePtr[0];
+        int scItemCount = *(int*)(scAddr + 0x30);
+        uintptr_t scItems = *(uintptr_t*)(scAddr + 0x28);
+        for (int j = 0; j < scItemCount; j++) {
+            uintptr_t itemAddr = scItems + (uintptr_t)j * 0x10;
+            if (*(uintptr_t*)itemAddr == entry[0]) {
+                if (j >= 0) {
+                    invCount = *(int*)(itemAddr + 8) - *(int*)(itemAddr + 0xC);
+                }
+                break;
+            }
+        }
+
+        // Set NumberElement value (at uiRow + 0x10)
+        void* numSlot = (void*)((uintptr_t)uiRow + 0x10);
+        fn_InternalBasePtr_CheckPtr(numSlot);
+        fn_NumberElement_SetValueInt(*(void**)numSlot, invCount);
+
+        // Lookup trade order amount from TradeComponent BST (red-black tree at +0x60)
+        // Node: {key(+0), value(+8), color(+10), left(+18), right(+20)}
+        int orderAmt = 0;
+        fn_InternalBasePtr_CheckPtr(&tradePtr);
+        uintptr_t* bstNode = *(uintptr_t**)(tradePtr[0] + 0x60);
+        while (bstNode != nullptr) {
+            if (entry[0] < *bstNode) {
+                bstNode = (uintptr_t*)bstNode[3];  // left child at +0x18
+            } else if (entry[0] > *bstNode) {
+                bstNode = (uintptr_t*)bstNode[4];  // right child at +0x20
+            } else {
+                orderAmt = (int)bstNode[1];  // value at +0x08
+                break;
+            }
+        }
+
+        // Set SpinnerElement value (at uiRow + 0x08)
+        void* spinSlot = (void*)((uintptr_t)uiRow + 8);
+        fn_InternalBasePtr_CheckPtr(spinSlot);
+        fn_SpinnerElement_SetValue(*(void**)spinSlot, orderAmt);
+
+        // Enable spinner and number elements via vtable[8] (+0x40) = SetEnabled
+        fn_InternalBasePtr_CheckPtr(spinSlot);
+        Element_SetEnabled(*(void**)spinSlot, true);
+        fn_InternalBasePtr_CheckPtr(numSlot);
+        Element_SetEnabled(*(void**)numSlot, true);
+
+        // Set spinner min/max range
+        fn_InternalBasePtr_CheckPtr(spinSlot);
+        fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 9999);
+
+        // Set spinner element name to resource path filename
+        void* path = fn_External_GetPath((void*)entry[0]);
+        uint64_t filenameBuf[4] = {0};
+        fn_Filename_GetPathFilename(path, filenameBuf, false);
+        fn_InternalBasePtr_CheckPtr(spinSlot);
+        fn_Element_SetName(*(void**)spinSlot, filenameBuf);
+        fn_Filename_Dtor(filenameBuf);
+    }
+
+    // --- Clear remaining UI rows beyond data ---
+    int uiRowCount = *(int*)(s + 0x88);
+    for (int i = entryCount; i < uiRowCount; i++) {
+        int byteOff = i * 0x18;
+        uintptr_t* uiRow = (uintptr_t*)(*(uintptr_t*)(s + 0x80) + byteOff);
+
+        // Set blank sprite
+        uint8_t blankSprite[16] = {};
+        fn_Sprite_DefaultCtor(blankSprite);
+        uint64_t spriteVal[2] = {((uint64_t*)blankSprite)[0], ((uint64_t*)blankSprite)[1]};
+        fn_InternalBasePtr_CheckPtr(uiRow);
+        fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
+
+        // Set blank text
+        uint64_t blankStr[2] = {0, 0};
+        fn_String_Ctor_Default(blankStr);
+        uint64_t strVal[2] = {blankStr[0], blankStr[1]};
+        fn_InternalBasePtr_CheckPtr(uiRow);
+        fn_TextElement_SetText(*(void**)uiRow, strVal);
+
+        // Disable spinner (at +8) via vtable SetEnabled
+        void* spinSlot = (void*)((uintptr_t)uiRow + 8);
+        fn_InternalBasePtr_CheckPtr(spinSlot);
+        Element_SetEnabled(*(void**)spinSlot, false);
+
+        // Disable number (at +0x10) via vtable SetEnabled
+        void* numSlot = (void*)((uintptr_t)uiRow + 0x10);
+        fn_InternalBasePtr_CheckPtr(numSlot);
+        Element_SetEnabled(*(void**)numSlot, false);
+
+        // Set spinner min/max to 0,0 (no range)
+        fn_InternalBasePtr_CheckPtr(spinSlot);
+        fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 0);
+    }
+}
+
+// ============================================================
 // NOTE: The following functions are too complex for this pass (100+ lines
 // with many unknown sub-calls) and are marked "needs opus":
 //
@@ -1759,9 +1982,6 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
 //     — executes the actual trade: moves sell items to StateMachine,
 //       processes buy orders (destroys/removes/spawns entities),
 //       updates totals, refreshes all tables
-//
-//   fn_TradeUI_RefreshDisplay  (0x1400846b0, 336 lines)
-//     — rebuilds sorted trade table display from ExternalFactory order list
 //
 //   fn_TradeUI_RefreshSellTable (0x140083c70, 381 lines)
 //     — populates sell table UI elements with resource info, amounts, icons

@@ -627,6 +627,11 @@ uint32_t* g_TypeId_CaptureBoxElement = nullptr;
 // TradeUI support
 fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc = nullptr;
 fn_TradeUI_RefreshDisplay_t fn_TradeUI_RefreshDisplay = nullptr;
+uint32_t* g_TypeInfo_ValueDescription = nullptr;
+uint32_t* g_TypeInfo_TradeDescription = nullptr;
+fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18 = nullptr;
+fn_IntroSort_ByName_t fn_IntroSort_ByName = nullptr;
+fn_IntroSort_ByComponent_t fn_IntroSort_ByComponent = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable = nullptr;
 fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable = nullptr;
 fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
@@ -2612,6 +2617,16 @@ bool EngineFuncsInit() {
         ResolveExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ"));
     fn_TradeUI_RefreshDisplay = reinterpret_cast<fn_TradeUI_RefreshDisplay_t>(
         ResolveAddr(Module::Exe, 0x1400846b0));
+    g_TypeInfo_ValueDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4bf0));
+    g_TypeInfo_TradeDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4bb8));
+    fn_DynArray_Clear_0x18 = reinterpret_cast<fn_DynArray_Clear_0x18_t>(
+        ResolveAddr(Module::Exe, 0x140016200));
+    fn_IntroSort_ByName = reinterpret_cast<fn_IntroSort_ByName_t>(
+        ResolveAddr(Module::Exe, 0x1400162d0));
+    fn_IntroSort_ByComponent = reinterpret_cast<fn_IntroSort_ByComponent_t>(
+        ResolveAddr(Module::Exe, 0x1400165d0));
     fn_TradeUI_RefreshSellTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
         ResolveAddr(Module::Exe, 0x140083c70));
     fn_TradeUI_RefreshBuyTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
