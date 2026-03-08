@@ -106,22 +106,351 @@ static bool BuildComplete_Impl(void* posComp)
 }
 
 // ============================================================
-// EntityUI_SetEditMode — NEEDS OPUS (0x140102b60)
+// EntityUI_SetEditMode (0x140102b60)
 // ============================================================
-// 100+ lines: walks BST, calls Factory::CreateObject, creates ToolSetting objects.
-// Kept as passthrough via fn_EntityUI_SetEditMode.
+// Sets the player controller's active tool. Walks a BST at +0x10
+// (tool type registry) to find the matching tool entry for the
+// given mode. Creates a new tool controller via Factory::CreateObject
+// and optionally a ToolSetting, then activates the tool.
+//
+// PlayerController layout:
+//   +0x10: tool registry BST root (nodes: +0x00=typeId(4), +0x04=pad,
+//          +0x08=toolTypeId(4), +0x10=settingPtr(8), +0x18=parent(8),
+//          +0x20=left(8), +0x28=right(8))
+//   +0x20: current mode (uint64)
+//   +0x28: active tool (InternalBasePtr)
+//   +0x80: override flag (char)
+//   +0x88: override mode (uint64)
+//
+// BST node layout (0x30 bytes, keyed by typeId at +0x00):
+//   +0x00: typeId (uint32_t) — key for BST ordering
+//   +0x08: toolTypeId (uint32_t) — passed to Factory::CreateObject
+//   +0x10: settingPtr (void*) — cached ToolSetting object
+//   +0x18: parent (node*), +0x20: left (node*), +0x28: right (node*)
+
+void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
+{
+    uintptr_t pc = (uintptr_t)playerController;
+
+    // If override flag is set and mode != 0, use stored override mode
+    if (*(char*)(pc + 0x80) != 0 && mode != 0) {
+        mode = *(uint64_t*)(pc + 0x88);
+    }
+
+    // Check if already in this mode with a valid tool
+    uint64_t curMode = *(uint64_t*)(pc + 0x20);
+    void* curTool = *(void**)(pc + 0x28);
+    if (curMode == mode && curTool != nullptr && mode != 0)
+        return;
+
+    // Set new mode
+    *(uint64_t*)(pc + 0x20) = mode;
+
+    // Destroy existing tool if present
+    if (*(void**)(pc + 0x28) != nullptr) {
+        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+        // Call vtable[5] (offset 0x28) = Shutdown on the tool
+        void* tool = *(void**)(pc + 0x28);
+        void** vtbl = *(void***)(tool);
+        typedef void (*VCall_Shutdown_t)(void*);
+        ((VCall_Shutdown_t)vtbl[5])(tool);
+        // DeletePtr releases the object
+        fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
+    }
+
+    // Find the matching tool type in the BST at +0x10
+    // Walk to the rightmost node first (find max for reverse iteration)
+    uint32_t foundTypeId = 0;
+    uint32_t* bstNode = *(uint32_t**)(pc + 0x10);
+    uint32_t* foundNode = nullptr;
+
+    if (bstNode == nullptr)
+        goto create_tool;
+
+    // Walk to rightmost leaf (last in-order)
+    {
+        uint32_t* node = bstNode;
+        while (*(uint32_t**)(node + 8) != nullptr) {  // +0x20 = left child (8 = 0x20/4)
+            node = *(uint32_t**)(node + 8);
+        }
+
+        // Reverse in-order traversal looking for tool matching mode
+        uint32_t* cur = node;
+        while (cur != nullptr) {
+            // Check if this tool entry's description contains a component
+            // matching mode's type
+            uint64_t descMode = *(uint64_t*)(pc + 0x20);
+            if (descMode != 0) {
+                uint32_t nodeKey = *cur;
+                int descCount = *(int*)(descMode + 0x30);
+                void** descArray = *(void***)(descMode + 0x28);
+                for (int i = 0; i < descCount; i++) {
+                    void* comp = descArray[i];
+                    void** cvtbl = *(void***)comp;
+                    typedef int (*fn_GetTypeId_t)(void*);
+                    int typeId = ((fn_GetTypeId_t)cvtbl[2])(comp);
+                    if ((uint32_t)typeId == nodeKey) {
+                        if (comp != nullptr) {
+                            foundTypeId = nodeKey;
+                        }
+                        goto done_search;
+                    }
+                }
+            }
+
+            // Move to predecessor in BST
+            if (cur == nullptr) break;
+            uint32_t* rightChild = *(uint32_t**)(cur + 10);  // +0x28
+            if (rightChild != nullptr) {
+                // Go right, then left to the bottom
+                uint32_t* next = rightChild;
+                while (*(uint32_t**)(next + 8) != nullptr) {  // +0x20
+                    next = *(uint32_t**)(next + 8);
+                }
+                cur = next;
+            } else {
+                // Go up until we come from a right child
+                uint32_t* parent = *(uint32_t**)(cur + 6);  // +0x18
+                if (parent != nullptr) {
+                    if (*(uint32_t**)(parent + 8) != cur) {  // +0x20 = left != cur
+                        // We came from left — find ancestor where we're from right
+                        while (parent != nullptr && *(uint32_t**)(parent + 10) == cur) {
+                            cur = parent;
+                            parent = *(uint32_t**)(parent + 6);
+                        }
+                        cur = parent;
+                    } else {
+                        cur = parent;
+                    }
+                } else {
+                    cur = nullptr;
+                }
+            }
+        }
+    }
+done_search:
+
+    // Find BST node matching foundTypeId
+    {
+        uint32_t* node = *(uint32_t**)(pc + 0x10);
+        foundNode = nullptr;
+        while (node != nullptr) {
+            if (foundTypeId < *node) {
+                node = *(uint32_t**)(node + 8);  // left
+            } else if (foundTypeId <= *node) {
+                foundNode = node;
+                break;
+            } else {
+                node = *(uint32_t**)(node + 10);  // right
+            }
+        }
+    }
+
+create_tool:
+    if (foundNode == nullptr) return;
+
+    // Create tool controller via Factory::CreateObject
+    {
+        void* factory = *(void**)*g_pFactorySingleton;
+        uint32_t toolTypeId = foundNode[2];  // +0x08
+        void* newObj = fn_Factory_CreateObject(factory, toolTypeId);
+
+        // IsDerivedFrom check for ToolController type
+        bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
+        void* toolCtrl = isToolCtrl ? newObj : nullptr;
+
+        // Wrap in InternalBasePtr and store at +0x28
+        uint64_t ibpBuf[1] = {0};
+        fn_InternalBasePtr_Ctor(ibpBuf, toolCtrl);
+        *(uint64_t*)(pc + 0x28) = ibpBuf[0];
+
+        // If node's setting (+0x10) is null, create one via vtable call
+        void* setting = *(void**)((uintptr_t)foundNode + 0x10);
+        if (setting == 0) {
+            fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+            void* tool = *(void**)(pc + 0x28);
+            void** tvtbl = *(void***)tool;
+            // vtable[11] (offset 0x58): GetSettingTypeId(this, retval) -> int*
+            typedef int* (*VCall_GetSettingTypeId_t)(void*, void*);
+            uint64_t settingBuf[1] = {0};
+            int* settingResult = ((VCall_GetSettingTypeId_t)tvtbl[11])(tool, settingBuf);
+
+            if (*settingResult != 0) {
+                fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+                tool = *(void**)(pc + 0x28);
+                tvtbl = *(void***)tool;
+                settingBuf[0] = 0;
+                int* sr2 = ((VCall_GetSettingTypeId_t)tvtbl[11])(tool, settingBuf);
+                uint32_t settingTypeId = *(uint32_t*)sr2;
+
+                void* settingObj = fn_Factory_CreateObject(factory, settingTypeId);
+                bool isSetting = fn_IsDerivedFrom(settingObj, *g_TypeId_ToolSetting);
+                void* typedSetting = isSetting ? settingObj : nullptr;
+
+                uint64_t settIbp[1] = {0};
+                fn_InternalBasePtr_Ctor(settIbp, typedSetting);
+                *(uint64_t*)((uintptr_t)foundNode + 0x10) = settIbp[0];
+            }
+        }
+
+        // Setup tool: tool+0x10=controller, tool+0x20=mode, tool+0x18=setting
+        setting = *(void**)((uintptr_t)foundNode + 0x10);
+        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+        void* activeTool = *(void**)(pc + 0x28);
+        uint64_t activeMode = *(uint64_t*)(pc + 0x20);
+        *(uintptr_t*)((uintptr_t)activeTool + 0x10) = pc;
+        *(uint64_t*)((uintptr_t)activeTool + 0x20) = activeMode;
+        *(void**)((uintptr_t)activeTool + 0x18) = (void*)setting;
+
+        // Call tool's vtable[4] (offset 0x20) = Startup
+        fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
+        activeTool = *(void**)(pc + 0x28);
+        void** atVtbl = *(void***)activeTool;
+        typedef void (*VCall_Startup_t)(void*);
+        ((VCall_Startup_t)atVtbl[4])(activeTool);
+    }
+}
 
 // ============================================================
-// EntityUI_SelectEntity — BST insert/update (0x140102e30)
+// EntityUI_SelectEntity (0x140102e30)
 // ============================================================
-// Inserts or updates entity in tracking BST at playerController+0x60.
-// Also increments count at playerController+0x68.
-// BST node (0x38 bytes): key(8), x(4), y(4), active(4), _pad(4),
-//   left(8), right(8), parent(8), balance(4)
+// Inserts or updates entity in the tracking AVL BST at
+// playerController+0x60. Increments count at +0x68 on insert.
 //
-// Calls FUN_140025920 to rebalance after insert.
-// Since FUN_140025920 is complex AVL rebalancing, keep as sub-function.
+// BST node (0x38 bytes):
+//   +0x00: key (uint64_t, entity InternalBasePtr value)
+//   +0x08: x position (int32)
+//   +0x0C: y position (int32)
+//   +0x10: active flag (int32, set to 1)
+//   +0x18: parent (node*)
+//   +0x20: left child (node*)
+//   +0x28: right child (node*)
+//   +0x30: balance factor (int16)
+//   +0x32: height (int16)
+//
 // NOTE: This function is used in both entityui.cpp and toolui.cpp.
+
+void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
+                                 uint32_t x, uint32_t y)
+{
+    uintptr_t pc = (uintptr_t)playerController;
+    uint64_t entityKey = *(uint64_t*)entityPtr;
+    uintptr_t* rootPtr = (uintptr_t*)(pc + 0x60);
+
+    // Search BST for existing node with matching key
+    uintptr_t node = *rootPtr;
+    while (node != 0) {
+        fn_InternalBasePtr_CheckPtr((void*)node);
+        uint64_t nodeKey = *(uint64_t*)node;
+        if (entityKey < nodeKey) {
+            node = *(uintptr_t*)(node + 0x20);  // left
+        } else {
+            fn_InternalBasePtr_CheckPtr(entityPtr);
+            if (entityKey <= nodeKey) {
+                // Found — update position and active flag
+                if (node != 0) {
+                    *(uint8_t*)(node + 0x10) = 1;  // active = true
+                    *(uint32_t*)(node + 0x08) = x;
+                    *(uint32_t*)(node + 0x0C) = y;
+                    return;
+                }
+                break;
+            }
+            node = *(uintptr_t*)(node + 0x28);  // right
+        }
+    }
+
+    // Not found — insert new node
+    // Prepare node data
+    uint32_t activeFlag = 1;
+
+    if (*rootPtr == 0) {
+        // Empty tree — create root node
+        uintptr_t* newNode = (uintptr_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+        if (newNode != nullptr) {
+            *(uint64_t*)newNode = 0;
+            *(uint64_t*)newNode = entityKey;
+            *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
+            *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
+            *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
+            newNode[3] = 0;  // parent = null
+            newNode[4] = 0;  // left = null
+            newNode[5] = 0;  // right = null
+            *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;  // balance = 0
+        }
+        *rootPtr = (uintptr_t)newNode;
+    } else {
+        // Walk BST to find insertion point
+        uintptr_t cur = *rootPtr;
+        uintptr_t parent = 0;
+
+        while (true) {
+            parent = cur;
+            fn_InternalBasePtr_CheckPtr((void*)cur);
+            uint64_t curKey = *(uint64_t*)cur;
+
+            if (curKey <= entityKey) {
+                fn_InternalBasePtr_CheckPtr(entityPtr);
+                if (entityKey <= curKey) {
+                    // Duplicate key — should not happen, already handled above
+                    return;
+                }
+                // Go right
+                uintptr_t right = *(uintptr_t*)(cur + 0x28);
+                if (right == 0) {
+                    // Insert as right child
+                    uintptr_t* newNode = (uintptr_t*)fn_MemAlloc(
+                        g_pMemAllocSingleton, 0x38, 8);
+                    if (newNode != nullptr) {
+                        *(uint64_t*)newNode = 0;
+                        *(uint64_t*)newNode = entityKey;
+                        *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
+                        *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
+                        *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
+                        newNode[4] = 0;   // left
+                        newNode[5] = 0;   // right
+                        *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;
+                        newNode[3] = parent;  // parent
+                    }
+                    *(uintptr_t*)(cur + 0x28) = (uintptr_t)newNode;
+                    // Rebalance
+                    uintptr_t nodeRef = (uintptr_t)newNode;
+                    fn_AVL_Rebalance_0x38(rootPtr, &nodeRef);
+                    break;
+                }
+                cur = right;
+            } else {
+                // Go left
+                uintptr_t left = *(uintptr_t*)(cur + 0x20);
+                if (left == 0) {
+                    // Insert as left child
+                    uintptr_t* newNode = (uintptr_t*)fn_MemAlloc(
+                        g_pMemAllocSingleton, 0x38, 8);
+                    if (newNode != nullptr) {
+                        *(uint64_t*)newNode = 0;
+                        *(uint64_t*)newNode = entityKey;
+                        *(uint32_t*)((uintptr_t)newNode + 0x08) = x;
+                        *(uint32_t*)((uintptr_t)newNode + 0x0C) = y;
+                        *(uint32_t*)((uintptr_t)newNode + 0x10) = activeFlag;
+                        newNode[4] = 0;   // left
+                        newNode[5] = 0;   // right
+                        *(uint32_t*)((uintptr_t)newNode + 0x30) = 0;
+                        newNode[3] = parent;  // parent
+                    }
+                    *(uintptr_t*)(cur + 0x20) = (uintptr_t)newNode;
+                    // Rebalance
+                    uintptr_t nodeRef = (uintptr_t)newNode;
+                    fn_AVL_Rebalance_0x38(rootPtr, &nodeRef);
+                    break;
+                }
+                cur = left;
+            }
+        }
+    }
+
+    // Increment entity count
+    *(int*)(pc + 0x68) = *(int*)(pc + 0x68) + 1;
+}
 
 // ============================================================
 // EditTool_SelectEntity — NEEDS OPUS (0x1400fd3b0)
@@ -431,7 +760,7 @@ void EntityUI_Slot8(EntityUI* self) {
 
     if (!editToolPtr) {
         // No EditTool active — deselect first, then get new EditTool
-        fn_EntityUI_SetEditMode(playerController, 0);
+        EntityUI_SetEditMode_Impl(playerController, 0);
 
         // Re-read current tool after deselect
         currentTool = *(void**)((uintptr_t)playerController + 0x28);
@@ -467,7 +796,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 
     if (id == 1) {
         // Close entity panel — set edit mode to 0
-        fn_EntityUI_SetEditMode(playerController, 0);
+        EntityUI_SetEditMode_Impl(playerController, 0);
         return;
     }
 
@@ -548,7 +877,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         uint32_t dialogX = *(uint32_t*)(*(uintptr_t*)(s + 0x18) + 0x88);
         uint32_t dialogY = *(uint32_t*)(*(uintptr_t*)(s + 0x18) + 0x8c);
         void* entityKey = *(void**)(s + 0x30);
-        fn_EntityUI_SelectEntity(playerController, &entityKey, dialogX, dialogY);
+        EntityUI_SelectEntity_Impl(playerController, &entityKey, dialogX, dialogY);
         return;
     }
 }

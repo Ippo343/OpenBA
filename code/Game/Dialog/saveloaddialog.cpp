@@ -780,18 +780,41 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         fn_UI_CloseDialog(ui, &basePtr);
 
         // --- Step 1: Allocate and construct the inner GameUpdateLoop (0x160 bytes) ---
-        // This is the actual gameplay loop that will run after loading completes.
+        // GameUpdateLoop_Ctor reimplemented inline (was FUN_140098060).
+        // Calls UpdateLoop base ctor, patches vtable, initializes all fields.
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
         void* pGameLoop = nullptr;
         if (gameLoop) {
-            uint64_t nameStr = 0;  // empty string
-            uint64_t loopPtrNull = 0;
             void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
-            // Signature: (self, savedState, loaderLoopPtr, opFlag, nameStr, 0, 0, 1, 0, 0, 0)
-            // opFlag=0xffffffff, nameStr=empty string, param8='\x01'
-            fn_GameUpdateLoop_Ctor(gameLoop, savedState, (void*)&loopPtrNull,
-                                   0xffffffff, (void*)&nameStr, 0, 0, 1, 0, 0, 0);
-            fn_String_Dtor((void*)&nameStr);
+
+            fn_UpdateLoop_Ctor(gameLoop);
+            *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
+
+            // +0x28: empty name string
+            uint8_t nameStr[8];
+            fn_String_Ctor_CStr(nameStr, "");
+            *(uint64_t*)((uintptr_t)gameLoop + 0x28) = *(uint64_t*)nameStr;
+            *(uint32_t*)((uintptr_t)gameLoop + 0x30) = 0;   // p6
+            *(uint32_t*)((uintptr_t)gameLoop + 0x34) = 0;   // p7
+            *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x40) = 0;   // p9
+            *(uint64_t*)((uintptr_t)gameLoop + 0x48) = 0;   // p10
+            *(uint64_t*)((uintptr_t)gameLoop + 0x50) = 0;   // p11
+            *(uint64_t*)((uintptr_t)gameLoop + 0x58) = (uint64_t)savedState;
+            // Zero remaining fields +0x60..+0xC0
+            for (uintptr_t off = 0x60; off <= 0xC0; off += 8)
+                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
+            *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
+            *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
+            // p8=1 means disasterOff=false -> 0 (not 0xF0)
+            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = 0;
+            for (uintptr_t off = 0xD8; off <= 0x148; off += 8)
+                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
+            // +0x150: loaderLoopPtr (null)
+            *(uint64_t*)((uintptr_t)gameLoop + 0x150) = 0;
+            *(uint8_t*)((uintptr_t)gameLoop + 0x158) = 0;
+            *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = 0xFFFFFFFF;  // opFlag
+
             pGameLoop = gameLoop;
         }
 
@@ -800,20 +823,18 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
         void* pDlLoop = nullptr;
         if (dlLoop) {
-            // Build Time from constant (originally DAT_14017214c = 1.0f)
-            float delayVal = 1.0f;
-            uint64_t delayTime[1]; // 8-byte Time
-            fn_Time_Ctor_Float((void*)delayTime, delayVal);
+            // Build Time from constant (1.0f delay)
+            uint64_t delayTime[1];
+            fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
-            // Get the dialog filename string via fn_GetLoadingSoundString
-            // This formats "Dialog/Loading.rsc:gameLoad%i" with a random 0-11 variant
-            uint64_t dialogNameStr = 0;
-            fn_GetLoadingSoundString(0, (void*)&dialogNameStr, 0, 0);
+            // GetLoadingSoundString reimplemented inline: generates random loading sound variant
+            uint8_t dialogNameStr[8];
+            GetLoadingSoundString(dialogNameStr);
 
             // Construct base Engine::DialogLoaderLoopT
-            fn_DialogLoaderLoopT_Ctor(dlLoop, (void*)&dialogNameStr, pGameLoop, (void*)delayTime);
+            fn_DialogLoaderLoopT_Ctor(dlLoop, dialogNameStr, pGameLoop, (void*)delayTime);
 
-            fn_String_Dtor((void*)&dialogNameStr);
+            fn_String_Dtor(dialogNameStr);
 
             // Patch vtable to exe subclass (GameLoadDialogLoopT)
             *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
@@ -823,7 +844,6 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
             *(uint32_t*)(dl + 0x188) = 0xff000000;
             *(uint32_t*)(dl + 0x18c) = 0xff000000;
             *(uint8_t*)(dl  + 0x190) = 0;  // [400]
-            // System::Random::Random at +0x194
             fn_Random_Default_Ctor((void*)(dl + 0x194));
             *(uint64_t*)(dl + 0xb58) = 0;
             *(uint8_t*)(dl  + 0x40)  = 0;  // m_finished override = 0
@@ -832,32 +852,24 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         }
 
         // --- Step 3: Allocate and construct the outer LoaderLoop (0x48 bytes) ---
-        // Wraps the GameLoadDialogLoopT as its next loop with zero delay.
         void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
         void* pOuterLoop = nullptr;
         if (outerLoop) {
             uint64_t zeroTime[1];
             fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
             fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
-            // Patch vtable to exe subclass (GameLoaderLoop)
             *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
             pOuterLoop = outerLoop;
         }
 
         // --- Step 4: Set the outer LoaderLoop as the engine's next loop ---
+        // SetDialogLoaderNextLoop and SetEngineNextLoop now reimplemented inline.
         uintptr_t loaderLoop1 = *(uintptr_t*)(s + 0xE0);
         if (loaderLoop1 == 0) {
-            // No existing dialog loader loop: set next loop on the engine singleton.
-            // FUN_140097fb0: SetCursor(null), SetFullscreenFade(black), store next loop.
             uintptr_t engPtr = *(uintptr_t*)(s + 0xE8);
-            void* ui = *(void**)(engPtr + 0x98);
-            uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
-            if (fn_UI_SetCursor) fn_UI_SetCursor(ui, nullCursor);
-            if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
-            *(void**)(engPtr + 0xC8) = pOuterLoop;
+            SetEngineNextLoop(engPtr, pOuterLoop);
         } else {
-            // Inside a dialog loader loop: queue as its next transition
-            fn_SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
+            SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
         }
 
         *(uint8_t*)(s + 0xBA) = 0;

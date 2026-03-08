@@ -1171,15 +1171,31 @@ extern uint32_t* g_TypeId_EditTool;  // resolved from _typeInfo_exref for EditTo
 // EntityUI helpers
 // ============================================================
 
-// EntityUI_SetEditMode(playerController, mode) — sets edit tool selection mode
-// FUN_140102b60: sets player controller edit state
-typedef void (*fn_EntityUI_SetEditMode_t)(void* playerController, int mode);
-extern fn_EntityUI_SetEditMode_t fn_EntityUI_SetEditMode;
+// fn_EntityUI_SetEditMode — reimplemented in entityui.cpp as EntityUI_SetEditMode_Impl
+// FUN_140102b60: sets player controller edit state (BST lookup + Factory::CreateObject)
+void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
-// EntityUI_SelectEntity(playerController, entityPtr, x, y) — select entity for editing
-// FUN_140102e30: passes entity to edit tool's select
-typedef void (*fn_EntityUI_SelectEntity_t)(void* playerController, void* entityPtr, int x, int y);
-extern fn_EntityUI_SelectEntity_t fn_EntityUI_SelectEntity;
+// fn_EntityUI_SelectEntity — reimplemented in entityui.cpp as EntityUI_SelectEntity_Impl
+// FUN_140102e30: BST insert/update for entity tracking
+void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
+                                 uint32_t x, uint32_t y);
+
+// Factory::CreateObject(factory_singleton, typeId) -> Base*
+// Used by SetEditMode to create tool controller objects.
+// Ordinal for Object::Factory::CreateObject
+typedef void* (*fn_Factory_CreateObject_t)(void* factory, uint32_t typeId);
+extern fn_Factory_CreateObject_t fn_Factory_CreateObject;
+
+// ToolController type ID — DAT_1401c6eb8 (IsDerivedFrom check on Factory::CreateObject result)
+extern uint32_t* g_TypeId_ToolController;
+
+// ToolSetting type ID — TypeInfo_ToolSetting (used to IsDerivedFrom check on created setting)
+extern uint32_t* g_TypeId_ToolSetting;
+
+// AVL tree rebalance for 0x38-byte nodes (entity tracking BST)
+// FUN_140025920: walks up tree fixing balance factors, does rotations
+typedef void (*fn_AVL_Rebalance_0x38_t)(void* treeRoot, void* newNode);
+extern fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38;
 
 // EditTool_GetSelected(editTool, retval) — gets currently selected entity
 // vtable[13] (offset 0x68): virtual call on EditTool, returns InternalPtr<ComponentEntity>
@@ -1342,16 +1358,7 @@ extern uintptr_t g_PauseDialog_Vtable;
 // ToolUI child dialog vtable (PTR_FUN_14015f5a0 in exe .rdata) — used by Toolbar_Utility
 extern uintptr_t g_ToolUI_ChildDialog_Vtable;
 
-// Object::Factory::CreateObject(this, typeId) -> Base*
-// ?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z
-typedef void* (*fn_Factory_CreateObject_t)(void* self, uint32_t typeId);
-extern fn_Factory_CreateObject_t fn_Factory_CreateObject;
-
-// ToolController type ID — DAT_1401c6eb8 (used in Toolbar_ShowGroup for IsDerivedFrom)
-extern uint32_t* g_TypeId_ToolController;
-
-// ToolSetting type ID — used in Toolbar_ShowGroup for IsDerivedFrom
-extern uint32_t* g_TypeId_ToolSetting;
+// fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — declared above (entityui section)
 
 // Toolbar item sort function (FUN_140021790) — sorts toolbar items by priority
 typedef void (*fn_ToolbarSort_t)(void* array, int count);
@@ -2354,9 +2361,31 @@ extern fn_IntroSort_ByName_t fn_IntroSort_ByName;
 typedef void (*fn_IntroSort_ByComponent_t)(void* array, int count, void* context);
 extern fn_IntroSort_ByComponent_t fn_IntroSort_ByComponent;
 
-// TradeUI table refresh sub-functions (needs opus — 381/488 lines each)
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable;   // FUN_140083c70
-extern fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable;    // FUN_140083100
+// fn_TradeUI_RefreshSellTable — now reimplemented inline in tradeui.cpp (FUN_140083c70)
+// fn_TradeUI_RefreshBuyTable — now reimplemented inline in tradeui.cpp (FUN_140083100)
+
+// DynArray clear for 0x20-byte stride arrays (FUN_140016050)
+// Resets count to 0. arrayStruct = pointer to {dataPtr(+0), count(+8), capacity(+C)}.
+typedef void (*fn_DynArray_Clear_0x20_t)(void* arrayStruct);
+extern fn_DynArray_Clear_0x20_t fn_DynArray_Clear_0x20;
+
+// DynArray clear for 0x18-byte stride arrays (FUN_140016130) — for buy entries
+// Same pattern as fn_DynArray_Clear_0x18 but at different address.
+extern fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18_Buy;
+
+// Building_GetOrderName(building, retval) -> String*
+// FUN_140015fd0: returns the current order's name string
+typedef void* (*fn_Building_GetOrderName_t)(void* building, void* retval);
+extern fn_Building_GetOrderName_t fn_Building_GetOrderName;
+
+// Building_GetBuyEntries(building, dynArray) — populates buy entry list
+// FUN_140059670: walks trade description + ExternalFactory to build buyable item list
+typedef void (*fn_Building_GetBuyEntries_t)(void* building, void* dynArray);
+extern fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries;
+
+// DynArray_Clear_0x08 (FUN_140001bb0) — clear 8-byte stride array (for buy entries temp)
+typedef void (*fn_DynArray_Clear_0x08_t)(void* arrayStruct, int newCount);
+extern fn_DynArray_Clear_0x08_t fn_DynArray_Clear_0x08;
 
 // TradeUI::OnTradeButton — executes trade (needs opus — ~160 lines)
 typedef void (*fn_TradeUI_OnTradeButton_t)(void* self, void* p2, void* p3, int64_t p4);
@@ -3973,7 +4002,7 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
     if (editToolRef == 0) {
         // Switch to EditTool mode
-        fn_EntityUI_SetEditMode(toolController, 0);
+        EntityUI_SetEditMode_Impl(toolController, 0);
 
         // Re-read current tool after mode switch
         void* newTool = *(void**)(tc + 0x28);

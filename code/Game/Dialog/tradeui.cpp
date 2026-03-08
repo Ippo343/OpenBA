@@ -189,6 +189,751 @@ static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem) {
     }
 }
 
+// ============================================================
+// Helper: find a description sub-component by typeId
+// ============================================================
+static void* FindDescComponent(void* descEntity, uint32_t typeId)
+{
+    if (!descEntity) return nullptr;
+    int count = *(int*)((uintptr_t)descEntity + 0x30);
+    void** arr = *(void***)((uintptr_t)descEntity + 0x28);
+    for (int i = 0; i < count; i++) {
+        void* comp = arr[i];
+        void** vtbl = *(void***)comp;
+        typedef int (*fn_GetTypeId_t)(void*);
+        int tid = ((fn_GetTypeId_t)vtbl[2])(comp);
+        if ((uint32_t)tid == typeId) {
+            if (fn_IsDerivedFrom(comp, typeId))
+                return comp;
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================
+// Helper: set spinner increment based on max value
+// ============================================================
+static void SetSpinnerIncrement(void* spinner)
+{
+    fn_InternalBasePtr_CheckPtr(&spinner);
+    int maxVal = fn_SpinnerElement_GetMaxValue(spinner);
+    if (maxVal < 0x15) {
+        fn_InternalBasePtr_CheckPtr(&spinner);
+        fn_SpinnerElement_SetIncrement(spinner, 1);
+    } else if (maxVal < 0x33) {
+        fn_InternalBasePtr_CheckPtr(&spinner);
+        fn_SpinnerElement_SetIncrement(spinner, 5);
+    } else if (maxVal < 0x65) {
+        fn_InternalBasePtr_CheckPtr(&spinner);
+        fn_SpinnerElement_SetIncrement(spinner, 0x14);
+    }
+    // >= 0x65: no increment set (uses default)
+}
+
+// ============================================================
+// Helper: set element name from External resource path
+// ============================================================
+static void SetElementNameFromExternal(void* element, void* externalPtr)
+{
+    void* path = fn_External_GetPath(externalPtr);
+    uint8_t filenameBuf1[16] = {0};
+    uint8_t filenameBuf2[16] = {0};
+    void* nameStr = fn_Filename_GetPathFilename(path, filenameBuf1, false);
+    fn_InternalBasePtr_CheckPtr(&element);
+    fn_Element_SetName(element, nameStr);
+    fn_Filename_Dtor(filenameBuf1);
+    fn_Filename_Dtor(filenameBuf2);
+}
+
+// ============================================================
+// Helper: virtual call for Element::SetEnabled(this, bool)
+// vtable[8] (offset 0x40)
+// ============================================================
+static inline void VCall_Element_SetEnabled(void* elem, bool enabled)
+{
+    void** vtbl = *(void***)elem;
+    typedef void (*fn_t)(void*, uint8_t);
+    ((fn_t)vtbl[8])(elem, enabled ? 1 : 0);
+}
+
+// ============================================================
+// Helper: virtual call for Element::SetColor(this, uint32_t)
+// vtable[10] (offset 0x50)
+// ============================================================
+static inline void VCall_Element_SetColor(void* elem, uint32_t color)
+{
+    void** vtbl = *(void***)elem;
+    typedef void (*fn_t)(void*, uint32_t);
+    ((fn_t)vtbl[10])(elem, color);
+}
+
+// ============================================================
+// RefreshSellTable (0x140083c70)
+// ============================================================
+// Rebuilds the sell table data and UI.
+//
+// Phase 1: Get entity components (Building, StateMachine).
+// Phase 2: Iterate resource entries from the game world's resource table.
+//          For each resource type, check building's storage BST for availability.
+//          If available (count > 0), find ValueDescription + ResourceType sub-components
+//          and push a 0x20-byte sell data entry.
+// Phase 3: Build state check, then populate sell table UI cells.
+//          For each sell entry: set sprite, text, counts, spinner limits, color.
+// Phase 4: Clear unused sell table cells.
+
+void TradeUI_RefreshSellTable(TradeUI* self)
+{
+    uintptr_t s = (uintptr_t)self;
+
+    // Get entity, BuildingComponent, StateMachineComponent
+    void* entityRaw = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entityRaw : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    // Check TradeDescription on building
+    fn_IsDerivedFrom(*(void**)(buildingPtr[0] + 0x18), *g_TypeInfo_TradeDescription);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t smPtr[2] = {0, 0};
+    fn_FindComponent_SM((void*)entityPtr[0], &smPtr);
+
+    // Get resource table from game world singleton (+0xf0 = resource manager)
+    void* resourceMgr = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
+    int resourceCount = *(int*)((uintptr_t)resourceMgr + 0x118);
+
+    // Clear sell data array at +0x30 (stride 0x20)
+    fn_DynArray_Clear_0x20((void*)(s + 0x30));
+
+    // Phase 2: Iterate resources and build sell entries
+    if (resourceCount > 0) {
+        for (int ri = 0; ri < resourceCount; ri++) {
+            void* valueDesc = nullptr;
+            void* resTypeComp = nullptr;
+
+            // Get resource entity from resource table
+            uint64_t resEntity = *(uint64_t*)(*(uintptr_t*)((uintptr_t)resourceMgr + 0x110)
+                                  + (uintptr_t)ri * 8);
+
+            // Search building's storage BST for this resource
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            uintptr_t* bstNode = *(uintptr_t**)(buildingPtr[0] + 0x60);
+            bool found = false;
+            while (bstNode != nullptr) {
+                if (resEntity < *bstNode) {
+                    bstNode = (uintptr_t*)bstNode[3];  // left at +0x18? No...
+                } else if (resEntity <= *bstNode) {
+                    // Found — check if count (at node+0x08) > 0
+                    if (bstNode != nullptr && (int)bstNode[1] != 0) {
+                        // Find ValueDescription and ResourceType in resource entity
+                        int descCount = *(int*)(resEntity + 0x30);
+                        void** descArray = *(void***)(resEntity + 0x28);
+                        for (int d = 0; d < descCount; d++) {
+                            void* comp = descArray[d];
+                            void** cvtbl = *(void***)comp;
+                            typedef int (*fn_GetTypeId_t)(void*);
+                            int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
+                            if ((uint32_t)tid == *g_TypeId_ResourceType) {
+                                if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType))
+                                    resTypeComp = comp;
+                                break;
+                            }
+                        }
+                        // Find ValueDescription
+                        for (int d = 0; d < descCount; d++) {
+                            void* comp = descArray[d];
+                            void** cvtbl = *(void***)comp;
+                            typedef int (*fn_GetTypeId_t)(void*);
+                            int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
+                            if ((uint32_t)tid == *g_TypeInfo_ValueDescription) {
+                                if (fn_IsDerivedFrom(comp, *g_TypeInfo_ValueDescription))
+                                    valueDesc = comp;
+                                break;
+                            }
+                        }
+                        found = true;
+                    }
+                    break;
+                } else {
+                    bstNode = (uintptr_t*)bstNode[4];  // right
+                }
+            }
+
+            if (!found) continue;
+
+            // Build 0x20-byte sell data entry and push to array at +0x30
+            // Entry: {resEntity(8), valueDesc(8), resTypeComp(8), pad(8)}
+            uint64_t entry[4] = {resEntity, (uint64_t)valueDesc, (uint64_t)resTypeComp, 0};
+            TradeUI_DynArrayPush(s, 0x30, 0x38, 0x3C, entry, 0x20);
+        }
+    }
+
+    // Phase 3: Get build state, populate sell table UI
+    int sellCount = *(int*)(s + 0x38);
+    uint64_t sellCountU = (uint64_t)sellCount;
+
+    // Find BuildState component on entity
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    void* buildStateComp = nullptr;
+    {
+        int compCount = *(int*)(entityPtr[0] + 0x38);
+        void** compArr = *(void***)(entityPtr[0] + 0x30);
+        for (int i = 0; i < compCount; i++) {
+            void* comp = compArr[i];
+            void** cvtbl = *(void***)comp;
+            typedef int (*fn_GetTypeId_t)(void*);
+            int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
+            if ((uint32_t)tid == *g_TypeId_BuildStateComponent) {
+                if (fn_IsDerivedFrom(comp, *g_TypeId_BuildStateComponent))
+                    buildStateComp = comp;
+                break;
+            }
+        }
+    }
+
+    // Check trade state: buildState byte +0x52 (or +0x50 if negative)
+    bool tradeActive = false;
+    if (buildStateComp) {
+        fn_InternalBasePtr_Ctor(&buildStateComp, buildStateComp);
+        fn_InternalBasePtr_CheckPtr(&buildStateComp);
+        int8_t state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);
+        int8_t stateVal = state52;
+        if (state52 < 0) stateVal = *(int8_t*)((uintptr_t)buildStateComp + 0x50);
+        tradeActive = (stateVal == 0x13);
+    }
+
+    // Populate sell table cells
+    if (sellCount > 0) {
+        uintptr_t dataOffset = 0;
+        for (int i = 0; i < sellCount; i++) {
+            uintptr_t* sellData = (uintptr_t*)(*(uintptr_t*)(s + 0x30) + dataOffset);
+            uintptr_t* sellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x60) + dataOffset);
+
+            // Get sellable count from building
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            int sellableCount = fn_Building_GetSellableCount(
+                (void*)buildingPtr[0], (void*)sellData[0]);
+
+            bool hasStock = (sellableCount > 0);
+            uint32_t color = hasStock ? 0xFFFFFFFF : 0xFF808080;
+
+            // Set sprite from ValueDescription (+0x20=spriteSheet, +0x28=spriteName)
+            void* valueDesc = (void*)sellData[1];
+            uint8_t spriteBuf[16] = {0};
+            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valueDesc + 0x20),
+                          (void*)((uintptr_t)valueDesc + 0x28));
+            fn_InternalBasePtr_CheckPtr(sellUI);
+            fn_LabelElement_SetSprite(*(void**)sellUI, spriteBuf);
+
+            // Set text from ValueDescription (+0x30=stringTable)
+            uint8_t uiStrBuf[16] = {0};
+            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valueDesc + 0x30),
+                            (void*)((uintptr_t)valueDesc + 0x28));
+            fn_InternalBasePtr_CheckPtr(sellUI);
+            fn_TextElement_SetText(*(void**)sellUI, uiStrBuf);
+
+            // Set sellable count on number element (sellUI+0x10)
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x10));
+            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)sellUI + 0x10), sellableCount);
+
+            // Search StateMachine's order list for matching resource to get order qty
+            int orderQty = 0;
+            fn_InternalBasePtr_CheckPtr(&smPtr);
+            int smOrderCount = *(int*)(smPtr[0] + 0x30);
+            if (smOrderCount > 0) {
+                uintptr_t* orderArr = *(uintptr_t**)(smPtr[0] + 0x28);
+                for (int j = 0; j < smOrderCount; j++) {
+                    if (orderArr[j * 2] == sellData[0]) {
+                        if (j >= 0) {
+                            orderQty = (int)orderArr[j * 2 + 1]
+                                       - *(int*)((uintptr_t)&orderArr[j * 2 + 1] + 4);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Set order qty on number element (sellUI+0x08)
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x08));
+            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)sellUI + 0x08), orderQty);
+
+            // Set spinner enabled state
+            bool spinnerEnabled = tradeActive && hasStock;
+            void* spinner = *(void**)((uintptr_t)sellUI + 0x18);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x18));
+            VCall_Element_SetEnabled(spinner, spinnerEnabled);
+
+            // Set number and label elements enabled
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x08));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)sellUI + 0x08), true);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x10));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)sellUI + 0x10), true);
+
+            // Set spinner min/max
+            int spinnerMax = 0;
+            if (tradeActive && hasStock) {
+                spinnerMax = sellableCount;
+            }
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x18));
+            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)sellUI + 0x18), 0, spinnerMax);
+
+            // Set spinner increment based on max value
+            void* spinnerElem = *(void**)((uintptr_t)sellUI + 0x18);
+            SetSpinnerIncrement(spinnerElem);
+
+            // Reset spinner value to 0
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x18));
+            fn_SpinnerElement_SetValue(*(void**)((uintptr_t)sellUI + 0x18), 0);
+
+            // Set element name from resource path
+            SetElementNameFromExternal(*(void**)((uintptr_t)sellUI + 0x18),
+                                       (void*)sellData[0]);
+
+            // Set color on label, number, and count elements
+            fn_InternalBasePtr_CheckPtr(sellUI);
+            VCall_Element_SetColor(*(void**)sellUI, color);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x08));
+            VCall_Element_SetColor(*(void**)((uintptr_t)sellUI + 0x08), color);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x10));
+            VCall_Element_SetColor(*(void**)((uintptr_t)sellUI + 0x10), color);
+
+            dataOffset += 0x20;
+        }
+    }
+
+    // Phase 4: Clear unused sell table cells
+    int totalSellCells = 0;
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
+    totalSellCells = *(int*)(*(uintptr_t*)(s + 0xC8) + 0xC0);
+    if ((int)sellCountU < totalSellCells) {
+        uintptr_t clearOffset = sellCountU << 5;
+        for (int i = (int)sellCountU; i < totalSellCells; i++) {
+            uintptr_t* cellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x60) + clearOffset);
+
+            // Set empty sprite
+            uint8_t emptySprite[16] = {0};
+            fn_Sprite_Default_Ctor(emptySprite);
+            fn_InternalBasePtr_CheckPtr(cellUI);
+            fn_LabelElement_SetSprite(*(void**)cellUI, emptySprite);
+
+            // Set empty text
+            uint8_t emptyStr[16] = {0};
+            fn_String_Ctor_Default(emptyStr);
+            fn_InternalBasePtr_CheckPtr(cellUI);
+            fn_TextElement_SetText(*(void**)cellUI, emptyStr);
+
+            // Disable spinner, number, and label elements
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x08));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
+
+            // Set spinner min/max to 0
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
+            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x18), 0, 0);
+
+            clearOffset += 0x20;
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
+        }
+    }
+}
+
+// ============================================================
+// RefreshBuyTable (0x140083100)
+// ============================================================
+// Rebuilds the buy table data and UI.
+//
+// Phase 1: Get entity components (Building + TradeDescription).
+// Phase 2: Set up order header text ("textName"/"textOrder") with
+//          trade order name and current merchant info.
+// Phase 3: Build buy entries array from trade orders (building+0x50/+0x58).
+// Phase 4: Populate buy table UI cells with sprite/text/numbers.
+// Phase 5: Clear unused buy table cells.
+// Phase 6: Build purchase reserved entries (building+0xb0/+0xb8).
+// Phase 7: Set combo and enable state for order combo.
+// Phase 8: Populate purchase button array with checked states.
+
+void TradeUI_RefreshBuyTable(TradeUI* self)
+{
+    uintptr_t s = (uintptr_t)self;
+
+    // Get entity, BuildingComponent, TradeDescription
+    void* entityRaw = *(void**)(s + 0x28);
+    bool isDerived = fn_IsDerivedFrom(entityRaw, *g_TypeId_ComponentEntity);
+    void* compEntity = isDerived ? entityRaw : nullptr;
+
+    uint64_t entityPtr[2] = {0, 0};
+    fn_InternalBasePtr_Ctor(&entityPtr, compEntity);
+
+    fn_InternalBasePtr_CheckPtr(&entityPtr);
+    uint64_t buildingPtr[2] = {0, 0};
+    fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
+
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    void* tradeDescRaw = *(void**)(buildingPtr[0] + 0x18);
+    bool isTrade = fn_IsDerivedFrom(tradeDescRaw, *g_TypeInfo_TradeDescription);
+    void* tradeDesc = isTrade ? tradeDescRaw : nullptr;
+
+    // Clear buy data array at +0x40 (stride 0x18)
+    fn_DynArray_Clear_0x18_Buy((void*)(s + 0x40));
+
+    // Phase 2: Set order header text elements
+    for (int ti = 0; ti < 2; ti++) {
+        const char* elemName = (ti == 0) ? "textName" : "textOrder";
+        uint8_t nameStr[8] = {0};
+        fn_String_Ctor_CStr(nameStr, elemName);
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
+        uint8_t foundBuf[16] = {0};
+        fn_FindElement(*(void**)(s + 0x20), foundBuf, nameStr);
+        fn_InternalBasePtr_CheckPtr(foundBuf);
+
+        // IsDerivedFrom TextElement
+        void* textElem = nullptr;
+        if (*(void**)foundBuf) {
+            bool isText = fn_IsDerivedFrom(*(void**)foundBuf, *g_TypeId_TextElement);
+            if (isText) textElem = *(void**)foundBuf;
+        }
+        uint64_t textIbp[1] = {0};
+        fn_InternalBasePtr_Ctor(textIbp, textElem);
+        fn_String_Dtor(nameStr);
+
+        // Set text parameters based on current order
+        fn_InternalBasePtr_CheckPtr(&buildingPtr);
+        int orderIdx = *(int*)(buildingPtr[0] + 0x2c);
+        if (orderIdx < 0) {
+            fn_InternalBasePtr_CheckPtr(textIbp);
+            // No active order — text stays default
+        } else {
+            // Get order entry from trade description
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            uintptr_t orderEntry = *(uintptr_t*)((uintptr_t)tradeDesc + 0x48)
+                                   + (uintptr_t)orderIdx * 0x48;
+
+            // Set parameter 0: order name string
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            uint8_t orderNameBuf[8] = {0};
+            fn_Building_GetOrderName((void*)buildingPtr[0], orderNameBuf);
+            fn_InternalBasePtr_CheckPtr(textIbp);
+            fn_TextElement_SetParameter((void*)*textIbp, 0, orderNameBuf);
+            fn_String_Dtor(orderNameBuf);
+
+            // Set parameter 1: UI string from order entry
+            uint8_t uiStrBuf[16] = {0};
+            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)orderEntry,
+                            (void*)(orderEntry + 8));
+            // Convert to System::String
+            uint8_t sysStrBuf[8] = {0};
+            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
+            fn_InternalBasePtr_CheckPtr(textIbp);
+            fn_TextElement_SetParameter((void*)*textIbp, 1, sysStrBuf);
+            fn_String_Dtor(sysStrBuf);
+        }
+
+        // Set enabled state based on order validity
+        fn_InternalBasePtr_CheckPtr(textIbp);
+        VCall_Element_SetColor((void*)*textIbp, 0xFFFFFFFF);
+    }
+
+    // Phase 3: Build buy entries from trade orders
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    int tradeOrderCount = *(int*)(buildingPtr[0] + 0x58);
+    if (tradeOrderCount > 0) {
+        for (int oi = 0; oi < tradeOrderCount; oi++) {
+            // Get trade order entry
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            uintptr_t orderList = *(uintptr_t*)(buildingPtr[0] + 0x50);
+            uintptr_t orderEntry = *(uintptr_t*)(orderList + (uintptr_t)oi * 0x10);
+
+            // Find ValueDescription in order entry's description
+            void* valDesc = FindDescComponent((void*)orderEntry, *g_TypeInfo_ValueDescription);
+
+            // Build 0x18-byte buy data entry
+            uint64_t buyEntry[3] = {orderEntry, (uint64_t)valDesc, 0};
+            TradeUI_DynArrayPush(s, 0x40, 0x48, 0x4C, buyEntry, 0x18);
+        }
+    }
+
+    // Phase 4: Populate buy table UI cells
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    int buyCount = *(int*)(buildingPtr[0] + 0x58);
+    uint64_t buyCountU = (uint64_t)buyCount;
+
+    if (buyCount > 0) {
+        uintptr_t dataOffset = 0;
+        uintptr_t buyDataOffset = 0;
+        for (int i = 0; i < buyCount; i++) {
+            uintptr_t* buyUI = (uintptr_t*)(*(uintptr_t*)(s + 0x70) + dataOffset);
+
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            uintptr_t* buyOrder = (uintptr_t*)(*(uintptr_t*)(buildingPtr[0] + 0x50) + buyDataOffset);
+            uintptr_t orderDesc = *buyOrder;
+
+            // Find ValueDescription
+            void* valDesc = FindDescComponent((void*)orderDesc, *g_TypeInfo_ValueDescription);
+
+            // Set sprite from ValueDescription
+            uint8_t spriteBuf[16] = {0};
+            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valDesc + 0x20),
+                          (void*)((uintptr_t)valDesc + 0x28));
+            fn_InternalBasePtr_CheckPtr(buyUI);
+            fn_LabelElement_SetSprite(*(void**)buyUI, spriteBuf);
+
+            // Set text from ValueDescription
+            uint8_t uiStrBuf[16] = {0};
+            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valDesc + 0x30),
+                            (void*)((uintptr_t)valDesc + 0x38));
+            fn_InternalBasePtr_CheckPtr(buyUI);
+            fn_TextElement_SetText(*(void**)buyUI, uiStrBuf);
+
+            // Set price number (buyUI+0x18 = price element)
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x18));
+            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)buyUI + 0x18),
+                                        *(int*)((uintptr_t)buyOrder + 0x0C));
+
+            // Set quantity number (buyUI+0x08)
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x08));
+            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)buyUI + 0x08),
+                                        (int)buyOrder[1]);
+
+            // Set spinner min/max (buyUI+0x10)
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x10));
+            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)buyUI + 0x10),
+                                        0, *(int*)((uintptr_t)buyOrder + 0x0C));
+
+            // Set spinner increment
+            void* spinnerElem = *(void**)((uintptr_t)buyUI + 0x10);
+            SetSpinnerIncrement(spinnerElem);
+
+            // Set element name from resource path
+            SetElementNameFromExternal(*(void**)((uintptr_t)buyUI + 0x10),
+                                       (void*)*buyOrder);
+
+            // Enable all sub-elements
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x10));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)buyUI + 0x10), true);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x18));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)buyUI + 0x18), true);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x08));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)buyUI + 0x08), true);
+
+            dataOffset += 0x20;
+            buyDataOffset += 0x10;
+        }
+    }
+
+    // Phase 5: Clear unused buy table cells
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
+    int totalBuyCells = *(int*)(*(uintptr_t*)(s + 0xD0) + 0xC0);
+    if ((int)buyCountU < totalBuyCells) {
+        uintptr_t clearOffset = buyCountU << 5;
+        for (int i = (int)buyCountU; i < totalBuyCells; i++) {
+            uintptr_t* cellUI = (uintptr_t*)(*(uintptr_t*)(s + 0x70) + clearOffset);
+
+            // Set empty sprite
+            uint8_t emptySprite[16] = {0};
+            fn_Sprite_Default_Ctor(emptySprite);
+            fn_InternalBasePtr_CheckPtr(cellUI);
+            fn_LabelElement_SetSprite(*(void**)cellUI, emptySprite);
+
+            // Set empty text
+            uint8_t emptyStr[16] = {0};
+            fn_String_Ctor_Default(emptyStr);
+            fn_InternalBasePtr_CheckPtr(cellUI);
+            fn_TextElement_SetText(*(void**)cellUI, emptyStr);
+
+            // Set spinner min/max to 0
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
+            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x10), 0, 0);
+
+            // Disable elements
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x08));
+            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
+
+            clearOffset += 0x20;
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
+        }
+    }
+
+    // Phase 6: Build purchase reserved entries (building+0xb0/+0xb8)
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    int orderIdx = *(int*)(buildingPtr[0] + 0x2c);
+    if (orderIdx < 0) {
+        // No active order — clear purchase list
+        fn_MemFreeStatic(*(void**)(s + 0xb0));
+        *(uint64_t*)(s + 0xb0) = 0;
+        *(uint64_t*)(s + 0xb8) = 0;
+    } else {
+        // Populate purchase reserved entries via helper
+        fn_InternalBasePtr_CheckPtr(&buildingPtr);
+        fn_Building_GetBuyEntries((void*)buildingPtr[0], (void*)(s + 0xb0));
+    }
+
+    // Phase 7: Set order combo current item and enabled state
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    int comboIdx = 0;
+    if (*(int*)(buildingPtr[0] + 0x2c) >= 0) {
+        comboIdx = *(int*)(*(uintptr_t*)(buildingPtr[0] + 0x30)
+                    + (uintptr_t)*(int*)(buildingPtr[0] + 0x2c) * 0x20 + 8);
+    }
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
+    fn_ComboElement_SetCurrentItem(*(void**)(s + 0xC0), comboIdx);
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
+    void* comboElem = *(void**)(s + 0xC0);
+    fn_InternalBasePtr_CheckPtr(&buildingPtr);
+    bool comboEnabled = (*(int*)(buildingPtr[0] + 0x2c) >= 0);
+    VCall_Element_SetEnabled(comboElem, comboEnabled);
+
+    // Phase 8: Populate purchase button array with checked states
+    int purchaseCount = *(int*)(s + 0xb8);
+    if (purchaseCount > 0) {
+        uintptr_t offset = 0;
+        for (int pi = 0; pi < purchaseCount; pi++) {
+            uintptr_t purchaseEntity = *(uintptr_t*)(offset + *(uintptr_t*)(s + 0xb0));
+
+            // Find ValueDescription for this purchase entity
+            void* valDesc = FindDescComponent((void*)purchaseEntity, *g_TypeInfo_ValueDescription);
+
+            // Set sprite and text on purchase button element
+            void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+            fn_InternalBasePtr_CheckPtr(purchaseUI);
+            int childCount = fn_Element_ChildCount(*(void**)purchaseUI);
+
+            for (int ci = 0; ci < childCount; ci++) {
+                void* purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+                fn_InternalBasePtr_CheckPtr(purchaseUIPtr);
+                uint64_t childBuf[2] = {0, 0};
+                fn_Element_Child(*(void**)purchaseUIPtr, childBuf, ci);
+                fn_InternalBasePtr_CheckPtr(childBuf);
+
+                // IsDerivedFrom TextElement check
+                void* childElem = nullptr;
+                if (*(void**)childBuf) {
+                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, *g_TypeId_TextElement);
+                    if (isText) childElem = *(void**)childBuf;
+                }
+                uint64_t childIbp[1] = {0};
+                fn_InternalBasePtr_Ctor(childIbp, childElem);
+
+                if ((void*)*childIbp != nullptr) {
+                    // Set sprite
+                    uint8_t spriteBuf[16] = {0};
+                    fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valDesc + 0x20),
+                                  (void*)((uintptr_t)valDesc + 0x28));
+                    fn_InternalBasePtr_CheckPtr(childIbp);
+                    fn_LabelElement_SetSprite((void*)*childIbp, spriteBuf);
+
+                    // Set text
+                    uint8_t uiStrBuf[16] = {0};
+                    fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valDesc + 0x30),
+                                    (void*)((uintptr_t)valDesc + 0x38));
+                    fn_InternalBasePtr_CheckPtr(childIbp);
+                    fn_TextElement_SetText((void*)*childIbp, uiStrBuf);
+                }
+
+                purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+                fn_InternalBasePtr_CheckPtr(purchaseUIPtr);
+                childCount = fn_Element_ChildCount(*(void**)purchaseUIPtr);
+            }
+
+            // Enable purchase button
+            void* purchaseBtn = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+            fn_InternalBasePtr_CheckPtr(purchaseBtn);
+            VCall_Element_SetEnabled(*(void**)purchaseBtn, true);
+
+            // Check if this purchase entity is in the current order's selection list
+            fn_InternalBasePtr_CheckPtr(&buildingPtr);
+            uintptr_t orderData = (uintptr_t)*(int*)(buildingPtr[0] + 0x2c) * 0x20
+                                  + *(uintptr_t*)(buildingPtr[0] + 0x30);
+            int selCount = *(int*)(orderData + 0x18);
+            if (selCount > 0) {
+                uintptr_t* selList = *(uintptr_t**)(orderData + 0x10);
+                for (int si = 0; si < selCount; si++) {
+                    if (selList[si] == *(uintptr_t*)(*(uintptr_t*)(s + 0xb0) + offset)) {
+                        void* purchaseBtnPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+                        fn_InternalBasePtr_CheckPtr(purchaseBtnPtr);
+                        *(uint8_t*)(*(uintptr_t*)purchaseBtnPtr + 0xd8) = 1;
+                        break;
+                    }
+                }
+            }
+
+            offset += 8;
+        }
+    }
+
+    // Clear unused purchase buttons
+    int totalPurchaseSlots = *(int*)(s + 0xa8);
+    if (purchaseCount < totalPurchaseSlots) {
+        uintptr_t offset = (uintptr_t)purchaseCount * 8;
+        for (int i = purchaseCount; i < totalPurchaseSlots; i++) {
+            // Clear children
+            int ci = 0;
+            void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+            fn_InternalBasePtr_CheckPtr(purchaseUI);
+            int childCount = fn_Element_ChildCount(*(void**)purchaseUI);
+            while (ci < childCount) {
+                purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+                fn_InternalBasePtr_CheckPtr(purchaseUI);
+                uint64_t childBuf[2] = {0, 0};
+                fn_Element_Child(*(void**)purchaseUI, childBuf, ci);
+                fn_InternalBasePtr_CheckPtr(childBuf);
+
+                void* childElem = nullptr;
+                if (*(void**)childBuf) {
+                    bool isText = fn_IsDerivedFrom(*(void**)childBuf, *g_TypeId_TextElement);
+                    if (isText) childElem = *(void**)childBuf;
+                }
+                uint64_t childIbp[1] = {0};
+                fn_InternalBasePtr_Ctor(childIbp, childElem);
+
+                if ((void*)*childIbp != nullptr) {
+                    uint8_t emptySprite[16] = {0};
+                    fn_Sprite_Default_Ctor(emptySprite);
+                    fn_InternalBasePtr_CheckPtr(childIbp);
+                    fn_LabelElement_SetSprite((void*)*childIbp, emptySprite);
+
+                    uint8_t emptyStr[16] = {0};
+                    fn_String_Ctor_Default(emptyStr);
+                    fn_InternalBasePtr_CheckPtr(childIbp);
+                    fn_TextElement_SetText((void*)*childIbp, emptyStr);
+                }
+
+                ci++;
+                purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+                fn_InternalBasePtr_CheckPtr(purchaseUI);
+                childCount = fn_Element_ChildCount(*(void**)purchaseUI);
+            }
+
+            // Disable button and clear checked state
+            purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+            fn_InternalBasePtr_CheckPtr(purchaseUI);
+            void* btn = *(void**)purchaseUI;
+            VCall_Element_SetEnabled(btn, false);
+
+            purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
+            fn_InternalBasePtr_CheckPtr(purchaseUI);
+            *(uint8_t*)(*(uintptr_t*)purchaseUI + 0xd8) = 0;
+
+            offset += 8;
+        }
+    }
+}
+
 void TradeUI_Serialize(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
@@ -641,8 +1386,8 @@ void TradeUI_Serialize(TradeUI* self) {
 
     // --- Phase 5: Call refresh functions ---
     TradeUI_RefreshDisplay(self, 0, 0, 0);
-    fn_TradeUI_RefreshSellTable(self);
-    fn_TradeUI_RefreshBuyTable(self);
+    TradeUI_RefreshSellTable(self);
+    TradeUI_RefreshBuyTable(self);
 }
 
 // ============================================================
@@ -878,8 +1623,8 @@ void TradeUI_OnCreate(TradeUI* self) {
 
     if (selfOrderCount != buildingOrderCount) {
         // Order count changed — refresh sell, buy, and order tables
-        fn_TradeUI_RefreshSellTable(self);
-        fn_TradeUI_RefreshBuyTable(self);
+        TradeUI_RefreshSellTable(self);
+        TradeUI_RefreshBuyTable(self);
         TradeUI_RefreshDisplay(self, 0, 0, 0);
     }
 
@@ -1401,8 +2146,8 @@ void TradeUI_OnDismissButton(TradeUI* self) {
 
     // Refresh display and tables
     TradeUI_RefreshDisplay(self, stateAddr, stateVal, 10);
-    fn_TradeUI_RefreshSellTable(self);
-    fn_TradeUI_RefreshBuyTable(self);
+    TradeUI_RefreshSellTable(self);
+    TradeUI_RefreshBuyTable(self);
 }
 
 // ============================================================
@@ -1494,7 +2239,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
         *(int*)((uintptr_t)retval + 8) = newVal;
     }
 
-    fn_TradeUI_RefreshSellTable(self);
+    TradeUI_RefreshSellTable(self);
     TradeUI_RefreshDisplay(self, (uint64_t)retval, (uint64_t)newEntry, (int64_t)building);
 }
 

@@ -22,6 +22,10 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// Forward declaration — defined in entityui.cpp
+extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
+                                        uint32_t x, uint32_t y);
+
 // ============================================================
 // ToolUI::Slot4 (vtable +0x20) — Setup/populate tool panel
 // ============================================================
@@ -278,7 +282,7 @@ void ToolUI_Slot8(ToolUI* self) {
             uint8_t entityBuf[8];
             fn_InternalBasePtr_Ctor(entityBuf, entity);
 
-            fn_EntityUI_SelectEntity(
+            EntityUI_SelectEntity_Impl(
                 *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120),
                 entityBuf, newX, newY);
         }

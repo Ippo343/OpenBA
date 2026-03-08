@@ -369,9 +369,13 @@ fn_CitizenList_AssignWorker_t fn_CitizenList_AssignWorker = nullptr;
 fn_CitizenList_RemoveWorker_t fn_CitizenList_RemoveWorker = nullptr;
 uint32_t* g_TypeId_EditTool = nullptr;
 
-// EntityUI helpers
-fn_EntityUI_SetEditMode_t fn_EntityUI_SetEditMode = nullptr;
-fn_EntityUI_SelectEntity_t fn_EntityUI_SelectEntity = nullptr;
+// EntityUI helpers — now reimplemented inline in entityui.cpp
+// fn_EntityUI_SetEditMode — inlined
+// fn_EntityUI_SelectEntity — inlined
+fn_Factory_CreateObject_t fn_Factory_CreateObject = nullptr;
+uint32_t* g_TypeId_ToolController = nullptr;
+uint32_t* g_TypeId_ToolSetting = nullptr;
+fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38 = nullptr;
 // ============================================================
 // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
 // ============================================================
@@ -416,9 +420,7 @@ fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
 uintptr_t g_ToolbarDialog_Vtable = 0;   // PTR_FUN_14015fa00
 uintptr_t g_PauseDialog_Vtable = 0;     // PTR_FUN_14015f550
 uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
-fn_Factory_CreateObject_t fn_Factory_CreateObject = nullptr;
-uint32_t* g_TypeId_ToolController = nullptr;  // DAT_1401c6eb8
-uint32_t* g_TypeId_ToolSetting = nullptr;
+// fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
 fn_ToolbarSort_t fn_ToolbarSort = nullptr;
 uint32_t* g_TypeId_ToolbarExternal = nullptr;
 fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
@@ -657,8 +659,13 @@ uint32_t* g_TypeInfo_TradeDescription = nullptr;
 fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18 = nullptr;
 fn_IntroSort_ByName_t fn_IntroSort_ByName = nullptr;
 fn_IntroSort_ByComponent_t fn_IntroSort_ByComponent = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshSellTable = nullptr;
-fn_TownHallUI_SubFunc_t fn_TradeUI_RefreshBuyTable = nullptr;
+// fn_TradeUI_RefreshSellTable — now reimplemented inline in tradeui.cpp
+// fn_TradeUI_RefreshBuyTable — now reimplemented inline in tradeui.cpp
+fn_DynArray_Clear_0x20_t fn_DynArray_Clear_0x20 = nullptr;
+fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18_Buy = nullptr;
+fn_Building_GetOrderName_t fn_Building_GetOrderName = nullptr;
+fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries = nullptr;
+fn_DynArray_Clear_0x08_t fn_DynArray_Clear_0x08 = nullptr;
 fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
 uint32_t* g_TypeId_TableElement = nullptr;
 uint32_t* g_TypeId_SpinnerElement = nullptr;
@@ -2055,11 +2062,16 @@ bool EngineFuncsInit() {
     g_TypeId_EditTool = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c4158));
 
-    // EntityUI helpers
-    fn_EntityUI_SetEditMode = reinterpret_cast<fn_EntityUI_SetEditMode_t>(
-        ResolveAddr(Module::Exe, 0x140102b60));
-    fn_EntityUI_SelectEntity = reinterpret_cast<fn_EntityUI_SelectEntity_t>(
-        ResolveAddr(Module::Exe, 0x140102e30));
+    // EntityUI helpers — SetEditMode/SelectEntity now reimplemented in entityui.cpp
+    // Resolve sub-functions needed by reimplementations:
+    fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
+        ResolveExport("?CreateObject@Factory@Object@@QEAAPEAVBase@2@I@Z"));
+    g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6eb8));
+    g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6ef0));
+    fn_AVL_Rebalance_0x38 = reinterpret_cast<fn_AVL_Rebalance_0x38_t>(
+        ResolveAddr(Module::Exe, 0x140025920));
     // fn_GetDescPage/fn_BuildComplete: now static impls in buildui.cpp
 
     // Phase F Wave 1: MapParamsDialog / UpgradeUI / ConsumeProduceUI / HelpUI
@@ -2151,19 +2163,7 @@ bool EngineFuncsInit() {
     g_ToolbarDialog_Vtable = ResolveAddr(Module::Exe, 0x14015fa00);
     g_PauseDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f550);
     g_ToolUI_ChildDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f5a0);
-    // Factory::CreateObject from Runtime DLL
-    fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
-        ResolveExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z"));
-    // ToolController type ID — DAT_1401c6eb8
-    g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6eb8));
-    // ToolSetting type ID — from TypeInfo for ToolSetting class
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015f4c0));
-        if (exref && *exref) {
-            g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
+    // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — resolved above (entityui section)
     // Toolbar item sort function
     fn_ToolbarSort = reinterpret_cast<fn_ToolbarSort_t>(
         ResolveAddr(Module::Exe, 0x140021790));
@@ -2732,10 +2732,17 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400162d0));
     fn_IntroSort_ByComponent = reinterpret_cast<fn_IntroSort_ByComponent_t>(
         ResolveAddr(Module::Exe, 0x1400165d0));
-    fn_TradeUI_RefreshSellTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140083c70));
-    fn_TradeUI_RefreshBuyTable = reinterpret_cast<fn_TownHallUI_SubFunc_t>(
-        ResolveAddr(Module::Exe, 0x140083100));
+    // fn_TradeUI_RefreshSellTable/RefreshBuyTable — now reimplemented in tradeui.cpp
+    fn_DynArray_Clear_0x20 = reinterpret_cast<fn_DynArray_Clear_0x20_t>(
+        ResolveAddr(Module::Exe, 0x140016050));
+    fn_DynArray_Clear_0x18_Buy = reinterpret_cast<fn_DynArray_Clear_0x18_t>(
+        ResolveAddr(Module::Exe, 0x140016130));
+    fn_Building_GetOrderName = reinterpret_cast<fn_Building_GetOrderName_t>(
+        ResolveAddr(Module::Exe, 0x140015fd0));
+    fn_Building_GetBuyEntries = reinterpret_cast<fn_Building_GetBuyEntries_t>(
+        ResolveAddr(Module::Exe, 0x140059670));
+    fn_DynArray_Clear_0x08 = reinterpret_cast<fn_DynArray_Clear_0x08_t>(
+        ResolveAddr(Module::Exe, 0x140001bb0));
     fn_TradeUI_OnTradeButton = reinterpret_cast<fn_TradeUI_OnTradeButton_t>(
         ResolveAddr(Module::Exe, 0x140081420));
     g_TypeId_TableElement = reinterpret_cast<uint32_t*>(

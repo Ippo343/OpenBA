@@ -287,8 +287,32 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
             void* gameWorld = *g_pGameWorldSingleton;
             void* random = *(void**)((uintptr_t)gameWorld + 0xD8);
 
+            // GenerateTownName — reimpl of FUN_140099ac0
+            // Load NameDatabase, generate name, fix "vill" suffix
             uint8_t nameBuf[8];
-            fn_GenerateTownName(0, nameBuf, random, nameLen);
+            {
+                uint8_t fnBuf[8];
+                fn_Filename_CtorCStr(fnBuf, "Game/Names/Cities.ndb");
+                void* ndbRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnBuf);
+                void* nameDB = nullptr;
+                if (ndbRes && fn_IsDerivedFrom(ndbRes, *g_TypeId_NameDatabase)) nameDB = ndbRes;
+                fn_Filename_Dtor(fnBuf);
+
+                fn_NameDB_GenerateName(nameBuf, nameDB, random, 5, nameLen);
+
+                uint64_t sp = *(uint64_t*)nameBuf;
+                bool endsVill = false;
+                if (sp != 0) {
+                    int slen = *(int*)(sp - 8);
+                    if (slen > 4) {
+                        uint8_t sfx[8];
+                        fn_String_SubString(nameBuf, sfx, slen - 4);
+                        endsVill = fn_String_Equals(sfx, "vill");
+                        fn_String_Dtor(sfx);
+                    }
+                }
+                if (endsVill) fn_String_Append(nameBuf, "e");
+            }
             fn_EditElement_SetText(editName, nameBuf);
             fn_String_Dtor(nameBuf);
         }

@@ -61,9 +61,8 @@ Runtime DLL pointers (`ResolveExport`/`ResolveOrdinal`) are fine to keep.
 - Sub-deps resolved: `Game_RemoveEntity_Impl`, `Storage_CanAddItem`, `Storage_AddItem` (all inline)
 - New Runtime ptrs: `fn_Factory_GetTypeIdFromName` (ord 2991), `fn_IsA` (ord 3089), `g_pFactorySingleton`
 
-### TownHallUI — 7/15 fully reimplemented, 8 thin wrappers
+### TownHallUI — 15/15 fully reimplemented (2026-03-08)
 
-Fully reimplemented (fn_* removed):
 - [x] `fn_TownHallUI_InitGeneral` (0x1400807f0)
 - [x] `fn_TownHallUI_InitGraph` (0x14007f0a0)
 - [x] `fn_TownHallUI_OnProfessionButton` (0x14007dca0)
@@ -71,8 +70,6 @@ Fully reimplemented (fn_* removed):
 - [x] `fn_TownHallUI_UpdateGeneral` (0x14007d030)
 - [x] `fn_TownHallUI_UpdateProfessions` (0x14007ccb0)
 - [x] `fn_TownHallUI_OnProfessionSpinner` (0x14007dd10)
-
-Thin wrappers (fn_* kept — too complex, deep BST/component traversal):
 - [x] `fn_TownHallUI_InitProfessions` (0x140080160)
 - [x] `fn_TownHallUI_InitProduction` (0x14007fc30)
 - [x] `fn_TownHallUI_InitInventory` (0x14007f660)
@@ -92,24 +89,88 @@ Thin wrappers (fn_* kept — too complex, deep BST/component traversal):
 
 - [x] `fn_GameWorld_GetMapName` (0x140011f90) — already inlined in mapparamsdialog.cpp
 
-### Remaining — per-dialog UI functions (1-2 uses each)
+### Per-dialog UI functions — batch reimplemented (2026-03-08)
 
-EntityUI: `fn_EntityUI_SetEditMode`, `fn_EntityUI_SelectEntity`
-WorkplaceUI: `fn_WorkplaceUI_AdjustWorkerCount/ToggleWorkplace`
-TradeUI: `fn_TradeUI_RefreshSellTable/RefreshBuyTable/OnOrderSpinner/Update`
-ToolbarDialog: `fn_ToolbarDialog_Ctor/UpdateButtons`, `fn_Toolbar_ShowGroup/Utility/ToggleAll`
-MainMenuDialog: 11x `fn_MainMenu_Open*` + `fn_MainMenu_ReturnToMenu` (likely one-liners)
-DebugUI: 11x `fn_Game_*/fn_DebugUI_*` (debug-only functions)
-ModDialog: `fn_ModDialog_ToggleMod/MoveToTop/ShowDetails/Apply`
-ModDetailsDialog: `fn_ModDetailsDialog_OpenUpdateDialog/DeleteMod`
-SaveLoadDialog: `fn_GetLoadingSoundString`, `fn_GameUpdateLoop_Ctor`,
-  `fn_SetDialogLoaderNextLoop`
-NewGameDialog: `fn_StartNewGame`, `fn_GenerateTownName`
-ScenarioDialog: `fn_ScenarioDialog_LoadSelected`
-OptionsDialog: `fn_OptionsDialog_PopulateInputBindList/OnInputBindClick`
-MapUI: `fn_MapUI_SetupImage/HandleClick`
-NoiseUI: `fn_NoiseUI_SetupImage/GenerateNoise`
-CropUI: `fn_CropUI_PopulateCombo/GetExpectedCount`
+EntityUI:
+- [x] `fn_EntityUI_SetEditMode` (0x140102b60) — BST walk + Factory::CreateObject for tool controllers
+- [x] `fn_EntityUI_SelectEntity` (0x140102e30) — AVL BST insert/update for entity tracking
+
+TradeUI:
+- [x] `fn_TradeUI_RefreshSellTable` (0x140083c70) — resource table iteration + UI cell population
+- [x] `fn_TradeUI_RefreshBuyTable` (0x140083100) — trade order iteration + buy table UI
+
+ToolbarDialog:
+- [x] `fn_ToolbarDialog_UpdateButtons` (0x1400b8fd0) — entity BST search for enable state
+
+MainMenuDialog:
+- [x] `fn_MainMenu_OpenNewGame` (0x1400B3620) — dialog launcher
+- [x] `fn_MainMenu_OpenLoad` (0x1400B3770) — dialog launcher
+- [x] `fn_MainMenu_OpenSave` (0x1400B38B0) — dialog launcher
+- [x] `fn_MainMenu_OpenOptions` (0x1400B3A10) — dialog launcher
+- [x] `fn_MainMenu_ReturnToMenu` (0x1400B4790) — dialog launcher
+- [x] `fn_MainMenu_OpenAchievement` (0x1400B34C0) — dialog launcher
+- [x] `fn_MainMenu_OpenScenario` (0x1400B3380) — dialog launcher
+- [x] `fn_MainMenu_OpenGoal` (0x1400B3220) — dialog launcher
+- [x] `fn_MainMenu_OpenMap` (0x1400B3120) — dialog launcher
+- [x] `fn_MainMenu_OpenTutorial` (0x1400B2FE0) — dialog launcher
+- [x] `fn_MainMenu_OpenMod` (0x1400B2EA0) — dialog launcher
+
+DebugUI:
+- [x] `fn_DebugUI_SetDayLighting` (0x140061780) — already existed
+- [x] `fn_Game_SpawnResources` (0x140091660) — already existed
+- [x] `fn_Game_TriggerDisasterByType` (0x140060110) — already existed
+- [x] `fn_Game_KillAllCitizens` (0x140060000) — entity iteration + destroy
+- [x] `fn_Game_SpawnItemsInStorage` (0x140060290) — storage list iteration + spawn
+- [x] `fn_Game_SpawnCitizens` (0x140060380) — residence capacity check + citizen creation
+- [x] `fn_DebugUI_TriggerDisasterOnBuilding` (0x14005FF30) — random building + disease apply
+- [x] `fn_Game_StartRandomFire` (0x14005FEB0) — random building + FireComponent ignite
+- [x] `fn_Game_SpawnTornado` (0x14005FD20) — entity factory create + register
+- [x] `fn_Game_InfectRandomCitizen` (0x14005FE10) — random citizen + disease infect
+- [x] `fn_DebugUI_OnDiseaseComboChanged` (0x14005FC60) — already existed
+- [x] `fn_DebugUI_OnDaySliderChanged` (0x1400607E0) — already existed
+- [x] `fn_DebugUI_WriteLightingColors` (0x140061530) — already existed
+- [x] `fn_Game_GetMonthFromTime` — already existed
+
+ModDialog:
+- [x] `fn_ModDialog_ToggleMod` (0x14006e930) — checkbox state + Modification::Enable
+- [x] `fn_ModDialog_MoveToTop` (0x14006e660) — loop swap entries to top
+- [x] `fn_ModDialog_ShowDetails` (0x14006e490) — create ModDetailsDialog instance
+- [x] `fn_ModDialog_Apply` (0x14006ea70) — dirty check + ReloadDialog creation
+
+ModDetailsDialog:
+- [x] `fn_ModDetailsDialog_OpenUpdateDialog` (0x14006d400) — create ModUpdateDialog
+- [x] `fn_ModDetailsDialog_DeleteMod` (0x14006d550) — create ModUpdateDialog (same pattern)
+
+SaveLoadDialog:
+- [x] `fn_GetLoadingSoundString` (0x140099130) — inline
+- [x] `fn_GameUpdateLoop_Ctor` (0x140098060) — base ctor + vtable patch + field init
+- [x] `fn_SetDialogLoaderNextLoop` (0x14009a8f0) — inline
+
+NewGameDialog:
+- [x] `fn_StartNewGame` (0x1400b4540) — GameUpdateLoop + GameLoadDialogLoopT + LoaderLoop chain
+- [x] `fn_GenerateTownName` (0x140099ac0) — Cities.ndb NameDatabase + "vill"→"ville" fix
+
+ScenarioDialog:
+- [x] `fn_ScenarioDialog_LoadSelected` (0x140077cb0) — new scenario vs saved scenario paths
+
+OptionsDialog:
+- [x] `fn_OptionsDialog_PopulateInputBindList` (0x140073580) — already reimplemented
+- [x] `fn_OptionsDialog_OnInputBindClick` (0x1400729a0) — already reimplemented
+
+MapUI:
+- [x] `fn_MapUI_SetupImage` (0x14006cb00) — MaterialInstance + SpriteSheet from ImageBuffer
+- [x] `fn_MapUI_HandleClick` (0x14006c850) — click→camera target projection
+
+NoiseUI:
+- [x] `fn_NoiseUI_SetupImage` (0x140071890) — same pattern as MapUI
+- [x] `fn_NoiseUI_GenerateNoise` (0x1400711D0) — PerlinNoise 256x256 grayscale render
+
+CropUI:
+- [x] `fn_CropUI_PopulateCombo` (0x140078830) — ExternalFactory iteration + combo population
+- [x] `fn_CropUI_GetExpectedCount` (0x140078a40) — bonus, shares iterator helper
+
+### Remaining — not yet tackled
+
 SelectResourceUI: `fn_SelectResourceUI_PopulateCombo/GetResourceCount`
 ProfessionUI: `fn_ProfessionUI_HandleSpinner/HandleButton`
 ResidenceUI: `fn_ResidenceUI_GoToCitizen`
@@ -117,6 +178,20 @@ ConsumeProduceUI: `fn_ConsumeProduceUI_Slot4`
 ControlUI: `fn_FindComponentByTypeId`
 TutorialUI: `fn_MenuDialogLoopT_Ctor`
 ToolUI: `fn_UIDesc_AddControllers`
+
+### Too complex — kept as fn_* pointers (2026-03-08)
+
+These functions have deep dependencies on engine subsystems not yet available
+(Factory object creation, Scene graph, Camera/3D math, Audio emitters, etc.).
+They are documented but deferred until their sub-dependencies are reimplemented.
+
+| Function | Address | Reason |
+|----------|---------|--------|
+| `fn_DebugUI_OnDrawComboChanged` | 0x1400608A0 | Geometry creation, Scene graph AddGlobalObject, Audio emitter management, 5+ sub-functions |
+| `fn_Toolbar_ShowGroup` | 0x140102b60 | Factory::CreateObject, BST traversal, ToolController/ToolSetting management |
+| `fn_Toolbar_Utility` | 0x140101a80 | Camera transforms, PauseDialog creation, complex tool management |
+| `fn_Toolbar_ToggleAll` | 0x140101ce0 | Similar tool/factory complexity as ShowGroup/Utility |
+| `fn_ToolbarDialog_Ctor` | 0x1400b9910 | 300+ line recursive constructor with sub-dialog creation, sorting, radio setup |
 
 Engine/component functions moved to [component_goals.md](component_goals.md)
 
@@ -128,4 +203,4 @@ Engine/component functions moved to [component_goals.md](component_goals.md)
 |------|-------|--------|
 | 0-3 | 59 trampoline calls | DONE |
 | 4 | ResolveAddr in clean code | DONE |
-| 5 | ~120 exe fn_* pointers | ~67 done, 8 TownHallUI thin wrappers, 3 kept as ptrs, ~35 per-dialog UI + ~16 in component_goals.md |
+| 5 | ~120 exe fn_* pointers | ~118 done, 5 too complex (kept as fn_*), ~7 per-dialog UI remaining + ~16 in component_goals.md |

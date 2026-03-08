@@ -77,6 +77,45 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 // ============================================================
 // Helper: generate random name with length limit
 // ============================================================
+// ============================================================
+// GenerateTownName — reimplementation of FUN_140099ac0
+// ============================================================
+// Loads "Game/Names/Cities.ndb", generates a random town name using the
+// NameDatabase, then checks if it ends in "vill" and appends "e" to make "ville".
+// Original: 0x140099ac0.
+static void* GenerateTownName(void* retStr, void* random, int maxLen) {
+    // Load NameDatabase resource
+    uint8_t filenameBuf[8];
+    fn_Filename_CtorCStr(filenameBuf, "Game/Names/Cities.ndb");
+    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    void* nameDB = nullptr;
+    if (resource && fn_IsDerivedFrom(resource, *g_TypeId_NameDatabase)) {
+        nameDB = resource;
+    }
+    fn_Filename_Dtor(filenameBuf);
+
+    // Generate name using inner algorithm (retry loop, binary search uniqueness check)
+    fn_NameDB_GenerateName(retStr, nameDB, random, 5, maxLen);
+
+    // Check if name ends in "vill" — if so, append "e" to make "ville"
+    uint64_t strPtr = *(uint64_t*)retStr;
+    bool endsInVill = false;
+    if (strPtr != 0) {
+        int len = *(int*)(strPtr - 8);  // COW header: length at strPtr-8
+        if (len > 4) {
+            uint8_t suffixStr[8];
+            fn_String_SubString(retStr, suffixStr, len - 4);
+            endsInVill = fn_String_Equals(suffixStr, "vill");
+            fn_String_Dtor(suffixStr);
+        }
+    }
+    if (endsInVill) {
+        fn_String_Append(retStr, "e");
+    }
+
+    return retStr;
+}
+
 static void GenerateRandomName(void* editNamePtr, void* random) {
     fn_InternalBasePtr_CheckPtr(&editNamePtr);
     void* editElem = *(void**)&editNamePtr;
@@ -93,7 +132,7 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
     int nameLen = (divResult + finalAdj) * 2;
 
     uint8_t nameStr[8];
-    fn_GenerateTownName(0, nameStr, random, nameLen);
+    GenerateTownName(nameStr, random, nameLen);
 
     fn_InternalBasePtr_CheckPtr(&editNamePtr);
     fn_EditElement_SetText(*(void**)&editNamePtr, nameStr);
@@ -404,12 +443,91 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     *(uint32_t*)(cfg + 0x28) = (uint32_t)climateIdx;
     *(uint32_t*)(cfg + 0x30) = (uint32_t)disasterIdx;
 
-    // Invoke StartNewGame: FUN_1400b4540
-    // arg order: worldSetup, nameStr, seed, terrainSize, disasterOff, climate, terrain, mapGen, -1, &retval
-    void* retval = nullptr;
-    fn_StartNewGame(self->worldSetup, nameStr, (uint64_t)seed,
-                    (uint64_t)terrainSize, disasterOff,
-                    climateGen, terrainGen, mapGen, -1, &retval);
+    // StartNewGame — reimplementation of FUN_1400b4540
+    // Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain,
+    // then sets next loop on the appropriate engine or dialog loader target.
+    {
+        uintptr_t ws = (uintptr_t)self->worldSetup;
+
+        // Step 1: Allocate and construct GameUpdateLoop (0x160 bytes)
+        void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
+        void* pGameLoop = nullptr;
+        if (gameLoop) {
+            // GameUpdateLoop_Ctor reimplemented inline:
+            // Calls UpdateLoop base ctor, then sets vtable and fields.
+            fn_UpdateLoop_Ctor(gameLoop);
+            *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
+            // Copy name string to +0x28
+            fn_String_Ctor_CStr((void*)((uintptr_t)gameLoop + 0x28), "");
+            fn_String_Assign((void*)((uintptr_t)gameLoop + 0x28), nameStr);
+            *(uint32_t*)((uintptr_t)gameLoop + 0x30) = (uint32_t)(uintptr_t)seed;
+            *(uint32_t*)((uintptr_t)gameLoop + 0x34) = terrainSize;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x40) = (uint64_t)climateGen;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x48) = (uint64_t)terrainGen;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x50) = (uint64_t)mapGen;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x58) = 0;  // savedState = null
+            // Zero remaining fields
+            for (uintptr_t off = 0x60; off <= 0xC0; off += 8) {
+                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
+            }
+            *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
+            *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
+            // disasterOff -> +0xD0: 0xF0 if enabled, 0 if disabled
+            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = disasterOff ? 0 : 0xF0;
+            for (uintptr_t off = 0xD8; off <= 0x148; off += 8) {
+                *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
+            }
+            // Store retval ptr at +0x150
+            uint8_t nullIBP[8];
+            fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+            *(uint64_t*)((uintptr_t)gameLoop + 0x150) = *(uint64_t*)nullIBP;
+            *(uint8_t*)((uintptr_t)gameLoop + 0x158) = 0;
+            *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = (uint32_t)-1;  // param_9 = -1
+            pGameLoop = gameLoop;
+        }
+
+        // Step 2: Allocate and construct GameLoadDialogLoopT (0xB60 bytes)
+        void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xB60, 4);
+        void* pDlLoop = nullptr;
+        if (dlLoop) {
+            uint8_t delayTime[8];
+            fn_Time_Ctor_Float(delayTime, 1.0f);
+            uint8_t loadingStr[8];
+            GetLoadingSoundString(loadingStr);
+            fn_DialogLoaderLoopT_Ctor(dlLoop, loadingStr, pGameLoop, delayTime);
+            *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
+            *(uint32_t*)((uintptr_t)dlLoop + 0x188) = 0xFF000000;
+            *(uint32_t*)((uintptr_t)dlLoop + 0x18C) = 0xFF000000;
+            *(uint8_t*)((uintptr_t)dlLoop + 400) = 0;
+            fn_Random_Default_Ctor((void*)((uintptr_t)dlLoop + 0x194));
+            *(uint64_t*)((uintptr_t)dlLoop + 0xB58) = 0;
+            *(uint8_t*)((uintptr_t)dlLoop + 0x40) = 0;
+            fn_String_Dtor(loadingStr);
+            pDlLoop = dlLoop;
+        }
+
+        // Step 3: Allocate and construct outer LoaderLoop (0x48 bytes)
+        void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
+        void* pOuterLoop = nullptr;
+        if (outerLoop) {
+            uint8_t zeroTime[8];
+            fn_Time_Ctor_Float(zeroTime, 0.0f);
+            fn_LoaderLoop_Ctor(outerLoop, pDlLoop, zeroTime);
+            *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
+            pOuterLoop = outerLoop;
+        }
+
+        // Step 4: Set next loop
+        // In StartNewGame, the check is: +0xC0 (loaderLoop1) == 0 -> use engine at +0xB8
+        uintptr_t loaderLoop1 = *(uintptr_t*)(ws + 0xC0);
+        if (loaderLoop1 == 0) {
+            uintptr_t engPtr = *(uintptr_t*)(ws + 0xB8);
+            SetEngineNextLoop(engPtr, pOuterLoop);
+        } else {
+            SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
+        }
+    }
 }
 
 void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData) {

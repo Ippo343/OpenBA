@@ -481,6 +481,8 @@ void TradeUI_OnDismissButton(TradeUI* self);
 void TradeUI_OnPurchaseButton(TradeUI* self, int idx);
 void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* reserved);
 void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4);
+void TradeUI_RefreshSellTable(TradeUI* self);
+void TradeUI_RefreshBuyTable(TradeUI* self);
 void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self);
 void TradeUI_RefreshSellSpinnerValues(TradeUI* self);
 void TradeUI_RefreshOrderDisplay(TradeUI* self);
