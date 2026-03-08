@@ -22,7 +22,7 @@ reads in Dtors, Cat B: hook install targets) — these disappear with standalone
 
 ---
 
-## Step 5 — IN PROGRESS — Replace exe-resolved engine_funcs with clean C++
+## Step 5 — DONE (2026-03-08) — Replace exe-resolved engine_funcs with clean C++
 
 Goal: Decompile and reimplement all `fn_*` function pointers that resolve from
 `Module::Exe` so dialog/UI code has zero exe function dependencies.
@@ -169,29 +169,40 @@ CropUI:
 - [x] `fn_CropUI_PopulateCombo` (0x140078830) — ExternalFactory iteration + combo population
 - [x] `fn_CropUI_GetExpectedCount` (0x140078a40) — bonus, shares iterator helper
 
-### Remaining — not yet tackled
+### Final per-dialog UI functions — batch reimplemented (2026-03-08)
 
-SelectResourceUI: `fn_SelectResourceUI_PopulateCombo/GetResourceCount`
-ProfessionUI: `fn_ProfessionUI_HandleSpinner/HandleButton`
-ResidenceUI: `fn_ResidenceUI_GoToCitizen`
-ConsumeProduceUI: `fn_ConsumeProduceUI_Slot4`
-ControlUI: `fn_FindComponentByTypeId`
-TutorialUI: `fn_MenuDialogLoopT_Ctor`
-ToolUI: `fn_UIDesc_AddControllers`
+SelectResourceUI:
+- [x] `fn_SelectResourceUI_PopulateCombo` (0x140078830) — ExternalFactory iteration + combo population (shared iterator helper)
+- [x] `fn_SelectResourceUI_GetResourceCount` (0x140078a40) — count-only mode of same iterator
 
-### Too complex — kept as fn_* pointers (2026-03-08)
+ProfessionUI:
+- [x] `fn_ProfessionUI_HandleSpinner` (0x1400763c0) — citizen assignment with FindIdle→FindWorking→FindStudent→FindAny fallback
+- [x] `fn_ProfessionUI_HandleButton` (0x140076a30) — rotate-to-next-citizen + camera center
 
-These functions have deep dependencies on engine subsystems not yet available
-(Factory object creation, Scene graph, Camera/3D math, Audio emitters, etc.).
-They are documented but deferred until their sub-dependencies are reimplemented.
+ResidenceUI:
+- [x] `fn_ResidenceUI_GoToCitizen` (0x1400b56a0) — storage room iteration + Toolbar_CenterOnEntity_Impl
 
-| Function | Address | Reason |
-|----------|---------|--------|
-| `fn_DebugUI_OnDrawComboChanged` | 0x1400608A0 | Geometry creation, Scene graph AddGlobalObject, Audio emitter management, 5+ sub-functions |
-| `fn_Toolbar_ShowGroup` | 0x140102b60 | Factory::CreateObject, BST traversal, ToolController/ToolSetting management |
-| `fn_Toolbar_Utility` | 0x140101a80 | Camera transforms, PauseDialog creation, complex tool management |
-| `fn_Toolbar_ToggleAll` | 0x140101ce0 | Similar tool/factory complexity as ShowGroup/Utility |
-| `fn_ToolbarDialog_Ctor` | 0x1400b9910 | 300+ line recursive constructor with sub-dialog creation, sorting, radio setup |
+ConsumeProduceUI:
+- [x] `fn_ConsumeProduceUI_Slot4` (0x14005F3D0) — already reimplemented, cleaned up dead fn_*
+
+ControlUI:
+- [x] `fn_FindComponentByTypeId` (0x1400c3680) — inline component array walk + vtable type ID match
+
+TutorialUI:
+- [x] `fn_MenuDialogLoopT_Ctor` (0x14009bb00) — inline: DialogLoopT base ctor + vtable patch + Random/AudioScene init
+
+ToolUI:
+- [x] `fn_UIDesc_AddControllers` (0x14012e100) — controller entry iteration with tab/non-tab paths
+
+### Previously "too complex" — all reimplemented (2026-03-08)
+
+All 5 functions previously deferred as "too complex" have been fully reimplemented:
+
+- [x] `fn_Toolbar_ToggleAll` (0x140101ce0) — camera view transform + PauseDialog creation
+- [x] `fn_Toolbar_ShowGroup` (0x140102b60) — 8-step BST traversal + Factory::CreateObject + ToolSetting caching
+- [x] `fn_Toolbar_Utility` (0x140101a80) — dialog open/close + BST position tracking + DialogInstance ctor
+- [x] `fn_DebugUI_OnDrawComboChanged` (0x1400608A0) — control flow reimplemented; 5 deep engine sub-fns (DrawGeometry/AudioObjectGroup ctors) kept as Runtime-level fn_* (not exe game logic)
+- [x] `fn_ToolbarDialog_Ctor` (0x1400b9910) — 400-line constructor: ExternalFactory iteration, template cloning, radio setup, speed array init
 
 Engine/component functions moved to [component_goals.md](component_goals.md)
 
@@ -203,4 +214,4 @@ Engine/component functions moved to [component_goals.md](component_goals.md)
 |------|-------|--------|
 | 0-3 | 59 trampoline calls | DONE |
 | 4 | ResolveAddr in clean code | DONE |
-| 5 | ~120 exe fn_* pointers | ~118 done, 5 too complex (kept as fn_*), ~7 per-dialog UI remaining + ~16 in component_goals.md |
+| 5 | ~130 exe fn_* pointers | **ALL DONE** — ~130 reimplemented (including all 5 "too complex"), component funcs in component_goals.md |

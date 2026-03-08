@@ -1342,11 +1342,13 @@ typedef void (*fn_RadioElement_SetActiveRadio_t)(void* self, int index);
 extern fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio;
 
 // ToolbarDialog constructor (FUN_1400b9910 in retail exe)
-// REPLACED: now ToolbarDialog_Ctor_Impl() in code/Game/Dialog/toolbardialog.cpp
-// Creates a child ToolbarDialog from parent + toolbar data
+// FULLY REIMPLEMENTED: ToolbarDialog_Ctor_Impl() in code/Game/Dialog/toolbardialog.cpp
+// Creates a ToolbarDialog from parent + toolbar data, populates buttons/sprites/shortcuts.
+// The fn_ToolbarDialog_Ctor pointer is kept for the initial toolbar creation call from
+// FUN_140097c00 (which is not yet reimplemented). Sub-dialog creation in OnEvent now
+// calls ToolbarDialog_Ctor_Impl directly.
 typedef void* (*fn_ToolbarDialog_Ctor_t)(void* self, void* userInterface, void* dialog,
                                          void* parentPtr, void* toolbarData);
-// NOTE: kept as extern for sub-dialog recursive creation
 extern fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor;
 
 // ToolbarDialog game system dispatch functions (called from OnEvent)
@@ -1362,7 +1364,8 @@ typedef void (*fn_Toolbar_Utility_t)(void* gameSubsys, void* retBuf, uint64_t pa
 extern fn_Toolbar_Utility_t fn_Toolbar_Utility;
 
 // Case 3: Toggle all
-// REPLACED: now Toolbar_ToggleAll_Impl() in code/Game/Dialog/toolbardialog.cpp
+// FULLY REIMPLEMENTED: Toolbar_ToggleAll_Impl() in code/Game/Dialog/toolbardialog.cpp
+// Kept as fallback only — fn_Toolbar_ToggleAll is no longer called by Toolbar_ToggleAll_Impl.
 typedef void (*fn_Toolbar_ToggleAll_t)(void* gameSubsys);
 extern fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll;
 
@@ -1383,6 +1386,18 @@ extern fn_ToolbarSort_t fn_ToolbarSort;
 
 // TypeInfo for Toolbar external — used by ExternalFactory::FindNext
 extern uint32_t* g_TypeId_ToolbarExternal;
+
+// Toolbar type ID at DAT_1401c6128 — used by ExternalFactory::FindNext and IsDerivedFrom
+// in ToolbarDialog_Ctor to iterate all Toolbar items matching a group
+extern uint32_t* g_TypeId_ToolbarItem;
+
+// RadioElement::FindCheckBoxes(this) — scans children for checkboxes and registers them
+// ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ (0x1800d5750)
+typedef void (*fn_RadioElement_FindCheckBoxes_t)(void* self);
+extern fn_RadioElement_FindCheckBoxes_t fn_RadioElement_FindCheckBoxes;
+
+// Sprite constructor taking spriteSheet + spriteName (same as fn_Sprite_Ctor but used in toolbar)
+// Already available as fn_Sprite_Ctor
 
 // FUN_140100270: Find open dialog by controller type matching group ID
 // Searches all open dialogs for one whose controller matches a specific type
@@ -1755,11 +1770,12 @@ extern fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId;
 typedef void (*fn_InternalBasePtr_CheckPtr_t)(void* self);
 extern fn_InternalBasePtr_CheckPtr_t fn_InternalBasePtr_CheckPtr;
 
-// UI::DialogInstance::DialogInstance(this, userInterface, externalResource, parentPtr, p4, p5, p6)
-// Full constructor for creating child dialog instances
-// Resolved from Runtime export
+// UI::DialogInstance::DialogInstance(this, ui, dialog, parentInternalPtr, dataSource, extraPtr, flags)
+// Full constructor for creating child dialog instances.
+// MSVC signature: (UserInterface*, Dialog const*, InternalPtr<DialogInstance>, Base*, void*, int)
+// Resolved from Runtime export at 0x180114870
 typedef void* (*fn_DialogInstance_Ctor_t)(void* self, void* userInterface, void* externalRes,
-                                          void* parentPtr, int p4, int p5, int p6);
+                                          void* parentPtr, void* dataSource, void* extraPtr, int flags);
 extern fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor;
 
 // MainMenuDialog BuildId child dialog vtable (PTR_FUN_14015f5a0 in exe)
@@ -2595,10 +2611,58 @@ extern fn_Game_InfectRandomCitizen_t fn_Game_InfectRandomCitizen;
 typedef void (*fn_DebugUI_OnDiseaseComboChanged_t)(void* self);
 extern fn_DebugUI_OnDiseaseComboChanged_t fn_DebugUI_OnDiseaseComboChanged;
 
-// DebugUI_OnDrawComboChanged (0x1400608A0) — handles draw combo selection (scene/mesh)
-// RCX=self(DebugUI*)
-typedef void (*fn_DebugUI_OnDrawComboChanged_t)(void* self);
-extern fn_DebugUI_OnDrawComboChanged_t fn_DebugUI_OnDrawComboChanged;
+// DebugUI_OnDrawComboChanged — now reimplemented in code/Game/Dialog/debugui.cpp
+// Sub-functions needed by the reimplementation:
+
+// DrawGeometry_Ctor (FUN_1400d3f10) — constructs a DrawGeometry object (0xf0 bytes)
+// Calls Graphics::Geometry::Geometry() base ctor, sets vtable, inits fields.
+// RCX=allocated memory (0xf0 bytes) -> returns constructed object
+typedef void* (*fn_DrawGeometry_Ctor_t)(void* mem);
+extern fn_DrawGeometry_Ctor_t fn_DrawGeometry_Ctor;
+
+// DrawGeometry_Init (FUN_1400d3f80) — initializes a DrawGeometry with descriptor data
+// Generates random vertex positions, index buffers, sets transform/bounds/draw flags.
+// RCX=geometry, RDX=descriptor ptr (from draw descriptor array entry +0x00)
+typedef void (*fn_DrawGeometry_Init_t)(void* geometry, void* descriptor);
+extern fn_DrawGeometry_Init_t fn_DrawGeometry_Init;
+
+// AudioObjectGroup_Ctor (FUN_1400c3720) — constructs an audio object group (0x48 bytes)
+// Creates Internal object, iterates audio descriptors, creates sub-objects via Factory.
+// RCX=allocated memory (0x48 bytes), RDX=audio descriptor ptr -> returns constructed object
+typedef void* (*fn_AudioObjectGroup_Ctor_t)(void* mem, void* audioDesc);
+extern fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor;
+
+// AudioScene_RegisterObject (FUN_1400c48a0) — registers an audio object with the audio manager
+// RCX=audioMgr (world+0xE8), RDX=InternalBasePtr* to audio object, R8D=sound type
+typedef void (*fn_AudioScene_RegisterObject_t)(void* audioMgr, void* audioObjPtr, int soundType);
+extern fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject;
+
+// Entity_FindAudioComponent (FUN_140002280) — finds audio component on an entity
+// Searches entity's component list for audio component type (DAT_1401c3e60).
+// RCX=entity, RDX=out InternalBasePtr -> returns InternalBasePtr*
+// NOTE: member function ABI — RCX=this(entity), RDX=hidden retval ptr
+typedef void* (*fn_Entity_FindAudioComponent_t)(void* entity, void* retval);
+extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
+
+// Graphics::Scene::AddGlobalObject — adds a Geometry to the global scene render list
+// RCX=Graphics::Scene*, RDX=Geometry*
+typedef void (*fn_Graphics_Scene_AddGlobalObject_t)(void* scene, void* geometry);
+extern fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject;
+
+// Audio::Scene::MoveEmitter — moves an audio emitter from old to new position
+// RCX=Audio::Scene*, EDX=emitterId, R8=oldPos(Vector3*), R9=newPos(Vector3*)
+typedef void (*fn_Audio_Scene_MoveEmitter_t)(void* scene, uint32_t emitterId, void* oldPos, void* newPos);
+extern fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter;
+
+// Audio::Scene::SetEmitterVolume — sets volume on an audio emitter
+// RCX=Audio::Scene*, EDX=emitterId, R8=pos(Vector3*), XMM3=volume(float)
+typedef void (*fn_Audio_Scene_SetEmitterVolume_t)(void* scene, uint32_t emitterId, void* pos, float volume);
+extern fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume;
+
+// Math::Vector3::operator== — compares two Vector3 for equality
+// RCX=lhs(Vector3*), RDX=rhs(Vector3*) -> returns bool
+typedef bool (*fn_Vector3_Equals_t)(void* lhs, void* rhs);
+extern fn_Vector3_Equals_t fn_Vector3_Equals;
 
 // DebugUI_OnDaySliderChanged (0x1400607E0) — handles day slider change, updates time/weather
 // RCX=self(DebugUI*)

@@ -169,6 +169,171 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
     }
 }
 
+// ============================================================
+// DebugUI_OnDrawComboChanged (FUN_1400608A0)
+// Handles draw combo selection — shows/hides scene debug geometry.
+//
+// When a draw combo item is selected, this function iterates through
+// all draw entries in the draw manager (world+0x130). For the selected
+// entry, it creates a DrawGeometry + AudioObjectGroup if they don't
+// exist, adds them to the graphics/audio scenes. For all other entries,
+// it hides the geometry by setting alpha to -1.0f.
+//
+// Draw manager struct layout (pointed to by world+0x130):
+//   R14 = *(world+0x130) — draw manager ptr
+//   *R14 = inner data ptr:
+//     +0x28 = ptr to array of draw descriptors (0x10 stride per entry)
+//     +0x30 = count of draw entries
+//   R14+0x10 = state field (int, set to 0 on show, 3 on hide)
+//   R14+0x50 = ptr to array of Geometry* (one per draw entry)
+//   R14+0x60 = ptr to array of audio object ptrs (one per draw entry)
+//
+// Draw descriptor entry (at inner[+0x28] + i*0x10):
+//   +0x00 = geometry descriptor ptr (passed to DrawGeometry_Init)
+//   +0x08 = audio descriptor ptr (null if no audio; +0x20 = sound type)
+//
+// Audio component (found via Entity_FindAudioComponent):
+//   +0x28 = position (Vector3, 12 bytes)
+//   +0x38 = emitter array ptr (each entry 0x10: [emitterId(4), ?(4), ...])
+//   +0x40 = emitter count
+//
+// Original: 0x1400608A0
+// ============================================================
+static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Get selected combo index
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
+    int selectedIdx = *(int*)(*(uintptr_t*)(s + 0x108) + 0x118);
+
+    // Get item data (cast to int index into draw list)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
+    void* itemData = fn_ComboElement_GetItemData(*(void**)(s + 0x108), selectedIdx);
+    int selectedDrawIdx = (int)(intptr_t)itemData;
+
+    // Get draw manager from game world
+    uintptr_t world = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t* drawMgr = *(uintptr_t**)(world + 0x130);  // R14 = plVar1
+
+    uintptr_t innerData = *(uintptr_t*)drawMgr;  // *plVar1
+    int drawCount = *(int*)(innerData + 0x30);
+    uintptr_t descArray = *(uintptr_t*)(innerData + 0x28);  // array of 0x10-stride descriptors
+
+    void** geometryArray = (void**)(drawMgr[10]);  // R14+0x50 = plVar1[10] (offset 0x50)
+    void** audioArray = (void**)(drawMgr[0xC]);    // R14+0x60 = plVar1[0xC] (offset 0x60)
+
+    for (int i = 0; i < drawCount; i++) {
+        if (selectedDrawIdx == i) {
+            // Selected entry — create and show geometry if not already created
+            if (geometryArray[i] == nullptr) {
+                // Allocate and construct DrawGeometry (0xf0 bytes)
+                void* geomMem = fn_MemAlloc(g_pMemAllocSingleton, 0xf0, 8);
+                void* geometry = nullptr;
+                if (geomMem) {
+                    geometry = fn_DrawGeometry_Ctor(geomMem);
+                }
+                geometryArray[i] = geometry;
+
+                // Initialize with descriptor data
+                uintptr_t descPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10);
+                fn_DrawGeometry_Init(geometryArray[i], (void*)descPtr);
+
+                // Add to graphics scene
+                void* graphicsScene = *(void**)(world + 0x60);
+                fn_Graphics_Scene_AddGlobalObject(graphicsScene, geometryArray[i]);
+
+                // Reset state to 0 (showing)
+                *(int*)((uintptr_t)drawMgr + 0x10) = 0;
+
+                // Check if this entry has an audio descriptor
+                uintptr_t audioDescPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10 + 8);
+                if (audioDescPtr != 0) {
+                    // Allocate and construct AudioObjectGroup (0x48 bytes)
+                    void* audioMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+                    void* audioObj = nullptr;
+                    if (audioMem) {
+                        audioObj = fn_AudioObjectGroup_Ctor(audioMem, (void*)audioDescPtr);
+                    }
+
+                    // Store via InternalBasePtr
+                    uint8_t audioBasePtrBuf[8];
+                    fn_InternalBasePtr_Ctor(audioBasePtrBuf, audioObj);
+                    audioArray[i] = *(void**)audioBasePtrBuf;
+
+                    // Register with audio manager
+                    // Sound type from audio descriptor +0x20
+                    int soundType = *(int*)(audioDescPtr + 0x20);
+                    uint8_t audioRef[8];
+                    *(void**)audioRef = audioArray[i];
+                    void* audioMgr = *(void**)(world + 0xE8);
+                    fn_AudioScene_RegisterObject(audioMgr, audioRef, soundType);
+
+                    // Find audio component on the audio object
+                    fn_InternalBasePtr_CheckPtr((void*)&audioArray[i]);
+                    uint8_t audioCompBuf[8];
+                    fn_Entity_FindAudioComponent((void*)audioArray[i], audioCompBuf);
+
+                    // Check if position differs from zero — if so, move all emitters
+                    float zeroPos[3] = {0.0f, 0.0f, 0.0f};
+                    fn_InternalBasePtr_CheckPtr(audioCompBuf);
+                    uintptr_t audioComp = *(uintptr_t*)audioCompBuf;
+
+                    bool posEqual = fn_Vector3_Equals(zeroPos, (void*)(audioComp + 0x28));
+                    if (!posEqual) {
+                        int emitterCount = *(int*)(audioComp + 0x40);
+                        uintptr_t emitterArray = *(uintptr_t*)(audioComp + 0x38);
+
+                        for (int e = 0; e < emitterCount; e++) {
+                            uint32_t emitterId = *(uint32_t*)(emitterArray + (uintptr_t)e * 0x10);
+                            if (emitterId != 0) {
+                                void* audioScene = *(void**)(world + 0x78);
+                                fn_Audio_Scene_MoveEmitter(
+                                    audioScene, emitterId,
+                                    (void*)(audioComp + 0x28),  // old position
+                                    zeroPos);                    // new position (zero)
+                            }
+                        }
+
+                        // Update stored position to zero
+                        *(float*)(audioComp + 0x28) = 0.0f;
+                        *(float*)(audioComp + 0x2C) = 0.0f;
+                        *(float*)(audioComp + 0x30) = 0.0f;
+                    }
+
+                    // Handle first emitter volume — mute it if needed
+                    fn_InternalBasePtr_CheckPtr(audioCompBuf);
+                    audioComp = *(uintptr_t*)audioCompBuf;
+                    uint32_t* firstEmitter = *(uint32_t**)(audioComp + 0x38);
+                    if (firstEmitter[0] == 0) {
+                        // No emitter ID — just zero the volume field
+                        firstEmitter[1] = 0;
+                    } else {
+                        // Check if volume is non-zero
+                        float currentVolume = *(float*)&firstEmitter[1];
+                        if (currentVolume != 0.0f) {
+                            firstEmitter[1] = 0;
+                            void* audioScene = *(void**)(world + 0x78);
+                            fn_Audio_Scene_SetEmitterVolume(
+                                audioScene, firstEmitter[0],
+                                (void*)(audioComp + 0x28),
+                                0.0f);
+                        }
+                    }
+                }
+            }
+        } else {
+            // Non-selected entry — hide geometry if it exists
+            void* geometry = geometryArray[i];
+            if (geometry != nullptr) {
+                // Set alpha to -1.0f (0xbf800000) to hide
+                *(uint32_t*)((uintptr_t)geometry + 0xC4) = 0xbf800000;
+                // Set state to 3 (hiding)
+                *(int*)((uintptr_t)drawMgr + 0x10) = 3;
+            }
+        }
+    }
+}
+
 // SetEngineNextLoop — now inline in engine_funcs.h as SetEngineNextLoop()
 // (was static SetEngineNextLoop_Impl here, promoted to shared inline)
 
@@ -700,8 +865,8 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
             // Disease combo changed
             DebugUI_OnDiseaseComboChanged_Impl(self);
         } else if (param4 == 0x163) {
-            // Draw combo changed (select visible scene/mesh) — NEEDS OPUS
-            fn_DebugUI_OnDrawComboChanged(self);
+            // Draw combo changed (select visible scene/mesh)
+            DebugUI_OnDrawComboChanged_Impl(self);
         }
         return;
     }

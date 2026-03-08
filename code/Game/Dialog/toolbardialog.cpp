@@ -10,7 +10,7 @@
 //   +0xC8: int32 buttonCount (count for +0xC0 array)
 //   +0xD0: void* toolbarItems (dynamic array of ToolbarItem* ptrs)
 //   +0xD8: int32 itemCount (count for +0xD0 array)
-//   +0xE0: (unused)
+//   +0xE0: uint64 toolbarGroupId (which toolbar group this dialog shows)
 //   +0xE8: InternalBasePtr subDialog (child toolbar dialog instance)
 //   +0xF0: int32 openSubIndex (-1 = none)
 //   +0xF4: int32 currentSpeedIndex
@@ -450,16 +450,172 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 // ============================================================
 // Toolbar_Utility_Impl (was fn_Toolbar_Utility, FUN_140101a80)
 //
-// Opens a utility dialog. Searches for an existing open dialog matching
-// the utility type, closes it if found, or opens a new one.
+// Opens/closes a utility dialog (e.g., town hall, trade post UI).
+//
+// gameSubsys = ToolController at gameWorld+0x120
+// retBuf     = output InternalBasePtr (hidden return ptr)
+// param      = pointer to Description object for this utility type
+//
+// The Description object (param) has:
+//   +0x28: pointer to array of sub-item ptrs (Description children)
+//   +0x30: int32 count of sub-items
+// One child will be a UIDescription (g_TypeId_UIDescription),
+// which has the external resource ref at +0x28.
+//
+// The BST at gameSubsys+0x50 tracks utility dialog positions:
+//   Node layout (0x38 bytes):
+//     +0x00: uint64 key (= param, the Description ptr value)
+//     +0x08: int32 saved X position
+//     +0x0C: int32 saved Y position
+//     +0x10: uint8 isOpen flag
+//     +0x20: left child ptr
+//     +0x28: right child ptr
+//
+// Flow:
+//   1. FindDialogByControllerType — search open dialogs for one
+//      whose controller is a ToolUI with +0x30 == param
+//   2. If found: close the dialog, clear BST isOpen flag
+//   3. If not found: find UIDescription child, create DialogInstance,
+//      set ToolUI vtable, look up/insert in BST, position, add to UI
 // ============================================================
 static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param) {
-    // This function has complex dialog lifecycle management with
-    // FindDialogByControllerType, Factory::CreateObject, BST lookups.
-    // Use the original exe function which is still resolved.
-    if (fn_Toolbar_Utility) {
-        fn_Toolbar_Utility(gameSubsys, retBuf, param);
+    uintptr_t self = (uintptr_t)gameSubsys;
+
+    // Get the UserInterface singleton: *(gameWorld + 0x98)
+    void* gameWorld = *g_pGameWorldSingleton;
+    void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
+
+    // Step 1: Check if a dialog with this controller type is already open
+    void* existingDialog = nullptr;
+    fn_FindDialogByControllerType(gameSubsys, &existingDialog, param);
+
+    if (existingDialog != nullptr) {
+        // Dialog is already open — close it
+        uint64_t closeRef = (uint64_t)existingDialog;
+        fn_UI_CloseDialog(userInterface, &closeRef);
+
+        // Search BST at self+0x50 and clear the isOpen flag
+        uintptr_t* node = *(uintptr_t**)(self + 0x50);
+        while (node != nullptr) {
+            uint64_t nodeKey = *(uint64_t*)node;
+            if (param < nodeKey) {
+                node = (uintptr_t*)node[4];  // left child (+0x20)
+            } else if (param > nodeKey) {
+                node = (uintptr_t*)node[5];  // right child (+0x28)
+            } else {
+                // Found — clear the isOpen flag at +0x10
+                *(uint8_t*)(node + 2) = 0;
+                break;
+            }
+        }
+
+        // Return null InternalBasePtr
+        fn_InternalBasePtr_Ctor(retBuf, nullptr);
+        return;
     }
+
+    // Step 2: No existing dialog — find the UIDescription sub-item
+    int32_t subCount = *(int32_t*)(param + 0x30);
+    void* uiDescItem = nullptr;
+
+    for (int i = 0; i < subCount; i++) {
+        void* subItem = *(void**)(*(uintptr_t*)(param + 0x28) + (int64_t)i * 8);
+        if (!subItem) continue;
+
+        // Call vtable[2] (+0x10) to get the type ID
+        typedef uint32_t (*GetTypeId_t)(void* obj);
+        uint32_t subType = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+
+        if (subType == *g_TypeId_UIDescription) {
+            bool isDerived = fn_IsDerivedFrom(subItem, *g_TypeId_UIDescription);
+            if (isDerived) {
+                uiDescItem = subItem;
+            }
+            break;
+        }
+    }
+
+    if (uiDescItem == nullptr) {
+        fn_InternalBasePtr_Ctor(retBuf, nullptr);
+        return;
+    }
+
+    // Step 3: Create a new DialogInstance from the UIDescription's resource
+    void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    void* dialogInst = nullptr;
+
+    if (newBuf != nullptr) {
+        // Null parent InternalBasePtr
+        uint8_t nullParent[8];
+        fn_InternalBasePtr_Ctor(nullParent, nullptr);
+
+        // External resource from uiDescItem+0x28
+        void* extRes = *(void**)((uintptr_t)uiDescItem + 0x28);
+
+        // DialogInstance ctor: (self, ui, extRes, parentPtr, dataSource, extraPtr, flags)
+        // param is passed as the data source (identifies the utility type)
+        dialogInst = fn_DialogInstance_Ctor(newBuf, userInterface, extRes,
+                                            nullParent, (void*)param, nullptr, 0);
+
+        // Override vtable to ToolUI child dialog vtable
+        *(uintptr_t*)dialogInst = g_ToolUI_ChildDialog_Vtable;
+    }
+
+    // Wrap in InternalBasePtr
+    void* dialogRef = nullptr;
+    fn_InternalBasePtr_Ctor(&dialogRef, dialogInst);
+
+    if (dialogRef == nullptr) {
+        fn_InternalBasePtr_Ctor(retBuf, nullptr);
+        return;
+    }
+
+    // Step 4: Look up position in BST at self+0x50
+    uintptr_t* bstNode = nullptr;
+    uintptr_t* bstRoot = (uintptr_t*)(self + 0x50);
+
+    // BST search: find existing node for this param key
+    uintptr_t* current = *(uintptr_t**)bstRoot;
+    while (current != nullptr) {
+        uint64_t nodeKey = *(uint64_t*)current;
+        if (param < nodeKey) {
+            current = (uintptr_t*)current[4];  // left child (+0x20)
+        } else if (param > nodeKey) {
+            current = (uintptr_t*)current[5];  // right child (+0x28)
+        } else {
+            bstNode = current;
+            break;
+        }
+    }
+
+    if (bstNode == nullptr) {
+        // Not in BST — insert new node via fn_BST_Insert_0x14
+        // Insert data: key=param, position=(default 1,0), flags=0
+        uint8_t insertBuf[24];
+        *(uint64_t*)&insertBuf[0] = param;          // key
+        *(uint64_t*)&insertBuf[8] = 0;              // x=0, y=0
+        *(uint64_t*)&insertBuf[16] = 0;             // flags=0
+
+        void* retNode = nullptr;
+        fn_BST_Insert_0x14(bstRoot, &retNode, insertBuf);
+        bstNode = (uintptr_t*)retNode;
+    }
+
+    // Set the isOpen flag at +0x10 to 1
+    *(uint8_t*)((uintptr_t)bstNode + 0x10) = 1;
+
+    // Position dialog at saved coordinates from the BST node
+    fn_InternalBasePtr_CheckPtr(&dialogRef);
+    int32_t savedX = *(int32_t*)((uintptr_t)bstNode + 0x08);
+    int32_t savedY = *(int32_t*)((uintptr_t)bstNode + 0x0C);
+    fn_DialogInstance_SetUpperLeft((void*)(uintptr_t)dialogRef, savedX, savedY, false);
+
+    // Add dialog to the UI
+    uint64_t addRef = (uint64_t)dialogRef;
+    fn_UI_AddDialog(userInterface, &addRef);
+
+    // Return the dialog reference
+    *(void**)retBuf = (void*)(uintptr_t)dialogRef;
 }
 
 // ============================================================
@@ -471,16 +627,584 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 // Flow:
 //   1. If tool controller at +0x28 is active, call its Close (vtable[9])
 //   2. Call ShowGroup(gameSubsys, 0) to clear current group
-//   3. Reset camera to overview position
-//   4. Load "Dialog/Pause.rsc" and create PauseDialog (0xC8 bytes)
-//   5. Add dialog to UI
+//   3. Recompute camera view transform and apply to camera
+//   4. Load "Dialog/Pause.rsc" via ExternalFactory::FindOrLoad
+//   5. IsDerivedFrom check on loaded resource (DialogInstance type)
+//   6. MemAlloc 0xC8 bytes for PauseDialog
+//   7. Construct DialogInstance base, set PauseDialog vtable, set gameWorld ptr
+//   8. Add dialog to UI
+//
+// gameSubsys layout (ToolController subsystem at gameWorld+0x120):
+//   +0x28: InternalBasePtr — current active tool controller
+//
+// PauseDialog layout (0xC8 bytes, extends DialogInstance 0xB8):
+//   +0x00: vtable (PTR_FUN_14015f550)
+//   +0xB8: gameWorld pointer (DAT_1401c3dd8)
+//   +0xC0: 0 (unused/flags)
 // ============================================================
 static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
-    // This function requires Camera/Transform manipulation plus
-    // PauseDialog creation with a specific vtable. Use the original.
-    if (fn_Toolbar_ToggleAll) {
-        fn_Toolbar_ToggleAll(gameSubsys);
+    uintptr_t gs = (uintptr_t)gameSubsys;
+
+    // Get UserInterface from gameWorld+0x98
+    void* gameWorld = *g_pGameWorldSingleton;
+    void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
+
+    // Step 1: If there's an active tool controller at +0x28, close it via vtable[9]
+    if (*(uintptr_t*)(gs + 0x28) != 0) {
+        fn_InternalBasePtr_CheckPtr((void*)(gs + 0x28));
+        void* toolCtrl = *(void**)(gs + 0x28);
+        // vtable[9] = Close (offset 0x48)
+        typedef void (*VClose_t)(void* self);
+        VClose_t vClose = (VClose_t)(*(uintptr_t*)(*(uintptr_t*)toolCtrl + 0x48));
+        vClose(toolCtrl);
     }
+
+    // Step 2: Clear current tool group by calling ShowGroup(gameSubsys, 0)
+    Toolbar_ShowGroup_Impl(gameSubsys, 0);
+
+    // Step 3: Recompute camera view transform
+    // Time::Time(0.0f) — constructs a zero time value (unused, but matches original)
+    uint8_t timeVal[16];
+    if (fn_Time_Ctor_Float) {
+        fn_Time_Ctor_Float(timeVal, 0.0f);
+    }
+
+    // Get camera system at gameWorld+0xE0
+    void* cameraSys = *(void**)((uintptr_t)gameWorld + 0xE0);
+
+    // CameraSys_ComputeViewTransform: computes look-at transform from camera params
+    // Returns a compact Transform (7 floats = 0x1C bytes) written to outBuf and cameraSys[0..6]
+    uint8_t transformBuf[32]; // enough for 7 dwords
+    if (fn_CameraSys_ComputeViewTransform) {
+        void* result = fn_CameraSys_ComputeViewTransform(cameraSys, transformBuf);
+
+        // Convert compact Transform to Transform3 (48 bytes) and set on camera
+        if (fn_Transform_AsTransform3 && fn_Camera_SetCameraToWorld) {
+            uint8_t transform3[48];
+            fn_Transform_AsTransform3(result, transform3);
+            // Camera object is at cameraSys+0x34
+            fn_Camera_SetCameraToWorld((void*)((uintptr_t)cameraSys + 0x34), transform3);
+        }
+    }
+
+    // Step 4: Load "Dialog/Pause.rsc" resource
+    uint8_t filename[16]; // System::Filename is 8-16 bytes
+    if (fn_Filename_CtorCStr) {
+        fn_Filename_CtorCStr(filename, "Dialog/Pause.rsc");
+    }
+
+    void* externalRes = nullptr;
+    if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton && fn_ExternalFactory_FindOrLoad) {
+        externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+    }
+
+    // Step 5: IsDerivedFrom check — verify the loaded resource is a DialogInstance type
+    void* checkedRes = nullptr;
+    if (externalRes != nullptr) {
+        bool isDerived = fn_IsDerivedFrom(externalRes, *g_TypeId_DialogInstance);
+        if (isDerived) {
+            checkedRes = externalRes;
+        }
+    }
+
+    // Clean up filename
+    if (fn_Filename_Dtor) {
+        fn_Filename_Dtor(filename);
+    }
+
+    // Step 6: Allocate PauseDialog (0xC8 bytes)
+    void* pauseDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+    void* finalDialog = nullptr;
+
+    uintptr_t gameWorldPtr = (uintptr_t)gameWorld;
+
+    if (pauseDialog != nullptr) {
+        // Construct null parent InternalBasePtr
+        uint64_t parentRef;
+        fn_InternalBasePtr_Ctor(&parentRef, nullptr);
+        uint64_t parentCopy = parentRef;
+
+        // Step 7: Construct DialogInstance base class
+        // DialogInstance::DialogInstance(self, userInterface, externalRes, parentPtr, 0, 0, 0)
+        fn_DialogInstance_Ctor(pauseDialog, userInterface, checkedRes, &parentCopy, 0, 0, 0);
+
+        // Set PauseDialog vtable
+        *(uintptr_t*)pauseDialog = g_PauseDialog_Vtable;
+        // Set gameWorld pointer at +0xB8
+        *(uintptr_t*)((uintptr_t)pauseDialog + 0xB8) = gameWorldPtr;
+        // Zero out +0xC0
+        *(uint64_t*)((uintptr_t)pauseDialog + 0xC0) = 0;
+
+        finalDialog = pauseDialog;
+    }
+
+    // Step 8: Wrap in InternalBasePtr and add to UI
+    uint64_t dialogRef;
+    fn_InternalBasePtr_Ctor(&dialogRef, finalDialog);
+    uint64_t addRef = dialogRef;
+    fn_UI_AddDialog(userInterface, &addRef);
+}
+
+// ============================================================
+// Helper: push_back for engine dynamic arrays (ptr, count at +0, capacity at +4)
+// Mimics the inlined vector growth pattern seen throughout the exe.
+// ============================================================
+static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, uint64_t value) {
+    int32_t oldCount = *pCount;
+    int32_t newCount = oldCount + 1;
+    if (newCount == oldCount) return; // overflow guard (matches original)
+
+    *pCount = newCount;
+    void* oldData = *pData;
+
+    if (*pCapacity < newCount) {
+        int32_t newCap = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            newCap = newCount * 3;
+        }
+        *pCapacity = newCap;
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCap * 8, 8);
+        *pData = newData;
+    }
+
+    // Copy existing elements to new buffer (if buffer changed)
+    int32_t copyStart = (oldData == *pData) ? oldCount : 0;
+    uint64_t* dst = (uint64_t*)*pData;
+    uint64_t* src = (uint64_t*)oldData;
+    for (int32_t i = copyStart; i < newCount; i++) {
+        if (i < oldCount) {
+            dst[i] = src[i];
+        } else {
+            dst[i] = value; // new element
+        }
+    }
+
+    if (oldData != *pData) {
+        fn_MemFree(g_pMemAllocSingleton, oldData);
+    }
+}
+
+static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, int32_t value) {
+    int32_t oldCount = *pCount;
+    int32_t newCount = oldCount + 1;
+    if (newCount == oldCount) return;
+
+    *pCount = newCount;
+    void* oldData = *pData;
+
+    if (*pCapacity < newCount) {
+        int32_t newCap = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            newCap = newCount * 3;
+        }
+        *pCapacity = newCap;
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)newCap * 4, 4);
+        *pData = newData;
+    }
+
+    int32_t copyStart = (oldData == *pData) ? oldCount : 0;
+    int32_t* dst = (int32_t*)*pData;
+    int32_t* src = (int32_t*)oldData;
+    for (int32_t i = copyStart; i < newCount; i++) {
+        if (i < oldCount) {
+            dst[i] = src[i];
+        } else {
+            dst[i] = value;
+        }
+    }
+
+    if (oldData != *pData) {
+        fn_MemFree(g_pMemAllocSingleton, oldData);
+    }
+}
+
+// ============================================================
+// ToolbarDialog_Ctor_Impl (was fn_ToolbarDialog_Ctor, FUN_1400b9910)
+//
+// Constructs a ToolbarDialog instance. This is the main constructor that:
+//   1. Calls base DialogInstance ctor
+//   2. Patches vtable to ToolbarDialog vtable
+//   3. Iterates all Toolbar externals matching the group ID
+//   4. Sorts them by priority (+0x50 field)
+//   5. Determines icon sizes based on nesting depth
+//   6. For each toolbar item, clones a UI template element, sets up
+//      name, tooltip, sprite, keyboard shortcut, and adds to table
+//   7. Calls RadioElement::FindCheckBoxes to wire up radio behavior
+//   8. Populates the speed values array {1, 2, 5, 10}
+//   9. Finds current game speed index in the array
+//
+// Parameters:
+//   self          — uninitialized 0x108-byte allocation
+//   userInterface — UserInterface* (UI system)
+//   dialog        — Dialog* (dialog resource with templates)
+//   parentPtr     — InternalBasePtr* to parent dialog (deref'd to get Base*)
+//   toolbarData   — toolbar group ID (uint64_t cast to void*)
+//
+// Returns: self (constructed ToolbarDialog)
+// ============================================================
+void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
+                               void* parentPtr, void* toolbarData) {
+    uintptr_t s = (uintptr_t)self;
+    uint64_t groupId = (uint64_t)toolbarData;
+
+    // --- Step 1: Call base DialogInstance constructor ---
+    // DialogInstance(self, userInterface, dialog, parentPtr, 0, 0, 0)
+    fn_DialogInstance_Ctor(self, userInterface, dialog, parentPtr, nullptr, nullptr, 0);
+
+    // --- Step 2: Patch vtable to ToolbarDialog ---
+    *(uintptr_t*)s = g_ToolbarDialog_Vtable;
+
+    // --- Step 3: Initialize ToolbarDialog-specific fields ---
+    *(uint64_t*)(s + 0xB8) = 0;         // radioElement
+    *(uint64_t*)(s + 0xC0) = 0;         // buttonElements data
+    *(uint64_t*)(s + 0xC8) = 0;         // buttonCount + capacity (two int32s)
+    *(uint64_t*)(s + 0xD0) = 0;         // toolbarItems data
+    *(uint64_t*)(s + 0xD8) = 0;         // itemCount + capacity
+    *(uint64_t*)(s + 0xE0) = groupId;   // toolbar group ID
+    fn_InternalBasePtr_Ctor((void*)(s + 0xE8), nullptr); // subDialog = null
+    *(int32_t*)(s + 0xF0) = -1;         // openSubIndex = -1
+    *(uint64_t*)(s + 0xF8) = 0;         // speedValues data
+    *(uint64_t*)(s + 0x100) = 0;        // speedValueCount + capacity
+
+    // --- Step 4: Find key UI elements ---
+    // Find "toolbarContent" table element
+    uint8_t strBuf[16];
+    uint8_t elemBuf[16];
+
+    fn_String_Ctor_CStr(strBuf, "toolbarContent");
+    void* retPtr = fn_DialogInstance_FindElement(self, elemBuf, strBuf);
+    void* tableElement = *(void**)retPtr;
+    fn_String_Dtor(strBuf);
+
+    // Find "toolBar" radio element
+    fn_String_Ctor_CStr(strBuf, "toolBar");
+    retPtr = fn_DialogInstance_FindElement(self, elemBuf, strBuf);
+    *(uint64_t*)(s + 0xB8) = *(uint64_t*)retPtr;
+    fn_String_Dtor(strBuf);
+
+    // Set radio element ID to 1000
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
+    fn_Element_SetElementId(*(void**)(s + 0xB8), 1000);
+
+    // --- Step 5: Collect all Toolbar items matching our group ID ---
+    // Use ExternalFactory::FindNext to iterate all Toolbar externals
+    void* factory = *g_pExternalFactorySingleton;
+    uint32_t toolbarTypeId = *g_TypeId_ToolbarItem;
+
+    // Temporary dynamic array for matching toolbar items
+    void* itemList = nullptr;
+    int32_t itemListCount = 0;
+    int32_t itemListCap = 0;
+
+    void* ext = fn_ExternalFactory_FindNext(factory, toolbarTypeId, nullptr);
+    while (ext != nullptr) {
+        // IsDerivedFrom check
+        bool isDerived = fn_IsDerivedFrom(ext, toolbarTypeId);
+        void* toolbarItem = isDerived ? ext : nullptr;
+
+        // Check: item must have name (byte at +0x45 != 0) and group must match
+        if (toolbarItem != nullptr) {
+            uint8_t hasName = *(uint8_t*)((uintptr_t)toolbarItem + 0x45);
+            uint64_t itemGroup = *(uint64_t*)((uintptr_t)toolbarItem + 0x60);
+            if (hasName != 0 && itemGroup == groupId) {
+                DynArray8_Push(&itemList, &itemListCount, &itemListCap,
+                               (uint64_t)toolbarItem);
+            }
+        }
+
+        ext = fn_ExternalFactory_FindNext(factory, toolbarTypeId, ext);
+    }
+
+    // Sort by priority field at +0x50
+    if (itemListCount > 1) {
+        fn_ToolbarSort(itemList, itemListCount);
+    }
+
+    // --- Step 6: Determine icon sizes based on nesting depth ---
+    // Walk linked list at first item's +0x60 chain to count depth
+    int depth = 0;
+    if (itemListCount > 0) {
+        uint64_t* items = (uint64_t*)itemList;
+        uint64_t firstItem = items[0];
+        for (uint64_t link = *(uint64_t*)(firstItem + 0x60);
+             link != 0;
+             link = *(uint64_t*)(link + 0x60)) {
+            depth++;
+        }
+    }
+
+    // Map depth to keyboard shortcut ID range
+    int shortcutStart, shortcutEnd;
+    if (depth == 0) {
+        shortcutStart = 0x18; shortcutEnd = 0x20;
+    } else if (depth == 1) {
+        shortcutStart = 0x23; shortcutEnd = 0x2c;
+    } else if (depth == 2) {
+        shortcutStart = 0x2d; shortcutEnd = 0x31;
+    } else {
+        shortcutStart = 0; shortcutEnd = -1; // no shortcuts
+    }
+
+    // Build array of available shortcut IDs
+    int32_t* shortcutIds = nullptr;
+    int32_t shortcutCount = 0;
+    int32_t shortcutCap = 0;
+    for (int id = shortcutStart; id <= shortcutEnd; id++) {
+        DynArray4_Push((void**)&shortcutIds, &shortcutCount, &shortcutCap, id);
+    }
+
+    // --- Step 7: Create UI elements for each toolbar item ---
+    int buttonIndex = 0;
+    for (int i = 0; i < itemListCount; i++) {
+        uint64_t* items = (uint64_t*)itemList;
+        uintptr_t item = (uintptr_t)items[i];
+
+        // Determine template index based on action type
+        int32_t actionType = *(int32_t*)(item + 0x48);
+        int templateIndex;
+        if (actionType == 10) {
+            templateIndex = 0;  // SpeedDisplay: plain text template
+        } else if (actionType == 0) {
+            templateIndex = 1;  // Tool/group: expandable button
+        } else if (actionType == 1) {
+            templateIndex = 2;  // ShowGroup: standard button
+        } else {
+            templateIndex = 3;  // Other: utility button
+        }
+
+        // Get template element from Dialog and clone it
+        uint8_t templateBuf[16];
+        fn_Dialog_GetTemplate(dialog, templateBuf, templateIndex);
+        void* templateElem = *(void**)templateBuf;
+
+        // Clone the template: virtual call at vtable[8] (offset 0x40)
+        // Element::Clone(this, retBuf, dialog) — member, non-trivial return
+        typedef void* (*CloneFn)(void* self, void* retBuf, void* dialog);
+        uint8_t cloneBuf[16];
+        uintptr_t vtable = *(uintptr_t*)templateElem;
+        CloneFn cloneFn = (CloneFn)(*(uintptr_t*)(vtable + 0x40));
+        cloneFn(templateElem, cloneBuf, dialog);
+        void* newElement = *(void**)cloneBuf;
+
+        // Push to buttonElements array (+0xC0/+0xC8/+0xCC)
+        DynArray8_Push(
+            (void**)(s + 0xC0),
+            (int32_t*)(s + 0xC8),
+            (int32_t*)(s + 0xCC),
+            (uint64_t)newElement
+        );
+
+        // Push to toolbarItems array (+0xD0/+0xD8/+0xDC)
+        DynArray8_Push(
+            (void**)(s + 0xD0),
+            (int32_t*)(s + 0xD8),
+            (int32_t*)(s + 0xDC),
+            (uint64_t)item
+        );
+
+        // Add element as child of table at current buttonIndex
+        fn_InternalBasePtr_CheckPtr((void*)&tableElement);
+        void* elemPtr = newElement;
+        fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
+
+        // Set element name from toolbar item's resource path
+        void* itemPath = fn_External_GetPath((void*)item);
+        uint8_t pathIdBuf[32]; // Filename + return
+        void* pathStr = fn_Filename_GetPathIdentifier(itemPath, pathIdBuf);
+        fn_InternalBasePtr_CheckPtr((void*)&newElement);
+        fn_Element_SetName(newElement, pathStr);
+        // Filename destructors for temporaries (two Filename locals)
+        // The decompiler shows two ~Filename calls — these clean up the
+        // Filename objects created by GetPath and GetPathIdentifier.
+        // In our reimpl, pathIdBuf is stack-allocated and cleaned up automatically.
+
+        // Get toolbar item's display string and sprite
+        // UI::String at item+0x20 (stringTable) + item+0x30 (stringName)
+        // UI::Sprite at item+0x28 (spriteSheet) + item+0x38 (spriteName)
+        uint8_t uiString[16]; // UI::String (16 bytes)
+        uint8_t uiSprite[16]; // UI::Sprite (16 bytes)
+        fn_UIString_Ctor(uiString, *(uint64_t*)(item + 0x20), (void*)(item + 0x30));
+        fn_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
+
+        // --- Configure button element (skip for SpeedDisplay) ---
+        if (templateIndex != 0) {
+            // Cast element to ButtonElement via IsDerivedFrom
+            fn_InternalBasePtr_CheckPtr((void*)&newElement);
+            void* elemForCast = newElement;
+            bool isButton = fn_IsDerivedFrom(elemForCast, *g_TypeId_HelpButtonElem);
+            void* buttonElem = isButton ? elemForCast : nullptr;
+
+            uint64_t buttonRef;
+            fn_InternalBasePtr_Ctor(&buttonRef, buttonElem);
+
+            // For ShowGroup (1) and Utility (2), override string/sprite from
+            // the item's entity description (BuildRequirementComponent)
+            if (actionType == 1 || actionType == 2) {
+                uint64_t entityDesc = *(uint64_t*)(item + 0x58);
+                void* buildReqComp = nullptr;
+                if (entityDesc != 0) {
+                    int32_t descCount = *(int32_t*)(entityDesc + 0x30);
+                    for (int j = 0; j < descCount; j++) {
+                        void* subItem = *(void**)(*(uintptr_t*)(entityDesc + 0x28) + (int64_t)j * 8);
+                        // Virtual call to GetTypeId (vtable[2], offset 0x10)
+                        typedef uint32_t (*GetTypeIdFn)(void*);
+                        uint32_t subType = ((GetTypeIdFn)(*(uintptr_t*)(*(uintptr_t*)subItem + 0x10)))(subItem);
+                        if (subType == *g_TypeId_BuildRequirementComponent) {
+                            bool derived = fn_IsDerivedFrom(subItem, *g_TypeId_BuildRequirementComponent);
+                            if (derived) {
+                                buildReqComp = subItem;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // Override UI::String from buildReqComp+0x30/+0x48
+                if (buildReqComp != nullptr) {
+                    uint8_t overrideStr[16];
+                    fn_UIString_Ctor(overrideStr, *(uint64_t*)((uintptr_t)buildReqComp + 0x30),
+                                     (void*)((uintptr_t)buildReqComp + 0x48));
+                    *(uint64_t*)&uiString[0] = *(uint64_t*)overrideStr;
+                    *(uint64_t*)&uiString[8] = *(uint64_t*)(overrideStr + 8);
+
+                    // Override sprite: Sprite() default (empty/invalid sprite)
+                    uint8_t overrideSpr[16];
+                    fn_Sprite_Default_Ctor(overrideSpr);
+                    *(uint64_t*)&uiSprite[0] = *(uint64_t*)overrideSpr;
+                    *(uint64_t*)&uiSprite[8] = *(uint64_t*)(overrideSpr + 8);
+                }
+            }
+
+            // Assign keyboard shortcut ID
+            if (*(uint8_t*)(item + 0x44) == 0) {
+                // Item has explicit shortcut override at +0x40
+                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+                *(int32_t*)(buttonRef + 0xC0) = *(int32_t*)(item + 0x40);
+
+                // Remove this shortcut ID from the available pool
+                int32_t targetId = *(int32_t*)(item + 0x40);
+                for (int j = 0; j < shortcutCount; j++) {
+                    if (shortcutIds[j] == targetId) {
+                        // Shift remaining elements left
+                        for (int k = j; k < shortcutCount - 1; k++) {
+                            shortcutIds[k] = shortcutIds[k + 1];
+                        }
+                        shortcutCount--;
+                        j--; // re-check same index
+                    }
+                }
+            } else if (shortcutCount > 0) {
+                // Auto-assign first available shortcut
+                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+                *(int32_t*)(buttonRef + 0xC0) = shortcutIds[0];
+
+                // Remove first shortcut from pool
+                for (int k = 0; k < shortcutCount - 1; k++) {
+                    shortcutIds[k] = shortcutIds[k + 1];
+                }
+                shortcutCount--;
+            }
+
+            // Set element ID (button index within this toolbar)
+            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+            fn_Element_SetElementId((void*)buttonRef, buttonIndex);
+
+            // Set user data to the entity description pointer
+            void* userData = *(void**)(item + 0x58);
+            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+            fn_Element_SetUserData((void*)buttonRef, userData);
+
+            // Set tooltip from UI::String
+            uint8_t tooltipData[16];
+            *(uint64_t*)tooltipData = *(uint64_t*)uiString;
+            *(uint64_t*)(tooltipData + 8) = *(uint64_t*)(uiString + 8);
+            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+            fn_Element_SetToolTip((void*)buttonRef, tooltipData);
+
+            // Enable the element (set flag 0x10000)
+            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+            fn_Element_SetFlagsOnOff((void*)buttonRef, 0x10000, 0);
+
+            // Set sprite on all ImageElement children
+            int childIdx = 0;
+            fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+            int childCount = fn_Element_ChildCount((void*)buttonRef);
+            while (childIdx < childCount) {
+                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+                uint8_t childBuf[16];
+                fn_Element_Child((void*)buttonRef, childBuf, childIdx);
+                fn_InternalBasePtr_CheckPtr((void*)childBuf);
+                void* childElem = *(void**)childBuf;
+
+                // Cast to ImageElement
+                bool isImage = fn_IsDerivedFrom(childElem, *g_TypeId_ImageElement);
+                void* imageElem = isImage ? childElem : nullptr;
+
+                uint64_t imageRef;
+                fn_InternalBasePtr_Ctor(&imageRef, imageElem);
+
+                // Set sprite if valid and imageElem is non-null
+                bool spriteValid = fn_Sprite_IsValid(uiSprite);
+                if (spriteValid && imageRef != 0) {
+                    uint8_t sprCopy[16];
+                    *(uint64_t*)sprCopy = *(uint64_t*)uiSprite;
+                    *(uint64_t*)(sprCopy + 8) = *(uint64_t*)(uiSprite + 8);
+                    fn_InternalBasePtr_CheckPtr((void*)&imageRef);
+                    fn_ImageElement_SetSprite((void*)imageRef, sprCopy);
+                }
+
+                childIdx++;
+                fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
+                childCount = fn_Element_ChildCount((void*)buttonRef);
+            }
+        }
+
+        buttonIndex++;
+    }
+
+    // --- Step 8: Wire up radio button behavior ---
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
+    fn_RadioElement_FindCheckBoxes(*(void**)(s + 0xB8));
+
+    // --- Step 9: Populate speed values array {1, 2, 5, 10} ---
+    *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
+
+    DynArray4_Push(
+        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 1);
+    DynArray4_Push(
+        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 2);
+    DynArray4_Push(
+        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 5);
+    DynArray4_Push(
+        (void**)(s + 0xF8), (int32_t*)(s + 0x100), (int32_t*)(s + 0x104), 10);
+
+    // --- Step 10: Find current game speed in speed array ---
+    int32_t speedIndex = 0;
+    uint64_t gameWorldAddr = (uintptr_t)*g_pGameWorldSingleton;
+    int32_t currentSpeed = *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34);
+    int32_t speedCount = *(int32_t*)(s + 0x100);
+    int32_t* speedArr = *(int32_t**)(s + 0xF8);
+
+    for (int i = 0; i < speedCount; i++) {
+        if (speedArr[i] == currentSpeed) {
+            if (i >= 0) {
+                speedIndex = i;
+                goto found_speed;
+            }
+            break;
+        }
+    }
+    speedIndex = 0; // default to first speed
+found_speed:
+    *(int32_t*)(s + 0xF4) = speedIndex;
+    // Write the speed value back to the game system
+    *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34) = speedArr[speedIndex];
+
+    // --- Cleanup ---
+    fn_MemFree(g_pMemAllocSingleton, shortcutIds);
+    fn_MemFree(g_pMemAllocSingleton, itemList);
+
+    return self;
 }
 
 // ============================================================
@@ -674,13 +1398,13 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
                     int64_t selfRef;
                     fn_InternalBasePtr_Ctor(&selfRef, self);
 
-                    // Construct child ToolbarDialog
-                    childDialog = fn_ToolbarDialog_Ctor(
+                    // Construct child ToolbarDialog (recursive call)
+                    childDialog = ToolbarDialog_Ctor_Impl(
                         newDialog,
                         *(void**)(s + 0x10),    // UserInterface
                         *(void**)(s + 0x18),    // Dialog
                         &selfRef,               // parent InternalPtr
-                        (void*)item             // toolbar item data
+                        (void*)item             // toolbar item (group parent)
                     );
                 }
 

@@ -422,6 +422,8 @@ uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
 // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
 fn_ToolbarSort_t fn_ToolbarSort = nullptr;
 uint32_t* g_TypeId_ToolbarExternal = nullptr;
+uint32_t* g_TypeId_ToolbarItem = nullptr;
+fn_RadioElement_FindCheckBoxes_t fn_RadioElement_FindCheckBoxes = nullptr;
 fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
 // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
@@ -723,7 +725,16 @@ fn_Game_StartRandomFire_t fn_Game_StartRandomFire = nullptr;
 fn_Game_SpawnTornado_t fn_Game_SpawnTornado = nullptr;
 fn_Game_InfectRandomCitizen_t fn_Game_InfectRandomCitizen = nullptr;
 fn_DebugUI_OnDiseaseComboChanged_t fn_DebugUI_OnDiseaseComboChanged = nullptr;
-fn_DebugUI_OnDrawComboChanged_t fn_DebugUI_OnDrawComboChanged = nullptr;
+// fn_DebugUI_OnDrawComboChanged removed — now reimplemented in code/Game/Dialog/debugui.cpp
+fn_DrawGeometry_Ctor_t fn_DrawGeometry_Ctor = nullptr;
+fn_DrawGeometry_Init_t fn_DrawGeometry_Init = nullptr;
+fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
+fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
+fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
+fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject = nullptr;
+fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter = nullptr;
+fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume = nullptr;
+fn_Vector3_Equals_t fn_Vector3_Equals = nullptr;
 fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
 fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
 fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
@@ -2176,6 +2187,16 @@ bool EngineFuncsInit() {
             g_TypeId_ToolbarExternal = reinterpret_cast<uint32_t*>(*exref);
         }
     }
+    // Toolbar type ID at DAT_1401c6128 (filled by Toolbar_RegisterType at runtime)
+    g_TypeId_ToolbarItem = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6128));
+    // RadioElement::FindCheckBoxes
+    fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
+        ResolveExport("?FindCheckBoxes@RadioElement@UI@@QEAAXXZ"));
+    if (!fn_RadioElement_FindCheckBoxes) {
+        fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
+            ResolveAddr(Module::Runtime, 0x1800d5750));
+    }
     // FUN_140100270: Find dialog by controller type
     fn_FindDialogByControllerType = reinterpret_cast<fn_FindDialogByControllerType_t>(
         ResolveAddr(Module::Exe, 0x140100270));
@@ -2914,8 +2935,26 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14005FE10));
     fn_DebugUI_OnDiseaseComboChanged = reinterpret_cast<fn_DebugUI_OnDiseaseComboChanged_t>(
         ResolveAddr(Module::Exe, 0x14005FC60));
-    fn_DebugUI_OnDrawComboChanged = reinterpret_cast<fn_DebugUI_OnDrawComboChanged_t>(
-        ResolveAddr(Module::Exe, 0x1400608A0));
+    // fn_DebugUI_OnDrawComboChanged removed — now reimplemented
+    // Sub-functions for the reimplementation:
+    fn_DrawGeometry_Ctor = reinterpret_cast<fn_DrawGeometry_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400d3f10));
+    fn_DrawGeometry_Init = reinterpret_cast<fn_DrawGeometry_Init_t>(
+        ResolveAddr(Module::Exe, 0x1400d3f80));
+    fn_AudioObjectGroup_Ctor = reinterpret_cast<fn_AudioObjectGroup_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400c3720));
+    fn_AudioScene_RegisterObject = reinterpret_cast<fn_AudioScene_RegisterObject_t>(
+        ResolveAddr(Module::Exe, 0x1400c48a0));
+    fn_Entity_FindAudioComponent = reinterpret_cast<fn_Entity_FindAudioComponent_t>(
+        ResolveAddr(Module::Exe, 0x140002280));
+    fn_Graphics_Scene_AddGlobalObject = reinterpret_cast<fn_Graphics_Scene_AddGlobalObject_t>(
+        ResolveExport("?AddGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+    fn_Audio_Scene_MoveEmitter = reinterpret_cast<fn_Audio_Scene_MoveEmitter_t>(
+        ResolveExport("?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z"));
+    fn_Audio_Scene_SetEmitterVolume = reinterpret_cast<fn_Audio_Scene_SetEmitterVolume_t>(
+        ResolveExport("?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z"));
+    fn_Vector3_Equals = reinterpret_cast<fn_Vector3_Equals_t>(
+        ResolveExport("?operator==@Vector3@Math@@QEBA_NAEBV12@@Z"));
     fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(
         ResolveAddr(Module::Exe, 0x1400607E0));
     fn_DebugUI_WriteLightingColors = reinterpret_cast<fn_DebugUI_WriteLightingColors_t>(
