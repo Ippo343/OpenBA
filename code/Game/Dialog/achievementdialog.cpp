@@ -102,11 +102,12 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         fn_AchievementManager_GetAchievement(manager, achievBuf, i);
         void* achievement = *(void**)achievBuf;
 
-        // Set sprite on imageIcon from achievement sprite name
+        // Set sprite on imageIcon from achievement sprite sheet + sprite name
         uint8_t spriteNameBuf[8];
         fn_Achievement_GetSpriteName(achievement, spriteNameBuf);
+        uint64_t spriteSheet = *(uint64_t*)((uintptr_t)achievement + 0x38);
         uint8_t spriteBuf[16];
-        fn_Sprite_Ctor(spriteBuf, *(uint64_t*)spriteNameBuf, nullptr);
+        fn_Sprite_Ctor(spriteBuf, spriteSheet, spriteNameBuf);
         fn_ImageElement_SetSprite(imageIcon, spriteBuf);
         fn_String_Dtor(spriteNameBuf);
 
@@ -114,11 +115,9 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         fn_Element_SetFlagsOnOff(imageStar, 1, 0);
 
         // Set title text
-        uint8_t titleStrBuf[16];
-        fn_UIString_Ctor(titleStrBuf, *(uint64_t*)((uintptr_t)achievement + 0x20),
-                         nullptr);
         uint8_t titleTextBuf[8];
         fn_Achievement_GetTitle(achievement, titleTextBuf);
+        uint8_t titleStrBuf[16];
         fn_UIString_Ctor(titleStrBuf, *(uint64_t*)((uintptr_t)achievement + 0x20),
                          titleTextBuf);
         fn_TextElement_SetText(textTitle, titleStrBuf);
