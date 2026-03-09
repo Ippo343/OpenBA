@@ -2012,7 +2012,7 @@ extern fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab;
 // [3]=statusIconEnabled, [4]=statusIconScale, [5]=edgeScroll,
 // [6]=autopause, [7]=lastTab
 // Byte offsets: +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow
-extern int32_t* g_pGameSettings;  // DAT_1401c3de0
+extern int32_t** g_pGameSettingsPtr;  // DAT_1401c3de0 — pointer TO pointer to game settings
 
 // ============================================================
 // StorageUI support functions

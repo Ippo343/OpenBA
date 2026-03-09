@@ -515,7 +515,7 @@ fn_VideoDevice_GetInterfaceCount_t fn_VideoDevice_GetInterfaceCount = nullptr;
 fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor = nullptr;
 fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab = nullptr;
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
-int32_t* g_pGameSettings = nullptr;
+int32_t** g_pGameSettingsPtr = nullptr;
 
 // StorageUI support
 fn_ExternalFactory_FindNext_t fn_ExternalFactory_FindNext = nullptr;
@@ -2366,7 +2366,7 @@ bool EngineFuncsInit() {
     fn_TabElement_SetActiveTab = reinterpret_cast<fn_TabElement_SetActiveTab_t>(
         ResolveExport("?SetActiveTab@TabElement@UI@@QEAAXH@Z"));
     // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call)
-    g_pGameSettings = reinterpret_cast<int32_t*>(ResolveAddr(Module::Exe, 0x1401c3de0));
+    g_pGameSettingsPtr = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x1401c3de0));
     // Audio::Configuration singleton: exe exref at 0x140151b78 -> pointer to singleton
     {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b78));

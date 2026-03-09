@@ -73,10 +73,10 @@ enum OptionsElementId {
 //   +0x2C: shadow res, +0x30: shadow quality, +0x34: reflection quality
 //   +0x38: refresh num, +0x3C: refresh den, +0x40: fullscreen, +0x41: vsync
 //
-// g_pGameSettings (int32_t[8]):
+// g_pGameSettingsPtr -> int32_t* (pointer at 0x1401c3de0 to actual settings array):
 //   [0]=uiScale, [1]=autosave, [2]=statusIconDist, [3]=statusIconEnabled
 //   [4]=statusIconScale, [5]=edgeScroll, [6]=autopause, [7]=lastTab
-//   Byte: +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow
+//   Byte: +0x14=edgeScroll, +0x15=showCelsius, +0x16=showWeather, +0x17=autoslow, +0x18=autopause
 //
 // Video::Device:
 //   +0x98: anisotropic filter level count (int)
@@ -98,13 +98,30 @@ static inline void SetCheckState(void* elem, uint8_t val) {
     if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = val;
 }
 
+// Helper: get KeyMap container via single deref from 0x1401c3de8
+// Used for name table (+0xC8), string table (+0xD0), and fn_ApplyKeyMapToUI
+static inline void* GetKeyMapContainer() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return nullptr;
+    return *g_pKeyMapSingleton;
+}
+
+// Helper: get actual KeyMap object via triple deref from exref at 0x140151738
+// [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
+// Used for method calls (GetDeviceForId, GetInputForId, etc.)
+static inline void* GetActualKeyMap() {
+    if (!g_pKeyMapObjectExref || !*g_pKeyMapObjectExref) return nullptr;
+    void* step2 = *(void**)*g_pKeyMapObjectExref;
+    if (!step2) return nullptr;
+    return *(void**)step2;
+}
+
 // Helper: get input key name as UI::String (replaces FUN_140099c20)
 // Converts device type (-1=unbound, 0=gamepad, 1=keyboard, 2=mouse) and key index
 // to a UI-display string like "Keyboard5" or "Unbound".
 // Returns a UI::String (16 bytes) in retval, using the KeyMap's string table at +0xD0.
 static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
-    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
-    if (!keyMap) return;
+    void* keyMapContainer = GetKeyMapContainer();
+    if (!keyMapContainer) return;
 
     uint8_t tempStr[8];
     if (deviceType < 0) {
@@ -115,8 +132,8 @@ static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
         fn_String_Format(tempStr, "%s%i", devName, keyIndex);
     }
 
-    // Construct UI::String from the KeyMap's string table at +0xD0
-    uint64_t stringTable = *(uint64_t*)((uintptr_t)keyMap + 0xD0);
+    // Construct UI::String from the KeyMap container's string table at +0xD0
+    uint64_t stringTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xD0);
     fn_UIString_Ctor(retval, stringTable, tempStr);
     fn_String_Dtor(tempStr);
 }
@@ -582,7 +599,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
                 fn_String_Dtor(textBuf);
             }
         }
-        int autoSaveIdx = g_pGameSettings ? g_pGameSettings[1] : 0;
+        int autoSaveIdx = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[1] : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
         if (self->comboAutosave) fn_ComboElement_SetCurrentItem(self->comboAutosave, autoSaveIdx);
@@ -591,7 +608,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     // --- UI scale slider ---
     FIND_ELEMENT(self->sliderUIScale,"sliderUIScale");
     SetSliderRange(self->sliderUIScale, 75.0f, 150.0f);
-    if (g_pGameSettings) SetSliderValue(self->sliderUIScale, (float)g_pGameSettings[0]);
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr) SetSliderValue(self->sliderUIScale, (float)(*g_pGameSettingsPtr)[0]);
 
     // --- Gameplay settings checkboxes and sliders ---
     FIND_ELEMENT(self->checkStatusIcon,      "checkStatusIcon");
@@ -604,8 +621,8 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     FIND_ELEMENT(self->checkMouseClip,       "checkMouseClip");
     FIND_ELEMENT(self->checkAutopause,       "checkAutopause");
 
-    if (g_pGameSettings) {
-        int32_t* gs = g_pGameSettings;
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr) {
+        int32_t* gs = *g_pGameSettingsPtr;
         SetCheckState(self->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
         SetCheckState(self->checkAutopause,  (uint8_t)gs[6]);
         SetCheckState(self->checkStatusIcon, (uint8_t)gs[3]);
@@ -626,7 +643,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     // --- Tab options: restore last active tab ---
     FIND_ELEMENT(self->tabOptions,"tabOptions");
     if (self->tabOptions) {
-        int lastTab = g_pGameSettings ? g_pGameSettings[7] : 0;
+        int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
         // Clamp to valid range — options dialog has 4 tabs (0-3)
         if (lastTab < 0 || lastTab > 3) lastTab = 0;
         fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
@@ -674,12 +691,12 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
 // ============================================================
 // ApplyGameSettings (0x140072420)
 // ============================================================
-// Reads all game settings from UI controls, writes to g_pGameSettings,
+// Reads all game settings from UI controls, writes to g_pGameSettingsPtr,
 // updates autosave timers on all open dialogs, persists settings,
 // applies key map to UI, and updates UI scale.
 static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
-    if (!g_pGameSettings) return;
-    int32_t* gs = g_pGameSettings;
+    if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr) return;
+    int32_t* gs = *g_pGameSettingsPtr;
 
     // UI scale slider -> gs[0]
     fn_InternalBasePtr_CheckPtr(&self->sliderUIScale);
@@ -734,20 +751,20 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
 
     // Iterate all open dialogs and update autosave timer on each
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    if (fn_UI_GetFirstDialog && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
+    if (fn_UI_GetFirstDialog && fn_IsA && fn_IsDerivedFrom && fn_UpdateAutoSaveTimer &&
         g_TypeId_AutoSaveDialogType) {
         uint32_t typeId = *g_TypeId_AutoSaveDialogType;
         void* iter = nullptr;
         fn_UI_GetFirstDialog(userInterface, &iter);
         while (iter != nullptr) {
-            fn_InternalBasePtr_CheckPtr(&iter);
-            void* dialog = *(void**)&iter;
-            bool isType = fn_IsDerivedFrom(dialog, typeId);
-            if (isType) {
-                fn_InternalBasePtr_CheckPtr(&iter);
-                void* dialogInst = *(void**)&iter;
-                bool isDerived = fn_IsDerivedFrom(dialogInst, typeId);
-                void* target = isDerived ? dialogInst : nullptr;
+            // iter is an InternalBasePtr node: deref +0x0 for object, +0x10 for next
+            fn_InternalBasePtr_CheckPtr(iter);
+            void* dialog = *(void**)iter;
+            if (fn_IsA(dialog, typeId)) {
+                fn_InternalBasePtr_CheckPtr(iter);
+                void* obj = *(void**)iter;
+                bool isDerived = fn_IsDerivedFrom(obj, typeId);
+                void* target = isDerived ? obj : nullptr;
                 if (target) fn_UpdateAutoSaveTimer(target);
             }
             iter = *(void**)((uintptr_t)iter + 0x10);
@@ -758,7 +775,7 @@ static void OptionsDialog_ApplyGameSettings(OptionsDialog* self) {
     if (fn_SaveGameSettings) fn_SaveGameSettings(gs);
 
     // Apply key map config to UI (cursor speed, zoom, etc.)
-    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    void* keyMap = GetKeyMapContainer();
     if (keyMap && fn_ApplyKeyMapToUI) {
         fn_ApplyKeyMapToUI(keyMap, userInterface);
     } else if (keyMap) {
@@ -982,16 +999,16 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
         fn_Persistence_ReadSettings(persistence);
 
     // Re-read game settings from persistence
-    if (fn_ReadGameSettings && g_pGameSettings)
-        fn_ReadGameSettings(g_pGameSettings);
+    if (fn_ReadGameSettings && g_pGameSettingsPtr && *g_pGameSettingsPtr)
+        fn_ReadGameSettings(*g_pGameSettingsPtr);
 
     // Restore last tab
     fn_InternalBasePtr_CheckPtr(&self->tabOptions);
-    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
-    if (g_pGameSettings)
-        g_pGameSettings[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
+    if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
+        (*g_pGameSettingsPtr)[7] = *(int32_t*)((uintptr_t)*(void**)&self->tabOptions + 0xF8);
 
     // Re-apply keymap config to UI
+    void* keyMap = GetKeyMapContainer();
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
     if (keyMap && fn_ApplyKeyMapToUI)
         fn_ApplyKeyMapToUI(keyMap, userInterface);
@@ -1254,16 +1271,10 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 // Sets label text from KeyMap string table, sets button key name text,
 // assigns element IDs starting at kInputBind_Base (13).
 void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
-    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    void* keyMapContainer = GetKeyMapContainer();
+    if (!keyMapContainer) return;
+    void* keyMap = GetActualKeyMap();  // for method calls (GetDeviceForId, etc.)
     if (!keyMap) return;
-    // Actual KeyMap object: triple deref from exref at 0x140151738
-    // [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
-    void* actualKeyMap = nullptr;
-    if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
-        void* step2 = *(void**)*g_pKeyMapObjectExref;
-        if (step2) actualKeyMap = *(void**)step2;
-    }
-    if (!actualKeyMap) return;
 
     fn_InternalBasePtr_CheckPtr(&self->inputList);
     void* inputList = self->inputList;
@@ -1293,8 +1304,8 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
             if (textElem) {
                 void* textObj = (void*)textElem;
                 if (g_TypeId_TextElement && fn_IsDerivedFrom(textObj, *g_TypeId_TextElement)) {
-                    // Get input name from KeyMap string table at +0xC8
-                    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMap + 0xC8);
+                    // Get input name from KeyMap container's name table at +0xC8
+                    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
                     uint8_t uiStr[16];
                     fn_UIString_Ctor_Index(uiStr, nameTable, inputId);
                     fn_TextElement_SetText(textObj, uiStr);
@@ -1309,8 +1320,8 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
             fn_Element_Child(self->inputList, &btnChild, row * 3 + 1 + slot);
 
             // Get current device and key for this input binding
-            int device = fn_KeyMap_GetDeviceForId(actualKeyMap, inputId, slot);
-            int key = fn_KeyMap_GetInputForId(actualKeyMap, inputId, slot);
+            int device = fn_KeyMap_GetDeviceForId(keyMap, inputId, slot);
+            int key = fn_KeyMap_GetInputForId(keyMap, inputId, slot);
 
             // Set the button's key name text
             SetInputBindButtonText((void*)&btnChild, device, key);
@@ -1336,15 +1347,10 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 // 6. If result=1 (bound), checks for conflicts and handles them
 // 7. Refreshes the input bind list
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot) {
-    void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
+    void* keyMapContainer = GetKeyMapContainer();
+    if (!keyMapContainer) return;
+    void* keyMap = GetActualKeyMap();  // for method calls
     if (!keyMap) return;
-    // Actual KeyMap object: triple deref from exref at 0x140151738
-    void* actualKeyMap = nullptr;
-    if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
-        void* step2 = *(void**)*g_pKeyMapObjectExref;
-        if (step2) actualKeyMap = *(void**)step2;
-    }
-    if (!actualKeyMap) return;
 
     int inputId = bindIndex + 5;  // Convert bind index to KeyMap input ID
 
@@ -1369,9 +1375,9 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     fn_InternalBasePtr_Ctor((void*)&dialogPtr, dialog);
 
     // Set the input name text on the dialog
-    // Get input name from KeyMap string table at +0xC8
+    // Get input name from KeyMap container's name table at +0xC8
     uint8_t inputNameUI[16];
-    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMap + 0xC8);
+    uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
     fn_UIString_Ctor_Index(inputNameUI, nameTable, inputId);
 
     // Convert to System::String
@@ -1401,14 +1407,14 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     int capturedKey = *(int*)((uintptr_t)(void*)dialogPtr + 0xC0);
 
     // Check if the new binding conflicts with an existing one
-    int conflictId = fn_KeyMap_GetIdForDeviceInput(actualKeyMap, capturedDevice, capturedKey);
+    int conflictId = fn_KeyMap_GetIdForDeviceInput(keyMap, capturedDevice, capturedKey);
 
     // Delete the input bind dialog
     fn_InternalBasePtr_DeletePtr((void*)&dialogPtr);
 
     if (result == 2) {
         // User chose "clear" — unbind this slot
-        fn_KeyMap_ClearInput2(actualKeyMap, inputId, slot);
+        fn_KeyMap_ClearInput2(keyMap, inputId, slot);
         // Update button text to "Unbound"
         uint64_t elemVal = *(uint64_t*)element;
         SetInputBindButtonText((void*)&elemVal, -1, 0);
@@ -1509,7 +1515,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
 
         if (confirmResult >= 1 && confirmResult <= 2) {
             // User confirmed (OK or Yes) — clear the old conflicting binding
-            fn_KeyMap_ClearInput3(actualKeyMap, conflictId, capturedDevice, capturedKey);
+            fn_KeyMap_ClearInput3(keyMap, conflictId, capturedDevice, capturedKey);
             goto set_binding;
         }
         // User cancelled — don't change anything
@@ -1520,7 +1526,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     goto cleanup;
 
 set_binding:
-    fn_KeyMap_SetInput(actualKeyMap, inputId, slot, capturedDevice, capturedKey);
+    fn_KeyMap_SetInput(keyMap, inputId, slot, capturedDevice, capturedKey);
     fn_InputDevice_ResetState(*g_pInputDeviceSingleton);
 
     // Refresh the entire input bind list
