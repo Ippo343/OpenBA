@@ -3073,7 +3073,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ModUploadDialog::Dtor", InstallModUploadDialogDtor, RemoveModUploadDialogDtor, true },
     // --- ModDialog ---
     { "ModDialog::Dtor", InstallModDialogDtor, RemoveModDialogDtor, true },
-    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "ModDialog::Slot4", InstallModDialogSlot4, RemoveModDialogSlot4, true },
     { "ModDialog::Slot8", InstallModDialogSlot8, RemoveModDialogSlot8, true },
     { "ModDialog::Slot10", InstallModDialogSlot10, RemoveModDialogSlot10, true },
     // --- ScenarioDialog ---

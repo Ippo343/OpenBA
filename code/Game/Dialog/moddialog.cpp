@@ -22,9 +22,9 @@
 //   +0x08: textModAuthor InternalPtr<Element>
 //   +0x10: textModVersion InternalPtr<Element>
 //   +0x18: textModDescription InternalPtr<Element>
-//   +0x20: checkLoaded   InternalPtr<Element>
-//   +0x28: vtChild       InternalPtr<Element>  (first child via vtable[0x58])
-//   +0x30: imageConflict InternalPtr<Element>
+//   +0x20: imageConflict InternalPtr<Element>
+//   +0x28: checkLoaded   InternalPtr<Element>
+//   +0x30: vtChild       InternalPtr<Element>  (first child via vtable[0x58])
 //   +0x38: imageIcon     ImageElement* (InternalPtr)
 //   +0x40: ImageBuffer*
 //   +0x48: MaterialInstance*
@@ -152,24 +152,34 @@ conflict_done:
             fn_String_Dtor(buildStr);
         }
 
-        // Set enabled checkbox state: entry+0x28 element, +0xD8 = enabled byte
+        // Set enabled checkbox state: entry+0x28 = checkLoaded, element +0xD8 = enabled byte
         fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
         *(uint8_t*)(*(uintptr_t*)(entry + 0x28) + 0xD8) = enabled;
 
-        // Update child element (vtable call at +0x50 — some kind of refresh/layout)
+        // Update vtChild element with color (vtable[10] = offset +0x50)
+        // Color encodes enabled/conflict state:
+        //   0x20c0ffc0 = enabled, no conflict (green)
+        //   0x40ff0000 = enabled, has conflict (red)
+        //   0x10ffffff = disabled (white/transparent)
+        uint32_t rowColor;
+        if (enabled) {
+            rowColor = hasConflict ? 0x40ff0000 : 0x20c0ffc0;
+        } else {
+            rowColor = 0x10ffffff;
+        }
         fn_InternalBasePtr_CheckPtr((void*)(entry + 0x30));
         {
             void* elem = *(void**)(entry + 0x30);
             void** vtable = *(void***)elem;
-            typedef void (*fn_Refresh_t)(void*);
-            ((fn_Refresh_t)vtable[10])(elem);  // vtable[10] = offset +0x50
+            typedef void (*fn_SetColor_t)(void*, uint32_t);
+            ((fn_SetColor_t)vtable[10])(elem, rowColor);
         }
 
-        // Show/hide conflict icon
+        // Show/hide conflict icon (entry+0x20 = imageConflict)
         fn_InternalBasePtr_CheckPtr((void*)(entry + 0x20));
         fn_Element_SetFlagsOnOff(*(void**)(entry + 0x20),
-                                  hasConflict ? 0 : 1,    // hideFlags: hide if no conflict
-                                  hasConflict ? 1 : 0);   // showFlags: show if conflict
+                                  hasConflict ? 0 : 1,    // set bit 0 (hidden) when no conflict
+                                  hasConflict ? 1 : 0);   // clear bit 0 (visible) when conflict
 
         // Copy thumbnail texture (48x48)
         if (fn_VideoDevice_Lock && fn_VideoDevice_Unlock && fn_ImageBuffer_CopyToTexture) {
@@ -262,6 +272,7 @@ void ModDialog_Slot4(ModDialog* self) {
         // Add cloned element to tableMods
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
         void* tableElem = *(void**)(s + 0xC8);
+
         fn_Element_AddChild(tableElem, &clonedElem);
 
         // Find child elements by name in the cloned row
@@ -332,20 +343,22 @@ void ModDialog_Slot4(ModDialog* self) {
         fn_InternalBasePtr_CheckPtr(buttonDetailsBuf);
         fn_Element_SetElementId(*(void**)buttonDetailsBuf, i + 5000);
 
-        // Hide Up+Top for first mod
+        // Hide Up+Top for first mod (vtable[8] = Element::Hide virtual, arg=0 matches original)
         if (i == 0) {
             fn_InternalBasePtr_CheckPtr(buttonUpBuf);
             void** upVt = *(void***)*(void**)buttonUpBuf;
-            ((fn_ElementVt_Hide_t)upVt[8])(*(void**)buttonUpBuf, 0);
+            typedef void (*fn_VHide_t)(void*, int);
+            ((fn_VHide_t)upVt[8])(*(void**)buttonUpBuf, 0);
             fn_InternalBasePtr_CheckPtr(buttonTopBuf);
             void** topVt = *(void***)*(void**)buttonTopBuf;
-            ((fn_ElementVt_Hide_t)topVt[8])(*(void**)buttonTopBuf, 0);
+            ((fn_VHide_t)topVt[8])(*(void**)buttonTopBuf, 0);
         }
         // Hide Down for last mod
         if (i == modCount - 1) {
             fn_InternalBasePtr_CheckPtr(buttonDownBuf);
             void** downVt = *(void***)*(void**)buttonDownBuf;
-            ((fn_ElementVt_Hide_t)downVt[8])(*(void**)buttonDownBuf, 0);
+            typedef void (*fn_VHide_t)(void*, int);
+            ((fn_VHide_t)downVt[8])(*(void**)buttonDownBuf, 0);
         }
 
         // Build 0x58-byte entry struct (11 × 8 bytes of InternalPtrs + raw ptrs)
@@ -354,9 +367,9 @@ void ModDialog_Slot4(ModDialog* self) {
             uint64_t textModAuthor;  // +0x08
             uint64_t textModVersion; // +0x10
             uint64_t textModDesc;    // +0x18
-            uint64_t checkLoaded;    // +0x20
-            uint64_t vtChild;        // +0x28
-            uint64_t imageConflict;  // +0x30
+            uint64_t imageConflict;  // +0x20
+            uint64_t checkLoaded;    // +0x28
+            uint64_t vtChild;        // +0x30
             uint64_t imageIcon;      // +0x38
             void*    imageBuffer;    // +0x40
             void*    matInstance;    // +0x48
@@ -367,9 +380,9 @@ void ModDialog_Slot4(ModDialog* self) {
         entry.textModAuthor = *(uint64_t*)textModAuthorBuf;
         entry.textModVersion = *(uint64_t*)textModVersionBuf;
         entry.textModDesc   = *(uint64_t*)textModDescBuf;
+        entry.imageConflict = *(uint64_t*)imageConflictBuf;
         entry.checkLoaded   = *(uint64_t*)checkLoadedBuf;
         entry.vtChild       = *(uint64_t*)vtChildBuf;
-        entry.imageConflict = *(uint64_t*)imageConflictBuf;
         entry.imageIcon     = *(uint64_t*)imageIconBuf;
 
         // --- Create 48x48 ImageBuffer ---
@@ -483,7 +496,7 @@ void ModDialog_Slot4(ModDialog* self) {
         uint8_t groupStr[8];
         fn_String_Ctor_CStr(groupStr, "groupBrowse");
         uint32_t typeId = g_TypeId_BrowserController ? *g_TypeId_BrowserController : 0;
-        fn_DialogInstance_AddController(self, typeId, 0, 0, browserExt, groupStr);
+        fn_DialogInstance_AddController6(self, typeId, 0, 0, browserExt, groupStr);
         fn_String_Dtor(groupStr);
     }
 
@@ -516,22 +529,15 @@ void ModDialog_Slot4(ModDialog* self) {
 // ModDialog_ToggleMod_Impl (was fn_ModDialog_ToggleMod, FUN_14006e930)
 //
 // Toggles the enabled state of a mod at the given index.
-// Reads the current checkbox state from entry+0x28 element's +0xD8 byte,
-// calls Modification::Enable with the inverted state, then refreshes display.
+// Reads the mod's actual enabled state and inverts it, then refreshes display.
 // ============================================================
 static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
-    uintptr_t s = (uintptr_t)self;
     void* modSingleton = *(void**)g_ppModificationSingleton;
 
-    // entry = base + index * 0x58; checkbox element is at entry+0x28
-    uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)index * 0x58;
-    fn_InternalBasePtr_CheckPtr((void*)(entry + 0x28));
-    // Current checked state from UI element at +0xD8
-    bool currentChecked = *(uint8_t*)(*(uintptr_t*)(entry + 0x28) + 0xD8) != 0;
-
-    // Enable(modSingleton, index, !currentChecked)
-    // The original inverts the state: if checkbox shows checked, disable; vice versa
-    fn_Modification_Enable(modSingleton, index, currentChecked);
+    // Read the mod's actual enabled state and invert it
+    void* mod = fn_Modification_GetMod(modSingleton, index);
+    bool currentEnabled = *(uint8_t*)((uintptr_t)mod + 0x50) != 0;
+    fn_Modification_Enable(modSingleton, index, !currentEnabled);
 
     ModDialog_RefreshDisplay_Impl(self);
 }

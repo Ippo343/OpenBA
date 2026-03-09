@@ -2202,6 +2202,10 @@ extern uintptr_t g_ModDetailsDialog_Vtable;
 typedef void (*fn_ModDialog_CloseAndReload_t)(void* self);
 extern fn_ModDialog_CloseAndReload_t fn_ModDialog_CloseAndReload;
 
+// ModDialog_RefreshDisplay original (FUN_14006eec0) — for A/B testing
+typedef void (*fn_ModDialog_RefreshDisplay_Orig_t)(void* self);
+extern fn_ModDialog_RefreshDisplay_Orig_t fn_ModDialog_RefreshDisplay_Orig;
+
 // MainMenu_Reload (FUN_1400b4790) — reloads from main menu context
 typedef void (*fn_MainMenu_Reload_t)(void* self);
 extern fn_MainMenu_Reload_t fn_MainMenu_Reload;

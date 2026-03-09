@@ -595,6 +595,7 @@ fn_DialogInstance_AddController_t fn_DialogInstance_AddController = nullptr;
 // fn_ModDialog_Apply — REPLACED with inline impl in moddialog.cpp
 uintptr_t g_ModDetailsDialog_Vtable = 0;  // PTR_FUN_14015c670
 fn_ModDialog_CloseAndReload_t fn_ModDialog_CloseAndReload = nullptr;
+fn_ModDialog_RefreshDisplay_Orig_t fn_ModDialog_RefreshDisplay_Orig = nullptr;
 fn_MainMenu_Reload_t fn_MainMenu_Reload = nullptr;
 fn_Game_ReloadWithSave_t fn_Game_ReloadWithSave = nullptr;
 fn_SavedState_Ctor_t fn_SavedState_Ctor = nullptr;
@@ -1785,8 +1786,11 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c3dd8));
     g_pKeyMapSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3de8));
-    g_pEngineSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140151440));
+    // Engine singleton: exe exref at 0x140151440 → pointer to Runtime var. Dereference once.
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151440));
+        g_pEngineSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
+    }
 
     // ================================================================
     // Phase A4: FindComponent type IDs (resolved from exe .rdata)
@@ -1990,8 +1994,11 @@ bool EngineFuncsInit() {
         ResolveExport("?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ"));
     fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
         ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ"));
-    g_pFileSystemSingleton2 = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140151278));  // exref for FileSystem singleton
+    // FileSystem singleton: exe exref at 0x140151278 → pointer to Runtime var. Dereference once.
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151278));
+        g_pFileSystemSingleton2 = exref ? reinterpret_cast<void**>(*exref) : nullptr;
+    }
     fn_LoadScenarioFromSave = reinterpret_cast<fn_LoadScenarioFromSave_t>(
         ResolveAddr(Module::Exe, 0x1400b49f0));
 
@@ -2278,7 +2285,7 @@ bool EngineFuncsInit() {
     fn_String_SubString = reinterpret_cast<fn_String_SubString_t>(
         ResolveExport("?SubString@String@System@@QEBA?AV12@H@Z"));
     fn_String_Assign = reinterpret_cast<fn_String_Assign_t>(
-        ResolveExport("?operator=@String@System@@QEAAAEAV12@AEBV12@@Z"));
+        ResolveExport("??4String@System@@QEAAAEAV01@AEBV01@@Z"));
     // UI::String::String(ExternalPtr<StringTable>) — single-arg ctor, dispatch at 0x140151300
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151300));
@@ -2588,8 +2595,12 @@ bool EngineFuncsInit() {
     // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
     // --- IO::Modification ---
-    g_ppModificationSingleton = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401519e8));
+    // Modification singleton: exe exref at 0x1401519e8 contains a pointer to
+    // IO::Modification::_singleton (in Runtime DLL). Dereference once at init.
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401519e8));
+        g_ppModificationSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
+    }
     fn_Modification_GetCount = reinterpret_cast<fn_Modification_GetCount_t>(
         ResolveAddr(Module::Runtime, 0x18000da90));
     fn_Modification_GetMod = reinterpret_cast<fn_Modification_GetMod_t>(
@@ -2630,6 +2641,8 @@ bool EngineFuncsInit() {
     g_ModDetailsDialog_Vtable = ResolveAddr(Module::Exe, 0x14015c670);
     fn_ModDialog_CloseAndReload = reinterpret_cast<fn_ModDialog_CloseAndReload_t>(
         ResolveAddr(Module::Exe, 0x14006e9b0));
+    fn_ModDialog_RefreshDisplay_Orig = reinterpret_cast<fn_ModDialog_RefreshDisplay_Orig_t>(
+        ResolveAddr(Module::Exe, 0x14006eec0));
     fn_MainMenu_Reload = reinterpret_cast<fn_MainMenu_Reload_t>(
         ResolveAddr(Module::Exe, 0x1400b4790));
     fn_Game_ReloadWithSave = reinterpret_cast<fn_Game_ReloadWithSave_t>(
@@ -3049,7 +3062,13 @@ bool EngineFuncsInit() {
     g_pLoader              = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe7b8));
     g_pLoaderFlags         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Runtime, 0x1801fe7c0));
     g_pLoaderCompletionEvent = reinterpret_cast<HANDLE*>(ResolveAddr(Module::Runtime, 0x1801fe7e0));
-    g_pAppSingleton        = reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801feb80));
+    // Application singleton: exe exref at 0x140152368 contains a pointer to
+    // Application::_singleton (in Runtime DLL). Dereference once at init to get
+    // the actual singleton variable, so *g_pAppSingleton yields Application*.
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152368));
+        g_pAppSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
+    }
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Timer globals:\n");
