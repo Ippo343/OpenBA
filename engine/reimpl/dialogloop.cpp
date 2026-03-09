@@ -72,37 +72,9 @@ typedef void (*DialogLoopT_Startup_t)(DialogLoopT* self);
 static void Reimpl_Startup(DialogLoopT* self) {
     g_lastHook = "DialogLoopT::Startup";
 #ifdef _DEBUG
-    printf("[DialogLoopT::Startup] self=%p\n", (void*)self);
+    printf("[DialogLoopT::Startup] self=%p (trampoline passthrough)\n", (void*)self);
 #endif
-
-    // 1. Call pure virtual CreateDialog() — vtable slot 12 (offset +0x60)
-    //    Signature: void* CreateDialog(this, &outPtr)
-    //    Returns InternalPtr<DialogInstance> by pointer in RDX
-    void** vtable = *reinterpret_cast<void***>(self);
-    typedef void* (*CreateDialog_t)(DialogLoopT* self, void* outPtr);
-    void* dialogResult = nullptr;
-    ((CreateDialog_t)vtable[12])(self, &dialogResult);
-
-    // 2. Store the dialog instance
-    self->m_dialogInstance = dialogResult;
-
-    // 3. Call dialog->Show() — vtable slot 4 (offset +0x20)
-    if (dialogResult) {
-        void** dialogVtable = *reinterpret_cast<void***>(dialogResult);
-        typedef void (*DialogShow_t)(void* self);
-        ((DialogShow_t)dialogVtable[4])(dialogResult);
-    }
-
-    // 4. Append dialog to UserInterface's pending-open list
-    //    Pending-open array is at UserInterface+0x28 = self+0x68
-    //    Array struct: {void* data, int count, int capacity} at +0x68/+0x70/+0x74
-    uint8_t* uiBase = &self->m_userInterface[0];
-    int32_t* pCount = reinterpret_cast<int32_t*>(uiBase + 0x30); // count at UI+0x30
-    fn_DynArrayPush(uiBase + 0x28, *pCount + 1, &dialogResult);
-
-#ifdef _DEBUG
-    printf("[DialogLoopT::Startup] dialog=%p\n", dialogResult);
-#endif
+    ((DialogLoopT_Startup_t)g_hookStartup.trampoline)(self);
 }
 
 // ============================================================
@@ -153,10 +125,8 @@ static bool Reimpl_Update(DialogLoopT* self, Time* dt) {
     double dtSeconds = (double)dt->ticks * (*g_Timer_secondsPerTick);
     int64_t uiDelta = (int64_t)((float)dtSeconds / (*g_Timer_secondsPerTick));
 
-    // Update the UI (processes events, layouts, animations)
-    fn_UI_Update(GetUI(self), &uiDelta);
-
-    return true;
+    // Call through trampoline to original implementation
+    return ((DialogLoopT_Update_t)g_hookUpdate.trampoline)(self, dt);
 }
 
 // ============================================================

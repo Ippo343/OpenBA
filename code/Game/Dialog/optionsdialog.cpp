@@ -489,28 +489,23 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     FIND_ELEMENT(buttonApply,  "buttonApply");
     fn_Element_SetElementId(buttonOk,     kButton_Ok);
     fn_Element_SetElementId(buttonCancel, kButton_Cancel);
-    if (buttonCancel) *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
     fn_Element_SetElementId(buttonApply,  kButton_Apply);
+    if (buttonCancel) *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
 
-    // --- Resolve singletons ---
     int32_t* audioVol = g_pAudioConfigSingleton
                         ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
     void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
-
-    // Input::Configuration singleton (resolved via Runtime DLL export)
     void* inputCfg = g_pInputConfigSingleton ? *g_pInputConfigSingleton : nullptr;
 
-    // --- Audio sliders ---
+    // Audio sliders
     FIND_ELEMENT(self->sliderUI,     "sliderUI");
     FIND_ELEMENT(self->sliderMusic,  "sliderMusic");
     FIND_ELEMENT(self->sliderAmbient,"sliderAmbient");
     FIND_ELEMENT(self->sliderEffect, "sliderEffect");
-
     fn_Element_SetElementId(self->sliderUI,     kSlider_UI);
     fn_Element_SetElementId(self->sliderMusic,  kSlider_Music);
     fn_Element_SetElementId(self->sliderAmbient,kSlider_Ambient);
     fn_Element_SetElementId(self->sliderEffect, kSlider_Effect);
-
     void* audioSliders[4] = { self->sliderUI, self->sliderMusic,
                                self->sliderAmbient, self->sliderEffect };
     for (int i = 0; i < 4; i++) {
@@ -518,22 +513,19 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         if (audioVol) SetSliderValue(audioSliders[i], (float)audioVol[i]);
     }
 
-    // --- Video combo boxes: find and assign IDs ---
+    // Video combos: find + IDs + save config
     FIND_ELEMENT(self->comboRenderer,  "comboRenderer");
     FIND_ELEMENT(self->comboAdapter,   "comboAdapter");
     FIND_ELEMENT(self->comboResolution,"comboResolution");
     FIND_ELEMENT(self->comboAntialias, "comboAntialias");
     FIND_ELEMENT(self->comboFilter,    "comboFilter");
     FIND_ELEMENT(self->comboRefresh,   "comboRefresh");
-
     fn_Element_SetElementId(self->comboRenderer,   kCombo_Renderer);
     fn_Element_SetElementId(self->comboAdapter,    kCombo_Adapter);
     fn_Element_SetElementId(self->comboResolution, kCombo_Resolution);
     fn_Element_SetElementId(self->comboRefresh,    kCombo_Refresh);
     fn_Element_SetElementId(self->comboAntialias,  kCombo_Antialias);
     fn_Element_SetElementId(self->comboFilter,     kCombo_Filter);
-
-    // --- Save current video config ---
     if (vidCfg) {
         self->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
         self->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
@@ -548,7 +540,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     // --- Populate all video combo boxes ---
     OptionsDialog_PopulateVideoComboBoxes(self);
 
-    // --- Shadow/reflection quality combos ---
+    // Shadow/reflection combos
     FIND_ELEMENT(self->comboShadowRes,        "comboShadowResolution");
     FIND_ELEMENT(self->comboShadowQuality,    "comboShadowQuality");
     FIND_ELEMENT(self->comboReflectionQuality,"comboReflectionQuality");
@@ -561,20 +553,16 @@ void OptionsDialog_Startup(OptionsDialog* self) {
             *(int32_t*)((uintptr_t)vidCfg + 0x34));
     }
 
-    // --- Fullscreen / VSync checkboxes ---
+    // Checkboxes
     FIND_ELEMENT(self->checkFullscreen,"checkFullscreen");
     FIND_ELEMENT(self->checkVSync,     "checkVSync");
     if (vidCfg) {
         SetCheckState(self->checkFullscreen, *(uint8_t*)((uintptr_t)vidCfg + 0x40));
         SetCheckState(self->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
     }
-
-    // --- Software mouse checkbox ---
     FIND_ELEMENT(self->checkSoftwareMouse,"checkSoftwareMouse");
     if (inputCfg) SetCheckState(self->checkSoftwareMouse,
                                 *(uint8_t*)((uintptr_t)inputCfg + 0x0A));
-
-    // --- Input binding list ---
     FIND_ELEMENT(self->inputList,"inputList");
     OptionsDialog_PopulateInputBindList(self);
 
@@ -594,7 +582,6 @@ void OptionsDialog_Startup(OptionsDialog* self) {
                 fn_String_Dtor(textBuf);
             }
         }
-
         int autoSaveIdx = g_pGameSettings ? g_pGameSettings[1] : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
@@ -630,11 +617,9 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         SetSliderValue(self->sliderStatusIcon, (float)gs[2]);
 
         SetSliderRange(self->sliderStatusIconScale, 25.0f, 200.0f);
-        // gs[4] * 0.01f * 100.0f = gs[4] * 1.0f (the two constants cancel out)
         SetSliderValue(self->sliderStatusIconScale, (float)gs[4]);
     }
 
-    // checkMouseClip: from Input::Configuration +0x08
     if (inputCfg) SetCheckState(self->checkMouseClip,
                                 *(uint8_t*)((uintptr_t)inputCfg + 0x08));
 
@@ -642,6 +627,8 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     FIND_ELEMENT(self->tabOptions,"tabOptions");
     if (self->tabOptions) {
         int lastTab = g_pGameSettings ? g_pGameSettings[7] : 0;
+        // Clamp to valid range — options dialog has 4 tabs (0-3)
+        if (lastTab < 0 || lastTab > 3) lastTab = 0;
         fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
     }
 }
@@ -1269,6 +1256,14 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
     void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
     if (!keyMap) return;
+    // Actual KeyMap object: triple deref from exref at 0x140151738
+    // [exref] -> [runtime global] -> [KeyMap ptr] = actual Input::KeyMap
+    void* actualKeyMap = nullptr;
+    if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
+        void* step2 = *(void**)*g_pKeyMapObjectExref;
+        if (step2) actualKeyMap = *(void**)step2;
+    }
+    if (!actualKeyMap) return;
 
     fn_InternalBasePtr_CheckPtr(&self->inputList);
     void* inputList = self->inputList;
@@ -1314,8 +1309,8 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
             fn_Element_Child(self->inputList, &btnChild, row * 3 + 1 + slot);
 
             // Get current device and key for this input binding
-            int device = fn_KeyMap_GetDeviceForId(keyMap, inputId, slot);
-            int key = fn_KeyMap_GetInputForId(keyMap, inputId, slot);
+            int device = fn_KeyMap_GetDeviceForId(actualKeyMap, inputId, slot);
+            int key = fn_KeyMap_GetInputForId(actualKeyMap, inputId, slot);
 
             // Set the button's key name text
             SetInputBindButtonText((void*)&btnChild, device, key);
@@ -1343,6 +1338,13 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot) {
     void* keyMap = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;
     if (!keyMap) return;
+    // Actual KeyMap object: triple deref from exref at 0x140151738
+    void* actualKeyMap = nullptr;
+    if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
+        void* step2 = *(void**)*g_pKeyMapObjectExref;
+        if (step2) actualKeyMap = *(void**)step2;
+    }
+    if (!actualKeyMap) return;
 
     int inputId = bindIndex + 5;  // Convert bind index to KeyMap input ID
 
@@ -1399,14 +1401,14 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     int capturedKey = *(int*)((uintptr_t)(void*)dialogPtr + 0xC0);
 
     // Check if the new binding conflicts with an existing one
-    int conflictId = fn_KeyMap_GetIdForDeviceInput(keyMap, capturedDevice, capturedKey);
+    int conflictId = fn_KeyMap_GetIdForDeviceInput(actualKeyMap, capturedDevice, capturedKey);
 
     // Delete the input bind dialog
     fn_InternalBasePtr_DeletePtr((void*)&dialogPtr);
 
     if (result == 2) {
         // User chose "clear" — unbind this slot
-        fn_KeyMap_ClearInput2(keyMap, inputId, slot);
+        fn_KeyMap_ClearInput2(actualKeyMap, inputId, slot);
         // Update button text to "Unbound"
         uint64_t elemVal = *(uint64_t*)element;
         SetInputBindButtonText((void*)&elemVal, -1, 0);
@@ -1507,7 +1509,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
 
         if (confirmResult >= 1 && confirmResult <= 2) {
             // User confirmed (OK or Yes) — clear the old conflicting binding
-            fn_KeyMap_ClearInput3(keyMap, conflictId, capturedDevice, capturedKey);
+            fn_KeyMap_ClearInput3(actualKeyMap, conflictId, capturedDevice, capturedKey);
             goto set_binding;
         }
         // User cancelled — don't change anything
@@ -1518,7 +1520,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     goto cleanup;
 
 set_binding:
-    fn_KeyMap_SetInput(keyMap, inputId, slot, capturedDevice, capturedKey);
+    fn_KeyMap_SetInput(actualKeyMap, inputId, slot, capturedDevice, capturedKey);
     fn_InputDevice_ResetState(*g_pInputDeviceSingleton);
 
     // Refresh the entire input bind list

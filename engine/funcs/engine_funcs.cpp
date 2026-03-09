@@ -259,6 +259,7 @@ uint32_t* g_TypeId_ToolUI = nullptr;
 // ============================================================
 void** g_pGameWorldSingleton = nullptr;
 void** g_pKeyMapSingleton = nullptr;
+void** g_pKeyMapObjectExref = nullptr;
 void** g_pEngineSingleton = nullptr;
 
 // ============================================================
@@ -1786,6 +1787,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c3dd8));
     g_pKeyMapSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3de8));
+    g_pKeyMapObjectExref = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140151738));
     // Engine singleton: exe exref at 0x140151440 → pointer to Runtime var. Dereference once.
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151440));
@@ -3178,8 +3181,10 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Phase A3 — Singletons:\n");
     printf("  GameWorld                 = %p -> %p\n", (void*)g_pGameWorldSingleton,
            g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
-    printf("  KeyMap                    = %p -> %p\n", (void*)g_pKeyMapSingleton,
+    printf("  KeyMap (container)        = %p -> %p\n", (void*)g_pKeyMapSingleton,
            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pKeyMapObjectExref,
+           g_pKeyMapObjectExref ? *g_pKeyMapObjectExref : nullptr);
     printf("  EngineSingleton           = %p -> %p\n", (void*)g_pEngineSingleton,
            g_pEngineSingleton ? *g_pEngineSingleton : nullptr);
     printf("[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):\n");
