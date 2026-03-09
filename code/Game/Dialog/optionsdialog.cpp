@@ -1358,7 +1358,13 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     uint8_t filenameBuf[8];
     fn_String_Ctor_CStr(filenameBuf, "Dialog/Options.rsc:inputBind");
     fn_Filename_AdjustDelimiters(filenameBuf);
-    (void)fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    void* extResult = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    // Type check the external resource
+    void* external = nullptr;
+    if (extResult && g_pExternalTypeId) {
+        bool isDerived = fn_IsDerivedFrom(extResult, *g_pExternalTypeId);
+        if (isDerived) external = extResult;
+    }
     fn_String_Dtor(filenameBuf);
 
     // Allocate and construct OptionInputBindDialog
@@ -1367,7 +1373,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     if (mem) {
         uint8_t nullPtr[8] = {};
         fn_InternalBasePtr_Ctor(nullPtr, nullptr);
-        dialog = fn_OptionInputBindDialog_Ctor(mem);
+        void* userInterface = *(void**)((uintptr_t)self + 0x10);
+        dialog = fn_OptionInputBindDialog_Ctor(mem, userInterface, external, nullPtr);
     }
 
     // Wrap in InternalPtr
@@ -1434,7 +1441,11 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         uint8_t fnameBuf2[8];
         fn_String_Ctor_CStr(fnameBuf2, "Dialog/Options.rsc:inputBound");
         fn_Filename_AdjustDelimiters(fnameBuf2);
-        (void)fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf2);
+        void* extResult2 = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf2);
+        void* external2 = nullptr;
+        if (extResult2 && g_pExternalTypeId) {
+            if (fn_IsDerivedFrom(extResult2, *g_pExternalTypeId)) external2 = extResult2;
+        }
         fn_String_Dtor(fnameBuf2);
 
         // Allocate and construct MessageDialog (0xC0 bytes)
@@ -1443,7 +1454,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         if (mem2) {
             uint8_t nullPtr2[8] = {};
             fn_InternalBasePtr_Ctor(nullPtr2, nullptr);
-            dialog2 = fn_MessageDialog_Ctor(mem2);
+            void* ui = *(void**)((uintptr_t)self + 0x10);
+            dialog2 = fn_MessageDialog_Ctor(mem2, ui, external2, nullPtr2);
         }
 
         uint64_t dialog2Ptr = 0;

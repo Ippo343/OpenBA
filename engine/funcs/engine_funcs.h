@@ -3237,11 +3237,13 @@ typedef int (*fn_KeyMap_GetIdForDeviceInput_t)(void* self, int device, int key);
 extern fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput;
 
 // OptionInputBindDialog ctor (0x140071d30) — creates 0xC8-byte dialog
-typedef void* (*fn_OptionInputBindDialog_Ctor_t)(void* mem);
+// Params: (mem, userInterface, externalResource, internalBasePtrNull)
+typedef void* (*fn_OptionInputBindDialog_Ctor_t)(void* mem, void* userInterface, void* external, void* internalBasePtr);
 extern fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor;
 
 // MessageDialog ctor (0x14006d300) — creates 0xC0-byte dialog
-typedef void* (*fn_MessageDialog_Ctor_t)(void* mem);
+// Params: (mem, userInterface, externalResource, internalBasePtrNull)
+typedef void* (*fn_MessageDialog_Ctor_t)(void* mem, void* userInterface, void* external, void* internalBasePtr);
 extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 
 // ============================================================

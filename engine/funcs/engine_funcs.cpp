@@ -3375,7 +3375,7 @@ bool EngineFuncsInit() {
     fn_KeyMap_ClearInput3 = reinterpret_cast<fn_KeyMap_ClearInput3_t>(
         ResolveExport("?ClearInput@KeyMap@Input@@QEAAXHHH@Z"));
     fn_KeyMap_GetIdForDeviceInput = reinterpret_cast<fn_KeyMap_GetIdForDeviceInput_t>(
-        ResolveExport("?GetIdForDeviceInput@KeyMap@Input@@QEBAHH@Z"));
+        ResolveExport("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z"));
 
     // Dialog constructors — exe functions
     fn_OptionInputBindDialog_Ctor = reinterpret_cast<fn_OptionInputBindDialog_Ctor_t>(
