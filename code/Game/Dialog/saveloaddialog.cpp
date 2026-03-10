@@ -33,6 +33,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include "ui/Dialogs.h"
 #include <cstdint>
 #include <cstdio>
@@ -895,11 +896,11 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     void* externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
     fn_Filename_Dtor(filename);
 
-    // IsDerivedFrom check — ensure it's a DialogInstance
+    // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
     void* checkedRes = nullptr;
     if (externalRes) {
-        bool isDialog = fn_IsDerivedFrom(externalRes, *g_TypeId_DialogInstance);
-        if (isDialog) checkedRes = externalRes;
+        bool isExternal = fn_IsDerivedFrom(externalRes, *g_pExternalTypeId);
+        if (isExternal) checkedRes = externalRes;
     }
 
     // Allocate 0xC0 bytes for a DialogInstance shell
@@ -909,7 +910,7 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
         uint64_t nullParent = 0;
         fn_DialogInstance_Ctor(dlg, *(void**)(s + 0x10), checkedRes, &nullParent, 0, 0, 0);
         // Patch vtable to MessageDialog
-        *(void**)dlg = (void*)MessageDialogAddr::Vtable;
+        *(void**)dlg = (void*)ResolveAddr(Module::Exe, MessageDialogAddr::Vtable);
     }
 
     // ShowDialog(ui, InternalPtr<DialogInstance>)
@@ -1041,7 +1042,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         void* checkedWarn = nullptr;
         if (warnExt) {
-            if (fn_IsDerivedFrom(warnExt, *g_TypeId_DialogInstance)) {
+            if (fn_IsDerivedFrom(warnExt, *g_pExternalTypeId)) {
                 checkedWarn = warnExt;
             }
         }
@@ -1051,7 +1052,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         if (warnDlg) {
             uint64_t nullParent = 0;
             fn_DialogInstance_Ctor(warnDlg, *(void**)(s + 0x10), checkedWarn, &nullParent, 0, 0, 0);
-            *(void**)warnDlg = (void*)MessageDialogAddr::Vtable;
+            *(void**)warnDlg = (void*)ResolveAddr(Module::Exe, MessageDialogAddr::Vtable);
         }
 
         // Find the TextElement inside the warning dialog and set mod info parameters
