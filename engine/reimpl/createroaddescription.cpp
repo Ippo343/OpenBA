@@ -60,7 +60,7 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_fn_Serializer_Ctor(serializer, stream, 0);
 
     // bool at +0x20
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x20), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x20), nullptr);
 
     // ExternalPtr at +0x28
     fn_ExternalPtr_Serialize3((void*)(s + 0x28), serializer);

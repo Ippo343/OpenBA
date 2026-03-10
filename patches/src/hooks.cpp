@@ -2114,7 +2114,7 @@ extern void InstallMenuSceneSlot8(); extern void RemoveMenuSceneSlot8();
 
 static ReimplEntry g_reimplementations[] = {
     // --- Data patches ---
-    { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          true  },
+    { "BuildNumber",           InstallBuildPatch,          RemoveBuildPatch,          false },
 
     // --- Launcher skip ---
     { "PlatformConfigure",     InstallPlatformConfigure,   RemovePlatformConfigure,   true  },

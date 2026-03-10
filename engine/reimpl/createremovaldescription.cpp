@@ -64,36 +64,37 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 // Serialize: bool at +0x20, count at +0x30, resize ExternalPtr array at +0x28,
 //            serialize array via fn_ExternalRefArray_Serialize, ExternalPtr at +0x38,
 //            bools at +0x40/+0x41/+0x42/+0x43.
-static uint64_t Reimpl_Serialize(void* self, void* stream) {
+static uint64_t Reimpl_Serialize(void* self, void* stream, void* /*param3*/, void* param4) {
     g_lastHook = "CreateRemovalDescription::Serialize";
     uintptr_t s = (uintptr_t)self;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
 
     // bool at +0x20
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x20), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x20), nullptr);
 
-    // int count at +0x30, resize 8-byte ExternalPtr array at +0x28 on load
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x30), nullptr);
-    int count = *(int*)(s + 0x30);
+    // int count at +0x30 — serialize into local (matching original pattern)
+    int localCount = *(int*)(s + 0x30);
+    g_fn_Serialize_Int(serializer, (void*)&localCount, nullptr);
 
-    void* encoding = *(void**)(serializer + 8);
-    int mode = *(int*)((uintptr_t)encoding + 8);
+    // Mode check: original reads *(int*)(serializer_field0 + 8)
+    void* serField0 = *(void**)serializer;
+    int mode = *(int*)((uintptr_t)serField0 + 8);
     if (mode == 0) {
-        fn_ExeArrayResize3((void*)(s + 0x28), count);
+        fn_ExeArrayResize3((void*)(s + 0x28), localCount);
     }
 
-    // Serialize ExternalPtr array
-    fn_ExternalRefArray_Serialize(serializer, count, *(void**)(s + 0x28), nullptr);
+    // Serialize ExternalPtr array — pass param4 through (required by FUN_1400049c0)
+    fn_ExternalRefArray_Serialize(serializer, localCount, *(void**)(s + 0x28), param4);
 
     // ExternalPtr at +0x38
     fn_ExternalPtr_Serialize3((void*)(s + 0x38), serializer);
 
     // bools at +0x40/+0x41/+0x42/+0x43
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x40), nullptr);
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x41), nullptr);
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x42), nullptr);
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x43), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x40), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x41), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x42), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x43), nullptr);
 
     g_fn_Serializer_Dtor(serializer);
     return 1;

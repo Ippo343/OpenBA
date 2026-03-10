@@ -35,6 +35,7 @@
 #include "engine_funcs.h"
 #include "ui/Dialogs.h"
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 // ============================================================
@@ -231,8 +232,8 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         entry[1] = FindChildElem((void*)clonedElem, "labelSaveDate");   // +0x08: TextElement
         entry[2] = FindChildElem((void*)clonedElem, "imageSaveIcon");   // +0x10: ImageElement
         entry[3] = FindChildElem((void*)clonedElem, "borderSave");      // +0x18: Element
-        entry[4] = FindChildElem((void*)clonedElem, "selectSave");      // +0x20: Element
-        entry[5] = FindChildElem((void*)clonedElem, "imageCorrupt");    // +0x28: Element
+        entry[4] = FindChildElem((void*)clonedElem, "imageCorrupt");    // +0x20: Element (matches original stack layout)
+        entry[5] = FindChildElem((void*)clonedElem, "selectSave");      // +0x28: Element (toggled by Update for selection)
 
         // Set imageSaveIcon flags: disable mouse-over highlight (0x10000)
         fn_InternalBasePtr_CheckPtr(&entry[2]);
@@ -255,8 +256,8 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             fn_ImageElement_SetSprite((void*)entry[2], sprite);
 
             // Hide imageCorrupt overlay
-            fn_InternalBasePtr_CheckPtr(&entry[5]);
-            fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
+            fn_InternalBasePtr_CheckPtr(&entry[4]);
+            fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
         } else {
             // --- Build sprite from raw image data ---
             // Allocate MaterialInstance (0x60 bytes)
@@ -363,8 +364,8 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             // Check save validity: status at saveInfo+0x44
             if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
                 // Valid save: hide imageCorrupt overlay
-                fn_InternalBasePtr_CheckPtr(&entry[5]);
-                fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
+                fn_InternalBasePtr_CheckPtr(&entry[4]);
+                fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
             } else {
                 // Invalid/corrupt: dim the icon
                 fn_InternalBasePtr_CheckPtr(&entry[2]);
@@ -434,14 +435,14 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         entry[1] = FindChildElem((void*)clonedElem, "labelSaveDate");
         entry[2] = FindChildElem((void*)clonedElem, "imageSaveIcon");
         entry[3] = FindChildElem((void*)clonedElem, "borderSave");
-        entry[4] = FindChildElem((void*)clonedElem, "selectSave");
-        entry[5] = FindChildElem((void*)clonedElem, "imageCorrupt");
+        entry[4] = FindChildElem((void*)clonedElem, "imageCorrupt");
+        entry[5] = FindChildElem((void*)clonedElem, "selectSave");
 
         // Hide imageCorrupt and selectSave overlays for empty slots
-        fn_InternalBasePtr_CheckPtr(&entry[5]);
-        fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
         fn_InternalBasePtr_CheckPtr(&entry[4]);
         fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
+        fn_InternalBasePtr_CheckPtr(&entry[5]);
+        fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
 
         // Dim border (SetColor via vtable[10] = 0x80ffffff)
         fn_InternalBasePtr_CheckPtr(&entry[3]);
@@ -621,7 +622,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
             uintptr_t entryBase = entryArray + (uintptr_t)i * 0x40;
             bool notSelected = (i != selectedIdx);
 
-            // entry+0x28: imageCorrupt/selectSave — shown when selected, hidden otherwise
+            // entry+0x28: selectSave — shown when selected, hidden otherwise
             void* selectElem = (void*)*(uint64_t*)(entryBase + 0x28);
             fn_Element_SetFlagsOnOff(selectElem, notSelected ? 1 : 0, notSelected ? 0 : 1);
 

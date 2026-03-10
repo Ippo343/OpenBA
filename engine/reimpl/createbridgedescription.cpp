@@ -47,7 +47,7 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 // Serialize: wraps fields in Serializer, uses encoding vcall for ExternalPtr fields
 // FUN_1401195d0: Serializer ctor/dtor, 5x SerializerEncodingVCall (offsets +0x20,+0x28,+0x2c,+0x24,+0x30),
 //                Serialize_Int (+0x34), ExternalRefArray count=5 at +0x38
-static uint64_t Reimpl_Serialize(void* self, void* stream) {
+static uint64_t Reimpl_Serialize(void* self, void* stream, void* /*param3*/, void* param4) {
     g_lastHook = "CreateBridgeDescription::Serialize";
     uintptr_t s = (uintptr_t)self;
     uint8_t serializer[24];
@@ -58,7 +58,7 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x24));
     SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x30));
     g_fn_Serialize_Int(serializer, (void*)(s + 0x34), nullptr);
-    fn_ExternalRefArray_Serialize(serializer, 5, (void*)(s + 0x38), nullptr);
+    fn_ExternalRefArray_Serialize(serializer, 5, (void*)(s + 0x38), param4);
     g_fn_Serializer_Dtor(serializer);
     return 1;
 }

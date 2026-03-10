@@ -67,7 +67,7 @@ static uint32_t Reimpl_Slot3(void* self) {
 // FrustumOutlineDescription::Serialize (0x14006c460)
 // Calls base Serialize, then serializes ExternalPtr at +0x68, String at +0x70,
 // and two ints at +0x78 and +0x7c.
-static void Reimpl_Serialize(void* self, void* stream) {
+static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "FrustumOutlineDescription::Serialize";
     uint8_t serBuf[24];
     fn_ElementDescription_Serialize(self, stream);
@@ -77,6 +77,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serBuf, (void*)((uintptr_t)self + 0x78), nullptr);
     g_fn_Serialize_Int(serBuf, (void*)((uintptr_t)self + 0x7c), nullptr);
     g_fn_Serializer_Dtor(serBuf);
+    return 1;
 }
 
 // FrustumOutlineDescription::Cleanup (0x140012390)

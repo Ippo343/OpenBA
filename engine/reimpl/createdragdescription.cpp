@@ -58,7 +58,7 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serializer, (void*)(s + 0x2c), nullptr);
     g_fn_Serialize_Int(serializer, (void*)(s + 0x30), nullptr);
     g_fn_Serialize_Int(serializer, (void*)(s + 0x34), nullptr);
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x24), nullptr);
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x24), nullptr);
     // FUN_140002340: ExternalPtr<BuildingDescription> field serialize (checks DAT_1401c7318)
     fn_ExternalPtr_BuildSerialize((void*)(s + 0x38), serializer);
     g_fn_Serializer_Dtor(serializer);

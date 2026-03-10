@@ -58,19 +58,18 @@ static inline void SerializerEncodingVCall3(void* serializer, int vtableOffset, 
 // FUN_1400478f0: Serializer ctor/dtor, SerializerEncodingVCall3 (+0x20, extra=0),
 //                ExternalRefArray count=6 at +0x28, 4x Serialize_Int (+0x58,+0x5c,+0x60,+0x64),
 //                1x bool Serialize_Int (+0x68), FUN_140002340 (ExternalPtr helper) at +0x70
-static uint64_t Reimpl_Serialize(void* self, void* stream) {
+static uint64_t Reimpl_Serialize(void* self, void* stream, void* /*param3*/, void* param4) {
     g_lastHook = "CreateFencedDescription::Serialize";
     uintptr_t s = (uintptr_t)self;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     SerializerEncodingVCall3(serializer, 0x98, (void*)(s + 0x20), 0);
-    fn_ExternalRefArray_Serialize(serializer, 6, (void*)(s + 0x28), nullptr);
+    fn_ExternalRefArray_Serialize(serializer, 6, (void*)(s + 0x28), param4);
     g_fn_Serialize_Int(serializer, (void*)(s + 0x58), nullptr);
     g_fn_Serialize_Int(serializer, (void*)(s + 0x5c), nullptr);
     g_fn_Serialize_Int(serializer, (void*)(s + 0x60), nullptr);
     g_fn_Serialize_Int(serializer, (void*)(s + 100), nullptr);    // 0x64 = 100
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x68), nullptr);
-    // FUN_140002340: ExternalPtr<BuildingDescription> field serialize (checks DAT_1401c7318)
+    g_fn_Serialize_Bool(serializer, (void*)(s + 0x68), nullptr);
     fn_ExternalPtr_BuildSerialize((void*)(s + 0x70), serializer);
     g_fn_Serializer_Dtor(serializer);
     return 1;

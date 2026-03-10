@@ -606,6 +606,7 @@ uintptr_t g_ReloadDialog_Vtable = 0;  // PTR_FUN_14015c480
 g_fn_Serializer_Ctor_t g_fn_Serializer_Ctor = nullptr;
 g_fn_Serializer_Dtor_t g_fn_Serializer_Dtor = nullptr;
 g_fn_Serialize_Int_t g_fn_Serialize_Int = nullptr;
+g_fn_Serialize_Bool_t g_fn_Serialize_Bool = nullptr;
 g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion = nullptr;
 
 // TownHallUI support
@@ -2666,6 +2667,8 @@ bool EngineFuncsInit() {
         ResolveExport("??1Serializer@IO@@QEAA@XZ"));
     g_fn_Serialize_Int = reinterpret_cast<g_fn_Serialize_Int_t>(
         ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z"));
+    g_fn_Serialize_Bool = reinterpret_cast<g_fn_Serialize_Bool_t>(
+        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z"));
     g_fn_Serializer_GetVersion = reinterpret_cast<g_fn_Serializer_GetVersion_t>(
         ResolveExport("?GetVersion@Serializer@IO@@QEBAHXZ"));
 

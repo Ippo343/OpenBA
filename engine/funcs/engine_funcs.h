@@ -2237,6 +2237,9 @@ extern g_fn_Serializer_Dtor_t g_fn_Serializer_Dtor;
 typedef void (*g_fn_Serialize_Int_t)(void* self, void* field, const char* name);
 extern g_fn_Serialize_Int_t g_fn_Serialize_Int;
 
+typedef void (*g_fn_Serialize_Bool_t)(void* self, void* field, const char* name);
+extern g_fn_Serialize_Bool_t g_fn_Serialize_Bool;
+
 typedef int (*g_fn_Serializer_GetVersion_t)(void* self);
 extern g_fn_Serializer_GetVersion_t g_fn_Serializer_GetVersion;
 

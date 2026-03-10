@@ -75,19 +75,20 @@ static uint64_t Reimpl_Serialize(void* self, void* stream) {
     // Serialize External base at +0x20 via encoding virtual call
     SerializerEncodingVCall(serializer, 0x98, (void*)(s + 0x20));
 
-    // Serialize count at +0x38; resize int array at +0x30 on load
-    g_fn_Serialize_Int(serializer, (void*)(s + 0x38), nullptr);
-    uint32_t count = *(uint32_t*)(s + 0x38);  // re-read after possible load
+    // Serialize count into local (matching original — does NOT write to +0x38 on load)
+    uint32_t localCount = *(uint32_t*)(s + 0x38);
+    g_fn_Serialize_Int(serializer, (void*)&localCount, nullptr);
 
-    void* encoding = *(void**)(serializer + 8);
-    int mode = *(int*)((uintptr_t)encoding + 8);
+    // Mode check: original reads *(int*)(serializer_field0 + 8)
+    void* serField0 = *(void**)serializer;
+    int mode = *(int*)((uintptr_t)serField0 + 8);
     if (mode == 0) {
-        fn_ExeArrayResize2((void*)(s + 0x30), (int)count);
+        fn_ExeArrayResize2((void*)(s + 0x30), (int)localCount);
     }
 
     // Serialize each int in the array via encoding vcall
     void* arr = *(void**)(s + 0x30);
-    for (uint32_t i = 0; i < count; i++) {
+    for (uint32_t i = 0; i < (int)localCount; i++) {
         SerializerEncodingVCall(serializer, 0x98, (void*)((uintptr_t)arr + i * 4));
     }
 

@@ -79,24 +79,24 @@ static HookInfo g_hookGetTarget;
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "PlayAnimation::Serialize";
     uint8_t* s = (uint8_t*)self;
-    uint8_t ser1[16];
+    uint8_t ser1[24];
     uint8_t ser2[24];
 
-    fn_Serializer_Ctor(ser1, stream, 0);
-    fn_Serialize_Bool(ser1, s + 0x18, nullptr);
-    fn_Serializer_Dtor(ser1);
+    g_fn_Serializer_Ctor(ser1, stream, 0);
+    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
+    g_fn_Serializer_Dtor(ser1);
 
-    fn_Serializer_Ctor(ser2, stream, 0);
+    g_fn_Serializer_Ctor(ser2, stream, 0);
     fn_IBP_Serialize(s + 0x20, ser2);
     if (*(void**)(s + 0x20) != nullptr) {
         if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *g_TypeInfo_ComponentEntity)) {
             *(void**)(s + 0x20) = nullptr;
         }
     }
-    fn_Serialize_Int(ser2, s + 0x28, nullptr);
+    g_fn_Serialize_Int(ser2, s + 0x28, nullptr);
     fn_Time_Serialize(s + 0x30, ser2);
     fn_Time_Serialize(s + 0x38, ser2);
-    fn_Serializer_Dtor(ser2);
+    g_fn_Serializer_Dtor(ser2);
 }
 
 // ============================================================
