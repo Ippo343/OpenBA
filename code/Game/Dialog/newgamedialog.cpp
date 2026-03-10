@@ -104,21 +104,23 @@ static void* GenerateTownName(void* retStr, void* random, int maxLen) {
         int len = *(int*)(strPtr - 8);  // COW header: length at strPtr-8
         if (len > 4) {
             uint8_t suffixStr[8];
-            fn_String_SubString(retStr, suffixStr, len - 4);
+            fn_String_SubString(retStr, suffixStr, len - 4, len - 1);
             endsInVill = fn_String_Equals(suffixStr, "vill");
             fn_String_Dtor(suffixStr);
         }
     }
     if (endsInVill) {
-        fn_String_Append(retStr, "e");
+        uint8_t tmpRet[8];
+        fn_String_Append(retStr, tmpRet, "e");
+        fn_String_Dtor(tmpRet);
     }
 
     return retStr;
 }
 
 static void GenerateRandomName(void* editNamePtr, void* random) {
-    fn_InternalBasePtr_CheckPtr(&editNamePtr);
-    void* editElem = *(void**)&editNamePtr;
+    fn_InternalBasePtr_CheckPtr(editNamePtr);
+    void* editElem = *(void**)editNamePtr;
     // EditElement+0xD0 contains max char count
     int maxLen = *(int*)((uintptr_t)editElem + 0xD0);
 
@@ -134,8 +136,8 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
     uint8_t nameStr[8];
     GenerateTownName(nameStr, random, nameLen);
 
-    fn_InternalBasePtr_CheckPtr(&editNamePtr);
-    fn_EditElement_SetText(*(void**)&editNamePtr, nameStr);
+    fn_InternalBasePtr_CheckPtr(editNamePtr);
+    fn_EditElement_SetText_SysStr(*(void**)editNamePtr, nameStr);
     fn_String_Dtor(nameStr);
 }
 
@@ -143,12 +145,12 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
 // Helper: generate random seed
 // ============================================================
 static void GenerateRandomSeed(void* editSeedPtr, void* random) {
-    fn_InternalBasePtr_CheckPtr(&editSeedPtr);
+    fn_InternalBasePtr_CheckPtr(editSeedPtr);
     // NumberEditElement+0xFC contains max value
-    int maxVal = *(int*)((uintptr_t)*(void**)&editSeedPtr + 0xFC);
+    int maxVal = *(int*)((uintptr_t)*(void**)editSeedPtr + 0xFC);
 
-    fn_InternalBasePtr_CheckPtr(&editSeedPtr);
-    void* seedElem = *(void**)&editSeedPtr;
+    fn_InternalBasePtr_CheckPtr(editSeedPtr);
+    void* seedElem = *(void**)editSeedPtr;
     uint32_t seed = fn_Random_Rand(random, (uint32_t)(maxVal + 1));
     fn_NumberEditElement_SetValue(seedElem, seed);
 }
@@ -163,7 +165,7 @@ static void UpdateDescription(NewGameDialog* self) {
     void* condCombo = self->comboCondition;
 
     // Get selected map generator resource
-    void** ptrArray = *(void***)(*(uintptr_t*)self->mapGeneratorList + 0x20);
+    void** ptrArray = *(void***)((uintptr_t)self->mapGeneratorList + 0x20);
     int selectedIdx = *(int*)((uintptr_t)condCombo + 0x118);
     void* resource = ptrArray[selectedIdx];
 
@@ -398,21 +400,21 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // Get combo item data pointers from ExternalList arrays
     fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     void* mapGenItem = fn_ComboElement_GetItemData(self->comboCondition, condIdx);
-    void** mapPtrArray = *(void***)(*(uintptr_t*)self->mapGeneratorList + 0x20);
+    void** mapPtrArray = *(void***)((uintptr_t)self->mapGeneratorList + 0x20);
     void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
     void* mapGen = nullptr;
     if (fn_IsDerivedFrom(mapGenResource, *g_TypeId_MapGenerator)) mapGen = mapGenResource;
 
     fn_InternalBasePtr_CheckPtr(&self->comboClimate);
     void* climateItem = fn_ComboElement_GetItemData(self->comboClimate, climateIdx);
-    void** climatePtrArray = *(void***)(*(uintptr_t*)self->climateGeneratorList + 0x20);
+    void** climatePtrArray = *(void***)((uintptr_t)self->climateGeneratorList + 0x20);
     void* climateResource = climatePtrArray[(intptr_t)climateItem];
     void* climateGen = nullptr;
     if (fn_IsDerivedFrom(climateResource, *g_TypeId_ClimateGenerator)) climateGen = climateResource;
 
     fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
     void* terrainItem = fn_ComboElement_GetItemData(self->comboTerrain, terrainIdx);
-    void** terrainPtrArray = *(void***)(*(uintptr_t*)self->terrainGeneratorList + 0x20);
+    void** terrainPtrArray = *(void***)((uintptr_t)self->terrainGeneratorList + 0x20);
     void* terrainResource = terrainPtrArray[(intptr_t)terrainItem];
     void* terrainGen = nullptr;
     if (fn_IsDerivedFrom(terrainResource, *g_TypeId_TerrainGenerator)) terrainGen = terrainResource;
@@ -463,9 +465,9 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
             *(uint32_t*)((uintptr_t)gameLoop + 0x30) = (uint32_t)(uintptr_t)seed;
             *(uint32_t*)((uintptr_t)gameLoop + 0x34) = terrainSize;
             *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x40) = (uint64_t)climateGen;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x40) = (uint64_t)mapGen;
             *(uint64_t*)((uintptr_t)gameLoop + 0x48) = (uint64_t)terrainGen;
-            *(uint64_t*)((uintptr_t)gameLoop + 0x50) = (uint64_t)mapGen;
+            *(uint64_t*)((uintptr_t)gameLoop + 0x50) = (uint64_t)climateGen;
             *(uint64_t*)((uintptr_t)gameLoop + 0x58) = 0;  // savedState = null
             // Zero remaining fields
             for (uintptr_t off = 0x60; off <= 0xC0; off += 8) {
@@ -473,8 +475,9 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
             }
             *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
             *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
-            // disasterOff -> +0xD0: 0xF0 if enabled, 0 if disabled
-            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = disasterOff ? 0 : 0xF0;
+            // disaster flag: combo idx 0 = disasters ON -> +0xD0 = 0
+            //                combo idx != 0 = disasters OFF -> +0xD0 = 0xF0
+            *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = (disasterIdx == 0) ? 0 : 0xF0;
             for (uintptr_t off = 0xD8; off <= 0x148; off += 8) {
                 *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
             }

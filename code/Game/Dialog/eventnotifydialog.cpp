@@ -435,7 +435,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                             fn_String_Assign((void*)(notifyEntry + 0x20), eventTextStr);
                         } else {
                             uint8_t subStr[8];
-                            fn_String_SubString(eventTextStr, subStr, colonPos + 1);
+                            fn_String_SubString(eventTextStr, subStr, colonPos + 1, strLen - 1);
                             fn_String_Assign((void*)(notifyEntry + 0x20), subStr);
                             fn_String_Dtor(subStr);
                         }
@@ -536,14 +536,14 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     // DialogInstance::GetRoot() is equivalent to reading *(void**)(dlg + 0x50).
     fn_InternalBasePtr_CheckPtr((void*)(s + 0xB8));
     void* parentDlg  = *(void**)(s + 0xB8);
-    // GetRoot on parentDlg: CheckPtr on the returned InternalBasePtr, then read elem ptr.
-    // (GetRoot returns an InternalBasePtr wrapping the root element.)
-    // In practice, root = *(void**)(dlg + 0x50) directly.
+    if (!parentDlg) return;
     void* parentRoot = *(void**)((uintptr_t)parentDlg + 0x50);
+    if (!parentRoot) return;
     int   parentY    = *(int*)((uintptr_t)parentRoot + 0x60);
 
     // GetRoot on self:
     void* selfRoot = *(void**)(s + 0x50);
+    if (!selfRoot) return;
     int   selfY    = *(int*)((uintptr_t)selfRoot + 0x60);
 
     int targetY = parentY - selfY + 44;  // 0x2c = 44
@@ -572,11 +572,16 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     // -------------------------------------------------------
     // Step 4: Show ribbonNotify element
     // -------------------------------------------------------
-    uintptr_t eventLogPtr = *(uintptr_t*)(*(uintptr_t*)(uintptr_t)(*g_pGameWorldSingleton) + 0x138);
+    void* gameWorld = *g_pGameWorldSingleton;
+    if (!gameWorld) return;
+    uintptr_t eventLogPtr = *(uintptr_t*)((uintptr_t)gameWorld + 0x138);
+    if (!eventLogPtr) return;  // event log not initialized yet (e.g. during loading)
     uintptr_t eventArray  = *(uintptr_t*)(eventLogPtr + 0x18);
+    if (!eventArray) return;
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0xE8));
-    fn_Element_SetFlagsOnOff(*(void**)(s + 0xE8), 0, 1);  // clear flag 1 = show
+    void* ribbonElem = *(void**)(s + 0xE8);
+    if (ribbonElem) fn_Element_SetFlagsOnOff(ribbonElem, 0, 1);  // clear flag 1 = show
 
     // -------------------------------------------------------
     // Steps 5 & 6: Sync notification slots
@@ -584,6 +589,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     uintptr_t notifyEntryBase = *(uintptr_t*)(s + 0xC8);  // array of 0x18-byte entries
     uintptr_t activeBase      = *(uintptr_t*)(s + 0xD8);  // array of 0x30-byte entries
     int capacity              = *(int*)(s + 0xD0);
+    if (!notifyEntryBase || !activeBase) return;
 
     // --- Active slots ---
     for (int i = 0; i < activeCount; i++) {
@@ -593,6 +599,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         void* groupElem  = *(void**)(slotEntry + 0x00);
         void* imageElem  = *(void**)(slotEntry + 0x08);
         void* buttonElem = *(void**)(slotEntry + 0x10);
+        if (!buttonElem || !groupElem || !imageElem) continue;
 
         // Event index stored at active_entry+0x08
         int eventIndex = *(int*)(activeEntry + 0x08);
@@ -613,7 +620,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Check if child4 is an ImageElement; if so, copy sprite to it as well
         {
-            bool isImage = fn_IsDerivedFrom(child4, g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0u);
+            bool isImage = child4 && fn_IsDerivedFrom(child4, g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0u);
             void* imgChild = isImage ? child4 : nullptr;
             // Construct InternalBasePtr for imgChild on stack
             uint8_t imgChildPtr[16];
@@ -662,9 +669,11 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
             void* ctrl = getCtrl(buttonElem, ctrlBuf);
             fn_InternalBasePtr_CheckPtr(ctrl);
             void* ctrlResolved = *(void**)ctrl;
-            uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
-            typedef void (*SetColor_t)(void* self, uint32_t c);
-            ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, color);
+            if (ctrlResolved) {
+                uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
+                typedef void (*SetColor_t)(void* self, uint32_t c);
+                ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, color);
+            }
         }
 
         // Also set color on each of the 4 children of the button element.
@@ -675,6 +684,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
             void* kid = *(void**)fn_Element_Child(buttonElem, kidBuf, c);
             fn_InternalBasePtr_CheckPtr(&kid);
             void* kidResolved = *(void**)&kid;
+            if (!kidResolved) continue;
             uintptr_t* kidVtable = *(uintptr_t**)kidResolved;
             typedef void (*SetColor_t)(void* self, uint32_t c);
             ((SetColor_t)(kidVtable[0x50 / 8]))(kidResolved, color);
@@ -698,6 +708,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         void* groupElem  = *(void**)(slotEntry + 0x00);
         void* imageElem  = *(void**)(slotEntry + 0x08);
         void* buttonElem = *(void**)(slotEntry + 0x10);
+        if (!buttonElem || !groupElem || !imageElem) continue;
 
         // Reset button controller color to 0xFFFFFFFF (white = no tint)
         {
@@ -709,9 +720,11 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
             void* ctrl = getCtrl(buttonElem, ctrlBuf);
             fn_InternalBasePtr_CheckPtr(ctrl);
             void* ctrlResolved = *(void**)ctrl;
-            uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
-            typedef void (*SetColor_t)(void* self, uint32_t c);
-            ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, 0xFFFFFFFFu);
+            if (ctrlResolved) {
+                uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
+                typedef void (*SetColor_t)(void* self, uint32_t c);
+                ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, 0xFFFFFFFFu);
+            }
         }
 
         // Also reset color on button element itself (direct vtable[10] call)

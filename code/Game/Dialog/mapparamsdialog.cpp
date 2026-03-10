@@ -140,7 +140,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         uint8_t nameBuf[8];
         fn_String_Ctor_Copy(nameBuf, (void*)((uintptr_t)gameWorld + 0x28));
         void* editName = *(void**)(s + 0xB8);
-        if (editName) fn_EditElement_SetText(editName, nameBuf);
+        if (editName) fn_EditElement_SetText_SysStr(editName, nameBuf);
         fn_String_Dtor(nameBuf);
     }
 
@@ -306,14 +306,18 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
                     int slen = *(int*)(sp - 8);
                     if (slen > 4) {
                         uint8_t sfx[8];
-                        fn_String_SubString(nameBuf, sfx, slen - 4);
+                        fn_String_SubString(nameBuf, sfx, slen - 4, slen - 1);
                         endsVill = fn_String_Equals(sfx, "vill");
                         fn_String_Dtor(sfx);
                     }
                 }
-                if (endsVill) fn_String_Append(nameBuf, "e");
+                if (endsVill) {
+                    uint8_t tmpRet[8];
+                    fn_String_Append(nameBuf, tmpRet, "e");
+                    fn_String_Dtor(tmpRet);
+                }
             }
-            fn_EditElement_SetText(editName, nameBuf);
+            fn_EditElement_SetText_SysStr(editName, nameBuf);
             fn_String_Dtor(nameBuf);
         }
     }

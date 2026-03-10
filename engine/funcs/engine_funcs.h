@@ -990,10 +990,15 @@ extern fn_DateTime_AsString_t fn_DateTime_AsString;
 struct SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
-// EditElement::SetText(this, String*) — sets edit field text
-// ?SetText@EditElement@UI@@QEAAXVString@2@@Z (0x180042070)
+// TextElement::SetText(this, UI::String*) — sets text element text (takes UI::String, 16 bytes)
+// ?SetText@TextElement@UI@@QEAAXVString@2@@Z (0x180042070)
 typedef void (*fn_EditElement_SetText_t)(void* self, void* str);
 extern fn_EditElement_SetText_t fn_EditElement_SetText;
+
+// EditElement::SetText(this, System::String const&) — sets edit field text (takes System::String, 8 bytes)
+// ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z (0x1800d0db0)
+typedef void (*fn_EditElement_SetText_SysStr_t)(void* self, void* sysStr);
+extern fn_EditElement_SetText_SysStr_t fn_EditElement_SetText_SysStr;
 
 // Input::Device::Released(this, InputDevice, 0, keyIndex) -> bool
 // ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z
@@ -1558,10 +1563,10 @@ extern float* g_pNotifyTimerDuration;
 typedef void* (*fn_Time_Ctor_Float_t)(void* retval, float seconds);
 extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
 
-// System::String::SubString(this, retval, startIndex) -> String (member, non-trivial return)
-// RCX=this, RDX=retval(String*), R8=startIndex
-// ?SubString@String@System@@QEBA?AV12@H@Z
-typedef void* (*fn_String_SubString_t)(void* self, void* retval, int startIndex);
+// System::String::SubString(this, retval, startIndex, endIndex) -> String (member, non-trivial return)
+// RCX=this, RDX=retval(String*), R8=startIndex, R9=endIndex
+// ?SubString@String@System@@QEBA?AV12@HH@Z
+typedef void* (*fn_String_SubString_t)(void* self, void* retval, int startIndex, int endIndex);
 extern fn_String_SubString_t fn_String_SubString;
 
 // System::String::operator=(this, other) -> String& — string assignment
@@ -1935,8 +1940,11 @@ extern uint32_t* g_TypeId_NameDatabase;  // DAT_1401c5a60
 typedef bool (*fn_String_Equals_t)(void* self, const char* cstr);
 extern fn_String_Equals_t fn_String_Equals;
 
-// System::String::operator+=(this, cstr)
-typedef void (*fn_String_Append_t)(void* self, const char* cstr);
+// System::String::operator+=(this, retval, cstr)
+// Non-trivial return ABI: RCX=this, RDX=retval(String), R8=cstr
+// Modifies self in-place AND returns copy through retval.
+// Resolved from exe dispatch table at 0x140151a18.
+typedef void* (*fn_String_Append_t)(void* self, void* retval, const char* cstr);
 extern fn_String_Append_t fn_String_Append;
 
 // Start game handler: FUN_1400b4540 — NOW REIMPLEMENTED in newgamedialog.cpp

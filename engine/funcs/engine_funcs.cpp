@@ -329,6 +329,7 @@ fn_UI_Play_t fn_UI_Play = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
 // fn_SaveLoadDialog_PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
 fn_EditElement_SetText_t fn_EditElement_SetText = nullptr;
+fn_EditElement_SetText_SysStr_t fn_EditElement_SetText_SysStr = nullptr;
 fn_Input_Device_Released_t fn_Input_Device_Released = nullptr;
 void** g_pInputDeviceSingleton = nullptr;
 fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite = nullptr;
@@ -1954,6 +1955,12 @@ bool EngineFuncsInit() {
         fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
             ResolveAddr(Module::Runtime, 0x180042070));
 
+    fn_EditElement_SetText_SysStr = reinterpret_cast<fn_EditElement_SetText_SysStr_t>(
+        ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
+    if (!fn_EditElement_SetText_SysStr)
+        fn_EditElement_SetText_SysStr = reinterpret_cast<fn_EditElement_SetText_SysStr_t>(
+            ResolveAddr(Module::Runtime, 0x1800d0db0));
+
     fn_Input_Device_Released = reinterpret_cast<fn_Input_Device_Released_t>(
         ResolveExport("?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
 
@@ -2287,7 +2294,7 @@ bool EngineFuncsInit() {
     fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
     fn_String_SubString = reinterpret_cast<fn_String_SubString_t>(
-        ResolveExport("?SubString@String@System@@QEBA?AV12@H@Z"));
+        ResolveExport("?SubString@String@System@@QEBA?AV12@HH@Z"));
     fn_String_Assign = reinterpret_cast<fn_String_Assign_t>(
         ResolveExport("??4String@System@@QEAAAEAV01@AEBV01@@Z"));
     // UI::String::String(ExternalPtr<StringTable>) — single-arg ctor, dispatch at 0x140151300
@@ -2529,8 +2536,11 @@ bool EngineFuncsInit() {
     // fn_String_SubString already resolved above
     fn_String_Equals = reinterpret_cast<fn_String_Equals_t>(
         ResolveExport("??8String@System@@QEBA_NPEBD@Z"));
-    fn_String_Append = reinterpret_cast<fn_String_Append_t>(
-        ResolveExport("??YString@System@@QEAAXPEBD@Z"));
+    // operator+= with non-trivial return — resolve from exe dispatch table 0x140151a18
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a18));
+        if (dispatch) fn_String_Append = reinterpret_cast<fn_String_Append_t>(*dispatch);
+    }
     // fn_StartNewGame — REIMPLEMENTED inline in newgamedialog.cpp
     g_TypeId_MapGenerator = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c59b8));
