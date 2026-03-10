@@ -213,6 +213,7 @@ Hooks copy N prologue bytes to a trampoline, overwrite original with JMP. See `n
 3. **RSP captures (MOV RAX/R11,RSP)** — captures wrong RSP value, used for absolute addressing. Fix: disable hook (40 affected).
 4. **RSP-relative stores (MOV [RSP+xx],reg)** — safe for passthroughs (write/read internally consistent). No fix needed.
 5. **RAX clobbered by JMP-back** — trampoline's `MOV RAX, imm64; JMP RAX` overwrites values prologue set in RAX. Fix: changed to `MOV R10; JMP R10`.
+6. **Implicit register forwarding** — original function passes a volatile register (e.g., RDX) through to a sub-call without explicitly referencing it. The C passthrough's compiler-generated code may clobber that register. Fix: declare and forward all implicitly-passed parameters in the passthrough typedef. Example: ModelComponent vtable slot +0x40 forwards RDX (Time*) to MeshInstance::Update — passthrough must be `(void* self, void* time)`, not `(void* self)`.
 
 ### Crash Diagnostics
 - VEH handler catches ACCESS_VIOLATION/ILLEGAL_INSTRUCTION, logs to `patch_debug.log`

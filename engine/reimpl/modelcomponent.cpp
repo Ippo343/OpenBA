@@ -65,10 +65,12 @@ static void Reimpl_OnCreate(void* self) {
     ((Orig_t)g_hookOnCreate.trampoline)(self);
 }
 
-static void Reimpl_OnRemove(void* self) {
+// Note: vtable slot +0x40 implicitly passes RDX (Time*) through to
+// MeshInstance::Update(const Time&). Must forward it or RDX gets clobbered.
+static void Reimpl_OnRemove(void* self, void* time) {
     g_lastHook = "ModelComponent::OnRemove";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookOnRemove.trampoline)(self);
+    typedef void (*Orig_t)(void*, void*);
+    ((Orig_t)g_hookOnRemove.trampoline)(self, time);
 }
 
 // ============================================================

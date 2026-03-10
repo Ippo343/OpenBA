@@ -170,6 +170,9 @@ static bool Reimpl_Update(MainLoop* self, Time* dt) {
     }
 
     // --- Loop transition ---
+#ifdef _DEBUG
+    printf("[MainLoop::Update] TRANSITION from %p to %p\n", (void*)current, (void*)self->m_nextLoop);
+#endif
 
     // 1. Shutdown the current loop
     VCall_Shutdown(current);
@@ -185,10 +188,20 @@ static bool Reimpl_Update(MainLoop* self, Time* dt) {
     self->m_currentLoop = next;
 
     // 4. Initialize the new loop (remainder = 0, mid-frame transition)
+#ifdef _DEBUG
+    printf("[MainLoop::Update] VCall_Startup next=%p vtable=%p Startup=%p\n",
+           (void*)next, (void*)next->vtable, next->vtable->Startup);
+#endif
     VCall_Startup(next, 0);
+#ifdef _DEBUG
+    printf("[MainLoop::Update] VCall_Startup done\n");
+#endif
 
     // 5. Run the new loop's first tick with the current dt
     VCall_Update(next, dt);
+#ifdef _DEBUG
+    printf("[MainLoop::Update] First Update tick done\n");
+#endif
 
     // 6. Mark video resources dirty — forces ClearResources on next draw
     self->m_videoContextDirty = 1;
@@ -330,6 +343,14 @@ static void CleanupAudioChannels(MainLoop* self) {
 
 static bool Reimpl_Frame(MainLoop* self, bool drawOnly) {
     g_lastHook = "MainLoop::Frame";
+#ifdef _DEBUG
+    static int frameNum = 0;
+    if (frameNum % 300 == 0) {
+        printf("[MainLoop::Frame] frame=%d loop=%p drawOnly=%d\n",
+               frameNum, (void*)self->m_currentLoop, (int)drawOnly);
+    }
+    frameNum++;
+#endif
     // --- Capture current time and update accumulator ---
     int64_t now = QPCToTicks(GetQPC());
     int64_t elapsed = now - self->m_lastTimestamp;
