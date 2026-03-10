@@ -12,6 +12,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -50,12 +51,28 @@ enum MainMenuButtonId {
 // ============================================================
 // Helper: load .rsc resource for dialog construction
 // ============================================================
+// Exe dispatch table entry for the External type ID (0x140151728).
+// At runtime: *dispatch = pointer to Runtime global, **dispatch = uint32_t type ID.
+static uint32_t** g_dispatchExternalTypeId = nullptr;
+
 static void* LoadDialogResource(const char* rscPath) {
     uint8_t filenameBuf[16];
     fn_Filename_CtorCStr(filenameBuf, rscPath);
     void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    void* extRes = nullptr;
+    if (resource) {
+        // Type check using exe dispatch table — matches original code exactly
+        if (!g_dispatchExternalTypeId) {
+            g_dispatchExternalTypeId = reinterpret_cast<uint32_t**>(
+                ResolveAddr(Module::Exe, 0x140151728));
+        }
+        uint32_t typeId = **g_dispatchExternalTypeId;
+        if (fn_IsDerivedFrom(resource, typeId)) {
+            extRes = resource;
+        }
+    }
     fn_Filename_Dtor(filenameBuf);
-    return resource;
+    return extRes;
 }
 
 // ============================================================
@@ -330,7 +347,7 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
                                          parentIBP,
-                                         0);  // difficulty
+                                         1);  // difficulty: 1 = tutorial mode
     }
     AddDialogToUI(self, dlgObj);
 }

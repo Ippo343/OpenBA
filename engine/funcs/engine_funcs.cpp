@@ -2125,10 +2125,22 @@ bool EngineFuncsInit() {
         ResolveExport("?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ"));
     fn_Achievement_GetTitle = reinterpret_cast<fn_Achievement_GetTitle_t>(
         ResolveExport("?GetTitle@Achievement@1@QEBA?AVString@System@@XZ"));
+    if (!fn_Achievement_GetTitle) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151598));
+        if (d && *d) fn_Achievement_GetTitle = reinterpret_cast<fn_Achievement_GetTitle_t>(*d);
+    }
     fn_Achievement_GetDescription = reinterpret_cast<fn_Achievement_GetDescription_t>(
         ResolveExport("?GetDescription@Achievement@1@QEBA?AVString@System@@XZ"));
+    if (!fn_Achievement_GetDescription) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151590));
+        if (d && *d) fn_Achievement_GetDescription = reinterpret_cast<fn_Achievement_GetDescription_t>(*d);
+    }
     fn_Achievement_GetSpriteName = reinterpret_cast<fn_Achievement_GetSpriteName_t>(
         ResolveExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ"));
+    if (!fn_Achievement_GetSpriteName) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401515a0));
+        if (d && *d) fn_Achievement_GetSpriteName = reinterpret_cast<fn_Achievement_GetSpriteName_t>(*d);
+    }
     fn_AchievementManager_GetAchievementCount = reinterpret_cast<fn_AchievementManager_GetAchievementCount_t>(
         ResolveExport("?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ"));
     if (!fn_AchievementManager_GetAchievementCount)
@@ -2147,18 +2159,22 @@ bool EngineFuncsInit() {
         ResolveExport("?SetPadding@Element@UI@@QEAAXHHHH@Z"));
     // fn_EventNotifyDialog_ArrayRemove (0x140011670) — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 
-    // Scenario type ID: exref at 0x140151510 -> pointer -> uint32_t typeId
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151510));
-        if (exref && *exref) {
-            g_TypeId_Scenario = reinterpret_cast<uint32_t*>(*exref);
-        }
-    }
+    // Scenario type ID: direct uint32_t in .data at 0x1401c5b08
+    // (Original Slot4 at 0x140078248: MOV EDX, dword ptr [0x1401c5b08])
+    g_TypeId_Scenario = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5b08));
 
     fn_Sprite_Ctor = reinterpret_cast<fn_Sprite_Ctor_t>(
         ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z"));
+    if (!fn_Sprite_Ctor) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514c8));
+        if (d && *d) fn_Sprite_Ctor = reinterpret_cast<fn_Sprite_Ctor_t>(*d);
+    }
     fn_UIString_Ctor = reinterpret_cast<fn_UIString_Ctor_t>(
         ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z"));
+    if (!fn_UIString_Ctor) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151300));
+        if (d && *d) fn_UIString_Ctor = reinterpret_cast<fn_UIString_Ctor_t>(*d);
+    }
     fn_UIString_ToSystemString = reinterpret_cast<fn_UIString_ToSystemString_t>(
         ResolveExport("??BString@UI@@QEBA?AV0System@@XZ"));
 

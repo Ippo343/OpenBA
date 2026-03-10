@@ -49,8 +49,8 @@ static void ScenarioDialog_ArrayPush_Impl(void* arrayBase, int newCount, void* e
         }
     }
 
-    if (oldData != (void*)*dataPtr) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+    if (oldData != (void*)*dataPtr && oldData != nullptr) {
+        fn_MemFreeStatic(oldData);
     }
 }
 
