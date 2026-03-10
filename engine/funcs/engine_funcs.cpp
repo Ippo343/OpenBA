@@ -2455,7 +2455,7 @@ bool EngineFuncsInit() {
         ResolveExport("?GetPathIdentifer@Filename@System@@QEBA?AVString@2@XZ"));
     if (!fn_Filename_GetPathIdentifier) {
         fn_Filename_GetPathIdentifier = reinterpret_cast<fn_Filename_GetPathIdentifier_t>(
-            ResolveAddr(Module::Runtime, 0x180069150));
+            ResolveAddr(Module::Runtime, 0x1800c6610));
     }
     // BSTRebalance — now static inline in professionui.cpp (BSTRebalance_Impl)
     // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp

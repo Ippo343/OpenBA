@@ -1210,9 +1210,10 @@ void DebugUI_Slot4(DebugUI* self) {
         for (int i = 0; i < weatherCount; i++) {
             void* entry = *(void**)((uintptr_t)i * 0x10 +
                 *(uintptr_t*)(weatherList + 0x28));
-            void* path = fn_External_GetPath(entry);
+            uint8_t pathBuf[8];
+            fn_External_GetPath(entry, pathBuf);
             uint8_t filenameBuf[16];
-            fn_Filename_GetPathFilename(path, filenameBuf, false);
+            fn_Filename_GetPathFilename(pathBuf, filenameBuf, false);
 
             uint8_t spr[16];
             fn_Sprite_Default_Ctor(spr);
@@ -1221,6 +1222,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
             fn_String_Dtor(filenameBuf);
             fn_String_Dtor((uint8_t*)filenameBuf + 8);
+            fn_Filename_Dtor(pathBuf);
 
             // Check if this weather is currently active
             uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +

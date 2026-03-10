@@ -779,8 +779,8 @@ static void DynArray8_Push(void** pData, int32_t* pCount, int32_t* pCapacity, ui
         }
     }
 
-    if (oldData != *pData) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+    if (oldData != *pData && oldData != nullptr) {
+        fn_MemFreeStatic(oldData);
     }
 }
 
@@ -813,8 +813,8 @@ static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, in
         }
     }
 
-    if (oldData != *pData) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+    if (oldData != *pData && oldData != nullptr) {
+        fn_MemFreeStatic(oldData);
     }
 }
 
@@ -848,7 +848,6 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     uint64_t groupId = (uint64_t)toolbarData;
 
     // --- Step 1: Call base DialogInstance constructor ---
-    // DialogInstance(self, userInterface, dialog, parentPtr, 0, 0, 0)
     fn_DialogInstance_Ctor(self, userInterface, dialog, parentPtr, nullptr, nullptr, 0);
 
     // --- Step 2: Patch vtable to ToolbarDialog ---
@@ -1008,21 +1007,19 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
 
         // Set element name from toolbar item's resource path
-        void* itemPath = fn_External_GetPath((void*)item);
-        uint8_t pathIdBuf[32]; // Filename + return
-        void* pathStr = fn_Filename_GetPathIdentifier(itemPath, pathIdBuf);
+        // Set element name from toolbar item's resource path
+        uint8_t pathBuf[8];
+        fn_External_GetPath((void*)item, pathBuf);
+        uint8_t pathIdBuf[8];
+        fn_Filename_GetPathIdentifier(pathBuf, pathIdBuf);
         fn_InternalBasePtr_CheckPtr((void*)&newElement);
-        fn_Element_SetName(newElement, pathStr);
-        // Filename destructors for temporaries (two Filename locals)
-        // The decompiler shows two ~Filename calls — these clean up the
-        // Filename objects created by GetPath and GetPathIdentifier.
-        // In our reimpl, pathIdBuf is stack-allocated and cleaned up automatically.
+        fn_Element_SetName(newElement, pathIdBuf);
+        fn_Filename_Dtor(pathIdBuf);
+        fn_Filename_Dtor(pathBuf);
 
         // Get toolbar item's display string and sprite
-        // UI::String at item+0x20 (stringTable) + item+0x30 (stringName)
-        // UI::Sprite at item+0x28 (spriteSheet) + item+0x38 (spriteName)
-        uint8_t uiString[16]; // UI::String (16 bytes)
-        uint8_t uiSprite[16]; // UI::Sprite (16 bytes)
+        uint8_t uiString[16];
+        uint8_t uiSprite[16];
         fn_UIString_Ctor(uiString, *(uint64_t*)(item + 0x20), (void*)(item + 0x30));
         fn_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
 
@@ -1106,22 +1103,20 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             }
 
             // Set element ID (button index within this toolbar)
+            // Set element ID (button index within this toolbar)
             fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetElementId((void*)buttonRef, buttonIndex);
 
-            // Set user data to the entity description pointer
             void* userData = *(void**)(item + 0x58);
             fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetUserData((void*)buttonRef, userData);
 
-            // Set tooltip from UI::String
             uint8_t tooltipData[16];
             *(uint64_t*)tooltipData = *(uint64_t*)uiString;
             *(uint64_t*)(tooltipData + 8) = *(uint64_t*)(uiString + 8);
             fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetToolTip((void*)buttonRef, tooltipData);
 
-            // Enable the element (set flag 0x10000)
             fn_InternalBasePtr_CheckPtr((void*)&buttonRef);
             fn_Element_SetFlagsOnOff((void*)buttonRef, 0x10000, 0);
 
@@ -1201,8 +1196,8 @@ found_speed:
     *(int32_t*)(*(uintptr_t*)(gameWorldAddr + 0x120) + 0x34) = speedArr[speedIndex];
 
     // --- Cleanup ---
-    fn_MemFree(g_pMemAllocSingleton, shortcutIds);
-    fn_MemFree(g_pMemAllocSingleton, itemList);
+    fn_MemFreeStatic(shortcutIds);
+    fn_MemFreeStatic(itemList);
 
     return self;
 }
@@ -1427,7 +1422,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
                 int parentBottom = *(int32_t*)((uintptr_t)parentRadio + 100); // +0x64
 
                 void* selfRoot = *(void**)((uintptr_t)self + 0x50); // GetRoot inlined
-                int selfTop = *(int32_t*)(*(uintptr_t*)selfRoot + 0x24);
+                int selfTop = *(int32_t*)((uintptr_t)selfRoot + 0x24);
 
                 // Get element position for centering
                 int elemX = *(int32_t*)(localElemRef + 0x68);

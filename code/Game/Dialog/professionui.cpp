@@ -383,10 +383,13 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
         // Set element name from profession file path
         if (fn_External_GetPath && fn_Filename_GetPathIdentifier) {
-            void* pathResult = fn_External_GetPath(profDesc);
+            uint8_t pathBuf[8];
+            fn_External_GetPath(profDesc, pathBuf);
             uint8_t identBuf[8];
-            fn_Filename_GetPathIdentifier(pathResult, identBuf);
+            fn_Filename_GetPathIdentifier(pathBuf, identBuf);
             fn_Element_SetName(spinner, identBuf);
+            fn_Filename_Dtor(identBuf);
+            fn_Filename_Dtor(pathBuf);
         }
 
         // BST insert: key=profDesc, value=idBase-300 (=i)

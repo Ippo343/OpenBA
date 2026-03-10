@@ -1739,8 +1739,9 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
 // ProfessionUI support
 // ============================================================
 
-// Object::External::GetPath(this) -> Filename* (returns internal pointer)
-typedef void* (*fn_External_GetPath_t)(void* self);
+// Object::External::GetPath() — returns Filename by value (non-trivial return ABI)
+// Member function: RCX=this, RDX=retBuf (Filename, 8 bytes). Returns retBuf in RAX.
+typedef void* (*fn_External_GetPath_t)(void* self, void* retBuf);
 extern fn_External_GetPath_t fn_External_GetPath;
 
 // System::Filename::GetPathIdentifer(this, retval) -> String (member, non-trivial return)

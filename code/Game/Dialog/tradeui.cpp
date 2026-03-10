@@ -236,14 +236,14 @@ static void SetSpinnerIncrement(void* spinner)
 // ============================================================
 static void SetElementNameFromExternal(void* element, void* externalPtr)
 {
-    void* path = fn_External_GetPath(externalPtr);
+    uint8_t pathBuf[8];
+    fn_External_GetPath(externalPtr, pathBuf);
     uint8_t filenameBuf1[16] = {0};
-    uint8_t filenameBuf2[16] = {0};
-    void* nameStr = fn_Filename_GetPathFilename(path, filenameBuf1, false);
+    void* nameStr = fn_Filename_GetPathFilename(pathBuf, filenameBuf1, false);
     fn_InternalBasePtr_CheckPtr(&element);
     fn_Element_SetName(element, nameStr);
     fn_Filename_Dtor(filenameBuf1);
-    fn_Filename_Dtor(filenameBuf2);
+    fn_Filename_Dtor(pathBuf);
 }
 
 // ============================================================
@@ -2675,12 +2675,14 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 9999);
 
         // Set spinner element name to resource path filename
-        void* path = fn_External_GetPath((void*)entry[0]);
+        uint8_t pathBuf[8];
+        fn_External_GetPath((void*)entry[0], pathBuf);
         uint64_t filenameBuf[4] = {0};
-        fn_Filename_GetPathFilename(path, filenameBuf, false);
+        fn_Filename_GetPathFilename(pathBuf, filenameBuf, false);
         fn_InternalBasePtr_CheckPtr(spinSlot);
         fn_Element_SetName(*(void**)spinSlot, filenameBuf);
         fn_Filename_Dtor(filenameBuf);
+        fn_Filename_Dtor(pathBuf);
     }
 
     // --- Clear remaining UI rows beyond data ---
