@@ -51,15 +51,11 @@ enum MainMenuButtonId {
 // Helper: load .rsc resource for dialog construction
 // ============================================================
 static void* LoadDialogResource(const char* rscPath) {
-    uint8_t filenameBuf[8];
+    uint8_t filenameBuf[16];
     fn_Filename_CtorCStr(filenameBuf, rscPath);
     void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
-    void* extRes = nullptr;
-    if (resource && fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
-        extRes = resource;
-    }
     fn_Filename_Dtor(filenameBuf);
-    return extRes;
+    return resource;
 }
 
 // ============================================================
@@ -275,8 +271,8 @@ void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
         dlgObj = fn_ScenarioDialog_Ctor(dlgMem,
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
-                                         0,  // difficulty (main menu = 0)
-                                         parentIBP);
+                                         parentIBP,
+                                         0);  // difficulty (main menu = 0)
     }
     AddDialogToUI(self, dlgObj);
 }
@@ -333,8 +329,8 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
         dlgObj = fn_ScenarioDialog_Ctor(dlgMem,
                                          *(void**)((uintptr_t)self + 0x10),
                                          extRes, nullIBP,
-                                         0,  // difficulty
-                                         parentIBP);
+                                         parentIBP,
+                                         0);  // difficulty
     }
     AddDialogToUI(self, dlgObj);
 }

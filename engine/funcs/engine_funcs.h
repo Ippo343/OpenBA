@@ -1816,7 +1816,7 @@ extern fn_OptionsDialog_Ctor_t fn_OptionsDialog_Ctor;  // 0x140075150
 // ScenarioDialog ctor: FUN_1400786b0(self, ui, extRes, parentIBP, difficulty, parentMenuIBP)
 // difficulty = byte at MainMenuDialog+0xB8 area. Also used for TutorialDialog.
 typedef void* (*fn_ScenarioDialog_Ctor_t)(void* self, void* ui, void* extRes, void* parentIBP,
-                                           uint8_t difficulty, void* parentMenuIBP);
+                                           void* parentMenuIBP, uint8_t difficulty);
 extern fn_ScenarioDialog_Ctor_t fn_ScenarioDialog_Ctor;  // 0x1400786b0
 
 // MapParamsDialog ctor: FUN_14006bd80(self, ui, extRes, nullParent)
