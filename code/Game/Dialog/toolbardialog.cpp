@@ -1299,15 +1299,14 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
             // SpeedDisplay: get first child (text element), format speed as "%ix"
             void* elem = *(void**)&buttonArray[i];
 
-            // Element::Child(elem, retBuf, 0) — member function ABI
+            // Element::Child(elem, retBuf, 1) — child[1] is the text element
             uint8_t childBuf[16];
-            fn_Element_Child(elem, childBuf, 0);
+            fn_Element_Child(elem, childBuf, 1);
 
             void* childElem = *(void**)childBuf;
 
             // IsDerivedFrom check for TextElement type (exref at 0x140151508)
-            // We cast and call SetParameter
-            bool isDerived = fn_IsDerivedFrom(childElem, *g_TypeId_ToolbarElement);
+            bool isDerived = fn_IsDerivedFrom(childElem, *g_TypeId_TextElement);
             void* textElem = isDerived ? childElem : nullptr;
 
             // Build local InternalPtr
