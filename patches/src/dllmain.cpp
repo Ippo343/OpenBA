@@ -170,6 +170,29 @@ static LONG CALLBACK VectoredCrashHandler(EXCEPTION_POINTERS* ep) {
             fprintf(f, "Module:    %s + 0x%llX\n", modName, (unsigned long long)offset);
         }
 
+        // Raw stack dump (useful when RIP=0 breaks DbgHelp walker)
+        {
+            HMODULE hExe = GetModuleHandleA(NULL);
+            HMODULE hRt = GetModuleHandleA("Runtime-x64.dll");
+            HMODULE hDll = GetModuleHandleA("version.dll");
+            uintptr_t exeBase = hExe ? (uintptr_t)hExe : 0;
+            uintptr_t rtBase = hRt ? (uintptr_t)hRt : 0;
+            uintptr_t dllBase = hDll ? (uintptr_t)hDll : 0;
+            fprintf(f, "\nModule bases: EXE=%p RT=%p DLL=%p\n", (void*)exeBase, (void*)rtBase, (void*)dllBase);
+            fprintf(f, "Raw stack (RSP=%p):\n", (void*)ctx->Rsp);
+            uintptr_t rsp = ctx->Rsp;
+            for (int si = 0; si < 24; si++) {
+                uintptr_t val = 0;
+                if (!IsBadReadPtr((void*)(rsp + si * 8), 8))
+                    val = *(uintptr_t*)(rsp + si * 8);
+                const char* tag = "";
+                if (exeBase && val >= exeBase && val < exeBase + 0x200000) tag = " <-- EXE";
+                else if (rtBase && val >= rtBase && val < rtBase + 0x300000) tag = " <-- RT";
+                else if (dllBase && val >= dllBase && val < dllBase + 0x800000) tag = " <-- DLL";
+                fprintf(f, "  [RSP+%02X] %016llX%s\n", si * 8, (unsigned long long)val, tag);
+            }
+        }
+
         // Stack trace using DbgHelp
         fprintf(f, "\nStack trace:\n");
         HANDLE process = GetCurrentProcess();

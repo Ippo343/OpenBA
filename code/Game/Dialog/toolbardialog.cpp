@@ -261,7 +261,6 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
 // ============================================================
 static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
     uintptr_t pc = (uintptr_t)gameSubsys;
-
     // Step 1: If lockToggle is set and groupId is non-zero, override with locked group
     if (*(uint8_t*)(pc + 0x80) != 0 && groupId != 0) {
         groupId = *(int64_t*)(pc + 0x88);
@@ -275,7 +274,6 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 
     // Step 3: Store new group, close existing controller if any
     *(int64_t*)(pc + 0x20) = groupId;
-
     if (*(int64_t*)(pc + 0x28) != 0) {
         // CheckPtr on the InternalBasePtr
         fn_InternalBasePtr_CheckPtr((void*)(pc + 0x28));
@@ -385,10 +383,17 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
         }
     }
 
-    // Step 6: Create ToolController via Factory::CreateObject
-    uint32_t factoryTypeId = *(uint32_t*)(foundNode + 0x08);
-    void* newObj = fn_Factory_CreateObject(*g_pFactorySingleton, factoryTypeId);
+    // When groupId=0 (ESC/clear tools), no matching type exists — just clear controller and return
+    if (foundTypeId == 0) {
+        fn_InternalBasePtr_DeletePtr((void*)(pc + 0x28));
+        return;
+    }
 
+    // Step 6: Create ToolController via Factory::CreateObject
+    // g_pFactorySingleton is dispatch table → points to Factory::_singleton → holds Factory*
+    // Need double-deref: *(void**)*g_pFactorySingleton to get the actual Factory object
+    uint32_t factoryTypeId = *(uint32_t*)(foundNode + 0x08);
+    void* newObj = fn_Factory_CreateObject(*(void**)*g_pFactorySingleton, factoryTypeId);
     // IsDerivedFrom check for ToolController type
     bool isToolCtrl = fn_IsDerivedFrom(newObj, *g_TypeId_ToolController);
     void* toolController = isToolCtrl ? newObj : nullptr;
@@ -418,7 +423,7 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
             uint32_t settingFactoryId = *typeIdPtr;
 
             // Create the ToolSetting object
-            void* settingObj = fn_Factory_CreateObject(*g_pFactorySingleton, settingFactoryId);
+            void* settingObj = fn_Factory_CreateObject(*(void**)*g_pFactorySingleton, settingFactoryId);
             bool isToolSetting = fn_IsDerivedFrom(settingObj, *g_TypeId_ToolSetting);
             void* toolSetting = isToolSetting ? settingObj : nullptr;
 
@@ -644,11 +649,9 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 // ============================================================
 static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
     uintptr_t gs = (uintptr_t)gameSubsys;
-
     // Get UserInterface from gameWorld+0x98
     void* gameWorld = *g_pGameWorldSingleton;
     void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
-
     // Step 1: If there's an active tool controller at +0x28, close it via vtable[9]
     if (*(uintptr_t*)(gs + 0x28) != 0) {
         fn_InternalBasePtr_CheckPtr((void*)(gs + 0x28));
@@ -698,15 +701,6 @@ static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
         externalRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
     }
 
-    // Step 5: IsDerivedFrom check — verify the loaded resource is a DialogInstance type
-    void* checkedRes = nullptr;
-    if (externalRes != nullptr) {
-        bool isDerived = fn_IsDerivedFrom(externalRes, *g_TypeId_DialogInstance);
-        if (isDerived) {
-            checkedRes = externalRes;
-        }
-    }
-
     // Clean up filename
     if (fn_Filename_Dtor) {
         fn_Filename_Dtor(filename);
@@ -726,7 +720,7 @@ static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
 
         // Step 7: Construct DialogInstance base class
         // DialogInstance::DialogInstance(self, userInterface, externalRes, parentPtr, 0, 0, 0)
-        fn_DialogInstance_Ctor(pauseDialog, userInterface, checkedRes, &parentCopy, 0, 0, 0);
+        fn_DialogInstance_Ctor(pauseDialog, userInterface, externalRes, &parentCopy, 0, 0, 0);
 
         // Set PauseDialog vtable
         *(uintptr_t*)pauseDialog = g_PauseDialog_Vtable;
