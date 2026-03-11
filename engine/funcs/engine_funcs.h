@@ -1038,14 +1038,16 @@ extern fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause;
 typedef void (*fn_SaveLoad_Update_t)(void* saveLoad, void* time);
 extern fn_SaveLoad_Update_t fn_SaveLoad_Update;
 
-// IO::Persistence::GetSavePath(this) -> Filename* (returns address of internal field)
+// IO::Persistence::GetSavePath(this, retval) -> Filename (non-trivial return ABI)
 // ?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ
-typedef void* (*fn_Persistence_GetSavePath_t)(void* self);
+// MSVC x64 member: RCX=this, RDX=hidden_retval (Filename buffer)
+typedef void* (*fn_Persistence_GetSavePath_t)(void* self, void* retval);
 extern fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath;
 
-// IO::FileSystem::GetDataDirectory(this) -> String* (returns address of internal field)
+// IO::FileSystem::GetDataDirectory(this, retval) -> String (non-trivial return ABI)
 // ?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ
-typedef void* (*fn_FileSystem_GetDataDirectory_t)(void* self);
+// MSVC x64 member: RCX=this, RDX=hidden_retval (String buffer)
+typedef void* (*fn_FileSystem_GetDataDirectory_t)(void* self, void* retval);
 extern fn_FileSystem_GetDataDirectory_t fn_FileSystem_GetDataDirectory;
 
 // IO::FileSystem singleton
@@ -1948,12 +1950,13 @@ extern fn_String_Equals_t fn_String_Equals;
 typedef void* (*fn_String_Append_t)(void* self, void* retval, const char* cstr);
 extern fn_String_Append_t fn_String_Append;
 
-// Start game handler: FUN_1400b4540 — NOW REIMPLEMENTED in newgamedialog.cpp
-// Old typedef kept for reference:
-// typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint64_t seed,
-//                                    uint64_t terrainSize, int disasterOff, void* climate,
-//                                    void* terrain, void* mapGen, int param9, void* retval);
-// extern fn_StartNewGame_t fn_StartNewGame;
+// Start game handler: FUN_1400b4540
+// Constructs GameUpdateLoop -> GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
+// Params: worldSetup, displayName, seed, terrainSize, disasterOff, climateGen, terrainGen, mapGen, scenarioIdx, nullIBP
+typedef void (*fn_StartNewGame_t)(void* worldSetup, void* nameStr, uint32_t seed,
+                                   uint32_t terrainSize, char disasterOff, void* climate,
+                                   void* terrain, void* mapGen, uint32_t scenarioIdx, void* retvalIBP);
+extern fn_StartNewGame_t fn_StartNewGame;
 
 // TypeInfo IDs for generator IsDerivedFrom checks
 extern uint32_t* g_TypeId_MapGenerator;      // DAT_1401c59b8

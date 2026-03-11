@@ -368,80 +368,11 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         uint8_t nullIBP[8];
         fn_InternalBasePtr_Ctor(nullIBP, nullptr);
 
-        // Call StartNewGame logic via fn_* — this function constructs the game loop chain
-        // We use the same reimplemented pattern as newgamedialog.cpp
-        // parentCtrl is the worldSetup ptr (MainMenuDialog or similar parent)
-        {
-            uintptr_t ws = (uintptr_t)parentCtrl;
-
-            // Step 1: GameUpdateLoop (0x160 bytes)
-            void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
-            void* pGameLoop = nullptr;
-            if (gameLoop) {
-                fn_UpdateLoop_Ctor(gameLoop);
-                *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
-                fn_String_Ctor_CStr((void*)((uintptr_t)gameLoop + 0x28), "");
-                fn_String_Assign((void*)((uintptr_t)gameLoop + 0x28), displayNameStr);
-                *(uint32_t*)((uintptr_t)gameLoop + 0x30) = seedVal;
-                *(uint32_t*)((uintptr_t)gameLoop + 0x34) = terrainSizeVal;
-                *(uint64_t*)((uintptr_t)gameLoop + 0x38) = 0;
-                *(uint64_t*)((uintptr_t)gameLoop + 0x40) = (uint64_t)climateGen;
-                *(uint64_t*)((uintptr_t)gameLoop + 0x48) = (uint64_t)terrainGen;
-                *(uint64_t*)((uintptr_t)gameLoop + 0x50) = (uint64_t)mapGen;
-                *(uint64_t*)((uintptr_t)gameLoop + 0x58) = 0;
-                for (uintptr_t off = 0x60; off <= 0xC0; off += 8)
-                    *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
-                *(uint16_t*)((uintptr_t)gameLoop + 0xC0) = 0;
-                *(uint64_t*)((uintptr_t)gameLoop + 0xC8) = 0;
-                *(uint32_t*)((uintptr_t)gameLoop + 0xD0) = disasterOff ? 0 : 0xF0;
-                for (uintptr_t off = 0xD8; off <= 0x148; off += 8)
-                    *(uint64_t*)((uintptr_t)gameLoop + off) = 0;
-                *(uint64_t*)((uintptr_t)gameLoop + 0x150) = *(uint64_t*)nullIBP;
-                *(uint8_t*)((uintptr_t)gameLoop + 0x158) = 0;
-                *(uint32_t*)((uintptr_t)gameLoop + 0x15C) = scenarioResIdx;
-                pGameLoop = gameLoop;
-            }
-
-            // Step 2: GameLoadDialogLoopT (0xB60 bytes)
-            void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xB60, 4);
-            void* pDlLoop = nullptr;
-            if (dlLoop) {
-                uint8_t delayTime[8];
-                fn_Time_Ctor_Float(delayTime, 1.0f);
-                uint8_t loadingStr[8];
-                GetLoadingSoundString(loadingStr);
-                fn_DialogLoaderLoopT_Ctor(dlLoop, loadingStr, pGameLoop, delayTime);
-                *(void**)dlLoop = (void*)g_GameLoadDialogLoopT_Vtable;
-                *(uint32_t*)((uintptr_t)dlLoop + 0x188) = 0xFF000000;
-                *(uint32_t*)((uintptr_t)dlLoop + 0x18C) = 0xFF000000;
-                *(uint8_t*)((uintptr_t)dlLoop + 400) = 0;
-                fn_Random_Default_Ctor((void*)((uintptr_t)dlLoop + 0x194));
-                *(uint64_t*)((uintptr_t)dlLoop + 0xB58) = 0;
-                *(uint8_t*)((uintptr_t)dlLoop + 0x40) = 0;
-                fn_String_Dtor(loadingStr);
-                pDlLoop = dlLoop;
-            }
-
-            // Step 3: Outer LoaderLoop (0x48 bytes)
-            void* outerLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 4);
-            void* pOuterLoop = nullptr;
-            if (outerLoop) {
-                uint8_t zeroTime[8];
-                fn_Time_Ctor_Float(zeroTime, 0.0f);
-                fn_LoaderLoop_Ctor(outerLoop, pDlLoop, zeroTime);
-                *(void**)outerLoop = (void*)g_GameLoaderLoop_Vtable;
-                pOuterLoop = outerLoop;
-            }
-
-            // Step 4: Set next loop
-            uintptr_t loaderLoop1 = *(uintptr_t*)(ws + 0xC0);
-            if (loaderLoop1 == 0) {
-                uintptr_t engPtr = *(uintptr_t*)(ws + 0xB8);
-                SetEngineNextLoop(engPtr, pOuterLoop);
-            } else {
-                SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
-            }
-        }
+        // Call original FUN_1400b4540 directly — constructs GameUpdateLoop ->
+        // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
+        fn_StartNewGame(parentCtrl, displayNameStr, seedVal, terrainSizeVal,
+                        disasterOff, climateGen, terrainGen, mapGen,
+                        scenarioResIdx, nullIBP);
     } else {
         // Saved scenario: load the save file first, then start from saved state
         void* saveLoad = *g_pSaveLoadSingleton;
@@ -449,11 +380,21 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         fn_SaveLoad_SetSaveName(saveLoad, saveNameStr, 2);
 
         // Get save path and set data directory
+        // Original flow (from assembly at 0x140077d41-0x140077d96):
+        //   1. GetSavePath → Filename at RSP+0xa8 (kept alive until after loop)
+        //   2. GetDataDirectory → temp at RSP+0xb0, returns ref in RAX
+        //   3. persistence+0x90 = RAX (data dir)
+        //   4. Destroy RSP+0xb0 (GetDataDirectory temp)
+        //   5. SaveLoad::Update loop
+        //   6. persistence+0x90 = RSP+0xa8 (restore from GetSavePath result)
         void* persistence = *g_pPersistenceSingleton;
-        fn_Persistence_GetSavePath(persistence);
+        uint8_t savePathBuf[16];  // Filename return buffer (non-trivial return ABI)
+        fn_Persistence_GetSavePath(persistence, savePathBuf);
         void* fileSystem = *g_pFileSystemSingleton2;
-        void* dataDir = fn_FileSystem_GetDataDirectory(fileSystem);
+        uint8_t dataDirBuf[16];  // String return buffer (non-trivial return ABI)
+        void* dataDir = fn_FileSystem_GetDataDirectory(fileSystem, dataDirBuf);
         fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), dataDir);
+        fn_Filename_Dtor(dataDirBuf);  // destroy GetDataDirectory temp (NOT savePathBuf!)
 
         // Run SaveLoad::Update loop until operation completes
         int operation = fn_SaveLoad_GetOperation(saveLoad);
@@ -464,9 +405,9 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
             operation = fn_SaveLoad_GetOperation(saveLoad);
         }
 
-        // Restore data directory
-        void* dataDir2 = fn_FileSystem_GetDataDirectory(fileSystem);
-        fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), dataDir2);
+        // Restore persistence path from GetSavePath result (matches original at 0x140077df0)
+        fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), savePathBuf);
+        fn_Filename_Dtor(savePathBuf);  // destroy GetSavePath Filename after use
 
         // Get parent controller and load from saved state
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));

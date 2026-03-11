@@ -484,7 +484,7 @@ uint32_t* g_TypeId_NameDatabase = nullptr;
 // fn_String_SubString already defined above
 fn_String_Equals_t fn_String_Equals = nullptr;
 fn_String_Append_t fn_String_Append = nullptr;
-// fn_StartNewGame — REMOVED, now reimplemented in newgamedialog.cpp
+fn_StartNewGame_t fn_StartNewGame = nullptr;
 uint32_t* g_TypeId_MapGenerator = nullptr;
 uint32_t* g_TypeId_ClimateGenerator = nullptr;
 uint32_t* g_TypeId_TerrainGenerator = nullptr;
@@ -1925,6 +1925,10 @@ bool EngineFuncsInit() {
 
     fn_SaveLoad_SetOperation = reinterpret_cast<fn_SaveLoad_SetOperation_t>(
         ResolveExport("?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z"));
+    if (!fn_SaveLoad_SetOperation) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151658));
+        if (d && *d) fn_SaveLoad_SetOperation = reinterpret_cast<fn_SaveLoad_SetOperation_t>(*d);
+    }
 
     fn_SaveLoad_GetSaveCount = reinterpret_cast<fn_SaveLoad_GetSaveCount_t>(
         ResolveExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ"));
@@ -2001,13 +2005,26 @@ bool EngineFuncsInit() {
     // New helpers for reimplemented ScenarioDialog_LoadSelected:
     fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(
         ResolveExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z"));
+    if (!fn_SaveLoad_Update) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d20));
+        if (d && *d) fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(*d);
+    }
     fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(
         ResolveExport("?GetSavePath@Persistence@IO@@QEAA?AVFilename@System@@XZ"));
+    if (!fn_Persistence_GetSavePath) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d38));
+        if (d && *d) fn_Persistence_GetSavePath = reinterpret_cast<fn_Persistence_GetSavePath_t>(*d);
+    }
     fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(
         ResolveExport("?GetDataDirectory@FileSystem@IO@@QEBAAEBVString@System@@XZ"));
-    // FileSystem singleton: exe exref at 0x140151278 → pointer to Runtime var. Dereference once.
+    if (!fn_FileSystem_GetDataDirectory) {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d30));
+        if (d && *d) fn_FileSystem_GetDataDirectory = reinterpret_cast<fn_FileSystem_GetDataDirectory_t>(*d);
+    }
+    // FileSystem singleton: exe dispatch at 0x140151d18 → pointer to Runtime singleton.
+    // Original: MOV RAX,[0x140151d18]; MOV RCX,[RAX] (at 0x140077d5a)
     {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151278));
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d18));
         g_pFileSystemSingleton2 = exref ? reinterpret_cast<void**>(*exref) : nullptr;
     }
     fn_LoadScenarioFromSave = reinterpret_cast<fn_LoadScenarioFromSave_t>(
@@ -2557,7 +2574,8 @@ bool EngineFuncsInit() {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a18));
         if (dispatch) fn_String_Append = reinterpret_cast<fn_String_Append_t>(*dispatch);
     }
-    // fn_StartNewGame — REIMPLEMENTED inline in newgamedialog.cpp
+    fn_StartNewGame = reinterpret_cast<fn_StartNewGame_t>(
+        ResolveAddr(Module::Exe, 0x1400b4540));
     g_TypeId_MapGenerator = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c59b8));
     g_TypeId_ClimateGenerator = reinterpret_cast<uint32_t*>(

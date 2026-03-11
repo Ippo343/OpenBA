@@ -2443,7 +2443,7 @@ static ReimplEntry g_reimplementations[] = {
     { "WildAnimalComponent::OnCreate", InstallWildAnimalComponentOnCreate, RemoveWildAnimalComponentOnCreate, true },
 
     // --- WorkComponent ---
-    { "WorkComponent::Shutdown", InstallWorkComponentShutdown, RemoveWorkComponentShutdown, true },
+    { "WorkComponent::Shutdown", InstallWorkComponentShutdown, RemoveWorkComponentShutdown, false }, // DISABLED: causes tutorial load crash — reimpl serialization mismatch
     { "WorkComponent::Draw", InstallWorkComponentDraw, RemoveWorkComponentDraw, false }, // DISABLED: relative CALL in prologue
     { "WorkComponent::OnCreate", InstallWorkComponentOnCreate, RemoveWorkComponentOnCreate, false }, // DISABLED: relative CALL in prologue
 
@@ -3326,7 +3326,7 @@ static ReimplEntry g_reimplementations[] = {
     // Phase 5: Miscellaneous Types
     // ================================================================
     { "ComponentEntity::Dtor", InstallComponentEntityDtor, RemoveComponentEntityDtor, true },
-    { "ComponentEntity::Slot3", InstallComponentEntitySlot3, RemoveComponentEntitySlot3, true },
+    { "ComponentEntity::Slot3", InstallComponentEntitySlot3, RemoveComponentEntitySlot3, false }, // DISABLED: trampoline shifts local_res vars into Reimpl's frame, corrupts serialization
     { "ComponentEntity::Slot5", InstallComponentEntitySlot5, RemoveComponentEntitySlot5, true },
     { "ComponentEntity::Slot8", InstallComponentEntitySlot8, RemoveComponentEntitySlot8, true },
     // NOTE: ComponentEntity::Slot9 skipped — shared function 0x14003addc
