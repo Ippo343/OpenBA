@@ -99,11 +99,11 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Complex function (66 instructions). Checks ownership, sets harvest flags, removes resource.
 // Passthrough via trampoline.
 // ============================================================
-typedef uint64_t (*fn_RNRPurecall_t)(void* self);
+typedef uint64_t (*fn_RNRPurecall_t)(void* self, void* actionStack);
 
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
     g_lastHook = "RemoveNaturalResource::Purecall";
-    return ((fn_RNRPurecall_t)g_hookPurecall.trampoline)(self);
+    return ((fn_RNRPurecall_t)g_hookPurecall.trampoline)(self, actionStack);
 }
 
 // ============================================================

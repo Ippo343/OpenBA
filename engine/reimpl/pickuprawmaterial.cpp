@@ -82,11 +82,11 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Complex function — picks up raw material, does state machine transfer.
 // Passthrough via trampoline.
 // ============================================================
-typedef uint64_t (*fn_PickupPurecall_t)(void* self);
+typedef uint64_t (*fn_PickupPurecall_t)(void* self, void* actionStack);
 
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
     g_lastHook = "PickupRawMaterial::Purecall";
-    return ((fn_PickupPurecall_t)g_hookPurecall.trampoline)(self);
+    return ((fn_PickupPurecall_t)g_hookPurecall.trampoline)(self, actionStack);
 }
 
 // ============================================================

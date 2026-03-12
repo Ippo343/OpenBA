@@ -78,7 +78,8 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Calls road tile completion on terrain system.
 // Returns 0 (action complete).
 // ============================================================
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
+    (void)actionStack;
     g_lastHook = "CompleteRoad::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* gameState = *g_pGameState;

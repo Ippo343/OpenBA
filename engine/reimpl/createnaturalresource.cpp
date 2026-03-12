@@ -94,11 +94,11 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Complex function (132 instructions) — creates entity, sets up components.
 // Passthrough via trampoline.
 // ============================================================
-typedef uint64_t (*fn_CNRPurecall_t)(void* self);
+typedef uint64_t (*fn_CNRPurecall_t)(void* self, void* actionStack);
 
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
     g_lastHook = "CreateNaturalResource::Purecall";
-    return ((fn_CNRPurecall_t)g_hookPurecall.trampoline)(self);
+    return ((fn_CNRPurecall_t)g_hookPurecall.trampoline)(self, actionStack);
 }
 
 // ============================================================

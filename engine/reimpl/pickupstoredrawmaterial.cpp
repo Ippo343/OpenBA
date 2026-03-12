@@ -42,7 +42,7 @@ static HookInfo g_hookCheckEntity;
 // ============================================================
 
 typedef void (*PickupStoredRawMaterial_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*PickupStoredRawMaterial_AbstractImpl_t)(void* self);
+typedef uint64_t (*PickupStoredRawMaterial_AbstractImpl_t)(void* self, void* actionStack);
 typedef void (*PickupStoredRawMaterial_CheckEntity_t)(void* self);
 
 // ============================================================
@@ -66,7 +66,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Queries storage for available materials, transfers from storage to citizen
 // ============================================================
 
-static uint64_t Reimpl_AbstractImpl(void* self) {
+static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
     g_lastHook = "PickupStoredRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -79,7 +79,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
         callCount++;
     }
 #endif
-    return ((PickupStoredRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self);
+    return ((PickupStoredRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
 }
 
 // ============================================================

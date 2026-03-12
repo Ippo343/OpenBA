@@ -635,55 +635,113 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                         // Tree nodes: +0x00 = entity InternalBasePtr, +0x08 = parent, +0x10 = left, +0x18 = right
                         // FUN_1400c2de0 per entity: checks flag bit 2 (0x4), calls component vtable +0x40 (lifecycle slot)
                         {
-                            // Resolve FUN_1400c2de0 — entity tree node handler (component lifecycle dispatch)
                             typedef void (*fn_EntityTreeNodeHandler_t)(int64_t entity, void* time);
                             static fn_EntityTreeNodeHandler_t fn_EntityTreeNodeHandler = nullptr;
                             if (!fn_EntityTreeNodeHandler)
                                 fn_EntityTreeNodeHandler = (fn_EntityTreeNodeHandler_t)ResolveAddr(Module::Exe, 0x1400c2de0);
 
-                            uintptr_t treeRoot = *(uintptr_t*)(el + 0x68); // param_1[0xd]
+                            uintptr_t treeRoot = *(uintptr_t*)(el + 0x68);
+                            TRACE("[EntityList::Update] tree root = %p\n", (void*)treeRoot);
+
                             if (treeRoot != 0) {
-                                // Find leftmost node (in-order traversal start)
+                                // Find leftmost node
                                 uintptr_t node = treeRoot;
-                                while (*(uintptr_t*)(node + 0x10) != 0) { // left child
+                                int leftDepth = 0;
+                                while (*(uintptr_t*)(node + 0x10) != 0) {
                                     node = *(uintptr_t*)(node + 0x10);
+                                    leftDepth++;
+                                    if (leftDepth > 50000) {
+                                        TRACE("[EntityList::Update] ERROR: left descent > 50000, aborting\n");
+                                        break;
+                                    }
                                 }
+                                TRACE("[EntityList::Update] leftmost found at depth %d, node=%p\n", leftDepth, (void*)node);
 
-                                int safetyCount = 0;
-                                while (node != 0 && safetyCount < 50000) {
-                                    safetyCount++;
+                                if (leftDepth <= 50000) {
+                                    int safetyCount = 0;
+                                    while (node != 0 && safetyCount < 50000) {
+                                        safetyCount++;
 
-                                    // Process this node: CheckPtr then call handler if not deleted
-                                    fn_InternalBasePtr_CheckPtr((void*)node);
-                                    int64_t entity = *(int64_t*)node;
-                                    if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
+                                        // Process this node
                                         fn_InternalBasePtr_CheckPtr((void*)node);
-                                        fn_EntityTreeNodeHandler(entity, time);
-                                    }
+                                        int64_t entity = *(int64_t*)node;
 
-                                    // In-order successor: go right then leftmost, or walk up
-                                    uintptr_t rightChild = *(uintptr_t*)(node + 0x18);
-                                    if (rightChild != 0) {
-                                        // Go right, then find leftmost in right subtree
-                                        node = rightChild;
-                                        while (*(uintptr_t*)(node + 0x10) != 0) {
-                                            node = *(uintptr_t*)(node + 0x10);
+                                        if (safetyCount <= 10) {
+                                            int32_t compCount = *(int32_t*)(entity + 0x38);
+                                            void** compArr = *(void***)(entity + 0x30);
+                                            TRACE("[EntityList::Update] node %d: node=%p entity=%p flags=0x%x compCount=%d vtable=%p\n",
+                                                  safetyCount, (void*)node, (void*)entity,
+                                                  *(uint32_t*)(entity + 0x40), compCount,
+                                                  compCount > 0 ? *(void**)compArr[0] : nullptr);
+                                            // Log each component's vtable slot 8 address
+                                            for (int ci = 0; ci < compCount && ci < 20; ci++) {
+                                                void* comp = compArr[ci];
+                                                void** vtbl = *(void***)comp;
+                                                uint32_t cflags = *(uint32_t*)((uintptr_t)comp + 4);
+                                                TRACE("  comp[%d] = %p vtable=%p slot8=%p flags=0x%x %s\n",
+                                                      ci, comp, vtbl, vtbl[8], cflags,
+                                                      (cflags & 0x4) ? "<-- HAS BIT2" : "");
+                                            }
                                         }
-                                    } else {
-                                        // Walk up until we come from a left child
-                                        uintptr_t parent = *(uintptr_t*)(node + 0x08);
-                                        while (parent != 0 && *(uintptr_t*)(parent + 0x18) == node) {
+
+                                        if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
+                                            fn_InternalBasePtr_CheckPtr((void*)node);
+                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d calling handler (inline)...\n", safetyCount);
+                                            // Inline FUN_1400c2de0: iterate components, call vtable +0x40 on those with flag bit 2
+                                            if ((*(uint32_t*)(entity + 0x40) & 0x4) != 0) {
+                                                int32_t nc = *(int32_t*)(entity + 0x38);
+                                                for (int64_t ci = 0; ci < nc; ci++) {
+                                                    void** compPtr = (void**)(*(uintptr_t*)(entity + 0x30) + ci * 8);
+                                                    fn_InternalBasePtr_CheckPtr((void*)compPtr);
+                                                    void* comp = *compPtr;
+                                                    if ((*(uint32_t*)((uintptr_t)comp + 4) & 0x4) != 0) {
+                                                        fn_InternalBasePtr_CheckPtr((void*)compPtr);
+                                                        comp = *compPtr;
+                                                        void** vtbl = *(void***)comp;
+                                                        typedef void (*Slot8_t)(void*, void*);
+                                                        if (safetyCount <= 10) {
+                                                            TRACE("  node %d comp[%d] slot8=%p calling...\n", safetyCount, (int)ci, vtbl[8]);
+                                                        }
+                                                        ((Slot8_t)vtbl[8])(comp, time);
+                                                        if (safetyCount <= 10) TRACE("  node %d comp[%d] slot8 done\n", safetyCount, (int)ci);
+                                                    }
+                                                    if (*(uint32_t*)(entity + 0x40) & 0x400) break; // entity deleted
+                                                }
+                                            }
+                                        }
+
+                                        if (safetyCount <= 10) {
+                                            TRACE("[EntityList::Update] node %d handler done, finding successor...\n", safetyCount);
+                                        }
+
+                                        // In-order successor
+                                        uintptr_t rightChild = *(uintptr_t*)(node + 0x18);
+                                        if (rightChild != 0) {
+                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: right=%p\n", safetyCount, (void*)rightChild);
+                                            node = rightChild;
+                                            while (*(uintptr_t*)(node + 0x10) != 0) {
+                                                node = *(uintptr_t*)(node + 0x10);
+                                            }
+                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: next=%p\n", safetyCount, (void*)node);
+                                        } else {
+                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: no right, walking up...\n", safetyCount);
+                                            uintptr_t parent = *(uintptr_t*)(node + 0x08);
+                                            while (parent != 0 && *(uintptr_t*)(parent + 0x18) == node) {
+                                                node = parent;
+                                                parent = *(uintptr_t*)(node + 0x08);
+                                            }
                                             node = parent;
-                                            parent = *(uintptr_t*)(node + 0x08);
+                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: walked up to %p\n", safetyCount, (void*)node);
                                         }
-                                        node = parent;
                                     }
-                                }
 
-                                if (safetyCount >= 50000) {
-                                    TRACE("[EntityList::Update] WARNING: tree walk hit safety limit (50000 nodes)\n");
+                                    if (safetyCount >= 50000) {
+                                        TRACE("[EntityList::Update] WARNING: tree walk hit safety limit\n");
+                                    }
+                                    TRACE("[EntityList::Update] tree walk done (%d nodes)\n", safetyCount);
                                 }
-                                TRACE("[EntityList::Update] tree walk done (%d nodes)\n", safetyCount);
+                            } else {
+                                TRACE("[EntityList::Update] tree empty (root=0)\n");
                             }
                         }
 

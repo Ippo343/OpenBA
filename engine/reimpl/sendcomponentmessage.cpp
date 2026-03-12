@@ -33,7 +33,7 @@ static HookInfo g_hookAbstractImpl;
 // ============================================================
 
 typedef void (*SendComponentMessage_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*SendComponentMessage_AbstractImpl_t)(void* self);
+typedef uint64_t (*SendComponentMessage_AbstractImpl_t)(void* self, void* actionStack);
 
 // ============================================================
 // SendComponentMessage::Serialize -- passthrough wrapper
@@ -59,7 +59,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // virtual method (vtable+0x78) with message params
 // ============================================================
 
-static uint64_t Reimpl_AbstractImpl(void* self) {
+static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
     g_lastHook = "SendComponentMessage::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -72,7 +72,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
         callCount++;
     }
 #endif
-    return ((SendComponentMessage_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self);
+    return ((SendComponentMessage_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
 }
 
 // ============================================================

@@ -61,9 +61,9 @@ static HookInfo g_hookCheckEntity;
 
 typedef void (*MoveTo_Serialize_t)(void* self, void* stream);
 typedef uint64_t (*MoveTo_AbstractImpl_t)(void* self, void* p2, void* p3, void* p4);
-typedef uint64_t (*MoveTo_Execute_t)(void* self, void* param2);
+typedef uint64_t (*MoveTo_Execute_t)(void* self, void* actionStack, void* time);
 typedef void (*MoveTo_Enter_t)(void* self);
-typedef void (*MoveTo_Exit_t)(void* self);
+typedef void (*MoveTo_Exit_t)(void* self, void* actionStack);
 typedef void (*MoveTo_CheckEntity_t)(void* self);
 
 // ============================================================
@@ -112,7 +112,7 @@ static uint64_t Reimpl_AbstractImpl(void* self, void* p2, void* p3, void* p4) {
 // terrain type (road/bridge/normal), updates character facing/position
 // ============================================================
 
-static uint64_t Reimpl_Execute(void* self, void* param2) {
+static uint64_t Reimpl_Execute(void* self, void* actionStack, void* time) {
     g_lastHook = "MoveTo::Execute";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -124,7 +124,7 @@ static uint64_t Reimpl_Execute(void* self, void* param2) {
         callCount++;
     }
 #endif
-    return ((MoveTo_Execute_t)g_hookExecute.trampoline)(self, param2);
+    return ((MoveTo_Execute_t)g_hookExecute.trampoline)(self, actionStack, time);
 }
 
 // ============================================================
@@ -151,7 +151,7 @@ static void Reimpl_Enter(void* self) {
 // Resets character animation to idle
 // ============================================================
 
-static void Reimpl_Exit(void* self) {
+static void Reimpl_Exit(void* self, void* actionStack) {
     g_lastHook = "MoveTo::Exit";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -160,7 +160,7 @@ static void Reimpl_Exit(void* self) {
         callCount++;
     }
 #endif
-    ((MoveTo_Exit_t)g_hookExit.trampoline)(self);
+    ((MoveTo_Exit_t)g_hookExit.trampoline)(self, actionStack);
 }
 
 // ============================================================

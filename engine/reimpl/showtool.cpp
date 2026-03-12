@@ -88,7 +88,8 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // If toolId > 10 and != 0xFFFFFFFE, hide tool. Otherwise show tool with specific ID.
 // Always returns 1 (action remains active / done in one tick).
 // ============================================================
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
+    (void)actionStack;
     g_lastHook = "ShowTool::Purecall";
     uint8_t* s = (uint8_t*)self;
     uint32_t toolId = *(uint32_t*)(s + 0x28);

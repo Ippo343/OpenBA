@@ -35,7 +35,7 @@ static HookInfo g_hookCheckEntity;
 // ============================================================
 
 typedef void (*ConsumeRawMaterial_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*ConsumeRawMaterial_AbstractImpl_t)(void* self);
+typedef uint64_t (*ConsumeRawMaterial_AbstractImpl_t)(void* self, void* actionStack);
 typedef void (*ConsumeRawMaterial_CheckEntity_t)(void* self);
 
 // ============================================================
@@ -61,7 +61,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // quantities from StateMachineComponent, updates global resource tracker
 // ============================================================
 
-static uint64_t Reimpl_AbstractImpl(void* self) {
+static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
     g_lastHook = "ConsumeRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -74,7 +74,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
         callCount++;
     }
 #endif
-    return ((ConsumeRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self);
+    return ((ConsumeRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
 }
 
 // ============================================================

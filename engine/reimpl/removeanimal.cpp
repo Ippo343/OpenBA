@@ -107,7 +107,8 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Marks the entity at +0x20 for removal, queues to cleanup list.
 // Returns 0 (action complete).
 // ============================================================
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
+    (void)actionStack;
     g_lastHook = "RemoveAnimal::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* entityRef = *(void**)(s + 0x20);

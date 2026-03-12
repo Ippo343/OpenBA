@@ -102,7 +102,8 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Gets NR component from entity at +0x20, calls SetAnimIndex with +0x28.
 // Returns _field2C (bool at +0x2C).
 // ============================================================
-static bool Reimpl_Purecall(void* self) {
+static int Reimpl_Purecall(void* self, void* actionStack) {
+    (void)actionStack;
     g_lastHook = "AnimateNaturalResource::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* localIBP;
@@ -111,14 +112,16 @@ static bool Reimpl_Purecall(void* self) {
     fn_GetNRComp(*(void**)(s + 0x20), &localIBP);
     fn_CheckPtr(&localIBP);
     fn_SetAnimIndex(localIBP, *(uint32_t*)(s + 0x28));
-    return *(uint8_t*)(s + 0x2C) != 0;
+    return (*(uint8_t*)(s + 0x2C) != 0) ? 1 : 0;
 }
 
 // ============================================================
 // AnimateNaturalResource::Execute (0x1400c55b0)
 // Checks if entity's model is still animating. Returns true while animating.
 // ============================================================
-static bool Reimpl_Execute(void* self) {
+static int Reimpl_Execute(void* self, void* actionStack, void* time) {
+    (void)actionStack;
+    (void)time;
     g_lastHook = "AnimateNaturalResource::Execute";
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
@@ -126,7 +129,7 @@ static bool Reimpl_Execute(void* self) {
     fn_CheckPtr(s + 0x20);
     fn_GetModelComp(*(void**)(s + 0x20), localIBP);
     fn_CheckPtr(localIBP);
-    return fn_IsAnimating((uint8_t*)(localIBP[0]) + 0x28);
+    return fn_IsAnimating((uint8_t*)(localIBP[0]) + 0x28) ? 1 : 0;
 }
 
 // ============================================================

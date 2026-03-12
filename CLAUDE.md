@@ -206,14 +206,15 @@ static bool Reimpl(MainLoop* self, bool drawOnly) {
 - **Engine sub-objects**: EngineInstance (at `MainLoop::m_engine`) holds pointers to subsystems at fixed offsets: `+0x690` = Application, `+0x6d0` = Audio::Device, `+0x6e0` = Input::Device.
 - **Non-trivial return ABI for member functions**: MSVC x64 member functions returning structs >8 bytes (e.g., `InternalPtr<T>`) use a hidden return pointer, but the parameter order is **RCX=this, RDX=hidden_retval, R8+=args**. This is different from free/static functions where **RCX=hidden_retval, RDX+=args**. When writing typedefs for these, the first param must be `self`, second must be `retval`. Getting this backwards causes hardfaults. Affected functions: `fn_FindElement`, `fn_Element_FindElementType`, `fn_Element_Child`, `fn_DialogInstance_FindElement`, `fn_DialogInstance_GetController`, `fn_DialogInstance_FindElementType`. Verify in Ghidra disassembly: `MOV RCX,[self]` then `LEA RDX,[retval]` confirms member function order.
 
-### Trampoline Bug Classes (5 discovered)
+### Trampoline Bug Classes (7 discovered)
 Hooks copy N prologue bytes to a trampoline, overwrite original with JMP. See `notes/NOTES030126.md` for full details.
 1. **Split instructions** — prologue size doesn't land on instruction boundary. Fix: verify in Ghidra.
 2. **Relative branches/calls** — PC-relative instructions (JNZ, CALL E8, JMP rel) break when relocated. Fix: disable hook (68 affected).
 3. **RSP captures (MOV RAX/R11,RSP)** — captures wrong RSP value, used for absolute addressing. Fix: disable hook (40 affected).
 4. **RSP-relative stores (MOV [RSP+xx],reg)** — safe for passthroughs (write/read internally consistent). No fix needed.
 5. **RAX clobbered by JMP-back** — trampoline's `MOV RAX, imm64; JMP RAX` overwrites values prologue set in RAX. Fix: changed to `MOV R10; JMP R10`.
-6. **Implicit register forwarding** — original function passes a volatile register (e.g., RDX) through to a sub-call without explicitly referencing it. The C passthrough's compiler-generated code may clobber that register. Fix: declare and forward all implicitly-passed parameters in the passthrough typedef. Example: ModelComponent vtable slot +0x40 forwards RDX (Time*) to MeshInstance::Update — passthrough must be `(void* self, void* time)`, not `(void* self)`.
+6. **Implicit register forwarding** — original function passes a volatile register (e.g., RDX) through to a sub-call without explicitly referencing it. The C passthrough's compiler-generated code may clobber that register. Fix: declare and forward all implicitly-passed parameters in the passthrough typedef. Examples: ModelComponent vtable slot +0x40 forwards RDX (Time*) to MeshInstance::Update — passthrough must be `(void* self, void* time)`, not `(void* self)`. Action executor (FUN_1400c4c50) passes RDX=actionStack to AbstractImpl(+0x20)/Exit(+0x38), and RDX=actionStack + R8=time to Execute(+0x28) — all action passthroughs must declare these params.
+7. **Bool return type on action reimpl** — action reimpl functions returning `bool` leave garbage in upper EAX bytes. The action executor (FUN_1400c4c50) checks returns as `int` (comparing with 0, 1, 2). A `bool` return only guarantees the low byte of EAX, so upper bytes may contain garbage causing wrong branch decisions and infinite loops. Fix: use `int` return type with explicit `? 1 : 0` conversions.
 
 ### Crash Diagnostics
 - VEH handler catches ACCESS_VIOLATION/ILLEGAL_INSTRUCTION, logs to `patch_debug.log`

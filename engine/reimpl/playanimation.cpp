@@ -104,14 +104,22 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Finds family component, calls animation setup.
 // Returns 1 (action stays active, Execute checks completion).
 // ============================================================
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
+    (void)actionStack;
     g_lastHook = "PlayAnimation::Purecall";
     uint8_t* s = (uint8_t*)self;
     void* localIBP;
 
     fn_CheckPtr(s + 0x20);
+    // After CheckPtr, entity may be NULL if it was deleted
+    if (*(void**)(s + 0x20) == nullptr) {
+        return 0;
+    }
     fn_FindFamily(*(void**)(s + 0x20), &localIBP);
     fn_CheckPtr(&localIBP);
+    if (localIBP == nullptr) {
+        return 0;
+    }
     fn_SetAnimation(localIBP, *(uint32_t*)(s + 0x28), *g_AnimFloat, *g_AnimFloat);
     return 1;
 }
@@ -122,12 +130,13 @@ static uint64_t Reimpl_Purecall(void* self) {
 //   self->_field38 += *time;
 //   return (self->_field38 < self->_field30);
 // ============================================================
-static bool Reimpl_Execute(void* self, void* time_ptr) {
+static int Reimpl_Execute(void* self, void* actionStack, void* time_ptr) {
+    (void)actionStack;
     g_lastHook = "PlayAnimation::Execute";
     uint8_t* s = (uint8_t*)self;
     int64_t elapsed = *(int64_t*)time_ptr;
     *(int64_t*)(s + 0x38) += elapsed;
-    return *(int64_t*)(s + 0x38) < *(int64_t*)(s + 0x30);
+    return (*(int64_t*)(s + 0x38) < *(int64_t*)(s + 0x30)) ? 1 : 0;
 }
 
 // CheckEntity at 0x1400423f0 is 3 bytes (ret 0), too small to hook.

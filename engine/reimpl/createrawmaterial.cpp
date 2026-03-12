@@ -49,7 +49,7 @@ static HookInfo g_hookAbstractImpl;
 // ============================================================
 
 typedef void (*CreateRawMaterial_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*CreateRawMaterial_AbstractImpl_t)(void* self);
+typedef uint64_t (*CreateRawMaterial_AbstractImpl_t)(void* self, void* actionStack);
 
 // ============================================================
 // CreateRawMaterial::Serialize -- passthrough wrapper
@@ -74,7 +74,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // with random rotation, registers with resource tracker
 // ============================================================
 
-static uint64_t Reimpl_AbstractImpl(void* self) {
+static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
     g_lastHook = "CreateRawMaterial::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -88,7 +88,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
         callCount++;
     }
 #endif
-    return ((CreateRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self);
+    return ((CreateRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
 }
 
 // ============================================================

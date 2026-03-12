@@ -47,9 +47,9 @@ static HookInfo g_hookCheckEntity;
 // ============================================================
 
 typedef void (*PerformWork_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*PerformWork_AbstractImpl_t)(void* self);
-typedef uint8_t (*PerformWork_Execute_t)(void* self, void* param2, int64_t* deltaTime);
-typedef void (*PerformWork_Exit_t)(void* self);
+typedef uint64_t (*PerformWork_AbstractImpl_t)(void* self, void* actionStack);
+typedef uint8_t (*PerformWork_Execute_t)(void* self, void* actionStack, int64_t* deltaTime);
+typedef void (*PerformWork_Exit_t)(void* self, void* actionStack);
 typedef void (*PerformWork_CheckEntity_t)(void* self);
 
 // ============================================================
@@ -73,7 +73,7 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Sets animation, facing direction, and optionally decrements tool durability
 // ============================================================
 
-static uint64_t Reimpl_AbstractImpl(void* self) {
+static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
     g_lastHook = "PerformWork::AbstractImpl";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -87,7 +87,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
         callCount++;
     }
 #endif
-    return ((PerformWork_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self);
+    return ((PerformWork_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
 }
 
 // ============================================================
@@ -96,7 +96,7 @@ static uint64_t Reimpl_AbstractImpl(void* self) {
 // returns 0 when done, 1 when still working, 2 on failure
 // ============================================================
 
-static uint8_t Reimpl_Execute(void* self, void* param2, int64_t* deltaTime) {
+static uint8_t Reimpl_Execute(void* self, void* actionStack, int64_t* deltaTime) {
     g_lastHook = "PerformWork::Execute";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -105,7 +105,7 @@ static uint8_t Reimpl_Execute(void* self, void* param2, int64_t* deltaTime) {
         callCount++;
     }
 #endif
-    return ((PerformWork_Execute_t)g_hookExecute.trampoline)(self, param2, deltaTime);
+    return ((PerformWork_Execute_t)g_hookExecute.trampoline)(self, actionStack, deltaTime);
 }
 
 // ============================================================
@@ -113,7 +113,7 @@ static uint8_t Reimpl_Execute(void* self, void* param2, int64_t* deltaTime) {
 // Resets character animation to idle
 // ============================================================
 
-static void Reimpl_Exit(void* self) {
+static void Reimpl_Exit(void* self, void* actionStack) {
     g_lastHook = "PerformWork::Exit";
 #ifdef _DEBUG
     static int callCount = 0;
@@ -122,7 +122,7 @@ static void Reimpl_Exit(void* self) {
         callCount++;
     }
 #endif
-    ((PerformWork_Exit_t)g_hookExit.trampoline)(self);
+    ((PerformWork_Exit_t)g_hookExit.trampoline)(self, actionStack);
 }
 
 // ============================================================

@@ -110,7 +110,8 @@ static void Reimpl_Serialize(void* self, void* stream) {
 // Resolves task index from work entity if needed, calls task completion.
 // Returns 0 (action complete).
 // ============================================================
-static uint64_t Reimpl_Purecall(void* self) {
+static uint64_t Reimpl_Purecall(void* self, void* actionStack) {
+    (void)actionStack;
     g_lastHook = "CompleteTask::Purecall";
     uint8_t* s = (uint8_t*)self;
 
