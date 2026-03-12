@@ -214,10 +214,13 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             fn_InternalBasePtr_CheckPtr(ibpBuf);
             fn_Element_SetFlagsOnOff(wrappedElem, 1, 0);
 
-            // Push into dynamic array at +0x40 (fn_ExeArrayPush handles realloc)
+            // Push into dynamic array at +0x40 (8-byte InternalBasePtr elements)
+            // NOTE: fn_ExeArrayPush copies 4 bytes per element — wrong for 8-byte ptrs.
+            // Use fn_ExeArrayResize (8-byte realloc) + manual element write instead.
             uint32_t newCount = *(uint32_t*)(s + 0x48) + 1;
-            fn_ExeArrayPush((void*)(s + 0x40), (int)newCount, ibpBuf);
-            *(uint32_t*)(s + 0x48) = newCount;
+            fn_ExeArrayResize((void*)(s + 0x40), (int)newCount);
+            uint64_t* slot = (uint64_t*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)(newCount - 1) * 8);
+            *slot = *(uint64_t*)ibpBuf;
 
             // Find next label
             fn_String_Format(fmtBuf, "labelBuild%i", (uint64_t)newCount);
