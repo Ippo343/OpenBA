@@ -335,9 +335,12 @@ void MainMenuDialog_OpenMap(MainMenuDialog* self) {
 // OpenTutorial (0x1400B2FE0): "Dialog/Tutorial.rsc", size 0xE8
 // Uses same ctor as Scenario (FUN_1400786b0).
 void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
+    printf("[MainMenuDialog] OpenTutorial called, self=%p\n", self);
     void* extRes = LoadDialogResource("Dialog/Tutorial.rsc");
+    printf("[MainMenuDialog] OpenTutorial: extRes=%p\n", extRes);
     void* dlgObj = nullptr;
     void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xE8, 8);
+    printf("[MainMenuDialog] OpenTutorial: dlgMem=%p\n", dlgMem);
     if (dlgMem) {
         uint8_t parentIBP[8];
         fn_InternalBasePtr_Ctor(parentIBP, (void*)self);
@@ -348,8 +351,10 @@ void MainMenuDialog_OpenTutorial(MainMenuDialog* self) {
                                          extRes, nullIBP,
                                          parentIBP,
                                          1);  // difficulty: 1 = tutorial mode
+        printf("[MainMenuDialog] OpenTutorial: dlgObj=%p after ctor\n", dlgObj);
     }
     AddDialogToUI(self, dlgObj);
+    printf("[MainMenuDialog] OpenTutorial: dialog added to UI\n");
 }
 
 // OpenMod (0x1400B2EA0): "Dialog/Mod.rsc", size 0xD8

@@ -386,6 +386,20 @@ extern void RemoveLoaderLoopIsFinished();
 extern void InstallLoaderLoopOnVideoError();
 extern void RemoveLoaderLoopOnVideoError();
 
+// --- GameUpdateLoop reimplementations (engine/reimpl/gameupdateloop.cpp) ---
+extern void InstallGameUpdateLoopDestroy();
+extern void RemoveGameUpdateLoopDestroy();
+extern void InstallGameUpdateLoopStartup();
+extern void RemoveGameUpdateLoopStartup();
+extern void InstallGameUpdateLoopShutdown();
+extern void RemoveGameUpdateLoopShutdown();
+extern void InstallGameUpdateLoopLoad();
+extern void RemoveGameUpdateLoopLoad();
+extern void InstallGameUpdateLoopUpdate();
+extern void RemoveGameUpdateLoopUpdate();
+extern void InstallGameUpdateLoopDraw();
+extern void RemoveGameUpdateLoopDraw();
+
 // --- LivestockComponent reimplementations (engine/reimpl/livestockcomponent.cpp) ---
 extern void InstallLivestockComponentUpdate();
 extern void RemoveLivestockComponentUpdate();
@@ -2165,6 +2179,17 @@ static ReimplEntry g_reimplementations[] = {
     { "LoaderLoop::Exit",         InstallLoaderLoopExit,          RemoveLoaderLoopExit,          true  },
     { "LoaderLoop::IsFinished",   InstallLoaderLoopIsFinished,    RemoveLoaderLoopIsFinished,    true  },
     { "LoaderLoop::OnVideoError", InstallLoaderLoopOnVideoError,  RemoveLoaderLoopOnVideoError,  true  },
+
+    // --- GameUpdateLoop reimplementations ---
+    { "GameUpdateLoop::Destroy",  InstallGameUpdateLoopDestroy,  RemoveGameUpdateLoopDestroy,  true  },
+    { "GameUpdateLoop::Startup",  InstallGameUpdateLoopStartup,  RemoveGameUpdateLoopStartup,  true  },
+    { "GameUpdateLoop::Shutdown", InstallGameUpdateLoopShutdown, RemoveGameUpdateLoopShutdown, true  },
+    { "GameUpdateLoop::Load",     InstallGameUpdateLoopLoad,     RemoveGameUpdateLoopLoad,     true  },
+    // Vtable-patched (Bug Class 3 — MOV RAX,RSP prevents prologue hooking):
+    { "GameUpdateLoop::Update",   InstallGameUpdateLoopUpdate,   RemoveGameUpdateLoopUpdate,   true  },
+    { "GameUpdateLoop::Draw",     InstallGameUpdateLoopDraw,     RemoveGameUpdateLoopDraw,     true  },
+    // NOT HOOKED: SaveRestore (0x1400959C0) — Bug Class 3, not yet reimplemented
+    //   — Bug Class 3 (MOV RAX,RSP), need vtable patching instead.
 
     // --- Configuration reimplementations ---
     { "Configuration::CurrentBuildId",   InstallConfigCurrentBuildId,   RemoveConfigCurrentBuildId,   true  },

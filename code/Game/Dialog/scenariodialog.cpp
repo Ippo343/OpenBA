@@ -8,6 +8,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 // ============================================================
@@ -71,6 +72,8 @@ static void ScenarioDialog_ArrayPush_Impl(void* arrayBase, int newCount, void* e
 
 void ScenarioDialog_Slot4(ScenarioDialog* self) {
     uintptr_t s = (uintptr_t)self;
+    uint8_t selfDifficulty = *(uint8_t*)(s + 0xB8);
+    printf("[ScenarioDialog::Slot4] Setup called, self=%p, difficulty=%d\n", self, selfDifficulty);
 
     // --- Find "buttonCancel" → set element ID 100, set +0xC0 flag = 8 ---
     {
@@ -122,6 +125,8 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     // --- Get scenario count and iterate ---
     int scenarioCount = fn_ExternalList_GetResourceCount(scenarioList);
     int entryIndex = 0;  // counts matched scenarios (for button IDs and array)
+    printf("[ScenarioDialog::Slot4] scenarioCount=%d, mgmtObj=%p, scenarioList=%p\n",
+           scenarioCount, mgmtObj, scenarioList);
 
     for (int i = 0; i < scenarioCount; i++) {
         // Get resource[i] from ExternalList: *(array+0x20)[i*8]
@@ -135,8 +140,10 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 
         // Filter by difficulty: scenario+0x69 must match self+0xB8
         uint8_t scenDifficulty = *(uint8_t*)((uintptr_t)scenario + 0x69);
-        uint8_t selfDifficulty = *(uint8_t*)(s + 0xB8);
-        if (scenDifficulty != selfDifficulty) continue;
+        uint8_t selfDifficultyVal = *(uint8_t*)(s + 0xB8);
+        printf("[ScenarioDialog::Slot4] scenario[%d] at %p: difficulty=%d (want %d), isScenario=%d\n",
+               i, scenario, scenDifficulty, selfDifficultyVal, isScenario);
+        if (scenDifficulty != selfDifficultyVal) continue;
 
         // --- Clone template element from Dialog ---
         // GetTemplate(dialog, retval, 0)
@@ -278,8 +285,10 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         int newCount = *(int*)(s + 0xE0) + 1;
         ScenarioDialog_ArrayPush_Impl((void*)(s + 0xD8), newCount, entry);
 
+        printf("[ScenarioDialog::Slot4] Added entry[%d] for scenario[%d]\n", entryIndex, i);
         entryIndex++;
     }
+    printf("[ScenarioDialog::Slot4] Done. Total entries: %d\n", entryIndex);
 }
 
 // ============================================================
@@ -291,11 +300,16 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 //
 // Original: 0x140077BE0.
 
+static int s_slot6LogCount = 0;
 void ScenarioDialog_Slot6(ScenarioDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
     int count = *(int*)(s + 0xE0);
     int selected = *(int*)(s + 0xC8);
+    if (s_slot6LogCount < 3) {
+        printf("[ScenarioDialog::Slot6] Draw: count=%d, selected=%d\n", count, selected);
+        s_slot6LogCount++;
+    }
     uintptr_t entryArray = *(uintptr_t*)(s + 0xD8);
 
     // Show selected entry, hide all others
@@ -329,6 +343,7 @@ void ScenarioDialog_Slot6(ScenarioDialog* self) {
 
 static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
     uintptr_t s = (uintptr_t)self;
+    printf("[ScenarioDialog::LoadSelected] Called, self=%p\n", self);
 
     int selectedIdx = *(int*)(s + 0xC8);  // +0xC8 = selectedIndex (200 decimal = 0xC8)
     uintptr_t entryArray = *(uintptr_t*)(s + 0xD8);
@@ -346,6 +361,8 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
     uint64_t saveStrPtr = *(uint64_t*)saveNameStr;
     bool hasSaveState = (saveStrPtr != 0 && *(int*)(saveStrPtr - 8) > 0);
+    printf("[ScenarioDialog::LoadSelected] selectedIdx=%d, scenario=%p, hasSaveState=%d, saveStrPtr=%p\n",
+           selectedIdx, (void*)scenario, hasSaveState, (void*)saveStrPtr);
 
     if (!hasSaveState) {
         // New scenario: start fresh game with scenario parameters
@@ -368,11 +385,17 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         uint8_t nullIBP[8];
         fn_InternalBasePtr_Ctor(nullIBP, nullptr);
 
+        printf("[ScenarioDialog::LoadSelected] NEW SCENARIO: seed=%u, terrainSize=%u, disasterOff=%d, scenarioResIdx=%u\n",
+               seedVal, terrainSizeVal, (int)disasterOff, scenarioResIdx);
+        printf("[ScenarioDialog::LoadSelected] climateGen=%p, terrainGen=%p, mapGen=%p, parentCtrl=%p\n",
+               climateGen, terrainGen, mapGen, parentCtrl);
+
         // Call original FUN_1400b4540 directly — constructs GameUpdateLoop ->
         // GameLoadDialogLoopT -> LoaderLoop chain and sets next loop.
         fn_StartNewGame(parentCtrl, displayNameStr, seedVal, terrainSizeVal,
                         disasterOff, climateGen, terrainGen, mapGen,
                         scenarioResIdx, nullIBP);
+        printf("[ScenarioDialog::LoadSelected] fn_StartNewGame returned\n");
     } else {
         // Saved scenario: load the save file first, then start from saved state
         void* saveLoad = *g_pSaveLoadSingleton;
@@ -398,12 +421,19 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 
         // Run SaveLoad::Update loop until operation completes
         int operation = fn_SaveLoad_GetOperation(saveLoad);
+        printf("[ScenarioDialog::LoadSelected] SAVED SCENARIO: entering SaveLoad loop, initial operation=%d\n", operation);
+        int loopCount = 0;
         while (operation != 0) {
             uint8_t zeroTime[8];
             fn_Time_Ctor_Float(zeroTime, 0.0f);
             fn_SaveLoad_Update(saveLoad, zeroTime);
             operation = fn_SaveLoad_GetOperation(saveLoad);
+            loopCount++;
+            if (loopCount % 100 == 0) {
+                printf("[ScenarioDialog::LoadSelected] SaveLoad loop iteration %d, operation=%d\n", loopCount, operation);
+            }
         }
+        printf("[ScenarioDialog::LoadSelected] SaveLoad loop done after %d iterations\n", loopCount);
 
         // Restore persistence path from GetSavePath result (matches original at 0x140077df0)
         fn_String_Assign((void*)(*(uintptr_t*)g_pPersistenceSingleton + 0x90), savePathBuf);
@@ -437,6 +467,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
                           int param3, int param4) {
     uintptr_t s = (uintptr_t)self;
+    printf("[ScenarioDialog::Slot8] OnCommand: param3=0x%x, param4=%d\n", param3, param4);
 
     if (param3 == 2) {
         // Selection change — button IDs are 1000 + index
