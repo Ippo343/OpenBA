@@ -3314,7 +3314,7 @@ static ReimplEntry g_reimplementations[] = {
     { "FinishTutorialInstance::Dtor", InstallFinishTutorialInstanceDtor, RemoveFinishTutorialInstanceDtor, true },
     { "FinishTutorialInstance::Slot3", InstallFinishTutorialInstanceSlot3, RemoveFinishTutorialInstanceSlot3, true },
     { "FinishTutorialInstance::Slot4", InstallFinishTutorialInstanceSlot4, RemoveFinishTutorialInstanceSlot4, true },
-    { "FinishTutorialInstance::Slot5", InstallFinishTutorialInstanceSlot5, RemoveFinishTutorialInstanceSlot5, true },
+    { "FinishTutorialInstance::Slot5", InstallFinishTutorialInstanceSlot5, RemoveFinishTutorialInstanceSlot5, false },
     { "FinishTutorialInstance::Slot6", InstallFinishTutorialInstanceSlot6, RemoveFinishTutorialInstanceSlot6, true },
     { "StatGoal::Dtor", InstallStatGoalDtor, RemoveStatGoalDtor, true },
     { "StatGoal::Slot5", InstallStatGoalSlot5, RemoveStatGoalSlot5, true },

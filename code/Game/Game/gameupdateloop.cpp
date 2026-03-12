@@ -632,8 +632,60 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                         TRACE("[EntityList::Update] PreUpdate done\n");
 
                         // Step 3: tree node iteration (param_1[0xd] = root of binary tree at +0x68)
-                        // This iterates the tree calling FUN_1400c2de0 per node
-                        // For now, skip tree iteration — focus on bucket iteration which has component Updates
+                        // Tree nodes: +0x00 = entity InternalBasePtr, +0x08 = parent, +0x10 = left, +0x18 = right
+                        // FUN_1400c2de0 per entity: checks flag bit 2 (0x4), calls component vtable +0x40 (lifecycle slot)
+                        {
+                            // Resolve FUN_1400c2de0 — entity tree node handler (component lifecycle dispatch)
+                            typedef void (*fn_EntityTreeNodeHandler_t)(int64_t entity, void* time);
+                            static fn_EntityTreeNodeHandler_t fn_EntityTreeNodeHandler = nullptr;
+                            if (!fn_EntityTreeNodeHandler)
+                                fn_EntityTreeNodeHandler = (fn_EntityTreeNodeHandler_t)ResolveAddr(Module::Exe, 0x1400c2de0);
+
+                            uintptr_t treeRoot = *(uintptr_t*)(el + 0x68); // param_1[0xd]
+                            if (treeRoot != 0) {
+                                // Find leftmost node (in-order traversal start)
+                                uintptr_t node = treeRoot;
+                                while (*(uintptr_t*)(node + 0x10) != 0) { // left child
+                                    node = *(uintptr_t*)(node + 0x10);
+                                }
+
+                                int safetyCount = 0;
+                                while (node != 0 && safetyCount < 50000) {
+                                    safetyCount++;
+
+                                    // Process this node: CheckPtr then call handler if not deleted
+                                    fn_InternalBasePtr_CheckPtr((void*)node);
+                                    int64_t entity = *(int64_t*)node;
+                                    if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
+                                        fn_InternalBasePtr_CheckPtr((void*)node);
+                                        fn_EntityTreeNodeHandler(entity, time);
+                                    }
+
+                                    // In-order successor: go right then leftmost, or walk up
+                                    uintptr_t rightChild = *(uintptr_t*)(node + 0x18);
+                                    if (rightChild != 0) {
+                                        // Go right, then find leftmost in right subtree
+                                        node = rightChild;
+                                        while (*(uintptr_t*)(node + 0x10) != 0) {
+                                            node = *(uintptr_t*)(node + 0x10);
+                                        }
+                                    } else {
+                                        // Walk up until we come from a left child
+                                        uintptr_t parent = *(uintptr_t*)(node + 0x08);
+                                        while (parent != 0 && *(uintptr_t*)(parent + 0x18) == node) {
+                                            node = parent;
+                                            parent = *(uintptr_t*)(node + 0x08);
+                                        }
+                                        node = parent;
+                                    }
+                                }
+
+                                if (safetyCount >= 50000) {
+                                    TRACE("[EntityList::Update] WARNING: tree walk hit safety limit (50000 nodes)\n");
+                                }
+                                TRACE("[EntityList::Update] tree walk done (%d nodes)\n", safetyCount);
+                            }
+                        }
 
                         // Step 4: 5-bucket round-robin
                         // Buckets start at param_1[3] = offset +0x18 (each bucket = ptr, count = 16 bytes)
@@ -778,11 +830,8 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         }
 
         // Step 4b: AchievementManager::Update with scaled time
-        // DEBUG: skip for now — crashes in FinishTutorialInstance::Slot5 (null vtable call)
-        // TODO: investigate why tutorial achievement vtable has null entries
-        if (false)
         TRACE("[GameUpdateLoop::Update] calling AchievementManager::Update...\n");
-        if (false) {
+        {
             float seconds = fn_Time_AsSeconds(time);
             int64_t scaledTime[1];
             fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMultiplier);
@@ -902,10 +951,25 @@ post_simulation:
     TRACE("[GameUpdateLoop::Update] Audio::Scene::Update done\n");
 
     // Step 13: Quicksave/quickload key checks
-    // SKIP for now — KeyMap triple-deref crashes (null field at +0x10 inside KeyMap object).
-    // Not needed for tutorial debugging.
-    // TODO: fix KeyMap indirection chain (g_pKeyMapObjectExref triple deref)
-    TRACE("[GameUpdateLoop::Update] SKIP quicksave/quickload (disabled)\n");
+    {
+        void* keyMap = nullptr;
+        if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
+            void* step2 = *(void**)*g_pKeyMapObjectExref;
+            if (step2) {
+                keyMap = *(void**)step2;
+            }
+        }
+
+        if (keyMap && fn_KeyMap_Pressed) {
+            self->m_quickSavePressed = fn_KeyMap_Pressed(keyMap, 0, 0x21) ? 1 : 0;
+            self->m_quickLoadPressed = fn_KeyMap_Pressed(keyMap, 0, 0x22) ? 1 : 0;
+            TRACE("[GameUpdateLoop::Update] quicksave/quickload key check done (save=%d, load=%d)\n",
+                  self->m_quickSavePressed, self->m_quickLoadPressed);
+        } else {
+            TRACE("[GameUpdateLoop::Update] SKIP quicksave/quickload (keyMap=%p, fn=%p)\n",
+                  keyMap, (void*)fn_KeyMap_Pressed);
+        }
+    }
 
     // Step 14: SaveLoad::Update if active
     if (self->m_saveLoad != nullptr) {

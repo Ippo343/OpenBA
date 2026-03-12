@@ -100,7 +100,7 @@ void RemoveFinishTutorialInstanceSlot4() { RemoveHook(&g_hookSlot4); }
 
 void InstallFinishTutorialInstanceSlot5() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400d7a50);
-    // Prologue: mov [rsp+8],rbx(5) + push rdi(2) + sub rsp,0x20(4) + lea rbx,[rcx+0x20](4) = 15
+    // Prologue: mov [rsp+8],rbx(5) + push rdi(1) + sub rsp,0x20(4) + lea rbx,[rcx+0x20](4) + mov rdi,rdx(3) = 17
     InstallHook(target, (void*)Reimpl_Slot5, &g_hookSlot5, 17);
 #ifdef _DEBUG
     printf("[FinishTutorialInstance] Slot5 hooked at %p\n", (void*)target);
