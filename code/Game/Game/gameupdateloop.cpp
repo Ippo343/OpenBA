@@ -978,7 +978,13 @@ post_simulation:
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
     }
 
-    // Step 14b: Calculate sun direction for scene clean
+    // Step 14b: Calculate sun direction (normalized)
+    // Original at 0x140096717-0x14009676f computes direction from PlayerController
+    // offsets (+0x98..+0xac), normalizes via Math::Vector3::Normalize, but the
+    // normalized result goes to a stack temporary and is never stored to SunLight
+    // or passed to Scene::Clean. Verified in disassembly: no MOV between the
+    // Normalize CALL and the Scene::Clean CALL. This appears to be dead code in
+    // the original binary — possibly a removed/vestigial lighting update.
     {
         void* playerCtrl = self->m_playerController;
         uintptr_t pc = (uintptr_t)playerCtrl;
@@ -986,11 +992,10 @@ post_simulation:
         float dirY = *(float*)(pc + 0xa8) + *(float*)(pc + 0x9c) + 0.0f;
         float dirZ = (*(float*)(pc + 0xac) + *(float*)(pc + 0xa0)) - (*g_fConst_1_0);
         float dir[3] = { dirX, dirY, dirZ };
-        // Normalize inline — fn_Vector3_Normalize returns by value (hidden retval ptr ABI),
-        // our old typedef was wrong and caused a WRITE crash to garbage RDX.
         float len = sqrtf(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
         if (len > 0.0f) { dir[0] /= len; dir[1] /= len; dir[2] /= len; }
-        // TODO: pass normalized dir to Graphics::Scene (original likely does)
+        // Result intentionally unused — matches original binary behavior.
+        (void)dir;
     }
 
     // Step 15: Graphics::Scene::Clean
