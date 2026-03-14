@@ -2114,7 +2114,7 @@ bool EngineFuncsInit() {
     // The original uses _typeInfo_exref which is the same exref as EditTool's type
     // We resolve it from the address seen in EntityUI::Slot7
     g_TypeId_EditTool = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c4158));
+        ResolveAddr(Module::Exe, 0x1401c6dd8));
 
     // EntityUI helpers — SetEditMode/SelectEntity now reimplemented in entityui.cpp
     // Resolve sub-functions needed by reimplementations:

@@ -10,7 +10,6 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
-#include <cstring>
 
 // ============================================================
 // UpgradeUI::Serialize (vtable +0x20) — Slot4
@@ -25,82 +24,84 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
 
     // Get description from DialogController +0x10
     void* desc = *(void**)(s + 0x10);
-    if (!desc) return;
 
     // Check if description is an UpgradeDescription type
-    if (!fn_IsDerivedFrom(desc, *g_TypeId_UpgradeDescription))
-        return;
-    void* upgradeDesc = desc;
+    bool isUpgrade = fn_IsDerivedFrom(desc, *g_TypeId_UpgradeDescription);
+    void* upgradeDesc = isUpgrade ? desc : nullptr;
 
-    // Get the controller's element at +0x20, check if it's a ButtonElement
+    // CheckPtr on the InternalBasePtr at +0x20 before reading
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x20));
     void* elem = *(void**)(s + 0x20);
-    if (!elem) return;
 
-    // The element is expected to be a button — store at +0x30
-    // (In the original, this checks IsDerivedFrom(ButtonElement), but we skip
-    // the runtime type check since the vtable setup guarantees the element type)
-    *(void**)(s + 0x30) = elem;
-    void* button = elem;
+    // Check if element is a ButtonElement (exref 0x1401514f8)
+    bool isButton = fn_IsDerivedFrom(elem, *g_TypeId_HelpButtonElem);
+    void* checkedElem = isButton ? elem : nullptr;
+
+    // Properly construct InternalBasePtr at +0x30 (button reference)
+    fn_InternalBasePtr_Ctor((void*)(s + 0x30), checkedElem);
 
     // Set button element ID to 33000
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
+    void* button = *(void**)(s + 0x30);
     fn_Element_SetElementId(button, 33000);
 
-    // Get button's first child (should be an ImageElement)
+    // Get button's child at index 4 (the ImageElement)
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
+    button = *(void**)(s + 0x30);
     uint8_t childBuf[16];
-    fn_Element_Child(button, childBuf, 0);
-    void* imageElem = *(void**)childBuf;
-    if (!imageElem) return;
+    fn_Element_Child(button, childBuf, 4);
+
+    // Check if child is an ImageElement type
+    fn_InternalBasePtr_CheckPtr(childBuf);
+    void* childElem = *(void**)childBuf;
+    bool isImage = fn_IsDerivedFrom(childElem, *g_TypeId_ImageElement);
+    void* checkedImage = isImage ? childElem : nullptr;
+
+    // Construct an IBP for the image element
+    uint8_t imageIBP[8];
+    fn_InternalBasePtr_Ctor(imageIBP, checkedImage);
 
     // Get the sub-description from upgradeDesc+0x20
     uintptr_t subDesc = *(uintptr_t*)((uintptr_t)upgradeDesc + 0x20);
-    if (!subDesc) return;
 
-    // Iterate sub-description's component list to find BuildRequirementComponent
-    // Component array at subDesc+0x28, count at subDesc+0x30
+    // Find BuildRequirementComponent in sub-description's component list
     void* buildReqComp = nullptr;
-    int compCount = *(int*)(subDesc + 0x30);
-    uintptr_t compArray = *(uintptr_t*)(subDesc + 0x28);
+    if (subDesc && *(int*)(subDesc + 0x30) > 0) {
+        int compCount = *(int*)(subDesc + 0x30);
+        uintptr_t compArray = *(uintptr_t*)(subDesc + 0x28);
 
-    for (int i = 0; i < compCount; i++) {
-        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-        if (!comp) continue;
+        for (int i = 0; i < compCount; i++) {
+            void* comp = *(void**)(compArray + (uintptr_t)i * 8);
+            if (!comp) continue;
 
-        // Call component vtable[2] to get type ID
-        void** compVtable = *(void***)comp;
-        typedef int (*fn_GetTypeId_t)(void*);
-        int typeId = ((fn_GetTypeId_t)compVtable[2])(comp);
+            // Call component vtable[2] to get type ID
+            void** compVtable = *(void***)comp;
+            typedef uint32_t (*fn_GetTypeId_t)(void*);
+            uint32_t typeId = ((fn_GetTypeId_t)compVtable[2])(comp);
 
-        if (typeId == (int)*g_TypeId_BuildRequirementComponent) {
-            // Verify with IsDerivedFrom
-            if (fn_IsDerivedFrom(comp, *g_TypeId_BuildRequirementComponent)) {
-                buildReqComp = comp;
+            if (typeId == *g_TypeId_BuildRequirementComponent) {
+                void* checked = fn_IsDerivedFrom(comp, *g_TypeId_BuildRequirementComponent)
+                    ? comp : nullptr;
+                buildReqComp = checked;
+                break;
             }
-            break;
         }
     }
 
-    // Create a Sprite from the BuildRequirementComponent
-    // Sprite is 12 bytes: {ExternalPtr<SpriteSheet> +0x20, int spriteIndex}
-    // We use SpriteSheet::GetSpriteIndexFromName to resolve the index
-    if (buildReqComp) {
-        uintptr_t brc = (uintptr_t)buildReqComp;
-        void* spriteSheet = *(void**)(brc + 0x20);      // SpriteSheet ExternalPtr
-        void* spriteName = (void*)(brc + 0x28);          // System::String (name)
+    // Create a Sprite from the BuildRequirementComponent using proper constructor
+    uintptr_t brc = (uintptr_t)buildReqComp;
+    uint8_t sprite[16];
+    fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
 
-        uint8_t sprite[16] = {0};
-        memcpy(sprite, &spriteSheet, 8);                  // ExternalPtr<SpriteSheet>
-        if (spriteSheet) {
-            int idx = fn_SpriteSheet_GetSpriteIndexFromName(spriteSheet, spriteName);
-            *(int*)(sprite + 8) = idx;
-        } else {
-            *(int*)(sprite + 8) = -1;
-        }
+    // Set sprite on the image element
+    fn_InternalBasePtr_CheckPtr(imageIBP);
+    void* imageElem = *(void**)imageIBP;
+    fn_ImageElement_SetSprite(imageElem, sprite);
 
-        fn_ImageElement_SetSprite(imageElem, sprite);
-    }
-
-    // Set button's user data to the sub-description (upgradeDesc+0x20)
+    // Set button's user data to the sub-description
     void* subDescBase = *(void**)((uintptr_t)upgradeDesc + 0x20);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
+    button = *(void**)(s + 0x30);
     fn_Element_SetUserData(button, subDescBase);
 }
 

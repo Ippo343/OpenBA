@@ -554,9 +554,10 @@ void EntityUI_Slot6(EntityUI* self) {
 void EntityUI_Slot7(EntityUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // Get current EditTool selection from player controller
+    // Get current EditTool selection from player controller (IBP at +0x28)
     void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
+    fn_InternalBasePtr_CheckPtr(&currentTool);
 
     // Check if current tool is EditTool type
     bool isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
@@ -746,9 +747,10 @@ void EntityUI_Slot8(EntityUI* self) {
     if (dialogAtPos != dialogInst || *(uintptr_t*)(s + 0x30) == 0)
         return;
 
-    // Get current tool from player controller
+    // Get current tool from player controller (IBP at +0x28, needs CheckPtr)
     void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
+    fn_InternalBasePtr_CheckPtr(&currentTool);
 
     // Check if current tool is EditTool
     bool isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
@@ -756,26 +758,26 @@ void EntityUI_Slot8(EntityUI* self) {
 
     uint8_t editToolBuf[8];
     fn_InternalBasePtr_Ctor(editToolBuf, editTool);
-    void* editToolPtr = *(void**)editToolBuf;
 
-    if (!editToolPtr) {
+    if (*(void**)editToolBuf == nullptr) {
         // No EditTool active — deselect first, then get new EditTool
         EntityUI_SetEditMode_Impl(playerController, 0);
 
-        // Re-read current tool after deselect
+        // Re-read current tool after deselect (with CheckPtr)
         currentTool = *(void**)((uintptr_t)playerController + 0x28);
+        fn_InternalBasePtr_CheckPtr(&currentTool);
         isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
         void* newEditTool = isEditTool ? currentTool : nullptr;
 
-        uint8_t newBuf[8];
-        fn_InternalBasePtr_Ctor(newBuf, newEditTool);
-        editToolPtr = *(void**)newBuf;
+        fn_InternalBasePtr_Ctor(editToolBuf, newEditTool);
     }
 
     // Select the entity in the edit tool
+    void* editToolPtr = *(void**)editToolBuf;
     if (editToolPtr) {
         void* entityPtr = *(void**)(s + 0x30);
-        fn_EditTool_SelectEntity(editToolPtr, &entityPtr);
+        fn_InternalBasePtr_CheckPtr(editToolBuf);
+        fn_EditTool_SelectEntity(*(void**)editToolBuf, &entityPtr);
     }
 }
 
