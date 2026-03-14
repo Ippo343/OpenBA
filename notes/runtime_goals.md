@@ -4,9 +4,9 @@ Tracking Runtime-x64.dll functions that need decompilation for current work.
 
 ## Infrastructure Status
 
-- `runtime/types/` — binary-compatible struct headers (common.h, video/ImageBuffer.h exist)
+- `runtime/types/` — binary-compatible struct headers (common.h, video/ImageBuffer.h, ui/Sprite.h, ui/SpriteSheet.h, ui/ImageElement.h, ui/LabelElement.h)
 - `runtime/funcs/runtime_funcs.{h,cpp}` — internal function pointer resolution (placeholder, calls work)
-- `runtime/src/<namespace>/` — clean reimpl source dirs (16 namespaces, all empty)
+- `runtime/src/ui/` — debug logging stubs (sprite_debug.cpp, spritesheet_debug.cpp, element_sprite_debug.cpp)
 - `runtime/reimpl/` — hook wrappers (empty)
 - **Makefile** — build rules for all runtime dirs already in place, include paths set (`-Iruntime/types -Iruntime/funcs`)
 
@@ -14,91 +14,107 @@ No additional toolchain or build setup needed. Files placed in `runtime/src/ui/`
 
 ---
 
-## Priority: UI::Sprite Pipeline
+## COMPLETED: UI::Sprite Pipeline (2026-03-13)
 
-**Context:** BuildRequirementUI::Slot4 reimpl no longer crashes (array push fix), but
-resource icons/sprites don't display. All function pointers resolve, all component
-lookups succeed, all element pointers valid. Need to understand the sprite pipeline
-to find what's wrong.
+All decompiled, type headers created, debug wrappers written. Build passes.
 
-### 1. UI::Sprite Constructors
+### Sprite (0x10 bytes) — `runtime/types/ui/Sprite.h`
 
-| Address | Name | Notes |
-|---------|------|-------|
-| `0x18011b9c0` | `UI::Sprite::Sprite` | 3 xrefs — likely the main ctor (ExternalPtr<SpriteSheet> + String& name) |
-| `0x18011ba10` | `UI::Sprite::Sprite` | Overload (copy ctor?) |
-| `0x18011ba30` | `UI::Sprite::Sprite` | Overload (default ctor?) |
+| Offset | Type | Field | Notes |
+|--------|------|-------|-------|
+| +0x00 | void* | spriteSheet | ExternalPtr\<SpriteSheet\>, null = no sheet |
+| +0x08 | int32 | spriteIndex | Index into sheet, -1 = invalid |
+| +0x0C | int32 | pad0C | Padding |
 
-**Goal:** Understand Sprite struct layout (16 bytes? 24 bytes?), what fields it stores,
-and how it resolves the sprite name to an index. Does it call `GetSpriteIndexFromName`?
-Does it fail silently if the name is empty/invalid?
+- Main ctor (`0x18011b9c0`): stores sheet, calls GetSpriteIndexFromName to resolve name → index. Returns -1 if sheet is null.
+- Default ctor (`0x18011ba10`): sheet=null, index=-1.
+- By-index ctor (`0x18011ba30`): direct store, no name lookup.
+- IsValid (`0x180030c40`): `index >= 0 AND sheet != nullptr`.
 
-**Export name (main ctor):**
-`??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z`
+### SpriteSheet (0x58 bytes) — `runtime/types/ui/SpriteSheet.h`
 
-### 2. SetSprite Methods
+| Offset | Type | Field | Notes |
+|--------|------|-------|-------|
+| +0x00 | void* | vtable | |
+| +0x08 | char* | m_filename | Sheet resource path |
+| +0x20 | SpriteInfo* | m_sprites | Dynamic array, 0x38 bytes per entry |
+| +0x28 | int32 | m_spriteCount | |
+| +0x2C | int32 | m_spriteCapacity | |
+| +0x38 | char* | m_textureName | System::String |
+| +0x40 | char* | m_groupName | System::String |
 
-| Address | Name | Notes |
-|---------|------|-------|
-| `0x180042980` | `UI::LabelElement::SetSprite` | Used for resource requirement labels |
-| `0x180118600` | `UI::ImageElement::SetSprite` | Used for building icon |
-| `0x1800429d0` | `UI::LabelElement::GetSprite` | May reveal Sprite storage layout |
-| `0x1801182a0` | `UI::ImageElement::GetSprite` | May reveal Sprite storage layout |
+- **GetSpriteIndexFromName (`0x1800031f0`)**: LINEAR SCAN, case-sensitive, compares string length first then char-by-char. Returns -1 on not found.
+- SpriteInfo entries are 0x38 bytes: name (+0x00), group (+0x08), x/y/w/h (+0x10..+0x1C), UV coords (+0x20..+0x2C).
 
-**Export names:**
-- `?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z`
-- `?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z`
+### ImageElement (0xE0 bytes) — `runtime/types/ui/ImageElement.h`
 
-**Goal:** Understand how SetSprite stores the sprite data on the element. Does it
-copy the 16-byte Sprite struct? Does it trigger a layout/render update? Is there
-a "dirty" flag that needs setting?
+- Inherits: Element (0xC0) → ImageElement
+- Sprite at **+0xC0**
+- SetSprite (`0x180118600`): compares old/new, copies 0x10 bytes, sets dirty flag `0x8000000` at +0x34, walks parent chain via +0x98.
+- GetSprite (`0x1801182a0`): returns via hidden return pointer (member function ABI: RCX=this, RDX=retval).
 
-### 3. Sprite Index Resolution
+### LabelElement (0x130 bytes) — `runtime/types/ui/LabelElement.h`
 
-| Address | Name | Notes |
-|---------|------|-------|
-| `0x1800031f0` | `GetSpriteIndexFromName` | 47 xrefs — core lookup function |
-| `0x1800032d0` | `GetSpriteNameFromIndex` | Reverse lookup |
-| `0x180003190` | `GetSpriteCount` | SpriteSheet query |
+- Inherits: Element (0xC0) → TextElement (0x100) → LabelElement
+- Sprite at **+0x100** (NOT +0xC0 — TextElement adds 0x40 bytes of text/font/color fields)
+- SetSprite (`0x180042980`): same dirty-flag pattern as ImageElement.
+- GetSprite (`0x1800429d0`): same hidden return pointer ABI.
 
-**Goal:** Understand the name→index mapping. If Sprite ctor calls this and the name
-string is wrong, what happens? Returns -1? Returns 0? Crashes?
+### Debug Logging — `runtime/src/ui/`
 
-### 4. SpriteSheet
-
-| Address | Name | Notes |
-|---------|------|-------|
-| `0x1800035d0` | `UI::SpriteSheet::SpriteSheet` | Constructor, 4 xrefs |
-| `0x18011c740` | `SetSpriteSheet` | May show how sheet is stored on elements |
+- `sprite_debug.cpp` — wraps Sprite ctors and IsValid, logs sheet/index/validity
+- `spritesheet_debug.cpp` — wraps GetSpriteIndexFromName (highlights failed lookups), includes `DumpAllSprites` for full sheet contents
+- `element_sprite_debug.cpp` — wraps SetSprite/GetSprite for both element types, logs dirty flag changes
 
 ---
 
-## Priority: Component Layout at DAT_1401c7cb8
+## COMPLETED: Component Layout at DAT_1401c7cb8 (2026-03-13)
 
-The component found via type ID at exe address `0x1401c7cb8` is used in both
-BuildUI (+0x30 for sprite name) and BuildRequirementUI (+0x38 for sprite name).
-Need to determine the actual struct layout.
+**RESOLVED: DAT_1401c7cb8 = `RawMaterialDescription`** (not ResourceType, not CitizenComponent).
 
-**Questions:**
-- What class does this type ID represent? (labeled `g_TypeId_ResourceType` but
-  comment says "NOTE: same as g_TypeId_ResourceType; this is the CitizenComponent")
-- What fields are at +0x20, +0x28, +0x30, +0x38?
-- Are +0x30 and +0x38 both valid System::String fields?
-- Does the original BuildRequirementUI really use +0x38, or is there a register
-  tracking subtlety in the disassembly?
+Type header: `engine/types/RawMaterialDescription.h` (0x60 bytes).
+Full analysis: `notes/component_1401c7cb8_analysis.md`.
 
-**Approach:** Decompile a few xref sites of DAT_1401c7cb8 in the exe to understand
-the component's field layout. Also check ToolKit resource files for field definitions.
+Key fields for sprite pipeline:
+- +0x20: `_spriteSheet` (SpriteSheet*) — arg1 to fn_Sprite_Ctor
+- +0x30: `_name` (String, e.g. "Log") — BuildUI sprite name
+- +0x38: `_nameSmall` (String, e.g. "LogSmall") — BuildRequirementUI sprite name
+
+### Rename TODO (see `notes/type_update_1401c7cb8.md`)
+
+These wrong names need updating across the codebase:
+- `g_TypeId_ResourceType` → `g_TypeId_RawMaterialDescription` (engine_funcs.h:583)
+- `g_TypeId_CitizenComponent` → remove duplicate (engine_funcs.h:2714)
+- `g_pBuildingDataTypeId` → `g_TypeId_RawMaterialDescription` (rawmaterialcomponent.cpp:65)
+- Comments in buildui.cpp, buildrequirementui.cpp, debugui.cpp
+- `Game_KillAllCitizens` → `Game_DestroyAllRawMaterials` (misnamed — destroys loose items, not citizens)
+
+### Missing function pointer
+
+- `fn_LabelElement_GetSprite` — ordinal 2927, address `0x1800429d0`, mangled: `?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ`
 
 ---
 
-## Type Headers Needed
+## Next Priorities
 
-| Type | Namespace | Est. Size | Notes |
-|------|-----------|-----------|-------|
-| `Sprite` | `UI` | 16 bytes? | SpriteSheet ref + index? |
-| `SpriteSheet` | `UI` | Unknown | Sprite atlas metadata |
-| `LabelElement` | `UI` | Unknown | Extends Element, has sprite+text |
-| `ImageElement` | `UI` | Unknown | Extends Element, has sprite |
+### 1. Integrate debug logging into BuildRequirementUI reimpl
 
-These go in `runtime/types/ui/` once field layouts are confirmed.
+Wire up the sprite debug wrappers in `code/Game/Dialog/buildrequirementui.cpp` to trace
+the actual sprite pipeline at runtime. Replace direct `fn_Sprite_Ctor` calls with
+`Debug_Sprite_Ctor` and `fn_ImageElement_SetSprite` with `Debug_ImageElement_SetSprite`
+to see exactly what sprite data flows through.
+
+### 2. Additional Runtime types (as needed)
+
+| Type | Namespace | Priority | Notes |
+|------|-----------|----------|-------|
+| `Element` | `UI` | Medium | Full 0xC0-byte base class layout (dirty flags, parent chain, bounds) |
+| `TextElement` | `UI` | Medium | 0x40 bytes of text/font/color fields between Element and LabelElement |
+| `DialogInstance` | `UI` | Low | Container for element trees, needed for deeper UI reimpl |
+| `String` | `System` | Low | Already partially understood (8-byte COW refcounted), full layout in SystemString.h |
+
+### 3. Remaining runtime/src/ namespaces (future)
+
+16 namespace directories exist but are empty. Fill as needed for exe reimpl work:
+achievement, application, audio, collision, engine, graphics, io, map, math, network,
+object, pathfinding, system, ui (started), video, volume.
