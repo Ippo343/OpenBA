@@ -1227,7 +1227,11 @@ bool EngineFuncsInit() {
 
     // String::operator< — lexicographic comparison
     fn_String_LessThan = reinterpret_cast<fn_String_LessThan_t>(
-        ResolveExport("?operator<@String@System@@QEBA_NAEBV12@@Z"));
+        ResolveExport("??MString@System@@QEBA_NAEBV01@@Z"));
+    if (!fn_String_LessThan) {
+        fn_String_LessThan = reinterpret_cast<fn_String_LessThan_t>(
+            ResolveAddr(Module::Runtime, 0x180029360));
+    }
 
     // String::String() — default ctor
     fn_String_Ctor_Default = reinterpret_cast<fn_String_Ctor_Default_t>(

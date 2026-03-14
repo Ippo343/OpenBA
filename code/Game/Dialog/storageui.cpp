@@ -305,12 +305,8 @@ void StorageUI_Startup(StorageUI* self) {
         }
 
         // Sort items alphabetically by resource name
-        // Use original function — our reimpl corrupts the array
         if (itemCount > 1) {
-            typedef void (*fn_Sort_t)(void*, int, void*, void*);
-            static fn_Sort_t fn_sort = (fn_Sort_t)ResolveAddr(Module::Exe, 0x1400213f0);
-            uint8_t scratch[8] = {};
-            fn_sort(sortedItems, itemCount, scratch, nullptr);
+            StorageUI_SortItems(sortedItems, itemCount, nullptr, nullptr);
         }
     }
 
@@ -398,40 +394,37 @@ void StorageUI_Startup(StorageUI* self) {
 // ============================================================
 // StorageUI_SortItems — Introsort on 0x18-byte resource display structs
 // ============================================================
-// Replaces FUN_1400213f0. Sorts an array of {entityPtr, resourceTypePtr, count}
-// structs alphabetically by resource name. Each struct is 0x18 bytes (3 uint64_t).
+// Faithful reimplementation of FUN_1400213f0.
+// Sorts an array of {entityPtr, resourceTypePtr, count} structs (0x18 bytes each)
+// alphabetically by resource name using introsort (quicksort + selection sort fallback).
 //
-// The original exe implementation was an introsort (quicksort + insertion sort
-// fallback for small partitions). The comparison function (FUN_1400b8370) extracts
-// the resource name string from item[1] (resourceType)+0x28 -> StringTable,
-// +0x30 -> StringName, and uses System::String::operator< to compare.
-//
-// We reimplement as a clean C++ introsort with the same comparison semantics.
-// The scratch parameters are unused in the original for this call path.
+// Comparison (FUN_1400b8370): extracts resource name via UIString from
+// item[1]+0x28 (stringTable) and item[1]+0x30 (stringName), then uses
+// System::String::operator< to compare.
 
-// Compare two 0x18-byte items by resource name (alphabetical order).
-// Returns true if item at 'a' should sort before item at 'b'.
+// Compare: returns true if name(a) < name(b)
 static bool StorageUI_CompareItems(const uint64_t* a, const uint64_t* b) {
-    // a[1] = resourceTypePtr, b[1] = resourceTypePtr
-    // Resource name: UIString from resourceType+0x28 (stringTable), resourceType+0x30 (stringName)
     uintptr_t resA = (uintptr_t)a[1];
     uintptr_t resB = (uintptr_t)b[1];
 
-    // Build UIString -> System::String for item A
+    // Build UIString -> convert to System::String for item A
     uint8_t uiStrA[16];
     fn_UIString_Ctor(uiStrA, *(uint64_t*)(resA + 0x28), (void*)(resA + 0x30));
-    uint8_t sysStrA[16];
-    fn_String_Ctor_Copy(sysStrA, uiStrA);
-    fn_String_Dtor(uiStrA);
+    uint8_t tempA[8] = {};
+    fn_UIString_ToSystemString(uiStrA, tempA);  // UIString → System::String conversion
+    uint8_t sysStrA[8];
+    fn_String_Ctor_Copy(sysStrA, tempA);
+    fn_String_Dtor(tempA);
 
-    // Build UIString -> System::String for item B
+    // Build UIString -> convert to System::String for item B
     uint8_t uiStrB[16];
     fn_UIString_Ctor(uiStrB, *(uint64_t*)(resB + 0x28), (void*)(resB + 0x30));
-    uint8_t sysStrB[16];
-    fn_String_Ctor_Copy(sysStrB, uiStrB);
-    fn_String_Dtor(uiStrB);
+    uint8_t tempB[8] = {};
+    fn_UIString_ToSystemString(uiStrB, tempB);  // UIString → System::String conversion
+    uint8_t sysStrB[8];
+    fn_String_Ctor_Copy(sysStrB, tempB);
+    fn_String_Dtor(tempB);
 
-    // Compare: String::operator< (resolved in engine_funcs.cpp)
     bool result = fn_String_LessThan(sysStrA, sysStrB);
 
     fn_String_Dtor(sysStrB);
@@ -440,168 +433,157 @@ static bool StorageUI_CompareItems(const uint64_t* a, const uint64_t* b) {
     return result;
 }
 
-// Swap two 0x18-byte items
+// Swap two 0x18-byte items (3 uint64_t)
 static inline void StorageUI_SwapItems(uint64_t* a, uint64_t* b) {
     uint64_t t0 = a[0], t1 = a[1], t2 = a[2];
     a[0] = b[0]; a[1] = b[1]; a[2] = b[2];
     b[0] = t0;   b[1] = t1;   b[2] = t2;
 }
 
-// Insertion sort for small partitions (0x18-byte elements)
-static void StorageUI_InsertionSort(uint64_t* first, uint64_t* last) {
-    // 'last' points to the last element (inclusive), each element is 3 uint64_t
-    for (uint64_t* cur = first + 3; cur <= last; cur += 3) {
-        // Find the rightmost element in [first, cur) that is greater than *cur
+// Selection sort for small partitions (operator_impl_5ad0 / FUN_140015ad0)
+// Finds max element and swaps it to end, shrinking unsorted region.
+static void StorageUI_SelectionSort(uint64_t* first, uint64_t* last) {
+    for (uint64_t* end = last; first < end; end -= 3) {
         uint64_t* best = first;
-        for (uint64_t* scan = first + 3; scan <= cur; scan += 3) {
-            if (!StorageUI_CompareItems(best, scan)) {
-                best = scan;
+        uint64_t* scan = first;
+        while (scan + 3 <= end) {
+            if (StorageUI_CompareItems(best, scan + 3)) {
+                best = scan + 3;
             }
+            scan += 3;
         }
-        // Swap best with last element in unsorted portion
-        if (best != last) {
-            // Selection sort style: find max, swap to end
-        }
-    }
-
-    // Actually, the original FUN_140015ad0 is a selection sort (finds max, swaps to end).
-    // Reimplement that directly:
-    for (uint64_t* end = last; end > first; end -= 3) {
-        uint64_t* maxElem = first;
-        for (uint64_t* scan = first + 3; scan <= end; scan += 3) {
-            if (StorageUI_CompareItems(maxElem, scan)) {
-                maxElem = scan;
-            }
-        }
-        StorageUI_SwapItems(maxElem, end);
+        StorageUI_SwapItems(best, end);
     }
 }
 
-// Introsort implementation (quicksort with insertion sort fallback)
-// Reimplements FUN_1400213f0.
-void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*scratch2*/) {
+// Introsort: quicksort with selection sort fallback for <9 elements.
+// Faithful reimplementation of FUN_1400213f0.
+void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*unused*/) {
     if (count < 2) return;
 
-    uint64_t* arr = (uint64_t*)items;
-    // Each element is 3 uint64_t (0x18 bytes)
+    uint64_t* param_1 = (uint64_t*)items;  // lo pointer (mutable)
+    uint64_t* plVar11 = param_1 + (int64_t)(count - 1) * 3;  // hi pointer
 
-    // Stack-based iterative quicksort (matches original's explicit stack of 62 entries)
-    struct Range { uint64_t* lo; uint64_t* hi; };
-    Range stack[64];
-    int stackTop = 0;
-
-    uint64_t* lo = arr;
-    uint64_t* hi = arr + (int64_t)(count - 1) * 3;
+    // Explicit stack matching original (two parallel arrays of 62 entries)
+    uint64_t* stackLo[62];
+    uint64_t* stackHi[62];
+    int64_t lVar7 = 0;  // stack depth
 
     for (;;) {
-        int64_t span = (hi - lo) / 3 + 1;  // number of elements
+        int64_t span = ((int64_t)plVar11 - (int64_t)param_1) / 0x18 + 1;
 
         if (span < 9) {
-            // Insertion/selection sort for small partitions
-            if (lo < hi) {
-                StorageUI_InsertionSort(lo, hi);
+            // Selection sort for small partition
+            if (param_1 < plVar11) {
+                StorageUI_SelectionSort(param_1, plVar11);
             }
             goto pop;
         }
 
         // Median-of-three pivot selection
         {
-            uint64_t* mid = lo + (span / 2) * 3;
+            uint64_t* plVar8 = param_1 + (span >> 1) * 3;  // mid = pivot
 
-            // Sort lo, mid, hi (3-element sort for pivot selection)
-            if (StorageUI_CompareItems(mid, lo)) {
-                StorageUI_SwapItems(lo, mid);
-            }
-            if (StorageUI_CompareItems(hi, lo)) {
-                StorageUI_SwapItems(lo, hi);
-            }
-            if (StorageUI_CompareItems(hi, mid)) {
-                StorageUI_SwapItems(mid, hi);
-            }
+            if (StorageUI_CompareItems(plVar8, param_1))
+                StorageUI_SwapItems(param_1, plVar8);
+            if (StorageUI_CompareItems(plVar11, param_1))
+                StorageUI_SwapItems(param_1, plVar11);
+            if (StorageUI_CompareItems(plVar11, plVar8))
+                StorageUI_SwapItems(plVar8, plVar11);
 
-            // Partition around pivot (mid)
-            uint64_t* i = lo;
-            uint64_t* j = hi;
+            // Partition
+            uint64_t* plVar6 = param_1;   // forward scan pointer
+            uint64_t* plVar9 = plVar11;   // backward scan pointer
+            uint64_t* plVar10;            // trailing pointer (one behind plVar9)
 
-            for (;;) {
-                // Scan forward: find element >= pivot
-                if (i < mid) {
-                    do {
-                        i += 3;
-                        if (i >= mid) break;
-                    } while (!StorageUI_CompareItems(mid, i));
-                }
-                if (i >= mid) {
-                    // Continue scanning from mid forward
-                    do {
-                        i += 3;
-                        if (i > hi) break;
-                    } while (!StorageUI_CompareItems(mid, i));
-                }
-
-                // Scan backward: find element <= pivot
+        partition:
+            // Forward scan: find element where pivot < elem
+            if (plVar6 < plVar8) {
                 do {
-                    j -= 3;
-                    if (j <= mid) break;
-                } while (StorageUI_CompareItems(mid, j));
-
-                if (i > j) break;
-
-                // Swap and update pivot pointer if needed
-                StorageUI_SwapItems(i, j);
-                if (mid == j) {
-                    mid = i;
-                }
+                    plVar6 += 3;
+                    if (plVar8 <= plVar6) goto forward_past_pivot;
+                } while (!StorageUI_CompareItems(plVar8, plVar6));
+                if (plVar8 <= plVar6) goto forward_past_pivot;
+            } else {
+            forward_past_pivot:
+                do {
+                    plVar6 += 3;
+                    if (plVar11 < plVar6) break;
+                } while (!StorageUI_CompareItems(plVar8, plVar6));
             }
 
-            // Find final pivot position
-            uint64_t* pivotPos = j;
-            if (mid < pivotPos + 3) {
-                // Scan backward for final position
-                while (pivotPos > mid) {
-                    pivotPos -= 3;
-                    if (pivotPos <= mid) break;
-                    bool less = StorageUI_CompareItems(pivotPos, mid);
-                    bool greater = StorageUI_CompareItems(mid, pivotPos);
-                    if (less || greater) break;
+            // Backward scan: find element where pivot < elem is false
+            do {
+                plVar10 = plVar9;
+                plVar9 = plVar10 - 3;
+                if (plVar9 <= plVar8) break;
+            } while (StorageUI_CompareItems(plVar8, plVar9));
+
+            if (plVar6 <= plVar9) {
+                // Swap and continue partitioning
+                StorageUI_SwapItems(plVar6, plVar9);
+                if (plVar8 == plVar9) {
+                    plVar8 = plVar6;  // pivot moved
                 }
-            } else {
-                while (pivotPos > lo) {
-                    pivotPos -= 3;
-                    if (pivotPos <= lo) break;
-                    bool less = StorageUI_CompareItems(pivotPos, mid);
+                goto partition;
+            }
+
+            // Find final pivot boundary (plVar10 tracks the split point)
+            if (plVar8 < plVar10) {
+                do {
+                    plVar10 -= 3;
+                    if (plVar10 <= plVar8) goto scan_left;
+                    bool less = StorageUI_CompareItems(plVar10, plVar8);
                     if (less) break;
-                    bool greater = StorageUI_CompareItems(mid, pivotPos);
+                    bool greater = StorageUI_CompareItems(plVar8, plVar10);
                     if (greater) break;
-                }
+                } while (true);
+                if (plVar10 <= plVar8) goto scan_left;
+            } else {
+            scan_left:
+                do {
+                    plVar10 -= 3;
+                    if (plVar10 <= param_1) break;
+                    bool less = StorageUI_CompareItems(plVar10, plVar8);
+                    if (less) break;
+                    bool greater = StorageUI_CompareItems(plVar8, plVar10);
+                    if (greater) break;
+                } while (true);
             }
 
-            // Calculate partition sizes for depth limit
-            int64_t rightSize = (hi - i) / 6 + ((hi - i) >> 63);  // approximate
-            int64_t leftSize = (pivotPos - lo) / 3;
+            // Decide which partition to push vs iterate
+            int64_t rightBytes = (int64_t)plVar11 - (int64_t)plVar6;
+            int64_t rightDiv = rightBytes / 6 + (rightBytes >> 63);
+            int64_t param_3 = (rightDiv >> 2) - (rightDiv >> 63);
+            int64_t leftSize = ((int64_t)plVar10 - (int64_t)param_1) / 0x18;
 
-            if (rightSize > leftSize) {
-                // Push right partition, recurse on left
-                if (i < hi) {
-                    stack[stackTop++] = {i, hi};
+            if (param_3 <= leftSize) {
+                // Left partition is large: push left, iterate right
+                if (param_1 < plVar10) {
+                    stackLo[lVar7] = param_1;
+                    stackHi[lVar7] = plVar10;
+                    lVar7++;
                 }
-                hi = pivotPos;
-                if (hi <= lo) goto pop;
+                param_1 = plVar6;
+                if (plVar11 <= plVar6) goto pop;
             } else {
-                // Push left partition, recurse on right
-                if (lo < pivotPos) {
-                    stack[stackTop++] = {lo, pivotPos};
+                // Right partition is large: push right, iterate left
+                if (plVar6 < plVar11) {
+                    stackLo[lVar7] = plVar6;
+                    stackHi[lVar7] = plVar11;
+                    lVar7++;
                 }
-                lo = i;
-                if (hi <= lo) goto pop;
+                plVar11 = plVar10;
+                if (plVar10 <= param_1) goto pop;
             }
             continue;
         }
 
     pop:
-        if (--stackTop < 0) return;
-        lo = stack[stackTop].lo;
-        hi = stack[stackTop].hi;
+        lVar7--;
+        if (lVar7 < 0) return;
+        param_1 = stackLo[lVar7];
+        plVar11 = stackHi[lVar7];
     }
 }
 

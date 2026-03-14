@@ -710,23 +710,24 @@ static void Game_InfectRandomCitizen_Impl() {
 void DebugUI_Slot8(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // Access engine singleton via exref (double-indirect pointer).
-    // g_pEngineSingleton -> singleton ptr -> engine state.
-    uintptr_t singleton = *(uintptr_t*)(*g_pEngineSingleton);
+    // Access engine singleton via exref (triple-indirect pointer).
+    if (!g_pEngineSingleton || !*g_pEngineSingleton) return;
+    uintptr_t singletonPtr = *(uintptr_t*)(*g_pEngineSingleton);
+    if (!singletonPtr) return;
+    uintptr_t singleton = *(uintptr_t*)singletonPtr;
+    if (!singleton) return;
     uintptr_t engineState = *(uintptr_t*)(singleton + 0x10);
+    if (!engineState) return;
 
     // Read and display 4 debug counters from engine state
-    int counterA = *(int*)(engineState + 0x2158);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x58), counterA);
-
-    int counterB = *(int*)(engineState + 0x215C);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x40), counterB);
-
-    int counterC = *(int*)(engineState + 0x2150);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x48), counterC);
-
-    int counterD = *(int*)(engineState + 0x2154);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x50), counterD);
+    void* numBatches   = *(void**)(s + 0x58);
+    void* numDrawCalls = *(void**)(s + 0x40);
+    void* numTriangles = *(void**)(s + 0x48);
+    void* numVertices  = *(void**)(s + 0x50);
+    if (numBatches)   fn_NumberElement_SetValueInt(numBatches,   *(int*)(engineState + 0x2158));
+    if (numDrawCalls) fn_NumberElement_SetValueInt(numDrawCalls, *(int*)(engineState + 0x215C));
+    if (numTriangles) fn_NumberElement_SetValueInt(numTriangles, *(int*)(engineState + 0x2150));
+    if (numVertices)  fn_NumberElement_SetValueInt(numVertices,  *(int*)(engineState + 0x2154));
 
     // Read frame time and total time as Time objects (8-byte tick counts)
     int64_t frameTimeTicks = *(int64_t*)(singleton + 0x68);
@@ -735,26 +736,25 @@ void DebugUI_Slot8(DebugUI* self) {
     float totalSeconds = fn_Time_AsSeconds(&totalTimeTicks);
 
     // Exponential moving average smoothing constants
-    const float alpha = 0.95f;   // DAT_140172138
-    const float beta  = 0.05f;   // DAT_1401720d8
+    const float alpha = 0.95f;
+    const float beta  = 0.05f;
 
     float* smoothedFPS     = (float*)(s + 0x120);
     float* smoothedFrameMS = (float*)(s + 0x124);
     float* smoothedTotalMS = (float*)(s + 0x128);
 
-    // Smooth: new = old * alpha + sample * beta
-    // FPS is computed as 1/totalSeconds (instantaneous), smoothed separately
-    float instantFPS = 1.0f / totalSeconds;  // DAT_14017214c (1.0f) / totalSeconds
+    float instantFPS = (totalSeconds > 0.0f) ? (1.0f / totalSeconds) : 0.0f;
     *smoothedTotalMS = (*smoothedTotalMS) * alpha + totalSeconds * beta;
     *smoothedFPS     = instantFPS * beta + (*smoothedFPS) * alpha;
     *smoothedFrameMS = (*smoothedFrameMS) * alpha + frameSeconds * beta;
 
-    // Display smoothed FPS as integer
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x60), (int)*smoothedFPS);
-
-    // Display smoothed frame time and total time in milliseconds
-    fn_NumberElement_SetValueFloat(*(void**)(s + 0x68), *smoothedFrameMS * 1000.0f);
-    fn_NumberElement_SetValueFloat(*(void**)(s + 0x70), *smoothedTotalMS * 1000.0f);
+    // Display smoothed values (null-safe)
+    void* numFPS     = *(void**)(s + 0x60);
+    void* numFrameMS = *(void**)(s + 0x68);
+    void* numTotalMS = *(void**)(s + 0x70);
+    if (numFPS)     fn_NumberElement_SetValueInt(numFPS, (int)*smoothedFPS);
+    if (numFrameMS) fn_NumberElement_SetValueFloat(numFrameMS, *smoothedFrameMS * 1000.0f);
+    if (numTotalMS) fn_NumberElement_SetValueFloat(numTotalMS, *smoothedTotalMS * 1000.0f);
 }
 
 // ============================================================
@@ -776,64 +776,62 @@ void DebugUI_Slot8(DebugUI* self) {
 // Original: 0x140061280
 void DebugUI_Slot7(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
+    typedef void (*fn_SetColor_t)(void*, uint32_t);
 
     // --- Day slider text update ---
-    // Get first child of sliderDay (a TextElement)
     void* sliderDay = *(void**)(s + 0x78);
-    uint8_t childBuf[16];
-    fn_Element_Child(sliderDay, childBuf, 0);
-    void* textChild = *(void**)childBuf;
+    if (sliderDay) {
+        uint8_t childBuf[16];
+        fn_Element_Child(sliderDay, childBuf, 0);
+        void* textChild = *(void**)childBuf;
+        if (textChild) {
+            float dayValue = *(float*)((uintptr_t)sliderDay + 0x128);
+            uint8_t uiStrBuf[16];
+            uint64_t fmtRef = *(uint64_t*)((uintptr_t)textChild + 0xD8);
+            *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textChild + 0xE0);
+            fn_UIString_Ctor_Index(uiStrBuf, fmtRef, (int)dayValue / 30);
+            fn_TextElement_SetText(textChild, uiStrBuf);
+        }
+    }
 
-    // Read slider value from sliderDay element at +0x128 (current float value)
-    float dayValue = *(float*)((uintptr_t)sliderDay + 0x128);
-
-    // Build UI::String with format string from textChild+0xD8 and int param dayValue/30
-    // UI::String::String(buf, *(textChild+0xD8), dayValue/30) is the engine call.
-    // The format string is a UI::String reference. We construct a 16-byte UI::String
-    // on the stack: [0..7] = string data, [8..15] = additional data
-    uint8_t uiStrBuf[16];
-    uint64_t fmtRef = *(uint64_t*)((uintptr_t)textChild + 0xD8);
-    *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textChild + 0xE0);
-    fn_UIString_Ctor_Index(uiStrBuf, fmtRef, (int)dayValue / 30);
-
-    // Set the formatted text on the TextElement child
-    fn_TextElement_SetText(textChild, uiStrBuf);
+    // Helper lambda: read slider value, null-safe
+    auto readSlider = [](uintptr_t s, uintptr_t offset) -> float {
+        void* slider = *(void**)(s + offset);
+        return slider ? *(float*)((uintptr_t)slider + 0x128) : 0.0f;
+    };
 
     // --- Sun color swatch ---
     void* imageColorSun = *(void**)(s + 0xF0);
-    float sunR = *(float*)(*(uintptr_t*)(s + 0x80) + 0x128);
-    float sunG = *(float*)(*(uintptr_t*)(s + 0x88) + 0x128);
-    float sunB = *(float*)(*(uintptr_t*)(s + 0x90) + 0x128);
-    // Pack ARGB: 0xFF000000 | (R << 16) | (G << 8) | B
-    uint32_t sunColor = 0xFF000000
-        | (((int)sunR << 8) | (int)sunG) << 8
-        | (int)sunB;
-    // Call vtable[10] (offset 0x50): SetColor(this, argb)
-    void** sunVt = *(void***)imageColorSun;
-    typedef void (*fn_SetColor_t)(void*, uint32_t);
-    ((fn_SetColor_t)sunVt[10])(imageColorSun, sunColor);
+    if (imageColorSun) {
+        uint32_t sunColor = 0xFF000000
+            | ((int)readSlider(s, 0x80) << 16)
+            | ((int)readSlider(s, 0x88) << 8)
+            | (int)readSlider(s, 0x90);
+        void** sunVt = *(void***)imageColorSun;
+        ((fn_SetColor_t)sunVt[10])(imageColorSun, sunColor);
+    }
 
     // --- Ambient color swatch ---
     void* imageColorAmb = *(void**)(s + 0xF8);
-    float ambR = *(float*)(*(uintptr_t*)(s + 0x98) + 0x128);
-    float ambG = *(float*)(*(uintptr_t*)(s + 0xA0) + 0x128);
-    float ambB = *(float*)(*(uintptr_t*)(s + 0xA8) + 0x128);
-    uint32_t ambColor = 0xFF000000
-        | (((int)ambR << 8) | (int)ambG) << 8
-        | (int)ambB;
-    void** ambVt = *(void***)imageColorAmb;
-    ((fn_SetColor_t)ambVt[10])(imageColorAmb, ambColor);
+    if (imageColorAmb) {
+        uint32_t ambColor = 0xFF000000
+            | ((int)readSlider(s, 0x98) << 16)
+            | ((int)readSlider(s, 0xA0) << 8)
+            | (int)readSlider(s, 0xA8);
+        void** ambVt = *(void***)imageColorAmb;
+        ((fn_SetColor_t)ambVt[10])(imageColorAmb, ambColor);
+    }
 
     // --- Fog color swatch ---
     void* imageColorFog = *(void**)(s + 0x100);
-    float fogR = *(float*)(*(uintptr_t*)(s + 0xB0) + 0x128);
-    float fogG = *(float*)(*(uintptr_t*)(s + 0xB8) + 0x128);
-    float fogB = *(float*)(*(uintptr_t*)(s + 0xC0) + 0x128);
-    uint32_t fogColor = 0xFF000000
-        | (((int)fogR << 8) | (int)fogG) << 8
-        | (int)fogB;
-    void** fogVt = *(void***)imageColorFog;
-    ((fn_SetColor_t)fogVt[10])(imageColorFog, fogColor);
+    if (imageColorFog) {
+        uint32_t fogColor = 0xFF000000
+            | ((int)readSlider(s, 0xB0) << 16)
+            | ((int)readSlider(s, 0xB8) << 8)
+            | (int)readSlider(s, 0xC0);
+        void** fogVt = *(void***)imageColorFog;
+        ((fn_SetColor_t)fogVt[10])(imageColorFog, fogColor);
+    }
 }
 
 // ============================================================
@@ -899,39 +897,39 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     switch (param4) {
     // --- Resource spawn buttons ---
     // Each calls Game_SpawnResources(citizenList, resourceFlag, count)
-    case 300:  Game_SpawnResources_Impl(citizenList, 0x400,     50);   return;  // Logs
-    case 301:  Game_SpawnResources_Impl(citizenList, 0x800,     50);   return;  // Food
-    case 302:  Game_SpawnResources_Impl(citizenList, 0x1000,    50);   return;  // Herbs
-    case 303:  Game_SpawnResources_Impl(citizenList, 0x80,      50);   return;  // Stone
-    case 304:  Game_SpawnResources_Impl(citizenList, 0x100,     50);   return;  // Iron
-    case 305:  Game_SpawnResources_Impl(citizenList, 0x200,     50);   return;  // Firewood
-    case 306:  Game_SpawnResources_Impl(citizenList, 0x20,      1000); return;  // Tool
-    case 307:  Game_SpawnResources_Impl(citizenList, 0x2000,    25);   return;  // Coat
-    case 308:  Game_SpawnResources_Impl(citizenList, 0x4000,    25);   return;  // Leather coat
-    case 309:  Game_SpawnResources_Impl(citizenList, 0x10000,   50);   return;  // Herbs2
-    case 310:  Game_SpawnResources_Impl(citizenList, 0x20000,   100);  return;  // Ale
-    case 311:  Game_SpawnResources_Impl(citizenList, 0x40000,   100);  return;  // Resource type 18
-    case 312:  Game_SpawnResources_Impl(citizenList, 0x80000,   100);  return;  // Resource type 19
-    case 313:  Game_SpawnResources_Impl(citizenList, 0x100000,  100);  return;  // Resource type 20
-    case 314:  Game_SpawnResources_Impl(citizenList, 0x200000,  100);  return;  // Resource type 21
-    case 315:  Game_SpawnResources_Impl(citizenList, 0x400000,  100);  return;  // Resource type 22
-    case 316:  Game_SpawnResources_Impl(citizenList, 0x800000,  100);  return;  // Resource type 23
-    case 317:  Game_SpawnResources_Impl(citizenList, 0x1000000, 100);  return;  // Resource type 24
-    case 318:  Game_SpawnResources_Impl(citizenList, 0x2000000, 100);  return;  // Resource type 25
-    case 319:  Game_SpawnResources_Impl(citizenList, 0x4000000, 100);  return;  // Resource type 26
-    case 320:  Game_SpawnResources_Impl(citizenList, 0x8000000, 100);  return;  // Resource type 27
+    case 300:  fn_Game_SpawnResources(citizenList, 0x400,     50);   return;  // Logs
+    case 301:  fn_Game_SpawnResources(citizenList, 0x800,     50);   return;  // Food
+    case 302:  fn_Game_SpawnResources(citizenList, 0x1000,    50);   return;  // Herbs
+    case 303:  fn_Game_SpawnResources(citizenList, 0x80,      50);   return;  // Stone
+    case 304:  fn_Game_SpawnResources(citizenList, 0x100,     50);   return;  // Iron
+    case 305:  fn_Game_SpawnResources(citizenList, 0x200,     50);   return;  // Firewood
+    case 306:  fn_Game_SpawnResources(citizenList, 0x20,      1000); return;  // Tool
+    case 307:  fn_Game_SpawnResources(citizenList, 0x2000,    25);   return;  // Coat
+    case 308:  fn_Game_SpawnResources(citizenList, 0x4000,    25);   return;  // Leather coat
+    case 309:  fn_Game_SpawnResources(citizenList, 0x10000,   50);   return;  // Herbs2
+    case 310:  fn_Game_SpawnResources(citizenList, 0x20000,   100);  return;  // Ale
+    case 311:  fn_Game_SpawnResources(citizenList, 0x40000,   100);  return;  // Resource type 18
+    case 312:  fn_Game_SpawnResources(citizenList, 0x80000,   100);  return;  // Resource type 19
+    case 313:  fn_Game_SpawnResources(citizenList, 0x100000,  100);  return;  // Resource type 20
+    case 314:  fn_Game_SpawnResources(citizenList, 0x200000,  100);  return;  // Resource type 21
+    case 315:  fn_Game_SpawnResources(citizenList, 0x400000,  100);  return;  // Resource type 22
+    case 316:  fn_Game_SpawnResources(citizenList, 0x800000,  100);  return;  // Resource type 23
+    case 317:  fn_Game_SpawnResources(citizenList, 0x1000000, 100);  return;  // Resource type 24
+    case 318:  fn_Game_SpawnResources(citizenList, 0x2000000, 100);  return;  // Resource type 25
+    case 319:  fn_Game_SpawnResources(citizenList, 0x4000000, 100);  return;  // Resource type 26
+    case 320:  fn_Game_SpawnResources(citizenList, 0x8000000, 100);  return;  // Resource type 27
 
     // --- Disaster / entity manipulation buttons ---
-    case 321:  Game_TriggerDisasterByType_Impl(0); return;  // Trigger disaster type 0
-    case 322:  Game_TriggerDisasterByType_Impl(1); return;  // Trigger disaster type 1
-    case 323:  Game_TriggerDisasterByType_Impl(2); return;  // Trigger disaster type 2
-    case 324:  Game_DestroyAllRawMaterials_Impl();  return;  // Destroy all loose raw material entities
-    case 325:  Game_SpawnItemsInStorage_Impl();    return;  // Spawn items in all storage
-    case 326:  Game_SpawnCitizens_Impl();          return;  // Spawn new citizens
-    case 327:  DebugUI_TriggerDisasterOnBuilding_Impl(self); return;  // Disaster on random building
-    case 328:  Game_StartRandomFire_Impl();        return;  // Start random fire
-    case 329:  Game_SpawnTornado_Impl();           return;  // Spawn tornado
-    case 330:  Game_InfectRandomCitizen_Impl();    return;  // Infect random citizen
+    case 321:  fn_Game_TriggerDisasterByType(0); return;  // Trigger disaster type 0
+    case 322:  fn_Game_TriggerDisasterByType(1); return;  // Trigger disaster type 1
+    case 323:  fn_Game_TriggerDisasterByType(2); return;  // Trigger disaster type 2
+    case 324:  fn_Game_DestroyAllRawMaterials();  return;  // Destroy all loose raw material entities
+    case 325:  fn_Game_SpawnItemsInStorage();    return;  // Spawn items in all storage
+    case 326:  fn_Game_SpawnCitizens();          return;  // Spawn new citizens
+    case 327:  fn_DebugUI_TriggerDisasterOnBuilding(self); return;  // Disaster on random building
+    case 328:  fn_Game_StartRandomFire();        return;  // Start random fire
+    case 329:  fn_Game_SpawnTornado();           return;  // Spawn tornado
+    case 330:  fn_Game_InfectRandomCitizen();    return;  // Infect random citizen
 
     // --- Debug render flag toggles (checkboxes) ---
     // param2 points to the checkbox element; flag is OR'd/AND'd into game+0xD0
@@ -985,10 +983,10 @@ void DebugUI_ToggleDebugFlag(void* checkboxElement, uint32_t flag) {
 static void* DebugUI_FindElem(void* parentElem, const char* name) {
     uint8_t nameBuf[8];
     fn_String_Ctor_CStr(nameBuf, name);
-    uint64_t result = 0;
-    fn_FindElement(parentElem, &result, nameBuf);
+    uint8_t retBuf[16] = {};  // InternalPtr is 16 bytes (hidden return)
+    fn_FindElement(parentElem, retBuf, nameBuf);
     fn_String_Dtor(nameBuf);
-    return (void*)result;
+    return *(void**)retBuf;
 }
 
 // Helper: Find element by name, wrap in InternalBasePtr via IsDerivedFrom.
@@ -1002,9 +1000,10 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
 }
 
 // Helper: Find element, set element ID, return as InternalBasePtr.
+// Returns nullptr if element not found (e.g., Debug Menu mod missing elements).
 static void* DebugUI_FindAndSetId(void* parentElem, const char* name, int id) {
     void* elem = DebugUI_FindElemBase(parentElem, name);
-    fn_Element_SetElementId(elem, id);
+    if (elem) fn_Element_SetElementId(elem, id);
     return elem;
 }
 
@@ -1054,24 +1053,26 @@ void DebugUI_Slot4(DebugUI* self) {
         void* combo = DebugUI_FindElemBase(parentElem, "diseaseCombo");
         self->diseaseCombo = combo;
 
-        // Populate from ExternalList (resource descriptions at gameWorld+0xA8)
-        void* gameWorld = *g_pGameWorldSingleton;
-        void* externalList = *(void**)((uintptr_t)gameWorld + 0xa8);
-        int resourceCount = fn_ExternalList_GetResourceCount(externalList);
-        for (int i = 0; i < resourceCount; i++) {
-            void* resource = *(void**)((uintptr_t)i * 8 +
-                *(uintptr_t*)((uintptr_t)externalList + 0x20));
-            bool isDisease = fn_IsDerivedFrom(resource, *g_TypeId_DiseaseDescription);
-            if (isDisease) {
-                uint8_t textBuf[8];
-                fn_StringTable_GetText(*(void**)((uintptr_t)resource + 0x20), textBuf, 0);
-                uint8_t spriteBuf[16];
-                fn_Sprite_Default_Ctor(spriteBuf);
-                fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);
-                fn_String_Dtor(textBuf);
+        if (combo) {
+            // Populate from ExternalList (resource descriptions at gameWorld+0xA8)
+            void* gameWorld_dc = *g_pGameWorldSingleton;
+            void* externalList = *(void**)((uintptr_t)gameWorld_dc + 0xa8);
+            int resourceCount = fn_ExternalList_GetResourceCount(externalList);
+            for (int i = 0; i < resourceCount; i++) {
+                void* resource = *(void**)((uintptr_t)i * 8 +
+                    *(uintptr_t*)((uintptr_t)externalList + 0x20));
+                bool isDisease = fn_IsDerivedFrom(resource, *g_TypeId_DiseaseDescription);
+                if (isDisease) {
+                    uint8_t textBuf[8];
+                    fn_StringTable_GetText(*(void**)((uintptr_t)resource + 0x20), textBuf, 0);
+                    uint8_t spriteBuf[16];
+                    fn_Sprite_Default_Ctor(spriteBuf);
+                    fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);
+                    fn_String_Dtor(textBuf);
+                }
             }
+            fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
         }
-        fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
     }
     DebugUI_FindAndSetId(parentElem, "diseaseButton", 0x147);
 
@@ -1090,32 +1091,32 @@ void DebugUI_Slot4(DebugUI* self) {
 
     void* elem;
     elem = DebugUI_FindAndSetId(parentElem, "zeroCostCheck",      0x14B);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = cheatFlags & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = cheatFlags & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noHungerCheck",      0x14C);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 1) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 1) & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noColdCheck",        0x14D);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 2) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 2) & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noHealthCheck",      0x14E);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 3) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 3) & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noSickCheck",        0x14F);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 4) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 4) & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noCropDiseaseCheck", 0x150);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 5) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 5) & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noFireCheck",        0x151);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 6) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 6) & 1;
 
     elem = DebugUI_FindAndSetId(parentElem, "noTornadoCheck",     0x152);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 7) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 7) & 1;
 
     // educatedCheck -- bit 9 (bit 8 is skipped)
     elem = DebugUI_FindAndSetId(parentElem, "educatedCheck",      0x153);
-    *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 9) & 1;
+    if (elem) *(uint8_t*)((uintptr_t)elem + 0xD8) = (cheatFlags >> 9) & 1;
 
     // ==========================================================
     // 6. Draw combo (ID 0x166) with drawable type entries
@@ -1123,32 +1124,35 @@ void DebugUI_Slot4(DebugUI* self) {
     {
         void* combo = DebugUI_FindElemBase(parentElem, "drawCombo");
         self->drawCombo = combo;
-        fn_Element_SetElementId(self->drawCombo, 0x166);
 
-        // Populate from drawable type list at gameWorld+0xF0
-        uintptr_t drawableList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-        int drawCount = *(int*)(drawableList + 200); // +0xC8
-        int selectedIndex = 0;
-        for (int i = 0; i < drawCount; i++) {
-            void* entry = *(void**)((uintptr_t)i * 8 +
-                *(uintptr_t*)(drawableList + 0xC0));
-            void* inner = *(void**)((uintptr_t)entry + 0x18);
-            bool isDrawable = fn_IsDerivedFrom(inner, *g_TypeId_DrawableType);
-            void* drawableDesc = isDrawable ? inner : nullptr;
+        if (combo) {
+            fn_Element_SetElementId(self->drawCombo, 0x166);
 
-            uint8_t spriteBuf[16];
-            fn_Sprite_Default_Ctor(spriteBuf);
-            fn_ComboElement_AddItem(self->drawCombo, spriteBuf,
-                (void*)((uintptr_t)drawableDesc + 0x20), entry);
+            // Populate from drawable type list at gameWorld+0xF0
+            uintptr_t drawableList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
+            int drawCount = *(int*)(drawableList + 200); // +0xC8
+            int selectedIndex = 0;
+            for (int i = 0; i < drawCount; i++) {
+                void* entry = *(void**)((uintptr_t)i * 8 +
+                    *(uintptr_t*)(drawableList + 0xC0));
+                void* inner = *(void**)((uintptr_t)entry + 0x18);
+                bool isDrawable = fn_IsDerivedFrom(inner, *g_TypeId_DrawableType);
+                void* drawableDesc = isDrawable ? inner : nullptr;
 
-            // Check if current entry matches the null/default internal ptr
-            uint8_t nullBuf[8];
-            fn_InternalBasePtr_Ctor(nullBuf, nullptr);
-            if (entry == *(void**)nullBuf) {
-                selectedIndex = i + 4;
+                uint8_t spriteBuf[16];
+                fn_Sprite_Default_Ctor(spriteBuf);
+                fn_ComboElement_AddItem(self->drawCombo, spriteBuf,
+                    (void*)((uintptr_t)drawableDesc + 0x20), entry);
+
+                // Check if current entry matches the null/default internal ptr
+                uint8_t nullBuf[8];
+                fn_InternalBasePtr_Ctor(nullBuf, nullptr);
+                if (entry == *(void**)nullBuf) {
+                    selectedIndex = i + 4;
+                }
             }
+            fn_ComboElement_SetCurrentItem(self->drawCombo, selectedIndex);
         }
-        fn_ComboElement_SetCurrentItem(self->drawCombo, selectedIndex);
     }
 
     // ==========================================================
@@ -1158,9 +1162,11 @@ void DebugUI_Slot4(DebugUI* self) {
 
     #define SETUP_SLIDER(field, name, id, minVal, maxVal) do { \
         self->field = DebugUI_FindElemBase(parentElem, name); \
-        fn_Element_SetElementId(self->field, id); \
-        *(float*)((uintptr_t)self->field + 0x118) = minVal; \
-        *(float*)((uintptr_t)self->field + 0x11C) = maxVal; \
+        if (self->field) { \
+            fn_Element_SetElementId(self->field, id); \
+            *(float*)((uintptr_t)self->field + 0x118) = minVal; \
+            *(float*)((uintptr_t)self->field + 0x11C) = maxVal; \
+        } \
     } while(0)
 
     SETUP_SLIDER(sliderDay, "sliderDay", 0x154, 0.0f, 359.0f);
@@ -1194,55 +1200,56 @@ void DebugUI_Slot4(DebugUI* self) {
     {
         self->comboWeather = DebugUI_FindElemBase(parentElem, "comboWeather");
 
-        // Add "None" entry with userData = -1
-        uint8_t noneBuf[8];
-        fn_String_Ctor_CStr(noneBuf, "None");
-        uint8_t spriteBuf[16];
-        fn_Sprite_Default_Ctor(spriteBuf);
-        fn_ComboElement_AddItem(self->comboWeather, spriteBuf, noneBuf, (void*)(intptr_t)-1);
-        fn_String_Dtor(noneBuf);
+        if (self->comboWeather) {
+            // Add "None" entry with userData = -1
+            uint8_t noneBuf[8];
+            fn_String_Ctor_CStr(noneBuf, "None");
+            uint8_t spriteBuf[16];
+            fn_Sprite_Default_Ctor(spriteBuf);
+            fn_ComboElement_AddItem(self->comboWeather, spriteBuf, noneBuf, (void*)(intptr_t)-1);
+            fn_String_Dtor(noneBuf);
 
-        // Populate from weather list at gameWorld+0x130
-        void** weatherListPtr = *(void***)((uintptr_t)gameWorld + 0x130);
-        uintptr_t weatherList = *(uintptr_t*)weatherListPtr;
-        int weatherCount = *(int*)(weatherList + 0x30);
-        int selectedIndex = 0;
-        for (int i = 0; i < weatherCount; i++) {
-            void* entry = *(void**)((uintptr_t)i * 0x10 +
-                *(uintptr_t*)(weatherList + 0x28));
-            uint8_t pathBuf[8];
-            fn_External_GetPath(entry, pathBuf);
-            uint8_t filenameBuf[16];
-            fn_Filename_GetPathFilename(pathBuf, filenameBuf, false);
+            // Populate from weather list at gameWorld+0x130
+            void** weatherListPtr = *(void***)((uintptr_t)gameWorld + 0x130);
+            uintptr_t weatherList = *(uintptr_t*)weatherListPtr;
+            int weatherCount = *(int*)(weatherList + 0x30);
+            int selectedIndex = 0;
+            for (int i = 0; i < weatherCount; i++) {
+                void* entry = *(void**)((uintptr_t)i * 0x10 +
+                    *(uintptr_t*)(weatherList + 0x28));
+                uint8_t pathBuf[8];
+                fn_External_GetPath(entry, pathBuf);
+                uint8_t filenameBuf[16];
+                fn_Filename_GetPathFilename(pathBuf, filenameBuf, false);
 
-            uint8_t spr[16];
-            fn_Sprite_Default_Ctor(spr);
-            fn_ComboElement_AddItem(self->comboWeather, spr, filenameBuf,
-                (void*)(intptr_t)i);
+                uint8_t spr[16];
+                fn_Sprite_Default_Ctor(spr);
+                fn_ComboElement_AddItem(self->comboWeather, spr, filenameBuf,
+                    (void*)(intptr_t)i);
 
-            fn_String_Dtor(filenameBuf);
-            fn_String_Dtor((uint8_t*)filenameBuf + 8);
-            fn_Filename_Dtor(pathBuf);
+                fn_Filename_Dtor(filenameBuf);
+                fn_Filename_Dtor(pathBuf);
 
-            // Check if this weather is currently active
-            uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +
-                (uintptr_t)weatherListPtr[10]);
-            if (activeCheck != 0 && *(float*)(activeCheck + 0xC4) > 0.0f) {
-                selectedIndex = i + 1;
+                // Check if this weather is currently active
+                uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +
+                    (uintptr_t)weatherListPtr[10]);
+                if (activeCheck != 0 && *(float*)(activeCheck + 0xC4) > 0.0f) {
+                    selectedIndex = i + 1;
+                }
             }
+            fn_ComboElement_SetCurrentItem(self->comboWeather, selectedIndex);
+            fn_Element_SetElementId(self->comboWeather, 0x163);
         }
-        fn_ComboElement_SetCurrentItem(self->comboWeather, selectedIndex);
-        fn_Element_SetElementId(self->comboWeather, 0x163);
     }
 
     // ==========================================================
     // 10. Action buttons (IDs 0x164, 0x165)
     // ==========================================================
     self->buttonSave = DebugUI_FindElemBase(parentElem, "buttonSave");
-    fn_Element_SetElementId(self->buttonSave, 0x164);
+    if (self->buttonSave) fn_Element_SetElementId(self->buttonSave, 0x164);
 
     self->buttonMenuScene = DebugUI_FindElemBase(parentElem, "buttonMenuScene");
-    fn_Element_SetElementId(self->buttonMenuScene, 0x165);
+    if (self->buttonMenuScene) fn_Element_SetElementId(self->buttonMenuScene, 0x165);
 
     // ==========================================================
     // Initialize day slider from current game time
@@ -1255,8 +1262,10 @@ void DebugUI_Slot4(DebugUI* self) {
         int monthIndex = (int)(timeSeconds / 25200.0f * 12.0f);
         if (monthIndex > 11) monthIndex = 0;
 
-        *(float*)((uintptr_t)self->sliderDay + 0x128) = (float)(monthIndex * 30);
-        DebugUI_SetDayLighting_Impl(self, monthIndex);
+        if (self->sliderDay) {
+            *(float*)((uintptr_t)self->sliderDay + 0x128) = (float)(monthIndex * 30);
+            DebugUI_SetDayLighting_Impl(self, monthIndex);
+        }
     }
 
     // ==========================================================
