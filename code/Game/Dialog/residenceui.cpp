@@ -18,6 +18,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
 
 // ============================================================
 // File-local helper: ResidenceUI_ArrayPush_Impl (FUN_140021020)
@@ -63,17 +64,20 @@ static void ResidenceUI_ArrayPush_Impl(void* arrayBase, int newCount, void* entr
     }
 }
 
-// Helper: find element by name in parent element, returns raw InternalPtr value
+// Helper: find element by name in parent element, returns raw pointer
+// Original pattern: FindElement → CheckPtr → deref
 static void* FindChildElem(void* parentElem, const char* name) {
     uint8_t nameStr[8], retBuf[16];
     fn_String_Ctor_CStr(nameStr, name);
     fn_FindElement(parentElem, retBuf, nameStr);
+    fn_InternalBasePtr_CheckPtr(retBuf);  // resolve IBP before deref
     void* result = *(void**)retBuf;
     fn_String_Dtor(nameStr);
     return result;
 }
 
 // Helper: find element by name, wrap as InternalBasePtr
+// Original pattern: FindElement → CheckPtr → deref → IsDerivedFrom → IBP_Ctor
 static uint64_t FindElemAsBasePtr(void* parentElem, const char* name) {
     void* elem = FindChildElem(parentElem, name);
     uint8_t bpBuf[8];
@@ -111,40 +115,70 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
         tableElem = *(void**)basePtrBuf;
     }
 
-    // Get row count from table element (ChildCount)
-    int rowCount = fn_Element_ChildCount(tableElem);
+    // Get row count and column count from table element
+    int rowCount = *(int*)((uintptr_t)tableElem + 0xC0);
+    int colCount = *(int*)((uintptr_t)tableElem + 0xC4);
+
+#ifdef _DEBUG
+    printf("[ResidenceUI::Slot4] tableElem=%p rowCount=%d colCount=%d\n",
+           tableElem, rowCount, colCount);
+    fflush(stdout);
+#endif
 
     for (int i = 0; i < rowCount; i++) {
         // 0x30-byte entry: imageMale, imageFemale, textName, textAge, textProfession, buttonGoto
         uint64_t entry[6] = {0, 0, 0, 0, 0, 0};
-
-        // Get child row element
         uint8_t childBuf[8];
 
-        // Find "buttonGoto" in row, set ID 300+i
-        fn_Element_Child(tableElem, childBuf, i);
+        // Original uses flat table indices: row * colCount + column
+        // Column layout: 0=buttonGoto, 1=textName, 2=imageMale/Female, 3=textAge, 4=textProfession
+        int base = i * colCount;
+
+        // Col 0: buttonGoto
+        fn_InternalBasePtr_CheckPtr(&tableElem);
+        fn_Element_Child(tableElem, childBuf, base + 0);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[5] = FindElemAsBasePtr(*(void**)childBuf, "buttonGoto");
+        fn_InternalBasePtr_CheckPtr(&entry[5]);
         if (entry[5]) fn_Element_SetElementId((void*)entry[5], 300 + i);
 
-        // Find "textName" in row
-        fn_Element_Child(tableElem, childBuf, i);
+        // Col 1: textName
+        fn_InternalBasePtr_CheckPtr(&tableElem);
+        fn_Element_Child(tableElem, childBuf, base + 1);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[2] = FindElemAsBasePtr(*(void**)childBuf, "textName");
 
-        // Find "imageMale" in row
-        fn_Element_Child(tableElem, childBuf, i);
-        entry[0] = FindElemAsBasePtr(*(void**)childBuf, "imageMale");
+        // Col 2: imageMale + imageFemale (container cell)
+        fn_InternalBasePtr_CheckPtr(&tableElem);
+        fn_Element_Child(tableElem, childBuf, base + 2);
+        fn_InternalBasePtr_CheckPtr(childBuf);
+        void* iconCell = *(void**)childBuf;
+        entry[0] = FindElemAsBasePtr(iconCell, "imageMale");
 
-        // Find "imageFemale" in row
-        fn_Element_Child(tableElem, childBuf, i);
+        fn_InternalBasePtr_CheckPtr(&tableElem);
+        fn_Element_Child(tableElem, childBuf, base + 2);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[1] = FindElemAsBasePtr(*(void**)childBuf, "imageFemale");
 
-        // Find "textAge" in row
-        fn_Element_Child(tableElem, childBuf, i);
+        // Col 3: textAge
+        fn_InternalBasePtr_CheckPtr(&tableElem);
+        fn_Element_Child(tableElem, childBuf, base + 3);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[3] = FindElemAsBasePtr(*(void**)childBuf, "textAge");
 
-        // Find "textProfession" in row
-        fn_Element_Child(tableElem, childBuf, i);
+        // Col 4: textProfession
+        fn_InternalBasePtr_CheckPtr(&tableElem);
+        fn_Element_Child(tableElem, childBuf, base + 4);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         entry[4] = FindElemAsBasePtr(*(void**)childBuf, "textProfession");
+
+#ifdef _DEBUG
+        if (i < 3) {
+            printf("[ResidenceUI::Slot4]   row[%d] base=%d: imgM=%llx imgF=%llx txtN=%llx txtA=%llx txtP=%llx btn=%llx\n",
+                   i, base, entry[0], entry[1], entry[2], entry[3], entry[4], entry[5]);
+            fflush(stdout);
+        }
+#endif
 
         // Push entry into dynamic array at +0x30
         // FUN_140021020: array resize/push with 0x30-byte elements
@@ -191,6 +225,11 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, g_TypeId_ResidenceComponent);
     fn_InternalBasePtr_CheckPtr(&storageComp);
 
+#ifdef _DEBUG
+    printf("[ResidenceUI::Slot7] self=%p entity=%p resComp=0x%llx\n",
+           (void*)self, entity, (unsigned long long)storageComp);
+#endif
+
     float ageMul = *g_pAgeMultiplier;  // 5.0f
     int totalResidents = 0;
     int rowIdx = 0;
@@ -199,6 +238,10 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
     // Outer loop: iterate room groups (storageComp+0x58 = group count)
     int groupCount = *(int*)(storageComp + 0x58);
+#ifdef _DEBUG
+    printf("[ResidenceUI::Slot7] groupCount=%d totalRowSlots=%d\n",
+           groupCount, *(int*)(s + 0x38));
+#endif
 
     if (groupCount > 0) {
         uintptr_t groupOffset = 0;
@@ -210,19 +253,41 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
             if (residentCount > 0) {
                 totalResidents += residentCount;
                 int endRow = rowIdx + residentCount;
+#ifdef _DEBUG
+                printf("[ResidenceUI::Slot7]   group[%d]: residentCount=%d rowIdx=%d\n",
+                       g, residentCount, rowIdx);
+#endif
 
                 for (int r = 0; r < residentCount; r++) {
-                    // Get citizen ptr from resident list
-                    uintptr_t residentListPtr = *(uintptr_t*)(groupArrayBase + groupOffset);
+                    // Original CheckPtr's the component IBP every iteration
+                    fn_InternalBasePtr_CheckPtr(&storageComp);
+
+                    // Get citizen ptr from resident list + CheckPtr
+                    uintptr_t residentListPtr = *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + groupOffset);
                     uintptr_t citizen = *(uintptr_t*)(residentListPtr + r * 8);
+                    fn_InternalBasePtr_CheckPtr(&citizen);
+
+#ifdef _DEBUG
+                    {
+                        uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x30;
+                        void* imgM = *(void**)(rowBase + 0x00);
+                        void* imgF = *(void**)(rowBase + 0x08);
+                        void* txtN = *(void**)(rowBase + 0x10);
+                        printf("[ResidenceUI::Slot7]     r[%d] citizen=%p imgM=%p imgF=%p txtN=%p\n",
+                               r, (void*)citizen, imgM, imgF, txtN);
+                        fflush(stdout);
+                    }
+#endif
 
                     // Get row entry: 0x30-byte entries at self+0x30
                     uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x30;
 
                     // Check gender: citizen+0x38 != 0 means male
+                    fn_InternalBasePtr_CheckPtr(&citizen);
                     bool isMale = (*(int*)(citizen + 0x38) != 0);
 
-                    // Show/hide gender icons
+                    // Show/hide gender icons — CheckPtr each element IBP in row array
+                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x08));
                     void* imageFemale = *(void**)(rowBase + 0x08);
                     if (imageFemale) {
                         if (isMale) {
@@ -231,24 +296,31 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                             fn_Element_SetFlagsOnOff(imageFemale, 0, 1);
                         }
                     }
-                    void* imageMale = *(void**)(rowBase + 0x00);
+                    fn_InternalBasePtr_CheckPtr((void*)rowBase);
+                    void* imageMale = *(void**)rowBase;
                     if (imageMale) fn_Element_SetFlagsOnOff(imageMale, (uint32_t)!isMale, (uint32_t)isMale);
 
                     // Set name text: citizen+0x28 is the name String
+                    fn_InternalBasePtr_CheckPtr(&citizen);
+                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x10));
                     void* textName = *(void**)(rowBase + 0x10);
                     if (textName) fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
+                    fn_InternalBasePtr_CheckPtr(&citizen);
                     uint8_t ageStr[8];
                     int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
                     fn_String_Format(ageStr, "%i", (uint64_t)(uint32_t)ageYears);
+                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x18));
                     void* textAge = *(void**)(rowBase + 0x18);
                     if (textAge) fn_TextElement_SetParameter(textAge, 0, ageStr);
                     fn_String_Dtor(ageStr);
 
                     // Determine profession text based on age/death status
+                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x20));
                     void* textProfession = *(void**)(rowBase + 0x20);
 
+                    fn_InternalBasePtr_CheckPtr(&citizen);
                     float age = *(float*)(citizen + 0x3c);
                     uintptr_t descPtr = *(uintptr_t*)(citizen + 0x288);
                     float oldAgeThreshold = *(float*)(descPtr + 0x44);
@@ -280,6 +352,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     if (textProfession) fn_TextElement_SetText(textProfession, uiStr);
 
                     // Activate buttonGoto: vtable[8](this)
+                    fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x28));
                     void* buttonGoto = *(void**)(rowBase + 0x28);
                     if (buttonGoto) {
                         void** vtbl = *(void***)buttonGoto;

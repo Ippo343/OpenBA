@@ -15,12 +15,16 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
+#include "resolve.h"
 
-// Helper: find element by name in parent, returns raw InternalPtr value
+// Helper: find element by name in parent, returns raw pointer
+// Original pattern: FindElement → CheckPtr → deref
 static void* StorageUI_FindChildElem(void* parentElem, const char* name) {
     uint8_t nameStr[8], retBuf[16];
     fn_String_Ctor_CStr(nameStr, name);
     fn_FindElement(parentElem, retBuf, nameStr);
+    fn_InternalBasePtr_CheckPtr(retBuf);  // resolve IBP before deref
     void* result = *(void**)retBuf;
     fn_String_Dtor(nameStr);
     return result;
@@ -114,8 +118,9 @@ void StorageUI_Serialize(StorageUI* self) {
     // Iterate all cells, find "labelStorage" and "numberCount" sub-elements
     totalCells = fn_Element_ChildCount((void*)tableElem);
     for (int i = 0; i < totalCells; i++) {
-        // Get child row element
+        // Get child row element — CheckPtr before deref (matches original)
         fn_Element_Child((void*)tableElem, childBuf, i);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         void* rowElem = *(void**)childBuf;
 
         // Find "labelStorage" element
@@ -126,6 +131,7 @@ void StorageUI_Serialize(StorageUI* self) {
 
         // Get raw child element ptr
         fn_Element_Child((void*)tableElem, childBuf, i);
+        fn_InternalBasePtr_CheckPtr(childBuf);
         uint64_t rawChild = *(uint64_t*)childBuf;
 
         // Build 0x18-byte entry: {labelStorage, numberCount, rawChild}
@@ -198,9 +204,16 @@ void StorageUI_Startup(StorageUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entity);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find StateMachine component
-    uint64_t stateMachineComp = 0;
-    fn_FindComponent_StateMachine((void*)entityPtr, &stateMachineComp);
+    // Find StorageComponent (type ID 0x1401c7e78) — NOT StateMachine!
+    // Original calls FUN_140006270 which searches by StorageComponent type ID.
+    uint64_t storageComp = 0;
+    fn_FindComponent_Storage((void*)entityPtr, &storageComp);
+    fn_InternalBasePtr_CheckPtr(&storageComp);
+
+#ifdef _DEBUG
+    printf("[StorageUI::Startup] self=%p entity=%p storageComp=0x%llx\n",
+           (void*)self, entity, (unsigned long long)storageComp);
+#endif
 
     // Build temp array of storage items
     void* sortedItems = nullptr;
@@ -208,13 +221,21 @@ void StorageUI_Startup(StorageUI* self) {
     int itemCount = 0;
     int itemCapacity = 0;
 
-    int smEntryCount = stateMachineComp ? *(int*)(stateMachineComp + 0x30) : 0;
+    int smEntryCount = storageComp ? *(int*)(storageComp + 0x30) : 0;
+#ifdef _DEBUG
+    printf("[StorageUI::Startup] smEntryCount=%d (comp+0x28=%p comp+0x30=%d comp+0x38=%d)\n",
+           smEntryCount,
+           storageComp ? (void*)*(uintptr_t*)(storageComp + 0x28) : nullptr,
+           storageComp ? *(int*)(storageComp + 0x30) : -1,
+           storageComp ? *(int*)(storageComp + 0x38) : -1);
+    fflush(stdout);
+#endif
     if (smEntryCount > 0) {
         uintptr_t entryOffset = 0;
         itemCount = 0;
 
         for (int i = 0; i < smEntryCount; i++) {
-            uintptr_t smArray = *(uintptr_t*)(stateMachineComp + 0x28);
+            uintptr_t smArray = *(uintptr_t*)(storageComp + 0x28);
             uintptr_t entryPtr = smArray + entryOffset;
             int count = *(int*)(entryPtr + 8);
 
@@ -224,6 +245,10 @@ void StorageUI_Startup(StorageUI* self) {
                 // Find ResourceType component in entry's component list
                 int compCount = *(int*)(resEntry + 0x30);
                 void* resType = nullptr;
+#ifdef _DEBUG
+                printf("[StorageUI::Startup]   entry[%d]: count=%d resEntry=%p compCount=%d\n",
+                       i, count, (void*)resEntry, compCount);
+#endif
                 for (int c = 0; c < compCount; c++) {
                     void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
                     typedef int (*fn_GetTypeId_t)(void*);
@@ -280,13 +305,21 @@ void StorageUI_Startup(StorageUI* self) {
         }
 
         // Sort items alphabetically by resource name
+        // Use original function — our reimpl corrupts the array
         if (itemCount > 1) {
-            uint8_t scratch[8];
-            StorageUI_SortItems(sortedItems, itemCount, scratch, nullptr);
+            typedef void (*fn_Sort_t)(void*, int, void*, void*);
+            static fn_Sort_t fn_sort = (fn_Sort_t)ResolveAddr(Module::Exe, 0x1400213f0);
+            uint8_t scratch[8] = {};
+            fn_sort(sortedItems, itemCount, scratch, nullptr);
         }
     }
 
     // Populate table rows with sorted items
+#ifdef _DEBUG
+    printf("[StorageUI::Startup] itemCount=%d totalRows=%d sortedItems=%p\n",
+           itemCount, *(int*)(s + 0x38), sortedItems);
+    fflush(stdout);
+#endif
     int rowIdx = 0;
     if (itemCount > 0) {
         uintptr_t itemPtr = (uintptr_t)sortedItems + 0x10;  // start at first item's resType
@@ -295,30 +328,46 @@ void StorageUI_Startup(StorageUI* self) {
             if (rowIdx >= *(int*)(s + 0x38)) break;
 
             uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x18;
-            void* labelElem = *(void**)rowBase;
-            void* numberElem = *(void**)(rowBase + 8);
 
             uintptr_t resType = *(uintptr_t*)(itemPtr - 8);  // item[1] = resType
             int count = *(int*)itemPtr;  // item[2] = count
+
+#ifdef _DEBUG
+            {
+                fn_InternalBasePtr_CheckPtr((void*)rowBase);
+                void* labelE = *(void**)rowBase;
+                printf("[StorageUI::Startup]   row[%d]: resType=%p count=%d labelElem=%p\n",
+                       rowIdx, (void*)resType, count, labelE);
+                fflush(stdout);
+            }
+#endif
 
             // Set sprite from resource type
             uint8_t spriteBuf[16];
             fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(resType + 0x20),
                            (void*)(resType + 0x30));
+            fn_InternalBasePtr_CheckPtr((void*)rowBase);
+            void* labelElem = *(void**)rowBase;
             fn_LabelElement_SetSprite(labelElem, spriteBuf);
 
             // Set text from resource type
             uint8_t uiStrBuf[16];
             fn_UIString_Ctor(uiStrBuf, *(uint64_t*)(resType + 0x28),
                              (void*)(resType + 0x30));
+            fn_InternalBasePtr_CheckPtr((void*)rowBase);
+            labelElem = *(void**)rowBase;
             fn_TextElement_SetText(labelElem, uiStrBuf);
 
             // Set count
+            fn_InternalBasePtr_CheckPtr((void*)(rowBase + 8));
+            void* numberElem = *(void**)(rowBase + 8);
             fn_NumberElement_SetValueInt(numberElem, count);
 
             // Show both elements (flags: hide=0, show=1)
-            fn_Element_SetFlagsOnOff(labelElem, 0, 1);
-            fn_Element_SetFlagsOnOff(numberElem, 0, 1);
+            fn_InternalBasePtr_CheckPtr((void*)rowBase);
+            fn_Element_SetFlagsOnOff(*(void**)rowBase, 0, 1);
+            fn_InternalBasePtr_CheckPtr((void*)(rowBase + 8));
+            fn_Element_SetFlagsOnOff(*(void**)(rowBase + 8), 0, 1);
 
             rowIdx++;
             itemPtr += 0x18;
@@ -331,12 +380,12 @@ void StorageUI_Startup(StorageUI* self) {
         uintptr_t hideOffset = (uintptr_t)rowIdx * 0x18;
         for (int i = rowIdx; i < totalRows; i++) {
             uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + hideOffset;
-            void* labelElem = *(void**)rowBase;
-            void* numberElem = *(void**)(rowBase + 8);
 
-            // Hide both elements (flags: hide=1, show=0)
-            fn_Element_SetFlagsOnOff(labelElem, 1, 0);
-            fn_Element_SetFlagsOnOff(numberElem, 1, 0);
+            // Hide both elements (flags: hide=1, show=0) — CheckPtr before deref
+            fn_InternalBasePtr_CheckPtr((void*)rowBase);
+            fn_Element_SetFlagsOnOff(*(void**)rowBase, 1, 0);
+            fn_InternalBasePtr_CheckPtr((void*)(rowBase + 8));
+            fn_Element_SetFlagsOnOff(*(void**)(rowBase + 8), 1, 0);
 
             hideOffset += 0x18;
         }
