@@ -601,13 +601,19 @@ void EntityUI_Slot7(EntityUI* self) {
 
     // Set tool hint via vtable[10] (offset 0x50) on ToolUI's +0x38 element
     {
-        void* hintElem = *(void**)((uintptr_t)toolPtr + 0x38);
-        void** vtbl = *(void***)hintElem;
-        typedef void (*VCall_SetHint_t)(void*, uint64_t);
-        ((VCall_SetHint_t)vtbl[10])(hintElem, toolHint);
+        fn_InternalBasePtr_CheckPtr(toolBuf);  // CheckPtr on ToolUI controller IBP (matches original)
+        toolPtr = *(void**)toolBuf;
+        if (toolPtr) {
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)toolPtr + 0x38));  // CheckPtr on +0x38 element IBP
+            void* hintElem = *(void**)((uintptr_t)toolPtr + 0x38);
+            void** vtbl = *(void***)hintElem;
+            typedef void (*VCall_SetHint_t)(void*, uint64_t);
+            ((VCall_SetHint_t)vtbl[10])(hintElem, toolHint);
+        }
     }
 
     // Find components on entity to determine page state
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
     void* entityPtr = *(void**)(s + 0x30);
 
     void* buildStateComp = nullptr;
@@ -637,37 +643,47 @@ void EntityUI_Slot7(EntityUI* self) {
     if (posComp == 0 && destroyComp == 0) {
         if (smComp == 0 || pageIdx != 0) {
             // Get default page from entity's description
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
             void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
             void* descResult = nullptr;
             GetDescPage_Impl(entityDesc, &descResult);
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
         } else {
             pageIdx = 2;
         }
     } else {
-        // Build/destroy in progress
+        // Build/destroy in progress — sequential checks matching original flow
         if (pageIdx >= 3 && pageIdx <= 7) {
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             pageIdx = 3;
-        } else if (posComp != 0) {
-            // Check if build is complete
-            bool complete = BuildComplete_Impl(posComp);
-            if (!complete) {
-                pageIdx = 2;
-            } else if (pageIdx != 0) {
-                // Use entity description page or keep current page if pinned (page 4)
+        } else {
+            // Check 2: if posComp exists, verify build is complete
+            bool gotoPage2 = false;
+            if (posComp != 0) {
+                fn_InternalBasePtr_CheckPtr(&posComp);
+                bool complete = BuildComplete_Impl((void*)posComp);
+                if (!complete) {
+                    gotoPage2 = true;
+                }
+            }
+            // Check 3: if not redirected to page 2 and pageIdx != 0, get desc page
+            if (!gotoPage2 && pageIdx != 0) {
+                fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
                 void* entityDesc = *(void**)((uintptr_t)(*(void**)(s + 0x30)) + 0x28);
                 void* descResult = nullptr;
                 GetDescPage_Impl(entityDesc, &descResult);
 
+                fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
                 int activePage = fn_PageElement_GetActivePage(*(void**)(s + 0x40));
                 if (activePage != 4) {
                     pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
                 }
+                fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
             } else {
+                fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
                 pageIdx = 2;
             }
-        } else {
-            pageIdx = 2;
         }
     }
 
