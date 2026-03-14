@@ -194,6 +194,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
             void** buttonArray = *(void***)(s + 0xC0);
             fn_InternalBasePtr_CheckPtr((void*)&buttonArray[i]);
             void* elem = buttonArray[i];
+            if (!elem) continue;
             typedef void (*SetEnabled_t)(void* self, bool enabled);
             SetEnabled_t fn = (SetEnabled_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
             fn(elem, enabled);
@@ -203,6 +204,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
             void** buttonArray = *(void***)(s + 0xC0);
             fn_InternalBasePtr_CheckPtr((void*)&buttonArray[i]);
             void* elem = buttonArray[i];
+            if (!elem) continue;
 
             // Search entity BST for typeId count
             int entityCount = 0;
@@ -1236,6 +1238,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
     // Get game subsystem at gameWorld->+0x120
     void* gameWorld = *g_pGameWorldSingleton;
+    if (!gameWorld) return;
     uintptr_t gameSys = *(uintptr_t*)((uintptr_t)gameWorld + 0x120);
 
     // Current active dialog pointer at gameSys->+0x20
@@ -1259,6 +1262,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
                 uintptr_t elemPtr = (uintptr_t)&buttonArray[i];
                 // CheckPtr is a no-op in retail
                 void* elem = *(void**)elemPtr;
+                if (!elem) continue;
 
                 // IsDerivedFrom check, then cast
                 bool isDerived = fn_IsDerivedFrom(elem, *g_TypeId_ToolbarElement);
@@ -1277,6 +1281,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
         else if (actionType == 9) {
             // SpeedUp: enable/disable based on whether current speed < max speed
             void* elem = *(void**)&buttonArray[i];
+            if (!elem) continue;
             // Virtual call: elem->vtable[8] = SetEnabled/SetChecked (vtable +0x40)
             typedef void (*SetChecked_t)(void* self, bool checked);
             SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
@@ -1290,6 +1295,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
         else if (actionType == 6) {
             // SpeedDown: enable/disable based on whether current speed > min speed
             void* elem = *(void**)&buttonArray[i];
+            if (!elem) continue;
             typedef void (*SetChecked_t)(void* self, bool checked);
             SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
@@ -1300,6 +1306,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
         else if (actionType == 8) {
             // Unpause button: checked state = isPaused flag at gameSys->+0x30
             void* elem = *(void**)&buttonArray[i];
+            if (!elem) continue;
             typedef void (*SetChecked_t)(void* self, bool checked);
             SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
@@ -1309,6 +1316,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
         else if (actionType == 7) {
             // Pause button: checked state = NOT paused
             void* elem = *(void**)&buttonArray[i];
+            if (!elem) continue;
             typedef void (*SetChecked_t)(void* self, bool checked);
             SetChecked_t fn = (SetChecked_t)(*(uintptr_t*)(*(uintptr_t*)elem + 0x40));
 
@@ -1318,6 +1326,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
         else if (actionType == 10) {
             // SpeedDisplay: get first child (text element), format speed as "%ix"
             void* elem = *(void**)&buttonArray[i];
+            if (!elem) continue;
 
             // Element::Child(elem, retBuf, 1) — child[1] is the text element
             uint8_t childBuf[16];

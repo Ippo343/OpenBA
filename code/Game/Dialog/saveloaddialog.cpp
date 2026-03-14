@@ -540,19 +540,24 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 
     uint8_t mode = *(uint8_t*)(s + 0xB8);
     void* saveLoad = *g_pSaveLoadSingleton;
+    if (!saveLoad) return;
 
     // --- Show/hide load/save labels based on mode ---
     // labelLoad (+0xF8): visible when mode == 0 (save mode shows "load" label? no...)
     // Actually: labelLoad visible when NOT save mode, labelSave visible when save mode
     uint32_t isLoadMode = (uint32_t)(mode == 0);
     uint32_t isSaveMode = (uint32_t)(mode != 0);
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0xF8), isLoadMode, 0);
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x100), isSaveMode, 0);
+    void* labelLoad = (void*)*(uint64_t*)(s + 0xF8);
+    if (labelLoad) fn_Element_SetFlagsOnOff(labelLoad, isLoadMode, 0);
+    void* labelSave = (void*)*(uint64_t*)(s + 0x100);
+    if (labelSave) fn_Element_SetFlagsOnOff(labelSave, isSaveMode, 0);
 
     // buttonSave (+0x140): visible in save mode
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x140), isSaveMode, 0);
+    void* buttonSave = (void*)*(uint64_t*)(s + 0x140);
+    if (buttonSave) fn_Element_SetFlagsOnOff(buttonSave, isSaveMode, 0);
     // buttonLoad (+0x148): visible in load mode
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x148), isLoadMode, 0);
+    void* buttonLoad = (void*)*(uint64_t*)(s + 0x148);
+    if (buttonLoad) fn_Element_SetFlagsOnOff(buttonLoad, isLoadMode, 0);
 
     int operation = fn_SaveLoad_GetOperation(saveLoad);
 
@@ -564,7 +569,8 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 
     if (operation == 0 && !anyFlagsSet) {
         // --- IDLE STATE: show main page, update buttons and entry list ---
-        fn_PageElement_SetActivePage((void*)*(uint64_t*)(s + 0xF0), 1);
+        void* pageElem = (void*)*(uint64_t*)(s + 0xF0);
+        if (pageElem) fn_PageElement_SetActivePage(pageElem, 1);
 
         // Enable/disable buttonLoad based on selected save validity
         int selectedIdx = *(int*)(s + 0xC0);
@@ -581,25 +587,31 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         // buttonLoad: SetEnabled via vtable[8]
         {
             void* loadBtn = (void*)*(uint64_t*)(s + 0x148);
-            void** vtable = *(void***)loadBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(loadBtn, loadEnabled ? 1 : 0);
+            if (loadBtn) {
+                void** vtable = *(void***)loadBtn;
+                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+                ((fn_SetEnabled_t)vtable[8])(loadBtn, loadEnabled ? 1 : 0);
+            }
         }
 
         // buttonSave: always enabled
         {
             void* saveBtn = (void*)*(uint64_t*)(s + 0x140);
-            void** vtable = *(void***)saveBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(saveBtn, 1);
+            if (saveBtn) {
+                void** vtable = *(void***)saveBtn;
+                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+                ((fn_SetEnabled_t)vtable[8])(saveBtn, 1);
+            }
         }
 
         // buttonCancel: always enabled
         {
             void* cancelBtn = (void*)*(uint64_t*)(s + 0x150);
-            void** vtable = *(void***)cancelBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(cancelBtn, 1);
+            if (cancelBtn) {
+                void** vtable = *(void***)cancelBtn;
+                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+                ((fn_SetEnabled_t)vtable[8])(cancelBtn, 1);
+            }
         }
 
         // Check selected save for delete eligibility
@@ -610,9 +622,11 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         // buttonDelete: SetEnabled via vtable[8]
         {
             void* deleteBtn = (void*)*(uint64_t*)(s + 0x158);
-            void** vtable = *(void***)deleteBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(deleteBtn, (uint64_t)(selectedIdx >= 0));
+            if (deleteBtn) {
+                void** vtable = *(void***)deleteBtn;
+                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+                ((fn_SetEnabled_t)vtable[8])(deleteBtn, (uint64_t)(selectedIdx >= 0));
+            }
         }
 
         // --- Iterate save entries: show/hide selection highlighting ---
@@ -625,66 +639,78 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 
             // entry+0x28: selectSave — shown when selected, hidden otherwise
             void* selectElem = (void*)*(uint64_t*)(entryBase + 0x28);
-            fn_Element_SetFlagsOnOff(selectElem, notSelected ? 1 : 0, notSelected ? 0 : 1);
+            if (selectElem) fn_Element_SetFlagsOnOff(selectElem, notSelected ? 1 : 0, notSelected ? 0 : 1);
 
             // entry+0x18: borderSave — shown when NOT selected, hidden when selected
             void* borderElem = (void*)*(uint64_t*)(entryBase + 0x18);
-            fn_Element_SetFlagsOnOff(borderElem, notSelected ? 0 : 1, notSelected ? 1 : 0);
+            if (borderElem) fn_Element_SetFlagsOnOff(borderElem, notSelected ? 0 : 1, notSelected ? 1 : 0);
         }
         return;
     }
 
     // --- OPERATION IN PROGRESS: show loading page ---
     // Rotate loading spinner image
-    fn_ImageElement_SetRotation((void*)*(uint64_t*)(s + 0x138),
-                                *(float*)(s + 0xC8));
+    void* spinnerImg = (void*)*(uint64_t*)(s + 0x138);
+    if (spinnerImg) fn_ImageElement_SetRotation(spinnerImg, *(float*)(s + 0xC8));
 
     // Switch to loading page (page 0)
-    fn_PageElement_SetActivePage((void*)*(uint64_t*)(s + 0xF0), 0);
+    void* pageElemOp = (void*)*(uint64_t*)(s + 0xF0);
+    if (pageElemOp) fn_PageElement_SetActivePage(pageElemOp, 0);
 
     // Disable all four buttons
     {
         void* loadBtn = (void*)*(uint64_t*)(s + 0x148);
-        void** vtable = *(void***)loadBtn;
-        typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-        ((fn_SetEnabled_t)vtable[8])(loadBtn, 0);
+        if (loadBtn) {
+            void** vtable = *(void***)loadBtn;
+            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+            ((fn_SetEnabled_t)vtable[8])(loadBtn, 0);
+        }
     }
     {
         void* saveBtn = (void*)*(uint64_t*)(s + 0x140);
-        void** vtable = *(void***)saveBtn;
-        typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-        ((fn_SetEnabled_t)vtable[8])(saveBtn, 0);
+        if (saveBtn) {
+            void** vtable = *(void***)saveBtn;
+            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+            ((fn_SetEnabled_t)vtable[8])(saveBtn, 0);
+        }
     }
     {
         void* cancelBtn = (void*)*(uint64_t*)(s + 0x150);
-        void** vtable = *(void***)cancelBtn;
-        typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-        ((fn_SetEnabled_t)vtable[8])(cancelBtn, 0);
+        if (cancelBtn) {
+            void** vtable = *(void***)cancelBtn;
+            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+            ((fn_SetEnabled_t)vtable[8])(cancelBtn, 0);
+        }
     }
     {
         void* deleteBtn = (void*)*(uint64_t*)(s + 0x158);
-        void** vtable = *(void***)deleteBtn;
-        typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-        ((fn_SetEnabled_t)vtable[8])(deleteBtn, 0);
+        if (deleteBtn) {
+            void** vtable = *(void***)deleteBtn;
+            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
+            ((fn_SetEnabled_t)vtable[8])(deleteBtn, 0);
+        }
     }
 
     // --- Show/hide status text based on operation type ---
     // Operation types: 1 = listing, 2 = saving, 4 = deleting
+    void* textPleaseWait = (void*)*(uint64_t*)(s + 0x130);
+    void* textLoading = (void*)*(uint64_t*)(s + 0x120);
+    void* textSaving = (void*)*(uint64_t*)(s + 0x128);
     if (operation == 1) {
         // Listing: show textPleaseWait, hide textLoading, hide textSaving
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x130), 0, 1);  // show textPleaseWait
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x120), 1, 0);  // hide textLoading
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x128), 1, 0);  // hide textSaving
+        if (textPleaseWait) fn_Element_SetFlagsOnOff(textPleaseWait, 0, 1);
+        if (textLoading) fn_Element_SetFlagsOnOff(textLoading, 1, 0);
+        if (textSaving) fn_Element_SetFlagsOnOff(textSaving, 1, 0);
     } else if (operation == 2) {
         // Saving: hide textPleaseWait, show textLoading, hide textSaving
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x130), 1, 0);  // hide textPleaseWait
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x120), 0, 1);  // show textLoading
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x128), 1, 0);  // hide textSaving
+        if (textPleaseWait) fn_Element_SetFlagsOnOff(textPleaseWait, 1, 0);
+        if (textLoading) fn_Element_SetFlagsOnOff(textLoading, 0, 1);
+        if (textSaving) fn_Element_SetFlagsOnOff(textSaving, 1, 0);
     } else if (operation == 4) {
         // Deleting: hide textPleaseWait, hide textLoading, show textSaving
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x130), 1, 0);  // hide textPleaseWait
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x120), 1, 0);  // hide textLoading
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x128), 0, 1);  // show textSaving
+        if (textPleaseWait) fn_Element_SetFlagsOnOff(textPleaseWait, 1, 0);
+        if (textLoading) fn_Element_SetFlagsOnOff(textLoading, 1, 0);
+        if (textSaving) fn_Element_SetFlagsOnOff(textSaving, 0, 1);
     }
 }
 

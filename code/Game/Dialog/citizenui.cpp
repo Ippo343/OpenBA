@@ -195,6 +195,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     uint64_t citizenAIRef = 0;
     fn_FindComponent_CitizenAI((void*)entityRef, &citizenAIRef);
     uintptr_t ai = (uintptr_t)citizenAIRef;
+    if (!ai) return;
 
     // Get CitizenDescription from CitizenAI (+0x18), check IsDerivedFrom
     void* descBase = *(void**)(ai + 0x18);
@@ -206,46 +207,54 @@ void CitizenUI_Slot7(CitizenUI* self) {
     bool isMale = (*(int*)(ai + 0x38) != 0);
     // imageFemale (+0x38): visible if male, imageMale (+0x30): visible if female... wait
     // Actually: if isMale, show imageMale (hide female), else show imageFemale (hide male)
+    void* imageFemale = (void*)*(uint64_t*)(s + 0x38);
     if (isMale) {
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x38), 1, 0);  // hide imageFemale
+        if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 1, 0);  // hide imageFemale
     } else {
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x38), 0, 1);  // show imageFemale
+        if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 0, 1);  // show imageFemale
     }
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x30), isMale ? 0 : 1, isMale ? 1 : 0);
+    void* imageMale = (void*)*(uint64_t*)(s + 0x30);
+    if (imageMale) fn_Element_SetFlagsOnOff(imageMale, isMale ? 0 : 1, isMale ? 1 : 0);
 
     // --- Education visibility ---
     // age at +0x210 (int), education age threshold at description+0x118 via CitizenAI+0x288
     bool isEducated = (*(int*)(ai + 0x210) < *(int*)(*(uintptr_t*)(ai + 0x288) + 0x118));
+    void* textEducatedNo = (void*)*(uint64_t*)(s + 0x60);
     if (isEducated) {
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x60), 0, 1);  // show textEducatedNo
+        if (textEducatedNo) fn_Element_SetFlagsOnOff(textEducatedNo, 0, 1);  // show textEducatedNo
     } else {
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x60), 1, 0);  // hide textEducatedNo
+        if (textEducatedNo) fn_Element_SetFlagsOnOff(textEducatedNo, 1, 0);  // hide textEducatedNo
     }
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x58),
+    void* textEducatedYes = (void*)*(uint64_t*)(s + 0x58);
+    if (textEducatedYes) fn_Element_SetFlagsOnOff(textEducatedYes,
                              isEducated ? 1 : 0, isEducated ? 0 : 1);
 
     // --- Name text ---
     // CitizenAI+0x28 is the citizen's name (System::String)
-    fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x40), 0, (void*)(ai + 0x28));
+    void* textName = (void*)*(uint64_t*)(s + 0x40);
+    if (textName) fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
 
     // --- Age number ---
     float ageFloat = *(float*)(ai + 0x3c);
     int ageYears = (int)(ageFloat * *g_pAgeMultiplier);
-    fn_NumberElement_SetValueInt((void*)*(uint64_t*)(s + 0x48), ageYears);
+    void* numberAge = (void*)*(uint64_t*)(s + 0x48);
+    if (numberAge) fn_NumberElement_SetValueInt(numberAge, ageYears);
 
     // --- Clothing text (string table lookup) ---
     {
         void* clothingElem = (void*)*(uint64_t*)(s + 0x68);
-        uint32_t clothingIdx = *(uint32_t*)(ai + 0x1e4);
-        uintptr_t elemPtr = (uintptr_t)clothingElem;
-        // Build UI::String from element's string table (+0xD8) and string entry (+0xE0)
-        uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
-        uint8_t uiStr[16];
-        fn_UIString_Ctor_Index(uiStr, stringTable, clothingIdx);
-        uint8_t textVal[16];
-        *(uint64_t*)textVal = *(uint64_t*)uiStr;
-        *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-        fn_TextElement_SetText(clothingElem, textVal);
+        if (clothingElem) {
+            uint32_t clothingIdx = *(uint32_t*)(ai + 0x1e4);
+            uintptr_t elemPtr = (uintptr_t)clothingElem;
+            // Build UI::String from element's string table (+0xD8) and string entry (+0xE0)
+            uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
+            uint8_t uiStr[16];
+            fn_UIString_Ctor_Index(uiStr, stringTable, clothingIdx);
+            uint8_t textVal[16];
+            *(uint64_t*)textVal = *(uint64_t*)uiStr;
+            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+            fn_TextElement_SetText(clothingElem, textVal);
+        }
     }
 
     // --- Tool text ---
@@ -264,14 +273,16 @@ void CitizenUI_Slot7(CitizenUI* self) {
     }
     {
         void* toolElem = (void*)*(uint64_t*)(s + 0x70);
-        uintptr_t elemPtr = (uintptr_t)toolElem;
-        uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
-        uint8_t uiStr[16];
-        fn_UIString_Ctor_Index(uiStr, stringTable, toolValue);
-        uint8_t textVal[16];
-        *(uint64_t*)textVal = *(uint64_t*)uiStr;
-        *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-        fn_TextElement_SetText(toolElem, textVal);
+        if (toolElem) {
+            uintptr_t elemPtr = (uintptr_t)toolElem;
+            uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
+            uint8_t uiStr[16];
+            fn_UIString_Ctor_Index(uiStr, stringTable, toolValue);
+            uint8_t textVal[16];
+            *(uint64_t*)textVal = *(uint64_t*)uiStr;
+            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+            fn_TextElement_SetText(toolElem, textVal);
+        }
     }
 
     // --- Profession text ---
@@ -282,33 +293,35 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // Else: use +0x1F0 (current profession description)
     {
         void* profElem = (void*)*(uint64_t*)(s + 0x50);
-        uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0);
+        if (profElem) {
+            uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0);
 
-        bool isChild = (*(float*)(ai + 0x3c) < *(float*)(*(uintptr_t*)(ai + 0x288) + 0x44));
-        bool hasWorkplace = (*(uintptr_t*)(ai + 0x208) != 0);
+            bool isChild = (*(float*)(ai + 0x3c) < *(float*)(*(uintptr_t*)(ai + 0x288) + 0x44));
+            bool hasWorkplace = (*(uintptr_t*)(ai + 0x208) != 0);
 
-        uint8_t textVal[16];
-        if (isChild || hasWorkplace) {
-            uintptr_t profEntry;
-            if (*(uintptr_t*)(ai + 0x208) == 0) {
-                profEntry = *(uintptr_t*)(profListBase + 0x40);  // child
+            uint8_t textVal[16];
+            if (isChild || hasWorkplace) {
+                uintptr_t profEntry;
+                if (*(uintptr_t*)(ai + 0x208) == 0) {
+                    profEntry = *(uintptr_t*)(profListBase + 0x40);  // child
+                } else {
+                    profEntry = *(uintptr_t*)(profListBase + 0x48);  // worker with workplace
+                }
+                uint64_t strTable = *(uint64_t*)(profEntry + 0x20);
+                uint8_t uiStr[16];
+                fn_UIString_Ctor(uiStr, strTable, (void*)(profEntry + 0x30));
+                *(uint64_t*)textVal = *(uint64_t*)uiStr;
+                *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
             } else {
-                profEntry = *(uintptr_t*)(profListBase + 0x48);  // worker with workplace
+                uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
+                uint64_t strTable = *(uint64_t*)(profDesc + 0x20);
+                uint8_t uiStr[16];
+                fn_UIString_Ctor(uiStr, strTable, (void*)(profDesc + 0x30));
+                *(uint64_t*)textVal = *(uint64_t*)uiStr;
+                *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
             }
-            uint64_t strTable = *(uint64_t*)(profEntry + 0x20);
-            uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, strTable, (void*)(profEntry + 0x30));
-            *(uint64_t*)textVal = *(uint64_t*)uiStr;
-            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-        } else {
-            uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
-            uint64_t strTable = *(uint64_t*)(profDesc + 0x20);
-            uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, strTable, (void*)(profDesc + 0x30));
-            *(uint64_t*)textVal = *(uint64_t*)uiStr;
-            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+            fn_TextElement_SetText(profElem, textVal);
         }
-        fn_TextElement_SetText(profElem, textVal);
     }
 
     // --- Health hearts and happiness stars ---
@@ -322,24 +335,29 @@ void CitizenUI_Slot7(CitizenUI* self) {
     bool profEnabled = (*(uintptr_t*)(ai + 0x248) != 0) || (*(uintptr_t*)(ai + 0x208) != 0);
     {
         void* profBtn = (void*)*(uint64_t*)(s + 0x78);
-        typedef void (*fn_VSetEnabled_t)(void* self, bool enabled);
-        void** vtable = *(void***)profBtn;
-        fn_VSetEnabled_t vfunc = (fn_VSetEnabled_t)vtable[8]; // vtable+0x40
-        vfunc(profBtn, profEnabled);
+        if (profBtn) {
+            typedef void (*fn_VSetEnabled_t)(void* self, bool enabled);
+            void** vtable = *(void***)profBtn;
+            fn_VSetEnabled_t vfunc = (fn_VSetEnabled_t)vtable[8]; // vtable+0x40
+            vfunc(profBtn, profEnabled);
+        }
     }
 
     // --- Home button virtual call ---
     {
         void* homeBtn = (void*)*(uint64_t*)(s + 0x80);
-        typedef void (*fn_VSetEnabled_t)(void* self, bool enabled);
-        void** vtable = *(void***)homeBtn;
-        fn_VSetEnabled_t vfunc = (fn_VSetEnabled_t)vtable[8]; // vtable+0x40
-        // Original passes result of CheckPtr on CitizenAI (always true if we got here)
-        vfunc(homeBtn, true);
+        if (homeBtn) {
+            typedef void (*fn_VSetEnabled_t)(void* self, bool enabled);
+            void** vtable = *(void***)homeBtn;
+            fn_VSetEnabled_t vfunc = (fn_VSetEnabled_t)vtable[8]; // vtable+0x40
+            // Original passes result of CheckPtr on CitizenAI (always true if we got here)
+            vfunc(homeBtn, true);
+        }
     }
 
     // --- textNameIs: set name parameter ---
-    fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x90), 0, (void*)(ai + 0x28));
+    void* textNameIs = (void*)*(uint64_t*)(s + 0x90);
+    if (textNameIs) fn_TextElement_SetParameter(textNameIs, 0, (void*)(ai + 0x28));
 
     // --- Action text ---
     // Get entity reference from CitizenAI+0x10, find profession component
@@ -379,14 +397,16 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // Set action text from string table at element +0xD8
     {
         void* actionElem = (void*)*(uint64_t*)(s + 0x98);
-        uintptr_t elemPtr = (uintptr_t)actionElem;
-        uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
-        uint8_t uiStr[16];
-        fn_UIString_Ctor_Index(uiStr, stringTable, actionIndex);
-        uint8_t textVal[16];
-        *(uint64_t*)textVal = *(uint64_t*)uiStr;
-        *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-        fn_TextElement_SetText(actionElem, textVal);
+        if (actionElem) {
+            uintptr_t elemPtr = (uintptr_t)actionElem;
+            uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
+            uint8_t uiStr[16];
+            fn_UIString_Ctor_Index(uiStr, stringTable, actionIndex);
+            uint8_t textVal[16];
+            *(uint64_t*)textVal = *(uint64_t*)uiStr;
+            *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+            fn_TextElement_SetText(actionElem, textVal);
+        }
     }
 }
 

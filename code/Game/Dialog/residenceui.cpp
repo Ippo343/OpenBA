@@ -185,8 +185,8 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entity);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find ResidenceComponent (NOT StorageComponent — different type with room data at +0x50/+0x58)
-    // Original uses DWORD_1401c7cf0 = g_TypeId_ResidenceComponent
+    // Find ResidenceComponent — original uses type ID at 0x1401c7cf0 (ResidenceComponent),
+    // NOT StorageComponent (0x1401c7e78). Different component with room data at +0x50/+0x58.
     uintptr_t storageComp = 0;
     Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, g_TypeId_ResidenceComponent);
     fn_InternalBasePtr_CheckPtr(&storageComp);
@@ -224,24 +224,26 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
                     // Show/hide gender icons
                     void* imageFemale = *(void**)(rowBase + 0x08);
-                    if (isMale) {
-                        fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
-                    } else {
-                        fn_Element_SetFlagsOnOff(imageFemale, 0, 1);
+                    if (imageFemale) {
+                        if (isMale) {
+                            fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
+                        } else {
+                            fn_Element_SetFlagsOnOff(imageFemale, 0, 1);
+                        }
                     }
                     void* imageMale = *(void**)(rowBase + 0x00);
-                    fn_Element_SetFlagsOnOff(imageMale, (uint32_t)!isMale, (uint32_t)isMale);
+                    if (imageMale) fn_Element_SetFlagsOnOff(imageMale, (uint32_t)!isMale, (uint32_t)isMale);
 
                     // Set name text: citizen+0x28 is the name String
                     void* textName = *(void**)(rowBase + 0x10);
-                    fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
+                    if (textName) fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     uint8_t ageStr[8];
                     int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
                     fn_String_Format(ageStr, "%i", (uint64_t)(uint32_t)ageYears);
                     void* textAge = *(void**)(rowBase + 0x18);
-                    fn_TextElement_SetParameter(textAge, 0, ageStr);
+                    if (textAge) fn_TextElement_SetParameter(textAge, 0, ageStr);
                     fn_String_Dtor(ageStr);
 
                     // Determine profession text based on age/death status
@@ -255,31 +257,35 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     // UI::String is 16 bytes. Construct from ExternalPtr<StringTable> entry.
                     // The UIString ctor from single ExternalPtr is at dispatch 0x140151300.
                     // We call it via fn_UIString_Ctor_Entry(retval, externalPtr).
+                    // UI::String ctor needs 3 args: (retbuf, externalPtr at +0x20, stringName at +0x30)
+                    // fn_UIString_Ctor_Entry only passes 2 — Ghidra drops R8 (the string name).
                     uint64_t uiStr[2];
                     if (age < oldAgeThreshold && deadFlag == 0) {
-                        // Normal citizen: profession from citizen+0x1f0 -> +0x20
+                        // Normal citizen: profession from citizen+0x1f0
                         uintptr_t profDesc = *(uintptr_t*)(citizen + 0x1f0);
-                        fn_UIString_Ctor_Entry(uiStr, *(uint64_t*)(profDesc + 0x20));
+                        fn_UIString_Ctor(uiStr, *(uint64_t*)(profDesc + 0x20), (void*)(profDesc + 0x30));
                     } else if (deadFlag != 0) {
-                        // Dead: "deceased" from ProfessionList +0x48 -> +0x20
+                        // Dead: "deceased" from ProfessionList +0x48
                         void* world = *g_pGameWorldSingleton;
                         uintptr_t profList = *(uintptr_t*)((uintptr_t)world + 0xB0);
                         uintptr_t entry = *(uintptr_t*)(profList + 0x48);
-                        fn_UIString_Ctor_Entry(uiStr, *(uint64_t*)(entry + 0x20));
+                        fn_UIString_Ctor(uiStr, *(uint64_t*)(entry + 0x20), (void*)(entry + 0x30));
                     } else {
-                        // Old/retired: "elderly" from ProfessionList +0x40 -> +0x20
+                        // Old/retired: "elderly" from ProfessionList +0x40
                         void* world = *g_pGameWorldSingleton;
                         uintptr_t profList = *(uintptr_t*)((uintptr_t)world + 0xB0);
                         uintptr_t entry = *(uintptr_t*)(profList + 0x40);
-                        fn_UIString_Ctor_Entry(uiStr, *(uint64_t*)(entry + 0x20));
+                        fn_UIString_Ctor(uiStr, *(uint64_t*)(entry + 0x20), (void*)(entry + 0x30));
                     }
-                    fn_TextElement_SetText(textProfession, uiStr);
+                    if (textProfession) fn_TextElement_SetText(textProfession, uiStr);
 
                     // Activate buttonGoto: vtable[8](this)
                     void* buttonGoto = *(void**)(rowBase + 0x28);
-                    void** vtbl = *(void***)buttonGoto;
-                    typedef void (*VCall_Activate_t)(void*);
-                    ((VCall_Activate_t)vtbl[8])(buttonGoto);
+                    if (buttonGoto) {
+                        void** vtbl = *(void***)buttonGoto;
+                        typedef void (*VCall_Activate_t)(void*);
+                        ((VCall_Activate_t)vtbl[8])(buttonGoto);
+                    }
 
                     rowIdx++;
                 }
@@ -301,22 +307,18 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
             if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
 
             // Clear name text
+            uint8_t emptyStr1[8];
+            fn_String_Ctor_CStr(emptyStr1, "");
             void* textName = *(void**)(rowBase + 0x10);
-            if (textName) {
-                uint8_t emptyStr1[8];
-                fn_String_Ctor_CStr(emptyStr1, "");
-                fn_TextElement_SetParameter(textName, 0, emptyStr1);
-                fn_String_Dtor(emptyStr1);
-            }
+            if (textName) fn_TextElement_SetParameter(textName, 0, emptyStr1);
+            fn_String_Dtor(emptyStr1);
 
             // Clear age text
+            uint8_t emptyStr2[8];
+            fn_String_Ctor_CStr(emptyStr2, "");
             void* textAge = *(void**)(rowBase + 0x18);
-            if (textAge) {
-                uint8_t emptyStr2[8];
-                fn_String_Ctor_CStr(emptyStr2, "");
-                fn_TextElement_SetParameter(textAge, 0, emptyStr2);
-                fn_String_Dtor(emptyStr2);
-            }
+            if (textAge) fn_TextElement_SetParameter(textAge, 0, emptyStr2);
+            fn_String_Dtor(emptyStr2);
 
             // Reset profession text: fn_UIString_Ctor(retbuf, externalPtr from +0xD8, empty string)
             void* textProfession = *(void**)(rowBase + 0x20);
@@ -332,10 +334,11 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
             // Deactivate buttonGoto: vtable[8](this, 0)
             void* buttonGoto = *(void**)(rowBase + 0x28);
-            if (!buttonGoto) { i++; continue; }
-            void** vtbl = *(void***)buttonGoto;
-            typedef void (*VCall_Deactivate_t)(void*, int);
-            ((VCall_Deactivate_t)vtbl[8])(buttonGoto, 0);
+            if (buttonGoto) {
+                void** vtbl = *(void***)buttonGoto;
+                typedef void (*VCall_Deactivate_t)(void*, int);
+                ((VCall_Deactivate_t)vtbl[8])(buttonGoto, 0);
+            }
 
             i++;
         } while (i < *(int*)(s + 0x38));

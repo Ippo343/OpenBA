@@ -20,14 +20,20 @@ void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
     uint32_t showFlags = (uint32_t)(operation == 4);
 
     void* elem1 = *(void**)(s + 0xB8);
-    fn_Element_SetFlagsOnOff(elem1, hideFlags, showFlags);
+    if (elem1) {
+        fn_Element_SetFlagsOnOff(elem1, hideFlags, showFlags);
+    }
 
     void* elem2 = *(void**)(s + 0xC0);
-    fn_Element_SetFlagsOnOff(elem2, hideFlags, showFlags);
+    if (elem2) {
+        fn_Element_SetFlagsOnOff(elem2, hideFlags, showFlags);
+    }
 
     // Apply rotation to first indicator element
     float angle = *(float*)(s + 0xC8);
-    fn_ImageElement_SetRotation(elem1, angle);
+    if (elem1) {
+        fn_ImageElement_SetRotation(elem1, angle);
+    }
 }
 
 // AutoSaveDialog::Slot7 (0x14005E090) — Update

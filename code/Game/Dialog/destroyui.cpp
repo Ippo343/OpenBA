@@ -599,6 +599,9 @@ void DestroyUI_Slot7(DestroyUI* self) {
     void* buttonDestroy   = (void*)self->data68;
     void* buttonRebuild   = (void*)self->data70;
 
+    // Guard: if critical UI elements aren't initialized yet, bail out
+    if (!progressRemove || !progressDestruct || !buttonReclaim || !buttonDestroy) return;
+
     // The last element to be hidden at function exit
     void* hideAtEnd = nullptr;
 
@@ -606,9 +609,9 @@ void DestroyUI_Slot7(DestroyUI* self) {
         // --- Building is being demolished: show reclaim, update progress ---
 
         // Hide rebuild, destroy buttons and textDamage
-        fn_Element_SetFlagsOnOff(buttonRebuild, 1, 0);
+        if (buttonRebuild) fn_Element_SetFlagsOnOff(buttonRebuild, 1, 0);
         fn_Element_SetFlagsOnOff(buttonDestroy, 1, 0);
-        fn_Element_SetFlagsOnOff(textDamage, 1, 0);
+        if (textDamage) fn_Element_SetFlagsOnOff(textDamage, 1, 0);
 
         // Show reclaim button
         fn_Element_SetFlagsOnOff(buttonReclaim, 0, 1);
@@ -676,20 +679,20 @@ void DestroyUI_Slot7(DestroyUI* self) {
 
         if (currentState == targetState) {
             // Building state matches target → show "fixing" text
-            fn_Element_SetFlagsOnOff(textFixing, 0, 1);
-            fn_Element_SetFlagsOnOff(textRemove, 1, 0);
+            if (textFixing) fn_Element_SetFlagsOnOff(textFixing, 0, 1);
+            if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 1, 0);
             hideAtEnd = textUpgrade;
         } else {
             // Check if building can be rebuilt (upgraded)
             bool canRebuild = DestroyComponent_CanRebuild_Impl(destroyComp);
             if (!canRebuild) {
                 // Regular removal: show textRemove
-                fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
-                fn_Element_SetFlagsOnOff(textRemove, 0, 1);
+                if (textUpgrade) fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
+                if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 0, 1);
             } else {
                 // Can rebuild: show textUpgrade
-                fn_Element_SetFlagsOnOff(textRemove, 1, 0);
-                fn_Element_SetFlagsOnOff(textUpgrade, 0, 1);
+                if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 1, 0);
+                if (textUpgrade) fn_Element_SetFlagsOnOff(textUpgrade, 0, 1);
             }
             hideAtEnd = textFixing;
         }
@@ -732,12 +735,12 @@ void DestroyUI_Slot7(DestroyUI* self) {
         fn_Element_SetFlagsOnOff(buttonDestroy, 0, 1);
 
         // Show textDamage
-        fn_Element_SetFlagsOnOff(textDamage, 0, 1);
+        if (textDamage) fn_Element_SetFlagsOnOff(textDamage, 0, 1);
 
         // Hide everything else
-        fn_Element_SetFlagsOnOff(textFixing, 1, 0);
-        fn_Element_SetFlagsOnOff(textRemove, 1, 0);
-        fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
+        if (textFixing) fn_Element_SetFlagsOnOff(textFixing, 1, 0);
+        if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 1, 0);
+        if (textUpgrade) fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
         fn_Element_SetFlagsOnOff(progressRemove, 1, 0);
         fn_Element_SetFlagsOnOff(progressDestruct, 1, 0);
 
@@ -745,7 +748,7 @@ void DestroyUI_Slot7(DestroyUI* self) {
     }
 
     // Hide the last element (buttonReclaim when reclaim active, or a text element)
-    fn_Element_SetFlagsOnOff(hideAtEnd, 1, 0);
+    if (hideAtEnd) fn_Element_SetFlagsOnOff(hideAtEnd, 1, 0);
 }
 
 // ============================================================
