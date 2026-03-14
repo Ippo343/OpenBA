@@ -6,7 +6,7 @@ Tracking Runtime-x64.dll functions that need decompilation for current work.
 
 - `runtime/types/` — binary-compatible struct headers (common.h, video/ImageBuffer.h, ui/Sprite.h, ui/SpriteSheet.h, ui/ImageElement.h, ui/LabelElement.h)
 - `runtime/funcs/runtime_funcs.{h,cpp}` — internal function pointer resolution (placeholder, calls work)
-- `runtime/src/ui/` — debug logging stubs (sprite_debug.cpp, spritesheet_debug.cpp, element_sprite_debug.cpp)
+- `runtime/src/ui/` — debug logging stubs + headers (sprite_debug.{h,cpp}, spritesheet_debug.{h,cpp}, element_sprite_debug.{h,cpp})
 - `runtime/reimpl/` — hook wrappers (empty)
 - **Makefile** — build rules for all runtime dirs already in place, include paths set (`-Iruntime/types -Iruntime/funcs`)
 
@@ -80,29 +80,47 @@ Key fields for sprite pipeline:
 - +0x30: `_name` (String, e.g. "Log") — BuildUI sprite name
 - +0x38: `_nameSmall` (String, e.g. "LogSmall") — BuildRequirementUI sprite name
 
-### Rename TODO (see `notes/type_update_1401c7cb8.md`)
+### COMPLETED: Renames (2026-03-13)
 
-These wrong names need updating across the codebase:
-- `g_TypeId_ResourceType` → `g_TypeId_RawMaterialDescription` (engine_funcs.h:583)
-- `g_TypeId_CitizenComponent` → remove duplicate (engine_funcs.h:2714)
-- `g_pBuildingDataTypeId` → `g_TypeId_RawMaterialDescription` (rawmaterialcomponent.cpp:65)
-- Comments in buildui.cpp, buildrequirementui.cpp, debugui.cpp
-- `Game_KillAllCitizens` → `Game_DestroyAllRawMaterials` (misnamed — destroys loose items, not citizens)
+All wrong names for DAT_1401c7cb8 fixed in commit `cd8b5a5`:
+- `g_TypeId_ResourceType` → `g_TypeId_RawMaterialDescription` (12 files, including consumeproduceui, tradeui, townhallui, storageui, productionui)
+- `g_TypeId_CitizenComponent` duplicate removed, replaced with `fn_FindComponent_RawMaterial` helper
+- `g_pBuildingDataTypeId` local static removed from rawmaterialcomponent.cpp (uses global instead)
+- `Game_KillAllCitizens` → `Game_DestroyAllRawMaterials` (engine_funcs + debugui)
 
-### Missing function pointer
+### COMPLETED: fn_LabelElement_GetSprite (2026-03-13)
 
-- `fn_LabelElement_GetSprite` — ordinal 2927, address `0x1800429d0`, mangled: `?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ`
+Added to engine_funcs — ordinal 2927, address `0x1800429d0`, resolves via mangled name with address fallback. `element_sprite_debug.cpp` updated to use it.
+
+### COMPLETED: Debug wrapper headers (2026-03-13)
+
+Created `.h` files for all debug wrappers so they can be included from other translation units:
+- `runtime/src/ui/sprite_debug.h`
+- `runtime/src/ui/element_sprite_debug.h`
+- `runtime/src/ui/spritesheet_debug.h`
+
+### COMPLETED: Debug integration into BuildRequirementUI + BuildUI (2026-03-13)
+
+8 sprite call sites wrapped with `#ifdef _DEBUG` / Debug_ wrappers in:
+- `code/Game/Dialog/buildrequirementui.cpp` (4 sites: 2x Sprite_Ctor, 1x ImageElement_SetSprite, 1x LabelElement_SetSprite)
+- `code/Game/Dialog/buildui.cpp` (4 sites: 1x Sprite_Ctor, 1x Sprite_DefaultCtor, 2x LabelElement_SetSprite)
+
+Debug builds now log all sprite pipeline operations. Deploy and check `patch_debug.log`.
 
 ---
 
 ## Next Priorities
 
-### 1. Integrate debug logging into BuildRequirementUI reimpl
+### 1. Deploy and diagnose sprite display issue
 
-Wire up the sprite debug wrappers in `code/Game/Dialog/buildrequirementui.cpp` to trace
-the actual sprite pipeline at runtime. Replace direct `fn_Sprite_Ctor` calls with
-`Debug_Sprite_Ctor` and `fn_ImageElement_SetSprite` with `Debug_ImageElement_SetSprite`
-to see exactly what sprite data flows through.
+Build with `mingw32-make deploy`, launch game, start a new game, place a building.
+Check `patch_debug.log` for:
+- `[Sprite::Ctor]` lines showing sheet ptr and resolved index
+- `[SpriteSheet] LOOKUP FAILED` lines indicating wrong sprite names
+- `[ImageElement::SetSprite]` / `[LabelElement::SetSprite]` showing dirty flag changes
+
+If sprites still don't display, use `SpriteSheet_Debug_DumpAllSprites` to dump the full
+sheet contents and compare against the names being looked up.
 
 ### 2. Additional Runtime types (as needed)
 
