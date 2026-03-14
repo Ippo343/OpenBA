@@ -31,6 +31,14 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+#ifdef _DEBUG
+// Debug sprite logging wrappers (runtime/src/ui/)
+extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+extern void* Debug_Sprite_DefaultCtor(void* retval);
+extern bool Debug_Sprite_IsValid(void* sprite);
+extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
+#endif
+
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
 // ============================================================
@@ -1015,7 +1023,11 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         uint8_t uiString[16];
         uint8_t uiSprite[16];
         fn_UIString_Ctor(uiString, *(uint64_t*)(item + 0x20), (void*)(item + 0x30));
+#ifdef _DEBUG
+        Debug_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
+#else
         fn_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
+#endif
 
         // --- Configure button element (skip for SpeedDisplay) ---
         if (templateIndex != 0) {
@@ -1058,9 +1070,15 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                     *(uint64_t*)&uiString[0] = *(uint64_t*)overrideStr;
                     *(uint64_t*)&uiString[8] = *(uint64_t*)(overrideStr + 8);
 
-                    // Override sprite: Sprite() default (empty/invalid sprite)
+                    // Override sprite from BuildRequirementComponent: SpriteSheet at +0x20, name at +0x28
                     uint8_t overrideSpr[16];
-                    fn_Sprite_Default_Ctor(overrideSpr);
+#ifdef _DEBUG
+                    Debug_Sprite_Ctor(overrideSpr, *(uint64_t*)((uintptr_t)buildReqComp + 0x20),
+                                   (void*)((uintptr_t)buildReqComp + 0x28));
+#else
+                    fn_Sprite_Ctor(overrideSpr, *(uint64_t*)((uintptr_t)buildReqComp + 0x20),
+                                   (void*)((uintptr_t)buildReqComp + 0x28));
+#endif
                     *(uint64_t*)&uiSprite[0] = *(uint64_t*)overrideSpr;
                     *(uint64_t*)&uiSprite[8] = *(uint64_t*)(overrideSpr + 8);
                 }
@@ -1133,13 +1151,21 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                 fn_InternalBasePtr_Ctor(&imageRef, imageElem);
 
                 // Set sprite if valid and imageElem is non-null
+#ifdef _DEBUG
+                bool spriteValid = Debug_Sprite_IsValid(uiSprite);
+#else
                 bool spriteValid = fn_Sprite_IsValid(uiSprite);
+#endif
                 if (spriteValid && imageRef != 0) {
                     uint8_t sprCopy[16];
                     *(uint64_t*)sprCopy = *(uint64_t*)uiSprite;
                     *(uint64_t*)(sprCopy + 8) = *(uint64_t*)(uiSprite + 8);
                     fn_InternalBasePtr_CheckPtr((void*)&imageRef);
+#ifdef _DEBUG
+                    Debug_ImageElement_SetSprite((void*)imageRef, sprCopy);
+#else
                     fn_ImageElement_SetSprite((void*)imageRef, sprCopy);
+#endif
                 }
 
                 childIdx++;

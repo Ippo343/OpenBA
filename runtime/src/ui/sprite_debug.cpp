@@ -20,8 +20,14 @@
 // ============================================================
 void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName) {
 #ifdef _DEBUG
-    printf("[Sprite::Ctor] sheet=%p name=%p retval=%p\n",
-           (void*)(uintptr_t)spriteSheet, spriteName, retval);
+    // spriteName is System::String const& — dereference to get char*
+    const char* nameStr = "(null)";
+    if (spriteName) {
+        const char* dataPtr = *(const char**)spriteName;
+        if (dataPtr) nameStr = dataPtr;
+    }
+    printf("[Sprite::Ctor] sheet=%p name=\"%s\" retval=%p\n",
+           (void*)(uintptr_t)spriteSheet, nameStr, retval);
 #endif
     void* result = fn_Sprite_Ctor(retval, spriteSheet, spriteName);
 #ifdef _DEBUG
