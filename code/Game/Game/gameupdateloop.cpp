@@ -780,15 +780,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                                 int64_t deltaTime[1] = { delta };
 
                                 for (int ci = 0; ci < compCount; ci++) {
+                                    fn_InternalBasePtr_CheckPtr((void*)&compArr[ci]);
                                     void* comp = compArr[ci];
                                     uintptr_t cp = (uintptr_t)comp;
-                                    uint32_t compFlags = *(uint32_t*)(cp + 4);
+                                    uint32_t compFlags = *(uint32_t*)(cp + 0x20);
 
                                     // Check if component has update flag (bit 3)
                                     if (!(compFlags & 0x8)) continue;
-
-                                    fn_InternalBasePtr_CheckPtr((void*)&compArr[ci]);
-                                    comp = compArr[ci]; // re-read after CheckPtr
 
                                     // Get vtable and call Update at +0x48
                                     void** vtbl = *(void***)comp;

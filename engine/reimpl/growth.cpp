@@ -80,6 +80,11 @@ static float* g_fFreezeGrowth = nullptr;   // DAT_140172288 = growth rate at fre
 
 static void Reimpl_Update(void* self, int64_t* deltaTime) {
     g_lastHook = "GrowthComponent::Update";
+    // PASSTHROUGH — reimpl crashes now that component updates actually run
+    // (was previously untested due to component flags bug in gameupdateloop.cpp)
+    typedef void (*fn_Orig_t)(void*, int64_t*);
+    ((fn_Orig_t)g_hookUpdate.trampoline)(self, deltaTime);
+    return;
 #ifdef _DEBUG
     static int callCount = 0;
     if (callCount < 5) {

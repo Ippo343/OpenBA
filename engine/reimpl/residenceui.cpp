@@ -59,11 +59,12 @@ static void Reimpl_Slot4(void* self) {
     ResidenceUI_Slot4((ResidenceUI*)self);
 }
 
-// Slot7 — REIMPLEMENTED (update resident display rows)
+// Slot7 — PASSTHROUGH (reimpl crashes with null row elements when residents
+// are present — needs CheckPtr fixes and row count validation)
 typedef void (*fn_Slot7_t)(void* self);
 static void Reimpl_Slot7(void* self) {
     g_lastHook = "ResidenceUI::Slot7";
-    ResidenceUI_Slot7((ResidenceUI*)self);
+    ((fn_Slot7_t)g_hookSlot7.trampoline)(self);
 }
 
 // Slot9 — REIMPLEMENTED (dispatches resident row clicks)

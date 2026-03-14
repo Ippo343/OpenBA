@@ -2763,7 +2763,7 @@ static ReimplEntry g_reimplementations[] = {
     { "CitizenUI::Dtor", InstallCitizenUIDtor, RemoveCitizenUIDtor, true },
     { "CitizenUI::Slot4", InstallCitizenUISlot4, RemoveCitizenUISlot4, true },
     { "CitizenUI::Slot6", InstallCitizenUISlot6, RemoveCitizenUISlot6, true },
-    { "CitizenUI::Slot7", InstallCitizenUISlot7, RemoveCitizenUISlot7, true },
+    { "CitizenUI::Slot7", InstallCitizenUISlot7, RemoveCitizenUISlot7, false }, // SetFlagsOnOff(null) — needs null guards
     { "CitizenUI::Slot9", InstallCitizenUISlot9, RemoveCitizenUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ConsumeProduceUI ---
@@ -2795,7 +2795,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- DestroyUI ---
     { "DestroyUI::Dtor", InstallDestroyUIDtor, RemoveDestroyUIDtor, true },
     { "DestroyUI::Slot4", InstallDestroyUISlot4, RemoveDestroyUISlot4, true },
-    { "DestroyUI::Slot7", InstallDestroyUISlot7, RemoveDestroyUISlot7, true },
+    { "DestroyUI::Slot7", InstallDestroyUISlot7, RemoveDestroyUISlot7, false }, // SetFlagsOnOff(null) — needs null guards
     { "DestroyUI::Slot9", InstallDestroyUISlot9, RemoveDestroyUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- EntityUI ---
@@ -2888,7 +2888,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- ResidenceUI ---
     { "ResidenceUI::Dtor", InstallResidenceUIDtor, RemoveResidenceUIDtor, true },
     { "ResidenceUI::Slot4", InstallResidenceUISlot4, RemoveResidenceUISlot4, true },
-    { "ResidenceUI::Slot7", InstallResidenceUISlot7, RemoveResidenceUISlot7, true },
+    { "ResidenceUI::Slot7", InstallResidenceUISlot7, RemoveResidenceUISlot7, false }, // Bug class 4: MOV [RSP+8],RCX prologue + reimpl null element crash
     { "ResidenceUI::Slot9", InstallResidenceUISlot9, RemoveResidenceUISlot9, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- ResourceLimitUI ---
@@ -2979,7 +2979,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- EventNotifyDialog ---
     { "EventNotifyDialog::ScalarDtor", InstallEventNotifyDialogScalarDtor, RemoveEventNotifyDialogScalarDtor, true },
     { "EventNotifyDialog::Startup", InstallEventNotifyDialogStartup, RemoveEventNotifyDialogStartup, true },
-    { "EventNotifyDialog::Update", InstallEventNotifyDialogUpdate, RemoveEventNotifyDialogUpdate, true },
+    { "EventNotifyDialog::Update", InstallEventNotifyDialogUpdate, RemoveEventNotifyDialogUpdate, false }, // SetFlagsOnOff(null) — needs null guards
     { "EventNotifyDialog::Load", InstallEventNotifyDialogLoad, RemoveEventNotifyDialogLoad, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "EventNotifyDialog::OnEvent", InstallEventNotifyDialogOnEvent, RemoveEventNotifyDialogOnEvent, true }, // full reimpl, no trampoline
 
@@ -3013,13 +3013,13 @@ static ReimplEntry g_reimplementations[] = {
     // --- SaveLoadDialog ---
     { "SaveLoadDialog::ScalarDtor", InstallSaveLoadDialogScalarDtor, RemoveSaveLoadDialogScalarDtor, true },
     { "SaveLoadDialog::Startup", InstallSaveLoadDialogStartup, RemoveSaveLoadDialogStartup, true },
-    { "SaveLoadDialog::Update", InstallSaveLoadDialogUpdate, RemoveSaveLoadDialogUpdate, true },
+    { "SaveLoadDialog::Update", InstallSaveLoadDialogUpdate, RemoveSaveLoadDialogUpdate, false }, // SetFlagsOnOff(null) — needs null guards
     { "SaveLoadDialog::Load", InstallSaveLoadDialogLoad, RemoveSaveLoadDialogLoad, true }, // RE-ENABLED: reimpl doesn't use trampoline
     { "SaveLoadDialog::OnEvent", InstallSaveLoadDialogOnEvent, RemoveSaveLoadDialogOnEvent, true }, // full reimpl, no trampoline
 
     // --- ToolbarDialog ---
     { "ToolbarDialog::ScalarDtor", InstallToolbarDialogScalarDtor, RemoveToolbarDialogScalarDtor, true },
-    { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, true },
+    { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, false }, // Crashes in original SetFlagsOnOff(null) — state corruption from other hooks
     { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, true }, // RE-ENABLED: reimpl doesn't use trampoline
 
     // --- TutorialHighlightDialog ---
@@ -3054,7 +3054,7 @@ static ReimplEntry g_reimplementations[] = {
     { "AchievementDialog::Slot17", InstallAchievementDialogSlot17, RemoveAchievementDialogSlot17, true },
     // --- AutoSaveDialog ---
     { "AutoSaveDialog::Dtor", InstallAutoSaveDialogDtor, RemoveAutoSaveDialogDtor, true },
-    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "AutoSaveDialog::Slot6", InstallAutoSaveDialogSlot6, RemoveAutoSaveDialogSlot6, false }, // Null deref — exposed by component update loop fix
     { "AutoSaveDialog::Slot7", InstallAutoSaveDialogSlot7, RemoveAutoSaveDialogSlot7, true },
     // --- EventPopupDialog ---
     { "EventPopupDialog::Dtor", InstallEventPopupDialogDtor, RemoveEventPopupDialogDtor, true },

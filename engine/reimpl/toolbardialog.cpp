@@ -59,11 +59,12 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Slot 6: Update(this, param2, param3, param4) — sync toolbar buttons with game state
+// Slot 6: Update — PASSTHROUGH (reimpl crashes with null element in SetFlagsOnOff,
+// exposed by component update loop fix)
 typedef void (*fn_Update_t)(void* self, uint64_t param2, uint64_t param3, uint64_t param4);
 static void Reimpl_Update(void* self, uint64_t param2, uint64_t param3, uint64_t param4) {
     g_lastHook = "ToolbarDialog::Update";
-    ToolbarDialog_Update(self, param2, param3, param4);
+    ((fn_Update_t)g_hookUpdate.trampoline)(self, param2, param3, param4);
 }
 
 // Slot 8: OnEvent(this, element, eventType, eventData, p5, p6, p7) — handle toolbar clicks
