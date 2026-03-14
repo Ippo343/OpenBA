@@ -188,7 +188,8 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     uint8_t mapName[8];
     fn_String_Ctor_Copy(mapName, (void*)((uintptr_t)gameWorld + 0x28));  // FUN_140011f90: copies gameWorld+0x28 String
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
-    fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
+    if (self->labelTitleParam)
+        fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
     fn_String_Dtor(mapName);
 }
 
@@ -517,7 +518,8 @@ found_happiness:
     uint8_t mapName[8];
     fn_String_Ctor_Copy(mapName, (void*)((uintptr_t)gameWorld + 0x28));  // FUN_140011f90: copies gameWorld+0x28 String
     fn_InternalBasePtr_CheckPtr(&self->labelTitleParam);
-    fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
+    if (self->labelTitleParam)
+        fn_TextElement_SetParameter(self->labelTitleParam, 0, mapName);
     fn_String_Dtor(mapName);
 }
 

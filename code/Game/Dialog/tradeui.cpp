@@ -171,7 +171,7 @@ static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem) {
     fn_Element_Child(tableElem, childBuf, 0);
     fn_InternalBasePtr_CheckPtr(childBuf);
     void* firstChild = *(void**)childBuf;
-    void* templateObj = *(void**)(*(uintptr_t*)firstChild + 0xB8);
+    void* templateObj = *(void**)((uintptr_t)firstChild + 0xB8);
 
     int totalCells = fn_Element_ChildCount(tableElem);
     for (int i = 0; i < totalCells; i++) {

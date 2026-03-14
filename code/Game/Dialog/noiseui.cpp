@@ -259,7 +259,7 @@ void NoiseUI_GenerateNoise(void* self) {
 
     // Copy to ImageBuffer texture
     fn_ImageBuffer_CopyToTexture(*(void**)(s + 0x30), pixels, 0x100, 0x100);
-    fn_MemFree(g_pMemAllocSingleton, pixels);
+    fn_MemFreeStatic(pixels);
 }
 
 // ============================================================
@@ -308,7 +308,7 @@ void NoiseUI_Slot4(NoiseUI* self) {
 
     // Copy pixel data to ImageBuffer texture
     fn_ImageBuffer_CopyToTexture(*(void**)(s + 0x30), pixels, 0x100, 0x100);
-    fn_MemFree(g_pMemAllocSingleton, pixels);
+    fn_MemFreeStatic(pixels);
 
     // Setup MaterialInstance + SpriteSheet, find "noiseImage" element
     NoiseUI_SetupImage((void*)s, *(void**)(s + 0x30),

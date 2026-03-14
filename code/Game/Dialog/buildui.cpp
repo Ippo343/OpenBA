@@ -433,7 +433,7 @@ void BuildUI_Slot7(BuildUI* self) {
             uintptr_t resEntry = *(uintptr_t*)(resBase + rowOffset);
 
             // Search StateMachine component for matching resource entry
-            int smCount = *(int*)(stateMachineComp + 0x30);
+            int smCount = stateMachineComp ? *(int*)(stateMachineComp + 0x30) : 0;
             uint64_t delivered = 0;
             if (smCount > 0) {
                 uintptr_t smArray = *(uintptr_t*)(stateMachineComp + 0x28);

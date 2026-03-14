@@ -294,7 +294,7 @@ void FollowDialog_Slot7(FollowDialog* self) {
 
     // Check Escape key (key ID 8) — if pressed, close the follow dialog.
     // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on self.
-    void* keyMap = *(void**)*g_pKeyMapSingleton;
+    void* keyMap = ***(void****)g_pKeyMapObjectExref;
     if (fn_KeyMap_Pressed(keyMap, 0, 8)) {
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
         uintptr_t followedInner = *(uintptr_t*)(s + 0xC0);

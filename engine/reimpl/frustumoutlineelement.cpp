@@ -131,7 +131,7 @@ static void Reimpl_Draw(void* self, void* spriteCtx, uint8_t alpha) {
         (((packedColor >> 8 & 0xffff0000u) * (uint32_t)alpha ^ packedColor) & 0xffffffu) ^
         ((packedColor >> 8 & 0xff0000u) * (uint32_t)alpha);
 
-    // Project frustum corners: 4 Vec3s (x,y,z) as 12 floats
+    // Project frustum corners: 4 Vec3s (x,y,z) as 12 floats (world-space)
     float corners[12];
     fn_FrustumProject(corners);
 
@@ -141,6 +141,30 @@ static void Reimpl_Draw(void* self, void* spriteCtx, uint8_t alpha) {
     int elemH = *reinterpret_cast<int*>(s + 0xd4);
     void* sprite = reinterpret_cast<void*>(s + 0xc0);
 
+    // Transform corners from world-space to element-space:
+    //   1. Scale by elemW / mapGridSize (world → element pixels)
+    //   2. Translate by (elemW/2, elemH/2) to center
+    //   3. Flip Y axis: y = (elemW - uvScale) - y
+    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float halfW = (float)elemW * 0.5f;
+    float halfH = (float)elemH * 0.5f;
+    int mapGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xF8);
+    float worldToElem = (float)elemW / (float)mapGridSize;
+
+    for (int i = 0; i < 4; i++) {
+        float* c = &corners[i * 3];
+        // Scale
+        float sx = worldToElem * c[0];
+        float sy = worldToElem * c[1];
+        // Translate to center
+        float tx = sx + halfW;
+        float ty = sy + halfH;
+        // Store, then flip Y
+        c[0] = tx;
+        c[1] = ((float)elemW - uvScale) - ty;
+        c[2] = 0.0f;
+    }
+
     // SetScissor to clip draw region, saving old viewport (16-byte retval)
     // ABI: RCX=spriteCtx, RDX=&savedVP, R8=elemX, R9=elemY, [RSP+0x20]=elemW, [RSP+0x28]=elemH
     uint8_t savedViewport[16];
@@ -149,7 +173,6 @@ static void Reimpl_Draw(void* self, void* spriteCtx, uint8_t alpha) {
     pfnSetScissor4(spriteCtx, savedViewport, elemX, elemY, elemW, elemH);
 
     // Draw quadrilateral outline edges
-    // corners[i*3] = x, corners[i*3+1] = y, corners[i*3+2] = z (ignored for 2D)
     fn_SpriteContext_AddLine(spriteCtx, sprite,
         (int)corners[0] + elemX, (int)corners[1] + elemY,
         (int)corners[3] + elemX, (int)corners[4] + elemY, color);

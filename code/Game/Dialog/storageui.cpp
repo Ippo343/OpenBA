@@ -79,11 +79,11 @@ void StorageUI_Serialize(StorageUI* self) {
     // Calculate row count: ceil(resourceTypeCount / colCount)
     int rowCount = ((int)(resourceTypeCount - 1 + (uint32_t)colCount) / colCount * colCount) / colCount;
 
-    // Get template object from first child's element at +0xB8
+    // Get template factory from first child element at +0xB8 (NOT vtable+0xB8)
     uint8_t childBuf[16];
     fn_Element_Child((void*)tableElem, childBuf, 0);
     void* firstChild = *(void**)childBuf;
-    void* templateObj = *(void**)(*(uintptr_t*)firstChild + 0xB8);
+    void* templateObj = *(void**)((uintptr_t)firstChild + 0xB8);
 
     // Ensure minimum row count from table's +0xC0
     int minRows = *(int*)(tableElem + 0xC0);
@@ -208,7 +208,7 @@ void StorageUI_Startup(StorageUI* self) {
     int itemCount = 0;
     int itemCapacity = 0;
 
-    int smEntryCount = *(int*)(stateMachineComp + 0x30);
+    int smEntryCount = stateMachineComp ? *(int*)(stateMachineComp + 0x30) : 0;
     if (smEntryCount > 0) {
         uintptr_t entryOffset = 0;
         itemCount = 0;

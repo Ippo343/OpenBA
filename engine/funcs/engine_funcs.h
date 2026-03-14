@@ -604,8 +604,11 @@ extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
 extern void** g_pGameWorldSingleton;  // DAT_1401c3dd8
 
 // Input::KeyMap singleton — used by HotKeyToolTipUI
-extern void** g_pKeyMapSingleton;     // DAT_1401c3de8 (container/manager object)
-extern void** g_pKeyMapObjectExref;   // exref at 0x140151738 (triple deref -> actual Input::KeyMap)
+extern void** g_pKeyMapSingleton;     // DAT_1401c3de8 (container/manager object, NOT the KeyMap)
+extern void** g_pKeyMapObjectExref;   // exref at 0x140151738 — triple deref to get actual Input::KeyMap:
+                                      //   ***(void****)g_pKeyMapObjectExref
+                                      //   (slot → External ptr → wrapped ptr → KeyMap)
+                                      // Use this for fn_KeyMap_GetValue/fn_KeyMap_Pressed calls
 
 // Engine/UpdateLoop singleton — exref at 0x140151440 (double-indirect)
 // Sub-fields: +0x10 = engine state (debug counters at +0x2150..+0x215C)

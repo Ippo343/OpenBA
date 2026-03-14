@@ -2119,7 +2119,11 @@ bool EngineFuncsInit() {
     // EntityUI helpers — SetEditMode/SelectEntity now reimplemented in entityui.cpp
     // Resolve sub-functions needed by reimplementations:
     fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
-        ResolveExport("?CreateObject@Factory@Object@@QEAAPEAVBase@2@I@Z"));
+        ResolveExport("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z"));
+    if (!fn_Factory_CreateObject) {
+        fn_Factory_CreateObject = reinterpret_cast<fn_Factory_CreateObject_t>(
+            ResolveAddr(Module::Runtime, 0x1800c0ae0));
+    }
     g_TypeId_ToolController = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6eb8));
     g_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(

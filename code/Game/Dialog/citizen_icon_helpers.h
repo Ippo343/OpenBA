@@ -76,6 +76,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
 {
     fn_InternalBasePtr_CheckPtr((void*)groupElemIBP);
     void* groupElem = *(void**)groupElemIBP;
+    if (!groupElem) return;
     int childCount = fn_Element_ChildCount(groupElem);
     if (childCount <= 0) return;
 

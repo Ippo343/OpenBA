@@ -56,7 +56,7 @@ static void GoalDialog_ArrayPush_Impl(void* arrayBase, int newCount, void* entry
     }
 
     if (oldData != (void*)*dataPtr) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+        fn_MemFreeStatic(oldData);
     }
 }
 

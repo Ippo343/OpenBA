@@ -59,7 +59,7 @@ static void ResidenceUI_ArrayPush_Impl(void* arrayBase, int newCount, void* entr
     }
 
     if (oldData != (void*)*dataPtr) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+        fn_MemFreeStatic(oldData);
     }
 }
 
@@ -124,7 +124,7 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
         // Find "buttonGoto" in row, set ID 300+i
         fn_Element_Child(tableElem, childBuf, i);
         entry[5] = FindElemAsBasePtr(*(void**)childBuf, "buttonGoto");
-        fn_Element_SetElementId((void*)entry[5], 300 + i);
+        if (entry[5]) fn_Element_SetElementId((void*)entry[5], 300 + i);
 
         // Find "textName" in row
         fn_Element_Child(tableElem, childBuf, i);
@@ -185,13 +185,17 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entity);
     uintptr_t entityPtr = *(uintptr_t*)entityBuf;
 
-    // Find StorageComponent (residences use storage)
+    // Find ResidenceComponent (NOT StorageComponent — different type with room data at +0x50/+0x58)
+    // Original uses DWORD_1401c7cf0 = g_TypeId_ResidenceComponent
     uintptr_t storageComp = 0;
-    fn_FindComponent_Storage((void*)entityPtr, &storageComp);
+    Entity_FindComponentByExeTypeId((void*)entityPtr, &storageComp, g_TypeId_ResidenceComponent);
+    fn_InternalBasePtr_CheckPtr(&storageComp);
 
     float ageMul = *g_pAgeMultiplier;  // 5.0f
     int totalResidents = 0;
     int rowIdx = 0;
+
+    if (!storageComp) return;
 
     // Outer loop: iterate room groups (storageComp+0x58 = group count)
     int groupCount = *(int*)(storageComp + 0x58);
@@ -292,33 +296,43 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
             // Hide both gender icons
             void* imageMale = *(void**)(rowBase + 0x00);
-            fn_Element_SetFlagsOnOff(imageMale, 1, 0);
+            if (imageMale) fn_Element_SetFlagsOnOff(imageMale, 1, 0);
             void* imageFemale = *(void**)(rowBase + 0x08);
-            fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
+            if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
 
             // Clear name text
-            uint8_t emptyStr1[8];
-            fn_String_Ctor_CStr(emptyStr1, "");
             void* textName = *(void**)(rowBase + 0x10);
-            fn_TextElement_SetParameter(textName, 0, emptyStr1);
-            fn_String_Dtor(emptyStr1);
+            if (textName) {
+                uint8_t emptyStr1[8];
+                fn_String_Ctor_CStr(emptyStr1, "");
+                fn_TextElement_SetParameter(textName, 0, emptyStr1);
+                fn_String_Dtor(emptyStr1);
+            }
 
             // Clear age text
-            uint8_t emptyStr2[8];
-            fn_String_Ctor_CStr(emptyStr2, "");
             void* textAge = *(void**)(rowBase + 0x18);
-            fn_TextElement_SetParameter(textAge, 0, emptyStr2);
-            fn_String_Dtor(emptyStr2);
+            if (textAge) {
+                uint8_t emptyStr2[8];
+                fn_String_Ctor_CStr(emptyStr2, "");
+                fn_TextElement_SetParameter(textAge, 0, emptyStr2);
+                fn_String_Dtor(emptyStr2);
+            }
 
-            // Reset profession text to element's own default UI::String
+            // Reset profession text: fn_UIString_Ctor(retbuf, externalPtr from +0xD8, empty string)
             void* textProfession = *(void**)(rowBase + 0x20);
-            uint64_t origUIStr[2];
-            fn_UIString_Ctor_Entry(origUIStr,
-                *(uint64_t*)((uintptr_t)textProfession + 0xD8));
-            fn_TextElement_SetText(textProfession, origUIStr);
+            if (textProfession) {
+                uint8_t emptyStr3[8];
+                fn_String_Ctor_CStr(emptyStr3, "");
+                uint64_t origUIStr[2];
+                fn_UIString_Ctor(origUIStr,
+                    *(uint64_t*)((uintptr_t)textProfession + 0xD8), emptyStr3);
+                fn_TextElement_SetText(textProfession, origUIStr);
+                fn_String_Dtor(emptyStr3);
+            }
 
             // Deactivate buttonGoto: vtable[8](this, 0)
             void* buttonGoto = *(void**)(rowBase + 0x28);
+            if (!buttonGoto) { i++; continue; }
             void** vtbl = *(void***)buttonGoto;
             typedef void (*VCall_Deactivate_t)(void*, int);
             ((VCall_Deactivate_t)vtbl[8])(buttonGoto, 0);

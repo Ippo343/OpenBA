@@ -686,8 +686,8 @@ void EntityUI_Slot7(EntityUI* self) {
 void EntityUI_Slot8(EntityUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // Get KeyMap singleton (double-indirect from exref)
-    void* keyMap = *g_pKeyMapSingleton;
+    // Get KeyMap singleton (triple deref from exref: slot → External → KeyMap)
+    void* keyMap = ***(void****)g_pKeyMapObjectExref;
 
     // Get dialog element from +0x18 -> +0x10 (dialog root element)
     void* dialogInst = *(void**)(s + 0x18);
@@ -773,8 +773,10 @@ void EntityUI_Slot8(EntityUI* self) {
     }
 
     // Select the entity in the edit tool
-    void* entityPtr = *(void**)(s + 0x30);
-    fn_EditTool_SelectEntity(editToolPtr, &entityPtr);
+    if (editToolPtr) {
+        void* entityPtr = *(void**)(s + 0x30);
+        fn_EditTool_SelectEntity(editToolPtr, &entityPtr);
+    }
 }
 
 // ============================================================
@@ -867,8 +869,9 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         // If unpinned, remove entity from tracking set
         if (*(char*)(*(uintptr_t*)(s + 0x38) + 0xd8) == 0) {
             uint64_t entityKey = *(uint64_t*)(s + 0x30);
+            uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
             EntityTrackingSet_Remove_Impl(
-                (void*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120)) + 0x60),
+                (void*)(worldObj + 0x50),
                 &entityKey);
             return;
         }

@@ -64,7 +64,7 @@ static void HelpUI_ArrayResize_Impl(void* arrayBase, int newCount) {
     }
 
     if (oldData != (void*)*dataPtr) {
-        fn_MemFree(g_pMemAllocSingleton, oldData);
+        fn_MemFreeStatic(oldData);
     }
 }
 
@@ -153,7 +153,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
 
         // Free old buffer if it changed
         if (histArray != *(void**)(s + 0x68)) {
-            fn_MemFree(g_pMemAllocSingleton, histArray);
+            fn_MemFreeStatic(histArray);
         }
     }
 

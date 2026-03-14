@@ -180,7 +180,7 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
         void* saveLoad = *(void**)(engPtr + 0xB70);
         if (saveLoad) {
             fn_SaveLoad_Dtor(saveLoad);
-            fn_MemFree(g_pMemAllocSingleton, saveLoad);
+            fn_MemFreeStatic(saveLoad);
         }
         *(void**)(engPtr + 0xB70) = nullptr;
     } else {
@@ -188,7 +188,7 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
         void* saveLoad = *(void**)(gameWorld + 0x140);
         if (saveLoad) {
             fn_SaveLoad_Dtor(saveLoad);
-            fn_MemFree(g_pMemAllocSingleton, saveLoad);
+            fn_MemFreeStatic(saveLoad);
         }
         *(void**)(gameWorld + 0x140) = nullptr;
     }

@@ -306,12 +306,13 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
 
-    // Get template factory: first child of table -> vtable+0xB8
+    // Get template factory: first child of table -> element+0xB8
     uint64_t firstChildBuf = 0;
     fn_Element_Child(tableElem, &firstChildBuf, 0);
+    fn_InternalBasePtr_CheckPtr((void*)&firstChildBuf);
     void* firstChild = (void*)firstChildBuf;
-    uintptr_t firstChildVtbl = *(uintptr_t*)firstChild;
-    void** factoryVtbl = *(void***)(firstChildVtbl + 0xB8);
+    // Factory is at element+0xB8 (NOT vtable+0xB8)
+    void** factory = *(void***)((uintptr_t)firstChild + 0xB8);
 
     // Set table size: ceil(profCount / colCount) rows
     int rowCount = ((colCount - 1 + profCount) / colCount * colCount) / colCount;
@@ -320,15 +321,18 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     // Phase 1: Populate table cells from template factory
     int col = 0;
     int row = 0;
-    uintptr_t templateData = *(uintptr_t*)(firstChildVtbl + 0x18);
 
     for (int i = 0; i < profCount; i++) {
-        // Clone template via factory: factoryVtbl->vt[8](factory, retval, templateData)
-        typedef uint64_t (*fn_FactoryClone_t)(void* factory, void* retval, uintptr_t templateData);
+        // Template data from dataSource (self+0x18) -> +0x18
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+        uintptr_t templateData = *(uintptr_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
+
+        // Clone template via factory vtable slot 8: factory->vt[8](factory, retval, templateData)
+        typedef uint64_t (*fn_FactoryClone_t)(void* factoryThis, void* retval, uintptr_t tmplData);
         uint64_t cloneBuf = 0;
-        uintptr_t factoryFnAddr = *(uintptr_t*)((uintptr_t)*factoryVtbl + 0x40);
+        uintptr_t factoryFnAddr = *(uintptr_t*)(*(uintptr_t*)factory + 0x40);
         uint64_t cloned = ((fn_FactoryClone_t)factoryFnAddr)(
-            factoryVtbl, &cloneBuf, templateData);
+            factory, &cloneBuf, templateData);
 
         fn_TableElement_SetChild3(tableElem, (void*)cloned, col, row);
 
@@ -346,19 +350,16 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     void* profArray = *(void**)((uintptr_t)profListPtr + 0x20);
 
     for (int i = 0; i < profCount; i++) {
-        // Get row element from table
-        uint64_t rowElem = 0;
-        fn_Element_Child(tableElem, &rowElem, tableRow);
-
-        // Get cell element (the i-th child column within this row)
+        // Get cell element via flat index: colCount * row + col (original uses IMUL+ADD)
+        int flatIdx = colCount * tableRow + tableCol;
         uint64_t cellElem = 0;
-        fn_Element_Child((void*)rowElem, &cellElem, tableCol);
+        fn_Element_Child(tableElem, &cellElem, flatIdx);
 
-        // Get 4 children of cell:
+        // Get 4 children of cell (indices from disassembly: 0, 1, 3, 4):
         //   child[0] = text/label element (name + sprite)
         //   child[1] = spinner element (worker count)
-        //   child[2] = number element (actual count)
-        //   child[3] = button element (goto)
+        //   child[3] = number element (actual count)
+        //   child[4] = button element (goto)
         uint64_t textLabelBuf = 0;
         fn_Element_Child((void*)cellElem, &textLabelBuf, 0);
         void* textLabel = (void*)textLabelBuf;
@@ -368,11 +369,11 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         void* spinner = (void*)spinnerBuf;
 
         uint64_t numberBuf = 0;
-        fn_Element_Child((void*)cellElem, &numberBuf, 2);
+        fn_Element_Child((void*)cellElem, &numberBuf, 3);
         void* numberElem = (void*)numberBuf;
 
         uint64_t buttonBuf = 0;
-        fn_Element_Child((void*)cellElem, &buttonBuf, 3);
+        fn_Element_Child((void*)cellElem, &buttonBuf, 4);
         void* button = (void*)buttonBuf;
 
         // Set button element ID: idBase + 200
@@ -469,25 +470,27 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
                         (void*)((uintptr_t)profDesc + 0x30));
         fn_LabelElement_SetSprite(textLabel, spriteBuf);
 
-        // Tooltip: UI::String from ExternalPtr (single arg)
+        // Tooltip: UI::String from ExternalPtr + string name at +0x38
         uint8_t tooltipBuf[16];
-        fn_UIString_Ctor_Entry(tooltipBuf, *(uint64_t*)((uintptr_t)profDesc + 0x20));
+        fn_UIString_Ctor(tooltipBuf, *(uint64_t*)((uintptr_t)profDesc + 0x20),
+                         (void*)((uintptr_t)profDesc + 0x38));
         fn_Element_SetToolTip(textLabel, tooltipBuf);
 
         // Set spinner element ID
         fn_SpinnerElement_SetElementId(spinner, idBase);
 
-        // Set child[0] of spinner same ID
+        // Get child[0] of spinner: this is the NumberEditElement
+        // Set its element ID, then push to spinner array
         uint64_t spinnerChild0 = 0;
         fn_Element_Child(spinner, &spinnerChild0, 0);
         fn_Element_SetElementId((void*)spinnerChild0, idBase);
 
-        // Get child[1] of spinner, store as NumberEditElement pointer
-        uint64_t spinnerChild1 = 0;
-        fn_Element_Child(spinner, &spinnerChild1, 1);
-        void* numEditElem = (void*)spinnerChild1;
+        // Get child[0] again for NumberEditElement cast (same element, original does this)
+        uint64_t numEditBuf = 0;
+        fn_Element_Child(spinner, &numEditBuf, 0);
+        void* numEditElem = (void*)numEditBuf;
 
-        // Push spinner's NumberEditElement to spinner array at +0x40
+        // Push spinner's NumberEditElement (child[0]) to spinner array at +0x40
         PushToArray8(s, 0x40, (uint64_t)numEditElem);
 
         // Push number element to number array at +0x50
