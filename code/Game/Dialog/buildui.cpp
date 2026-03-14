@@ -17,6 +17,14 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+#ifdef _DEBUG
+// Debug sprite logging wrappers (runtime/src/ui/)
+extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+extern void* Debug_Sprite_DefaultCtor(void* retval);
+extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
+extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
+#endif
+
 // ============================================================
 // CountOccupiedBuildTiles (0x140118330)
 // ============================================================
@@ -242,16 +250,16 @@ void BuildUI_Slot4(BuildUI* self) {
             // Active resource row: set amount, sprite, text, tooltip
             uintptr_t resEntry = *(uintptr_t*)(resBase + rowIdx * 0x10);
 
-            // Find ResourceType in entry's component list
+            // Find RawMaterialDescription in entry's component list
             int compCount = *(int*)(resEntry + 0x30);
             void* resType = nullptr;
             for (int c = 0; c < compCount; c++) {
                 void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
-                // Get TypeId via vtable[2] and compare with ResourceType
+                // Get TypeId via vtable[2] and compare with RawMaterialDescription
                 typedef int (*fn_GetTypeId_t)(void*);
                 int typeId = ((fn_GetTypeId_t)(*(void***)comp)[2])(comp);
-                if (typeId == (int)*g_TypeId_ResourceType) {
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType)) {
+                if (typeId == (int)*g_TypeId_RawMaterialDescription) {
+                    if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                         resType = comp;
                     }
                     break;
@@ -275,9 +283,18 @@ void BuildUI_Slot4(BuildUI* self) {
             if (resType) {
                 // Set sprite from resource type
                 uint8_t spriteBuf[16];
+#ifdef _DEBUG
+                Debug_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)resType + 0x20),
+                               (void*)((uintptr_t)resType + 0x30));
+#else
                 fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)resType + 0x20),
                                (void*)((uintptr_t)resType + 0x30));
+#endif
+#ifdef _DEBUG
+                Debug_LabelElement_SetSprite((void*)labelStorage, spriteBuf);
+#else
                 fn_LabelElement_SetSprite((void*)labelStorage, spriteBuf);
+#endif
 
                 // Set text from resource type
                 uint8_t uiStrBuf[16];
@@ -313,8 +330,16 @@ void BuildUI_Slot4(BuildUI* self) {
             fn_TextElement_SetText((void*)labelStorage, emptyStr2);
 
             uint8_t emptySprite[16];
+#ifdef _DEBUG
+            Debug_Sprite_DefaultCtor(emptySprite);
+#else
             fn_Sprite_Default_Ctor(emptySprite);
+#endif
+#ifdef _DEBUG
+            Debug_LabelElement_SetSprite((void*)labelStorage, emptySprite);
+#else
             fn_LabelElement_SetSprite((void*)labelStorage, emptySprite);
+#endif
         }
 
         rowIdx++;

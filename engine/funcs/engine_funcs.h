@@ -580,7 +580,7 @@ extern uint32_t* g_TypeId_ConsumeProduceComponent;// DAT_1401c7388
 extern uint32_t* g_TypeId_RadiusComponent;        // DAT_1401c4870
 extern uint32_t* g_TypeId_BuildRequirementComponent;// DAT_1401c7f58
 extern uint32_t* g_TypeId_ResourceComponent;      // DAT_1401c7040
-extern uint32_t* g_TypeId_ResourceType;           // DAT_1401c7cb8
+extern uint32_t* g_TypeId_RawMaterialDescription;           // DAT_1401c7cb8
 extern uint32_t* g_TypeId_DialogController;       // DAT_1401c56e0
 extern uint32_t* g_TypeId_PageToggleUI;           // DAT_1401c4f00
 extern uint32_t* g_TypeId_MeshInstanceComponent;  // DAT_1401c7e40
@@ -793,8 +793,8 @@ inline int fn_StorageComponent_QueryCount(void* storageComp) {
             // GetTypeId via vtable slot +0x10
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (typeId == *g_TypeId_ResourceType) {
-                if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType)) {
+            if (typeId == *g_TypeId_RawMaterialDescription) {
+                if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                     resourceType = comp;
                 }
                 break;
@@ -1014,6 +1014,11 @@ extern void** g_pInputDeviceSingleton;
 // ?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ (0x1801182a0, ordinal 2926)
 typedef void (*fn_ImageElement_GetSprite_t)(void* self, void* retval);
 extern fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite;
+
+// LabelElement::GetSprite — returns Sprite via hidden return pointer
+// Address: 0x1800429d0, Ordinal: 2927
+typedef void (*fn_LabelElement_GetSprite_t)(void* self, void* retval);
+extern fn_LabelElement_GetSprite_t fn_LabelElement_GetSprite;
 
 // SpriteSheet::GetSpriteIndexFromName(this, name) -> int
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z (0x1800031f0, ordinal 2930)
@@ -2597,9 +2602,9 @@ extern fn_Game_SpawnResources_t fn_Game_SpawnResources;
 typedef void (*fn_Game_TriggerDisasterByType_t)(int type);
 extern fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType;
 
-// Game_KillAllCitizens (0x140060000) — kills all citizens
-typedef void (*fn_Game_KillAllCitizens_t)(void);
-extern fn_Game_KillAllCitizens_t fn_Game_KillAllCitizens;
+// Game_DestroyAllRawMaterials (0x140060000) — destroys all loose raw material entities
+typedef void (*fn_Game_DestroyAllRawMaterials_t)(void);
+extern fn_Game_DestroyAllRawMaterials_t fn_Game_DestroyAllRawMaterials;
 
 // Game_SpawnItemsInStorage (0x140060290) — spawns items in storage buildings
 typedef void (*fn_Game_SpawnItemsInStorage_t)(void);
@@ -2711,14 +2716,9 @@ inline void fn_FindComponent_Fire(void* entity, void* retval) {
     Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_FireComponent);
 }
 
-// CitizenComponent type ID — DAT_1401c7cb8 (used by KillAllCitizens)
-// NOTE: same as g_TypeId_ResourceType; this is the CitizenComponent (not ResourceType)
-// Ghidra uses DAT_1401c7cb8 in KillAllCitizens to find citizen components on entities
-extern uint32_t* g_TypeId_CitizenComponent;
-
-// fn_FindComponent_Citizen — searches entity for CitizenComponent (DAT_1401c7cb8)
-inline void fn_FindComponent_Citizen(void* entity, void* retval) {
-    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_CitizenComponent);
+// fn_FindComponent_RawMaterial — searches entity for RawMaterialDescription (DAT_1401c7cb8)
+inline void fn_FindComponent_RawMaterial(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_RawMaterialDescription);
 }
 
 // Game_DestroyEntity (FUN_1400c3ec0 in exe) — destroys an entity from the entity list
@@ -3594,8 +3594,8 @@ inline bool Storage_CanAddItem(void* storageComp, void* entityPtr, int quantity)
         void* comp = *(void**)(compArray + (uintptr_t)i * 8);
         typedef uint32_t (*GetTypeId_t)(void*);
         uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-        if (typeId == *g_TypeId_ResourceType) {
-            if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType)) {
+        if (typeId == *g_TypeId_RawMaterialDescription) {
+            if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                 resourceType = comp;
             }
             break;
@@ -3892,8 +3892,8 @@ inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag
             void* comp = *(void**)(compArray + (uintptr_t)j * 8);
             typedef uint32_t (*GetTypeId_t)(void*);
             uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (typeId == *g_TypeId_ResourceType) {
-                if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType)) {
+            if (typeId == *g_TypeId_RawMaterialDescription) {
+                if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                     resourceType = comp;
                 }
                 break;

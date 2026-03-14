@@ -592,7 +592,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     // Count resource types via ExternalFactory::FindNext
     int resourceCount = 0;
     void* factory = *g_pExternalFactorySingleton;
-    uint32_t resTypeId = *(uint32_t*)g_TypeId_ResourceType;
+    uint32_t resTypeId = *(uint32_t*)g_TypeId_RawMaterialDescription;
     void* extIter = fn_ExternalFactory_FindNext(factory, resTypeId, nullptr);
     while (extIter) {
         resourceCount++;
@@ -1499,7 +1499,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint64_t entityPtr = *(uint64_t*)n;
 
             // Find ResourceType component on entity
-            void* resourceComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_ResourceType);
+            void* resourceComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_RawMaterialDescription);
 
             // Read counter value at selected index
             int counterVal = *(int*)(n + counterOffset);

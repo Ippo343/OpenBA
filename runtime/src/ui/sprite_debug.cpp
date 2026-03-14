@@ -7,6 +7,7 @@
 // Usage: In debug builds, call Debug_Sprite_* instead of fn_Sprite_* to get
 // printf logging of sprite construction and validation calls.
 
+#include "sprite_debug.h"
 #include "../../../engine/funcs/engine_funcs.h"
 #include "../../types/ui/Sprite.h"
 #include <cstdio>

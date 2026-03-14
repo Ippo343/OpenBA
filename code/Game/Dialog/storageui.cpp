@@ -67,10 +67,10 @@ void StorageUI_Serialize(StorageUI* self) {
     // Count resource types via ExternalFactory::FindNext
     uint32_t resourceTypeCount = 0;
     void* factory = *g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ResourceType, nullptr);
+    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, nullptr);
     while (ext != nullptr) {
         resourceTypeCount++;
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ResourceType, ext);
+        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, ext);
     }
 
     // Get column count from table element +0xC4
@@ -228,8 +228,8 @@ void StorageUI_Startup(StorageUI* self) {
                     void* comp = *(void**)(*(uintptr_t*)(resEntry + 0x28) + c * 8);
                     typedef int (*fn_GetTypeId_t)(void*);
                     int typeId = ((fn_GetTypeId_t)(*(void***)comp)[2])(comp);
-                    if (typeId == (int)*g_TypeId_ResourceType) {
-                        if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType)) {
+                    if (typeId == (int)*g_TypeId_RawMaterialDescription) {
+                        if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
                             resType = comp;
                         }
                         break;

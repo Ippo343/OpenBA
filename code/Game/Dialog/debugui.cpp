@@ -338,12 +338,12 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 // (was static SetEngineNextLoop_Impl here, promoted to shared inline)
 
 // ============================================================
-// Game_KillAllCitizens (FUN_140060000)
+// Game_DestroyAllRawMaterials (FUN_140060000)
 // Iterates ExternalFactory for all entities with BuildComponent (DAT_1401c7318).
-// For each entity, searches components for CitizenComponent (DAT_1401c7cb8).
+// For each entity, searches components for RawMaterialDescription (DAT_1401c7cb8).
 // If found, destroys the entity via Game_DestroyEntity.
 // ============================================================
-static void Game_KillAllCitizens_Impl() {
+static void Game_DestroyAllRawMaterials_Impl() {
     void* factory = *g_pExternalFactorySingleton;
     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
     void* entityList = *(void**)(game + 0xF0);
@@ -366,9 +366,9 @@ static void Game_KillAllCitizens_Impl() {
                 // Get component type via vtable[2] (+0x10)
                 typedef int (*fn_GetTypeId_t)(void*);
                 int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-                if (typeId == (int)*g_TypeId_CitizenComponent) {
+                if (typeId == (int)*g_TypeId_RawMaterialDescription) {
                     // Confirm with IsDerivedFrom
-                    bool isCitizen = fn_IsDerivedFrom(comp, *g_TypeId_CitizenComponent);
+                    bool isCitizen = fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription);
                     if (isCitizen && comp != nullptr) {
                         fn_Game_DestroyEntity(entityList, buildEntity);
                     }
@@ -925,7 +925,7 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     case 321:  Game_TriggerDisasterByType_Impl(0); return;  // Trigger disaster type 0
     case 322:  Game_TriggerDisasterByType_Impl(1); return;  // Trigger disaster type 1
     case 323:  Game_TriggerDisasterByType_Impl(2); return;  // Trigger disaster type 2
-    case 324:  Game_KillAllCitizens_Impl();        return;  // Kill all citizens
+    case 324:  Game_DestroyAllRawMaterials_Impl();  return;  // Destroy all loose raw material entities
     case 325:  Game_SpawnItemsInStorage_Impl();    return;  // Spawn items in all storage
     case 326:  Game_SpawnCitizens_Impl();          return;  // Spawn new citizens
     case 327:  DebugUI_TriggerDisasterOnBuilding_Impl(self); return;  // Disaster on random building

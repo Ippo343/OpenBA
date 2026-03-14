@@ -20,6 +20,14 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+#ifdef _DEBUG
+// Debug sprite logging wrappers (runtime/src/ui/)
+extern void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteName);
+extern void* Debug_Sprite_DefaultCtor(void* retval);
+extern void Debug_ImageElement_SetSprite(void* self, void* spriteData);
+extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
+#endif
+
 // Helper: find component by type ID in a description's component list.
 // Description has component array at +0x28 and count at +0x30.
 static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
@@ -149,10 +157,18 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             // Create sprite from BuildRequirementComponent: SpriteSheet at +0x20, name at +0x28
             uintptr_t brc = (uintptr_t)buildReqComp;
             uint8_t sprite[16];
+#ifdef _DEBUG
+            Debug_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
+#else
             fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
+#endif
 
             fn_InternalBasePtr_CheckPtr(ibpBuf);
+#ifdef _DEBUG
+            Debug_ImageElement_SetSprite(imagePtr, sprite);
+#else
             fn_ImageElement_SetSprite(imagePtr, sprite);
+#endif
         }
     }
 
@@ -262,18 +278,27 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             // Get the sub-entity from this entry (pointer at entry+0x00)
             uintptr_t subEntity = *(uintptr_t*)entry;
 
-            // Find ResourceType component in sub-entity's component list
-            void* resType = FindCompInDesc(subEntity, *g_TypeId_ResourceType);
+            // Find RawMaterialDescription component in sub-entity's component list
+            void* resType = FindCompInDesc(subEntity, *g_TypeId_RawMaterialDescription);
 
-            // Create sprite from ResourceType: SpriteSheet at +0x20, name at +0x38
+            // Create sprite from RawMaterialDescription: SpriteSheet at +0x20, name at +0x38
             uint8_t sprite[24];
+#ifdef _DEBUG
+            Debug_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
+                           (void*)((uintptr_t)resType + 0x38));
+#else
             fn_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
                            (void*)((uintptr_t)resType + 0x38));
+#endif
 
             // Set sprite on label element
             void* label = *(void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
             fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
+#ifdef _DEBUG
+            Debug_LabelElement_SetSprite(label, sprite);
+#else
             fn_LabelElement_SetSprite(label, sprite);
+#endif
 
             // Format count as "%i" and set as text parameter 0
             uint8_t countStr[8];

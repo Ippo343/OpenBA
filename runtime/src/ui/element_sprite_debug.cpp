@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 
+#include "element_sprite_debug.h"
 #include "../../types/ui/ImageElement.h"
 #include "../../types/ui/LabelElement.h"
 #include "../../../engine/funcs/engine_funcs.h"
@@ -121,22 +122,24 @@ void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
 }
 
 // Debug wrapper: log LabelElement::GetSprite result
-// Note: fn_LabelElement_GetSprite does not exist in engine_funcs.h yet.
-// This reads the sprite directly from the struct until a function pointer is added.
+// Uses fn_LabelElement_GetSprite when available, falls back to direct struct read.
 void Debug_LabelElement_GetSprite(void* self, void* retval) {
 #ifdef _DEBUG
     printf("[LabelElement::GetSprite] this=%p\n", self);
 #endif
 
-    // LabelElement::GetSprite copies +0x100 and +0x108 to retval
-    // No function pointer exists yet — read directly from struct
-    LabelElement* elem = reinterpret_cast<LabelElement*>(self);
-    uint64_t* out = reinterpret_cast<uint64_t*>(retval);
-    out[0] = reinterpret_cast<uint64_t>(elem->spriteSheet);
-    uint64_t second = 0;
-    second |= (uint32_t)elem->spriteIndex;
-    second |= ((uint64_t)elem->spriteFlags) << 32;
-    out[1] = second;
+    if (fn_LabelElement_GetSprite) {
+        fn_LabelElement_GetSprite(self, retval);
+    } else {
+        // Fallback: read directly from struct at +0x100/+0x108
+        LabelElement* elem = reinterpret_cast<LabelElement*>(self);
+        uint64_t* out = reinterpret_cast<uint64_t*>(retval);
+        out[0] = reinterpret_cast<uint64_t>(elem->spriteSheet);
+        uint64_t second = 0;
+        second |= (uint32_t)elem->spriteIndex;
+        second |= ((uint64_t)elem->spriteFlags) << 32;
+        out[1] = second;
+    }
 
 #ifdef _DEBUG
     PrintSpriteFromPtr("  RESULT", reinterpret_cast<const uint8_t*>(retval));

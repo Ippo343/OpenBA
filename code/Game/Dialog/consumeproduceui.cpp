@@ -83,7 +83,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             // at entry+0x10 = pointer to sub-entry
             uintptr_t entryPtr = *(uintptr_t*)(entriesBase + (uintptr_t)i * 0x28 + 0x10);
 
-            // Search sub-entries for ResourceDescription type (g_TypeId_ResourceType)
+            // Search sub-entries for ResourceDescription type (g_TypeId_RawMaterialDescription)
             int subCount = *(int*)(entryPtr + 0x30);
             uintptr_t subArray = *(uintptr_t*)(entryPtr + 0x28);
             void* resourceDesc = nullptr;
@@ -94,9 +94,9 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
                 typedef int (*fn_GetTypeId_t)(void*);
                 void** vtbl = *(void***)subEntry;
                 int typeId = ((fn_GetTypeId_t)vtbl[2])(subEntry);
-                if (typeId == (int)*g_TypeId_ResourceType) {
+                if (typeId == (int)*g_TypeId_RawMaterialDescription) {
                     // Verify with IsDerivedFrom
-                    if (fn_IsDerivedFrom((void*)subEntry, *g_TypeId_ResourceType)) {
+                    if (fn_IsDerivedFrom((void*)subEntry, *g_TypeId_RawMaterialDescription)) {
                         resourceDesc = subEntry;
                     }
                     break;

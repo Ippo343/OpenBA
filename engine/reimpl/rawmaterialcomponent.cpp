@@ -61,8 +61,7 @@ static fn_SerializeField30_t fn_SerializeField30 = nullptr;
 // Object::Base::IsDerivedFrom (from engine_funcs)
 // Already extern: fn_IsDerivedFrom
 
-// DAT_1401c7cb8 — type ID for building/structure data
-static uint32_t* g_pBuildingDataTypeId = nullptr;
+// DAT_1401c7cb8 — RawMaterialDescription type ID (from engine_funcs.h g_TypeId_RawMaterialDescription)
 
 // Object::InternalBasePtr::CheckPtr via IAT at [0x140152ab0]
 typedef void (*fn_CheckPtr_t)(void* ptr);
@@ -141,7 +140,7 @@ static void Reimpl_Serialize(RawMaterialComponent* self) {
 
     // Get building data via IsDerivedFrom check on _unk18
     void* baseObj = self->_unk18;
-    bool isDerived = fn_IsDerivedFrom(baseObj, *g_pBuildingDataTypeId);
+    bool isDerived = fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription);
     void* buildingData = nullptr;
     if (isDerived) {
         buildingData = baseObj;
@@ -282,8 +281,7 @@ void InstallRawMaterialComponentShutdown() {
 void RemoveRawMaterialComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallRawMaterialComponentSerialize() {
-    g_pBuildingDataTypeId = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
+    // g_TypeId_RawMaterialDescription already resolved in engine_funcs init (DAT_1401c7cb8)
 
     uintptr_t iatCheckPtr = ResolveAddr(Module::Exe, 0x140152ab0);
     if (iatCheckPtr) fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(iatCheckPtr);
@@ -294,7 +292,7 @@ void InstallRawMaterialComponentSerialize() {
     g_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 
-    if (!fn_IsDerivedFrom || !g_pBuildingDataTypeId || !fn_CheckPtr ||
+    if (!fn_IsDerivedFrom || !g_TypeId_RawMaterialDescription || !fn_CheckPtr ||
         !fn_RegisterRawMaterial || !g_pGameState) {
 #ifdef _DEBUG
         printf("[RawMaterialComponent] ERROR: failed to resolve Serialize helpers\n");

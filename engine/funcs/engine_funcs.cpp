@@ -240,7 +240,7 @@ uint32_t* g_TypeId_ConsumeProduceComponent = nullptr;
 uint32_t* g_TypeId_RadiusComponent = nullptr;
 uint32_t* g_TypeId_BuildRequirementComponent = nullptr;
 uint32_t* g_TypeId_ResourceComponent = nullptr;
-uint32_t* g_TypeId_ResourceType = nullptr;
+uint32_t* g_TypeId_RawMaterialDescription = nullptr;
 uint32_t* g_TypeId_DialogController = nullptr;
 uint32_t* g_TypeId_PageToggleUI = nullptr;
 uint32_t* g_TypeId_MeshInstanceComponent = nullptr;
@@ -333,6 +333,7 @@ fn_EditElement_SetText_SysStr_t fn_EditElement_SetText_SysStr = nullptr;
 fn_Input_Device_Released_t fn_Input_Device_Released = nullptr;
 void** g_pInputDeviceSingleton = nullptr;
 fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite = nullptr;
+fn_LabelElement_GetSprite_t fn_LabelElement_GetSprite = nullptr;
 fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName = nullptr;
 fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter = nullptr;
 fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
@@ -721,7 +722,7 @@ uint32_t* g_TypeId_DiseaseDescription = nullptr;
 uint32_t* g_TypeId_DrawableType = nullptr;
 fn_Game_SpawnResources_t fn_Game_SpawnResources = nullptr;
 fn_Game_TriggerDisasterByType_t fn_Game_TriggerDisasterByType = nullptr;
-fn_Game_KillAllCitizens_t fn_Game_KillAllCitizens = nullptr;
+fn_Game_DestroyAllRawMaterials_t fn_Game_DestroyAllRawMaterials = nullptr;
 fn_Game_SpawnItemsInStorage_t fn_Game_SpawnItemsInStorage = nullptr;
 fn_Game_SpawnCitizens_t fn_Game_SpawnCitizens = nullptr;
 fn_DebugUI_TriggerDisasterOnBuilding_t fn_DebugUI_TriggerDisasterOnBuilding = nullptr;
@@ -745,7 +746,7 @@ fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
 
 // --- DebugUI deep-reimpl helpers ---
 uint32_t* g_TypeId_FireComponent = nullptr;
-uint32_t* g_TypeId_CitizenComponent = nullptr;
+// g_TypeId_CitizenComponent removed — was duplicate of g_TypeId_RawMaterialDescription (DAT_1401c7cb8)
 fn_Game_DestroyEntity_t fn_Game_DestroyEntity = nullptr;
 fn_FireComponent_Ignite_t fn_FireComponent_Ignite = nullptr;
 fn_DiseaseComponent_Infect_t fn_DiseaseComponent_Infect = nullptr;
@@ -1728,7 +1729,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c7f58));
     g_TypeId_ResourceComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7040));
-    g_TypeId_ResourceType = reinterpret_cast<uint32_t*>(
+    g_TypeId_RawMaterialDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7cb8));
     g_TypeId_DialogController = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c56e0));
@@ -1981,6 +1982,12 @@ bool EngineFuncsInit() {
     if (!fn_ImageElement_GetSprite)
         fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
             ResolveAddr(Module::Runtime, 0x1801182a0));
+
+    fn_LabelElement_GetSprite = reinterpret_cast<fn_LabelElement_GetSprite_t>(
+        ResolveExport("?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ"));
+    if (!fn_LabelElement_GetSprite)
+        fn_LabelElement_GetSprite = reinterpret_cast<fn_LabelElement_GetSprite_t>(
+            ResolveAddr(Module::Runtime, 0x1800429d0));
 
     fn_SpriteSheet_GetSpriteIndexFromName = reinterpret_cast<fn_SpriteSheet_GetSpriteIndexFromName_t>(
         ResolveExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"));
@@ -2982,7 +2989,7 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140091660));
     fn_Game_TriggerDisasterByType = reinterpret_cast<fn_Game_TriggerDisasterByType_t>(
         ResolveAddr(Module::Exe, 0x140060110));
-    fn_Game_KillAllCitizens = reinterpret_cast<fn_Game_KillAllCitizens_t>(
+    fn_Game_DestroyAllRawMaterials = reinterpret_cast<fn_Game_DestroyAllRawMaterials_t>(
         ResolveAddr(Module::Exe, 0x140060000));
     fn_Game_SpawnItemsInStorage = reinterpret_cast<fn_Game_SpawnItemsInStorage_t>(
         ResolveAddr(Module::Exe, 0x140060290));
@@ -3028,8 +3035,7 @@ bool EngineFuncsInit() {
     // --- DebugUI deep-reimpl helpers ---
     g_TypeId_FireComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c41e0));
-    g_TypeId_CitizenComponent = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7cb8));
+    // g_TypeId_CitizenComponent removed — was duplicate of g_TypeId_RawMaterialDescription (DAT_1401c7cb8)
     fn_Game_DestroyEntity = reinterpret_cast<fn_Game_DestroyEntity_t>(
         ResolveAddr(Module::Exe, 0x140091e60));
     fn_FireComponent_Ignite = reinterpret_cast<fn_FireComponent_Ignite_t>(

@@ -9,7 +9,7 @@
 // Factory:      FUN_1400372d0 -> MemAlloc(0x60, 8)
 // Constructor:  FUN_1401296a0
 // Vtable:       0x1401641f0
-// Type ID addr: 0x1401c7cb8 (mislabeled as g_TypeId_ResourceType in engine_funcs.h)
+// Type ID addr: 0x1401c7cb8 (g_TypeId_RawMaterialDescription in engine_funcs.h)
 //
 // ToolKit .rsc definition (e.g., RawMaterialWood.rsc):
 //   RawMaterialDescription rawmaterial {

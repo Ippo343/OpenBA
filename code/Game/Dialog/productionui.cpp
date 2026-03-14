@@ -267,8 +267,8 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
             typedef int (*fn_GetTypeId_t)(void*);
             void** vtbl = *(void***)subEntry;
             int typeId = ((fn_GetTypeId_t)vtbl[2])(subEntry);
-            if (typeId == (int)*g_TypeId_ResourceType) {
-                if (fn_IsDerivedFrom(subEntry, *g_TypeId_ResourceType)) {
+            if (typeId == (int)*g_TypeId_RawMaterialDescription) {
+                if (fn_IsDerivedFrom(subEntry, *g_TypeId_RawMaterialDescription)) {
                     resourceDesc = subEntry;
                 }
                 break;

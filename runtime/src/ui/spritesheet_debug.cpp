@@ -13,6 +13,7 @@
 //
 // All logging is guarded by #ifdef _DEBUG so release builds have zero overhead.
 
+#include "spritesheet_debug.h"
 #include "../../../engine/funcs/engine_funcs.h"
 #include "../../../runtime/types/ui/SpriteSheet.h"
 #include "../../../engine/types/SystemString.h"

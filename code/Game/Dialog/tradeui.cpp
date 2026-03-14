@@ -341,8 +341,8 @@ void TradeUI_RefreshSellTable(TradeUI* self)
                             void** cvtbl = *(void***)comp;
                             typedef int (*fn_GetTypeId_t)(void*);
                             int tid = ((fn_GetTypeId_t)cvtbl[2])(comp);
-                            if ((uint32_t)tid == *g_TypeId_ResourceType) {
-                                if (fn_IsDerivedFrom(comp, *g_TypeId_ResourceType))
+                            if ((uint32_t)tid == *g_TypeId_RawMaterialDescription) {
+                                if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription))
                                     resTypeComp = comp;
                                 break;
                             }
@@ -1100,10 +1100,10 @@ void TradeUI_Serialize(TradeUI* self) {
     // --- Phase 3: Count resources and selectable builds via ExternalFactory ---
     int resourceTypeCount = 0;
     void* factory = *g_pExternalFactorySingleton;
-    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ResourceType, nullptr);
+    void* ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, nullptr);
     while (ext != nullptr) {
         resourceTypeCount++;
-        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_ResourceType, ext);
+        ext = fn_ExternalFactory_FindNext(factory, *g_TypeId_RawMaterialDescription, ext);
     }
 
     int selectableCount = 0;
@@ -1405,7 +1405,7 @@ void TradeUI_Serialize(TradeUI* self) {
 // buy orders: self+0x40 = ptr, self+0x48 = count, stride 0x18
 //   entry[j]: +0x00 = resource entity ptr, +0x10 = quantity int
 // resource entity: +0x28 = component array ptr, +0x30 = component count
-//   component value at +0x48 (identified by vtable+0x10 returning g_TypeId_ResourceType)
+//   component value at +0x48 (identified by vtable+0x10 returning g_TypeId_RawMaterialDescription)
 // merchant state check: BuildState component, byte at +0x52 (or +0x50 if negative)
 //   0x13 = merchant arrived (enables dismiss button)
 // storage capacity: StateMachineComp+0x38 vs StorageComponent_QueryCount
@@ -1420,9 +1420,9 @@ static inline void Element_SetEnabled(void* element, bool enabled) {
 }
 
 // Find resource value for a given resource entity ptr by searching its component array
-// Returns 0 if not found. Resource type identified via vtable+0x10 == g_TypeId_ResourceType.
+// Returns 0 if not found. Resource type identified via vtable+0x10 == g_TypeId_RawMaterialDescription.
 static int FindResourceValue(void* resourceEntity) {
-    if (!resourceEntity || !g_TypeId_ResourceType) return 0;
+    if (!resourceEntity || !g_TypeId_RawMaterialDescription) return 0;
     uintptr_t entity = (uintptr_t)resourceEntity;
     int compCount = *(int*)(entity + 0x30);
     void** compArray = *(void***)(entity + 0x28);
@@ -1434,9 +1434,9 @@ static int FindResourceValue(void* resourceEntity) {
         uintptr_t vtbl = *(uintptr_t*)comp;
         GetTypeId_t getType = *(GetTypeId_t*)(vtbl + 0x10);
         int typeId = getType(comp);
-        if (typeId == (int)*g_TypeId_ResourceType) {
+        if (typeId == (int)*g_TypeId_RawMaterialDescription) {
             // Verify with IsDerivedFrom, then return value at +0x48
-            bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_ResourceType);
+            bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription);
             if (isRes) return *(int*)((uintptr_t)comp + 0x48);
             break;
         }
@@ -2548,7 +2548,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
     for (int i = 0; i < entityCount; i++) {
         uintptr_t entity = *(uintptr_t*)(*(uintptr_t*)(tradeList + 0x110) + (uintptr_t)i * 8);
 
-        void* resourceComp = FindDescSubObject((void*)entity, g_TypeId_ResourceType);
+        void* resourceComp = FindDescSubObject((void*)entity, g_TypeId_RawMaterialDescription);
         void* valueComp = FindDescSubObject((void*)entity, g_TypeInfo_ValueDescription);
 
         // Push 0x18-byte entry: {entity, resourceComp, valueComp}
