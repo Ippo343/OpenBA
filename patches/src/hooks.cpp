@@ -3387,7 +3387,7 @@ const ReimplEntry* GetReimplTable(int* outCount) {
 
 // Set to -1 to install all hooks, or a specific index to stop after that many.
 // Use for bisecting crashes: try 30 (engine core only), then 100, 200, etc.
-static constexpr int DEBUG_MAX_HOOKS = -1;
+static constexpr int DEBUG_MAX_HOOKS = -1; // All hooks (layout bug in EventNotifyDialog::Slot7 fixed)
 
 // When non-null, only hooks whose name starts with one of these prefixes are installed.
 // Essential hooks (BuildNumber, PlatformConfigure) are always installed.

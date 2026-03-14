@@ -240,9 +240,47 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
         // Set button element ID to 1500 + i (0x5DC + i)
         fn_Element_SetElementId((void*)entry[2], i + 0x5DC);
 
-        // Push entry into dynamic array at +0xC8
-        int newCount = *(int*)(s + 0xD0) + 1;
-        EventNotifyDialog_ArrayPush_Impl((void*)(s + 0xC8), newCount, entry);
+        // Push entry into dynamic array at +0xC8 (0x18-byte stride, no Strings)
+        // This is an INLINE push — NOT EventNotifyDialog_ArrayPush_Impl which is
+        // for the 0x30-stride +0xD8 array with String at +0x20.
+        {
+            uintptr_t* base = (uintptr_t*)(s + 0xC8);
+            void* oldData = (void*)*base;
+            int* countPtr = (int*)(s + 0xD0);
+            int* capPtr   = (int*)(s + 0xD4);
+            int oldCount = *countPtr;
+            int newCnt = oldCount + 1;
+
+            *countPtr = newCnt;
+
+            if (*capPtr < newCnt) {
+                *capPtr = newCnt;
+                if (oldCount != 0) {
+                    *capPtr = newCnt * 3;
+                }
+                void* alloc = fn_MemAlloc(g_pMemAllocSingleton, (uintptr_t)*capPtr * 0x18, 8);
+                *base = (uintptr_t)alloc;
+            }
+
+            void* newData = (void*)*base;
+
+            int startIdx = (oldData == newData) ? oldCount : 0;
+            if (startIdx < newCnt) {
+                for (int j = startIdx; j < newCnt; j++) {
+                    uint64_t* dst = (uint64_t*)((uintptr_t)newData + (uintptr_t)j * 0x18);
+                    uint64_t* src = (j < oldCount)
+                        ? (uint64_t*)((uintptr_t)oldData + (uintptr_t)j * 0x18)
+                        : entry;
+                    dst[0] = src[0];
+                    dst[1] = src[1];
+                    dst[2] = src[2];
+                }
+            }
+
+            if (oldData != newData) {
+                fn_MemFreeStatic(oldData);
+            }
+        }
     }
 
     // Copy event log counter: self+0xC4 = *(*(world+0x138) + 0x20)
@@ -262,12 +300,12 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
 // Trims excess entries if beyond display capacity.
 //
 // Active event entry (0x30 bytes at +0xD8 array):
-//   +0x00: int64 timer (countdown ticks)
-//   +0x08: UI::Sprite (16 bytes, icon sprite)
-//   +0x18: int32 eventIndex
-//   +0x1C: int32 severity/color code
+//   +0x00: Time timer (8 bytes, countdown)
+//   +0x08: int32 eventIndex
+//   +0x0C: (padding, 4 bytes)
+//   +0x10: UI::Sprite (16 bytes, icon sprite)
 //   +0x20: System::String (8 bytes, display text)
-//   +0x28: ??? (padding/unused)
+//   +0x28: uint32 color (ARGB)
 //
 // Original: 0x140067C30.
 
@@ -373,13 +411,13 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         uint8_t notifyEntry[0x30];
                         memset(notifyEntry, 0, 0x30);
 
-                        // +0x18 = event index
-                        *(int*)(notifyEntry + 0x18) = scanIdx;
+                        // +0x08 = event index (int32)
+                        *(int*)(notifyEntry + 0x08) = scanIdx;
 
                         // +0x00 = timer (Time constructed from float seconds)
                         fn_Time_Ctor_Float(notifyEntry, timerDuration);
 
-                        // +0x08 = sprite icon (from "EventIcon%i" format)
+                        // +0x10 = sprite icon (from "EventIcon%i" format)
                         uint8_t iconNameStr[8];
                         int iconIndex = *(int*)(entryOffset + 0x1C + eventArray);
                         fn_String_Format(iconNameStr, "EventIcon%i", (uint64_t)(uint32_t)iconIndex);
@@ -393,12 +431,12 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         // Create sprite with icon name (copies sprite sheet, sets index)
                         uint8_t newSprite[32];
                         fn_Sprite_Ctor(newSprite, *(uint64_t*)spriteBuf, iconNameStr);
-                        *(uint64_t*)(notifyEntry + 0x08) = *(uint64_t*)newSprite;
-                        *(uint64_t*)(notifyEntry + 0x10) = *(uint64_t*)(newSprite + 8);
+                        *(uint64_t*)(notifyEntry + 0x10) = *(uint64_t*)newSprite;
+                        *(uint64_t*)(notifyEntry + 0x18) = *(uint64_t*)(newSprite + 8);
 
                         fn_String_Dtor(iconNameStr);
 
-                        // +0x1C = color based on severity
+                        // +0x28 = color based on severity
                         int sev = *(int*)(entryOffset + 0x14 + eventArray);
                         uint32_t color;
                         if (sev == 1)      color = 0xFFFFFF00;  // yellow
@@ -406,7 +444,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         else if (sev == 3) color = 0xFFFF6060;  // red
                         else if (sev == 4) color = 0xFFEA7517;  // orange
                         else               color = 0xFFFFFFFF;  // white
-                        *(uint32_t*)(notifyEntry + 0x1C) = color;
+                        *(uint32_t*)(notifyEntry + 0x28) = color;
 
                         // +0x20 = text string (strip category prefix before ':')
                         // Event text is at eventArray + entryOffset + 0x08
@@ -514,8 +552,9 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
 //   +0xE8: void* ribbonNotifyElement (the ribbon container)
 //
 // Active event entry layout (0x30 bytes):
-//   +0x00: int64 timer
+//   +0x00: Time timer (8 bytes)
 //   +0x08: int32 event_index (into game event log)
+//   +0x0C: (padding)
 //   +0x10: Sprite (16 bytes) — icon sprite
 //   +0x20: System::String — display text
 //   +0x28: uint32 color (ARGB, set from severity in Slot7)
