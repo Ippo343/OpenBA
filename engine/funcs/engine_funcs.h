@@ -594,6 +594,24 @@ extern uint32_t* g_TypeId_AttendanceSubComp;      // DAT_1401c3f78
 extern uint32_t* g_TypeId_ResourceLimitType;      // DAT_1401c5520
 extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
 
+// BridgeTool-related type IDs
+extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup component lookup)
+// g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (DAT_1401c79e0) — already declared above
+// g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
+extern uint32_t* g_TypeId_ModelComponent;          // DAT_1401c7a50
+extern uint32_t* g_TypeId_PickingComponent;        // DAT_1401c7c10
+
+// BridgeTool helper functions (internal to exe)
+// BridgeTool_SnapEndCell (0x1400fb710): snaps end cell to same row or column as drag start
+// RCX=self(BridgeTool*), EDX=endCell -> returns snapped cell index
+typedef int (*fn_BridgeTool_SnapEndCell_t)(void* self, int endCell);
+extern fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell;
+
+// BridgeTool_ValidatePath (0x1400fb2d0): validates bridge path between two cells
+// RCX=self(BridgeTool*), EDX=startCell, R8D=endCell, R9=outLength(int*) -> returns bool (1=valid)
+typedef int (*fn_BridgeTool_ValidatePath_t)(void* self, int startCell, int endCell, int* outLength);
+extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
+
 // ============================================================
 // Game Singletons (Phase A3 — exe global pointers)
 // ============================================================
@@ -2103,6 +2121,28 @@ extern fn_DialogInstance_AddControllerTab_t fn_DialogInstance_AddControllerTab;
 typedef void (*fn_DialogInstance_AddController6_t)(void* self, uint32_t typeId,
     void* dataSource, void* controllerConfig, void* elementDesc, void* nameStr);
 extern fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6;
+
+// ============================================================
+// DragTool support functions
+// ============================================================
+
+// Input::KeyMap::Released(this, slot, keyId) -> bool
+// ?Released@KeyMap@Input@@QEBA_NHH@Z
+// Dispatch table at 0x1401528f0
+typedef bool (*fn_KeyMap_Released_t)(void* self, int slot, int keyId);
+extern fn_KeyMap_Released_t fn_KeyMap_Released;
+
+// UI::DialogInstance::GetRoot(this) -> InternalBasePtr<Element>* (returns ptr to root element IBP)
+// ?GetRoot@DialogInstance@UI@@QEAAAEAV?$InternalBasePtr@VElement@UI@@@Object@@XZ
+// Dispatch table at 0x1401527f8
+typedef void* (*fn_DialogInstance_GetRoot_t)(void* self);
+extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
+
+// Audio::Scene::PlayEffect(this, soundId, count, time) — plays a sound effect
+// ?PlayEffect@Scene@Audio@@QEAAXVExternalPtr@Object@@HAEBVTime@System@@@Z
+// Dispatch table at 0x140152830
+typedef void (*fn_AudioScene_PlayEffect_t)(void* self, uint64_t soundId, int count, void* time);
+extern fn_AudioScene_PlayEffect_t fn_AudioScene_PlayEffect;
 
 // ============================================================
 // ModDetailsDialog support functions

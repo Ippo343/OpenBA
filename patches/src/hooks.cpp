@@ -1930,6 +1930,7 @@ extern void InstallToolbarDtor(); extern void RemoveToolbarDtor();
 extern void InstallToolbarSerialize(); extern void RemoveToolbarSerialize();
 extern void InstallToolbarCleanup(); extern void RemoveToolbarCleanup();
 extern void InstallRotationSettingDtor(); extern void RemoveRotationSettingDtor();
+extern void InstallSetTextParams(); extern void RemoveSetTextParams();
 extern void InstallDragToolDtor(); extern void RemoveDragToolDtor();
 extern void InstallDragToolOnKey(); extern void RemoveDragToolOnKey();
 extern void InstallBridgeToolDtor(); extern void RemoveBridgeToolDtor();
@@ -3181,11 +3182,12 @@ static ReimplEntry g_reimplementations[] = {
     { "Toolbar::Serialize", InstallToolbarSerialize, RemoveToolbarSerialize, true },
     { "Toolbar::Cleanup", InstallToolbarCleanup, RemoveToolbarCleanup, true },
     { "RotationSetting::Dtor", InstallRotationSettingDtor, RemoveRotationSettingDtor, true },
+    { "SetTextParams::NullGuard", InstallSetTextParams, RemoveSetTextParams, true },
     { "DragTool::Dtor", InstallDragToolDtor, RemoveDragToolDtor, true },
     { "DragTool::OnKey", InstallDragToolOnKey, RemoveDragToolOnKey, true },
     { "BridgeTool::Dtor", InstallBridgeToolDtor, RemoveBridgeToolDtor, true },
     { "BridgeTool::Startup", InstallBridgeToolStartup, RemoveBridgeToolStartup, true },
-    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "BridgeTool::CalcPath", InstallBridgeToolCalcPath, RemoveBridgeToolCalcPath, true },
     { "BridgeTool::CalcCost", InstallBridgeToolCalcCost, RemoveBridgeToolCalcCost, true },
     { "DragPlacementTool::Dtor", InstallDragPlacementToolDtor, RemoveDragPlacementToolDtor, true },
     { "DragPlacementTool::Startup", InstallDragPlacementToolStartup, RemoveDragPlacementToolStartup, true },

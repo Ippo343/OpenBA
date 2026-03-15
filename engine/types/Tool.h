@@ -37,21 +37,34 @@ static_assert(sizeof(Tool) == 0x28, "Tool size mismatch");
 static_assert(offsetof(Tool, vtable) == 0x00, "");
 
 // DragTool base layout (0x38 bytes) — for tools that support click-and-drag placement
+//
+// OnKey state machine:
+//   dragState==0 && key pressed => pick startCell, open dialog, set dragState=1
+//   dragState==1 (dragging)     => update endCell, call virtual BuildPath (+0x70),
+//                                  update UI via operator_impl_fc60, handle release
+//   singleClick flag at +0x29   => set when start==end on release (single click mode)
+//
 struct DragTool {
     // --- Tool base (0x28 bytes) ---
     void*    vtable;             // +0x00: -> 0x140161c10 (base DragTool)
     uint8_t  _base08[8];         // +0x08: Object::Internal base
-    uint8_t  _pad10[8];          // +0x10
-    void*    _field18;           // +0x18
-    void*    _field20;           // +0x20
+    void*    dialogPtr;          // +0x10: InternalBasePtr to placement UI dialog
+    void*    _field18;           // +0x18: unused? (zeroed in base)
+    void*    descriptionPtr;     // +0x20: pointer to description/config (ExternalPtr)
 
     // --- DragTool fields ---
-    uint16_t _field28;           // +0x28: zeroed (two flags?)
+    uint8_t  dragState;          // +0x28: 0=idle, 1=dragging
+    uint8_t  singleClick;        // +0x29: 1 if user single-clicked (start==end on release)
     uint8_t  _pad2A[2];          // +0x2A: padding
-    int64_t  _field2C;           // +0x2C: -1 (all 0xFF bytes)
-    int32_t  _field34;           // +0x34: -1 sentinel
+    int32_t  startCell;          // +0x2C: map cell index of drag start (-1 = invalid)
+    int32_t  endCell;            // +0x30: map cell index of drag end (-1 = invalid)
+    int32_t  lastEndCell;        // +0x34: previous endCell (used for change detection / sound)
 };
 
 static_assert(sizeof(DragTool) == 0x38, "DragTool size mismatch");
 static_assert(offsetof(DragTool, vtable) == 0x00, "");
-static_assert(offsetof(DragTool, _field28) == 0x28, "");
+static_assert(offsetof(DragTool, dragState) == 0x28, "");
+static_assert(offsetof(DragTool, singleClick) == 0x29, "");
+static_assert(offsetof(DragTool, startCell) == 0x2C, "");
+static_assert(offsetof(DragTool, endCell) == 0x30, "");
+static_assert(offsetof(DragTool, lastEndCell) == 0x34, "");

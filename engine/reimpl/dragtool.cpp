@@ -24,10 +24,13 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Player/dragtool.h"
 #include <cstdio>
 #include <cstdint>
 
 // --- Slot0: Dtor ---
+// Kept as trampoline: needs Object::Internal::~Internal which isn't resolved as a fn ptr yet.
+// When fn_Internal_Dtor is added, switch to calling DragTool_Dtor() in code/Game/Player.
 static HookInfo g_hookDragToolDtor;
 typedef void* (*fn_DragToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_DragToolDtor(void* self, uint32_t flags) {
@@ -36,11 +39,11 @@ static void* Reimpl_DragToolDtor(void* self, uint32_t flags) {
 }
 
 // --- Slot6: OnKey ---
+// DEEPLY REIMPLEMENTED: delegates to DragTool_OnKey() in code/Game/Player/dragtool.cpp
 static HookInfo g_hookDragToolOnKey;
-typedef uint64_t (*fn_DragToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_DragToolOnKey(void* self, char key) {
     g_lastHook = "DragTool::DragToolOnKey";
-    return ((fn_DragToolOnKey_t)g_hookDragToolOnKey.trampoline)(self, key);
+    return DragTool_OnKey((DragTool*)self, key);
 }
 
 void InstallDragToolDtor() {

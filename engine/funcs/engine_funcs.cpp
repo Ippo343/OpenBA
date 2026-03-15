@@ -254,6 +254,17 @@ uint32_t* g_TypeId_AttendanceSubComp = nullptr;
 uint32_t* g_TypeId_ResourceLimitType = nullptr;
 uint32_t* g_TypeId_ToolUI = nullptr;
 
+// BridgeTool-related type IDs
+uint32_t* g_TypeId_CreateBridgeDescription = nullptr;
+// g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (same DAT_1401c79e0)
+uint32_t* g_TypeId_ModelComponent = nullptr;
+// g_TypeId_MultiObjectComponent already defined below (~line 444)
+uint32_t* g_TypeId_PickingComponent = nullptr;
+
+// BridgeTool helper functions
+fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell = nullptr;
+fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
+
 // ============================================================
 // Game Singletons (Phase A3)
 // ============================================================
@@ -536,6 +547,11 @@ uint32_t* g_TypeId_UIDescription = nullptr;
 fn_TabElement_AddTab_t fn_TabElement_AddTab = nullptr;
 fn_DialogInstance_AddControllerTab_t fn_DialogInstance_AddControllerTab = nullptr;
 fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6 = nullptr;
+
+// DragTool support
+fn_KeyMap_Released_t fn_KeyMap_Released = nullptr;
+fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot = nullptr;
+fn_AudioScene_PlayEffect_t fn_AudioScene_PlayEffect = nullptr;
 
 // ModDetailsDialog support
 fn_Element_Hide_t fn_Element_Hide = nullptr;
@@ -1757,6 +1773,22 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c5520));
     g_TypeId_ToolUI = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5788));
+
+    // BridgeTool type IDs
+    g_TypeId_CreateBridgeDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c73f8));
+    // g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (same addr, already resolved above)
+    g_TypeId_ModelComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7a50));
+    // g_TypeId_MultiObjectComponent already resolved in Phase E below
+    g_TypeId_PickingComponent = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7c10));
+    // BridgeTool helper functions (exe-internal)
+    fn_BridgeTool_SnapEndCell = reinterpret_cast<fn_BridgeTool_SnapEndCell_t>(
+        ResolveAddr(Module::Exe, 0x1400fb710));
+    fn_BridgeTool_ValidatePath = reinterpret_cast<fn_BridgeTool_ValidatePath_t>(
+        ResolveAddr(Module::Exe, 0x1400fb2d0));
+
     // CheckboxElement type ID: exref at 0x1401516a8 → pointer → uint32_t typeId
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
@@ -2632,6 +2664,23 @@ bool EngineFuncsInit() {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a90));
         if (dispatch) fn_DialogInstance_AddController6 =
             reinterpret_cast<fn_DialogInstance_AddController6_t>(*dispatch);
+    }
+
+    // --- DragTool support ---
+    // KeyMap::Released — dispatch table at 0x1401528f0
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528f0));
+        if (dispatch) fn_KeyMap_Released = reinterpret_cast<fn_KeyMap_Released_t>(*dispatch);
+    }
+    // DialogInstance::GetRoot — dispatch table at 0x1401527f8
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401527f8));
+        if (dispatch) fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(*dispatch);
+    }
+    // Audio::Scene::PlayEffect — dispatch table at 0x140152830
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152830));
+        if (dispatch) fn_AudioScene_PlayEffect = reinterpret_cast<fn_AudioScene_PlayEffect_t>(*dispatch);
     }
 
     // --- ModDetailsDialog support ---

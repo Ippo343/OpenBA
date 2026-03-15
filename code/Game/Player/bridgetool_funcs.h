@@ -1,0 +1,36 @@
+#pragma once
+// Function declarations for deeply reimplemented BridgeTool methods.
+// Called from engine/reimpl/bridgetool.cpp wrappers.
+// No dependency on hooks.h or resolve.h -- portable to standalone exe.
+
+#include "BridgeTool.h"
+#include <cstdint>
+
+// Dtor (vtable +0x00): Scalar deleting destructor.
+// Resets vtable chain (BridgeTool -> DragTool -> Tool), calls Internal::~Internal,
+// conditionally frees memory if flags & 1.
+// Original: 0x14002d7f0
+void* BridgeTool_Dtor(BridgeTool* self, uint32_t flags);
+
+// Startup (vtable +0x20, Slot4): Finds BridgeDescription component on the entity
+// at self->entity (+0x20) and stores it at self->bridgeDesc (+0x38).
+// Iterates entity's component array, matching by CreateBridgeDescription type ID.
+// Original: 0x1400fb7a0
+void BridgeTool_Startup(BridgeTool* self);
+
+// CalcCost (vtable +0x70, Slot14): Calculates bridge placement cost.
+// Snaps endCell to same row/col as drag start, validates path, returns cost info.
+// param_4 = outValid (set to 1), param_5 = outCostB (set to 0),
+// param_6 = outCostA (set to 0), param_7 = outLength (set to 1).
+// Returns 0 on success, 3 on failure (invalid cell or failed validation).
+// Original: 0x1400facf0
+uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
+                              uint32_t* outValid, int* outCostB, int* outCostA, int* outLength);
+
+// CalcPath (vtable +0x68, Slot13): Builds the bridge path between two cells.
+// The most complex function — creates entity instances for each bridge segment,
+// sets their position/rotation transforms, and registers with entity list.
+// Currently delegates to original via trampoline (requires many untyped engine APIs:
+// entity copy-ctor, transform ops, geometry transforms, picking scene registration).
+// Original: 0x1400f9cd0
+// Signature: (self, startCell, endCell) -> bool (1=success, 0=failure)
