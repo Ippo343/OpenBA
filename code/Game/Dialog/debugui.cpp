@@ -345,35 +345,35 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 // ============================================================
 static void Game_DestroyAllRawMaterials_Impl() {
     void* factory = *g_pExternalFactorySingleton;
-    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
-    void* entityList = *(void**)(game + 0xF0);
 
     // Iterate all entities with BuildComponent type
     void* entity = fn_ExternalFactory_FindNext(factory, *g_TypeId_BuildComponent, nullptr);
     while (entity) {
-        // Verify this entity is actually a BuildComponent entity
+        // IsDerivedFrom check against BuildComponent
         bool isBuild = fn_IsDerivedFrom(entity, *g_TypeId_BuildComponent);
         void* buildEntity = isBuild ? entity : nullptr;
 
-        if (buildEntity) {
-            // Search entity's components for a CitizenComponent
-            uintptr_t e = (uintptr_t)buildEntity;
-            int compCount = *(int*)(e + 0x30);
-            void** compArray = *(void***)(e + 0x28);
+        // Search entity's components for RawMaterialDescription
+        uintptr_t e = (uintptr_t)buildEntity;
+        int compCount = *(int*)(e + 0x30);
+        void** compArray = *(void***)(e + 0x28);
 
-            for (int i = 0; i < compCount; i++) {
-                void* comp = compArray[i];
-                // Get component type via vtable[2] (+0x10)
-                typedef int (*fn_GetTypeId_t)(void*);
-                int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-                if (typeId == (int)*g_TypeId_RawMaterialDescription) {
-                    // Confirm with IsDerivedFrom
-                    bool isCitizen = fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription);
-                    if (isCitizen && comp != nullptr) {
-                        fn_Game_DestroyEntity(entityList, buildEntity);
-                    }
-                    break;
+        for (int i = 0; i < compCount; i++) {
+            void* comp = compArray[i];
+            // Get component type via vtable[2] (+0x10)
+            typedef uint32_t (*fn_GetTypeId_t)(void*);
+            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+            if (typeId == *g_TypeId_RawMaterialDescription) {
+                // Re-read component pointer from array and confirm with IsDerivedFrom
+                void* rawComp = compArray[i];
+                bool isRawMat = fn_IsDerivedFrom(rawComp, *g_TypeId_RawMaterialDescription);
+                if (isRawMat && rawComp != nullptr) {
+                    // Destroy the entity (re-read entityList from global each time)
+                    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
+                    void* entityList = *(void**)(game + 0xF0);
+                    fn_Game_DestroyEntity(entityList, buildEntity);
                 }
+                break;
             }
         }
 
@@ -389,11 +389,13 @@ static void Game_DestroyAllRawMaterials_Impl() {
 static void Game_SpawnItemsInStorage_Impl() {
     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
-    int storageCount = *(int*)(entityListBase + 0x98);
-    void** storageArray = *(void***)(entityListBase + 0x90);
 
+    int storageCount = *(int*)(entityListBase + 0x98);
+    if (storageCount <= 0) return;
+
+    uintptr_t arrayBase = *(uintptr_t*)(entityListBase + 0x90);
     for (int i = 0; i < storageCount; i++) {
-        void* storage = storageArray[i];
+        void* storage = *(void**)(arrayBase + (uintptr_t)i * 8);
         fn_InternalBasePtr_CheckPtr(&storage);
 
         // Check if storage has items to spawn (component+0x28 != 0)
@@ -416,152 +418,238 @@ static void Game_SpawnItemsInStorage_Impl() {
 
 // ============================================================
 // Game_SpawnCitizens (FUN_140060380)
-// Spawns up to 4 new citizens at random buildings that have residence
-// components with available capacity. Loads Template/Citizen.rsc,
-// creates entity, finds CitizenAI component, sets up citizen.
+// Spawns up to 4 new citizens at buildings that have residence
+// components with available capacity. Iterates all buildings,
+// spawning multiple citizens per building until full or 4 total.
 // ============================================================
 static void Game_SpawnCitizens_Impl() {
     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
     void* randomPtr = *(void**)(game + 0xD8);
-    uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
-    int buildingCount = (int)*(int64_t*)(entityListBase + 8);
+    uintptr_t* entityListPtr = *(uintptr_t**)(game + 0xF0);
+    int buildingCount = (int)entityListPtr[1]; // building count at entityList+0x08
 
     if (buildingCount == 0) return;
 
-    int spawnedTotal = 0;
-    for (int attempt = 0; attempt < buildingCount && spawnedTotal < 4; attempt++) {
-        // Get building from list
-        void* building = *(void**)(*(uintptr_t*)entityListBase + (uintptr_t)attempt * 8);
-        if (!building) continue;
+    int spawnedTotal = 0; // R13D — total citizens spawned across all buildings
+    do {
+        // Inner loop: scan all buildings
+        int buildIdx = 0; // local_res10
+        if (buildingCount > 0) {
+            uintptr_t buildOffset = 0; // local_b0 — byte offset into building array
+            do {
+                // Get building from array: *(entityListPtr[0] + buildOffset)
+                uintptr_t buildArrayBase = entityListPtr[0];
+                void* building = *(void**)(buildOffset + buildArrayBase);
 
-        fn_InternalBasePtr_CheckPtr(&building);
+                if (building != nullptr) {
+                    fn_InternalBasePtr_CheckPtr(&building);
 
-        // Find ResidenceComponent on this building
-        void* residenceComp = nullptr;
-        {
-            uintptr_t b = (uintptr_t)building;
-            int compCount = *(int*)(b + 0x38);
-            void** compArr = *(void***)(b + 0x30);
-            for (int c = 0; c < compCount; c++) {
-                void* comp = compArr[c];
-                fn_InternalBasePtr_CheckPtr(&comp);
-                typedef int (*fn_GetTypeId_t)(void*);
-                int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-                if (typeId == (int)*g_TypeId_ResidenceComponent_FC) {
-                    fn_InternalBasePtr_CheckPtr(&comp);
-                    bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_ResidenceComponent_FC);
-                    residenceComp = isRes ? comp : nullptr;
-                    break;
+                    // Find ResidenceComponent (DAT_1401c7900) on this building
+                    void* residenceComp = nullptr;
+                    {
+                        uintptr_t b = (uintptr_t)building;
+                        int compCount = *(int*)(b + 0x38);
+                        uintptr_t compArrayBase = *(uintptr_t*)(b + 0x30);
+                        int ci = 0;
+                        int64_t cOffset = 0;
+                        while (ci < compCount) {
+                            void** pComp = (void**)(compArrayBase + cOffset * 8);
+                            fn_InternalBasePtr_CheckPtr(pComp);
+                            void* comp = *pComp;
+                            typedef uint32_t (*fn_GetTypeId_t)(void*);
+                            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                            if (typeId == *g_TypeId_ResidenceComponent_FC) {
+                                // Re-read and CheckPtr on the array slot
+                                pComp = (void**)(compArrayBase + cOffset * 8);
+                                fn_InternalBasePtr_CheckPtr(pComp);
+                                comp = *pComp;
+                                bool isRes = fn_IsDerivedFrom(comp, *g_TypeId_ResidenceComponent_FC);
+                                residenceComp = isRes ? comp : nullptr;
+                                goto found_residence;
+                            }
+                            ci++;
+                            cOffset++;
+                        }
+                        residenceComp = nullptr;
+                    }
+found_residence:
+                    // Store in InternalBasePtr
+                    void* resCompIBP = nullptr;
+                    fn_InternalBasePtr_Ctor(&resCompIBP, residenceComp);
+
+                    if (resCompIBP != nullptr) {
+                        // Inner while(true) loop: spawn citizens at this building until full
+                        int spawnedHere = 0; // R12D — per-building spawn counter
+                        while (true) {
+                            // Re-check ResidenceComponent each iteration
+                            fn_InternalBasePtr_CheckPtr(&resCompIBP);
+                            uintptr_t resComp = (uintptr_t)resCompIBP;
+
+                            // Get ResidenceDescription from component+0x18
+                            void* desc = *(void**)(resComp + 0x18);
+                            bool isResDesc = fn_IsDerivedFrom(desc, *g_TypeId_ResidenceDescription);
+                            void* resDesc = isResDesc ? desc : nullptr;
+
+                            // Read capacity value from desc+0x30 (maxOccupants)
+                            // GetOccupantCount returns values that add to this
+                            int capacityAccum = *(int*)((uintptr_t)resDesc + 0x30);
+
+                            // Sum occupant counts from children at resComp+0x28/+0x30
+                            int childCount = *(int*)(resComp + 0x30);
+                            if (childCount > 0) {
+                                uintptr_t childArrayBase = *(uintptr_t*)(resComp + 0x28);
+                                int si = 0;
+                                uintptr_t sOffset = 0;
+                                do {
+                                    void** pChild = (void**)(childArrayBase + sOffset);
+                                    fn_InternalBasePtr_CheckPtr(pChild);
+                                    int occResult = fn_ResidenceComponent_GetOccupantCount(*pChild, 0);
+                                    capacityAccum += occResult;
+                                    si++;
+                                    sOffset += 8;
+                                } while (si < childCount);
+                            }
+
+                            // Break if no more room: spawnedHere >= capacityAccum
+                            if (spawnedHere >= capacityAccum) break;
+
+                            // Get spawn point for this slot
+                            fn_InternalBasePtr_CheckPtr(&resCompIBP);
+                            uint8_t spawnPos[16] = {0};
+                            fn_ResidenceComponent_GetSpawnPoint(resCompIBP, spawnPos, 0, spawnedHere, nullptr);
+
+                            // Check if we've reached the global limit of 4
+                            if (spawnedTotal >= 4) {
+                                // Original doesn't exit; it just skips spawn and
+                                // increments spawnedHere until capacity is hit
+                                spawnedHere++;
+                                continue;
+                            }
+
+                            spawnedTotal++;
+                            // Save spawnedTotal (R13D saved to stack, reused for gender)
+                            int savedSpawnedTotal = spawnedTotal;
+
+                            // Random gender
+                            uint32_t gender = fn_Random_Rand(randomPtr, 2);
+                            uint32_t genderFlag = (gender != 0) ? 1 : 0;
+
+                            // Load citizen template
+                            uint8_t filenameBuf[16];
+                            fn_Filename_CtorCStr(filenameBuf, "Template/Citizen.rsc");
+                            void* factory = *g_pExternalFactorySingleton;
+                            void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
+
+                            // Determine entity description (RDI in disasm)
+                            // If extTemplate is null, use null.
+                            // If non-null, IsDerivedFrom check; use result (may be null).
+                            void* entityDesc = nullptr;
+                            if (extTemplate == nullptr) {
+                                entityDesc = nullptr;
+                            } else {
+                                bool isBuildDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
+                                entityDesc = isBuildDesc ? extTemplate : nullptr;
+                            }
+
+                            fn_Filename_Dtor(filenameBuf);
+
+                            // Allocate and create entity (0x48 bytes)
+                            void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+                            void* newEntity = nullptr;
+                            if (memBlock != nullptr) {
+                                newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
+                            }
+
+                            // Wrap new entity in InternalBasePtr
+                            void* newEntityIBP = nullptr;
+                            fn_InternalBasePtr_Ctor(&newEntityIBP, newEntity);
+
+                            // Find CitizenAIComponent (DAT_1401c7158) on the new entity
+                            fn_InternalBasePtr_CheckPtr(&newEntityIBP);
+                            void* aiComp = nullptr;
+                            {
+                                uintptr_t ne = (uintptr_t)newEntityIBP;
+                                int compCount = *(int*)(ne + 0x38);
+                                uintptr_t compArrayBase = *(uintptr_t*)(ne + 0x30);
+                                int ci = 0;
+                                int64_t cOffset = 0;
+                                while (ci < compCount) {
+                                    void** pComp = (void**)(compArrayBase + cOffset * 8);
+                                    fn_InternalBasePtr_CheckPtr(pComp);
+                                    void* comp = *pComp;
+                                    typedef uint32_t (*fn_GetTypeId_t)(void*);
+                                    uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
+                                    if (typeId == *g_TypeId_CitizenAIComponent_FC) {
+                                        pComp = (void**)(compArrayBase + cOffset * 8);
+                                        fn_InternalBasePtr_CheckPtr(pComp);
+                                        comp = *pComp;
+                                        bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenAIComponent_FC);
+                                        aiComp = isAI ? comp : nullptr;
+                                        goto found_ai;
+                                    }
+                                    ci++;
+                                    cOffset++;
+                                }
+                                aiComp = nullptr;
+                            }
+found_ai:
+                            // Wrap CitizenAI in InternalBasePtr
+                            void* aiCompIBP = nullptr;
+                            fn_InternalBasePtr_Ctor(&aiCompIBP, aiComp);
+
+                            // Setup citizen
+                            fn_InternalBasePtr_CheckPtr(&aiCompIBP);
+                            void* citizenAI = aiCompIBP;
+
+                            // Get CitizenDescription (DAT_1401c7190) from AI component
+                            void* citDescRaw = *(void**)((uintptr_t)citizenAI + 0x18);
+                            bool isCitDesc = fn_IsDerivedFrom(citDescRaw, *g_TypeId_CitizenDescription);
+                            void* citDesc = isCitDesc ? citDescRaw : nullptr;
+
+                            // Get profession list from game (re-read global)
+                            game = (uintptr_t)*g_pGameWorldSingleton;
+                            void* profList = *(void**)(*(uintptr_t*)(game + 0xB0) + 0x30);
+
+                            // Create null parent InternalBasePtr
+                            void* parentIBP = nullptr;
+                            fn_InternalBasePtr_Ctor(&parentIBP, nullptr);
+
+                            // Read age range from CitizenDescription
+                            fn_InternalBasePtr_CheckPtr(&aiCompIBP);
+                            citizenAI = aiCompIBP;
+                            float minAge = *(float*)((uintptr_t)citDesc + 0x50);
+                            float randAge = fn_Random_RandFloat(randomPtr);
+                            float maxAge = *(float*)((uintptr_t)citDesc + 0x54);
+                            float age = randAge * (maxAge - minAge) + minAge;
+
+                            fn_CitizenComponent_Setup(citizenAI, spawnPos,
+                                                      genderFlag, '\0',
+                                                      age, '\x01', &parentIBP, profList);
+
+                            // Register entity with entity manager
+                            // Use newEntityIBP (the InternalBasePtr value) as the entity ref
+                            void* entityRef = newEntityIBP;
+                            game = (uintptr_t)*g_pGameWorldSingleton;
+                            void* entityMgr = *(void**)(game + 0xE8);
+                            fn_EntityList_RegisterEntity(entityMgr, &entityRef,
+                                                         *(int*)((uintptr_t)entityDesc + 0x20));
+
+                            // Restore spawnedTotal
+                            spawnedTotal = savedSpawnedTotal;
+
+                            spawnedHere++;
+                        } // while(true) — per-building spawn loop
+                    }
                 }
-            }
+
+                // Advance to next building
+                buildIdx++;
+                buildOffset += 8;
+                // Re-read building count (may change if entities are added)
+                buildingCount = (int)entityListPtr[1];
+            } while (buildIdx < buildingCount);
         }
-
-        if (!residenceComp) continue;
-
-        // Get max capacity from description
-        void* desc = *(void**)((uintptr_t)residenceComp + 0x18);
-        bool isResDesc = fn_IsDerivedFrom(desc, *g_TypeId_ResidenceDescription);
-        void* resDesc = isResDesc ? desc : nullptr;
-        if (!resDesc) continue;
-        int maxCapacity = *(int*)((uintptr_t)resDesc + 0x30);
-
-        // Sum current occupants across all sub-slots
-        int currentOccupants = 0;
-        int subCount = *(int*)((uintptr_t)residenceComp + 0x30);
-        void** subArray = *(void***)((uintptr_t)residenceComp + 0x28);
-        for (int s = 0; s < subCount; s++) {
-            void* sub = subArray[s];
-            fn_InternalBasePtr_CheckPtr(&sub);
-            int occ = fn_ResidenceComponent_GetOccupantCount(sub, 0);
-            currentOccupants += occ;
-        }
-
-        if (currentOccupants >= maxCapacity) continue;
-
-        // Spawn citizen at this building
-        // Get spawn point
-        uint8_t spawnPos[16] = {0};
-        fn_ResidenceComponent_GetSpawnPoint(residenceComp, spawnPos, 0, currentOccupants, nullptr);
-
-        if (spawnedTotal >= 4) break;
-        spawnedTotal++;
-
-        // Random gender
-        uint32_t gender = fn_Random_Rand(randomPtr, 2);
-
-        // Load citizen template
-        uint8_t filenameBuf[16];
-        fn_Filename_CtorCStr(filenameBuf, "Template/Citizen.rsc");
-        void* factory = *g_pExternalFactorySingleton;
-        void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
-        fn_Filename_Dtor(filenameBuf);
-
-        void* entityDesc = nullptr;
-        if (extTemplate) {
-            bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
-            entityDesc = isEntityDesc ? extTemplate : nullptr;
-        }
-        if (!entityDesc) entityDesc = extTemplate;
-
-        // Allocate and create entity (0x48 bytes)
-        void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-        void* newEntity = nullptr;
-        if (memBlock) {
-            newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
-        }
-
-        // Find CitizenAI component on the new entity
-        uint8_t aiCompBuf[8] = {0};
-        fn_InternalBasePtr_Ctor(aiCompBuf, nullptr);
-        if (newEntity) {
-            uintptr_t ne = (uintptr_t)newEntity;
-            int compCount = *(int*)(ne + 0x38);
-            void** compArr = *(void***)(ne + 0x30);
-            for (int c = 0; c < compCount; c++) {
-                void* comp = compArr[c];
-                fn_InternalBasePtr_CheckPtr(&comp);
-                typedef int (*fn_GetTypeId_t)(void*);
-                int typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-                if (typeId == (int)*g_TypeId_CitizenAIComponent_FC) {
-                    fn_InternalBasePtr_CheckPtr(&comp);
-                    bool isAI = fn_IsDerivedFrom(comp, *g_TypeId_CitizenAIComponent_FC);
-                    void* aiComp = isAI ? comp : nullptr;
-                    fn_InternalBasePtr_Ctor(aiCompBuf, aiComp);
-                    break;
-                }
-            }
-        }
-
-        void* citizenAI = *(void**)aiCompBuf;
-        if (citizenAI) {
-            // Get citizen description
-            void* citizenDesc = *(void**)((uintptr_t)citizenAI + 0x18);
-            bool isCitDesc = fn_IsDerivedFrom(citizenDesc, *g_TypeId_CitizenDescription);
-            void* citDesc = isCitDesc ? citizenDesc : nullptr;
-
-            // Get age range from description
-            float minAge = *(float*)((uintptr_t)citDesc + 0x50);
-            float maxAge = *(float*)((uintptr_t)citDesc + 0x54);
-            float randAge = fn_Random_RandFloat(randomPtr);
-            float age = randAge * (maxAge - minAge) + minAge;
-
-            // Get profession list from game
-            void* profList = *(void**)(*(uintptr_t*)(game + 0xB0) + 0x30);
-
-            // Setup citizen
-            uint8_t parentBuf[8] = {0};
-            fn_InternalBasePtr_Ctor(parentBuf, nullptr);
-            fn_CitizenComponent_Setup(citizenAI, spawnPos, (gender != 0) ? 1 : 0, '\0',
-                                      age, '\x01', parentBuf, profList);
-        }
-
-        // Register entity
-        void* entityMgr = *(void**)(game + 0xE8);
-        void* entityRef = newEntity;
-        if (entityDesc) {
-            fn_EntityList_RegisterEntity(entityMgr, &entityRef, *(int*)((uintptr_t)entityDesc + 0x20));
-        }
-    }
+    } while (spawnedTotal < 4);
 }
 
 // ============================================================
@@ -575,21 +663,28 @@ static void DebugUI_TriggerDisasterOnBuilding_Impl(DebugUI* self) {
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
 
     // Pick random building from the building list
-    int buildingCount = *(int*)(entityListBase + 0xA8);
+    uint32_t buildingCount = *(uint32_t*)(entityListBase + 0xA8);
+    if (buildingCount == 0) return;
     void* randomPtr = *(void**)(game + 0xD8);
     uint32_t randIdx = fn_Random_Rand(randomPtr, buildingCount);
 
     // Get disease description from combo selection
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
-    int diseaseIdx = *(int*)(*(uintptr_t*)(s + 0x30) + 0x118);
-    void* descList = *(void**)(*(uintptr_t*)(game + 0xA8) + 0x20);
-    void* diseaseEntry = *(void**)((uintptr_t)descList + (uintptr_t)diseaseIdx * 8);
+    void* combo = *(void**)(s + 0x30);
+    if (!combo) return;
+    int diseaseIdx = *(int*)((uintptr_t)combo + 0x118);
+    void* externalList = *(void**)((uintptr_t)game + 0xA8);
+    if (!externalList) return;
+    void* diseaseEntry = *(void**)(*(uintptr_t*)((uintptr_t)externalList + 0x20) +
+                                   (int64_t)diseaseIdx * 8);
     bool isDisease = fn_IsDerivedFrom(diseaseEntry, *g_TypeId_DiseaseDescription);
     void* diseaseDesc = isDisease ? diseaseEntry : nullptr;
+    if (!diseaseDesc) return;
 
-    // Get building entity
-    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0xA0) + (uintptr_t)randIdx * 8);
+    // Get building entity from building array
+    void* building = *(void**)(*(uintptr_t*)(entityListBase + 0xA0) + (int64_t)(int)randIdx * 8);
     fn_InternalBasePtr_CheckPtr(&building);
+    if (!building) return;
 
     // Apply disease to building
     fn_DisasterComponent_Infect(building, diseaseDesc);
@@ -635,19 +730,22 @@ static void Game_SpawnTornado_Impl() {
     fn_Filename_CtorCStr(filenameBuf, "Template/Tornado.rsc");
     void* factory = *g_pExternalFactorySingleton;
     void* extTemplate = fn_ExternalFactory_FindOrLoad(factory, filenameBuf);
-    fn_Filename_Dtor(filenameBuf);
 
-    // Cast to entity description
+    // Cast to entity description (must be derived from BuildComponent type)
     void* entityDesc = nullptr;
     if (extTemplate) {
         bool isEntityDesc = fn_IsDerivedFrom(extTemplate, *g_TypeId_BuildComponent);
-        entityDesc = isEntityDesc ? extTemplate : nullptr;
+        if (isEntityDesc) {
+            entityDesc = extTemplate;
+        }
     }
-    if (!entityDesc) entityDesc = extTemplate;
+
+    // Filename dtor AFTER IsDerivedFrom check (matches original order)
+    fn_Filename_Dtor(filenameBuf);
 
     // Allocate and create entity (0x48 bytes)
-    void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     void* newEntity = nullptr;
+    void* memBlock = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
     if (memBlock) {
         newEntity = fn_EntityFactory_CreateEntity(memBlock, entityDesc);
     }
@@ -669,18 +767,21 @@ static void Game_InfectRandomCitizen_Impl() {
     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t entityListBase = *(uintptr_t*)(game + 0xF0);
 
-    void* randomPtr = *(void**)(game + 0xD8);
     uint32_t citizenCount = *(uint32_t*)(entityListBase + 0xF8);
+    if (citizenCount == 0) return;
+
+    void* randomPtr = *(void**)(game + 0xD8);
     uint32_t randIdx = fn_Random_Rand(randomPtr, citizenCount);
 
     // Get random citizen
-    void* citizen = *(void**)(*(uintptr_t*)(entityListBase + 0xF0) + (uintptr_t)randIdx * 8);
+    uintptr_t citizenArray = *(uintptr_t*)(entityListBase + 0xF0);
+    if (!citizenArray) return;
+    void* citizen = *(void**)(citizenArray + (uintptr_t)randIdx * 8);
     fn_InternalBasePtr_CheckPtr(&citizen);
+    if (!citizen) return;
 
     // Infect citizen's disease component
     fn_DiseaseComponent_Infect(citizen);
-
-    // Original has a spurious MemFree(nullptr) — skip it
 }
 
 // ============================================================
@@ -897,39 +998,39 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     switch (param4) {
     // --- Resource spawn buttons ---
     // Each calls Game_SpawnResources(citizenList, resourceFlag, count)
-    case 300:  fn_Game_SpawnResources(citizenList, 0x400,     50);   return;  // Logs
-    case 301:  fn_Game_SpawnResources(citizenList, 0x800,     50);   return;  // Food
-    case 302:  fn_Game_SpawnResources(citizenList, 0x1000,    50);   return;  // Herbs
-    case 303:  fn_Game_SpawnResources(citizenList, 0x80,      50);   return;  // Stone
-    case 304:  fn_Game_SpawnResources(citizenList, 0x100,     50);   return;  // Iron
-    case 305:  fn_Game_SpawnResources(citizenList, 0x200,     50);   return;  // Firewood
-    case 306:  fn_Game_SpawnResources(citizenList, 0x20,      1000); return;  // Tool
-    case 307:  fn_Game_SpawnResources(citizenList, 0x2000,    25);   return;  // Coat
-    case 308:  fn_Game_SpawnResources(citizenList, 0x4000,    25);   return;  // Leather coat
-    case 309:  fn_Game_SpawnResources(citizenList, 0x10000,   50);   return;  // Herbs2
-    case 310:  fn_Game_SpawnResources(citizenList, 0x20000,   100);  return;  // Ale
-    case 311:  fn_Game_SpawnResources(citizenList, 0x40000,   100);  return;  // Resource type 18
-    case 312:  fn_Game_SpawnResources(citizenList, 0x80000,   100);  return;  // Resource type 19
-    case 313:  fn_Game_SpawnResources(citizenList, 0x100000,  100);  return;  // Resource type 20
-    case 314:  fn_Game_SpawnResources(citizenList, 0x200000,  100);  return;  // Resource type 21
-    case 315:  fn_Game_SpawnResources(citizenList, 0x400000,  100);  return;  // Resource type 22
-    case 316:  fn_Game_SpawnResources(citizenList, 0x800000,  100);  return;  // Resource type 23
-    case 317:  fn_Game_SpawnResources(citizenList, 0x1000000, 100);  return;  // Resource type 24
-    case 318:  fn_Game_SpawnResources(citizenList, 0x2000000, 100);  return;  // Resource type 25
-    case 319:  fn_Game_SpawnResources(citizenList, 0x4000000, 100);  return;  // Resource type 26
-    case 320:  fn_Game_SpawnResources(citizenList, 0x8000000, 100);  return;  // Resource type 27
+    case 300:  Game_SpawnResources_Impl(citizenList, 0x400,     50);   return;  // Logs
+    case 301:  Game_SpawnResources_Impl(citizenList, 0x800,     50);   return;  // Food
+    case 302:  Game_SpawnResources_Impl(citizenList, 0x1000,    50);   return;  // Herbs
+    case 303:  Game_SpawnResources_Impl(citizenList, 0x80,      50);   return;  // Stone
+    case 304:  Game_SpawnResources_Impl(citizenList, 0x100,     50);   return;  // Iron
+    case 305:  Game_SpawnResources_Impl(citizenList, 0x200,     50);   return;  // Firewood
+    case 306:  Game_SpawnResources_Impl(citizenList, 0x20,      1000); return;  // Tool
+    case 307:  Game_SpawnResources_Impl(citizenList, 0x2000,    25);   return;  // Coat
+    case 308:  Game_SpawnResources_Impl(citizenList, 0x4000,    25);   return;  // Leather coat
+    case 309:  Game_SpawnResources_Impl(citizenList, 0x10000,   50);   return;  // Herbs2
+    case 310:  Game_SpawnResources_Impl(citizenList, 0x20000,   100);  return;  // Ale
+    case 311:  Game_SpawnResources_Impl(citizenList, 0x40000,   100);  return;  // Resource type 18
+    case 312:  Game_SpawnResources_Impl(citizenList, 0x80000,   100);  return;  // Resource type 19
+    case 313:  Game_SpawnResources_Impl(citizenList, 0x100000,  100);  return;  // Resource type 20
+    case 314:  Game_SpawnResources_Impl(citizenList, 0x200000,  100);  return;  // Resource type 21
+    case 315:  Game_SpawnResources_Impl(citizenList, 0x400000,  100);  return;  // Resource type 22
+    case 316:  Game_SpawnResources_Impl(citizenList, 0x800000,  100);  return;  // Resource type 23
+    case 317:  Game_SpawnResources_Impl(citizenList, 0x1000000, 100);  return;  // Resource type 24
+    case 318:  Game_SpawnResources_Impl(citizenList, 0x2000000, 100);  return;  // Resource type 25
+    case 319:  Game_SpawnResources_Impl(citizenList, 0x4000000, 100);  return;  // Resource type 26
+    case 320:  Game_SpawnResources_Impl(citizenList, 0x8000000, 100);  return;  // Resource type 27
 
     // --- Disaster / entity manipulation buttons ---
-    case 321:  fn_Game_TriggerDisasterByType(0); return;  // Trigger disaster type 0
-    case 322:  fn_Game_TriggerDisasterByType(1); return;  // Trigger disaster type 1
-    case 323:  fn_Game_TriggerDisasterByType(2); return;  // Trigger disaster type 2
-    case 324:  fn_Game_DestroyAllRawMaterials();  return;  // Destroy all loose raw material entities
-    case 325:  fn_Game_SpawnItemsInStorage();    return;  // Spawn items in all storage
-    case 326:  fn_Game_SpawnCitizens();          return;  // Spawn new citizens
-    case 327:  fn_DebugUI_TriggerDisasterOnBuilding(self); return;  // Disaster on random building
-    case 328:  fn_Game_StartRandomFire();        return;  // Start random fire
-    case 329:  fn_Game_SpawnTornado();           return;  // Spawn tornado
-    case 330:  fn_Game_InfectRandomCitizen();    return;  // Infect random citizen
+    case 321:  Game_TriggerDisasterByType_Impl(0); return;  // Trigger disaster type 0
+    case 322:  Game_TriggerDisasterByType_Impl(1); return;  // Trigger disaster type 1
+    case 323:  Game_TriggerDisasterByType_Impl(2); return;  // Trigger disaster type 2
+    case 324:  Game_DestroyAllRawMaterials_Impl();  return;  // Destroy all loose raw material entities
+    case 325:  Game_SpawnItemsInStorage_Impl();    return;  // Spawn items in all storage
+    case 326:  Game_SpawnCitizens_Impl();          return;  // Spawn new citizens
+    case 327:  DebugUI_TriggerDisasterOnBuilding_Impl(self); return;  // Disaster on random building
+    case 328:  Game_StartRandomFire_Impl();        return;  // Start random fire
+    case 329:  Game_SpawnTornado_Impl();           return;  // Spawn tornado
+    case 330:  Game_InfectRandomCitizen_Impl();    return;  // Infect random citizen
 
     // --- Debug render flag toggles (checkboxes) ---
     // param2 points to the checkbox element; flag is OR'd/AND'd into game+0xD0
@@ -1063,8 +1164,13 @@ void DebugUI_Slot4(DebugUI* self) {
                     *(uintptr_t*)((uintptr_t)externalList + 0x20));
                 bool isDisease = fn_IsDerivedFrom(resource, *g_TypeId_DiseaseDescription);
                 if (isDisease) {
-                    uint8_t textBuf[8];
-                    fn_StringTable_GetText(*(void**)((uintptr_t)resource + 0x20), textBuf, 0);
+                    // Build UIString from disease's StringTable (+0x20) and StringName (+0x28)
+                    uint8_t uiStr[16];
+                    fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)resource + 0x20),
+                                     (void*)((uintptr_t)resource + 0x28));
+                    // Convert UIString to System::String
+                    uint8_t textBuf[8] = {};
+                    fn_UIString_ToSystemString(uiStr, textBuf);
                     uint8_t spriteBuf[16];
                     fn_Sprite_Default_Ctor(spriteBuf);
                     fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, textBuf, nullptr);

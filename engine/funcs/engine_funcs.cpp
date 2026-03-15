@@ -752,6 +752,8 @@ fn_FireComponent_Ignite_t fn_FireComponent_Ignite = nullptr;
 fn_DiseaseComponent_Infect_t fn_DiseaseComponent_Infect = nullptr;
 fn_StorageComponent_GetCapacity_t fn_StorageComponent_GetCapacity = nullptr;
 fn_StorageComponent_SpawnItem_t fn_StorageComponent_SpawnItem = nullptr;
+fn_StorageCanAdd_t fn_StorageCanAdd = nullptr;   // 0x14012cd80
+fn_StorageAddItem_t fn_StorageAddItem = nullptr;  // 0x14012d000
 fn_EntityFactory_CreateEntity_t fn_EntityFactory_CreateEntity = nullptr;
 fn_EntityList_RegisterEntity_t fn_EntityList_RegisterEntity = nullptr;
 uint32_t* g_TypeId_ResidenceComponent_FC = nullptr;
@@ -3054,6 +3056,10 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140128570));
     fn_StorageComponent_SpawnItem = reinterpret_cast<fn_StorageComponent_SpawnItem_t>(
         ResolveAddr(Module::Exe, 0x140128670));
+    fn_StorageCanAdd = reinterpret_cast<fn_StorageCanAdd_t>(
+        ResolveAddr(Module::Exe, 0x14012cd80));
+    fn_StorageAddItem = reinterpret_cast<fn_StorageAddItem_t>(
+        ResolveAddr(Module::Exe, 0x14012d000));
     fn_EntityFactory_CreateEntity = reinterpret_cast<fn_EntityFactory_CreateEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c3720));
     fn_EntityList_RegisterEntity = reinterpret_cast<fn_EntityList_RegisterEntity_t>(

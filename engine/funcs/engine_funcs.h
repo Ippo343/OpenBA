@@ -3866,114 +3866,214 @@ inline void Game_TriggerDisasterByType_Impl(int disasterType) {
 
 // --- Game_SpawnResources (0x140091660) — REIMPLEMENTED inline ---
 // Spawns 'count' resources into citizen storage buildings.
-// Phase 1: builds array of entity pointers whose ResourceType flags match resourceFlag.
+// Phase 1: builds array of entity pointers whose NaturalResourceComponent flags match resourceFlag.
 // Phase 2: round-robin distributes items across citizens' StorageComponents.
-// param_1 = citizenList (entityList struct with +0x22*8 items at +0x22*8 ptr),
-// param_2 = resourceFlag bitmask, param_3 = total count to spawn.
-inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count) {
-    uintptr_t cl = (uintptr_t)citizenListPtr;
+// param_1 = Game object (longlong*), param_2 = resourceFlag bitmask, param_3 = total count to spawn.
+//
+// Structure offsets on param_1 (Game object):
+//   +0x110 (param_1[0x22]) = entity array ptr (raw pointers)
+//   +0x118 (param_1[0x23]) = entity count
+//   +0x000 (param_1[0])    = citizen InternalBasePtr array
+//   +0x008 (param_1[1])    = citizen count
+//
+// Entities (phase 1) are raw pointers with components at +0x28 (array) / +0x30 (count).
+// Citizens (phase 2) are InternalBasePtr entries with components at +0x30 (IBP array) / +0x38 (count).
+//
+// Calls original exe functions StorageComponent_impl_cd80 (0x14012cd80) for CanAdd
+// and FUN_14012d000 (0x14012d000) for AddItem, via resolved function pointers.
 
-    // Phase 1: Build array of matching resource entity pointers
-    // citizenList+0x110 = entity array ptr, citizenList+0x118 = entity count
-    int entityCount = *(int*)(cl + 0x118);
-    uintptr_t entityArray = *(uintptr_t*)(cl + 0x110);
+// Resolved exe function pointers for Storage CanAdd/AddItem
+typedef uint32_t (*fn_StorageCanAdd_t)(void* storageComp, void* entityPtr, int quantity);
+extern fn_StorageCanAdd_t fn_StorageCanAdd;  // 0x14012cd80
+
+typedef void (*fn_StorageAddItem_t)(void* storageComp, void* entityPtr, int quantity);
+extern fn_StorageAddItem_t fn_StorageAddItem;  // 0x14012d000
+
+inline void Game_SpawnResources_Impl(void* citizenListPtr, uint32_t resourceFlag, int count) {
+    int64_t* param_1 = (int64_t*)citizenListPtr;
 
     // Dynamic array for matching entities
-    uintptr_t* matchArr = nullptr;
+    // Ghidra uses local_48 = array ptr, local_40 = packed CONCAT44(capacity, count)
+    void* matchArr = nullptr;
     int matchCount = 0;
     int matchCapacity = 0;
 
-    for (int i = 0; i < entityCount; i++) {
-        uintptr_t entity = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
-        if (entity == 0) continue;
+    // Phase 1: Build array of entity pointers whose NaturalResourceComponent flags match resourceFlag
+    // Entity array is raw pointers: param_1[0x22] = array ptr, param_1[0x23] = count
+    if ((int)param_1[0x23] > 0) {
+        int64_t entityOffset = 0;
+        int entityIdx = 0;
+        do {
+            int64_t entity = *(int64_t*)(entityOffset + param_1[0x22]);
 
-        // Find ResourceType component on this entity
-        int compCount = *(int*)(entity + 0x30);
-        uintptr_t compArray = *(uintptr_t*)(entity + 0x28);
-        void* resourceType = nullptr;
-        for (int j = 0; j < compCount; j++) {
-            void* comp = *(void**)(compArray + (uintptr_t)j * 8);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-            if (typeId == *g_TypeId_RawMaterialDescription) {
-                if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
-                    resourceType = comp;
-                }
-                break;
-            }
-        }
-
-        if (resourceType == nullptr) continue;
-        uint32_t resFlags = *(uint32_t*)((uintptr_t)resourceType + 0x5c);
-        if ((resFlags & resourceFlag) == 0) continue;
-
-        // Add to match array
-        int newMatchCount = matchCount + 1;
-        if (newMatchCount != matchCount) {
-            uintptr_t* oldArr = matchArr;
-            if (matchCapacity < newMatchCount) {
-                matchCapacity = (matchCount != 0) ? newMatchCount * 3 : newMatchCount;
-                matchArr = (uintptr_t*)fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)matchCapacity * 8, 8);
-                // Copy old entries
-                for (int k = 0; k < matchCount; k++) {
-                    matchArr[k] = oldArr[k];
-                }
-                if (oldArr) fn_MemFreeStatic(oldArr);
-            }
-            matchArr[matchCount] = entity;
-            matchCount = newMatchCount;
-        }
-    }
-
-    if (matchCount <= 0 || count <= 0) {
-        if (matchArr) fn_MemFreeStatic(matchArr);
-        return;
-    }
-
-    // Phase 2: Round-robin distribute 'count' items across citizens' StorageComponents
-    // citizenList+0x00 = citizen ptr array, citizenList+0x08 = citizen count
-    int citizenCount = *(int*)(cl + 0x08);
-    uintptr_t citizenArray = *(uintptr_t*)cl;
-    int spawned = 0;
-
-    while (spawned < count) {
-        bool anyAdded = false;
-        for (int c = 0; c < citizenCount && spawned < count; c++) {
-            uintptr_t citizenRef = *(uintptr_t*)(citizenArray + (uintptr_t)c * 8);
-            // CheckPtr equivalent — deref the InternalBasePtr
-            uintptr_t citizen = *(uintptr_t*)citizenRef;
-            if (citizen == 0) continue;
-
-            // FindComponent_Storage on citizen
-            int cCompCount = *(int*)(citizen + 0x38);
-            uintptr_t cCompArray = *(uintptr_t*)(citizen + 0x30);
-            void* storageComp = nullptr;
-            for (int j = 0; j < cCompCount; j++) {
-                void* comp = *(void**)(cCompArray + (uintptr_t)j * 8);
-                typedef uint32_t (*GetTypeId_t)(void*);
-                uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-                if (typeId == *g_TypeId_StorageComponent_FC) {
-                    if (fn_IsDerivedFrom(comp, *g_TypeId_StorageComponent_FC)) {
-                        storageComp = comp;
+            // Find NaturalResourceComponent on this entity (raw component array at +0x28/+0x30)
+            void* natResComp = nullptr;
+            int compIdx = 0;
+            int64_t compOffset = 0;
+            if (*(int*)(entity + 0x30) > 0) {
+                do {
+                    void* comp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
+                    // vtable call: GetTypeId at vtable+0x10
+                    typedef uint32_t (*GetTypeId_t)(void*);
+                    uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+                    if (typeId == *g_TypeId_RawMaterialDescription) {
+                        void* foundComp = *(void**)(*(int64_t*)(entity + 0x28) + compOffset * 8);
+                        bool isDerived = fn_IsDerivedFrom(foundComp, *g_TypeId_RawMaterialDescription);
+                        natResComp = nullptr;
+                        if (isDerived) {
+                            natResComp = foundComp;
+                        }
+                        goto phase1_found;
                     }
-                    break;
+                    compIdx++;
+                    compOffset++;
+                } while (compIdx < *(int*)(entity + 0x30));
+            }
+            natResComp = nullptr;
+
+        phase1_found:
+            {
+                // Check resource flags match (natResComp+0x5c & resourceFlag)
+                // Original code does NOT null-check — relies on entities always having the component
+                void* oldArr = matchArr;
+                int oldCount = matchCount;
+                if ((*(uint32_t*)((uintptr_t)natResComp + 0x5c) & resourceFlag) != 0) {
+                    int newCount = matchCount + 1;
+                    if (newCount != matchCount) {  // overflow guard (matches original JZ)
+                        matchCount = newCount;
+                        if (matchCapacity < newCount) {
+                            // Growth: if first alloc, capacity = newCount; else capacity = newCount * 3
+                            matchCapacity = newCount;
+                            if (oldArr != nullptr) {
+                                matchCapacity = newCount * 3;
+                            }
+                            matchArr = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)matchCapacity * 8, 8);
+                        }
+
+                        // Copy old entries + append new entity
+                        // If matchArr == oldArr (no realloc needed), start from old count (just append)
+                        // If matchArr != oldArr (reallocated), start from 0 (copy all + append)
+                        uint32_t copyStart = 0;
+                        if (oldArr == matchArr) {
+                            copyStart = (uint32_t)oldCount;
+                        }
+                        int copyIdx = (int)copyStart;
+                        if (copyIdx < newCount) {
+                            int64_t* dstSlot = (int64_t*)((int64_t)matchArr + (int64_t)copyIdx * 8);
+                            int64_t* srcSlot = (int64_t*)((int64_t)oldArr + (int64_t)copyIdx * 8);
+                            do {
+                                if (dstSlot != nullptr) {
+                                    int64_t* source = &entity;
+                                    if ((int)copyStart < oldCount) {
+                                        source = srcSlot;
+                                    }
+                                    *dstSlot = *source;
+                                }
+                                copyStart++;
+                                srcSlot++;
+                                dstSlot++;
+                            } while ((int)copyStart < newCount);
+                        }
+
+                        // Free old array if it was reallocated
+                        if (oldArr != matchArr) {
+                            fn_MemFreeStatic(oldArr);
+                        }
+                    }
                 }
             }
-            if (!storageComp) continue;
 
-            // Try to add one item from the round-robin slot
-            int slot = spawned % matchCount;
-            uintptr_t matchEntity = matchArr[slot];
-            if (Storage_CanAddItem(storageComp, (void*)matchEntity, 1)) {
-                Storage_AddItem(storageComp, (void*)matchEntity, 1);
-                spawned++;
-                anyAdded = true;
+            entityIdx++;
+            entityOffset += 8;
+        } while (entityIdx < (int)param_1[0x23]);
+
+        // Phase 2: Round-robin distribute items across citizens' StorageComponents
+        // Citizens are InternalBasePtr entries: param_1[0] = array ptr, param_1[1] = count
+        if (matchCount > 0 && count > 0) {
+            int spawned = 0;
+
+            while (true) {
+                bool anyAdded = false;
+                int citizenIdx = 0;
+                if ((int)param_1[1] < 1) break;
+
+                int64_t citizenOffset = 0;
+                do {
+                    // Each citizen entry is an InternalBasePtr — load then CheckPtr
+                    int64_t citizenIBP = *(int64_t*)(citizenOffset + *param_1);
+                    fn_InternalBasePtr_CheckPtr(&citizenIBP);
+                    int64_t citizen = citizenIBP;
+
+                    // Find StorageComponent on citizen
+                    // Citizen component array is IBP entries at citizen+0x30, count at citizen+0x38
+                    void* storageComp = nullptr;
+                    int cCompIdx = 0;
+                    int64_t cCompOffset = 0;
+                    if (*(int*)(citizen + 0x38) > 0) {
+                        do {
+                            // Each component entry is an InternalBasePtr — CheckPtr before reading
+                            void* compIBP = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
+                            fn_InternalBasePtr_CheckPtr(compIBP);
+
+                            typedef uint32_t (*GetTypeId_t)(void*);
+                            uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)(*(int64_t*)compIBP) + 0x10)))(*(void**)compIBP);
+                            if (typeId == *g_TypeId_StorageComponent_FC) {
+                                // Re-CheckPtr the IBP slot and read again
+                                void* compIBP2 = (void*)(*(int64_t*)(citizen + 0x30) + cCompOffset * 8);
+                                fn_InternalBasePtr_CheckPtr(compIBP2);
+                                void* compVal = *(void**)compIBP2;
+
+                                bool isDerived = fn_IsDerivedFrom(compVal, *g_TypeId_StorageComponent_FC);
+                                storageComp = nullptr;
+                                if (isDerived) {
+                                    storageComp = compVal;
+                                }
+                                goto phase2_found;
+                            }
+                            cCompIdx++;
+                            cCompOffset++;
+                        } while (cCompIdx < *(int*)(citizen + 0x38));
+                    }
+                    storageComp = nullptr;
+
+                phase2_found:
+                    {
+                        // Wrap found storage component in an InternalBasePtr via fn_InternalBasePtr_Ctor
+                        int64_t storageIBP = 0;
+                        fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+
+                        // Try to add one item via round-robin
+                        if (spawned < count) {
+                            int64_t* matchSlot = (int64_t*)((int64_t)matchArr + (int64_t)(spawned % matchCount) * 8);
+
+                            // CheckPtr the storage IBP before use
+                            fn_InternalBasePtr_CheckPtr(&storageIBP);
+
+                            // Call original exe CanAdd function (0x14012cd80)
+                            uint32_t canAdd = fn_StorageCanAdd((void*)storageIBP, (void*)*matchSlot, 1);
+                            if ((char)canAdd != '\0') {
+                                // CheckPtr again before AddItem
+                                fn_InternalBasePtr_CheckPtr(&storageIBP);
+
+                                // Call original exe AddItem function (0x14012d000)
+                                fn_StorageAddItem((void*)storageIBP, (void*)*matchSlot, 1);
+                                spawned++;
+                                anyAdded = true;
+                            }
+                        }
+                    }
+
+                    citizenIdx++;
+                    citizenOffset += 8;
+                } while (citizenIdx < (int)param_1[1]);
+
+                if (!anyAdded || spawned >= count) break;
             }
         }
-        if (!anyAdded) break;  // No citizen could accept — stop
     }
 
-    if (matchArr) fn_MemFreeStatic(matchArr);
+    // Free match array
+    fn_MemFreeStatic(matchArr);
 }
 
 // ============================================================
