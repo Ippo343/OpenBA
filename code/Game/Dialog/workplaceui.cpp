@@ -11,7 +11,25 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+
+// Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
+typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
+static fn_OrigFindComp_t fn_OrigFindCompPosition = nullptr;
+// Original FUN_140002ed0 — FindComponent with type DAT_1401c7900 (ResidenceComponent)
+// This is what gets passed to FUN_140123070 (GetOccupantCount)
+static fn_OrigFindComp_t fn_OrigFindCompResidence = nullptr;
+
+static void EnsureOrigFindComps() {
+    if (!fn_OrigFindCompPosition)
+        fn_OrigFindCompPosition = (fn_OrigFindComp_t)
+            ResolveAddr(Module::Exe, 0x14000d6c0);
+    if (!fn_OrigFindCompResidence)
+        fn_OrigFindCompResidence = (fn_OrigFindComp_t)
+            ResolveAddr(Module::Exe, 0x140002ed0);
+}
 
 // ============================================================
 // WorkplaceUI_AdjustWorkerCount (0x140087610)
@@ -233,6 +251,12 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 0, 1);
 
     // Check if job count up/down should be visible
+#ifdef _DEBUG
+    printf("[WorkPlaceUI] jobType=%p jobType+0x20=%d buildProf=%p laborerProf(0x38)=%p\n",
+        jobType, (int)*(uint8_t*)((uintptr_t)jobType + 0x20),
+        *(void**)((uintptr_t)buildComp + 0x48),
+        *(void**)((uintptr_t)(*(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0)) + 0x38));
+#endif
     if (*(uint8_t*)((uintptr_t)jobType + 0x20) == 0) {
         // Check for laborer profession
         void* professionId = *(void**)((uintptr_t)buildComp + 0x48);
@@ -240,20 +264,22 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
         void* laborerProf = *(void**)((uintptr_t)profList + 0x38);
 
         if (professionId == laborerProf) {
-            // Check for PositionComponent (FUN_14000d6c0) — additional check for lab
-            void* posComp = nullptr;
-            fn_FindComponent_Position(entityPtr, &posComp);
-            if (posComp != nullptr) goto showUpDown;
+            // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
+            EnsureOrigFindComps();
+            fn_InternalBasePtr_CheckPtr(entityBuf);
+            uint64_t posCheck = 0;
+            fn_OrigFindCompPosition(*(void**)entityBuf, &posCheck);
+            if (posCheck != 0) goto showUpDown;
         }
 
-        // Hide worker up/down
+        // Hide job count up/down
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x50), 1, 0);
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x58), 0, 1);
+        fn_Element_SetFlagsOnOff(*(void**)(s + 0x58), 1, 0);
     } else {
 showUpDown:
-        // Show worker up/down
+        // Show job count up/down
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x50), 0, 1);
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x58), 1, 0);
+        fn_Element_SetFlagsOnOff(*(void**)(s + 0x58), 0, 1);
     }
 
     // Get worker count and max worker count
@@ -271,14 +297,12 @@ showUpDown:
     }
     uint32_t maxCount = *(uint32_t*)((uintptr_t)wpComp2 + 0x30);
 
-    // Get profession sprite from buildComp +0x48 -> +0x28/+0x30
+    // Get profession sprite from buildComp +0x48 -> +0x28 (sheet) / +0x30 (name)
     {
         uintptr_t profPtr = *(uintptr_t*)((uintptr_t)buildComp + 0x48);
-        // Build sprite from profession +0x28 (sprite sheet) and +0x30 (index range)
         uint8_t spriteBuf[16];
-        // Use LabelElement::SetSprite on workPlaceCount (+0x30)
-        *(uint64_t*)spriteBuf = *(uint64_t*)(profPtr + 0x28);
-        *(uint64_t*)(spriteBuf + 8) = 0; // padding
+        fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(profPtr + 0x28),
+                        (void*)(profPtr + 0x30));
         fn_LabelElement_SetSprite(*(void**)(s + 0x30), spriteBuf);
     }
 
@@ -334,45 +358,74 @@ showUpDown:
         fn_String_Dtor(fmtBuf);
     }
 
-    // Enable/disable workerCountDown (+0x48) based on laborer count > 0
-    {
-        void* btnDown = *(void**)(s + 0x48);
-        void** vtbl = *(void***)btnDown;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnDown, laborerCount > 0);
-    }
-
-    // Enable/disable workerCountUp (+0x40) based on worker availability
+    // Enable/disable workerCountUp (+0x40) based on laborer count > 0
     {
         void* btnUp = *(void**)(s + 0x40);
         void** vtbl = *(void***)btnUp;
         typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnUp, (int)workplaceWorkerCount > 0);
+        ((VCall_Enable_t)vtbl[8])(btnUp, laborerCount > 0);
     }
 
-    // Job count up/down visibility based on workplace capacity
-    int wpMaxCount = *(int*)((uintptr_t)wpComp2 + 0x30);
+    // Enable/disable workerCountDown (+0x48) based on workers assigned > 0
+    {
+        void* btnDown = *(void**)(s + 0x48);
+        void** vtbl = *(void***)btnDown;
+        typedef void (*VCall_Enable_t)(void*, int);
+        ((VCall_Enable_t)vtbl[8])(btnDown, (int)workplaceWorkerCount > 0);
+    }
+
+    // Job count up/down enable based on workplace capacity
+    // Use workComp (from main entity), NOT wpComp2 (from inner entity)
+    fn_InternalBasePtr_CheckPtr(&workComp);
+    if (*(int*)((uintptr_t)workComp + 0x30) == 0) {
+        int count = fn_StorageCountQuery(workComp);
+        *(int*)((uintptr_t)workComp + 0x30) = count;
+    }
+    int wpMaxCount = *(int*)((uintptr_t)workComp + 0x30);
+
+#ifdef _DEBUG
+    printf("[WorkPlaceUI] Startup: workComp=%p wpComp2=%p workComp+0x30=%d wpComp2+0x30=%d jobType+0x28=%d jobType+0x2c=%d workerCount=%u maxCount=%u wpWorkers=%d laborers=%d\n",
+        workComp, wpComp2, wpMaxCount, *(int*)((uintptr_t)wpComp2 + 0x30),
+        *(int*)((uintptr_t)jobType + 0x28), *(int*)((uintptr_t)jobType + 0x2c),
+        workerCount, maxCount, workplaceWorkerCount, laborerCount);
+#endif
 
     // Check if this is a laborer profession
+    fn_InternalBasePtr_CheckPtr(&buildComp);
     if (*(void**)((uintptr_t)buildComp + 0x48) ==
         *(void**)((uintptr_t)profList + 0x38)) {
-        // Laborer building — check position component for additional limit
-        void* posComp = nullptr;
-        fn_FindComponent_Position(entityPtr, &posComp);
-        if (posComp != nullptr) {
-            int posCount = *(int*)((uintptr_t)jobType + 0x2c);
-            // Get position-based count
-            void* posComp2 = nullptr;
-            fn_FindComponent_Position(entityPtr, &posComp2);
-            // Enable up if capacity < posCount
+        // Laborer building — check position component for position-based limit
+        // Guard check: FUN_14000d6c0 (type DAT_1401c7008)
+        EnsureOrigFindComps();
+        fn_InternalBasePtr_CheckPtr(entityBuf);
+        uint64_t posGuard = 0;
+        fn_OrigFindCompPosition(*(void**)entityBuf, &posGuard);
+        if (posGuard != 0) {
+            int maxCap = *(int*)((uintptr_t)jobType + 0x2c);
+            // Get ResidenceComponent via FUN_140002ed0 (type DAT_1401c7900)
+            fn_InternalBasePtr_CheckPtr(entityBuf);
+            uint64_t resIBP = 0;
+            fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP);
+            fn_InternalBasePtr_CheckPtr(&resIBP);
+            int posCount = fn_ResidenceComponent_GetOccupantCount((void*)resIBP, 1);
+            // Use min(jobType max, position count) as the real limit
+            if (posCount < maxCap) {
+                fn_InternalBasePtr_CheckPtr(entityBuf);
+                uint64_t resIBP2 = 0;
+                fn_OrigFindCompResidence(*(void**)entityBuf, &resIBP2);
+                fn_InternalBasePtr_CheckPtr(&resIBP2);
+                maxCap = fn_ResidenceComponent_GetOccupantCount((void*)resIBP2, 1);
+            }
+            // Enable up if current max < capacity limit
             void* btnUp = *(void**)(s + 0x50);
             void** vtbl = *(void***)btnUp;
             typedef void (*VCall_Enable_t)(void*, int);
-            ((VCall_Enable_t)vtbl[8])(btnUp, wpMaxCount < posCount);
+            ((VCall_Enable_t)vtbl[8])(btnUp, wpMaxCount < maxCap);
 
+            // Enable down if current max > 1
             void* btnDown = *(void**)(s + 0x58);
             void** vtbl2 = *(void***)btnDown;
-            ((VCall_Enable_t)vtbl2[8])(btnDown, wpMaxCount > 1 && wpMaxCount != posCount);
+            ((VCall_Enable_t)vtbl2[8])(btnDown, wpMaxCount > 1);
             return;
         }
     }
