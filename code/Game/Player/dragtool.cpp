@@ -37,8 +37,8 @@ typedef void* (*fn_OpenToolDialog_t)(void* dialogIBP, void* retval, uint64_t des
 static fn_OpenToolDialog_t g_fn_OpenToolDialog = nullptr;
 
 // FUN_1400ffbf0: PlayTickSound — plays "tick" audio when endCell changes during drag.
-// Checks a timer at +0x48 on the dialog to avoid rapid-fire.
-// Args: (dialogPtr_raw) — the raw value from the InternalBasePtr
+// Checks a timer at +0x48 on the IBP storage to avoid rapid-fire.
+// Args: (dialogIBP_ptr) — pointer to the InternalBasePtr (same as self->dialogPtr)
 // Original: 0x1400ffbf0
 typedef void (*fn_PlayTickSound_t)(uint64_t dialogVal);
 static fn_PlayTickSound_t g_fn_PlayTickSound = nullptr;
@@ -252,7 +252,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         // If endCell changed, play tick sound and update lastEndCell
         if (self->lastEndCell != self->endCell) {
             self->lastEndCell = self->endCell;
-            g_fn_PlayTickSound((uint64_t)*DIALOG_IBP());
+            g_fn_PlayTickSound((uint64_t)DIALOG_IBP());
         }
 
         // ---- Call virtual BuildPath (vtable slot 14 = +0x70) ----
