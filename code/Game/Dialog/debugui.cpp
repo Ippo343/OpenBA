@@ -811,28 +811,37 @@ static void Game_InfectRandomCitizen_Impl() {
 void DebugUI_Slot8(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // Access engine singleton via exref (triple-indirect pointer).
-    if (!g_pEngineSingleton || !*g_pEngineSingleton) return;
-    uintptr_t singletonPtr = *(uintptr_t*)(*g_pEngineSingleton);
-    if (!singletonPtr) return;
-    uintptr_t singleton = *(uintptr_t*)singletonPtr;
-    if (!singleton) return;
-    uintptr_t engineState = *(uintptr_t*)(singleton + 0x10);
+    // Engine singleton access: slot → *slot → *(result + 0x10)
+    // g_pEngineSingleton = *exref (already one deref done at init time)
+    // So: *g_pEngineSingleton = **exref = engine object, then +0x10 = engineState
+    // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
+    if (!g_pEngineSingleton) return;
+    uintptr_t engineObj = (uintptr_t)*g_pEngineSingleton;
+    if (!engineObj) return;
+    uintptr_t engineState = *(uintptr_t*)(engineObj + 0x10);
     if (!engineState) return;
 
     // Read and display 4 debug counters from engine state
-    void* numBatches   = *(void**)(s + 0x58);
-    void* numDrawCalls = *(void**)(s + 0x40);
-    void* numTriangles = *(void**)(s + 0x48);
-    void* numVertices  = *(void**)(s + 0x50);
-    if (numBatches)   fn_NumberElement_SetValueInt(numBatches,   *(int*)(engineState + 0x2158));
-    if (numDrawCalls) fn_NumberElement_SetValueInt(numDrawCalls, *(int*)(engineState + 0x215C));
-    if (numTriangles) fn_NumberElement_SetValueInt(numTriangles, *(int*)(engineState + 0x2150));
-    if (numVertices)  fn_NumberElement_SetValueInt(numVertices,  *(int*)(engineState + 0x2154));
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x58));
+    void* numBatches = *(void**)(s + 0x58);
+    if (numBatches) fn_NumberElement_SetValueInt(numBatches, *(int*)(engineState + 0x2158));
 
-    // Read frame time and total time as Time objects (8-byte tick counts)
-    int64_t frameTimeTicks = *(int64_t*)(singleton + 0x68);
-    int64_t totalTimeTicks = *(int64_t*)(singleton + 0x58);
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
+    void* numDrawCalls = *(void**)(s + 0x40);
+    if (numDrawCalls) fn_NumberElement_SetValueInt(numDrawCalls, *(int*)(engineState + 0x215C));
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x48));
+    void* numTriangles = *(void**)(s + 0x48);
+    if (numTriangles) fn_NumberElement_SetValueInt(numTriangles, *(int*)(engineState + 0x2150));
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x50));
+    void* numVertices = *(void**)(s + 0x50);
+    if (numVertices) fn_NumberElement_SetValueInt(numVertices, *(int*)(engineState + 0x2154));
+
+    // Read frame time and total time from engine object (NOT engineState)
+    // Original: *(*(g_pEngineSingleton_exref) + 0x68) and + 0x58
+    int64_t frameTimeTicks = *(int64_t*)(engineObj + 0x68);
+    int64_t totalTimeTicks = *(int64_t*)(engineObj + 0x58);
     float frameSeconds = fn_Time_AsSeconds(&frameTimeTicks);
     float totalSeconds = fn_Time_AsSeconds(&totalTimeTicks);
 
@@ -849,12 +858,17 @@ void DebugUI_Slot8(DebugUI* self) {
     *smoothedFPS     = instantFPS * beta + (*smoothedFPS) * alpha;
     *smoothedFrameMS = (*smoothedFrameMS) * alpha + frameSeconds * beta;
 
-    // Display smoothed values (null-safe)
-    void* numFPS     = *(void**)(s + 0x60);
+    // Display smoothed values
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x60));
+    void* numFPS = *(void**)(s + 0x60);
+    if (numFPS) fn_NumberElement_SetValueInt(numFPS, (int)*smoothedFPS);
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));
     void* numFrameMS = *(void**)(s + 0x68);
-    void* numTotalMS = *(void**)(s + 0x70);
-    if (numFPS)     fn_NumberElement_SetValueInt(numFPS, (int)*smoothedFPS);
     if (numFrameMS) fn_NumberElement_SetValueFloat(numFrameMS, *smoothedFrameMS * 1000.0f);
+
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x70));
+    void* numTotalMS = *(void**)(s + 0x70);
     if (numTotalMS) fn_NumberElement_SetValueFloat(numTotalMS, *smoothedTotalMS * 1000.0f);
 }
 
@@ -1093,8 +1107,15 @@ static void* DebugUI_FindElem(void* parentElem, const char* name) {
 // Helper: Find element by name, wrap in InternalBasePtr via IsDerivedFrom.
 static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
     void* rawElem = DebugUI_FindElem(parentElem, name);
-    if (!rawElem || !fn_IsDerivedFrom(rawElem, *g_TypeId_UIElementBase))
+#ifdef _DEBUG
+    if (!rawElem) printf("[DebugUI::Slot4] FindElemBase('%s') = NULL\n", name);
+    else printf("[DebugUI::Slot4] FindElemBase('%s') = %p\n", name, rawElem);
+#endif
+    // Original uses g_TypeId_ObjectInternal (Object::Internal base class),
+    // NOT g_TypeId_UIElementBase which excludes sliders/images/numbers.
+    if (!rawElem || !fn_IsDerivedFrom(rawElem, *g_TypeId_ObjectInternal)) {
         rawElem = nullptr;
+    }
     uint8_t basePtrBuf[8];
     fn_InternalBasePtr_Ctor(basePtrBuf, rawElem);
     return *(void**)basePtrBuf;
