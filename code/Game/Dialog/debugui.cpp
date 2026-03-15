@@ -25,7 +25,7 @@
 // param_1 = weatherMgr ptr; time stored at +8.
 static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
     float seconds = fn_Time_AsSeconds((void*)((uintptr_t)weatherMgr + 8));
-    int month = (int)((seconds / 25200.0f) * 12.0f);  // 25200s/yr, 12 months
+    int month = (int)((seconds / 3600.0f) * 12.0f);  // 3600s/yr (DAT_14017225c), 12 months
     if (month > 11) month = 0;
     return month;
 }
@@ -124,7 +124,7 @@ static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
 
 // DebugUI_OnDaySliderChanged (FUN_1400607E0)
 // Reads slider value (0-359), converts to game time, resets weather, sets lighting.
-// DAT_140172238 = 360.0f (slider range), DAT_14017225c = 25200.0f (seconds/year)
+// DAT_140172238 = 360.0f (slider range), DAT_14017225c = 3600.0f (seconds/year)
 // DAT_1401721cc = 30.0f (days/month for month index calc)
 static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
@@ -133,7 +133,7 @@ static void DebugUI_OnDaySliderChanged_Impl(DebugUI* self) {
 
     // Convert slider (0-359) to game time in ticks
     int64_t timeTicks;
-    fn_Time_Ctor_Float(&timeTicks, (sliderVal / 360.0f) * 25200.0f);
+    fn_Time_Ctor_Float(&timeTicks, (sliderVal / 360.0f) * 3600.0f);
 
     // Set game world time
     *(int64_t*)(*(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x128) + 8) = timeTicks;
@@ -894,56 +894,77 @@ void DebugUI_Slot7(DebugUI* self) {
     typedef void (*fn_SetColor_t)(void*, uint32_t);
 
     // --- Day slider text update ---
+    // Original: CheckPtr(+0x78), get child, CheckPtr child, IsDerivedFrom, IBP ctor,
+    //           CheckPtr(+0x78) again for value, CheckPtr child for format, SetText
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
     void* sliderDay = *(void**)(s + 0x78);
     if (sliderDay) {
         uint8_t childBuf[16];
         fn_Element_Child(sliderDay, childBuf, 0);
-        void* textChild = *(void**)childBuf;
-        if (textChild) {
-            float dayValue = *(float*)((uintptr_t)sliderDay + 0x128);
+        fn_InternalBasePtr_CheckPtr(childBuf);
+        void* childRaw = *(void**)childBuf;
+        // IsDerivedFrom check + IBP wrap (matches original)
+        bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_ObjectInternal);
+        void* textChild = isText ? childRaw : nullptr;
+        uint8_t textIBP[8];
+        fn_InternalBasePtr_Ctor(textIBP, textChild);
+
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x78));
+        float dayValue = *(float*)(*(uintptr_t*)(s + 0x78) + 0x128);
+
+        fn_InternalBasePtr_CheckPtr(textIBP);
+        void* textElem = *(void**)textIBP;
+        if (textElem) {
             uint8_t uiStrBuf[16];
-            uint64_t fmtRef = *(uint64_t*)((uintptr_t)textChild + 0xD8);
-            *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textChild + 0xE0);
+            uint64_t fmtRef = *(uint64_t*)((uintptr_t)textElem + 0xD8);
+            *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textElem + 0xE0);
             fn_UIString_Ctor_Index(uiStrBuf, fmtRef, (int)dayValue / 30);
-            fn_TextElement_SetText(textChild, uiStrBuf);
+            fn_InternalBasePtr_CheckPtr(textIBP);
+            fn_TextElement_SetText(*(void**)textIBP, uiStrBuf);
         }
     }
 
-    // Helper lambda: read slider value, null-safe
+    // Helper: read slider value with CheckPtr (matches original pattern)
     auto readSlider = [](uintptr_t s, uintptr_t offset) -> float {
-        void* slider = *(void**)(s + offset);
-        return slider ? *(float*)((uintptr_t)slider + 0x128) : 0.0f;
+        fn_InternalBasePtr_CheckPtr((void*)(s + offset));
+        return *(float*)(*(uintptr_t*)(s + offset) + 0x128);
     };
 
     // --- Sun color swatch ---
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xF0));
     void* imageColorSun = *(void**)(s + 0xF0);
     if (imageColorSun) {
-        uint32_t sunColor = 0xFF000000
-            | ((int)readSlider(s, 0x80) << 16)
-            | ((int)readSlider(s, 0x88) << 8)
-            | (int)readSlider(s, 0x90);
+        float sunB = readSlider(s, 0x90);
+        float sunG = readSlider(s, 0x88);
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
+        uint32_t sunColor = ((int)*(float*)(*(uintptr_t*)(s + 0x80) + 0x128) << 8
+            | (int)sunG) << 8 | (int)sunB | 0xFF000000;
         void** sunVt = *(void***)imageColorSun;
         ((fn_SetColor_t)sunVt[10])(imageColorSun, sunColor);
     }
 
     // --- Ambient color swatch ---
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0xF8));
     void* imageColorAmb = *(void**)(s + 0xF8);
     if (imageColorAmb) {
-        uint32_t ambColor = 0xFF000000
-            | ((int)readSlider(s, 0x98) << 16)
-            | ((int)readSlider(s, 0xA0) << 8)
-            | (int)readSlider(s, 0xA8);
+        float ambB = readSlider(s, 0xA8);
+        float ambG = readSlider(s, 0xA0);
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
+        uint32_t ambColor = ((int)*(float*)(*(uintptr_t*)(s + 0x98) + 0x128) << 8
+            | (int)ambG) << 8 | (int)ambB | 0xFF000000;
         void** ambVt = *(void***)imageColorAmb;
         ((fn_SetColor_t)ambVt[10])(imageColorAmb, ambColor);
     }
 
     // --- Fog color swatch ---
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x100));
     void* imageColorFog = *(void**)(s + 0x100);
     if (imageColorFog) {
-        uint32_t fogColor = 0xFF000000
-            | ((int)readSlider(s, 0xB0) << 16)
-            | ((int)readSlider(s, 0xB8) << 8)
-            | (int)readSlider(s, 0xC0);
+        float fogB = readSlider(s, 0xC0);
+        float fogG = readSlider(s, 0xB8);
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xB0));
+        uint32_t fogColor = ((int)*(float*)(*(uintptr_t*)(s + 0xB0) + 0x128) << 8
+            | (int)fogG) << 8 | (int)fogB | 0xFF000000;
         void** fogVt = *(void***)imageColorFog;
         ((fn_SetColor_t)fogVt[10])(imageColorFog, fogColor);
     }
@@ -1283,36 +1304,34 @@ void DebugUI_Slot4(DebugUI* self) {
     }
 
     // ==========================================================
-    // 7. Lighting sliders -- find, store, set IDs and min/max
+    // 7. Lighting sliders -- find, store, set IDs
     // ==========================================================
-    // Slider element: +0x118 = min value, +0x11C = max value
+    // Original finds all slider elements first, stores IBPs, sets IDs.
+    // Min/max are set later (after image elements) matching original order.
 
-    #define SETUP_SLIDER(field, name, id, minVal, maxVal) do { \
+    #define FIND_SLIDER(field, name, id) do { \
         self->field = DebugUI_FindElemBase(parentElem, name); \
-        if (self->field) { \
-            fn_Element_SetElementId(self->field, id); \
-            *(float*)((uintptr_t)self->field + 0x118) = minVal; \
-            *(float*)((uintptr_t)self->field + 0x11C) = maxVal; \
-        } \
+        fn_InternalBasePtr_CheckPtr((void*)(s + offsetof(DebugUI, field))); \
+        fn_Element_SetElementId(*(void**)(s + offsetof(DebugUI, field)), id); \
     } while(0)
 
-    SETUP_SLIDER(sliderDay, "sliderDay", 0x154, 0.0f, 359.0f);
-    SETUP_SLIDER(valueSunR, "valueSunR", 0x155, 0.0f, 255.0f);
-    SETUP_SLIDER(valueSunG, "valueSunG", 0x156, 0.0f, 255.0f);
-    SETUP_SLIDER(valueSunB, "valueSunB", 0x157, 0.0f, 255.0f);
-    SETUP_SLIDER(valueSunH, "valueSunH", 0x158, -180.0f, 180.0f);
-    SETUP_SLIDER(valueSunP, "valueSunP", 0x159, 0.0f, 90.0f);
-    SETUP_SLIDER(valueAmbR, "valueAmbR", 0x15A, 0.0f, 255.0f);
-    SETUP_SLIDER(valueAmbG, "valueAmbG", 0x15B, 0.0f, 255.0f);
-    SETUP_SLIDER(valueAmbB, "valueAmbB", 0x15C, 0.0f, 255.0f);
-    SETUP_SLIDER(valueFogR, "valueFogR", 0x15D, 0.0f, 255.0f);
-    SETUP_SLIDER(valueFogG, "valueFogG", 0x15E, 0.0f, 255.0f);
-    SETUP_SLIDER(valueFogB, "valueFogB", 0x15F, 0.0f, 255.0f);
-    SETUP_SLIDER(valueFogN, "valueFogN", 0x160, -50.0f, 500.0f);
-    SETUP_SLIDER(valueFogF, "valueFogF", 0x161, -50.0f, 500.0f);
-    SETUP_SLIDER(valueFogM, "valueFogM", 0x162, 0.0f, 255.0f);
+    FIND_SLIDER(sliderDay, "sliderDay", 0x154);
+    FIND_SLIDER(valueSunR, "valueSunR", 0x155);
+    FIND_SLIDER(valueSunG, "valueSunG", 0x156);
+    FIND_SLIDER(valueSunB, "valueSunB", 0x157);
+    FIND_SLIDER(valueSunH, "valueSunH", 0x158);
+    FIND_SLIDER(valueSunP, "valueSunP", 0x159);
+    FIND_SLIDER(valueAmbR, "valueAmbR", 0x15A);
+    FIND_SLIDER(valueAmbG, "valueAmbG", 0x15B);
+    FIND_SLIDER(valueAmbB, "valueAmbB", 0x15C);
+    FIND_SLIDER(valueFogR, "valueFogR", 0x15D);
+    FIND_SLIDER(valueFogG, "valueFogG", 0x15E);
+    FIND_SLIDER(valueFogB, "valueFogB", 0x15F);
+    FIND_SLIDER(valueFogN, "valueFogN", 0x160);
+    FIND_SLIDER(valueFogF, "valueFogF", 0x161);
+    FIND_SLIDER(valueFogM, "valueFogM", 0x162);
 
-    #undef SETUP_SLIDER
+    #undef FIND_SLIDER
 
     // ==========================================================
     // 8. Color preview images (no IDs, just stored)
@@ -1320,6 +1339,36 @@ void DebugUI_Slot4(DebugUI* self) {
     self->imageColorSun = DebugUI_FindElemBase(parentElem, "imageColorSun");
     self->imageColorAmb = DebugUI_FindElemBase(parentElem, "imageColorAmb");
     self->imageColorFog = DebugUI_FindElemBase(parentElem, "imageColorFog");
+
+    // ==========================================================
+    // 8b. Slider min/max — set AFTER image elements (matches original order)
+    // ==========================================================
+    // Original uses CheckPtr + deref for every write. +0x118 = min, +0x11C = max.
+    // Helper: CheckPtr on IBP field, then write float to resolved element.
+    #define SET_MINMAX(field, minVal, maxVal) do { \
+        fn_InternalBasePtr_CheckPtr((void*)(s + offsetof(DebugUI, field))); \
+        *(float*)(*(uintptr_t*)(s + offsetof(DebugUI, field)) + 0x118) = minVal; \
+        fn_InternalBasePtr_CheckPtr((void*)(s + offsetof(DebugUI, field))); \
+        *(float*)(*(uintptr_t*)(s + offsetof(DebugUI, field)) + 0x11C) = maxVal; \
+    } while(0)
+
+    SET_MINMAX(sliderDay, 0.0f, 359.0f);
+    SET_MINMAX(valueSunR, 0.0f, 255.0f);
+    SET_MINMAX(valueSunG, 0.0f, 255.0f);
+    SET_MINMAX(valueSunB, 0.0f, 255.0f);
+    SET_MINMAX(valueSunH, -180.0f, 180.0f);
+    SET_MINMAX(valueSunP, 0.0f, 90.0f);
+    SET_MINMAX(valueAmbR, 0.0f, 255.0f);
+    SET_MINMAX(valueAmbG, 0.0f, 255.0f);
+    SET_MINMAX(valueAmbB, 0.0f, 255.0f);
+    SET_MINMAX(valueFogR, 0.0f, 255.0f);
+    SET_MINMAX(valueFogG, 0.0f, 255.0f);
+    SET_MINMAX(valueFogB, 0.0f, 255.0f);
+    SET_MINMAX(valueFogN, -50.0f, 500.0f);
+    SET_MINMAX(valueFogF, -50.0f, 500.0f);
+    SET_MINMAX(valueFogM, 0.0f, 255.0f);
+
+    #undef SET_MINMAX
 
     // ==========================================================
     // 9. Weather combo (ID 0x163) with weather preset entries
@@ -1385,8 +1434,8 @@ void DebugUI_Slot4(DebugUI* self) {
         uintptr_t weatherTime = *(uintptr_t*)((uintptr_t)gameWorld + 0x128);
         float timeSeconds = fn_Time_AsSeconds((void*)(weatherTime + 8));
         // Convert time to month index: (seconds / secondsPerYear) * monthsPerYear
-        // DAT_14017225c = 25200.0f, DAT_1401721b8 = 12.0f
-        int monthIndex = (int)(timeSeconds / 25200.0f * 12.0f);
+        // DAT_14017225c = 3600.0f, DAT_1401721b8 = 12.0f
+        int monthIndex = (int)(timeSeconds / 3600.0f * 12.0f);
         if (monthIndex > 11) monthIndex = 0;
 
         if (self->sliderDay) {
