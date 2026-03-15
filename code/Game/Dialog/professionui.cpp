@@ -719,13 +719,11 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
 
     // Add citizens if desired > current
     if (current < desired) {
-        int toAdd = desired - current;
-        for (int i = 0; i < toAdd; i++) {
-            void* citizenList = *(void**)(*(uintptr_t*)*g_pGameWorldSingleton + 0xF0);
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0) + 0x20 + idx * 8);
-
-            // Shuffle entity list to randomize which citizen gets assigned
-            fn_CitizenList_ShuffleEntities(citizenList, profId);
+        uint64_t toAdd = (uint64_t)(uint32_t)(desired - current);
+        do {
+            void* citizenList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+            // Triple deref: world+0xB0 → profList, +0x20 → profArray, +idx*8 → profId
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xB0) + 0x20) + idx * 8);
 
             // Request a worker slot
             uint64_t retBuf[2] = {0, 0};
@@ -736,38 +734,42 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
             uint64_t slotCopy = slot;
             uint8_t findBuf[8] = {0};
             void* result = fn_CitizenList_FindIdle(citizenList, findBuf, &slotCopy, profId);
-            uint64_t found = *(uint64_t*)result;
+            int64_t found = *(int64_t*)result;
 
             if (found == 0) {
                 if (slot != 0) {
                     slotCopy = slot;
                     uint8_t fb2[8] = {0};
                     result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
-                    found = *(uint64_t*)result;
-                    if (found != 0) continue;
+                    found = *(int64_t*)result;
+                    if (found != 0) goto next_iter;
                 }
                 slotCopy = slot;
                 uint8_t fb3[8] = {0};
                 result = fn_CitizenList_FindStudent(citizenList, fb3, &slotCopy, profId);
-                found = *(uint64_t*)result;
+                found = *(int64_t*)result;
 
                 if (found == 0) {
                     slotCopy = slot;
                     uint64_t anyBuf = 0;
                     fn_CitizenList_FindAny(citizenList, &anyBuf, &slotCopy, profId);
+                    found = (int64_t)anyBuf;
                 }
             }
-        }
+next_iter:
+            toAdd--;
+        } while (toAdd != 0);
     }
 
     // Remove citizens if desired < current
     if (desired < current) {
-        int toRemove = current - desired;
-        for (int i = 0; i < toRemove; i++) {
-            void* citizenList = *(void**)(*(uintptr_t*)*g_pGameWorldSingleton + 0xF0);
-            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0) + 0x20 + idx * 8);
+        uint64_t toRemove = (uint64_t)(uint32_t)(current - desired);
+        do {
+            void* citizenList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xF0);
+            uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xB0) + 0x20) + idx * 8);
             fn_CitizenList_RemoveWorker(citizenList, profId);
-        }
+            toRemove--;
+        } while (toRemove != 0);
     }
 
     // Refresh display: call Slot8 (vtable +0x40) with Time(0.0)
@@ -793,7 +795,7 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
 
 static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
     uintptr_t s = (uintptr_t)self;
-    uintptr_t game = *(uintptr_t*)*g_pGameWorldSingleton;
+    uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
 
     void* citizenList = *(void**)(game + 0xF0);
     uintptr_t citizenMgr = (uintptr_t)citizenList;
@@ -801,7 +803,8 @@ static void ProfessionUI_HandleButton(ProfessionUI* self, int profIndex) {
     uintptr_t citizenArray = *(uintptr_t*)(citizenMgr + 0xA0);
 
     // Get the profession ID for this index
-    uint64_t profId = *(uint64_t*)(*(uintptr_t*)(game + 0xB0) + 0x20 + (int64_t)profIndex * 8);
+    // Triple deref: world+0xB0 → profList, +0x20 → profArray, +idx*8 → profId
+    uint64_t profId = *(uint64_t*)(*(uintptr_t*)(*(uintptr_t*)(game + 0xB0) + 0x20) + (int64_t)profIndex * 8);
 
     // Count eligible (adult, alive) citizens
     int eligible = 0;
@@ -909,17 +912,17 @@ void ProfessionUI_Slot9(ProfessionUI* self, void* param2,
     void* profListPtr = *(void**)((uintptr_t)worldSingleton + 0xB0);
     int profCount = *(int*)((uintptr_t)profListPtr + 0x28);
 
-    if (param3 == 0x12) {
-        // Spinner value changed -- reassign citizens
+    // Original logic: msg 0x15 handles BOTH spinner (300-range) and button (500-range).
+    // msg 0x12 also handles button (500-range).
+    if (param3 != 0x12) {
+        if (param3 != 0x15) return;
+        // msg 0x15: spinner value changed -- reassign citizens
         if (param4 >= 300 && param4 <= profCount + 300) {
             ProfessionUI_HandleSpinner(self, param4 - 300);
         }
     }
-
-    if (param3 == 0x15) {
-        // Button clicked -- find and center on citizen
-        if (param4 > 499 && param4 <= profCount + 500) {
-            ProfessionUI_HandleButton(self, param4 - 500);
-        }
+    // msg 0x12 or 0x15: button clicked -- find and center on citizen
+    if (param4 > 499 && param4 <= profCount + 500) {
+        ProfessionUI_HandleButton(self, param4 - 500);
     }
 }

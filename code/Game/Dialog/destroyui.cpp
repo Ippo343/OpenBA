@@ -187,8 +187,9 @@ static void DestroyComponent_Destroy_Impl(void* destroyComp)
 // StateMachine_Tick — resolved locally for StartUpgrade
 // ============================================================
 // Located at 0x1400a9660 in Application-x64.exe.
-// Signature: (stateMachine*, Time, bool processTransitions, bool processActions)
-typedef void (*fn_StateMachine_Tick_Local_t)(void* stateMachine, int64_t deltaTime,
+// Signature: (stateMachine*, Time*, bool processTransitions, bool processActions)
+// NOTE: Second arg is a POINTER to Time (LEA RDX), not a Time value.
+typedef void (*fn_StateMachine_Tick_Local_t)(void* stateMachine, void* timePtr,
                                              char param3, char param4);
 static fn_StateMachine_Tick_Local_t g_StateMachine_Tick = nullptr;
 
@@ -237,10 +238,11 @@ static void ProcessStateMachine(uintptr_t buildState, uintptr_t* smPtrAddr,
                 // and has CanTransition returning true
                 while (true) {
                     if (subState >= 0) {
-                        // vtable+0x20: CanTransition(node, smRef) -> bool
-                        typedef bool (*fn_CanTransition_t)(void* node, void* smRef);
+                        // vtable+0x20: CanTransition(node, smRef, subState) -> bool
+                        // NOTE: R8 carries subState as implicit 3rd arg (dispatch index).
+                        typedef bool (*fn_CanTransition_t)(void* node, void* smRef, int subState);
                         bool canTrans = ((fn_CanTransition_t)(*(void**)(*(uintptr_t*)node + 0x20)))
-                                        ((void*)node, (void*)smPtrAddr);
+                                        ((void*)node, (void*)smPtrAddr, subState);
                         if (canTrans) break;
                     }
                     // Move to next node in linked list (offset +0x08)
@@ -302,10 +304,11 @@ static void ProcessStateMachine(uintptr_t buildState, uintptr_t* smPtrAddr,
 
                 while (true) {
                     if (subState >= 0) {
-                        // vtable+0x18: HasExitHandler(node, smRef) -> bool
-                        typedef bool (*fn_HasExit_t)(void* node, void* smRef);
+                        // vtable+0x18: HasExitHandler(node, smRef, subState) -> bool
+                        // NOTE: R8 carries subState as implicit 3rd arg (dispatch index).
+                        typedef bool (*fn_HasExit_t)(void* node, void* smRef, int subState);
                         bool hasExit = ((fn_HasExit_t)(*(void**)(*(uintptr_t*)node + 0x18)))
-                                       ((void*)node, (void*)smPtrAddr);
+                                       ((void*)node, (void*)smPtrAddr, subState);
                         if (hasExit) break;
                     }
                     node = *(uintptr_t*)(node + 0x08);
@@ -325,16 +328,12 @@ first_entry_check:
 
             while (true) {
                 if (subState >= 0) {
-                    // vtable+0x30: OnFirstEntry(node, smRef [, time]) -> bool
-                    typedef bool (*fn_OnFirstEntry_t)(void* node, void* smRef, ...);
-                    bool result;
-                    if (time) {
-                        result = ((fn_OnFirstEntry_t)(*(void**)(*(uintptr_t*)node + 0x30)))
-                                 ((void*)node, (void*)smPtrAddr, time);
-                    } else {
-                        result = ((fn_OnFirstEntry_t)(*(void**)(*(uintptr_t*)node + 0x30)))
-                                 ((void*)node, (void*)smPtrAddr);
-                    }
+                    // vtable+0x30: OnFirstEntry(node, smRef, time, subState) -> bool
+                    // NOTE: Original passes 4 args — Ghidra drops both R8 (time) and R9 (subState).
+                    // R9 is the state dispatch index used by the controller's jump table.
+                    typedef bool (*fn_OnFirstEntry_t)(void* node, void* smRef, void* time, int subState);
+                    bool result = ((fn_OnFirstEntry_t)(*(void**)(*(uintptr_t*)node + 0x30)))
+                                  ((void*)node, (void*)smPtrAddr, time, subState);
                     if (result) break;
                 }
                 node = *(uintptr_t*)(node + 0x08);
@@ -430,7 +429,8 @@ do_upgrade:
     uintptr_t* smPtrAddr = (uintptr_t*)(buildState + 0x48);
 
     // Run the state machine exit sequence
-    ProcessStateMachine(buildState, smPtrAddr, true, nullptr);
+    // NOTE: Original always passes &zeroTime to OnFirstEntry (Ghidra drops R8).
+    ProcessStateMachine(buildState, smPtrAddr, true, &zeroTime);
 
     // --- Phase 2: Settle state machine if sub-state is negative ---
     fn_InternalBasePtr_CheckPtr(&bsRef2);
@@ -440,7 +440,7 @@ do_upgrade:
         int64_t tickTime = 0;
         fn_Time_Ctor_Float((void*)&tickTime, 0.0f);
         if (g_StateMachine_Tick) {
-            g_StateMachine_Tick((void*)(buildState + 0x48), tickTime, 0, 0);
+            g_StateMachine_Tick((void*)(buildState + 0x48), &tickTime, 0, 0);
         }
     }
 
