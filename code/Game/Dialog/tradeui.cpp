@@ -57,6 +57,22 @@ static uint32_t ReadDispatchTypeId(uintptr_t ghidraSlotAddr) {
 #define SLOT_SPINNER_ELEM  0x1401516c8  // SpinnerElement
 #define SLOT_TOOLBAR_ELEM  0x1401516a8  // ToolbarElement
 
+// SliderElement::SetMinMax — resolved from dispatch slot 0x140151cf8 at runtime.
+// SliderElement has NO exported SetMinMax; the engine fills this dispatch slot.
+// SpinnerElement::SetMinMax crashes on SliderElements (+0xa0 is NULL).
+// NumberEditElement::SetMinMax hangs on SliderElements (+0xC8 isn't a string).
+#define SLOT_SLIDER_SETMINMAX 0x140151cf8
+static fn_SpinnerElement_SetMinMax_t fn_SliderElement_SetMinMax = nullptr;
+
+static void SliderElement_SetMinMax(void* self, int minVal, int maxVal) {
+    if (!fn_SliderElement_SetMinMax) {
+        uintptr_t slot = ResolveAddr(Module::Exe, SLOT_SLIDER_SETMINMAX);
+        if (slot) fn_SliderElement_SetMinMax = *(fn_SpinnerElement_SetMinMax_t*)slot;
+    }
+    if (fn_SliderElement_SetMinMax)
+        fn_SliderElement_SetMinMax(self, minVal, maxVal);
+}
+
 // ============================================================
 // Draw (vtable +0x28): Mark tables for layout recalc, set building dirty flag
 // ============================================================
@@ -510,8 +526,9 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             if (tradeActive && hasStock) {
                 spinnerMax = sellableCount;
             }
+            // sellUI+0x18 is a SliderElement (NOT SpinnerElement) — use NumberEditElement::SetMinMax
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x18));
-            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)sellUI + 0x18), 0, spinnerMax);
+            SliderElement_SetMinMax(*(void**)((uintptr_t)sellUI + 0x18), 0, spinnerMax);
 
             // Set spinner increment based on max value
             void* spinnerElem = *(void**)((uintptr_t)sellUI + 0x18);
@@ -569,10 +586,10 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             if (*(void**)((uintptr_t)cellUI + 0x10))
                 VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
 
-            // Set spinner min/max to 0
+            // cellUI+0x18 is a SliderElement — use NumberEditElement::SetMinMax
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
             if (*(void**)((uintptr_t)cellUI + 0x18))
-                fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x18), 0, 0);
+                SliderElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x18), 0, 0);
 
             clearOffset += 0x20;
             fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
@@ -737,9 +754,9 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             fn_NumberElement_SetValueInt(*(void**)((uintptr_t)buyUI + 0x08),
                                         (int)buyOrder[1]);
 
-            // Set spinner min/max (buyUI+0x10)
+            // Set slider min/max (buyUI+0x10 is a SliderElement)
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buyUI + 0x10));
-            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)buyUI + 0x10),
+            SliderElement_SetMinMax(*(void**)((uintptr_t)buyUI + 0x10),
                                         0, *(int*)((uintptr_t)buyOrder + 0x0C));
 
             // Set spinner increment
@@ -783,10 +800,10 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             fn_InternalBasePtr_CheckPtr(cellUI);
             fn_TextElement_SetText(*(void**)cellUI, emptyStr);
 
-            // Set spinner min/max to 0 and disable elements (null-guard each)
+            // cellUI+0x10 is a SliderElement — use NumberEditElement::SetMinMax
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
             if (*(void**)((uintptr_t)cellUI + 0x10))
-                fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x10), 0, 0);
+                SliderElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x10), 0, 0);
 
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
             if (*(void**)((uintptr_t)cellUI + 0x10))
@@ -1245,34 +1262,33 @@ void TradeUI_Serialize(TradeUI* self) {
         void* rowElem = *(void**)rowBuf;
 
         // Get 4 child elements from ribbonSellRow:
-        // child(0)=SpinnerElement, child(1)=LabelElement,
-        // child(0)=label, child(1)=numberLbl, child(2)=amountLbl, child(3)=spinner
+        // child(0)=SpinnerElement, child(1)=LabelElement, child(2)=SpinnerElement, child(3)=SliderElement
         uint64_t c[2];
         fn_Element_Child(rowElem, c, 0);
         fn_InternalBasePtr_CheckPtr(c);
-        void* label = *(void**)c;
+        void* spinElem = *(void**)c;      // child(0) = SpinnerElement
 
         fn_Element_Child(rowElem, c, 1);
         fn_InternalBasePtr_CheckPtr(c);
-        void* numberLbl = *(void**)c;
+        void* labelElem = *(void**)c;     // child(1) = LabelElement
 
         fn_Element_Child(rowElem, c, 2);
         fn_InternalBasePtr_CheckPtr(c);
-        void* amountLbl = *(void**)c;
+        void* numElem = *(void**)c;       // child(2) = SpinnerElement (amount)
 
         fn_Element_Child(rowElem, c, 3);
         fn_InternalBasePtr_CheckPtr(c);
-        void* spinner = *(void**)c;
+        void* sliderElem = *(void**)c;    // child(3) = SliderElement
 
-        // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
-        fn_InternalBasePtr_Ctor(c, spinner);
+        // Set user data on SliderElement (original uses fn_Element_SetUserData, NOT SetElementId)
+        fn_InternalBasePtr_Ctor(c, sliderElem);
         fn_InternalBasePtr_CheckPtr(c);
         fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 3000));
 
-        // Build 0x20-byte entry: {child1, child0, child2, child3} = {numberLbl, label, amountLbl, spinner}
-        // Verified against original: +0=LabelElement(child1), +8=NumberElement(child0), +10=NumberElement, +18=SpinnerElement
-        uint64_t entry[4] = {(uint64_t)numberLbl, (uint64_t)label,
-                              (uint64_t)amountLbl, (uint64_t)spinner};
+        // Build 0x20-byte entry: {child1, child0, child2, child3}
+        // +0=LabelElement, +8=SpinnerElement, +10=SpinnerElement, +18=SliderElement
+        uint64_t entry[4] = {(uint64_t)labelElem, (uint64_t)spinElem,
+                              (uint64_t)numElem, (uint64_t)sliderElem};
         TradeUI_DynArrayPush(s, 0x60, 0x68, 0x6C, entry, 0x20);
     }
 
@@ -1311,33 +1327,33 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(rowBuf);
         void* rowElem = *(void**)rowBuf;
 
-        // child(0)=spinner, child(1)=label, child(2)=numberLbl, child(3)=amountSpinner
+        // child(0)=SpinnerElement, child(1)=LabelElement, child(2)=SpinnerElement, child(3)=SliderElement
         uint64_t c[2];
         fn_Element_Child(rowElem, c, 0);
         fn_InternalBasePtr_CheckPtr(c);
-        void* spinner = *(void**)c;
+        void* spinElem = *(void**)c;      // child(0) = SpinnerElement
 
         fn_Element_Child(rowElem, c, 1);
         fn_InternalBasePtr_CheckPtr(c);
-        void* label = *(void**)c;
+        void* labelElem = *(void**)c;     // child(1) = LabelElement
 
         fn_Element_Child(rowElem, c, 2);
         fn_InternalBasePtr_CheckPtr(c);
-        void* numberLbl = *(void**)c;
+        void* numElem = *(void**)c;       // child(2) = SpinnerElement
 
         fn_Element_Child(rowElem, c, 3);
         fn_InternalBasePtr_CheckPtr(c);
-        void* amountSpinner = *(void**)c;
+        void* sliderElem = *(void**)c;    // child(3) = SliderElement
 
-        // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
-        fn_InternalBasePtr_Ctor(c, amountSpinner);
+        // Set user data on SliderElement (original uses fn_Element_SetUserData, NOT SetElementId)
+        fn_InternalBasePtr_Ctor(c, sliderElem);
         fn_InternalBasePtr_CheckPtr(c);
         fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 4000));
 
-        // Build 0x20-byte entry: {child1, child2, child0, child3} = {label, numberLbl, spinner, amountSpinner}
-        // Verified against original: +0=LabelElement, +8=NumberElement, +10=SpinnerElement, +18=NumberElement
-        uint64_t entry[4] = {(uint64_t)label, (uint64_t)numberLbl,
-                              (uint64_t)spinner, (uint64_t)amountSpinner};
+        // Build 0x20-byte entry: {child1, child2, child3, child0}
+        // +0=LabelElement, +8=SpinnerElement, +10=SliderElement, +18=SpinnerElement
+        uint64_t entry[4] = {(uint64_t)labelElem, (uint64_t)numElem,
+                              (uint64_t)sliderElem, (uint64_t)spinElem};
         TradeUI_DynArrayPush(s, 0x70, 0x78, 0x7C, entry, 0x20);
     }
 
@@ -2390,9 +2406,9 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
                 spinnerMax = 0;
             }
 
-            // Set SpinnerElement (+0x18) min=0, max=spinnerMax
+            // sellUI+0x18 is a SliderElement — use NumberEditElement::SetMinMax
             fn_InternalBasePtr_CheckPtr((void*)(entryBase + 0x18));
-            fn_SpinnerElement_SetMinMax(*(void**)(entryBase + 0x18), 0, spinnerMax);
+            SliderElement_SetMinMax(*(void**)(entryBase + 0x18), 0, spinnerMax);
 
             // Re-read spinner ptr and CheckPtr for GetMaxValue (matches original pattern)
             fn_InternalBasePtr_CheckPtr((void*)(entryBase + 0x18));
@@ -2708,7 +2724,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_InternalBasePtr_CheckPtr(numSlot);
         Element_SetEnabled(*(void**)numSlot, true);
 
-        // Set spinner min/max range
+        // spinSlot is storage entry[1] = SpinnerElement (confirmed via vtable at runtime)
         fn_InternalBasePtr_CheckPtr(spinSlot);
         fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 9999);
 
@@ -2753,7 +2769,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_InternalBasePtr_CheckPtr(numSlot);
         Element_SetEnabled(*(void**)numSlot, false);
 
-        // Set spinner min/max to 0,0 (no range)
+        // spinSlot is storage entry[1] = SpinnerElement (confirmed via vtable at runtime)
         fn_InternalBasePtr_CheckPtr(spinSlot);
         fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 0);
     }

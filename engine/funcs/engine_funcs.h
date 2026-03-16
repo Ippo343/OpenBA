@@ -531,7 +531,9 @@ extern fn_SpinnerElement_SetElementId_t fn_SpinnerElement_SetElementId;
 typedef void (*fn_SpinnerElement_SetValue_t)(void* self, int value);
 extern fn_SpinnerElement_SetValue_t fn_SpinnerElement_SetValue;
 
-// SpinnerElement::SetMinMax(this, min, max)
+// SpinnerElement::SetMinMax(this, min, max) — reads +0xa0 field, ONLY for SpinnerElement.
+// WARNING: Do NOT call on SliderElement — use fn_NumberEditElement_SetMinMax instead.
+// SpinnerElement::SetMinMax dereferences +0xa0 which is NULL on SliderElements → crash.
 typedef void (*fn_SpinnerElement_SetMinMax_t)(void* self, int minVal, int maxVal);
 extern fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax;
 
