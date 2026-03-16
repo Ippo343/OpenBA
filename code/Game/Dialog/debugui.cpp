@@ -1068,16 +1068,18 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
     case 330:  Game_InfectRandomCitizen_Impl();    return;  // Infect random citizen
 
     // --- Debug render flag toggles (checkboxes) ---
-    // param2 points to the checkbox element; flag is OR'd/AND'd into game+0xD0
-    case 331: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x1);   return; }
-    case 332: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x2);   return; }
-    case 333: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x4);   return; }
-    case 334: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x8);   return; }
-    case 335: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x10);  return; }
-    case 336: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x20);  return; }
-    case 337: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x40);  return; }
-    case 338: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x80);  return; }
-    case 339: { void* cb = *(void**)&param2; DebugUI_ToggleDebugFlag(cb, 0x200); return; }
+    // param2 is a pointer to an InternalBasePtr (the checkbox element IBP).
+    // Original copies *param2 (deref) to a local IBP, passes &local to ToggleDebugFlag.
+    // ToggleDebugFlag calls CheckPtr on the IBP, then dereferences to get element.
+    case 331: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x1);   return; }
+    case 332: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x2);   return; }
+    case 333: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x4);   return; }
+    case 334: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x8);   return; }
+    case 335: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x10);  return; }
+    case 336: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x20);  return; }
+    case 337: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x40);  return; }
+    case 338: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x80);  return; }
+    case 339: { uint64_t ibp = *(uint64_t*)(uintptr_t)param2; DebugUI_ToggleDebugFlag(&ibp, 0x200); return; }
 
     default: return;
     }
@@ -1086,16 +1088,22 @@ void DebugUI_Slot9(DebugUI* self, uint64_t param2, int param3, int param4) {
 // ============================================================
 // DebugUI_ToggleDebugFlag -- helper for debug render checkboxes
 // ============================================================
-// Reads checkbox checked state (+0xD8), sets or clears a bit in
+// param_2 is an InternalBasePtr* pointing to the checkbox element.
+// Must CheckPtr then deref through IBP to reach actual element.
+// Reads checkbox checked state (element+0xD8), sets or clears a bit in
 // the game world's debug flags at game+0xD0.
 //
 // Original: 0x14005FCC0
-void DebugUI_ToggleDebugFlag(void* checkboxElement, uint32_t flag) {
+void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
     void* game = *g_pGameWorldSingleton;
     uint32_t* debugFlags = (uint32_t*)((uintptr_t)game + 0xD0);
 
-    // Read checkbox state: element+0xD8 is the checked bool
-    bool checked = *(uint8_t*)((uintptr_t)checkboxElement + 0xD8) != 0;
+    // CheckPtr resolves the InternalBasePtr (lazy/weak pointer resolution)
+    fn_InternalBasePtr_CheckPtr(ibpPtr);
+
+    // Deref through IBP to get actual checkbox element, then read +0xD8
+    void* element = *(void**)ibpPtr;
+    bool checked = *(uint8_t*)((uintptr_t)element + 0xD8) != 0;
 
     if (checked) {
         *debugFlags |= flag;
