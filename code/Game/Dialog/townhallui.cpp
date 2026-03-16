@@ -155,9 +155,8 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     for (int i = 0; i < 7; i++) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor_Index(uiStrBuf, self->graphYearsTable, i);
-        uint8_t sysStrBuf[8];
-        fn_String_Ctor_Copy(sysStrBuf, uiStrBuf);
-        fn_String_Dtor(uiStrBuf);
+        uint8_t sysStrBuf[8] = {0};
+        fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
         fn_InternalBasePtr_CheckPtr((void*)&self->timeCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
@@ -178,9 +177,8 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         if (!isEmpty) {
             uint8_t uiStrBuf[16];
             fn_UIString_Ctor_Index(uiStrBuf, self->graphTypesTable, i);
-            uint8_t sysStrBuf[8];
-            fn_String_Ctor_Copy(sysStrBuf, uiStrBuf);
-            fn_String_Dtor(uiStrBuf);
+            uint8_t sysStrBuf[8] = {0};
+            fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
             fn_InternalBasePtr_CheckPtr((void*)&self->graphCombo);
             uint8_t emptySprite[16];
             fn_Sprite_Default_Ctor(emptySprite);
@@ -240,7 +238,9 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
     fn_Element_Child((void*)tablePtr, childBuf, 0);
     fn_InternalBasePtr_CheckPtr(childBuf);
     uintptr_t templateChild = *(uintptr_t*)childBuf;
-    uintptr_t cloneVtable = *(uintptr_t*)(*(uintptr_t*)(templateChild) + 0xb8);
+    // Read the clonable object at field +0xB8 of the template element
+    // (NOT vtable+0xB8 — that hits .rdata type name strings)
+    uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
     // Set table size to profession count x 1
     int profCount = *(int*)(profList + 0x28);
@@ -256,11 +256,11 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
         void* tbl = (void*)tablePtr;
 
-        // Call vtable clone: CloneChild(cloneVtable, retBuf, dialogInst)
+        // Call vtable clone: cloneObj->vtable[+0x40](cloneObj, retBuf, dialogInst)
         typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
-        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneVtable + 0x40);
+        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
         uint8_t cloneBuf[16];
-        void* clonedElem = cloneFunc((void*)cloneVtable, cloneBuf, dialogInst);
+        void* clonedElem = cloneFunc((void*)cloneObj, cloneBuf, dialogInst);
 
         fn_TableElement_SetChild3(tbl, clonedElem, i, 0);
 
@@ -552,9 +552,8 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     for (int i = 0; i < 7; i++) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor_Index(uiStrBuf, yearsTable, i);
-        uint8_t sysStrBuf[8];
-        fn_String_Ctor_Copy(sysStrBuf, uiStrBuf);
-        fn_String_Dtor(uiStrBuf);
+        uint8_t sysStrBuf[8] = {0};
+        fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
         fn_InternalBasePtr_CheckPtr((void*)&self->productionCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
@@ -608,7 +607,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     fn_Element_Child((void*)tablePtr, childBuf, 0);
     fn_InternalBasePtr_CheckPtr(childBuf);
     uintptr_t templateChild = *(uintptr_t*)childBuf;
-    uintptr_t cloneVtable = *(uintptr_t*)(*(uintptr_t*)(templateChild) + 0xb8);
+    uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
     // Size table: ceil(resourceCount / colCount) rows
     fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
@@ -625,9 +624,9 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
 
         typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
-        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneVtable + 0x40);
+        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
         uint8_t cloneBuf[16];
-        void* clonedElem = cloneFunc((void*)cloneVtable, cloneBuf, dialogInst);
+        void* clonedElem = cloneFunc((void*)cloneObj, cloneBuf, dialogInst);
 
         fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
 
@@ -722,9 +721,8 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     for (int i = 0; i < 3; i++) {
         uint8_t uiStrBuf[16];
         fn_UIString_Ctor_Index(uiStrBuf, invTypeTable, i);
-        uint8_t sysStrBuf[8];
-        fn_String_Ctor_Copy(sysStrBuf, uiStrBuf);
-        fn_String_Dtor(uiStrBuf);
+        uint8_t sysStrBuf[8] = {0};
+        fn_UIString_ToSystemString(uiStrBuf, sysStrBuf);
         fn_InternalBasePtr_CheckPtr((void*)&self->inventoryCombo);
         uint8_t emptySprite[16];
         fn_Sprite_Default_Ctor(emptySprite);
@@ -876,7 +874,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     fn_Element_Child((void*)tablePtr, templateBuf, 0);
     fn_InternalBasePtr_CheckPtr(templateBuf);
     uintptr_t templateChild = *(uintptr_t*)templateBuf;
-    uintptr_t cloneVtable = *(uintptr_t*)(*(uintptr_t*)(templateChild) + 0xb8);
+    uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
     // Size table: ceil(agriCount / colCount) rows
     fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
@@ -893,9 +891,9 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         fn_InternalBasePtr_CheckPtr((void*)&tablePtr);
 
         typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
-        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneVtable + 0x40);
+        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
         uint8_t cloneBuf[16];
-        void* clonedElem = cloneFunc((void*)cloneVtable, cloneBuf, dialogInst);
+        void* clonedElem = cloneFunc((void*)cloneObj, cloneBuf, dialogInst);
 
         fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
 
@@ -1018,9 +1016,9 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x160));
     *(uint32_t*)(*(uintptr_t*)(s + 0x160) + 0xe4) = ticksPerStep;
 
-    // Set x-axis min label
+    // Set x-axis min label (UIString from graphYearsTable at timeIdx)
     uint8_t xMinStr[16];
-    uint64_t* pXMin = (uint64_t*)fn_UIString_Ctor(xMinStr, self->graphYearsTable, nullptr);
+    uint64_t* pXMin = (uint64_t*)fn_UIString_Ctor_Index(xMinStr, self->graphYearsTable, timeIdx);
     uint8_t xMinCopy[16];
     memcpy(xMinCopy, pXMin, 16);
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x178));
@@ -1074,7 +1072,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
             fn_InternalBasePtr_CheckPtr(labelPtr);
             uint64_t lblST = *(uint64_t*)(*(uintptr_t*)labelPtr + 0xd8);
             uint8_t lblStr[16];
-            uint64_t* pLbl = (uint64_t*)fn_UIString_Ctor(lblStr, lblST, (void*)(uintptr_t)seriesIdx);
+            uint64_t* pLbl = (uint64_t*)fn_UIString_Ctor_Index(lblStr, lblST, seriesIdx);
             uint8_t lblCopy[16];
             memcpy(lblCopy, pLbl, 16);
             fn_InternalBasePtr_CheckPtr(labelPtr);
@@ -1184,7 +1182,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));
     uint64_t monthST = *(uint64_t*)(*(uintptr_t*)(s + 0x68) + 0xd8);
     uint8_t monthStr[16];
-    uint64_t* pMonth = (uint64_t*)fn_UIString_Ctor(monthStr, monthST, (void*)(uintptr_t)monthIdx);
+    uint64_t* pMonth = (uint64_t*)fn_UIString_Ctor_Index(monthStr, monthST, monthIdx);
     uint8_t monthCopy[16];
     memcpy(monthCopy, pMonth, 16);
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x68));
@@ -1415,17 +1413,23 @@ static void* AgriBST_Next(void* node) {
     return nullptr;
 }
 
-// Find entity component by type ID (inline helper matching Ghidra pattern)
+// Find entity component by type ID
+// Note: these entities use +0x28/+0x30 layout (not +0x30/+0x38 like ComponentEntity)
 static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
+    if (!entity) return nullptr;
+    void** compArray = *(void***)(entity + 0x28);
     int compCount = *(int*)(entity + 0x30);
-    uintptr_t compArray = *(uintptr_t*)(entity + 0x28);
     for (int i = 0; i < compCount; i++) {
-        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-        // vtable[+0x10] = GetTypeId()
-        int id = (*(int (**)(void*))(**(uintptr_t**)&comp + 0x10))(comp);
-        if (id == (int)typeId) {
+        void* comp = compArray[i];
+        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) continue;
+        // vtable slot 2 (+0x10) = GetTypeId()
+        void** vtable = *(void***)comp;
+        typedef int (*fn_GetTypeId_t)(void*);
+        int id = ((fn_GetTypeId_t)vtable[2])(comp);
+        if ((uint32_t)id == typeId) {
             if (fn_IsDerivedFrom(comp, typeId))
                 return comp;
+            break;
         }
     }
     return nullptr;

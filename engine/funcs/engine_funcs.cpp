@@ -2830,7 +2830,7 @@ bool EngineFuncsInit() {
     fn_GraphElement_RemoveGraphs = reinterpret_cast<fn_GraphElement_RemoveGraphs_t>(
         ResolveExport("?RemoveGraphs@GraphElement@UI@@QEAAXXZ"));
     fn_GraphElement_AddGraph = reinterpret_cast<fn_GraphElement_AddGraph_t>(
-        ResolveExport("?AddGraph@GraphElement@UI@@QEAAXK@Z"));
+        ResolveExport("?AddGraph@GraphElement@UI@@QEAAXI@Z"));
     fn_GraphElement_AddGraphPoint = reinterpret_cast<fn_GraphElement_AddGraphPoint_t>(
         ResolveExport("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z"));
 
