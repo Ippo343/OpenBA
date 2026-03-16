@@ -16,6 +16,7 @@
 #include "ui/Panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 // ============================================================
@@ -1119,7 +1120,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     int totalCitizens = *(int*)(gameData + 0xa8);
     int adults = 0, students = 0, children = 0, familyCount = 0;
-    float clothedSum = 0.0f, happinessSum = 0.0f, healthSum = 0.0f;
+    float clothedSum = 0.0f, educatedSum = 0.0f, happinessSum = 0.0f, healthSum = 0.0f;
     float perCitizen = (totalCitizens > 0) ? (1.0f / (float)totalCitizens) : 0.0f;
 
     for (int i = 0; i < totalCitizens; i++) {
@@ -1161,12 +1162,12 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
         happinessSum += *(float*)(citizen + 0x50);
         fn_InternalBasePtr_CheckPtr((void*)&citizen);
         if (*(int*)(citizen + 0x1e4) != 0) {
-            clothedSum += 0.0f; // educated tracking (doesn't add to clothedSum)
+            educatedSum += 1.0f;
         }
     }
 
     float healthAvg = healthSum * perCitizen;
-    float educatedPct = perCitizen * 100.0f;
+    float educatedPct = educatedSum * perCitizen * 100.0f;
     float clothedPct = (adults > 0) ? ((clothedSum / (float)adults) * 100.0f) : 0.0f;
 
     // Year
@@ -1203,16 +1204,16 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x98));
     fn_NumberElement_SetValueInt(*(void**)(s + 0x98), children);
 
-    // Clothed %
+    // Educated % (at +0xa0)
     {
         uint8_t fmtBuf[8];
-        fn_String_Format(fmtBuf, "%i", (uint64_t)(uint32_t)(int)(happinessSum * educatedPct + 0.5f));
+        fn_String_Format(fmtBuf, "%i", (uint64_t)(uint32_t)(int)(educatedPct + 0.5f));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xa0));
         fn_TextElement_SetParameter(*(void**)(s + 0xa0), 0, fmtBuf);
         fn_String_Dtor(fmtBuf);
     }
 
-    // Educated %
+    // Clothed % (at +0xa8)
     {
         uint8_t fmtBuf[8];
         fn_String_Format(fmtBuf, "%i", (uint64_t)(uint32_t)(int)(clothedPct + 0.5f));
@@ -1416,22 +1417,99 @@ static void* AgriBST_Next(void* node) {
 // Find entity component by type ID
 // Note: these entities use +0x28/+0x30 layout (not +0x30/+0x38 like ComponentEntity)
 static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
-    if (!entity) return nullptr;
+    if (!entity) {
+        printf("[TH_FindComp] entity is NULL for typeId=0x%x\n", typeId);
+        return nullptr;
+    }
     void** compArray = *(void***)(entity + 0x28);
     int compCount = *(int*)(entity + 0x30);
+
+    if (!compArray) {
+        printf("[TH_FindComp] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
+               (unsigned long long)entity, typeId);
+        return nullptr;
+    }
+    if (compCount < 0 || compCount > 200) {
+        printf("[TH_FindComp] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
+               (unsigned long long)entity, compCount, typeId);
+        return nullptr;
+    }
+
     for (int i = 0; i < compCount; i++) {
         void* comp = compArray[i];
-        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) continue;
+        if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {
+            printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx SKIPPED (bad ptr, typeId=0x%x)\n",
+                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId);
+            continue;
+        }
         // vtable slot 2 (+0x10) = GetTypeId()
         void** vtable = *(void***)comp;
+        if (!vtable) {
+            printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx NULL vtable (typeId=0x%x)\n",
+                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId);
+            continue;
+        }
         typedef int (*fn_GetTypeId_t)(void*);
         int id = ((fn_GetTypeId_t)vtable[2])(comp);
         if ((uint32_t)id == typeId) {
-            if (fn_IsDerivedFrom(comp, typeId))
+            bool derived = fn_IsDerivedFrom(comp, typeId);
+            printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
+                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId, (int)derived);
+            if (derived)
                 return comp;
             break;
         }
     }
+    printf("[TH_FindComp] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
+           (unsigned long long)entity, typeId, compCount);
+    return nullptr;
+}
+
+// Find component on a ComponentEntity by type ID
+// ComponentEntity layout: +0x30 = IBP array, +0x38 = count
+// Each array element is an InternalBasePtr that needs CheckPtr before deref.
+static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId) {
+    if (!entity) {
+        printf("[TH_FindComp_CE] entity is NULL for typeId=0x%x\n", typeId);
+        return nullptr;
+    }
+    uintptr_t compArrayBase = *(uintptr_t*)(entity + 0x30);
+    int compCount = *(int*)(entity + 0x38);
+
+    if (!compArrayBase) {
+        printf("[TH_FindComp_CE] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
+               (unsigned long long)entity, typeId);
+        return nullptr;
+    }
+    if (compCount < 0 || compCount > 200) {
+        printf("[TH_FindComp_CE] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
+               (unsigned long long)entity, compCount, typeId);
+        return nullptr;
+    }
+
+    for (int i = 0; i < compCount; i++) {
+        // Each element is an IBP — CheckPtr it before reading
+        void* ibpSlot = (void*)(compArrayBase + (uintptr_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(ibpSlot);
+        void* comp = *(void**)ibpSlot;
+        if (!comp) continue;
+
+        void** vtable = *(void***)comp;
+        if (!vtable) continue;
+
+        typedef int (*fn_GetTypeId_t)(void*);
+        int id = ((fn_GetTypeId_t)vtable[2])(comp);
+        if ((uint32_t)id == typeId) {
+            bool derived = fn_IsDerivedFrom(comp, typeId);
+            printf("[TH_FindComp_CE] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
+                   (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId, (int)derived);
+            if (derived)
+                return comp;
+            break;
+        }
+    }
+    printf("[TH_FindComp_CE] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
+           (unsigned long long)entity, typeId, compCount);
     return nullptr;
 }
 
@@ -1562,6 +1640,12 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Find ValueDescription component on entity
             void* valDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
+            if (!valDesc) {
+                printf("[TH_UpdateProd] valDesc NULL for entity=0x%llx, skipping entry %d\n",
+                       (unsigned long long)entityPtr, i);
+                elemOff += 0x10;
+                continue;
+            }
 
             // Create sprite from ValueDescription+0x20 (spriteSheet) and +0x28 (spriteName)
             uint8_t spriteBuf[16];
@@ -1729,30 +1813,35 @@ next_entity: ;
                 // Find SelectDescription component (DAT_1401c48a8) on entity
                 void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
 
-                if (selectDesc) {
-                    // Create sprite from SelectDescription+0x20/+0x28
-                    uint8_t spriteBuf[16];
-                    fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x20),
-                                  (void*)((uintptr_t)selectDesc + 0x28));
+                printf("[TH_Agri] entity=0x%llx found in tempBST, selectDesc=%p\n",
+                       (unsigned long long)entityPtr, selectDesc);
 
-                    uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                    fn_InternalBasePtr_CheckPtr((void*)labelPtr);
-                    fn_LabelElement_SetSprite(*(void**)labelPtr, spriteBuf);
+                // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
+                // Create sprite from SelectDescription+0x20/+0x28
+                uint8_t spriteBuf[16];
+                fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x20),
+                              (void*)((uintptr_t)selectDesc + 0x28));
 
-                    // Create UIString from SelectDescription+0x30/+0x38
-                    uint8_t uiStrBuf[16];
-                    fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x30),
-                                    (void*)((uintptr_t)selectDesc + 0x38));
+                uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+                fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+                fn_LabelElement_SetSprite(*(void**)labelPtr, spriteBuf);
 
-                    labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                    fn_InternalBasePtr_CheckPtr((void*)labelPtr);
-                    fn_TextElement_SetText(*(void**)labelPtr, uiStrBuf);
+                // Create UIString from SelectDescription+0x30/+0x38
+                uint8_t uiStrBuf[16];
+                fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x30),
+                                (void*)((uintptr_t)selectDesc + 0x38));
 
-                    // Vtable +0x50 call (SetDisplayMode)
-                    labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                    fn_InternalBasePtr_CheckPtr((void*)labelPtr);
-                    Element_VCall50(*(void**)labelPtr, 0);
-                }
+                labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+                fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+                fn_TextElement_SetText(*(void**)labelPtr, uiStrBuf);
+
+                // Vtable +0x50 call (SetColor) — 0xFFC0C0C0 = opaque silver/gray
+                labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
+                fn_InternalBasePtr_CheckPtr((void*)labelPtr);
+                Element_VCall50(*(void**)labelPtr, (int)0xFFC0C0C0);
+            } else {
+                printf("[TH_Agri] entity=0x%llx NOT found in tempBST (displayIdx=%d)\n",
+                       (unsigned long long)entityPtr, displayIdx);
             }
 
             // Show element (SetFlagsOnOff hide=0, show=1)
@@ -1869,8 +1958,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
             uintptr_t entity = entityPtr;
 
-            // Find WorkplaceComponent (DAT_1401c80e0)
-            void* workplaceComp = TownHall_FindComponentByTypeId(entity, *g_TypeId_WorkplaceComponent);
+            // Find WorkplaceComponent (DAT_1401c80e0) — ComponentEntity layout
+            void* workplaceComp = TownHall_FindComponentByTypeId_CE(entity, *g_TypeId_WorkplaceComponent);
 
             uint64_t wpBP = 0;
             fn_InternalBasePtr_Ctor(&wpBP, workplaceComp);
@@ -1883,7 +1972,7 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 uintptr_t entity2 = entityPtr;
 
                 // Find WorkplaceComponent again to get StorageLocationComponent
-                void* workplaceComp2 = TownHall_FindComponentByTypeId(entity2, *g_TypeId_WorkplaceComponent);
+                void* workplaceComp2 = TownHall_FindComponentByTypeId_CE(entity2, *g_TypeId_WorkplaceComponent);
 
                 uint64_t wpBP2 = 0;
                 fn_InternalBasePtr_Ctor(&wpBP2, workplaceComp2);
@@ -1893,8 +1982,8 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
                 fn_InternalBasePtr_CheckPtr((void*)(wpBP2 + 0x10));
                 uintptr_t parentEntity = *(uintptr_t*)(wpBP2 + 0x10);
 
-                // Find StorageLocationComponent (DAT_1401c8070)
-                void* storageLocComp = TownHall_FindComponentByTypeId(parentEntity, *g_TypeId_StorageLocationComponent);
+                // Find StorageLocationComponent (DAT_1401c8070) — ComponentEntity layout
+                void* storageLocComp = TownHall_FindComponentByTypeId_CE(parentEntity, *g_TypeId_StorageLocationComponent);
 
                 uint64_t slBP = 0;
                 fn_InternalBasePtr_Ctor(&slBP, storageLocComp);
@@ -2061,15 +2150,15 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
     for (int i = 0; i < entityCount; i++) {
         uint64_t entityPtr = entities[i];
 
-        // Find StorageComponent_FC (DAT_1401c7e78)
+        // Find StorageComponent_FC (DAT_1401c7e78) — ComponentEntity layout
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-        void* storageComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_StorageComponent_FC);
+        void* storageComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_StorageComponent_FC);
         uint64_t storageBP = 0;
         fn_InternalBasePtr_Ctor(&storageBP, storageComp);
 
-        // Find BuildStateComponent (DAT_1401c7cf0)
+        // Find BuildStateComponent (DAT_1401c7cf0) — ComponentEntity layout
         fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-        void* buildStateComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_BuildStateComponent);
+        void* buildStateComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_BuildStateComponent);
         uint64_t buildStateBP = 0;
         fn_InternalBasePtr_Ctor(&buildStateBP, buildStateComp);
 
@@ -2077,9 +2166,9 @@ void TownHallUI_UpdateAll(TownHallUI* self) {
         if (buildStateBP != 0) {
             counterIndex = 2; // under construction
         } else {
-            // Check for BuildingComponent (DAT_1401c4b80)
+            // Check for BuildingComponent (DAT_1401c4b80) — ComponentEntity layout
             fn_InternalBasePtr_CheckPtr((void*)&entityPtr);
-            void* buildingComp = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_BuildingComponent);
+            void* buildingComp = TownHall_FindComponentByTypeId_CE(entityPtr, *g_TypeId_BuildingComponent);
             uint64_t buildingBP = 0;
             fn_InternalBasePtr_Ctor(&buildingBP, buildingComp);
             if (buildingBP != 0)
