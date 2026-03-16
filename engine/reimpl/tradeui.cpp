@@ -84,12 +84,10 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Serialize: TRAMPOLINE — too many edge cases with unbuilt buildings (null elements).
-// The other 7 methods are fully reimplemented.
-typedef void (*fn_Serialize_t)(void* self);
+// Serialize: REIMPLEMENTED
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TradeUI::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
+    TradeUI_Serialize((TradeUI*)self);
 }
 
 // Draw: REIMPLEMENTED
@@ -104,11 +102,10 @@ static void Reimpl_Slot6(void* self) {
     TradeUI_Slot6((TradeUI*)self);
 }
 
-// Startup: TRAMPOLINE — isolating UI corruption in EntityUI::Slot7
-typedef void (*fn_Startup_t)(void* self);
+// Startup: REIMPLEMENTED
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TradeUI::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    TradeUI_Startup((TradeUI*)self);
 }
 
 // OnCreate: REIMPLEMENTED
