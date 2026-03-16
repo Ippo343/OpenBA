@@ -187,7 +187,7 @@ static void ToolbarDialog_UpdateButtons_Impl(void* self) {
                         break;
                     }
                 }
-                enabled = entityCount >= *(int32_t*)((uintptr_t)matchedComponent + 0x60);
+                enabled = entityCount < *(int32_t*)((uintptr_t)matchedComponent + 0x60);
             }
 
             // Set button enabled via vtable[8] (offset 0x40)
