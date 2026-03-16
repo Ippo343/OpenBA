@@ -305,7 +305,7 @@ void ControlUI_Slot4(ControlUI* self);
 void ControlUI_Slot7(ControlUI* self);
 
 // Slot9 (vtable +0x48): On checkbox click, toggles component state.
-void ControlUI_Slot9(ControlUI* self, uint64_t param2, int param3, int param4);
+void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4);
 
 // ============================================================
 // BuildUI

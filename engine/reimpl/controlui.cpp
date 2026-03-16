@@ -60,7 +60,7 @@ static void Reimpl_Slot7(void* self) {
 }
 
 // Slot9 — REIMPLEMENTED (toggles component state on checkbox click)
-static void Reimpl_Slot9(void* self, uint64_t param2, int param3, int param4) {
+static void Reimpl_Slot9(void* self, uint64_t* param2, int param3, int param4) {
     g_lastHook = "ControlUI::Slot9";
     ControlUI_Slot9((ControlUI*)self, param2, param3, param4);
 }

@@ -302,14 +302,15 @@ static inline void VCall_Element_SetEnabled(void* elem, bool enabled)
 }
 
 // ============================================================
-// Helper: virtual call for Element::SetColor(this, uint32_t)
-// vtable[10] (offset 0x50)
+// Helper: virtual call for Element vtable[10] (offset 0x50)
+// Used as a visibility/show function in some contexts:
+//   arg=0 hides, arg=-1 (0xFFFFFFFF) shows.
 // ============================================================
-static inline void VCall_Element_SetColor(void* elem, uint32_t color)
+static inline void VCall_Element_Slot10(void* elem, int arg)
 {
     void** vtbl = *(void***)elem;
-    typedef void (*fn_t)(void*, uint32_t);
-    ((fn_t)vtbl[10])(elem, color);
+    typedef void (*fn_t)(void*, int);
+    ((fn_t)vtbl[10])(elem, arg);
 }
 
 // ============================================================
@@ -544,11 +545,11 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
             // Set color on label, number, and count elements
             fn_InternalBasePtr_CheckPtr(sellUI);
-            VCall_Element_SetColor(*(void**)sellUI, color);
+            VCall_Element_Slot10(*(void**)sellUI, color);
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x08));
-            VCall_Element_SetColor(*(void**)((uintptr_t)sellUI + 0x08), color);
+            VCall_Element_Slot10(*(void**)((uintptr_t)sellUI + 0x08), color);
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)sellUI + 0x10));
-            VCall_Element_SetColor(*(void**)((uintptr_t)sellUI + 0x10), color);
+            VCall_Element_Slot10(*(void**)((uintptr_t)sellUI + 0x10), color);
 
             dataOffset += 0x20;
         }
@@ -688,9 +689,16 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             fn_String_Dtor(sysStrBuf);
         }
 
-        // Set enabled state based on order validity
+        // Show/hide text element based on order validity
+        // vtable+0x50 is a visibility function: EDX=0 hides, EDX=-1 shows
+        // Original asm: orderIdx<0 → XOR EDX,EDX; orderIdx>=0 → OR EDX,0xffffffff
         fn_InternalBasePtr_CheckPtr(textIbp);
-        VCall_Element_SetColor((void*)*textIbp, 0xFFFFFFFF);
+        {
+            typedef void (*fn_SetVisible_t)(void* self, int visible);
+            void* elem = (void*)*textIbp;
+            void** vtbl = *(void***)elem;
+            ((fn_SetVisible_t)vtbl[10])(elem, (orderIdx < 0) ? 0 : -1);
+        }
     }
 
     // Phase 3: Build buy entries from trade orders
@@ -2120,8 +2128,15 @@ void TradeUI_OnOrderSpinner(TradeUI* self, int idx, int idx2) {
 // OnDismissButton (FUN_140081950): Dismiss the merchant
 // ============================================================
 // Finds BuildState component on the owning entity. Reads merchant
-// state from +0x51 (or +0x50 if +0x51 is 0). Then calls
-// RefreshDisplay with that state info and refreshes sell/buy tables.
+// state byte from +0x51 (sign-extended). Calls vtable[2] on the
+// object at buildState+0x48 to trigger dismissal, then refreshes
+// display and both sell/buy tables.
+//
+// Original asm register setup (interleaved for RefreshDisplay):
+//   RCX = *(buildState+0x48)        — object ptr (this for vtable call)
+//   R8D = MOVSX byte [buildState+0x51] — state byte (3rd arg to RefreshDisplay)
+//   RDX = buildState + 0x48         — address (2nd arg to RefreshDisplay)
+//   R9D = 10                        — constant (4th arg to RefreshDisplay)
 
 void TradeUI_OnDismissButton(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
@@ -2141,19 +2156,17 @@ void TradeUI_OnDismissButton(TradeUI* self) {
     fn_InternalBasePtr_CheckPtr(buildStatePtr);
     uintptr_t buildState = buildStatePtr[0];
 
-    // Read merchant state byte from +0x51 (fall back to +0x50 if zero)
-    uint8_t stateByte = *(uint8_t*)(buildState + 0x51);
-    if (stateByte == 0) {
-        stateByte = *(uint8_t*)(buildState + 0x50);
-    }
+    // Read merchant state byte from +0x51 (sign-extended, no fallback)
+    int8_t stateByte = *(int8_t*)(buildState + 0x51);
     uintptr_t stateAddr = buildState + 0x48;
-    uint64_t stateVal = (uint64_t)(uint32_t)stateByte;
+    uint64_t stateVal = (uint64_t)(uint32_t)(int32_t)stateByte;
 
-    // Call vtable[2] on +0x48 (some state notification call)
-    // Original: (**(code **)(**(longlong **)(lVar1 + 0x48) + 0x10))()
-    void** vtbl = *(void***)(buildState + 0x48);
-    typedef void (*StateCall_t)();
-    ((StateCall_t)(vtbl[2]))();
+    // Call vtable[2] on object at buildState+0x48 (dismiss notification)
+    // Original: MOV RCX,[RDX+0x48]; MOV RAX,[RCX]; CALL [RAX+0x10]
+    void* obj = *(void**)(buildState + 0x48);
+    void** vtbl = *(void***)obj;
+    typedef void (*StateCall_t)(void* self);
+    ((StateCall_t)(vtbl[2]))(obj);
 
     // Refresh display and tables
     TradeUI_RefreshDisplay(self, stateAddr, stateVal, 10);

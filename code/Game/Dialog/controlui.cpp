@@ -119,12 +119,16 @@ void ControlUI_Slot7(ControlUI* self) {
 }
 
 // Slot9: On checkbox click (event 0x12, id 50000), toggle component state.
-void ControlUI_Slot9(ControlUI* self, uint64_t param2, int param3, int param4) {
+// param2 is a POINTER — must deref to compare against stored element ptr.
+// Original asm: CMP [RDI],RAX where RDI=param2, RAX=*(self+0x30)
+void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) {
     uintptr_t s = (uintptr_t)self;
 
     if (param3 == 0x12 && param4 == 50000) {
-        // Verify event source matches element at +0x30
-        if (*(uint64_t*)&param2 == *(uint64_t*)(s + 0x30)) {
+        // CheckPtr on stored element before comparison
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
+        // Verify: *param2 must match stored element pointer at +0x30
+        if (*param2 == *(uint64_t*)(s + 0x30)) {
             // Get datasource component
             void* datasource = (void*)*(uint64_t*)(s + 0x10);
             uint32_t controlTypeId = g_TypeId_ControlComponent ? *g_TypeId_ControlComponent : 0;
@@ -133,6 +137,8 @@ void ControlUI_Slot9(ControlUI* self, uint64_t param2, int param3, int param4) {
                 component = datasource;
             }
 
+            // CheckPtr on sub-component before vtable call
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x38));
             // Call vtable[14] (offset 0x70) on sub-component to toggle state
             void* subCompPtr = (void*)*(uint64_t*)(s + 0x38);
             void** subVtable = *(void***)subCompPtr;
