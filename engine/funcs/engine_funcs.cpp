@@ -467,6 +467,7 @@ fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
 fn_String_SubString_t fn_String_SubString = nullptr;
 fn_String_Assign_t fn_String_Assign = nullptr;
 fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry = nullptr;
+fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor = nullptr;
 fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor = nullptr;
 fn_Dialog_GetReference_t fn_Dialog_GetReference = nullptr;
 fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect = nullptr;
@@ -698,6 +699,7 @@ uint32_t* g_TypeId_SpinnerElement = nullptr;
 uint32_t* g_TypeId_TextElement = nullptr;
 uint32_t* g_TypeId_LabelElement = nullptr;
 uint32_t* g_TypeId_NumberEditElement = nullptr;
+uint32_t* g_TypeId_SliderElement = nullptr;
 uint32_t* g_TypeId_SelectDescription = nullptr;
 fn_Building_GetSellableCount_t fn_Building_GetSellableCount = nullptr;
 fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
@@ -2386,6 +2388,13 @@ bool EngineFuncsInit() {
             fn_UIString_Ctor_Entry = reinterpret_cast<fn_UIString_Ctor_Entry_t>(*dispatch);
         }
     }
+    // UI::String::String() — default ctor, dispatch at 0x140151ca8
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151ca8));
+        if (dispatch && *dispatch) {
+            fn_UIString_DefaultCtor = reinterpret_cast<fn_UIString_DefaultCtor_t>(*dispatch);
+        }
+    }
     fn_Sprite_Default_Ctor = reinterpret_cast<fn_Sprite_Default_Ctor_t>(
         ResolveExport("??0Sprite@UI@@QEAA@XZ"));
     fn_Dialog_GetReference = reinterpret_cast<fn_Dialog_GetReference_t>(
@@ -2913,10 +2922,17 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140001bb0));
     fn_TradeUI_OnTradeButton = reinterpret_cast<fn_TradeUI_OnTradeButton_t>(
         ResolveAddr(Module::Exe, 0x140081420));
-    g_TypeId_TableElement = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x140151510));
-    g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401516c8));
+    // TableElement type ID — dispatch slot at 0x140151510 contains a POINTER to the type ID
+    // Original asm: MOV RAX,[0x140151510]; MOV EDX,[RAX] (double deref)
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151510));
+        if (exref && *exref) g_TypeId_TableElement = reinterpret_cast<uint32_t*>(*exref);
+    }
+    // SpinnerElement type ID — dispatch slot at 0x1401516c8 contains a POINTER to the type ID
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516c8));
+        if (exref && *exref) g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(*exref);
+    }
     // TextElement type ID — exref at 0x140151508
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151508));
@@ -2931,6 +2947,11 @@ bool EngineFuncsInit() {
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151cb0));
         if (exref && *exref) g_TypeId_NumberEditElement = reinterpret_cast<uint32_t*>(*exref);
+    }
+    // SliderElement type ID — exref at 0x140151cf0
+    {
+        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151cf0));
+        if (exref && *exref) g_TypeId_SliderElement = reinterpret_cast<uint32_t*>(*exref);
     }
     // SelectDescription type ID — DAT_1401c48a8
     g_TypeId_SelectDescription = reinterpret_cast<uint32_t*>(

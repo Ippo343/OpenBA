@@ -1608,6 +1608,12 @@ extern fn_String_Assign_t fn_String_Assign;
 typedef void* (*fn_UIString_Ctor_Entry_t)(void* retval, uint64_t externalPtr);
 extern fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry;
 
+// UI::String::String(retval) — default ctor, produces empty UI::String
+// Non-trivial return: RCX=retval(UIString*, 16 bytes)
+// Resolved from exe dispatch table at 0x140151ca8.
+typedef void* (*fn_UIString_DefaultCtor_t)(void* retval);
+extern fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor;
+
 // UI::Sprite default ctor — UI::Sprite::Sprite(this)
 // ??0Sprite@UI@@QEAA@XZ
 typedef void* (*fn_Sprite_Default_Ctor_t)(void* retval);
@@ -2528,6 +2534,11 @@ extern uint32_t* g_TypeId_LabelElement;
 
 // NumberEditElement type ID — exref 0x140151cb0
 extern uint32_t* g_TypeId_NumberEditElement;
+
+// SliderElement type ID — exref 0x140151cf0
+// Used in TradeUI inner loops (tablePurchase child(2), tableStorage child(1),
+// tableSell child(3), tableBuy child(3))
+extern uint32_t* g_TypeId_SliderElement;
 
 // ButtonElement type ID — exref 0x1401514f8 (same as g_TypeId_HelpButtonElem)
 // Already available as g_TypeId_HelpButtonElem

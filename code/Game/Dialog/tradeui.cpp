@@ -33,7 +33,29 @@
 
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+
+// ============================================================
+// Runtime dispatch slot type ID reader — reads fresh from exe dispatch slot,
+// matching the original asm pattern: MOV RAX,[slot]; MOV EDX,[RAX]
+// This avoids stale cached pointers that may point to wrong data.
+// ============================================================
+static uint32_t ReadDispatchTypeId(uintptr_t ghidraSlotAddr) {
+    uintptr_t slot = ResolveAddr(Module::Exe, ghidraSlotAddr);
+    if (!slot) return 0;
+    void* ptr = *(void**)slot;
+    if (!ptr) return 0;
+    return *(uint32_t*)ptr;
+}
+
+// Dispatch slot addresses for element type IDs used in Serialize inner loops
+#define SLOT_BUTTON_ELEM   0x1401514f8  // ButtonElement / HelpButtonElem
+#define SLOT_LABEL_ELEM    0x140151668  // LabelElement
+#define SLOT_SLIDER_ELEM   0x140151cf0  // SliderElement
+#define SLOT_SPINNER_ELEM  0x1401516c8  // SpinnerElement
+#define SLOT_TOOLBAR_ELEM  0x1401516a8  // ToolbarElement
 
 // ============================================================
 // Draw (vtable +0x28): Mark tables for layout recalc, set building dirty flag
@@ -165,14 +187,9 @@ static void TradeUI_DynArrayPush(uintptr_t s, int ptrOff, int countOff, int capO
 }
 
 // Helper: clone template into all table cells
-static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem) {
-    // Get template object from first child's element at +0xB8
-    uint64_t childBuf[2] = {0, 0};
-    fn_Element_Child(tableElem, childBuf, 0);
-    fn_InternalBasePtr_CheckPtr(childBuf);
-    void* firstChild = *(void**)childBuf;
-    void* templateObj = *(void**)((uintptr_t)firstChild + 0xB8);
-
+// templateObj must be read from first child's +0xB8 BEFORE calling SetSize,
+// because SetSize destroys/replaces children.
+static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem, void* templateObj) {
     int totalCells = fn_Element_ChildCount(tableElem);
     for (int i = 0; i < totalCells; i++) {
         // Get dialog resource reference
@@ -187,6 +204,17 @@ static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem) {
 
         fn_TableElement_SetChild2(tableElem, cloneBuf, i);
     }
+}
+
+// Helper: read template from table's first child +0xB8 (must be called BEFORE SetSize)
+static void* TradeUI_GetTableTemplate(void* ibpPtr) {
+    fn_InternalBasePtr_CheckPtr(ibpPtr);
+    uint64_t childBuf[2] = {0, 0};
+    fn_Element_Child(*(void**)ibpPtr, childBuf, 0);
+    fn_InternalBasePtr_CheckPtr(childBuf);
+    void* firstChild = *(void**)childBuf;
+    if (!firstChild) return nullptr;
+    return *(void**)((uintptr_t)firstChild + 0xB8);
 }
 
 // ============================================================
@@ -304,7 +332,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t smPtr[2] = {0, 0};
-    fn_FindComponent_SM((void*)entityPtr[0], &smPtr);
+    fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
 
     // Get resource table from game world singleton (+0xf0 = resource manager)
     void* resourceMgr = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf0);
@@ -433,10 +461,10 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             fn_InternalBasePtr_CheckPtr(sellUI);
             fn_LabelElement_SetSprite(*(void**)sellUI, spriteBuf);
 
-            // Set text from ValueDescription (+0x30=stringTable)
+            // Set text from ValueDescription (+0x30=stringTable, +0x38=stringName)
             uint8_t uiStrBuf[16] = {0};
             fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valueDesc + 0x30),
-                            (void*)((uintptr_t)valueDesc + 0x28));
+                            (void*)((uintptr_t)valueDesc + 0x38));
             fn_InternalBasePtr_CheckPtr(sellUI);
             fn_TextElement_SetText(*(void**)sellUI, uiStrBuf);
 
@@ -526,21 +554,25 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
             // Set empty text
             uint8_t emptyStr[16] = {0};
-            fn_String_Ctor_Default(emptyStr);
+            fn_UIString_DefaultCtor(emptyStr);
             fn_InternalBasePtr_CheckPtr(cellUI);
             fn_TextElement_SetText(*(void**)cellUI, emptyStr);
 
-            // Disable spinner, number, and label elements
+            // Disable spinner, number, and label elements (null-guard each)
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
+            if (*(void**)((uintptr_t)cellUI + 0x18))
+                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x08));
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
+            if (*(void**)((uintptr_t)cellUI + 0x08))
+                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
+            if (*(void**)((uintptr_t)cellUI + 0x10))
+                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
 
             // Set spinner min/max to 0
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
-            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x18), 0, 0);
+            if (*(void**)((uintptr_t)cellUI + 0x18))
+                fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x18), 0, 0);
 
             clearOffset += 0x20;
             fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
@@ -747,21 +779,24 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set empty text
             uint8_t emptyStr[16] = {0};
-            fn_String_Ctor_Default(emptyStr);
+            fn_UIString_DefaultCtor(emptyStr);
             fn_InternalBasePtr_CheckPtr(cellUI);
             fn_TextElement_SetText(*(void**)cellUI, emptyStr);
 
-            // Set spinner min/max to 0
+            // Set spinner min/max to 0 and disable elements (null-guard each)
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
-            fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x10), 0, 0);
+            if (*(void**)((uintptr_t)cellUI + 0x10))
+                fn_SpinnerElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x10), 0, 0);
 
-            // Disable elements
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x10));
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
+            if (*(void**)((uintptr_t)cellUI + 0x10))
+                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x18));
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
+            if (*(void**)((uintptr_t)cellUI + 0x18))
+                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x18), false);
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cellUI + 0x08));
-            VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
+            if (*(void**)((uintptr_t)cellUI + 0x08))
+                VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x08), false);
 
             clearOffset += 0x20;
             fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
@@ -908,7 +943,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                     fn_LabelElement_SetSprite((void*)*childIbp, emptySprite);
 
                     uint8_t emptyStr[16] = {0};
-                    fn_String_Ctor_Default(emptyStr);
+                    fn_UIString_DefaultCtor(emptyStr);
                     fn_InternalBasePtr_CheckPtr(childIbp);
                     fn_TextElement_SetText((void*)*childIbp, emptyStr);
                 }
@@ -1013,82 +1048,66 @@ void TradeUI_Serialize(TradeUI* self) {
     fn_ComboElement_SetCurrentItem(*(void**)(s + 0x140), 0);
 
     // --- Phase 2: Build tablePurchase row array (stride 0x20, 4 elements per row) ---
-    // Each row has child elements accessed by index: 0=labelPurchase, 1=numberPurchase,
-    // 2=buttonPurchase(SpinnerElement), 3=amountSpinner(SpinnerElement)
-    // Element IDs: label=baseId-1000, number=baseId, spinner=baseId+1000
+    // tablePurchase uses FLAT indexing with stride 3 per logical row:
+    //   child[k]   = compound cell with sub-child(0)=label, sub-child(1)=number
+    //   child[k+1] = button element (standalone)
+    //   child[k+2] = spinner element (standalone)
+    // +0xC0 = row count. Element IDs: label=baseId-1000, number=baseId, spinner=baseId+1000
     fn_InternalBasePtr_CheckPtr((void*)(s + 0xE0));
     void* tablePurchase = *(void**)(s + 0xE0);
-    int purchaseChildCount = *(int*)((uintptr_t)tablePurchase + 0xC0);
+    int purchaseRowCount = *(int*)((uintptr_t)tablePurchase + 0xC0);
 
     int baseId = 6000;
-    for (int i = 0; i < purchaseChildCount; i++) {
-        // Get child row i from tablePurchase
-        uint64_t childBuf[2] = {0, 0};
-        fn_Element_Child(tablePurchase, childBuf, i);
-        fn_InternalBasePtr_CheckPtr(childBuf);
-        void* rowElem = *(void**)childBuf;
+    int flatIdx = 0;
+    for (int row = 0; row < purchaseRowCount; row++) {
+        uint64_t buf[2] = {0, 0};
+        uint64_t sub[2] = {0, 0};
 
-        // Get child(0) -> child(0) => cast to TableElement (label)
-        uint64_t buf0[2] = {0, 0};
-        fn_Element_Child(rowElem, buf0, 0);
-        fn_InternalBasePtr_CheckPtr(buf0);
-        uint64_t buf0b[2] = {0, 0};
-        fn_Element_Child(*(void**)buf0, buf0b, 0);
-        fn_InternalBasePtr_CheckPtr(buf0b);
-        uint64_t r0[2], r1[2];
+        // child[flatIdx] = compound cell -> sub-child(0) = label
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xE0));
+        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx);
+        fn_InternalBasePtr_CheckPtr(buf);
+        fn_Element_Child(*(void**)buf, sub, 0);
+        fn_InternalBasePtr_CheckPtr(sub);
+        void* label = *(void**)sub;
 
-        // child(0) -> child(0) = label element
-        fn_Element_Child(rowElem, r0, 0);
-        fn_InternalBasePtr_CheckPtr(r0);
-        fn_Element_Child(*(void**)r0, r1, 0);
-        fn_InternalBasePtr_CheckPtr(r1);
-        void* label = nullptr;
-        if (*(void**)r1 && g_TypeId_TableElement) {
-            if (fn_IsDerivedFrom(*(void**)r1, *g_TypeId_TableElement))
-                label = *(void**)r1;
-        }
+        // same compound cell -> sub-child(1) = number
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xE0));
+        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx);
+        fn_InternalBasePtr_CheckPtr(buf);
+        flatIdx++;
+        fn_Element_Child(*(void**)buf, sub, 1);
+        fn_InternalBasePtr_CheckPtr(sub);
+        void* number = *(void**)sub;
 
-        // child(0) -> child(1) = number element
-        fn_Element_Child(rowElem, r0, 0);
-        fn_InternalBasePtr_CheckPtr(r0);
-        fn_Element_Child(*(void**)r0, r1, 1);
-        fn_InternalBasePtr_CheckPtr(r1);
-        void* number = nullptr;
-        if (*(void**)r1 && g_TypeId_TableElement) {
-            if (fn_IsDerivedFrom(*(void**)r1, *g_TypeId_TableElement))
-                number = *(void**)r1;
-        }
+        // child[flatIdx] = button (standalone)
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xE0));
+        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx);
+        fn_InternalBasePtr_CheckPtr(buf);
+        void* button = *(void**)buf;
 
-        // child(1) = button/text element
-        fn_Element_Child(rowElem, r0, 1);
-        fn_InternalBasePtr_CheckPtr(r0);
-        void* button = nullptr;
-        if (*(void**)r0 && g_TypeId_TableElement) {
-            if (fn_IsDerivedFrom(*(void**)r0, *g_TypeId_TableElement))
-                button = *(void**)r0;
-        }
+        // child[flatIdx+1] = spinner (standalone)
+        fn_InternalBasePtr_CheckPtr((void*)(s + 0xE0));
+        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx + 1);
+        fn_InternalBasePtr_CheckPtr(buf);
+        void* spinner = *(void**)buf;
 
-        // child(2) = spinner element
-        fn_Element_Child(rowElem, r0, 2);
-        fn_InternalBasePtr_CheckPtr(r0);
-        void* spinner = nullptr;
-        if (*(void**)r0 && g_TypeId_SpinnerElement) {
-            if (fn_IsDerivedFrom(*(void**)r0, *g_TypeId_SpinnerElement))
-                spinner = *(void**)r0;
-        }
+        flatIdx += 2;  // advance past button + spinner (total +3 per row)
 
         // Set element IDs
+        uint64_t r0[2] = {0, 0};
         fn_InternalBasePtr_Ctor(r0, label);
         fn_InternalBasePtr_CheckPtr(r0);
-        fn_Element_SetElementId(*(void**)r0, baseId - 1000);
+        if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId - 1000);
 
         fn_InternalBasePtr_Ctor(r0, number);
         fn_InternalBasePtr_CheckPtr(r0);
-        fn_Element_SetElementId(*(void**)r0, baseId);
+        if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId);
 
+        // Set user data on spinner (original uses fn_Element_SetUserData, NOT SetElementId)
         fn_InternalBasePtr_Ctor(r0, spinner);
         fn_InternalBasePtr_CheckPtr(r0);
-        fn_SpinnerElement_SetElementId(*(void**)r0, baseId + 1000);
+        if (*(void**)r0) fn_Element_SetUserData(*(void**)r0, (void*)(uintptr_t)(baseId + 1000));
 
         // Build 0x20-byte entry: {label, number, button, spinner}
         uint64_t entry[4] = {(uint64_t)label, (uint64_t)number, (uint64_t)button, (uint64_t)spinner};
@@ -1142,11 +1161,12 @@ void TradeUI_Serialize(TradeUI* self) {
         // Resize table: rows = ceil(resourceTypeCount / colCount)
         int rowCount = ((resourceTypeCount - 1 + storageColCount) / storageColCount * storageColCount)
                        / storageColCount;
+        void* storageTemplate = TradeUI_GetTableTemplate((void*)(s + 0xD8));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xD8));
         fn_TableElement_SetSize(*(void**)(s + 0xD8), rowCount, storageColCount);
 
         // Clone template into all cells
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xD8));
+        TradeUI_CloneTableCells(s, *(void**)(s + 0xD8), storageTemplate);
     }
 
     // Iterate tableStorage cells, find "ribbonStorageRow" sub-elements
@@ -1170,31 +1190,23 @@ void TradeUI_Serialize(TradeUI* self) {
         void* rowElem = *(void**)rowBuf;
 
         uint64_t c0[2] = {0, 0}, c1[2] = {0, 0}, c2[2] = {0, 0};
+        // child(0) = label, child(1) = slider, child(2) = spinner
         fn_Element_Child(rowElem, c0, 0);
         fn_InternalBasePtr_CheckPtr(c0);
-        void* e0 = nullptr;
-        if (*(void**)c0 && g_TypeId_TableElement) {
-            if (fn_IsDerivedFrom(*(void**)c0, *g_TypeId_TableElement)) e0 = *(void**)c0;
-        }
+        void* e0 = *(void**)c0;
 
         fn_Element_Child(rowElem, c1, 1);
         fn_InternalBasePtr_CheckPtr(c1);
-        void* e1 = nullptr;
-        if (*(void**)c1 && g_TypeId_SpinnerElement) {
-            if (fn_IsDerivedFrom(*(void**)c1, *g_TypeId_SpinnerElement)) e1 = *(void**)c1;
-        }
+        void* e1 = *(void**)c1;
 
         fn_Element_Child(rowElem, c2, 2);
         fn_InternalBasePtr_CheckPtr(c2);
-        void* e2 = nullptr;
-        if (*(void**)c2 && g_TypeId_TableElement) {
-            if (fn_IsDerivedFrom(*(void**)c2, *g_TypeId_TableElement)) e2 = *(void**)c2;
-        }
+        void* e2 = *(void**)c2;
 
-        // Set spinner element ID
+        // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
         fn_InternalBasePtr_Ctor(c0, e1);
         fn_InternalBasePtr_CheckPtr(c0);
-        fn_SpinnerElement_SetElementId(*(void**)c0, i + 2000);
+        fn_Element_SetUserData(*(void**)c0, (void*)(uintptr_t)(i + 2000));
 
         // Build 0x18-byte entry: {e0, e1, e2}
         uint64_t entry[3] = {(uint64_t)e0, (uint64_t)e1, (uint64_t)e2};
@@ -1209,10 +1221,11 @@ void TradeUI_Serialize(TradeUI* self) {
     {
         int rowCount = (((resourceTypeCount - 1 + sellColCount) / sellColCount) * sellColCount)
                        / sellColCount;
+        void* sellTemplate = TradeUI_GetTableTemplate((void*)(s + 0xC8));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC8));
         fn_TableElement_SetSize(*(void**)(s + 0xC8), rowCount, sellColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xC8));
+        TradeUI_CloneTableCells(s, *(void**)(s + 0xC8), sellTemplate);
     }
 
     // Iterate tableSell cells, find "ribbonSellRow" sub-elements (4 children per row)
@@ -1233,37 +1246,30 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(rowBuf);
         void* rowElem = *(void**)rowBuf;
 
-        // Get 4 child elements: child(0)=label, child(1)=numberLabel,
-        // child(2)=amountLabel, child(3)=spinner
+        // Get 4 child elements from ribbonSellRow:
+        // child(0)=SpinnerElement, child(1)=LabelElement,
+        // child(0)=label, child(1)=numberLbl, child(2)=amountLbl, child(3)=spinner
         uint64_t c[2];
-        void* label = nullptr;
         fn_Element_Child(rowElem, c, 0);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_SpinnerElement))
-            label = *(void**)c;
+        void* label = *(void**)c;
 
-        void* numberLbl = nullptr;
         fn_Element_Child(rowElem, c, 1);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_TableElement))
-            numberLbl = *(void**)c;
+        void* numberLbl = *(void**)c;
 
-        void* amountLbl = nullptr;
         fn_Element_Child(rowElem, c, 2);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_TableElement))
-            amountLbl = *(void**)c;
+        void* amountLbl = *(void**)c;
 
-        void* spinner = nullptr;
         fn_Element_Child(rowElem, c, 3);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_SpinnerElement))
-            spinner = *(void**)c;
+        void* spinner = *(void**)c;
 
-        // Set spinner element ID
+        // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
         fn_InternalBasePtr_Ctor(c, spinner);
         fn_InternalBasePtr_CheckPtr(c);
-        fn_SpinnerElement_SetElementId(*(void**)c, i + 3000);
+        fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 3000));
 
         // Build 0x20-byte entry: {numberLbl, label, amountLbl, spinner}
         uint64_t entry[4] = {(uint64_t)numberLbl, (uint64_t)label,
@@ -1281,10 +1287,11 @@ void TradeUI_Serialize(TradeUI* self) {
         int totalItems = selectableCount + resourceTypeCount - 1;
 
         int rowCount = (((totalItems + buyColCount) / buyColCount) * buyColCount) / buyColCount;
+        void* buyTemplate = TradeUI_GetTableTemplate((void*)(s + 0xD0));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xD0));
         fn_TableElement_SetSize(*(void**)(s + 0xD0), rowCount, buyColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xD0));
+        TradeUI_CloneTableCells(s, *(void**)(s + 0xD0), buyTemplate);
     }
 
     // Iterate tableBuy cells, find "ribbonBuyRow" sub-elements (4 children per row)
@@ -1305,36 +1312,28 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_InternalBasePtr_CheckPtr(rowBuf);
         void* rowElem = *(void**)rowBuf;
 
-        // 4 children: child(0)=spinner, child(1)=label, child(2)=numberLbl, child(3)=amountSpinner
+        // child(0)=spinner, child(1)=label, child(2)=numberLbl, child(3)=amountSpinner
         uint64_t c[2];
-        void* spinner = nullptr;
         fn_Element_Child(rowElem, c, 0);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_SpinnerElement))
-            spinner = *(void**)c;
+        void* spinner = *(void**)c;
 
-        void* label = nullptr;
         fn_Element_Child(rowElem, c, 1);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_TableElement))
-            label = *(void**)c;
+        void* label = *(void**)c;
 
-        void* numberLbl = nullptr;
         fn_Element_Child(rowElem, c, 2);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_TableElement))
-            numberLbl = *(void**)c;
+        void* numberLbl = *(void**)c;
 
-        void* amountSpinner = nullptr;
         fn_Element_Child(rowElem, c, 3);
         fn_InternalBasePtr_CheckPtr(c);
-        if (*(void**)c && fn_IsDerivedFrom(*(void**)c, *g_TypeId_SpinnerElement))
-            amountSpinner = *(void**)c;
+        void* amountSpinner = *(void**)c;
 
-        // Set spinner element ID
+        // Set user data on slider (original uses fn_Element_SetUserData, NOT SetElementId)
         fn_InternalBasePtr_Ctor(c, amountSpinner);
         fn_InternalBasePtr_CheckPtr(c);
-        fn_SpinnerElement_SetElementId(*(void**)c, i + 4000);
+        fn_Element_SetUserData(*(void**)c, (void*)(uintptr_t)(i + 4000));
 
         // Build 0x20-byte entry: {label, spinner, numberLbl, amountSpinner}
         uint64_t entry[4] = {(uint64_t)label, (uint64_t)spinner,
@@ -1352,10 +1351,11 @@ void TradeUI_Serialize(TradeUI* self) {
 
         int rowCount = ((int)(totalOrderItems / (int)orderColCount * (int)orderColCount))
                        / (int)orderColCount;
+        void* orderTemplate = TradeUI_GetTableTemplate((void*)(s + 0xE8));
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xE8));
         fn_TableElement_SetSize(*(void**)(s + 0xE8), rowCount, (int)orderColCount);
 
-        TradeUI_CloneTableCells(s, *(void**)(s + 0xE8));
+        TradeUI_CloneTableCells(s, *(void**)(s + 0xE8), orderTemplate);
     }
 
     // Iterate tableOrder cells, set element IDs (0x1F40+i) on purchase button children
@@ -1368,12 +1368,7 @@ void TradeUI_Serialize(TradeUI* self) {
         fn_Element_Child(*(void**)(s + 0xE8), cellBuf, i);
         fn_InternalBasePtr_CheckPtr(cellBuf);
 
-        void* child = *(void**)cellBuf;
-        void* typed = nullptr;
-        if (child && g_TypeId_HelpButtonElem) {
-            if (fn_IsDerivedFrom(child, *g_TypeId_HelpButtonElem))
-                typed = child;
-        }
+        void* typed = *(void**)cellBuf;
         uint64_t ibp[1] = {0};
         fn_InternalBasePtr_Ctor(ibp, typed);
         fn_InternalBasePtr_CheckPtr(ibp);
@@ -1460,8 +1455,8 @@ void TradeUI_Startup(TradeUI* self) {
     fn_FindComponent_Building((void*)entityPtr[0], &buildingPtr);
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
-    uint64_t stateMachinePtr[2] = {0, 0};
-    fn_FindComponent_StateMachine((void*)entityPtr[0], &stateMachinePtr);
+    uint64_t storageCompPtr[2] = {0, 0};
+    fn_FindComponent_Storage((void*)entityPtr[0], &storageCompPtr);
 
     // --- Compute sell total ---
     // sell orders: ptr at self+0x30, count at self+0x38, stride 0x20
@@ -1505,10 +1500,10 @@ void TradeUI_Startup(TradeUI* self) {
     bool bBuySell     = displayBuyTotal  < displaySellTotal; // buy < sell (textTooMuch case)
 
     // --- Storage capacity check ---
-    fn_InternalBasePtr_CheckPtr(&stateMachinePtr);
-    uintptr_t smComp = stateMachinePtr[0];
-    int storageCapacity = *(int*)(smComp + 0x38);
-    int storageCount = fn_StorageComponent_QueryCount((void*)smComp);
+    fn_InternalBasePtr_CheckPtr(&storageCompPtr);
+    uintptr_t storageComp = storageCompPtr[0];
+    int storageCapacity = *(int*)(storageComp + 0x38);
+    int storageCount = fn_StorageComponent_QueryCount((void*)storageComp);
     bool bStorageFull = storageCapacity < storageCount + (buyTotal - sellTotal);
 
     // --- Show/hide warning texts ---
@@ -2273,7 +2268,7 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t smPtr[2] = {0, 0};
-    fn_FindComponent_StateMachine((void*)entityPtr[0], &smPtr);
+    fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
 
     int storageCount = *(int*)(s + 0x58);
     uintptr_t storageOrders = *(uintptr_t*)(s + 0x50);  // resource entity ptrs, stride 0x18
@@ -2336,7 +2331,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
 
     fn_InternalBasePtr_CheckPtr(&entityPtr);
     uint64_t smPtr[2] = {0, 0};
-    fn_FindComponent_StateMachine((void*)entityPtr[0], &smPtr);
+    fn_FindComponent_Storage((void*)entityPtr[0], &smPtr);
 
     int sellCount = *(int*)(s + 0x38);
 
@@ -2613,9 +2608,10 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_InternalBasePtr_CheckPtr(uiRow);
         fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
 
-        // Set text name from ValueDescription (+0x30 = name string)
+        // Set text name from ValueDescription (+0x30=stringTable, +0x38=stringName)
+        // Original uses fn_UIString_Ctor — TextElement::SetText expects UI::String, not System::String
         uint64_t strBuf[2] = {0, 0};
-        fn_String_Ctor_Copy(strBuf, (void*)(valueDesc + 0x30));
+        fn_UIString_Ctor(strBuf, *(uint64_t*)(valueDesc + 0x30), (void*)(valueDesc + 0x38));
         uint64_t strVal[2] = {strBuf[0], strBuf[1]};
         fn_InternalBasePtr_CheckPtr(uiRow);
         fn_TextElement_SetText(*(void**)uiRow, strVal);
@@ -2698,9 +2694,9 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         fn_InternalBasePtr_CheckPtr(uiRow);
         fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
 
-        // Set blank text
+        // Set blank text — must use UI::String default ctor, not System::String
         uint64_t blankStr[2] = {0, 0};
-        fn_String_Ctor_Default(blankStr);
+        fn_UIString_DefaultCtor(blankStr);
         uint64_t strVal[2] = {blankStr[0], blankStr[1]};
         fn_InternalBasePtr_CheckPtr(uiRow);
         fn_TextElement_SetText(*(void**)uiRow, strVal);

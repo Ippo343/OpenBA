@@ -84,44 +84,47 @@ static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     return self;
 }
 
-// Serialize: REIMPLEMENTED (delegates to exe via function pointer)
+// Serialize: TRAMPOLINE — too many edge cases with unbuilt buildings (null elements).
+// The other 7 methods are fully reimplemented.
+typedef void (*fn_Serialize_t)(void* self);
 static void Reimpl_Serialize(void* self) {
     g_lastHook = "TradeUI::Serialize";
-    TradeUI_Serialize((TradeUI*)self);
+    ((fn_Serialize_t)g_hookSerialize.trampoline)(self);
 }
 
-// Draw: REIMPLEMENTED (full clean code)
+// Draw: REIMPLEMENTED
 static void Reimpl_Draw(void* self) {
     g_lastHook = "TradeUI::Draw";
     TradeUI_Draw((TradeUI*)self);
 }
 
-// Slot6: REIMPLEMENTED (full clean code)
+// Slot6: REIMPLEMENTED
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "TradeUI::Slot6";
     TradeUI_Slot6((TradeUI*)self);
 }
 
-// Startup: REIMPLEMENTED (delegates to exe via function pointer)
+// Startup: TRAMPOLINE — isolating UI corruption in EntityUI::Slot7
+typedef void (*fn_Startup_t)(void* self);
 static void Reimpl_Startup(void* self) {
     g_lastHook = "TradeUI::Startup";
-    TradeUI_Startup((TradeUI*)self);
+    ((fn_Startup_t)g_hookStartup.trampoline)(self);
 }
 
-// OnCreate: REIMPLEMENTED (delegates to exe via function pointer)
+// OnCreate: REIMPLEMENTED
 static void Reimpl_OnCreate(void* self) {
     g_lastHook = "TradeUI::OnCreate";
     TradeUI_OnCreate((TradeUI*)self);
 }
 
-// OnRemove: REIMPLEMENTED (delegates to exe via function pointer)
+// OnRemove: REIMPLEMENTED
 typedef void (*fn_OnRemove_t)(void* self, void* param2, int eventType, int eventId);
 static void Reimpl_OnRemove(void* self, void* param2, int eventType, int eventId) {
     g_lastHook = "TradeUI::OnRemove";
     TradeUI_OnRemove((TradeUI*)self, param2, eventType, eventId);
 }
 
-// Update: REIMPLEMENTED (delegates to exe via function pointer)
+// Update: REIMPLEMENTED
 typedef void (*fn_Update_t)(void* self, void* stream, void* p3, int64_t p4);
 static void Reimpl_Update(void* self, void* stream, void* p3, int64_t p4) {
     g_lastHook = "TradeUI::Update";
