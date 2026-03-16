@@ -47,8 +47,8 @@ static fn_Serializer_SerializeInt_t fn_Serializer_SerializeInt = nullptr;
 typedef int (*fn_Serializer_GetVersion_t)(void* self);
 static fn_Serializer_GetVersion_t fn_Serializer_GetVersion = nullptr;
 
-// FUN_140023a00 — resize float array
-typedef void (*fn_ResizeFloatArray_t)(void* arrayPtr, int newSize);
+// FUN_140023a00 — resize float array (takes address of float* and new count)
+typedef void (*fn_ResizeFloatArray_t)(float** arrayPtr, int newSize);
 static fn_ResizeFloatArray_t fn_ResizeFloatArray = nullptr;
 
 // IO::Serializer::Serialize(this, count, floatArray, name) — serialize float array
@@ -59,8 +59,8 @@ static fn_Serializer_SerializeFloatArray_t fn_Serializer_SerializeFloatArray = n
 // Shutdown (0x140118e00)
 // Calls parent ResourceProduceComponent_Shutdown, then serializes:
 //   - consumeResourceId (+0x50)
-//   - consumeData1 count (+0x60) with array resize
-//   - float array at consumeData0 (+0x58)
+//   - consumeCount (+0x60) via local copy, with array resize on load
+//   - float array at consumeRates (+0x58)
 //   - consumeState (+0x68)
 //   - Version-0 migration: if consumeResourceId < 0 on load, reset to 0
 // ============================================================
@@ -86,20 +86,24 @@ static void Reimpl_Shutdown(ConsumeProduceComponent* self, void* stream) {
     // Serialize consumeResourceId at +0x50
     fn_Serializer_SerializeInt(serBuf, &self->consumeResourceId, nullptr);
 
-    // Serialize consume array count (+0x60 as int)
-    fn_Serializer_SerializeInt(serBuf, (int*)&self->consumeData1, nullptr);
+    // Copy consume count to local (original uses local_res8, NOT direct field access).
+    // On load, the resize function reads +0x60 internally as old count to decide
+    // whether reallocation is needed. Writing directly to +0x60 before resize would
+    // make old == new, causing resize to skip reallocation.
+    int localCount = self->consumeCount;
+    fn_Serializer_SerializeInt(serBuf, &localCount, nullptr);
 
     // On load (direction == 0): resize array if needed
     if (*(int*)(pSerData[0] + 8) == 0) {
-        fn_ResizeFloatArray(&self->consumeData0, *(int*)&self->consumeData1);
+        fn_ResizeFloatArray(&self->consumeRates, localCount);
     }
 
-    // Serialize float array: consumeData0 ptr, consumeData1 count
-    fn_Serializer_SerializeFloatArray(serBuf, *(int*)&self->consumeData1,
-                                       *(float**)&self->consumeData0, nullptr);
+    // Serialize float array using local count and rates pointer
+    fn_Serializer_SerializeFloatArray(serBuf, localCount,
+                                       self->consumeRates, nullptr);
 
     // Serialize consumeState at +0x68
-    fn_Serializer_SerializeInt(serBuf, (int*)&self->consumeState, nullptr);
+    fn_Serializer_SerializeInt(serBuf, &self->consumeState, nullptr);
 
     // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
     int version = fn_Serializer_GetVersion(serBuf);

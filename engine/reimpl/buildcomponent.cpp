@@ -69,16 +69,17 @@ static void Passthrough_Draw(BuildComponent* self) {
 
 // ============================================================
 // OnCreate (0x140108CB0)
-// Removes entity from the removal queue. Creates InternalBasePtr
-// from owner, searches the removal queue (GameState+0xF0+0xD0)
-// for this entity. If found, shifts remaining entries down and
-// decrements count.
+// Removes component from the removal queue. Creates InternalBasePtr
+// from self (component ptr, NOT owner entity), searches the removal
+// queue (GameState+0xF0+0xD0). If found, shifts remaining entries
+// down and decrements count.
 // ============================================================
 static void Reimpl_OnCreate(BuildComponent* self) {
     g_lastHook = "BuildComponent::OnCreate";
-    // Create InternalBasePtr on stack
+    // Create InternalBasePtr on stack — original passes self (component ptr),
+    // NOT self->owner (entity ptr). The removal queue contains component pointers.
     uint8_t ptrBuf[8];
-    fn_InternalBasePtr_Ctor(ptrBuf, self->owner);
+    fn_InternalBasePtr_Ctor(ptrBuf, (void*)self);
 
     void* gameState = *g_pGameState;
     void* worldData = *(void**)((uintptr_t)gameState + 0xF0);

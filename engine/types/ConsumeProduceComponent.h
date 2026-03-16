@@ -8,9 +8,9 @@
 // Constructor sets:
 //   vtable = 0x140162a80 (overwrites ResourceProduceComponent vtable)
 //   +0x50 = 0xFFFFFFFF (int32, invalid resource ID / sentinel)
-//   +0x58 = 0 (qword)
-//   +0x60 = 0 (qword)
-//   +0x68 = 0 (uint32)
+//   +0x58 = 0 (float* consumeRates, zeroed)
+//   +0x60 = 0 (int32 consumeCount, zeroed — dword in asm despite qword ctor clear)
+//   +0x68 = 0 (int32 consumeState)
 //   flags |= 0x80 (via BTS bit 7)
 
 #include <cstdint>
@@ -42,9 +42,10 @@ struct ConsumeProduceComponent {
     // ConsumeProduceComponent own fields
     int32_t  consumeResourceId; // +0x50: initialized to -1 (0xFFFFFFFF), resource type sentinel
     uint8_t  _pad54[4];         // +0x54: padding
-    void*    consumeData0;      // +0x58: zeroed
-    void*    consumeData1;      // +0x60: zeroed
-    uint32_t consumeState;      // +0x68: zeroed
+    float*   consumeRates;      // +0x58: float array (consume rate per slot), zeroed
+    int32_t  consumeCount;      // +0x60: number of consume slots (dword access in asm)
+    uint8_t  _pad64[4];         // +0x64: padding
+    int32_t  consumeState;      // +0x68: zeroed
     uint8_t  _pad6C[4];         // +0x6C: padding to 0x70
 };
 
@@ -54,6 +55,6 @@ static_assert(offsetof(ConsumeProduceComponent, controllerVtable) == 0x28, "");
 static_assert(offsetof(ConsumeProduceComponent, selfPtr) == 0x40, "");
 static_assert(offsetof(ConsumeProduceComponent, produceFlag) == 0x48, "");
 static_assert(offsetof(ConsumeProduceComponent, consumeResourceId) == 0x50, "");
-static_assert(offsetof(ConsumeProduceComponent, consumeData0) == 0x58, "");
-static_assert(offsetof(ConsumeProduceComponent, consumeData1) == 0x60, "");
+static_assert(offsetof(ConsumeProduceComponent, consumeRates) == 0x58, "");
+static_assert(offsetof(ConsumeProduceComponent, consumeCount) == 0x60, "");
 static_assert(offsetof(ConsumeProduceComponent, consumeState) == 0x68, "");
