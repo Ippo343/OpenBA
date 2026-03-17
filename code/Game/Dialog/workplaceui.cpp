@@ -225,15 +225,18 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     void* entity = isEntity ? dataSource : nullptr;
     uint8_t entityBuf[8];
     fn_InternalBasePtr_Ctor(entityBuf, entity);
+    fn_InternalBasePtr_CheckPtr((void*)entityBuf);
     void* entityPtr = *(void**)entityBuf;
 
     // Find BuildState2 component (FUN_140002e10 — type DAT_1401c8118)
     void* buildComp = nullptr;
     fn_FindComponent_BuildState2(entityPtr, &buildComp);
+    fn_InternalBasePtr_CheckPtr(&buildComp);
 
     // Find WorkplaceComponent
     void* workComp = nullptr;
     fn_FindComponent_Workplace(entityPtr, &workComp);
+    fn_InternalBasePtr_CheckPtr(&workComp);
 
     // Get WorkplaceJobType sub-component from workplace: +0x18
     void* jobSubComp = *(void**)((uintptr_t)workComp + 0x18);
@@ -241,8 +244,12 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     void* jobType = isJobType ? jobSubComp : nullptr;
 
     // Check if building is complete: buildComp +0x48 (profession ptr) must be non-null
+    fn_InternalBasePtr_CheckPtr(&buildComp);
     if (*(uintptr_t*)((uintptr_t)buildComp + 0x48) == 0) {
         // Building not complete — hide the entire panel
+#ifdef _DEBUG
+        printf("[WorkPlaceUI] HIDDEN: buildComp=%p profession(+0x48)=NULL entity=%p\n", buildComp, entityPtr);
+#endif
         fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 1, 0);
         return;
     }
@@ -250,12 +257,11 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
     // Building complete — show the panel
     fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 0, 1);
 
-    // Check if job count up/down should be visible
 #ifdef _DEBUG
-    printf("[WorkPlaceUI] jobType=%p jobType+0x20=%d buildProf=%p laborerProf(0x38)=%p\n",
-        jobType, (int)*(uint8_t*)((uintptr_t)jobType + 0x20),
-        *(void**)((uintptr_t)buildComp + 0x48),
-        *(void**)((uintptr_t)(*(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xb0)) + 0x38));
+    printf("[WorkPlaceUI] entity=%p buildComp=%p workComp=%p jobType=%p jt+0x20=%d prof=%p\n",
+        entityPtr, buildComp, workComp, jobType,
+        jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x20) : -1,
+        *(void**)((uintptr_t)buildComp + 0x48));
 #endif
     if (*(uint8_t*)((uintptr_t)jobType + 0x20) == 0) {
         // Check for laborer profession
@@ -283,12 +289,16 @@ showUpDown:
     }
 
     // Get worker count and max worker count
+    fn_InternalBasePtr_CheckPtr(&buildComp);
     uint32_t workerCount = *(uint32_t*)((uintptr_t)buildComp + 0x60);
 
     // Get WorkplaceComponent from buildComp's parent entity (+0x10)
+    fn_InternalBasePtr_CheckPtr(&buildComp);
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)buildComp + 0x10));
     void* parentEntity = *(void**)((uintptr_t)buildComp + 0x10);
     void* wpComp2 = nullptr;
     fn_FindComponent_Workplace(parentEntity, &wpComp2);
+    fn_InternalBasePtr_CheckPtr(&wpComp2);
 
     // Get max count — lazy-init cached value at +0x30
     if (*(int*)((uintptr_t)wpComp2 + 0x30) == 0) {
@@ -384,10 +394,11 @@ showUpDown:
     int wpMaxCount = *(int*)((uintptr_t)workComp + 0x30);
 
 #ifdef _DEBUG
-    printf("[WorkPlaceUI] Startup: workComp=%p wpComp2=%p workComp+0x30=%d wpComp2+0x30=%d jobType+0x28=%d jobType+0x2c=%d workerCount=%u maxCount=%u wpWorkers=%d laborers=%d\n",
-        workComp, wpComp2, wpMaxCount, *(int*)((uintptr_t)wpComp2 + 0x30),
-        *(int*)((uintptr_t)jobType + 0x28), *(int*)((uintptr_t)jobType + 0x2c),
-        workerCount, maxCount, workplaceWorkerCount, laborerCount);
+    printf("[WorkPlaceUI] workers=%u/%u assigned=%d laborers=%d wpMax=%d jt+0x28=%d jt+0x2c=%d jt+0x34=%d\n",
+        workerCount, maxCount, workplaceWorkerCount, laborerCount, wpMaxCount,
+        jobType ? *(int*)((uintptr_t)jobType + 0x28) : -1,
+        jobType ? *(int*)((uintptr_t)jobType + 0x2c) : -1,
+        jobType ? (int)*(uint8_t*)((uintptr_t)jobType + 0x34) : -1);
 #endif
 
     // Check if this is a laborer profession
@@ -457,6 +468,9 @@ showUpDown:
 void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
     (void)param2;
     if (msg != 0x12) return;
+#ifdef _DEBUG
+    printf("[WorkPlaceUI] OnRemove: msg=0x%x id=0x%x\n", msg, id);
+#endif
 
     uintptr_t s = (uintptr_t)self;
 

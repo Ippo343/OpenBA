@@ -606,9 +606,11 @@ void EntityUI_Slot7(EntityUI* self) {
         if (toolPtr) {
             fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)toolPtr + 0x38));  // CheckPtr on +0x38 element IBP
             void* hintElem = *(void**)((uintptr_t)toolPtr + 0x38);
-            void** vtbl = *(void***)hintElem;
-            typedef void (*VCall_SetHint_t)(void*, uint64_t);
-            ((VCall_SetHint_t)vtbl[10])(hintElem, toolHint);
+            if (hintElem) {
+                void** vtbl = *(void***)hintElem;
+                typedef void (*VCall_SetHint_t)(void*, uint64_t);
+                ((VCall_SetHint_t)vtbl[10])(hintElem, toolHint);
+            }
         }
     }
 
@@ -675,7 +677,8 @@ void EntityUI_Slot7(EntityUI* self) {
                 GetDescPage_Impl(entityDesc, &descResult);
 
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
-                int activePage = fn_PageElement_GetActivePage(*(void**)(s + 0x40));
+                void* pagesElem = *(void**)(s + 0x40);
+                int activePage = pagesElem ? fn_PageElement_GetActivePage(pagesElem) : 0;
                 if (activePage != 4) {
                     pageIdx = descResult ? *(int*)((uintptr_t)descResult + 0x40) : 2;
                 }
@@ -687,7 +690,10 @@ void EntityUI_Slot7(EntityUI* self) {
         }
     }
 
-    fn_PageElement_SetActivePage(*(void**)(s + 0x40), pageIdx);
+    void* pagesElemFinal = *(void**)(s + 0x40);
+    if (pagesElemFinal) {
+        fn_PageElement_SetActivePage(pagesElemFinal, pageIdx);
+    }
 }
 
 // ============================================================
