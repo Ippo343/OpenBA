@@ -427,7 +427,7 @@ fn_UI_AddDialog_t fn_UI_AddDialog = nullptr;
 fn_Element_GetPaddedSize_t fn_Element_GetPaddedSize = nullptr;
 fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio = nullptr;
 fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
-// fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr; // REIMPLEMENTED in toolbardialog.cpp
+fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
 fn_Toolbar_ToggleAll_t fn_Toolbar_ToggleAll = nullptr;
 uintptr_t g_ToolbarDialog_Vtable = 0;   // PTR_FUN_14015fa00
@@ -2267,9 +2267,9 @@ bool EngineFuncsInit() {
     }
     fn_ToolbarDialog_Ctor = reinterpret_cast<fn_ToolbarDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x1400b9910));
-    // fn_Toolbar_ShowGroup — REIMPLEMENTED in code/Game/Dialog/toolbardialog.cpp
-    // fn_Toolbar_ShowGroup = reinterpret_cast<fn_Toolbar_ShowGroup_t>(
-    //     ResolveAddr(Module::Exe, 0x140102b60));
+    // fn_Toolbar_ShowGroup — must call original (15+ direct callers share state)
+    fn_Toolbar_ShowGroup = reinterpret_cast<fn_Toolbar_ShowGroup_t>(
+        ResolveAddr(Module::Exe, 0x140102b60));
     fn_Toolbar_Utility = reinterpret_cast<fn_Toolbar_Utility_t>(
         ResolveAddr(Module::Exe, 0x140101a80));
     fn_Toolbar_ToggleAll = reinterpret_cast<fn_Toolbar_ToggleAll_t>(

@@ -1389,10 +1389,11 @@ extern fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor;
 
 // ToolbarDialog game system dispatch functions (called from OnEvent)
 // Case 1: ShowGroup — toggle visibility of a game group
-// REIMPLEMENTED: Toolbar_ShowGroup_Impl() in code/Game/Dialog/toolbardialog.cpp
-// Original was at 0x140102b60. No longer needs fn_* pointer.
-// typedef void (*fn_Toolbar_ShowGroup_t)(void* gameSubsys, int64_t groupId);
-// extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
+// Must call ORIGINAL exe function (not our reimpl) because 15+ other callers
+// (EntityUI, CitizenComponent, TradeWork, etc.) call FUN_140102b60 directly.
+// Using our reimpl causes state desync (pc+0x20/0x28 overwritten by original callers).
+typedef void (*fn_Toolbar_ShowGroup_t)(void* gameSubsys, int64_t groupId);
+extern fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup;
 
 // Case 2: Utility action
 // REPLACED: now Toolbar_Utility_Impl() in code/Game/Dialog/toolbardialog.cpp

@@ -673,7 +673,10 @@ static void Toolbar_ToggleAll_Impl(void* gameSubsys) {
     }
 
     // Step 2: Clear current tool group by calling ShowGroup(gameSubsys, 0)
-    Toolbar_ShowGroup_Impl(gameSubsys, 0);
+    if (fn_Toolbar_ShowGroup)
+        fn_Toolbar_ShowGroup(gameSubsys, 0);
+    else
+        Toolbar_ShowGroup_Impl(gameSubsys, 0);
 
     // Step 3: Recompute camera view transform
     // Time::Time(0.0f) — constructs a zero time value (unused, but matches original)
@@ -1384,6 +1387,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         int64_t* itemArray = *(int64_t**)(s + 0xD0);
         uintptr_t item = (uintptr_t)itemArray[buttonIndex];
 
+        // CheckPtr resolves lazy/weak InternalBasePtr before dereference
+        fn_InternalBasePtr_CheckPtr(element);
         // IsDerivedFrom check on the element
         void* elemObj = *(void**)element;
         bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_ToolbarElement);
@@ -1480,10 +1485,16 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         case 1: {
             // ShowGroup: toggle visibility of a game group
             void* groupId = nullptr;
+            fn_InternalBasePtr_CheckPtr(&localElemRef);
             if (localElemRef != 0 && *(uint8_t*)(localElemRef + 0xD8) != 0) {
                 groupId = *(void**)(item + 0x58);
             }
-            Toolbar_ShowGroup_Impl((void*)gameSys, (int64_t)groupId);
+            // Must call ORIGINAL exe function — 15+ other callers share PlayerController state
+            if (fn_Toolbar_ShowGroup) {
+                fn_Toolbar_ShowGroup((void*)gameSys, (int64_t)groupId);
+            } else {
+                Toolbar_ShowGroup_Impl((void*)gameSys, (int64_t)groupId);
+            }
             break;
         }
         case 2: {
@@ -1572,6 +1583,8 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         int64_t* itemArray = *(int64_t**)(s + 0xD0);
         uintptr_t item = (uintptr_t)itemArray[selIndex];
 
+        // CheckPtr resolves lazy/weak InternalBasePtr before dereference
+        fn_InternalBasePtr_CheckPtr(element);
         // Dynamic cast the element to get toolbar controller
         void* elemObj = *(void**)element;
         void* castResult = nullptr;

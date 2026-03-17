@@ -3020,8 +3020,8 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- ToolbarDialog ---
     { "ToolbarDialog::ScalarDtor", InstallToolbarDialogScalarDtor, RemoveToolbarDialogScalarDtor, true },
-    { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, true }, // RE-ENABLED: null guards added, reimpl (no trampoline)
-    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "ToolbarDialog::Update", InstallToolbarDialogUpdate, RemoveToolbarDialogUpdate, true },
+    { "ToolbarDialog::OnEvent", InstallToolbarDialogOnEvent, RemoveToolbarDialogOnEvent, true },
 
     // --- TutorialHighlightDialog ---
     { "TutorialHighlightDialog::ScalarDtor", InstallTutorialHighlightDialogScalarDtor, RemoveTutorialHighlightDialogScalarDtor, true },
@@ -3191,9 +3191,9 @@ static ReimplEntry g_reimplementations[] = {
     { "BridgeTool::CalcCost", InstallBridgeToolCalcCost, RemoveBridgeToolCalcCost, true },
     { "DragPlacementTool::Dtor", InstallDragPlacementToolDtor, RemoveDragPlacementToolDtor, true },
     { "DragPlacementTool::Startup", InstallDragPlacementToolStartup, RemoveDragPlacementToolStartup, true },
-    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
-    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
-    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "DragPlacementTool::Draw", InstallDragPlacementToolDraw, RemoveDragPlacementToolDraw, true },
+    { "DragPlacementTool::CalcPath", InstallDragPlacementToolCalcPath, RemoveDragPlacementToolCalcPath, true },
+    { "DragPlacementTool::CalcCost", InstallDragPlacementToolCalcCost, RemoveDragPlacementToolCalcCost, true },
     { "EditTool::Dtor", InstallEditToolDtor, RemoveEditToolDtor, true },
     { "EditTool::OnKey", InstallEditToolOnKey, RemoveEditToolOnKey, true },
     { "EditTool::Startup", InstallEditToolStartup, RemoveEditToolStartup, true },
@@ -3202,11 +3202,11 @@ static ReimplEntry g_reimplementations[] = {
     { "FencedTool::Startup", InstallFencedToolStartup, RemoveFencedToolStartup, true },
     { "FencedTool::Shutdown2", InstallFencedToolShutdown2, RemoveFencedToolShutdown2, true },
     { "FencedTool::OnKey", InstallFencedToolOnKey, RemoveFencedToolOnKey, true },
-    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
-    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "FencedTool::Serialize", InstallFencedToolSerialize, RemoveFencedToolSerialize, true },
+    { "FencedTool::Draw", InstallFencedToolDraw, RemoveFencedToolDraw, true },
     { "FencedTool::Shutdown", InstallFencedToolShutdown, RemoveFencedToolShutdown, true },
-    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
-    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "FencedTool::CalcPath", InstallFencedToolCalcPath, RemoveFencedToolCalcPath, true },
+    { "FencedTool::CalcCost", InstallFencedToolCalcCost, RemoveFencedToolCalcCost, true },
     { "PathTool::Dtor", InstallPathToolDtor, RemovePathToolDtor, true },
     { "PathTool::OnKey", InstallPathToolOnKey, RemovePathToolOnKey, true },
     { "PathTool::Draw", InstallPathToolDraw, RemovePathToolDraw, true },
@@ -3214,9 +3214,9 @@ static ReimplEntry g_reimplementations[] = {
     { "PlacementTool::Dtor", InstallPlacementToolDtor, RemovePlacementToolDtor, true },
     { "PlacementTool::Startup", InstallPlacementToolStartup, RemovePlacementToolStartup, true },
     { "PlacementTool::Shutdown2", InstallPlacementToolShutdown2, RemovePlacementToolShutdown2, true },
-    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
-    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
-    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, true }, // RSP-safe passthrough (needs decompilation for deep reimpl)
+    { "PlacementTool::OnKey", InstallPlacementToolOnKey, RemovePlacementToolOnKey, true },
+    { "PlacementTool::Serialize", InstallPlacementToolSerialize, RemovePlacementToolSerialize, true },
+    { "PlacementTool::Draw", InstallPlacementToolDraw, RemovePlacementToolDraw, true },
     { "RemovalTool::Dtor", InstallRemovalToolDtor, RemoveRemovalToolDtor, true },
     { "RemovalTool::Startup", InstallRemovalToolStartup, RemoveRemovalToolStartup, true },
     { "RemovalTool::Draw", InstallRemovalToolDraw, RemoveRemovalToolDraw, true },
@@ -3389,7 +3389,7 @@ const ReimplEntry* GetReimplTable(int* outCount) {
 
 // Set to -1 to install all hooks, or a specific index to stop after that many.
 // Use for bisecting crashes: try 30 (engine core only), then 100, 200, etc.
-static constexpr int DEBUG_MAX_HOOKS = -1; // All hooks (layout bug in EventNotifyDialog::Slot7 fixed)
+static constexpr int DEBUG_MAX_HOOKS = -1; // All hooks
 
 // When non-null, only hooks whose name starts with one of these prefixes are installed.
 // Essential hooks (BuildNumber, PlatformConfigure) are always installed.
