@@ -322,7 +322,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
 
         // Set empty text on label element
         uint8_t emptyStr[16];
-        fn_String_Ctor_Default(emptyStr);
+        fn_UIString_DefaultCtor(emptyStr);
         fn_TextElement_SetText(labelElem, emptyStr);
 
         // Hide number element
