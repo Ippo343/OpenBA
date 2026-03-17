@@ -917,6 +917,52 @@ fn_Factory_GetTypeIdFromName_t fn_Factory_GetTypeIdFromName = nullptr;
 void** g_pFactorySingleton = nullptr;
 fn_IsA_t fn_IsA = nullptr;
 
+// ClearStorage helpers
+uint32_t* g_TypeId_UnknownComp_7ee8       = nullptr;  // DAT_1401c7ee8
+fn_Work_CanStartWork_t fn_Work_CanStartWork = nullptr;  // FUN_1400f7100
+fn_FindStorageDestination_t fn_FindStorageDestination = nullptr;  // FUN_14008d590
+fn_Map_CanPathTo_t fn_Map_CanPathTo = nullptr;  // FUN_1400a00f0
+fn_Work_ValidateAssignment_t fn_Work_ValidateAssignment = nullptr;  // FUN_1400f6ef0
+fn_Pathfinding_FindPath_t fn_Pathfinding_FindPath = nullptr;  // FUN_1400bf790
+fn_CitizenAI_RegisterWork_t fn_CitizenAI_RegisterWork = nullptr;  // FUN_140021a30
+fn_CitizenAI_LongTermPlan_t fn_CitizenAI_LongTermPlan = nullptr;  // FUN_140115e60
+fn_BST_Remove_t fn_BST_Remove = nullptr;  // FUN_14001a6e0
+fn_Storage_FindSlot_t fn_Storage_FindSlot = nullptr;  // FUN_14012d5d0
+fn_Entity_GetPosition_t fn_Entity_GetPosition = nullptr;  // FUN_140122e20
+
+// BuildRoad::Execute helpers
+fn_Map_CheckPassable_t fn_Map_CheckPassable = nullptr;
+fn_Map_FindNearestPassable_t fn_Map_FindNearestPassable = nullptr;
+fn_Vector3_Ctor_t fn_Vector3_Ctor = nullptr;
+fn_PerformWork_Action_Ctor_t fn_PerformWork_Action_Ctor = nullptr;
+fn_PerformWork_Action_Ctor3_t fn_PerformWork_Action_Ctor3 = nullptr;
+fn_FindStorageForResource_t fn_FindStorageForResource = nullptr;
+fn_FindComponent_WorkplaceC_t fn_FindComponent_WorkplaceC = nullptr;
+fn_FindComponent_BuildStateC_t fn_FindComponent_BuildStateC = nullptr;
+fn_FindComponent_StorageLocC_t fn_FindComponent_StorageLocC = nullptr;
+fn_TryAssignWorkplace_t fn_TryAssignWorkplace = nullptr;
+fn_FindComponent_RawMaterialC_t fn_FindComponent_RawMaterialC = nullptr;
+fn_GetRemainingCapacity_t fn_GetRemainingCapacity = nullptr;
+fn_BuildRoad_QueryStorage_t fn_BuildRoad_QueryStorage = nullptr;
+
+// BuildStructure support
+fn_Work_SerializeBase_t fn_Work_SerializeBase = nullptr;
+fn_BST_SerializeHelper_t fn_BST_SerializeHelper = nullptr;
+fn_Entity_FindComponent_Position_t fn_Entity_FindComponent_Position = nullptr;
+fn_Entity_FindComponent_Build_t fn_Entity_FindComponent_Build = nullptr;
+fn_Entity_FindComponent_BuildDesc_t fn_Entity_FindComponent_BuildDesc = nullptr;
+fn_Entity_FindComponent_MatDesc_t fn_Entity_FindComponent_MatDesc = nullptr;
+fn_PositionComponent_Count_t fn_PositionComponent_Count = nullptr;
+fn_CalcMaxBuilders_t fn_CalcMaxBuilders = nullptr;
+fn_Entity_GetPositionForIndex_t fn_Entity_GetPositionForIndex = nullptr;
+fn_Map_Invalidate_t fn_Map_Invalidate = nullptr;
+fn_Map_CalcPathCost_t fn_Map_CalcPathCost = nullptr;
+fn_Map_NeighborLookup_t fn_Map_NeighborLookup = nullptr;
+fn_Map_CalcPathDist_t fn_Map_CalcPathDist = nullptr;
+fn_Map_CachePathDist_t fn_Map_CachePathDist = nullptr;
+fn_SetupBuildActions_t fn_SetupBuildActions = nullptr;
+fn_BST_Insert_t fn_BST_Insert = nullptr;
+
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
 // ============================================================
@@ -1110,6 +1156,14 @@ void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
     }
     *pCount = newCount;
 }
+
+// ============================================================
+// BuildStructure Work class helpers
+// ============================================================
+fn_TreeRemoveByKey_t fn_TreeRemoveByKey = nullptr;
+fn_TreeRecursiveFree_t fn_TreeRecursiveFree = nullptr;
+fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor = nullptr;
+fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 
 // ============================================================
 // Initialization
@@ -2869,7 +2923,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140014890));
     fn_BST_FreeNodes = reinterpret_cast<fn_BST_FreeNodes_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
-
     // --- Inventory sort ---
     fn_InventorySort_Asc = reinterpret_cast<fn_InventorySort_Asc_t>(
         ResolveAddr(Module::Exe, 0x140015200));
@@ -3667,6 +3720,103 @@ bool EngineFuncsInit() {
         printf("[EngineFuncs] Phase H: FindDialogByName_Impl, Game_TriggerDisasterByType_Impl, "
                "Game_SpawnResources_Impl now available as inline replacements\n");
     }
+#endif
+
+    // --- Phase I: Work class helpers ---
+    fn_TreeRemoveByKey = reinterpret_cast<fn_TreeRemoveByKey_t>(
+        ResolveAddr(Module::Exe, 0x140025520));
+    fn_TreeRecursiveFree = reinterpret_cast<fn_TreeRecursiveFree_t>(
+        ResolveAddr(Module::Exe, 0x140014c30));
+    fn_ObjectInternal_Dtor = reinterpret_cast<fn_ObjectInternal_Dtor_t>(
+        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152770)));
+    fn_StateMachine_ReleaseTasks = reinterpret_cast<fn_StateMachine_ReleaseTasks_t>(
+        ResolveAddr(Module::Exe, 0x1400c5400));
+    fn_Map_CheckPassable = reinterpret_cast<fn_Map_CheckPassable_t>(
+        ResolveAddr(Module::Exe, 0x1400a00f0));
+    fn_Map_FindNearestPassable = reinterpret_cast<fn_Map_FindNearestPassable_t>(
+        ResolveAddr(Module::Exe, 0x14009ccf0));
+    fn_Vector3_Ctor = *reinterpret_cast<fn_Vector3_Ctor_t*>(
+        ResolveAddr(Module::Exe, 0x140152a30));
+    fn_PerformWork_Action_Ctor = reinterpret_cast<fn_PerformWork_Action_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400bffd0));
+    fn_PerformWork_Action_Ctor3 = reinterpret_cast<fn_PerformWork_Action_Ctor3_t>(
+        ResolveAddr(Module::Exe, 0x1400c1eb0));
+    fn_FindStorageForResource = reinterpret_cast<fn_FindStorageForResource_t>(
+        ResolveAddr(Module::Exe, 0x14008d590));
+    fn_FindComponent_WorkplaceC = reinterpret_cast<fn_FindComponent_WorkplaceC_t>(
+        ResolveAddr(Module::Exe, 0x1400223c0));
+    fn_FindComponent_BuildStateC = reinterpret_cast<fn_FindComponent_BuildStateC_t>(
+        ResolveAddr(Module::Exe, 0x1400052c0));
+    fn_FindComponent_StorageLocC = reinterpret_cast<fn_FindComponent_StorageLocC_t>(
+        ResolveAddr(Module::Exe, 0x140003050));
+    fn_TryAssignWorkplace = reinterpret_cast<fn_TryAssignWorkplace_t>(
+        ResolveAddr(Module::Exe, 0x1400f8620));
+    fn_FindComponent_RawMaterialC = reinterpret_cast<fn_FindComponent_RawMaterialC_t>(
+        ResolveAddr(Module::Exe, 0x140006330));
+    fn_GetRemainingCapacity = reinterpret_cast<fn_GetRemainingCapacity_t>(
+        ResolveAddr(Module::Exe, 0x140116540));
+    fn_CitizenAI_LongTermPlan = reinterpret_cast<fn_CitizenAI_LongTermPlan_t>(
+        ResolveAddr(Module::Exe, 0x140115e60));
+    fn_BuildRoad_QueryStorage = reinterpret_cast<fn_BuildRoad_QueryStorage_t>(
+        ResolveAddr(Module::Exe, 0x14012ce70));
+    // ClearStorage-specific helpers
+    g_TypeId_UnknownComp_7ee8 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ee8));
+    fn_Work_CanStartWork = reinterpret_cast<fn_Work_CanStartWork_t>(
+        ResolveAddr(Module::Exe, 0x1400f7100));
+    fn_FindStorageDestination = reinterpret_cast<fn_FindStorageDestination_t>(
+        ResolveAddr(Module::Exe, 0x14008d590));
+    fn_Map_CanPathTo = reinterpret_cast<fn_Map_CanPathTo_t>(
+        ResolveAddr(Module::Exe, 0x1400a00f0));
+    fn_Work_ValidateAssignment = reinterpret_cast<fn_Work_ValidateAssignment_t>(
+        ResolveAddr(Module::Exe, 0x1400f6ef0));
+    fn_Pathfinding_FindPath = reinterpret_cast<fn_Pathfinding_FindPath_t>(
+        ResolveAddr(Module::Exe, 0x1400bf790));
+    fn_CitizenAI_RegisterWork = reinterpret_cast<fn_CitizenAI_RegisterWork_t>(
+        ResolveAddr(Module::Exe, 0x140021a30));
+    fn_BST_Remove = reinterpret_cast<fn_BST_Remove_t>(
+        ResolveAddr(Module::Exe, 0x14001a6e0));
+    fn_Storage_FindSlot = reinterpret_cast<fn_Storage_FindSlot_t>(
+        ResolveAddr(Module::Exe, 0x14012d5d0));
+    fn_Entity_GetPosition = reinterpret_cast<fn_Entity_GetPosition_t>(
+        ResolveAddr(Module::Exe, 0x140122e20));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Phase I: Work class helpers resolved\n");
+#endif
+    // --- BuildStructure support ---
+    fn_Work_SerializeBase = reinterpret_cast<fn_Work_SerializeBase_t>(
+        ResolveAddr(Module::Exe, 0x1400f7400));
+    fn_BST_SerializeHelper = reinterpret_cast<fn_BST_SerializeHelper_t>(
+        ResolveAddr(Module::Exe, 0x1400296b0));
+    fn_Entity_FindComponent_Position = reinterpret_cast<fn_Entity_FindComponent_Position_t>(
+        ResolveAddr(Module::Exe, 0x140002ed0));
+    fn_Entity_FindComponent_Build = reinterpret_cast<fn_Entity_FindComponent_Build_t>(
+        ResolveAddr(Module::Exe, 0x14000d6c0));
+    fn_Entity_FindComponent_BuildDesc = reinterpret_cast<fn_Entity_FindComponent_BuildDesc_t>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+    fn_Entity_FindComponent_MatDesc = reinterpret_cast<fn_Entity_FindComponent_MatDesc_t>(
+        ResolveAddr(Module::Exe, 0x140003050));
+    fn_PositionComponent_Count = reinterpret_cast<fn_PositionComponent_Count_t>(
+        ResolveAddr(Module::Exe, 0x140123070));
+    fn_CalcMaxBuilders = reinterpret_cast<fn_CalcMaxBuilders_t>(
+        ResolveAddr(Module::Exe, 0x14012e5c0));
+    fn_Entity_GetPositionForIndex = reinterpret_cast<fn_Entity_GetPositionForIndex_t>(
+        ResolveAddr(Module::Exe, 0x140122e20));
+    fn_Map_Invalidate = reinterpret_cast<fn_Map_Invalidate_t>(
+        ResolveAddr(Module::Exe, 0x14009c480));
+    fn_Map_CalcPathCost = reinterpret_cast<fn_Map_CalcPathCost_t>(
+        ResolveAddr(Module::Exe, 0x14009f810));
+    fn_Map_NeighborLookup = reinterpret_cast<fn_Map_NeighborLookup_t>(
+        ResolveAddr(Module::Exe, 0x14009d0a0));
+    fn_Map_CalcPathDist = reinterpret_cast<fn_Map_CalcPathDist_t>(
+        ResolveAddr(Module::Exe, 0x1400a8ba0));
+    fn_Map_CachePathDist = reinterpret_cast<fn_Map_CachePathDist_t>(
+        ResolveAddr(Module::Exe, 0x1400a5b30));
+    fn_SetupBuildActions = reinterpret_cast<fn_SetupBuildActions_t>(
+        ResolveAddr(Module::Exe, 0x1400c0690));
+    fn_BST_Insert = reinterpret_cast<fn_BST_Insert_t>(
+        ResolveAddr(Module::Exe, 0x140021a30));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved\n");
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

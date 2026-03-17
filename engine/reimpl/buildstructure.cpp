@@ -9,8 +9,8 @@
 //   [0]  ScalarDtor    = 0x140029680   <-- passthrough
 //   [1]  VectorDtor    = 0x140029620
 //   [2]  BaseDtor      = 0x140029610
-//   [3]  Serialize     = 0x1400e5850   <-- passthrough (complex, array serialization)
-//   [4]  Execute       = 0x1400e4fc0   <-- passthrough (very complex building logic)
+//   [3]  Serialize     = 0x1400e5850   <-- REIMPLEMENTED (clean C++)
+//   [4]  Execute       = 0x1400e4fc0   <-- REIMPLEMENTED (clean C++)
 //   [5]  Shared        = 0x1400f7540
 //   [6]  OnComplete    = 0x1400e4f80   <-- passthrough
 //   [7]  OnCancel      = 0x1400e4f40   <-- passthrough
@@ -19,12 +19,14 @@
 //   [10] GetTarget     = 0x1400e5830
 //   [11] GetPriority   = 0x140029670
 //
-// Constructor reimplemented. All vtable methods passthrough.
+// Constructor reimplemented. Serialize and Execute call clean code in
+// code/Game/Work/buildstructure.cpp.
 
 #include "BuildActions.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Work/buildstructure_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -40,6 +42,10 @@ static fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 static HookInfo g_hookCtor;
 static HookInfo g_hookScalarDtor;
 static HookInfo g_hookSerialize;
+static HookInfo g_hookExecute;
+static HookInfo g_hookOnComplete;
+static HookInfo g_hookOnCancel;
+static HookInfo g_hookCleanup;
 
 // ============================================================
 // Constructor (0x1400e5a90)
@@ -81,11 +87,46 @@ static void* Reimpl_ScalarDtor(BuildStructure* self, uint32_t flags) {
 }
 
 // ============================================================
-// Serialize (0x1400e5850) — passthrough
+// Serialize (0x1400e5850) — calls clean reimplementation
 // ============================================================
 static void Reimpl_Serialize(BuildStructure* self, void* stream) {
     g_lastHook = "BuildStructure::Serialize";
-    ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
+    BuildStructure_Serialize(self, stream);
+}
+
+// ============================================================
+// Execute (0x1400e4fc0) — calls clean reimplementation
+// Returns int (NOT bool) per bug class 7.
+// ============================================================
+static int Reimpl_Execute(BuildStructure* self, void* citizenPtr) {
+    g_lastHook = "BuildStructure::Execute";
+    return BuildStructure_Execute(self, citizenPtr);
+}
+
+// ============================================================
+// OnComplete (0x1400e4f80) — reimplemented
+// ============================================================
+static void Reimpl_OnComplete(BuildStructure* self, void* citizenIBP,
+                               void* unused, int slotIndex) {
+    g_lastHook = "BuildStructure::OnComplete";
+    BuildStructure_OnComplete(self, citizenIBP, unused, slotIndex);
+}
+
+// ============================================================
+// OnCancel (0x1400e4f40) — reimplemented
+// ============================================================
+static void Reimpl_OnCancel(BuildStructure* self, void* citizenIBP,
+                             void* unused, int slotIndex) {
+    g_lastHook = "BuildStructure::OnCancel";
+    BuildStructure_OnCancel(self, citizenIBP, unused, slotIndex);
+}
+
+// ============================================================
+// Cleanup (0x1400e57a0) — reimplemented
+// ============================================================
+static void Reimpl_Cleanup(BuildStructure* self) {
+    g_lastHook = "BuildStructure::Cleanup";
+    BuildStructure_Cleanup(self);
 }
 
 // ============================================================
@@ -128,7 +169,46 @@ void InstallBuildStructureSerialize() {
     uintptr_t target = ResolveAddr(Module::Exe, BuildStructureAddr::Serialize);
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
-    printf("[BuildStructure] Serialize hooked at %p\n", (void*)target);
+    printf("[BuildStructure] Serialize hooked at %p -> clean reimpl\n", (void*)target);
 #endif
 }
 void RemoveBuildStructureSerialize() { RemoveHook(&g_hookSerialize); }
+
+void InstallBuildStructureExecute() {
+    // Prologue: MOV [RSP+0x10],RDX (5) + PUSH RBP/RBX/RSI/RDI (4) + PUSH R12/R13 (4) = 13 bytes
+    // The MOV [RSP+0x10],RDX is bug class 4 (RSP-relative store) but we never call
+    // the trampoline, so it's safe — we fully reimplement in clean C++.
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e4fc0);
+    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 13);
+#ifdef _DEBUG
+    printf("[BuildStructure] Execute hooked at %p -> clean reimpl\n", (void*)target);
+#endif
+}
+void RemoveBuildStructureExecute() { RemoveHook(&g_hookExecute); }
+
+void InstallBuildStructureOnComplete() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e4f80);
+    InstallHook(target, (void*)Reimpl_OnComplete, &g_hookOnComplete, 13);
+#ifdef _DEBUG
+    printf("[BuildStructure] OnComplete hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveBuildStructureOnComplete() { RemoveHook(&g_hookOnComplete); }
+
+void InstallBuildStructureOnCancel() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e4f40);
+    InstallHook(target, (void*)Reimpl_OnCancel, &g_hookOnCancel, 13);
+#ifdef _DEBUG
+    printf("[BuildStructure] OnCancel hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveBuildStructureOnCancel() { RemoveHook(&g_hookOnCancel); }
+
+void InstallBuildStructureCleanup() {
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e57a0);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 13);
+#ifdef _DEBUG
+    printf("[BuildStructure] Cleanup hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveBuildStructureCleanup() { RemoveHook(&g_hookCleanup); }

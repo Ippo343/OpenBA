@@ -26,16 +26,25 @@ namespace BuildRoadAddr {
     constexpr uintptr_t Vtable       = 0x140161020;
     constexpr uintptr_t ScalarDtor   = 0x1400295b0;
     constexpr uintptr_t Serialize    = 0x1400e4980;
+    constexpr uintptr_t Execute      = 0x1400e4190;
+    constexpr uintptr_t OnComplete   = 0x1400e4150;
+    constexpr uintptr_t OnCancel     = 0x1400e4120;
+    constexpr uintptr_t Cleanup      = 0x1400e4910;
+    constexpr uintptr_t Validate     = 0x1400e40c0;
+    constexpr uintptr_t GetTarget    = 0x1400e4960;
+    constexpr uintptr_t GetPriority  = 0x1400295a0;
+    constexpr uintptr_t WorkVtable   = 0x140161a80;
+    constexpr uintptr_t TypeInfo     = 0x1401c6860;
 }
 
 struct BuildRoad {
     // --- Work base (0x48 bytes) ---
     void*    vtable;             // +0x00: -> 0x140161020
     uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr (zeroed)
+    void*    field_10;           // +0x10: entity ptr (citizen InternalBasePtr)
     void*    field_18;           // +0x18: entity ptr (zeroed)
-    int32_t  field_20;           // +0x20: -1 sentinel
-    int32_t  field_24;           // +0x24: 0
+    int32_t  field_20;           // +0x20: work ID (-1 sentinel)
+    int32_t  field_24;           // +0x24: priority (0)
     int32_t  field_28;           // +0x28: -1 sentinel
     int32_t  field_2c;           // +0x2C: 0
     void*    field_30;           // +0x30: zeroed
@@ -44,23 +53,32 @@ struct BuildRoad {
     uint8_t  _pad44[4];          // +0x44: padding
 
     // --- BuildRoad fields ---
-    void*    field_48;           // +0x48: zeroed (InternalBasePtr)
-    void*    field_50;           // +0x50: zeroed
-    int32_t  field_58;           // +0x58: -1 sentinel
-    int32_t  field_5c;           // +0x5C: 2 (road type?)
-    uint8_t  _fields60[0x10];    // +0x60: remaining fields
+    void*    field_48;           // +0x48: InternalBasePtr — target entity (zeroed)
+    void*    field_50;           // +0x50: ExternalPtr — building description (zeroed)
+    int32_t  field_58;           // +0x58: map cell index (-1 sentinel)
+    int32_t  field_5c;           // +0x5C: road type (2 = default)
+    int32_t  field_60;           // +0x60: material type (0xff default if version < 1)
+    int32_t  field_64;           // +0x64: field (serialized, version >= 1)
+    int32_t  field_68;           // +0x68: material count (2 default if version < 1)
+    uint8_t  _pad6c[4];          // +0x6C: padding
 };
 
 static_assert(sizeof(BuildRoad) == 0x70, "BuildRoad size mismatch");
 static_assert(offsetof(BuildRoad, vtable) == 0x00, "");
 static_assert(offsetof(BuildRoad, field_48) == 0x48, "");
 static_assert(offsetof(BuildRoad, field_58) == 0x58, "");
+static_assert(offsetof(BuildRoad, field_60) == 0x60, "");
+static_assert(offsetof(BuildRoad, field_68) == 0x68, "");
 
 // ============================================================
 // BuildStructure — structure construction work. Size = 0x70.
 // Ctor: 0x1400e5a90, Vtable: 0x1401610a0, Factory: 0x140029630
 // Inherits: Object::Internal -> Work (0x48) -> BuildStructure
 // BaseDtor: 0x1400e5920
+//
+// Manages citizen work assignments for building structures.
+// Maintains a slot array (per-build-point availability) and a
+// binary tree of assigned citizens (InternalBasePtr keys).
 // ============================================================
 namespace BuildStructureAddr {
     constexpr uintptr_t Ctor         = 0x1400e5a90;
@@ -69,39 +87,51 @@ namespace BuildStructureAddr {
     constexpr uintptr_t ScalarDtor   = 0x140029680;
     constexpr uintptr_t BaseDtor     = 0x1400e5920;
     constexpr uintptr_t Serialize    = 0x1400e5850;
+    constexpr uintptr_t Execute      = 0x1400e4fc0;
+    constexpr uintptr_t OnComplete   = 0x1400e4f80;
+    constexpr uintptr_t OnCancel     = 0x1400e4f40;
+    constexpr uintptr_t Cleanup      = 0x1400e57a0;
+    constexpr uintptr_t Validate     = 0x1400e4be0;
+    constexpr uintptr_t GetTarget    = 0x1400e5830;
+    constexpr uintptr_t GetPriority  = 0x140029670;
 }
 
 struct BuildStructure {
     // --- Work base (0x48 bytes) ---
     void*    vtable;             // +0x00: -> 0x1401610a0
     uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr
-    void*    field_18;           // +0x18: entity ptr
-    int32_t  field_20;           // +0x20: -1
-    int32_t  field_24;           // +0x24: 0
-    int32_t  field_28;           // +0x28: -1
-    int32_t  field_2c;           // +0x2C: 0
-    void*    field_30;           // +0x30: zeroed
-    void*    field_38;           // +0x38: zeroed
-    int32_t  field_40;           // +0x40: 0
+    void*    field_10;           // +0x10: entity ptr (building being constructed)
+    void*    field_18;           // +0x18: entity ptr (storage location)
+    int32_t  field_20;           // +0x20: task ID (-1 sentinel)
+    int32_t  field_24;           // +0x24: task sub-ID
+    int32_t  field_28;           // +0x28: secondary ID (-1 sentinel)
+    int32_t  field_2c;           // +0x2C: secondary sub-ID
+    void*    field_30;           // +0x30: time start (zeroed)
+    void*    field_38;           // +0x38: time end (zeroed)
+    int32_t  field_40;           // +0x40: flags/state (0)
     uint8_t  _pad44[4];          // +0x44: padding
 
     // --- BuildStructure fields ---
-    // Note: ctor doesn't init +0x48, starts at +0x50
-    uint8_t  field_48;           // +0x48: bool (serialized)
+    // Note: ctor doesn't init +0x48/+0x4C (set by Serialize or caller)
+    uint8_t  field_48;           // +0x48: bool — serialized flag (has initial setup?)
     uint8_t  _pad49[3];          // +0x49: padding
-    int32_t  field_4c;           // +0x4C: int (serialized)
-    void*    field_50;           // +0x50: array ptr (zeroed)
-    int32_t  field_58;           // +0x58: count (zeroed)
+    int32_t  field_4c;           // +0x4C: current slot index (round-robin for assignment)
+    void*    field_50;           // +0x50: slot availability array (byte per build point, 0=free 1=busy)
+    int32_t  field_58;           // +0x58: slot count (number of build points)
     uint8_t  _pad5c[4];          // +0x5C: padding
-    void*    field_60;           // +0x60: tree node ptr (zeroed)
-    int32_t  field_68;           // +0x68: 0
+    void*    field_60;           // +0x60: binary tree root (citizen assignment tree, nodes 0x20 bytes)
+    int32_t  field_68;           // +0x68: priority counter (GetPriority returns field_68 > 0)
     uint8_t  _pad6c[4];          // +0x6C: padding
 };
 
 static_assert(sizeof(BuildStructure) == 0x70, "BuildStructure size mismatch");
 static_assert(offsetof(BuildStructure, vtable) == 0x00, "");
+static_assert(offsetof(BuildStructure, field_48) == 0x48, "");
+static_assert(offsetof(BuildStructure, field_4c) == 0x4C, "");
 static_assert(offsetof(BuildStructure, field_50) == 0x50, "");
+static_assert(offsetof(BuildStructure, field_58) == 0x58, "");
+static_assert(offsetof(BuildStructure, field_60) == 0x60, "");
+static_assert(offsetof(BuildStructure, field_68) == 0x68, "");
 
 // ============================================================
 // ClearArea — area clearing work. Size = 0x78.
@@ -115,6 +145,13 @@ namespace ClearAreaAddr {
     constexpr uintptr_t ScalarDtor   = 0x140029870;
     constexpr uintptr_t BaseDtor     = 0x1400e6810;
     constexpr uintptr_t Serialize    = 0x1400e6740;
+    constexpr uintptr_t Execute      = 0x1400e5ee0;
+    constexpr uintptr_t OnComplete   = 0x1400e5e30;
+    constexpr uintptr_t OnCancel     = 0x1400e5e00;
+    constexpr uintptr_t Cleanup      = 0x1400e6650;
+    constexpr uintptr_t Validate     = 0x1400e5b10;  // bug class 3 - unhookable
+    constexpr uintptr_t GetTarget    = 0x1400e6720;
+    constexpr uintptr_t GetPriority  = 0x140029860;  // 9 bytes - too small to hook
 }
 
 struct ClearArea {
@@ -133,16 +170,16 @@ struct ClearArea {
     uint8_t  _pad44[4];          // +0x44: padding
 
     // --- ClearArea fields ---
-    void*    field_48;           // +0x48: tree node ptr (zeroed)
-    int32_t  field_50;           // +0x50: count (zeroed)
+    void*    field_48;           // +0x48: BST root — entities to clear (InternalBasePtr tree nodes)
+    int32_t  field_50;           // +0x50: entity tree count
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: tree node ptr (zeroed)
-    int32_t  field_60;           // +0x60: count (zeroed)
+    void*    field_58;           // +0x58: BST root — cell indices to clear (int tree nodes)
+    int32_t  field_60;           // +0x60: cell tree count
     uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: InternalBasePtr (zeroed)
-    uint8_t  field_70;           // +0x70: bool (serialized)
-    uint8_t  field_71;           // +0x71: bool (serialized, version >= 1)
-    uint8_t  field_72;           // +0x72: bool (serialized, version >= 1)
+    void*    field_68;           // +0x68: InternalBasePtr — map component entity
+    uint8_t  field_70;           // +0x70: bool — clear trees/resources
+    uint8_t  field_71;           // +0x71: bool — clear ground (version >= 1)
+    uint8_t  field_72;           // +0x72: bool — clear buildings (version >= 1)
     uint8_t  _pad73[5];          // +0x73: padding
 };
 

@@ -1,0 +1,1064 @@
+// code/Game/Work/cleararea.cpp
+// Clean reimplementation of ClearArea Work action.
+//
+// ClearArea (0x78 bytes) -- area clearing work action.
+// Inherits: Object::Internal -> Work (0x48) -> ClearArea
+// Ctor: 0x1400e68d0, Vtable: 0x140161110
+//
+// Fields:
+//   +0x48: void* treeRoot   -- BST of InternalBasePtrs (entities to clear)
+//   +0x50: int treeCount    -- number of entries in +0x48 tree
+//   +0x58: void* cellRoot   -- BST of cell indices (ground cells to clear)
+//   +0x60: int cellCount    -- number of entries in +0x58 tree
+//   +0x68: void* mapEntity  -- InternalBasePtr to map component entity
+//   +0x70: bool clearTrees  -- whether to clear trees/resources
+//   +0x71: bool clearGround -- whether to clear ground (v1+)
+//   +0x72: bool clearBuildings -- whether to clear buildings (v1+)
+//
+// Decompiled from Application-x64.exe.
+
+#include "Work/cleararea_funcs.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+// ============================================================
+// Local function pointers (resolved once on first use)
+// ============================================================
+
+// Object::Internal::Internal — ctor for base class
+typedef void* (*fn_ObjectInternal_Ctor_t)(void* self);
+static fn_ObjectInternal_Ctor_t s_fn_ObjectInternal_Ctor = nullptr;
+
+// Object::Internal::~Internal — dtor for base class (tail-called by BaseDtor)
+typedef void (*fn_ObjectInternal_Dtor_t)(void* self);
+static fn_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
+
+// Work base Serialize at 0x1400f7400
+typedef void (*fn_Work_Serialize_t)(void* self, void* stream);
+static fn_Work_Serialize_t s_fn_Work_Serialize = nullptr;
+
+// IO::Serializer ctor/dtor
+typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
+
+typedef void (*fn_Serializer_Dtor_t)(void* self);
+static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
+
+typedef void (*fn_Serialize_Bool_t)(void* self, void* field, const char* name);
+static fn_Serialize_Bool_t s_fn_Serialize_Bool = nullptr;
+
+typedef int (*fn_Serializer_GetVersion_t)(void* self);
+static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
+
+// BST serialization helpers
+// ClearArea_helper_9c10: serializes tree at +0x48 (InternalBasePtr BST)
+typedef void (*fn_BST_Serialize_IBP_t)(void* bst, void* serializer);
+static fn_BST_Serialize_IBP_t s_fn_BST_Serialize_IBP = nullptr;  // 0x140029c10
+
+// TradeDescription_impl_9de0: serializes tree at +0x58 (cell index BST)
+typedef void (*fn_BST_Serialize_Cell_t)(void* bst, void* serializer);
+static fn_BST_Serialize_Cell_t s_fn_BST_Serialize_Cell = nullptr;  // 0x140029de0
+
+// FUN_140002340: InternalBasePtr serialize
+typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
+static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;  // 0x140002340
+
+// BST tree node operations
+// ClearArea_helper_98a0: insert into IBP BST at +0x48
+typedef void (*fn_BST_Insert_IBP_t)(void* bst, void* entry);
+static fn_BST_Insert_IBP_t s_fn_BST_Insert_IBP = nullptr;  // 0x1400298a0
+
+// TradeDescription_impl_ca60: remove node from BST (local variant, returns void*)
+typedef void* (*fn_BST_RemoveLocal_t)(void* bst, void* node);
+static fn_BST_RemoveLocal_t s_fn_BST_Remove = nullptr;  // 0x14001ca60
+
+// FUN_14000e320: recursive free of tree branch
+typedef void (*fn_TreeNodeFree_t)(void* tree, void* branch);
+static fn_TreeNodeFree_t s_fn_TreeNodeFree = nullptr;  // 0x14000e320
+
+// FUN_1400c5400: remove pending action from state machine
+typedef void (*fn_RemovePendingAction_t)(void* smActionList);
+static fn_RemovePendingAction_t s_fn_RemovePendingAction = nullptr;  // 0x1400c5400
+
+// Cached vtable addresses
+static void* s_vtable_Work = nullptr;
+static void* s_vtable_ClearArea = nullptr;
+
+// ============================================================
+// Lazy resolver — called once before first use
+// ============================================================
+static bool s_resolved = false;
+
+static bool ResolveAll() {
+    if (s_resolved) return true;
+
+    // Object::Internal ctor — indirect through dispatch table
+    uintptr_t ctorSlot = ResolveAddr(Module::Exe, 0x140152768);
+    if (ctorSlot)
+        s_fn_ObjectInternal_Ctor = reinterpret_cast<fn_ObjectInternal_Ctor_t>(
+            *reinterpret_cast<uintptr_t*>(ctorSlot));
+
+    // Object::Internal dtor — indirect through dispatch table
+    uintptr_t dtorSlot = ResolveAddr(Module::Exe, 0x140152770);
+    if (dtorSlot)
+        s_fn_ObjectInternal_Dtor = reinterpret_cast<fn_ObjectInternal_Dtor_t>(
+            *reinterpret_cast<uintptr_t*>(dtorSlot));
+
+    // Work base serialize
+    s_fn_Work_Serialize = reinterpret_cast<fn_Work_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1400f7400));
+
+    // IO::Serializer (IAT slots)
+    uintptr_t iatCtor = ResolveAddr(Module::Exe, 0x140152ad8);
+    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152ad0);
+    if (iatCtor) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(iatCtor);
+    if (iatDtor) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(iatDtor);
+
+    // IO::Serializer::Serialize(bool) and GetVersion from globals
+    s_fn_Serialize_Bool = reinterpret_cast<fn_Serialize_Bool_t>((void*)g_fn_Serialize_Bool);
+    s_fn_Serializer_GetVersion = reinterpret_cast<fn_Serializer_GetVersion_t>((void*)g_fn_Serializer_GetVersion);
+
+    // BST serialization
+    s_fn_BST_Serialize_IBP = reinterpret_cast<fn_BST_Serialize_IBP_t>(
+        ResolveAddr(Module::Exe, 0x140029c10));
+    s_fn_BST_Serialize_Cell = reinterpret_cast<fn_BST_Serialize_Cell_t>(
+        ResolveAddr(Module::Exe, 0x140029de0));
+    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x140002340));
+
+    // BST operations
+    s_fn_BST_Insert_IBP = reinterpret_cast<fn_BST_Insert_IBP_t>(
+        ResolveAddr(Module::Exe, 0x1400298a0));
+    s_fn_BST_Remove = reinterpret_cast<fn_BST_RemoveLocal_t>(
+        ResolveAddr(Module::Exe, 0x14001ca60));
+    s_fn_TreeNodeFree = reinterpret_cast<fn_TreeNodeFree_t>(
+        ResolveAddr(Module::Exe, 0x14000e320));
+    s_fn_RemovePendingAction = reinterpret_cast<fn_RemovePendingAction_t>(
+        ResolveAddr(Module::Exe, 0x1400c5400));
+
+    // Vtable pointers
+    s_vtable_Work = (void*)ResolveAddr(Module::Exe, 0x140161a80);
+    s_vtable_ClearArea = (void*)ResolveAddr(Module::Exe, ClearAreaAddr::Vtable);
+
+    s_resolved = true;
+    return (s_fn_ObjectInternal_Ctor != nullptr);
+}
+
+// ============================================================
+// ClearArea::Ctor (0x1400e68d0)
+// ============================================================
+void* ClearArea_Ctor(ClearArea* self) {
+    ResolveAll();
+
+    s_fn_ObjectInternal_Ctor(self);
+
+    // Work base fields
+    self->vtable = s_vtable_Work;
+    self->field_10 = nullptr;
+    self->field_18 = nullptr;
+    self->field_20 = -1;
+    self->field_24 = 0;
+    self->field_28 = -1;
+    self->field_2c = 0;
+    self->field_30 = nullptr;
+    self->field_38 = nullptr;
+    self->field_40 = 0;
+
+    // Set ClearArea vtable
+    self->vtable = s_vtable_ClearArea;
+
+    // ClearArea fields
+    self->field_48 = nullptr;  // tree root
+    self->field_50 = 0;        // tree count
+    self->field_58 = nullptr;  // cell tree root
+    self->field_60 = 0;        // cell count
+    self->field_68 = nullptr;  // map entity IBP
+
+    return self;
+}
+
+// ============================================================
+// ClearArea::BaseDtor (0x1400e6810)
+// ============================================================
+// Destroys ClearArea-specific data: frees both BST trees,
+// resets vtable to Work, then tail-calls Internal::~Internal.
+void ClearArea_BaseDtor(ClearArea* self) {
+    ResolveAll();
+
+    // Set ClearArea vtable (in case called from derived)
+    self->vtable = s_vtable_ClearArea;
+
+    // Free cell tree (+0x58)
+    void* cellRoot = self->field_58;
+    if (cellRoot) {
+        // Recursively free left subtree, then right subtree, then root
+        s_fn_TreeNodeFree(&self->field_58, *(void**)((uintptr_t)cellRoot + 0x18));
+        s_fn_TreeNodeFree(&self->field_58, *(void**)((uintptr_t)cellRoot + 0x20));
+        fn_MemFreeStatic(cellRoot);
+    }
+    self->field_58 = nullptr;
+    self->field_60 = 0;
+
+    // Free entity tree (+0x48)
+    void* treeRoot = self->field_48;
+    if (treeRoot) {
+        s_fn_TreeNodeFree(&self->field_48, *(void**)((uintptr_t)treeRoot + 0x18));
+        s_fn_TreeNodeFree(&self->field_48, *(void**)((uintptr_t)treeRoot + 0x20));
+        fn_MemFreeStatic(treeRoot);
+    }
+    self->field_48 = nullptr;
+    self->field_50 = 0;
+
+    // Reset to Work vtable and call Internal::~Internal
+    self->vtable = s_vtable_Work;
+    s_fn_ObjectInternal_Dtor(self);
+}
+
+// ============================================================
+// ClearArea::ScalarDtor (0x140029870)
+// ============================================================
+void* ClearArea_ScalarDtor(ClearArea* self, uint32_t flags) {
+    ClearArea_BaseDtor(self);
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+    return self;
+}
+
+// ============================================================
+// ClearArea::Serialize (0x1400e6740)
+// ============================================================
+// Pattern: Work_Serialize + Serializer(v1) + BST_Serialize(+0x48) +
+//          IBP_Serialize(+0x68) + Bool(+0x70) + [v1: BST_Cell(+0x58) +
+//          Bool(+0x71) + Bool(+0x72)]
+void ClearArea_Serialize(ClearArea* self, void* stream) {
+    ResolveAll();
+
+    // Serialize Work base class
+    s_fn_Work_Serialize(self, stream);
+
+    // Create Serializer with version=1
+    uint8_t serializerBuf[24];
+    s_fn_Serializer_Ctor(serializerBuf, stream, 1);
+
+    // Serialize entity BST at +0x48
+    s_fn_BST_Serialize_IBP(&self->field_48, serializerBuf);
+
+    // Serialize map entity InternalBasePtr at +0x68
+    s_fn_IBP_Serialize(&self->field_68, serializerBuf);
+
+    // Serialize clearTrees bool at +0x70
+    s_fn_Serialize_Bool(serializerBuf, &self->field_70, nullptr);
+
+    // Version >= 1: serialize additional fields
+    int version = s_fn_Serializer_GetVersion(serializerBuf);
+    if (version > 0) {
+        // Serialize cell BST at +0x58
+        s_fn_BST_Serialize_Cell(&self->field_58, serializerBuf);
+
+        // Serialize clearGround bool at +0x71
+        s_fn_Serialize_Bool(serializerBuf, &self->field_71, nullptr);
+
+        // Serialize clearBuildings bool at +0x72
+        s_fn_Serialize_Bool(serializerBuf, &self->field_72, nullptr);
+    }
+
+    // Destroy serializer
+    s_fn_Serializer_Dtor(serializerBuf);
+}
+
+// ============================================================
+// ClearArea::OnComplete (0x1400e5e30)
+// ============================================================
+// Called when a work task completes. Inserts completed entry into
+// the entity tree (+0x48) if entry is non-null, then searches
+// the cell tree (+0x58) for the given cellIndex and removes it.
+//
+// Params: self, citizen (unused), treeEntry (IBP*), cellIndex
+void ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, int cellIndex) {
+    ResolveAll();
+
+    // If treeEntry is non-null, insert into entity BST at +0x48
+    uintptr_t entryPtr = treeEntry ? *(uintptr_t*)treeEntry : 0;
+    if (entryPtr != 0) {
+        s_fn_BST_Insert_IBP(&self->field_48, treeEntry);
+    }
+
+    // Search cell BST (+0x58) for cellIndex and remove if found
+    void* node = self->field_58;
+    void* root = node;
+    if (node == nullptr) return;
+
+    // BST search for cellIndex
+    while (node != nullptr) {
+        int nodeVal = *(int*)node;
+        if (cellIndex < nodeVal) {
+            node = *(void**)((uintptr_t)node + 0x18);  // left child
+        } else if (cellIndex > nodeVal) {
+            node = *(void**)((uintptr_t)node + 0x20);  // right child
+        } else {
+            // Found — now search again from root and remove
+            if (root == nullptr) return;
+            void* searchNode = root;
+            while (searchNode != nullptr) {
+                int searchVal = *(int*)searchNode;
+                if (cellIndex < searchVal) {
+                    searchNode = *(void**)((uintptr_t)searchNode + 0x18);
+                } else if (cellIndex > searchVal) {
+                    searchNode = *(void**)((uintptr_t)searchNode + 0x20);
+                } else {
+                    // Remove this node from cell tree
+                    s_fn_BST_Remove(&self->field_58, searchNode);
+                    return;
+                }
+            }
+            return;
+        }
+    }
+}
+
+// ============================================================
+// ClearArea::OnCancel (0x1400e5e00)
+// ============================================================
+// Forwards to Cleanup via vtable +0x30 with copied params.
+// Original implementation: deref params, call vtable[6] (Cleanup).
+// Since we control both, just call Cleanup directly.
+void ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry) {
+    // The original copies *treeEntry and *citizen to stack locals,
+    // then calls vtable +0x30 (Cleanup) via indirect call.
+    // Since Cleanup ignores the extra params and only uses self,
+    // we can call it directly.
+    typedef void (*fn_Cleanup_t)(void* self, void* p1, void* p2);
+    void** vtable = *(void***)self;
+    fn_Cleanup_t cleanup = (fn_Cleanup_t)vtable[6];  // vtable +0x30
+    // Copy values as original does
+    uintptr_t treeCopy = treeEntry ? *(uintptr_t*)treeEntry : 0;
+    uintptr_t citizenCopy = citizen ? *(uintptr_t*)citizen : 0;
+    cleanup(self, &citizenCopy, &treeCopy);
+}
+
+// ============================================================
+// ClearArea::Cleanup (0x1400e6650)
+// ============================================================
+// Iterates entity tree (+0x48): while count > 0, finds the
+// rightmost (last) tree node, gets its entity's state machine
+// component (+0x278), and removes the pending action (+0x48).
+// Then does the same for cell tree (+0x58).
+void ClearArea_Cleanup(ClearArea* self) {
+    ResolveAll();
+
+    // Clean up entity tree (+0x48)
+    while (self->field_50 > 0) {
+        // Find rightmost (last) node in BST
+        void* node = self->field_48;
+        void* prev = node;
+        while (node != nullptr) {
+            prev = node;
+            node = *(void**)((uintptr_t)node + 0x18);  // traverse left to find min
+        }
+
+        // prev is the leftmost node
+        // Get entity from node (+0x08 = InternalBasePtr)
+        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)prev + 8));
+        uintptr_t entity = *(uintptr_t*)((uintptr_t)prev + 8);
+
+        // Get state machine component: entity->field_278
+        fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
+        uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
+
+        // Remove pending action from state machine action list (+0x48)
+        s_fn_RemovePendingAction((void*)(smComp + 0x48));
+
+        // Re-read count (RemovePendingAction may have modified it indirectly)
+        // The tree node gets removed by the action system
+    }
+
+    // Clean up cell tree (+0x58)
+    while (self->field_60 > 0) {
+        // Find leftmost node in cell BST
+        void* node = self->field_58;
+        void* prev = node;
+        while (node != nullptr) {
+            prev = node;
+            node = *(void**)((uintptr_t)node + 0x18);
+        }
+
+        // Get entity from node (+0x08)
+        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)prev + 8));
+        uintptr_t entity = *(uintptr_t*)((uintptr_t)prev + 8);
+
+        // Get state machine component and remove pending action
+        fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
+        uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
+        s_fn_RemovePendingAction((void*)(smComp + 0x48));
+    }
+}
+
+// ============================================================
+// ClearArea::GetTarget (0x1400e6720)
+// ============================================================
+// Returns the map entity from gameWorld singleton:
+//   gameWorld->field_b0->field_30
+// Uses hidden return pointer ABI (member function returning non-trivial).
+void* ClearArea_GetTarget(ClearArea* self, void* retbuf) {
+    (void)self;  // unused
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
+    *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
+    return retbuf;
+}
+
+// ============================================================
+// ClearArea::GetPriority (0x140029860)
+// ============================================================
+// Returns true (1) if tree count > 0, false (0) otherwise.
+int ClearArea_GetPriority(ClearArea* self) {
+    return (self->field_50 > 0) ? 1 : 0;
+}
+
+// ============================================================
+// Sub-function pointers (internal exe functions)
+// Resolved once on first call to ClearArea_Execute.
+// ============================================================
+
+// FUN_14012e5c0: Get total slot count for a storage/workplace component
+// param: entity ptr. Returns int count (stored at entity+0x30 if 0).
+typedef int (*fn_GetSlotCount_t)(void* entity);
+static fn_GetSlotCount_t fn_GetSlotCount = nullptr;
+
+// FUN_140002e10: FindComponent_BuildState2 (WorkplaceComponent)
+// entity, retval -> InternalBasePtr
+// Already available as fn_FindComponent_BuildState2 inline in engine_funcs.h
+
+// FUN_140004680: FindComponent_Build (BuildComponent_Slot4)
+// Already available as fn_FindComponent_Build inline in engine_funcs.h
+
+// FUN_14009fc00: WorldGrid::GetTilesInArea(grid, x1, y1, x2, y2, outArray, filterBool)
+// outArray is a dynamic array: [0]=ptr, [8]=count
+typedef void (*fn_WorldGrid_GetTilesInArea_t)(void* grid, int x1, int y1, int x2, int y2,
+                                               void* outArray, char filter);
+static fn_WorldGrid_GetTilesInArea_t fn_WorldGrid_GetTilesInArea = nullptr;
+
+// FUN_14009d7c0: WorldGrid::SortTilesByDistance(grid, tileArray, refTileIdx)
+typedef void (*fn_WorldGrid_SortTiles_t)(void* grid, void* tileArray, int refTileIdx);
+static fn_WorldGrid_SortTiles_t fn_WorldGrid_SortTiles = nullptr;
+
+// FUN_1400052c0: FindComponent (NaturalResourceDescription type — DAT_1401c7c80-based)
+// entity, retval -> InternalBasePtr
+typedef void (*fn_FindComponent_NatRes_t)(void* entity, void* retval);
+static fn_FindComponent_NatRes_t fn_FindComponent_NatRes = nullptr;
+
+// FUN_14009ccf0: WorldGrid::FindCellForAction(grid, tileIdx, refTileIdx, flags) -> int cellIdx
+typedef int (*fn_WorldGrid_FindCell_t)(void* grid, int tileIdx, int refTileIdx, uint32_t flags);
+static fn_WorldGrid_FindCell_t fn_WorldGrid_FindCell = nullptr;
+
+// FUN_1400a00f0: WorldGrid::ValidateCell(grid, validationFlags, cellIdx, refTileIdx) -> bool
+typedef int (*fn_WorldGrid_ValidateCell_t)(void* grid, int validationFlags, int cellIdx, int refTileIdx);
+static fn_WorldGrid_ValidateCell_t fn_WorldGrid_ValidateCell = nullptr;
+
+// BuildStructure_impl_6ef0: validate/setup structure building
+// (self, citizenIBP, cellIdx, refTileIdx, time) -> bool
+typedef int (*fn_BuildStructure_impl_t)(void* self, void* citizenIBP, uint32_t cellIdx,
+                                         uint32_t refTileIdx, void* time);
+static fn_BuildStructure_impl_t fn_BuildStructure_impl = nullptr;
+
+// FUN_14009f3e0: CharacterComponent::GetWorldPosition(grid, outPos, inPos, walkable, outParam)
+typedef void (*fn_GetWorldPosition_t)(void* grid, float* outPos, float* inPos, char walkable, void* outParam);
+static fn_GetWorldPosition_t fn_GetWorldPosition = nullptr;
+
+// PerformWork_Action_Ctor3 (0x1400c1eb0): Create PerformWork action for tree clearing
+// (citizenIBP, workId, targetIBP, worldPos, zero, zeroByte)
+typedef void (*fn_PerformWork_Ctor3_t)(void* citizenIBP, int workId, void* targetIBP,
+                                        float* worldPos, int zero, char zeroByte);
+static fn_PerformWork_Ctor3_t fn_PerformWork_Ctor3 = nullptr;
+
+// PerformWork_Action_Ctor (0x1400bffd0): Create PerformWork action for ground clearing
+// (citizenIBP, workId, worldPos, tileIdx, mode, zeroByte, tileIdx2, zero, zero, clearInfo, workIBP)
+typedef void (*fn_PerformWork_Ctor_t)(void* citizenIBP, int workId, void* worldPos,
+                                       void* tileIdx, int mode, char zeroByte,
+                                       uint32_t tileIdx2, int64_t zero1, int zero2,
+                                       float* clearInfo, void* workIBP);
+static fn_PerformWork_Ctor_t fn_PerformWork_Ctor = nullptr;
+
+// ClearArea_helper_9920 (0x140029920): BST insert for tree tracking set at +0x48
+typedef void (*fn_ClearArea_TreeInsert_t)(void* treeSet, void* workIBP, void* keyValue);
+static fn_ClearArea_TreeInsert_t fn_ClearArea_TreeInsert = nullptr;
+
+// TradeDescription_impl_9a40 (0x140029a40): BST insert for ground tile tracking set at +0x58
+typedef void (*fn_ClearArea_GroundInsert_t)(void* groundSet, void* workIBP, void* keyValue);
+static fn_ClearArea_GroundInsert_t fn_ClearArea_GroundInsert = nullptr;
+
+// FUN_1400f8620: GatherWork — attempt to gather a natural resource
+// (gatherSys, citizenIBP, resourceTypeId, pickupBool) -> bool
+typedef int (*fn_GatherWork_Attempt_t)(void* gatherSys, void* citizenIBP, int resourceTypeId, char pickupBool);
+static fn_GatherWork_Attempt_t fn_GatherWork_Attempt = nullptr;
+
+// Math::Vector3::Vector3 — uses global fn_Vector3_Ctor from engine_funcs.h
+
+// System::MemoryAllocator::MemFree — dispatch at 0x140152b68
+typedef void (*fn_MemFreeDispatch_t)(void* ptr);
+static fn_MemFreeDispatch_t fn_MemFreeDispatch = nullptr;
+
+// NaturalResourceDescription type ID — DAT_1401c7c80
+static uint32_t* g_TypeId_NaturalResourceDesc = nullptr;
+
+// StorageLocationComponent type ID — DAT_1401c8070 (already in engine_funcs.h)
+
+// Float constant: half-cell offset (DAT_140172114)
+static float* g_pHalfCellOffset = nullptr;
+
+// ============================================================
+// One-time resolution (Execute-specific helpers)
+// ============================================================
+static bool s_exec_resolved = false;
+
+static bool ResolveClearAreaFuncs() {
+    if (s_exec_resolved) return true;
+
+    fn_GetSlotCount = reinterpret_cast<fn_GetSlotCount_t>(
+        ResolveAddr(Module::Exe, 0x14012e5c0));
+    fn_WorldGrid_GetTilesInArea = reinterpret_cast<fn_WorldGrid_GetTilesInArea_t>(
+        ResolveAddr(Module::Exe, 0x14009fc00));
+    fn_WorldGrid_SortTiles = reinterpret_cast<fn_WorldGrid_SortTiles_t>(
+        ResolveAddr(Module::Exe, 0x14009d7c0));
+    fn_FindComponent_NatRes = reinterpret_cast<fn_FindComponent_NatRes_t>(
+        ResolveAddr(Module::Exe, 0x1400052c0));
+    fn_WorldGrid_FindCell = reinterpret_cast<fn_WorldGrid_FindCell_t>(
+        ResolveAddr(Module::Exe, 0x14009ccf0));
+    fn_WorldGrid_ValidateCell = reinterpret_cast<fn_WorldGrid_ValidateCell_t>(
+        ResolveAddr(Module::Exe, 0x1400a00f0));
+    fn_BuildStructure_impl = reinterpret_cast<fn_BuildStructure_impl_t>(
+        ResolveAddr(Module::Exe, 0x1400f6ef0));
+    fn_GetWorldPosition = reinterpret_cast<fn_GetWorldPosition_t>(
+        ResolveAddr(Module::Exe, 0x14009f3e0));
+    fn_PerformWork_Ctor3 = reinterpret_cast<fn_PerformWork_Ctor3_t>(
+        ResolveAddr(Module::Exe, 0x1400c1eb0));
+    fn_PerformWork_Ctor = reinterpret_cast<fn_PerformWork_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400bffd0));
+    fn_ClearArea_TreeInsert = reinterpret_cast<fn_ClearArea_TreeInsert_t>(
+        ResolveAddr(Module::Exe, 0x140029920));
+    fn_ClearArea_GroundInsert = reinterpret_cast<fn_ClearArea_GroundInsert_t>(
+        ResolveAddr(Module::Exe, 0x140029a40));
+    fn_GatherWork_Attempt = reinterpret_cast<fn_GatherWork_Attempt_t>(
+        ResolveAddr(Module::Exe, 0x1400f8620));
+
+    // Dispatch slots (indirect via .rdata)
+    // fn_Vector3_Ctor resolved globally in engine_funcs.cpp
+    {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152b68));
+        if (slot) fn_MemFreeDispatch = reinterpret_cast<fn_MemFreeDispatch_t>(*slot);
+    }
+
+    // Type IDs
+    g_TypeId_NaturalResourceDesc = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7c80));
+
+    // Float constant
+    g_pHalfCellOffset = reinterpret_cast<float*>(
+        ResolveAddr(Module::Exe, 0x140172114));
+
+    s_exec_resolved = true;
+    return fn_GetSlotCount && fn_WorldGrid_GetTilesInArea && fn_WorldGrid_SortTiles;
+}
+
+// ============================================================
+// Tile info entry — 16 bytes per tile returned by GetTilesInArea
+// ============================================================
+struct TileInfo {
+    uint32_t tileIndex;     // +0x00
+    uint32_t pad04;         // +0x04
+    uint64_t entityPtr;     // +0x08: InternalBasePtr to entity on this tile (0 if empty)
+};
+static_assert(sizeof(TileInfo) == 0x10, "TileInfo size mismatch");
+
+// ============================================================
+// ClearArea::Execute implementation
+// ============================================================
+int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
+    if (!ResolveClearAreaFuncs()) return 1;
+
+    ClearArea* self = reinterpret_cast<ClearArea*>(selfPtr);
+    uintptr_t s = reinterpret_cast<uintptr_t>(selfPtr);
+
+    // field_50 = tree count done, field_60 = ground count done
+    int treesCleared = self->field_50;
+    int groundCleared = self->field_60;
+
+    // --- Check if work entity is valid ---
+    // CheckPtr on self->field_18 (work entity IBP at +0x18, which is param_1[3] in decompilation)
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x18));
+    void* workEntity = self->field_18;
+
+    // Get total slot count for the entity
+    if (*(int*)((uintptr_t)workEntity + 0x30) == 0) {
+        int count = fn_GetSlotCount(workEntity);
+        *(int*)((uintptr_t)workEntity + 0x30) = count;
+    }
+
+    // If treesCleared + groundCleared >= totalSlots, all work done
+    int totalSlots = *(int*)((uintptr_t)workEntity + 0x30);
+    if (treesCleared + groundCleared >= totalSlots) {
+        return 1;
+    }
+
+    // --- Check citizen entity has active build state ---
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
+    void* citizenEntity = self->field_10;
+
+    // Find WorkplaceComponent (FUN_140002e10 = FindComponent_BuildState2)
+    uint64_t buildStateIBP = 0;
+    fn_FindComponent_BuildState2(citizenEntity, &buildStateIBP);
+
+    if (buildStateIBP != 0) {
+        // Re-find and check if component is active (byte at +0x50)
+        uint64_t buildStateIBP2 = 0;
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
+        fn_FindComponent_BuildState2(self->field_10, &buildStateIBP2);
+        fn_InternalBasePtr_CheckPtr(&buildStateIBP2);
+        void* bsComp = reinterpret_cast<void*>(buildStateIBP2);
+        if (*(char*)((uintptr_t)bsComp + 0x50) == 0) {
+            return 1;  // component not active
+        }
+    }
+
+    // --- Get tile list for the clear area ---
+    int result = 0;
+
+    // Tile array (dynamic): ptr + count
+    struct TileArray {
+        TileInfo* ptr;
+        int count;
+        int _pad;
+    };
+    TileArray tileArray;
+    tileArray.ptr = nullptr;
+    tileArray.count = 0;
+    tileArray._pad = 0;
+
+    // Get WorldGrid from game singleton
+    void* gameWorld = *g_pGameWorldSingleton;
+    void* worldGrid = *(void**)((uintptr_t)gameWorld + 0xF8);
+
+    // Get citizen entity and read clearTrees flag
+    uint64_t citizenIBP = reinterpret_cast<uint64_t>(self->field_10);
+    char clearTrees = self->field_70;  // +0x70 = clearTrees flag
+
+    // Find BuildComponent on citizen entity
+    fn_InternalBasePtr_CheckPtr(&citizenIBP);
+    uint64_t buildCompIBP = 0;
+    fn_FindComponent_Build(reinterpret_cast<void*>(citizenIBP), &buildCompIBP);
+    fn_InternalBasePtr_CheckPtr(&buildCompIBP);
+    void* buildComp = reinterpret_cast<void*>(buildCompIBP);
+
+    // Read area bounds from build component (short values at +0x28, +0x2a, +0x2c, +0x2e)
+    int16_t x1 = *(int16_t*)((uintptr_t)buildComp + 0x28);
+    int16_t y1 = *(int16_t*)((uintptr_t)buildComp + 0x2a);
+    int16_t x2 = *(int16_t*)((uintptr_t)buildComp + 0x2c);
+    int16_t y2 = *(int16_t*)((uintptr_t)buildComp + 0x2e);
+
+    // Get tiles in the area
+    fn_WorldGrid_GetTilesInArea(worldGrid, (int)x1, (int)y1, (int)x2, (int)y2,
+                                 &tileArray, clearTrees);
+
+    int tileCount = tileArray.count;
+    if (tileCount == 0) {
+        goto done_nothing;
+    }
+
+    // --- Compute reference tile index for distance sorting ---
+    {
+        // CheckPtr on actionStack
+        fn_InternalBasePtr_CheckPtr(actionStack);
+        void* citizen = *(void**)actionStack;
+
+        // Get CharacterComponent (+0x278) -> PositionComponent (+0x68)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>((uintptr_t)citizen + 0x278));
+        void* charComp = *(void**)((uintptr_t)citizen + 0x278);
+
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>((uintptr_t)charComp + 0x68));
+        void* posComp = *(void**)((uintptr_t)charComp + 0x68);
+
+        // Read position (floats at +0x158, +0x15c, +0x160)
+        float posX = *(float*)((uintptr_t)posComp + 0x158);
+        float posY = *(float*)((uintptr_t)posComp + 0x15c);
+        // posZ = *(float*)((uintptr_t)posComp + 0x160);  // stored but unused for ref calc
+
+        int gridSize = *(int*)worldGrid;
+        int halfGrid = gridSize >> 1;
+
+        // Convert world position to tile coordinates
+        int tileX = (int)(posX + (float)halfGrid);
+        int tileY = (int)(posY + (float)halfGrid);
+
+        // Clamp to grid bounds
+        if (tileX < 0) tileX = 0;
+        if (tileX >= gridSize) tileX = gridSize - 1;
+        if (tileY < 0) tileY = 0;
+        if (tileY >= gridSize) tileY = gridSize - 1;
+
+        uint32_t refTileIdx = (uint32_t)(gridSize * tileY + tileX);
+
+        // Sort tiles by distance from citizen
+        fn_WorldGrid_SortTiles(worldGrid, &tileArray, refTileIdx);
+
+        // ============================================================
+        // Phase 1: Clear trees (field_70)
+        // ============================================================
+        if (self->field_70 != 0 && tileCount > 0) {
+            TileInfo* tiles = tileArray.ptr;
+            for (int i = 0; i < tileCount; i++) {
+                TileInfo* tile = &tiles[i];
+                uint64_t treeEntity = tile->entityPtr;
+
+                if (treeEntity == 0) {
+                    continue;  // no entity on this tile
+                }
+
+                // Check if tree entity is already in our tracking BST at +0x48
+                void* bstNode = self->field_48;
+                bool alreadyTracked = false;
+                while (bstNode != nullptr) {
+                    fn_InternalBasePtr_CheckPtr(bstNode);
+                    uint64_t nodeKey = *(uint64_t*)bstNode;
+                    if (treeEntity < nodeKey) {
+                        bstNode = *(void**)((uintptr_t)bstNode + 0x18);  // left child
+                    } else {
+                        fn_InternalBasePtr_CheckPtr(&treeEntity);
+                        if (treeEntity <= nodeKey) {
+                            alreadyTracked = true;
+                            break;  // found match
+                        }
+                        bstNode = *(void**)((uintptr_t)bstNode + 0x20);  // right child
+                    }
+                }
+                if (alreadyTracked) continue;
+
+                // Check filter: if field_68 is set, tree's +0x28 must match
+                if (self->field_68 != nullptr) {
+                    fn_InternalBasePtr_CheckPtr(&treeEntity);
+                    void* treeEntityObj = reinterpret_cast<void*>(treeEntity);
+                    int64_t treeType = *(int64_t*)((uintptr_t)treeEntityObj + 0x28);
+                    if (treeType != reinterpret_cast<int64_t>(self->field_68)) {
+                        continue;  // doesn't match filter
+                    }
+                }
+
+                // Find NaturalResource component on tree entity
+                fn_InternalBasePtr_CheckPtr(&treeEntity);
+                uint64_t natResIBP = 0;
+                fn_FindComponent_NatRes(reinterpret_cast<void*>(treeEntity), &natResIBP);
+
+                if (natResIBP == 0) continue;
+
+                // Find valid cell near this tile
+                int cellIdx = fn_WorldGrid_FindCell(worldGrid, tile->tileIndex, refTileIdx, 0xe07);
+                if (cellIdx < 0) continue;
+
+                // Validate cell is passable
+                int valid = fn_WorldGrid_ValidateCell(worldGrid, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx);
+                if (!(valid & 0xFF)) continue;
+
+                // Try to set up the build structure work
+                void* actionStackPtr = *(void**)actionStack;
+                int buildResult = fn_BuildStructure_impl(selfPtr, &actionStackPtr,
+                                                          (uint32_t)cellIdx, refTileIdx, time);
+                if (!(buildResult & 0xFF)) {
+                    // BuildStructure_impl returned false → result = 0 (no work assigned)
+                    result = 0;
+                    goto cleanup;
+                }
+
+                // Check if natRes component has "removable" flag (bit 20 of +0x20)
+                if (natResIBP != 0) {
+                    fn_InternalBasePtr_CheckPtr(&natResIBP);
+                    void* natResObj = reinterpret_cast<void*>(natResIBP);
+                    uint32_t flags = *(uint32_t*)((uintptr_t)natResObj + 0x20);
+                    if ((flags >> 20) & 1) {
+                        continue;  // already flagged, skip
+                    }
+                }
+
+                // Compute world position from cell index
+                int gridSz = *(int*)worldGrid;
+                float halfOffset = (float)(gridSz >> 1) - *g_pHalfCellOffset;
+                float worldX = (float)(cellIdx % gridSz) - halfOffset;
+                float worldY = (float)(cellIdx / gridSz) - halfOffset;
+
+                float posVec[4];  // Vector3 (padded)
+                if (fn_Vector3_Ctor) {
+                    fn_Vector3_Ctor(posVec, worldX, worldY, 0.0f);
+                } else {
+                    posVec[0] = worldX; posVec[1] = worldY; posVec[2] = 0.0f;
+                }
+
+                // Get nearby walkable position
+                float walkPos[4];
+                fn_GetWorldPosition(worldGrid, walkPos, posVec, 0, nullptr);
+
+                // Create PerformWork action for tree removal
+                uint64_t targetIBP = natResIBP;
+                uint64_t citizenRef = reinterpret_cast<uint64_t>(*(void**)actionStack);
+
+                // PerformWork_Action_Ctor3(citizenIBP, workId, targetIBP, worldPos, 0, 0)
+                fn_PerformWork_Ctor3(&citizenRef, self->field_20, &targetIBP, walkPos, 0, 0);
+
+                // Post-work setup on citizen
+                int workId = self->field_20;
+                fn_InternalBasePtr_CheckPtr(actionStack);
+                void* citizenObj = *(void**)actionStack;
+
+                // Call vtable[10] (+0x50) on self — Work::GetTarget(self, &workIBP)
+                typedef void* (*fn_VTable50_t)(void* self, void* retBuf);
+                void* vtable = *(void**)selfPtr;
+                fn_VTable50_t fn_getTarget = reinterpret_cast<fn_VTable50_t>(
+                    *(void**)((uintptr_t)vtable + 0x50));
+                uint64_t workIBP = 0;
+                void* workResult = fn_getTarget(selfPtr, &workIBP);
+                uint64_t workEntity2 = *(uint64_t*)workResult;
+
+                // Set fields on citizen: +0x30 = workId, +0x54 |= 4, +0xb0 = 0
+                *(int*)((uintptr_t)citizenObj + 0x30) = workId;
+                *(uint32_t*)((uintptr_t)citizenObj + 0x54) |= 4;
+                *(uint32_t*)((uintptr_t)citizenObj + 0xb0) = 0;
+
+                // If work entity matches citizen's +0x1f0 and workId >= 0, set flag
+                if (workEntity2 == *(uint64_t*)((uintptr_t)citizenObj + 0x1f0) && workId >= 0) {
+                    *(uint32_t*)((uintptr_t)citizenObj + 0x88) |= 0x20000;
+                }
+
+                // Insert tree entity into tracking BST
+                struct { uint64_t key; uint64_t value; } insertPair;
+                insertPair.key = treeEntity;
+                insertPair.value = reinterpret_cast<uint64_t>(*(void**)actionStack);
+                fn_ClearArea_TreeInsert(reinterpret_cast<void*>(s + 0x48), &workIBP,
+                                        reinterpret_cast<void*>(&insertPair));
+
+                result = 2;
+                goto cleanup;
+            }
+            // Exhausted all tiles in phase 1, reload tileCount
+            tileCount = tileArray.count;
+        }
+
+        // ============================================================
+        // Phase 2: Clear ground tiles (field_71)
+        // ============================================================
+        if (self->field_71 != 0 && tileCount > 0) {
+            TileInfo* tiles = tileArray.ptr;
+            for (int i = 0; i < tileCount; i++) {
+                TileInfo* tile = &tiles[i];
+                uint32_t tileIdx = tile->tileIndex;
+
+                // Only process tiles with no entity
+                if (tile->entityPtr != 0) continue;
+
+                // Check if tile is already in ground tracking BST at +0x58
+                void* bstNode = self->field_58;
+                bool alreadyTracked = false;
+                while (bstNode != nullptr) {
+                    int nodeKey = *(int*)bstNode;
+                    if ((int)tileIdx < nodeKey) {
+                        bstNode = *(void**)((uintptr_t)bstNode + 0x18);
+                    } else if ((int)tileIdx <= nodeKey) {
+                        alreadyTracked = true;
+                        break;
+                    } else {
+                        bstNode = *(void**)((uintptr_t)bstNode + 0x20);
+                    }
+                }
+                if (alreadyTracked) {
+                    tileCount = tileArray.count;
+                    continue;
+                }
+
+                // Validate cell passability
+                int passable = fn_WorldGrid_ValidateCell(worldGrid, 0xe1f, (int)tileIdx, refTileIdx);
+                if (!(passable & 0xFF)) {
+                    tileCount = tileArray.count;
+                    continue;
+                }
+
+                // Create InternalBasePtr for null entity
+                uint64_t nullIBP = 0;
+                fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+
+                // Zero-init clear info
+                struct { int64_t a; int32_t b; } clearInfo;
+                clearInfo.a = 0;
+                clearInfo.b = 0;
+
+                // Compute world position
+                int gridSz = *(int*)worldGrid;
+                float halfOffset = (float)(gridSz >> 1) - *g_pHalfCellOffset;
+                float worldX = (float)((int)tileIdx % gridSz) - halfOffset;
+                float worldY = (float)((int)tileIdx / gridSz) - halfOffset;
+
+                float posVec[4];
+                if (fn_Vector3_Ctor) {
+                    fn_Vector3_Ctor(posVec, worldX, worldY, 0.0f);
+                } else {
+                    posVec[0] = worldX; posVec[1] = worldY; posVec[2] = 0.0f;
+                }
+
+                float walkPos[4];
+                fn_GetWorldPosition(worldGrid, walkPos, posVec, 0, nullptr);
+
+                // Create PerformWork action for ground clearing
+                void* actionStackPtrForWork = *(void**)actionStack;
+                uint64_t citizenRef = reinterpret_cast<uint64_t>(actionStackPtrForWork);
+                int workId = self->field_20;
+
+                fn_PerformWork_Ctor(&citizenRef, workId, walkPos,
+                                     reinterpret_cast<void*>((uint64_t)tileIdx),
+                                     2, 0, tileIdx, 0, 0,
+                                     reinterpret_cast<float*>(&clearInfo), &nullIBP);
+
+                // Post-work setup on citizen
+                int workIdSaved = self->field_20;
+                fn_InternalBasePtr_CheckPtr(actionStack);
+                void* citizenObj = *(void**)actionStack;
+
+                // Call vtable[10] (+0x50) — Work::GetTarget
+                typedef void* (*fn_VTable50_t)(void* self, void* retBuf);
+                void* vtable = *(void**)selfPtr;
+                fn_VTable50_t fn_getTarget = reinterpret_cast<fn_VTable50_t>(
+                    *(void**)((uintptr_t)vtable + 0x50));
+                uint64_t workIBP = 0;
+                void* workResult = fn_getTarget(selfPtr, &workIBP);
+                uint64_t workEntity2 = *(uint64_t*)workResult;
+
+                *(int*)((uintptr_t)citizenObj + 0x30) = workIdSaved;
+                *(uint32_t*)((uintptr_t)citizenObj + 0x54) |= 4;
+                *(uint32_t*)((uintptr_t)citizenObj + 0xb0) = 0;
+
+                if (workEntity2 == *(uint64_t*)((uintptr_t)citizenObj + 0x1f0) && workIdSaved >= 0) {
+                    *(uint32_t*)((uintptr_t)citizenObj + 0x88) |= 0x20000;
+                }
+
+                // Insert tile into ground tracking BST
+                struct { uint32_t tileKey; uint32_t pad; uint64_t citizenRef; } groundPair;
+                groundPair.tileKey = tileIdx;
+                groundPair.pad = 0;
+                groundPair.citizenRef = reinterpret_cast<uint64_t>(*(void**)actionStack);
+                fn_ClearArea_GroundInsert(reinterpret_cast<void*>(s + 0x58), &workIBP,
+                                           reinterpret_cast<void*>(&groundPair));
+
+                result = 0;
+                goto cleanup;
+            }
+        }
+
+        // ============================================================
+        // Phase 3: Clear natural resources (field_72)
+        // ============================================================
+        if (self->field_72 != 0 && tileCount > 0) {
+            TileInfo* tiles = tileArray.ptr;
+            for (int i = 0; i < tileCount; i++) {
+                TileInfo* tile = &tiles[i];
+
+                // CheckPtr on entity for this tile
+                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&tile->entityPtr));
+                void* tileEntity = reinterpret_cast<void*>(tile->entityPtr);
+
+                // Search entity's component array for NaturalResourceDescription type
+                uintptr_t te = (uintptr_t)tileEntity;
+                int compCount = *(int*)(te + 0x38);
+                uintptr_t compArray = *(uintptr_t*)(te + 0x30);
+
+                // Find NaturalResourceDescription component
+                void* natResComp = nullptr;
+                for (int j = 0; j < compCount; j++) {
+                    void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
+                    fn_InternalBasePtr_CheckPtr(compIBP);
+                    void* comp = *compIBP;
+
+                    // GetTypeId via vtable[2] (+0x10)
+                    typedef uint32_t (*GetTypeId_t)(void*);
+                    uint32_t typeId = reinterpret_cast<GetTypeId_t>(
+                        *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
+
+                    if (typeId == *g_TypeId_NaturalResourceDesc) {
+                        // Verify with IsDerivedFrom
+                        void** compIBP2 = reinterpret_cast<void**>(
+                            *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
+                        fn_InternalBasePtr_CheckPtr(compIBP2);
+                        void* comp2 = *compIBP2;
+                        if (fn_IsDerivedFrom(comp2, *g_TypeId_NaturalResourceDesc)) {
+                            natResComp = comp2;
+                        }
+                        break;  // goto LAB_1400e6532
+                    }
+                }
+
+                // Create IBP for natRes component
+                uint64_t natResIBP = 0;
+                fn_InternalBasePtr_Ctor(&natResIBP, natResComp);
+
+                if (natResIBP == 0) continue;
+
+                // Now find StorageLocationComponent on same entity
+                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&tile->entityPtr));
+                tileEntity = reinterpret_cast<void*>(tile->entityPtr);
+                te = (uintptr_t)tileEntity;
+                compCount = *(int*)(te + 0x38);
+                compArray = *(uintptr_t*)(te + 0x30);
+
+                void* storageLocComp = nullptr;
+                for (int j = 0; j < compCount; j++) {
+                    void** compIBP = reinterpret_cast<void**>(compArray + (uintptr_t)j * 8);
+                    fn_InternalBasePtr_CheckPtr(compIBP);
+                    void* comp = *compIBP;
+
+                    typedef uint32_t (*GetTypeId_t)(void*);
+                    uint32_t typeId = reinterpret_cast<GetTypeId_t>(
+                        *(void**)((*(uintptr_t*)comp) + 0x10))(comp);
+
+                    if (typeId == *g_TypeId_StorageLocationComponent) {
+                        void** compIBP2 = reinterpret_cast<void**>(
+                            *(uintptr_t*)(te + 0x30) + (uintptr_t)j * 8);
+                        fn_InternalBasePtr_CheckPtr(compIBP2);
+                        void* comp2 = *compIBP2;
+                        if (fn_IsDerivedFrom(comp2, *g_TypeId_StorageLocationComponent)) {
+                            storageLocComp = comp2;
+                        }
+                        break;
+                    }
+                }
+
+                uint64_t storageIBP = 0;
+                fn_InternalBasePtr_Ctor(&storageIBP, storageLocComp);
+
+                // Get resource type ID from storage location component
+                fn_InternalBasePtr_CheckPtr(&storageIBP);
+                int resourceTypeId = *(int*)(storageIBP + 0x28);
+
+                // Get gather system from game singleton
+                void* gameWorld2 = *g_pGameWorldSingleton;
+                void* gatherSys = *(void**)((uintptr_t)gameWorld2 + 0x118);
+
+                // Create citizen IBP for gather work
+                uint64_t citizenRef = reinterpret_cast<uint64_t>(*(void**)actionStack);
+
+                int gatherResult = fn_GatherWork_Attempt(gatherSys, &citizenRef,
+                                                          resourceTypeId, 0);
+                if (gatherResult & 0xFF) {
+                    result = 2;
+                    goto cleanup;
+                }
+            }
+        }
+    }
+
+done_nothing:
+    result = 1;
+
+cleanup:
+    // Free the tile array
+    if (fn_MemFreeDispatch && tileArray.ptr) {
+        fn_MemFreeDispatch(tileArray.ptr);
+    }
+    tileArray.ptr = nullptr;
+    tileArray.count = 0;
+    return result;
+}

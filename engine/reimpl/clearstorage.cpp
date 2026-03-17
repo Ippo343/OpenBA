@@ -9,7 +9,7 @@
 //   +0x08: VectorDtor (0x14002a0a0)   — tiny, not hooked
 //   +0x10: BaseDtor   (0x14002a090)   — tiny, not hooked
 //   +0x18: Serialize  (0x1400e7350)   — HOOKED (full reimpl)
-//   +0x20: Slot4      (0x1400e6c50)   — HOOKED (passthrough, complex storage logic)
+//   +0x20: Slot4      (0x1400e6c50)   — HOOKED (full reimpl → ClearStorage_Execute)
 //   +0x28: Execute    (0x1400f7540)   — 3 bytes, unhookable
 //   +0x30: Slot6      (0x1400e6c30)   — HOOKED (passthrough)
 //   +0x38: Slot7      (0x1400e6c20)   — needs check
@@ -19,6 +19,7 @@
 //   +0x58: Slot11     (0x14002a0f0)   — 9 bytes, unhookable (checks +0x60 > 0)
 
 #include "ClearStorage.h"
+#include "Work/clearstorage_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -80,10 +81,10 @@ static void Reimpl_Serialize(ClearStorage* self, void* stream) {
 // Passthrough reimplementations
 // ============================================================
 
-typedef uint32_t (*fn_Slot4_t)(void* self, void* param2, void* param3);
-static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
+// Slot4/Execute — delegates to clean reimplementation in code/Game/Work/clearstorage.cpp
+static int Reimpl_Slot4(ClearStorage* self, void* citizenAI, void* time) {
     g_lastHook = "ClearStorage::Slot4";
-    return ((fn_Slot4_t)g_hookSlot4.trampoline)(self, param2, param3);
+    return ClearStorage_Execute(self, citizenAI, time);
 }
 
 typedef uint8_t (*fn_Slot6_t)(void* self, void* param2);
@@ -98,6 +99,9 @@ static void Reimpl_Slot8(void* self) {
     ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
+// Slot9/Validate — hook DISABLED (bug class 3: MOV RAX,RSP in prologue).
+// Clean reimpl exists in code/Game/Work/clearstorage.cpp (ClearStorage_Validate)
+// but we keep the trampoline here since the hook can't be safely installed.
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
     g_lastHook = "ClearStorage::Slot9";
@@ -152,7 +156,7 @@ void InstallClearStorageSlot4() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e6c50);
     InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
 #ifdef _DEBUG
-    printf("[ClearStorage] Slot4 hooked at %p (passthrough)\n", (void*)target);
+    printf("[ClearStorage] Slot4 hooked at %p (reimpl)\n", (void*)target);
 #endif
 }
 

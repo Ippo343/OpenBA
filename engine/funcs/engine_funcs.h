@@ -4337,6 +4337,248 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 }
 
 // ============================================================
+// Work class helpers (shared by BuildStructure, ClearArea, ClearStorage)
+// ============================================================
+
+// Tree node removal by key (CitizenAI_impl_5520 @ 0x140025520)
+// Searches binary tree at *param_1 for node matching param_2's key, removes it.
+// Used by OnComplete/OnCancel to remove citizen from assignment tree.
+typedef void (*fn_TreeRemoveByKey_t)(void* treeRootPtr, void* keyIBP);
+extern fn_TreeRemoveByKey_t fn_TreeRemoveByKey;
+// Alias used by ClearStorage
+static inline auto& fn_BST_RemoveByKey = fn_TreeRemoveByKey;
+
+// Recursive tree node free (FUN_140014c30 @ 0x140014c30)
+// Recursively frees a binary tree (children at +0x10 and +0x18).
+typedef void (*fn_TreeRecursiveFree_t)(void* treeRootPtr, void* node);
+extern fn_TreeRecursiveFree_t fn_TreeRecursiveFree;
+
+// Object::Internal::~Internal — via dispatch slot 0x140152770
+typedef void (*fn_ObjectInternal_Dtor_t)(void* self);
+extern fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor;
+
+// Citizen state machine release (FUN_1400c5400 @ 0x1400c5400)
+// Walks task list, calls vtable+0x40 on each, clears slots.
+// Used by Cleanup to release assigned citizens.
+typedef void (*fn_StateMachine_ReleaseTasks_t)(void* taskListPtr);
+extern fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks;
+// Alias used by ClearStorage
+static inline auto& fn_SM_CancelWork = fn_StateMachine_ReleaseTasks;
+
+// ============================================================
+// BuildRoad::Execute helper functions (exe-only, 0x1400e4190)
+// ============================================================
+
+// FUN_1400a00f0 — Map_CheckPassable: checks if path between two cells is passable
+// RCX=mapGrid, EDX=passFlags(0xe1f), R8=fromCell, R9D=toCell
+// Returns: non-zero if passable
+typedef uint64_t (*fn_Map_CheckPassable_t)(int* mapGrid, uint32_t flags, uint32_t fromCell, int toCell);
+extern fn_Map_CheckPassable_t fn_Map_CheckPassable;
+
+// FUN_14009ccf0 — Map_FindNearestPassable: find nearest passable cell adjacent to target
+// RCX=mapGrid, EDX=srcCell, R8D=destCell, R9D=passFlags(0xe07)
+// Returns: cell index (-1 if not found)
+typedef int (*fn_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
+extern fn_Map_FindNearestPassable_t fn_Map_FindNearestPassable;
+
+// Math::Vector3::Vector3(this, x, y, z) — dispatch slot at 0x140152a30
+// RCX=outVec3, XMM1=x, XMM2=y, XMM3=z
+typedef float* (*fn_Vector3_Ctor_t)(float* self, float x, float y, float z);
+extern fn_Vector3_Ctor_t fn_Vector3_Ctor;
+
+// FUN_1400bffd0 — PerformWork_Action_Ctor: creates a PerformWork action (11 params)
+// Complex multi-param constructor. Params match Ghidra decompilation signature.
+typedef void (*fn_PerformWork_Action_Ctor_t)(
+    void* entityIBP, int priority, void* position, uint64_t targetCell,
+    uint32_t roadType, uint8_t flags, int param7, int64_t resource,
+    int resourceCount, float* velocity, void* actionRef);
+extern fn_PerformWork_Action_Ctor_t fn_PerformWork_Action_Ctor;
+
+// FUN_1400c1eb0 — PerformWork_Action_Ctor3: creates a PerformWork action (6 params)
+// Simpler constructor for building at an existing structure.
+typedef void (*fn_PerformWork_Action_Ctor3_t)(
+    void* entityIBP, int priority, void* targetIBP, float* position,
+    int flag, uint8_t param6);
+extern fn_PerformWork_Action_Ctor3_t fn_PerformWork_Action_Ctor3;
+
+// FUN_14008d590 — FindStorageForResource: searches for storage entity with resource
+typedef void (*fn_FindStorageForResource_t)(
+    void** citizenList, void* outEntity, int cellIndex, int64_t resourceType,
+    int param5, char param6, float* velocity, void* outStorageIBP);
+extern fn_FindStorageForResource_t fn_FindStorageForResource;
+
+// FUN_1400223c0 — FindComponent type DAT_1401c7c80 (WorkplaceComponent variant)
+// RCX=entity, RDX=outIBP
+typedef void (*fn_FindComponent_WorkplaceC_t)(int64_t entity, void* outIBP);
+extern fn_FindComponent_WorkplaceC_t fn_FindComponent_WorkplaceC;
+
+// FUN_1400052c0 — FindComponent type DAT_1401c7b30 (BuildStateComponent variant)
+// RCX=entity, RDX=outIBP
+typedef void (*fn_FindComponent_BuildStateC_t)(int64_t entity, void* outIBP);
+extern fn_FindComponent_BuildStateC_t fn_FindComponent_BuildStateC;
+
+// FUN_140003050 — FindComponent_StorageLocation (already have fn_FindComponent_Workplace)
+// RCX=entity, RDX=outIBP
+typedef void (*fn_FindComponent_StorageLocC_t)(int64_t entity, void* outIBP);
+extern fn_FindComponent_StorageLocC_t fn_FindComponent_StorageLocC;
+
+// FUN_1400f8620 — TryAssignWorkplace
+// RCX=assignMgr, RDX=citizenRef, R8D=workerCount, R9B=flag
+typedef uint64_t (*fn_TryAssignWorkplace_t)(uintptr_t mgr, void* citizenRef, int count, char flag);
+extern fn_TryAssignWorkplace_t fn_TryAssignWorkplace;
+
+// FUN_140006330 — FindComponent_RawMaterial on entity (by resource type)
+// RCX=resourceType, RDX=outIBP
+typedef void (*fn_FindComponent_RawMaterialC_t)(int64_t resourceType, void* outIBP);
+extern fn_FindComponent_RawMaterialC_t fn_FindComponent_RawMaterialC;
+
+// FUN_140116540 — GetRemainingCapacity: returns capacity - current count
+// RCX=citizenEntity
+typedef int (*fn_GetRemainingCapacity_t)(uintptr_t citizenEntity);
+extern fn_GetRemainingCapacity_t fn_GetRemainingCapacity;
+
+// FUN_140115e60 — CitizenAI_State_LongTermPlan: replan citizen's state
+// RCX=citizenEntity
+typedef void (*fn_CitizenAI_LongTermPlan_t)(void* citizenEntity);
+extern fn_CitizenAI_LongTermPlan_t fn_CitizenAI_LongTermPlan;
+
+// FUN_14012ce70 — BuildRoad_QueryStorage: check storage for resource availability
+// RCX=storageComp, RDX=resourceType  -> returns available count
+typedef int (*fn_BuildRoad_QueryStorage_t)(uint64_t storageComp, int64_t resourceType);
+extern fn_BuildRoad_QueryStorage_t fn_BuildRoad_QueryStorage;
+
+// ============================================================
+// ClearStorage helpers (code/Game/Work/clearstorage.cpp)
+// ============================================================
+
+// FUN_140017980: FindComponent by type ID 0x1401c7ee8 (unknown component type)
+extern uint32_t* g_TypeId_UnknownComp_7ee8;  // DAT_1401c7ee8
+
+inline void fn_FindComponent_Unknown7ee8(void* entity, void* retval) {
+    Entity_FindComponentByExeTypeId(entity, retval, g_TypeId_UnknownComp_7ee8);
+}
+
+// FUN_1400f7100: Work::CanStartWork(self, citizenAI, taskIBP, outCompleteTask)
+typedef bool (*fn_Work_CanStartWork_t)(void* self, void* citizenAI, void* taskIBP, void* outCompleteTask);
+extern fn_Work_CanStartWork_t fn_Work_CanStartWork;
+
+// Alias: fn_FindStorageDestination is the same function as fn_FindStorageForResource (0x14008d590)
+// ClearStorage uses this name; both are valid.
+typedef void (*fn_FindStorageDestination_t)(void* worldArray, void* outEntityIBP,
+    uint32_t resourceTypeId, void* sourceEntity, int count, char allowFull,
+    float* outPos, void* entityIBP);
+extern fn_FindStorageDestination_t fn_FindStorageDestination;
+
+// Alias: fn_Map_CanPathTo is the same function as fn_Map_CheckPassable (0x1400a00f0)
+// ClearStorage uses this name with a different signature cast.
+typedef bool (*fn_Map_CanPathTo_t)(void* mapGrid, int pathType, uint32_t destCell, uint32_t srcTypeId);
+extern fn_Map_CanPathTo_t fn_Map_CanPathTo;
+
+// FUN_1400f6ef0: BuildStructure_impl_6ef0 — validates work assignment against citizen/entity.
+typedef bool (*fn_Work_ValidateAssignment_t)(void* work, void* citizenIBP, uint32_t destCell,
+    uint32_t srcCell, void* time);
+extern fn_Work_ValidateAssignment_t fn_Work_ValidateAssignment;
+
+// FUN_1400bf790: Pathfinding_FindPath — sets up pathfinding for citizen work route.
+typedef void (*fn_Pathfinding_FindPath_t)(void* outResult, void* citizenPtr, int pathType,
+    void* destEntityIBP, float* destPos, void* srcEntityIBP, float* srcPos,
+    long sourceEntity, int itemCount, int flags, int param11, char param12,
+    int param13, int param14);
+extern fn_Pathfinding_FindPath_t fn_Pathfinding_FindPath;
+
+// FUN_140021a30: CitizenAI_impl_1a30 — registers work assignment with citizen AI.
+typedef void (*fn_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
+extern fn_CitizenAI_RegisterWork_t fn_CitizenAI_RegisterWork;
+
+// FUN_14001a6e0: BST_Remove — removes a node from an intrusive BST (red-black tree).
+typedef void (*fn_BST_Remove_t)(void* bstRoot, void* node);
+extern fn_BST_Remove_t fn_BST_Remove;
+
+// FUN_14012d5d0: StorageComponent_FindSlot — finds storage slot for a grid cell.
+typedef int (*fn_Storage_FindSlot_t)(void* storageComp, uint32_t cellIndex, float* outPos, uint32_t typeId);
+extern fn_Storage_FindSlot_t fn_Storage_FindSlot;
+
+// FUN_140122e20: Entity_GetPosition — gets entity world position as Vector3.
+typedef void (*fn_Entity_GetPosition_t)(void* entity, void* outVec3, int param3, int param4, float* param5);
+extern fn_Entity_GetPosition_t fn_Entity_GetPosition;
+
+// ============================================================
+// BuildStructure support (code/Game/Work/buildstructure.cpp)
+// ============================================================
+
+// Work::Serialize base (0x1400f7400) — serializes Work base fields
+typedef void (*fn_Work_SerializeBase_t)(void* self, void* stream);
+extern fn_Work_SerializeBase_t fn_Work_SerializeBase;
+
+// BST serialize helper (0x1400296b0) — serializes InternalBasePtr BST
+typedef void (*fn_BST_SerializeHelper_t)(void* bstRoot, void* serializer);
+extern fn_BST_SerializeHelper_t fn_BST_SerializeHelper;
+
+// Entity::FindComponent by type ID — various component lookups on entities.
+
+// FindComponent_Position (0x140002ed0) — type DWORD_1401c7900
+typedef void* (*fn_Entity_FindComponent_Position_t)(uintptr_t entity, void* retIBP);
+extern fn_Entity_FindComponent_Position_t fn_Entity_FindComponent_Position;
+
+// FindComponent_Build (0x14000d6c0) — type DWORD_1401c7008 (BuildComponent)
+typedef void* (*fn_Entity_FindComponent_Build_t)(uintptr_t entity, void* retIBP);
+extern fn_Entity_FindComponent_Build_t fn_Entity_FindComponent_Build;
+
+// FindComponent_BuildDesc (0x140002e10) — type DWORD_1401c80e0 (BuildDescription)
+typedef void* (*fn_Entity_FindComponent_BuildDesc_t)(uintptr_t entity, void* retIBP);
+extern fn_Entity_FindComponent_BuildDesc_t fn_Entity_FindComponent_BuildDesc;
+
+// FindComponent_MatDesc (0x140003050) — type DWORD_1401c8070 (MaterialDescription)
+// Note: same address as fn_FindComponent_StorageLocC, different type ID baked in
+typedef void* (*fn_Entity_FindComponent_MatDesc_t)(uintptr_t entity, void* retIBP);
+extern fn_Entity_FindComponent_MatDesc_t fn_Entity_FindComponent_MatDesc;
+
+// PositionComponent_Count (0x140123070) — recursive position count
+typedef int (*fn_PositionComponent_Count_t)(uintptr_t posComp, int mode);
+extern fn_PositionComponent_Count_t fn_PositionComponent_Count;
+
+// CalcMaxBuilders (0x14012e5c0) — calculates max builder count from description
+typedef int (*fn_CalcMaxBuilders_t)(uintptr_t matDesc);
+extern fn_CalcMaxBuilders_t fn_CalcMaxBuilders;
+
+// Entity_GetPositionForIndex (0x140122e20) — gets world pos for build point index
+// Note: same address as fn_Entity_GetPosition, different typedef
+typedef void* (*fn_Entity_GetPositionForIndex_t)(
+    uintptr_t posComp, float* outPos, int mode, int index, float* heading);
+extern fn_Entity_GetPositionForIndex_t fn_Entity_GetPositionForIndex;
+
+// Map_Invalidate (0x14009c480) — recalculates map connectivity/zones
+typedef void (*fn_Map_Invalidate_t)(int* mapGrid);
+extern fn_Map_Invalidate_t fn_Map_Invalidate;
+
+// Map_CalcPathCost (0x14009f810) — calculates path cost between grid cells
+typedef int (*fn_Map_CalcPathCost_t)(int* mapGrid, uint32_t cellA, int cellB, uint8_t cacheResults);
+extern fn_Map_CalcPathCost_t fn_Map_CalcPathCost;
+
+// Map_NeighborLookup (0x14009d0a0) — finds path region from neighbor cells
+typedef int (*fn_Map_NeighborLookup_t)(int* mapGrid, int cell);
+extern fn_Map_NeighborLookup_t fn_Map_NeighborLookup;
+
+// Map_CalcPathDist (0x1400a8ba0) — A* / grid walk path distance
+typedef int (*fn_Map_CalcPathDist_t)(int* navData, int regionA, int regionB);
+extern fn_Map_CalcPathDist_t fn_Map_CalcPathDist;
+
+// Map_CachePathDist (0x1400a5b30) — cache computed path distance
+typedef void (*fn_Map_CachePathDist_t)(void* pathCache, int regionA, int regionB, int dist);
+extern fn_Map_CachePathDist_t fn_Map_CachePathDist;
+
+// SetupBuildActions (0x1400c0690) — creates the action queue for build work
+typedef void (*fn_SetupBuildActions_t)(
+    void* citizenEntityIBP, int priority, void* buildingEntityIBPPtr,
+    float* position, int posIndex, uint8_t altAnim);
+extern fn_SetupBuildActions_t fn_SetupBuildActions;
+
+// BST_Insert (0x140021a30) — insert entity into BST (tracks claimed positions)
+// Note: same address as fn_CitizenAI_RegisterWork, different typedef
+typedef void* (*fn_BST_Insert_t)(void* bstRoot, void* entityIBP, void* citizenIBP);
+extern fn_BST_Insert_t fn_BST_Insert;
+
+// ============================================================
 // Initialization
 // ============================================================
 

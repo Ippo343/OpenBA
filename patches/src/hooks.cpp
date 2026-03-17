@@ -825,6 +825,16 @@ extern void InstallBuildRoadScalarDtor();
 extern void RemoveBuildRoadScalarDtor();
 extern void InstallBuildRoadSerialize();
 extern void RemoveBuildRoadSerialize();
+extern void InstallBuildRoadExecute();
+extern void RemoveBuildRoadExecute();
+extern void InstallBuildRoadOnComplete();
+extern void RemoveBuildRoadOnComplete();
+extern void InstallBuildRoadOnCancel();
+extern void RemoveBuildRoadOnCancel();
+extern void InstallBuildRoadCleanup();
+extern void RemoveBuildRoadCleanup();
+extern void InstallBuildRoadValidate();
+extern void RemoveBuildRoadValidate();
 
 // --- BuildStructure (engine/reimpl/buildstructure.cpp) ---
 extern void InstallBuildStructureCtor();
@@ -833,6 +843,14 @@ extern void InstallBuildStructureScalarDtor();
 extern void RemoveBuildStructureScalarDtor();
 extern void InstallBuildStructureSerialize();
 extern void RemoveBuildStructureSerialize();
+extern void InstallBuildStructureExecute();
+extern void RemoveBuildStructureExecute();
+extern void InstallBuildStructureOnComplete();
+extern void RemoveBuildStructureOnComplete();
+extern void InstallBuildStructureOnCancel();
+extern void RemoveBuildStructureOnCancel();
+extern void InstallBuildStructureCleanup();
+extern void RemoveBuildStructureCleanup();
 
 // --- ClearArea (engine/reimpl/cleararea.cpp) ---
 extern void InstallClearAreaCtor();
@@ -841,6 +859,14 @@ extern void InstallClearAreaScalarDtor();
 extern void RemoveClearAreaScalarDtor();
 extern void InstallClearAreaSerialize();
 extern void RemoveClearAreaSerialize();
+extern void InstallClearAreaExecute();
+extern void RemoveClearAreaExecute();
+extern void InstallClearAreaOnComplete();
+extern void RemoveClearAreaOnComplete();
+extern void InstallClearAreaCleanup();
+extern void RemoveClearAreaCleanup();
+extern void InstallClearAreaGetTarget();
+extern void RemoveClearAreaGetTarget();
 
 // --- ClearStorage (engine/reimpl/clearstorage.cpp) ---
 extern void InstallClearStorageSerialize();
@@ -2500,16 +2526,29 @@ static ReimplEntry g_reimplementations[] = {
     { "BuildRoad::Ctor", InstallBuildRoadCtor, RemoveBuildRoadCtor, true },
     { "BuildRoad::ScalarDtor", InstallBuildRoadScalarDtor, RemoveBuildRoadScalarDtor, true },
     { "BuildRoad::Serialize", InstallBuildRoadSerialize, RemoveBuildRoadSerialize, true },
+    { "BuildRoad::Execute", InstallBuildRoadExecute, RemoveBuildRoadExecute, true },
+    { "BuildRoad::OnComplete", InstallBuildRoadOnComplete, RemoveBuildRoadOnComplete, true },
+    { "BuildRoad::OnCancel", InstallBuildRoadOnCancel, RemoveBuildRoadOnCancel, true },
+    { "BuildRoad::Cleanup", InstallBuildRoadCleanup, RemoveBuildRoadCleanup, true },
+    { "BuildRoad::Validate", InstallBuildRoadValidate, RemoveBuildRoadValidate, true },
 
     // --- BuildStructure ---
     { "BuildStructure::Ctor", InstallBuildStructureCtor, RemoveBuildStructureCtor, true },
     { "BuildStructure::ScalarDtor", InstallBuildStructureScalarDtor, RemoveBuildStructureScalarDtor, true },
     { "BuildStructure::Serialize", InstallBuildStructureSerialize, RemoveBuildStructureSerialize, true },
+    { "BuildStructure::Execute", InstallBuildStructureExecute, RemoveBuildStructureExecute, true },
+    { "BuildStructure::OnComplete", InstallBuildStructureOnComplete, RemoveBuildStructureOnComplete, true },
+    { "BuildStructure::OnCancel", InstallBuildStructureOnCancel, RemoveBuildStructureOnCancel, true },
+    { "BuildStructure::Cleanup", InstallBuildStructureCleanup, RemoveBuildStructureCleanup, true },
 
     // --- ClearArea ---
     { "ClearArea::Ctor", InstallClearAreaCtor, RemoveClearAreaCtor, true },
     { "ClearArea::ScalarDtor", InstallClearAreaScalarDtor, RemoveClearAreaScalarDtor, true },
     { "ClearArea::Serialize", InstallClearAreaSerialize, RemoveClearAreaSerialize, true },
+    { "ClearArea::Execute", InstallClearAreaExecute, RemoveClearAreaExecute, true },
+    { "ClearArea::OnComplete", InstallClearAreaOnComplete, RemoveClearAreaOnComplete, true },
+    { "ClearArea::Cleanup", InstallClearAreaCleanup, RemoveClearAreaCleanup, true },
+    { "ClearArea::GetTarget", InstallClearAreaGetTarget, RemoveClearAreaGetTarget, true },
 
     // --- ClearStorage ---
     { "ClearStorage::Serialize", InstallClearStorageSerialize, RemoveClearStorageSerialize, true },

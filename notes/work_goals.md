@@ -18,11 +18,11 @@ Work classes have a simpler vtable than components — primarily CreateWork/Upda
 
 | Class | Vtable | Type Header | Reimpl Status | Priority |
 |-------|--------|-------------|---------------|----------|
-| AutoPickupWork | 0x140161a80 | AutoPickupWork.h | Not started | Low |
-| BuildRoad | - | - | Not started | Medium |
-| BuildStructure | - | - | Not started | Medium |
-| ClearArea | - | - | Not started | Medium |
-| ClearStorage | 0x1401611a0 | ClearStorage.h | Not started | Low |
+| AutoPickupWork | 0x140160fa0 | AutoPickupWork.h | Deep reimpl (5/5 non-abstract) | Low |
+| BuildRoad | 0x140161020 | BuildActions.h | **COMPLETE** (all hookable slots reimplemented) | Medium |
+| BuildStructure | 0x1401610a0 | BuildActions.h | **COMPLETE** (all hookable slots reimplemented) | Medium |
+| ClearArea | 0x140161110 | BuildActions.h | **COMPLETE** (all hookable slots reimplemented) | Medium |
+| ClearStorage | 0x1401611a0 | ClearStorage.h | **COMPLETE** (Slot9 disabled=bug class 3, clean C++ ready) | Low |
 | ConsumeProduce | - | - | Not started | Medium |
 | FireWork | 0x1401612a0 | FireWork.h | Not started | Low |
 | FishingWork | 0x140161320 | FishingWork.h | Not started | Medium |
