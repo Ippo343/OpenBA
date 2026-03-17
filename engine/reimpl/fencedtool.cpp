@@ -53,11 +53,13 @@ static void Reimpl_FencedToolShutdown2(void* self) {
 }
 
 // --- Slot6: OnKey ---
+// Bug class 6 fix: FencedTool::OnKey takes (self, key) and forwards key via RDX
+// to DragTool::OnKey internally. Must declare key param to prevent compiler clobbering RDX.
 static HookInfo g_hookFencedToolOnKey;
-typedef void (*fn_FencedToolOnKey_t)(void* self);
-static void Reimpl_FencedToolOnKey(void* self) {
+typedef uint64_t (*fn_FencedToolOnKey_t)(void* self, char key);
+static uint64_t Reimpl_FencedToolOnKey(void* self, char key) {
     g_lastHook = "FencedTool::FencedToolOnKey";
-    ((fn_FencedToolOnKey_t)g_hookFencedToolOnKey.trampoline)(self);
+    return ((fn_FencedToolOnKey_t)g_hookFencedToolOnKey.trampoline)(self, key);
 }
 
 // --- Slot7: Serialize ---
