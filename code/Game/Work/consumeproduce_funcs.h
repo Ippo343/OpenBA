@@ -19,6 +19,12 @@ void* ConsumeProduce_ScalarDtor_Impl(ConsumeProduceAction* self, uint32_t flags)
 // Original: 0x1400e9020
 void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream);
 
+// ConsumeProduce::Execute (vtable slot 4, 0x1400e7840):
+// Complex production work logic -- pathfinding, storage queries, citizen AI.
+// Returns: 1 = retry/not ready, 2 = action pushed.
+// Uses int return type (NOT bool) per bug class 7.
+int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP);
+
 // ConsumeProduce::OnComplete (vtable slot 6) -- store null IBP, update slot state.
 // Returns int per bug class 7. Original: 0x1400e77c0
 int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4);

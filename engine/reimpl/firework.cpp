@@ -20,10 +20,10 @@
 //   +0x58: Slot11     (0x14002a220)   — 9 bytes, unhookable (checks +0x58 > 0)
 
 #include "FireWork.h"
-#include "Work/firework_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Work/firework_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -37,43 +37,87 @@ static HookInfo g_hookSlot8;
 static HookInfo g_hookSlot9;
 
 // ============================================================
-// Reimplementations — delegate to clean game logic layer
+// Local helper function pointers
 // ============================================================
 
-// Serialize (0x1400e9a50) — fully reimplemented in code/Game/Work/firework.cpp
+// Work base Serialize at 0x1400f7400
+typedef void (*fn_Work_Serialize_t)(void* self, void* stream);
+static fn_Work_Serialize_t fn_Work_Serialize = nullptr;
+
+// IO::Serializer ctor/dtor via IAT
+typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+static fn_Serializer_Ctor_t fn_Serializer_Ctor = nullptr;
+typedef void (*fn_Serializer_Dtor_t)(void* self);
+static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
+
+// IO::Serializer::Serialize(this, int*, name)
+typedef void (*fn_Serializer_Serialize_t)(void* self, int* value, const char* name);
+static fn_Serializer_Serialize_t fn_Serializer_Serialize = nullptr;
+
+// BST serialization helper at 0x1400296b0 (FUN_1400296b0)
+typedef void (*fn_BST_Serialize296b0_t)(void* bst, void* serializer);
+static fn_BST_Serialize296b0_t fn_BST_Serialize = nullptr;
+
+// ============================================================
+// Serialize (0x1400e9a50)
+// Pattern: Work_Serialize + Serializer(v0) + BST_Serialize(+0x50) +
+//          Serializer::Serialize(+0x48)
+// ============================================================
 static void Reimpl_Serialize(FireWork* self, void* stream) {
     g_lastHook = "FireWork::Serialize";
-    FireWork_Serialize_Impl(self, stream);
+#ifdef _DEBUG
+    static int callCount = 0;
+    if (callCount < 3) {
+        printf("[FireWork::Serialize] self=%p stream=%p field58=%d\n",
+               (void*)self, stream, self->_field58);
+        callCount++;
+    }
+#endif
+
+    fn_Work_Serialize(self, stream);
+
+    uint8_t serializerBuf[24];
+    fn_Serializer_Ctor(serializerBuf, stream, 0);
+
+    // Serialize BST at +0x50
+    fn_BST_Serialize(&self->_field50, serializerBuf);
+
+    // Serialize int at +0x48 (Note: FireWork struct has this as padding area,
+    // but the Serialize function accesses it. The decompilation shows param_1+0x48.)
+    int* field48_ptr = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x48);
+    fn_Serializer_Serialize(serializerBuf, field48_ptr, nullptr);
+
+    fn_Serializer_Dtor(serializerBuf);
 }
 
-// Slot4 (0x1400e9620) — fire suppression logic, delegates to clean layer
-// Clean layer currently delegates to original exe code for complex sub-calls.
-static int Reimpl_Slot4(FireWork* self, void* param2, void* param3) {
+// ============================================================
+// Passthrough reimplementations
+// ============================================================
+
+// Slot4 (0x1400e9620) — fire suppression work assignment (deep reimpl)
+static int Reimpl_Slot4(FireWork* self, void* citizenIBP, void* time) {
     g_lastHook = "FireWork::Slot4";
-    return FireWork_Slot4_Impl(self, param2, param3);
+    return FireWork_Slot4_Impl(self, citizenIBP, time);
 }
 
-// Slot6 (0x1400e9600) — tree remove, fully reimplemented in clean layer
+// Slot6 (0x1400e9600) — calls helper on +0x50, returns false
 typedef void (*fn_Slot6_t)(void* self, void* param2);
 static void Reimpl_Slot6(void* self, void* param2) {
     g_lastHook = "FireWork::Slot6";
-    // Slot6 hook is disabled (bug class 2), but reimpl exists for standalone exe.
-    // When hook is active, delegate to clean code; when disabled, trampoline is used.
     ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
 }
 
-// Slot8 (0x1400e99a0) — cleanup loop, delegates to clean layer
-static void Reimpl_Slot8(FireWork* self) {
+// Slot8 (0x1400e99a0) — cleanup loop
+typedef void (*fn_Slot8_t)(void* self);
+static void Reimpl_Slot8(void* self) {
     g_lastHook = "FireWork::Slot8";
-    FireWork_Slot8_Impl(self);
+    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
-// Slot9 (0x1400e93c0) — validation, delegates to clean layer
-// Clean layer currently delegates to original exe code.
-typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
-static uint64_t Reimpl_Slot9(void* self, void* param2) {
+// Slot9 (0x1400e93c0) — BST validation pass (deep reimpl)
+static int Reimpl_Slot9(FireWork* self, void* citizenIBP) {
     g_lastHook = "FireWork::Slot9";
-    return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
+    return FireWork_Slot9_Impl(self, citizenIBP);
 }
 
 // ============================================================
@@ -81,10 +125,30 @@ static uint64_t Reimpl_Slot9(void* self, void* param2) {
 // ============================================================
 
 void InstallFireWorkSerialize() {
-    // Resolve all clean-layer function pointers
-    if (!FireWork_ResolveFuncs()) {
+    fn_Work_Serialize = reinterpret_cast<fn_Work_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1400f7400));
+
+    uintptr_t iatCtor = ResolveAddr(Module::Exe, 0x140152ad8);
+    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152ad0);
+    if (iatCtor) fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(iatCtor);
+    if (iatDtor) fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(iatDtor);
+
+    // Serializer::Serialize via IAT at [0x140152ac8]
+    uintptr_t iatSer = ResolveAddr(Module::Exe, 0x140152ac8);
+    if (iatSer) fn_Serializer_Serialize = *reinterpret_cast<fn_Serializer_Serialize_t*>(iatSer);
+
+    fn_BST_Serialize = reinterpret_cast<fn_BST_Serialize296b0_t>(
+        ResolveAddr(Module::Exe, 0x1400296b0));
+
 #ifdef _DEBUG
-        printf("[FireWork] ERROR: failed to resolve clean layer funcs, skipping Serialize hook\n");
+    printf("[FireWork] Work_Serialize=%p BST_Serialize=%p Serializer_Serialize=%p\n",
+           (void*)fn_Work_Serialize, (void*)fn_BST_Serialize, (void*)fn_Serializer_Serialize);
+#endif
+
+    if (!fn_Work_Serialize || !fn_Serializer_Ctor || !fn_Serializer_Dtor ||
+        !fn_BST_Serialize || !fn_Serializer_Serialize) {
+#ifdef _DEBUG
+        printf("[FireWork] ERROR: failed to resolve helpers, skipping Serialize hook\n");
 #endif
         return;
     }
@@ -100,11 +164,18 @@ void InstallFireWorkSerialize() {
 void RemoveFireWorkSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallFireWorkSlot4() {
+    if (!FireWork_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[FireWork] ERROR: failed to resolve Slot4/Slot9 helpers, skipping hooks\n");
+#endif
+        return;
+    }
+
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e9620);
     // Prologue: MOV [RSP+0x18],R8(5) + MOV [RSP+0x10],RDX(5) + PUSH RBP(2) + PUSH RBX(2) = 14 -> corrected to 15
     InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 15);
 #ifdef _DEBUG
-    printf("[FireWork] Slot4 hooked at %p (passthrough)\n", (void*)target);
+    printf("[FireWork] Slot4 hooked at %p (deep reimpl)\n", (void*)target);
 #endif
 }
 
@@ -137,7 +208,7 @@ void InstallFireWorkSlot9() {
     // Prologue: MOV RAX,RSP(3) + PUSH RBP(2) + PUSH RSI(2) + PUSH RDI(2) + PUSH R12(2) + PUSH R13(2) = 13
     InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 14);
 #ifdef _DEBUG
-    printf("[FireWork] Slot9 hooked at %p (passthrough)\n", (void*)target);
+    printf("[FireWork] Slot9 hooked at %p (deep reimpl)\n", (void*)target);
 #endif
 }
 

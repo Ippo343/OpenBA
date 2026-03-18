@@ -1,17 +1,20 @@
 // code/Game/Work/consumeproduce.cpp
-// Clean C++ reimplementation of ConsumeProduce Work class methods.
+// Clean C++ reimplementation of ConsumeProduce Work class.
 // Source: Game/Work/ConsumeProduce.cpp (from profile build debug strings)
 //
 // ConsumeProduce -- consume/produce work cycle. Size = 0x78.
 // Inherits: Object::Internal -> Work (0x48) -> ConsumeProduce
 // Ctor: 0x1400e9340, Vtable: 0x140161220
 //
-// Execute (slot 4) is NOT reimplemented here -- it is ~500 lines of complex
-// game logic involving pathfinding, storage queries, and citizen AI state
-// transitions. It remains as a trampoline in the hook layer until all
-// dependent helper functions are resolved.
+// Methods implemented:
+//   Ctor (0x1400e9340), ScalarDtor (0x14002a190), Serialize (0x1400e9020)
+//   Execute (vtable slot 4, 0x1400e7840)
+//   OnComplete (vtable slot 6, 0x1400e77c0)
+//   OnCancel (vtable slot 7, 0x1400e7780)
+//   Cleanup (vtable slot 8, 0x1400e8f30)
+//   Validate (vtable slot 9, 0x1400e7530)
+//   GetTarget (vtable slot 10, 0x1400e8fb0)
 //
-// Decompiled from Application-x64.exe using Ghidra.
 // This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/consumeproduce_funcs.h"
@@ -20,9 +23,11 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 
 // ============================================================
 // Local function pointers resolved at init time
+// (only those NOT already declared in engine_funcs.h)
 // ============================================================
 
 // Object::Internal::Internal(this) -- via IAT at 0x140152768
@@ -70,6 +75,34 @@ static uint32_t* s_typeId_1401c7158 = nullptr;
 // Cached vtable addresses
 static void* s_vtable_Work = nullptr;
 static void* s_vtable_ConsumeProduce = nullptr;
+
+// FUN_14012c3f0 -- ModelComponent::SetActiveState(component, stateIndex, enabled)
+// Toggles visibility state bits on a model/mesh component.
+typedef void (*s_fn_ModelComp_SetActiveState_t)(void* component, uint8_t stateIndex, char enabled);
+static s_fn_ModelComp_SetActiveState_t s_fn_ModelComp_SetActiveState = nullptr;
+
+// FUN_1401193a0 -- ConsumeProduceAction_helper_93a0(stateMachineComp)
+// Checks if production count is below threshold. Returns bool-as-uint64.
+typedef uint64_t (*s_fn_CheckProduceThreshold_t)(uintptr_t smComponent);
+static s_fn_CheckProduceThreshold_t s_fn_CheckProduceThreshold = nullptr;
+
+// FUN_14012b310 -- ConsumeProduceAction_helper_b310(stateMachineComp)
+// Resets production state, sets field +0x48 = 1, transitions state machine.
+typedef void (*s_fn_ResetProductionState_t)(uintptr_t smComponent);
+static s_fn_ResetProductionState_t s_fn_ResetProductionState = nullptr;
+
+// FUN_14009c480 -- Map_RecalcZones(mapGrid, vec3, param3, param4)
+typedef void (*s_fn_Map_RecalcZones_t)(int* mapGrid, float* vec3, uint64_t param3, uint32_t param4);
+static s_fn_Map_RecalcZones_t s_fn_Map_RecalcZones = nullptr;
+
+// FUN_1400bef70 -- SetupConsumeProduceWorkChain (13 params)
+// Creates the action chain for resource hauling + production work.
+typedef void (*s_fn_SetupWorkChain_t)(
+    void* citizenIBP, int priority, void* entityIBP, float* destPos,
+    float heading, uintptr_t componentData, uint64_t productType,
+    uint32_t flags, int* actionRef, uint32_t field54, int slotIndex,
+    float produceTime, uint32_t packedParams);
+static s_fn_SetupWorkChain_t s_fn_SetupWorkChain = nullptr;
 
 static bool s_resolved = false;
 
@@ -121,17 +154,33 @@ bool ConsumeProduce_ResolveFuncs() {
     s_fn_TaskListCleanup = reinterpret_cast<void(*)(void*)>(
         ResolveAddr(Module::Exe, 0x1400c5400));
 
-    // FindPositionComponent (FUN_140002e10) -- find WorkComponent on entity
+    // FindPositionComponent (FUN_140002e10)
     s_fn_FindPositionComponent = reinterpret_cast<void*(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140002e10));
 
-    // TypeId for IsDerivedFrom check
+    // TypeId for IsDerivedFrom check in Serialize
     s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
 
     // Vtables
     s_vtable_Work = (void*)ResolveAddr(Module::Exe, 0x140161a80);
     s_vtable_ConsumeProduce = (void*)ResolveAddr(Module::Exe, ConsumeProduceActionAddr::Vtable);
+
+    // Execute-specific helpers
+    s_fn_ModelComp_SetActiveState = reinterpret_cast<s_fn_ModelComp_SetActiveState_t>(
+        ResolveAddr(Module::Exe, 0x14012c3f0));
+
+    s_fn_CheckProduceThreshold = reinterpret_cast<s_fn_CheckProduceThreshold_t>(
+        ResolveAddr(Module::Exe, 0x1401193a0));
+
+    s_fn_ResetProductionState = reinterpret_cast<s_fn_ResetProductionState_t>(
+        ResolveAddr(Module::Exe, 0x14012b310));
+
+    s_fn_Map_RecalcZones = reinterpret_cast<s_fn_Map_RecalcZones_t>(
+        ResolveAddr(Module::Exe, 0x14009c480));
+
+    s_fn_SetupWorkChain = reinterpret_cast<s_fn_SetupWorkChain_t>(
+        ResolveAddr(Module::Exe, 0x1400bef70));
 
     bool ok = s_fn_ObjectInternal_Ctor && s_fn_ObjectInternal_Dtor &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
@@ -141,10 +190,26 @@ bool ConsumeProduce_ResolveFuncs() {
               s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
               s_fn_FindPositionComponent &&
               s_typeId_1401c7158 &&
+              s_vtable_Work && s_vtable_ConsumeProduce &&
+              s_fn_ModelComp_SetActiveState && s_fn_CheckProduceThreshold &&
+              s_fn_ResetProductionState && s_fn_Map_RecalcZones &&
+              s_fn_SetupWorkChain &&
               fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
               g_fn_Serialize_Int && g_fn_Serialize_Bool &&
-              s_vtable_Work && s_vtable_ConsumeProduce;
+              fn_GetActiveProductIndex &&
+              fn_FindStorageForResource && fn_Map_CheckPassable &&
+              fn_Storage_FindSlot && fn_Random_Rand &&
+              fn_Entity_GetPosition && fn_Entity_FindComponent_Position &&
+              fn_CitizenAI_LongTermPlan && fn_TryAssignWorkplace &&
+              fn_Pathfinding_FindPath &&
+              g_pGameWorldSingleton &&
+              g_TypeId_ConsumeProduceComponent &&
+              g_TypeId_HappinessComponent &&
+              g_TypeId_StateMachineComponent_FC &&
+              g_TypeId_StorageComponent_FC &&
+              g_TypeId_RawMaterialDescription &&
+              g_TypeId_StorageLocationComponent;
 
 #ifdef _DEBUG
     printf("[ConsumeProduce] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p\n",
@@ -160,6 +225,11 @@ bool ConsumeProduce_ResolveFuncs() {
     printf("[ConsumeProduce]   FindPos=%p typeId=%p vtWork=%p vtCP=%p\n",
            (void*)s_fn_FindPositionComponent, (void*)s_typeId_1401c7158,
            s_vtable_Work, s_vtable_ConsumeProduce);
+    printf("[ConsumeProduce]   SetActiveState=%p CheckThresh=%p ResetProd=%p\n",
+           (void*)s_fn_ModelComp_SetActiveState, (void*)s_fn_CheckProduceThreshold,
+           (void*)s_fn_ResetProductionState);
+    printf("[ConsumeProduce]   RecalcZones=%p SetupWorkChain=%p\n",
+           (void*)s_fn_Map_RecalcZones, (void*)s_fn_SetupWorkChain);
     if (!ok) printf("[ConsumeProduce] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -194,11 +264,11 @@ void* ConsumeProduce_Ctor_Impl(ConsumeProduceAction* self) {
 
     // ConsumeProduce-specific fields
     // Note: field_48 (bool) and field_4c/field_54 (ints) are NOT initialized by ctor
-    self->field_50 = 0;    // Type
+    self->field_50 = 0;        // Type
     self->field_58 = nullptr;  // IBP array
-    self->field_60 = 0;       // IBP count
+    self->field_60 = 0;        // IBP count
     self->field_68 = nullptr;  // int array
-    self->field_70 = 0;       // int count
+    self->field_70 = 0;        // int count
 
     return self;
 }
@@ -300,6 +370,679 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
 }
 
 // ============================================================
+// Helpers for Execute
+// ============================================================
+
+// Find a component by type ID on an entity (iterates component list at +0x30/+0x38).
+// Returns the component pointer, or nullptr if not found.
+static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
+    int count = *(int*)(entity + 0x38);
+    uintptr_t compArray = *(uintptr_t*)(entity + 0x30);
+    for (int i = 0; i < count; i++) {
+        uintptr_t* compPtr = (uintptr_t*)(compArray + (uintptr_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(compPtr);
+        uintptr_t comp = *compPtr;
+        // Call vtable slot +0x10 to get component type ID
+        uint32_t compType = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))((void*)comp);
+        if (compType == typeId) {
+            fn_InternalBasePtr_CheckPtr(compPtr);
+            void* found = (void*)*compPtr;
+            if (fn_IsDerivedFrom(found, typeId)) {
+                return found;
+            }
+            break;
+        }
+    }
+    return nullptr;
+}
+
+// Finalize action: call vtable +0x50, set citizen state flags, store citizen ref.
+static int FinalizeAction(ConsumeProduceAction* self, void* entityIBP, void* actionIBP, int priority, int slotIndex) {
+    fn_InternalBasePtr_CheckPtr(entityIBP);
+    uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
+
+    // Call vtable slot +0x50 (Shared method)
+    uintptr_t vtable = *(uintptr_t*)self;
+    typedef uint64_t* (*VtSlot50_t)(ConsumeProduceAction*, void*);
+    VtSlot50_t vtShared = *(VtSlot50_t*)(vtable + 0x50);
+    uint64_t* result = vtShared(self, actionIBP);
+
+    uint64_t actionPtr = *result;
+    *(uint32_t*)(citizenEntity + 0x54) |= 4;
+    *(int32_t*)(citizenEntity + 0x30) = priority;
+    *(int32_t*)(citizenEntity + 0xb0) = 0;
+
+    if (actionPtr == *(uint64_t*)(citizenEntity + 0x1f0) && priority >= 0) {
+        *(uint32_t*)(citizenEntity + 0x88) |= 0x20000;
+    }
+
+    // Store citizen entity ref at self->field_58[slotIndex]
+    uintptr_t slotArray = (uintptr_t)self->field_58;
+    *(uintptr_t*)(slotArray + (int64_t)slotIndex * 8) = *(uintptr_t*)entityIBP;
+    return 2;
+}
+
+// ============================================================
+// Execute (0x1400e7840) -- vtable slot 4
+//
+// Main production work logic. Returns 1 (retry) or 2 (action pushed).
+// ============================================================
+int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    int* mapGrid = *(int**)(gameWorld + 0xf8);
+    void** worldEntityList = *(void***)(gameWorld + 0xf0);
+
+    void* entityFieldPtr = (void*)((uintptr_t)self + 0x10);  // self->field_10 as IBP
+
+    // --- Find PositionComponent on work entity ---
+    uintptr_t posIBP = 0;
+    fn_InternalBasePtr_CheckPtr(entityFieldPtr);
+    fn_Entity_FindComponent_Position(*(uintptr_t*)entityFieldPtr, &posIBP);
+
+    // --- Find StateMachineComponent (type 0x1401c7350) on work entity ---
+    uintptr_t smCompIBP = 0;
+    fn_InternalBasePtr_CheckPtr(entityFieldPtr);
+    fn_FindComponent_StateMachine((void*)*(uintptr_t*)entityFieldPtr, &smCompIBP);
+
+    // --- Get ConsumeProduceDescription from SM component's entity +0x18 ---
+    fn_InternalBasePtr_CheckPtr(&smCompIBP);
+    void* descBase = *(void**)(smCompIBP + 0x18);
+    bool isDerived = fn_IsDerivedFrom(descBase, *g_TypeId_ConsumeProduceComponent);
+    void* cpDesc = isDerived ? descBase : nullptr;  // ConsumeProduceDescription*
+
+    // --- Find Unknown7ee8 component (for storage slot lookup) ---
+    uintptr_t unkCompIBP = 0;
+    fn_InternalBasePtr_CheckPtr(entityFieldPtr);
+    fn_FindComponent_Unknown7ee8((void*)*(uintptr_t*)entityFieldPtr, &unkCompIBP);
+
+    // --- Check resource depletion (bVar6) ---
+    // Get active product index from ConsumeProduce component
+    bool resourcesDepleted = false;
+    fn_InternalBasePtr_CheckPtr(&smCompIBP);
+    int activeProductIdx = fn_GetActiveProductIndex((void*)smCompIBP);
+    fn_InternalBasePtr_CheckPtr(&smCompIBP);
+
+    uintptr_t cpDescAddr = (uintptr_t)cpDesc;
+
+    if (*(int*)(smCompIBP + 0x50) < 0) {
+        // Multi-product mode: check ALL products for depletion
+        int productCount = *(int*)(cpDescAddr + 0x30);
+        if (productCount > 0) {
+            int* productPtr = (int*)(*(uintptr_t*)(cpDescAddr + 0x28) + 0x18);
+            for (int i = 0; i < productCount; i++) {
+                int materialType = *productPtr;
+                productPtr += 10;  // stride = 0x28 bytes = 10 ints
+                // Check world material supply vs demand
+                uintptr_t* matArray = (uintptr_t*)worldEntityList[0x2e];
+                int supply = (int)matArray[(int64_t)materialType * 4];
+                int demand = (int)matArray[(int64_t)materialType * 4 + 1];
+                if (demand <= supply) {
+                    resourcesDepleted = true;
+                }
+            }
+        }
+    } else {
+        // Single product mode: check specific active product
+        uintptr_t productData = *(uintptr_t*)(cpDescAddr + 0x28);
+        int materialType = *(int*)(productData + 0x18 + (int64_t)activeProductIdx * 0x28);
+        uintptr_t* matArray = (uintptr_t*)worldEntityList[0x2e];
+        int supply = (int)matArray[materialType * 4];
+        int demand = (int)matArray[materialType * 4 + 1];
+        resourcesDepleted = (demand <= supply);
+    }
+
+    // --- Find HappinessComponent (type 0x1401c7e08) on work entity ---
+    fn_InternalBasePtr_CheckPtr(entityFieldPtr);
+    uintptr_t entity = *(uintptr_t*)entityFieldPtr;
+    void* meshComp = FindComponentOnEntity(entity, *g_TypeId_HappinessComponent);
+
+    uintptr_t meshCompIBP = 0;
+    fn_InternalBasePtr_Ctor(&meshCompIBP, meshComp);
+
+    // Set active state = 2, enabled = resourcesDepleted
+    fn_InternalBasePtr_CheckPtr(&meshCompIBP);
+    s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 2, resourcesDepleted ? '\x01' : '\0');
+
+    // --- Find StateMachineComponent (type 0x1401c7350) for produce check ---
+    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x10));
+    entity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    void* smComp2 = FindComponentOnEntity(entity, *g_TypeId_StateMachineComponent_FC);
+
+    uintptr_t smComp2IBP = 0;
+    fn_InternalBasePtr_Ctor(&smComp2IBP, smComp2);
+
+    // Check produce threshold
+    fn_InternalBasePtr_CheckPtr(&smComp2IBP);
+    uint64_t canProduce = s_fn_CheckProduceThreshold(smComp2IBP);
+
+    // ============================================================
+    // BRANCH: Not depleted
+    // ============================================================
+    if (!resourcesDepleted) {
+        if ((char)canProduce == '\0') {
+            goto handle_depleted_or_idle;
+        }
+
+        // --- Pick random empty output slot ---
+        void* randomPtr = *(void**)(gameWorld + 0xd8);
+        uint32_t startSlot = fn_Random_Rand(randomPtr, (uint32_t)self->field_60);
+        int totalSlots = self->field_60;
+        uint32_t slot = startSlot;
+
+        if (totalSlots < 1) {
+            return 1;
+        }
+
+        // Find an empty slot (field_58[slot] == 0)
+        int attempts = 0;
+        while (*(uintptr_t*)((uintptr_t)self->field_58 + (uintptr_t)slot * 8) != 0) {
+            slot++;
+            if ((int)slot >= totalSlots) {
+                slot = 0;
+            }
+            attempts++;
+            if (attempts >= totalSlots) {
+                return 1;  // All slots occupied
+            }
+        }
+
+        if (slot == 0xffffffff) {
+            return 1;
+        }
+
+        // --- Find StorageComponent on work entity ---
+        fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x10));
+        entity = *(uintptr_t*)((uintptr_t)self + 0x10);
+        void* storageComp = FindComponentOnEntity(entity, *g_TypeId_StorageComponent_FC);
+
+        uintptr_t storageCompIBP = 0;
+        fn_InternalBasePtr_Ctor(&storageCompIBP, storageComp);
+
+        // --- Setup loop vars for product iteration ---
+        int64_t productStride = (int64_t)activeProductIdx * 5;
+        uintptr_t productData = *(uintptr_t*)(cpDescAddr + 0x28);
+
+        // Get citizen position data for cell index calculation
+        fn_InternalBasePtr_CheckPtr(entityIBP);
+        uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
+        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
+        uintptr_t citizenSM = *(uintptr_t*)(citizenEntity + 0x278);
+        fn_InternalBasePtr_CheckPtr((void*)(citizenSM + 0x68));
+        uintptr_t citizenPos = *(uintptr_t*)(citizenSM + 0x68);
+
+        (void)*(float*)(citizenPos + 0x160);  // posHeight -- read but not used in reimpl
+        int mapSize = *mapGrid;
+        int halfMap = mapSize >> 1;
+        int cellX = (int)(*(float*)(citizenPos + 0x158) + (float)halfMap);
+        int cellY = (int)(*(float*)(citizenPos + 0x15c) + (float)halfMap);
+        if (cellX < 0) cellX = 0;
+        if (cellX >= mapSize) cellX = mapSize - 1;
+        if (cellY < 0) cellY = 0;
+        if (cellY >= mapSize) cellY = mapSize - 1;
+        int citizenCell = cellY * mapSize + cellX;
+
+        // --- Iterate input materials for active product ---
+        int inputCount = *(int*)(storageCompIBP + 0x30);
+        if (inputCount > 0) {
+            uintptr_t inputOffset = 0;
+            for (int inputIdx = 0; inputIdx < inputCount; inputIdx++) {
+                // Get material entity from storage component
+                fn_InternalBasePtr_CheckPtr(&storageCompIBP);
+                uintptr_t storageData = *(uintptr_t*)(storageCompIBP + 0x28);
+                uintptr_t matEntity = *(uintptr_t*)(inputOffset + storageData);
+
+                // Check if this material entity matches the required material for active product
+                bool matMatches = (*(uintptr_t*)(productData + 0x10 + productStride * 8) == matEntity);
+                if (!matMatches) {
+                    int64_t matCheckCount = (int64_t)*(int*)(productData + 8 + productStride * 8);
+                    if (matCheckCount > 0) {
+                        uintptr_t* matCheckPtr = *(uintptr_t**)(productData + productStride * 8);
+                        for (int64_t j = 0; j < matCheckCount; j++) {
+                            if (matCheckPtr[j * 2] == matEntity) {
+                                matMatches = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (matMatches) {
+                    inputOffset += 0x10;
+                    continue;
+                }
+
+                // Material doesn't match -- need to find and haul it
+                // Get available amount from storage
+                void* rawMatComp = FindComponentOnEntity(matEntity, *g_TypeId_RawMaterialDescription);
+
+                // Check remaining amount in storage: capacity - currently stored
+                int available = *(int*)(inputOffset + 8 + storageData) - *(int*)(inputOffset + 0xc + storageData);
+
+                // Find storage on citizen's home entity
+                fn_InternalBasePtr_CheckPtr(entityIBP);
+                citizenEntity = *(uintptr_t*)entityIBP;
+                fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
+                uintptr_t homeEntity = *(uintptr_t*)(citizenEntity + 0x10);
+
+                // Find StorageComponent on home entity
+                void* homeStorage = FindComponentOnEntity(homeEntity, *g_TypeId_StorageComponent_FC);
+                uintptr_t homeStorageIBP = 0;
+                fn_InternalBasePtr_Ctor(&homeStorageIBP, homeStorage);
+
+                // Check if home storage has capacity for the material
+                fn_InternalBasePtr_CheckPtr(&homeStorageIBP);
+                int homeCapacity = *(int*)(homeStorageIBP + 0x38);
+                fn_InternalBasePtr_CheckPtr(&homeStorageIBP);
+                int homeStored = fn_StorageComponent_QueryCount((void*)homeStorageIBP);
+
+                if (homeCapacity - homeStored < available * *(int*)((uintptr_t)rawMatComp + 0x48)) {
+                    // Not enough capacity -- check citizen's own storage
+                    fn_InternalBasePtr_CheckPtr(entityIBP);
+                    citizenEntity = *(uintptr_t*)entityIBP;
+                    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
+                    homeEntity = *(uintptr_t*)(citizenEntity + 0x10);
+
+                    void* citizenStorage = FindComponentOnEntity(homeEntity, *g_TypeId_StorageComponent_FC);
+                    uintptr_t citizenStorageIBP = 0;
+                    fn_InternalBasePtr_Ctor(&citizenStorageIBP, citizenStorage);
+
+                    fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
+                    int cap2 = *(int*)(citizenStorageIBP + 0x38);
+                    fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
+                    int stored2 = fn_StorageComponent_QueryCount((void*)citizenStorageIBP);
+                    available = (cap2 - stored2) / *(int*)((uintptr_t)rawMatComp + 0x48);
+                }
+
+                if (available == 0) {
+                    // No resources available -- replan citizen
+                    fn_InternalBasePtr_CheckPtr(entityIBP);
+                    fn_CitizenAI_LongTermPlan(*(void**)entityIBP);
+                    return 2;
+                }
+
+                // --- Search for storage with this resource ---
+                float searchPos[3] = { 0.0f, 0.0f, 0.0f };
+
+                // Get entity ref for pathfinding
+                uintptr_t entityRef = *(uintptr_t*)entityFieldPtr;
+
+                uintptr_t foundEntity = 0;
+                fn_FindStorageForResource(
+                    worldEntityList, &foundEntity,
+                    *(uint32_t*)((uintptr_t)self + 0x28), matEntity,
+                    available, '\x01', searchPos, (void*)((uintptr_t)self + 0x10));
+
+                if (foundEntity != 0) {
+                    // Check passability
+                    uint64_t passable = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)citizenCell,
+                                                             *(uint32_t*)((uintptr_t)self + 0x28));
+                    if ((char)passable == '\0') {
+                        return 1;
+                    }
+
+                    // Get terrain position for storage
+                    float terrainPos[4] = {};
+                    if (unkCompIBP == 0) {
+                        if (posIBP != 0) {
+                            fn_InternalBasePtr_CheckPtr(&posIBP);
+                            fn_Entity_GetPosition((void*)posIBP, (void*)&foundEntity, 0, 0, nullptr);
+                            terrainPos[0] = *(float*)&foundEntity;
+                            terrainPos[1] = ((float*)&foundEntity)[1];
+                            terrainPos[2] = ((float*)&foundEntity)[2];
+                        }
+                    } else {
+                        // Use storage slot lookup
+                        int slotMapSize = *mapGrid;
+                        int slotCellX = (int)(searchPos[0] + (float)(slotMapSize >> 1));
+                        int slotCellY = (int)(searchPos[1] + (float)(slotMapSize >> 1));
+                        if (slotCellX < 0) slotCellX = 0;
+                        if (slotCellX >= slotMapSize) slotCellX = slotMapSize - 1;
+                        if (slotCellY < 0) slotCellY = 0;
+                        if (slotCellY >= slotMapSize) slotCellY = slotMapSize - 1;
+
+                        fn_InternalBasePtr_CheckPtr(&unkCompIBP);
+                        int slotResult = fn_Storage_FindSlot(
+                            (void*)unkCompIBP, slotMapSize * slotCellY + slotCellX,
+                            (float*)&terrainPos, *(uint32_t*)((uintptr_t)self + 0x28));
+                        if (slotResult >= 0) {
+                            // Set up pathfinding and create work action
+                            uintptr_t destEntity = foundEntity;
+                            uintptr_t destEntityRef = *(uintptr_t*)entityIBP;
+
+                            fn_Pathfinding_FindPath(
+                                &worldEntityList, &destEntityRef,
+                                *(int*)((uintptr_t)self + 0x20), &destEntity,
+                                searchPos, &entityRef, (float*)&terrainPos,
+                                (long)matEntity, available, slot, 0, '\x01', 0, 0);
+
+                            int priority = *(int*)((uintptr_t)self + 0x20);
+                            fn_InternalBasePtr_CheckPtr(entityIBP);
+                            return FinalizeAction(self, entityIBP, &destEntityRef, priority, slot);
+                        }
+                    }
+                }
+
+                inputOffset += 0x10;
+            }
+        }
+
+        // --- Second pass: check each input material for nearby storage ---
+        bool allInputsAvailable = true;
+        int inputMatCount = *(int*)(productData + 8 + productStride * 8);
+        for (int matIdx = 0; matIdx < inputMatCount; matIdx++) {
+            uintptr_t matEntity2 = *(uintptr_t*)(*(uintptr_t*)(productData + productStride * 8) + (uintptr_t)matIdx * 0x10);
+
+            // Check if this material is already in our storage
+            int existingAmount = 0;
+            fn_InternalBasePtr_CheckPtr(&storageCompIBP);
+            int storageSlotCount = *(int*)(storageCompIBP + 0x30);
+            if (storageSlotCount > 0) {
+                uintptr_t* storageSlots = *(uintptr_t**)(storageCompIBP + 0x28);
+                for (int si = 0; si < storageSlotCount; si++) {
+                    if (storageSlots[si * 2] == matEntity2) {
+                        if (si >= 0) {
+                            existingAmount = (int)storageSlots[si * 2 + 1] - *(int*)((uintptr_t)storageSlots + si * 0x10 + 0xc);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            int required = *(int*)(*(uintptr_t*)(productData + productStride * 8) + 8 + (uintptr_t)matIdx * 0x10);
+            if (existingAmount < required) {
+                allInputsAvailable = false;
+
+                // Search for this material in nearby entities
+                float searchPos2[3] = { 0.0f, 0.0f, 0.0f };
+
+                // Get building position for search
+                fn_InternalBasePtr_CheckPtr(entityIBP);
+                citizenEntity = *(uintptr_t*)entityIBP;
+                fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
+                citizenSM = *(uintptr_t*)(citizenEntity + 0x278);
+                fn_InternalBasePtr_CheckPtr((void*)(citizenSM + 0x68));
+                uintptr_t bldgPos = *(uintptr_t*)(citizenSM + 0x68);
+
+                mapSize = *mapGrid;
+                halfMap = mapSize >> 1;
+                int bx = (int)(*(float*)(bldgPos + 0x158) + (float)halfMap);
+                int by = (int)(*(float*)(bldgPos + 0x15c) + (float)halfMap);
+                if (bx < 0) bx = 0;
+                if (bx >= mapSize) bx = mapSize - 1;
+                if (by < 0) by = 0;
+                if (by >= mapSize) by = mapSize - 1;
+
+                uintptr_t foundStorage = 0;
+                fn_FindStorageForResource(
+                    worldEntityList, (void*)&foundStorage,
+                    mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
+                    (void*)((uintptr_t)self + 0x10));
+
+                if (foundStorage != 0) {
+                    // Found storage -- check if it has the material available
+                    fn_InternalBasePtr_CheckPtr(&foundStorage);
+                    uintptr_t fStorage = foundStorage;
+                    void* fStorageComp = FindComponentOnEntity(fStorage, *g_TypeId_StorageComponent_FC);
+                    uintptr_t fStorageIBP = 0;
+                    fn_InternalBasePtr_Ctor(&fStorageIBP, fStorageComp);
+
+                    // Check if storage has the material
+                    fn_InternalBasePtr_CheckPtr(&fStorageIBP);
+                    int fSlotCount = *(int*)(fStorageIBP + 0x30);
+                    if (fSlotCount > 0) {
+                        uintptr_t* fSlots = *(uintptr_t**)(fStorageIBP + 0x28);
+                        for (int fi = 0; fi < fSlotCount; fi++) {
+                            if (fSlots[fi * 2] == matEntity2) {
+                                if (fi >= 0 && (int)fSlots[fi * 2 + 1] != *(int*)((uintptr_t)fSlots + fi * 0x10 + 0xc)) {
+                                    // Material available -- find storage on citizen's home entity
+                                    fn_InternalBasePtr_CheckPtr(entityIBP);
+                                    citizenEntity = *(uintptr_t*)entityIBP;
+                                    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
+                                    uintptr_t homeEnt2 = *(uintptr_t*)(citizenEntity + 0x10);
+                                    void* homeStorage2 = FindComponentOnEntity(homeEnt2, *g_TypeId_StorageComponent_FC);
+                                    uintptr_t homeStorage2IBP = 0;
+                                    fn_InternalBasePtr_Ctor(&homeStorage2IBP, homeStorage2);
+
+                                    fn_InternalBasePtr_CheckPtr(&homeStorage2IBP);
+                                    int hs2Count = fn_StorageComponent_QueryCount((void*)homeStorage2IBP);
+                                    if (hs2Count < 1) {
+                                        // Storage empty -- set up path to fetch material
+                                        uintptr_t fetchDest = foundStorage;
+                                        fn_InternalBasePtr_CheckPtr(&posIBP);
+                                        float fetchPos[4] = {};
+                                        fn_Entity_GetPosition((void*)posIBP, fetchPos, 0, slot, nullptr);
+
+                                        uintptr_t pathSrc = *(uintptr_t*)entityFieldPtr;
+
+                                        fn_Pathfinding_FindPath(
+                                            &foundStorage, &worldEntityList,
+                                            *(int*)((uintptr_t)self + 0x20), &pathSrc,
+                                            (float*)&fetchPos, &fetchDest, searchPos2,
+                                            (long)matEntity2, -1, slot, 1, '\0', 0, 0);
+
+                                        int priority2 = *(int*)((uintptr_t)self + 0x20);
+                                        fn_InternalBasePtr_CheckPtr(entityIBP);
+                                        return FinalizeAction(self, entityIBP, &fetchDest, priority2, slot);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Third pass: check assigned positions for validity ---
+        int totalPositions = (int)self->field_60;  // number of output positions
+        uint32_t firstFreePos = 0xffffffff;
+        int firstFreeIndex = -1;
+        uint32_t freeCount = 0;
+
+        for (int posIdx = 0; posIdx < totalPositions; posIdx++) {
+            fn_InternalBasePtr_CheckPtr(&posIBP);
+            float posVec[3];
+            fn_Entity_GetPosition((void*)posIBP, posVec, 2, posIdx, nullptr);
+
+            mapSize = *mapGrid;
+            halfMap = mapSize >> 1;
+            int px = (int)(posVec[0] + (float)halfMap);
+            int py = (int)(posVec[1] + (float)halfMap);
+            if (px < 0) px = 0;
+            if (px >= mapSize) px = mapSize - 1;
+            if (py < 0) py = 0;
+            if (py >= mapSize) py = mapSize - 1;
+            int posCell = py * mapSize + px;
+
+            // Check if position has status 2 but no structure
+            int* statusArray = (int*)self->field_68;
+            uintptr_t structBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+            if (statusArray[posIdx] == 2 &&
+                *(uintptr_t*)(structBase + 8 + (int64_t)posCell * 0x30) == 0) {
+                statusArray[posIdx] = 0;
+            }
+
+            if (statusArray[posIdx] == 0) {
+                freeCount++;
+                if ((int)firstFreePos < 0) {
+                    firstFreePos = (uint32_t)posIdx;
+                    firstFreeIndex = posCell;
+                }
+            }
+        }
+
+        // If all positions are free, mark as not producing
+        if (freeCount == (uint32_t)totalPositions) {
+            *(uint8_t*)((uintptr_t)self + 0x48) = 0;  // field_48 = false
+        }
+
+        // If no free position found, mark as producing
+        if ((int)firstFreePos < 0) {
+            *(uint8_t*)((uintptr_t)self + 0x48) = 1;  // field_48 = true
+        } else if (*(char*)((uintptr_t)self + 0x48) == '\0' && allInputsAvailable) {
+            goto setup_produce_action;
+        }
+
+        // --- Check each position for workplace assignment ---
+        for (int posIdx2 = 0; posIdx2 < totalPositions; posIdx2++) {
+            fn_InternalBasePtr_CheckPtr(&posIBP);
+            float checkPos[3];
+            fn_Entity_GetPosition((void*)posIBP, checkPos, 2, posIdx2, nullptr);
+
+            mapSize = *mapGrid;
+            halfMap = mapSize >> 1;
+            int cx = (int)(checkPos[0] + (float)halfMap);
+            int cy = (int)(checkPos[1] + (float)halfMap);
+            if (cx < 0) cx = 0;
+            if (cx >= mapSize) cx = mapSize - 1;
+            if (cy < 0) cy = 0;
+            if (cy >= mapSize) cy = mapSize - 1;
+            int checkCell = cy * mapSize + cx;
+
+            uintptr_t structBase2 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+            uintptr_t structEntity = *(uintptr_t*)(structBase2 + 8 + (int64_t)checkCell * 0x30);
+
+            if (structEntity != 0) {
+                fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x10));
+                if (structEntity != *(uintptr_t*)((uintptr_t)self + 0x10)) {
+                    // Found a different entity at this position -- check for StorageLocation
+                    fn_InternalBasePtr_CheckPtr(&structEntity);
+                    void* locComp = FindComponentOnEntity(structEntity, *g_TypeId_StorageLocationComponent);
+                    uintptr_t locCompIBP = 0;
+                    fn_InternalBasePtr_Ctor(&locCompIBP, locComp);
+
+                    fn_InternalBasePtr_CheckPtr(&locCompIBP);
+                    uintptr_t citizenRef3 = *(uintptr_t*)entityIBP;
+                    uintptr_t assignMgr = *(uintptr_t*)(gameWorld + 0x118);
+                    uint64_t assigned = fn_TryAssignWorkplace(
+                        assignMgr, &citizenRef3, *(int*)(locCompIBP + 0x28), '\x01');
+                    if ((char)assigned != '\0') {
+                        return 2;
+                    }
+                }
+            }
+        }
+
+        if ((int)firstFreePos < 0) {
+            return 1;
+        }
+
+    setup_produce_action:
+        // --- Set up produce action ---
+        // Find HappinessComponent again and toggle state 3
+        fn_InternalBasePtr_CheckPtr(entityFieldPtr);
+        entity = *(uintptr_t*)entityFieldPtr;
+        void* meshComp2 = FindComponentOnEntity(entity, *g_TypeId_HappinessComponent);
+        uintptr_t meshComp2IBP = 0;
+        fn_InternalBasePtr_Ctor(&meshComp2IBP, meshComp2);
+        fn_InternalBasePtr_CheckPtr(&meshComp2IBP);
+        s_fn_ModelComp_SetActiveState((void*)meshComp2IBP, 3, !allInputsAvailable ? '\x01' : '\0');
+
+        if (allInputsAvailable) {
+            // Get position for the output slot
+            fn_InternalBasePtr_CheckPtr(&posIBP);
+            float producePos[3];
+            float produceHeading[2] = {};
+            fn_Entity_GetPosition((void*)posIBP, producePos, 0, slot, produceHeading);
+
+            mapSize = *mapGrid;
+            halfMap = mapSize >> 1;
+            int prodCellX = (int)(producePos[1] + (float)halfMap);
+            int prodCellY = (int)(producePos[0] + (float)halfMap);
+            if (prodCellY < 0) prodCellY = 0;
+            if (prodCellY >= mapSize) prodCellY = mapSize - 1;
+            if (prodCellX < 0) prodCellX = 0;
+            if (prodCellX >= mapSize) prodCellX = mapSize - 1;
+
+            // Recalculate map zones
+            s_fn_Map_RecalcZones(mapGrid, producePos, 0, slot);
+
+            // Get cell structs for passability check
+            uintptr_t structBase3 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+            uintptr_t srcCellStruct = structBase3 + (int64_t)citizenCell * 0x30;
+            uintptr_t dstCellStruct = structBase3 + (int64_t)(prodCellX * mapSize + prodCellY) * 0x30;
+
+            uint32_t srcMask = 1 << (*(uint8_t*)(dstCellStruct + 0x29) & 0x1f);
+            uint32_t dstMask = 1 << (*(uint8_t*)(srcCellStruct + 0x29) & 0x1f);
+            uint32_t combined = srcMask | dstMask;
+            uint32_t passFlags = combined | 0xe1f;
+
+            if ((passFlags & dstMask) != 0 && (passFlags & srcMask) != 0 &&
+                ((combined & 0x1e0) != 0 ||
+                 (*(int16_t*)(srcCellStruct + 0x26) != 0 &&
+                  *(int16_t*)(dstCellStruct + 0x26) != 0 &&
+                  *(int16_t*)(srcCellStruct + 0x26) == *(int16_t*)(dstCellStruct + 0x26)))) {
+
+                // Check if enough consume cycles have passed
+                char canFinish = '\0';
+                if (*(int*)(cpDescAddr + 0x40) <= self->field_4c) {
+                    canFinish = '\x01';
+                    self->field_4c -= *(int*)(cpDescAddr + 0x40);
+
+                    // Increment produce counter on StateMachineComponent
+                    fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)self + 0x10));
+                    entity = *(uintptr_t*)((uintptr_t)self + 0x10);
+                    void* smComp3 = FindComponentOnEntity(entity, *g_TypeId_StateMachineComponent_FC);
+                    uintptr_t smComp3IBP = 0;
+                    fn_InternalBasePtr_Ctor(&smComp3IBP, smComp3);
+                    fn_InternalBasePtr_CheckPtr(&smComp3IBP);
+                    *(int*)(smComp3IBP + 0x68) += 1;
+                }
+
+                // Create work action chain
+                uintptr_t citizenRef4 = *(uintptr_t*)entityIBP;
+                uintptr_t workEntityRef = *(uintptr_t*)((uintptr_t)self + 0x10);
+                int actionPriority = (int)*(int64_t*)((uintptr_t)self + 0x50);
+
+                s_fn_SetupWorkChain(
+                    &citizenRef4,
+                    *(int*)((uintptr_t)self + 0x20),
+                    &workEntityRef,
+                    producePos,
+                    produceHeading[0],
+                    *(uintptr_t*)(*(uintptr_t*)((uintptr_t)self + 0x10) + 0x28),
+                    *(uint64_t*)(productData + 0x10 + productStride * 8),
+                    (uint32_t)canFinish,
+                    (int*)&actionPriority,
+                    *(uint32_t*)((uintptr_t)self + 0x54),
+                    firstFreeIndex,
+                    *(float*)(cpDescAddr + 0x44),
+                    (canFinish ? 0x8000 : 0) | ((firstFreePos | 0x100) << 8) | slot);
+
+                // Update status array for the position
+                if (canFinish != '\0') {
+                    ((int*)self->field_68)[(int)firstFreePos] = 1;
+                }
+
+                int priority3 = *(int*)((uintptr_t)self + 0x20);
+                fn_InternalBasePtr_CheckPtr(entityIBP);
+                return FinalizeAction(self, entityIBP, &actionPriority, priority3, slot);
+            }
+        }
+        return 1;
+    }
+
+    // ============================================================
+    // BRANCH: Depleted resources or threshold not met
+    // ============================================================
+    if ((char)canProduce != '\0') {
+    handle_depleted_or_idle:
+        // Nothing to do here -- fall through
+        (void)0;
+    }
+
+    // Reset production state via helper
+    fn_InternalBasePtr_CheckPtr(&smCompIBP);
+    s_fn_ResetProductionState(smCompIBP);
+
+    // Set active state = 3, disabled
+    fn_InternalBasePtr_CheckPtr(&meshCompIBP);
+    s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 3, '\0');
+
+    return 1;
+}
+
+// ============================================================
 // OnComplete (0x1400e77c0) -- vtable slot 6
 // Stores null IBP into the assigned citizen slot, updates state tracking.
 // param4 encodes: bits [6:0] = slot index, bit 15 = update int array,
@@ -379,7 +1122,7 @@ void ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self) {
 int ConsumeProduce_Validate_Impl(ConsumeProduceAction* self, void* param2) {
     int count = self->field_60;
     if (count <= 0) {
-        // No assigned citizens -- free temp array and return valid
+        // No assigned citizens -- return valid
         return 1;
     }
 

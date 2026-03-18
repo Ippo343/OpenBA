@@ -24,10 +24,10 @@ Work classes have a simpler vtable than components — primarily CreateWork/Upda
 | ClearArea | 0x140161110 | BuildActions.h | **COMPLETE** (all hookable slots reimplemented) | Medium |
 | ClearStorage | 0x1401611a0 | ClearStorage.h | **COMPLETE** (Slot9 disabled=bug class 3, clean C++ ready) | Low |
 Stage 2:
-| ConsumeProduce | 0x140161220 | BuildActions.h | Deep reimpl (7/8, Execute forwarded) | Medium |
-| FireWork | 0x1401612a0 | FireWork.h | Deep reimpl (3/5, Slot4/Slot9 forwarded, Slot6/Slot9 disabled=bug class 2/3) | Low |
-| FishingWork | 0x140161320 | FishingWork.h | Deep reimpl (5/7, Slot4/Slot9 forwarded) | Medium |
-| ForesterWork | 0x1401613a0 | ForesterWork.h | Deep reimpl (6/7, Slot4 forwarded, Slot9 disabled=bug class 3) | Medium |
+| ConsumeProduce | 0x140161220 | BuildActions.h | **COMPLETE** (all methods reimpl'd, Execute not hooked — standalone exe only) | Medium |
+| FireWork | 0x1401612a0 | FireWork.h | **COMPLETE** (all methods reimpl'd, Slot6/Slot9 disabled=bug class 2/3) | Low |
+| FishingWork | 0x140161320 | FishingWork.h | **COMPLETE** (all 7 hooked methods reimpl'd) | Medium |
+| ForesterWork | 0x1401613a0 | ForesterWork.h | **COMPLETE** (all methods reimpl'd, Slot9 disabled=bug class 3) | Medium |
 Stage 3:
 | GatherRawMaterials | - | - | Not started | High |
 | HarvestArea | 0x1401614a0 | HarvestArea.h | Not started | Medium |

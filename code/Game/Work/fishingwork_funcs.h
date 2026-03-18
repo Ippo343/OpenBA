@@ -1,35 +1,23 @@
 #pragma once
-// Function declarations for deeply reimplemented FishingWork methods.
-// Called from engine/reimpl/fishingwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
+// FishingWork function declarations — clean game logic layer.
+// These functions are called from engine/reimpl/fishingwork.cpp hook wrappers.
+// They must NOT depend on hooks.h — they are portable for standalone exe.
 
-#include "FishingWork.h"
 #include <cstdint>
 
-// Serialize (vtable +0x18, 0x1400ea910):
-// Work_Serialize + Serializer(v0) + serialize IBP array at +0x48/+0x50,
-// with IsDerivedFrom validation per element, then int array at +0x58/+0x60,
-// then int at +0x68.
-void FishingWork_Serialize_Impl(FishingWork* self, void* stream);
+struct FishingWork;
 
-// OnComplete (vtable +0x30, slot 6, 0x1400e9eb0):
-// Clears citizen ref at index (param4 & 0xf), optionally marks spot as done.
-// Returns 0.
-int FishingWork_OnComplete_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4);
+// Slot4/Execute (vtable +0x20, 0x1400e9f20):
+// Fishing dock work assignment — finds an available fishing spot, assigns a citizen
+// to fish there, or retries with animation if no spot found.
+// Returns: 1 = not ready/retry, 2 = action pushed
+int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* time);
 
-// OnCancel (vtable +0x38, slot 7, 0x1400e9e80):
-// Delegates to OnComplete (slot 6) via vtable call.
-// NOTE: Must forward all 4 params (bug class 6 — implicit R9 forwarding to slot6).
-void FishingWork_OnCancel_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4);
+// Slot9/Validate (vtable +0x48, 0x1400e9c30):
+// Validates all fishing work assignments. Iterates citizen slots, checks each
+// via Work::CanStartWork. Clears invalid citizens, marks orphaned spots for reset.
+// Returns: 1 = all valid, 0 = some invalid
+int FishingWork_Slot9_Impl(FishingWork* self, void* param2);
 
-// Cleanup (vtable +0x40, slot 8, 0x1400ea830):
-// For each citizen ref, walks entity -> StateMachineComponent -> task list cleanup.
-void FishingWork_Cleanup_Impl(FishingWork* self);
-
-// GetTarget (vtable +0x50, slot 10, 0x1400ea8b0):
-// Returns workplace entity's position component via hidden return ptr.
-// Uses MSVC member function ABI: RCX=this, RDX=outPtr.
-void* FishingWork_GetTarget_Impl(FishingWork* self, void* outPtr);
-
-// Resolve all local function pointers. Called once from Install.
+// Resolution helper — resolves all FishingWork-specific function pointers.
 bool FishingWork_ResolveFuncs();
