@@ -1,38 +1,37 @@
 // engine/reimpl/consumeproduce.cpp
-// Reimplementation of ConsumeProduce Work action from Application-x64.exe.
+// Hook wrappers for ConsumeProduce Work action from Application-x64.exe.
 //
-// ConsumeProduce — consume/produce work cycle. Size = 0x78.
+// ConsumeProduce -- consume/produce work cycle. Size = 0x78.
 // Inherits: Object::Internal -> Work (0x48) -> ConsumeProduce
 // Ctor: 0x1400e9340, Vtable: 0x140161220
 //
 // Vtable (12 slots):
-//   [0]  ScalarDtor    = 0x14002a190   <-- passthrough
+//   [0]  ScalarDtor    = 0x14002a190   <-- reimplemented
 //   [1]  VectorDtor    = 0x14002a140
 //   [2]  BaseDtor      = 0x14002a130
-//   [3]  Serialize     = 0x1400e9020   <-- passthrough (complex: array of InternalBasePtrs + ints)
-//   [4]  Execute       = 0x1400e7840   <-- passthrough (complex)
+//   [3]  Serialize     = 0x1400e9020   <-- reimplemented
+//   [4]  Execute       = 0x1400e7840   <-- passthrough (extremely complex ~500 lines)
 //   [5]  Shared        = 0x1400f7540
-//   [6]  OnComplete    = 0x1400e77c0   <-- passthrough
-//   [7]  OnCancel      = 0x1400e7780   <-- passthrough
-//   [8]  Cleanup       = 0x1400e8f30   <-- passthrough
-//   [9]  Validate      = 0x1400e7530   <-- passthrough
-//   [10] GetTarget     = 0x1400e8fb0   <-- passthrough
+//   [6]  OnComplete    = 0x1400e77c0   <-- passthrough (not hooked in hooks.cpp)
+//   [7]  OnCancel      = 0x1400e7780   <-- passthrough (not hooked in hooks.cpp)
+//   [8]  Cleanup       = 0x1400e8f30   <-- passthrough (not hooked in hooks.cpp)
+//   [9]  Validate      = 0x1400e7530   <-- passthrough (not hooked in hooks.cpp)
+//   [10] GetTarget     = 0x1400e8fb0   <-- passthrough (not hooked in hooks.cpp)
 //   [11] GetPriority   = 0x14002a0f0
 //
-// Constructor reimplemented. All vtable methods passthrough.
+// Ctor, ScalarDtor, Serialize reimplemented in code/Game/Work/consumeproduce.cpp.
+// Slots 6-10 have clean code in code/Game/ but are not hooked yet.
 
 #include "BuildActions.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Work/consumeproduce_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
-// ============================================================
-// Helper function pointers
-// ============================================================
-typedef void* (*fn_ObjectInternal_Ctor_t)(void* self);
-static fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
+// Forward declaration for resolution
+extern bool ConsumeProduce_ResolveFuncs();
 
 // ============================================================
 // Hook state
@@ -42,67 +41,34 @@ static HookInfo g_hookScalarDtor;
 static HookInfo g_hookSerialize;
 
 // ============================================================
-// Constructor (0x1400e9340)
+// Constructor (0x1400e9340) -- reimplemented
 // ============================================================
 static void* Reimpl_Ctor(ConsumeProduceAction* self) {
     g_lastHook = "ConsumeProduce::Ctor";
-    fn_ObjectInternal_Ctor(self);
-
-    // Work base fields
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    self->field_10 = nullptr;
-    self->field_18 = nullptr;
-    self->field_20 = -1;
-    self->field_24 = 0;
-    self->field_28 = -1;
-    self->field_2c = 0;
-    self->field_30 = nullptr;
-    self->field_38 = nullptr;
-    self->field_40 = 0;
-
-    // Set ConsumeProduce vtable
-    self->vtable = (void*)ResolveAddr(Module::Exe, ConsumeProduceActionAddr::Vtable);
-
-    // ConsumeProduce fields
-    self->field_50 = 0;
-    self->field_58 = nullptr;
-    self->field_60 = 0;
-    self->field_68 = nullptr;
-    self->field_70 = 0;
-
-    return self;
+    return ConsumeProduce_Ctor_Impl(self);
 }
 
 // ============================================================
-// ScalarDtor (0x14002a190) — passthrough
+// ScalarDtor (0x14002a190) -- reimplemented
 // ============================================================
 static void* Reimpl_ScalarDtor(ConsumeProduceAction* self, uint32_t flags) {
     g_lastHook = "ConsumeProduce::ScalarDtor";
-    return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
+    return ConsumeProduce_ScalarDtor_Impl(self, flags);
 }
 
 // ============================================================
-// Serialize (0x1400e9020) — passthrough
+// Serialize (0x1400e9020) -- reimplemented
 // ============================================================
 static void Reimpl_Serialize(ConsumeProduceAction* self, void* stream) {
     g_lastHook = "ConsumeProduce::Serialize";
-    ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
-}
-
-// ============================================================
-// Resolve helpers
-// ============================================================
-static bool ResolveHelpers() {
-    fn_ObjectInternal_Ctor = reinterpret_cast<fn_ObjectInternal_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152768)));
-    return fn_ObjectInternal_Ctor != nullptr;
+    ConsumeProduce_Serialize_Impl(self, stream);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallConsumeProduceCtor() {
-    if (!ResolveHelpers()) {
+    if (!ConsumeProduce_ResolveFuncs()) {
 #ifdef _DEBUG
         printf("[ConsumeProduce] ERROR: Failed to resolve helpers\n");
 #endif

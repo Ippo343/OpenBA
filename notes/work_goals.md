@@ -2,7 +2,7 @@
 
 **Directory:** `code/Game/Work/`
 **Type headers:** `AutoPickupWork.h`, `ClearStorage.h`, `FireWork.h`, `FishingWork.h`, `ForesterWork.h`, `HarvestArea.h`, `HarvestOrchard.h`, `HerbalistWork.h`, `HuntWork.h`, `LocationWork.h`, `MarketWork.h`, `PastureWork.h`, `Pickup.h`, `TendArea.h`, `TradeWork.h`
-**Source files:** None yet (empty directory)
+**Source files:** `autopickupwork.cpp`, `buildroad.cpp`, `buildstructure.cpp`, `cleararea.cpp`, `clearstorage.cpp`, `consumeproduce.cpp`, `firework.cpp`, `fishingwork.cpp`, `foresterwork.cpp`
 
 ---
 
@@ -23,18 +23,22 @@ Work classes have a simpler vtable than components — primarily CreateWork/Upda
 | BuildStructure | 0x1401610a0 | BuildActions.h | **COMPLETE** (all hookable slots reimplemented) | Medium |
 | ClearArea | 0x140161110 | BuildActions.h | **COMPLETE** (all hookable slots reimplemented) | Medium |
 | ClearStorage | 0x1401611a0 | ClearStorage.h | **COMPLETE** (Slot9 disabled=bug class 3, clean C++ ready) | Low |
-| ConsumeProduce | - | - | Not started | Medium |
-| FireWork | 0x1401612a0 | FireWork.h | Not started | Low |
-| FishingWork | 0x140161320 | FishingWork.h | Not started | Medium |
-| ForesterWork | 0x1401613a0 | ForesterWork.h | Not started | Medium |
+Stage 2:
+| ConsumeProduce | 0x140161220 | BuildActions.h | Deep reimpl (7/8, Execute forwarded) | Medium |
+| FireWork | 0x1401612a0 | FireWork.h | Deep reimpl (3/5, Slot4/Slot9 forwarded, Slot6/Slot9 disabled=bug class 2/3) | Low |
+| FishingWork | 0x140161320 | FishingWork.h | Deep reimpl (5/7, Slot4/Slot9 forwarded) | Medium |
+| ForesterWork | 0x1401613a0 | ForesterWork.h | Deep reimpl (6/7, Slot4 forwarded, Slot9 disabled=bug class 3) | Medium |
+Stage 3:
 | GatherRawMaterials | - | - | Not started | High |
 | HarvestArea | 0x1401614a0 | HarvestArea.h | Not started | Medium |
 | HarvestOrchard | 0x140161520 | HarvestOrchard.h | Not started | Medium |
 | HerbalistWork | 0x1401615a0 | HerbalistWork.h | Not started | Low |
+Stage 4:
 | HuntWork | 0x140161620 | HuntWork.h | Not started | Medium |
 | LocationWork | 0x1401616a0 | LocationWork.h | Not started | Medium |
 | MarketWork | 0x140161710 | MarketWork.h | Not started | Medium |
 | PastureWork | 0x1401617a0 | PastureWork.h | Not started | Medium |
+Stage 5:
 | Pickup | 0x140161810 | Pickup.h | Not started | Medium |
 | PlantArea | - | - | Not started | Medium |
 | PlantOrchard | - | - | Not started | Medium |
@@ -46,7 +50,6 @@ Work classes have a simpler vtable than components — primarily CreateWork/Upda
 ## Missing Type Headers
 
 These Work classes need type headers created from Ghidra decompilation:
-- BuildRoad, BuildStructure, ClearArea, ConsumeProduce
 - GatherRawMaterials, PlantArea, PlantOrchard
 
 ## Profile Source Paths

@@ -31,11 +31,13 @@ struct FishingWork {
     uint8_t  _pad44[4];          // +0x44
 
     // --- FishingWork fields ---
-    void*    _field48;           // +0x48: zeroed
-    void*    _field50;           // +0x50: zeroed
-    void*    _field58;           // +0x58: zeroed
-    void*    _field60;           // +0x60: zeroed
-    uint32_t _field68;           // +0x68: zeroed
+    void*    citizenRefs;        // +0x48: InternalBasePtr[] array (citizen entity refs)
+    int32_t  citizenCount;       // +0x50: count of citizenRefs array
+    int32_t  citizenCapacity;    // +0x54: capacity of citizenRefs array
+    void*    spotStates;         // +0x58: int32_t[] array (0=avail, 1=assigned, 2=done)
+    int32_t  spotCount;          // +0x60: count of spotStates array
+    int32_t  spotCapacity;       // +0x64: capacity of spotStates array
+    int32_t  retryCount;         // +0x68: retry counter for fishing spot search
     uint8_t  _pad6C[4];          // +0x6C: padding
 };
 
