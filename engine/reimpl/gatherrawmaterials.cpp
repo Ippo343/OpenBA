@@ -19,12 +19,16 @@
 //   [10] GetTarget     = 0x1400ec510   <-- passthrough
 //   [11] GetPriority   = 0x14002a400
 //
-// Constructor reimplemented. All vtable methods passthrough.
+// Constructor reimplemented.
+// Serialize, Execute, OnComplete, OnCancel, Cleanup reimplemented in code/Game/Work/.
+// Validate disabled (MOV RAX,RSP prologue = bug class 3).
+// GetTarget disabled (RIP-relative MOV = bug class 2).
 
 #include "BuildActions.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Work/gatherrawmaterials_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -83,11 +87,11 @@ static void* Reimpl_ScalarDtor(GatherRawMaterials* self, uint32_t flags) {
 }
 
 // ============================================================
-// Serialize (0x1400ec560) — passthrough
+// Serialize (0x1400ec560) — reimplemented
 // ============================================================
 static void Reimpl_Serialize(GatherRawMaterials* self, void* stream) {
     g_lastHook = "GatherRawMaterials::Serialize";
-    ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
+    GatherRawMaterials_Serialize_Impl(self, stream);
 }
 
 // ============================================================
@@ -127,6 +131,7 @@ void InstallGatherRawMaterialsScalarDtor() {
 void RemoveGatherRawMaterialsScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallGatherRawMaterialsSerialize() {
+    GatherRawMaterials_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, GatherRawMaterialsAddr::Serialize);
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
@@ -134,3 +139,89 @@ void InstallGatherRawMaterialsSerialize() {
 #endif
 }
 void RemoveGatherRawMaterialsSerialize() { RemoveHook(&g_hookSerialize); }
+
+// ============================================================
+// Execute (0x1400ebe40) — reimplemented
+// Prologue: MOV [RSP+0x18],R8 / MOV [RSP+0x10],RDX / MOV [RSP+0x8],RCX / PUSH RBP = 16 bytes
+// No bug class triggers in prologue.
+// ============================================================
+static HookInfo g_hookExecute;
+
+static int Reimpl_Execute(GatherRawMaterials* self, void* entityIBP, uint64_t param3, uint64_t param4) {
+    g_lastHook = "GatherRawMaterials::Execute";
+    return GatherRawMaterials_Execute_Impl(self, entityIBP, param3, param4);
+}
+
+void InstallGatherRawMaterialsExecute() {
+    GatherRawMaterials_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400ebe40);
+    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 15);
+#ifdef _DEBUG
+    printf("[GatherRawMaterials] Execute hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveGatherRawMaterialsExecute() { RemoveHook(&g_hookExecute); }
+
+// ============================================================
+// OnComplete (0x1400ebdf0) — reimplemented
+// Prologue: MOV [RSP+0x8],RBX / PUSH RDI / SUB RSP,0x20 = 10 bytes
+// CALL at offset 0x14 is safe (outside prologue).
+// ============================================================
+static HookInfo g_hookOnComplete;
+
+static int Reimpl_OnComplete(GatherRawMaterials* self, void* param2, void* param3, uint32_t param4) {
+    g_lastHook = "GatherRawMaterials::OnComplete";
+    return GatherRawMaterials_OnComplete_Impl(self, param2, param3, param4);
+}
+
+void InstallGatherRawMaterialsOnComplete() {
+    GatherRawMaterials_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400ebdf0);
+    InstallHook(target, (void*)Reimpl_OnComplete, &g_hookOnComplete, 10);
+#ifdef _DEBUG
+    printf("[GatherRawMaterials] OnComplete hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveGatherRawMaterialsOnComplete() { RemoveHook(&g_hookOnComplete); }
+
+// ============================================================
+// OnCancel (0x1400ebdb0) — reimplemented
+// Prologue: MOV [RSP+0x8],RBX / PUSH RDI / SUB RSP,0x20 = 10 bytes
+// ============================================================
+static HookInfo g_hookOnCancel;
+
+static void Reimpl_OnCancel(GatherRawMaterials* self, void* param2, void* param3, uint32_t param4) {
+    g_lastHook = "GatherRawMaterials::OnCancel";
+    GatherRawMaterials_OnCancel_Impl(self, param2, param3, param4);
+}
+
+void InstallGatherRawMaterialsOnCancel() {
+    GatherRawMaterials_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400ebdb0);
+    InstallHook(target, (void*)Reimpl_OnCancel, &g_hookOnCancel, 10);
+#ifdef _DEBUG
+    printf("[GatherRawMaterials] OnCancel hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveGatherRawMaterialsOnCancel() { RemoveHook(&g_hookOnCancel); }
+
+// ============================================================
+// Cleanup (0x1400ec480) — reimplemented
+// Prologue: MOV [RSP+0x8],RBX / PUSH RDI / SUB RSP,0x20 = 10 bytes
+// ============================================================
+static HookInfo g_hookCleanup;
+
+static void Reimpl_Cleanup(GatherRawMaterials* self) {
+    g_lastHook = "GatherRawMaterials::Cleanup";
+    GatherRawMaterials_Cleanup_Impl(self);
+}
+
+void InstallGatherRawMaterialsCleanup() {
+    GatherRawMaterials_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400ec480);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 10);
+#ifdef _DEBUG
+    printf("[GatherRawMaterials] Cleanup hooked at %p\n", (void*)target);
+#endif
+}
+void RemoveGatherRawMaterialsCleanup() { RemoveHook(&g_hookCleanup); }

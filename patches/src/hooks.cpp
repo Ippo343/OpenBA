@@ -983,6 +983,14 @@ extern void InstallGatherRawMaterialsScalarDtor();
 extern void RemoveGatherRawMaterialsScalarDtor();
 extern void InstallGatherRawMaterialsSerialize();
 extern void RemoveGatherRawMaterialsSerialize();
+extern void InstallGatherRawMaterialsExecute();
+extern void RemoveGatherRawMaterialsExecute();
+extern void InstallGatherRawMaterialsOnComplete();
+extern void RemoveGatherRawMaterialsOnComplete();
+extern void InstallGatherRawMaterialsOnCancel();
+extern void RemoveGatherRawMaterialsOnCancel();
+extern void InstallGatherRawMaterialsCleanup();
+extern void RemoveGatherRawMaterialsCleanup();
 
 // --- HarvestArea (engine/reimpl/harvestarea.cpp) ---
 extern void InstallHarvestAreaScalarDtor();
@@ -2619,6 +2627,10 @@ static ReimplEntry g_reimplementations[] = {
     { "GatherRawMaterials::Ctor", InstallGatherRawMaterialsCtor, RemoveGatherRawMaterialsCtor, true },
     { "GatherRawMaterials::ScalarDtor", InstallGatherRawMaterialsScalarDtor, RemoveGatherRawMaterialsScalarDtor, true },
     { "GatherRawMaterials::Serialize", InstallGatherRawMaterialsSerialize, RemoveGatherRawMaterialsSerialize, true },
+    { "GatherRawMaterials::Execute", InstallGatherRawMaterialsExecute, RemoveGatherRawMaterialsExecute, true },
+    { "GatherRawMaterials::OnComplete", InstallGatherRawMaterialsOnComplete, RemoveGatherRawMaterialsOnComplete, true },
+    { "GatherRawMaterials::OnCancel", InstallGatherRawMaterialsOnCancel, RemoveGatherRawMaterialsOnCancel, true },
+    { "GatherRawMaterials::Cleanup", InstallGatherRawMaterialsCleanup, RemoveGatherRawMaterialsCleanup, true },
 
     // --- HarvestArea ---
     { "HarvestArea::ScalarDtor", InstallHarvestAreaScalarDtor, RemoveHarvestAreaScalarDtor, true },
