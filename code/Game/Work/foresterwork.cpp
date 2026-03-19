@@ -25,6 +25,31 @@
 
 // All typedefs prefixed with FW_ to avoid conflicts with engine_funcs.h
 
+// Work::Serialize base
+typedef void  (*FW_Work_Serialize_t)(void* self, void* stream);
+// IO::Serializer ctor/dtor
+typedef void  (*FW_Serializer_Ctor_t)(void* self, void* stream, int version);
+typedef void  (*FW_Serializer_Dtor_t)(void* self);
+// IO::Serializer::Serialize for int
+typedef void  (*FW_SerializeInt_t)(void* self, void* field, const char* name);
+// BST serialization
+typedef void  (*FW_BST_Serialize_t)(void* bstRoot, void* serializer);
+// FUN_1400f7100 -- validate work entity
+typedef char  (*FW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
+// MemAlloc/MemFree
+typedef void* (*FW_MemAlloc_t)(int64_t size, int align);
+typedef void  (*FW_MemFreeFunc_t)(void* ptr);
+// BST node remove
+typedef void  (*FW_BSTRemove_t)(void* bstRoot, void* node);
+// BST find-and-remove by key
+typedef void  (*FW_BSTFindRemove_t)(void* bstRoot, void* keyIBP);
+// Cancel all work items (FUN_1400c5400)
+typedef void  (*FW_CancelAllWork_t)(void* smPtr);
+// Find sub-entity (FUN_140002e10)
+typedef void* (*FW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
+// Tree node cleanup (FUN_140014c30)
+typedef void  (*FW_TreeNodeCleanup_t)(void* bstRoot, void* node);
+
 typedef int   (*FW_AutoPickup_CheckAssignments_t)(uintptr_t self, void* citizenRef);
 typedef void* (*FW_FindComp_MatDesc_t)(uintptr_t entity, void* outIBP);
 typedef void* (*FW_FindComp_MeshInstance_t)(uintptr_t entity, void* outIBP);
@@ -85,6 +110,24 @@ static FW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static FW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
 static FW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
 static FW_Vector3_Ctor_t              s_fn_Vector3_Ctor = nullptr;
+static FW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
+static FW_Serializer_Ctor_t           s_fn_Serializer_Ctor = nullptr;
+static FW_Serializer_Dtor_t           s_fn_Serializer_Dtor = nullptr;
+static FW_SerializeInt_t              s_fn_SerializeInt = nullptr;
+static FW_BST_Serialize_t             s_fn_BST_Serialize = nullptr;
+static FW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
+static FW_MemAlloc_t                  s_fn_MemAlloc = nullptr;
+static FW_MemFreeFunc_t               s_fn_MemFreeFunc = nullptr;
+static FW_BSTRemove_t                 s_fn_BSTRemove = nullptr;
+static FW_BSTFindRemove_t             s_fn_BSTFindRemove = nullptr;
+static FW_CancelAllWork_t             s_fn_CancelAllWork = nullptr;
+static FW_FindSubEntity_t             s_fn_FindSubEntity = nullptr;
+static FW_TreeNodeCleanup_t           s_fn_TreeNodeCleanup = nullptr;
+
+// Vtable pointers for dtor chain
+static void** s_vtable_ForesterWork = nullptr;     // 0x1401613a0
+static void** s_vtable_AutoPickupWork = nullptr;   // 0x140161340
+static void** s_vtable_Work = nullptr;              // 0x1401612e0
 
 // fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom
 // all from engine_funcs.h (no local copies needed)
@@ -165,7 +208,53 @@ bool ForesterWork_ResolveFuncs() {
     s_fn_StorageQueryCount = reinterpret_cast<FW_StorageQueryCount_t>(
         ResolveAddr(Module::Exe, 0x14012cf10));
 
+    // New function pointers for deferred vtable slots
+    s_fn_Work_Serialize = reinterpret_cast<FW_Work_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1400f7400));
+    s_fn_BST_Serialize = reinterpret_cast<FW_BST_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x140025630));
+    s_fn_ValidateEntity = reinterpret_cast<FW_ValidateEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400f7100));
+    s_fn_BSTRemove = reinterpret_cast<FW_BSTRemove_t>(
+        ResolveAddr(Module::Exe, 0x140024f30));
+    s_fn_BSTFindRemove = reinterpret_cast<FW_BSTFindRemove_t>(
+        ResolveAddr(Module::Exe, 0x140025520));
+    s_fn_CancelAllWork = reinterpret_cast<FW_CancelAllWork_t>(
+        ResolveAddr(Module::Exe, 0x1400c5400));
+    s_fn_FindSubEntity = reinterpret_cast<FW_FindSubEntity_t>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+    s_fn_TreeNodeCleanup = reinterpret_cast<FW_TreeNodeCleanup_t>(
+        ResolveAddr(Module::Exe, 0x140014c30));
+
+    // Vtable pointers for dtor chain
+    s_vtable_ForesterWork = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401613a0));
+    s_vtable_AutoPickupWork = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140161340));
+    s_vtable_Work = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401612e0));
+
     // Dispatch slots (indirect through IAT)
+    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152a00);
+    if (iatSerCtor)
+        s_fn_Serializer_Ctor = *reinterpret_cast<FW_Serializer_Ctor_t*>(iatSerCtor);
+
+    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152a08);
+    if (iatSerDtor)
+        s_fn_Serializer_Dtor = *reinterpret_cast<FW_Serializer_Dtor_t*>(iatSerDtor);
+
+    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152878);
+    if (iatSerInt)
+        s_fn_SerializeInt = *reinterpret_cast<FW_SerializeInt_t*>(iatSerInt);
+
+    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x1401527e8);
+    if (iatMemAlloc)
+        s_fn_MemAlloc = *reinterpret_cast<FW_MemAlloc_t*>(iatMemAlloc);
+
+    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x1401527f0);
+    if (iatMemFree)
+        s_fn_MemFreeFunc = *reinterpret_cast<FW_MemFreeFunc_t*>(iatMemFree);
+
     uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
     if (iatRandTol)
         s_fn_Random_RandTol = *reinterpret_cast<FW_Random_RandTol_t*>(iatRandTol);
@@ -211,6 +300,12 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
               s_fn_Random_RandTol && s_fn_Vector3_Ctor &&
+              s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
+              s_fn_SerializeInt && s_fn_BST_Serialize &&
+              s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFreeFunc &&
+              s_fn_BSTRemove && s_fn_BSTFindRemove &&
+              s_fn_CancelAllWork && s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
+              s_vtable_ForesterWork && s_vtable_AutoPickupWork && s_vtable_Work &&
               fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
@@ -250,6 +345,19 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_StorageQueryCount) printf("  MISSING: s_fn_StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: s_fn_Random_RandTol\n");
         if (!s_fn_Vector3_Ctor) printf("  MISSING: s_fn_Vector3_Ctor\n");
+        if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
+        if (!s_fn_Serializer_Ctor) printf("  MISSING: s_fn_Serializer_Ctor\n");
+        if (!s_fn_Serializer_Dtor) printf("  MISSING: s_fn_Serializer_Dtor\n");
+        if (!s_fn_SerializeInt) printf("  MISSING: s_fn_SerializeInt\n");
+        if (!s_fn_BST_Serialize) printf("  MISSING: s_fn_BST_Serialize\n");
+        if (!s_fn_ValidateEntity) printf("  MISSING: s_fn_ValidateEntity\n");
+        if (!s_fn_MemAlloc) printf("  MISSING: s_fn_MemAlloc\n");
+        if (!s_fn_MemFreeFunc) printf("  MISSING: s_fn_MemFreeFunc\n");
+        if (!s_fn_BSTRemove) printf("  MISSING: s_fn_BSTRemove\n");
+        if (!s_fn_BSTFindRemove) printf("  MISSING: s_fn_BSTFindRemove\n");
+        if (!s_fn_CancelAllWork) printf("  MISSING: s_fn_CancelAllWork\n");
+        if (!s_fn_FindSubEntity) printf("  MISSING: s_fn_FindSubEntity\n");
+        if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
     }
 #endif
 
@@ -785,4 +893,282 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     }
 
     return 2;
+}
+
+
+// ============================================================
+// ForesterWork::DtorBody (0x1400EBA00)
+// Sets vtables down ForesterWork -> AutoPickupWork -> Work chain,
+// frees BST nodes at +0x48, zeros count at +0x50, then calls
+// Object::Internal::~Internal via tail-call.
+// ============================================================
+void ForesterWork_DtorBody(ForesterWork* self) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // Set vtable to ForesterWork
+    *(void**)selfAddr = s_vtable_ForesterWork;
+
+    // Free BST nodes at +0x48
+    void* bstRoot = *(void**)(selfAddr + 0x48);
+    if (bstRoot != nullptr) {
+        // Clean up left subtree
+        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x10));
+        // Clean up right subtree
+        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
+        // Free root node
+        if (s_fn_MemFreeFunc) {
+            s_fn_MemFreeFunc(bstRoot);
+        }
+    }
+
+    // Zero out BST root and count
+    *(void**)(selfAddr + 0x48) = nullptr;
+    *(uint32_t*)(selfAddr + 0x50) = 0;
+
+    // Set vtable to AutoPickupWork, then Work
+    *(void**)selfAddr = s_vtable_AutoPickupWork;
+    *(void**)selfAddr = s_vtable_Work;
+
+    // The original does a tail-call JMP to Object::Internal::~Internal.
+    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+}
+
+
+// ============================================================
+// ForesterWork::ScalarDtor (0x14002A370)
+// Calls dtor body, then conditional free.
+// ============================================================
+void* ForesterWork_ScalarDtor_Impl(ForesterWork* self, uint32_t flags) {
+    ForesterWork_DtorBody(self);
+    if (flags & 1) {
+        if (s_fn_MemFreeFunc) {
+            s_fn_MemFreeFunc(self);
+        }
+    }
+    return self;
+}
+
+
+// ============================================================
+// ForesterWork::Serialize (0x1400EB970)
+// Work::Serialize + version block + BST serialization + int field
+// ============================================================
+void ForesterWork_Serialize_Impl(ForesterWork* self, void* stream) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // Call Work::Serialize base
+    s_fn_Work_Serialize(self, stream);
+
+    // Create first serializer (version block, version=0)
+    uint8_t serializer1[24] = {0};
+    s_fn_Serializer_Ctor(serializer1, stream, 0);
+    s_fn_Serializer_Dtor(serializer1);
+
+    // Create second serializer (version=0) for BST + int
+    uint8_t serializer2[24] = {0};
+    s_fn_Serializer_Ctor(serializer2, stream, 0);
+
+    // Serialize BST at self+0x48
+    s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializer2);
+
+    // Serialize int field at self+0x58
+    s_fn_SerializeInt(serializer2, (void*)(selfAddr + 0x58), nullptr);
+
+    s_fn_Serializer_Dtor(serializer2);
+}
+
+
+// ============================================================
+// ForesterWork::Slot6 (0x1400EAEA0) — NOT HOOKABLE
+// 20-byte thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520;
+//                xor al,al; add rsp,0x28; ret
+// Removes entity from BST at self+0x48, returns false.
+// Standalone exe only.
+// ============================================================
+int ForesterWork_Slot6_Impl(ForesterWork* self, void* param2) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
+}
+
+
+// ============================================================
+// ForesterWork::Slot7 (0x1400EAE90) — 9-byte thunk, too small to hook.
+// Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
+// Calls BSTFindRemove on the BST at self+0x48.
+// Standalone exe only.
+// ============================================================
+void ForesterWork_Slot7_Impl(ForesterWork* self, void* param2) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+}
+
+
+// ============================================================
+// ForesterWork::Slot8 / CancelAll (0x1400EB8A0)
+// Loops through tree at +0x48 while count (+0x50) > 0.
+// For each leftmost node, cancels the work item via engine call.
+// ============================================================
+void ForesterWork_Slot8_Impl(ForesterWork* self) {
+    uintptr_t selfAddr = (uintptr_t)self;
+    int count = *(int*)(selfAddr + 0x50);
+
+    while (count > 0) {
+        // Find leftmost node in BST (following +0x10 = left child)
+        void* node = *(void**)(selfAddr + 0x48);
+        void* leftmost = node;
+        while (node != nullptr) {
+            leftmost = node;
+            node = *(void**)((uintptr_t)node + 0x10);
+        }
+
+        // Cancel the work item: get citizen entity from node key
+        fn_InternalBasePtr_CheckPtr(leftmost);
+        uintptr_t citizenEntity = *(uintptr_t*)leftmost;
+
+        // Navigate to citizen AI subsystem and cancel
+        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
+        s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+
+        count = *(int*)(selfAddr + 0x50);
+    }
+}
+
+
+// ============================================================
+// ForesterWork::Slot9 / RemoveInvalid (0x1400EAC60) — 164 instructions
+// Iterates BST at +0x48, validates each entry via FUN_1400f7100.
+// Collects invalid ones in a dynamic array, removes them from tree.
+// Returns true if all valid (removeCount == 0), false otherwise.
+// ============================================================
+int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
+    uintptr_t selfAddr = (uintptr_t)self;
+    void** bstRootPtr = (void**)((uintptr_t)self + 0x48);
+
+    void* root = *bstRootPtr;
+    uintptr_t* removeArr = nullptr;
+    uint32_t removeCount = 0;
+    uint32_t removeCapacity = 0;
+
+    if (root != nullptr) {
+        // Find leftmost node (minimum)
+        void* node = root;
+        while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
+            node = *(void**)((uintptr_t)node + 0x10);
+        }
+
+        // In-order traversal
+        while (node != nullptr) {
+            uintptr_t entityIBP = *(uintptr_t*)node;
+
+            // Validate this entity
+            char stillValid = s_fn_ValidateEntity(selfAddr, param2, (void*)&entityIBP, nullptr);
+
+            if (stillValid == '\0') {
+                // Add to removal list -- grow array if needed
+                uint32_t newCount = removeCount + 1;
+                if (newCount != removeCount) {
+                    uintptr_t* newArr = removeArr;
+                    if ((int)removeCapacity < (int)newCount) {
+                        uint32_t newCap = newCount;
+                        if (removeCount != 0) {
+                            newCap = newCount * 3;
+                        }
+                        removeCapacity = newCap;
+                        newArr = (uintptr_t*)s_fn_MemAlloc((int64_t)(int)newCap * 8, 8);
+                    }
+
+                    // Copy existing entries if buffer changed
+                    int copyStart = (removeArr == newArr) ? (int)removeCount : 0;
+                    for (int ci = copyStart; ci < (int)newCount; ci++) {
+                        uintptr_t* dst = &newArr[ci];
+                        *dst = 0;
+                        if (ci < (int)removeCount) {
+                            *dst = removeArr[ci];
+                        } else {
+                            *dst = entityIBP;
+                        }
+                    }
+
+                    if (removeArr != newArr) {
+                        s_fn_MemFreeFunc(removeArr);
+                    }
+                    removeArr = newArr;
+                    removeCount = newCount;
+                }
+            }
+
+            // Get next node in tree (in-order traversal)
+            void* right = *(void**)((uintptr_t)node + 0x18);
+            if (right != nullptr) {
+                // Go right, then leftmost
+                node = right;
+                while (*(void**)((uintptr_t)node + 0x10) != nullptr) {
+                    node = *(void**)((uintptr_t)node + 0x10);
+                }
+            } else {
+                // Go up until we come from a left child
+                void* parent = *(void**)((uintptr_t)node + 0x8);
+                while (parent != nullptr) {
+                    if (*(void**)((uintptr_t)parent + 0x10) == node) {
+                        // node is left child of parent -- parent is next
+                        break;
+                    }
+                    // node is right child, keep going up
+                    node = parent;
+                    parent = *(void**)((uintptr_t)node + 0x8);
+                }
+                node = parent;
+            }
+        }
+    }
+
+    // Remove invalid entries from tree
+    if ((int)removeCount > 0) {
+        for (uint32_t i = 0; i < removeCount; i++) {
+            uintptr_t searchKey = removeArr[i];
+            void* treeNode = *bstRootPtr;
+
+            while (treeNode != nullptr) {
+                fn_InternalBasePtr_CheckPtr(treeNode);
+                uintptr_t nodeKey = *(uintptr_t*)treeNode;
+                if (searchKey < nodeKey) {
+                    treeNode = *(void**)((uintptr_t)treeNode + 0x10);
+                } else {
+                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
+                    if (searchKey <= nodeKey) {
+                        // Found -- remove this node
+                        s_fn_BSTRemove(bstRootPtr, treeNode);
+                        break;
+                    }
+                    treeNode = *(void**)((uintptr_t)treeNode + 0x18);
+                }
+            }
+        }
+    }
+
+    s_fn_MemFreeFunc(removeArr);
+    return (removeCount == 0) ? 1 : 0;
+}
+
+
+// ============================================================
+// ForesterWork::Slot10 / GetWorkEntity (0x1400EB910)
+// Looks up entity from this->_field10, gets sub-object via
+// FUN_140002e10, returns entity +0x48 through output pointer.
+// Hidden return ptr ABI: RCX=self, RDX=retbuf.
+// ============================================================
+void* ForesterWork_Slot10_Impl(ForesterWork* self, void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
+    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
+
+    uintptr_t subIBP[2] = {0};
+    void* result = s_fn_FindSubEntity(entityRef, subIBP);
+
+    fn_InternalBasePtr_CheckPtr(result);
+
+    uintptr_t resolvedEntity = *(uintptr_t*)result;
+    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
+
+    return outPtr;
 }

@@ -100,18 +100,16 @@ static int Reimpl_Slot4(FireWork* self, void* citizenIBP, void* time) {
     return FireWork_Slot4_Impl(self, citizenIBP, time);
 }
 
-// Slot6 (0x1400e9600) — calls helper on +0x50, returns false
-typedef void (*fn_Slot6_t)(void* self, void* param2);
-static void Reimpl_Slot6(void* self, void* param2) {
+// Slot6 (0x1400e9600) — OnComplete: remove citizen from BST, return false
+static int Reimpl_Slot6(FireWork* self, void* citizenIBP) {
     g_lastHook = "FireWork::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
+    return FireWork_Slot6_Impl(self, citizenIBP);
 }
 
-// Slot8 (0x1400e99a0) — cleanup loop
-typedef void (*fn_Slot8_t)(void* self);
-static void Reimpl_Slot8(void* self) {
+// Slot8 (0x1400e99a0) — CancelAll/Cleanup: release all pending actions
+static void Reimpl_Slot8(FireWork* self) {
     g_lastHook = "FireWork::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    FireWork_Slot8_Impl(self);
 }
 
 // Slot9 (0x1400e93c0) — BST validation pass (deep reimpl)

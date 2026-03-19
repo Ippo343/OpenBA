@@ -1,10 +1,19 @@
 // code/Game/Work/fishingwork.cpp
-// Clean C++ reimplementation of FishingWork Work class methods (Slot4 + Slot9).
+// Clean C++ reimplementation of FishingWork Work class methods.
 // Source: Game/Work/FishingWork.cpp (from profile build debug strings)
 //
 // FishingWork — fishing dock work action. Size = 0x70.
 // Inherits: Object::Internal -> Work (0x48) -> FishingWork
 // Vtable: 0x140161320
+//
+// Implemented vtable slots:
+//   +0x18: Serialize  (0x1400ea910) — array serialization with IsDerivedFrom
+//   +0x20: Slot4      (0x1400e9f20) — fishing work assignment
+//   +0x30: Slot6      (0x1400e9eb0) — clear citizen slot + mark spot done
+//   +0x38: Slot7      (0x1400e9e80) — delegates to Slot6 via vtable +0x30
+//   +0x40: Slot8      (0x1400ea830) — cancel all: clear citizens + cancel actions
+//   +0x48: Slot9      (0x1400e9c30) — validate work assignments
+//   +0x50: Slot10     (0x1400ea8b0) — get target entity position IBP
 //
 // Decompiled from Application-x64.exe using Ghidra.
 // This file must NOT depend on hooks.h — it is portable for standalone exe.
@@ -57,12 +66,35 @@ static uint64_t (*s_fn_TryAssignToSpot)(uintptr_t assignMgr, void* citizenIBP, i
 
 // System::MemoryAllocator::MemAlloc/MemFree — use fn_MemAlloc/fn_MemFreeStatic from engine_funcs
 
+// Work::Serialize base (0x1400f7400)
+static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
+
+// FUN_1400032e0 — IBP array resize (ptr at +0x48, count/cap at +0x50/+0x54)
+static void (*s_fn_IBPArray_Resize)(void* arrayField, int newCount) = nullptr;
+
+// FUN_1400021d0 — int32 array resize (ptr at +0x58, count/cap at +0x60/+0x64)
+static void (*s_fn_IntArray_Resize)(void* arrayField, int newCount) = nullptr;
+
+// Object::InternalBasePtr::Serialize (dispatch slot 0x140152aa0)
+static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
+
+// IO::Serializer::Serialize for int array (dispatch slot 0x140151278)
+// (serializer, count, int_array_ptr, name)
+static void (*s_fn_Serialize_IntArray)(void* serializer, int count, int* array, const char* name) = nullptr;
+
+// FUN_140002e10 — find PositionComponent on entity (for Slot10/GetTarget)
+static void* (*s_fn_FindComp_PositionEntity)(uintptr_t entity, void* outIBP) = nullptr;
+
+// FUN_1400c5400 — cancel pending actions on state machine action list
+static void (*s_fn_CancelPendingActions)(void* smActionList) = nullptr;
+
 // TypeId pointers for component lookups
 static uint32_t* s_typeId_1401c7660 = nullptr;  // FishingComponent (searched on entity.componentList)
 static uint32_t* s_typeId_1401c7698 = nullptr;  // FishingDescription (IsDerivedFrom check)
 static uint32_t* s_typeId_1401c4870 = nullptr;  // RadiusComponent
 static uint32_t* s_typeId_1401c7e78 = nullptr;  // StorageComponent_FC
 static uint32_t* s_typeId_1401c8070 = nullptr;  // StorageLocationComponent / WorkplaceComponent
+static uint32_t* s_typeId_1401c7158 = nullptr;  // Citizen type (IsDerivedFrom check in Serialize)
 
 static bool s_fishingwork_funcs_resolved = false;
 
@@ -100,24 +132,62 @@ bool FishingWork_ResolveFuncs() {
     s_fn_TryAssignToSpot = reinterpret_cast<uint64_t(*)(uintptr_t, void*, int, char)>(
         ResolveAddr(Module::Exe, 0x1400f8620));
 
+    // Work::Serialize base (0x1400f7400)
+    s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
+        ResolveAddr(Module::Exe, 0x1400f7400));
+
+    // FUN_1400032e0 — IBP array resize
+    s_fn_IBPArray_Resize = reinterpret_cast<void(*)(void*, int)>(
+        ResolveAddr(Module::Exe, 0x1400032e0));
+
+    // FUN_1400021d0 — int array resize
+    s_fn_IntArray_Resize = reinterpret_cast<void(*)(void*, int)>(
+        ResolveAddr(Module::Exe, 0x1400021d0));
+
+    // InternalBasePtr::Serialize via dispatch slot 0x140152aa0
+    {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152aa0);
+        if (slot) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(slot);
+    }
+
+    // Serialize int array via dispatch slot 0x140151278
+    {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140151278);
+        if (slot) s_fn_Serialize_IntArray = *reinterpret_cast<void(**)(void*, int, int*, const char*)>(slot);
+    }
+
+    // FUN_140002e10 — find PositionComponent on entity
+    s_fn_FindComp_PositionEntity = reinterpret_cast<void*(*)(uintptr_t, void*)>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+
+    // FUN_1400c5400 — cancel pending actions
+    s_fn_CancelPendingActions = reinterpret_cast<void(*)(void*)>(
+        ResolveAddr(Module::Exe, 0x1400c5400));
+
     // Type IDs
     s_typeId_1401c7660 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7660));
     s_typeId_1401c7698 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7698));
     s_typeId_1401c4870 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4870));
     s_typeId_1401c7e78 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
     s_typeId_1401c8070 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
+    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
 
     bool ok = s_fn_FindComponent_MeshInstance && s_fn_FindComponent_Position &&
               s_fn_Entity_GetSpotPosition && s_fn_MeshInstance_SetVisibility &&
               s_fn_FishingAction_Ctor && s_fn_PlayAnimation_Action_Ctor &&
               s_fn_TryAssignToSpot &&
+              s_fn_Work_Serialize && s_fn_IBPArray_Resize && s_fn_IntArray_Resize &&
+              s_fn_IBP_Serialize && s_fn_Serialize_IntArray &&
+              s_fn_FindComp_PositionEntity && s_fn_CancelPendingActions &&
               s_typeId_1401c7660 && s_typeId_1401c7698 &&
               s_typeId_1401c4870 && s_typeId_1401c7e78 && s_typeId_1401c8070 &&
+              s_typeId_1401c7158 &&
               fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic && fn_MemAlloc &&
               fn_Map_CheckPassable && fn_Work_CanStartWork &&
               fn_CitizenAI_LongTermPlan && fn_Random_RandTol &&
-              g_pGameWorldSingleton && g_pMemAllocSingleton && g_fUVScale;
+              g_pGameWorldSingleton && g_pMemAllocSingleton && g_fUVScale &&
+              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Int;
 
 #ifdef _DEBUG
     printf("[FishingWork] ResolveFuncs: FindMesh=%p FindPos=%p GetSpotPos=%p SetVis=%p\n",
@@ -126,9 +196,16 @@ bool FishingWork_ResolveFuncs() {
     printf("[FishingWork]   FishAction=%p PlayAnim=%p TryAssign=%p\n",
            (void*)s_fn_FishingAction_Ctor, (void*)s_fn_PlayAnimation_Action_Ctor,
            (void*)s_fn_TryAssignToSpot);
-    printf("[FishingWork]   TypeIds: 7660=%p 7698=%p 4870=%p 7e78=%p 8070=%p\n",
+    printf("[FishingWork]   TypeIds: 7660=%p 7698=%p 4870=%p 7e78=%p 8070=%p 7158=%p\n",
            (void*)s_typeId_1401c7660, (void*)s_typeId_1401c7698,
-           (void*)s_typeId_1401c4870, (void*)s_typeId_1401c7e78, (void*)s_typeId_1401c8070);
+           (void*)s_typeId_1401c4870, (void*)s_typeId_1401c7e78, (void*)s_typeId_1401c8070,
+           (void*)s_typeId_1401c7158);
+    printf("[FishingWork]   WorkSer=%p IBPResize=%p IntResize=%p IBPSer=%p IntArrSer=%p\n",
+           (void*)s_fn_Work_Serialize, (void*)s_fn_IBPArray_Resize,
+           (void*)s_fn_IntArray_Resize, (void*)s_fn_IBP_Serialize,
+           (void*)s_fn_Serialize_IntArray);
+    printf("[FishingWork]   FindPosEnt=%p CancelPending=%p\n",
+           (void*)s_fn_FindComp_PositionEntity, (void*)s_fn_CancelPendingActions);
     if (!ok) printf("[FishingWork] ERROR: some function pointers not resolved!\n");
 #endif
 
@@ -638,4 +715,189 @@ int FishingWork_Slot9_Impl(FishingWork* self, void* param2) {
 
     fn_MemFreeStatic(spotMapping);
     return allValid ? 1 : 0;
+}
+
+// ============================================================
+// Serialize (0x1400ea910)
+// Serializes FishingWork fields:
+//   1. Work base serialize
+//   2. IO::Serializer(version=0)
+//   3. Serialize citizenCount (+0x50), resize IBP array if loading
+//   4. Loop: IBP::Serialize each citizen ref, validate with IsDerivedFrom
+//   5. Serialize spotCount (+0x60), resize int array if loading
+//   6. Serialize spotStates int array (+0x58)
+//   7. Serialize retryCount (+0x68)
+// ============================================================
+void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // 1. Call Work::Serialize base
+    s_fn_Work_Serialize(self, stream);
+
+    // 2. Create IO::Serializer (version=0)
+    uint8_t serializer[24] = {0};
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // 3. Serialize citizenCount at +0x50
+    int citizenCount = *(int*)(selfAddr + 0x50);
+    g_fn_Serialize_Int(serializer, &citizenCount, nullptr);
+
+    // If loading (serializer mode == 0 at *(int*)(serializer[0] + 8)):
+    // resize the IBP array at +0x48 to the deserialized count
+    uintptr_t serPtr = *(uintptr_t*)serializer;
+    if (*(int*)(serPtr + 8) == 0) {
+        s_fn_IBPArray_Resize((void*)(selfAddr + 0x48), citizenCount);
+    }
+
+    // 4. Loop over each citizen IBP, serialize and validate
+    uintptr_t ibpArray = *(uintptr_t*)(selfAddr + 0x48);
+    int64_t remaining = (int64_t)citizenCount;
+    if (remaining > 0) {
+        uintptr_t ibpPtr = ibpArray;
+        do {
+            // Serialize the InternalBasePtr
+            s_fn_IBP_Serialize((void*)ibpPtr, serializer);
+
+            // Validate: if the ptr is non-null and not derived from expected type, null it
+            uintptr_t ptrVal = *(uintptr_t*)ibpPtr;
+            if (ptrVal != 0) {
+                if (!fn_IsDerivedFrom((void*)ptrVal, *s_typeId_1401c7158)) {
+                    *(uintptr_t*)ibpPtr = 0;
+                }
+            }
+
+            ibpPtr += 8;
+            remaining--;
+        } while (remaining != 0);
+    }
+
+    // 5. Serialize spotCount at +0x60
+    int spotCount = *(int*)(selfAddr + 0x60);
+    g_fn_Serialize_Int(serializer, &spotCount, nullptr);
+
+    // If loading, resize the int array at +0x58
+    serPtr = *(uintptr_t*)serializer;
+    if (*(int*)(serPtr + 8) == 0) {
+        s_fn_IntArray_Resize((void*)(selfAddr + 0x58), spotCount);
+    }
+
+    // 6. Serialize the spotStates int array
+    s_fn_Serialize_IntArray(serializer, spotCount,
+                            *(int**)(selfAddr + 0x58), nullptr);
+
+    // 7. Serialize retryCount at +0x68
+    g_fn_Serialize_Int(serializer, (int*)(selfAddr + 0x68), nullptr);
+
+    // Destroy serializer
+    g_fn_Serializer_Dtor(serializer);
+}
+
+// ============================================================
+// Slot6 (0x1400e9eb0)
+// Called when a citizen completes fishing work at a spot.
+// Clears the citizen IBP slot and marks the spot state as 2 (done)
+// if the high bit flag is set in param_4.
+//
+// param_4 encoding: bits[3:0] = citizen slot index,
+//                   bit 15 = has spot info,
+//                   bits[7:4] = spot index
+// Returns: 0 (via cleared upper bytes)
+// ============================================================
+int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // Clear citizen IBP slot: citizenRefs[param4 & 0xf] = nullptr IBP
+    uintptr_t nullIBP = 0;
+    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    uint32_t citizenSlot = param4 & 0xf;
+    *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x48) + (uintptr_t)citizenSlot * 8) = nullIBP;
+
+    // If bit 15 is set, mark the spot state as 2 (done/needs reset)
+    if ((param4 >> 15) & 1) {
+        uint32_t spotIdx = (param4 >> 4) & 0xf;
+        uintptr_t spotStates = *(uintptr_t*)(selfAddr + 0x58);
+        *(int32_t*)(spotStates + (uintptr_t)spotIdx * 4) = 2;
+    }
+
+    return 0;
+}
+
+// ============================================================
+// Slot7 (0x1400e9e80)
+// Delegates to Slot6 (vtable +0x30) with same parameters.
+// The decompiled code copies param2 and param3 then calls
+// vtable[+0x30](self, &copy2, &copy3).
+// ============================================================
+void FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3) {
+    // Copy the pointed-to values
+    uintptr_t copy2 = *(uintptr_t*)param2;
+    uintptr_t copy3 = *(uintptr_t*)param3;
+
+    // Call vtable slot +0x30 (Slot6)
+    uintptr_t vt = *(uintptr_t*)self;
+    typedef void (*VtSlot30_t)(FishingWork*, void*, void*);
+    (*(VtSlot30_t*)(vt + 0x30))(self, &copy2, &copy3);
+}
+
+// ============================================================
+// Slot8/CancelAll (0x1400ea830)
+// Cancels all active fishing work:
+//   - Iterates citizen slots, for each non-null citizen:
+//     calls CancelPendingActions on their state machine action list
+//   - Then clears the citizen IBP slot
+// ============================================================
+void FishingWork_Slot8_Impl(FishingWork* self) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    int citizenCount = *(int*)(selfAddr + 0x50);
+    if (citizenCount <= 0) return;
+
+    int i = 0;
+    int64_t offset = 0;
+    do {
+        uintptr_t* citizenSlot = (uintptr_t*)(*(uintptr_t*)(selfAddr + 0x48) + offset);
+        if (*citizenSlot != 0) {
+            // CheckPtr on citizen IBP
+            fn_InternalBasePtr_CheckPtr(citizenSlot);
+            uintptr_t citizenEntity = *citizenSlot;
+
+            // Get state machine component at citizen+0x278
+            fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
+            uintptr_t smComp = *(uintptr_t*)(citizenEntity + 0x278);
+
+            // Cancel pending actions on smComp+0x48 (action list)
+            s_fn_CancelPendingActions((void*)(smComp + 0x48));
+        }
+
+        i++;
+        offset += 8;
+    } while (i < *(int*)(selfAddr + 0x50));
+}
+
+// ============================================================
+// Slot10/GetTarget (0x1400ea8b0)
+// Returns the target entity's position IBP (entity+0x48) via
+// the building entity reference at self+0x10.
+// Uses FUN_140002e10 to find PositionComponent on building entity.
+// Returns param2 (hidden return pointer pattern).
+// ============================================================
+void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // CheckPtr on building entity IBP (at self+0x10)
+    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
+    uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
+
+    // Find PositionComponent via FUN_140002e10
+    uintptr_t posIBP[1] = {0};
+    s_fn_FindComp_PositionEntity(buildingEntity, posIBP);
+
+    // CheckPtr on the returned IBP
+    fn_InternalBasePtr_CheckPtr(posIBP);
+
+    // Read position entity's field at +0x48 and store in output
+    uintptr_t posEntity = *(uintptr_t*)posIBP;
+    *(uintptr_t*)param2 = *(uintptr_t*)(posEntity + 0x48);
+
+    return param2;
 }

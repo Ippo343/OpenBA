@@ -6,7 +6,7 @@
 // Ctor: 0x1400e5a90, Vtable: 0x1401610a0
 //
 // Vtable (12 slots):
-//   [0]  ScalarDtor    = 0x140029680   <-- passthrough
+//   [0]  ScalarDtor    = 0x140029680   <-- REIMPLEMENTED (clean C++)
 //   [1]  VectorDtor    = 0x140029620
 //   [2]  BaseDtor      = 0x140029610
 //   [3]  Serialize     = 0x1400e5850   <-- REIMPLEMENTED (clean C++)
@@ -79,11 +79,11 @@ static void* Reimpl_Ctor(BuildStructure* self) {
 }
 
 // ============================================================
-// ScalarDtor (0x140029680) — passthrough
+// ScalarDtor (0x140029680) — reimplemented (clean C++)
 // ============================================================
 static void* Reimpl_ScalarDtor(BuildStructure* self, uint32_t flags) {
     g_lastHook = "BuildStructure::ScalarDtor";
-    return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
+    return BuildStructure_ScalarDtor(self, flags);
 }
 
 // ============================================================

@@ -40,15 +40,16 @@ static HookInfo g_hookScalarDtor;
 
 static void* Reimpl_ScalarDtor(void* self, uint32_t flags) {
     g_lastHook = "ForesterWork::ScalarDtor";
-    return ((FW_ScalarDtor_t)g_hookScalarDtor.trampoline)(self, flags);
+    return ForesterWork_ScalarDtor_Impl((ForesterWork*)self, flags);
 }
 
 void InstallForesterWorkScalarDtor() {
+    ForesterWork_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002A370);
     // Prologue: MOV [RSP+8],RBX(5) + PUSH RDI(1) + SUB RSP,0x20(4) + MOV EBX,EDX(2) = 12
     InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 12);
 #ifdef _DEBUG
-    printf("[ForesterWork] ScalarDtor hooked at %p (passthrough, prologue=12)\n", (void*)target);
+    printf("[ForesterWork] ScalarDtor hooked at %p (REIMPLEMENTED, prologue=12)\n", (void*)target);
 #endif
 }
 void RemoveForesterWorkScalarDtor() { RemoveHook(&g_hookScalarDtor); }
@@ -63,15 +64,16 @@ static HookInfo g_hookSerialize;
 
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "ForesterWork::Serialize";
-    ((FW_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    ForesterWork_Serialize_Impl((ForesterWork*)self, stream);
 }
 
 void InstallForesterWorkSerialize() {
+    ForesterWork_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400EB970);
     // Prologue: PUSH RDI(2) + SUB RSP,0x50(4) + MOV [RSP+0x20],-2(9) = 15
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
-    printf("[ForesterWork] Serialize hooked at %p (passthrough, prologue=15)\n", (void*)target);
+    printf("[ForesterWork] Serialize hooked at %p (REIMPLEMENTED, prologue=15)\n", (void*)target);
 #endif
 }
 void RemoveForesterWorkSerialize() { RemoveHook(&g_hookSerialize); }
@@ -118,15 +120,16 @@ static HookInfo g_hookSlot8;
 
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "ForesterWork::Slot8";
-    ((FW_Slot8_t)g_hookSlot8.trampoline)(self);
+    ForesterWork_Slot8_Impl((ForesterWork*)self);
 }
 
 void InstallForesterWorkSlot8() {
+    ForesterWork_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400EB8A0);
     // Prologue: PUSH RDI(2) + SUB RSP,0x20(4) + CMP [RCX+0x50],0(4) + MOV RDI,RCX(3) = 13
     InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 13);
 #ifdef _DEBUG
-    printf("[ForesterWork] Slot8 hooked at %p (passthrough, prologue=13)\n", (void*)target);
+    printf("[ForesterWork] Slot8 hooked at %p (REIMPLEMENTED, prologue=13)\n", (void*)target);
 #endif
 }
 void RemoveForesterWorkSlot8() { RemoveHook(&g_hookSlot8); }
@@ -136,21 +139,21 @@ void RemoveForesterWorkSlot8() { RemoveHook(&g_hookSlot8); }
 // 164 instructions. Iterates tree, validates each entry via
 // FUN_1400F7100, collects invalid ones, removes them from tree.
 // ============================================================
-typedef bool (*FW_Slot9_t)(void* self, void* param2);
 static HookInfo g_hookSlot9;
 
-static bool Reimpl_Slot9(void* self, void* param2) {
+static int Reimpl_Slot9(void* self, void* param2) {
     g_lastHook = "ForesterWork::Slot9";
-    return ((FW_Slot9_t)g_hookSlot9.trampoline)(self, param2);
+    return ForesterWork_Slot9_Impl((ForesterWork*)self, param2);
 }
 
 void InstallForesterWorkSlot9() {
+    ForesterWork_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400EAC60);
     // Prologue: MOV RAX,RSP(3) + PUSH RBP(1) + PUSH RSI(1) + PUSH RDI(1) +
     //           PUSH R12(2) + PUSH R13(2) + PUSH R14(2) = 12
     InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 12);
 #ifdef _DEBUG
-    printf("[ForesterWork] Slot9 hooked at %p (passthrough, prologue=12)\n", (void*)target);
+    printf("[ForesterWork] Slot9 hooked at %p (REIMPLEMENTED, prologue=12)\n", (void*)target);
 #endif
 }
 void RemoveForesterWorkSlot9() { RemoveHook(&g_hookSlot9); }
@@ -165,15 +168,16 @@ static HookInfo g_hookSlot10;
 
 static void* Reimpl_Slot10(void* self, void* outPtr) {
     g_lastHook = "ForesterWork::Slot10";
-    return ((FW_Slot10_t)g_hookSlot10.trampoline)(self, outPtr);
+    return ForesterWork_Slot10_Impl((ForesterWork*)self, outPtr);
 }
 
 void InstallForesterWorkSlot10() {
+    ForesterWork_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400EB910);
     // Prologue: MOV [RSP+0x10],RBX(5) + PUSH RDI(1) + SUB RSP,0x20(4) + LEA RBX,[RCX+0x10](4) = 14
     InstallHook(target, (void*)Reimpl_Slot10, &g_hookSlot10, 14);
 #ifdef _DEBUG
-    printf("[ForesterWork] Slot10 hooked at %p (passthrough, prologue=14)\n", (void*)target);
+    printf("[ForesterWork] Slot10 hooked at %p (REIMPLEMENTED, prologue=14)\n", (void*)target);
 #endif
 }
 void RemoveForesterWorkSlot10() { RemoveHook(&g_hookSlot10); }

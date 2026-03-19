@@ -33,5 +33,14 @@ void BuildRoad_Cleanup_Impl(BuildRoad* self);
 // BuildRoad::Validate — check if assigned task still valid
 int BuildRoad_Validate_Impl(BuildRoad* self, void* param2);
 
+// BuildRoad::GetTarget — returns the road build target entity from gameWorld.
+// Uses hidden return pointer ABI (member function): RCX=self, RDX=retbuf.
+// NOT HOOKED — RIP-relative prologue (bug class 2), standalone exe only.
+void* BuildRoad_GetTarget_Impl(BuildRoad* self, void* retbuf);
+
+// BuildRoad::GetPriority — returns true (1) if field_48 is non-null.
+// NOT HOOKED — only 10 bytes total, too small.
+int BuildRoad_GetPriority_Impl(BuildRoad* self);
+
 // Resolution helper
 bool BuildRoad_ResolveFuncs();

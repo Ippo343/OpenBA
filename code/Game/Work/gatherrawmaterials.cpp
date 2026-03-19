@@ -115,6 +115,10 @@ static GRM_GetRemainingCapacity_t s_fn_GetRemainingCapacity = nullptr;
 typedef void (*GRM_LongTermPlan_t)(void* citizenEntity);
 static GRM_LongTermPlan_t s_fn_LongTermPlan = nullptr;
 
+// Tree node cleanup (FUN_140014c30)
+typedef void (*GRM_TreeNodeCleanup_t)(void* bstRoot, void* node);
+static GRM_TreeNodeCleanup_t s_fn_TreeNodeCleanup = nullptr;
+
 // FUN_140122be0: CalcBestTargetPos (position lookup from positionComp + material desc)
 typedef uint8_t (*GRM_CalcBestTargetPos_t)(uintptr_t posComp, uintptr_t matDescField,
     float* posOut, float* posOut2, int* distOut);
@@ -145,6 +149,10 @@ static GRM_RegisterWork_t s_fn_RegisterWork = nullptr;
 static uint32_t* s_typeId_GatherDesc = nullptr;    // DWORD_1401c7040
 static uint32_t* s_typeId_RawMatComp = nullptr;     // DWORD_1401c7cb8
 static uint32_t* s_typeId_PosDesc = nullptr;        // DAT_1401c7938
+
+// Vtable pointers for dtor chain
+static void** s_vtable_GatherRawMaterials = nullptr;  // 0x140161420
+static void** s_vtable_Work = nullptr;                 // 0x1401612e0
 
 static bool s_resolved = false;
 
@@ -195,6 +203,14 @@ bool GatherRawMaterials_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400bf790));
     s_fn_RegisterWork = reinterpret_cast<GRM_RegisterWork_t>(
         ResolveAddr(Module::Exe, 0x140021a30));
+    s_fn_TreeNodeCleanup = reinterpret_cast<GRM_TreeNodeCleanup_t>(
+        ResolveAddr(Module::Exe, 0x140014c30));
+
+    // Vtable pointers for dtor chain
+    s_vtable_GatherRawMaterials = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140161420));
+    s_vtable_Work = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401612e0));
 
     // Dispatch slots (indirect through IAT)
     uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152a00);
@@ -241,6 +257,8 @@ bool GatherRawMaterials_ResolveFuncs() {
               s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos &&
               s_fn_ValidateWorkAssign && s_fn_PathfindingFindPath &&
               s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
+              s_fn_TreeNodeCleanup &&
+              s_vtable_GatherRawMaterials && s_vtable_Work &&
               fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
               g_pGameWorldSingleton &&
               s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
@@ -274,6 +292,7 @@ bool GatherRawMaterials_ResolveFuncs() {
         if (!s_fn_RegisterWork) printf("  MISSING: s_fn_RegisterWork\n");
         if (!s_fn_MemAlloc) printf("  MISSING: s_fn_MemAlloc\n");
         if (!s_fn_MemFree) printf("  MISSING: s_fn_MemFree\n");
+        if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
     }
 #endif
 
@@ -909,4 +928,62 @@ void* GatherRawMaterials_GetTarget_Impl(GatherRawMaterials* /*self*/, void* retb
     uintptr_t something = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(something + 0x30);
     return retbuf;
+}
+
+
+// ============================================================
+// GatherRawMaterials::DtorBody (0x1400ec650)
+// Sets vtable to GatherRawMaterials, frees BST at +0x68,
+// frees int arrays at +0x58 and +0x48, sets vtable to Work,
+// then calls Object::Internal::~Internal.
+// ============================================================
+void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // Set vtable to GatherRawMaterials
+    *(void**)selfAddr = s_vtable_GatherRawMaterials;
+
+    // Free BST nodes at +0x68
+    void* bstRoot = *(void**)(selfAddr + 0x68);
+    if (bstRoot != nullptr) {
+        // Clean up left subtree
+        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x10));
+        // Clean up right subtree
+        s_fn_TreeNodeCleanup((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x18));
+        // Free root node
+        s_fn_MemFree(bstRoot);
+    }
+
+    // Zero out BST root and count
+    *(void**)(selfAddr + 0x68) = nullptr;
+    *(uint32_t*)(selfAddr + 0x70) = 0;
+
+    // Free second int array at +0x58
+    s_fn_MemFree(*(void**)(selfAddr + 0x58));
+    *(void**)(selfAddr + 0x58) = nullptr;
+    *(uint64_t*)(selfAddr + 0x60) = 0;
+
+    // Free first int array at +0x48
+    s_fn_MemFree(*(void**)(selfAddr + 0x48));
+    *(void**)(selfAddr + 0x48) = nullptr;
+    *(uint64_t*)(selfAddr + 0x50) = 0;
+
+    // Set vtable to Work (no AutoPickupWork in GatherRawMaterials' chain)
+    *(void**)selfAddr = s_vtable_Work;
+
+    // The original does a tail-call JMP to Object::Internal::~Internal.
+    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+}
+
+
+// ============================================================
+// GatherRawMaterials::ScalarDtor (0x14002a410)
+// Calls dtor body, then conditional free.
+// ============================================================
+void* GatherRawMaterials_ScalarDtor_Impl(GatherRawMaterials* self, uint32_t flags) {
+    GatherRawMaterials_DtorBody(self);
+    if (flags & 1) {
+        s_fn_MemFree(self);
+    }
+    return self;
 }

@@ -87,16 +87,16 @@ static int Reimpl_Slot4(ClearStorage* self, void* citizenAI, void* time) {
     return ClearStorage_Execute(self, citizenAI, time);
 }
 
-typedef uint8_t (*fn_Slot6_t)(void* self, void* param2);
-static uint8_t Reimpl_Slot6(void* self, void* param2) {
+// Slot6 — delegates to clean reimplementation
+static int Reimpl_Slot6(ClearStorage* self, void* param2) {
     g_lastHook = "ClearStorage::Slot6";
-    return ((fn_Slot6_t)g_hookSlot6.trampoline)(self, param2);
+    return ClearStorage_Slot6_Impl(self, param2);
 }
 
-typedef void (*fn_Slot8_t)(void* self);
-static void Reimpl_Slot8(void* self) {
-    g_lastHook = "ClearStorage::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+// Slot8/CancelAll — delegates to clean reimplementation
+static void Reimpl_Slot8(ClearStorage* self) {
+    g_lastHook = "ClearStorage::CancelAll";
+    ClearStorage_CancelAll_Impl(self);
 }
 
 // Slot9/Validate — hook DISABLED (bug class 3: MOV RAX,RSP in prologue).
@@ -104,14 +104,14 @@ static void Reimpl_Slot8(void* self) {
 // but we keep the trampoline here since the hook can't be safely installed.
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);
 static uint64_t Reimpl_Slot9(void* self, void* param2) {
-    g_lastHook = "ClearStorage::Slot9";
+    g_lastHook = "ClearStorage::Validate";
     return ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param2);
 }
 
-typedef void* (*fn_Slot10_t)(void* self, void* param2);
-static void* Reimpl_Slot10(void* self, void* param2) {
-    g_lastHook = "ClearStorage::Slot10";
-    return ((fn_Slot10_t)g_hookSlot10.trampoline)(self, param2);
+// Slot10/GetTarget — delegates to clean reimplementation
+static void* Reimpl_Slot10(ClearStorage* self, void* param2) {
+    g_lastHook = "ClearStorage::GetTarget";
+    return ClearStorage_GetTarget_Impl(self, param2);
 }
 
 // ============================================================

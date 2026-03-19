@@ -1062,3 +1062,201 @@ cleanup:
     tileArray.count = 0;
     return result;
 }
+
+// ============================================================
+// ClearArea::Validate (0x1400e5b10) — slot 9
+// ============================================================
+// Validates both BSTs: entity tree at +0x48 and cell tree at +0x58.
+// For each entry in the entity tree, calls FUN_1400f7100 to check
+// if the citizen still has a matching CompleteTask action.
+// Invalid entries are collected and removed from the entity tree.
+// Then checks the cell tree at +0x58: if any entry is invalid,
+// returns 0 immediately (early exit).
+// Returns: 1 if all entries valid (or both BSTs empty), 0 otherwise.
+//
+// NOT HOOKED — bug class 3 (RSP capture), standalone exe only.
+// ============================================================
+
+// FUN_1400f7100: Work::ValidateTask helper
+typedef uint8_t (*fn_ValidateTask_t)(void* self, void* citizenIBP, void* ibp, void* outTask);
+static fn_ValidateTask_t s_fn_ValidateTask_CA = nullptr;
+
+// CitizenAI_impl_ca60 (0x14001ca60): BST remove node
+typedef void* (*fn_BST_RemoveNode_t)(void* bstRoot, void* node);
+static fn_BST_RemoveNode_t s_fn_BST_RemoveNode_CA = nullptr;
+
+static bool EnsureValidateFuncs() {
+    if (!s_fn_ValidateTask_CA) {
+        s_fn_ValidateTask_CA = reinterpret_cast<fn_ValidateTask_t>(
+            ResolveAddr(Module::Exe, 0x1400f7100));
+    }
+    if (!s_fn_BST_RemoveNode_CA) {
+        s_fn_BST_RemoveNode_CA = reinterpret_cast<fn_BST_RemoveNode_t>(
+            ResolveAddr(Module::Exe, 0x14001ca60));
+    }
+    return s_fn_ValidateTask_CA && s_fn_BST_RemoveNode_CA;
+}
+
+int ClearArea_Validate(ClearArea* self, void* citizenIBP) {
+    if (!EnsureValidateFuncs()) return 1;
+
+    uintptr_t s = (uintptr_t)self;
+
+    // Dynamic array for entities to remove from tree at +0x48
+    uintptr_t* removeArr = nullptr;
+    uint32_t removeCount = 0;
+    uint32_t removeCap = 0;
+
+    // ---- Phase 1: Validate entity tree at +0x48 ----
+    void* root48 = self->field_48;
+    if (root48 != nullptr) {
+        // Find leftmost node
+        void* node = root48;
+        while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
+            node = *(void**)((uintptr_t)node + 0x18);
+        }
+
+        // In-order traversal
+        while (node != nullptr) {
+            // Read entity IBP from node+0x08
+            uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
+
+            // Validate this entry
+            uint8_t valid = s_fn_ValidateTask_CA((void*)s, citizenIBP,
+                                                  (void*)&entityIBP, nullptr);
+
+            if (valid == 0) {
+                // Invalid — add to removal list
+                uint32_t newCount = removeCount + 1;
+                if (newCount != removeCount) {
+                    if ((int)removeCap < (int)newCount) {
+                        uint32_t newCap = newCount;
+                        if (removeCount != 0) {
+                            newCap = newCount * 3;
+                        }
+                        removeCap = newCap;
+                        uintptr_t* newArr = (uintptr_t*)fn_MemAlloc(
+                            g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+
+                        // Copy existing entries
+                        uint32_t copyStart = 0;
+                        if (removeArr == newArr) {
+                            copyStart = removeCount;
+                        }
+                        for (uint32_t i = copyStart; i < newCount; i++) {
+                            if (newArr != nullptr) {
+                                uintptr_t src = 0;
+                                if (i < removeCount && removeArr != nullptr) {
+                                    src = removeArr[i];
+                                } else {
+                                    src = entityIBP;
+                                }
+                                newArr[i] = src;
+                            }
+                        }
+
+                        if (removeArr != newArr) {
+                            fn_MemFreeStatic(removeArr);
+                        }
+                        removeArr = newArr;
+                    } else {
+                        removeArr[removeCount] = entityIBP;
+                    }
+                    removeCount = newCount;
+                }
+            }
+
+            // Move to in-order successor
+            void* right = *(void**)((uintptr_t)node + 0x20);
+            if (right != nullptr) {
+                node = right;
+                while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
+                    node = *(void**)((uintptr_t)node + 0x18);
+                }
+            } else {
+                void* parent = *(void**)((uintptr_t)node + 0x10);
+                if (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) != node) {
+                    while (parent != nullptr &&
+                           *(void**)((uintptr_t)parent + 0x20) == node) {
+                        node = parent;
+                        parent = *(void**)((uintptr_t)node + 0x10);
+                    }
+                    node = parent;
+                } else {
+                    node = parent;
+                }
+            }
+        }
+    }
+
+    // ---- Phase 2: Validate cell tree at +0x58 ----
+    void* root58 = self->field_58;
+    if (root58 != nullptr) {
+        // Find leftmost node
+        void* node = root58;
+        while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
+            node = *(void**)((uintptr_t)node + 0x18);
+        }
+
+        // In-order traversal
+        while (node != nullptr) {
+            uintptr_t entityIBP = *(uintptr_t*)((uintptr_t)node + 0x08);
+
+            uint8_t valid = s_fn_ValidateTask_CA((void*)s, citizenIBP,
+                                                  (void*)&entityIBP, nullptr);
+            if (valid == 0) {
+                // Cell tree has invalid entry — early return 0
+                fn_MemFreeStatic(nullptr);
+                fn_MemFreeStatic(removeArr);
+                return 0;
+            }
+
+            // Move to in-order successor
+            void* right = *(void**)((uintptr_t)node + 0x20);
+            if (right != nullptr) {
+                node = right;
+                while (*(void**)((uintptr_t)node + 0x18) != nullptr) {
+                    node = *(void**)((uintptr_t)node + 0x18);
+                }
+            } else {
+                void* parent = *(void**)((uintptr_t)node + 0x10);
+                if (parent != nullptr && *(void**)((uintptr_t)parent + 0x18) != node) {
+                    while (parent != nullptr &&
+                           *(void**)((uintptr_t)parent + 0x20) == node) {
+                        node = parent;
+                        parent = *(void**)((uintptr_t)node + 0x10);
+                    }
+                    node = parent;
+                } else {
+                    node = parent;
+                }
+            }
+        }
+    }
+
+    // ---- Phase 3: Remove invalid entries from entity tree ----
+    if ((int)removeCount > 0) {
+        for (uint32_t i = 0; i < removeCount; i++) {
+            void* bstNode = self->field_48;
+            while (bstNode != nullptr) {
+                fn_InternalBasePtr_CheckPtr(bstNode);
+                uintptr_t nodeKey = *(uintptr_t*)bstNode;
+                if (removeArr[i] < nodeKey) {
+                    bstNode = *(void**)((uintptr_t)bstNode + 0x18); // left
+                } else {
+                    fn_InternalBasePtr_CheckPtr(&removeArr[i]);
+                    if (removeArr[i] <= nodeKey) {
+                        // Found — remove it
+                        s_fn_BST_RemoveNode_CA(&self->field_48, bstNode);
+                        break;
+                    }
+                    bstNode = *(void**)((uintptr_t)bstNode + 0x20); // right
+                }
+            }
+        }
+    }
+
+    fn_MemFreeStatic(nullptr);
+    fn_MemFreeStatic(removeArr);
+    return 1;
+}

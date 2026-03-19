@@ -49,5 +49,11 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2);
 // Hidden return ptr ABI: RCX=self, RDX=retbuf.
 void* GatherRawMaterials_GetTarget_Impl(GatherRawMaterials* self, void* retbuf);
 
+// DtorBody (0x1400ec650): Sets vtables, frees BST + arrays, calls base dtor.
+void GatherRawMaterials_DtorBody(GatherRawMaterials* self);
+
+// ScalarDtor (0x14002a410): Calls dtor body, conditional free.
+void* GatherRawMaterials_ScalarDtor_Impl(GatherRawMaterials* self, uint32_t flags);
+
 // Resolution helper -- resolve all function pointers. Called once.
 bool GatherRawMaterials_ResolveFuncs();

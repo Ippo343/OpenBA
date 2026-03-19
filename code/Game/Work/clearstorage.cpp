@@ -16,6 +16,61 @@
 #include <cstdio>
 
 // ============================================================
+// Local function pointers (resolved once on first use)
+// ============================================================
+
+// Object::Internal::~Internal — dtor for base class
+typedef void (*fn_ObjectInternal_Dtor_t)(void* self);
+static fn_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
+
+// BST find-and-remove by key (CitizenAI_impl_5520 at 0x140025520)
+typedef void (*fn_BSTFindRemove_t)(void* bstRoot, void* key);
+static fn_BSTFindRemove_t s_fn_BSTFindRemove = nullptr;
+
+// FUN_1400c5400 — cancel all work on action list
+typedef void (*fn_TaskCancel_t)(void* actionList);
+static fn_TaskCancel_t s_fn_TaskCancel = nullptr;
+
+// FUN_140014c30 — recursive BST node free
+typedef void (*fn_TreeNodeCleanup_t)(void* tree, void* branch);
+static fn_TreeNodeCleanup_t s_fn_TreeNodeCleanup = nullptr;
+
+// Vtable pointers
+static void* s_vtable_ClearStorage = nullptr;
+static void* s_vtable_Work = nullptr;
+
+static bool s_initialized = false;
+
+void ClearStorage_InitFuncs() {
+    if (s_initialized) return;
+    s_initialized = true;
+
+    // Object::Internal::~Internal — IAT slot at 0x140152770 (verified from dtor disasm JMP)
+    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
+    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<fn_ObjectInternal_Dtor_t*>(iatDtor);
+
+    s_fn_BSTFindRemove = reinterpret_cast<fn_BSTFindRemove_t>(
+        ResolveAddr(Module::Exe, 0x140025520));
+
+    s_fn_TaskCancel = reinterpret_cast<fn_TaskCancel_t>(
+        ResolveAddr(Module::Exe, 0x1400c5400));
+
+    s_fn_TreeNodeCleanup = reinterpret_cast<fn_TreeNodeCleanup_t>(
+        ResolveAddr(Module::Exe, 0x140014c30));
+
+    s_vtable_ClearStorage = (void*)ResolveAddr(Module::Exe, ClearStorageAddr::Vtable);
+    s_vtable_Work = (void*)ResolveAddr(Module::Exe, 0x140161a80);
+
+#ifdef _DEBUG
+    printf("[ClearStorage_InitFuncs] ObjDtor=%p BSTFindRemove=%p TaskCancel=%p TreeCleanup=%p\n",
+           (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_BSTFindRemove,
+           (void*)s_fn_TaskCancel, (void*)s_fn_TreeNodeCleanup);
+    printf("[ClearStorage_InitFuncs] vtable_CS=%p vtable_Work=%p\n",
+           s_vtable_ClearStorage, s_vtable_Work);
+#endif
+}
+
+// ============================================================
 // Helper: Clamp int to [0, max-1]
 // ============================================================
 static inline int ClampGrid(int val, int gridSize) {
@@ -441,4 +496,111 @@ phase2:
     fn_MemFreeStatic(removeList);
 
     return removeCount == 0 ? 1 : 0;
+}
+
+// ============================================================
+// ClearStorage::ScalarDtor (vtable +0x00, 0x14002a100)
+// ============================================================
+// Calls the ClearStorage destructor (frees BST + aux data, resets vtable
+// chain to Work, calls Internal::~Internal), then conditionally frees
+// the object's memory.
+void* ClearStorage_ScalarDtor_Impl(ClearStorage* self, uint32_t flags) {
+    ClearStorage_InitFuncs();
+
+    // --- ClearStorage destructor logic (0x1400e73b0) ---
+
+    // Set vtable to ClearStorage (in case called from derived)
+    self->vtable = s_vtable_ClearStorage;
+
+    // Free BST at +0x58 (citizen assignment tree)
+    void* bstRoot = self->_field58;
+    if (bstRoot != nullptr) {
+        s_fn_TreeNodeCleanup(&self->_field58, *(void**)((uintptr_t)bstRoot + 0x10));
+        s_fn_TreeNodeCleanup(&self->_field58, *(void**)((uintptr_t)bstRoot + 0x18));
+        fn_MemFreeStatic(bstRoot);
+    }
+    self->_field58 = nullptr;
+    self->_field60 = 0;
+
+    // Free auxiliary data at +0x48
+    fn_MemFreeStatic(self->_field48);
+    self->_field48 = nullptr;
+    self->_field50 = nullptr;
+
+    // Reset to Work vtable and call Internal::~Internal
+    self->vtable = s_vtable_Work;
+    s_fn_ObjectInternal_Dtor(self);
+
+    // Conditionally free memory
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+
+    return self;
+}
+
+// ============================================================
+// ClearStorage::Slot6 (vtable +0x30, 0x1400e6c30)
+// ============================================================
+// BST find-and-remove by key on the citizen BST at self+0x58,
+// then returns false (0). This removes a specific citizen's
+// entry from the work tracking tree.
+int ClearStorage_Slot6_Impl(ClearStorage* self, void* param2) {
+    ClearStorage_InitFuncs();
+
+    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x58), param2);
+    return 0;
+}
+
+// ============================================================
+// ClearStorage::CancelAll (Slot8, vtable +0x40, 0x1400e72a0)
+// ============================================================
+// Iterates the BST at self+0x58 by finding the leftmost node
+// each iteration. For each node, resolves the citizen entity,
+// navigates to its state machine component (+0x278), and cancels
+// the pending work action via TaskCancel on its action list (+0x48).
+// Repeats until the BST is empty (count at self+0x60 drops to 0).
+void ClearStorage_CancelAll_Impl(ClearStorage* self) {
+    ClearStorage_InitFuncs();
+
+    while (true) {
+        void* node = self->_field58;
+        if (node == nullptr) {
+            return;
+        }
+
+        // Find leftmost node in BST
+        void* leftmost = node;
+        void* left = *(void**)((uintptr_t)leftmost + 0x10);
+        while (left != nullptr) {
+            leftmost = left;
+            left = *(void**)((uintptr_t)leftmost + 0x10);
+        }
+
+        if (leftmost == nullptr) {
+            return;
+        }
+
+        // Resolve the citizen entity from the BST node
+        fn_InternalBasePtr_CheckPtr(leftmost);
+        uintptr_t citizenEntity = *(uintptr_t*)leftmost;
+
+        // Navigate to state machine component (+0x278) and cancel its action list (+0x48)
+        fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
+        s_fn_TaskCancel((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
+    }
+}
+
+// ============================================================
+// ClearStorage::GetTarget (Slot10, vtable +0x50, 0x1400e7330)
+// ============================================================
+// Returns the map entity IBP from the game world singleton.
+// Uses hidden return pointer ABI (member function returning non-trivial).
+// Path: g_pGameWorldSingleton -> +0xb0 -> +0x30
+void* ClearStorage_GetTarget_Impl(ClearStorage* self, void* retbuf) {
+    (void)self;  // unused
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
+    *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
+    return retbuf;
 }

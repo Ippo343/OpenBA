@@ -460,3 +460,125 @@ int FireWork_Slot9_Impl(FireWork* self, void* citizenIBP) {
     // Return 1 if BST is now empty, 0 otherwise
     return (removeCount == 0) ? 1 : 0;
 }
+
+// ============================================================
+// Slot6 (0x1400e9600): OnComplete — remove citizen from BST,
+// return false (0).
+//
+// Calls CitizenAI_impl_5520 on the BST at +0x50 to remove
+// the citizen entry identified by param2, then returns 0.
+// ============================================================
+
+// CitizenAI_impl_5520 (0x140025520): BST lookup + remove by key.
+// Searches BST for a node matching param2's IBP key, removes it.
+typedef void (*fn_BST_RemoveByKey_t)(void* bstRoot, void* ibpKey);
+static fn_BST_RemoveByKey_t s_fn_BST_RemoveByKey = nullptr;
+
+static bool EnsureSlot6Funcs() {
+    if (!s_fn_BST_RemoveByKey) {
+        s_fn_BST_RemoveByKey = reinterpret_cast<fn_BST_RemoveByKey_t>(
+            ResolveAddr(Module::Exe, 0x140025520));
+    }
+    return s_fn_BST_RemoveByKey != nullptr;
+}
+
+int FireWork_Slot6_Impl(FireWork* self, void* citizenIBP) {
+    if (!EnsureSlot6Funcs()) return 0;
+    uintptr_t s = (uintptr_t)self;
+    // Remove citizen entry from BST at +0x50
+    s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
+    return 0;
+}
+
+// ============================================================
+// Slot7 (0x1400e95f0): OnCancel — thunk to BST remove by key.
+//
+// This is a 6-byte thunk: ADD RCX,0x50; JMP CitizenAI_impl_5520
+// Adjusts this pointer to point to BST root at +0x50, then
+// jumps to the BST remove-by-key function. The effect is
+// identical to Slot6 without the SUB RSP / return false wrapper.
+// ============================================================
+void FireWork_Slot7_Impl(FireWork* self, void* citizenIBP) {
+    if (!EnsureSlot6Funcs()) return;
+    uintptr_t s = (uintptr_t)self;
+    // Remove citizen entry from BST at +0x50
+    s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
+}
+
+// ============================================================
+// Slot8 (0x1400e99a0): CancelAll / Cleanup.
+//
+// Walks the BST at +0x50 in a loop. For each iteration:
+//   1. Get leftmost node in the BST
+//   2. CheckPtr on the node, read entity from node
+//   3. Get StateMachineComponent at entity+0x278
+//   4. Call FUN_1400c5400 (remove pending action) on SMC+0x48
+// Continues until the BST root is null.
+// ============================================================
+
+// FUN_1400c5400: remove pending action from state machine
+typedef void (*fn_RemovePendingAction_t)(void* smActionList);
+static fn_RemovePendingAction_t s_fn_RemovePendingAction_FW = nullptr;
+
+static bool EnsureSlot8Funcs() {
+    if (!s_fn_RemovePendingAction_FW) {
+        s_fn_RemovePendingAction_FW = reinterpret_cast<fn_RemovePendingAction_t>(
+            ResolveAddr(Module::Exe, 0x1400c5400));
+    }
+    return s_fn_RemovePendingAction_FW != nullptr;
+}
+
+void FireWork_Slot8_Impl(FireWork* self) {
+    if (!EnsureSlot8Funcs()) return;
+    uintptr_t s = (uintptr_t)self;
+    void** bstRoot = (void**)(s + 0x50);
+
+    while (true) {
+        void* root = *bstRoot;
+        if (root == nullptr) return;
+
+        // Find leftmost node in BST
+        void* node = root;
+        void* leftChild = *(void**)((uintptr_t)node + 0x10);
+        while (leftChild != nullptr) {
+            node = leftChild;
+            leftChild = *(void**)((uintptr_t)node + 0x10);
+        }
+
+        if (node == nullptr) return;
+
+        // Double-traverse to find leftmost again (matches decompilation pattern)
+        void* node2 = root;
+        while (node2 != nullptr) {
+            void* left2 = *(void**)((uintptr_t)node2 + 0x10);
+            if (left2 == nullptr) break;
+            node2 = left2;
+        }
+
+        // CheckPtr on the node, read entity
+        fn_InternalBasePtr_CheckPtr(node2);
+        uintptr_t entityPtr = *(uintptr_t*)node2;
+
+        // Get StateMachineComponent at entity+0x278
+        fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x278));
+        uintptr_t smComp = *(uintptr_t*)(entityPtr + 0x278);
+
+        // Remove pending action from SMC+0x48
+        s_fn_RemovePendingAction_FW((void*)(smComp + 0x48));
+    }
+}
+
+// ============================================================
+// Slot10 (0x1400e9a30): GetTarget.
+//
+// Returns the map entity from gameWorld singleton:
+//   gameWorld->field_b0->field_30
+// Uses hidden return pointer ABI (member function returning
+// non-trivial InternalBasePtr): RCX=this, RDX=retbuf.
+// ============================================================
+void* FireWork_Slot10_Impl(FireWork* /*self*/, void* retbuf) {
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
+    *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
+    return retbuf;
+}

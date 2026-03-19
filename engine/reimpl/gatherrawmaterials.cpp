@@ -83,7 +83,7 @@ static void* Reimpl_Ctor(GatherRawMaterials* self) {
 // ============================================================
 static void* Reimpl_ScalarDtor(GatherRawMaterials* self, uint32_t flags) {
     g_lastHook = "GatherRawMaterials::ScalarDtor";
-    return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
+    return GatherRawMaterials_ScalarDtor_Impl(self, flags);
 }
 
 // ============================================================
@@ -122,10 +122,11 @@ void InstallGatherRawMaterialsCtor() {
 void RemoveGatherRawMaterialsCtor() { RemoveHook(&g_hookCtor); }
 
 void InstallGatherRawMaterialsScalarDtor() {
+    GatherRawMaterials_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, GatherRawMaterialsAddr::ScalarDtor);
     InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 12);
 #ifdef _DEBUG
-    printf("[GatherRawMaterials] ScalarDtor hooked at %p\n", (void*)target);
+    printf("[GatherRawMaterials] ScalarDtor hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveGatherRawMaterialsScalarDtor() { RemoveHook(&g_hookScalarDtor); }

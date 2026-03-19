@@ -37,6 +37,14 @@ void ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry);
 // Cleanup (vtable +0x40): Releases all assigned citizens.
 void ClearArea_Cleanup(ClearArea* self);
 
+// Validate (vtable +0x48, 0x1400e5b10): Validates entity and cell BSTs.
+// Walks entity tree at +0x48 and cell tree at +0x58, checking each
+// entry with FUN_1400f7100. Invalid entity entries are removed.
+// If any cell tree entry is invalid, returns 0 immediately.
+// Returns: 1 if all valid or trees empty, 0 if cell tree has invalid entry.
+// NOT HOOKED — bug class 3 (RSP capture), standalone exe only.
+int ClearArea_Validate(ClearArea* self, void* citizenIBP);
+
 // GetTarget (vtable +0x50): Returns map entity from gameWorld.
 void* ClearArea_GetTarget(ClearArea* self, void* retbuf);
 
