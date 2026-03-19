@@ -2,7 +2,7 @@
 
 **Directory:** `code/Game/Work/`
 **Type headers:** `AutoPickupWork.h`, `ClearStorage.h`, `FireWork.h`, `FishingWork.h`, `ForesterWork.h`, `HarvestArea.h`, `HarvestOrchard.h`, `HerbalistWork.h`, `HuntWork.h`, `LocationWork.h`, `MarketWork.h`, `PastureWork.h`, `Pickup.h`, `TendArea.h`, `TradeWork.h`
-**Source files:** `autopickupwork.cpp`, `buildroad.cpp`, `buildstructure.cpp`, `cleararea.cpp`, `clearstorage.cpp`, `consumeproduce.cpp`, `firework.cpp`, `fishingwork.cpp`, `foresterwork.cpp`, `gatherrawmaterials.cpp`, `harvestarea.cpp`, `harvestorchard.cpp`, `herbalistwork.cpp`
+**Source files:** `autopickupwork.cpp`, `buildroad.cpp`, `buildstructure.cpp`, `cleararea.cpp`, `clearstorage.cpp`, `consumeproduce.cpp`, `firework.cpp`, `fishingwork.cpp`, `foresterwork.cpp`, `gatherrawmaterials.cpp`, `harvestarea.cpp`, `harvestorchard.cpp`, `herbalistwork.cpp`, `huntwork.cpp`, `locationwork.cpp`, `marketwork.cpp`, `pasturework.cpp`
 
 ---
 
@@ -33,11 +33,11 @@ Stage 3:
 | HarvestArea | 0x1401614a0 | HarvestArea.h | **COMPLETE** (8 methods reimpl'd, Slot9 disabled=bug class 2) | Medium |
 | HarvestOrchard | 0x140161520 | HarvestOrchard.h | **COMPLETE** (8 methods reimpl'd, Slot9 disabled=bug class 2) | Medium |
 | HerbalistWork | 0x1401615a0 | HerbalistWork.h | **COMPLETE** (8 methods reimpl'd, Slot6 unhookable=bug class 1, Slot9 disabled=bug class 2) | Low |
-Stage 4 (new classes):
-| HuntWork | 0x140161620 | HuntWork.h | Not started | Medium |
-| LocationWork | 0x1401616a0 | LocationWork.h | Not started | Medium |
-| MarketWork | 0x140161710 | MarketWork.h | Not started | Medium |
-| PastureWork | 0x1401617a0 | PastureWork.h | Not started | Medium |
+Stage 4:
+| HuntWork | 0x140161620 | HuntWork.h | **COMPLETE** (all methods reimpl'd, Slot9 disabled=bug class 3, Slot6 unhookable) | Medium |
+| LocationWork | 0x1401616a0 | LocationWork.h | **COMPLETE** (all 7 hooked methods reimpl'd) | Medium |
+| MarketWork | 0x140161710 | MarketWork.h | **COMPLETE** (all methods reimpl'd, Slot4/6/8/9 disabled=bug classes 2/3, Slot4 calls original) | Medium |
+| PastureWork | 0x1401617a0 | PastureWork.h | **COMPLETE** (all methods reimpl'd, Slot9 disabled=bug class 3, Slot6 unhookable) | Medium |
 Stage 5 (new classes):
 | Pickup | 0x140161810 | Pickup.h | Not started | Medium |
 | PlantArea | - | - | Not started | Medium |

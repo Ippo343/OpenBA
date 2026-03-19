@@ -1,0 +1,528 @@
+// code/Game/Work/locationwork.cpp
+// Clean C++ reimplementation of LocationWork — all methods.
+// Source: Game/Work/LocationWork.cpp (from profile build debug strings)
+//
+// LocationWork (0x50 bytes) — Location-based work action.
+// Inherits: Object::Internal -> Work (0x48) -> LocationWork
+// Vtable: 0x1401616a0
+//
+// Unlike HerbalistWork/ForesterWork which extend AutoPickupWork with a BST,
+// LocationWork extends Work directly with a single InternalBasePtr at +0x48.
+// This stores a reference to the citizen entity assigned to the work.
+//
+// Decompiled from Application-x64.exe using Ghidra.
+// This file must NOT depend on hooks.h — it is portable for standalone exe.
+
+#include "Work/locationwork_funcs.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstdio>
+
+// ============================================================
+// Local function pointers (resolved once by LocationWork_ResolveFuncs)
+// ============================================================
+
+// All typedefs prefixed with LW_ to avoid conflicts
+
+// Work::Serialize base
+typedef void  (*LW_Work_Serialize_t)(void* self, void* stream);
+// IO::Serializer ctor/dtor
+typedef void* (*LW_Serializer_Ctor_t)(void* self, void* stream, int version);
+typedef void  (*LW_Serializer_Dtor_t)(void* self);
+// InternalBasePtr::Serialize
+typedef void  (*LW_InternalBasePtr_Serialize_t)(void* basePtr, void* serializer);
+
+// Entity_FindComponent_Storage (0x140006270)
+typedef void* (*LW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
+// StorageComponent_QueryCount (0x14012cf10)
+typedef int   (*LW_StorageQueryCount_t)(void* storageComp);
+// CitizenAI_State_LongTermPlan (0x140115e60)
+typedef void  (*LW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
+// Entity_FindComponent_Position (0x140002ed0)
+typedef void* (*LW_FindComp_Position_t)(uintptr_t entity, void* outIBP);
+
+// FUN_140122be0 — FindWalkablePosition (workplace position helper)
+typedef uint8_t (*LW_FindWalkablePos_t)(uintptr_t posComp, uintptr_t descOffset,
+                                         float* srcPos, float* outPos, int* outDist);
+// FUN_140122b00 — FindWalkablePosition variant (sub-position)
+typedef uint8_t (*LW_FindWalkablePosSub_t)(uintptr_t entity, int index,
+                                            float* srcPos, float* outPos, int* outDist);
+
+// Pathfinding_WalkTowards action constructor (0x1400f8620)
+// Creates a WalkTowards action: (citizenIBP, priority, position, flag1, fScale, flag2)
+typedef void (*LW_WalkTowards_Ctor_t)(void* citizenIBP, int priority,
+                                       float* position, int flag1, float fScale, uint32_t flag2);
+
+// FUN_1400f7100 — ValidateEntity
+typedef bool (*LW_ValidateEntity_t)(uintptr_t work, void* citizenIBP, void* entityIBP, void* outTask);
+
+// FUN_1400c5400 — CancelAllWork
+typedef void (*LW_CancelAllWork_t)(void* bstRoot);
+
+// FUN_140002e10 — FindSubEntity
+typedef void* (*LW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
+
+// Object::Internal::~Internal
+typedef void (*LW_Internal_Dtor_t)(void* self);
+
+// fn_MemFreeStatic
+typedef void (*LW_MemFreeStatic_t)(void* ptr);
+
+static LW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
+static LW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
+static LW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
+static LW_InternalBasePtr_Serialize_t  s_fn_InternalBasePtr_Serialize = nullptr;
+
+static LW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
+static LW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
+static LW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
+static LW_FindComp_Position_t          s_fn_FindComp_Position = nullptr;
+static LW_FindWalkablePos_t            s_fn_FindWalkablePos = nullptr;
+static LW_FindWalkablePosSub_t         s_fn_FindWalkablePosSub = nullptr;
+static LW_WalkTowards_Ctor_t           s_fn_WalkTowards_Ctor = nullptr;
+static LW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
+static LW_CancelAllWork_t              s_fn_CancelAllWork = nullptr;
+static LW_FindSubEntity_t              s_fn_FindSubEntity = nullptr;
+static LW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
+
+// TypeId for Serialize validation (DAT_1401c7158)
+static uint32_t s_typeId_Validate = 0;
+
+// TypeId for RadiusDescription check (DAT_1401c7938)
+static uint32_t* s_typeId_RadiusDesc = nullptr;
+
+// Float constant: g_fUVScale at 0x14017214c
+static float* s_fUVScale = nullptr;
+
+// Vtable pointers for dtor chain
+static void** s_vtable_LocationWork = nullptr;  // 0x1401616a0
+static void** s_vtable_Work = nullptr;           // 0x1401612e0
+
+static bool s_locationwork_funcs_resolved = false;
+
+// ============================================================
+// Resolution — called once during hook installation
+// ============================================================
+bool LocationWork_ResolveFuncs() {
+    if (s_locationwork_funcs_resolved) return true;
+
+    // Work::Serialize
+    s_fn_Work_Serialize = reinterpret_cast<LW_Work_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1400f7400));
+
+    // IO::Serializer ctor/dtor from dispatch slots
+    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
+    if (iatSerCtor)
+        s_fn_Serializer_Ctor = *reinterpret_cast<LW_Serializer_Ctor_t*>(iatSerCtor);
+    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
+    if (iatSerDtor)
+        s_fn_Serializer_Dtor = *reinterpret_cast<LW_Serializer_Dtor_t*>(iatSerDtor);
+
+    // InternalBasePtr::Serialize via dispatch slot
+    uintptr_t iatBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
+    if (iatBPSer)
+        s_fn_InternalBasePtr_Serialize = *reinterpret_cast<LW_InternalBasePtr_Serialize_t*>(iatBPSer);
+
+    // Entity component finders
+    s_fn_FindComp_Storage = reinterpret_cast<LW_FindComp_Storage_t>(
+        ResolveAddr(Module::Exe, 0x140006270));
+    s_fn_StorageQueryCount = reinterpret_cast<LW_StorageQueryCount_t>(
+        ResolveAddr(Module::Exe, 0x14012cf10));
+    s_fn_CitizenAI_LongTermPlan = reinterpret_cast<LW_CitizenAI_LongTermPlan_t>(
+        ResolveAddr(Module::Exe, 0x140115e60));
+    s_fn_FindComp_Position = reinterpret_cast<LW_FindComp_Position_t>(
+        ResolveAddr(Module::Exe, 0x140002ed0));
+
+    // Pathfinding helpers
+    s_fn_FindWalkablePos = reinterpret_cast<LW_FindWalkablePos_t>(
+        ResolveAddr(Module::Exe, 0x140122be0));
+    s_fn_FindWalkablePosSub = reinterpret_cast<LW_FindWalkablePosSub_t>(
+        ResolveAddr(Module::Exe, 0x140122b00));
+
+    // WalkTowards action constructor
+    s_fn_WalkTowards_Ctor = reinterpret_cast<LW_WalkTowards_Ctor_t>(
+        ResolveAddr(Module::Exe, 0x1400f8620));
+
+    // Validation and cleanup
+    s_fn_ValidateEntity = reinterpret_cast<LW_ValidateEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400f7100));
+    s_fn_CancelAllWork = reinterpret_cast<LW_CancelAllWork_t>(
+        ResolveAddr(Module::Exe, 0x1400c5400));
+    s_fn_FindSubEntity = reinterpret_cast<LW_FindSubEntity_t>(
+        ResolveAddr(Module::Exe, 0x140002e10));
+
+    // fn_MemFreeStatic from engine_funcs
+    s_fn_MemFreeStatic = reinterpret_cast<LW_MemFreeStatic_t>(fn_MemFreeStatic);
+
+    // TypeId for Serialize validation — read uint32 value at 0x1401c7158
+    uintptr_t typeIdAddr = ResolveAddr(Module::Exe, 0x1401c7158);
+    if (typeIdAddr)
+        s_typeId_Validate = *reinterpret_cast<uint32_t*>(typeIdAddr);
+
+    // TypeId for RadiusDescription check (DAT_1401c7938)
+    s_typeId_RadiusDesc = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7938));
+
+    // Float constant: g_fUVScale at 0x14017214c
+    s_fUVScale = reinterpret_cast<float*>(
+        ResolveAddr(Module::Exe, 0x14017214c));
+
+    // Vtable pointers for dtor
+    s_vtable_LocationWork = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401616a0));
+    s_vtable_Work = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x1401612e0));
+
+    // Verify critical pointers
+    bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
+              s_fn_InternalBasePtr_Serialize &&
+              s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
+              s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Position &&
+              s_fn_FindWalkablePos && s_fn_FindWalkablePosSub &&
+              s_fn_WalkTowards_Ctor && s_fn_ValidateEntity &&
+              s_fn_CancelAllWork && s_fn_FindSubEntity &&
+              fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+              fn_IsDerivedFrom && s_typeId_RadiusDesc && s_fUVScale &&
+              s_vtable_LocationWork && s_vtable_Work;
+
+    s_locationwork_funcs_resolved = ok;
+
+#ifdef _DEBUG
+    printf("[LocationWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
+    if (!ok) {
+        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
+        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
+        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
+        if (!s_fn_InternalBasePtr_Serialize) printf("  MISSING: InternalBasePtr_Serialize\n");
+        if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
+        if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
+        if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
+        if (!s_fn_FindComp_Position) printf("  MISSING: FindComp_Position\n");
+        if (!s_fn_FindWalkablePos) printf("  MISSING: FindWalkablePos\n");
+        if (!s_fn_FindWalkablePosSub) printf("  MISSING: FindWalkablePosSub\n");
+        if (!s_fn_WalkTowards_Ctor) printf("  MISSING: WalkTowards_Ctor\n");
+        if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
+        if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
+        if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
+        if (!s_typeId_RadiusDesc) printf("  MISSING: typeId_RadiusDesc\n");
+        if (!s_fUVScale) printf("  MISSING: fUVScale\n");
+        if (!s_vtable_LocationWork) printf("  MISSING: vtable_LocationWork\n");
+        if (!s_vtable_Work) printf("  MISSING: vtable_Work\n");
+    }
+#endif
+
+    return ok;
+}
+
+
+// ============================================================
+// LocationWork::Serialize (0x1400efba0)
+// Pattern: Work_Serialize + Serializer(v0) + InternalBasePtr::Serialize(+0x48)
+//   + validate IsDerivedFrom, clear if invalid
+// ============================================================
+void LocationWork_Serialize_Impl(LocationWork* self, void* stream) {
+    // Call Work::Serialize base
+    s_fn_Work_Serialize(self, stream);
+
+    // Create serializer (version=0)
+    uint8_t serializerBuf[24] = {0};
+    s_fn_Serializer_Ctor(serializerBuf, stream, 0);
+
+    // Serialize InternalBasePtr at +0x48
+    s_fn_InternalBasePtr_Serialize(&self->_field48, serializerBuf);
+
+    // Validate: if _field48 is non-null, check IsDerivedFrom
+    if (self->_field48 != nullptr) {
+        if (!fn_IsDerivedFrom(self->_field48, s_typeId_Validate)) {
+            self->_field48 = nullptr;
+        }
+    }
+
+    s_fn_Serializer_Dtor(serializerBuf);
+}
+
+
+// ============================================================
+// LocationWork::Slot4 (0x1400ef880) — pathfinding/location work logic
+//
+// Algorithm:
+// 1. If already has target (+0x48 != 0), return 1 (already assigned)
+// 2. Check citizen's storage — if carrying items, call LongTermPlan
+// 3. Find position component on workplace entity
+// 4. Get citizen's current position
+// 5. Find walkable position near workplace (main + sub-positions)
+// 6. If found, create WalkTowards action and assign work
+// 7. Store citizen ref at +0x48
+// ============================================================
+int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
+    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t* selfQ = (uintptr_t*)self;
+
+    // Step 1: Already has target?
+    if (selfQ[9] != 0) {  // field +0x48
+        return 1;
+    }
+
+    // Step 2: Check citizen's storage — if carrying items, replan
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
+
+    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
+    uintptr_t storageIBP = 0;
+    s_fn_FindComp_Storage(*(uintptr_t*)(citizenEntity + 0x10), &storageIBP);
+
+    fn_InternalBasePtr_CheckPtr(&storageIBP);
+    int itemCount = s_fn_StorageQueryCount((void*)storageIBP);
+    if (itemCount > 0) {
+        fn_InternalBasePtr_CheckPtr(citizenIBP);
+        s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
+    }
+
+    // Step 3: Find position component on workplace entity (self+0x10)
+    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
+    uintptr_t posCompIBP = 0;
+    s_fn_FindComp_Position(selfQ[2], &posCompIBP);  // self->_field10
+
+    // Step 4: Get citizen's current position
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    uintptr_t citEnt = *(uintptr_t*)citizenIBP;
+
+    fn_InternalBasePtr_CheckPtr((void*)(citEnt + 0x278));
+    uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
+
+    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
+    uintptr_t posObj = *(uintptr_t*)(aiComp + 0x68);
+
+    float srcX = *(float*)(posObj + 0x158);
+    float srcY = *(float*)(posObj + 0x15c);
+    float srcZ = *(float*)(posObj + 0x160);
+
+    // Step 5: Find walkable positions
+    // Get description from position component, check if RadiusDescription
+    fn_InternalBasePtr_CheckPtr(&posCompIBP);
+    void* descObj = *(void**)(posCompIBP + 0x18);
+    int bestDist = 0x7fffffff;
+
+    bool isDerivedRadius = fn_IsDerivedFrom(descObj, *s_typeId_RadiusDesc);
+    void* radiusDesc = nullptr;
+    if (isDerivedRadius) {
+        radiusDesc = descObj;
+    }
+
+    float bestPos[3] = {0.0f, 0.0f, 0.0f};
+    float srcPosArr[3] = {srcX, srcY, srcZ};
+
+    // Check main position (via posComp + description offset +0x28)
+    uint8_t found = s_fn_FindWalkablePos(
+        posCompIBP, (uintptr_t)radiusDesc + 0x28,
+        srcPosArr, bestPos, &bestDist);
+
+    // Also check sub-positions
+    int subCount = *(int*)(posCompIBP + 0x30);
+    if (subCount > 0) {
+        uintptr_t subArray = *(uintptr_t*)(posCompIBP + 0x28);
+        for (int i = 0; i < subCount; i++) {
+            uintptr_t* subPtr = (uintptr_t*)(subArray + (uintptr_t)i * 8);
+            fn_InternalBasePtr_CheckPtr(subPtr);
+            uint8_t subFound = s_fn_FindWalkablePosSub(
+                *subPtr, 0, srcPosArr, bestPos, &bestDist);
+            found = found | subFound;
+        }
+    }
+
+    if (!found) {
+        return 0;  // No walkable position found
+    }
+
+    // Step 6: Create WalkTowards action and assign work
+    uintptr_t citizenRef = *(uintptr_t*)citizenIBP;
+    uintptr_t citizenIBPLocal = citizenRef;
+
+    // The Ghidra decompilation shows the last two params come from stack;
+    // the pattern is: (citizenIBP, priority, position, 0, g_fUVScale, flag&0xffffff00)
+    s_fn_WalkTowards_Ctor(
+        &citizenIBPLocal,
+        (int)selfQ[4],          // priority from self+0x20
+        bestPos,
+        0,                       // flag1
+        *s_fUVScale,            // UV scale constant
+        0);                      // flag2 (cleared upper bits)
+
+    int priority = (int)selfQ[4];
+
+    // Get work entity via vtable slot +0x50 (Slot10)
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    uintptr_t citEntPost = *(uintptr_t*)citizenIBP;
+
+    uintptr_t vtable = *(uintptr_t*)self;
+    typedef uintptr_t* (*GetWorkEntity_t)(LocationWork*, void*);
+    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
+    uintptr_t workEntIBP[2] = {0};
+    uintptr_t* result = getWorkEntity(self, workEntIBP);
+    uintptr_t workEntity = *result;
+
+    // Set citizen flags
+    *(uint32_t*)(citEntPost + 0x54) |= 4;
+    *(int32_t*)(citEntPost + 0x30) = priority;
+    *(uint32_t*)(citEntPost + 0xb0) = 0;
+
+    // If work entity matches citizen's home entity and priority >= 0, set owned flag
+    if (workEntity == *(uintptr_t*)(citEntPost + 0x1f0) && priority >= 0) {
+        *(uint32_t*)(citEntPost + 0x88) |= 0x20000;
+    }
+
+    // Store citizen as target at +0x48
+    selfQ[9] = *(uintptr_t*)citizenIBP;
+
+    return 2;
+}
+
+
+// ============================================================
+// LocationWork::Slot6 (0x1400ef850) — clear target, return false
+// Constructs null InternalBasePtr into +0x48.
+// ============================================================
+bool LocationWork_Slot6_Impl(LocationWork* self) {
+    uintptr_t nullIBP = 0;
+    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    self->_field48 = (void*)nullIBP;
+    return false;
+}
+
+
+// ============================================================
+// LocationWork::Slot7 (0x1400ef820) — clear target, void return
+// Constructs null InternalBasePtr into +0x48.
+// ============================================================
+void LocationWork_Slot7_Impl(LocationWork* self) {
+    uintptr_t nullIBP = 0;
+    fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+    self->_field48 = (void*)nullIBP;
+}
+
+
+// ============================================================
+// LocationWork::Slot8 (0x1400efaf0) — cancel single target's work
+// If target at +0x48 exists, navigates to its AI subsystem and
+// cancels all work items.
+// ============================================================
+void LocationWork_Slot8_Impl(LocationWork* self) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    if (*(uintptr_t*)(selfAddr + 0x48) == 0) {
+        return;
+    }
+
+    // CheckPtr on the target entity at +0x48
+    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x48));
+    uintptr_t targetEntity = *(uintptr_t*)(selfAddr + 0x48);
+
+    // Navigate to citizen AI component (+0x278) then cancel work (+0x48)
+    fn_InternalBasePtr_CheckPtr((void*)(targetEntity + 0x278));
+    s_fn_CancelAllWork((void*)(*(uintptr_t*)(targetEntity + 0x278) + 0x48));
+}
+
+
+// ============================================================
+// LocationWork::Slot9 (0x1400ef7c0) — validate target
+// Checks if the single target entity is still valid.
+// If invalid, clears +0x48 to null and returns false.
+// Returns true if valid (or no target).
+// ============================================================
+bool LocationWork_Slot9_Impl(LocationWork* self, void* citizenIBP) {
+    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t targetIBP = *(uintptr_t*)(selfAddr + 0x48);
+
+    if (targetIBP == 0) {
+        return true;  // No target — considered valid (nothing to invalidate)
+    }
+
+    // Validate the entity
+    bool stillValid = s_fn_ValidateEntity(selfAddr, citizenIBP, &targetIBP, nullptr);
+
+    if (!stillValid) {
+        // Clear the target — construct null InternalBasePtr
+        uintptr_t nullIBP = 0;
+        fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+        *(uintptr_t*)(selfAddr + 0x48) = nullIBP;
+        return false;
+    }
+
+    return true;
+}
+
+
+// ============================================================
+// LocationWork::Slot10 (0x1400efb40) — get work entity sub-object
+// Returns entity from self->_field10's sub-object at +0x48.
+// IDENTICAL to HuntWork/PastureWork Slot10.
+// ============================================================
+void* LocationWork_Slot10_Impl(LocationWork* self, void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // CheckPtr on self+0x10
+    fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
+    uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
+
+    // Find sub-entity via FUN_140002e10
+    uintptr_t subIBP[2] = {0};
+    void* result = s_fn_FindSubEntity(entityRef, subIBP);
+
+    // CheckPtr on the result
+    fn_InternalBasePtr_CheckPtr(result);
+
+    // Read +0x48 from the resolved entity and store in output
+    uintptr_t resolvedEntity = *(uintptr_t*)result;
+    *(uintptr_t*)outPtr = *(uintptr_t*)(resolvedEntity + 0x48);
+
+    return outPtr;
+}
+
+
+// ============================================================
+// LocationWork::Execute (0x1400f7540) — 3 bytes: XOR AL,AL; RET
+// Always returns false. Too small to hook.
+// ============================================================
+bool LocationWork_Execute_Impl(LocationWork* /*self*/) {
+    return false;
+}
+
+
+// ============================================================
+// LocationWork::Slot11 (0x1400295a0) — checks +0x48 != 0
+// Returns true if target entity reference is non-null.
+// Too small to hook (10 bytes).
+// ============================================================
+bool LocationWork_Slot11_Impl(LocationWork* self) {
+    return self->_field48 != nullptr;
+}
+
+
+// ============================================================
+// LocationWork::ScalarDtor (0x14002a850)
+// Simpler than BST classes — just vtable chain + Internal dtor.
+// Sets LocationWork vtable, then Work vtable, calls Internal dtor,
+// then conditional free.
+// ============================================================
+void* LocationWork_ScalarDtor_Impl(LocationWork* self, uint32_t flags) {
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // Set vtable to LocationWork (cleanup phase)
+    *(void**)selfAddr = s_vtable_LocationWork;
+
+    // Set vtable to Work (base class cleanup)
+    *(void**)selfAddr = s_vtable_Work;
+
+    // Object::Internal::~Internal would be called here as a tail call.
+    // In the hook context, the trampoline handles the actual dtor chain.
+    // For standalone exe, we would call Internal::~Internal directly.
+
+    if (flags & 1) {
+        if (s_fn_MemFreeStatic) {
+            s_fn_MemFreeStatic(self);
+        }
+    }
+
+    return self;
+}
