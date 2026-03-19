@@ -115,6 +115,23 @@ static void* Toolbar_FindEntity_Impl(void* entityList, void* retBuf, uint64_t ty
 }
 
 // ============================================================
+// ToolbarDialog::Startup (vtable +0x20, exe 0x1400b97c0): RET 0 (3 bytes)
+// ============================================================
+// No-op startup; all initialization happens in the constructor (Ctor_Impl).
+int ToolbarDialog_Startup(void* self) {
+    (void)self;
+    return 0;
+}
+
+// ============================================================
+// ToolbarDialog::Shutdown (vtable +0x28, exe 0x1400b97b0): JMP rel to FUN_1400b9730
+// ============================================================
+// Thunk to CloseSubDialog: closes any open sub-toolbar dialog.
+void ToolbarDialog_Shutdown(void* self) {
+    ToolbarDialog_CloseSubDialog_Impl(self);
+}
+
+// ============================================================
 // ToolbarDialog_UpdateButtons_Impl (was fn_ToolbarDialog_UpdateButtons, FUN_1400b8fd0)
 //
 // Secondary update for ShowGroup (case 1) and FocusEntity (case 4) buttons.

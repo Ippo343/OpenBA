@@ -189,6 +189,15 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
 }
 
 // ============================================================
+// AchievementDialog::Slot7 (vtable +0x38, exe 0x14005D480): RET 0 (3 bytes)
+// ============================================================
+// No-op handler; returns 0.
+int AchievementDialog_Slot7(AchievementDialog* self) {
+    (void)self;
+    return 0;
+}
+
+// ============================================================
 // AchievementDialog::Slot6 (vtable +0x30) — Update achievement display
 // ============================================================
 // Iterates achievement entries at +0xC0 (stride 0x20), count at +0xC8.

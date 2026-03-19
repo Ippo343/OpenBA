@@ -75,6 +75,10 @@ static uint64_t FindDialogElemAsBasePtr(void* dialogInst, const char* name) {
 }
 
 // ============================================================
+// BuildRequirementUI::Shutdown (vtable +0x18) — No-op
+// ============================================================
+
+// ============================================================
 // BuildRequirementUI::Slot4 (vtable +0x20) — Setup/populate
 // ============================================================
 // Resolves the building description from the datasource,

@@ -14,6 +14,25 @@
 // elements by name and assigns element IDs 0-3.
 void MessageDialog_Slot4(MessageDialog* self);
 
+// Slot5 (vtable +0x28): Shutdown — 3-byte no-op, returns 0.
+int MessageDialog_Slot5(MessageDialog* self);
+
+// Slot8 (vtable +0x40): OnCommand — dispatches button clicks through vtable.
+// msg 0x12: id 0=Cancel(+0x58), 1=Ok(+0x50), 2=Yes(+0x60), 3=No(+0x68).
+void MessageDialog_Slot8(MessageDialog* self, void* param2, int param3, int param4);
+
+// Slot10 (vtable +0x50): ButtonOk — sets result=1, closes dialog.
+void MessageDialog_Slot10(MessageDialog* self);
+
+// Slot11 (vtable +0x58): ButtonCancel — sets result=0, closes dialog.
+void MessageDialog_Slot11(MessageDialog* self);
+
+// Slot12 (vtable +0x60): ButtonYes — sets result=2, closes dialog.
+void MessageDialog_Slot12(MessageDialog* self);
+
+// Slot13 (vtable +0x68): ButtonNo — sets result=3, closes dialog.
+void MessageDialog_Slot13(MessageDialog* self);
+
 // ============================================================
 // EventPopupDialog
 // ============================================================
@@ -22,9 +41,15 @@ void MessageDialog_Slot4(MessageDialog* self);
 // sets event icon sprite and text parameter, assigns button ID 200.
 void EventPopupDialog_Slot4(EventPopupDialog* self);
 
+// Slot8 (vtable +0x40): OnCommand — close dialog on msg=0x12, id=200.
+void EventPopupDialog_Slot8(EventPopupDialog* self, void* param2, int param3, int param4);
+
 // ============================================================
 // LoaderDialog
 // ============================================================
+
+// Slot4 (vtable +0x20): Setup — finds "loadingImage" element, stores at +0xB8.
+void LoaderDialog_Slot4(LoaderDialog* self);
 
 // Slot6 (vtable +0x30): Applies current rotation angle to loading spinner image.
 void LoaderDialog_Slot6(LoaderDialog* self);
@@ -36,12 +61,29 @@ void LoaderDialog_Slot7(LoaderDialog* self, void* time);
 // AutoSaveDialog
 // ============================================================
 
+// Slot4 (vtable +0x20): Setup — stops timer, picks autosave interval by
+// game speed, starts new timer. JMP thunk to 0x14005E120.
+void AutoSaveDialog_Slot4(AutoSaveDialog* self);
+
 // Slot6 (vtable +0x30): Toggles save/load indicator visibility based on
 // SaveLoad::GetOperation, applies rotation to active indicator.
 void AutoSaveDialog_Slot6(AutoSaveDialog* self);
 
 // Slot7 (vtable +0x38): Accumulates rotation angle (90 deg/sec), wraps at 360.
 void AutoSaveDialog_Slot7(AutoSaveDialog* self, void* time);
+
+// Slot8 (vtable +0x40): OnCommand — if msg==0x13 (timer), triggers autosave.
+void AutoSaveDialog_Slot8(AutoSaveDialog* self, void* param2, int param3, int param4);
+
+// ============================================================
+// TutorialGoalDialog
+// ============================================================
+
+// Slot3 (vtable +0x18, exe 0x1400df080): Returns 1 (type constant).
+int TutorialGoalDialog_Slot3(void* self);
+
+// Slot7 (vtable +0x38, exe 0x140001640): Delegator — calls vtable[0] with flags=0.
+void TutorialGoalDialog_Slot7(void* self);
 
 // ============================================================
 // TutorialHighlightDialog
@@ -65,6 +107,9 @@ void TutorialHighlightDialog_Load(TutorialHighlightDialog* self, void* param2);
 // ============================================================
 // MapParamsDialog
 // ============================================================
+
+// Slot5 (vtable +0x28): Shutdown — 3-byte no-op, returns 0.
+int MapParamsDialog_Slot5(MapParamsDialog* self);
 
 // Startup (vtable +0x20): Finds all UI elements (editName, numberSeed,
 // text labels, buttons), sets IDs, populates values from game state.
@@ -102,6 +147,9 @@ void ScenarioDialog_Slot4(ScenarioDialog* self);
 
 // Slot6 (vtable +0x30): Updates entry visibility based on selected index.
 void ScenarioDialog_Slot6(ScenarioDialog* self);
+
+// Slot7 (vtable +0x38, exe 0x140078000): RET 0 no-op (3 bytes).
+int ScenarioDialog_Slot7(ScenarioDialog* self);
 
 // Slot8 (vtable +0x40): OnCommand — selection change and button dispatch.
 void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
@@ -165,6 +213,9 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self);
 // OnInputBindClick: Shows input bind dialog, handles key rebinding.
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot);
 
+// Shutdown (vtable +0x28, exe 0x140073480): RET 0 no-op (3 bytes).
+int OptionsDialog_Shutdown(OptionsDialog* self);
+
 // ============================================================
 // SaveLoadDialog
 // ============================================================
@@ -225,6 +276,9 @@ void NewGameDialog_Slot4(NewGameDialog* self);
 // whether the name field has content.
 void NewGameDialog_Slot6(NewGameDialog* self);
 
+// Slot5 (vtable +0x28, exe 0x1400706c0): Shutdown — RET 0 no-op (3 bytes).
+int NewGameDialog_Shutdown(NewGameDialog* self);
+
 // OnEvent (vtable +0x40, exe 0x140070110): Handles button clicks and combo changes.
 // eventType 0x12 (button): 0=newName, 1=newSeed, 2=ok(startGame), 3=cancel(close)
 // eventType 0x14 (combo): 4=comboCondition (update description text)
@@ -262,6 +316,16 @@ void TutorialSetupDialog_Slot9(void* self);
 // Shows all dialogs, finds current TutorialSetupDialog instance, closes it.
 void TutorialSetupDialog_Slot10(void* self);
 
+// Slot3 (vtable +0x18, exe 0x1400e2be0): Returns 6 (type constant).
+int TutorialSetupDialog_Slot3(void* self);
+
+// Slot7 (vtable +0x38, exe 0x140001640): Delegator — calls vtable[0] with flags=0.
+void TutorialSetupDialog_Slot7(void* self);
+
+// Slot11 (vtable +0x58, exe 0x1400285f0): Ctor wrapper — TEST+branch,
+// constructs the object if non-null (sets vtables, zeros fields).
+void* TutorialSetupDialog_Slot11(void* self);
+
 // ============================================================
 // AchievementDialog
 // ============================================================
@@ -283,6 +347,12 @@ void GoalDialog_Slot4(GoalDialog* self);
 // Slot6 (vtable +0x30): Updates goal entry visibility (met/failed indicators).
 void GoalDialog_Slot6(GoalDialog* self);
 
+// Slot7 (vtable +0x38): No-op handler — returns 0.
+int GoalDialog_Slot7(GoalDialog* self);
+
+// Slot8 (vtable +0x40): OnCommand — close dialog on msg=0x12, id=100.
+void GoalDialog_Slot8(GoalDialog* self, void* param2, int param3, int param4);
+
 // ============================================================
 // EventNotifyDialog
 // ============================================================
@@ -290,6 +360,9 @@ void GoalDialog_Slot6(GoalDialog* self);
 // Slot4 (vtable +0x20): Startup — finds ribbonNotify, notifyContent,
 // builds notification entry array from children. Sets button IDs.
 void EventNotifyDialog_Slot4(EventNotifyDialog* self);
+
+// Slot5 (vtable +0x28): Shutdown — 3-byte no-op, returns 0.
+int EventNotifyDialog_Slot5(EventNotifyDialog* self);
 
 // Slot6 (vtable +0x30): Update — smoothly positions the notification ribbon
 // relative to the toolbar, updates per-slot sprites/flags/colors/text.
@@ -316,6 +389,9 @@ void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int event
 // sets entry colors and check visibility, formats percentage text.
 void AchievementDialog_Slot6(AchievementDialog* self);
 
+// Slot7 (vtable +0x38, exe 0x14005D480): RET 0 no-op (3 bytes).
+int AchievementDialog_Slot7(AchievementDialog* self);
+
 // Slot14 (vtable +0x70): Finds ProgressElement by type, stores at +0x30,
 // reads attendance capacity from sub-component, sets progress max.
 void AchievementDialog_Slot14(AchievementDialog* self);
@@ -326,6 +402,12 @@ void AchievementDialog_Slot17(AchievementDialog* self);
 // ============================================================
 // ToolbarDialog
 // ============================================================
+
+// Startup (vtable +0x20, exe 0x1400b97c0): RET 0 no-op (3 bytes).
+int ToolbarDialog_Startup(void* self);
+
+// Shutdown (vtable +0x28, exe 0x1400b97b0): JMP to CloseSubDialog.
+void ToolbarDialog_Shutdown(void* self);
 
 // Slot6 (vtable +0x30): Update — syncs toolbar button states with game state.
 // Iterates items, updates checked/enabled based on speed, pause, group visibility.
@@ -359,6 +441,9 @@ void OptionInputBindDialog_OnButton2(OptionInputBindDialog* self);
 
 // OnButton3 (vtable +0x68): Sets result value 3, closes dialog.
 void OptionInputBindDialog_OnButton3(OptionInputBindDialog* self);
+
+// Shutdown (vtable +0x28, exe 0x14006d0c0): RET 0 no-op (3 bytes).
+int OptionInputBindDialog_Shutdown(OptionInputBindDialog* self);
 
 // OnEvent (vtable +0x40, exe 0x14006d070): Dispatches button clicks to OnOk/OnCancel/etc.
 // eventType 0x12 (button): 0=cancel, 1=ok, 2=button2, 3=button3

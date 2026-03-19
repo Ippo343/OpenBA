@@ -303,3 +303,29 @@ void GoalDialog_Slot6(GoalDialog* self) {
         fn_Element_SetFlagsOnOff(failedElem, hasFailed ? 0 : 1, hasFailed ? 1 : 0);
     }
 }
+
+// ============================================================
+// GoalDialog::Slot7 (vtable +0x38) — no-op handler
+// ============================================================
+// 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
+// Original: 0x140069800.
+
+int GoalDialog_Slot7(GoalDialog* /*self*/) {
+    return 0;
+}
+
+// ============================================================
+// GoalDialog::Slot8 (vtable +0x40) — OnCommand
+// ============================================================
+// When msg==0x12 (button click) and id==100 (buttonOk):
+//   Wraps self in InternalBasePtr, calls UserInterface::CloseDialog.
+//
+// Original: 0x1400697C0.
+
+void GoalDialog_Slot8(GoalDialog* self, void* /*param2*/, int param3, int param4) {
+    if (param3 == 0x12 && param4 == 100) {
+        uint8_t selfIBP[16];
+        fn_InternalBasePtr_Ctor(selfIBP, self);
+        fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    }
+}

@@ -70,3 +70,19 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
     // Set button ID 200 on buttonOk
     fn_Element_SetElementId(buttonOk, 200);
 }
+
+// ============================================================
+// EventPopupDialog::Slot8 (0x140068BD0) — vtable +0x40, OnCommand
+// ============================================================
+// When msg==0x12 (button click) and id==200 (buttonOk):
+//   Wraps self in InternalBasePtr, calls UserInterface::CloseDialog.
+//
+// Original: 0x140068BD0.
+
+void EventPopupDialog_Slot8(EventPopupDialog* self, void* /*param2*/, int param3, int param4) {
+    if (param3 == 0x12 && param4 == 200) {
+        uint8_t selfIBP[16];
+        fn_InternalBasePtr_Ctor(selfIBP, self);
+        fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    }
+}

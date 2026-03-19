@@ -653,6 +653,15 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 #undef FIND_ELEMENT
 
 // ============================================================
+// Shutdown (vtable +0x28, exe 0x140073480): RET 0 (3 bytes)
+// ============================================================
+// No-op shutdown; nothing to clean up.
+int OptionsDialog_Shutdown(OptionsDialog* self) {
+    (void)self;
+    return 0;
+}
+
+// ============================================================
 // ApplyInputSettings (0x140072360)
 // ============================================================
 // Reads checkMouseClip and checkSoftwareMouse from UI, writes to

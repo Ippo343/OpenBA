@@ -164,6 +164,16 @@ static void EventNotifyDialog_ArrayRemove_Impl(void* arrayBasePtr, int removeInd
 //
 // Original: 0x1400686d0.
 
+// ============================================================
+// EventNotifyDialog::Slot5 (vtable +0x28) — Shutdown
+// ============================================================
+// 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
+// Original: 0x1400686c0.
+
+int EventNotifyDialog_Slot5(EventNotifyDialog* /*self*/) {
+    return 0;
+}
+
 void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
     uintptr_t s = (uintptr_t)self;
 

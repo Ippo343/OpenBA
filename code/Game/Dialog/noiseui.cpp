@@ -358,3 +358,5 @@ void NoiseUI_Slot9(NoiseUI* self, void* param2, int msg, int id,
     // Regenerate noise texture from slider values
     NoiseUI_GenerateNoise((void*)self);
 }
+
+// ============================================================

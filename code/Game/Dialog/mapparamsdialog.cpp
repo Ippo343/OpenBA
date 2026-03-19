@@ -4,6 +4,16 @@
 #include <cstring>
 
 // ============================================================
+// MapParamsDialog::Slot5 (vtable +0x28) — Shutdown
+// ============================================================
+// 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
+// Original: 0x14006b800.
+
+int MapParamsDialog_Slot5(MapParamsDialog* /*self*/) {
+    return 0;
+}
+
+// ============================================================
 // MapParamsDialog::Startup (0x14006b810) — Slot4
 // ============================================================
 // Finds all UI elements by name, stores element pointers at fixed offsets.

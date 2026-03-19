@@ -292,6 +292,15 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 }
 
 // ============================================================
+// ScenarioDialog::Slot7 (vtable +0x38, exe 0x140078000): RET 0 (3 bytes)
+// ============================================================
+// No-op handler; returns 0.
+int ScenarioDialog_Slot7(ScenarioDialog* self) {
+    (void)self;
+    return 0;
+}
+
+// ============================================================
 // ScenarioDialog::Slot6 (vtable +0x30) — Update entry visibility
 // ============================================================
 // Iterates scenario entries at +0xD8 (stride 0x38), shows entry matching

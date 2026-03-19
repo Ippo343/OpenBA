@@ -164,3 +164,12 @@ void* OrchardUI_Slot12(OrchardUI* self, void* param2) {
     *(uint64_t*)param2 = *(uint64_t*)(orchardComp + 0x60);
     return param2;
 }
+
+// ============================================================
+// Slot13 (vtable +0x68): GetCategoryFilter — returns 1 (orchard category)
+// Original: 0x140075420 (6 bytes, MOV EAX,1; RET, unhookable)
+// ============================================================
+int OrchardUI_Slot13(OrchardUI* self) {
+    (void)self;
+    return 1;
+}

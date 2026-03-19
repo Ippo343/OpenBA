@@ -320,3 +320,5 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
     // Clamp scroll offset to >= 0
     if (*scrollOffset < 0) *scrollOffset = 0;
 }
+
+// EventLogUI_Slot6 — inline in ui_panels.h (3-byte no-op, 0x140067630)

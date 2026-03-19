@@ -335,3 +335,12 @@ void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4) {
         *(int32_t*)(pastureComp + 0x40) = (int32_t)sliderValue;
     }
 }
+
+// ============================================================
+// Slot13 (vtable +0x68): GetCategoryFilter — returns 2 (pasture category)
+// Original: 0x1400B4CF0 (6 bytes, MOV EAX,2; RET, unhookable)
+// ============================================================
+int PastureUI_Slot13(PastureUI* self) {
+    (void)self;
+    return 2;
+}

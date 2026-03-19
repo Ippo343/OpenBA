@@ -267,3 +267,5 @@ void MapUI_Slot9(MapUI* self, void* param2, int msg, int id,
     // Translate to map-relative coordinates and move camera
     MapUI_HandleClick(param2, clickX - elemX, clickY - elemY, elemW, elemH);
 }
+
+// ============================================================

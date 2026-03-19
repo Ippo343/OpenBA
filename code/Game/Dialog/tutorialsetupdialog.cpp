@@ -33,6 +33,43 @@
 #include <cstdint>
 
 // ============================================================
+// TutorialSetupDialog::Slot3 (vtable +0x18, exe 0x1400e2be0): MOV EAX,6; RET
+// ============================================================
+// Returns 6 — indicates this External subclass type (constant).
+int TutorialSetupDialog_Slot3(void* self) {
+    (void)self;
+    return 6;
+}
+
+// ============================================================
+// TutorialSetupDialog::Slot7 (vtable +0x38, exe 0x140001640): Delegator
+// ============================================================
+// MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]
+// Calls vtable slot 0 (scalar dtor) with flags=0 (destruct without freeing).
+void TutorialSetupDialog_Slot7(void* self) {
+    typedef void* (*fn_VDtor_t)(void* self, uint32_t flags);
+    void** vtbl = *(void***)self;
+    fn_VDtor_t vdtor = (fn_VDtor_t)vtbl[0];
+    vdtor(self, 0);
+}
+
+// ============================================================
+// TutorialSetupDialog::Slot11 (vtable +0x58, exe 0x1400285f0): Ctor wrapper
+// ============================================================
+// TEST RCX,RCX / JZ skip / CALL TutorialSetupDialog_Ctor / RET
+// This IS the TutorialSetupDialog constructor entry point (also used as a vtable slot).
+// If self is null, returns null. Otherwise delegates to the full Ctor at 0x1400e2cc0.
+void* TutorialSetupDialog_Slot11(void* self) {
+    if (self == nullptr) return nullptr;
+
+    // Delegate to the full TutorialSetupDialog Ctor (same one used in OnEvent)
+    typedef void* (*fn_TSDCtor_t)(void* self);
+    static fn_TSDCtor_t fn_Ctor = nullptr;
+    if (!fn_Ctor) fn_Ctor = (fn_TSDCtor_t)ResolveAddr(Module::Exe, TutorialSetupDialogAddr::Ctor);
+    return fn_Ctor(self);
+}
+
+// ============================================================
 // TutorialSetupDialog::ScalarDtor (vtable slot 0, exe 0x140028620)
 // ============================================================
 //

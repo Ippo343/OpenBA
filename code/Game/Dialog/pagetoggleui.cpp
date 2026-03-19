@@ -91,3 +91,5 @@ void PageToggleUI_Slot9(PageToggleUI* self, void* param2, int param3, int param4
         fn_PageElement_SetActivePage((void*)*(uint64_t*)(s + 0x38), *(int*)(s + 0x40));
     }
 }
+
+// ============================================================

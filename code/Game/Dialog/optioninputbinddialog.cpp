@@ -49,6 +49,15 @@ void OptionInputBindDialog_Startup(OptionInputBindDialog* self) {
 }
 
 // ============================================================
+// Shutdown (vtable +0x28, exe 0x14006d0c0): RET 0 (3 bytes)
+// ============================================================
+// No-op shutdown; nothing to clean up.
+int OptionInputBindDialog_Shutdown(OptionInputBindDialog* self) {
+    (void)self;
+    return 0;
+}
+
+// ============================================================
 // Load (vtable +0x38): Scan for key/mouse input releases
 // ============================================================
 // Original: 0x140071c80

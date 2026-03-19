@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <cstdio>
 
 // ============================================================
 // Helper: Object::Internal ctor/dtor (via dispatch slots)
@@ -589,5 +590,259 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         attemptCount++;
     }
 
+    return 1;
+}
+
+// ============================================================
+// GetTarget (vtable +0x50, 0x1400E5830)
+// ============================================================
+// Returns the world's current build target entity via InternalBasePtr.
+// Reads: gameWorld+0xB0 -> +0x38 (build target entity IBP)
+// Uses hidden return pointer ABI: RCX=self, RDX=retBuf
+void* BuildStructure_GetTarget(BuildStructure* /*self*/, void* retBuf) {
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t buildMgr = *(uintptr_t*)(gameWorld + 0xB0);
+    *(uint64_t*)retBuf = *(uint64_t*)(buildMgr + 0x38);
+    return retBuf;
+}
+
+// ============================================================
+// Helper: FUN_1400f7100 — Check if citizen has a CompleteTask
+// matching this Work's priority.
+// ============================================================
+// Walks the citizen's state machine action stack, finds CompleteTask
+// actions, and checks if any match the Work's priority at +0x20.
+// Returns 1 if found (and stores task IBP in *outTask), 0 otherwise.
+
+// TypeInfo_CompleteTask = DWORD_1401c7158
+static uint32_t* s_TypeId_CompleteTask = nullptr;
+
+static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_t* outTask) {
+    if (!s_TypeId_CompleteTask) {
+        s_TypeId_CompleteTask = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
+    }
+
+    uint32_t taskTypeId = s_TypeId_CompleteTask ? *s_TypeId_CompleteTask : 0;
+    if (taskTypeId == 0) return false;
+
+    // Check IBP is valid
+    if (*(uintptr_t*)citizenIBP == 0) return false;
+
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    bool isEntity = fn_IsA((void*)*(uintptr_t*)citizenIBP, *g_TypeId_ComponentEntity);
+    if (!isEntity) return false;
+
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    uintptr_t entity = *(uintptr_t*)citizenIBP;
+
+    // Get state machine component at entity+0x278
+    fn_InternalBasePtr_CheckPtr((void*)(entity + 0x278));
+    uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
+
+    // Iterate action stack: smComp+0x48 = array ptr, smComp+0x60 = count
+    int actionCount = *(int*)(smComp + 0x60) + 1;  // original: 0x60 field + 1
+    if (actionCount <= 0) return false;
+
+    uintptr_t actionArray = *(uintptr_t*)(smComp + 0x48);
+    for (int i = 0; i < actionCount; i++) {
+        uintptr_t actionIBP = *(uintptr_t*)(actionArray + i * 8);
+        fn_InternalBasePtr_CheckPtr(&actionIBP);
+
+        // Check if this action is a CompleteTask
+        bool isCompleteTask = fn_IsDerivedFrom((void*)actionIBP, taskTypeId);
+        if (!isCompleteTask) continue;
+
+        // Found a CompleteTask — wrap in IBP and check priority match
+        uint8_t taskBuf[8];
+        fn_InternalBasePtr_Ctor(taskBuf, isCompleteTask ? (void*)actionIBP : nullptr);
+        uintptr_t taskPtr = *(uintptr_t*)taskBuf;
+
+        if (taskPtr != 0) {
+            fn_InternalBasePtr_CheckPtr(taskBuf);
+            taskPtr = *(uintptr_t*)taskBuf;
+            // Check if task's priority (+0x30) matches work's priority (+0x20)
+            if (*(int*)(taskPtr + 0x30) == self->field_20) {
+                if (outTask) *outTask = taskPtr;
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// ============================================================
+// Validate (vtable +0x48, 0x1400E4BE0)
+// ============================================================
+// Walks the BST at +0x60 (citizens assigned to build slots).
+// For each citizen, checks if they still have a matching CompleteTask.
+// Citizens without a task are collected for removal.
+// After traversal, removes invalid citizens from the BST and
+// updates the slot array (+0x50) accordingly.
+//
+// Returns: 0 = some work remains (citizens validated/removed)
+//          1 = BST is empty (no assigned citizens)
+
+int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Dynamic arrays for citizens to remove and their slot indices
+    void* removeList = nullptr;     // array of IBP keys (8 bytes each)
+    int removeCount = 0;
+    int removeCap = 0;
+
+    void* slotList = nullptr;       // array of int slot indices (4 bytes each)
+    int slotCount = 0;
+    int slotCap = 0;
+
+    uintptr_t* treeRootPtr = (uintptr_t*)(s + 0x60);
+
+    // BST in-order traversal: find leftmost node first
+    uintptr_t root = *treeRootPtr;
+    if (root == 0) goto done_empty;
+
+    {
+        // Find leftmost (minimum) node
+        uintptr_t node = root;
+        while (*(uintptr_t*)(node + 0x10) != 0) {  // left child at +0x10
+            node = *(uintptr_t*)(node + 0x10);
+        }
+
+        // In-order traversal
+        while (node != 0) {
+            uintptr_t citizenKey = *(uintptr_t*)node;
+            uintptr_t taskResult = 0;
+
+            bool hasTask = CheckCitizenHasTask(self, &citizenKey, &taskResult);
+
+            if (!hasTask) {
+                // Citizen has no matching task — add to remove list
+                int newCount = removeCount + 1;
+                if (newCount != removeCount) {
+                    if (removeCap < newCount) {
+                        removeCap = (removeCount == 0) ? newCount : newCount * 3;
+                        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton,
+                                                    (uint64_t)removeCap * 8, 8);
+                        if (removeList != newBuf) {
+                            // Copy existing entries
+                            for (int k = 0; k < removeCount; k++) {
+                                ((uint64_t*)newBuf)[k] = ((uint64_t*)removeList)[k];
+                            }
+                        }
+                        // Set the new entry
+                        ((uint64_t*)newBuf)[removeCount] = citizenKey;
+                        if (removeList != newBuf) {
+                            fn_MemFreeStatic(removeList);
+                        }
+                        removeList = newBuf;
+                    } else {
+                        ((uint64_t*)removeList)[removeCount] = citizenKey;
+                    }
+                    removeCount = newCount;
+                }
+            } else {
+                // Citizen has matching task — record the slot index from task+0x34
+                fn_InternalBasePtr_CheckPtr(&taskResult);
+                int slotIdx = *(int*)(taskResult + 0x34);
+
+                int newSlotCount = slotCount + 1;
+                if (newSlotCount != slotCount) {
+                    if (slotCap < newSlotCount) {
+                        slotCap = (slotCount == 0) ? newSlotCount : newSlotCount * 3;
+                        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton,
+                                                    (uint64_t)slotCap * 4, 4);
+                        if (slotList != newBuf) {
+                            for (int k = 0; k < slotCount; k++) {
+                                ((int*)newBuf)[k] = ((int*)slotList)[k];
+                            }
+                        }
+                        ((int*)newBuf)[slotCount] = slotIdx;
+                        if (slotList != newBuf) {
+                            fn_MemFreeStatic(slotList);
+                        }
+                        slotList = newBuf;
+                    } else {
+                        ((int*)slotList)[slotCount] = slotIdx;
+                    }
+                    slotCount = newSlotCount;
+                }
+            }
+
+            // Move to next node (in-order successor)
+            uintptr_t right = *(uintptr_t*)(node + 0x18);  // right child
+            if (right != 0) {
+                // Go right, then find leftmost
+                node = right;
+                while (*(uintptr_t*)(node + 0x10) != 0) {
+                    node = *(uintptr_t*)(node + 0x10);
+                }
+            } else {
+                // Go up until we come from a left child
+                uintptr_t parent = *(uintptr_t*)(node + 0x08);  // parent at +0x08
+                if (parent != 0 && *(uintptr_t*)(parent + 0x10) == node) {
+                    // We are the left child — parent is next
+                    node = parent;
+                } else {
+                    // We are the right child — go up until we find a left-child relationship
+                    uintptr_t prev = node;
+                    while (parent != 0 && *(uintptr_t*)(parent + 0x18) == prev) {
+                        prev = parent;
+                        parent = *(uintptr_t*)(parent + 0x08);
+                    }
+                    node = parent;
+                }
+            }
+        }
+
+        // Process remove list: remove each citizen from the BST
+        if (removeCount > 0) {
+            uint64_t* rList = (uint64_t*)removeList;
+            for (int i = 0; i < removeCount; i++) {
+                // BST lookup to find the node
+                uintptr_t bstRoot = *treeRootPtr;
+                uintptr_t* searchNode = (uintptr_t*)bstRoot;
+                while (searchNode != nullptr) {
+                    fn_InternalBasePtr_CheckPtr(searchNode);
+                    if (rList[i] < *searchNode) {
+                        searchNode = (uintptr_t*)searchNode[2];  // left at +0x10
+                    } else {
+                        fn_InternalBasePtr_CheckPtr(&rList[i]);
+                        if (rList[i] <= *searchNode) {
+                            // Found — remove from BST
+                            fn_TreeRemoveByKey(treeRootPtr, searchNode);
+                            break;
+                        }
+                        searchNode = (uintptr_t*)searchNode[3];  // right at +0x18
+                    }
+                }
+            }
+
+            // Update slot array: mark only validated slots as claimed
+            int totalSlots = self->field_58;
+            for (int si = 0; si < totalSlots; si++) {
+                // Check if this slot index appears in the slotList
+                bool found = false;
+                for (int j = 0; j < slotCount; j++) {
+                    if (((int*)slotList)[j] == si) {
+                        found = true;
+                        break;
+                    }
+                }
+                ((uint8_t*)self->field_50)[si] = found ? 1 : 0;
+            }
+
+            fn_MemFreeStatic(slotList);
+            fn_MemFreeStatic(removeList);
+            return 0;
+        }
+    }
+
+    fn_MemFreeStatic(slotList);
+    fn_MemFreeStatic(removeList);
+    return 0;
+
+done_empty:
+    fn_MemFreeStatic(slotList);
+    fn_MemFreeStatic(removeList);
     return 1;
 }

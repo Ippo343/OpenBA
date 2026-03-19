@@ -908,3 +908,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         return;
     }
 }
+
+// ============================================================
+// EntityUI::Shutdown (vtable +0x18) — No-op
+// ============================================================

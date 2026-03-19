@@ -567,6 +567,15 @@ void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, in
     }
 }
 
+// ============================================================
+// Slot5 (vtable +0x28, exe 0x1400706c0): Shutdown — RET 0 (3 bytes)
+// ============================================================
+// No-op shutdown; nothing to clean up.
+int NewGameDialog_Shutdown(NewGameDialog* self) {
+    (void)self;
+    return 0;
+}
+
 void NewGameDialog_Slot6(NewGameDialog* self) {
     fn_InternalBasePtr_CheckPtr(&self->buttonOk);
     void* okBtn = self->buttonOk;

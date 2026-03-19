@@ -345,3 +345,5 @@ void ProductionUI_Slot7(ProductionUI* self) {
     UpdateProductionList(s, 0);
     UpdateProductionList(s, 1);
 }
+
+// ============================================================

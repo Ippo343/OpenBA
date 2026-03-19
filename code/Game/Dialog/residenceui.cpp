@@ -491,3 +491,5 @@ void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
         ResidenceUI_GoToCitizen(self, id - 300);
     }
 }
+
+// ============================================================

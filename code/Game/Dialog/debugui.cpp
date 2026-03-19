@@ -1468,3 +1468,7 @@ void DebugUI_Slot4(DebugUI* self) {
     self->smoothedFrameMS = 0.0f;
     self->smoothedTotalMS = 0.0f;
 }
+
+// ============================================================
+// DebugUI::Slot6 (vtable +0x30) — No-op
+// ============================================================
