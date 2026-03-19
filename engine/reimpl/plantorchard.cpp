@@ -6,22 +6,23 @@
 // Ctor: 0x1400f50b0, Vtable: 0x140161910
 //
 // Vtable (12 slots):
-//   [0]  ScalarDtor    = 0x14002c540   <-- passthrough
-//   [1]  VectorDtor    = 0x14002c4f0
-//   [2]  BaseDtor      = 0x14002c4e0
-//   [3]  Serialize     = 0x1400f4f50   <-- passthrough (identical pattern to PlantArea)
-//   [4]  Execute       = 0x1400f4af0   <-- passthrough (complex)
-//   [5]  Shared        = 0x1400f7540
-//   [6]  OnComplete    = 0x1400f4a90   <-- passthrough
-//   [7]  OnCancel      = 0x1400f4a20   <-- passthrough
-//   [8]  Cleanup       = 0x1400f4e70   <-- passthrough
-//   [9]  Validate      = 0x1400f47f0   <-- passthrough
-//   [10] GetTarget     = 0x1400f4ef0   <-- passthrough
-//   [11] GetPriority   = 0x140029860   (shared with ClearArea, PlantArea)
+//   [0]  ScalarDtor    = 0x14002c540   <-- REIMPLEMENTED
+//   [1]  VectorDtor    = 0x14002c4f0   (too small, clean code only)
+//   [2]  BaseDtor      = 0x14002c4e0   (too small, clean code only)
+//   [3]  Serialize     = 0x1400f4f50   <-- REIMPLEMENTED
+//   [4]  Slot4/Execute = 0x1400f4af0   <-- REIMPLEMENTED (complex orchard planting)
+//   [5]  Execute       = 0x1400f7540   (3 bytes, clean code only)
+//   [6]  OnComplete    = 0x1400f4a90   <-- REIMPLEMENTED
+//   [7]  OnCancel      = 0x1400f4a20   <-- REIMPLEMENTED
+//   [8]  Cleanup       = 0x1400f4e70   <-- REIMPLEMENTED
+//   [9]  Validate      = 0x1400f47f0   <-- REIMPLEMENTED
+//   [10] GetTarget     = 0x1400f4ef0   <-- REIMPLEMENTED
+//   [11] GetPriority   = 0x140029860   (9 bytes, shared, clean code only)
 //
-// Constructor reimplemented. All vtable methods passthrough.
+// Constructor reimplemented. All hookable vtable methods reimplemented.
 
 #include "BuildActions.h"
+#include "Work/plantorchard_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -40,6 +41,12 @@ static fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
 static HookInfo g_hookCtor;
 static HookInfo g_hookScalarDtor;
 static HookInfo g_hookSerialize;
+static HookInfo g_hookSlot4;
+static HookInfo g_hookOnComplete;
+static HookInfo g_hookOnCancel;
+static HookInfo g_hookCleanup;
+static HookInfo g_hookValidate;
+static HookInfo g_hookGetTarget;
 
 // ============================================================
 // Constructor (0x1400f50b0)
@@ -74,19 +81,67 @@ static void* Reimpl_Ctor(PlantOrchard* self) {
 }
 
 // ============================================================
-// ScalarDtor (0x14002c540) — passthrough
+// ScalarDtor (0x14002c540) — REIMPLEMENTED
 // ============================================================
 static void* Reimpl_ScalarDtor(PlantOrchard* self, uint32_t flags) {
     g_lastHook = "PlantOrchard::ScalarDtor";
-    return ((void*(*)(void*, uint32_t))g_hookScalarDtor.trampoline)(self, flags);
+    return PlantOrchard_ScalarDtor_Impl(self, flags);
 }
 
 // ============================================================
-// Serialize (0x1400f4f50) — passthrough
+// Serialize (0x1400f4f50) — REIMPLEMENTED
 // ============================================================
 static void Reimpl_Serialize(PlantOrchard* self, void* stream) {
     g_lastHook = "PlantOrchard::Serialize";
-    ((void(*)(void*, void*))g_hookSerialize.trampoline)(self, stream);
+    PlantOrchard_Serialize_Impl(self, stream);
+}
+
+// ============================================================
+// Slot4 (0x1400f4af0) — REIMPLEMENTED (complex orchard planting)
+// ============================================================
+static uint64_t Reimpl_Slot4(void* self, void* param2, uint64_t param3, uint64_t param4) {
+    g_lastHook = "PlantOrchard::Slot4";
+    return (uint64_t)PlantOrchard_Slot4_Impl((PlantOrchard*)self, param2, param3, param4);
+}
+
+// ============================================================
+// OnComplete (Slot6, 0x1400f4a90) — REIMPLEMENTED
+// ============================================================
+static void Reimpl_OnComplete(void* self, void* param2, void* param3, int param4) {
+    g_lastHook = "PlantOrchard::OnComplete";
+    PlantOrchard_OnComplete_Impl((PlantOrchard*)self, param2, param3, param4);
+}
+
+// ============================================================
+// OnCancel (Slot7, 0x1400f4a20) — REIMPLEMENTED
+// ============================================================
+static void Reimpl_OnCancel(void* self, void* param2, void* param3, int param4) {
+    g_lastHook = "PlantOrchard::OnCancel";
+    PlantOrchard_OnCancel_Impl((PlantOrchard*)self, param2, param3, param4);
+}
+
+// ============================================================
+// Cleanup (Slot8, 0x1400f4e70) — REIMPLEMENTED
+// ============================================================
+static void Reimpl_Cleanup(void* self) {
+    g_lastHook = "PlantOrchard::Cleanup";
+    PlantOrchard_Cleanup_Impl((PlantOrchard*)self);
+}
+
+// ============================================================
+// Validate (Slot9, 0x1400f47f0) — REIMPLEMENTED
+// ============================================================
+static bool Reimpl_Validate(void* self, void* param2) {
+    g_lastHook = "PlantOrchard::Validate";
+    return PlantOrchard_Validate_Impl((PlantOrchard*)self, param2);
+}
+
+// ============================================================
+// GetTarget (Slot10, 0x1400f4ef0) — REIMPLEMENTED
+// ============================================================
+static void* Reimpl_GetTarget(void* self, void* outPtr) {
+    g_lastHook = "PlantOrchard::GetTarget";
+    return PlantOrchard_GetTarget_Impl((PlantOrchard*)self, outPtr);
 }
 
 // ============================================================
@@ -108,6 +163,7 @@ void InstallPlantOrchardCtor() {
 #endif
         return;
     }
+    PlantOrchard_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, PlantOrchardAddr::Ctor);
     InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 19);
 #ifdef _DEBUG
@@ -117,19 +173,81 @@ void InstallPlantOrchardCtor() {
 void RemovePlantOrchardCtor() { RemoveHook(&g_hookCtor); }
 
 void InstallPlantOrchardScalarDtor() {
+    PlantOrchard_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, PlantOrchardAddr::ScalarDtor);
     InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 12);
 #ifdef _DEBUG
-    printf("[PlantOrchard] ScalarDtor hooked at %p\n", (void*)target);
+    printf("[PlantOrchard] ScalarDtor hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemovePlantOrchardScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallPlantOrchardSerialize() {
+    PlantOrchard_ResolveFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, PlantOrchardAddr::Serialize);
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
-    printf("[PlantOrchard] Serialize hooked at %p\n", (void*)target);
+    printf("[PlantOrchard] Serialize hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemovePlantOrchardSerialize() { RemoveHook(&g_hookSerialize); }
+
+void InstallPlantOrchardSlot4() {
+    PlantOrchard_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f4af0);
+    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 12);
+#ifdef _DEBUG
+    printf("[PlantOrchard] Slot4 hooked at %p (REIMPLEMENTED)\n", (void*)target);
+#endif
+}
+void RemovePlantOrchardSlot4() { RemoveHook(&g_hookSlot4); }
+
+void InstallPlantOrchardOnComplete() {
+    PlantOrchard_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f4a90);
+    InstallHook(target, (void*)Reimpl_OnComplete, &g_hookOnComplete, 14);
+#ifdef _DEBUG
+    printf("[PlantOrchard] OnComplete hooked at %p (REIMPLEMENTED)\n", (void*)target);
+#endif
+}
+void RemovePlantOrchardOnComplete() { RemoveHook(&g_hookOnComplete); }
+
+void InstallPlantOrchardOnCancel() {
+    PlantOrchard_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f4a20);
+    InstallHook(target, (void*)Reimpl_OnCancel, &g_hookOnCancel, 14);
+#ifdef _DEBUG
+    printf("[PlantOrchard] OnCancel hooked at %p (REIMPLEMENTED)\n", (void*)target);
+#endif
+}
+void RemovePlantOrchardOnCancel() { RemoveHook(&g_hookOnCancel); }
+
+void InstallPlantOrchardCleanup() {
+    PlantOrchard_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f4e70);
+    InstallHook(target, (void*)Reimpl_Cleanup, &g_hookCleanup, 13);
+#ifdef _DEBUG
+    printf("[PlantOrchard] Cleanup hooked at %p (REIMPLEMENTED)\n", (void*)target);
+#endif
+}
+void RemovePlantOrchardCleanup() { RemoveHook(&g_hookCleanup); }
+
+void InstallPlantOrchardValidate() {
+    PlantOrchard_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f47f0);
+    InstallHook(target, (void*)Reimpl_Validate, &g_hookValidate, 12);
+#ifdef _DEBUG
+    printf("[PlantOrchard] Validate hooked at %p (REIMPLEMENTED)\n", (void*)target);
+#endif
+}
+void RemovePlantOrchardValidate() { RemoveHook(&g_hookValidate); }
+
+void InstallPlantOrchardGetTarget() {
+    PlantOrchard_ResolveFuncs();
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f4ef0);
+    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 14);
+#ifdef _DEBUG
+    printf("[PlantOrchard] GetTarget hooked at %p (REIMPLEMENTED)\n", (void*)target);
+#endif
+}
+void RemovePlantOrchardGetTarget() { RemoveHook(&g_hookGetTarget); }

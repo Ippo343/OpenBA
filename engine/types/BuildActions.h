@@ -294,17 +294,23 @@ namespace PlantAreaAddr {
     constexpr uintptr_t ScalarDtor   = 0x14002c4b0;
     constexpr uintptr_t BaseDtor     = 0x1400f4600;
     constexpr uintptr_t Serialize    = 0x1400f4540;
+    constexpr uintptr_t Slot4        = 0x1400f4010;
+    constexpr uintptr_t OnComplete   = 0x1400f3f60;
+    constexpr uintptr_t OnCancel     = 0x1400f3ea0;
+    constexpr uintptr_t Cleanup      = 0x1400f4460;
+    constexpr uintptr_t Validate     = 0x1400f3c70;
+    constexpr uintptr_t GetTarget    = 0x1400f44e0;
 }
 
 struct PlantArea {
     // --- Work base (0x48 bytes) ---
     void*    vtable;             // +0x00: -> 0x140161890
     uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr
-    void*    field_18;           // +0x18: entity ptr
-    int32_t  field_20;           // +0x20: -1
-    int32_t  field_24;           // +0x24: 0
-    int32_t  field_28;           // +0x28: -1
+    void*    field_10;           // +0x10: workplace entity IBP
+    void*    field_18;           // +0x18: entity ptr (zeroed)
+    int32_t  field_20;           // +0x20: work ID (-1 sentinel)
+    int32_t  field_24;           // +0x24: priority (0)
+    int32_t  field_28;           // +0x28: -1 sentinel
     int32_t  field_2c;           // +0x2C: 0
     void*    field_30;           // +0x30: zeroed
     void*    field_38;           // +0x38: zeroed
@@ -312,18 +318,24 @@ struct PlantArea {
     uint8_t  _pad44[4];          // +0x44: padding
 
     // --- PlantArea fields ---
-    void*    field_48;           // +0x48: tree node ptr (zeroed)
-    int32_t  field_50;           // +0x50: count (zeroed)
+    void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
+    int32_t  field_50;           // +0x50: BST count (assigned workers)
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: bool array (zeroed)
-    int32_t  field_60;           // +0x60: count (zeroed)
+    void*    field_58;           // +0x58: validity byte array (one per field cell)
+    int32_t  field_60;           // +0x60: field cell count
     uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: InternalBasePtr (zeroed)
+    void*    field_68;           // +0x68: ExternalPtr (crop description resource)
 };
 
 static_assert(sizeof(PlantArea) == 0x70, "PlantArea size mismatch");
 static_assert(offsetof(PlantArea, vtable) == 0x00, "");
+static_assert(offsetof(PlantArea, field_10) == 0x10, "");
+static_assert(offsetof(PlantArea, field_20) == 0x20, "");
 static_assert(offsetof(PlantArea, field_48) == 0x48, "");
+static_assert(offsetof(PlantArea, field_50) == 0x50, "");
+static_assert(offsetof(PlantArea, field_58) == 0x58, "");
+static_assert(offsetof(PlantArea, field_60) == 0x60, "");
+static_assert(offsetof(PlantArea, field_68) == 0x68, "");
 
 // ============================================================
 // PlantOrchard — orchard planting work. Size = 0x70.
@@ -337,17 +349,23 @@ namespace PlantOrchardAddr {
     constexpr uintptr_t ScalarDtor   = 0x14002c540;
     constexpr uintptr_t BaseDtor     = 0x1400f5010;
     constexpr uintptr_t Serialize    = 0x1400f4f50;
+    constexpr uintptr_t Slot4        = 0x1400f4af0;
+    constexpr uintptr_t OnComplete   = 0x1400f4a90;
+    constexpr uintptr_t OnCancel     = 0x1400f4a20;
+    constexpr uintptr_t Cleanup      = 0x1400f4e70;
+    constexpr uintptr_t Validate     = 0x1400f47f0;
+    constexpr uintptr_t GetTarget    = 0x1400f4ef0;
 }
 
 struct PlantOrchard {
     // --- Work base (0x48 bytes) ---
     void*    vtable;             // +0x00: -> 0x140161910
     uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr
-    void*    field_18;           // +0x18: entity ptr
-    int32_t  field_20;           // +0x20: -1
-    int32_t  field_24;           // +0x24: 0
-    int32_t  field_28;           // +0x28: -1
+    void*    field_10;           // +0x10: workplace entity IBP
+    void*    field_18;           // +0x18: entity ptr (zeroed)
+    int32_t  field_20;           // +0x20: work ID (-1 sentinel)
+    int32_t  field_24;           // +0x24: priority (0)
+    int32_t  field_28;           // +0x28: -1 sentinel
     int32_t  field_2c;           // +0x2C: 0
     void*    field_30;           // +0x30: zeroed
     void*    field_38;           // +0x38: zeroed
@@ -355,18 +373,24 @@ struct PlantOrchard {
     uint8_t  _pad44[4];          // +0x44: padding
 
     // --- PlantOrchard fields ---
-    void*    field_48;           // +0x48: tree node ptr (zeroed)
-    int32_t  field_50;           // +0x50: count (zeroed)
+    void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
+    int32_t  field_50;           // +0x50: BST count (assigned workers)
     uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: bool array (zeroed)
-    int32_t  field_60;           // +0x60: count (zeroed)
+    void*    field_58;           // +0x58: validity byte array (one per orchard slot)
+    int32_t  field_60;           // +0x60: orchard slot count
     uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: InternalBasePtr (zeroed)
+    void*    field_68;           // +0x68: ExternalPtr (orchard description resource)
 };
 
 static_assert(sizeof(PlantOrchard) == 0x70, "PlantOrchard size mismatch");
 static_assert(offsetof(PlantOrchard, vtable) == 0x00, "");
+static_assert(offsetof(PlantOrchard, field_10) == 0x10, "");
+static_assert(offsetof(PlantOrchard, field_20) == 0x20, "");
 static_assert(offsetof(PlantOrchard, field_48) == 0x48, "");
+static_assert(offsetof(PlantOrchard, field_50) == 0x50, "");
+static_assert(offsetof(PlantOrchard, field_58) == 0x58, "");
+static_assert(offsetof(PlantOrchard, field_60) == 0x60, "");
+static_assert(offsetof(PlantOrchard, field_68) == 0x68, "");
 
 // ============================================================
 // Pickup — item pickup work. Size = 0x60.

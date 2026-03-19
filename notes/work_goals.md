@@ -2,7 +2,7 @@
 
 **Directory:** `code/Game/Work/`
 **Type headers:** `AutoPickupWork.h`, `ClearStorage.h`, `FireWork.h`, `FishingWork.h`, `ForesterWork.h`, `HarvestArea.h`, `HarvestOrchard.h`, `HerbalistWork.h`, `HuntWork.h`, `LocationWork.h`, `MarketWork.h`, `PastureWork.h`, `Pickup.h`, `TendArea.h`, `TradeWork.h`
-**Source files:** `autopickupwork.cpp`, `buildroad.cpp`, `buildstructure.cpp`, `cleararea.cpp`, `clearstorage.cpp`, `consumeproduce.cpp`, `firework.cpp`, `fishingwork.cpp`, `foresterwork.cpp`, `gatherrawmaterials.cpp`, `harvestarea.cpp`, `harvestorchard.cpp`, `herbalistwork.cpp`, `huntwork.cpp`, `locationwork.cpp`, `marketwork.cpp`, `pasturework.cpp`
+**Source files:** `autopickupwork.cpp`, `buildroad.cpp`, `buildstructure.cpp`, `cleararea.cpp`, `clearstorage.cpp`, `consumeproduce.cpp`, `firework.cpp`, `fishingwork.cpp`, `foresterwork.cpp`, `gatherrawmaterials.cpp`, `harvestarea.cpp`, `harvestorchard.cpp`, `herbalistwork.cpp`, `huntwork.cpp`, `locationwork.cpp`, `marketwork.cpp`, `pasturework.cpp`, `pickup.cpp`, `plantarea.cpp`, `plantorchard.cpp`, `tendarea.cpp`, `tradework.cpp`
 
 ---
 
@@ -38,12 +38,12 @@ Stage 4:
 | LocationWork | 0x1401616a0 | LocationWork.h | **COMPLETE** (all 7 hooked methods reimpl'd) | Medium |
 | MarketWork | 0x140161710 | MarketWork.h | **COMPLETE** (all methods reimpl'd, Slot4/6/8/9 disabled=bug classes 2/3, Slot4 calls original) | Medium |
 | PastureWork | 0x1401617a0 | PastureWork.h | **COMPLETE** (all methods reimpl'd, Slot9 disabled=bug class 3, Slot6 unhookable) | Medium |
-Stage 5 (new classes):
-| Pickup | 0x140161810 | Pickup.h | Not started | Medium |
-| PlantArea | - | - | Not started | Medium |
-| PlantOrchard | - | - | Not started | Medium |
-| TendArea | 0x140161990 | TendArea.h | Not started | Medium |
-| TradeWork | 0x140161a10 | TradeWork.h | Not started | Medium |
+Stage 5:
+| Pickup | 0x140161810 | Pickup.h | **COMPLETE** (all methods reimpl'd, Slot4 disabled=bug class 3, Slot8 disabled=Jcc, Slot10 disabled=bug 2, unique Execute reimpl'd) | Medium |
+| PlantArea | 0x140161890 | BuildActions.h | **COMPLETE** (all methods reimpl'd, most slots not hooked — standalone exe only) | Medium |
+| PlantOrchard | 0x140161910 | BuildActions.h | **COMPLETE** (all methods reimpl'd, most slots not hooked — standalone exe only) | Medium |
+| TendArea | 0x140161990 | TendArea.h | **COMPLETE** (all methods reimpl'd, Slot6/8/9 disabled=bug classes 2/3/Jcc) | Medium |
+| TradeWork | 0x140161a10 | TradeWork.h | **COMPLETE** (all methods reimpl'd, Slot4/6/8/9 disabled=bug classes 2/3/Jcc) | Medium |
 
 Stage 6 (deferred slots from Stages 1-3 — standalone exe completeness):
 
@@ -110,8 +110,7 @@ These addresses are reused across many classes. Implement once for standalone ex
 
 ## Missing Type Headers
 
-These Work classes need type headers created from Ghidra decompilation:
-- PlantArea, PlantOrchard
+None — all Work classes now have type headers.
 
 ## Profile Source Paths
 
