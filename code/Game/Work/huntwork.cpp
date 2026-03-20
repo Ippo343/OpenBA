@@ -37,11 +37,11 @@ typedef int   (*HuW_Random_RandTol_t)(void* rng, int range);
 typedef float*(*HuW_Vector3_Ctor_t)(float* self, float x, float y, float z);
 typedef float*(*HuW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos,
                                      char param4, uint32_t* outNormal);
-typedef void  (*HuW_PerformWork_Ctor3_t)(void* entityIBP, int priority, void* targetIBP,
-                                         float* position, int flag, uint8_t param6);
+typedef void  (*HuW_CreateHuntAction_t)(void* citizenEntityIBP, int priority, void* huntCompIBP,
+                                        float* position, float param5, char param6);
 typedef void  (*HuW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
 typedef void  (*HuW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
-typedef void* (*HuW_FindComp_Pasture_t)(uintptr_t entity, void* outIBP);
+typedef void* (*HuW_FindComp_Hunt_t)(uintptr_t entity, void* outIBP);
 typedef void* (*HuW_GetAreaComponent_t)(uintptr_t entityPtr, void* outIBP);
 typedef int   (*HuW_Map_CalcDistance_t)(int* mapGrid, uint32_t cellA, uint32_t cellB);
 typedef int   (*HuW_Map_FindNearestPassable_t)(int* mapGrid, int srcCell, int destCell, uint32_t flags);
@@ -85,10 +85,10 @@ static HuW_StorageQueryCount_t           s_fn_StorageQueryCount = nullptr;
 static HuW_Random_RandTol_t              s_fn_Random_RandTol = nullptr;
 static HuW_Vector3_Ctor_t               s_fn_Vector3_Ctor = nullptr;
 static HuW_GetTerrainPos_t              s_fn_GetTerrainPos = nullptr;
-static HuW_PerformWork_Ctor3_t          s_fn_PerformWork_Ctor3 = nullptr;
+static HuW_CreateHuntAction_t          s_fn_CreateHuntAction = nullptr;
 static HuW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static HuW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
-static HuW_FindComp_Pasture_t           s_fn_FindComp_Pasture = nullptr;
+static HuW_FindComp_Hunt_t           s_fn_FindComp_Hunt = nullptr;
 static HuW_GetAreaComponent_t           s_fn_GetAreaComponent = nullptr;
 static HuW_Map_CalcDistance_t            s_fn_Map_CalcDistance = nullptr;
 static HuW_Map_FindNearestPassable_t    s_fn_Map_FindNearestPassable = nullptr;
@@ -143,16 +143,16 @@ bool HuntWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x14012cf10));
     s_fn_GetTerrainPos = reinterpret_cast<HuW_GetTerrainPos_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));
-    s_fn_PerformWork_Ctor3 = reinterpret_cast<HuW_PerformWork_Ctor3_t>(
-        ResolveAddr(Module::Exe, 0x1400c1eb0));
+    s_fn_CreateHuntAction = reinterpret_cast<HuW_CreateHuntAction_t>(
+        ResolveAddr(Module::Exe, 0x1400bbbc0));
     s_fn_CitizenAI_RegisterWork = reinterpret_cast<HuW_CitizenAI_RegisterWork_t>(
         ResolveAddr(Module::Exe, 0x140021a30));
     s_fn_CitizenAI_LongTermPlan = reinterpret_cast<HuW_CitizenAI_LongTermPlan_t>(
         ResolveAddr(Module::Exe, 0x140115e60));
-    s_fn_FindComp_Pasture = reinterpret_cast<HuW_FindComp_Pasture_t>(
-        ResolveAddr(Module::Exe, 0x140004fe0));
+    s_fn_FindComp_Hunt = reinterpret_cast<HuW_FindComp_Hunt_t>(
+        ResolveAddr(Module::Exe, 0x14002a730));
     s_fn_GetAreaComponent = reinterpret_cast<HuW_GetAreaComponent_t>(
-        ResolveAddr(Module::Exe, 0x140004680));
+        ResolveAddr(Module::Exe, 0x1400063d0));
     s_fn_Map_CalcDistance = reinterpret_cast<HuW_Map_CalcDistance_t>(
         ResolveAddr(Module::Exe, 0x140008830));
     s_fn_Map_FindNearestPassable = reinterpret_cast<HuW_Map_FindNearestPassable_t>(
@@ -224,8 +224,8 @@ bool HuntWork_ResolveFuncs() {
               s_fn_CalcMaxWorkers && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount && s_fn_Random_RandTol &&
               s_fn_Vector3_Ctor && s_fn_GetTerrainPos &&
-              s_fn_PerformWork_Ctor3 && s_fn_CitizenAI_RegisterWork &&
-              s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Pasture &&
+              s_fn_CreateHuntAction && s_fn_CitizenAI_RegisterWork &&
+              s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Hunt &&
               s_fn_GetAreaComponent && s_fn_Map_CalcDistance &&
               s_fn_Map_FindNearestPassable && s_fn_Map_CanPathTo &&
               s_fn_Work_Serialize && s_fn_Serializer_Ctor &&
@@ -252,10 +252,10 @@ bool HuntWork_ResolveFuncs() {
         if (!s_fn_Random_RandTol) printf("  MISSING: Random_RandTol\n");
         if (!s_fn_Vector3_Ctor) printf("  MISSING: Vector3_Ctor\n");
         if (!s_fn_GetTerrainPos) printf("  MISSING: GetTerrainPos\n");
-        if (!s_fn_PerformWork_Ctor3) printf("  MISSING: PerformWork_Ctor3\n");
+        if (!s_fn_CreateHuntAction) printf("  MISSING: PerformWork_Ctor3\n");
         if (!s_fn_CitizenAI_RegisterWork) printf("  MISSING: CitizenAI_RegisterWork\n");
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
-        if (!s_fn_FindComp_Pasture) printf("  MISSING: FindComp_Pasture\n");
+        if (!s_fn_FindComp_Hunt) printf("  MISSING: FindComp_Hunt\n");
         if (!s_fn_GetAreaComponent) printf("  MISSING: GetAreaComponent\n");
         if (!s_fn_Map_CalcDistance) printf("  MISSING: Map_CalcDistance\n");
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
@@ -336,7 +336,7 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
 
     fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
     uintptr_t herdIBP[2] = {0};
-    s_fn_FindComp_Pasture(*(uintptr_t*)(selfAddr + 0x10), herdIBP);
+    s_fn_FindComp_Hunt(*(uintptr_t*)(selfAddr + 0x10), herdIBP);
 
     // Get the herd object, check if it's derived from HerdComponent
     fn_InternalBasePtr_CheckPtr(herdIBP);
@@ -461,18 +461,22 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
             float pathPos[3];
             s_fn_GetTerrainPos(mapGrid, pathPos, huntPos, 0, nullptr);
 
-            // Create PerformWork action (hunt at position)
-            uintptr_t huntEntityRef = *(uintptr_t*)citizenIBP;
-            uintptr_t huntBuf[2] = { huntEntityRef, 0 };
-            // Target is the herd entity -- use entityIBP for the work target
-            fn_InternalBasePtr_CheckPtr(entityIBP);
-            s_fn_PerformWork_Ctor3(
-                huntBuf,               // entityIBP
+            // Create hunt action at position
+            // Re-read citizen entity from citizenIBP (matches original)
+            fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
+            uintptr_t citizenEntRef = *(uintptr_t*)citizenIBP;
+
+            // Re-find hunt component on workplace (original re-calls FindComp_Hunt here)
+            uintptr_t huntCompIBP2 = 0;
+            s_fn_FindComp_Hunt(*(uintptr_t*)(selfAddr + 0x10), &huntCompIBP2);
+
+            s_fn_CreateHuntAction(
+                &citizenEntRef,        // citizen entity IBP
                 (int)selfQ[4],         // priority (workplaceId)
-                citizenIBP,            // targetIBP
-                pathPos,               // position
-                0,                     // flag
-                1);                    // param6
+                &huntCompIBP2,         // hunt component IBP
+                pathPos,               // terrain position
+                0.0f,                  // float param
+                1);                    // char param
 
             // Assign work and register with AI
             int priority = (int)selfQ[4];

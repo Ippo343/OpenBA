@@ -113,162 +113,165 @@ static void Reimpl_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     *reinterpret_cast<int64_t*>(comp + 0xC8) += dt;
 
     // --- Phase 3: Find storage component, check resource count ---
-    // Navigate: self->data38 -> entity owner -> component list -> find by type
-    // CheckPtr calls are no-ops, skipped
+    // Navigate: self->data38 (IBP to citizen) -> citizen+0x10 (IBP to entity) -> components
+    void* storageComp = nullptr;
+
+    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     int64_t citizenRef = *reinterpret_cast<int64_t*>(comp + 0x38);
+
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizenRef + 0x10));
     int64_t citizenEntity = *reinterpret_cast<int64_t*>(citizenRef + 0x10);
 
-    // Inline component search for storage type
     int componentCount = *reinterpret_cast<int*>(citizenEntity + 0x38);
     int64_t componentArray = *reinterpret_cast<int64_t*>(citizenEntity + 0x30);
 
-    void* storageComp = nullptr;
-    for (int i = 0; i < componentCount; i++) {
-        // CheckPtr — no-op
-        int64_t compRef = *reinterpret_cast<int64_t*>(componentArray + i * 8);
-        // Get type ID via vtable call at +0x10 (GetDescription/GetType)
-        int64_t compVtable = *reinterpret_cast<int64_t*>(compRef);
-        typedef int (*fn_GetType_t)();
-        fn_GetType_t getType = *reinterpret_cast<fn_GetType_t*>(compVtable + 0x10);
-        int typeId = getType();
+    int idx = 0;
+    int64_t byteOff = 0;
+    for (; idx < componentCount; idx++, byteOff += 8) {
+        void* ibpAddr = reinterpret_cast<void*>(componentArray + byteOff);
+        fn_InternalBasePtr_CheckPtr(ibpAddr);
 
-        if (typeId == static_cast<int>(*g_pStorageTypeId)) {
-            // CheckPtr — no-op
-            // IsDerivedFrom check
-            bool derived = fn_IsDerivedFrom(
-                reinterpret_cast<void*>(compRef), *g_pStorageTypeId);
+        int64_t compRef = *reinterpret_cast<int64_t*>(ibpAddr);
+        uint32_t dVar3 = *g_pStorageTypeId;
+
+        // vtable[2] = GetTypeId at +0x10
+        int64_t compVtable = *reinterpret_cast<int64_t*>(compRef);
+        typedef uint32_t (*fn_GetType_t)();
+        fn_GetType_t getType = *reinterpret_cast<fn_GetType_t*>(compVtable + 0x10);
+        uint32_t typeId = getType();
+
+        if (typeId == dVar3) {
+            // Re-read by index with CheckPtr (matches original)
+            void* ibpAddr2 = reinterpret_cast<void*>(componentArray + (int64_t)idx * 8);
+            fn_InternalBasePtr_CheckPtr(ibpAddr2);
+            void* resolved = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(ibpAddr2));
+
+            bool derived = fn_IsDerivedFrom(resolved, *g_pStorageTypeId);
             if (derived) {
-                storageComp = reinterpret_cast<void*>(compRef);
+                storageComp = resolved;
             }
             break;
         }
     }
 
-    // InternalBasePtr constructor — just stores the pointer
-    int64_t storageRef = reinterpret_cast<int64_t>(storageComp);
-
-    // CheckPtr — no-op
-    int storageCount = fn_StorageQueryCount(storageRef);
+    // Create proper IBP wrapper for storage, then CheckPtr before use
+    int64_t storageIBP = 0;
+    fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
+    fn_InternalBasePtr_CheckPtr(&storageIBP);
+    int storageCount = fn_StorageQueryCount(storageIBP);
     if (storageCount == 0) {
         *reinterpret_cast<int64_t*>(comp + 0xC8) = 0;
     }
 
     // --- Phase 4: Check hunger/thirst flags ---
-    // data30 byte 0 = hunger flag, data30 byte 1 = thirst flag
-    uint8_t hungerFlag = *reinterpret_cast<uint8_t*>(comp + 0x30);
-    uint8_t thirstFlag = *reinterpret_cast<uint8_t*>(comp + 0x31);
+    uint8_t hungerFlag = comp[0x30];
+    uint8_t thirstFlag = comp[0x31];
     int aiState = *reinterpret_cast<int*>(comp + 0x28);
 
-    // bVar4 = (hungerFlag && aiState == 0xE) || (thirstFlag && aiState == 0xF)
     bool isInNeedState = false;
     if ((hungerFlag != 0 && aiState == 0x0E) || (thirstFlag != 0 && aiState == 0x0F)) {
         isInNeedState = true;
     }
 
     // --- Phase 5: Hunger check ---
-    // CheckPtr — no-op
+    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     int64_t citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
     float health = *reinterpret_cast<float*>(citizenData + 0x44);
-    int64_t configPtr = *reinterpret_cast<int64_t*>(citizenData + 0x288);
-    float hungerThreshold = *reinterpret_cast<float*>(configPtr + 0xCC);
+    float* pHungerThresh = reinterpret_cast<float*>(
+        *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);
 
-    if (health <= hungerThreshold || isInNeedState ||
-        (aiState - 0x0EU) < 2 || *reinterpret_cast<int64_t*>(comp + 0xB0) > 0) {
+    if (health <= *pHungerThresh || health == *pHungerThresh || isInNeedState ||
+        ((uint32_t)(aiState - 0x0E) < 2) ||
+        *reinterpret_cast<int64_t*>(comp + 0xB0) > 0) {
         // Not hungry enough to transition, or in special state
-        // But if hunger flag is set and health is now OK, clear it
         if (hungerFlag != 0) {
-            // Re-read health (CheckPtr — no-op)
+            fn_InternalBasePtr_CheckPtr(comp + 0x38);
             citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
             health = *reinterpret_cast<float*>(citizenData + 0x44);
-            configPtr = *reinterpret_cast<int64_t*>(citizenData + 0x288);
-            hungerThreshold = *reinterpret_cast<float*>(configPtr + 0xCC);
+            pHungerThresh = reinterpret_cast<float*>(
+                *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);
 
-            if (health <= hungerThreshold) {
-                *reinterpret_cast<uint8_t*>(comp + 0x30) = 0;
+            if (health < *pHungerThresh || health == *pHungerThresh) {
+                comp[0x30] = 0;
             }
         }
     } else {
         // Hungry — check if has workplace with resources, release if so
-        // CheckPtr — no-op
-        citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-        int64_t workplaceRef = *reinterpret_cast<int64_t*>(citizenData + 0x238);
-        if (workplaceRef != 0) {
-            // CheckPtr — no-op
-            citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-            int64_t workplaceEntity = *reinterpret_cast<int64_t*>(citizenData + 0x238);
-            // CheckPtr — no-op (on workplaceEntity)
-            int64_t local_res8 = workplaceEntity;
-            // Find storage component on workplace
+        fn_InternalBasePtr_CheckPtr(comp + 0x38);
+        if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(comp + 0x38) + 0x238) != 0) {
+            fn_InternalBasePtr_CheckPtr(comp + 0x38);
+            int64_t wpEntity = *reinterpret_cast<int64_t*>(
+                *reinterpret_cast<int64_t*>(comp + 0x38) + 0x238);
+
+            fn_InternalBasePtr_CheckPtr(&wpEntity);
             int64_t findResult[2] = {};
-            void* pResult = fn_FindComponentStorage(local_res8, findResult);
-            // CheckPtr — no-op
+            void* pResult = fn_FindComponentStorage(wpEntity, findResult);
+
+            fn_InternalBasePtr_CheckPtr(pResult);
             int64_t wpStorage = *reinterpret_cast<int64_t*>(pResult);
             int resourceCount = fn_GetResourceCount(wpStorage);
 
             if (resourceCount > 0) {
-                // Re-read citizen data and release workplace
-                citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-                int64_t wpRef = *reinterpret_cast<int64_t*>(citizenData + 0x238);
-                // CheckPtr — no-op
-                citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
-                fn_ReleaseWorkplace(citizenData, &wpRef);
+                fn_InternalBasePtr_CheckPtr(comp + 0x38);
+                int64_t wpRef = *reinterpret_cast<int64_t*>(
+                    *reinterpret_cast<int64_t*>(comp + 0x38) + 0x238);
+                fn_InternalBasePtr_CheckPtr(comp + 0x38);
+                fn_ReleaseWorkplace(
+                    *reinterpret_cast<int64_t*>(comp + 0x38),
+                    &wpRef);
             }
         }
 
-        // Check health again after potentially releasing workplace
-        // CheckPtr — no-op
+        // Re-check health after potentially releasing workplace
+        fn_InternalBasePtr_CheckPtr(comp + 0x38);
         citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
         health = *reinterpret_cast<float*>(citizenData + 0x44);
-        configPtr = *reinterpret_cast<int64_t*>(citizenData + 0x288);
-        hungerThreshold = *reinterpret_cast<float*>(configPtr + 0xCC);
+        pHungerThresh = reinterpret_cast<float*>(
+            *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);
 
-        if (health > hungerThreshold && health != hungerThreshold) {
+        if (*pHungerThresh <= health && health != *pHungerThresh) {
             fn_TransitionState(reinterpret_cast<int64_t>(self), 1);
-            *reinterpret_cast<uint8_t*>(comp + 0x30) =
-                (*reinterpret_cast<int*>(comp + 0x28) == 0x0E) ? 1 : 0;
+            comp[0x30] = (*reinterpret_cast<int*>(comp + 0x28) == 0x0E) ? 1 : 0;
         }
     }
 
     // --- Phase 6: Thirst check ---
-    // Re-read thirst data
-    // CheckPtr — no-op
+    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
     float hydration = *reinterpret_cast<float*>(citizenData + 0x48);
-    configPtr = *reinterpret_cast<int64_t*>(citizenData + 0x288);
-    float thirstThreshold = *reinterpret_cast<float*>(configPtr + 0xEC);
+    float* pThirstThresh = reinterpret_cast<float*>(
+        *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xEC);
 
     // Re-read flags (may have been modified above)
-    thirstFlag = *reinterpret_cast<uint8_t*>(comp + 0x31);
+    thirstFlag = comp[0x31];
     aiState = *reinterpret_cast<int*>(comp + 0x28);
-    isInNeedState = ((*reinterpret_cast<uint8_t*>(comp + 0x30) != 0 && aiState == 0x0E) ||
+    isInNeedState = ((comp[0x30] != 0 && aiState == 0x0E) ||
                      (thirstFlag != 0 && aiState == 0x0F));
 
-    if (hydration <= thirstThreshold || isInNeedState ||
-        (aiState - 0x0EU) < 2 || *reinterpret_cast<int64_t*>(comp + 0xB8) > 0) {
+    if (hydration <= *pThirstThresh || hydration == *pThirstThresh || isInNeedState ||
+        ((uint32_t)(aiState - 0x0E) < 2) ||
+        *reinterpret_cast<int64_t*>(comp + 0xB8) > 0) {
         // Not thirsty enough or in special state
         if (thirstFlag != 0) {
-            // CheckPtr — no-op
+            fn_InternalBasePtr_CheckPtr(comp + 0x38);
             citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
             hydration = *reinterpret_cast<float*>(citizenData + 0x48);
-            configPtr = *reinterpret_cast<int64_t*>(citizenData + 0x288);
-            thirstThreshold = *reinterpret_cast<float*>(configPtr + 0xEC);
+            pThirstThresh = reinterpret_cast<float*>(
+                *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xEC);
 
-            if (hydration <= thirstThreshold) {
-                *reinterpret_cast<uint8_t*>(comp + 0x31) = 0;
+            if (hydration < *pThirstThresh || hydration == *pThirstThresh) {
+                comp[0x31] = 0;
             }
         }
     } else {
         // Thirsty — transition to thirst state
         fn_TransitionState(reinterpret_cast<int64_t>(self), 1);
-        *reinterpret_cast<uint8_t*>(comp + 0x31) =
-            (*reinterpret_cast<int*>(comp + 0x28) == 0x0F) ? 1 : 0;
+        comp[0x31] = (*reinterpret_cast<int*>(comp + 0x28) == 0x0F) ? 1 : 0;
     }
 
     // --- Phase 7: Housing check ---
-    hungerFlag = *reinterpret_cast<uint8_t*>(comp + 0x30);
-    thirstFlag = *reinterpret_cast<uint8_t*>(comp + 0x31);
-    if (hungerFlag == 0 && thirstFlag == 0) {
-        // CheckPtr — no-op
+    if (comp[0x30] == 0 && comp[0x31] == 0) {
+        fn_InternalBasePtr_CheckPtr(comp + 0x38);
         citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
         char canFindHouse = fn_CanFindHousing(citizenData);
         if (canFindHouse != 0 && *reinterpret_cast<int*>(comp + 0x28) != 2) {
@@ -277,12 +280,11 @@ static void Reimpl_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     }
 
     // --- Phase 8: Check health status for education/age ---
-    // CheckPtr — no-op
+    fn_InternalBasePtr_CheckPtr(comp + 0x38);
     citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizenData + 0x278));
     int64_t healthComp = *reinterpret_cast<int64_t*>(citizenData + 0x278);
-    // CheckPtr — no-op
-    int healthVal = *reinterpret_cast<int*>(healthComp + 0x60);
-    if (healthVal + 1 > 0) {
+    if (*reinterpret_cast<int*>(healthComp + 0x60) + 1 > 0) {
         // Citizen is alive (health > -1), skip education/age checks
         return;
     }

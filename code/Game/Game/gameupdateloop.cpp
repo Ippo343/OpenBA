@@ -750,59 +750,93 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                         // Round-robin index at offset +0xbc (5 uint32_t, one per bucket)
                         TRACE("[EntityList::Update] starting bucket iteration...\n");
                         int64_t currentTime = *elp; // accumulated time
+                        // Round-robin cursors at +0xbc (5 × uint32), process counts at +0xa8 (5 × uint32)
+                        uint32_t* cursorArr = reinterpret_cast<uint32_t*>(el + 0xbc);
+                        uint32_t* procCountArr = reinterpret_cast<uint32_t*>(el + 0xa8);
                         for (int bucket = 0; bucket < 5; bucket++) {
                             uintptr_t bucketBase = el + 0x18 + bucket * 16;
-                            void** arr = *(void***)bucketBase;
+                            int64_t* arrBase = *reinterpret_cast<int64_t**>(bucketBase);
                             int32_t count = *(int32_t*)(bucketBase + 8);
                             if (count == 0) continue;
 
-                            TRACE("[EntityList::Update] bucket %d: %d entities\n", bucket, count);
-                            // Process each entity in this bucket
-                            for (int ei = 0; ei < count; ei++) {
-                                void* entity = arr[ei];
-                                uintptr_t ent = (uintptr_t)entity;
-                                uint32_t entFlags = *(uint32_t*)(ent + 0x40);
+                            uint32_t processCount = procCountArr[bucket];
+                            uint32_t cursor = cursorArr[bucket];
+                            if ((int)cursor >= count) cursor = 0;
 
-                                // Skip if deleted (bit 10 = 0x400)
-                                if (entFlags & 0x400) continue;
+                            TRACE("[EntityList::Update] bucket %d: %d entities, proc=%u cursor=%u\n",
+                                  bucket, count, processCount, cursor);
 
-                                // Check time delta
-                                int64_t lastUpdate = *(int64_t*)(ent + 0x20);
-                                int64_t delta = currentTime - lastUpdate;
-                                if (delta <= 0) continue;
+                            uint32_t startIdx = cursor;
+                            uint32_t processed = 0;
+                            uint32_t idx = startIdx;
 
-                                // Check if entity has update flag (bit 3 = 0x8)
-                                if (!(entFlags & 0x8)) continue;
+                            if ((int)processCount > 0) {
+                                do {
+                                    // Read entity pointer into local and CheckPtr before any access
+                                    int64_t entIBP = arrBase[idx];
+                                    fn_InternalBasePtr_CheckPtr(&entIBP);
 
-                                int32_t compCount = *(int32_t*)(ent + 0x38);
-                                void** compArr = *(void***)(ent + 0x30);
+                                    // Check deleted flag (bit 10)
+                                    if ((*(uint32_t*)(entIBP + 0x40) >> 10 & 1) == 0) {
+                                        // CheckPtr again before time delta
+                                        fn_InternalBasePtr_CheckPtr(&entIBP);
+                                        int64_t delta = currentTime - *(int64_t*)(entIBP + 0x20);
 
-                                int64_t deltaTime[1] = { delta };
+                                        if (delta > 0) {
+                                            // CheckPtr again before component iteration
+                                            fn_InternalBasePtr_CheckPtr(&entIBP);
+                                            int64_t ent = entIBP;
 
-                                for (int ci = 0; ci < compCount; ci++) {
-                                    fn_InternalBasePtr_CheckPtr((void*)&compArr[ci]);
-                                    void* comp = compArr[ci];
-                                    uintptr_t cp = (uintptr_t)comp;
-                                    uint32_t compFlags = *(uint32_t*)(cp + 0x20);
+                                            if ((*(uint32_t*)(ent + 0x40) & 0x8) != 0 &&
+                                                (*(uint32_t*)(ent + 0x40) & 0x400) == 0) {
 
-                                    // Check if component has update flag (bit 3)
-                                    if (!(compFlags & 0x8)) continue;
+                                                int32_t compCount = *(int32_t*)(ent + 0x38);
+                                                int64_t deltaTime[1] = { delta };
 
-                                    // Get vtable and call Update at +0x48
-                                    void** vtbl = *(void***)comp;
-                                    typedef void (*CompUpdate_t)(void* self, void* time);
-                                    CompUpdate_t compUpdate = (CompUpdate_t)vtbl[9]; // +0x48 / 8 = slot 9
+                                                for (int64_t ci = 0; ci < compCount; ci++) {
+                                                    // Read component IBP and CheckPtr
+                                                    int64_t compIBP = *reinterpret_cast<int64_t*>(
+                                                        *(int64_t*)(ent + 0x30) + ci * 8);
+                                                    fn_InternalBasePtr_CheckPtr(&compIBP);
 
-                                    compUpdate(comp, deltaTime);
+                                                    // Check component update flag (bit 3 of flags at +0x20)
+                                                    if ((*(uint32_t*)(compIBP + 0x20) >> 3 & 1) != 0) {
+                                                        // CheckPtr again before calling Update
+                                                        fn_InternalBasePtr_CheckPtr(&compIBP);
+                                                        void** vtbl = *(void***)(uintptr_t)compIBP;
+                                                        typedef void (*CompUpdate_t)(void* self, void* time);
+                                                        CompUpdate_t compUpdate = (CompUpdate_t)vtbl[9];
+                                                        compUpdate((void*)(uintptr_t)compIBP, deltaTime);
+                                                    }
 
-                                    // Check if entity got deleted during update
-                                    if (*(uint32_t*)(ent + 0x40) & 0x400) break;
-                                }
+                                                    // Reload param_1 (matches original: param_1 = local_res8)
+                                                    elp = reinterpret_cast<int64_t*>(self->m_entityList);
+                                                    currentTime = *elp;
 
-                                // Update last-update time
-                                fn_InternalBasePtr_CheckPtr((void*)&arr[ei]);
-                                *(int64_t*)(ent + 0x20) = currentTime;
+                                                    // Check if entity deleted during update
+                                                    if (*(uint32_t*)(ent + 0x40) & 0x400) break;
+                                                }
+                                            }
+
+                                            // CheckPtr and update timestamp
+                                            fn_InternalBasePtr_CheckPtr(&entIBP);
+                                            *(int64_t*)(entIBP + 0x20) = currentTime;
+                                        }
+                                    }
+
+                                    // Advance with wrap-around
+                                    idx++;
+                                    processed++;
+                                    cursor++;
+                                    if ((int64_t)idx >= count) {
+                                        idx = 0;
+                                        cursor = 0;
+                                    }
+                                } while (idx != startIdx && (int)processed < (int)processCount);
                             }
+
+                            // Save cursor position
+                            cursorArr[bucket] = cursor;
                             TRACE("[EntityList::Update] bucket %d done\n", bucket);
                         }
                         TRACE("[EntityList::Update] all buckets done\n");
