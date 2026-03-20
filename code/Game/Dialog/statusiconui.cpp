@@ -115,11 +115,14 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 
             // GetActivePage is just *(int*)(pageElement + 0xC0)
             // PageToggleUI stores its page element at +0x40
-            void* pageElem = *(void**)((uintptr_t)ptInternal + 0x40);
-            int activePage = *(int*)((uintptr_t)pageElem + 0xC0);
-
-            // Icons are active on pages 2 and 3 (iVar3 - 2U <= 1)
-            iconsActive = (activePage >= 2 && activePage <= 3);
+            if (ptInternal != nullptr) {
+                void* pageElem = *(void**)((uintptr_t)ptInternal + 0x40);
+                if (pageElem != nullptr) {
+                    int activePage = *(int*)((uintptr_t)pageElem + 0xC0);
+                    // Icons are active on pages 2 and 3 (iVar3 - 2U <= 1)
+                    iconsActive = (activePage >= 2 && activePage <= 3);
+                }
+            }
         }
     }
 

@@ -261,8 +261,11 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
         uintptr_t newCitizenRef = *(uintptr_t*)entityIBP;
         uintptr_t local_buf[1] = { newCitizenRef };
 
-        // Call Slot4 via vtable
+        // Call Slot4 via vtable (guard against freed self after CancelAllWork)
         uintptr_t vtable = *(uintptr_t*)self;
+        if (vtable == 0) {
+            return 0;  // self was freed during CancelAllWork
+        }
         typedef int (*Slot4_fn)(void*, void*, void*);
         auto slot4 = *reinterpret_cast<Slot4_fn*>(vtable + 0x20);
         int result = slot4(self, local_buf, param3);

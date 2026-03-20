@@ -180,11 +180,11 @@ bool HarvestArea_ResolveFuncs() {
     s_fn_GetTerrainPos = reinterpret_cast<HA_GetTerrainPos_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));
     s_fn_ShowTool_Action_Ctor4 = reinterpret_cast<HA_ShowTool_Action_Ctor4_t>(
-        ResolveAddr(Module::Exe, 0x1400c1720));
+        ResolveAddr(Module::Exe, 0x1400c1530));  // was 0x1400c1720 (mid-function!)
     s_fn_BST_Insert = reinterpret_cast<HA_BST_Insert_t>(
         ResolveAddr(Module::Exe, 0x140029a40));
     s_fn_BST_Remove = reinterpret_cast<HA_BST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x140029a60));  // TradeDescription_impl_ca60
+        ResolveAddr(Module::Exe, 0x14001ca60));  // was 0x140029a60 (wrong function!)
     s_fn_BST_Serialize = reinterpret_cast<HA_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140029de0));
     s_fn_ValidateTask = reinterpret_cast<HA_ValidateTask_t>(
@@ -199,8 +199,10 @@ bool HarvestArea_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_BST_RecursiveFree = reinterpret_cast<HA_BST_RecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x14000e320));
-    s_fn_ObjectInternal_Dtor = reinterpret_cast<HA_ObjectInternal_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x14014e3a4));  // resolved via vtable tail call
+    // Object::Internal::~Internal via dispatch slot (JMP [0x140152770] in dtor)
+    uintptr_t iatInternalDtor = ResolveAddr(Module::Exe, 0x140152770);
+    if (iatInternalDtor)
+        s_fn_ObjectInternal_Dtor = *reinterpret_cast<HA_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
     // Dispatch slot IATs
     uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
@@ -462,8 +464,11 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                         uint64_t canPath = (uint64_t)s_fn_Map_CanPathTo(mapGrid, 0xe1f, citizenGridCell, nearestCell);
                         if ((char)canPath != 0) {
                             // Check NaturalResourceComponent on entity
-                            uintptr_t natResIBP1 = 0;
-                            uintptr_t natResIBP2 = 0;
+                            // natResIBPArray must be contiguous: ShowTool_Action_Ctor4
+                            // iterates param_4 as an array of harvestMode entries
+                            uintptr_t natResIBPArray[2] = {0, 0};
+                            uintptr_t& natResIBP1 = natResIBPArray[0];
+                            uintptr_t& natResIBP2 = natResIBPArray[1];
 
                             fn_InternalBasePtr_CheckPtr(&entityAtCell1);
                             uintptr_t natResCompIBP[2] = {0};
@@ -479,13 +484,18 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 
                             // Check flag bit 20 on NatRes (flagged for removal)
                             fn_InternalBasePtr_CheckPtr(&natResIBP1);
+                            if (natResIBP1 == 0) {
+                                // NatRes component gone — skip this cell
+                                validityArray[i] = 0;
+                                goto next_cell;
+                            }
                             if ((*(uint32_t*)(natResIBP1 + 0x20) >> 20) & 1) {
                                 goto handle_removal;
                             }
 
                             if (natResIBP2 != 0) {
                                 fn_InternalBasePtr_CheckPtr(&natResIBP2);
-                                if ((*(uint32_t*)(natResIBP2 + 0x20) >> 20) & 1) {
+                                if (natResIBP2 != 0 && (*(uint32_t*)(natResIBP2 + 0x20) >> 20) & 1) {
                                     pairedAvailable = false;
                                 }
                             }
@@ -516,11 +526,12 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                                 int harvestMode = pairedAvailable ? 2 : 1;
                                 uint32_t packedCellInfo = ((uint32_t)cellIdx2 << 16) | (uint32_t)i;
 
+
                                 s_fn_ShowTool_Action_Ctor4(
                                     actionBuf,                    // citizenIBP
                                     (int)selfQ[4],                // priority
                                     harvestMode,                  // 1=single, 2=paired
-                                    &natResIBP1,                  // target NatRes IBP
+                                    natResIBPArray,               // target NatRes IBP array (harvestMode entries)
                                     pathPos,                      // position
                                     packedCellInfo,               // packed cell indices
                                     0);                           // param7
