@@ -916,9 +916,7 @@ void ForesterWork_DtorBody(ForesterWork* self) {
         // Clean up right subtree
         s_fn_TreeNodeCleanup((void*)(selfAddr + 0x48), *(void**)((uintptr_t)bstRoot + 0x18));
         // Free root node
-        if (s_fn_MemFreeFunc) {
-            s_fn_MemFreeFunc(bstRoot);
-        }
+        fn_MemFreeStatic(bstRoot);
     }
 
     // Zero out BST root and count
@@ -941,9 +939,7 @@ void ForesterWork_DtorBody(ForesterWork* self) {
 void* ForesterWork_ScalarDtor_Impl(ForesterWork* self, uint32_t flags) {
     ForesterWork_DtorBody(self);
     if (flags & 1) {
-        if (s_fn_MemFreeFunc) {
-            s_fn_MemFreeFunc(self);
-        }
+        fn_MemFreeStatic(self);
     }
     return self;
 }
@@ -1089,7 +1085,7 @@ int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
                     }
 
                     if (removeArr != newArr) {
-                        s_fn_MemFreeFunc(removeArr);
+                        fn_MemFreeStatic(removeArr);
                     }
                     removeArr = newArr;
                     removeCount = newCount;
@@ -1145,7 +1141,7 @@ int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
         }
     }
 
-    s_fn_MemFreeFunc(removeArr);
+    fn_MemFreeStatic(removeArr);
     return (removeCount == 0) ? 1 : 0;
 }
 

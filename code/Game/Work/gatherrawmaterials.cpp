@@ -362,9 +362,6 @@ static uintptr_t TreeNext(uintptr_t node) {
 void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     uintptr_t selfAddr = (uintptr_t)self;
 
-    printf("[GRM::Serialize] ENTER self=%p +0x48=%p +0x58=%p\n",
-        self, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58));
-
     // Call base Work::Serialize
     s_fn_Work_Serialize(self, stream);
 
@@ -404,9 +401,6 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_TreeSerialize((void*)(selfAddr + 0x68), serializerBuf);
 
     s_fn_Serializer_Dtor(serializerBuf);
-
-    printf("[GRM::Serialize] EXIT self=%p +0x48=%p +0x58=%p\n",
-        self, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58));
 }
 
 // ============================================================
@@ -423,9 +417,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                                      uint64_t param3, uint64_t /*param4*/) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
-
-    printf("[GRM::Execute] ENTER self=%p entityIBP=%p +0x48=%p +0x58=%p\n",
-        self, entityIBP, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58));
 
     // --- Find PositionComponent on work entity (self+0x10) ---
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
@@ -640,9 +631,6 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 uintptr_t destEntity = foundEntity;
                 int* mapGridPtr = (int*)selfQ[2];  // Reread from self
                 void* citizenPtr = *(void**)entityIBP;
-
-                printf("[GRM::Execute] PathfindingFindPath: pathBuf=%p worldEL=%p citizen=%p dest=%p remaining=%d slot=%d\n",
-                    (void*)pathBuf, worldEntityList, citizenPtr, (void*)destEntity, remaining, slotIdx);
 
                 s_fn_PathfindingFindPath(
                     pathBuf,            // stack buffer (original: local_58[3])
@@ -954,10 +942,6 @@ void* GatherRawMaterials_GetTarget_Impl(GatherRawMaterials* /*self*/, void* retb
 // ============================================================
 void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
     uintptr_t selfAddr = (uintptr_t)self;
-
-    printf("[GRM::DtorBody] self=%p +0x48=%p +0x58=%p +0x68=%p s_fn_MemFree=%p fn_MemFreeStatic=%p\n",
-        self, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58), *(void**)(selfAddr + 0x68),
-        (void*)s_fn_MemFree, (void*)fn_MemFreeStatic);
 
     // Set vtable to GatherRawMaterials
     *(void**)selfAddr = s_vtable_GatherRawMaterials;

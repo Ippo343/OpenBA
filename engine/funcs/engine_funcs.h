@@ -4578,6 +4578,26 @@ extern fn_SetupBuildActions_t fn_SetupBuildActions;
 typedef void* (*fn_BST_Insert_t)(void* bstRoot, void* entityIBP, void* citizenIBP);
 extern fn_BST_Insert_t fn_BST_Insert;
 
+// CitizenComponent_CheckWorkplaceValid (0x1401158d0) — checks if workplace is reachable
+// RCX=CitizenComponent*, RDX=&workplaceEntityIBP. Returns bool (char).
+typedef char (*fn_CitizenComponent_CheckWorkplaceValid_t)(void* citizen, void* workplaceIBP);
+extern fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceValid;
+
+// CitizenComponent_HasVacancy (0x140017050) — checks if WorkplaceComponent has available slots
+// RCX=WorkplaceComponent*. Returns bool.
+typedef bool (*fn_CitizenComponent_HasVacancy_t)(uintptr_t workplaceComp);
+extern fn_CitizenComponent_HasVacancy_t fn_CitizenComponent_HasVacancy;
+
+// FUN_140003050 — FindStorageLocationComponent on entity (member fn, retval in RDX)
+// RCX=entity, RDX=retval IBP. Returns retval ptr.
+typedef void* (*fn_FindStorageLocationComp_t)(int64_t entity, void* outIBP);
+extern fn_FindStorageLocationComp_t fn_FindStorageLocationComp;
+
+// FUN_140002e10 — FindWorkplaceComponent on entity (member fn, retval in RDX)
+// RCX=entity, RDX=retval IBP. Returns retval ptr.
+typedef void* (*fn_FindWorkplaceComp_t)(int64_t entity, void* outIBP);
+extern fn_FindWorkplaceComp_t fn_FindWorkplaceComp;
+
 // ============================================================
 // Initialization
 // ============================================================

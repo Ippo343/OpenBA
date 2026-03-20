@@ -376,7 +376,7 @@ bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
                     newArr[i] = val;
                 }
                 if (removeArr != newArr) {
-                    if (s_fn_MemFree) s_fn_MemFree(removeArr);
+                    fn_MemFreeStatic(removeArr);
                 }
                 removeArr = newArr;
                 removeCount = newCount;
@@ -431,7 +431,7 @@ bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
         }
     }
 
-    if (s_fn_MemFree) s_fn_MemFree(removeArr);
+    fn_MemFreeStatic(removeArr);
     return removeCount == 0;
 }
 

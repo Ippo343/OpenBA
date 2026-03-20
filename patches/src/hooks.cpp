@@ -463,6 +463,8 @@ extern void RemoveCitizenAIComponentUpdate();
 // --- CitizenComponent reimplementations (engine/reimpl/citizencomponent.cpp) ---
 extern void InstallCitizenComponentUpdate();
 extern void RemoveCitizenComponentUpdate();
+extern void InstallCitizenComponentShouldSwitch();
+extern void RemoveCitizenComponentShouldSwitch();
 
 // ============================================================
 // Phase 2: Passive component lifecycle methods
@@ -2295,6 +2297,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- CitizenComponent reimplementations ---
     { "CitizenComponent::Update", InstallCitizenComponentUpdate, RemoveCitizenComponentUpdate, true },
+    { "CitizenComponent::ShouldSwitch", InstallCitizenComponentShouldSwitch, RemoveCitizenComponentShouldSwitch, true },
 
     // ============================================================
     // Phase 2: Passive component lifecycle methods

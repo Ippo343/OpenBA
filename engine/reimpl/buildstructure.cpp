@@ -106,19 +106,21 @@ static int Reimpl_Execute(BuildStructure* self, void* citizenPtr) {
 // ============================================================
 // OnComplete (0x1400e4f80) — reimplemented
 // ============================================================
-static void Reimpl_OnComplete(BuildStructure* self, void* citizenIBP,
+static int Reimpl_OnComplete(BuildStructure* self, void* citizenIBP,
                                void* unused, int slotIndex) {
     g_lastHook = "BuildStructure::OnComplete";
     BuildStructure_OnComplete(self, citizenIBP, unused, slotIndex);
+    return 0; // original returns false (XOR AL,AL)
 }
 
 // ============================================================
 // OnCancel (0x1400e4f40) — reimplemented
 // ============================================================
-static void Reimpl_OnCancel(BuildStructure* self, void* citizenIBP,
+static int Reimpl_OnCancel(BuildStructure* self, void* citizenIBP,
                              void* unused, int slotIndex) {
     g_lastHook = "BuildStructure::OnCancel";
     BuildStructure_OnCancel(self, citizenIBP, unused, slotIndex);
+    return 0; // original returns false (XOR AL,AL)
 }
 
 // ============================================================

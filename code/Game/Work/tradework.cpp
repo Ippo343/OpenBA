@@ -279,7 +279,7 @@ bool TradeWork_Slot9_Impl(TradeWork* self, void* param2) {
                     newArr[i] = val;
                 }
                 if (removeArr != newArr) {
-                    s_fn_MemFree(removeArr);
+                    fn_MemFreeStatic(removeArr);
                 }
                 removeArr = newArr;
                 removeCount = newCount;
@@ -329,7 +329,7 @@ bool TradeWork_Slot9_Impl(TradeWork* self, void* param2) {
         }
     }
 
-    s_fn_MemFree(removeArr);
+    fn_MemFreeStatic(removeArr);
     return removeCount == 0;
 }
 
