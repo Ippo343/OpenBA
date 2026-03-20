@@ -64,17 +64,17 @@ static uint64_t Reimpl_Slot6(void* self) {
 // ============================================================
 // Slot7 (0x1400ef820) — REIMPLEMENTED
 // ============================================================
-static void Reimpl_Slot7(void* self) {
+static int Reimpl_Slot7(void* self) {
     g_lastHook = "LocationWork::Slot7";
-    LocationWork_Slot7_Impl((LocationWork*)self);
+    return LocationWork_Slot7_Impl((LocationWork*)self);
 }
 
 // ============================================================
 // Slot8 (0x1400efaf0) — REIMPLEMENTED
 // ============================================================
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "LocationWork::Slot8";
-    LocationWork_Slot8_Impl((LocationWork*)self);
+    return LocationWork_Slot8_Impl((LocationWork*)self);
 }
 
 // ============================================================

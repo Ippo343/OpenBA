@@ -76,17 +76,17 @@ static int Reimpl_Execute(ClearArea* self, void* actionStack, void* time) {
 // OnComplete (0x1400e5e30) — delegates to clean code
 // Params: self(RCX), citizen(RDX), treeEntry(R8), cellIndex(R9D)
 // ============================================================
-static void Reimpl_OnComplete(ClearArea* self, void* citizen, void* treeEntry, int cellIndex) {
+static int Reimpl_OnComplete(ClearArea* self, void* citizen, void* treeEntry, int cellIndex) {
     g_lastHook = "ClearArea::OnComplete";
-    ClearArea_OnComplete(self, citizen, treeEntry, cellIndex);
+    return ClearArea_OnComplete(self, citizen, treeEntry, cellIndex);
 }
 
 // ============================================================
 // Cleanup (0x1400e6650) — delegates to clean code
 // ============================================================
-static void Reimpl_Cleanup(ClearArea* self) {
+static int Reimpl_Cleanup(ClearArea* self) {
     g_lastHook = "ClearArea::Cleanup";
-    ClearArea_Cleanup(self);
+    return ClearArea_Cleanup(self);
 }
 
 // ============================================================

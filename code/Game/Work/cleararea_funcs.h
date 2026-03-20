@@ -29,13 +29,16 @@ void ClearArea_Serialize(ClearArea* self, void* stream);
 int ClearArea_Execute(void* self, void* actionStack, void* time);
 
 // OnComplete (vtable +0x30): Removes completed tree entry.
-void ClearArea_OnComplete(ClearArea* self, void* citizen, void* treeEntry, int cellIndex);
+// Returns int per bug class 7.
+int ClearArea_OnComplete(ClearArea* self, void* citizen, void* treeEntry, int cellIndex);
 
 // OnCancel (vtable +0x38): Forwards to Cleanup.
-void ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry);
+// Returns int per bug class 7.
+int ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry);
 
 // Cleanup (vtable +0x40): Releases all assigned citizens.
-void ClearArea_Cleanup(ClearArea* self);
+// Returns int per bug class 7.
+int ClearArea_Cleanup(ClearArea* self);
 
 // Validate (vtable +0x48, 0x1400e5b10): Validates entity and cell BSTs.
 // Walks entity tree at +0x48 and cell tree at +0x58, checking each

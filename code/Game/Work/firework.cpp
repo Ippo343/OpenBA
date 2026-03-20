@@ -498,11 +498,12 @@ int FireWork_Slot6_Impl(FireWork* self, void* citizenIBP) {
 // jumps to the BST remove-by-key function. The effect is
 // identical to Slot6 without the SUB RSP / return false wrapper.
 // ============================================================
-void FireWork_Slot7_Impl(FireWork* self, void* citizenIBP) {
-    if (!EnsureSlot6Funcs()) return;
+int FireWork_Slot7_Impl(FireWork* self, void* citizenIBP) {
+    if (!EnsureSlot6Funcs()) return 0;
     uintptr_t s = (uintptr_t)self;
     // Remove citizen entry from BST at +0x50
     s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
+    return 0;
 }
 
 // ============================================================
@@ -528,14 +529,14 @@ static bool EnsureSlot8Funcs() {
     return s_fn_RemovePendingAction_FW != nullptr;
 }
 
-void FireWork_Slot8_Impl(FireWork* self) {
-    if (!EnsureSlot8Funcs()) return;
+int FireWork_Slot8_Impl(FireWork* self) {
+    if (!EnsureSlot8Funcs()) return 0;
     uintptr_t s = (uintptr_t)self;
     void** bstRoot = (void**)(s + 0x50);
 
     while (true) {
         void* root = *bstRoot;
-        if (root == nullptr) return;
+        if (root == nullptr) return 0;
 
         // Find leftmost node in BST
         void* node = root;
@@ -545,7 +546,7 @@ void FireWork_Slot8_Impl(FireWork* self) {
             leftChild = *(void**)((uintptr_t)node + 0x10);
         }
 
-        if (node == nullptr) return;
+        if (node == nullptr) return 0;
 
         // Double-traverse to find leftmost again (matches decompilation pattern)
         void* node2 = root;

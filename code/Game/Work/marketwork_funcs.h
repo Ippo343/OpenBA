@@ -34,12 +34,14 @@ bool MarketWork_Slot6_Impl(MarketWork* self, void* param2);
 
 // Slot7 (vtable +0x38): Not a function in Ghidra, skip.
 // Too small / not hookable. Implemented for standalone exe only.
-void MarketWork_Slot7_Impl(MarketWork* self, void* param2);
+// Returns int (bug class 7 -- action executor reads EAX).
+int MarketWork_Slot7_Impl(MarketWork* self, void* param2);
 
 // Slot8 (vtable +0x40): CancelAll. DISABLED hook (short Jcc).
 // Loops through BST at +0x48 while count (+0x50) > 0, cancels each work item.
 // Uses DIFFERENT BST offsets: left child at +0x20 (not +0x10).
-void MarketWork_Slot8_Impl(MarketWork* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int MarketWork_Slot8_Impl(MarketWork* self);
 
 // Slot9 (vtable +0x48): RemoveInvalid. DISABLED hook (MOV RAX,RSP).
 // Iterates BST, validates entries, removes invalid ones.

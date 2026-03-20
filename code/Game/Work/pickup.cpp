@@ -298,11 +298,12 @@ bool Pickup_Slot6_Impl(Pickup* self) {
 // Pickup::Slot7 / OnCancel (0x1400f2e80)
 // Resets citizenIBP to null, sets status to 0 (unassigned).
 // ============================================================
-void Pickup_Slot7_Impl(Pickup* self) {
+int Pickup_Slot7_Impl(Pickup* self) {
     uintptr_t nullIBP = 0;
     fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
     self->citizenIBP = (void*)nullIBP;
     self->status = 0;
+    return 0;
 }
 
 
@@ -310,7 +311,7 @@ void Pickup_Slot7_Impl(Pickup* self) {
 // Pickup::Slot8 / CancelAll (0x1400f39f0)
 // If status == 1 (assigned), cancels the citizen's active work.
 // ============================================================
-void Pickup_Slot8_Impl(Pickup* self) {
+int Pickup_Slot8_Impl(Pickup* self) {
     if (self->status == 1) {
         fn_InternalBasePtr_CheckPtr(&self->citizenIBP);
         uintptr_t citizenEntity = (uintptr_t)self->citizenIBP;
@@ -318,6 +319,7 @@ void Pickup_Slot8_Impl(Pickup* self) {
         fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
+    return 0;
 }
 
 
@@ -412,9 +414,7 @@ void Pickup_DtorBody(Pickup* self) {
 
     // Set vtable to Work (dtor chain)
     *(void**)selfAddr = s_vtable_Work;
-
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on ScalarDtor to handle the free after this returns.
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

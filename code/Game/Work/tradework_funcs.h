@@ -35,10 +35,12 @@ bool TradeWork_Execute_Impl(TradeWork* self);
 bool TradeWork_Slot6_Impl(TradeWork* self, void* param2);
 
 // Slot7 (vtable +0x38): BSTFindRemove on self+0x48 (tail call thunk).
-void TradeWork_Slot7_Impl(TradeWork* self, void* param2);
+// Returns int (bug class 7 -- action executor reads EAX).
+int TradeWork_Slot7_Impl(TradeWork* self, void* param2);
 
 // Slot8 (vtable +0x40): CancelAll. Loops BST at +0x48 while count > 0.
-void TradeWork_Slot8_Impl(TradeWork* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int TradeWork_Slot8_Impl(TradeWork* self);
 
 // Slot9 (vtable +0x48): RemoveInvalid. Iterates BST, removes invalid entries.
 bool TradeWork_Slot9_Impl(TradeWork* self, void* param2);

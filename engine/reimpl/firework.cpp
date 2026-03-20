@@ -107,9 +107,9 @@ static int Reimpl_Slot6(FireWork* self, void* citizenIBP) {
 }
 
 // Slot8 (0x1400e99a0) — CancelAll/Cleanup: release all pending actions
-static void Reimpl_Slot8(FireWork* self) {
+static int Reimpl_Slot8(FireWork* self) {
     g_lastHook = "FireWork::Slot8";
-    FireWork_Slot8_Impl(self);
+    return FireWork_Slot8_Impl(self);
 }
 
 // Slot9 (0x1400e93c0) — BST validation pass (deep reimpl)

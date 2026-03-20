@@ -24,12 +24,13 @@ bool HuntWork_Slot6_Impl(HuntWork* self, void* param2);
 
 // Slot7 (vtable +0x38): 9-byte thunk, too small to hook.
 // Calls CitizenAI_impl_5520(self+0x48, param2).
-// Implemented for standalone exe only.
-void HuntWork_Slot7_Impl(HuntWork* self, void* param2);
+// Returns int (bug class 7 -- action executor reads EAX).
+int HuntWork_Slot7_Impl(HuntWork* self, void* param2);
 
 // Slot8 (vtable +0x40): CancelAll.
 // Loops through tree at +0x48 while count (+0x50) > 0, cancels each work item.
-void HuntWork_Slot8_Impl(HuntWork* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int HuntWork_Slot8_Impl(HuntWork* self);
 
 // Slot9 (vtable +0x48): RemoveInvalid (164 instructions).
 // Iterates tree, validates entries, removes invalid ones.

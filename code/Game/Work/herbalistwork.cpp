@@ -757,8 +757,9 @@ bool HerbalistWork_Slot6_Impl(HerbalistWork* self, void* param2) {
 // Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
-void HerbalistWork_Slot7_Impl(HerbalistWork* self, void* param2) {
+int HerbalistWork_Slot7_Impl(HerbalistWork* self, void* param2) {
     s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
 }
 
 
@@ -767,7 +768,7 @@ void HerbalistWork_Slot7_Impl(HerbalistWork* self, void* param2) {
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each rightmost node, cancels the work item via engine call.
 // ============================================================
-void HerbalistWork_Slot8_Impl(HerbalistWork* self) {
+int HerbalistWork_Slot8_Impl(HerbalistWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -791,6 +792,7 @@ void HerbalistWork_Slot8_Impl(HerbalistWork* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 
@@ -998,9 +1000,7 @@ void HerbalistWork_DtorBody(HerbalistWork* self) {
     // Set vtable to AutoPickupWork, then Work, then call Internal dtor
     *(void**)selfAddr = s_vtable_AutoPickupWork;
     *(void**)selfAddr = s_vtable_Work;
-
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

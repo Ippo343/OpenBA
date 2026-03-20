@@ -593,7 +593,7 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
 // Called when citizen completes/cancels work. Removes entry from BST,
 // marks cell validity, and handles paired cell removal.
 // param4 is packed: low 16 bits = primary cell index, high 16 bits = paired cell index.
-void HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -635,6 +635,7 @@ void HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*
             }
         }
     }
+    return 0;
 }
 
 
@@ -644,7 +645,7 @@ void HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*
 // Called to validate and clean up work entries. Sets validity flag
 // and removes stale paired entry.
 // param4 is packed: low 16 = primary cell, high 16 = paired cell.
-void HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -668,10 +669,11 @@ void HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*
                 node = *(int**)(node + 8);
             } else {
                 s_fn_BST_Remove((void*)(selfAddr + 0x48), node);
-                return;
+                return 0;
             }
         }
     }
+    return 0;
 }
 
 
@@ -680,7 +682,7 @@ void HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*
 // ============================================================
 // Loops through BST (rightmost traversal), cancels each work item
 // via citizen AI task cleanup.
-void HarvestArea_Slot8_Impl(HarvestArea* self) {
+int HarvestArea_Slot8_Impl(HarvestArea* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -701,6 +703,7 @@ void HarvestArea_Slot8_Impl(HarvestArea* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 

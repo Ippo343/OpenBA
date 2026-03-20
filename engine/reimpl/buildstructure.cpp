@@ -109,8 +109,7 @@ static int Reimpl_Execute(BuildStructure* self, void* citizenPtr) {
 static int Reimpl_OnComplete(BuildStructure* self, void* citizenIBP,
                                void* unused, int slotIndex) {
     g_lastHook = "BuildStructure::OnComplete";
-    BuildStructure_OnComplete(self, citizenIBP, unused, slotIndex);
-    return 0; // original returns false (XOR AL,AL)
+    return BuildStructure_OnComplete(self, citizenIBP, unused, slotIndex);
 }
 
 // ============================================================
@@ -119,16 +118,15 @@ static int Reimpl_OnComplete(BuildStructure* self, void* citizenIBP,
 static int Reimpl_OnCancel(BuildStructure* self, void* citizenIBP,
                              void* unused, int slotIndex) {
     g_lastHook = "BuildStructure::OnCancel";
-    BuildStructure_OnCancel(self, citizenIBP, unused, slotIndex);
-    return 0; // original returns false (XOR AL,AL)
+    return BuildStructure_OnCancel(self, citizenIBP, unused, slotIndex);
 }
 
 // ============================================================
 // Cleanup (0x1400e57a0) — reimplemented
 // ============================================================
-static void Reimpl_Cleanup(BuildStructure* self) {
+static int Reimpl_Cleanup(BuildStructure* self) {
     g_lastHook = "BuildStructure::Cleanup";
-    BuildStructure_Cleanup(self);
+    return BuildStructure_Cleanup(self);
 }
 
 // ============================================================

@@ -25,13 +25,15 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t param
 // Constructs null InternalBasePtr into +0x48.
 bool LocationWork_Slot6_Impl(LocationWork* self);
 
-// Slot7 (vtable +0x38): Clear target, void return.
+// Slot7 (vtable +0x38): Clear target.
 // Constructs null InternalBasePtr into +0x48.
-void LocationWork_Slot7_Impl(LocationWork* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int LocationWork_Slot7_Impl(LocationWork* self);
 
 // Slot8 (vtable +0x40): Cancel single target's work.
 // If target at +0x48 exists, cancels its work via CancelAllWork.
-void LocationWork_Slot8_Impl(LocationWork* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int LocationWork_Slot8_Impl(LocationWork* self);
 
 // Slot9 (vtable +0x48): Validate target.
 // Checks if the single target entity is still valid.

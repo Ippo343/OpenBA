@@ -502,7 +502,7 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 // HarvestOrchard::Slot6 -- Insert/remove work entry
 // ============================================================
 // Simpler than HarvestArea -- single int key, no paired cell.
-void HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
+int HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -522,13 +522,14 @@ void HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*p
     // Mark cell as valid
     char* validityArray = (char*)selfQ[0xb];
     validityArray[param4] = 1;
+    return 0;
 }
 
 
 // ============================================================
 // HarvestOrchard::Slot7 -- Tree node lookup with validation
 // ============================================================
-void HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
+int HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -548,13 +549,14 @@ void HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* /*param2*/, void* /*p
     // Mark cell as valid
     char* validityArray = (char*)selfQ[0xb];
     validityArray[param4] = 1;
+    return 0;
 }
 
 
 // ============================================================
 // HarvestOrchard::Slot8 -- CancelAll
 // ============================================================
-void HarvestOrchard_Slot8_Impl(HarvestOrchard* self) {
+int HarvestOrchard_Slot8_Impl(HarvestOrchard* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -573,6 +575,7 @@ void HarvestOrchard_Slot8_Impl(HarvestOrchard* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 

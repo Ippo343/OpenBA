@@ -395,10 +395,11 @@ bool LocationWork_Slot6_Impl(LocationWork* self) {
 // LocationWork::Slot7 (0x1400ef820) — clear target, void return
 // Constructs null InternalBasePtr into +0x48.
 // ============================================================
-void LocationWork_Slot7_Impl(LocationWork* self) {
+int LocationWork_Slot7_Impl(LocationWork* self) {
     uintptr_t nullIBP = 0;
     fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
     self->_field48 = (void*)nullIBP;
+    return 0;
 }
 
 
@@ -407,11 +408,11 @@ void LocationWork_Slot7_Impl(LocationWork* self) {
 // If target at +0x48 exists, navigates to its AI subsystem and
 // cancels all work items.
 // ============================================================
-void LocationWork_Slot8_Impl(LocationWork* self) {
+int LocationWork_Slot8_Impl(LocationWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     if (*(uintptr_t*)(selfAddr + 0x48) == 0) {
-        return;
+        return 0;
     }
 
     // CheckPtr on the target entity at +0x48
@@ -421,6 +422,7 @@ void LocationWork_Slot8_Impl(LocationWork* self) {
     // Navigate to citizen AI component (+0x278) then cancel work (+0x48)
     fn_InternalBasePtr_CheckPtr((void*)(targetEntity + 0x278));
     s_fn_CancelAllWork((void*)(*(uintptr_t*)(targetEntity + 0x278) + 0x48));
+    return 0;
 }
 
 
@@ -513,10 +515,7 @@ void* LocationWork_ScalarDtor_Impl(LocationWork* self, uint32_t flags) {
 
     // Set vtable to Work (base class cleanup)
     *(void**)selfAddr = s_vtable_Work;
-
-    // Object::Internal::~Internal would be called here as a tail call.
-    // In the hook context, the trampoline handles the actual dtor chain.
-    // For standalone exe, we would call Internal::~Internal directly.
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 
     if (flags & 1) {
         if (s_fn_MemFreeStatic) {

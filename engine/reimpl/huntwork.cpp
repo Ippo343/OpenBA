@@ -113,12 +113,12 @@ void RemoveHuntWorkSlot4() { RemoveHook(&g_hookSlot4); }
 // ============================================================
 // Slot8 / CancelAll (0x1400EF530) — REIMPLEMENTED
 // ============================================================
-typedef void (*HuW_Slot8_t)(void* self);
+typedef int (*HuW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "HuntWork::Slot8";
-    HuntWork_Slot8_Impl((HuntWork*)self);
+    return HuntWork_Slot8_Impl((HuntWork*)self);
 }
 
 void InstallHuntWorkSlot8() {

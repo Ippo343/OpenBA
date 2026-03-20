@@ -69,16 +69,16 @@ static int Reimpl_Slot6(FishingWork* self, void* param2, void* param3, uint32_t 
     return FishingWork_Slot6_Impl(self, param2, param3, param4);
 }
 
-typedef void (*fn_Slot7_t)(void* self, void* param2, void* param3);
-static void Reimpl_Slot7(FishingWork* self, void* param2, void* param3) {
+typedef int (*fn_Slot7_t)(void* self, void* param2, void* param3);
+static int Reimpl_Slot7(FishingWork* self, void* param2, void* param3) {
     g_lastHook = "FishingWork::Slot7";
-    FishingWork_Slot7_Impl(self, param2, param3);
+    return FishingWork_Slot7_Impl(self, param2, param3);
 }
 
-typedef void (*fn_Slot8_t)(void* self);
-static void Reimpl_Slot8(FishingWork* self) {
+typedef int (*fn_Slot8_t)(void* self);
+static int Reimpl_Slot8(FishingWork* self) {
     g_lastHook = "FishingWork::Slot8";
-    FishingWork_Slot8_Impl(self);
+    return FishingWork_Slot8_Impl(self);
 }
 
 typedef uint64_t (*fn_Slot9_t)(void* self, void* param2);

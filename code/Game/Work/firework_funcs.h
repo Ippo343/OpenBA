@@ -34,12 +34,14 @@ int FireWork_Slot6_Impl(FireWork* self, void* citizenIBP);
 // Slot7 (vtable +0x38, 0x1400e95f0):
 // OnCancel — thunk to BST remove by key on +0x50.
 // 6-byte thunk in original: ADD RCX,0x50; JMP CitizenAI_impl_5520.
-void FireWork_Slot7_Impl(FireWork* self, void* citizenIBP);
+// Returns int per bug class 7.
+int FireWork_Slot7_Impl(FireWork* self, void* citizenIBP);
 
 // Slot8 (vtable +0x40, 0x1400e99a0):
 // CancelAll/Cleanup — walks BST at +0x50, removes all pending
 // actions from each citizen's state machine component.
-void FireWork_Slot8_Impl(FireWork* self);
+// Returns int per bug class 7.
+int FireWork_Slot8_Impl(FireWork* self);
 
 // Slot10 (vtable +0x50, 0x1400e9a30):
 // GetTarget — returns gameWorld->field_b0->field_30.

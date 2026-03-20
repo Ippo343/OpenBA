@@ -49,10 +49,12 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3);
 bool Pickup_Slot6_Impl(Pickup* self);
 
 // Slot7/OnCancel (vtable +0x38): Resets citizenIBP to null, sets status=0.
-void Pickup_Slot7_Impl(Pickup* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int Pickup_Slot7_Impl(Pickup* self);
 
 // Slot8/CancelAll (vtable +0x40): If status==1, cancels citizen's work.
-void Pickup_Slot8_Impl(Pickup* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int Pickup_Slot8_Impl(Pickup* self);
 
 // Slot9/Validate (vtable +0x48): Validates citizen entity via FUN_1400f7100.
 // If invalid, resets citizenIBP to null and status=0.

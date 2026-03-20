@@ -22,11 +22,13 @@ bool PlantArea_Execute_Impl(PlantArea* self);
 
 // Slot6/OnComplete (vtable +0x30): Removes BST entry, marks cells valid.
 // param4 is packed: low 16 bits = primary cell, high 16 bits = paired cell.
-void PlantArea_OnComplete_Impl(PlantArea* self, void* param2, void* param3, uint32_t param4);
+// Returns int (bug class 7 -- action executor reads EAX).
+int PlantArea_OnComplete_Impl(PlantArea* self, void* param2, void* param3, uint32_t param4);
 
 // Slot7/OnCancel (vtable +0x38): Marks cells valid, removes paired BST entry.
 // param4 is packed: low 16 bits = primary cell, high 16 bits = paired cell.
-void PlantArea_OnCancel_Impl(PlantArea* self, void* param2, void* param3, uint32_t param4);
+// Returns int (bug class 7 -- action executor reads EAX).
+int PlantArea_OnCancel_Impl(PlantArea* self, void* param2, void* param3, uint32_t param4);
 
 // Slot8/Cleanup (vtable +0x40): CancelAll -- loops BST, cancels each work item.
 void PlantArea_Cleanup_Impl(PlantArea* self);

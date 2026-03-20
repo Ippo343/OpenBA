@@ -524,7 +524,7 @@ bool PlantArea_Execute_Impl(PlantArea* /*self*/) {
 // Removes BST entries, marks cells valid.
 // param4 packed: low 16 = primary cell, high 16 = paired cell.
 // ============================================================
-void PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -565,6 +565,7 @@ void PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3
             }
         }
     }
+    return 0;
 }
 
 
@@ -573,7 +574,7 @@ void PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3
 // Marks cells valid, removes paired BST entry.
 // param4 packed: low 16 = primary cell, high 16 = paired cell.
 // ============================================================
-void PlantArea_OnCancel_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int PlantArea_OnCancel_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -610,10 +611,11 @@ void PlantArea_OnCancel_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/
                 node2 = *(int**)(node2 + 8);
             } else {
                 s_fn_BST_Remove((void*)(selfAddr + 0x48), node2);
-                return;
+                return 0;
             }
         }
     }
+    return 0;
 }
 
 
@@ -861,8 +863,7 @@ void PlantArea_DtorBody(PlantArea* self) {
 
     // Set Work vtable, then call Object::Internal::~Internal
     *(void**)selfAddr = s_vtable_Work;
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on the ScalarDtor wrapper to handle free after this returns.
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

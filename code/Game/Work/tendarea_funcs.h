@@ -35,10 +35,12 @@ bool TendArea_Execute_Impl(TendArea* self);
 bool TendArea_Slot6_Impl(TendArea* self, void* param2);
 
 // Slot7 (vtable +0x38): BSTFindRemove on self+0x48 (tail call thunk).
-void TendArea_Slot7_Impl(TendArea* self, void* param2);
+// Returns int (bug class 7 -- action executor reads EAX).
+int TendArea_Slot7_Impl(TendArea* self, void* param2);
 
 // Slot8 (vtable +0x40): CancelAll. Loops BST at +0x48 while count > 0.
-void TendArea_Slot8_Impl(TendArea* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int TendArea_Slot8_Impl(TendArea* self);
 
 // Slot9 (vtable +0x48): RemoveInvalid. Iterates BST, removes invalid entries.
 bool TendArea_Slot9_Impl(TendArea* self, void* param2);

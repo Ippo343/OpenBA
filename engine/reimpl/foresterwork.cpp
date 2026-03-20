@@ -115,12 +115,12 @@ void RemoveForesterWorkSlot4() { RemoveHook(&g_hookSlot4); }
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each rightmost node, cancels the work item via engine call.
 // ============================================================
-typedef void (*FW_Slot8_t)(void* self);
+typedef int (*FW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "ForesterWork::Slot8";
-    ForesterWork_Slot8_Impl((ForesterWork*)self);
+    return ForesterWork_Slot8_Impl((ForesterWork*)self);
 }
 
 void InstallForesterWorkSlot8() {

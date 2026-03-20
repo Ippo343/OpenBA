@@ -241,10 +241,11 @@ int BuildRoad_OnComplete_Impl(BuildRoad* self, void* /*param2*/, void* /*param3*
 // OnCancel (0x1400e4120) — slot 7
 // Clears target entity ref.
 // ============================================================
-void BuildRoad_OnCancel_Impl(BuildRoad* self) {
+int BuildRoad_OnCancel_Impl(BuildRoad* self) {
     uintptr_t temp = 0;
     fn_InternalBasePtr_Ctor(&temp, nullptr);
     self->field_48 = (void*)temp;
+    return 0;
 }
 
 // ============================================================
@@ -252,8 +253,8 @@ void BuildRoad_OnCancel_Impl(BuildRoad* self) {
 // If target entity exists, clean up its pending task list.
 // Walks entity -> +0x278 (StateMachineComponent) -> +0x48 (task list)
 // ============================================================
-void BuildRoad_Cleanup_Impl(BuildRoad* self) {
-    if (self->field_48 == nullptr) return;
+int BuildRoad_Cleanup_Impl(BuildRoad* self) {
+    if (self->field_48 == nullptr) return 0;
 
     fn_InternalBasePtr_CheckPtr(&self->field_48);
     uintptr_t entity = (uintptr_t)self->field_48;
@@ -263,6 +264,7 @@ void BuildRoad_Cleanup_Impl(BuildRoad* self) {
 
     // Call task list cleanup: FUN_1400c5400(smComp + 0x48)
     s_fn_TaskListCleanup((void*)(smComp + 0x48));
+    return 0;
 }
 
 // ============================================================

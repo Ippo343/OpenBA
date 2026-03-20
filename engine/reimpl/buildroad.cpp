@@ -86,17 +86,17 @@ static int Reimpl_OnComplete(BuildRoad* self, void* param2, void* param3, int pa
 // ============================================================
 // OnCancel (0x1400e4120) — reimplemented
 // ============================================================
-static void Reimpl_OnCancel(BuildRoad* self) {
+static int Reimpl_OnCancel(BuildRoad* self) {
     g_lastHook = "BuildRoad::OnCancel";
-    BuildRoad_OnCancel_Impl(self);
+    return BuildRoad_OnCancel_Impl(self);
 }
 
 // ============================================================
 // Cleanup (0x1400e4910) — reimplemented
 // ============================================================
-static void Reimpl_Cleanup(BuildRoad* self) {
+static int Reimpl_Cleanup(BuildRoad* self) {
     g_lastHook = "BuildRoad::Cleanup";
-    BuildRoad_Cleanup_Impl(self);
+    return BuildRoad_Cleanup_Impl(self);
 }
 
 // ============================================================

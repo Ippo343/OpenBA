@@ -107,17 +107,17 @@ static uint64_t Reimpl_Slot4(void* self, void* param2, uint64_t param3, uint64_t
 // ============================================================
 // OnComplete (Slot6, 0x1400f4a90) — REIMPLEMENTED
 // ============================================================
-static void Reimpl_OnComplete(void* self, void* param2, void* param3, int param4) {
+static int Reimpl_OnComplete(void* self, void* param2, void* param3, int param4) {
     g_lastHook = "PlantOrchard::OnComplete";
-    PlantOrchard_OnComplete_Impl((PlantOrchard*)self, param2, param3, param4);
+    return PlantOrchard_OnComplete_Impl((PlantOrchard*)self, param2, param3, param4);
 }
 
 // ============================================================
 // OnCancel (Slot7, 0x1400f4a20) — REIMPLEMENTED
 // ============================================================
-static void Reimpl_OnCancel(void* self, void* param2, void* param3, int param4) {
+static int Reimpl_OnCancel(void* self, void* param2, void* param3, int param4) {
     g_lastHook = "PlantOrchard::OnCancel";
-    PlantOrchard_OnCancel_Impl((PlantOrchard*)self, param2, param3, param4);
+    return PlantOrchard_OnCancel_Impl((PlantOrchard*)self, param2, param3, param4);
 }
 
 // ============================================================

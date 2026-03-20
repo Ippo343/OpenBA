@@ -191,9 +191,9 @@ void RemoveGatherRawMaterialsOnComplete() { RemoveHook(&g_hookOnComplete); }
 // ============================================================
 static HookInfo g_hookOnCancel;
 
-static void Reimpl_OnCancel(GatherRawMaterials* self, void* param2, void* param3, uint32_t param4) {
+static int Reimpl_OnCancel(GatherRawMaterials* self, void* param2, void* param3, uint32_t param4) {
     g_lastHook = "GatherRawMaterials::OnCancel";
-    GatherRawMaterials_OnCancel_Impl(self, param2, param3, param4);
+    return GatherRawMaterials_OnCancel_Impl(self, param2, param3, param4);
 }
 
 void InstallGatherRawMaterialsOnCancel() {
@@ -212,9 +212,9 @@ void RemoveGatherRawMaterialsOnCancel() { RemoveHook(&g_hookOnCancel); }
 // ============================================================
 static HookInfo g_hookCleanup;
 
-static void Reimpl_Cleanup(GatherRawMaterials* self) {
+static int Reimpl_Cleanup(GatherRawMaterials* self) {
     g_lastHook = "GatherRawMaterials::Cleanup";
-    GatherRawMaterials_Cleanup_Impl(self);
+    return GatherRawMaterials_Cleanup_Impl(self);
 }
 
 void InstallGatherRawMaterialsCleanup() {

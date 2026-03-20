@@ -186,8 +186,9 @@ bool TradeWork_Slot6_Impl(TradeWork* self, void* param2) {
 // ============================================================
 // TradeWork::Slot7 -- BSTFindRemove thunk (0x1400f5d10)
 // ============================================================
-void TradeWork_Slot7_Impl(TradeWork* self, void* param2) {
+int TradeWork_Slot7_Impl(TradeWork* self, void* param2) {
     s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
 }
 
 
@@ -196,7 +197,7 @@ void TradeWork_Slot7_Impl(TradeWork* self, void* param2) {
 // Loops through BST at +0x48 while count > 0.
 // Extended BST nodes: left child at +0x20 (not +0x10).
 // ============================================================
-void TradeWork_Slot8_Impl(TradeWork* self) {
+int TradeWork_Slot8_Impl(TradeWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     while (*(int*)(selfAddr + 0x50) > 0) {
@@ -215,6 +216,7 @@ void TradeWork_Slot8_Impl(TradeWork* self) {
         fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
+    return 0;
 }
 
 
@@ -421,8 +423,7 @@ void TradeWork_DtorBody(TradeWork* self) {
 
     // Set vtable to Work base
     *(void**)selfAddr = s_vtable_Work;
-
-    // Tail call to Object::Internal::~Internal handled by caller
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

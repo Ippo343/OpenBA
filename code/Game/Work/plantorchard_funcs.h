@@ -21,10 +21,12 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t param3
 bool PlantOrchard_Execute_Impl(PlantOrchard* self);
 
 // Slot6/OnComplete (vtable +0x30): Removes BST entry, marks cell available.
-void PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* param2, void* param3, int param4);
+// Returns int (bug class 7 -- action executor reads EAX).
+int PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* param2, void* param3, int param4);
 
 // Slot7/OnCancel (vtable +0x38): Marks cell available.
-void PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* param2, void* param3, int param4);
+// Returns int (bug class 7 -- action executor reads EAX).
+int PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* param2, void* param3, int param4);
 
 // Slot8/Cleanup (vtable +0x40): CancelAll -- loops BST, cancels each work item.
 void PlantOrchard_Cleanup_Impl(PlantOrchard* self);

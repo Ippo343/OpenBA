@@ -116,12 +116,12 @@ void RemovePastureWorkSlot4() { RemoveHook(&g_hookSlot4); }
 // Tree insertion with validation. Larger than the 9-byte thunks
 // in ForesterWork/HerbalistWork/HuntWork.
 // ============================================================
-typedef void (*PW_Slot7_t)(void* self, void* param2, void* param3);
+typedef int (*PW_Slot7_t)(void* self, void* param2, void* param3);
 static HookInfo g_hookSlot7;
 
-static void Reimpl_Slot7(void* self, void* param2, void* param3) {
+static int Reimpl_Slot7(void* self, void* param2, void* param3) {
     g_lastHook = "PastureWork::Slot7";
-    PastureWork_Slot7_Impl((PastureWork*)self, param2, param3);
+    return PastureWork_Slot7_Impl((PastureWork*)self, param2, param3);
 }
 
 void InstallPastureWorkSlot7() {
@@ -138,12 +138,12 @@ void RemovePastureWorkSlot7() { RemoveHook(&g_hookSlot7); }
 // ============================================================
 // Slot8 / CancelAll (0x1400F2B90) — REIMPLEMENTED
 // ============================================================
-typedef void (*PW_Slot8_t)(void* self);
+typedef int (*PW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "PastureWork::Slot8";
-    PastureWork_Slot8_Impl((PastureWork*)self);
+    return PastureWork_Slot8_Impl((PastureWork*)self);
 }
 
 void InstallPastureWorkSlot8() {

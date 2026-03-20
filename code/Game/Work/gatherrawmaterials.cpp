@@ -720,7 +720,7 @@ int GatherRawMaterials_OnComplete_Impl(GatherRawMaterials* self, void* param2,
 // Cancel handler. Removes from tree, decrements build count only
 // (does NOT increment assigned count).
 // ============================================================
-void GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
+int GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
                                        void* /*param3*/, uint32_t param4) {
     (void)self; // selfAddr used below via cast
     uintptr_t selfAddr = (uintptr_t)self;
@@ -736,6 +736,7 @@ void GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
     // Decrement field_58[slotIdx] only (cancel = don't credit the work)
     int* buildCountPtr = (int*)(selfQ[0xb] + (uintptr_t)slotIdx * 4);
     *buildCountPtr -= amount;
+    return 0;
 }
 
 // ============================================================
@@ -745,12 +746,12 @@ void GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
 // Walks tree from leftmost node, for each citizen calls
 // CitizenAI::StateMachineRelease.
 // ============================================================
-void GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self) {
+int GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     while (true) {
         uintptr_t root = *(uintptr_t*)(selfAddr + 0x68);
-        if (root == 0) return;
+        if (root == 0) return 0;
 
         // Find leftmost node
         uintptr_t node = root;
@@ -767,7 +768,7 @@ void GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self) {
         }
 
         // node is now leftmost
-        if (node == 0) return;
+        if (node == 0) return 0;
 
         // Get the citizen entity IBP from this node
         fn_InternalBasePtr_CheckPtr((void*)node);
@@ -974,8 +975,8 @@ void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
     // Set vtable to Work (no AutoPickupWork in GatherRawMaterials' chain)
     *(void**)selfAddr = s_vtable_Work;
 
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+    // Call Object::Internal::~Internal (base class cleanup)
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

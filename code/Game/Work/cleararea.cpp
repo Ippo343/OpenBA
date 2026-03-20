@@ -276,7 +276,7 @@ void ClearArea_Serialize(ClearArea* self, void* stream) {
 // the cell tree (+0x58) for the given cellIndex and removes it.
 //
 // Params: self, citizen (unused), treeEntry (IBP*), cellIndex
-void ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, int cellIndex) {
+int ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, int cellIndex) {
     ResolveAll();
 
     // If treeEntry is non-null, insert into entity BST at +0x48
@@ -288,7 +288,7 @@ void ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, i
     // Search cell BST (+0x58) for cellIndex and remove if found
     void* node = self->field_58;
     void* root = node;
-    if (node == nullptr) return;
+    if (node == nullptr) return 0;
 
     // BST search for cellIndex
     while (node != nullptr) {
@@ -299,7 +299,7 @@ void ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, i
             node = *(void**)((uintptr_t)node + 0x20);  // right child
         } else {
             // Found — now search again from root and remove
-            if (root == nullptr) return;
+            if (root == nullptr) return 0;
             void* searchNode = root;
             while (searchNode != nullptr) {
                 int searchVal = *(int*)searchNode;
@@ -310,12 +310,13 @@ void ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, i
                 } else {
                     // Remove this node from cell tree
                     s_fn_BST_Remove(&self->field_58, searchNode);
-                    return;
+                    return 0;
                 }
             }
-            return;
+            return 0;
         }
     }
+    return 0;
 }
 
 // ============================================================
@@ -324,18 +325,19 @@ void ClearArea_OnComplete(ClearArea* self, void* /*citizen*/, void* treeEntry, i
 // Forwards to Cleanup via vtable +0x30 with copied params.
 // Original implementation: deref params, call vtable[6] (Cleanup).
 // Since we control both, just call Cleanup directly.
-void ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry) {
+int ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry) {
     // The original copies *treeEntry and *citizen to stack locals,
     // then calls vtable +0x30 (Cleanup) via indirect call.
     // Since Cleanup ignores the extra params and only uses self,
     // we can call it directly.
-    typedef void (*fn_Cleanup_t)(void* self, void* p1, void* p2);
+    typedef int (*fn_Cleanup_t)(void* self, void* p1, void* p2);
     void** vtable = *(void***)self;
     fn_Cleanup_t cleanup = (fn_Cleanup_t)vtable[6];  // vtable +0x30
     // Copy values as original does
     uintptr_t treeCopy = treeEntry ? *(uintptr_t*)treeEntry : 0;
     uintptr_t citizenCopy = citizen ? *(uintptr_t*)citizen : 0;
     cleanup(self, &citizenCopy, &treeCopy);
+    return 0;
 }
 
 // ============================================================
@@ -345,7 +347,7 @@ void ClearArea_OnCancel(ClearArea* self, void* citizen, void* treeEntry) {
 // rightmost (last) tree node, gets its entity's state machine
 // component (+0x278), and removes the pending action (+0x48).
 // Then does the same for cell tree (+0x58).
-void ClearArea_Cleanup(ClearArea* self) {
+int ClearArea_Cleanup(ClearArea* self) {
     ResolveAll();
 
     // Clean up entity tree (+0x48)
@@ -393,6 +395,7 @@ void ClearArea_Cleanup(ClearArea* self) {
         uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
         s_fn_RemovePendingAction((void*)(smComp + 0x48));
     }
+    return 0;
 }
 
 // ============================================================

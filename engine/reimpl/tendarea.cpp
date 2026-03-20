@@ -124,11 +124,11 @@ void RemoveTendAreaSlot6() { RemoveHook(&g_hookSlot6); }
 // ============================================================
 // Slot8 / CancelAll (0x1400f5830) — REIMPLEMENTED
 // ============================================================
-typedef void (*TAW_Slot8_t)(void* self);
+typedef int (*TAW_Slot8_t)(void* self);
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "TendArea::Slot8";
-    TendArea_Slot8_Impl((TendArea*)self);
+    return TendArea_Slot8_Impl((TendArea*)self);
 }
 
 void InstallTendAreaSlot8() {

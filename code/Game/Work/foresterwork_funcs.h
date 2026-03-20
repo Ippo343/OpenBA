@@ -35,12 +35,13 @@ int ForesterWork_Slot6_Impl(ForesterWork* self, void* param2);
 
 // Slot7 (vtable +0x38, 0x1400EAE90): 9-byte thunk, too small to hook.
 // Calls BSTFindRemove on the BST at self+0x48.
-// Implemented for standalone exe only.
-void ForesterWork_Slot7_Impl(ForesterWork* self, void* param2);
+// Implemented for standalone exe only. Returns int per bug class 7.
+int ForesterWork_Slot7_Impl(ForesterWork* self, void* param2);
 
 // Slot8 (vtable +0x40, 0x1400EB8A0): CancelAll.
 // Loops through tree at +0x48 while count > 0, cancels each work item.
-void ForesterWork_Slot8_Impl(ForesterWork* self);
+// Returns int per bug class 7.
+int ForesterWork_Slot8_Impl(ForesterWork* self);
 
 // Slot9 (vtable +0x48, 0x1400EAC60): RemoveInvalid (164 instructions).
 // BST traversal + validation + removal of invalid entries.

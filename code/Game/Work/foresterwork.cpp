@@ -927,8 +927,8 @@ void ForesterWork_DtorBody(ForesterWork* self) {
     *(void**)selfAddr = s_vtable_AutoPickupWork;
     *(void**)selfAddr = s_vtable_Work;
 
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+    // Call Object::Internal::~Internal (base class cleanup)
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
@@ -993,8 +993,9 @@ int ForesterWork_Slot6_Impl(ForesterWork* self, void* param2) {
 // Calls BSTFindRemove on the BST at self+0x48.
 // Standalone exe only.
 // ============================================================
-void ForesterWork_Slot7_Impl(ForesterWork* self, void* param2) {
+int ForesterWork_Slot7_Impl(ForesterWork* self, void* param2) {
     s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
 }
 
 
@@ -1003,7 +1004,7 @@ void ForesterWork_Slot7_Impl(ForesterWork* self, void* param2) {
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each leftmost node, cancels the work item via engine call.
 // ============================================================
-void ForesterWork_Slot8_Impl(ForesterWork* self) {
+int ForesterWork_Slot8_Impl(ForesterWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -1026,6 +1027,7 @@ void ForesterWork_Slot8_Impl(ForesterWork* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 

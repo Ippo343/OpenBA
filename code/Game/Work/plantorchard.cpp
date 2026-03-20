@@ -445,7 +445,7 @@ bool PlantOrchard_Execute_Impl(PlantOrchard* /*self*/) {
 // Removes BST entry, marks cell available (sets validity to 0).
 // param4 is plain int cell index (not packed like PlantArea).
 // ============================================================
-void PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
+int PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -465,6 +465,7 @@ void PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* /*param2*/, void* /*
     // Mark cell as available (validity = 0 for orchard)
     char* validityArray = (char*)selfQ[0xb];
     validityArray[param4] = 0;
+    return 0;
 }
 
 
@@ -472,7 +473,7 @@ void PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* /*param2*/, void* /*
 // PlantOrchard::OnCancel (Slot7) -- 0x1400f4a20
 // Marks cell available. Does NOT remove BST entry (unlike OnComplete).
 // ============================================================
-void PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
+int PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
@@ -492,6 +493,7 @@ void PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* /*param2*/, void* /*pa
     // Mark cell as available
     char* validityArray = (char*)selfQ[0xb];
     validityArray[param4] = 0;
+    return 0;
 }
 
 
@@ -720,6 +722,7 @@ void PlantOrchard_DtorBody(PlantOrchard* self) {
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
     *(void**)selfAddr = s_vtable_Work;
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

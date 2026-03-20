@@ -79,17 +79,17 @@ static uint64_t Reimpl_Slot6(void* self, void* param2) {
 // ============================================================
 // Slot7 / OnCancel (0x1400f2e80) -- REIMPLEMENTED
 // ============================================================
-static void Reimpl_Slot7(void* self) {
+static int Reimpl_Slot7(void* self) {
     g_lastHook = "Pickup::Slot7";
-    Pickup_Slot7_Impl((Pickup*)self);
+    return Pickup_Slot7_Impl((Pickup*)self);
 }
 
 // ============================================================
 // Slot8 / CancelAll (0x1400f39f0) -- REIMPLEMENTED
 // ============================================================
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "Pickup::Slot8";
-    Pickup_Slot8_Impl((Pickup*)self);
+    return Pickup_Slot8_Impl((Pickup*)self);
 }
 
 // ============================================================

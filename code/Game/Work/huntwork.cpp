@@ -522,8 +522,9 @@ bool HuntWork_Slot6_Impl(HuntWork* self, void* param2) {
 // Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
-void HuntWork_Slot7_Impl(HuntWork* self, void* param2) {
+int HuntWork_Slot7_Impl(HuntWork* self, void* param2) {
     s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
 }
 
 
@@ -532,7 +533,7 @@ void HuntWork_Slot7_Impl(HuntWork* self, void* param2) {
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each leftmost node, cancels the work item via engine call.
 // ============================================================
-void HuntWork_Slot8_Impl(HuntWork* self) {
+int HuntWork_Slot8_Impl(HuntWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -555,6 +556,7 @@ void HuntWork_Slot8_Impl(HuntWork* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 
@@ -770,9 +772,7 @@ void HuntWork_DtorBody(HuntWork* self) {
     // Set vtable to AutoPickupWork, then Work
     *(void**)selfAddr = s_vtable_AutoPickupWork;
     *(void**)selfAddr = s_vtable_Work;
-
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

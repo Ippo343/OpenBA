@@ -437,8 +437,9 @@ bool TendArea_Slot6_Impl(TendArea* self, void* param2) {
 // ============================================================
 // TendArea::Slot7 -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
-void TendArea_Slot7_Impl(TendArea* self, void* param2) {
+int TendArea_Slot7_Impl(TendArea* self, void* param2) {
     s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
 }
 
 
@@ -447,7 +448,7 @@ void TendArea_Slot7_Impl(TendArea* self, void* param2) {
 // Loops through BST at +0x48 while count > 0.
 // For each leftmost node, cancels the work item.
 // ============================================================
-void TendArea_Slot8_Impl(TendArea* self) {
+int TendArea_Slot8_Impl(TendArea* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     while (*(int*)(selfAddr + 0x50) > 0) {
@@ -466,6 +467,7 @@ void TendArea_Slot8_Impl(TendArea* self) {
         fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x278));
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
+    return 0;
 }
 
 
@@ -673,8 +675,7 @@ void TendArea_DtorBody(TendArea* self) {
 
     // Set vtable to Work base
     *(void**)selfAddr = s_vtable_Work;
-
-    // Tail call to Object::Internal::~Internal handled by caller
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

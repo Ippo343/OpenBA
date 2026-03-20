@@ -20,13 +20,16 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t pa
 
 // Slot6 (vtable +0x30): Insert work item into tree, remove if present.
 // Simpler than HarvestArea -- single int key, no paired entry.
-void HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* param2, void* param3, int param4);
+// Returns int (bug class 7 -- action executor reads EAX).
+int HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* param2, void* param3, int param4);
 
 // Slot7 (vtable +0x38): Tree node lookup/insertion with validation.
-void HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* param2, void* param3, int param4);
+// Returns int (bug class 7 -- action executor reads EAX).
+int HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* param2, void* param3, int param4);
 
 // Slot8 (vtable +0x40): CancelAll -- loops tree, cancels each work item.
-void HarvestOrchard_Slot8_Impl(HarvestOrchard* self);
+// Returns int (bug class 7 -- action executor reads EAX).
+int HarvestOrchard_Slot8_Impl(HarvestOrchard* self);
 
 // Slot9 (vtable +0x48): RemoveInvalid -- validates tree entries, removes dead ones.
 // Returns int per bug class 7. Hook DISABLED (bug class 2 -- MOV RAX,RSP).

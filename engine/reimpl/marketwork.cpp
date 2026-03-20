@@ -69,10 +69,10 @@ static uint8_t Reimpl_Slot6(void* self, void* param2) {
 // Slot8 (0x1400f1ca0) — passthrough (DISABLED hook — short Jcc)
 // Clean reimpl in code/Game/Work/marketwork.cpp for standalone exe.
 // ============================================================
-typedef void (*fn_Slot8_t)(void* self);
-static void Reimpl_Slot8(void* self) {
+typedef int (*fn_Slot8_t)(void* self);
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "MarketWork::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    return ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
 }
 
 // ============================================================

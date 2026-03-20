@@ -122,11 +122,11 @@ void RemoveTradeWorkSlot6() { RemoveHook(&g_hookSlot6); }
 // ============================================================
 // Slot8 / CancelAll (0x1400f6be0) — REIMPLEMENTED
 // ============================================================
-typedef void (*TrW_Slot8_t)(void* self);
+typedef int (*TrW_Slot8_t)(void* self);
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "TradeWork::Slot8";
-    TradeWork_Slot8_Impl((TradeWork*)self);
+    return TradeWork_Slot8_Impl((TradeWork*)self);
 }
 
 void InstallTradeWorkSlot8() {

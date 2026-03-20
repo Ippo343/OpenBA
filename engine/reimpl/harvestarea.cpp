@@ -104,12 +104,12 @@ void RemoveHarvestAreaSlot4() { RemoveHook(&g_hookSlot4); }
 // Note: original takes 4 params (self, param2, param3, param4)
 // but the hook was declared with only 2. We pass through correctly.
 // ============================================================
-typedef void (*HA_Slot6_t)(void* self, void* param2, void* param3, uint32_t param4);
+typedef int (*HA_Slot6_t)(void* self, void* param2, void* param3, uint32_t param4);
 static HookInfo g_hookSlot6;
 
-static void Reimpl_Slot6(void* self, void* param2, void* param3, uint32_t param4) {
+static int Reimpl_Slot6(void* self, void* param2, void* param3, uint32_t param4) {
     g_lastHook = "HarvestArea::Slot6";
-    HarvestArea_Slot6_Impl((HarvestArea*)self, param2, param3, param4);
+    return HarvestArea_Slot6_Impl((HarvestArea*)self, param2, param3, param4);
 }
 
 void InstallHarvestAreaSlot6() {
@@ -127,12 +127,12 @@ void RemoveHarvestAreaSlot6() { RemoveHook(&g_hookSlot6); }
 // Slot7 (0x1400ECB60) — REIMPLEMENTED
 // Tree node lookup/insertion with validation.
 // ============================================================
-typedef void (*HA_Slot7_t)(void* self, void* param2, void* param3, uint32_t param4);
+typedef int (*HA_Slot7_t)(void* self, void* param2, void* param3, uint32_t param4);
 static HookInfo g_hookSlot7;
 
-static void Reimpl_Slot7(void* self, void* param2, void* param3, uint32_t param4) {
+static int Reimpl_Slot7(void* self, void* param2, void* param3, uint32_t param4) {
     g_lastHook = "HarvestArea::Slot7";
-    HarvestArea_Slot7_Impl((HarvestArea*)self, param2, param3, param4);
+    return HarvestArea_Slot7_Impl((HarvestArea*)self, param2, param3, param4);
 }
 
 void InstallHarvestAreaSlot7() {
@@ -150,12 +150,12 @@ void RemoveHarvestAreaSlot7() { RemoveHook(&g_hookSlot7); }
 // Slot8 / CancelAll (0x1400ED270) — REIMPLEMENTED
 // Loops tree at +0x48, cancels each work item via engine call.
 // ============================================================
-typedef void (*HA_Slot8_t)(void* self);
+typedef int (*HA_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "HarvestArea::Slot8";
-    HarvestArea_Slot8_Impl((HarvestArea*)self);
+    return HarvestArea_Slot8_Impl((HarvestArea*)self);
 }
 
 void InstallHarvestAreaSlot8() {

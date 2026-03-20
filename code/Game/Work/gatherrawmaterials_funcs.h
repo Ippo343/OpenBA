@@ -31,12 +31,14 @@ int GatherRawMaterials_OnComplete_Impl(GatherRawMaterials* self, void* param2,
 
 // OnCancel (vtable slot 7, 0x1400ebdb0):
 // Cancel handler -- removes from tree, decrements build counts.
-void GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
+// Returns int per bug class 7.
+int GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
                                        void* param3, uint32_t param4);
 
 // Cleanup (vtable slot 8, 0x1400ec480):
 // Release assigned citizens from tree at +0x68.
-void GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self);
+// Returns int per bug class 7.
+int GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self);
 
 // Validate (vtable slot 9, 0x1400ebb50):
 // Check assigned tasks are still valid.

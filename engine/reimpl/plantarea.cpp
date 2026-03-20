@@ -107,17 +107,17 @@ static uint64_t Reimpl_Slot4(void* self, void* param2, uint64_t param3, uint64_t
 // ============================================================
 // OnComplete (Slot6, 0x1400f3f60) — REIMPLEMENTED
 // ============================================================
-static void Reimpl_OnComplete(void* self, void* param2, void* param3, uint32_t param4) {
+static int Reimpl_OnComplete(void* self, void* param2, void* param3, uint32_t param4) {
     g_lastHook = "PlantArea::OnComplete";
-    PlantArea_OnComplete_Impl((PlantArea*)self, param2, param3, param4);
+    return PlantArea_OnComplete_Impl((PlantArea*)self, param2, param3, param4);
 }
 
 // ============================================================
 // OnCancel (Slot7, 0x1400f3ea0) — REIMPLEMENTED
 // ============================================================
-static void Reimpl_OnCancel(void* self, void* param2, void* param3, uint32_t param4) {
+static int Reimpl_OnCancel(void* self, void* param2, void* param3, uint32_t param4) {
     g_lastHook = "PlantArea::OnCancel";
-    PlantArea_OnCancel_Impl((PlantArea*)self, param2, param3, param4);
+    return PlantArea_OnCancel_Impl((PlantArea*)self, param2, param3, param4);
 }
 
 // ============================================================

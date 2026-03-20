@@ -103,12 +103,12 @@ void RemoveHarvestOrchardSlot4() { RemoveHook(&g_hookSlot4); }
 // Slot6 (0x1400ED880) — REIMPLEMENTED
 // Tree insert/remove with single int key.
 // ============================================================
-typedef void (*HO_Slot6_t)(void* self, void* param2, void* param3, int param4);
+typedef int (*HO_Slot6_t)(void* self, void* param2, void* param3, int param4);
 static HookInfo g_hookSlot6;
 
-static void Reimpl_Slot6(void* self, void* param2, void* param3, int param4) {
+static int Reimpl_Slot6(void* self, void* param2, void* param3, int param4) {
     g_lastHook = "HarvestOrchard::Slot6";
-    HarvestOrchard_Slot6_Impl((HarvestOrchard*)self, param2, param3, param4);
+    return HarvestOrchard_Slot6_Impl((HarvestOrchard*)self, param2, param3, param4);
 }
 
 void InstallHarvestOrchardSlot6() {
@@ -126,12 +126,12 @@ void RemoveHarvestOrchardSlot6() { RemoveHook(&g_hookSlot6); }
 // Slot7 (0x1400ED810) — REIMPLEMENTED
 // Tree node lookup/insertion with validation.
 // ============================================================
-typedef void (*HO_Slot7_t)(void* self, void* param2, void* param3, int param4);
+typedef int (*HO_Slot7_t)(void* self, void* param2, void* param3, int param4);
 static HookInfo g_hookSlot7;
 
-static void Reimpl_Slot7(void* self, void* param2, void* param3, int param4) {
+static int Reimpl_Slot7(void* self, void* param2, void* param3, int param4) {
     g_lastHook = "HarvestOrchard::Slot7";
-    HarvestOrchard_Slot7_Impl((HarvestOrchard*)self, param2, param3, param4);
+    return HarvestOrchard_Slot7_Impl((HarvestOrchard*)self, param2, param3, param4);
 }
 
 void InstallHarvestOrchardSlot7() {
@@ -148,12 +148,12 @@ void RemoveHarvestOrchardSlot7() { RemoveHook(&g_hookSlot7); }
 // ============================================================
 // Slot8 / CancelAll (0x1400EDDC0) — REIMPLEMENTED
 // ============================================================
-typedef void (*HO_Slot8_t)(void* self);
+typedef int (*HO_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "HarvestOrchard::Slot8";
-    HarvestOrchard_Slot8_Impl((HarvestOrchard*)self);
+    return HarvestOrchard_Slot8_Impl((HarvestOrchard*)self);
 }
 
 void InstallHarvestOrchardSlot8() {

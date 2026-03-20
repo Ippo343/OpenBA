@@ -30,12 +30,12 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP);
 int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4);
 
 // ConsumeProduce::OnCancel (vtable slot 7) -- delegates to OnComplete with cleared flag.
-// Original: 0x1400e7780
-void ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4);
+// Original: 0x1400e7780. Returns int per bug class 7.
+int ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4);
 
 // ConsumeProduce::Cleanup (vtable slot 8) -- release assigned citizens.
-// Original: 0x1400e8f30
-void ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self);
+// Original: 0x1400e8f30. Returns int per bug class 7.
+int ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self);
 
 // ConsumeProduce::Validate (vtable slot 9) -- check assigned tasks are still valid.
 // Returns int per bug class 7. Original: 0x1400e7530

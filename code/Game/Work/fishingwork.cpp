@@ -828,15 +828,16 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
 // The decompiled code copies param2 and param3 then calls
 // vtable[+0x30](self, &copy2, &copy3).
 // ============================================================
-void FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3) {
+int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3) {
     // Copy the pointed-to values
     uintptr_t copy2 = *(uintptr_t*)param2;
     uintptr_t copy3 = *(uintptr_t*)param3;
 
     // Call vtable slot +0x30 (Slot6)
     uintptr_t vt = *(uintptr_t*)self;
-    typedef void (*VtSlot30_t)(FishingWork*, void*, void*);
+    typedef int (*VtSlot30_t)(FishingWork*, void*, void*);
     (*(VtSlot30_t*)(vt + 0x30))(self, &copy2, &copy3);
+    return 0;
 }
 
 // ============================================================
@@ -846,11 +847,11 @@ void FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3) {
 //     calls CancelPendingActions on their state machine action list
 //   - Then clears the citizen IBP slot
 // ============================================================
-void FishingWork_Slot8_Impl(FishingWork* self) {
+int FishingWork_Slot8_Impl(FishingWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
     int citizenCount = *(int*)(selfAddr + 0x50);
-    if (citizenCount <= 0) return;
+    if (citizenCount <= 0) return 0;
 
     int i = 0;
     int64_t offset = 0;
@@ -872,6 +873,7 @@ void FishingWork_Slot8_Impl(FishingWork* self) {
         i++;
         offset += 8;
     } while (i < *(int*)(selfAddr + 0x50));
+    return 0;
 }
 
 // ============================================================

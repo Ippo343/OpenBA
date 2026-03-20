@@ -25,10 +25,12 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP);
 int BuildRoad_OnComplete_Impl(BuildRoad* self, void* param2, void* param3, int param4);
 
 // BuildRoad::OnCancel — clear target entity ref
-void BuildRoad_OnCancel_Impl(BuildRoad* self);
+// Returns int per bug class 7.
+int BuildRoad_OnCancel_Impl(BuildRoad* self);
 
 // BuildRoad::Cleanup — remove pending work from target's task list
-void BuildRoad_Cleanup_Impl(BuildRoad* self);
+// Returns int per bug class 7.
+int BuildRoad_Cleanup_Impl(BuildRoad* self);
 
 // BuildRoad::Validate — check if assigned task still valid
 int BuildRoad_Validate_Impl(BuildRoad* self, void* param2);

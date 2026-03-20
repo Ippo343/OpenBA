@@ -551,13 +551,13 @@ bool PastureWork_Slot6_Impl(PastureWork* self, void* param2) {
 //    c. Clear "flagged for removal" bit (0x100000) in entity flags at +0x20
 //    d. If flag changed and entity has parent (+0x10), call UpdateParentEntity
 // ============================================================
-void PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
+int PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
     // Insert citizen into BST
     s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
 
     // Check if param3 entity is valid
     if (*(uintptr_t*)param3 == 0) {
-        return;
+        return 0;
     }
 
     fn_InternalBasePtr_CheckPtr(param3);
@@ -565,7 +565,7 @@ void PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
 
     // Check if derived from ComponentEntity
     if (!fn_IsDerivedFrom((void*)entity, *s_typeId_ComponentEntity)) {
-        return;
+        return 0;
     }
 
     // Find NatRes component
@@ -573,7 +573,7 @@ void PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
     s_fn_FindComp_NatRes(entity, natResIBP);
 
     if (*(uintptr_t*)natResIBP == 0) {
-        return;
+        return 0;
     }
 
     // Clear "flagged for removal" bit (0x100000) in entity flags at +0x20
@@ -591,6 +591,7 @@ void PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
             s_fn_UpdateParentEntity(parentEntity);
         }
     }
+    return 0;
 }
 
 
@@ -598,7 +599,7 @@ void PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
 // PastureWork::Slot8 / CancelAll (0x1400F2B90)
 // Identical to HuntWork::Slot8 -- loops tree, cancels each.
 // ============================================================
-void PastureWork_Slot8_Impl(PastureWork* self) {
+int PastureWork_Slot8_Impl(PastureWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -618,6 +619,7 @@ void PastureWork_Slot8_Impl(PastureWork* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 
@@ -814,6 +816,7 @@ void PastureWork_DtorBody(PastureWork* self) {
 
     *(void**)selfAddr = s_vtable_AutoPickupWork;
     *(void**)selfAddr = s_vtable_Work;
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

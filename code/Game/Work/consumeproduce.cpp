@@ -1076,7 +1076,7 @@ int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* /*param2*/,
 // OnCancel (0x1400e7780) -- vtable slot 7
 // Delegates to OnComplete with bit 16 cleared (no produce increment).
 // ============================================================
-void ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4) {
+int ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4) {
     // Copy params, clear bit 16, call OnComplete (slot 6)
     // In original: reads vtable slot +0x30 (OnComplete) and calls it
     uint32_t modifiedParam4 = param4 & 0xFFFEFFFF;  // clear bit 16
@@ -1085,15 +1085,16 @@ void ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void
     void* vtable = self->vtable;
     OnComplete_t onComplete = *(OnComplete_t*)((uintptr_t)vtable + 0x30);
     onComplete(self, param2, param3, modifiedParam4);
+    return 0;
 }
 
 // ============================================================
 // Cleanup (0x1400e8f30) -- vtable slot 8
 // Iterates assigned citizens in the IBP array, clears their task state.
 // ============================================================
-void ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self) {
+int ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self) {
     int count = self->field_60;
-    if (count <= 0) return;
+    if (count <= 0) return 0;
 
     uintptr_t* ibpArray = (uintptr_t*)self->field_58;
 
@@ -1112,6 +1113,7 @@ void ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self) {
         // Call task list cleanup on the SM component's task list (+0x48)
         s_fn_TaskListCleanup((void*)(smComp + 0x48));
     }
+    return 0;
 }
 
 // ============================================================

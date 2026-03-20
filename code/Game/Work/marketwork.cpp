@@ -264,10 +264,11 @@ bool MarketWork_Slot6_Impl(MarketWork* self, void* param2) {
 // MarketWork likely uses the same pattern with its own BST remove.
 // Implemented for standalone exe completeness.
 //
-void MarketWork_Slot7_Impl(MarketWork* self, void* param2) {
+int MarketWork_Slot7_Impl(MarketWork* self, void* param2) {
     // MarketWork's BST remove uses different node layout
     // This is the "remove by key" equivalent for market BST
     s_fn_MarketBST_Remove((void*)((uintptr_t)self + 0x48), param2);
+    return 0;
 }
 
 
@@ -281,7 +282,7 @@ void MarketWork_Slot7_Impl(MarketWork* self, void* param2) {
 // - Left child at node+0x20 (not +0x10)
 // - node[4] in longlong* terms = byte offset 0x20
 //
-void MarketWork_Slot8_Impl(MarketWork* self) {
+int MarketWork_Slot8_Impl(MarketWork* self) {
     uintptr_t selfAddr = (uintptr_t)self;
     int count = *(int*)(selfAddr + 0x50);
 
@@ -305,6 +306,7 @@ void MarketWork_Slot8_Impl(MarketWork* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 
@@ -596,11 +598,9 @@ void MarketWork_DtorBody(MarketWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to Work, then Internal dtor will be called
+    // Set vtable to Work, then call Internal dtor
     *(void**)selfAddr = s_vtable_Work;
-
-    // The original does a tail-call JMP to Object::Internal::~Internal.
-    // We rely on the ScalarDtor wrapper to handle the free after this returns.
+    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 

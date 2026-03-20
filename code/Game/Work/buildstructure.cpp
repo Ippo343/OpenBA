@@ -125,30 +125,32 @@ void BuildStructure_BaseDtor(BuildStructure* self) {
 // ============================================================
 // OnComplete (0x1400e4f80)
 // ============================================================
-void BuildStructure_OnComplete(BuildStructure* self, void* citizenIBP,
+int BuildStructure_OnComplete(BuildStructure* self, void* citizenIBP,
                                 void* unused, int slotIndex) {
     fn_TreeRemoveByKey((void*)&self->field_60, citizenIBP);
     uint8_t* slots = (uint8_t*)self->field_50;
     slots[slotIndex] = 0;
+    return 0;
 }
 
 // ============================================================
 // OnCancel (0x1400e4f40)
 // ============================================================
-void BuildStructure_OnCancel(BuildStructure* self, void* citizenIBP,
+int BuildStructure_OnCancel(BuildStructure* self, void* citizenIBP,
                               void* unused, int slotIndex) {
     fn_TreeRemoveByKey((void*)&self->field_60, citizenIBP);
     uint8_t* slots = (uint8_t*)self->field_50;
     slots[slotIndex] = 0;
+    return 0;
 }
 
 // ============================================================
 // Cleanup (0x1400e57a0)
 // ============================================================
-void BuildStructure_Cleanup(BuildStructure* self) {
+int BuildStructure_Cleanup(BuildStructure* self) {
     while (true) {
         void* root = self->field_60;
-        if (root == nullptr) return;
+        if (root == nullptr) return 0;
 
         void* node = root;
         void* leftChild = *(void**)((uintptr_t)node + 0x10);
@@ -157,7 +159,7 @@ void BuildStructure_Cleanup(BuildStructure* self) {
             leftChild = *(void**)((uintptr_t)node + 0x10);
         }
 
-        if (node == nullptr) return;
+        if (node == nullptr) return 0;
 
         void* node2 = root;
         if (node2 != nullptr) {

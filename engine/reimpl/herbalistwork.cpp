@@ -111,12 +111,12 @@ void RemoveHerbalistWorkSlot4() { RemoveHook(&g_hookSlot4); }
 // ============================================================
 // Slot8 / CancelAll (0x1400EEAE0) — REIMPLEMENTED
 // ============================================================
-typedef void (*HW_Slot8_t)(void* self);
+typedef int (*HW_Slot8_t)(void* self);
 static HookInfo g_hookSlot8;
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "HerbalistWork::Slot8";
-    HerbalistWork_Slot8_Impl((HerbalistWork*)self);
+    return HerbalistWork_Slot8_Impl((HerbalistWork*)self);
 }
 
 void InstallHerbalistWorkSlot8() {
