@@ -317,9 +317,8 @@ found_dest_storage:
         // Validate the work assignment
         fn_InternalBasePtr_CheckPtr(citizenAI);
         void* citizenVal = *(void**)citizenAI;
-        uint64_t citizenRefCopy = (uint64_t)citizenVal;
 
-        if (!fn_Work_ValidateAssignment(self, &citizenRefCopy, destCell, srcCell, time)) {
+        if (!fn_Work_ValidateAssignment(self, citizenAI, destCell, srcCell, time)) {
             return 0;
         }
 

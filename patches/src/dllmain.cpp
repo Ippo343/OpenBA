@@ -107,6 +107,8 @@ static LONG CALLBACK VectoredCrashHandler(EXCEPTION_POINTERS* ep) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
+
+
     // Write to both stdout (patch_debug.log) and a dedicated crash file
     std::string crashPath = GameDirPath("patch_crash.log");
     FILE* crashFile = fopen(crashPath.c_str(), "w");

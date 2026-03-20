@@ -291,20 +291,20 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 
     // Traverse: buildMgmt -> +0x10 child -> find build description (type DWORD_1401c80e0)
     fn_InternalBasePtr_CheckPtr(&buildMgmtIBP);
-    uintptr_t buildMgmt = *(uintptr_t*)buildMgmtIBP;
+    uintptr_t buildMgmt = buildMgmtIBP;
     fn_InternalBasePtr_CheckPtr((void*)(buildMgmt + 0x10));
     uintptr_t buildDescIBP = 0;
     fn_Entity_FindComponent_BuildDesc(*(uintptr_t*)(buildMgmt + 0x10), &buildDescIBP);
     fn_InternalBasePtr_CheckPtr(&buildDescIBP);
 
     // Check if building is enabled (byte at +0x50 of description)
-    if (*(uint8_t*)(*(uintptr_t*)buildDescIBP + 0x50) == 0) {
+    if (*(uint8_t*)(buildDescIBP + 0x50) == 0) {
         return 1;
     }
 
     // --- Phase 2: Check if we have positions left to build ---
     fn_InternalBasePtr_CheckPtr(&posCompIBP);
-    int totalPositions = fn_PositionComponent_Count(*(uintptr_t*)posCompIBP, 1);
+    int totalPositions = fn_PositionComponent_Count(posCompIBP, 1);
     if (self->field_68 >= totalPositions) {
         return 1;
     }
@@ -314,15 +314,15 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     uintptr_t bcIBP = 0;
     fn_Entity_FindComponent_BuildDesc(*(uintptr_t*)(s + 0x10), &bcIBP);
     fn_InternalBasePtr_CheckPtr(&bcIBP);
-    int currentBuilders = *(int32_t*)(*(uintptr_t*)bcIBP + 0x60);
+    int currentBuilders = *(int32_t*)(bcIBP + 0x60);
 
     fn_InternalBasePtr_CheckPtr(&bcIBP);
-    uintptr_t bc2 = *(uintptr_t*)bcIBP;
+    uintptr_t bc2 = bcIBP;
     fn_InternalBasePtr_CheckPtr((void*)(bc2 + 0x10));
     uintptr_t matDescIBP = 0;
     fn_Entity_FindComponent_MatDesc(*(uintptr_t*)(bc2 + 0x10), &matDescIBP);
     fn_InternalBasePtr_CheckPtr(&matDescIBP);
-    uintptr_t matDesc = *(uintptr_t*)matDescIBP;
+    uintptr_t matDesc = matDescIBP;
 
     // Calculate max builders if not yet done
     if (*(int32_t*)(matDesc + 0x30) == 0) {
@@ -333,7 +333,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     if (currentBuilders == *(int32_t*)(matDesc + 0x30)) {
         bool found = false;
         fn_InternalBasePtr_CheckPtr(&bcIBP);
-        if (*(int32_t*)(*(uintptr_t*)bcIBP + 0x60) < 1) {
+        if (*(int32_t*)(bcIBP + 0x60) < 1) {
             return 1;
         }
 
@@ -341,7 +341,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         uintptr_t byteOff = 0;
         do {
             fn_InternalBasePtr_CheckPtr(&bcIBP);
-            uintptr_t bcVal = *(uintptr_t*)bcIBP;
+            uintptr_t bcVal = bcIBP;
             uintptr_t builderId = *(uintptr_t*)(byteOff + *(uintptr_t*)(bcVal + 0x58));
 
             fn_InternalBasePtr_CheckPtr(citizenPtr);
@@ -352,7 +352,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
             i++;
 
             fn_InternalBasePtr_CheckPtr(&bcIBP);
-        } while (i < *(int32_t*)(*(uintptr_t*)bcIBP + 0x60));
+        } while (i < *(int32_t*)(bcIBP + 0x60));
 
         if (!found) {
             return 1;
@@ -411,7 +411,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         fn_InternalBasePtr_CheckPtr(&posCompIBP);
         float candidatePos[3];
         fn_Entity_GetPositionForIndex(
-            *(uintptr_t*)posCompIBP, candidatePos, 1, chosenIndex, nullptr);
+            posCompIBP, candidatePos, 1, chosenIndex, nullptr);
 
         gridSize = *mapGrid;
         int candidateCell = WorldToCell(gridSize, candidatePos[0], candidatePos[1]);
@@ -425,7 +425,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                 fn_InternalBasePtr_CheckPtr(&posCompIBP);
                 float bestPos[3];
                 fn_Entity_GetPositionForIndex(
-                    *(uintptr_t*)posCompIBP, bestPos, 1, chosenIndex, nullptr);
+                    posCompIBP, bestPos, 1, chosenIndex, nullptr);
 
                 gridSize = *mapGrid;
                 int exactCell = WorldToCell(gridSize, bestPos[0], bestPos[1]);
@@ -445,7 +445,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                     fn_InternalBasePtr_CheckPtr(&posCompIBP);
                     float testPos[3];
                     fn_Entity_GetPositionForIndex(
-                        *(uintptr_t*)posCompIBP, testPos, 1, posIdx, nullptr);
+                        posCompIBP, testPos, 1, posIdx, nullptr);
 
                     gridSize = *mapGrid;
                     int testCell = WorldToCell(gridSize, testPos[0], testPos[1]);

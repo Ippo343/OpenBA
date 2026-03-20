@@ -72,39 +72,31 @@ static void Reimpl_Update(SpawnComponent* self, int64_t* pDeltaTime) {
     }
 #endif
 
-    // Get the linked object from owner entity (via FUN_1400052c0)
-    // CheckPtr on owner (self+0x10) is a no-op, skip
+    // CheckPtr on owner IBP, then get linked object (FUN_1400052c0)
+    uintptr_t ownerIBP = (uintptr_t)self + 0x10;
+    fn_InternalBasePtr_CheckPtr((void*)ownerIBP);
     uintptr_t linkedObjPtr = 0;
-    if (fn_GetLinkedObject) {
-        fn_GetLinkedObject(*(void**)((uintptr_t)self + 0x10), &linkedObjPtr);
-    }
+    fn_GetLinkedObject(*(void**)ownerIBP, &linkedObjPtr);
 
     // Get resource data via IsDerivedFrom check on _unk18
     void* baseObj = self->_unk18;
-    void* resourceData = nullptr;
-    if (baseObj && fn_IsDerivedFrom && g_pSpawnResourceTypeId) {
-        if (fn_IsDerivedFrom(baseObj, *g_pSpawnResourceTypeId)) {
-            resourceData = baseObj;
-        }
-    }
+    bool isDerived = fn_IsDerivedFrom(baseObj, *g_pSpawnResourceTypeId);
+    void* resourceData = isDerived ? baseObj : nullptr;
 
-    // CheckPtr on linkedObjPtr is a no-op, skip
-    // Get current growth rate from linked object
+    // CheckPtr on linked object IBP before reading growth
+    fn_InternalBasePtr_CheckPtr(&linkedObjPtr);
     float currentGrowth = *(float*)(linkedObjPtr + 0x28);
 
     // Get spawn entry count from resourceData+0x28
     int entryCount = *(int*)((uintptr_t)resourceData + 0x28);
     if (entryCount <= 0) return;
 
-    // Iterate spawn entries
     // Resource data layout at +0x20: pointer to array of 0x10-byte entries
     //   Each entry: +0x00 = pointer to template data
     //               +0x08 = float minGrowth
     //               +0x0C = float maxGrowth
-    // Timer array at self->field28 (self+0x28): array of int64 timers, one per entry
-
+    // Timer array at self+0x28: array of int64 timers, one per entry
     uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)resourceData + 0x20);
-    int64_t* timerArray = *(int64_t**)((uintptr_t)self + 0x28);
 
     for (int i = 0; i < entryCount; i++) {
         uintptr_t entry = entryArrayBase + (uintptr_t)i * 0x10;
@@ -117,25 +109,26 @@ static void Reimpl_Update(SpawnComponent* self, int64_t* pDeltaTime) {
             continue;
         }
 
-        // Accumulate delta time for this entry
-        timerArray[i] += *pDeltaTime;
+        // Accumulate delta time — re-read timer base each iteration (DoSpawn may realloc)
+        int64_t byteOffset = (int64_t)i * 8;
+        int64_t* pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
+        *pTimer += *pDeltaTime;
 
         // Get spawn template data from the entry
         uintptr_t templateData = *(uintptr_t*)entry;
 
         // Search template's component list for the spawn interval component
-        // templateData+0x30 = count of components, templateData+0x28 = array of component ptrs
+        // templateData+0x30 = count, templateData+0x28 = array of component ptrs
         int componentCount = *(int*)(templateData + 0x30);
         void* spawnIntervalComp = nullptr;
 
         for (int j = 0; j < componentCount; j++) {
             void* comp = *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8);
             // Call virtual GetDescription (vtable slot 2, offset +0x10) to get type ID
-            typedef int (*fn_GetDescription_t)(void*);
-            int typeId = ((fn_GetDescription_t)(*(void***)(comp))[2])(comp);
+            typedef uint32_t (*fn_GetTypeId_t)(void*);
+            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
 
-            if (g_pSpawnTemplateTypeId && typeId == (int)*g_pSpawnTemplateTypeId) {
-                // Found the matching component, verify with IsDerivedFrom
+            if (typeId == *g_pSpawnTemplateTypeId) {
                 if (fn_IsDerivedFrom(comp, *g_pSpawnTemplateTypeId)) {
                     spawnIntervalComp = comp;
                 }
@@ -143,17 +136,20 @@ static void Reimpl_Update(SpawnComponent* self, int64_t* pDeltaTime) {
             }
         }
 
-        // Convert the spawn interval (seconds) to ticks
-        // spawnIntervalComp+0x28 is float interval in game-time units
+        if (!spawnIntervalComp) continue;
+
+        // Convert spawn interval (game-time units * SECS_PER_SEASON) to ticks
+        // Original: System::Time::Time(&ticks, interval * 300.0f)
         float intervalSecs = *(float*)((uintptr_t)spawnIntervalComp + 0x28) * SECS_PER_SEASON;
         int64_t intervalTicks = (int64_t)((double)intervalSecs / *g_Timer_secondsPerTick);
 
-        // While accumulated time exceeds interval, spawn and subtract
-        while (timerArray[i] >= intervalTicks) {
-            timerArray[i] -= intervalTicks;
-            if (fn_DoSpawn) {
-                fn_DoSpawn(self, resourceData, i, 0);
-            }
+        // Re-read timer pointer (DoSpawn may realloc the array)
+        pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
+        while (intervalTicks > 0 && *pTimer >= intervalTicks) {
+            *pTimer -= intervalTicks;
+            fn_DoSpawn(self, resourceData, i, 0);
+            // Re-read after each spawn — original does this
+            pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
         }
     }
 }

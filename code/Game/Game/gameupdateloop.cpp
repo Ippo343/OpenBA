@@ -327,8 +327,8 @@ static void** g_pDebugSingleton = nullptr;
 // ============================================================
 static bool s_initialized = false;
 static int s_frameNum = 0;
-// Only log first 3 frames to avoid spamming the log
-#define TRACE(...) do { if (s_frameNum <= 3) printf(__VA_ARGS__); } while(0)
+// Debug trace — disabled for performance, enable when debugging
+#define TRACE(...) do { } while(0)
 
 static void EnsureInit() {
     if (s_initialized) return;

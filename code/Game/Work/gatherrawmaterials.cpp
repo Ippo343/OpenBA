@@ -362,6 +362,9 @@ static uintptr_t TreeNext(uintptr_t node) {
 void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     uintptr_t selfAddr = (uintptr_t)self;
 
+    printf("[GRM::Serialize] ENTER self=%p +0x48=%p +0x58=%p\n",
+        self, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58));
+
     // Call base Work::Serialize
     s_fn_Work_Serialize(self, stream);
 
@@ -401,6 +404,9 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     s_fn_TreeSerialize((void*)(selfAddr + 0x68), serializerBuf);
 
     s_fn_Serializer_Dtor(serializerBuf);
+
+    printf("[GRM::Serialize] EXIT self=%p +0x48=%p +0x58=%p\n",
+        self, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58));
 }
 
 // ============================================================
@@ -417,6 +423,9 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                                      uint64_t param3, uint64_t /*param4*/) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
+
+    printf("[GRM::Execute] ENTER self=%p entityIBP=%p +0x48=%p +0x58=%p\n",
+        self, entityIBP, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58));
 
     // --- Find PositionComponent on work entity (self+0x10) ---
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
@@ -501,10 +510,11 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
             // --- Search for a storage entity with this resource ---
             uintptr_t foundEntity = 0;
             float searchPos[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            uintptr_t excludeIBP = 0;  // Original: local null-initialized IBP (NOT &self->field_10)
 
             s_fn_FindStorageForResource(worldEntityList, &foundEntity, citizenCell,
                 *(uint64_t*)(slotOffset + matDescBase), 1, '\0', searchPos,
-                (void*)(selfAddr + 0x10));
+                (void*)&excludeIBP);
 
             if (foundEntity == 0) {
                 // No storage found for this slot
@@ -553,18 +563,18 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 int foundSlotIdx = -1;
                 int availableAmount = 0;
 
+                // Search storage slots for matching material type
+                // R8D=slotIdx starts at 0, increments on miss, used on match
                 if (storageSlotCount > 0) {
                     uintptr_t* slotArray = *(uintptr_t**)(storageComp + 0x28);
                     for (int si = 0; si < storageSlotCount; si++) {
                         if (slotArray[si * 2] == *(uintptr_t*)(slotOffset + matDescBase)) {
-                            if (foundSlotIdx >= 0) {
-                                // Found matching slot -- calc available
-                                availableAmount = (int)slotArray[foundSlotIdx * 2 + 1] -
-                                    *(int*)((uintptr_t)slotArray + foundSlotIdx * 0x10 + 0xc);
+                            if (si >= 0) {  // R8D >= 0 (always true for unsigned, but matches original TEST R8D,R8D / JS)
+                                availableAmount = (int)slotArray[si * 2 + 1] -
+                                    *(int*)((uintptr_t)slotArray + si * 0x10 + 0xc);
                             }
                             break;
                         }
-                        foundSlotIdx = si;
                     }
                 }
 
@@ -625,12 +635,17 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 }
 
                 // --- Find path and assign work ---
+                // Original uses a 3-qword stack buffer; [0]=worldEntityList
+                uintptr_t pathBuf[3] = { (uintptr_t)worldEntityList, 0, 0 };
                 uintptr_t destEntity = foundEntity;
                 int* mapGridPtr = (int*)selfQ[2];  // Reread from self
                 void* citizenPtr = *(void**)entityIBP;
 
+                printf("[GRM::Execute] PathfindingFindPath: pathBuf=%p worldEL=%p citizen=%p dest=%p remaining=%d slot=%d\n",
+                    (void*)pathBuf, worldEntityList, citizenPtr, (void*)destEntity, remaining, slotIdx);
+
                 s_fn_PathfindingFindPath(
-                    worldEntityList,    // outResult (reused)
+                    pathBuf,            // stack buffer (original: local_58[3])
                     &citizenPtr,        // citizenPtr
                     (int)selfQ[4],      // pathType (priority/workplaceId)
                     &mapGridPtr,        // mapGridPtr
@@ -835,7 +850,7 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
                         }
 
                         if (invalidArray != newArray) {
-                            s_fn_MemFree(invalidArray);
+                            fn_MemFreeStatic(invalidArray);
                         }
                         invalidArray = newArray;
                     } else {
@@ -913,7 +928,7 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
         }
     }
 
-    s_fn_MemFree(invalidArray);
+    fn_MemFreeStatic(invalidArray);
     return (invalidCount == 0) ? 1 : 0;
 }
 
@@ -940,6 +955,10 @@ void* GatherRawMaterials_GetTarget_Impl(GatherRawMaterials* /*self*/, void* retb
 void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
     uintptr_t selfAddr = (uintptr_t)self;
 
+    printf("[GRM::DtorBody] self=%p +0x48=%p +0x58=%p +0x68=%p s_fn_MemFree=%p fn_MemFreeStatic=%p\n",
+        self, *(void**)(selfAddr + 0x48), *(void**)(selfAddr + 0x58), *(void**)(selfAddr + 0x68),
+        (void*)s_fn_MemFree, (void*)fn_MemFreeStatic);
+
     // Set vtable to GatherRawMaterials
     *(void**)selfAddr = s_vtable_GatherRawMaterials;
 
@@ -951,7 +970,7 @@ void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
         // Clean up right subtree
         s_fn_TreeNodeCleanup((void*)(selfAddr + 0x68), *(void**)((uintptr_t)bstRoot + 0x18));
         // Free root node
-        s_fn_MemFree(bstRoot);
+        fn_MemFreeStatic(bstRoot);
     }
 
     // Zero out BST root and count
@@ -959,12 +978,12 @@ void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
     *(uint32_t*)(selfAddr + 0x70) = 0;
 
     // Free second int array at +0x58
-    s_fn_MemFree(*(void**)(selfAddr + 0x58));
+    fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
     *(void**)(selfAddr + 0x58) = nullptr;
     *(uint64_t*)(selfAddr + 0x60) = 0;
 
     // Free first int array at +0x48
-    s_fn_MemFree(*(void**)(selfAddr + 0x48));
+    fn_MemFreeStatic(*(void**)(selfAddr + 0x48));
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint64_t*)(selfAddr + 0x50) = 0;
 
@@ -983,7 +1002,7 @@ void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
 void* GatherRawMaterials_ScalarDtor_Impl(GatherRawMaterials* self, uint32_t flags) {
     GatherRawMaterials_DtorBody(self);
     if (flags & 1) {
-        s_fn_MemFree(self);
+        fn_MemFreeStatic(self);
     }
     return self;
 }
