@@ -52,6 +52,7 @@ typedef bool  (*PW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t de
 typedef void* (*PW_FindComp_NatRes_t)(uintptr_t entity, void* outIBP);
 typedef void* (*PW_FindComp_Position_t)(uintptr_t entity, void* outIBP);
 typedef void* (*PW_FindComp_Family_t)(uintptr_t entity, void* outIBP);
+typedef void* (*PW_FindComp_Family2_t)(uintptr_t entity, void* outIBP);  // Entity_FindComponent_Family @ 0x1400012d0
 
 // Work::Serialize
 typedef void  (*PW_Work_Serialize_t)(void* self, void* stream);
@@ -80,11 +81,19 @@ typedef void  (*PW_TreeNodeCleanup_t)(void* bstRoot, void* node);
 typedef void  (*PW_MemFreeStatic_t)(void* ptr);
 
 // PastureWork-specific helpers
-typedef void* (*PW_FindEmptyAnimalSlot_t)(uintptr_t pastureComp, void* outIBP);
+typedef int   (*PW_PastureHelper8350_t)(uintptr_t pastureComp);
 typedef void  (*PW_ActionCtor_GrazingWork_t)(void* entityIBP, int priority, void* targetIBP,
-                                              float* position, int flag, uint8_t param6);
-// Entity_impl_2e20 -- get entity position from component
-typedef void  (*PW_Entity_GetPosition_t)(uintptr_t posComp, float* outPos);
+                                              uint32_t param4, float* position, float* position2,
+                                              uint32_t typeId, int param8, int param9);
+// RemoveAnimal_Action_Ctor (0x1400bbea0)
+typedef void  (*PW_RemoveAnimalCtor_t)(void* entityIBP, int priority, void* posPtr, int cell,
+                                        void* natResIBP, uintptr_t descPtr, uint32_t param7);
+// Entity_impl_2e20 -- get entity position by index from position component
+typedef void* (*PW_Entity_GetPosition_t)(uintptr_t posComp, float* outPos, int group, int index, float* outHeading);
+// FUN_140123070 -- count positions in a position component
+typedef int   (*PW_PositionCount_t)(uintptr_t posComp, int group);
+// FUN_1400f8620 -- storage overflow work check
+typedef uint64_t (*PW_StorageOverflowCheck_t)(uintptr_t storageWorkMgr, void* citizenIBP, int storageId, char flag);
 // FUN_1400c3470 -- update parent entity after flag change
 typedef void  (*PW_UpdateParentEntity_t)(uintptr_t parentEntity);
 
@@ -107,7 +116,8 @@ static PW_Map_FindNearestPassable_t    s_fn_Map_FindNearestPassable = nullptr;
 static PW_Map_CanPathTo_t              s_fn_Map_CanPathTo = nullptr;
 static PW_FindComp_NatRes_t             s_fn_FindComp_NatRes = nullptr;
 static PW_FindComp_Position_t          s_fn_FindComp_Position = nullptr;
-static PW_FindComp_Family_t            s_fn_FindComp_Family = nullptr;
+static PW_FindComp_Family_t            s_fn_FindComp_Family = nullptr;   // FUN_1400223c0
+static PW_FindComp_Family2_t           s_fn_FindComp_Family2 = nullptr;  // Entity_FindComponent_Family @ 0x1400012d0
 static PW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static PW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
 static PW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
@@ -121,9 +131,12 @@ static PW_CancelAllWork_t              s_fn_CancelAllWork = nullptr;
 static PW_FindSubEntity_t              s_fn_FindSubEntity = nullptr;
 static PW_TreeNodeCleanup_t            s_fn_TreeNodeCleanup = nullptr;
 static PW_MemFreeStatic_t              s_fn_MemFreeStatic = nullptr;
-static PW_FindEmptyAnimalSlot_t        s_fn_FindEmptyAnimalSlot = nullptr;
+static PW_PastureHelper8350_t          s_fn_PastureHelper8350 = nullptr;
 static PW_ActionCtor_GrazingWork_t     s_fn_ActionCtor_GrazingWork = nullptr;
-static PW_Entity_GetPosition_t        s_fn_Entity_GetPosition = nullptr;
+static PW_RemoveAnimalCtor_t           s_fn_RemoveAnimalCtor = nullptr;
+static PW_Entity_GetPosition_t         s_fn_Entity_GetPosition = nullptr;
+static PW_PositionCount_t             s_fn_PositionCount = nullptr;
+static PW_StorageOverflowCheck_t      s_fn_StorageOverflowCheck = nullptr;
 static PW_UpdateParentEntity_t         s_fn_UpdateParentEntity = nullptr;
 
 // Type ID constants
@@ -185,9 +198,11 @@ bool PastureWork_ResolveFuncs() {
     s_fn_FindComp_NatRes = reinterpret_cast<PW_FindComp_NatRes_t>(
         ResolveAddr(Module::Exe, 0x140005500));
     s_fn_FindComp_Position = reinterpret_cast<PW_FindComp_Position_t>(
-        ResolveAddr(Module::Exe, 0x140002e20));  // Entity_FindComponent_Position
+        ResolveAddr(Module::Exe, 0x140002ed0));  // Entity_FindComponent_Position
     s_fn_FindComp_Family = reinterpret_cast<PW_FindComp_Family_t>(
         ResolveAddr(Module::Exe, 0x1400223c0));
+    s_fn_FindComp_Family2 = reinterpret_cast<PW_FindComp_Family2_t>(
+        ResolveAddr(Module::Exe, 0x1400012d0));  // Entity_FindComponent_Family
     s_fn_Work_Serialize = reinterpret_cast<PW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<PW_BST_Serialize_t>(
@@ -204,12 +219,18 @@ bool PastureWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140002e10));
     s_fn_TreeNodeCleanup = reinterpret_cast<PW_TreeNodeCleanup_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
-    s_fn_FindEmptyAnimalSlot = reinterpret_cast<PW_FindEmptyAnimalSlot_t>(
-        ResolveAddr(Module::Exe, 0x140008350));
+    s_fn_PastureHelper8350 = reinterpret_cast<PW_PastureHelper8350_t>(
+        ResolveAddr(Module::Exe, 0x140128350));
     s_fn_ActionCtor_GrazingWork = reinterpret_cast<PW_ActionCtor_GrazingWork_t>(
         ResolveAddr(Module::Exe, 0x1400bb0a0));
+    s_fn_RemoveAnimalCtor = reinterpret_cast<PW_RemoveAnimalCtor_t>(
+        ResolveAddr(Module::Exe, 0x1400bbea0));
     s_fn_Entity_GetPosition = reinterpret_cast<PW_Entity_GetPosition_t>(
-        ResolveAddr(Module::Exe, 0x14009f3e0));  // Same as GetTerrainPos for position calc
+        ResolveAddr(Module::Exe, 0x140122e20));   // Entity_impl_2e20
+    s_fn_PositionCount = reinterpret_cast<PW_PositionCount_t>(
+        ResolveAddr(Module::Exe, 0x140123070));   // FUN_140123070
+    s_fn_StorageOverflowCheck = reinterpret_cast<PW_StorageOverflowCheck_t>(
+        ResolveAddr(Module::Exe, 0x1400f8620));   // FUN_1400f8620
     s_fn_UpdateParentEntity = reinterpret_cast<PW_UpdateParentEntity_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
 
@@ -279,9 +300,13 @@ bool PastureWork_ResolveFuncs() {
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
               s_fn_UpdateParentEntity &&
+              s_fn_PastureHelper8350 && s_fn_RemoveAnimalCtor &&
+              s_fn_Entity_GetPosition && s_fn_PositionCount &&
+              s_fn_StorageOverflowCheck && s_fn_FindComp_Family2 &&
               fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
               g_pGameWorldSingleton &&
               s_typeId_PastureComponent && s_typeId_ComponentEntity &&
+              s_typeId_NatResComponent &&
               s_fHalfCellOffset && s_fn_OrigSlot4;
 
     s_pasture_funcs_resolved = ok;
@@ -318,6 +343,11 @@ bool PastureWork_ResolveFuncs() {
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
         if (!s_fn_TreeNodeCleanup) printf("  MISSING: TreeNodeCleanup\n");
         if (!s_fn_UpdateParentEntity) printf("  MISSING: UpdateParentEntity\n");
+        if (!s_fn_PastureHelper8350) printf("  MISSING: PastureHelper8350\n");
+        if (!s_fn_RemoveAnimalCtor) printf("  MISSING: RemoveAnimalCtor\n");
+        if (!s_fn_Entity_GetPosition) printf("  MISSING: Entity_GetPosition\n");
+        if (!s_fn_PositionCount) printf("  MISSING: PositionCount\n");
+        if (!s_fn_StorageOverflowCheck) printf("  MISSING: StorageOverflowCheck\n");
         if (!s_fn_OrigSlot4) printf("  MISSING: OrigSlot4\n");
     }
 #endif
@@ -330,203 +360,376 @@ bool PastureWork_ResolveFuncs() {
 // PastureWork::Slot4 -- Pasture work assignment (0x1400F2370)
 // ============================================================
 //
-// This is the most complex Slot4 in the Work hierarchy (509 instructions).
-// Due to the complexity and multiple interleaved branches involving:
-// - Animal count vs max workers
-// - Resource capacity checks
-// - Remove-animal action construction
-// - Empty-slot search with position checks
-// - Grazing work action construction
+// This is the most complex Slot4 in the Work hierarchy (509 instructions, 279 lines).
+// Three main branches:
+//   A) If pasture resource NOT at capacity -> find empty animal slot, create RemoveAnimal action
+//   B) If at capacity -> iterate position component for overflow storage work
+//   C) Final fallback -> random position via Area component, create grazing work action
 //
-// We delegate to the original function via direct address call.
-// This is safe because the function is hooked (we have the trampoline),
-// but the trampoline has the original prologue, so we call the original
-// address directly (before the hook overwrote it).
-//
-// The simpler methods (Slot6-11, Serialize, Dtor) are fully reimplemented.
+// Decompiled from Ghidra at 0x1400F2370, all control flow matched to original.
 //
 int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, uint64_t param4) {
-    // Use original function -- too complex to reimplement without risking subtle bugs.
-    // The trampoline provides the original function entry (with copied prologue bytes).
-    // However, we use s_fn_OrigSlot4 which points to the un-hooked original address.
-    // Since InstallHook already overwrote the prologue, we must go through the trampoline.
-    // The reimpl wrapper in engine/reimpl/pasturework.cpp will handle this correctly
-    // by calling us, and we need to return the correct value.
-    //
-    // NOTE: This is a temporary measure. When the full decompilation is verified,
-    // replace this with clean C++ matching the Ghidra output.
-
-    // We cannot call s_fn_OrigSlot4 directly because the prologue is overwritten.
-    // Instead, we return a sentinel that tells the reimpl wrapper to use trampoline.
-    // But that's not how the pattern works -- the reimpl wrapper calls us instead of trampoline.
-    //
-    // The correct approach: fully implement or use trampoline in the reimpl wrapper.
-    // Since the task says "focus on getting control flow right, use trampoline for unclear sub-calls",
-    // and this function is 509 instructions, we implement the skeleton with key branches.
-
+    (void)param3; (void)param4;  // unused in original, forwarded by action executor
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
-    uintptr_t citizenRef = *(uintptr_t*)entityIBP;
     void* citizenIBP = entityIBP;
 
+    // local_res20 = *(longlong*)param_2;  local_res10 = param_2
+    uintptr_t local_res20 = *(uintptr_t*)entityIBP;
+    void* local_res10 = entityIBP;
+
     // -------------------------------------------------------
-    // Step 1: Check auto-pickup assignments
+    // Step 1: Check auto-pickup assignments (FUN_1400e3db0)
     // -------------------------------------------------------
-    int checkResult = s_fn_AutoPickup_CheckAssignments(selfAddr, &citizenRef);
+    int checkResult = s_fn_AutoPickup_CheckAssignments(selfAddr, &local_res20);
     if (checkResult == 2) {
         return 2;
     }
 
-    // -------------------------------------------------------
-    // Step 2: Find material description and pasture component
-    // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
-    uintptr_t matDescIBP = 0;
-    s_fn_FindComp_MatDesc(*(uintptr_t*)(selfAddr + 0x10), &matDescIBP);
-
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
-    uintptr_t pastureIBP[2] = {0};
-    s_fn_FindComp_Pasture(*(uintptr_t*)(selfAddr + 0x10), pastureIBP);
+    // plVar17 = param_1 + 2 => selfAddr + 0x10
+    uintptr_t* plVar17 = (uintptr_t*)(selfAddr + 0x10);
 
     // -------------------------------------------------------
-    // Step 3: Check max workers vs current count
+    // Step 2: Find StorageLocation and Pasture components
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr(&matDescIBP);
-    if (*(int*)(matDescIBP + 0x30) == 0) {
-        int maxWorkers = s_fn_CalcMaxWorkers(matDescIBP);
-        *(int*)(matDescIBP + 0x30) = maxWorkers;
+    fn_InternalBasePtr_CheckPtr(plVar17);
+    uintptr_t local_58 = 0;  // matDescIBP (StorageLocation component)
+    s_fn_FindComp_MatDesc(*plVar17, &local_58);
+
+    fn_InternalBasePtr_CheckPtr(plVar17);
+    uintptr_t local_a8 = 0;  // pastureIBP
+    s_fn_FindComp_Pasture(*plVar17, &local_a8);
+
+    // -------------------------------------------------------
+    // Step 3: Get pasture description and worker count
+    // -------------------------------------------------------
+    fn_InternalBasePtr_CheckPtr(&local_a8);
+    void* pvVar20 = *(void**)(local_a8 + 0x18);  // pasture component description
+    bool bVar8 = fn_IsDerivedFrom(pvVar20, *s_typeId_PastureComponent);  // DAT_1401c7bd8
+    uintptr_t lVar18 = selfQ[10];  // worker count at self+0x50
+    void* pvVar19 = nullptr;
+    if (bVar8) {
+        pvVar19 = pvVar20;
     }
 
-    int workerCount = (int)selfQ[10]; // self->_field50
-    if (workerCount >= *(int*)(matDescIBP + 0x30)) {
+    // -------------------------------------------------------
+    // Step 4: Check max workers
+    // -------------------------------------------------------
+    fn_InternalBasePtr_CheckPtr(&local_58);
+    if (*(int*)(local_58 + 0x30) == 0) {
+        int iVar9 = s_fn_CalcMaxWorkers(local_58);
+        *(int*)(local_58 + 0x30) = iVar9;
+    }
+
+    // Original: if ((int)lVar18 <= *(int*)(local_58 + 0x30)) { ... whole body ... }
+    // Inverted: if workerCount > maxWorkers, skip to return 1 at end
+    if ((int)lVar18 > *(int*)(local_58 + 0x30)) {
         return 1;
     }
 
     // -------------------------------------------------------
-    // Step 4: Check if citizen's storage has items -> replan
+    // Step 5: Check resource capacity via game world resource table
+    //   lVar18 = *(int*)(pvVar19 + 0x20) * 0x20
+    //   table = *(*(g_pGameWorldSingleton + 0xf0) + 0x170)
+    //   bVar8 = table[lVar18 + 8] <= table[lVar18]
     // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
-    uintptr_t citizenEntity = *(uintptr_t*)citizenIBP;
+    {
+        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+        int descIndex = *(int*)((uintptr_t)pvVar19 + 0x20);
+        uintptr_t offset = (uintptr_t)descIndex * 0x20;
+        uintptr_t tableBase = *(uintptr_t*)(*(uintptr_t*)(gameWorld + 0xf0) + 0x170);
+        int currentCount = *(int*)(tableBase + offset);
+        int maxCount = *(int*)(tableBase + offset + 8);
+        bVar8 = (maxCount <= currentCount);  // at capacity?
 
-    fn_InternalBasePtr_CheckPtr((void*)(citizenEntity + 0x10));
-    uintptr_t storageIBP[2] = {0};
-    s_fn_FindComp_Storage(*(uintptr_t*)(citizenEntity + 0x10), storageIBP);
+        // Set mesh visibility based on capacity
+        fn_InternalBasePtr_CheckPtr(plVar17);
+        uintptr_t meshInstIBP = 0;
+        s_fn_FindComp_MeshInstance(*plVar17, &meshInstIBP);
+        fn_InternalBasePtr_CheckPtr(&meshInstIBP);
+        s_fn_MeshInstance_SetVisible(*(void**)&meshInstIBP, 2, bVar8 ? 1 : 0);
+    }
 
-    fn_InternalBasePtr_CheckPtr(storageIBP);
-    int storageCount = s_fn_StorageQueryCount((void*)*(uintptr_t*)storageIBP);
-    if (storageCount >= 1) {
+    // -------------------------------------------------------
+    // Branch A: NOT at capacity (bVar8 == false) -> find empty slot, remove animal
+    // -------------------------------------------------------
+    if (!bVar8) {
+        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+        int* piVar4 = *(int**)(gameWorld + 0xf8);  // mapGrid
+
+        // Get citizen position for pathfinding
         fn_InternalBasePtr_CheckPtr(citizenIBP);
-        s_fn_CitizenAI_LongTermPlan(*(void**)citizenIBP);
-        return 2;
-    }
+        uintptr_t citEnt = *(uintptr_t*)citizenIBP;
+        fn_InternalBasePtr_CheckPtr((void*)(citEnt + 0x278));
+        uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
+        fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
+        uintptr_t charComp = *(uintptr_t*)(aiComp + 0x68);
 
-    // -------------------------------------------------------
-    // Step 5: Get area component and search for work position
-    // -------------------------------------------------------
-    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
-    uintptr_t areaIBP[2] = {0};
-    s_fn_GetAreaComponent(*(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28), areaIBP);
+        int iVar21 = *piVar4;  // map size
+        (void)*(uint32_t*)(charComp + 0x160);  // local_48: read but unused (matches original)
+        int iVar9 = (int)(*(float*)(charComp + 0x158) + (float)(iVar21 >> 1));
+        int iVar10 = (int)(*(float*)(charComp + 0x15c) + (float)(iVar21 >> 1));
+        if (iVar9 < 0) iVar9 = 0;
+        if (iVar21 <= iVar9) iVar9 = iVar21 - 1;
+        if (iVar10 < 0) iVar10 = 0;
+        if (iVar21 <= iVar10) iVar10 = iVar21 - 1;
+        uint32_t uVar23 = iVar21 * iVar10 + iVar9;  // citizen cell index
 
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
-    int* mapGrid = *(int**)(gameWorld + 0xf8);
-    void* rng = *(void**)(gameWorld + 0xd8);
+        // Check if pasture has room for more animals (field+0x40 < field+0x38)
+        fn_InternalBasePtr_CheckPtr(&local_a8);
+        int pastureCount = *(int*)(local_a8 + 0x38);
+        fn_InternalBasePtr_CheckPtr(&local_a8);
+        if (*(int*)(local_a8 + 0x40) < pastureCount) {
+            // Find empty animal slot via helper
+            fn_InternalBasePtr_CheckPtr(&local_a8);
+            int slotIdx = s_fn_PastureHelper8350(local_a8);
+            if (slotIdx >= 0) {
+                // Get entity from pasture slot array
+                fn_InternalBasePtr_CheckPtr(&local_a8);
+                local_res20 = *(uintptr_t*)(*(uintptr_t*)(local_a8 + 0x30) + (uintptr_t)slotIdx * 8);
 
-    int areaRadius = *(int*)((uintptr_t)areaIBP[0] + 0x28);
-    int radiusSq = areaRadius * areaRadius;
-    int mapSize = *mapGrid;
+                // Navigate entity chain to get NatRes component
+                fn_InternalBasePtr_CheckPtr(&local_res20);
+                uintptr_t local_a0_0 = *(uintptr_t*)(local_res20 + 0x10);
+                fn_InternalBasePtr_CheckPtr(&local_a0_0);
+                uintptr_t natResIBP = 0;
+                s_fn_FindComp_NatRes(local_a0_0, &natResIBP);
 
-    uintptr_t workCell = selfQ[5]; // self->_field28
-    int cellCol = (int)workCell % mapSize;
-    int cellRow = (int)workCell / mapSize;
+                if (natResIBP != 0) {
+                    fn_InternalBasePtr_CheckPtr(&natResIBP);
+                    // Check if not flagged for removal (bit 20)
+                    if (((*(uint32_t*)(natResIBP + 0x20) >> 0x14) & 1) == 0) {
+                        // Get entity from natRes to find Family component
+                        fn_InternalBasePtr_CheckPtr(&natResIBP);
+                        local_a0_0 = *(uintptr_t*)(natResIBP + 0x10);
+                        fn_InternalBasePtr_CheckPtr(&local_a0_0);
+                        uintptr_t familyIBP[2] = {0};
+                        s_fn_FindComp_Family2(local_a0_0, familyIBP);  // Entity_FindComponent_Family @ 0x1400012d0
+                        fn_InternalBasePtr_CheckPtr(familyIBP);
+                        uintptr_t familyComp = *(uintptr_t*)familyIBP;
+                        fn_InternalBasePtr_CheckPtr((void*)(familyComp + 0x68));
+                        uintptr_t familyCharComp = *(uintptr_t*)(familyComp + 0x68);
 
-    // Get citizen's current grid position
-    fn_InternalBasePtr_CheckPtr(citizenIBP);
-    uintptr_t citEnt = *(uintptr_t*)citizenIBP;
+                        // Get animal position as cell index
+                        iVar21 = *piVar4;
+                        (void)*(uint32_t*)(familyCharComp + 0x160);  // local_48: read but unused
+                        iVar9 = (int)(*(float*)(familyCharComp + 0x158) + (float)(iVar21 >> 1));
+                        iVar10 = (int)(*(float*)(familyCharComp + 0x15c) + (float)(iVar21 >> 1));
+                        if (iVar9 < 0) iVar9 = 0;
+                        if (iVar21 <= iVar9) iVar9 = iVar21 - 1;
+                        if (iVar10 < 0) iVar10 = 0;
+                        if (iVar21 <= iVar10) iVar10 = iVar21 - 1;
+                        int animalCell = iVar21 * iVar10 + iVar9;
 
-    fn_InternalBasePtr_CheckPtr((void*)(citEnt + 0x278));
-    uintptr_t aiComp = *(uintptr_t*)(citEnt + 0x278);
-    fn_InternalBasePtr_CheckPtr((void*)(aiComp + 0x68));
-    uintptr_t posComp = *(uintptr_t*)(aiComp + 0x68);
+                        // Pathfinding check
+                        uint32_t uVar11 = (uint32_t)s_fn_Map_FindNearestPassable(piVar4, animalCell, uVar23, 0xe1f);
+                        uint64_t uVar16 = (uint64_t)s_fn_Map_CanPathTo(piVar4, 0xe1f, (uint32_t)uVar11, uVar23);
 
-    int mapSz = *mapGrid;
-    int citizenCellX = (int)(*(float*)(posComp + 0x158) + (float)(mapSz >> 1));
-    int citizenCellY = (int)(*(float*)(posComp + 0x15c) + (float)(mapSz >> 1));
+                        if ((char)uVar16 != '\0') {
+                            // Get description from natRes for RemoveAnimal action
+                            fn_InternalBasePtr_CheckPtr(&natResIBP);
+                            void* descPtr = *(void**)(natResIBP + 0x18);
+                            bool isDerived = fn_IsDerivedFrom(descPtr, *s_typeId_ComponentEntity);
+                            pvVar20 = nullptr;
+                            if (isDerived) {
+                                pvVar20 = descPtr;
+                            }
 
-    if (citizenCellX < 0) citizenCellX = 0;
-    if (citizenCellX >= mapSz) citizenCellX = mapSz - 1;
-    if (citizenCellY < 0) citizenCellY = 0;
-    if (citizenCellY >= mapSz) citizenCellY = mapSz - 1;
+                            // Compute world position from cell index
+                            float halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
+                            float local_80[3];
+                            s_fn_Vector3_Ctor(local_80,
+                                (float)((int)uVar11 % *piVar4) - halfOff,
+                                (float)((int)uVar11 / *piVar4) - halfOff,
+                                0.0f);
+                            float local_70[4];  // Vector3 + padding
+                            s_fn_GetTerrainPos(piVar4, local_70, local_80, '\0', nullptr);
 
-    int citizenGridCell = mapSz * citizenCellY + citizenCellX;
+                            // Build RemoveAnimal action
+                            uintptr_t local_90 = *(uintptr_t*)citizenIBP;
+                            uintptr_t local_a0_ibp = natResIBP;
+                            s_fn_RemoveAnimalCtor(
+                                &local_90,              // citizenIBP
+                                (int)selfQ[4],          // priority
+                                local_70,               // position
+                                animalCell,             // cell index
+                                &local_a0_ibp,          // natRes IBP
+                                (uintptr_t)pvVar20,     // description ptr
+                                1);                     // flag (CONCAT31 result)
 
-    // Random search for valid pasture cell
-    int randX, randY;
-    int testCellX, testCellY;
+                            // Assign work to citizen
+                            int priority = (int)selfQ[4];
+                            fn_InternalBasePtr_CheckPtr(citizenIBP);
+                            uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-    do {
-        do {
-            randX = s_fn_Random_RandTol(rng, areaRadius);
-            randY = s_fn_Random_RandTol(rng, areaRadius);
-            testCellX = cellCol + randX;
-            testCellY = cellRow + randY;
-        } while (radiusSq < randY * randY + randX * randX);
-    } while (testCellX < 0 || testCellX >= mapSize ||
-             testCellY < 0 || testCellY >= mapSize);
+                            // Call vtable slot +0x50 (GetWorkEntity)
+                            typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
+                            uintptr_t vtable = *(uintptr_t*)self;
+                            auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
+                            uintptr_t* wResult = getWorkEntity(self, &local_90);
+                            uintptr_t workEnt = *wResult;
 
-    uint32_t testCell = (uint32_t)mapSize * testCellY + testCellX;
+                            *(uint32_t*)(citizenEnt + 0x54) |= 4;
+                            *(int32_t*)(citizenEnt + 0x30) = priority;
+                            *(uint32_t*)(citizenEnt + 0xb0) = 0;
 
-    int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, testCell, citizenGridCell, 0xe07);
-    if (nearestCell >= 0) {
-        bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, nearestCell, citizenGridCell);
-        if (canPath) {
-            // Valid position found -- create grazing/pasture work action
-            float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-            float workPos[3];
-            s_fn_Vector3_Ctor(workPos,
-                (float)(nearestCell % *mapGrid) - halfOffset,
-                (float)(nearestCell / *mapGrid) - halfOffset,
-                0.0f);
-
-            float pathPos[3];
-            s_fn_GetTerrainPos(mapGrid, pathPos, workPos, 0, nullptr);
-
-            // Create action
-            uintptr_t workEntityRef = *(uintptr_t*)citizenIBP;
-            uintptr_t workBuf[2] = { workEntityRef, 0 };
-            fn_InternalBasePtr_CheckPtr(citizenIBP);
-            s_fn_ActionCtor_GrazingWork(
-                workBuf,               // entityIBP
-                (int)selfQ[4],         // priority
-                citizenIBP,            // targetIBP
-                pathPos,               // position
-                0,                     // flag
-                1);                    // param6
-
-            // Assign work and register with AI
-            int priority = (int)selfQ[4];
-            fn_InternalBasePtr_CheckPtr(citizenIBP);
-            uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
-
-            uintptr_t vtable = *(uintptr_t*)self;
-            typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
-            auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
-            uintptr_t workEntIBP[2] = {0};
-            uintptr_t* wResult = getWorkEntity(self, workEntIBP);
-            uintptr_t workEnt = *wResult;
-
-            *(uint32_t*)(citizenEnt2 + 0x54) |= 4;
-            *(uint32_t*)(citizenEnt2 + 0xb0) = 0;
-            *(int32_t*)(citizenEnt2 + 0x30) = priority;
-
-            if (workEnt == *(uintptr_t*)(citizenEnt2 + 0x1f0) && priority >= 0) {
-                *(uint32_t*)(citizenEnt2 + 0x88) |= 0x20000;
+                            if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
+                                *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
+                            }
+                            return 2;
+                        }
+                    }
+                }
             }
-
-            s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), workEntIBP, citizenIBP);
-            return 2;
+            // Slot search failed
+            return 1;
         }
+
+        // -------------------------------------------------------
+        // Branch B: At animal capacity -> try position-based overflow storage work
+        // -------------------------------------------------------
+        fn_InternalBasePtr_CheckPtr(plVar17);
+        uintptr_t posCompIBP = 0;
+        s_fn_FindComp_Position(*plVar17, &posCompIBP);
+
+        fn_InternalBasePtr_CheckPtr(&posCompIBP);
+        int posCount = s_fn_PositionCount(posCompIBP, 2);
+
+        if (posCount > 0) {
+            int iPvVar20 = 0;
+            do {
+                fn_InternalBasePtr_CheckPtr(&posCompIBP);
+                float local_80[3];
+                s_fn_Entity_GetPosition(posCompIBP, local_80, 2, iPvVar20, nullptr);
+
+                int iVar10map = *piVar4;
+                int iVar21pos = (int)(local_80[0] + (float)(iVar10map >> 1));
+                int iVar12 = (int)(local_80[1] + (float)(iVar10map >> 1));
+                if (iVar21pos < 0) iVar21pos = 0;
+                if (iVar10map <= iVar21pos) iVar21pos = iVar10map - 1;
+                if (iVar12 < 0) iVar12 = 0;
+                if (iVar10map <= iVar12) iVar12 = iVar10map - 1;
+
+                // Read entity from map grid cell
+                uintptr_t mapDataBase = *(uintptr_t*)((uintptr_t)piVar4 + 0x80);  // piVar4 + 0x20 as int* => byte offset 0x80
+                uintptr_t cellOffset = ((uintptr_t)iVar12 * (uintptr_t)iVar10map + (uintptr_t)iVar21pos) * 0x30;
+                local_res20 = *(uintptr_t*)(mapDataBase + 8 + cellOffset);
+
+                if (local_res20 != 0) {
+                    fn_InternalBasePtr_CheckPtr(&local_res20);
+                    uintptr_t familyIBP2[2] = {0};
+                    s_fn_FindComp_Family(local_res20, familyIBP2);
+
+                    if (*(uintptr_t*)familyIBP2 != 0) {
+                        fn_InternalBasePtr_CheckPtr(&local_res20);
+                        uintptr_t storageIBP2[4] = {0};  // local_70
+                        s_fn_FindComp_MatDesc(local_res20, storageIBP2);
+
+                        fn_InternalBasePtr_CheckPtr(storageIBP2);
+                        uintptr_t local_90_val = *(uintptr_t*)citizenIBP;
+                        uintptr_t storageWorkMgr = *(uintptr_t*)(gameWorld + 0x118);
+                        uint64_t overflowResult = s_fn_StorageOverflowCheck(
+                            storageWorkMgr, &local_90_val,
+                            *(int*)(*(uintptr_t*)storageIBP2 + 0x28), '\x01');
+
+                        if ((char)overflowResult != '\0') {
+                            return 2;
+                        }
+                    }
+                }
+
+                iPvVar20++;
+            } while (iPvVar20 < posCount);
+        }
+
+        // -------------------------------------------------------
+        // Branch C: Final fallback -> random area position, create grazing work
+        // -------------------------------------------------------
+        fn_InternalBasePtr_CheckPtr(plVar17);
+        uintptr_t areaIBP = 0;
+        s_fn_GetAreaComponent(*plVar17, &areaIBP);
+
+        void* rng = *(void**)(gameWorld + 0xd8);  // Random*
+
+        fn_InternalBasePtr_CheckPtr(&areaIBP);
+        short sVar1 = *(short*)(areaIBP + 0x28);
+        short sVar2 = *(short*)(areaIBP + 0x2a);
+        short sVar3 = *(short*)(areaIBP + 0x2c);
+
+        uint32_t uVar11 = (uint32_t)s_fn_Random_RandTol(rng, (int)*(short*)(areaIBP + 0x2e));
+        uint32_t uVar13 = (uint32_t)s_fn_Random_RandTol(rng, (int)sVar3);
+        int randCell = ((int)sVar2 + uVar11) * *piVar4 + uVar13 + (int)sVar1;
+
+        // Update local_res20 with randCell (low 32 bits)
+        local_res20 = (local_res20 & 0xFFFFFFFF00000000ULL) | (uint32_t)randCell;
+
+        int nearCell = s_fn_Map_FindNearestPassable(piVar4, randCell, uVar23, 0xe1f);
+        if (nearCell >= 0) {
+            uint64_t canPath = (uint64_t)s_fn_Map_CanPathTo(piVar4, 0xe1f, uVar23, nearCell);
+            uint32_t dVar7 = *s_typeId_NatResComponent;  // DWORD_1401c7ba0
+
+            if ((char)canPath != '\0') {
+                float halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
+                float local_80[3];
+                s_fn_Vector3_Ctor(local_80,
+                    (float)((int)local_res20 % *piVar4) - halfOff,
+                    (float)((int)local_res20 / *piVar4) - halfOff,
+                    0.0f);
+                float local_a0_pos[4];  // position buffer
+                s_fn_GetTerrainPos(piVar4, local_a0_pos, local_80, '\0', nullptr);
+
+                halfOff = (float)(*piVar4 >> 1) - *s_fHalfCellOffset;
+                float local_70_pos[4];  // position buffer
+                s_fn_Vector3_Ctor(local_70_pos,
+                    (float)(nearCell % *piVar4) - halfOff,
+                    (float)(nearCell / *piVar4) - halfOff,
+                    0.0f);
+                float local_50[2];  // dest position
+                s_fn_GetTerrainPos(piVar4, local_50, local_70_pos, '\0', nullptr);
+
+                // Create grazing work action (FUN_1400bb0a0)
+                local_res20 = *plVar17;
+                uintptr_t local_90_val = *(uintptr_t*)local_res10;
+                s_fn_ActionCtor_GrazingWork(
+                    &local_90_val,          // citizenIBP value
+                    (int)selfQ[4],          // priority
+                    &local_res20,           // work entity IBP
+                    0,                      // param4
+                    local_50,               // dest position
+                    local_a0_pos,           // source position
+                    dVar7,                  // type ID (DWORD_1401c7ba0)
+                    0,                      // param8
+                    0);                     // param9
+
+                // Assign work to citizen
+                int priority = (int)selfQ[4];
+                fn_InternalBasePtr_CheckPtr(local_res10);
+                uintptr_t citizenEnt = *(uintptr_t*)local_res10;
+
+                // Call vtable slot +0x50 (GetWorkEntity)
+                typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
+                uintptr_t vtable = *(uintptr_t*)self;
+                auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
+                uintptr_t* wResult = getWorkEntity(self, &local_res10);
+                uintptr_t workEnt = *wResult;
+
+                *(uint32_t*)(citizenEnt + 0x54) |= 4;
+                *(int32_t*)(citizenEnt + 0x30) = priority;
+                *(uint32_t*)(citizenEnt + 0xb0) = 0;
+
+                if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
+                    *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
+                }
+
+                // Register work with CitizenAI (CitizenAI_impl_1a30)
+                s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), &local_res10, local_res10);
+                return 2;
+            }
+        }
+        return 0;
     }
 
+    // Worker count at or below max but resource at capacity -> return 1
     return 1;
 }
 
@@ -816,7 +1019,6 @@ void PastureWork_DtorBody(PastureWork* self) {
 
     *(void**)selfAddr = s_vtable_AutoPickupWork;
     *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
