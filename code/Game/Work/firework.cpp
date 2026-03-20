@@ -6,9 +6,9 @@
 // Vtable: 0x1401612a0
 //
 // Fields:
-//   +0x48: int   _field48   -- number of currently assigned fire workers
+//   +0x48: int   _field48   -- max fire workers capacity
 //   +0x50: void* _field50   -- BST root (tracks entity -> citizen assignments)
-//   +0x58: int   _field58   -- max fire workers capacity
+//   +0x58: int   _field58   -- number of currently assigned fire workers
 //
 // Slot4 (0x1400e9620): Fire suppression work assignment.
 //   Finds a burning building, checks pathfinding, sets up citizen action queue.
@@ -179,10 +179,12 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     uintptr_t posCompIBP = 0;
     fn_Entity_FindComponent_Position(*(uintptr_t*)(s + 0x10), &posCompIBP);
 
-    // Check capacity: _field48 (assigned count) vs _field58 (max capacity)
-    int32_t assigned = *(int32_t*)(s + 0x48);
-    int32_t maxCap   = *(int32_t*)(s + 0x58);
-    if (assigned >= maxCap) {
+    // Check capacity: _field48 (max capacity) vs _field58 (assigned count)
+    // Original: if ((int)param_1[9] <= (int)param_1[0xb]) return 1;
+    // i.e. if max_capacity <= assigned_count, we're at capacity.
+    int32_t maxCap   = *(int32_t*)(s + 0x48);
+    int32_t assigned = *(int32_t*)(s + 0x58);
+    if (maxCap <= assigned) {
         return 1;
     }
 
@@ -201,7 +203,8 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     fn_InternalBasePtr_CheckPtr((void*)(smComp + 0x68));
     uintptr_t posData = *(uintptr_t*)(smComp + 0x68);
 
-    float citizenY = *(float*)(posData + 0x160);
+    // Original reads posData+0x160 (citizenY) but only uses it for dead-store
+    // to local_60[2] which is zeroed before FindFire — skip it.
     int gridSize = *mapGrid;
     uint32_t centerCell = WorldToCell(gridSize,
         *(float*)(posData + 0x158), *(float*)(posData + 0x15c));
@@ -212,10 +215,9 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     bool isCitizen = fn_IsDerivedFrom(citizenObj, *s_TypeId_CitizenComponent);
     void* citizenComp = isCitizen ? citizenObj : nullptr;
 
-    // Initialize position buffers
+    // Initialize position buffers (all zeroed — original zeros local_60 before FindFire)
     float srcPos[3] = {0.0f, 0.0f, 0.0f};
-    // citizenY is used to initialize destPos[2] below
-    float destPos[3] = {0.0f, 0.0f, citizenY};
+    float destPos[3] = {0.0f, 0.0f, 0.0f};
 
     // Search for a burning entity (spiral search from citizen position)
     int searchRadius = *(int*)((uintptr_t)citizenComp + 0xf8);
@@ -278,10 +280,14 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
     }
 
     // Set up fire suppression action queue
+    // Original: local_res8 = param_1[2]; local_88 = *(int**)param_2;
+    // local_88 is REASSIGNED from mapGrid to citizen entity ptr here.
     uintptr_t workEntityIBP = *(uintptr_t*)(s + 0x10);
     int priority = *(int32_t*)(s + 0x20);
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    uintptr_t citizenPtr = *(uintptr_t*)citizenIBP;
     s_fn_SetupFireActions(
-        (void*)mapGrid,  // param rewritten by Ghidra, actually citizenIBP
+        (void*)&citizenPtr,
         priority,
         srcPos, destPos, bestPos, (void*)&workEntityIBP);
 
