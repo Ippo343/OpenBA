@@ -18,6 +18,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Tutorial/tutorial_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -26,7 +27,7 @@ static HookInfo g_hookTutorialDtor;
 typedef void* (*fn_TutorialDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_TutorialDtor(void* self, uint32_t flags) {
     g_lastHook = "Tutorial::TutorialDtor";
-    return ((fn_TutorialDtor_t)g_hookTutorialDtor.trampoline)(self, flags);
+    return Tutorial_Dtor(self, flags);
 }
 
 void InstallTutorialDtor() {
@@ -60,7 +61,7 @@ static HookInfo g_hookTutorialCleanup;
 typedef void (*fn_TutorialCleanup_t)(void* self);
 static void Reimpl_TutorialCleanup(void* self) {
     g_lastHook = "Tutorial::TutorialCleanup";
-    ((fn_TutorialCleanup_t)g_hookTutorialCleanup.trampoline)(self);
+    Tutorial_Cleanup(self);
 }
 
 void InstallTutorialCleanup() {
@@ -77,7 +78,7 @@ static HookInfo g_hookTutorialCtor;
 typedef void* (*fn_TutorialCtor_t)(void* self);
 static void* Reimpl_TutorialCtor(void* self) {
     g_lastHook = "Tutorial::TutorialCtor";
-    return ((fn_TutorialCtor_t)g_hookTutorialCtor.trampoline)(self);
+    return Tutorial_Ctor(self);
 }
 
 void InstallTutorialCtor() {

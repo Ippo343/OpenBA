@@ -21,10 +21,10 @@ struct Tutorial {
     uint8_t  _extBase[0x18];     // +0x08: External base fields
 
     // --- Tutorial fields ---
-    void*    _field20;           // +0x20: zeroed (steps list?)
-    void*    _field28;           // +0x28: zeroed
-    void*    _field30;           // +0x30: zeroed
-    int32_t  _field38;           // +0x38: -1 sentinel (current step index?)
+    void*    setup;              // +0x20: ExternalPtr to TutorialSetup
+    void*    steps;              // +0x28: array of ExternalPtr to TutorialStep
+    int64_t  stepCount;          // +0x30: step count (low 32) + capacity (high 32)
+    int32_t  currentStep;        // +0x38: current step index (-1 = none)
     uint8_t  _pad3C[4];          // +0x3C: padding
 };
 
