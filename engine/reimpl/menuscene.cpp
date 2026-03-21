@@ -74,14 +74,15 @@ void InstallMenuSceneDtor() {
 void RemoveMenuSceneDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallMenuSceneSlot5() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400a3630);
-    // Prologue: push rbp(2) + mov rbp,rsp(3) + sub rsp,0x40(4) + mov [rbp-0x20],-2(8) = 17
-    InstallHook(target, (void*)Reimpl_Slot5, &g_hookSlot5, 17);
+    // VTable hook (Bug Class 8 fix): SEH cookie in prologue breaks inline hooking.
+    // vtable at 0x14015ede0, Slot5 = index 5 (+0x28)
+    InstallHookVTable(0x14015ede0, 5, (void*)Reimpl_Slot5, &g_hookSlot5);
+    RegisterHookInfo("MenuScene::Slot5", &g_hookSlot5);
 #ifdef _DEBUG
-    printf("[MenuScene] Slot5 hooked at %p\n", (void*)target);
+    printf("[MenuScene] Slot5 vtable-hooked (original=%p)\n", g_hookSlot5.trampoline);
 #endif
 }
-void RemoveMenuSceneSlot5() { RemoveHook(&g_hookSlot5); }
+void RemoveMenuSceneSlot5() { RemoveHookVTable(&g_hookSlot5); }
 
 void InstallMenuSceneSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14001b810);

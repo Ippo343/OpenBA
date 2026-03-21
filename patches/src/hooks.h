@@ -59,6 +59,21 @@ static constexpr size_t TRAMPOLINE_BUFFER_SIZE = 256;
 void RemoveHook(HookInfo* info);
 
 // ============================================================
+// VTable hook: swap a function pointer in a vtable (no code modification)
+// ============================================================
+// Solves Bug Class 8: SEH cookie functions whose prologue can't be overwritten
+// without breaking .pdata/.xdata unwind tables.
+//
+// vtableGhidraAddr = Ghidra address of the vtable (e.g., 0x14015ede0)
+// slotIndex        = vtable slot index (e.g., 5 for +0x28)
+// detourFunc       = our replacement function
+// info             = HookInfo to populate (trampoline = original func ptr)
+bool InstallHookVTable(uintptr_t vtableGhidraAddr, int slotIndex, void* detourFunc, HookInfo* info);
+
+// Remove a vtable hook: restores original function pointer
+void RemoveHookVTable(HookInfo* info);
+
+// ============================================================
 // Reimplementation registry
 // ============================================================
 

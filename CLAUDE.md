@@ -223,15 +223,14 @@ Hooks copy N prologue bytes to a trampoline, overwrite original with JMP. See `n
 5. **RAX clobbered by JMP-back** — trampoline's `MOV RAX, imm64; JMP RAX` overwrites values prologue set in RAX. Fix: changed to `MOV R10; JMP R10`.
 6. **Implicit register forwarding** — original function passes a volatile register (e.g., RDX) through to a sub-call without explicitly referencing it. The C passthrough's compiler-generated code may clobber that register. Fix: declare and forward all implicitly-passed parameters in the passthrough typedef. Examples: ModelComponent vtable slot +0x40 forwards RDX (Time*) to MeshInstance::Update — passthrough must be `(void* self, void* time)`, not `(void* self)`. Action executor (FUN_1400c4c50) passes RDX=actionStack to AbstractImpl(+0x20)/Exit(+0x38), and RDX=actionStack + R8=time to Execute(+0x28) — all action passthroughs must declare these params.
 7. **Bool return type on action reimpl** — action reimpl functions returning `bool` leave garbage in upper EAX bytes. The action executor (FUN_1400c4c50) checks returns as `int` (comparing with 0, 1, 2). A `bool` return only guarantees the low byte of EAX, so upper bytes may contain garbage causing wrong branch decisions and infinite loops. Fix: use `int` return type with explicit `? 1 : 0` conversions.
-8. **SEH cookie functions** — MSVC functions with structured exception handling have a `MOV [RBP-0x20], -2` SEH state cookie in their prologue, tracked by `.pdata`/`.xdata` unwind tables keyed to the original instruction addresses. Overwriting the prologue with our JMP breaks the exception unwind: when an exception propagates through the hooked function, the unwinder can't find the correct handler because the entry point code no longer matches the unwind descriptors. This kills the thread instead of catching the exception. Symptom: loader thread crashes with ACCESS_VIOLATION in unrelated code (e.g., VideoDX11 or Runtime Serializer) during background resource loading, where the base game handles the exception silently. Affected: `MenuScene::Slot5`, potentially `MapGenerator::Slot5` and `TerrainGenerator::Slot5`. Fix: disabled for now; future fix could use vtable patching instead of prologue overwrite for SEH functions.
+8. **SEH cookie functions** — MSVC functions with SEH have a `MOV [RBP-0x20], -2` state cookie in their prologue, tracked by `.pdata`/`.xdata` unwind tables keyed to original addresses. Overwriting the prologue breaks exception unwind, killing the thread. **FIXED**: `InstallHookVTable()` swaps the function pointer in the vtable instead of overwriting the prologue — zero code modification, SEH fully preserved. `MenuScene::Slot5` re-enabled. Use for any future SEH-affected virtual functions.
 
-### Remaining Disabled Hooks (5)
+### Remaining Disabled Hooks (4)
 These are NOT trampoline encoding issues — they are functional/logic bugs:
 - `Modification::SetupFileSystem` — crashes; 709-instruction function, likely SEH/unwind issue
 - `WorkComponent::Shutdown` — causes tutorial load crash due to serialization mismatch
 - `FinishTutorialInstance::Slot5` — reason unclear, needs investigation
 - `ComponentEntity::Slot3` — trampoline shifts local_res vars into reimpl's frame, corrupts serialization
-- `MenuScene::Slot5` — Bug Class 8 (SEH cookie); crashes loader thread during menu scene deserialization
 
 ### Crash Diagnostics
 - VEH handler catches ACCESS_VIOLATION/ILLEGAL_INSTRUCTION, logs to `patch_debug.log`

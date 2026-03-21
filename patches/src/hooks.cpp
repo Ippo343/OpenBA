@@ -565,6 +565,54 @@ void RemoveHook(HookInfo* info) {
 }
 
 // ============================================================
+// VTable hook: swap a function pointer in a vtable
+// ============================================================
+// No code modification — just replaces the pointer in the vtable.
+// Solves Bug Class 8 (SEH cookie functions) because the original
+// function's prologue and .pdata/.xdata unwind info stay intact.
+
+bool InstallHookVTable(uintptr_t vtableGhidraAddr, int slotIndex, void* detourFunc, HookInfo* info) {
+    memset(info, 0, sizeof(*info));
+
+    uintptr_t vtableRuntime = ResolveAddr(Module::Exe, vtableGhidraAddr);
+    if (!vtableRuntime) return false;
+
+    void** slot = &((void**)vtableRuntime)[slotIndex];
+
+    // Make vtable slot writable
+    DWORD oldProtect;
+    if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect)) return false;
+
+    // Save original function pointer as the "trampoline" (caller can call it directly)
+    info->trampoline = *slot;
+    // Store the slot address in target so RemoveHookVTable can restore it
+    info->target = (void*)slot;
+    // Store original pointer in original[] for diagnostics
+    memcpy(info->original, &info->trampoline, sizeof(void*));
+    info->patchSize = 0; // sentinel: 0 means vtable hook (no code bytes to restore)
+
+    // Swap in our detour
+    *slot = detourFunc;
+
+    // Restore original protection
+    VirtualProtect(slot, sizeof(void*), oldProtect, &oldProtect);
+    return true;
+}
+
+void RemoveHookVTable(HookInfo* info) {
+    if (!info->target) return;
+
+    void** slot = (void**)info->target;
+    DWORD oldProtect;
+    VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect);
+    *slot = info->trampoline;
+    VirtualProtect(slot, sizeof(void*), oldProtect, &oldProtect);
+
+    info->target = nullptr;
+    info->trampoline = nullptr;
+}
+
+// ============================================================
 // Build number patch (data patch, not a hook)
 // ============================================================
 
@@ -3803,7 +3851,7 @@ static ReimplEntry g_reimplementations[] = {
     { "Weather::Slot6", InstallWeatherSlot6, RemoveWeatherSlot6, true },
     { "Weather::Slot8", InstallWeatherSlot8, RemoveWeatherSlot8, true }, // RE-ENABLED: relocating trampoline handles near Jcc
     { "MenuScene::Dtor", InstallMenuSceneDtor, RemoveMenuSceneDtor, true },
-    { "MenuScene::Slot5", InstallMenuSceneSlot5, RemoveMenuSceneSlot5, false }, // DISABLED: Bug Class 8 — SEH cookie (mov [rbp-0x20],-2) in prologue; overwritten entry breaks exception unwind on loader thread
+    { "MenuScene::Slot5", InstallMenuSceneSlot5, RemoveMenuSceneSlot5, true }, // RE-ENABLED: vtable hook bypasses Bug Class 8 (SEH cookie) — no prologue modification
     { "MenuScene::Slot6", InstallMenuSceneSlot6, RemoveMenuSceneSlot6, true },
     { "MenuScene::Slot8", InstallMenuSceneSlot8, RemoveMenuSceneSlot8, true }, // RE-ENABLED: relocating trampoline handles near Jcc
 };
