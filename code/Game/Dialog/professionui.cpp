@@ -487,11 +487,17 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         fn_InternalBasePtr_CheckPtr((void*)&textLabelBuf);
         fn_Element_SetToolTip((void*)textLabelBuf, tooltipBuf);
 
-        // Set user data on spinner (original uses fn_Element_SetUserData, NOT SetElementId)
+        // Set user data and element ID on spinner
+        // Original only sets user data + child element ID, but the event system
+        // sends the spinner's own element ID as param4 in msg 0x15 notifications.
+        // Without SetElementId on the spinner itself, param4 is -1 and Slot9 never
+        // dispatches to HandleSpinner.
         fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
         fn_Element_SetUserData((void*)spinnerBuf, (void*)(uintptr_t)idBase);
+        fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
+        fn_Element_SetElementId((void*)spinnerBuf, idBase);
 
-        // Get child[0] of spinner: set its element ID
+        // Get child[0] of spinner: set its element ID (original does this too)
         fn_InternalBasePtr_CheckPtr((void*)&spinnerBuf);
         uint64_t spinnerChild0 = 0;
         fn_Element_Child((void*)spinnerBuf, &spinnerChild0, 0);
