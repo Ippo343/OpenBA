@@ -563,13 +563,13 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                      testCellY < 0 || testCellY >= mapSize);
 
             uint32_t testCell = (uint32_t)(*mapGrid) * testCellY + testCellX;
-            uintptr_t gridData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80); // mapGrid+0x20 as qword ptr = offset 0x80
+            uintptr_t gridData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
 
             // Check terrain type bitmask — skip "forest/resource" terrain (0x1e0 mask)
             uint8_t terrainByte = *(uint8_t*)(gridData + (uintptr_t)testCell * 0x30 + 0x29);
             uint32_t terrainBit = 1u << (terrainByte & 0x1f);
             if ((terrainBit & 0x1e0u) != 0) {
-                continue;  // Terrain already has resources, skip
+                continue;
             }
 
             // Check distance is within 2x workplace radius
@@ -581,7 +581,7 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             // Get resource entity at this cell (+8 in cell data)
             uintptr_t resourceEntity = *(uintptr_t*)(gridData + (uintptr_t)testCell * 0x30 + 8);
             if (resourceEntity == 0) {
-                continue;  // No resource at this cell
+                continue;
             }
 
             // -------------------------------------------------------
@@ -592,7 +592,7 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             s_fn_FindComp_NatRes(resourceEntity, natResCompIBP);
 
             if (*(uintptr_t*)natResCompIBP == 0) {
-                continue;  // No NatRes component
+                continue;
             }
 
             // Check NatRes component against the description list
@@ -600,7 +600,7 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             uintptr_t natResCompIBP2[2] = {0};
             s_fn_FindComp_NatRes(resourceEntity, natResCompIBP2);
 
-            // Iterate through herb types in the description list (radiusComp->+0x20, count at radiusComp->+0x28)
+            // Iterate through herb types in the description list
             int herbTypeCount = *(int*)((uintptr_t)radiusComp + 0x28);
             uintptr_t herbTypeList = *(uintptr_t*)((uintptr_t)radiusComp + 0x20);
 
@@ -644,8 +644,6 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                 // -------------------------------------------------------
                 // Valid herb found — create PerformWork action
                 // -------------------------------------------------------
-
-                // Calculate world position for nearest cell
                 float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
                 float cutPos[3];
                 s_fn_Vector3_Ctor(cutPos,
@@ -653,25 +651,22 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                     (float)(nearestCell / *mapGrid) - halfOffset,
                     0.0f);
 
-                // Get terrain height
                 float pathPos[3];
                 s_fn_GetTerrainPos(mapGrid, pathPos, cutPos, 0, nullptr);
 
-                // Create PerformWork action (harvest herb)
                 fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                 uintptr_t targetRef = *(uintptr_t*)natResCompIBP2;
                 uintptr_t harvestEntityRef = *(uintptr_t*)citizenIBP;
                 uintptr_t harvestBuf[2] = { harvestEntityRef, 0 };
                 uintptr_t harvestTargetBuf[2] = { targetRef, 0 };
                 s_fn_PerformWork_Ctor3(
-                    harvestBuf,                         // entityIBP
-                    (int)selfQ[4],                      // priority (workplaceId)
-                    harvestTargetBuf,                    // targetIBP
-                    pathPos,                             // position
-                    0,                                   // flag
-                    1);                                  // param6
+                    harvestBuf,
+                    (int)selfQ[4],
+                    harvestTargetBuf,
+                    pathPos,
+                    0,
+                    1);
 
-                // Reset fail counter and assign work
                 *(uint32_t*)(selfAddr + 0x58) = 0;
                 AssignWorkToEntity(self, citizenIBP, (int)selfQ[4]);
                 return 2;

@@ -39,6 +39,7 @@ typedef float*(*HuW_GetTerrainPos_t)(int* mapGrid, float* outPos, float* gridPos
                                      char param4, uint32_t* outNormal);
 typedef void  (*HuW_CreateHuntAction_t)(void* citizenEntityIBP, int priority, void* huntCompIBP,
                                         float* position, float param5, char param6);
+typedef uint32_t (*HuW_Entity_GetGridCell_t)(void* entityIBP, float* outPos);
 typedef void  (*HuW_CitizenAI_RegisterWork_t)(void* citizenAISub, void* entityIBP, void* citizenIBP);
 typedef void  (*HuW_CitizenAI_LongTermPlan_t)(void* citizenEntity);
 typedef void* (*HuW_FindComp_Hunt_t)(uintptr_t entity, void* outIBP);
@@ -93,6 +94,7 @@ static HuW_GetAreaComponent_t           s_fn_GetAreaComponent = nullptr;
 static HuW_Map_CalcDistance_t            s_fn_Map_CalcDistance = nullptr;
 static HuW_Map_FindNearestPassable_t    s_fn_Map_FindNearestPassable = nullptr;
 static HuW_Map_CanPathTo_t              s_fn_Map_CanPathTo = nullptr;
+static HuW_Entity_GetGridCell_t         s_fn_Entity_GetGridCell = nullptr;
 static HuW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static HuW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
 static HuW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
@@ -159,6 +161,8 @@ bool HuntWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x14009ccf0));
     s_fn_Map_CanPathTo = reinterpret_cast<HuW_Map_CanPathTo_t>(
         ResolveAddr(Module::Exe, 0x1400a00f0));
+    s_fn_Entity_GetGridCell = reinterpret_cast<HuW_Entity_GetGridCell_t>(
+        ResolveAddr(Module::Exe, 0x140087fb0));
     s_fn_Work_Serialize = reinterpret_cast<HuW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<HuW_BST_Serialize_t>(
@@ -402,13 +406,12 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     int cellCol = (int)workCell % mapSize;
     int cellRow = (int)workCell / mapSize;
 
-    // Search loop
-    // The original code uses a do-while for rejection sampling within radius
-    // and map bounds, then checks terrain/path viability
+    // Generate random position within radius (rejection sampling)
+    // Original only bounds-checks Y; we check both for safety but the
+    // else branch below handles the case where the cell is invalid.
     int randX, randY;
     int testCellX, testCellY;
 
-    // Generate random position within radius (rejection sampling)
     do {
         do {
             randX = s_fn_Random_RandTol(rng, areaRadius);
@@ -416,12 +419,12 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
             testCellX = cellCol + randX;
             testCellY = cellRow + randY;
         } while (radiusSq < randY * randY + randX * randX);
-    } while (testCellX < 0 || testCellX >= mapSize ||
-             testCellY < 0 || testCellY >= mapSize);
+    } while (testCellY < 0 || testCellY >= mapSize);
+    // Note: X bounds not checked here matches original behavior.
+    // Negative X will fail terrain/entity checks -> else branch handles it.
 
-    uint32_t testCell = (uint32_t)mapSize * testCellY + testCellX;
+    uint32_t testCell = (uint32_t)(mapSize * testCellY + testCellX);
 
-    // Find nearest passable cell
     // Get citizen's current position for pathfinding
     fn_InternalBasePtr_CheckPtr(citizenIBP);
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
@@ -443,70 +446,115 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
 
     int citizenGridCell = mapSz * citizenCellY + citizenCellX;
 
-    int nearestCell = s_fn_Map_FindNearestPassable(mapGrid, testCell, citizenGridCell, 0xe07);
-    if (nearestCell >= 0) {
-        bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, nearestCell, citizenGridCell);
-        if (canPath) {
-            // -------------------------------------------------------
-            // Valid hunt target found -- create PerformWork action
-            // -------------------------------------------------------
-            float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
-            float huntPos[3];
-            s_fn_Vector3_Ctor(huntPos,
-                (float)(nearestCell % *mapGrid) - halfOffset,
-                (float)(nearestCell / *mapGrid) - halfOffset,
-                0.0f);
+    // Get workplace entity's grid cell for distance check
+    fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
+    uintptr_t entityIBPBuf[2] = { *(uintptr_t*)(selfAddr + 0x10), 0 };
+    uint32_t entityGridCell = s_fn_Entity_GetGridCell(entityIBPBuf, nullptr);
 
-            // Get terrain height
-            float pathPos[3];
-            s_fn_GetTerrainPos(mapGrid, pathPos, huntPos, 0, nullptr);
+    // -------------------------------------------------------
+    // Step 8: Validate cell — terrain, distance, entity, passability
+    // Original checks all 4 conditions; if ANY fail, uses fallback action.
+    // -------------------------------------------------------
+    uintptr_t gridData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+    bool allChecksPass = false;
 
-            // Create hunt action at position
-            // Re-read citizen entity from citizenIBP (matches original)
-            fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
-            uintptr_t citizenEntRef = *(uintptr_t*)citizenIBP;
+    // Only check if cell index is in bounds (negative X can produce bad index)
+    if (testCellX >= 0 && testCellX < mapSize) {
+        // Check 1: terrain type — skip resource terrain (0x1e0 mask)
+        uint8_t terrainByte = *(uint8_t*)(gridData + (uintptr_t)testCell * 0x30 + 0x29);
+        uint32_t terrainBit = 1u << (terrainByte & 0x1f);
+        bool terrainOk = (terrainBit & 0x1e0u) == 0;
 
-            // Re-find hunt component on workplace (original re-calls FindComp_Hunt here)
-            uintptr_t huntCompIBP2 = 0;
-            s_fn_FindComp_Hunt(*(uintptr_t*)(selfAddr + 0x10), &huntCompIBP2);
+        // Check 2: distance from workplace to random cell
+        int dist = s_fn_Map_CalcDistance(mapGrid, entityGridCell, testCell);
+        bool distOk = dist <= areaRadius * 2;
 
-            s_fn_CreateHuntAction(
-                &citizenEntRef,        // citizen entity IBP
-                (int)selfQ[4],         // priority (workplaceId)
-                &huntCompIBP2,         // hunt component IBP
-                pathPos,               // terrain position
-                0.0f,                  // float param
-                1);                    // char param
+        // Check 3: no entity at the cell
+        uintptr_t cellEntity = *(uintptr_t*)(gridData + (uintptr_t)testCell * 0x30 + 8);
+        bool emptyCell = (cellEntity == 0);
 
-            // Assign work and register with AI
-            int priority = (int)selfQ[4];
-            fn_InternalBasePtr_CheckPtr(citizenIBP);
-            uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
-
-            uintptr_t vtable = *(uintptr_t*)self;
-            typedef uintptr_t* (*GetWorkEntity_t)(HuntWork*, void*);
-            auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
-            uintptr_t workEntIBP[2] = {0};
-            uintptr_t* wResult = getWorkEntity(self, workEntIBP);
-            uintptr_t workEnt = *wResult;
-
-            *(uint32_t*)(citizenEnt + 0x54) |= 4;
-            *(uint32_t*)(citizenEnt + 0xb0) = 0;
-            *(int32_t*)(citizenEnt + 0x30) = priority;
-
-            if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
-                *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
-            }
-
-            s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), workEntIBP, citizenIBP);
-            return 2;
+        // Check 4: passability from random cell to citizen
+        if (terrainOk && distOk && emptyCell) {
+            bool canPath = (char)s_fn_Map_CanPathTo(mapGrid, 0xe1f, testCell, citizenGridCell) != 0;
+            allChecksPass = canPath;
         }
     }
 
+    if (allChecksPass) {
+        // -------------------------------------------------------
+        // Valid hunt target — create hunt action at terrain position
+        // -------------------------------------------------------
+        float halfOffset = (float)(*mapGrid >> 1) - *s_fHalfCellOffset;
+        float huntPos[3];
+        s_fn_Vector3_Ctor(huntPos,
+            (float)((int)testCell % *mapGrid) - halfOffset,
+            (float)((int)testCell / *mapGrid) - halfOffset,
+            0.0f);
+
+        // Get terrain height
+        float pathPos[3];
+        s_fn_GetTerrainPos(mapGrid, pathPos, huntPos, 0, nullptr);
+
+        fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
+        uintptr_t citizenEntRef = *(uintptr_t*)citizenIBP;
+
+        uintptr_t huntCompIBP2 = 0;
+        s_fn_FindComp_Hunt(*(uintptr_t*)(selfAddr + 0x10), &huntCompIBP2);
+
+        s_fn_CreateHuntAction(
+            &citizenEntRef,        // citizen entity IBP
+            (int)selfQ[4],         // priority
+            &huntCompIBP2,         // hunt component IBP
+            pathPos,               // terrain position
+            0.0f,                  // float param
+            1);                    // char param (specific location)
+    } else {
+        // -------------------------------------------------------
+        // Cell checks failed — create fallback hunt action
+        // Position (0,0,0), g_pAgeMultiplier float, char=0 (roaming)
+        // -------------------------------------------------------
+        fn_InternalBasePtr_CheckPtr((uintptr_t*)(selfAddr + 0x10));
+        uintptr_t citizenEntRef2 = *(uintptr_t*)citizenIBP;
+
+        uintptr_t huntCompIBP3 = 0;
+        uintptr_t workplaceEnt = *(uintptr_t*)(selfAddr + 0x10);
+        s_fn_FindComp_Hunt(workplaceEnt, &huntCompIBP3);
+
+        float fallbackPos[3] = { 0.0f, 0.0f, 0.0f };
+
+        s_fn_CreateHuntAction(
+            &citizenEntRef2,       // citizen entity IBP
+            (int)selfQ[4],         // priority
+            &huntCompIBP3,         // hunt component IBP
+            fallbackPos,           // fallback position (0,0,0)
+            *g_pAgeMultiplier,     // float param (roaming radius)
+            0);                    // char param (roaming mode)
+    }
+
     // -------------------------------------------------------
-    // No valid target found -- return 1 (done/no work)
+    // Both paths: assign work and return 2
     // -------------------------------------------------------
-    return 1;
+    int priority = (int)selfQ[4];
+    fn_InternalBasePtr_CheckPtr(citizenIBP);
+    uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
+
+    uintptr_t vtable = *(uintptr_t*)self;
+    typedef uintptr_t* (*GetWorkEntity_t)(HuntWork*, void*);
+    auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
+    uintptr_t workEntIBP[2] = {0};
+    uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+    uintptr_t workEnt = *wResult;
+
+    *(uint32_t*)(citizenEnt + 0x54) |= 4;
+    *(uint32_t*)(citizenEnt + 0xb0) = 0;
+    *(int32_t*)(citizenEnt + 0x30) = priority;
+
+    if (workEnt == *(uintptr_t*)(citizenEnt + 0x1f0) && priority >= 0) {
+        *(uint32_t*)(citizenEnt + 0x88) |= 0x20000;
+    }
+
+    s_fn_CitizenAI_RegisterWork((void*)(selfAddr + 0x48), workEntIBP, citizenIBP);
+    return 2;
 }
 
 

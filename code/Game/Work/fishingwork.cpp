@@ -225,18 +225,40 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < count; i++) {
         uintptr_t* ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
         fn_InternalBasePtr_CheckPtr(ibpSlot);
-        // Call vtable+0x10 (GetTypeId) on the component
         uintptr_t comp = *ibpSlot;
         uintptr_t vtable = *(uintptr_t*)comp;
         typedef uint32_t (*GetTypeId_t)();
         uint32_t compTypeId = ((GetTypeId_t)(*(uintptr_t*)(vtable + 0x10)))();
         if (compTypeId == typeId) {
-            // Found — re-read via indexed IBP and check derivation
             ibpSlot = (uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
             fn_InternalBasePtr_CheckPtr(ibpSlot);
             void* result = (void*)*ibpSlot;
             if (fn_IsDerivedFrom(result, typeId)) {
                 return result;
+            }
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================
+// Helper: Find component on a sub-object (entity+0x28 description).
+// Sub-objects use +0x28 (array ptr) / +0x30 (count) — different from entities.
+// ============================================================
+static void* FindComponentOnSubObject(uintptr_t subObj, uint32_t typeId) {
+    int count = *(int*)(subObj + 0x30);
+    uintptr_t arrayPtr = *(uintptr_t*)(subObj + 0x28);
+
+    for (int i = 0; i < count; i++) {
+        uintptr_t comp = *(uintptr_t*)(arrayPtr + (uintptr_t)i * 8);
+        uintptr_t vtable = *(uintptr_t*)comp;
+        typedef uint32_t (*GetTypeId_t)();
+        uint32_t compTypeId = ((GetTypeId_t)(*(uintptr_t*)(vtable + 0x10)))();
+        if (compTypeId == typeId) {
+            void* c = *(void**)(arrayPtr + (uintptr_t)i * 8);
+            if (fn_IsDerivedFrom(c, typeId)) {
+                return c;
             }
             return nullptr;
         }
@@ -291,16 +313,17 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
     int spotMapIdx = *(int*)((uintptr_t)fishingDesc + 0x28);
     uintptr_t mapEntries = *(uintptr_t*)(*(uintptr_t*)(gameWorld + 0xf0) + 0x170);
     int64_t offset = (int64_t)spotMapIdx * 0x20;
-    bool seasonValid = *(int*)(mapEntries + offset + 8) <= *(int*)(mapEntries + offset);
+    // atCapacity = (limit <= current) — true when resource count is at/above limit
+    bool atCapacity = *(int*)(mapEntries + offset + 8) <= *(int*)(mapEntries + offset);
 
-    // Toggle mesh instance visibility based on season
+    // Toggle mesh instance visibility based on capacity (visGroup 2)
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t meshIBPBuf = 0;
     s_fn_FindComponent_MeshInstance(*(uintptr_t*)(selfAddr + 0x10), &meshIBPBuf);
     fn_InternalBasePtr_CheckPtr(&meshIBPBuf);
-    s_fn_MeshInstance_SetVisibility(*(void**)&meshIBPBuf, 2, seasonValid ? 1 : 0);
+    s_fn_MeshInstance_SetVisibility(*(void**)&meshIBPBuf, 2, atCapacity ? 1 : 0);
 
-    if (!seasonValid) {
+    if (atCapacity) {
         return 1;
     }
 
@@ -405,10 +428,11 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 return 1;
             }
 
-            // Find RadiusComponent on building entity for random spot range
+            // Find RadiusComponent on building's description sub-object (+0x28)
+            // Sub-objects use +0x28/+0x30 layout, NOT entity +0x30/+0x38
             fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
             uintptr_t entityForRadius = *(uintptr_t*)(*(uintptr_t*)(selfAddr + 0x10) + 0x28);
-            void* radiusComp = FindComponentOnEntity(entityForRadius, *s_typeId_1401c4870);
+            void* radiusComp = FindComponentOnSubObject(entityForRadius, *s_typeId_1401c4870);
 
             int radius = *(int*)((uintptr_t)radiusComp + 0x28);
             int radiusSq = radius * radius;
@@ -420,18 +444,28 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             // Get random source from game world
             void* randPtr = *(void**)(gameWorld + 0xd8);
 
-            // Try up to 10 random fishing positions within radius
-            for (int attempt = 0; attempt < 10; attempt++) {
-                int rx = fn_Random_RandTol(randPtr, radius);
-                int ry = fn_Random_RandTol(randPtr, radius);
-                int targetX = citizenGridY + rx;  // note: Ghidra local_5c = field_28 % mapSize
-                int targetY = citizenGridX + ry;  // note: Ghidra local_60 = field_28 / mapSize
+            // Try up to 10 random fishing positions within radius.
+            // Original uses nested do-while to guarantee each attempt has a
+            // valid in-radius, in-bounds position before checking terrain.
+            int attemptCount = 0;
+            do {
+                int rx, ry, targetX, targetY;
+                // Inner do-while: generate valid position within radius + bounds
+                do {
+                    do {
+                        rx = fn_Random_RandTol(randPtr, radius);
+                        ry = fn_Random_RandTol(randPtr, radius);
+                        targetX = citizenGridY + rx;
+                        targetY = citizenGridX + ry;
+                    } while (radiusSq < ry * ry + rx * rx);
+                } while (targetY < 0 || targetY >= cMapSize);
+                // Note: X bounds not checked matches original (negative X fails terrain check)
 
-                // Check within radius
-                if (rx * rx + ry * ry > radiusSq) continue;
-
-                // Check in bounds (compound condition from Ghidra)
-                if (targetX < 0 || targetX >= cMapSize || targetY < 0 || targetY >= cMapSize) continue;
+                // Clamp X for safety when accessing grid data
+                if (targetX < 0 || targetX >= cMapSize) {
+                    attemptCount++;
+                    continue;
+                }
 
                 // Check map cell for valid water terrain
                 int64_t mapCellIdx = (int64_t)(cMapSize * targetY + targetX);
@@ -441,8 +475,14 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 
                 // Check fishing description allows this terrain and terrain is nonzero
                 uint32_t fishingTerrainMask = *(uint32_t*)((uintptr_t)fishingDesc + 0x2c);
-                if (((fishingTerrainMask >> (terrainBit & 0x1f)) & 1) == 0) continue;
-                if (terrainType == 0) continue;
+                if (((fishingTerrainMask >> (terrainBit & 0x1f)) & 1) == 0) {
+                    attemptCount++;
+                    continue;
+                }
+                if (terrainType == 0) {
+                    attemptCount++;
+                    continue;
+                }
 
                 // Valid spot found — create fishing action
                 fn_InternalBasePtr_CheckPtr(&fishingIBP);
@@ -485,7 +525,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 // Reset retry counter
                 *(int*)(selfAddr + 0x68) = 0;
                 return 2;
-            }
+            } while (attemptCount < 10);
 
             // All 10 random attempts failed — retry with animation if under limit
             if ((int)selfQ[0xd] < 0xb) {  // retry count < 11
