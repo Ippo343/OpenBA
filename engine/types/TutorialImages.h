@@ -18,10 +18,14 @@ namespace TutorialImageAddr {
 struct TutorialImage {
     void*    vtable;             // +0x00: -> 0x140160a40
     uint8_t  _extBase[0x18];     // +0x08: External base
-    void*    _field20;           // +0x20: zeroed (image resource?)
-    void*    _field28;           // +0x28: zeroed
+    void*    imageRef;           // +0x20: External* image resource (serialized via ExternalPtr)
+    int32_t  imageWidth;         // +0x28: image width (serialized as int)
+    int32_t  imageHeight;        // +0x2C: image height (serialized as int)
 };
 static_assert(sizeof(TutorialImage) == 0x30, "TutorialImage size mismatch");
+static_assert(offsetof(TutorialImage, imageRef) == 0x20, "TutorialImage::imageRef offset");
+static_assert(offsetof(TutorialImage, imageWidth) == 0x28, "TutorialImage::imageWidth offset");
+static_assert(offsetof(TutorialImage, imageHeight) == 0x2C, "TutorialImage::imageHeight offset");
 
 // TutorialImageHotKey — displays hot key image. Size = 0x48.
 // Decompiled from: TutorialImageHotKey_Ctor (0x1400e0680)
