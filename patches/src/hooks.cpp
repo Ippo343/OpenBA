@@ -402,16 +402,34 @@ emit_abs_jmp:
                 copySrc = instBuf;
                 // copySize unchanged (same instruction length)
             } else {
-                // Too far — need indirection through data area
-                // This is complex and rarely needed (trampoline is usually close enough
-                // for RIP-relative to still work). For now, fall back to simple recalc
-                // and emit a warning.
+                // Too far — use data area indirection
+                // For CALL/JMP [RIP+disp32] (opcode FF /2 or /4): read the function
+                // pointer from absTarget (original .rdata slot) and store it in the
+                // trampoline data area, then fix the displacement to point there.
+                // For other RIP-relative (MOV, LEA, CMP, etc.): copy the 8-byte value
+                // from absTarget into the data area and redirect similarly.
+                dataPtr -= 8;
+                *(uintptr_t*)dataPtr = *(uintptr_t*)absTarget;
+
+                int64_t dataDisp = (int64_t)((uintptr_t)dataPtr - (newInst + instrLen));
+                if (dataDisp >= INT32_MIN && dataDisp <= INT32_MAX) {
+                    *pRelAddr = (int32_t)dataDisp;
+                    copySrc = instBuf;
 #ifdef _DEBUG
-                printf("[HookReloc] RIP-relative too far for 0x%llx, displacement won't fit\n",
-                       (unsigned long long)oldInst);
+                    printf("[HookReloc] RIP-relative indirection via data area for 0x%llx -> data@%p\n",
+                           (unsigned long long)oldInst, (void*)dataPtr);
 #endif
-                *pRelAddr = (uint32_t)(int32_t)newDisp; // may wrap, but try anyway
-                copySrc = instBuf;
+                } else {
+                    // Data area itself unreachable (shouldn't happen within 256-byte buffer)
+                    dataPtr += 8; // restore
+#ifdef _DEBUG
+                    printf("[HookReloc] RIP-relative data area unreachable for 0x%llx\n",
+                           (unsigned long long)oldInst);
+#endif
+                    VirtualFree(info->trampoline, 0, MEM_RELEASE);
+                    info->trampoline = nullptr;
+                    return false;
+                }
             }
         }
 
@@ -3785,7 +3803,7 @@ static ReimplEntry g_reimplementations[] = {
     { "Weather::Slot6", InstallWeatherSlot6, RemoveWeatherSlot6, true },
     { "Weather::Slot8", InstallWeatherSlot8, RemoveWeatherSlot8, true }, // RE-ENABLED: relocating trampoline handles near Jcc
     { "MenuScene::Dtor", InstallMenuSceneDtor, RemoveMenuSceneDtor, true },
-    { "MenuScene::Slot5", InstallMenuSceneSlot5, RemoveMenuSceneSlot5, true },
+    { "MenuScene::Slot5", InstallMenuSceneSlot5, RemoveMenuSceneSlot5, false }, // DISABLED: Bug Class 8 — SEH cookie (mov [rbp-0x20],-2) in prologue; overwritten entry breaks exception unwind on loader thread
     { "MenuScene::Slot6", InstallMenuSceneSlot6, RemoveMenuSceneSlot6, true },
     { "MenuScene::Slot8", InstallMenuSceneSlot8, RemoveMenuSceneSlot8, true }, // RE-ENABLED: relocating trampoline handles near Jcc
 };
