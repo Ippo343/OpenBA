@@ -18,6 +18,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Tutorial/tutorialstep_funcs.h"
 #include "TutorialStep.h"
 #include <cstdio>
 #include <cstdint>
@@ -28,7 +29,7 @@ static HookInfo g_hookTutorialStepDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialStep::Dtor";
-    return ((fn_Dtor_t)g_hookTutorialStepDtor.trampoline)(self, flags);
+    return TutorialStep_Dtor(self, flags);
 }
 
 void InstallTutorialStepDtor() {
@@ -45,7 +46,7 @@ static HookInfo g_hookTutorialStepSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialStep::Serialize";
-    ((fn_Serialize_t)g_hookTutorialStepSerialize.trampoline)(self, stream);
+    TutorialStep_Serialize(self, stream);
 }
 
 void InstallTutorialStepSerialize() {
@@ -62,7 +63,7 @@ static HookInfo g_hookTutorialStepCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialStep::Cleanup";
-    ((fn_Cleanup_t)g_hookTutorialStepCleanup.trampoline)(self);
+    TutorialStep_Cleanup(self);
 }
 
 void InstallTutorialStepCleanup() {
@@ -81,7 +82,7 @@ static void* g_savedTutorialStepInit = nullptr;
 typedef void* (*fn_Init_t)(void* self);
 static void* Reimpl_Init(void* self) {
     g_lastHook = "TutorialStep::Init";
-    return ((fn_Init_t)g_savedTutorialStepInit)(self);
+    return TutorialStep_Init(self);
 }
 
 static void PatchVtableSlot_Step(size_t slotIndex, void* newFunc, void** outOld) {

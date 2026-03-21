@@ -1,0 +1,173 @@
+// code/Game/Tutorial/tutorialinstance.cpp
+// Clean reimplementation of TutorialInstance vtable methods.
+//
+// TutorialInstance (0x38 bytes) -- tutorial runtime instance.
+// Vtable: 0x140160bf8, extends Object::Internal (0x10 bytes base).
+//
+// Fields (from Ghidra decompilation):
+//   +0x00: void*    vtable
+//   +0x08: uint8_t  _intBase[8]   -- Internal base fields
+//   +0x10: int32_t  currentStep   -- current tutorial step index
+//   +0x30: void*    tutorialDef   -- ExternalPtr<Tutorial> definition
+//
+// Decompiled from Application-x64.exe using Ghidra.
+// This file must NOT depend on hooks.h -- portable for standalone exe.
+
+#include "Tutorial/tutorialinstance_funcs.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstdio>
+
+// ============================================================
+// Local function pointers (resolved lazily)
+// ============================================================
+
+// Internal::~Internal -- dispatch slot 0x140152770
+typedef void (*fn_Internal_Dtor_dispatch_t)(void* self);
+static fn_Internal_Dtor_dispatch_t s_fn_Internal_Dtor = nullptr;
+
+// Serializer::Ctor -- dispatch slot 0x140152ad8
+typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
+
+// Serializer::Dtor -- dispatch slot 0x140152ad0
+typedef void (*fn_Serializer_Dtor_t)(void* self);
+static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
+
+// Serializer::Serialize(int*) -- dispatch slot 0x140152ac8
+typedef void (*fn_Serializer_SerializeInt_t)(void* serializer, void* intPtr, const char* name);
+static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
+
+static bool s_resolved = false;
+
+static void EnsureResolved() {
+    if (s_resolved) return;
+    s_resolved = true;
+
+    void** slot;
+
+    // Internal::~Internal
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152770));
+    if (slot && *slot) s_fn_Internal_Dtor = reinterpret_cast<fn_Internal_Dtor_dispatch_t>(*slot);
+
+    // Serializer slots
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad8));
+    if (slot && *slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(*slot);
+
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad0));
+    if (slot && *slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(*slot);
+
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ac8));
+    if (slot && *slot) s_fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(*slot);
+}
+
+// ============================================================
+// TutorialInstance_Dtor -- Slot0 (vtable +0x00, 0x1400281a0)
+// ============================================================
+// Scalar destructor: sets vtable, calls Internal::~Internal,
+// optionally frees memory.
+//
+// Disassembly:
+//   LEA RAX,[0x140160bf8]   ; vtable
+//   MOV [RCX],RAX           ; set vtable
+//   CALL [0x140152770]      ; Internal::~Internal
+//   TEST BL,0x1             ; check flags
+//   JZ skip
+//   CALL [0x140152b68]      ; MemFreeStatic
+void* TutorialInstance_Dtor(void* self, uint32_t flags) {
+    EnsureResolved();
+
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    // Set vtable to TutorialInstance
+    uintptr_t vtable = ResolveAddr(Module::Exe, TutorialInstanceAddr::Vtable);
+    *reinterpret_cast<uintptr_t*>(s) = vtable;
+
+    // Call Internal::~Internal
+    if (s_fn_Internal_Dtor) {
+        s_fn_Internal_Dtor(self);
+    }
+
+    // Conditionally free memory
+    if ((flags & 1) != 0) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic(self);
+    }
+
+    return self;
+}
+
+// ============================================================
+// TutorialInstance_Serialize -- Slot3 (vtable +0x18, 0x1400e1520)
+// ============================================================
+// Serializes the tutorial instance:
+//   1. ExternalPtr<Tutorial> at +0x30 via ExternalPtr_SerializeTutorial
+//   2. int32_t currentStep at +0x10
+//   3. On load: adjusts currentStep backwards if steps are not completed
+//      (walks backwards through tutorial steps checking the completed flag)
+//
+// Disassembly:
+//   CALL [0x140152ad8]  ; Serializer::Ctor(stack, stream, 0)
+//   CALL 0x1400262b0    ; ExternalPtr<Tutorial>::Serialize(&self+0x30, serializer)
+//   CALL [0x140152ac8]  ; Serializer::Serialize(&self+0x10, int)
+//   CMP [serializer+8],0  ; check if loading
+//   ...step adjustment loop...
+//   CALL [0x140152ad0]  ; Serializer::~Serializer
+void TutorialInstance_Serialize(void* self, void* stream) {
+    EnsureResolved();
+
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    // Create Serializer on stack (24 bytes)
+    uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) {
+        s_fn_Serializer_Ctor(serializer, stream, 0);
+    } else {
+        return;
+    }
+
+    // 1. Serialize ExternalPtr<Tutorial> at +0x30
+    if (fn_ExternalPtr_SerializeTutorial) {
+        fn_ExternalPtr_SerializeTutorial(reinterpret_cast<void*>(s + 0x30), serializer);
+    }
+
+    // 2. Serialize int32_t currentStep at +0x10
+    if (s_fn_Serializer_SerializeInt) {
+        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x10), nullptr);
+    }
+
+    // 3. On load: adjust currentStep backwards if steps are not completed
+    //    The serializer's encoding mode at *(serializer[0]+8) == 0 means "reading"
+    uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
+    if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+        // Loading from save -- check if current step needs adjustment
+        void* tutDef = *reinterpret_cast<void**>(s + 0x30);
+        int32_t step = *reinterpret_cast<int32_t*>(s + 0x10);
+
+        if (tutDef != nullptr) {
+            uintptr_t td = reinterpret_cast<uintptr_t>(tutDef);
+            int32_t totalSteps = *reinterpret_cast<int32_t*>(td + 0x30);
+
+            // Only adjust if step is within range and positive
+            if (step < totalSteps && step > 0) {
+                // Walk backwards: if the current step is not completed, go back
+                // tutDef->+0x28 is the steps array, each element is a pointer
+                // step[i]->+0x20 is the completed bool
+                while (step > 0) {
+                    void** stepsArray = *reinterpret_cast<void***>(td + 0x28);
+                    void* currentStepObj = stepsArray[step];
+                    uint8_t completed = *reinterpret_cast<uint8_t*>(
+                        reinterpret_cast<uintptr_t>(currentStepObj) + 0x20);
+                    if (completed != 0) break;
+                    step--;
+                    *reinterpret_cast<int32_t*>(s + 0x10) = step;
+                }
+            }
+        }
+    }
+
+    // Destroy serializer
+    if (s_fn_Serializer_Dtor) {
+        s_fn_Serializer_Dtor(serializer);
+    }
+}

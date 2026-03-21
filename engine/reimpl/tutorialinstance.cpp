@@ -13,6 +13,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Tutorial/tutorialinstance_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -21,7 +22,7 @@ static HookInfo g_hookTutorialInstanceDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialInstance::Dtor";
-    return ((fn_Dtor_t)g_hookTutorialInstanceDtor.trampoline)(self, flags);
+    return TutorialInstance_Dtor(self, flags);
 }
 
 void InstallTutorialInstanceDtor() {
@@ -38,7 +39,7 @@ static HookInfo g_hookTutorialInstanceSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialInstance::Serialize";
-    ((fn_Serialize_t)g_hookTutorialInstanceSerialize.trampoline)(self, stream);
+    TutorialInstance_Serialize(self, stream);
 }
 
 void InstallTutorialInstanceSerialize() {
