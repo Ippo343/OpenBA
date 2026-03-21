@@ -11,7 +11,9 @@
 MAKEFLAGS += -j$(shell nproc 2>/dev/null || echo 4)
 
 CXX = ccache g++
+CC = ccache gcc
 CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type -MMD -MP
+CFLAGS = -Wall -Wextra -MMD -MP
 LDFLAGS = -shared -static-libgcc -static-libstdc++
 LIBS = -luser32 -ldbghelp
 
@@ -30,6 +32,9 @@ PATCH_SRCS = \
     patches/src/proxy.cpp \
     patches/src/hooks.cpp \
     patches/src/resolve.cpp
+
+# HDE64 length disassembler (C source from MinHook, used by hook relocation)
+HDE_SRCS = patches/src/hde/hde64.c
 
 ENGINE_FUNC_SRCS = \
     engine/funcs/engine_funcs.cpp
@@ -52,6 +57,9 @@ ALL_SRCS = $(PATCH_SRCS) $(ENGINE_FUNC_SRCS) $(ENGINE_REIMPL_SRCS) $(GAME_SRC_SR
 #   patches/src/dllmain.cpp -> patches/build/obj/patches__src__dllmain.o
 OBJECTS = $(addprefix $(OBJ_DIR)/, $(subst /,__,$(ALL_SRCS:.cpp=.o)))
 
+# HDE64 C objects (separate from C++ objects)
+HDE_OBJECTS = $(addprefix $(OBJ_DIR)/, $(subst /,__,$(HDE_SRCS:.c=.o)))
+
 DEF_FILE = patches/src/proxy.def
 TARGET = $(BUILD_DIR)/version.dll
 
@@ -66,14 +74,18 @@ release: CXXFLAGS += -O2 -DNDEBUG
 release: $(TARGET)
 
 # Link all objects into the DLL
-$(TARGET): $(OBJECTS) $(DEF_FILE) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(DEF_FILE) $(LIBS)
+$(TARGET): $(OBJECTS) $(HDE_OBJECTS) $(DEF_FILE) | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(HDE_OBJECTS) $(DEF_FILE) $(LIBS)
 	@echo "Built: $@"
 	@ls -lh $@
 
 # Pattern rules: compile each source directory
 $(OBJ_DIR)/patches__src__%.o: patches/src/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+# HDE64 C source (length disassembler)
+$(OBJ_DIR)/patches__src__hde__%.o: patches/src/hde/%.c | $(OBJ_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(OBJ_DIR)/engine__funcs__%.o: engine/funcs/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
@@ -186,6 +198,7 @@ run: deploy
 
 # Include auto-generated header dependency files
 -include $(OBJECTS:.o=.d)
+-include $(HDE_OBJECTS:.o=.d)
 
 clean:
 	rm -rf $(BUILD_DIR)

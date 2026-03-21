@@ -27,6 +27,13 @@ struct HookInfo {
 // size) and MUST end on an instruction boundary. Default 12 works when the first
 // 12 bytes of the target are complete instructions. Use a larger value when the
 // 12-byte boundary falls mid-instruction (check with a disassembler).
+//
+// Auto-detects MOV RAX,RSP (48 8B C4) and MOV R11,RSP (4C 8B DC) in the
+// prologue and inserts ADD RAX/R11,8 corrections in the trampoline to
+// compensate for the CALL-induced RSP shift (Bug Class 3 fix).
+//
+// Auto-detects PC-relative instructions (CALL rel32, JMP rel, Jcc, RIP-relative)
+// and uses HDE64-based relocation to fix them in the trampoline (Bug Class 2 fix).
 bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t prologueSize = 12);
 
 // Install a hook for functions whose prologue starts with MOV RAX,RSP or MOV R11,RSP.
@@ -43,6 +50,10 @@ bool InstallHook(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t 
 //
 // Use the REIMPL_RSP_PASSTHROUGH macro in reimpl files to generate the naked stub.
 bool InstallHookRSPSafe(uintptr_t targetAddr, void* detourFunc, HookInfo* info, size_t prologueSize);
+
+// Trampoline buffer size: large enough for relocated instructions (which can expand)
+// plus the jump-back sequence (13 bytes: MOV R10, imm64 + JMP R10).
+static constexpr size_t TRAMPOLINE_BUFFER_SIZE = 256;
 
 // Remove a hook: restores original bytes
 void RemoveHook(HookInfo* info);
