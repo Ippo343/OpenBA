@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialSetups.h"
+#include "Tutorial/tutorialsetupcamera_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -31,7 +32,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialSetupCamera::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialSetupCamera_Dtor(self, flags);
 }
 
 void InstallTutorialSetupCameraDtor() {
@@ -48,7 +49,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialSetupCamera::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialSetupCamera_Serialize(self, stream);
 }
 
 void InstallTutorialSetupCameraSerialize() {
@@ -65,7 +66,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialSetupCamera::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialSetupCamera_Cleanup(self);
 }
 
 void InstallTutorialSetupCameraCleanup() {
@@ -77,14 +78,14 @@ void InstallTutorialSetupCameraCleanup() {
 }
 void RemoveTutorialSetupCameraCleanup() { RemoveHook(&g_hookCleanup); }
 
-// --- Slot8: Slot8 ---
+// --- Slot8: Slot8 / Apply ---
 // RE-ENABLED: RIP-relative MOV at byte 4 in the 18-byte prologue. Use vtable patch.
 // TutorialSetupCamera vtable slot 8 (+0x40): sets camera position in game state.
 static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "TutorialSetupCamera::Slot8";
-    ((fn_Slot8_t)g_savedSlot8)(self);
+    TutorialSetupCamera_Slot8(self);
 }
 
 static void PatchVtableSlot_Camera(size_t slotIndex, void* newFunc, void** outOld) {
@@ -115,7 +116,7 @@ static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialSetupCamera::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    return TutorialSetupCamera_Ctor(self);
 }
 
 void InstallTutorialSetupCameraCtor() {

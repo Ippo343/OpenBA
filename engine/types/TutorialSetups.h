@@ -22,10 +22,16 @@ namespace TutorialSetupCameraAddr {
 struct TutorialSetupCamera {
     void*    vtable;             // +0x00: -> 0x140160ca0
     uint8_t  _extBase[0x18];     // +0x08: External base
-    int64_t  _field20;           // +0x20: -1 (all 0xFF bytes) (camera target X,Y packed?)
-    int64_t  _field28;           // +0x28: -1
+    int32_t  cameraX;            // +0x20: camera cell X (-1 = unset)
+    int32_t  cameraChunkRow;     // +0x24: camera chunk row (-1 = unset)
+    int32_t  cameraY;            // +0x28: camera cell Y (-1 = unset)
+    int32_t  cameraChunkCol;     // +0x2C: camera chunk column (-1 = unset)
 };
 static_assert(sizeof(TutorialSetupCamera) == 0x30, "TutorialSetupCamera size mismatch");
+static_assert(offsetof(TutorialSetupCamera, cameraX) == 0x20, "cameraX offset");
+static_assert(offsetof(TutorialSetupCamera, cameraChunkRow) == 0x24, "cameraChunkRow offset");
+static_assert(offsetof(TutorialSetupCamera, cameraY) == 0x28, "cameraY offset");
+static_assert(offsetof(TutorialSetupCamera, cameraChunkCol) == 0x2C, "cameraChunkCol offset");
 
 // TutorialSetupGameSpeed — set game speed. Size = 0x28.
 // Decompiled from: TutorialSetupGameSpeed_Factory (0x1400289c0, inline ctor)
