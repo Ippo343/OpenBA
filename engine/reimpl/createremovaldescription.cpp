@@ -87,8 +87,8 @@ static uint64_t Reimpl_Serialize(void* self, void* stream, void* /*param3*/, voi
     // Serialize ExternalPtr array — pass param4 through (required by FUN_1400049c0)
     fn_ExternalRefArray_Serialize(serializer, localCount, *(void**)(s + 0x28), param4);
 
-    // ExternalPtr at +0x38
-    fn_ExternalPtr_Serialize3((void*)(s + 0x38), serializer);
+    // ExternalPtr at +0x38 — uses FUN_140002340 (fn_ExternalPtr_BuildSerialize)
+    fn_ExternalPtr_BuildSerialize((void*)(s + 0x38), serializer);
 
     // bools at +0x40/+0x41/+0x42/+0x43
     g_fn_Serialize_Bool(serializer, (void*)(s + 0x40), nullptr);
