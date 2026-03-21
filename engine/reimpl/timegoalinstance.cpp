@@ -16,6 +16,8 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/timegoalinstance_funcs.h"
+#include "Goal/timegoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -28,34 +30,27 @@ static HookInfo g_hookSlot5;
 static HookInfo g_hookSlot6;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot3_t)(void* self, void* stream);
-typedef void  (*fn_Slot5_t)(void* self, void* param2);
-typedef void  (*fn_Slot6_t)(void* self);
-
-// ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers — delegate to clean code
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TimeGoalInstance::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    // Dtor is shared with TimeGoal::Slot11
+    return TimeGoal_Slot11(self, flags);
 }
 
 static void Reimpl_Slot3(void* self, void* stream) {
     g_lastHook = "TimeGoalInstance::Slot3";
-    ((fn_Slot3_t)g_hookSlot3.trampoline)(self, stream);
+    TimeGoalInstance_Slot3((TimeGoalInstance*)self, stream);
 }
 
-static void Reimpl_Slot5(void* self, void* param2) {
+static void Reimpl_Slot5(void* self, void* time, void* goalList) {
     g_lastHook = "TimeGoalInstance::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, param2);
+    TimeGoalInstance_Slot5((TimeGoalInstance*)self, time, goalList);
 }
 
-static void Reimpl_Slot6(void* self) {
+static int Reimpl_Slot6(void* self) {
     g_lastHook = "TimeGoalInstance::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    return TimeGoalInstance_Slot6((TimeGoalInstance*)self);
 }
 
 // ============================================================

@@ -4599,6 +4599,88 @@ typedef void* (*fn_FindWorkplaceComp_t)(int64_t entity, void* outIBP);
 extern fn_FindWorkplaceComp_t fn_FindWorkplaceComp;
 
 // ============================================================
+// Achievement Goal support (code/Game/Goal/)
+// ============================================================
+
+// Achievement::Goal::~Goal (Runtime 0x18009edb0, ordinal 600)
+// ?~Goal@Achievement@@UEAA@XZ — destroys Goal base (string dtor + External dtor)
+typedef void (*fn_Goal_BaseDtor_t)(void* self);
+extern fn_Goal_BaseDtor_t fn_Goal_BaseDtor;
+
+// Achievement::Goal::Goal() (Runtime 0x18009ed50, ordinal 207)
+// ?Goal@Achievement@@QEAA@XZ — default ctor, zeroes base fields
+typedef void (*fn_Goal_BaseCtor_t)(void* self);
+extern fn_Goal_BaseCtor_t fn_Goal_BaseCtor;
+
+// Achievement::Goal::Serialize — called via dispatch slot 0x140152840
+// Signature: void Goal::Serialize(this, Stream*)
+typedef void (*fn_Goal_BaseSerialize_t)(void* self, void* stream);
+extern fn_Goal_BaseSerialize_t fn_Goal_BaseSerialize;
+
+// Achievement::GoalInstance::~GoalInstance (Runtime 0x18009ef40, ordinal 601)
+// ??1GoalInstance@Achievement@@UEAA@XZ
+typedef void (*fn_GoalInstance_BaseDtor_t)(void* self);
+extern fn_GoalInstance_BaseDtor_t fn_GoalInstance_BaseDtor;
+
+// Achievement::GoalInstance::Persist (Runtime 0x18009ef70)
+// Signature: void GoalInstance::Persist(this, Stream*)
+typedef void (*fn_GoalInstance_Persist_t)(void* self, void* stream);
+extern fn_GoalInstance_Persist_t fn_GoalInstance_Persist;
+
+// Object::InternalBasePtr::Serialize (Runtime DLL export)
+// ?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z
+typedef void (*fn_InternalBasePtr_Serialize_t)(void* self, void* serializer);
+extern fn_InternalBasePtr_Serialize_t fn_InternalBasePtr_Serialize;
+
+// UpdateLoop/Game IsRunning — dispatch slot 0x140152850
+// Used by PopulationGoal::Slot8 to check if game is active
+typedef bool (*fn_IsRunning_t)(void* self);
+extern fn_IsRunning_t fn_IsRunning;
+
+// System::MemoryAllocator::MemFree — static wrapper (0x18001d170 in Runtime)
+// Already have fn_MemFreeStatic, but need the one used by Goal dtors
+// (they call System::MemoryAllocator::MemFree which is fn_MemFreeStatic)
+
+// FinishTutorialGoal helper: External serialize for tutorial ref (+0x30)
+// FUN_1400262b0 — serializes External* field with type-check against Tutorial
+typedef void (*fn_ExternalPtr_SerializeTutorial_t)(void* fieldPtr, void* serializer);
+extern fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial;
+
+// BuildingGoal helpers
+// FUN_14001b030 — destroy building type array (dtor strings + free)
+typedef void (*fn_BuildingTypeArray_Dtor_t)(void* arrayField);
+extern fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor;
+
+// FUN_14001b340 — resize building type array
+typedef void (*fn_BuildingTypeArray_Resize_t)(void* arrayField, uint32_t count);
+extern fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize;
+
+// FUN_14001b1d0 — compute string hash for building type entry
+typedef void (*fn_StringHash_t)(void* str);
+extern fn_StringHash_t fn_StringHash;
+
+// System::String::Serialize — already declared as g_fn_String_Serialize
+
+// System::Filename::Filename() — default ctor (dispatch slot 0x140151d40)
+typedef void* (*fn_Filename_Ctor_t)(void* self);
+extern fn_Filename_Ctor_t fn_Filename_Ctor;
+
+// System::Filename::~Filename() — already declared as fn_Filename_Dtor
+// IO::Serializer::Serialize(bool) — already declared as g_fn_Serialize_Bool
+
+// Tutorial Goal helpers (exe-internal)
+// ============================================================
+
+// FUN_1400e1870(outIBP, elementPath, outDialogPtr) — find UI element by dotted path string.
+// Parses "DialogType.ElementName" (or "DialogType.Controller.ElementName"),
+// searches open dialogs for matching type, then finds child element by name.
+// outIBP receives the found element's InternalBasePtr (0 if not found).
+// outDialogPtr (optional, can be NULL) receives the dialog instance pointer.
+// RCX=outIBP, RDX=elementPath(String*), R8=outDialogPtr(or NULL)
+typedef void* (*fn_FindUIElementByPath_t)(void* outIBP, void* elementPath, void* outDialogPtr);
+extern fn_FindUIElementByPath_t fn_FindUIElementByPath;
+
+// ============================================================
 // Initialization
 // ============================================================
 

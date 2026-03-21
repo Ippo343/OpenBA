@@ -25,16 +25,167 @@
 #include "resolve.h"
 #include <cstdint>
 
-// FUN_14001b1d0 — String hash computation (updates string's hash field)
-typedef void (*fn_StringHash_t)(void* str);
-static fn_StringHash_t s_fn_StringHash = nullptr;
+// Vtable pointer for BuildingGoal (resolved at runtime)
+static void* s_vtable_BuildingGoal = nullptr;
+static bool s_resolved = false;
 
-static bool s_helpersResolved = false;
+static void EnsureResolved() {
+    if (s_resolved) return;
+    s_vtable_BuildingGoal = (void*)ResolveAddr(Module::Exe, 0x140160300);
+    s_resolved = true;
+}
 
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-    s_fn_StringHash = (fn_StringHash_t)ResolveAddr(Module::Exe, 0x14001b1d0);
-    s_helpersResolved = true;
+// ============================================================
+// BuildingGoal::Dtor (vtable +0x00, 0x140025e80)
+// ============================================================
+// Scalar destructor: sets vtable, destroys building type array at +0x38,
+// calls Goal::~Goal, optionally frees memory.
+//
+// Decompiled:
+//   *(vtable*)this = &vtable_BuildingGoal;
+//   FUN_14001b030(&this->+0x38);  // destroy building type array
+//   Goal::~Goal(this);
+//   if (flags & 1) MemFree(this);
+void* BuildingGoal_Dtor(BuildingGoal* self, uint32_t flags) {
+    EnsureResolved();
+    uintptr_t s = (uintptr_t)self;
+
+    // Set vtable
+    *(void**)self = s_vtable_BuildingGoal;
+
+    // Destroy building type array at +0x38
+    if (fn_BuildingTypeArray_Dtor) {
+        fn_BuildingTypeArray_Dtor((void*)(s + 0x38));
+    }
+
+    // Call Goal base destructor
+    if (fn_Goal_BaseDtor) {
+        fn_Goal_BaseDtor(self);
+    }
+
+    // If bit 0 set, free memory
+    if ((flags & 1) != 0) {
+        if (fn_MemFreeStatic) {
+            fn_MemFreeStatic(self);
+        }
+    }
+
+    return self;
+}
+
+// ============================================================
+// BuildingGoal::Slot5 (vtable +0x28, 0x1400d76a0)
+// ============================================================
+// Serialize/Load: calls Goal::Serialize base, then serializes:
+//   1. requireAll (bool at +0x30) via Serialize_Bool
+//   2. entry count (int, copy at local then written to +0x40)
+//   3. On load (encoding mode 0): resize array via FUN_14001b340
+//   4. For each entry: Filename ctor, String::Serialize, hash if loading, Filename dtor
+//
+// Decompiled from 0x1400d76a0 disassembly.
+int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Call Goal base serialize
+    if (fn_Goal_BaseSerialize) {
+        fn_Goal_BaseSerialize(self, stream);
+    }
+
+    // Create Serializer on stack (24 bytes)
+    uint8_t serializer[24];
+    if (g_fn_Serializer_Ctor) {
+        g_fn_Serializer_Ctor(serializer, stream, 0);
+    }
+
+    // Serialize requireAll (bool at +0x30)
+    if (g_fn_Serialize_Bool) {
+        g_fn_Serialize_Bool(serializer, (void*)(s + 0x30), nullptr);
+    }
+
+    // Serialize entry count
+    int entryCount = *(int*)(s + 0x40);
+    uint32_t countLocal = (uint32_t)entryCount;
+    if (g_fn_Serialize_Int) {
+        g_fn_Serialize_Int(serializer, &countLocal, nullptr);
+    }
+
+    // Check if loading (encoding mode == 0 means loading)
+    uintptr_t serPtr = *(uintptr_t*)serializer;
+    int encodingMode = *(int*)(serPtr + 0x08);
+    if (encodingMode == 0) {
+        // Loading: resize array
+        if (fn_BuildingTypeArray_Resize) {
+            fn_BuildingTypeArray_Resize((void*)(s + 0x38), countLocal);
+        }
+    }
+
+    // Serialize each entry
+    void* arrayBase = *(void**)(s + 0x38);
+    if ((int)countLocal > 0) {
+        uint8_t* entry = (uint8_t*)arrayBase;
+        for (uint32_t i = 0; i < countLocal; i++) {
+            // Filename ctor on stack (16 bytes)
+            uint8_t filenameBuf[16];
+            if (fn_Filename_Ctor) {
+                fn_Filename_Ctor(filenameBuf);
+            }
+
+            // String::Serialize — serialize the string at entry+0x00
+            if (g_fn_String_Serialize) {
+                g_fn_String_Serialize(entry, serializer);
+            }
+
+            // On load: compute hash
+            if (encodingMode == 0) {
+                if (fn_StringHash) {
+                    fn_StringHash(entry);
+                }
+            }
+
+            // Filename dtor
+            if (fn_Filename_Dtor) {
+                fn_Filename_Dtor(filenameBuf);
+            }
+
+            entry += 0x18;
+        }
+    }
+
+    // Destroy Serializer
+    if (g_fn_Serializer_Dtor) {
+        g_fn_Serializer_Dtor(serializer);
+    }
+
+    return 1;
+}
+
+// ============================================================
+// BuildingGoal::Slot6 (vtable +0x30, 0x140025e30)
+// ============================================================
+// Factory constructor: calls Goal::Goal() base ctor, sets vtable,
+// initializes fields: +0x30=1 (requireAll), +0x38=0 (array), +0x40=0 (count).
+// Returns null if input is null.
+BuildingGoal* BuildingGoal_Slot6(BuildingGoal* self) {
+    EnsureResolved();
+
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    // Call Goal base default constructor
+    if (fn_Goal_BaseCtor) {
+        fn_Goal_BaseCtor(self);
+    }
+
+    // Set vtable
+    *(void**)self = s_vtable_BuildingGoal;
+
+    // Initialize fields
+    *(uint8_t*)((uintptr_t)self + 0x30) = 1;   // requireAll = true
+    *(uint64_t*)((uintptr_t)self + 0x38) = 0;   // array ptr = null
+    *(uint64_t*)((uintptr_t)self + 0x40) = 0;   // count = 0
+
+    return self;
 }
 
 // ============================================================
@@ -53,7 +204,6 @@ static void EnsureHelpers() {
 //     0 otherwise
 
 int BuildingGoal_Slot8(BuildingGoal* self) {
-    EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
     // Get world data
@@ -73,13 +223,12 @@ int BuildingGoal_Slot8(BuildingGoal* self) {
             // Copy string, compute hash, extract key
             uint8_t strBuf[8];
             fn_String_Ctor_Copy(strBuf, (void*)entry);
-            // entry+0x08: uint32 field (copied to local_38)
             // entry+0x10: uint64 hash key
             uint64_t hashKey = *(uint64_t*)(entry + 0x10);
 
             // Compute string hash (FUN_14001b1d0)
-            if (s_fn_StringHash) {
-                s_fn_StringHash(strBuf);
+            if (fn_StringHash) {
+                fn_StringHash(strBuf);
             }
 
             // Use the hash key from the entry
@@ -128,4 +277,12 @@ int BuildingGoal_Slot8(BuildingGoal* self) {
         return 2;  // some matched — goal in progress
     }
     return 0;
+}
+
+// ============================================================
+// BuildingGoal::CreateInstance (vtable +0x50, 0x140025de0)
+// ============================================================
+// Same as Slot6 — constructs a new BuildingGoal in-place.
+BuildingGoal* BuildingGoal_CreateInstance(BuildingGoal* self) {
+    return BuildingGoal_Slot6(self);
 }

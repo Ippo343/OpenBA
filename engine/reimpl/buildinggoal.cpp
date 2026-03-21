@@ -13,13 +13,14 @@
 //   +0x28: 0x1400d76a0 — Slot5/Load
 //   +0x30: 0x140025e30 — Slot6/Cleanup
 //   +0x38: 0x140001640 — Slot7 base (7b, unhookable)
-//   +0x40: 0x1400d7580 — Slot8/Serialize
+//   +0x40: 0x1400d7580 — Slot8/Check
 //   +0x48: 0x14003ab5e — Slot9 base (not a function entry)
 //   +0x50: 0x140025de0 — Slot10/CreateInstance
 
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/buildinggoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -33,40 +34,31 @@ static HookInfo g_hookSlot8;
 static HookInfo g_hookSlot10;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot5_t)(void* self, void* stream);
-typedef void  (*fn_Slot6_t)(void* self);
-typedef void  (*fn_Slot8_t)(void* self, void* stream);
-typedef void  (*fn_Slot10_t)(void* self);
-
-// ============================================================
-// Passthrough wrappers
+// Reimpl wrappers — delegate to clean code in code/Game/Goal/
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "BuildingGoal::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return BuildingGoal_Dtor((BuildingGoal*)self, flags);
 }
 
-static void Reimpl_Slot5(void* self, void* stream) {
+static int Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "BuildingGoal::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    return BuildingGoal_Slot5((BuildingGoal*)self, stream);
 }
 
-static void Reimpl_Slot6(void* self) {
+static void* Reimpl_Slot6(void* self) {
     g_lastHook = "BuildingGoal::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    return BuildingGoal_Slot6((BuildingGoal*)self);
 }
 
-static void Reimpl_Slot8(void* self, void* stream) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "BuildingGoal::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, stream);
+    return BuildingGoal_Slot8((BuildingGoal*)self);
 }
 
-static void Reimpl_Slot10(void* self) {
+static void* Reimpl_Slot10(void* self) {
     g_lastHook = "BuildingGoal::Slot10";
-    ((fn_Slot10_t)g_hookSlot10.trampoline)(self);
+    return BuildingGoal_CreateInstance((BuildingGoal*)self);
 }
 
 // ============================================================

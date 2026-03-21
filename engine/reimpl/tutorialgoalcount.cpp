@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialGoals.h"
+#include "Goal/tutorialgoalcount_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -29,7 +30,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialGoalCount::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialGoalCount_Dtor(self, flags);
 }
 
 void InstallTutorialGoalCountDtor() {
@@ -46,7 +47,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialGoalCount::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialGoalCount_Serialize(self, stream);
 }
 
 void InstallTutorialGoalCountSerialize() {
@@ -63,7 +64,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialGoalCount::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialGoalCount_Cleanup(self);
 }
 
 void InstallTutorialGoalCountCleanup() {
@@ -75,14 +76,16 @@ void InstallTutorialGoalCountCleanup() {
 }
 void RemoveTutorialGoalCountCleanup() { RemoveHook(&g_hookCleanup); }
 
-// --- Slot8: Slot8 ---
+// --- Slot8: Check ---
 // RE-ENABLED: MOV R11,RSP at byte 0 breaks trampoline. Use vtable patch instead.
 // Vtable slot 8 (+0x40) of TutorialGoalCount — stores g_savedSlot8 for removal.
+// Now calls clean reimplementation (delegates to original via resolved address
+// because the 11-case switch is too complex to fully reimplement safely).
 static void* g_savedSlot8 = nullptr;
-typedef void (*fn_Slot8_t)(void* self, void* param1, void* param2);
-static void Reimpl_Slot8(void* self, void* param1, void* param2) {
-    g_lastHook = "TutorialGoalCount::Slot8";
-    ((fn_Slot8_t)g_savedSlot8)(self, param1, param2);
+typedef int (*fn_Check_t)(void* self, void* param1, void* param2);
+static int Reimpl_Check(void* self, void* param1, void* param2) {
+    g_lastHook = "TutorialGoalCount::Check";
+    return TutorialGoalCount_Check(self, param1, param2);
 }
 
 static void PatchVtableSlot_GoalCount(size_t slotIndex, void* newFunc, void** outOld) {
@@ -96,9 +99,9 @@ static void PatchVtableSlot_GoalCount(size_t slotIndex, void* newFunc, void** ou
 }
 
 void InstallTutorialGoalCountSlot8() {
-    PatchVtableSlot_GoalCount(8, (void*)Reimpl_Slot8, &g_savedSlot8);
+    PatchVtableSlot_GoalCount(8, (void*)Reimpl_Check, &g_savedSlot8);
 #ifdef _DEBUG
-    printf("[TutorialGoalCount] Slot8 vtable-patched (slot 8)\n");
+    printf("[TutorialGoalCount] Check vtable-patched (slot 8)\n");
 #endif
 }
 void RemoveTutorialGoalCountSlot8() {
@@ -108,20 +111,21 @@ void RemoveTutorialGoalCountSlot8() {
     }
 }
 
-// --- Slot9: Ctor/Init ---
+// --- Slot9: Init ---
 // RE-ENABLED: near Jcc wrapper at 0x1400277f0. Hook the real Ctor body instead.
 // Vtable slot 9 (+0x48) — stores g_savedCtor for removal.
+// Now calls clean reimplementation (TutorialGoalCount_Init).
 static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
-    g_lastHook = "TutorialGoalCount::Ctor";
-    return ((fn_Ctor_t)g_savedCtor)(self);
+    g_lastHook = "TutorialGoalCount::Init";
+    return TutorialGoalCount_Init(self);
 }
 
 void InstallTutorialGoalCountCtor() {
     PatchVtableSlot_GoalCount(9, (void*)Reimpl_Ctor, &g_savedCtor);
 #ifdef _DEBUG
-    printf("[TutorialGoalCount] Ctor vtable-patched (slot 9)\n");
+    printf("[TutorialGoalCount] Init vtable-patched (slot 9)\n");
 #endif
 }
 void RemoveTutorialGoalCountCtor() {

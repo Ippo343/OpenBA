@@ -16,11 +16,13 @@ Placement tools handle building/road/zone placement by the player. Each tool sub
 
 | Class | Vtable | Type Header | Reimpl Status | Priority |
 |-------|--------|-------------|---------------|----------|
+Stage 1 (do tool base first gate other items):
 | Tool (base) | 0x140161f10 / 0x140161c10 | Tool.h | Not started | - |
 | PlacementTool | - | PlacementTool.h | Not started | Medium |
 | BridgeTool | 0x140161b00 | BridgeTool.h | Not started | Low |
 | DragPlacementTool | 0x140161b90 | DragPlacementTool.h | Not started | Medium |
 | EditTool | 0x140161ca0 | EditTool.h | Not started | Medium |
+Stage 2:
 | FencedTool | 0x1401605d0 | FencedTool.h | Not started | Low |
 | PathTool | 0x140160680 | PathTool.h | Not started | Low |
 | RemovalTool | 0x140161de0 | RemovalTool.h | Not started | Medium |

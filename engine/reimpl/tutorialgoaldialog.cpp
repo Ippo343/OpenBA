@@ -57,8 +57,7 @@ typedef void (*fn_String_Serialize_t)(void* self, void* serializer);
 static fn_String_Serialize_t fn_String_Serialize = nullptr;
 
 // System::Filename::Filename(this) — default ctor
-typedef void* (*fn_Filename_Ctor_t)(void* self);
-static fn_Filename_Ctor_t fn_Filename_Ctor = nullptr;
+// Now using global fn_Filename_Ctor from engine_funcs.h
 
 // System::Filename::~Filename(this) — dtor
 // Note: fn_Filename_Dtor is now the global in engine_funcs.h; use it directly.

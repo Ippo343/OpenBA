@@ -13,13 +13,14 @@
 //   +0x28: 0x1400da8b0 — Slot5/Load
 //   +0x30: 0x140026520 — Slot6/Cleanup
 //   +0x38: 0x140001640 — Slot7 base (7b, unhookable)
-//   +0x40: 0x1400da720 — Slot8/Serialize
+//   +0x40: 0x1400da720 — Slot8/Check
 //   +0x48: 0x14003ab5e — Slot9 base (not a function entry)
 //   +0x50: 0x140026510 — Slot10/CreateInstance
 
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/statgoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -33,40 +34,31 @@ static HookInfo g_hookSlot8;
 static HookInfo g_hookSlot10;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot5_t)(void* self, void* stream);
-typedef void  (*fn_Slot6_t)(void* self);
-typedef void  (*fn_Slot8_t)(void* self);
-typedef void  (*fn_Slot10_t)(void* self);
-
-// ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers — delegate to clean code
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "StatGoal::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return StatGoal_Dtor((StatGoal*)self, flags);
 }
 
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "StatGoal::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    StatGoal_Slot5((StatGoal*)self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "StatGoal::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    StatGoal_Slot6((StatGoal*)self);
 }
 
-static void Reimpl_Slot8(void* self) {
+static int Reimpl_Slot8(void* self) {
     g_lastHook = "StatGoal::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    return StatGoal_Slot8((StatGoal*)self);
 }
 
-static void Reimpl_Slot10(void* self) {
+static void* Reimpl_Slot10(void* self) {
     g_lastHook = "StatGoal::Slot10";
-    ((fn_Slot10_t)g_hookSlot10.trampoline)(self);
+    return StatGoal_Slot10(self);
 }
 
 // ============================================================

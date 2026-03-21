@@ -19,6 +19,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/tutorialgoalbutton_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -27,7 +28,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialGoalButton::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialGoalButton_Dtor(self, flags);
 }
 
 void InstallTutorialGoalButtonDtor() {
@@ -44,7 +45,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialGoalButton::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialGoalButton_Serialize(self, stream);
 }
 
 void InstallTutorialGoalButtonSerialize() {
@@ -61,7 +62,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialGoalButton::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialGoalButton_Cleanup(self);
 }
 
 void InstallTutorialGoalButtonCleanup() {
@@ -73,36 +74,36 @@ void InstallTutorialGoalButtonCleanup() {
 }
 void RemoveTutorialGoalButtonCleanup() { RemoveHook(&g_hookCleanup); }
 
-// --- Slot8: Slot8 ---
+// --- Slot8: Check ---
 static HookInfo g_hookSlot8;
-typedef void (*fn_Slot8_t)(void* self, void* param);
-static void Reimpl_Slot8(void* self, void* param) {
-    g_lastHook = "TutorialGoalButton::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self, param);
+typedef int (*fn_Check_t)(void* self);
+static int Reimpl_Check(void* self) {
+    g_lastHook = "TutorialGoalButton::Check";
+    return TutorialGoalButton_Check(self);
 }
 
 void InstallTutorialGoalButtonSlot8() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dece0);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 13);
+    InstallHook(target, (void*)Reimpl_Check, &g_hookSlot8, 13);
 #ifdef _DEBUG
-    printf("[TutorialGoalButton] Slot8 hooked at %p\n", (void*)target);
+    printf("[TutorialGoalButton] Check hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveTutorialGoalButtonSlot8() { RemoveHook(&g_hookSlot8); }
 
-// --- Slot9: Ctor/Init ---
+// --- Slot9: Init ---
 static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
-    g_lastHook = "TutorialGoalButton::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    g_lastHook = "TutorialGoalButton::Init";
+    return TutorialGoalButton_Init(self);
 }
 
 void InstallTutorialGoalButtonCtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140027300);
     InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 15);
 #ifdef _DEBUG
-    printf("[TutorialGoalButton] Ctor hooked at %p\n", (void*)target);
+    printf("[TutorialGoalButton] Init hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveTutorialGoalButtonCtor() { RemoveHook(&g_hookCtor); }

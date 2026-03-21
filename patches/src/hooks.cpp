@@ -3355,12 +3355,12 @@ static ReimplEntry g_reimplementations[] = {
     { "BuildingGoal::Dtor", InstallBuildingGoalDtor, RemoveBuildingGoalDtor, true },
     { "BuildingGoal::Slot5", InstallBuildingGoalSlot5, RemoveBuildingGoalSlot5, true },
     { "BuildingGoal::Slot6", InstallBuildingGoalSlot6, RemoveBuildingGoalSlot6, true },
-    { "BuildingGoal::Slot8", InstallBuildingGoalSlot8, RemoveBuildingGoalSlot8, false }, // DISABLED: MOV RAX/R11,RSP in prologue
+    { "BuildingGoal::Slot8", InstallBuildingGoalSlot8, RemoveBuildingGoalSlot8, true }, // ENABLED: clean reimpl, trampoline not used
     { "BuildingGoal::Slot10", InstallBuildingGoalSlot10, RemoveBuildingGoalSlot10, true },
     { "PopulationGoal::Dtor", InstallPopulationGoalDtor, RemovePopulationGoalDtor, true },
     { "PopulationGoal::Slot5", InstallPopulationGoalSlot5, RemovePopulationGoalSlot5, true },
     { "PopulationGoal::Slot6", InstallPopulationGoalSlot6, RemovePopulationGoalSlot6, true },
-    { "PopulationGoal::Slot8", InstallPopulationGoalSlot8, RemovePopulationGoalSlot8, false }, // RIP-relative in prologue
+    { "PopulationGoal::Slot8", InstallPopulationGoalSlot8, RemovePopulationGoalSlot8, true }, // ENABLED: clean reimpl, trampoline not used
     { "PopulationGoal::Slot10", InstallPopulationGoalSlot10, RemovePopulationGoalSlot10, true },
     { "FinishTutorialGoal::Dtor", InstallFinishTutorialGoalDtor, RemoveFinishTutorialGoalDtor, true },
     { "FinishTutorialGoal::Slot5", InstallFinishTutorialGoalSlot5, RemoveFinishTutorialGoalSlot5, true },

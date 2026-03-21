@@ -1,0 +1,162 @@
+// code/Game/Goal/populationgoal.cpp
+// Clean reimplementation of PopulationGoal vtable methods.
+//
+// PopulationGoal (0x38 bytes) — achievement goal requiring population count.
+// Vtable: 0x140160370
+//
+// Fields (from Ghidra decompilation):
+//   +0x00: void*    vtable
+//   +0x08: uint8_t  _goalBase[0x28]  — Goal base fields
+//   +0x30: int32_t  targetPop        — required population count (default 100)
+//   +0x34: uint8_t  _pad34[4]        — padding
+//
+// The world population count is at game+0xF0+0xA8.
+//
+// Decompiled from Application-x64.exe using Ghidra.
+// This file must NOT depend on hooks.h — portable for standalone exe.
+
+#include "Goal/populationgoal_funcs.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+// Vtable pointer for PopulationGoal (resolved at runtime)
+static void* s_vtable_PopulationGoal = nullptr;
+static bool s_resolved = false;
+
+static void EnsureResolved() {
+    if (s_resolved) return;
+    s_vtable_PopulationGoal = (void*)ResolveAddr(Module::Exe, 0x140160370);
+    s_resolved = true;
+}
+
+// ============================================================
+// PopulationGoal::Dtor (vtable +0x00, 0x140026000)
+// ============================================================
+// Scalar destructor: sets vtable, calls Goal::~Goal, optionally frees.
+void* PopulationGoal_Dtor(PopulationGoal* self, uint32_t flags) {
+    EnsureResolved();
+
+    // Set vtable to PopulationGoal
+    *(void**)self = s_vtable_PopulationGoal;
+
+    // Call Goal base destructor
+    if (fn_Goal_BaseDtor) {
+        fn_Goal_BaseDtor(self);
+    }
+
+    // If bit 0 set, free memory
+    if ((flags & 1) != 0) {
+        if (fn_MemFreeStatic) {
+            fn_MemFreeStatic(self);
+        }
+    }
+
+    return self;
+}
+
+// ============================================================
+// PopulationGoal::Slot5 (vtable +0x28, 0x1400d7870)
+// ============================================================
+// Serialize/Load: calls Goal::Serialize base, then serializes
+// targetPop (int32 at +0x30) via Serializer.
+int PopulationGoal_Slot5(PopulationGoal* self, void* stream) {
+    uintptr_t s = (uintptr_t)self;
+
+    // Call Goal base serialize
+    if (fn_Goal_BaseSerialize) {
+        fn_Goal_BaseSerialize(self, stream);
+    }
+
+    // Create Serializer on stack (24 bytes)
+    uint8_t serializer[24];
+    if (g_fn_Serializer_Ctor) {
+        g_fn_Serializer_Ctor(serializer, stream, 0);
+    }
+
+    // Serialize targetPop at +0x30
+    if (g_fn_Serialize_Int) {
+        g_fn_Serialize_Int(serializer, (void*)(s + 0x30), nullptr);
+    }
+
+    // Destroy Serializer
+    if (g_fn_Serializer_Dtor) {
+        g_fn_Serializer_Dtor(serializer);
+    }
+
+    return 1;
+}
+
+// ============================================================
+// PopulationGoal::Slot6 (vtable +0x30, 0x140025fb0)
+// ============================================================
+// Factory constructor: calls Goal::Goal() base ctor, sets vtable,
+// initializes targetPop to 100.
+// Returns null if input is null.
+PopulationGoal* PopulationGoal_Slot6(PopulationGoal* self) {
+    EnsureResolved();
+
+    if (self == nullptr) {
+        return nullptr;
+    }
+
+    // Call Goal base default constructor
+    if (fn_Goal_BaseCtor) {
+        fn_Goal_BaseCtor(self);
+    }
+
+    // Set vtable to PopulationGoal
+    *(void**)self = s_vtable_PopulationGoal;
+
+    // Initialize targetPop to 100
+    self->targetPop = 100;
+
+    return self;
+}
+
+// ============================================================
+// PopulationGoal::Slot8 (vtable +0x40, 0x1400d7820)
+// ============================================================
+// Check goal completion: compares world population against targetPop.
+//
+// Decompiled:
+//   if (g_pGameWorldSingleton != NULL) {
+//       if (IsRunning(g_pGameWorldSingleton)) {
+//           return *(int*)(*(int64_t*)(g_pGameWorldSingleton+0xF0) + 0xA8) >= self->targetPop;
+//       }
+//   }
+//   return false;
+//
+// NOTE: Hook is DISABLED due to RIP-relative MOV in prologue.
+// This clean reimplementation works regardless of hook status.
+int PopulationGoal_Slot8(PopulationGoal* self) {
+    uintptr_t s = (uintptr_t)self;
+
+    if (g_pGameWorldSingleton == nullptr) return 0;
+    void* gameWorld = *g_pGameWorldSingleton;
+    if (gameWorld == nullptr) return 0;
+
+    // Check IsRunning
+    if (fn_IsRunning) {
+        bool running = fn_IsRunning(gameWorld);
+        if (!running) return 0;
+    }
+
+    // Read world data pointer at game+0xF0
+    uintptr_t worldData = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
+    if (worldData == 0) return 0;
+
+    // Compare population at worldData+0xA8 against targetPop at self+0x30
+    int currentPop = *(int*)(worldData + 0xA8);
+    int targetPop = *(int*)(s + 0x30);
+
+    return (currentPop >= targetPop) ? 1 : 0;
+}
+
+// ============================================================
+// PopulationGoal::CreateInstance (vtable +0x50, 0x140025f60)
+// ============================================================
+// Same as Slot6 — constructs a new PopulationGoal in-place.
+PopulationGoal* PopulationGoal_CreateInstance(PopulationGoal* self) {
+    return PopulationGoal_Slot6(self);
+}

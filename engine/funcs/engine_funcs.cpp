@@ -808,6 +808,7 @@ fn_FileSystem_GetSourceDirectory_t fn_FileSystem_GetSourceDirectory = nullptr;
 fn_External_SaveText_t     fn_External_SaveText     = nullptr;
 fn_Filename_CtorString_t   fn_Filename_CtorString   = nullptr;
 fn_Filename_CtorCStr_t     fn_Filename_CtorCStr     = nullptr;
+fn_Filename_Ctor_t         fn_Filename_Ctor         = nullptr;
 fn_Filename_Dtor_t         fn_Filename_Dtor         = nullptr;
 fn_String_Concat_t         fn_String_ConcatSS       = nullptr;
 fn_String_Concat_t         fn_String_ConcatSS2      = nullptr;
@@ -966,6 +967,20 @@ fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceVali
 fn_CitizenComponent_HasVacancy_t fn_CitizenComponent_HasVacancy = nullptr;
 fn_FindStorageLocationComp_t fn_FindStorageLocationComp = nullptr;
 fn_FindWorkplaceComp_t fn_FindWorkplaceComp = nullptr;
+
+// Achievement Goal support
+fn_Goal_BaseDtor_t fn_Goal_BaseDtor = nullptr;
+fn_Goal_BaseCtor_t fn_Goal_BaseCtor = nullptr;
+fn_Goal_BaseSerialize_t fn_Goal_BaseSerialize = nullptr;
+fn_GoalInstance_BaseDtor_t fn_GoalInstance_BaseDtor = nullptr;
+fn_GoalInstance_Persist_t fn_GoalInstance_Persist = nullptr;
+fn_InternalBasePtr_Serialize_t fn_InternalBasePtr_Serialize = nullptr;
+fn_IsRunning_t fn_IsRunning = nullptr;
+fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
+fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
+fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize = nullptr;
+fn_StringHash_t fn_StringHash = nullptr;
+fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
 
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
@@ -3829,6 +3844,93 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140002e10));
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved\n");
+#endif
+
+    // --- Achievement Goal support ---
+    fn_Goal_BaseDtor = reinterpret_cast<fn_Goal_BaseDtor_t>(
+        ResolveExport("??1Goal@Achievement@@UEAA@XZ"));
+    if (!fn_Goal_BaseDtor)
+        fn_Goal_BaseDtor = reinterpret_cast<fn_Goal_BaseDtor_t>(
+            ResolveAddr(Module::Runtime, 0x18009edb0));
+
+    fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
+        ResolveExport("??0Goal@Achievement@@QEAA@XZ"));
+    if (!fn_Goal_BaseCtor)
+        fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
+            ResolveAddr(Module::Runtime, 0x18009ed50));
+
+    // Goal::Serialize via dispatch slot 0x140152840
+    {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152840));
+        if (slot && *slot)
+            fn_Goal_BaseSerialize = reinterpret_cast<fn_Goal_BaseSerialize_t>(*slot);
+    }
+
+    fn_GoalInstance_BaseDtor = reinterpret_cast<fn_GoalInstance_BaseDtor_t>(
+        ResolveExport("??1GoalInstance@Achievement@@UEAA@XZ"));
+    if (!fn_GoalInstance_BaseDtor)
+        fn_GoalInstance_BaseDtor = reinterpret_cast<fn_GoalInstance_BaseDtor_t>(
+            ResolveAddr(Module::Runtime, 0x18009ef40));
+
+    fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
+        ResolveExport("?Persist@GoalInstance@Achievement@@QEAAXAEAVStream@IO@@@Z"));
+    if (!fn_GoalInstance_Persist)
+        fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
+            ResolveAddr(Module::Runtime, 0x18009ef70));
+
+    fn_InternalBasePtr_Serialize = reinterpret_cast<fn_InternalBasePtr_Serialize_t>(
+        ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
+
+    // IsRunning via dispatch slot 0x140152850
+    {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152850));
+        if (slot && *slot)
+            fn_IsRunning = reinterpret_cast<fn_IsRunning_t>(*slot);
+    }
+
+    // FinishTutorialGoal helper: External serialize for tutorial ref
+    fn_ExternalPtr_SerializeTutorial = reinterpret_cast<fn_ExternalPtr_SerializeTutorial_t>(
+        ResolveAddr(Module::Exe, 0x1400262b0));
+
+    // BuildingGoal helpers
+    fn_BuildingTypeArray_Dtor = reinterpret_cast<fn_BuildingTypeArray_Dtor_t>(
+        ResolveAddr(Module::Exe, 0x14001b030));
+    fn_BuildingTypeArray_Resize = reinterpret_cast<fn_BuildingTypeArray_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001b340));
+    fn_StringHash = reinterpret_cast<fn_StringHash_t>(
+        ResolveAddr(Module::Exe, 0x14001b1d0));
+
+    // Filename ctor/dtor — already resolved from dispatch slots earlier in init
+    // fn_Filename_Ctor at 0x140151d40, fn_Filename_Dtor at 0x1401529e8
+    // Resolve here as fallback if not yet done
+    if (!fn_Filename_Ctor) {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d40));
+        if (slot && *slot)
+            fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(*slot);
+    }
+    if (!fn_Filename_Dtor) {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529e8));
+        if (slot && *slot)
+            fn_Filename_Dtor = reinterpret_cast<fn_Filename_Dtor_t>(*slot);
+    }
+
+#ifdef _DEBUG
+    printf("[EngineFuncs] Achievement Goal support resolved\n");
+    printf("  Goal::~Goal         = %p\n", (void*)fn_Goal_BaseDtor);
+    printf("  Goal::Goal()        = %p\n", (void*)fn_Goal_BaseCtor);
+    printf("  Goal::Serialize     = %p\n", (void*)fn_Goal_BaseSerialize);
+    printf("  GoalInst::~GoalInst = %p\n", (void*)fn_GoalInstance_BaseDtor);
+    printf("  GoalInst::Persist   = %p\n", (void*)fn_GoalInstance_Persist);
+    printf("  IBP::Serialize      = %p\n", (void*)fn_InternalBasePtr_Serialize);
+    printf("  IsRunning           = %p\n", (void*)fn_IsRunning);
+#endif
+
+    // --- Phase K: Tutorial Goal helpers ---
+    fn_FindUIElementByPath = reinterpret_cast<fn_FindUIElementByPath_t>(
+        ResolveAddr(Module::Exe, 0x1400e1870));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Phase K: Tutorial goal helpers resolved\n");
+    printf("  FindUIElementByPath = %p\n", (void*)fn_FindUIElementByPath);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

@@ -21,6 +21,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/finishtutorialgoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -34,40 +35,31 @@ static HookInfo g_hookSlot10;
 static HookInfo g_hookSlot11;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot5_t)(void* self, void* stream);
-typedef void  (*fn_Slot6_t)(void* self);
-typedef void  (*fn_Slot10_t)(void* self);
-typedef void* (*fn_Slot11_t)(void* self, uint32_t flags);
-
-// ============================================================
-// Passthrough wrappers
+// Reimpl wrappers — delegate to clean code in code/Game/Goal/
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "FinishTutorialGoal::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return FinishTutorialGoal_Dtor((FinishTutorialGoal*)self, flags);
 }
 
-static void Reimpl_Slot5(void* self, void* stream) {
+static int Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "FinishTutorialGoal::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    return FinishTutorialGoal_Slot5((FinishTutorialGoal*)self, stream);
 }
 
-static void Reimpl_Slot6(void* self) {
+static void* Reimpl_Slot6(void* self) {
     g_lastHook = "FinishTutorialGoal::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    return FinishTutorialGoal_Slot6((FinishTutorialGoal*)self);
 }
 
-static void Reimpl_Slot10(void* self) {
+static void* Reimpl_Slot10(void* self) {
     g_lastHook = "FinishTutorialGoal::Slot10";
-    ((fn_Slot10_t)g_hookSlot10.trampoline)(self);
+    return FinishTutorialGoal_CreateInstance((FinishTutorialGoal*)self);
 }
 
 static void* Reimpl_Slot11(void* self, uint32_t flags) {
     g_lastHook = "FinishTutorialGoal::Slot11";
-    return ((fn_Slot11_t)g_hookSlot11.trampoline)(self, flags);
+    return FinishTutorialGoal_Slot11(self, flags);
 }
 
 // ============================================================

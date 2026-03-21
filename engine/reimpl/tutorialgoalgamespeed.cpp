@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialGoals.h"
+#include "Goal/tutorialgoalgamespeed_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -29,7 +30,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialGoalGameSpeed::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialGoalGameSpeed_Dtor(self, flags);
 }
 
 void InstallTutorialGoalGameSpeedDtor() {
@@ -46,7 +47,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialGoalGameSpeed::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialGoalGameSpeed_Serialize(self, stream);
 }
 
 void InstallTutorialGoalGameSpeedSerialize() {
@@ -63,7 +64,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialGoalGameSpeed::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialGoalGameSpeed_Cleanup(self);
 }
 
 void InstallTutorialGoalGameSpeedCleanup() {
@@ -75,14 +76,15 @@ void InstallTutorialGoalGameSpeedCleanup() {
 }
 void RemoveTutorialGoalGameSpeedCleanup() { RemoveHook(&g_hookCleanup); }
 
-// --- Slot8: Slot8 ---
+// --- Slot8: Check ---
 // RE-ENABLED: RIP-relative at byte 0 breaks trampoline. Use vtable patch instead.
 // Vtable slot 8 (+0x40) of TutorialGoalGameSpeed.
+// Now calls clean reimplementation (TutorialGoalGameSpeed_Check).
 static void* g_savedSlot8 = nullptr;
-typedef void (*fn_Slot8_t)(void* self);
-static void Reimpl_Slot8(void* self) {
-    g_lastHook = "TutorialGoalGameSpeed::Slot8";
-    ((fn_Slot8_t)g_savedSlot8)(self);
+typedef int (*fn_Check_t)(void* self);
+static int Reimpl_Check(void* self) {
+    g_lastHook = "TutorialGoalGameSpeed::Check";
+    return TutorialGoalGameSpeed_Check((TutorialGoalGameSpeed*)self);
 }
 
 static void PatchVtableSlot_GameSpeed(size_t slotIndex, void* newFunc, void** outOld) {
@@ -96,9 +98,9 @@ static void PatchVtableSlot_GameSpeed(size_t slotIndex, void* newFunc, void** ou
 }
 
 void InstallTutorialGoalGameSpeedSlot8() {
-    PatchVtableSlot_GameSpeed(8, (void*)Reimpl_Slot8, &g_savedSlot8);
+    PatchVtableSlot_GameSpeed(8, (void*)Reimpl_Check, &g_savedSlot8);
 #ifdef _DEBUG
-    printf("[TutorialGoalGameSpeed] Slot8 vtable-patched (slot 8)\n");
+    printf("[TutorialGoalGameSpeed] Check vtable-patched (slot 8)\n");
 #endif
 }
 void RemoveTutorialGoalGameSpeedSlot8() {
@@ -108,19 +110,19 @@ void RemoveTutorialGoalGameSpeedSlot8() {
     }
 }
 
-// --- Slot9: Ctor/Init ---
+// --- Slot9: Init ---
 static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
-    g_lastHook = "TutorialGoalGameSpeed::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    g_lastHook = "TutorialGoalGameSpeed::Init";
+    return TutorialGoalGameSpeed_Init(self);
 }
 
 void InstallTutorialGoalGameSpeedCtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140027690);
     InstallHook(target, (void*)Reimpl_Ctor, &g_hookCtor, 15);
 #ifdef _DEBUG
-    printf("[TutorialGoalGameSpeed] Ctor hooked at %p\n", (void*)target);
+    printf("[TutorialGoalGameSpeed] Init hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveTutorialGoalGameSpeedCtor() { RemoveHook(&g_hookCtor); }

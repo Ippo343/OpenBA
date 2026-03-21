@@ -293,8 +293,9 @@ typedef void (*fn_ExternalList_Find_t)(void* self, void* retval, void* filename,
 static fn_ExternalList_Find_t fn_ExternalList_Find = nullptr;
 
 // System::Filename::Filename(this, const char*) (Runtime)
-typedef void* (*fn_Filename_Ctor_t)(void* self, const char* path);
-static fn_Filename_Ctor_t fn_Filename_Ctor = nullptr;
+// NOTE: This is the CStr variant, distinct from the default ctor fn_Filename_Ctor in engine_funcs.h
+typedef void* (*fn_Filename_CtorCStr_Local_t)(void* self, const char* path);
+static fn_Filename_CtorCStr_Local_t fn_Filename_CtorCStr_Local = nullptr;
 
 // fn_Filename_Dtor — available from engine_funcs.h
 
@@ -479,7 +480,7 @@ static void EnsureInit() {
         ResolveExport("?IsPaused@Application@1@QEAA_NXZ"));
     fn_ExternalList_Find = reinterpret_cast<fn_ExternalList_Find_t>(
         ResolveExport("?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z"));
-    fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(
+    fn_Filename_CtorCStr_Local = reinterpret_cast<fn_Filename_CtorCStr_Local_t>(
         ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
     // fn_Filename_Dtor — resolved by EngineFuncsInit()
     // fn_InternalBasePtr_Ctor — resolved by EngineFuncsInit()
@@ -514,7 +515,7 @@ static void EnsureInit() {
     CHECK_FN(fn_Time_Ctor_Seconds);
     CHECK_FN(fn_App_IsPaused);
     CHECK_FN(fn_ExternalList_Find);
-    CHECK_FN(fn_Filename_Ctor);
+    CHECK_FN(fn_Filename_CtorCStr_Local);
     CHECK_FN(fn_SaveLoad_Draw);
     CHECK_FN(fn_AchievementManager_Update);
     CHECK_FN(fn_EventNotifier_Fire);
@@ -1347,7 +1348,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
     {
         uint8_t filename[8];
-        fn_Filename_Ctor(filename, "Dialog/Toolbar.rsc");
+        fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
 
         // Find the Dialog resource in the ExternalList
         void* foundBase = nullptr;
@@ -1384,7 +1385,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
     {
         uint8_t filename[8];
-        fn_Filename_Ctor(filename, "Dialog/EventNotify.rsc");
+        fn_Filename_CtorCStr_Local(filename, "Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
         uint32_t typeInfo = *g_pDialogTypeId;
         fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
@@ -1407,7 +1408,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Startup] creating AutoSave dialog...\n");
     {
         uint8_t filename[8];
-        fn_Filename_Ctor(filename, "Dialog/AutoSave.rsc");
+        fn_Filename_CtorCStr_Local(filename, "Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
         uint32_t typeInfo = *g_pDialogTypeId;
         fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);

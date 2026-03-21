@@ -16,6 +16,8 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/finishtutorialinstance_funcs.h"
+#include "Goal/finishtutorialgoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -29,40 +31,42 @@ static HookInfo g_hookSlot5;
 static HookInfo g_hookSlot6;
 
 // ============================================================
-// Original function typedefs
+// Original function typedefs (for slots still using trampoline)
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot3_t)(void* self, void* stream);
 typedef void  (*fn_Slot4_t)(void* self, void* p2, void* p3);
 typedef void  (*fn_Slot5_t)(void* self, void* p2, void* p3, void* p4);
-typedef void  (*fn_Slot6_t)(void* self);
 
 // ============================================================
-// Passthrough wrappers
+// Reimpl wrappers
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "FinishTutorialInstance::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    // Shared implementation with FinishTutorialGoal::Slot11
+    return FinishTutorialGoal_Slot11(self, flags);
 }
 
 static void Reimpl_Slot3(void* self, void* stream) {
     g_lastHook = "FinishTutorialInstance::Slot3";
-    ((fn_Slot3_t)g_hookSlot3.trampoline)(self, stream);
+    FinishTutorialInstance_Slot3((FinishTutorialInstance*)self, stream);
 }
 
 static void Reimpl_Slot4(void* self, void* p2, void* p3) {
     g_lastHook = "FinishTutorialInstance::Slot4";
+    // Slot4/Load is too complex (allocates TutorialInstance, many subsystem deps)
+    // Keep as trampoline for now
     ((fn_Slot4_t)g_hookSlot4.trampoline)(self, p2, p3);
 }
 
 static void Reimpl_Slot5(void* self, void* p2, void* p3, void* p4) {
     g_lastHook = "FinishTutorialInstance::Slot5";
+    // Slot5/Execute is too complex (tutorial step execution logic)
+    // Keep as trampoline for now
     ((fn_Slot5_t)g_hookSlot5.trampoline)(self, p2, p3, p4);
 }
 
-static void Reimpl_Slot6(void* self) {
+static int Reimpl_Slot6(void* self) {
     g_lastHook = "FinishTutorialInstance::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    return FinishTutorialInstance_Slot6((FinishTutorialInstance*)self);
 }
 
 // ============================================================

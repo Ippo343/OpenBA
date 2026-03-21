@@ -18,6 +18,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Goal/tutorialgoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -26,7 +27,7 @@ static HookInfo g_hookTutorialGoalDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialGoal::Dtor";
-    return ((fn_Dtor_t)g_hookTutorialGoalDtor.trampoline)(self, flags);
+    return TutorialGoal_Dtor(self, flags);
 }
 
 void InstallTutorialGoalDtor() {
@@ -43,7 +44,7 @@ static HookInfo g_hookTutorialGoalSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialGoal::Serialize";
-    ((fn_Serialize_t)g_hookTutorialGoalSerialize.trampoline)(self, stream);
+    TutorialGoal_Serialize(self, stream);
 }
 
 void InstallTutorialGoalSerialize() {
