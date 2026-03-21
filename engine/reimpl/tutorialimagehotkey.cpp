@@ -19,6 +19,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Tutorial/tutorialimagehotkey_funcs.h"
 #include "TutorialImages.h"
 #include <cstdio>
 #include <cstdint>
@@ -29,7 +30,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialImageHotKey::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialImageHotKey_Dtor(self, flags);
 }
 
 void InstallTutorialImageHotKeyDtor() {
@@ -46,7 +47,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialImageHotKey::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialImageHotKey_Serialize(self, stream);
 }
 
 void InstallTutorialImageHotKeySerialize() {
@@ -63,7 +64,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialImageHotKey::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialImageHotKey_Cleanup(self);
 }
 
 void InstallTutorialImageHotKeyCleanup() {
@@ -81,7 +82,7 @@ static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialImageHotKey::Ctor";
-    return ((fn_Ctor_t)g_savedCtor)(self);
+    return TutorialImageHotKey_Ctor(self);
 }
 
 static void PatchVtableSlot_HotKey(size_t slotIndex, void* newFunc, void** outOld) {
@@ -108,6 +109,7 @@ void RemoveTutorialImageHotKeyCtor() {
 }
 
 // --- Slot9: Slot9 ---
+// Kept as trampoline — requires many unresolved UI/KeyMap engine functions.
 static HookInfo g_hookSlot9;
 typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
 static void Reimpl_Slot9(void* self, void* param1, void* param2) {
