@@ -19,7 +19,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
-#include "Goal/tutorialgoalbutton_funcs.h"
+#include "Tutorial/tutorialgoalbutton_funcs.h"
 #include <cstdio>
 #include <cstdint>
 

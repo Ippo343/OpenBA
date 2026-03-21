@@ -20,7 +20,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialGoals.h"
-#include "Goal/tutorialgoalcount_funcs.h"
+#include "Tutorial/tutorialgoalcount_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>

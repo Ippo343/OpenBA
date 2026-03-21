@@ -12,7 +12,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 // This file must NOT depend on hooks.h — portable for standalone exe.
 
-#include "Goal/finishtutorialgoal_funcs.h"
+#include "Tutorial/finishtutorialgoal_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>

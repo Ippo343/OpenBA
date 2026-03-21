@@ -21,7 +21,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
-#include "Goal/finishtutorialgoal_funcs.h"
+#include "Tutorial/finishtutorialgoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 

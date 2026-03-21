@@ -18,7 +18,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
-#include "Goal/tutorialgoal_funcs.h"
+#include "Tutorial/tutorialgoal_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
