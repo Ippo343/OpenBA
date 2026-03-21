@@ -772,6 +772,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
                             if ((int)processCount > 0) {
                                 do {
+                                    // Re-read array base each iteration (original dereferences plVar7 every time)
+                                    // The array may be reallocated during component updates
+                                    arrBase = *reinterpret_cast<int64_t**>(bucketBase);
+
                                     // Read entity pointer into local and CheckPtr before any access
                                     int64_t entIBP = arrBase[idx];
                                     fn_InternalBasePtr_CheckPtr(&entIBP);
@@ -828,6 +832,8 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                                     idx++;
                                     processed++;
                                     cursor++;
+                                    // Re-read count (array may have changed size)
+                                    count = *(int32_t*)(bucketBase + 8);
                                     if ((int64_t)idx >= count) {
                                         idx = 0;
                                         cursor = 0;
