@@ -214,7 +214,7 @@ void InstallRemoveAnimalGetTarget() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400ca720);
     g_TypeInfo_ComponentEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c4218);
     // Resolve serializer functions for Serialize method
-    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("?Serializer@IO@@QEAA@PEAVStream@1@H@Z");
+    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
     fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveExport("??1Serializer@IO@@QEAA@XZ");
     fn_Serializer_Serialize = (fn_Serializer_Serialize_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z");
     fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z");

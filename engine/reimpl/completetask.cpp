@@ -193,11 +193,11 @@ static void ResolveHelpers() {
     fn_TryCompleteTask = (fn_TryCompleteTask_t)ResolveAddr(Module::Exe, 0x1400f8760);
     fn_TaskCleanup = (fn_TaskCleanup_t)ResolveAddr(Module::Exe, 0x1400f8e30);
     fn_TaskReassign = (fn_TaskReassign_t)ResolveAddr(Module::Exe, 0x1400f8800);
-    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("?Serializer@IO@@QEAA@PEAVStream@1@H@Z");
+    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
     fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveExport("??1Serializer@IO@@QEAA@XZ");
     fn_Serialize_Bool = (fn_Serialize_Bool_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z");
-    fn_Serialize_Int = (fn_Serialize_Int_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAint@PEBD@Z");
-    fn_Serializer_GetVersion = (fn_Serializer_GetVersion_t)ResolveExport("?GetVersion@Serializer@IO@@QEAAHXZ");
+    fn_Serialize_Int = (fn_Serialize_Int_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z");
+    fn_Serializer_GetVersion = (fn_Serializer_GetVersion_t)ResolveExport("?GetVersion@Serializer@IO@@QEBAHXZ");
     fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z");
 }
 

@@ -122,7 +122,7 @@ static void ResolveHelpers() {
     if (iatEntry) fn_CheckPtr = *reinterpret_cast<fn_CheckPtr_t*>(iatEntry);
     g_TypeInfo_DAT_1401c7158 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
     g_TypeInfo_ComponentEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c4218);
-    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("?Serializer@IO@@QEAA@PEAVStream@1@H@Z");
+    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
     fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveExport("??1Serializer@IO@@QEAA@XZ");
     fn_Serialize_Bool = (fn_Serialize_Bool_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z");
     fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z");

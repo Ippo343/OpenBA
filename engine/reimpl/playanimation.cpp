@@ -165,10 +165,10 @@ static void ResolveHelpers() {
     fn_FindFamily = (fn_FindFamily_t)ResolveAddr(Module::Exe, 0x1400012d0); // Entity_FindComponent_Family
     fn_SetAnimation = (fn_SetAnimation_t)ResolveAddr(Module::Exe, 0x14010a1f0);
     fn_Time_Serialize = (fn_Time_Serialize_t)ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z");
-    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("?Serializer@IO@@QEAA@PEAVStream@1@H@Z");
+    fn_Serializer_Ctor = (fn_Serializer_Ctor_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z");
     fn_Serializer_Dtor = (fn_Serializer_Dtor_t)ResolveExport("??1Serializer@IO@@QEAA@XZ");
     fn_Serialize_Bool = (fn_Serialize_Bool_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z");
-    fn_Serialize_Int = (fn_Serialize_Int_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAint@PEBD@Z");
+    fn_Serialize_Int = (fn_Serialize_Int_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z");
     fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z");
 }
 
