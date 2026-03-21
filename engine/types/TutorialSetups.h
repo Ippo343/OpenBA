@@ -61,18 +61,22 @@ namespace TutorialSetupRestrictPlayerAddr {
 struct TutorialSetupRestrictPlayer {
     void*    vtable;             // +0x00: -> 0x140160e20
     uint8_t  _extBase[0x18];     // +0x08: External base
-    int64_t  _field20;           // +0x20: -1 (restriction mask A?)
-    int64_t  _field28;           // +0x28: -1 (restriction mask B?)
-    uint32_t _field30;           // +0x30: zeroed
+    int32_t  restrictMinX;       // +0x20: cell X min (-1 = unrestricted)
+    int32_t  restrictMinChunkRow;// +0x24: chunk row for min pos
+    int32_t  restrictMaxX;       // +0x28: cell X max (-1 = unrestricted)
+    int32_t  restrictMaxChunkCol;// +0x2C: chunk col for max pos
+    int32_t  restrictToolFlags;  // +0x30: tool restriction bitmask (0 = none)
     uint8_t  _pad34[4];          // +0x34: padding
-    void*    _field38;           // +0x38: zeroed
-    int32_t  _field40;           // +0x40: -1 sentinel
+    // ExternalRef1 (tool restriction description)
+    uint64_t toolRefString;      // +0x38: System::String data ptr (8 bytes)
+    int32_t  toolRefStamp;       // +0x40: generation stamp (-1 = unresolved)
     uint8_t  _pad44[4];          // +0x44: padding
-    void*    _field48;           // +0x48: zeroed
-    void*    _field50;           // +0x50: zeroed
-    int32_t  _field58;           // +0x58: -1 sentinel
+    void*    toolRefCached;      // +0x48: cached External* from factory lookup
+    // ExternalRef2 (camera restriction description)
+    uint64_t cameraRefString;    // +0x50: System::String data ptr (8 bytes)
+    int32_t  cameraRefStamp;     // +0x58: generation stamp (-1 = unresolved)
     uint8_t  _pad5C[4];          // +0x5C: padding
-    void*    _field60;           // +0x60: zeroed
+    void*    cameraRefCached;    // +0x60: cached External* from factory lookup
 };
 static_assert(sizeof(TutorialSetupRestrictPlayer) == 0x68, "TutorialSetupRestrictPlayer size mismatch");
 

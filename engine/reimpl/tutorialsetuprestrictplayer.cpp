@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialSetups.h"
+#include "Tutorial/tutorialsetuprestrictplayer_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -31,7 +32,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialSetupRestrictPlayer::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialSetupRestrictPlayer_Dtor(self, flags);
 }
 
 void InstallTutorialSetupRestrictPlayerDtor() {
@@ -48,7 +49,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialSetupRestrictPlayer::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialSetupRestrictPlayer_Serialize(self, stream);
 }
 
 void InstallTutorialSetupRestrictPlayerSerialize() {
@@ -65,7 +66,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialSetupRestrictPlayer::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialSetupRestrictPlayer_Cleanup(self);
 }
 
 void InstallTutorialSetupRestrictPlayerCleanup() {
@@ -88,14 +89,13 @@ static void PatchVtableSlot_RestrictPlayer(size_t slotIndex, void* newFunc, void
     FlushInstructionCache(GetCurrentProcess(), entry, 8);
 }
 
-// --- Slot8: Slot8 ---
+// --- Slot8: Apply ---
 // RE-ENABLED: MOV R11,RSP at byte 0 breaks trampoline. Use vtable patch on slot 8.
-// Sets player restriction bounds in the game camera/input state.
 static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "TutorialSetupRestrictPlayer::Slot8";
-    ((fn_Slot8_t)g_savedSlot8)(self);
+    TutorialSetupRestrictPlayer_Slot8(self);
 }
 
 void InstallTutorialSetupRestrictPlayerSlot8() {
@@ -111,14 +111,13 @@ void RemoveTutorialSetupRestrictPlayerSlot8() {
     }
 }
 
-// --- Slot10: Slot10 ---
+// --- Slot10: Undo ---
 // RE-ENABLED: RIP-relative MOV at byte 3 breaks trampoline. Use vtable patch on slot 10.
-// Clears player restriction state in the game camera/input state.
 static void* g_savedSlot10 = nullptr;
 typedef void (*fn_Slot10_t)(void* self);
 static void Reimpl_Slot10(void* self) {
     g_lastHook = "TutorialSetupRestrictPlayer::Slot10";
-    ((fn_Slot10_t)g_savedSlot10)(self);
+    TutorialSetupRestrictPlayer_Slot10(self);
 }
 
 void InstallTutorialSetupRestrictPlayerSlot10() {
@@ -140,7 +139,7 @@ static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialSetupRestrictPlayer::Ctor";
-    return ((fn_Ctor_t)g_savedCtor)(self);
+    return TutorialSetupRestrictPlayer_Ctor(self);
 }
 
 void InstallTutorialSetupRestrictPlayerCtor() {
