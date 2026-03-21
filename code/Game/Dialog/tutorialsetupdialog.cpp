@@ -349,10 +349,6 @@ void TutorialSetupDialog_Slot8(void* self) {
     int count2 = *(int32_t*)(s + 0x38);
     if (count2 <= 0) return;
 
-    uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);
-    void* playerController = *(void**)(gameSingleton + 0x120);
-    void* ui = *(void**)(gameSingleton + 0x98);
-
     for (int i = 0; i < count2; ++i) {
         uint64_t instance = 0;
         void* strPtr = (void*)(*(uintptr_t*)(s + 0x30) + (uintptr_t)i * 8);
@@ -362,19 +358,26 @@ void TutorialSetupDialog_Slot8(void* self) {
         fn_InternalBasePtr_CheckPtr(&instance);
         void* basePtr = *(void**)(instance + 0x30);
 
-        // IsA BuildComponent?
-        bool isBuild = fn_IsDerivedFrom(basePtr, *g_TypeId_BuildComponent);
+        // Original uses IsA first (null/type-safe), then IsDerivedFrom
+        bool isBuild = fn_IsA(basePtr, *g_TypeId_BuildComponent);
         if (isBuild) {
             bool derived = fn_IsDerivedFrom(basePtr, *g_TypeId_BuildComponent);
             void* entityForFollow = derived ? basePtr : nullptr;
             uint64_t retval[2] = {0, 0};
+            uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);
+            void* playerController = *(void**)(gameSingleton + 0x120);
             fn_SetFollowBuilding(playerController, retval, (uint64_t)entityForFollow);
         } else {
-            bool isEntity = fn_IsDerivedFrom(basePtr, *g_TypeId_ComponentEntity);
+            // Original: SetEditMode only if IsA(ComponentEntity), but CloseDialog always
+            bool isEntity = fn_IsA(basePtr, *g_TypeId_ComponentEntity);
+            uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);
             if (isEntity) {
+                void* playerController = *(void**)(gameSingleton + 0x120);
                 fn_SetEditMode(playerController, 0);
-                fn_UI_CloseDialog(ui, &instance);
             }
+            void* ui = *(void**)(gameSingleton + 0x98);
+            uint64_t instCopy = instance;
+            fn_UI_CloseDialog(ui, &instCopy);
         }
     }
 }

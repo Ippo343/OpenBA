@@ -3780,13 +3780,18 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
         part1[copyLen] = 0;
     }
 
-    // Get type IDs from Factory
+    // Get type IDs from Factory (double-deref: dispatch slot -> pointer -> Factory*)
     if (!g_pFactorySingleton || !*g_pFactorySingleton || !fn_Factory_GetTypeIdFromName) {
         *(uintptr_t*)ret = 0;
         return retval;
     }
+    void* factoryObj = *(void**)*g_pFactorySingleton;
+    if (!factoryObj) {
+        *(uintptr_t*)ret = 0;
+        return retval;
+    }
 
-    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(*g_pFactorySingleton, part1, true);
+    uint32_t dialogTypeId = fn_Factory_GetTypeIdFromName(factoryObj, part1, true);
     if (dialogTypeId == 0) {
         *(uintptr_t*)ret = 0;
         return retval;
@@ -3794,7 +3799,7 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
 
     uint32_t controllerTypeId = 0;
     if (partCount == 2 && part2[0] != 0) {
-        controllerTypeId = fn_Factory_GetTypeIdFromName(*g_pFactorySingleton, part2, true);
+        controllerTypeId = fn_Factory_GetTypeIdFromName(factoryObj, part2, true);
     }
 
     // Get UI singleton
