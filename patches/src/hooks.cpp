@@ -1221,6 +1221,8 @@ extern void InstallSendComponentMessageSerialize();
 extern void RemoveSendComponentMessageSerialize();
 extern void InstallSendComponentMessageAbstractImpl();
 extern void RemoveSendComponentMessageAbstractImpl();
+extern void InstallSendComponentMessageGetTarget();
+extern void RemoveSendComponentMessageGetTarget();
 
 // --- ShowTool (engine/reimpl/showtool.cpp) ---
 extern void InstallShowToolSerialize();
@@ -2767,6 +2769,7 @@ static ReimplEntry g_reimplementations[] = {
     // --- SendComponentMessage ---
     { "SendComponentMessage::Serialize", InstallSendComponentMessageSerialize, RemoveSendComponentMessageSerialize, true },
     { "SendComponentMessage::AbstractImpl", InstallSendComponentMessageAbstractImpl, RemoveSendComponentMessageAbstractImpl, true },
+    { "SendComponentMessage::GetTarget", InstallSendComponentMessageGetTarget, RemoveSendComponentMessageGetTarget, true },
 
     // --- ShowTool ---
     { "ShowTool::Serialize", InstallShowToolSerialize, RemoveShowToolSerialize, true },

@@ -1,94 +1,47 @@
 // engine/reimpl/createrawmaterial.cpp
-// Reimplementation of CreateRawMaterial action from Application-x64.exe.
+// Hook wrappers for CreateRawMaterial action from Application-x64.exe.
 //
-// CreateRawMaterial spawns raw material entities (e.g., logs, stone, food) from
-// a resource-producing building. The AbstractImpl (257 instructions) handles:
-//   - Looking up RawMaterialComponent config for yield amounts
-//   - Checking building maturity level for yield scaling
-//   - Creating new entity instances via allocator
-//   - Placing entities near the building with random rotation
-//   - Registering with the global resource tracker
+// CreateRawMaterial -- 0x58 bytes. Spawns raw material entities from a resource building.
+// Inherits: Object::Internal -> Action (0x20) -> CreateRawMaterial
+// Vtable at 0x14015fd10 (10 slots).
 //
-// Struct size: 0x58, vtable at 0x14015fd10
-// Inherits: Object::Internal -> Action -> CreateRawMaterial
-//
-// Fields from Serialize:
-//   +0x20: resource type ID (serialized via FUN_140002340)
-//   +0x28: InternalBasePtr (source building)
-//   +0x30: InternalBasePtr (optional secondary entity)
-//   +0x38: InternalBasePtr (optional tertiary entity)
-//   +0x40: int (total quantity)
-//   +0x44: int (material type index)
-//   +0x48: uint (placement flags)
-//   +0x4C: float (yield multiplier)
-//   +0x50: bool (natural resource flag)
-//   +0x51: bool (place near flag)
-//
-// Vtable overrides vs Action base:
-//   Slot 3 (Serialize):    0x1400c6f30 -- PASSTHROUGH (versioned, 3 version checks)
-//   Slot 4 (AbstractImpl): 0x1400c6b40 -- PASSTHROUGH (257 instr, entity creation)
-//   Slot 9 (GetTarget):    0x1400c6aa0 -- checks +0x28->+0x10, +0x30, +0x38
-//   Slots 5,6,7 (Execute, Enter, Exit): BASE
-//   Slot 8 (CheckEntity):  BASE
+// Overrides vs Action base:
+//   Serialize    (0x1400c6f30) -- REIMPLEMENTED
+//   AbstractImpl (0x1400c6b40) -- REIMPLEMENTED
+//   GetTarget    (0x1400c6aa0) -- REIMPLEMENTED
+//   Slots 5-8 (Execute, Enter, Exit, CheckEntity): BASE
 
 #include "CreateRawMaterial.h"
 #include "hooks.h"
 #include "resolve.h"
+#include "engine_funcs.h"
+#include "Action/createrawmaterial_funcs.h"
 #include <cstdio>
 #include <cstdint>
+
+// Forward declaration for resolution
+extern bool CreateRawMaterial_ResolveFuncs();
 
 // ============================================================
 // Hook state
 // ============================================================
-
 static HookInfo g_hookSerialize;
 static HookInfo g_hookAbstractImpl;
 
 // ============================================================
-// Original function typedefs
+// CreateRawMaterial::Serialize (0x1400c6f30) -- reimplemented
 // ============================================================
-
-typedef void (*CreateRawMaterial_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*CreateRawMaterial_AbstractImpl_t)(void* self, void* actionStack);
-
-// ============================================================
-// CreateRawMaterial::Serialize -- passthrough wrapper
-// Versioned serialization with 3 version gates
-// ============================================================
-
-static void Reimpl_Serialize(void* self, void* stream) {
+static void Reimpl_Serialize(CreateRawMaterial* self, void* stream) {
     g_lastHook = "CreateRawMaterial::Serialize";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        printf("[CreateRawMaterial::Serialize] self=%p stream=%p\n", self, stream);
-        callCount++;
-    }
-#endif
-    ((CreateRawMaterial_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    CreateRawMaterial_Serialize_Impl(self, stream);
 }
 
 // ============================================================
-// CreateRawMaterial::AbstractImpl -- passthrough wrapper
-// Complex entity creation: allocates raw material entities, places them
-// with random rotation, registers with resource tracker
+// CreateRawMaterial::AbstractImpl (0x1400c6b40) -- reimplemented
 // ============================================================
-
-static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
+static int Reimpl_AbstractImpl(CreateRawMaterial* self, void* actionStack) {
     g_lastHook = "CreateRawMaterial::AbstractImpl";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        uint8_t* act = (uint8_t*)self;
-        int32_t qty = *(int32_t*)(act + 0x40);
-        int32_t matIdx = *(int32_t*)(act + 0x44);
-        float yieldMul = *(float*)(act + 0x4C);
-        printf("[CreateRawMaterial::AbstractImpl] self=%p qty=%d matIdx=%d yield=%.2f\n",
-               self, qty, matIdx, yieldMul);
-        callCount++;
-    }
-#endif
-    return ((CreateRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
+    return CreateRawMaterial_AbstractImpl_Impl(self, actionStack);
 }
 
 // ============================================================
@@ -96,11 +49,17 @@ static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
 // ============================================================
 
 void InstallCreateRawMaterialSerialize() {
+    if (!CreateRawMaterial_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[CreateRawMaterial] ERROR: Failed to resolve helpers for Serialize\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6f30);
     // Prologue: PUSH(2)+SUB(4)+MOV(9)+MOV(5) = 20 bytes
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 20);
 #ifdef _DEBUG
-    printf("[CreateRawMaterial] Serialize hooked at %p (prologue=20, passthrough)\n", (void*)target);
+    printf("[CreateRawMaterial] Serialize hooked at %p (reimplemented)\n", (void*)target);
 #endif
 }
 
@@ -109,11 +68,17 @@ void RemoveCreateRawMaterialSerialize() {
 }
 
 void InstallCreateRawMaterialAbstractImpl() {
+    if (!CreateRawMaterial_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[CreateRawMaterial] ERROR: Failed to resolve helpers for AbstractImpl\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6b40);
     // Prologue: PUSH(1)+PUSH(1)+PUSH(1)+PUSH(2)+PUSH(2)+PUSH(2)+MOV(3)+SUB(7) = 19 bytes
     InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 22);
 #ifdef _DEBUG
-    printf("[CreateRawMaterial] AbstractImpl hooked at %p (prologue=19, passthrough)\n", (void*)target);
+    printf("[CreateRawMaterial] AbstractImpl hooked at %p (reimplemented)\n", (void*)target);
 #endif
 }
 

@@ -1,78 +1,64 @@
 // engine/reimpl/sendcomponentmessage.cpp
-// Reimplementation of SendComponentMessage action from Application-x64.exe.
+// Hook wrappers for SendComponentMessage action from Application-x64.exe.
 //
-// SendComponentMessage sends a message to a specific component type on the
-// target entity. It looks up the component by type ID, then calls its
-// message handler virtual method with the stored message parameters.
+// SendComponentMessage — 0x40 bytes. Sends a message to a specific component
+// type on the target entity.
+// Inherits: Object::Internal -> Action (0x20) -> SendComponentMessage
+// Vtable at 0x1401600c0 (10 slots).
 //
-// Struct size: 0x40, vtable at 0x1401600c0
-// Inherits: Object::Internal -> Action -> SendComponentMessage
-//
-// Vtable overrides vs Action base:
-//   Slot 3 (Serialize):    0x1400cb000 (override) -- PASSTHROUGH
-//   Slot 4 (AbstractImpl): 0x1400caef0 (override) -- PASSTHROUGH (component lookup + vcall)
-//   Slot 9 (GetTarget):    0x1400cae80 (override) -- checks +0x20 and +0x28
-//   Slots 5,6,7 (Execute, Enter, Exit): BASE (inherited)
-//   Slot 8 (CheckEntity): BASE
+// Vtable:
+//   [0] +0x00  ScalarDtor    = 0x1400230f0   (RIP-relative, bug class 2, unhookable)
+//   [1] +0x08  VectorDtor    = 0x140023060   (not hooked)
+//   [2] +0x10  BaseDtor      = 0x140023050   (not hooked)
+//   [3] +0x18  Serialize     = 0x1400cb000   <-- reimplemented
+//   [4] +0x20  AbstractImpl  = 0x1400caef0   <-- reimplemented
+//   [5] +0x28  Execute       = 0x1400c4a90   (base Action, returns 0)
+//   [6] +0x30  Enter         = 0x1400c4b90   (base Action, no-op)
+//   [7] +0x38  Exit          = 0x1400c4ba0   (base Action, no-op)
+//   [8] +0x40  CheckEntity   = 0x1400c4a30   (base Action, no-op, returns void)
+//   [9] +0x48  GetTarget     = 0x1400cae80   <-- reimplemented
 
 #include "SendComponentMessage.h"
 #include "hooks.h"
 #include "resolve.h"
+#include "engine_funcs.h"
+#include "Action/sendcomponentmessage_funcs.h"
 #include <cstdio>
 #include <cstdint>
+
+// Forward declaration for resolution
+extern bool SendComponentMessage_ResolveFuncs();
 
 // ============================================================
 // Hook state
 // ============================================================
-
 static HookInfo g_hookSerialize;
 static HookInfo g_hookAbstractImpl;
+static HookInfo g_hookGetTarget;
 
 // ============================================================
-// Original function typedefs
+// SendComponentMessage::Serialize (0x1400cb000) — reimplemented
 // ============================================================
-
-typedef void (*SendComponentMessage_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*SendComponentMessage_AbstractImpl_t)(void* self, void* actionStack);
-
-// ============================================================
-// SendComponentMessage::Serialize -- passthrough wrapper
-// Serializes status, target entity (+0x20), source entity (+0x28),
-// component type (+0x30), message ID (+0x34), and params (+0x38, +0x3c)
-// ============================================================
-
-static void Reimpl_Serialize(void* self, void* stream) {
+static void Reimpl_Serialize(SendComponentMessage* self, void* stream) {
     g_lastHook = "SendComponentMessage::Serialize";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        printf("[SendComponentMessage::Serialize] self=%p stream=%p\n", self, stream);
-        callCount++;
-    }
-#endif
-    ((SendComponentMessage_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    SendComponentMessage_Serialize_Impl(self, stream);
 }
 
 // ============================================================
-// SendComponentMessage::AbstractImpl -- passthrough wrapper
-// Finds component by type ID on target entity, calls its message handler
-// virtual method (vtable+0x78) with message params
+// SendComponentMessage::AbstractImpl (0x1400caef0) — reimplemented
+// Returns int (bug class 7).
 // ============================================================
-
-static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
+static int Reimpl_AbstractImpl(SendComponentMessage* self, void* actionStack) {
     g_lastHook = "SendComponentMessage::AbstractImpl";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        uint8_t* act = (uint8_t*)self;
-        uint32_t msgType = *(uint32_t*)(act + 0x30);
-        int32_t msgId = *(int32_t*)(act + 0x34);
-        printf("[SendComponentMessage::AbstractImpl] self=%p msgType=%u msgId=%d\n",
-               self, msgType, msgId);
-        callCount++;
-    }
-#endif
-    return ((SendComponentMessage_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
+    return SendComponentMessage_AbstractImpl_Impl(self, actionStack);
+}
+
+// ============================================================
+// SendComponentMessage::GetTarget (0x1400cae80) — reimplemented
+// ============================================================
+static bool Reimpl_GetTarget(SendComponentMessage* self, void* param) {
+    g_lastHook = "SendComponentMessage::GetTarget";
+    return SendComponentMessage_GetTarget_Impl(self, param);
 }
 
 // ============================================================
@@ -80,11 +66,17 @@ static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
 // ============================================================
 
 void InstallSendComponentMessageSerialize() {
+    if (!SendComponentMessage_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[SendComponentMessage] ERROR: Failed to resolve helpers for Serialize\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400cb000);
     // Prologue: PUSH(2)+SUB(4)+MOV(9)+MOV(5) = 20 bytes
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 20);
 #ifdef _DEBUG
-    printf("[SendComponentMessage] Serialize hooked at %p (prologue=20, passthrough)\n", (void*)target);
+    printf("[SendComponentMessage] Serialize hooked at %p (reimplemented)\n", (void*)target);
 #endif
 }
 
@@ -93,14 +85,39 @@ void RemoveSendComponentMessageSerialize() {
 }
 
 void InstallSendComponentMessageAbstractImpl() {
+    if (!SendComponentMessage_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[SendComponentMessage] ERROR: Failed to resolve helpers for AbstractImpl\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400caef0);
     // Prologue: PUSH(2)+SUB(4)+MOV(5)+MOV(5) = 16 bytes
     InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 16);
 #ifdef _DEBUG
-    printf("[SendComponentMessage] AbstractImpl hooked at %p (prologue=16, passthrough)\n", (void*)target);
+    printf("[SendComponentMessage] AbstractImpl hooked at %p (reimplemented)\n", (void*)target);
 #endif
 }
 
 void RemoveSendComponentMessageAbstractImpl() {
     RemoveHook(&g_hookAbstractImpl);
+}
+
+void InstallSendComponentMessageGetTarget() {
+    if (!SendComponentMessage_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[SendComponentMessage] ERROR: Failed to resolve helpers for GetTarget\n");
+#endif
+        return;
+    }
+    uintptr_t target = ResolveAddr(Module::Exe, 0x1400cae80);
+    // Prologue: MOV(5)+MOV(5)+PUSH(1)+SUB(4) = 15 bytes
+    InstallHook(target, (void*)Reimpl_GetTarget, &g_hookGetTarget, 15);
+#ifdef _DEBUG
+    printf("[SendComponentMessage] GetTarget hooked at %p (reimplemented)\n", (void*)target);
+#endif
+}
+
+void RemoveSendComponentMessageGetTarget() {
+    RemoveHook(&g_hookGetTarget);
 }
