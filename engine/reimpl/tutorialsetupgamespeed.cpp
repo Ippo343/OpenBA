@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialSetups.h"
+#include "Tutorial/tutorialsetupgamespeed_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -31,7 +32,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialSetupGameSpeed::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialSetupGameSpeed_Dtor(self, flags);
 }
 
 void InstallTutorialSetupGameSpeedDtor() {
@@ -48,7 +49,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialSetupGameSpeed::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialSetupGameSpeed_Serialize(self, stream);
 }
 
 void InstallTutorialSetupGameSpeedSerialize() {
@@ -65,7 +66,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialSetupGameSpeed::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialSetupGameSpeed_Cleanup(self);
 }
 
 void InstallTutorialSetupGameSpeedCleanup() {
@@ -77,14 +78,14 @@ void InstallTutorialSetupGameSpeedCleanup() {
 }
 void RemoveTutorialSetupGameSpeedCleanup() { RemoveHook(&g_hookCleanup); }
 
-// --- Slot8: Slot8 ---
+// --- Slot8: Apply game speed ---
 // RE-ENABLED: RIP-relative MOV at byte 0 in the 17-byte prologue. Use vtable patch.
 // Sets game speed in the update controller (g_scenario+0x120) from self->speed (+0x20).
 static void* g_savedSlot8 = nullptr;
 typedef void (*fn_Slot8_t)(void* self);
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "TutorialSetupGameSpeed::Slot8";
-    ((fn_Slot8_t)g_savedSlot8)(self);
+    TutorialSetupGameSpeed_Slot8(self);
 }
 
 static void PatchVtableSlot_GSSpeed(size_t slotIndex, void* newFunc, void** outOld) {
@@ -115,7 +116,7 @@ static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialSetupGameSpeed::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    return TutorialSetupGameSpeed_Ctor(self);
 }
 
 void InstallTutorialSetupGameSpeedCtor() {
