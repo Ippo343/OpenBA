@@ -19,6 +19,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Tutorial/tutorialimageinputkey_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -27,7 +28,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialImageInputKey::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialImageInputKey_Dtor(self, flags);
 }
 
 void InstallTutorialImageInputKeyDtor() {
@@ -44,7 +45,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialImageInputKey::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialImageInputKey_Serialize(self, stream);
 }
 
 void InstallTutorialImageInputKeySerialize() {
@@ -59,9 +60,9 @@ void RemoveTutorialImageInputKeySerialize() { RemoveHook(&g_hookSerialize); }
 // --- Slot6: Cleanup ---
 static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
-static void Reimpl_Cleanup(void* self) {
+static void* Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialImageInputKey::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    return TutorialImageInputKey_Cleanup(self);
 }
 
 void InstallTutorialImageInputKeyCleanup() {
@@ -78,7 +79,7 @@ static HookInfo g_hookCtor;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialImageInputKey::Ctor";
-    return ((fn_Ctor_t)g_hookCtor.trampoline)(self);
+    return TutorialImageInputKey_Ctor(self);
 }
 
 void InstallTutorialImageInputKeyCtor() {
@@ -95,7 +96,7 @@ static HookInfo g_hookSlot9;
 typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
 static void Reimpl_Slot9(void* self, void* param1, void* param2) {
     g_lastHook = "TutorialImageInputKey::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param1, param2);
+    TutorialImageInputKey_Slot9(self, param1, param2);
 }
 
 void InstallTutorialImageInputKeySlot9() {

@@ -13,13 +13,14 @@
 //   +0x28: 0x1400e0af0 — Serialize (15b prologue)
 //   +0x30: 0x140028070 — Cleanup (14b prologue)
 //   +0x38: 0x140001640 — Base dispatch (8b, unhookable)
-//   +0x40: 0x140028060 — Ctor/Init (12b prologue)
+//   +0x40: 0x140028060 — Ctor/Init (12b prologue, vtable-patched)
 //   +0x48: 0x1400e0940 — Slot9 (13b prologue)
 
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "TutorialImages.h"
+#include "Tutorial/tutorialimagetoolbaricon_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -29,7 +30,7 @@ static HookInfo g_hookDtor;
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TutorialImageToolbarIcon::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TutorialImageToolbarIcon_Dtor(self, flags);
 }
 
 void InstallTutorialImageToolbarIconDtor() {
@@ -46,7 +47,7 @@ static HookInfo g_hookSerialize;
 typedef void (*fn_Serialize_t)(void* self, void* stream);
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "TutorialImageToolbarIcon::Serialize";
-    ((fn_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    TutorialImageToolbarIcon_Serialize(self, stream);
 }
 
 void InstallTutorialImageToolbarIconSerialize() {
@@ -63,7 +64,7 @@ static HookInfo g_hookCleanup;
 typedef void (*fn_Cleanup_t)(void* self);
 static void Reimpl_Cleanup(void* self) {
     g_lastHook = "TutorialImageToolbarIcon::Cleanup";
-    ((fn_Cleanup_t)g_hookCleanup.trampoline)(self);
+    TutorialImageToolbarIcon_Cleanup(self);
 }
 
 void InstallTutorialImageToolbarIconCleanup() {
@@ -81,7 +82,7 @@ static void* g_savedCtor = nullptr;
 typedef void* (*fn_Ctor_t)(void* self);
 static void* Reimpl_Ctor(void* self) {
     g_lastHook = "TutorialImageToolbarIcon::Ctor";
-    return ((fn_Ctor_t)g_savedCtor)(self);
+    return TutorialImageToolbarIcon_Ctor(self);
 }
 
 static void PatchVtableSlot_ToolbarIcon(size_t slotIndex, void* newFunc, void** outOld) {
@@ -112,7 +113,7 @@ static HookInfo g_hookSlot9;
 typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
 static void Reimpl_Slot9(void* self, void* param1, void* param2) {
     g_lastHook = "TutorialImageToolbarIcon::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param1, param2);
+    TutorialImageToolbarIcon_Slot9(self, param1, param2);
 }
 
 void InstallTutorialImageToolbarIconSlot9() {

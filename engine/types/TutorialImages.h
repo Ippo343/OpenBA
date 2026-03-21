@@ -58,11 +58,17 @@ namespace TutorialImageInputKeyAddr {
 struct TutorialImageInputKey {
     void*    vtable;             // +0x00: -> 0x140160b20
     uint8_t  _extBase[0x18];     // +0x08: External base
-    void*    _field20;           // +0x20: zeroed
-    void*    _field28;           // +0x28: zeroed
-    uint8_t  _pad30[8];          // +0x30: extra fields (extends TutorialImage)
+    void*    _externalRef;       // +0x20: ExternalPtr (image resource)
+    int32_t  _field28;           // +0x28: serialized int
+    int32_t  _field2C;           // +0x2C: serialized int
+    int32_t  _inputId;           // +0x30: input key ID (serialized via stream vtable +0x98)
+    uint8_t  _pad34[4];          // +0x34: padding
 };
 static_assert(sizeof(TutorialImageInputKey) == 0x38, "TutorialImageInputKey size mismatch");
+static_assert(offsetof(TutorialImageInputKey, _externalRef) == 0x20, "");
+static_assert(offsetof(TutorialImageInputKey, _field28) == 0x28, "");
+static_assert(offsetof(TutorialImageInputKey, _field2C) == 0x2C, "");
+static_assert(offsetof(TutorialImageInputKey, _inputId) == 0x30, "");
 
 // TutorialImageToolbarIcon — displays toolbar icon image. Size = 0x48.
 // Decompiled from: TutorialImageToolbarIcon_Ctor (0x1400e0c30)
@@ -72,4 +78,20 @@ namespace TutorialImageToolbarIconAddr {
     constexpr uintptr_t Vtable  = 0x140160b90; // concrete vtable at 0x140160b90 (slot8=0x140028060, slot9=0x1400e0940)
 }
 
-// TutorialImageToolbarIcon has same size as TutorialImageHotKey (0x48)
+struct TutorialImageToolbarIcon {
+    void*    vtable;             // +0x00: -> 0x140160b90
+    uint8_t  _extBase[0x18];     // +0x08: External base
+    void*    _externalRef;       // +0x20: ExternalPtr (image resource)
+    int32_t  _field28;           // +0x28: serialized int
+    int32_t  _field2C;           // +0x2C: serialized int
+    void*    _toolbarString;     // +0x30: System::String (toolbar name, serialized)
+    int32_t  _toolbarStringTag;  // +0x38: String tag / ExternalFactory version (-1 init)
+    uint8_t  _pad3C[4];          // +0x3C: padding
+    void*    _toolbarRef;        // +0x40: resolved Toolbar* (cached from _toolbarString)
+};
+static_assert(sizeof(TutorialImageToolbarIcon) == 0x48, "TutorialImageToolbarIcon size mismatch");
+static_assert(offsetof(TutorialImageToolbarIcon, _externalRef) == 0x20, "");
+static_assert(offsetof(TutorialImageToolbarIcon, _field28) == 0x28, "");
+static_assert(offsetof(TutorialImageToolbarIcon, _toolbarString) == 0x30, "");
+static_assert(offsetof(TutorialImageToolbarIcon, _toolbarStringTag) == 0x38, "");
+static_assert(offsetof(TutorialImageToolbarIcon, _toolbarRef) == 0x40, "");
