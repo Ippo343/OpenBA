@@ -253,6 +253,7 @@ uint32_t* g_TypeId_WorkplaceJobType = nullptr;
 uint32_t* g_TypeId_AttendanceSubComp = nullptr;
 uint32_t* g_TypeId_ResourceLimitType = nullptr;
 uint32_t* g_TypeId_ToolUI = nullptr;
+uint32_t* g_TypeId_ProfessionDescription = nullptr;
 
 // BridgeTool-related type IDs
 uint32_t* g_TypeId_CreateBridgeDescription = nullptr;
@@ -981,6 +982,12 @@ fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
 fn_BuildingTypeArray_Resize_t fn_BuildingTypeArray_Resize = nullptr;
 fn_StringHash_t fn_StringHash = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
+fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
+fn_TutorialTreeInsert_t fn_TutorialTreeInsert = nullptr;
+fn_TutorialStepExecute_t fn_TutorialStepExecute = nullptr;
+uint32_t* g_TypeId_FinishTutorialGoal = nullptr;
+void** g_pSingletonExref_151a80 = nullptr;
+void** g_TutorialInstanceVtable = nullptr;
 
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
@@ -2578,6 +2585,8 @@ bool EngineFuncsInit() {
     g_TypeId_ProfessionComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c70e8));
     // fn_FindProfessionComponent — inline in engine_funcs.h (uses g_TypeId_ProfessionComponent)
+    g_TypeId_ProfessionDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c5a98));
     g_FollowDialog_Vtable = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x14015be00));
     // fn_StatusBarUI_StatusIconHandler — REPLACED with static impl in statusbarui.cpp
@@ -3928,9 +3937,42 @@ bool EngineFuncsInit() {
     // --- Phase K: Tutorial Goal helpers ---
     fn_FindUIElementByPath = reinterpret_cast<fn_FindUIElementByPath_t>(
         ResolveAddr(Module::Exe, 0x1400e1870));
+
+    // Object::Internal::Internal — dispatch slot 0x140152768
+    if (!fn_ObjectInternal_Ctor) {
+        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152768));
+        if (slot && *slot)
+            fn_ObjectInternal_Ctor = reinterpret_cast<fn_ObjectInternal_Ctor_t>(*slot);
+    }
+
+    // FinishTutorialGoal_helper_01f0 — tutorial tree insert (exe-internal)
+    fn_TutorialTreeInsert = reinterpret_cast<fn_TutorialTreeInsert_t>(
+        ResolveAddr(Module::Exe, 0x1401001f0));
+
+    // FinishTutorialInstance_helper_1db0 — tutorial step execute (exe-internal)
+    fn_TutorialStepExecute = reinterpret_cast<fn_TutorialStepExecute_t>(
+        ResolveAddr(Module::Exe, 0x1400e1db0));
+
+    // TypeId for FinishTutorialGoal — stored at exe 0x1401c6240
+    g_TypeId_FinishTutorialGoal = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6240));
+
+    // Singleton exref at 0x140151a80
+    g_pSingletonExref_151a80 = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140151a80));
+
+    // TutorialInstance vtable at 0x140160bf8
+    g_TutorialInstanceVtable = reinterpret_cast<void**>(
+        ResolveAddr(Module::Exe, 0x140160bf8));
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase K: Tutorial goal helpers resolved\n");
-    printf("  FindUIElementByPath = %p\n", (void*)fn_FindUIElementByPath);
+    printf("  FindUIElementByPath   = %p\n", (void*)fn_FindUIElementByPath);
+    printf("  ObjectInternal::Ctor  = %p\n", (void*)fn_ObjectInternal_Ctor);
+    printf("  TutorialTreeInsert    = %p\n", (void*)fn_TutorialTreeInsert);
+    printf("  TutorialStepExecute   = %p\n", (void*)fn_TutorialStepExecute);
+    printf("  TypeId_FTGoal         = %p\n", (void*)g_TypeId_FinishTutorialGoal);
+    printf("  SingletonExref_151a80 = %p\n", (void*)g_pSingletonExref_151a80);
+    printf("  TutInstVtable         = %p\n", (void*)g_TutorialInstanceVtable);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

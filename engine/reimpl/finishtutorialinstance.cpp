@@ -31,12 +31,6 @@ static HookInfo g_hookSlot5;
 static HookInfo g_hookSlot6;
 
 // ============================================================
-// Original function typedefs (for slots still using trampoline)
-// ============================================================
-typedef void  (*fn_Slot4_t)(void* self, void* p2, void* p3);
-typedef void  (*fn_Slot5_t)(void* self, void* p2, void* p3, void* p4);
-
-// ============================================================
 // Reimpl wrappers
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
@@ -52,16 +46,12 @@ static void Reimpl_Slot3(void* self, void* stream) {
 
 static void Reimpl_Slot4(void* self, void* p2, void* p3) {
     g_lastHook = "FinishTutorialInstance::Slot4";
-    // Slot4/Load is too complex (allocates TutorialInstance, many subsystem deps)
-    // Keep as trampoline for now
-    ((fn_Slot4_t)g_hookSlot4.trampoline)(self, p2, p3);
+    FinishTutorialInstance_Slot4((FinishTutorialInstance*)self, p2, p3);
 }
 
 static void Reimpl_Slot5(void* self, void* p2, void* p3, void* p4) {
     g_lastHook = "FinishTutorialInstance::Slot5";
-    // Slot5/Execute is too complex (tutorial step execution logic)
-    // Keep as trampoline for now
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, p2, p3, p4);
+    FinishTutorialInstance_Slot5((FinishTutorialInstance*)self, p2, p3, p4);
 }
 
 static int Reimpl_Slot6(void* self) {

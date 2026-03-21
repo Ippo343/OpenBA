@@ -53,9 +53,13 @@ void TutorialGoalCount_Serialize(void* self, void* stream);
 void TutorialGoalCount_Cleanup(void* self);
 
 // Slot8 (vtable +0x40, 0x1400df290): Check — count items and compare to target.
-// Large switch on countMode (+0x20) with 11 cases.
-// Returns 1 if goal met, 0 otherwise.
+// 11-case switch on countMode (+0x20):
+//   0=buildings by type, 1=citizens by profession, 2=adult pop, 3=profession slots,
+//   4=total pop, 5=has trade posts, 6=stored resources by profession, 7=building
+//   storage by type, 8=total stored items, 9=UI spinner value, 10=occupied buildings.
+// Returns 1 if goal met (count compared to targetCount per greaterOrEqual flag), 0 otherwise.
 // Uses int return type (bug class 7).
+// param3: InternalBasePtr* used only in case 9 (CheckPtr called on it).
 int TutorialGoalCount_Check(void* self, void* param2, void* param3);
 
 // Slot9/Init (vtable +0x48, wrapper at 0x1400277f0 -> 0x1400dfa60): Init.

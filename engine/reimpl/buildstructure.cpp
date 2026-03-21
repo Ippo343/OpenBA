@@ -30,11 +30,7 @@
 #include <cstdio>
 #include <cstdint>
 
-// ============================================================
-// Helper function pointers
-// ============================================================
-typedef void* (*fn_ObjectInternal_Ctor_t)(void* self);
-static fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor = nullptr;
+// fn_ObjectInternal_Ctor is now declared globally in engine_funcs.h
 
 // ============================================================
 // Hook state
@@ -133,8 +129,7 @@ static int Reimpl_Cleanup(BuildStructure* self) {
 // Resolve helpers
 // ============================================================
 static bool ResolveHelpers() {
-    fn_ObjectInternal_Ctor = reinterpret_cast<fn_ObjectInternal_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152768)));
+    // fn_ObjectInternal_Ctor is now resolved globally in EngineFuncsInit()
     return fn_ObjectInternal_Ctor != nullptr;
 }
 

@@ -25,36 +25,28 @@
 typedef void (*fn_ResolveExternalRef_t)(void* stringField);
 static fn_ResolveExternalRef_t s_fn_ResolveExternalRef = nullptr;
 
-// FUN_140092010 — count buildings of a type in the world BST
-// RCX=worldData, RDX=buildingTypePtr -> returns uint count
+// FUN_140092010 — count buildings of a type in world BST at +0x160
+// BST keyed by type pointer, returns node[2] (count).
 typedef uint32_t (*fn_CountBuildingsByType_t)(uintptr_t worldData, uintptr_t typePtr);
 static fn_CountBuildingsByType_t s_fn_CountBuildingsByType = nullptr;
 
-// FUN_1400910a0 — count professions of a type
-// RCX=worldData, RDX=professionTypePtr -> returns uint count
+// FUN_1400910a0 — count professions of a type in world BST at +0x100
 typedef uint32_t (*fn_CountProfessionsByType_t)(uintptr_t worldData, uintptr_t typePtr);
 static fn_CountProfessionsByType_t s_fn_CountProfessionsByType = nullptr;
 
-// FUN_14012fbb0 — get stored resource count for a building entity
+// FUN_14012fbb0 — get total stored resource count for an entity
+// Finds StorageLocationComponent, then sums storage counts.
 typedef int (*fn_GetStoredCount_t)(uintptr_t entity);
 static fn_GetStoredCount_t s_fn_GetStoredCount = nullptr;
 
-// FUN_140015140 — FindBuildingComponent on entity
-typedef void* (*fn_FindBuildingComp_t)(uintptr_t entity, void* outIBP);
-static fn_FindBuildingComp_t s_fn_FindBuildingComp = nullptr;
+// FUN_140013920 — cast element to SliderElement (returns null if wrong type)
+// IsDerivedFrom check against g_TypeId_SliderElement (0x140151cf0).
+typedef void* (*fn_CastToSliderElement_t)(void* element);
+static fn_CastToSliderElement_t s_fn_CastToSliderElement = nullptr;
 
-// FUN_140006270 — FindStorageComponent on entity
-typedef void* (*fn_FindStorageComp_t)(uintptr_t entity, void* outIBP);
-static fn_FindStorageComp_t s_fn_FindStorageComp = nullptr;
-
-// FUN_140013920 — get dialog controller from InternalBasePtr
-typedef void* (*fn_GetDialogController_t)(void* element);
-static fn_GetDialogController_t s_fn_GetDialogController = nullptr;
-
-// TypeInfo_Profession at 0x1401c7318 (TypeId used in IsDerivedFrom checks)
-static uint32_t* s_TypeId_Profession = nullptr;
-// TypeId for building descriptions (DWORD_1401c7318 in some cases)
-static uint32_t* s_TypeId_BuildingDesc = nullptr;
+// Type IDs
+static uint32_t* s_TypeId_BuildingDesc = nullptr;      // 0x1401c7318 (cases 0, 7, 10)
+static uint32_t* s_TypeId_ProfessionDesc = nullptr;     // 0x1401c5a98 (cases 1, 3, 6)
 
 static bool s_helpersResolved = false;
 
@@ -64,19 +56,56 @@ static void EnsureHelpers() {
     s_fn_CountBuildingsByType = (fn_CountBuildingsByType_t)ResolveAddr(Module::Exe, 0x140092010);
     s_fn_CountProfessionsByType = (fn_CountProfessionsByType_t)ResolveAddr(Module::Exe, 0x1400910a0);
     s_fn_GetStoredCount = (fn_GetStoredCount_t)ResolveAddr(Module::Exe, 0x14012fbb0);
-    s_fn_FindBuildingComp = (fn_FindBuildingComp_t)ResolveAddr(Module::Exe, 0x140015140);
-    s_fn_FindStorageComp = (fn_FindStorageComp_t)ResolveAddr(Module::Exe, 0x140006270);
-    s_fn_GetDialogController = (fn_GetDialogController_t)ResolveAddr(Module::Exe, 0x140013920);
+    s_fn_CastToSliderElement = (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);
 
-    // TypeId for Profession/BuildingDescription — both at 0x1401c7318
-    // In the decompilation, different cases use different type IDs.
-    // Cases 0/7/10 use DWORD_1401c7318 for building type checks.
-    // Cases 1/3/6 use TypeInfo_Profession (also 0x1401c7318) for profession checks.
-    // These may actually be the same type ID used for different subtype checks.
     s_TypeId_BuildingDesc = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7318);
-    s_TypeId_Profession = s_TypeId_BuildingDesc;
+    s_TypeId_ProfessionDesc = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5a98);
 
     s_helpersResolved = true;
+}
+
+// ============================================================
+// BST lookup helper — searches a binary search tree keyed by pointer
+// ============================================================
+// BST node layout (8 bytes each slot):
+//   [0] = key (pointer value used as comparison key)
+//   [1] = value (context-dependent: array ptr, count, etc.)
+//   [2] = count (for some BSTs)
+//   [3] = (unused/parent?)
+//   [4] = left child
+//   [5] = right child
+static uintptr_t* BSTFind(uintptr_t root, uintptr_t key) {
+    uintptr_t* node = (uintptr_t*)root;
+    while (node != nullptr) {
+        uintptr_t nodeKey = node[0];
+        if (key < nodeKey) {
+            node = (uintptr_t*)node[4];  // left
+        } else if (key > nodeKey) {
+            node = (uintptr_t*)node[5];  // right
+        } else {
+            return node;  // found
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================
+// Resolve external type pointer from self->typeName
+// ============================================================
+// Calls FUN_1400265b0 to ensure external ref is loaded, then reads
+// self->_field40 and checks IsDerivedFrom against the given type ID.
+// Returns the type pointer if it matches, or 0 if not.
+static uintptr_t ResolveTypePtr(uintptr_t self, uint32_t* typeId) {
+    if (s_fn_ResolveExternalRef) {
+        s_fn_ResolveExternalRef((void*)(self + 0x30));
+    }
+    uintptr_t typePtr = *(uintptr_t*)(self + 0x40);
+    if (typePtr && fn_IsDerivedFrom && typeId) {
+        if (fn_IsDerivedFrom((void*)typePtr, *typeId)) {
+            return typePtr;
+        }
+    }
+    return 0;
 }
 
 // ============================================================
@@ -223,33 +252,414 @@ void TutorialGoalCount_Cleanup(void* self) {
 // ============================================================
 // TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
 // ============================================================
-// Large switch on countMode, counts various game metrics.
-// Returns 1 if goal met, 0 if not.
+// 11-case switch on countMode (+0x20). Counts a game metric and
+// compares against targetCount (+0x24). If greaterOrEqual (+0x28),
+// returns count >= target; otherwise returns count == target.
 //
-// Due to the extreme complexity (11 cases, ~1500 bytes of code),
-// this is implemented as a call to the original function via
-// resolved address. The function is too entangled with internal
-// game state (BST traversals, entity iteration, profession lookups)
-// to safely reimplement without risk of subtle bugs.
+// Count modes:
+//   0: Building count by type (BST at worldData+0x160)
+//   1: Citizens assigned to a profession type
+//   2: Adult population (worldData+0x28)
+//   3: Profession slot count by type (BST at worldData+0x100)
+//   4: Total population including children (worldData+0x08)
+//   5: Has trade posts (merchantList at worldData2+0xF0 > 0)
+//   6: Stored resource count across buildings of a profession type
+//   7: Building storage total by building type (BST at worldData+0x160, iterate)
+//   8: Total stored items across all buildings
+//   9: UI spinner/slider element value (by elementName path)
+//  10: Occupied building count by type
 //
-// The function will be fully reimplemented once all helper functions
-// (FUN_140092010, FUN_1400910a0, etc.) are individually decompiled
-// and available as clean code.
+// param2: unused (game world passed implicitly via g_pGameWorldSingleton)
+// param3: InternalBasePtr* — used in case 9 (CheckPtr called on it)
 //
-// For now, we use a resolved function pointer to the original.
+// Uses int return type (bug class 7 — upper EAX bits matter).
 int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     EnsureHelpers();
 
-    // Call original implementation via resolved address
-    typedef int (*fn_Check_t)(void*, void*, void*);
-    static fn_Check_t s_fn_Check = nullptr;
-    if (!s_fn_Check) {
-        s_fn_Check = (fn_Check_t)ResolveAddr(Module::Exe, TutorialGoalCountAddr::Check);
+    uintptr_t s = (uintptr_t)self;
+    uint32_t mode = *(uint32_t*)(s + 0x20);
+    int count = 0;
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) {
+        goto compare;
     }
-    if (s_fn_Check) {
-        return s_fn_Check(self, param2, param3);
+
+    switch (mode) {
+    // --------------------------------------------------------
+    // Case 0: Count buildings of a type
+    // --------------------------------------------------------
+    case 0: {
+        uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (s_fn_CountBuildingsByType && worldData) {
+            count = (int)s_fn_CountBuildingsByType(worldData, typePtr);
+        }
+        break;
     }
-    return 0;
+
+    // --------------------------------------------------------
+    // Case 1: Count citizens assigned to a specific profession
+    // --------------------------------------------------------
+    // Iterates citizen list (worldData+0xA0, count at +0xA8).
+    // For each alive citizen (health >= deathThreshold && no death flag),
+    // checks if their assigned profession matches the target type.
+    case 1: {
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (!worldData) break;
+        int citizenCount = *(int*)(worldData + 0xa8);
+        uintptr_t citizenArray = *(uintptr_t*)(worldData + 0xa0);
+        int matched = 0;
+        for (int i = 0; i < citizenCount; i++) {
+            // Each citizen is an IBP at citizenArray + i*8
+            uintptr_t citizenIBP = *(uintptr_t*)(citizenArray + (uintptr_t)i * 8);
+            // Store in local for CheckPtr
+            uintptr_t localCitizen = citizenIBP;
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&localCitizen);
+            }
+            uintptr_t citizen = localCitizen;
+            if (!citizen) continue;
+
+            // Check alive: health (float at +0x3c) >= deathThreshold (float at citizen->desc(+0x288)+0x44)
+            float health = *(float*)(citizen + 0x3c);
+            uintptr_t desc = *(uintptr_t*)(citizen + 0x288);
+            if (!desc) continue;
+            float deathThreshold = *(float*)(desc + 0x44);
+            if (health < deathThreshold) continue;
+
+            // Check no death flag: citizen+0x208 == 0
+            if (*(uintptr_t*)(citizen + 0x208) != 0) continue;
+
+            // Get assigned profession type: citizen+0x1F0
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&localCitizen);
+            }
+            uintptr_t profType = *(uintptr_t*)(localCitizen + 0x1f0);
+
+            // Resolve target profession type and compare
+            uintptr_t targetProf = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+            if (profType == targetProf) {
+                matched++;
+            }
+        }
+        count = matched;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 2: Adult population count (worldData+0x28)
+    // --------------------------------------------------------
+    case 2: {
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (worldData) {
+            count = *(int*)(worldData + 0x28);
+        }
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 3: Profession slot count by type
+    // --------------------------------------------------------
+    case 3: {
+        uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (s_fn_CountProfessionsByType && worldData) {
+            count = (int)s_fn_CountProfessionsByType(worldData, typePtr);
+        }
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 4: Total population including children (worldData+0x08)
+    // --------------------------------------------------------
+    case 4: {
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (worldData) {
+            count = *(int*)(worldData + 0x08);
+        }
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 5: Has trade posts (merchant list count > 0)
+    // --------------------------------------------------------
+    case 5: {
+        uintptr_t worldData2 = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+        if (worldData2) {
+            count = (*(int*)(worldData2 + 0xf0) > 0) ? 1 : 0;
+        }
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 6: Stored resource count across buildings of a profession type
+    // --------------------------------------------------------
+    // Gets profession count, then for each profession slot, looks up the
+    // building BST at worldData+0x160 to find entities, finds their
+    // WorkplaceComponent, and sums GetStoredCount.
+    case 6: {
+        // Get profession type
+        uintptr_t profType = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (!worldData || !s_fn_CountProfessionsByType) break;
+
+        int profCount = (int)s_fn_CountProfessionsByType(worldData, profType);
+        int total = 0;
+
+        for (int i = 0; i < profCount; i++) {
+            // Look up profession in BST at worldData+0x100
+            uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x100);
+            uintptr_t* node = BSTFind(bstRoot, profType);
+            if (!node) continue;
+
+            // node[1] = array of entity IBPs, indexed by i
+            uintptr_t entityIBP = *(uintptr_t*)(node[1] + (uintptr_t)i * 8);
+            uintptr_t localEntity = entityIBP;
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&localEntity);
+            }
+
+            // Find WorkplaceComponent (FUN_140002e10, type 0x1401c80e0)
+            uintptr_t workplaceIBP = 0;
+            fn_FindComponent_BuildState2((void*)localEntity, &workplaceIBP);
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&workplaceIBP);
+            }
+
+            // Check if workplace has storage (byte at +0x50 != 0)
+            uintptr_t workplace = workplaceIBP;
+            if (workplace && *(uint8_t*)(workplace + 0x50) != 0) {
+                // Get stored count
+                if (fn_InternalBasePtr_CheckPtr) {
+                    fn_InternalBasePtr_CheckPtr(&workplaceIBP);
+                }
+                if (s_fn_GetStoredCount) {
+                    total += s_fn_GetStoredCount(workplaceIBP);
+                }
+            }
+        }
+        count = total;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 7: Building storage total by building type
+    // --------------------------------------------------------
+    // Iterates all entities (worldData+0x30 array, count at +0x38),
+    // finds their BuildingComponent, checks if type matches,
+    // then sums from the BuildingComponent's storage map at +0x60.
+    case 7: {
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (!worldData) break;
+        int entityCount = *(int*)(worldData + 0x38);
+        uintptr_t entityArray = *(uintptr_t*)(worldData + 0x30);
+        int total = 0;
+
+        for (int i = 0; i < entityCount; i++) {
+            // Get entity IBP
+            uintptr_t entityIBP = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
+            uintptr_t localEntity = entityIBP;
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&localEntity);
+            }
+
+            // Find BuildingComponent
+            uintptr_t buildingIBP = 0;
+            fn_FindComponent_Building((void*)localEntity, &buildingIBP);
+
+            // Resolve building description type
+            uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+
+            // CheckPtr and get building component
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&buildingIBP);
+            }
+            uintptr_t building = buildingIBP;
+            if (!building) continue;
+
+            // Search the building's storage BST at +0x60 for matching type
+            uintptr_t storageBST = *(uintptr_t*)(building + 0x60);
+            uintptr_t* storageNode = BSTFind(storageBST, typePtr);
+
+            int storageCount = 0;
+            if (storageNode != nullptr) {
+                storageCount = (int)storageNode[1];
+            }
+            total += storageCount;
+
+            // Re-read worldData for next iteration (may change)
+            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        }
+        count = total;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 8: Total stored items across all buildings
+    // --------------------------------------------------------
+    // Iterates all entities, finds StorageComponent, sums all
+    // item counts from the storage's item array.
+    case 8: {
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (!worldData) break;
+        int entityCount = *(int*)(worldData + 0x38);
+        uintptr_t entityArray = *(uintptr_t*)(worldData + 0x30);
+        int total = 0;
+
+        for (int i = 0; i < entityCount; i++) {
+            // Get entity IBP
+            uintptr_t entityIBP = *(uintptr_t*)(entityArray + (uintptr_t)i * 8);
+            uintptr_t localEntity = entityIBP;
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&localEntity);
+            }
+
+            // Find StorageComponent
+            uintptr_t storageIBP = 0;
+            fn_FindComponent_Storage((void*)localEntity, &storageIBP);
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&storageIBP);
+            }
+            uintptr_t storage = storageIBP;
+            if (!storage) continue;
+
+            // Iterate storage items: count at +0x30, array ptr at +0x28
+            // Each item is 16 bytes (stride 2 qwords), count value at offset -8 from item+16
+            int itemCount = *(int*)(storage + 0x30);
+            for (int j = 0; j < itemCount; j++) {
+                if (fn_InternalBasePtr_CheckPtr) {
+                    fn_InternalBasePtr_CheckPtr(&storageIBP);
+                }
+                storage = storageIBP;
+                uintptr_t itemArray = *(uintptr_t*)(storage + 0x28);
+                // Items at stride 16 bytes (2 qwords): count at itemArray + j*16 + 8
+                int itemStored = *(int*)(itemArray + (uintptr_t)j * 16 + 8);
+                total += itemStored;
+                if (fn_InternalBasePtr_CheckPtr) {
+                    fn_InternalBasePtr_CheckPtr(&storageIBP);
+                }
+            }
+
+            // Re-read worldData for next iteration
+            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        }
+        count = total;
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 9: UI spinner/slider element value
+    // --------------------------------------------------------
+    // Finds a UI element by the elementName path (+0x48),
+    // casts it to SpinnerElement, reads its value if not active.
+    case 9: {
+        // CheckPtr on param3
+        if (fn_InternalBasePtr_CheckPtr && param3) {
+            fn_InternalBasePtr_CheckPtr(param3);
+        }
+
+        // Find UI element by path
+        if (!fn_FindUIElementByPath) break;
+        uintptr_t foundIBP[2] = {0, 0};  // InternalBasePtr buffer
+        fn_FindUIElementByPath(foundIBP, (void*)(s + 0x48), nullptr);
+
+        uintptr_t element = foundIBP[0];
+        if (!element) break;
+
+        // Cast to SliderElement (checks IsDerivedFrom SliderElement type)
+        if (!s_fn_CastToSliderElement) break;
+        void* slider = s_fn_CastToSliderElement((void*)element);
+        uintptr_t sliderIBP = (uintptr_t)slider;
+        if (!sliderIBP) break;
+
+        // Create IBP and check if active
+        if (fn_InternalBasePtr_CheckPtr) {
+            fn_InternalBasePtr_CheckPtr(&sliderIBP);
+        }
+        if (fn_SpinnerElement_IsActive && fn_SpinnerElement_IsActive((void*)sliderIBP)) {
+            break;  // Active (being edited) — don't read value yet
+        }
+
+        // Read current value
+        if (fn_InternalBasePtr_CheckPtr) {
+            fn_InternalBasePtr_CheckPtr(&sliderIBP);
+        }
+        if (fn_SpinnerElement_GetValue) {
+            count = fn_SpinnerElement_GetValue((void*)sliderIBP);
+        }
+        break;
+    }
+
+    // --------------------------------------------------------
+    // Case 10: Occupied building count by type
+    // --------------------------------------------------------
+    // Gets building count by type, then for each building in the BST,
+    // finds the BuildStateComponent and checks occupancy flags.
+    case 10: {
+        // Get building description type
+        uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+        uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        if (!worldData || !s_fn_CountBuildingsByType) break;
+
+        int buildingCount = (int)s_fn_CountBuildingsByType(worldData, typePtr);
+        int occupied = 0;
+
+        for (int i = 0; i < buildingCount; i++) {
+            // Look up building type in BST at worldData+0x160
+            // Need to re-resolve type each iteration (original code does this)
+            uintptr_t curTypePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+            uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x160);
+            uintptr_t* node = BSTFind(bstRoot, curTypePtr);
+
+            uintptr_t entityIBP = 0;
+            if (node) {
+                // node[1] = array of entity IBPs
+                entityIBP = *(uintptr_t*)(node[1] + (uintptr_t)i * 8);
+            } else {
+                // Not found — initialize empty IBP
+                if (fn_InternalBasePtr_Ctor) {
+                    fn_InternalBasePtr_Ctor(&entityIBP, nullptr);
+                }
+            }
+
+            // CheckPtr and find BuildStateComponent
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&entityIBP);
+            }
+            uintptr_t buildStateIBP = 0;
+            fn_FindComponent_BuildState((void*)entityIBP, &buildStateIBP);
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr(&buildStateIBP);
+            }
+            uintptr_t buildState = buildStateIBP;
+            if (!buildState) continue;
+
+            // Check occupancy: byte at +0x52 (if negative/high bit set, use +0x50 instead)
+            uint8_t flag52 = *(uint8_t*)(buildState + 0x52);
+            uint8_t checkFlag = flag52;
+            if ((int8_t)flag52 < 0) {
+                checkFlag = *(uint8_t*)(buildState + 0x50);
+            }
+            if (checkFlag != 0) {
+                occupied++;
+            }
+        }
+        count = occupied;
+        break;
+    }
+
+    default:
+        // Unknown mode — count stays 0, skip comparison
+        goto compare;
+    }
+
+compare:
+    // Final comparison: greaterOrEqual ? (count >= target) : (count == target)
+    if (*(uint8_t*)(s + 0x28) != 0) {
+        return (count >= *(int32_t*)(s + 0x24)) ? 1 : 0;
+    }
+    return (count == *(int32_t*)(s + 0x24)) ? 1 : 0;
 }
 
 // ============================================================

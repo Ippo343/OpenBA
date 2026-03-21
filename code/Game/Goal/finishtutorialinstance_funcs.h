@@ -34,16 +34,16 @@ inline uint32_t FinishTutorialInstance_GetTypeId(FinishTutorialInstance* /*self*
 // then type-checks the deserialized object against TutorialInstance.
 void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream);
 
-// Slot4 (vtable +0x20, 0x1400d7a90): Load/Startup.
-// Complex: allocates TutorialInstance (0x38 bytes), initializes IBP fields,
-// resolves goal, sets up tutorial state. Too complex for clean reimpl without
-// many additional resolved functions — keep as trampoline for now.
-// void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* p3);
+// Slot4 (vtable +0x20, 0x1400d7a90): Startup/Load.
+// Allocates TutorialInstance (0x38 bytes), initializes IBP fields,
+// copies tutorial definition from parent FinishTutorialGoal, registers
+// tutorial dialog via tree insert, sets game world flags.
+void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* p3);
 
 // Slot5 (vtable +0x28, 0x1400d7a50): Execute/Update step.
-// Checks IBP at +0x20, delegates to complex tutorial step handler.
-// Depends on many tutorial subsystem functions — keep as trampoline.
-// void FinishTutorialInstance_Slot5(FinishTutorialInstance* self, void* p2, void* p3, void* p4);
+// Checks IBP at +0x20, delegates to tutorial step execution helper
+// (FinishTutorialInstance_helper_1db0). R8/R9 are implicitly forwarded.
+void FinishTutorialInstance_Slot5(FinishTutorialInstance* self, void* p2, void* p3, void* p4);
 
 // Slot6 (vtable +0x30, 0x1400d7bb0): Check/Shutdown.
 // Checks IBP at +0x20, reads tutorial step count vs current step.

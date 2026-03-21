@@ -1720,6 +1720,7 @@ extern uint32_t* g_TypeId_HappinessComponent;  // DAT_1401c7e08
 
 // ProfessionComponent type ID at DAT_1401c70e8 (used by FindProfessionComponent)
 extern uint32_t* g_TypeId_ProfessionComponent;  // DAT_1401c70e8
+extern uint32_t* g_TypeId_ProfessionDescription;  // DAT_1401c5a98 (profession type in TutorialGoalCount)
 
 // FollowDialog vtable pointer (resolved from 0x14015be00)
 // Used by CitizenUI_Slot9 to manually construct FollowDialog instances.
@@ -4670,6 +4671,33 @@ extern fn_Filename_Ctor_t fn_Filename_Ctor;
 
 // Tutorial Goal helpers (exe-internal)
 // ============================================================
+
+// Object::Internal::Internal(this) — base constructor for Internal objects
+// Resolved from dispatch slot 0x140152768. Returns this (void*).
+typedef void* (*fn_ObjectInternal_Ctor_t)(void* self);
+extern fn_ObjectInternal_Ctor_t fn_ObjectInternal_Ctor;
+
+// FinishTutorialGoal_helper_01f0 (0x1401001f0) — tree insert for tutorial dialog setup
+// Inserts tutorial entry into the tree at gameWorld+0x120 (tutorial map).
+// Params: (treeRoot, tutorialExternalId, param3, screenHeight-0x1d0)
+typedef void (*fn_TutorialTreeInsert_t)(void* treeRoot, uint64_t tutorialId, void* param3, int param4);
+extern fn_TutorialTreeInsert_t fn_TutorialTreeInsert;
+
+// FinishTutorialInstance_helper_1db0 (0x1400e1db0) — main tutorial step execution
+// Called from FinishTutorialInstance::Slot5 (Execute/Update).
+// Params: (tutorialInstance*, param2, param3, param4)
+typedef void (*fn_TutorialStepExecute_t)(void* tutInst, void* param2, void* param3, uint64_t param4);
+extern fn_TutorialStepExecute_t fn_TutorialStepExecute;
+
+// TypeId for FinishTutorialGoal — stored at 0x1401c6240 in exe .rdata
+extern uint32_t* g_TypeId_FinishTutorialGoal;
+
+// Singleton External reference at 0x140151a80 — points to game config/time singleton
+// Deref pattern: *(void**)(*(void**)slot + 4) gives screen height or similar int
+extern void** g_pSingletonExref_151a80;
+
+// TutorialInstance vtable pointer — 0x140160bf8 in exe .rdata
+extern void** g_TutorialInstanceVtable;
 
 // FUN_1400e1870(outIBP, elementPath, outDialogPtr) — find UI element by dotted path string.
 // Parses "DialogType.ElementName" (or "DialogType.Controller.ElementName"),

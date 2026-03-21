@@ -31,7 +31,7 @@ Two hierarchies:
 
 | Class | Vtable | Size | Reimpl Status | Notes |
 |-------|--------|------|---------------|-------|
-| FinishTutorialInstance | 0x140160478 | 0x28 | **Partial** | Slot3/Slot6 done. Slot4/Slot5 remain trampolines (complex tutorial subsystem deps) |
+| FinishTutorialInstance | 0x140160478 | 0x28 | **Complete** | All slots. Slot4 allocates TutorialInstance + tree insert. Slot5 delegates to tutorial step executor |
 | TimeGoalInstance | 0x140160598 | 0x28 | **Complete** | All slots. Fixed bug class 6: Slot5 was missing R8=goalList param |
 
 ## Tutorial Goals
@@ -40,7 +40,7 @@ Two hierarchies:
 |-------|--------|------|---------------|-------|
 | TutorialGoal (base) | 0x1401607a0 | abstract | **Complete** | Dtor + Serialize |
 | TutorialGoalButton | 0x140160800 | 0x30 | **Complete** | All 5 slots. Check reads UI element flags by path string |
-| TutorialGoalCount | 0x140160950 | 0x50 | **Partial** | Dtor/Serialize/Cleanup/Init done. Slot8/Check delegates to original (11-case switch too entangled) |
+| TutorialGoalCount | 0x140160950 | 0x50 | **Complete** | All slots. Slot8/Check: 11-case switch counting buildings, citizens, professions, resources, UI elements |
 | TutorialGoalGameSpeed | 0x1401608e0 | 0x28 | **Complete** | All 5 slots. Check compares game speed vs targetSpeed |
 
 ---
@@ -60,9 +60,8 @@ Two hierarchies:
 - **TimeGoalInstance::Slot5** had implicit R8 forwarding (goalList param) that old passthrough missed (bug class 6)
 - **BuildingGoal::Slot8** and **PopulationGoal::Slot8** re-enabled — clean reimpl never calls trampoline, so prologue issues (MOV R11,RSP / RIP-relative) are bypassed
 
-### Remaining Work
-- FinishTutorialInstance Slot4/Slot5: complex tutorial subsystem (TutorialInstance allocation, dialog management, step execution)
-- TutorialGoalCount Slot8/Check: 11-case switch with 7 exe-internal helpers (~1500 bytes)
+### All Goal Classes Complete
+All 12 goal classes are now fully reimplemented in clean C++ (no remaining trampolines except FinishTutorialGoal::Slot8 which returns constant 0).
 
 ---
 

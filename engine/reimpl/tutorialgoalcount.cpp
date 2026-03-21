@@ -79,8 +79,7 @@ void RemoveTutorialGoalCountCleanup() { RemoveHook(&g_hookCleanup); }
 // --- Slot8: Check ---
 // RE-ENABLED: MOV R11,RSP at byte 0 breaks trampoline. Use vtable patch instead.
 // Vtable slot 8 (+0x40) of TutorialGoalCount — stores g_savedSlot8 for removal.
-// Now calls clean reimplementation (delegates to original via resolved address
-// because the 11-case switch is too complex to fully reimplement safely).
+// Now calls fully reimplemented Check (11-case switch on countMode).
 static void* g_savedSlot8 = nullptr;
 typedef int (*fn_Check_t)(void* self, void* param1, void* param2);
 static int Reimpl_Check(void* self, void* param1, void* param2) {
