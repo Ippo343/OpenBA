@@ -688,15 +688,15 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
                     statePtr = fn_SavedState_Ctor(savedState);
                 }
 
-                // Call vtable[7] on the object at Factory singleton +0x20
-                // to prepare the game for reload
-                void* factorySingleton = *g_pFactorySingleton;
-                if (factorySingleton) {
-                    uintptr_t inner = *(uintptr_t*)((uintptr_t)factorySingleton + 0x20);
+                // Call vtable[7] on Engine singleton sub-object at +0x20
+                // to prepare the game for reload (dispatch slot 0x140151440)
+                void* engine = g_pEngineSingleton ? *g_pEngineSingleton : nullptr;
+                if (engine) {
+                    uintptr_t inner = *(uintptr_t*)((uintptr_t)engine + 0x20);
                     if (inner) {
-                        typedef void (*fn_PrepareReload_t)(void* self);
+                        typedef void (*fn_PrepareReload_t)(void* self, bool param, void* savedState);
                         fn_PrepareReload_t fn = (fn_PrepareReload_t)(*(uintptr_t*)(*(uintptr_t*)inner + 0x38));
-                        fn((void*)inner);
+                        fn((void*)inner, true, statePtr);
                     }
                 }
 
