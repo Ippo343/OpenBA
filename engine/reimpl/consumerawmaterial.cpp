@@ -1,97 +1,58 @@
 // engine/reimpl/consumerawmaterial.cpp
-// Reimplementation of ConsumeRawMaterial action from Application-x64.exe.
+// Hook wrappers for ConsumeRawMaterial action from Application-x64.exe.
 //
-// ConsumeRawMaterial is a state machine action that consumes raw materials
-// from the entity's StateMachineComponent inventory. It checks available
-// quantities and either subtracts them (consume mode) or verifies they exist
-// (check mode), then records the consumption in the global resource tracker.
+// ConsumeRawMaterial -- 0x40 bytes. Consumes raw materials from entity's inventory.
+// Inherits: Object::Internal -> Action (0x20) -> ConsumeRawMaterial
+// Vtable at 0x14015fc20 (10 slots).
 //
-// Struct size: 0x40, vtable at 0x14015fc20
-// Inherits: Object::Internal -> Action -> ConsumeRawMaterial
-//
-// Vtable overrides vs Action base:
-//   Slot 3 (Serialize):    0x1400c6120 (override) -- PASSTHROUGH
-//   Slot 4 (AbstractImpl): 0x1400c5f50 (override) -- PASSTHROUGH (complex inventory logic)
-//   Slot 8 (CheckEntity):  0x1400c5e30 (override) -- PASSTHROUGH (undo consume on entity check)
-//   Slot 9 (GetTarget):    0x1400c5f10 (override) -- simple compare
-//   Slots 5,6,7 (Execute, Enter, Exit): BASE (inherited)
+// Overrides vs Action base:
+//   Serialize    (0x1400c6120) -- versioned serialization with entity ref + material list
+//   AbstractImpl (0x1400c5f50) -- consume materials or check availability
+//   CheckEntity  (0x1400c5e30) -- undo consumption if consume mode
+//   GetTarget    (0x1400c5f10) -- simple compare with +0x20 (not hooked)
+//   Execute/Enter/Exit use base.
 
 #include "ConsumeRawMaterial.h"
 #include "hooks.h"
 #include "resolve.h"
+#include "engine_funcs.h"
+#include "Action/consumerawmaterial_funcs.h"
 #include <cstdio>
 #include <cstdint>
+
+// Forward declaration for resolution
+extern bool ConsumeRawMaterial_ResolveFuncs();
 
 // ============================================================
 // Hook state
 // ============================================================
-
 static HookInfo g_hookSerialize;
 static HookInfo g_hookAbstractImpl;
 static HookInfo g_hookCheckEntity;
 
 // ============================================================
-// Original function typedefs
+// ConsumeRawMaterial::Serialize (0x1400c6120) -- reimplemented
 // ============================================================
-
-typedef void (*ConsumeRawMaterial_Serialize_t)(void* self, void* stream);
-typedef uint64_t (*ConsumeRawMaterial_AbstractImpl_t)(void* self, void* actionStack);
-typedef void (*ConsumeRawMaterial_CheckEntity_t)(void* self);
-
-// ============================================================
-// ConsumeRawMaterial::Serialize -- passthrough wrapper
-// Complex serialization with versioned InternalBasePtr fields
-// ============================================================
-
 static void Reimpl_Serialize(void* self, void* stream) {
     g_lastHook = "ConsumeRawMaterial::Serialize";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        printf("[ConsumeRawMaterial::Serialize] self=%p stream=%p\n", self, stream);
-        callCount++;
-    }
-#endif
-    ((ConsumeRawMaterial_Serialize_t)g_hookSerialize.trampoline)(self, stream);
+    ConsumeRawMaterial_Serialize_Impl((ConsumeRawMaterial*)self, stream);
 }
 
 // ============================================================
-// ConsumeRawMaterial::AbstractImpl -- passthrough wrapper
-// Complex inventory consumption: iterates material list, checks/subtracts
-// quantities from StateMachineComponent, updates global resource tracker
+// ConsumeRawMaterial::AbstractImpl (0x1400c5f50) -- reimplemented
+// Uses int return (bug class 7).
 // ============================================================
-
-static uint64_t Reimpl_AbstractImpl(void* self, void* actionStack) {
+static int Reimpl_AbstractImpl(void* self, void* actionStack) {
     g_lastHook = "ConsumeRawMaterial::AbstractImpl";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        uint8_t* act = (uint8_t*)self;
-        int32_t count = *(int32_t*)(act + 0x30);
-        uint8_t consumeMode = *(uint8_t*)(act + 0x38);
-        printf("[ConsumeRawMaterial::AbstractImpl] self=%p count=%d consume=%d\n",
-               self, count, consumeMode);
-        callCount++;
-    }
-#endif
-    return ((ConsumeRawMaterial_AbstractImpl_t)g_hookAbstractImpl.trampoline)(self, actionStack);
+    return ConsumeRawMaterial_AbstractImpl_Impl((ConsumeRawMaterial*)self, actionStack);
 }
 
 // ============================================================
-// ConsumeRawMaterial::CheckEntity -- passthrough wrapper
-// Undoes consumption when entity is removed (consume mode only)
+// ConsumeRawMaterial::CheckEntity (0x1400c5e30) -- reimplemented
 // ============================================================
-
 static void Reimpl_CheckEntity(void* self) {
     g_lastHook = "ConsumeRawMaterial::CheckEntity";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 3) {
-        printf("[ConsumeRawMaterial::CheckEntity] self=%p\n", self);
-        callCount++;
-    }
-#endif
-    ((ConsumeRawMaterial_CheckEntity_t)g_hookCheckEntity.trampoline)(self);
+    ConsumeRawMaterial_CheckEntity_Impl((ConsumeRawMaterial*)self);
 }
 
 // ============================================================
@@ -99,11 +60,17 @@ static void Reimpl_CheckEntity(void* self) {
 // ============================================================
 
 void InstallConsumeRawMaterialSerialize() {
+    if (!ConsumeRawMaterial_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[ConsumeRawMaterial] ERROR: Failed to resolve helpers for Serialize\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c6120);
     // Prologue: PUSH(2)+SUB(4)+MOV(9)+MOV(5) = 20 bytes
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 20);
 #ifdef _DEBUG
-    printf("[ConsumeRawMaterial] Serialize hooked at %p (prologue=20, passthrough)\n", (void*)target);
+    printf("[ConsumeRawMaterial] Serialize hooked at %p\n", (void*)target);
 #endif
 }
 
@@ -112,11 +79,17 @@ void RemoveConsumeRawMaterialSerialize() {
 }
 
 void InstallConsumeRawMaterialAbstractImpl() {
+    if (!ConsumeRawMaterial_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[ConsumeRawMaterial] ERROR: Failed to resolve helpers for AbstractImpl\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c5f50);
     // Prologue: PUSH(2)+SUB(4)+CMP(4)+MOV(3) = 13 bytes
     InstallHook(target, (void*)Reimpl_AbstractImpl, &g_hookAbstractImpl, 13);
 #ifdef _DEBUG
-    printf("[ConsumeRawMaterial] AbstractImpl hooked at %p (prologue=13, passthrough)\n", (void*)target);
+    printf("[ConsumeRawMaterial] AbstractImpl hooked at %p\n", (void*)target);
 #endif
 }
 
@@ -125,11 +98,17 @@ void RemoveConsumeRawMaterialAbstractImpl() {
 }
 
 void InstallConsumeRawMaterialCheckEntity() {
+    if (!ConsumeRawMaterial_ResolveFuncs()) {
+#ifdef _DEBUG
+        printf("[ConsumeRawMaterial] ERROR: Failed to resolve helpers for CheckEntity\n");
+#endif
+        return;
+    }
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c5e30);
     // Prologue: PUSH(2)+SUB(4)+CMP(4)+MOV(3) = 13 bytes
     InstallHook(target, (void*)Reimpl_CheckEntity, &g_hookCheckEntity, 13);
 #ifdef _DEBUG
-    printf("[ConsumeRawMaterial] CheckEntity hooked at %p (prologue=13, passthrough)\n", (void*)target);
+    printf("[ConsumeRawMaterial] CheckEntity hooked at %p\n", (void*)target);
 #endif
 }
 

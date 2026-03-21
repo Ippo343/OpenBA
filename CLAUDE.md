@@ -259,7 +259,7 @@ Defined in `.vscode/launch.json`:
 | Configuration | Type | What it does |
 |---------------|------|-------------|
 | **Attach to Banished** | attach | Attach GDB to running game process (pick from list) |
-| **Launch Banished (with patch)** | launch | Builds, deploys DLL, launches game with GDB attached |
+| **Launch Banished (debug with patch)** | launch | Builds, deploys DLL, launches game with GDB attached |
 | **Launch Banished (no debug)** | launch | Builds, deploys DLL, launches game without stopping on signals |
 
 ### Compiler & Toolchain

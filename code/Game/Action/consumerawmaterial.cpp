@@ -1,0 +1,325 @@
+// code/Game/Action/consumerawmaterial.cpp
+// Clean C++ reimplementation of ConsumeRawMaterial action methods.
+// Source: Game/Action/ConsumeRawMaterial.cpp (from profile build debug strings)
+//
+// ConsumeRawMaterial -- 0x40 bytes. Consumes raw materials from entity's inventory.
+// Inherits: Object::Internal -> Action (0x20) -> ConsumeRawMaterial
+// Factory: 0x140022090, Vtable: 0x14015fc20
+//
+// Vtable (10 slots):
+//   [0] +0x00 ScalarDtor    = (base Action)
+//   [1] +0x08 VectorDtor    = (base Action, unhookable)
+//   [2] +0x10 BaseDtor      = (base Action, unhookable)
+//   [3] +0x18 Serialize     = 0x1400c6120 (versioned, v0 legacy + v2 consume flag)
+//   [4] +0x20 AbstractImpl  = 0x1400c5f50 (consume or check materials)
+//   [5] +0x28 Execute       = 0x1400c4a90 (base Action, returns 0)
+//   [6] +0x30 Enter         = 0x1400c4b90 (base Action, void nop)
+//   [7] +0x38 Exit          = 0x1400c4ba0 (base Action, void nop)
+//   [8] +0x40 CheckEntity   = 0x1400c5e30 (undo consumption if consume mode)
+//   [9] +0x48 GetTarget     = 0x1400c5f10 (simple compare with +0x20)
+//
+// Field layout (0x40 bytes):
+//   +0x00-0x1F: Action base (vtable, Internal base, entity ptr, status byte)
+//   +0x20: InternalBasePtr  targetEntity    (entity whose storage to consume from)
+//   +0x28: void*            materialList    (array of {ExternalPtr, int32_t count} pairs, 0x10 each)
+//   +0x30: int32_t          materialCount   (number of entries in material list)
+//   +0x38: bool             consumeMode     (true = subtract, false = just check availability)
+//
+// Decompiled from Application-x64.exe using Ghidra.
+// This file must NOT depend on hooks.h -- it is portable for standalone exe.
+
+#include "ConsumeRawMaterial.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdio>
+#include <cstdint>
+
+// ============================================================
+// Local function pointers resolved at init time
+// (NOT in engine_funcs.h -- ConsumeRawMaterial-specific helpers)
+// ============================================================
+
+// FUN_14012d150 -- StorageComponent::SubtractItem(storage, itemType, count)
+typedef void (*s_fn_Storage_SubtractItem_t)(void* storageComp, int64_t itemType, int count);
+static s_fn_Storage_SubtractItem_t s_fn_Storage_SubtractItem = nullptr;
+
+// FUN_140088f90 -- GetResourceCategoryIndex(storageComp, materialExternalPtr) -> int
+// Returns the resource category index for the given material, or -1 if not found.
+typedef int (*s_fn_GetResourceCategoryIndex_t)(void* storageComp, int64_t materialPtr);
+static s_fn_GetResourceCategoryIndex_t s_fn_GetResourceCategoryIndex = nullptr;
+
+// FUN_14000da70 -- Array resize for 16-byte elements (material list)
+typedef void (*s_fn_ArrayResize16_t)(void* arrayBase, int newCount);
+static s_fn_ArrayResize16_t s_fn_ArrayResize16 = nullptr;
+
+// DAT_1401c7158 -- type ID for CitizenAI-like component (used for entity type check)
+// (Not directly used here, but included for reference)
+
+static bool s_funcs_resolved = false;
+
+// ============================================================
+// Resolution -- called once from Install
+// ============================================================
+bool ConsumeRawMaterial_ResolveFuncs() {
+    if (s_funcs_resolved) return true;
+
+    s_fn_Storage_SubtractItem = reinterpret_cast<s_fn_Storage_SubtractItem_t>(
+        ResolveAddr(Module::Exe, 0x14012d150));
+
+    s_fn_GetResourceCategoryIndex = reinterpret_cast<s_fn_GetResourceCategoryIndex_t>(
+        ResolveAddr(Module::Exe, 0x140088f90));
+
+    s_fn_ArrayResize16 = reinterpret_cast<s_fn_ArrayResize16_t>(
+        ResolveAddr(Module::Exe, 0x14000da70));
+
+    bool ok = s_fn_Storage_SubtractItem && s_fn_GetResourceCategoryIndex &&
+              s_fn_ArrayResize16 &&
+              g_TypeId_ComponentEntity && g_pGameWorldSingleton &&
+              fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+              fn_InternalBasePtr_Serialize &&
+              fn_ExternalPtr_BuildSerialize &&
+              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
+              g_fn_Serialize_Bool && g_fn_Serialize_Int &&
+              g_fn_Serializer_GetVersion;
+
+#ifdef _DEBUG
+    printf("[ConsumeRawMaterial] ResolveFuncs: SubItem=%p GetResCat=%p Resize16=%p\n",
+           (void*)s_fn_Storage_SubtractItem, (void*)s_fn_GetResourceCategoryIndex,
+           (void*)s_fn_ArrayResize16);
+    if (!ok) printf("[ConsumeRawMaterial] ERROR: some function pointers not resolved!\n");
+#endif
+
+    s_funcs_resolved = ok;
+    return ok;
+}
+
+// ============================================================
+// ConsumeRawMaterial::Serialize (0x1400c6120) -- slot 3
+// Versioned serialization (version 2):
+//   v0: legacy format (single ExternalPtr + int)
+//   v1+: entity ref(+0x20), material count(+0x30), material list(+0x28)
+//   v2+: consume mode flag(+0x38)
+// ============================================================
+void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
+    uint8_t* s = (uint8_t*)self;
+    uint8_t ser1[24];
+    uint8_t ser2[24];
+
+    // Serialize status byte (+0x18)
+    g_fn_Serializer_Ctor(ser1, stream, 0);
+    g_fn_Serialize_Bool(ser1, s + 0x18, nullptr);
+    g_fn_Serializer_Dtor(ser1);
+
+    // Versioned serializer (version 2)
+    g_fn_Serializer_Ctor(ser2, stream, 2);
+
+    // Serialize target entity (+0x20) with ComponentEntity type check
+    fn_InternalBasePtr_Serialize(s + 0x20, ser2);
+    if (*(void**)(s + 0x20) != nullptr) {
+        if (!fn_IsDerivedFrom(*(void**)(s + 0x20), *g_TypeId_ComponentEntity)) {
+            *(void**)(s + 0x20) = nullptr;
+        }
+    }
+
+    // Check version for format selection
+    int version = g_fn_Serializer_GetVersion(ser2);
+
+    if (version == 0) {
+        // Legacy v0 format: single ExternalPtr + int (no material list)
+        uintptr_t legacyExtPtr = 0;
+        fn_ExternalPtr_BuildSerialize(&legacyExtPtr, ser2);
+        uint32_t legacyCount;
+        g_fn_Serialize_Int(ser2, &legacyCount, nullptr);
+    } else {
+        // v1+ format: material count + material list array
+        uint32_t matCount = *(uint32_t*)(s + 0x30);
+        g_fn_Serialize_Int(ser2, &matCount, nullptr);
+
+        // If loading, resize the material array
+        if (*(int*)(*(uintptr_t*)ser2 + 8) == 0) {
+            s_fn_ArrayResize16((void*)(s + 0x28), (int)matCount);
+        }
+
+        // Serialize each material entry (ExternalPtr + int count, 0x10 bytes each)
+        uintptr_t* matList = *(uintptr_t**)(s + 0x28);
+        if ((int)matCount > 0) {
+            uint64_t remaining = (uint64_t)matCount;
+            do {
+                fn_ExternalPtr_BuildSerialize(matList, ser2);
+                g_fn_Serialize_Int(ser2, (void*)((uintptr_t)matList + 8), nullptr);
+                matList = (uintptr_t*)((uintptr_t)matList + 0x10);
+                remaining--;
+            } while (remaining != 0);
+        }
+    }
+
+    // v2+: serialize consume mode flag (+0x38)
+    int ver2 = g_fn_Serializer_GetVersion(ser2);
+    if (ver2 > 1) {
+        g_fn_Serialize_Bool(ser2, s + 0x38, nullptr);
+    }
+
+    g_fn_Serializer_Dtor(ser2);
+}
+
+// ============================================================
+// ConsumeRawMaterial::AbstractImpl (0x1400c5f50) -- slot 4
+// If material count is 0: return 2 (nothing to consume).
+// For each material in list:
+//   If consumeMode == false (check only):
+//     Look up available count in storage, subtract reserved.
+//     If available < requested: return 2 (insufficient).
+//   If consumeMode == true (consume):
+//     Subtract reserved amount from storage reserved field.
+//   Then: SubtractItem from storage, update global resource tracker.
+// Returns 0 on success, 2 on failure.
+// ============================================================
+int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionStack) {
+    (void)actionStack;
+    uint8_t* s = (uint8_t*)self;
+
+    int matCount = *(int*)(s + 0x30);
+    if (matCount == 0) {
+        return 2;
+    }
+
+    // Find StorageComponent on target entity (+0x20)
+    fn_InternalBasePtr_CheckPtr(s + 0x20);
+    uintptr_t storageIBP = 0;
+    fn_FindComponent_Storage(*(void**)(s + 0x20), &storageIBP);
+
+    int matIdx = 0;
+    int64_t matOffset = 0;
+
+    if (matCount <= 0) {
+        return 0;
+    }
+
+    do {
+        uintptr_t matList = *(uintptr_t*)(s + 0x28);
+        int64_t* matEntry = (int64_t*)(matList + matOffset);
+        int requestedCount = (int)matEntry[1];
+
+        if (*(uint8_t*)(s + 0x38) == 0) {
+            // Check mode: verify sufficient availability
+            fn_InternalBasePtr_CheckPtr(&storageIBP);
+            int availableCount = 0;
+            int slotCount = *(int*)(storageIBP + 0x30);
+            if (slotCount > 0) {
+                int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
+                for (int i = 0; i < slotCount; i++) {
+                    if (itemArray[i * 2] == matEntry[0]) {
+                        if (i >= 0) {
+                            // available = count - reserved
+                            availableCount = (int)itemArray[i * 2 + 1] -
+                                           *(int*)((uintptr_t)itemArray + (uintptr_t)i * 0x10 + 0xc);
+                        }
+                        break;
+                    }
+                }
+            }
+            if (availableCount < requestedCount) {
+                return 2;  // Insufficient
+            }
+        } else {
+            // Consume mode: subtract from reserved field
+            fn_InternalBasePtr_CheckPtr(&storageIBP);
+            int slotCount = *(int*)(storageIBP + 0x30);
+            if (slotCount > 0) {
+                int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
+                for (int i = 0; i < slotCount; i++) {
+                    if (itemArray[i * 2] == matEntry[0]) {
+                        if (i >= 0) {
+                            int* reservedPtr = (int*)((uintptr_t)itemArray + (uintptr_t)i * 0x10 + 0xc);
+                            *reservedPtr -= requestedCount;
+                            if (*(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)i * 0x10) < 0) {
+                                *(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)i * 0x10) = 0;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        // SubtractItem from storage
+        fn_InternalBasePtr_CheckPtr(&storageIBP);
+        void* storageComp = (void*)storageIBP;
+        s_fn_Storage_SubtractItem(storageComp, matEntry[0], requestedCount);
+
+        // Update global resource tracker
+        uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+        uintptr_t resourceTracker = *(uintptr_t*)(gameWorld + 0xf0);
+        int64_t consumedCount = matEntry[1];
+
+        int categoryIndex = s_fn_GetResourceCategoryIndex(storageComp, matEntry[0]);
+        if (categoryIndex >= 0) {
+            int* trackerEntry = (int*)(*(uintptr_t*)(resourceTracker + 0x170) +
+                                       (int64_t)categoryIndex * 0x20 + 0xc);
+            *trackerEntry += (int)consumedCount;
+        }
+
+        matIdx++;
+        matOffset += 0x10;
+    } while (matIdx < *(int*)(s + 0x30));
+
+    return 0;
+}
+
+// ============================================================
+// ConsumeRawMaterial::CheckEntity (0x1400c5e30) -- slot 8
+// Undoes consumption when entity is removed (only if consume mode is true).
+// Iterates material list, subtracts reserved amounts from storage.
+// ============================================================
+void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
+    uint8_t* s = (uint8_t*)self;
+
+    // Only undo if consume mode is active
+    if (*(uint8_t*)(s + 0x38) == 0) {
+        return;
+    }
+
+    // Find StorageComponent on target entity (+0x20)
+    fn_InternalBasePtr_CheckPtr(s + 0x20);
+    uintptr_t storageIBP = 0;
+    fn_FindComponent_Storage(*(void**)(s + 0x20), &storageIBP);
+
+    int matCount = *(int*)(s + 0x30);
+    if (matCount <= 0) return;
+
+    int64_t matOffset = 0;
+    for (int i = 0; i < matCount; i++) {
+        uintptr_t matList = *(uintptr_t*)(s + 0x28);
+        fn_InternalBasePtr_CheckPtr(&storageIBP);
+
+        int slotCount = *(int*)(storageIBP + 0x30);
+        if (slotCount > 0) {
+            int64_t* itemArray = *(int64_t**)(storageIBP + 0x28);
+            for (int j = 0; j < slotCount; j++) {
+                if (itemArray[j * 2] == *(int64_t*)(matList + matOffset)) {
+                    if (j >= 0) {
+                        int* reservedPtr = (int*)((uintptr_t)itemArray + (uintptr_t)j * 0x10 + 0xc);
+                        *reservedPtr -= *(int*)(matList + matOffset + 8);
+                        if (*(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)j * 0x10) < 0) {
+                            *(int*)((uintptr_t)itemArray + 0xc + (uintptr_t)j * 0x10) = 0;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        matOffset += 0x10;
+    }
+}
+
+// ============================================================
+// ConsumeRawMaterial::GetTarget (0x1400c5f10) -- slot 9
+// Simple compare: returns true if param matches entity at +0x20.
+// ============================================================
+bool ConsumeRawMaterial_GetTarget_Impl(ConsumeRawMaterial* self, void* param) {
+    uint8_t* s = (uint8_t*)self;
+
+    fn_InternalBasePtr_CheckPtr(s + 0x20);
+    return *(uintptr_t*)param == *(uintptr_t*)(s + 0x20);
+}
