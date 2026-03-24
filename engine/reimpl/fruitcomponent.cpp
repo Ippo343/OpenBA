@@ -206,17 +206,13 @@ void InstallFruitComponentUpdate() {
         return;
     }
 
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140049de0);
-    // Prologue bytes:
-    //   0: MOV RAX,RSP (3)
-    //   3: MOV [RAX+0x8],RBX (4)
-    //   7: MOV [RAX+0x10],RBP (4)
-    //  11: MOV [RAX+0x18],RSI (4)
-    // = 15 bytes, clean instruction boundary
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 15);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140159450, Update = slot 9 (+0x48)
+    InstallHookVTable(0x140159450, 9, (void*)Reimpl_Update, &g_hookUpdate);
+    RegisterHookInfo("FruitComponent::Update", &g_hookUpdate);
 #ifdef _DEBUG
-    printf("[FruitComponent] Update hooked at %p (prologue=15)\n", (void*)target);
+    printf("[FruitComponent] Update vtable-hooked (original=%p)\n", g_hookUpdate.trampoline);
 #endif
 }
 
-void RemoveFruitComponentUpdate() { RemoveHook(&g_hookUpdate); }
+void RemoveFruitComponentUpdate() { RemoveHookVTable(&g_hookUpdate); }
