@@ -116,10 +116,14 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
 // Generic pattern: entity +0x30 = component IBP array, +0x38 = count
 // Uses vtable+0x10 (GetTypeId) and IsDerivedFrom to match.
 // ============================================================
-static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr) {
+// Generic FindComponent: arrayOffset/countOffset differ by object type.
+// ComponentEntity: array=+0x30, count=+0x38
+// External description objects (e.g. material types): array=+0x28, count=+0x30
+static void* FindComponentByTypeId(void* entity, uint32_t* typeIdPtr,
+                                   int arrayOffset, int countOffset) {
     uintptr_t ent = (uintptr_t)entity;
-    int compCount = *(int*)(ent + 0x38);
-    uintptr_t compArray = *(uintptr_t*)(ent + 0x30);
+    int compCount = *(int*)(ent + countOffset);
+    uintptr_t compArray = *(uintptr_t*)(ent + arrayOffset);
 
     for (int i = 0; i < compCount; i++) {
         void** compIBP = (void**)(compArray + (uintptr_t)i * 8);
@@ -238,7 +242,8 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
         int64_t materialType = *(int64_t*)(matList + matOffset);
 
         // Find RawMaterialDescription component on the material type
-        void* rawMatDesc = FindComponentByTypeId((void*)materialType, s_typeId_RawMatDesc);
+        // Material type is an External description object: components at +0x28/+0x30
+        void* rawMatDesc = FindComponentByTypeId((void*)materialType, s_typeId_RawMatDesc, 0x28, 0x30);
 
         // Get requested count from material list (+0x08 in each entry)
         int requestedCount = *(int*)(matList + matOffset + 8);
@@ -251,7 +256,7 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
             void* parentEntity = *(void**)((uintptr_t)targetBuilding + 0x10);
 
             // Find StorageComponent on parent entity
-            void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp);
+            void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp, 0x30, 0x38);
 
             // Create IBP for parent storage, get max capacity and current count
             uintptr_t parentStorageIBP = 0;
@@ -332,7 +337,7 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
         void* parentEntity = *(void**)((uintptr_t)targetBuilding + 0x10);
 
         // Find StorageComponent on parent entity
-        void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp);
+        void* parentStorage = FindComponentByTypeId(parentEntity, s_typeId_StorageComp, 0x30, 0x38);
 
         uintptr_t parentStorageIBP2[2];
         fn_InternalBasePtr_Ctor(parentStorageIBP2, parentStorage);

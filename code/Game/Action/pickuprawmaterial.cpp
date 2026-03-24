@@ -170,9 +170,9 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
     void* rawMatDesc = *(void**)resultIBP;
     int quantity = *(int*)((uintptr_t)rawMatDesc + 0x28);
 
-    // Read raw material type from source entity's component (+0x28 field)
+    // Read raw material type from source entity (+0x28 field = ExternalPtr)
     fn_InternalBasePtr_CheckPtr(sourceEntityIBP);
-    int64_t itemType = *(int64_t*)(*(uintptr_t*)(*(void**)(s + 0x28)) + 0x28);
+    int64_t itemType = *(int64_t*)((uintptr_t)(*(void**)(s + 0x28)) + 0x28);
 
     // Navigate to source building (+0x20) -> parent entity (+0x10)
     fn_InternalBasePtr_CheckPtr(s + 0x20);

@@ -154,11 +154,14 @@ static void Reimpl_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
         }
     }
 
-    // Create proper IBP wrapper for storage, then CheckPtr before use
-    int64_t storageIBP = 0;
-    fn_InternalBasePtr_Ctor(&storageIBP, storageComp);
-    fn_InternalBasePtr_CheckPtr(&storageIBP);
-    int storageCount = fn_StorageQueryCount(storageIBP);
+    // Use inline fn_StorageComponent_QueryCount (from engine_funcs.h) instead of
+    // the exe's StorageComponent_QueryCount (0x14012cf10). The exe version crashes
+    // when a material type lacks RawMaterialDescription (NULL+0x48 deref).
+    // Our inline version has a null guard on the component lookup.
+    int storageCount = 0;
+    if (storageComp) {
+        storageCount = fn_StorageComponent_QueryCount(storageComp);
+    }
     if (storageCount == 0) {
         *reinterpret_cast<int64_t*>(comp + 0xC8) = 0;
     }
@@ -176,6 +179,7 @@ static void Reimpl_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
     // --- Phase 5: Hunger check ---
     fn_InternalBasePtr_CheckPtr(comp + 0x38);
     int64_t citizenData = *reinterpret_cast<int64_t*>(comp + 0x38);
+    if (!citizenData) return;  // citizen entity gone, bail out
     float health = *reinterpret_cast<float*>(citizenData + 0x44);
     float* pHungerThresh = reinterpret_cast<float*>(
         *reinterpret_cast<int64_t*>(citizenData + 0x288) + 0xCC);

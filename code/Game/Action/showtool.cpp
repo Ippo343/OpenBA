@@ -109,12 +109,24 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
 
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
         s_fn_CheckPtr(s + 0x20);
-        s_fn_HideTool(*(void**)(s + 0x20));
+        void* entity = *(void**)(s + 0x20);
+        if (!entity) return 1;  // entity removed, nothing to do
+        s_fn_HideTool(entity);
         return 1;
     }
 
     s_fn_CheckPtr(s + 0x20);
-    s_fn_ShowToolOnEntity(*(void**)(s + 0x20), (int)toolId);
+    void* entity = *(void**)(s + 0x20);
+    if (!entity) return 1;  // entity removed, nothing to do
+
+    // toolId < 0 (e.g. 0xFFFFFFFE = -2) triggers a "find best material from
+    // storage" codepath inside Entity_impl_73b0 that crashes when the material
+    // entity lacks the expected component (DAT_1401c7a88). The component search
+    // leaves a NULL ptr that gets dereferenced at +0x20. Since this path only
+    // controls which mesh to show on the citizen model (purely visual), skip it.
+    if ((int)toolId < 0) return 1;
+
+    s_fn_ShowToolOnEntity(entity, (int)toolId);
     return 1;
 }
 
@@ -134,7 +146,9 @@ int ShowTool_Exit_Impl(void* /*self*/) {
 void ShowTool_CheckEntity_Impl(void* self) {
     uint8_t* s = (uint8_t*)self;
     s_fn_CheckPtr(s + 0x20);
-    s_fn_HideTool(*(void**)(s + 0x20));
+    void* entity = *(void**)(s + 0x20);
+    if (!entity) return;  // entity already gone
+    s_fn_HideTool(entity);
 }
 
 // ============================================================
@@ -144,7 +158,9 @@ void ShowTool_CheckEntity_Impl(void* self) {
 bool ShowTool_GetTarget_Impl(void* self, void* param) {
     uint8_t* s = (uint8_t*)self;
     s_fn_CheckPtr(s + 0x20);
-    void* entityParent = *(void**)(*(uint8_t**)(s + 0x20) + 0x10);
+    void* entity = *(void**)(s + 0x20);
+    if (!entity) return false;  // entity gone, no match
+    void* entityParent = *(void**)(entity + 0x10);
     s_fn_CheckPtr(param);
     return entityParent == *(void**)param;
 }

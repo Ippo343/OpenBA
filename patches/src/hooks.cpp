@@ -1122,6 +1122,10 @@ extern void InstallStatusIconComponentOnUpdate2();
 extern void RemoveStatusIconComponentOnUpdate2();
 
 // --- StorageComponent (engine/reimpl/storagecomponent.cpp) ---
+extern void InstallStorageComponentQueryCount();
+extern void RemoveStorageComponentQueryCount();
+extern void InstallStorageComponentHelper_c560();
+extern void RemoveStorageComponentHelper_c560();
 extern void InstallStorageComponentShutdown();
 extern void RemoveStorageComponentShutdown();
 extern void InstallStorageComponentDraw();
@@ -2878,6 +2882,8 @@ static ReimplEntry g_reimplementations[] = {
     { "StatusIconComponent::OnUpdate2", InstallStatusIconComponentOnUpdate2, RemoveStatusIconComponentOnUpdate2, true },
 
     // --- StorageComponent ---
+    { "StorageComponent::QueryCount", InstallStorageComponentQueryCount, RemoveStorageComponentQueryCount, true },
+    { "StorageComponent::Helper_c560", InstallStorageComponentHelper_c560, RemoveStorageComponentHelper_c560, true },
     { "StorageComponent::Shutdown", InstallStorageComponentShutdown, RemoveStorageComponentShutdown, true },
     { "StorageComponent::Draw", InstallStorageComponentDraw, RemoveStorageComponentDraw, true },
 
