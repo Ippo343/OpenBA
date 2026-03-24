@@ -139,13 +139,16 @@ void InstallBuildComponentShutdown() {
 void RemoveBuildComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallBuildComponentDraw() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140108D40);
-    InstallHook(target, (void*)Passthrough_Draw, &g_hookDraw, 14);
+    // VTable hook: function is only 4 instructions (21 bytes) with RIP-relative MOV
+    // and relative JZ. Prologue hooking corrupts the tiny function body.
+    // vtable at 0x140162260, Draw = slot 6 (+0x30)
+    InstallHookVTable(0x140162260, 6, (void*)Passthrough_Draw, &g_hookDraw);
+    RegisterHookInfo("BuildComponent::Draw", &g_hookDraw);
 #ifdef _DEBUG
-    printf("[BuildComponent] Draw hooked at %p (passthrough)\n", (void*)target);
+    printf("[BuildComponent] Draw vtable-hooked (original=%p)\n", g_hookDraw.trampoline);
 #endif
 }
-void RemoveBuildComponentDraw() { RemoveHook(&g_hookDraw); }
+void RemoveBuildComponentDraw() { RemoveHookVTable(&g_hookDraw); }
 
 void InstallBuildComponentOnCreate() {
     if (!ResolveHelpers()) {

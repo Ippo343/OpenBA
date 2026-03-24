@@ -148,15 +148,15 @@ static int Reimpl_Slot9(void* self, void* param2) {
 
 void InstallForesterWorkSlot9() {
     ForesterWork_ResolveFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400EAC60);
-    // Prologue: MOV RAX,RSP(3) + PUSH RBP(1) + PUSH RSI(1) + PUSH RDI(1) +
-    //           PUSH R12(2) + PUSH R13(2) + PUSH R14(2) = 12
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 12);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x1401613a0, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(ResolveAddr(Module::Exe, 0x1401613a0), 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("ForesterWork::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[ForesterWork] Slot9 hooked at %p (REIMPLEMENTED, prologue=12)\n", (void*)target);
+    printf("[ForesterWork] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
-void RemoveForesterWorkSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveForesterWorkSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 // ============================================================
 // Slot10 / GetWorkEntity (0x1400EB910) — passthrough

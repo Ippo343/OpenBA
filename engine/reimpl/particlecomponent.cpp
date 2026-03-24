@@ -119,13 +119,15 @@ void InstallParticleComponentOnCreate() {
 void RemoveParticleComponentOnCreate() { RemoveHook(&g_hookOnCreate); }
 
 void InstallParticleComponentOnRemove() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140052b30);
-    InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 17);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x14015a290, OnRemove = slot 8 (+0x40)
+    InstallHookVTable(0x14015a290, 8, (void*)Reimpl_OnRemove, &g_hookOnRemove);
+    RegisterHookInfo("ParticleComponent::OnRemove", &g_hookOnRemove);
 #ifdef _DEBUG
-    printf("[ParticleComponent] OnRemove hooked at %p\n", (void*)target);
+    printf("[ParticleComponent] OnRemove vtable-hooked (original=%p)\n", g_hookOnRemove.trampoline);
 #endif
 }
-void RemoveParticleComponentOnRemove() { RemoveHook(&g_hookOnRemove); }
+void RemoveParticleComponentOnRemove() { RemoveHookVTable(&g_hookOnRemove); }
 
 void InstallParticleComponentOnUpdate2() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400531b0);

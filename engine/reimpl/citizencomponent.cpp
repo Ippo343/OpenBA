@@ -64,15 +64,12 @@ static bool Reimpl_ShouldSwitchWorkplace(CitizenComponent* self) {
 // Install / Remove
 // ============================================================
 void InstallCitizenComponentUpdate() {
-    uintptr_t target = ResolveAddr(Module::Exe, CitizenComponentAddr::Update);
-    // Prologue: MOV [RSP+8],RCX(5) + PUSH RBP(1) + PUSH RBX(1) + PUSH RSI(1) +
-    //           PUSH RDI(1) + PUSH R12(2) + PUSH R14(2) + PUSH R15(2) = 15 bytes
-    // But MOV RAX,RSP is 3 bytes at start. Using 13 bytes:
-    //   MOV RAX,RSP(3) + PUSH RBP(1) + PUSH RBX(1) + PUSH RSI(1) +
-    //   PUSH RDI(1) + PUSH R12(2) + PUSH R14(2) + PUSH R15(2) = 13 bytes.
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 13);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140162580, Update = slot 9 (+0x48)
+    InstallHookVTable(0x140162580, 9, (void*)Reimpl_Update, &g_hookUpdate);
+    RegisterHookInfo("CitizenComponent::Update", &g_hookUpdate);
 #ifdef _DEBUG
-    printf("[CitizenComponent] Update hooked at %p (prologue=13, passthrough)\n", (void*)target);
+    printf("[CitizenComponent] Update vtable-hooked (original=%p)\n", g_hookUpdate.trampoline);
 #endif
 }
 
@@ -88,5 +85,5 @@ void InstallCitizenComponentShouldSwitch() {
 #endif
 }
 
-void RemoveCitizenComponentUpdate() { RemoveHook(&g_hookUpdate); }
+void RemoveCitizenComponentUpdate() { RemoveHookVTable(&g_hookUpdate); }
 void RemoveCitizenComponentShouldSwitch() { RemoveHook(&g_hookShouldSwitch); }

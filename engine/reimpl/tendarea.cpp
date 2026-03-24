@@ -155,13 +155,15 @@ static uint64_t Reimpl_Slot9(void* self, void* param2) {
 
 void InstallTendAreaSlot9() {
     TendArea_ResolveFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5230);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161990, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(0x140161990, 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("TendArea::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[TendArea] Slot9 hooked at %p (passthrough/DISABLED)\n", (void*)target);
+    printf("[TendArea] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
-void RemoveTendAreaSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveTendAreaSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 // ============================================================
 // Slot10 / GetWorkEntity (0x1400f58a0) — REIMPLEMENTED

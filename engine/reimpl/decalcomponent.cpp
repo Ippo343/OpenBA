@@ -83,13 +83,16 @@ void InstallDecalComponentSerialize() {
 void RemoveDecalComponentSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallDecalComponentDraw() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x14011b560);
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 14);
+    // VTable hook: MOV RAX,RSP in prologue + MOVAPS [RAX-0x48] requires exact
+    // RSP alignment. Prologue hooking with RSP compensation breaks MOVAPS alignment.
+    // vtable at 0x140162fd0, Draw = slot 6 (+0x30)
+    InstallHookVTable(0x140162fd0, 6, (void*)Reimpl_Draw, &g_hookDraw);
+    RegisterHookInfo("DecalComponent::Draw", &g_hookDraw);
 #ifdef _DEBUG
-    printf("[DecalComponent] Draw hooked at %p\n", (void*)target);
+    printf("[DecalComponent] Draw vtable-hooked (original=%p)\n", g_hookDraw.trampoline);
 #endif
 }
-void RemoveDecalComponentDraw() { RemoveHook(&g_hookDraw); }
+void RemoveDecalComponentDraw() { RemoveHookVTable(&g_hookDraw); }
 
 void InstallDecalComponentOnCreate() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011b510);

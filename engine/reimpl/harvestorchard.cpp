@@ -182,15 +182,15 @@ static int Reimpl_Slot9(void* self, void* param2) {
 
 void InstallHarvestOrchardSlot9() {
     HarvestOrchard_ResolveFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400ED5E0);
-    // Prologue: MOV RAX,RSP(3) + PUSH RBP(1) + PUSH RSI(1) + PUSH RDI(1) +
-    //           PUSH R12(2) + PUSH R13(2) + PUSH R14(2) = 12
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 12);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161520, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(ResolveAddr(Module::Exe, 0x140161520), 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("HarvestOrchard::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[HarvestOrchard] Slot9 hooked at %p (REIMPLEMENTED, prologue=12)\n", (void*)target);
+    printf("[HarvestOrchard] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
-void RemoveHarvestOrchardSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveHarvestOrchardSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 // ============================================================
 // Slot10 / GetWorkEntity (0x1400EDE40) — REIMPLEMENTED

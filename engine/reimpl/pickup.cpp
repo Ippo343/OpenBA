@@ -126,14 +126,16 @@ void RemovePickupSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallPickupSlot4() {
     Pickup_ResolveFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f2f00);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 16);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161810, Slot4 = slot 4 (+0x20)
+    InstallHookVTable(0x140161810, 4, (void*)Reimpl_Slot4, &g_hookSlot4);
+    RegisterHookInfo("Pickup::Slot4", &g_hookSlot4);
 #ifdef _DEBUG
-    printf("[Pickup] Slot4 hooked at %p (REIMPLEMENTED, calls original)\n", (void*)target);
+    printf("[Pickup] Slot4 vtable-hooked (original=%p)\n", g_hookSlot4.trampoline);
 #endif
 }
 
-void RemovePickupSlot4() { RemoveHook(&g_hookSlot4); }
+void RemovePickupSlot4() { RemoveHookVTable(&g_hookSlot4); }
 
 void InstallPickupExecute() {
     Pickup_ResolveFuncs();

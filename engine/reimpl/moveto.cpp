@@ -165,19 +165,17 @@ void RemoveMoveToAbstractImpl() {
 }
 
 void InstallMoveToExecute() {
-    // DISABLED HOOK -- bug class 3: MOV RAX,RSP in prologue.
-    // Execute passthrough still installed for trampoline-based forwarding,
-    // but the hook entry in hooks.cpp should be disabled.
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400c8570);
-    // Prologue: MOV(3)+MOV(4)+PUSH(1)+PUSH(1)+PUSH(1)+PUSH(2)+PUSH(2) = 14 bytes
-    InstallHook(target, (void*)Reimpl_Execute, &g_hookExecute, 14);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x14015fe40, Execute = slot 5 (+0x28)
+    InstallHookVTable(0x14015fe40, 5, (void*)Reimpl_Execute, &g_hookExecute);
+    RegisterHookInfo("MoveTo::Execute", &g_hookExecute);
 #ifdef _DEBUG
-    printf("[MoveTo] Execute hooked at %p (passthrough, bug class 3)\n", (void*)target);
+    printf("[MoveTo] Execute vtable-hooked (original=%p)\n", g_hookExecute.trampoline);
 #endif
 }
 
 void RemoveMoveToExecute() {
-    RemoveHook(&g_hookExecute);
+    RemoveHookVTable(&g_hookExecute);
 }
 
 void InstallMoveToEnter() {

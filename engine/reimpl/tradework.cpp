@@ -91,13 +91,15 @@ static uint32_t Reimpl_Slot4(void* self, void* param2, void* param3) {
 }
 
 void InstallTradeWorkSlot4() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5d40);
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 16);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161a10, Slot4 = slot 4 (+0x20)
+    InstallHookVTable(0x140161a10, 4, (void*)Reimpl_Slot4, &g_hookSlot4);
+    RegisterHookInfo("TradeWork::Slot4", &g_hookSlot4);
 #ifdef _DEBUG
-    printf("[TradeWork] Slot4 hooked at %p (passthrough/DISABLED)\n", (void*)target);
+    printf("[TradeWork] Slot4 vtable-hooked (original=%p)\n", g_hookSlot4.trampoline);
 #endif
 }
-void RemoveTradeWorkSlot4() { RemoveHook(&g_hookSlot4); }
+void RemoveTradeWorkSlot4() { RemoveHookVTable(&g_hookSlot4); }
 
 // ============================================================
 // Slot6 (0x1400f5d20) — DISABLED (relative CALL), passthrough
@@ -152,13 +154,15 @@ static uint64_t Reimpl_Slot9(void* self, void* param2) {
 
 void InstallTradeWorkSlot9() {
     TradeWork_ResolveFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400f5ae0);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161a10, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(0x140161a10, 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("TradeWork::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[TradeWork] Slot9 hooked at %p (passthrough/DISABLED)\n", (void*)target);
+    printf("[TradeWork] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
-void RemoveTradeWorkSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveTradeWorkSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 // ============================================================
 // Slot10 / GetWorkEntity (0x1400f6c50) — REIMPLEMENTED

@@ -183,14 +183,16 @@ void InstallClearStorageSlot8() {
 void RemoveClearStorageSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallClearStorageSlot9() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e69f0);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x1401611a0, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(ResolveAddr(Module::Exe, 0x1401611a0), 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("ClearStorage::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[ClearStorage] Slot9 hooked at %p (passthrough)\n", (void*)target);
+    printf("[ClearStorage] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
 
-void RemoveClearStorageSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveClearStorageSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 void InstallClearStorageSlot10() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400e7330);

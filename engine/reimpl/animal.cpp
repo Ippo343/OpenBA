@@ -64,15 +64,15 @@ static void Reimpl_Update(void* self, int64_t* deltaTime) {
 // ============================================================
 
 void InstallAnimalComponentUpdate() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140106420);
-    // Prologue: MOV(3)+PUSH(1)+PUSH(1)+PUSH(1)+PUSH(2)+PUSH(2)+PUSH(2)+PUSH(2)+LEA(4) = 18 bytes
-    InstallHook(target, (void*)Reimpl_Update, &g_hookUpdate, 18);
-
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140162110, Update = slot 9 (+0x48)
+    InstallHookVTable(0x140162110, 9, (void*)Reimpl_Update, &g_hookUpdate);
+    RegisterHookInfo("AnimalComponent::Update", &g_hookUpdate);
 #ifdef _DEBUG
-    printf("[AnimalComponent] Update hooked at %p (prologue=18, passthrough)\n", (void*)target);
+    printf("[AnimalComponent] Update vtable-hooked (original=%p)\n", g_hookUpdate.trampoline);
 #endif
 }
 
 void RemoveAnimalComponentUpdate() {
-    RemoveHook(&g_hookUpdate);
+    RemoveHookVTable(&g_hookUpdate);
 }

@@ -147,15 +147,15 @@ static bool Reimpl_Slot9(void* self, void* param2) {
 
 void InstallHuntWorkSlot9() {
     HuntWork_ResolveFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400EED90);
-    // Prologue: MOV RAX,RSP(3) + PUSH RBP(1) + PUSH RSI(1) + PUSH RDI(1) +
-    //           PUSH R12(2) + PUSH R13(2) + PUSH R14(2) = 12
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 12);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161620, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(ResolveAddr(Module::Exe, 0x140161620), 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("HuntWork::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[HuntWork] Slot9 hooked at %p (passthrough/DISABLED, prologue=12)\n", (void*)target);
+    printf("[HuntWork] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
-void RemoveHuntWorkSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveHuntWorkSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 // ============================================================
 // Slot10 / GetWorkEntity (0x1400EF5A0) — REIMPLEMENTED

@@ -111,16 +111,16 @@ void InstallMarketWorkSerialize() {
 void RemoveMarketWorkSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallMarketWorkSlot4() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400eff80);
-    // Prologue: complex, check first safe boundary
-    // MOV [RSP+0x18],R8(5) + MOV [RSP+0x10],RDX(5) + PUSH RBP(2) + PUSH RBX(2) = 14
-    InstallHook(target, (void*)Reimpl_Slot4, &g_hookSlot4, 14);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161710, Slot4 = slot 4 (+0x20)
+    InstallHookVTable(0x140161710, 4, (void*)Reimpl_Slot4, &g_hookSlot4);
+    RegisterHookInfo("MarketWork::Slot4", &g_hookSlot4);
 #ifdef _DEBUG
-    printf("[MarketWork] Slot4 hooked at %p (passthrough, DISABLED)\n", (void*)target);
+    printf("[MarketWork] Slot4 vtable-hooked (original=%p)\n", g_hookSlot4.trampoline);
 #endif
 }
 
-void RemoveMarketWorkSlot4() { RemoveHook(&g_hookSlot4); }
+void RemoveMarketWorkSlot4() { RemoveHookVTable(&g_hookSlot4); }
 
 void InstallMarketWorkSlot6() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400eff60);
@@ -146,15 +146,16 @@ void InstallMarketWorkSlot8() {
 void RemoveMarketWorkSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallMarketWorkSlot9() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400efd20);
-    // Prologue needs checking - use safe 15
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 18);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x140161710, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(0x140161710, 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("MarketWork::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[MarketWork] Slot9 hooked at %p (passthrough, DISABLED)\n", (void*)target);
+    printf("[MarketWork] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
 
-void RemoveMarketWorkSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveMarketWorkSlot9() { RemoveHookVTable(&g_hookSlot9); }
 
 void InstallMarketWorkSlot10() {
     MarketWork_ResolveFuncs();

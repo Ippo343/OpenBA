@@ -202,12 +202,13 @@ void InstallFireWorkSlot8() {
 void RemoveFireWorkSlot8() { RemoveHook(&g_hookSlot8); }
 
 void InstallFireWorkSlot9() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400e93c0);
-    // Prologue: MOV RAX,RSP(3) + PUSH RBP(2) + PUSH RSI(2) + PUSH RDI(2) + PUSH R12(2) + PUSH R13(2) = 13
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 14);
+    // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
+    // vtable at 0x1401612a0, Slot9 = slot 9 (+0x48)
+    InstallHookVTable(ResolveAddr(Module::Exe, 0x1401612a0), 9, (void*)Reimpl_Slot9, &g_hookSlot9);
+    RegisterHookInfo("FireWork::Slot9", &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[FireWork] Slot9 hooked at %p (deep reimpl)\n", (void*)target);
+    printf("[FireWork] Slot9 vtable-hooked (original=%p)\n", g_hookSlot9.trampoline);
 #endif
 }
 
-void RemoveFireWorkSlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveFireWorkSlot9() { RemoveHookVTable(&g_hookSlot9); }
