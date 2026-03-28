@@ -166,7 +166,7 @@ bool HuntWork_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<HuW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<HuW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x14001a6b0));
+        ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm
     s_fn_ValidateEntity = reinterpret_cast<HuW_ValidateEntity_t>(
         ResolveAddr(Module::Exe, 0x1400f7100));
     s_fn_BSTRemove = reinterpret_cast<HuW_BSTRemove_t>(
@@ -189,10 +189,10 @@ bool HuntWork_ResolveFuncs() {
         s_fn_Vector3_Ctor = *reinterpret_cast<HuW_Vector3_Ctor_t*>(iatVec3Ctor);
 
     // Serializer ctor/dtor from dispatch slots
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140151500);
+    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtorSlot)
         s_fn_Serializer_Ctor = *reinterpret_cast<HuW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140151508);
+    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
     if (iatSerDtorSlot)
         s_fn_Serializer_Dtor = *reinterpret_cast<HuW_Serializer_Dtor_t*>(iatSerDtorSlot);
 

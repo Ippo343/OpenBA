@@ -106,7 +106,7 @@ bool MarketWork_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<MW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize_Simple = reinterpret_cast<MW_BST_Serialize_Simple_t>(
-        ResolveAddr(Module::Exe, 0x14001a6b0));
+        ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm
     s_fn_ValidateEntity = reinterpret_cast<MW_ValidateEntity_t>(
         ResolveAddr(Module::Exe, 0x1400f7100));
     s_fn_CancelAllWork = reinterpret_cast<MW_CancelAllWork_t>(
@@ -133,10 +133,10 @@ bool MarketWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140014c30));
 
     // Dispatch slots (indirect through .rdata)
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140151500);
+    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtorSlot)
         s_fn_Serializer_Ctor = *reinterpret_cast<MW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140151508);
+    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
     if (iatSerDtorSlot)
         s_fn_Serializer_Dtor = *reinterpret_cast<MW_Serializer_Dtor_t*>(iatSerDtorSlot);
 

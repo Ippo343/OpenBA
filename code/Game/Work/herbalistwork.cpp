@@ -181,7 +181,7 @@ bool HerbalistWork_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<HW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<HW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x14001a6b0));  // CitizenAI_impl_96b0 renamed
+        ResolveAddr(Module::Exe, 0x1400296b0));  // BST serialize (verified from original disasm)
     s_fn_ValidateEntity = reinterpret_cast<HW_ValidateEntity_t>(
         ResolveAddr(Module::Exe, 0x1400f7100));
     s_fn_BSTRemove = reinterpret_cast<HW_BSTRemove_t>(
@@ -204,14 +204,14 @@ bool HerbalistWork_ResolveFuncs() {
         s_fn_Vector3_Ctor = *reinterpret_cast<HW_Vector3_Ctor_t*>(iatVec3Ctor);
     // CheckPtr already from engine_funcs.h (no local copy needed)
 
-    // Serializer ctor/dtor from dispatch slots
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140151500);
+    // Serializer ctor/dtor from dispatch slots (verified from original disasm at 0x1400EEBB0)
+    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtorSlot)
         s_fn_Serializer_Ctor = *reinterpret_cast<HW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140151508);
+    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
     if (iatSerDtorSlot)
         s_fn_Serializer_Dtor = *reinterpret_cast<HW_Serializer_Dtor_t*>(iatSerDtorSlot);
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140151528);
+    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
     if (iatSerInt)
         s_fn_Serializer_SerializeInt = *reinterpret_cast<HW_Serializer_SerializeInt_t*>(iatSerInt);
 

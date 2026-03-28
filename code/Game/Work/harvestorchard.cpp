@@ -170,13 +170,13 @@ bool HarvestOrchard_ResolveFuncs() {
     if (iatVec3Ctor)
         s_fn_Vector3_Ctor = *reinterpret_cast<HO_Vector3_Ctor_t*>(iatVec3Ctor);
 
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x1401528e8);
+    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtor)
         s_fn_Serializer_Ctor = *reinterpret_cast<HO_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x1401528f0);
+    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
     if (iatSerDtor)
         s_fn_Serializer_Dtor = *reinterpret_cast<HO_Serializer_Dtor_t*>(iatSerDtor);
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140151278);
+    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
     if (iatSerInt)
         s_fn_Serializer_SerializeInt = *reinterpret_cast<HO_Serializer_SerializeInt_t*>(iatSerInt);
     s_fn_Serializer_SerializeBoolArray = reinterpret_cast<HO_Serializer_SerializeBoolArray_t>(

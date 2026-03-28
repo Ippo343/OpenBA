@@ -235,15 +235,15 @@ bool ForesterWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401612e0));
 
     // Dispatch slots (indirect through IAT)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152a00);
+    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
     if (iatSerCtor)
         s_fn_Serializer_Ctor = *reinterpret_cast<FW_Serializer_Ctor_t*>(iatSerCtor);
 
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152a08);
+    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
     if (iatSerDtor)
         s_fn_Serializer_Dtor = *reinterpret_cast<FW_Serializer_Dtor_t*>(iatSerDtor);
 
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152878);
+    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
     if (iatSerInt)
         s_fn_SerializeInt = *reinterpret_cast<FW_SerializeInt_t*>(iatSerInt);
 

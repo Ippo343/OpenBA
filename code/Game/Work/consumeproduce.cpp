@@ -265,10 +265,12 @@ void* ConsumeProduce_Ctor_Impl(ConsumeProduceAction* self) {
     // ConsumeProduce-specific fields
     // Note: field_48 (bool) and field_4c/field_54 (ints) are NOT initialized by ctor
     self->field_50 = 0;        // Type
-    self->field_58 = nullptr;  // IBP array
-    self->field_60 = 0;        // IBP count
-    self->field_68 = nullptr;  // int array
-    self->field_70 = 0;        // int count
+    self->field_58 = nullptr;  // IBP DynArray data ptr
+    self->field_60 = 0;        // IBP DynArray count
+    self->field_64 = 0;        // IBP DynArray capacity
+    self->field_68 = nullptr;  // int DynArray data ptr
+    self->field_70 = 0;        // int DynArray count
+    self->field_74 = 0;        // int DynArray capacity
 
     return self;
 }
@@ -283,15 +285,17 @@ void* ConsumeProduce_ScalarDtor_Impl(ConsumeProduceAction* self, uint32_t flags)
     // Set ConsumeProduce vtable (for correct virtual dispatch during destruction)
     self->vtable = s_vtable_ConsumeProduce;
 
-    // Free the int array at +0x68
+    // Free the int DynArray at +0x68 (original uses 8-byte writes to zero count+capacity)
     fn_MemFreeStatic(self->field_68);
     self->field_68 = nullptr;
     self->field_70 = 0;
+    self->field_74 = 0;
 
-    // Free the IBP array at +0x58
+    // Free the IBP DynArray at +0x58 (original uses 8-byte writes to zero count+capacity)
     fn_MemFreeStatic(self->field_58);
     self->field_58 = nullptr;
     self->field_60 = 0;
+    self->field_64 = 0;
 
     // Set Work vtable (base class destructor phase)
     self->vtable = s_vtable_Work;
@@ -325,17 +329,26 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     bool isLoading = (*(int*)(serStreamPtr + 8) == 0);
 
     // --- Serialize IBP array count (+0x60) ---
-    g_fn_Serialize_Int(serializerBuf, &self->field_60, nullptr);
+    // Use a local copy like the original does (original serializes into a stack local,
+    // not directly into self->field_60). This avoids issues if ResizeIBPArray
+    // modifies field_60 as a side-effect.
+    int ibpCount = self->field_60;
+    g_fn_Serialize_Int(serializerBuf, &ibpCount, nullptr);
 
     // If loading, resize the IBP array to match deserialized count
     if (isLoading) {
-        s_fn_ResizeIBPArray((void*)&self->field_58, self->field_60);
+        s_fn_ResizeIBPArray((void*)&self->field_58, ibpCount);
     }
 
     // Serialize each InternalBasePtr in the array
     uintptr_t* ibpArray = (uintptr_t*)self->field_58;
-    int count = self->field_60;
-    for (int i = 0; i < count; i++) {
+#ifdef _DEBUG
+    if (ibpCount > 0 && ibpArray == nullptr) {
+        printf("[ConsumeProduce::Serialize] BUG: ibpCount=%d but ibpArray=NULL! self=%p isLoading=%d field_58=%p field_60=%d\n",
+               ibpCount, (void*)self, (int)isLoading, (void*)self->field_58, self->field_60);
+    }
+#endif
+    for (int i = 0; i < ibpCount; i++) {
         s_fn_IBP_Serialize(&ibpArray[i], serializerBuf);
 
         // After deserialize, validate the entity type
@@ -349,16 +362,17 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     }
 
     // --- Serialize int array count (+0x70) ---
-    g_fn_Serialize_Int(serializerBuf, &self->field_70, nullptr);
+    int intCount = self->field_70;
+    g_fn_Serialize_Int(serializerBuf, &intCount, nullptr);
 
     // If loading, resize the int array
     if (isLoading) {
-        s_fn_ResizeIntArray((void*)&self->field_68, self->field_70);
+        s_fn_ResizeIntArray((void*)&self->field_68, intCount);
     }
 
     // Bulk-serialize the int array
     // Original: IO::Serializer::Serialize(serializer, count, intArrayPtr, name)
-    s_fn_Serializer_SerializeIntBulk(serializerBuf, self->field_70, self->field_68, nullptr);
+    s_fn_Serializer_SerializeIntBulk(serializerBuf, intCount, self->field_68, nullptr);
 
     // --- Serialize ConsumeProduce fields ---
     g_fn_Serialize_Bool(serializerBuf, &self->field_48, nullptr);   // bool at +0x48

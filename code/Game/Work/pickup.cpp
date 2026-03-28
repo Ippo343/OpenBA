@@ -104,8 +104,8 @@ bool Pickup_ResolveFuncs() {
     if (iatSer)
         s_fn_Serializer_Serialize = *reinterpret_cast<PiW_Serializer_Serialize_t*>(iatSer);
 
-    // Serializer::GetVersion
-    uintptr_t iatGetVer = ResolveAddr(Module::Exe, 0x140152ae0);
+    // Serializer::GetVersion (correct IAT slot verified from original disasm)
+    uintptr_t iatGetVer = ResolveAddr(Module::Exe, 0x140152a48);
     if (iatGetVer)
         s_fn_Serializer_GetVersion = *reinterpret_cast<PiW_Serializer_GetVersion_t*>(iatGetVer);
 

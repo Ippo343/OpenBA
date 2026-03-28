@@ -70,8 +70,8 @@ bool BuildRoad_ResolveFuncs() {
     if (iatSerCtor) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iatSerCtor);
     if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iatSerDtor);
 
-    // IO::Serializer::GetVersion — via IAT at 0x140152ae8
-    uintptr_t iatGetVer = ResolveAddr(Module::Exe, 0x140152ae8);
+    // IO::Serializer::GetVersion — correct IAT slot verified from original disasm
+    uintptr_t iatGetVer = ResolveAddr(Module::Exe, 0x140152a48);
     if (iatGetVer) s_fn_Serializer_GetVersion = *reinterpret_cast<int(**)(void*)>(iatGetVer);
 
     // InternalBasePtr::Serialize via IAT at 0x140152aa0

@@ -224,12 +224,12 @@ struct ConsumeProduceAction {
     int32_t  field_4c;           // +0x4C: int (serialized)
     int32_t  field_50;           // +0x50: Type (zeroed, serialized)
     int32_t  field_54;           // +0x54: int (serialized)
-    void*    field_58;           // +0x58: InternalBasePtr array (zeroed)
-    int32_t  field_60;           // +0x60: count (zeroed)
-    uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: int array (zeroed)
-    int32_t  field_70;           // +0x70: count (zeroed)
-    uint8_t  _pad74[4];          // +0x74: padding
+    void*    field_58;           // +0x58: InternalBasePtr DynArray data ptr (zeroed)
+    int32_t  field_60;           // +0x60: DynArray count (zeroed)
+    int32_t  field_64;           // +0x64: DynArray capacity (zeroed)
+    void*    field_68;           // +0x68: int DynArray data ptr (zeroed)
+    int32_t  field_70;           // +0x70: DynArray count (zeroed)
+    int32_t  field_74;           // +0x74: DynArray capacity (zeroed)
 };
 
 static_assert(sizeof(ConsumeProduceAction) == 0x78, "ConsumeProduceAction size mismatch");

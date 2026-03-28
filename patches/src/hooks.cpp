@@ -3084,7 +3084,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- HerbalistWork ---
     { "HerbalistWork::ScalarDtor", InstallHerbalistWorkScalarDtor, RemoveHerbalistWorkScalarDtor, true },
-    { "HerbalistWork::Serialize", InstallHerbalistWorkSerialize, RemoveHerbalistWorkSerialize, true },
+    { "HerbalistWork::Serialize", InstallHerbalistWorkSerialize, RemoveHerbalistWorkSerialize, false },
     { "HerbalistWork::Slot4", InstallHerbalistWorkSlot4, RemoveHerbalistWorkSlot4, true },
     { "HerbalistWork::Slot8", InstallHerbalistWorkSlot8, RemoveHerbalistWorkSlot8, true },
     { "HerbalistWork::Slot9", InstallHerbalistWorkSlot9, RemoveHerbalistWorkSlot9, true }, // RE-ENABLED: RSP correction in trampoline (Bug Class 3 fix)
@@ -3103,7 +3103,7 @@ static ReimplEntry g_reimplementations[] = {
     { "HuntWork::Slot10", InstallHuntWorkSlot10, RemoveHuntWorkSlot10, true },
 
     // --- LocationWork ---
-    { "LocationWork::Serialize", InstallLocationWorkSerialize, RemoveLocationWorkSerialize, true },
+    { "LocationWork::Serialize", InstallLocationWorkSerialize, RemoveLocationWorkSerialize, false },
     { "LocationWork::Slot4", InstallLocationWorkSlot4, RemoveLocationWorkSlot4, true },
     { "LocationWork::Slot6", InstallLocationWorkSlot6, RemoveLocationWorkSlot6, true },
     { "LocationWork::Slot7", InstallLocationWorkSlot7, RemoveLocationWorkSlot7, true },
@@ -3112,7 +3112,7 @@ static ReimplEntry g_reimplementations[] = {
     { "LocationWork::Slot10", InstallLocationWorkSlot10, RemoveLocationWorkSlot10, true },
 
     // --- MarketWork ---
-    { "MarketWork::Serialize", InstallMarketWorkSerialize, RemoveMarketWorkSerialize, true },
+    { "MarketWork::Serialize", InstallMarketWorkSerialize, RemoveMarketWorkSerialize, false },
     { "MarketWork::Slot4", InstallMarketWorkSlot4, RemoveMarketWorkSlot4, true }, // RE-ENABLED: RSP correction in trampoline (Bug Class 3 fix)
     { "MarketWork::Slot6", InstallMarketWorkSlot6, RemoveMarketWorkSlot6, true }, // RE-ENABLED: relocating trampoline handles relative CALL
     { "MarketWork::Slot8", InstallMarketWorkSlot8, RemoveMarketWorkSlot8, true }, // RE-ENABLED: relocating trampoline handles short Jcc
@@ -3129,7 +3129,7 @@ static ReimplEntry g_reimplementations[] = {
 
     // --- PastureWork ---
     { "PastureWork::ScalarDtor", InstallPastureWorkScalarDtor, RemovePastureWorkScalarDtor, true },
-    { "PastureWork::Serialize", InstallPastureWorkSerialize, RemovePastureWorkSerialize, true },
+    { "PastureWork::Serialize", InstallPastureWorkSerialize, RemovePastureWorkSerialize, false },
     { "PastureWork::Slot4", InstallPastureWorkSlot4, RemovePastureWorkSlot4, true },
     { "PastureWork::Slot7", InstallPastureWorkSlot7, RemovePastureWorkSlot7, true },
     { "PastureWork::Slot8", InstallPastureWorkSlot8, RemovePastureWorkSlot8, true },
@@ -3137,14 +3137,14 @@ static ReimplEntry g_reimplementations[] = {
     { "PastureWork::Slot10", InstallPastureWorkSlot10, RemovePastureWorkSlot10, true },
 
     // --- PerformWork ---
-    { "PerformWork::Serialize", InstallPerformWorkSerialize, RemovePerformWorkSerialize, true },
+    { "PerformWork::Serialize", InstallPerformWorkSerialize, RemovePerformWorkSerialize, false },
     { "PerformWork::AbstractImpl", InstallPerformWorkAbstractImpl, RemovePerformWorkAbstractImpl, true },
     { "PerformWork::Execute", InstallPerformWorkExecute, RemovePerformWorkExecute, true },
     { "PerformWork::Exit", InstallPerformWorkExit, RemovePerformWorkExit, true },
     { "PerformWork::CheckEntity", InstallPerformWorkCheckEntity, RemovePerformWorkCheckEntity, true },
 
     // --- Pickup ---
-    { "Pickup::Serialize", InstallPickupSerialize, RemovePickupSerialize, true },
+    { "Pickup::Serialize", InstallPickupSerialize, RemovePickupSerialize, false },
     { "Pickup::Slot4", InstallPickupSlot4, RemovePickupSlot4, true }, // RE-ENABLED: RSP correction in trampoline (Bug Class 3 fix)
     { "Pickup::Execute", InstallPickupExecute, RemovePickupExecute, true },
     { "Pickup::Slot6", InstallPickupSlot6, RemovePickupSlot6, true },
@@ -3166,12 +3166,12 @@ static ReimplEntry g_reimplementations[] = {
     // --- PlantArea ---
     { "PlantArea::Ctor", InstallPlantAreaCtor, RemovePlantAreaCtor, true },
     { "PlantArea::ScalarDtor", InstallPlantAreaScalarDtor, RemovePlantAreaScalarDtor, true },
-    { "PlantArea::Serialize", InstallPlantAreaSerialize, RemovePlantAreaSerialize, true },
+    { "PlantArea::Serialize", InstallPlantAreaSerialize, RemovePlantAreaSerialize, false },
 
     // --- PlantOrchard ---
     { "PlantOrchard::Ctor", InstallPlantOrchardCtor, RemovePlantOrchardCtor, true },
     { "PlantOrchard::ScalarDtor", InstallPlantOrchardScalarDtor, RemovePlantOrchardScalarDtor, true },
-    { "PlantOrchard::Serialize", InstallPlantOrchardSerialize, RemovePlantOrchardSerialize, true },
+    { "PlantOrchard::Serialize", InstallPlantOrchardSerialize, RemovePlantOrchardSerialize, false },
 
     // --- PlayAnimation ---
     { "PlayAnimation::Serialize", InstallPlayAnimationSerialize, RemovePlayAnimationSerialize, true },
@@ -3203,7 +3203,7 @@ static ReimplEntry g_reimplementations[] = {
     { "ShowTool::GetTarget", InstallShowToolGetTarget, RemoveShowToolGetTarget, true },
 
     // --- TendArea ---
-    { "TendArea::Serialize", InstallTendAreaSerialize, RemoveTendAreaSerialize, true },
+    { "TendArea::Serialize", InstallTendAreaSerialize, RemoveTendAreaSerialize, false },
     { "TendArea::Slot4", InstallTendAreaSlot4, RemoveTendAreaSlot4, true },
     { "TendArea::Slot6", InstallTendAreaSlot6, RemoveTendAreaSlot6, true }, // RE-ENABLED: relocating trampoline handles relative CALL
     { "TendArea::Slot8", InstallTendAreaSlot8, RemoveTendAreaSlot8, true }, // RE-ENABLED: relocating trampoline handles short Jcc
@@ -3211,7 +3211,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TendArea::Slot10", InstallTendAreaSlot10, RemoveTendAreaSlot10, true },
 
     // --- TradeWork ---
-    { "TradeWork::Serialize", InstallTradeWorkSerialize, RemoveTradeWorkSerialize, true },
+    { "TradeWork::Serialize", InstallTradeWorkSerialize, RemoveTradeWorkSerialize, false },
     { "TradeWork::Slot4", InstallTradeWorkSlot4, RemoveTradeWorkSlot4, true }, // RE-ENABLED: RSP correction in trampoline (Bug Class 3 fix)
     { "TradeWork::Slot6", InstallTradeWorkSlot6, RemoveTradeWorkSlot6, true }, // RE-ENABLED: relocating trampoline handles relative CALL
     { "TradeWork::Slot8", InstallTradeWorkSlot8, RemoveTradeWorkSlot8, true }, // RE-ENABLED: relocating trampoline handles short Jcc
