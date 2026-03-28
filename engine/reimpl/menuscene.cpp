@@ -10,11 +10,16 @@
 //   +0x10: 0x14001b7a0 — GetTypeId (7b, unhookable)
 //   +0x18: 0x1400a3960 — Slot3/Serialize? (6b, unhookable: mov eax,1; ret)
 //   +0x20: 0x1400a3620 — Slot4 (6b, unhookable: mov eax,1; ret)
-//   +0x28: 0x1400a3630 — Slot5/Load
+//   +0x28: 0x1400a3630 — Slot5/Load (VTable hook, Bug Class 8: SEH cookie)
 //   +0x30: 0x14001b810 — Slot6/Cleanup
 //   +0x38: 0x140001640 — Slot7 base (7b, unhookable)
-//   +0x40: 0x14001b800 — Slot8/IsDerivedFrom
+//   +0x40: 0x14001b800 — Slot8/Init (null-safe factory)
+//
+// Deep reimplementation: all 4 hooked slots delegate to clean code
+// in code/Game/Game/menuscene.cpp.
 
+#include "MenuScene.h"
+#include "Game/menuscene_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -30,7 +35,7 @@ static HookInfo g_hookSlot6;
 static HookInfo g_hookSlot8;
 
 // ============================================================
-// Original function typedefs
+// Original function typedefs (kept for reference)
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 typedef void  (*fn_Slot5_t)(void* self, void* stream);
@@ -38,26 +43,26 @@ typedef void  (*fn_Slot6_t)(void* self);
 typedef void  (*fn_Slot8_t)(void* self);
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers — delegate to clean code in code/Game/
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "MenuScene::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return MenuScene_Dtor((MenuScene*)self, flags);
 }
 
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "MenuScene::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    MenuScene_Serialize((MenuScene*)self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "MenuScene::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    MenuScene_Cleanup((MenuScene*)self);
 }
 
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "MenuScene::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    MenuScene_Slot8((MenuScene*)self);
 }
 
 // ============================================================
@@ -65,7 +70,7 @@ static void Reimpl_Slot8(void* self) {
 // ============================================================
 void InstallMenuSceneDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14001b830);
-    // Prologue: mov [rsp+8],rbx(5) + push rdi(2) + sub rsp,0x20(4) + mov ebx,edx(2) + mov rdi,rcx(3) = 13
+    // Prologue: mov [rsp+8],rbx(5) + push rdi(2) + sub rsp,0x20(4) + mov ebx,edx(2) + mov rdi,rcx(3) = 15
     InstallHook(target, (void*)Reimpl_Dtor, &g_hookDtor, 15);
 #ifdef _DEBUG
     printf("[MenuScene] Dtor hooked at %p\n", (void*)target);

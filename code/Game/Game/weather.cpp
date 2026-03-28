@@ -90,3 +90,116 @@ void Weather_Init(Weather* self) {
     self->sunHeading = 120.0f;
     self->sunPitch = 65.0f;
 }
+
+// ============================================================
+// Weather::Serialize (vtable +0x28, Slot5) — Save/Load all fields
+// ============================================================
+// Creates an IO::Serializer, then serializes every Weather field
+// in declaration order. ExternalPtr (material) uses a dedicated
+// serialize helper; Vector3 and Color have their own member
+// serialize methods; int/float/bool use the generic overloads.
+//
+// Original: 0x1400d3c90
+
+// Local function pointers resolved on first call (not in engine_funcs.h)
+// IO::Serializer::Serialize(float&, const char*) via IAT at 0x140152a60
+static void (*s_fn_Serialize_Float)(void* serializer, void* field, const char* name) = nullptr;
+// Math::Vector3::Serialize(this, serializer) via IAT at 0x140152a68
+static void (*s_fn_Vector3_Serialize)(void* vec3, void* serializer) = nullptr;
+// System::Color::Serialize(this, serializer) via IAT at 0x140151ee0
+static void (*s_fn_Color_Serialize)(void* color, void* serializer) = nullptr;
+
+static bool s_weather_serialize_inited = false;
+
+static void Weather_Serialize_InitFuncs() {
+    if (s_weather_serialize_inited) return;
+    s_weather_serialize_inited = true;
+
+    uintptr_t iat;
+
+    // Serialize_Float via IAT at [0x140152a60]
+    iat = ResolveAddr(Module::Exe, 0x140152a60);
+    if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
+
+    // Vector3::Serialize via IAT at [0x140152a68]
+    iat = ResolveAddr(Module::Exe, 0x140152a68);
+    if (iat) s_fn_Vector3_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iat);
+
+    // Color::Serialize via IAT at [0x140151ee0]
+    iat = ResolveAddr(Module::Exe, 0x140151ee0);
+    if (iat) s_fn_Color_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iat);
+}
+
+void Weather_Serialize(Weather* self, void* stream) {
+    Weather_Serialize_InitFuncs();
+
+    // Create IO::Serializer on the stack (24 bytes), version 0
+    uint8_t serializer[24];
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // ExternalPtr material (+0x20)
+    fn_ExternalPtr_Serialize3(&self->material, serializer);
+
+    // int particleCount (+0x28)
+    g_fn_Serialize_Int(serializer, &self->particleCount, nullptr);
+
+    // Vector3 velocityDir (+0x2C..+0x34)  — member function: this=vec3, arg=serializer
+    s_fn_Vector3_Serialize(&self->velocityDirX, serializer);
+
+    // float velocity (+0x38)
+    s_fn_Serialize_Float(serializer, &self->velocity, nullptr);
+
+    // float velocityTolerence (+0x3C)
+    s_fn_Serialize_Float(serializer, &self->velocityTolerence, nullptr);
+
+    // bool velocityStretch (+0x40)
+    g_fn_Serialize_Bool(serializer, &self->velocityStretch, nullptr);
+
+    // float particleSize (+0x44)
+    s_fn_Serialize_Float(serializer, &self->particleSize, nullptr);
+
+    // float size (+0x48)
+    s_fn_Serialize_Float(serializer, &self->size, nullptr);
+
+    // float nearFade (+0x4C)
+    s_fn_Serialize_Float(serializer, &self->nearFade, nullptr);
+
+    // float nearFadeStart (+0x50)
+    s_fn_Serialize_Float(serializer, &self->nearFadeStart, nullptr);
+
+    // float farFadeStart (+0x54)
+    s_fn_Serialize_Float(serializer, &self->farFadeStart, nullptr);
+
+    // float farFade (+0x58)
+    s_fn_Serialize_Float(serializer, &self->farFade, nullptr);
+
+    // float transitionTime (+0x5C)
+    s_fn_Serialize_Float(serializer, &self->transitionTime, nullptr);
+
+    // Color ambientColor (+0x60)  — member function: this=color, arg=serializer
+    s_fn_Color_Serialize(&self->ambientColor, serializer);
+
+    // Color lightColor (+0x64)
+    s_fn_Color_Serialize(&self->lightColor, serializer);
+
+    // Color fogColor (+0x68)
+    s_fn_Color_Serialize(&self->fogColor, serializer);
+
+    // float fogNear (+0x6C)
+    s_fn_Serialize_Float(serializer, &self->fogNear, nullptr);
+
+    // float fogFar (+0x70)
+    s_fn_Serialize_Float(serializer, &self->fogFar, nullptr);
+
+    // float fogMax (+0x74)
+    s_fn_Serialize_Float(serializer, &self->fogMax, nullptr);
+
+    // float sunHeading (+0x78)
+    s_fn_Serialize_Float(serializer, &self->sunHeading, nullptr);
+
+    // float sunPitch (+0x7C)
+    s_fn_Serialize_Float(serializer, &self->sunPitch, nullptr);
+
+    // Destroy serializer
+    g_fn_Serializer_Dtor(serializer);
+}

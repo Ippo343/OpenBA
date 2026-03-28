@@ -15,3 +15,6 @@ void Weather_Cleanup(Weather* self);
 // Init: Initializes all Weather fields to defaults.
 // Called by Cleanup and can replace Weather_Ctor (0x1400d3e50).
 void Weather_Init(Weather* self);
+
+// Serialize (vtable +0x28, Slot5): Serialize all Weather fields to/from stream.
+void Weather_Serialize(Weather* self, void* stream);

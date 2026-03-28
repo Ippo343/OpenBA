@@ -10,7 +10,7 @@
 //   +0x10: 0x140024f90 — GetTypeId (7b, unhookable)
 //   +0x18: 0x1400d3e40 — Slot3/Serialize? (6b, unhookable: mov eax,5; ret)
 //   +0x20: 0x14003a912 — Slot4 base (6b JMP thunk, unhookable)
-//   +0x28: 0x1400d3c90 — Slot5/Serialize                — passthrough (needs IO funcs)
+//   +0x28: 0x1400d3c90 — Slot5/Serialize                — REIMPLEMENTED
 //   +0x30: 0x140025000 — Slot6/Cleanup                  — REIMPLEMENTED
 //   +0x38: 0x140001640 — Slot7 base (7b, unhookable)
 //   +0x40: 0x140024ff0 — Slot8/Reset (DISABLED: near JCC in prologue)
@@ -49,10 +49,10 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
     return Weather_Dtor((Weather*)self, flags);
 }
 
-// Slot5/Serialize (0x1400d3c90) — passthrough (requires IO::Serializer funcs)
+// Slot5/Serialize (0x1400d3c90) — REIMPLEMENTED
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "Weather::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    Weather_Serialize((Weather*)self, stream);
 }
 
 // Slot6/Cleanup (0x140025000) — REIMPLEMENTED
