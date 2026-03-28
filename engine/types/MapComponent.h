@@ -32,7 +32,8 @@ struct MapComponent {
     uint16_t tileY0;       // +0x2A: initialized to 0xFFFF (invalid)
     uint16_t tileX1;       // +0x2C: initialized to 0xFFFF (invalid)
     uint16_t tileY1;       // +0x2E: initialized to 0xFFFF (invalid)
-    uint8_t  _pad30[8];    // +0x30: padding to 0x38
+    int32_t  extraField;   // +0x30: serialized int (purpose TBD)
+    uint8_t  _pad34[4];    // +0x34: padding to 0x38
 };
 
 static_assert(sizeof(MapComponent) == 0x38, "MapComponent size mismatch");
@@ -42,3 +43,4 @@ static_assert(offsetof(MapComponent, tileX0) == 0x28, "");
 static_assert(offsetof(MapComponent, tileY0) == 0x2A, "");
 static_assert(offsetof(MapComponent, tileX1) == 0x2C, "");
 static_assert(offsetof(MapComponent, tileY1) == 0x2E, "");
+static_assert(offsetof(MapComponent, extraField) == 0x30, "");

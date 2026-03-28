@@ -824,8 +824,20 @@ extern void InstallLivestockComponentUpdate();
 extern void RemoveLivestockComponentUpdate();
 
 // --- StateMachineComponent reimplementations (engine/reimpl/statemachinecomponent.cpp) ---
+extern void InstallStateMachineComponentDtor();
+extern void RemoveStateMachineComponentDtor();
+extern void InstallStateMachineComponentShutdown();
+extern void RemoveStateMachineComponentShutdown();
+extern void InstallStateMachineComponentSerialize();
+extern void RemoveStateMachineComponentSerialize();
+extern void InstallStateMachineComponentDraw();
+extern void RemoveStateMachineComponentDraw();
+extern void InstallStateMachineComponentOnRemove();
+extern void RemoveStateMachineComponentOnRemove();
 extern void InstallStateMachineComponentUpdate();
 extern void RemoveStateMachineComponentUpdate();
+extern void InstallStateMachineComponentOnUpdate2();
+extern void RemoveStateMachineComponentOnUpdate2();
 
 // --- HuntComponent reimplementations (engine/reimpl/huntcomponent.cpp) ---
 extern void InstallHuntComponentUpdate();
@@ -2679,7 +2691,13 @@ static ReimplEntry g_reimplementations[] = {
     { "LivestockComponent::Update", InstallLivestockComponentUpdate, RemoveLivestockComponentUpdate, true },
 
     // --- StateMachineComponent reimplementations ---
+    { "StateMachineComponent::ScalarDtor", InstallStateMachineComponentDtor, RemoveStateMachineComponentDtor, true },
+    { "StateMachineComponent::Shutdown", InstallStateMachineComponentShutdown, RemoveStateMachineComponentShutdown, true },
+    { "StateMachineComponent::Serialize", InstallStateMachineComponentSerialize, RemoveStateMachineComponentSerialize, true },
+    { "StateMachineComponent::Draw", InstallStateMachineComponentDraw, RemoveStateMachineComponentDraw, true },
+    { "StateMachineComponent::OnRemove", InstallStateMachineComponentOnRemove, RemoveStateMachineComponentOnRemove, true },
     { "StateMachineComponent::Update", InstallStateMachineComponentUpdate, RemoveStateMachineComponentUpdate, true },
+    { "StateMachineComponent::OnUpdate2", InstallStateMachineComponentOnUpdate2, RemoveStateMachineComponentOnUpdate2, true },
 
     // --- HuntComponent reimplementations ---
     { "HuntComponent::Update", InstallHuntComponentUpdate, RemoveHuntComponentUpdate, true },

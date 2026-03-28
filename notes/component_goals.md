@@ -2,7 +2,7 @@
 
 **Directory:** `code/Game/Component/`
 **Type headers:** 60+ in `engine/types/` (one per component)
-**Source files:** None yet (empty directory)
+**Source files:** `buildcomponent.cpp`, `citizencomponent.cpp`, `uicomponent.cpp`, `mapcomponent.cpp`, `statemachinecomponent.cpp`
 
 ---
 
@@ -23,7 +23,7 @@ Components are the core ECS building blocks. Each has a vtable with 12 slots:
 |-------|--------|------|-------------|---------------|
 | CitizenAIComponent | 0x140162470 | 0xD0 | CitizenAIComponent.h | Not started |
 | CitizenComponent | 0x140162580 | 0x290 | CitizenComponent.h | Not started |
-| StateMachineComponent | 0x140164520 | 0x58 | StateMachineComponent.h | Not started |
+| StateMachineComponent | 0x140164520 | 0x58 | StateMachineComponent.h | **ALL SLOTS REIMPL** (7 hooked + 1 unhookable) |
 | CharacterComponent | 0x140162370 | 0x80 | CharacterComponent.h | Not started |
 | AnimalComponent | 0x140162110 | 0x58 | AnimalComponent.h | Not started |
 | HerdComponent | 0x140163680 | 0x60 | HerdComponent.h | Not started |
@@ -35,7 +35,7 @@ Components are the core ECS building blocks. Each has a vtable with 12 slots:
 | ModelComponent | 0x140163ba0 | - | ModelComponent.h | Not started |
 | GrowthComponent | 0x140163590 | - | GrowthComponent.h | Not started |
 | StatusIconComponent | 0x140164620 | - | StatusIconComponent.h | Not started |
-| MapComponent | 0x140163aa0 | - | MapComponent.h | Not started |
+| MapComponent | 0x140163aa0 | 0x38 | MapComponent.h | **3/3 REIMPL** (Shutdown, Draw, OnCreate) |
 | InteractComponent | 0x1401638b0 | - | InteractComponent.h | Not started |
 
 ## Passive Components (no Update — lower priority)

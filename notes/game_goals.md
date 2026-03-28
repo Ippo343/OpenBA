@@ -16,19 +16,19 @@ Core game systems: main update loop, map, pathfinding, state machine, weather, s
 | Class | Key Address | Reimpl Status | Priority |
 |-------|------------|---------------|----------|
 | GameUpdateLoop | Update 0x140096380 | **REIMPL LIVE** | Done (Update), High (others) |
-| Weather | Vtable 0x140160290 | `weather.cpp` exists | Medium |
-| StateMachine | Tick 0x1400a9660 | Not started | High |
+| Weather | Vtable 0x140160290 | **ALL SLOTS REIMPL** (Dtor, Serialize, Cleanup) | Done |
+| StateMachine | Tick 0x1400a9660 | **REIMPL LIVE** (`statemachine.cpp`) | Done |
 | Game | Various | Not started | High |
 | Map | Various | Not started | Medium |
 | Pathfinder | FindPath 0x1400bf790 | Not started | High |
-| Scenario | Vtable 0x14015f020 | Not started | Low |
-| MapGenerator | Vtable 0x14015ed80 | Not started | Low |
-| ClimateGenerator | Vtable 0x14015e140 | Not started | Low |
-| TerrainGenerator | Vtable 0x14015f170 | Not started | Low |
-| MenuScene | Vtable 0x14015ede0 | Not started | Low |
+| Scenario | Vtable 0x14015f020 | **ALL SLOTS REIMPL** (`scenario.cpp`) | Done |
+| MapGenerator | Vtable 0x14015ed80 | **ALL SLOTS REIMPL** (`mapgenerator.cpp`) | Done |
+| ClimateGenerator | Vtable 0x14015e140 | **ALL SLOTS REIMPL** (`climategenerator.cpp`) | Done |
+| TerrainGenerator | Vtable 0x14015f170 | **ALL SLOTS REIMPL** (`terraingenerator.cpp`) | Done |
+| MenuScene | Vtable 0x14015ede0 | **REIMPL** (Dtor/Cleanup/Slot8, Serialize delegates) | Done |
 | NameDatabase | - | Not started | Low |
-| Profession/ProfessionList | Vtable 0x14015efa0/0x14015ef50 | Not started | Medium |
-| Toolbar | Vtable 0x140160120 | Not started | Low |
+| Profession/ProfessionList | Vtable 0x14015efa0/0x14015ef50 | **ALL SLOTS REIMPL** | Done |
+| Toolbar | Vtable 0x140160120 | **ALL SLOTS REIMPL** (Slot8 unhookable but implemented) | Done |
 
 ---
 
@@ -52,7 +52,7 @@ Core game systems: main update loop, map, pathfinding, state machine, weather, s
 
 | Function | Address | Status | Notes |
 |----------|---------|--------|-------|
-| StateMachine_Tick | 0x1400a9660 | Not started | Called from destroyui.cpp, drives all citizen AI |
+| StateMachine_Tick | 0x1400a9660 | **REIMPL LIVE** | Full reimpl in `statemachine.cpp`, drives all citizen AI |
 | Game::SpawnTornado | named | Not started | |
 | Game::InfectRandomCitizen | named | Not started | |
 | Game::StartRandomFire | named | Not started | |
