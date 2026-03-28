@@ -239,8 +239,12 @@ static uint64_t Reimpl_OnInit(void* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find dialog by string name at +0x20
+    // NOTE: FindDialogByName_Impl has a bug with two-part names (e.g. "DialogInstance:WorkPlaceUI").
+    // Use the original fn_FindDialogByName until the reimpl is fixed.
     uint64_t dialogPtr = 0;
-    FindDialogByName_Impl(&dialogPtr, (void*)(s + 0x20));
+    if (fn_FindDialogByName) {
+        fn_FindDialogByName(&dialogPtr, (void*)(s + 0x20));
+    }
 
     if (dialogPtr == 0) {
         return 0;  // dialog not found — return false
@@ -251,21 +255,14 @@ static uint64_t Reimpl_OnInit(void* self) {
     void* description = nullptr;
 
     if (userData != nullptr) {
-        // Check if it's a Description type (DAT_1401c7318 = g_TypeId_BuildComponent)
+        // Check if it's a BuildingDescription type (DAT_1401c7318)
         if (fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent)) {
-            // Direct Description — use as-is
-            if (fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent)) {
-                description = userData;
-            }
+            description = userData;
         } else {
             // Check if it's a ComponentEntity
             if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
-                void* entity = nullptr;
-                if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
-                    entity = userData;
-                }
                 // Get Description from ComponentEntity at +0x28
-                description = *(void**)((uintptr_t)entity + 0x28);
+                description = *(void**)((uintptr_t)userData + 0x28);
             }
         }
     }
@@ -275,8 +272,8 @@ static uint64_t Reimpl_OnInit(void* self) {
 
     // If self->data38 is set, compare with found description
     void* target = *(void**)(s + 0x38);
+
     if (target != nullptr) {
-        ResolveExternalByName_Impl((void*)(s + 0x28));
         if (target != description) {
             return 0;  // mismatch — return false
         }
