@@ -491,12 +491,10 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
     s_fn_FindHerdComp(tempIBP, herdCompIBP);
 
     fn_InternalBasePtr_CheckPtr(herdCompIBP);
-    void* herdCompEntity = (void*)(*(uintptr_t*)(herdCompIBP[0]));
 
-    // Read herd component at +0x28 from the found result
-    void* herdCompRef = *(void**)((uintptr_t)herdCompEntity + 0x28);
-    void* migrationTarget = nullptr;
-    migrationTarget = herdCompRef;
+    // Read herd component IBP at +0x28 from the resolved object
+    // herdCompIBP[0] IS the resolved object pointer after CheckPtr (no extra deref)
+    void* migrationTarget = *(void**)((uintptr_t)herdCompIBP[0] + 0x28);
 
     fn_InternalBasePtr_CheckPtr(&migrationTarget);
     s_fn_StartMigration(migrationTarget);

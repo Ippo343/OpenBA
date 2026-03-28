@@ -3442,7 +3442,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialUI::ScalarDtor", InstallTutorialUIScalarDtor, RemoveTutorialUIScalarDtor, true },
     { "TutorialUI::Serialize", InstallTutorialUISerialize, RemoveTutorialUISerialize, true },
     { "TutorialUI::Startup", InstallTutorialUIStartup, RemoveTutorialUIStartup, true },
-    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, true }, // RE-ENABLED: reimpl doesn't use trampoline
+    { "TutorialUI::OnRemove", InstallTutorialUIOnRemove, RemoveTutorialUIOnRemove, true },
 
     // --- UpgradeUI ---
     { "UpgradeUI::ScalarDtor", InstallUpgradeUIScalarDtor, RemoveUpgradeUIScalarDtor, true },

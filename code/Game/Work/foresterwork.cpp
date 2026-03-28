@@ -212,7 +212,7 @@ bool ForesterWork_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<FW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<FW_BST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x140025630));
+        ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm at 0x1400eb9c6
     s_fn_ValidateEntity = reinterpret_cast<FW_ValidateEntity_t>(
         ResolveAddr(Module::Exe, 0x1400f7100));
     s_fn_BSTRemove = reinterpret_cast<FW_BSTRemove_t>(

@@ -327,52 +327,52 @@ static void* Reimpl_OnDestroy(void* self) {
 // Install / Remove
 // ============================================================
 
+// All 5 functions are SHARED across multiple External subclass vtables.
+// Must use vtable patching (not prologue hooks) to avoid corrupting other classes.
+// TutorialGoalDialog vtable: 0x140160870
+//   Slot 0 (+0x00): ScalarDtor
+//   Slot 5 (+0x28): Shutdown
+//   Slot 6 (+0x30): OnEvent/Cleanup
+//   Slot 8 (+0x40): OnInit
+//   Slot 9 (+0x48): OnDestroy
+
 void InstallTutorialGoalDialogScalarDtor() {
     ResolveTutorialGoalDialogFuncs();
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140027590);
-    // Prologue: MOV [rsp+8],rcx(5) + PUSH RDI(1) + SUB RSP,0x30(4) + MOV qword,-2(9) = 19
-    InstallHook(target, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor, 19);
+    InstallHookVTable(0x140160870, 0, (void*)Reimpl_ScalarDtor, &g_hookScalarDtor);
 #ifdef _DEBUG
-    printf("[TutorialGoalDialog] ScalarDtor hooked at %p\n", (void*)target);
+    printf("[TutorialGoalDialog] ScalarDtor vtable-patched (slot 0)\n");
 #endif
 }
 void RemoveTutorialGoalDialogScalarDtor() { RemoveHook(&g_hookScalarDtor); }
 
 void InstallTutorialGoalDialogShutdown() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400defd0);
-    // Prologue: PUSH RDI(2) + SUB RSP,0x50(4) + MOV qword,-2(9) = 15
-    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
+    InstallHookVTable(0x140160870, 5, (void*)Reimpl_Shutdown, &g_hookShutdown);
 #ifdef _DEBUG
-    printf("[TutorialGoalDialog] Shutdown hooked at %p\n", (void*)target);
+    printf("[TutorialGoalDialog] Shutdown vtable-patched (slot 5)\n");
 #endif
 }
 void RemoveTutorialGoalDialogShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallTutorialGoalDialogOnEvent() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140027520);
-    // Prologue: PUSH RBX(2) + SUB RSP,0x30(4) + MOV qword,-2(9) = 15
-    InstallHook(target, (void*)Reimpl_OnEvent, &g_hookOnEvent, 15);
+    InstallHookVTable(0x140160870, 6, (void*)Reimpl_OnEvent, &g_hookOnEvent);
 #ifdef _DEBUG
-    printf("[TutorialGoalDialog] OnEvent hooked at %p\n", (void*)target);
+    printf("[TutorialGoalDialog] OnEvent vtable-patched (slot 6)\n");
 #endif
 }
 void RemoveTutorialGoalDialogOnEvent() { RemoveHook(&g_hookOnEvent); }
 
 void InstallTutorialGoalDialogOnInit() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400deee0);
-    InstallHook(target, (void*)Reimpl_OnInit, &g_hookOnInit, 13);
+    InstallHookVTable(0x140160870, 8, (void*)Reimpl_OnInit, &g_hookOnInit);
 #ifdef _DEBUG
-    printf("[TutorialGoalDialog] OnInit hooked at %p\n", (void*)target);
+    printf("[TutorialGoalDialog] OnInit vtable-patched (slot 8)\n");
 #endif
 }
 void RemoveTutorialGoalDialogOnInit() { RemoveHook(&g_hookOnInit); }
 
 void InstallTutorialGoalDialogOnDestroy() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400274b0);
-    // Prologue: PUSH RBX(2) + SUB RSP,0x30(4) + MOV qword,-2(9) = 15
-    InstallHook(target, (void*)Reimpl_OnDestroy, &g_hookOnDestroy, 15);
+    InstallHookVTable(0x140160870, 9, (void*)Reimpl_OnDestroy, &g_hookOnDestroy);
 #ifdef _DEBUG
-    printf("[TutorialGoalDialog] OnDestroy hooked at %p\n", (void*)target);
+    printf("[TutorialGoalDialog] OnDestroy vtable-patched (slot 9)\n");
 #endif
 }
 void RemoveTutorialGoalDialogOnDestroy() { RemoveHook(&g_hookOnDestroy); }
