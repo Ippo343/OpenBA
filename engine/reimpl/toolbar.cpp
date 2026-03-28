@@ -16,34 +16,36 @@
 //   +0x38: 0x140001640 — Slot7 dispatch thunk (7 bytes, unhookable)
 //   +0x40: 0x140024be0 — Slot8 (12 bytes, RIP-relative JNZ — unsafe for trampoline)
 
+#include "Toolbar.h"
+#include "Game/toolbar_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
-// --- Slot0: Dtor ---
+// --- Slot0: Dtor --- REIMPLEMENTED
 static HookInfo g_hookToolbarDtor;
 typedef void* (*fn_ToolbarDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_ToolbarDtor(void* self, uint32_t flags) {
     g_lastHook = "Toolbar::ToolbarDtor";
-    return ((fn_ToolbarDtor_t)g_hookToolbarDtor.trampoline)(self, flags);
+    return Toolbar_Dtor((Toolbar*)self, flags);
 }
 
-// --- Slot5: Serialize ---
+// --- Slot5: Serialize --- REIMPLEMENTED
 static HookInfo g_hookToolbarSerialize;
 typedef void (*fn_ToolbarSerialize_t)(void* self, void* stream);
 static void Reimpl_ToolbarSerialize(void* self, void* stream) {
     g_lastHook = "Toolbar::ToolbarSerialize";
-    ((fn_ToolbarSerialize_t)g_hookToolbarSerialize.trampoline)(self, stream);
+    Toolbar_Serialize((Toolbar*)self, stream);
 }
 
-// --- Slot6: Cleanup ---
+// --- Slot6: Cleanup --- REIMPLEMENTED
 static HookInfo g_hookToolbarCleanup;
 typedef void (*fn_ToolbarCleanup_t)(void* self);
 static void Reimpl_ToolbarCleanup(void* self) {
     g_lastHook = "Toolbar::ToolbarCleanup";
-    ((fn_ToolbarCleanup_t)g_hookToolbarCleanup.trampoline)(self);
+    Toolbar_Cleanup((Toolbar*)self);
 }
 
 void InstallToolbarDtor() {

@@ -21,16 +21,16 @@ struct ClimateGenerator {
     uint8_t  _extBase[0x18];     // +0x08: External base fields
 
     // --- ClimateGenerator fields ---
-    void*    _field20;           // +0x20: zeroed
-    void*    _field28;           // +0x28: zeroed
+    void*    _field20;           // +0x20: ExternalPtr (serialized via FUN_14000bf40)
+    void*    _field28;           // +0x28: System::String (8-byte COW, name/reference)
     uint8_t  _field30;           // +0x30: 1 (bool, enabled?)
     uint8_t  _pad31[3];          // +0x31: padding
     float    temperatureBase;    // +0x34: 50.0f (0x42480000) (base temp in F?)
     float    tempVariation;      // +0x38: 30.0f (0x41f00000)
     float    precipitation;      // +0x3C: 5.0f (0x40a00000)
     float    windSpeed;          // +0x40: 10.0f (0x41200000)
-    uint8_t  _climateData[0xC0]; // +0x44: zeroed block (seasonal/biome data, memset to 0)
-    uint32_t _field104;          // +0x104: zeroed
+    uint8_t  _climateData[0xC0]; // +0x44: 48 floats (seasonal/biome data, memset to 0)
+    float    _field104;          // +0x104: 0.0f (serialized as float)
     float    _field108;          // +0x108: 1.0f (0x3f800000)
     float    _field10C;          // +0x10C: 1.0f (0x3f800000)
 };

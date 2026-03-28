@@ -18,6 +18,8 @@
 //   +0x50: 0x14003addc — Slot10 base (shared, large)
 //   +0x58: 0x14003addc — Slot11 base (same as slot10)
 
+#include "Scenario.h"
+#include "Game/scenario_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -34,7 +36,7 @@ static HookInfo g_hookSlot6;
 static HookInfo g_hookSlot8;
 
 // ============================================================
-// Original function typedefs
+// Original function typedefs (kept for trampoline fallback)
 // ============================================================
 typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
 typedef uint32_t (*fn_Slot3_t)(void* self);
@@ -43,31 +45,31 @@ typedef void  (*fn_Slot6_t)(void* self);
 typedef void  (*fn_Slot8_t)(void* self);
 
 // ============================================================
-// Passthrough wrappers
+// Reimplemented wrappers — delegate to clean code in code/Game/
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "Scenario::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return Scenario_Dtor((Scenario*)self, flags);
 }
 
 static uint32_t Reimpl_Slot3(void* self) {
     g_lastHook = "Scenario::Slot3";
-    return ((fn_Slot3_t)g_hookSlot3.trampoline)(self);
+    return Scenario_Slot3((Scenario*)self);
 }
 
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "Scenario::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    Scenario_Serialize((Scenario*)self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "Scenario::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    Scenario_Cleanup((Scenario*)self);
 }
 
 static void Reimpl_Slot8(void* self) {
     g_lastHook = "Scenario::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    Scenario_Init((Scenario*)self);
 }
 
 // ============================================================

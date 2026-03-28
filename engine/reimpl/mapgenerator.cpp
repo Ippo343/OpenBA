@@ -18,6 +18,8 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "MapGenerator.h"
+#include "Game/mapgenerator_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -30,34 +32,26 @@ static HookInfo g_hookSlot6;
 static HookInfo g_hookSlot8;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot5_t)(void* self, void* stream);
-typedef void  (*fn_Slot6_t)(void* self);
-typedef void  (*fn_Slot8_t)(void* self);
-
-// ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers — delegate to clean code
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "MapGenerator::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return MapGenerator_Dtor((MapGenerator*)self, flags);
 }
 
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "MapGenerator::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    MapGenerator_Serialize((MapGenerator*)self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "MapGenerator::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    MapGenerator_Cleanup((MapGenerator*)self);
 }
 
-static void Reimpl_Slot8(void* self) {
+static void* Reimpl_Slot8(void* self) {
     g_lastHook = "MapGenerator::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    return MapGenerator_Slot8((MapGenerator*)self);
 }
 
 // ============================================================

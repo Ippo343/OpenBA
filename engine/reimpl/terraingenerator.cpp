@@ -18,6 +18,8 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "TerrainGenerator.h"
+#include "Game/terraingenerator_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -30,34 +32,26 @@ static HookInfo g_hookSlot6;
 static HookInfo g_hookSlot8;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot5_t)(void* self, void* stream);
-typedef void  (*fn_Slot6_t)(void* self);
-typedef void  (*fn_Slot8_t)(void* self);
-
-// ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers (delegate to clean code)
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "TerrainGenerator::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return TerrainGenerator_Dtor((TerrainGenerator*)self, flags);
 }
 
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "TerrainGenerator::Slot5";
-    ((fn_Slot5_t)g_hookSlot5.trampoline)(self, stream);
+    TerrainGenerator_Serialize((TerrainGenerator*)self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {
     g_lastHook = "TerrainGenerator::Slot6";
-    ((fn_Slot6_t)g_hookSlot6.trampoline)(self);
+    TerrainGenerator_Cleanup((TerrainGenerator*)self);
 }
 
-static void Reimpl_Slot8(void* self) {
+static void* Reimpl_Slot8(void* self) {
     g_lastHook = "TerrainGenerator::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    return TerrainGenerator_Slot8((TerrainGenerator*)self);
 }
 
 // ============================================================

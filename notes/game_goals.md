@@ -32,10 +32,6 @@ Core game systems: main update loop, map, pathfinding, state machine, weather, s
 
 ---
 
-## GameUpdateLoop Detailed Status
-
-See `notes/game_goals_updateloop.md` (moved from old game_goals.md) for the full step-by-step breakdown.
-
 ### Summary
 - **Update**: REIMPL LIVE — main simulation tick working
 - **Draw**: Passthrough (crashes in VideoDX11)
