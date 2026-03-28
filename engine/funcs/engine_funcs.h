@@ -3815,16 +3815,20 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
     }
 
     // Walk dialog linked list
-    // GetFirstDialog returns iterator data — the dialog linked list node
-    // Node layout: [0..7]=DialogInstance*, [0x10]=nextNode*
-    uintptr_t iterBuf[4] = {};
-    fn_UI_GetFirstDialog(uiSingleton, iterBuf);
-    // The result from GetFirstDialog puts the first dialog node ptr somewhere we read
-    // Based on decompiled code: local_res10 is the iterator, walking via +0x10
-    uintptr_t node = (uintptr_t)iterBuf[0];
+    // GetFirstDialog writes first node pointer into retval buffer.
+    // Node layout: [0]=InternalBasePtr (DialogInstance*), [0x10]=nextNode*
+    // Original: LEA RDX,[RBP+0x48]; MOV RCX,RSI; CALL [0x140151ca0]
+    uintptr_t nodeBuf[4] = {};
+    fn_UI_GetFirstDialog(uiSingleton, nodeBuf);
+    uintptr_t node = (uintptr_t)nodeBuf[0];
 
     while (node != 0) {
-        // node is a linked list entry; deref to get DialogInstance*
+        // CheckPtr on the iterator node (InternalBasePtr) before dereferencing.
+        // Original: MOV RCX,RSI; CALL [0x140152ab0] (fn_InternalBasePtr_CheckPtr)
+        if (fn_InternalBasePtr_CheckPtr)
+            fn_InternalBasePtr_CheckPtr((void*)node);
+
+        // Deref node to get DialogInstance*
         void* dialog = *(void**)node;
         if (dialog) {
             // Check IsA against dialogTypeId
@@ -3834,28 +3838,28 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
                     *(uintptr_t*)ret = (uintptr_t)dialog;
                     return retval;
                 }
-                // Need to check controller type too
-                // GetController(dialog, &retBuf, 0) — non-trivial return ABI
+                // Need to check controller type too.
+                // Original reloads node and calls CheckPtr again before GetController:
+                //   MOV RSI,[RBP+0x48]; MOV RCX,RSI; CALL CheckPtr
+                //   MOV R8D,EBX(=controllerTypeId); LEA RDX,[retbuf]; MOV RCX,[RSI]; CALL GetController
+                // GetController takes controllerTypeId as R8 — it does the type matching
+                // internally and returns a matching controller or null.
+                if (fn_InternalBasePtr_CheckPtr)
+                    fn_InternalBasePtr_CheckPtr((void*)node);
                 if (fn_DialogInstance_GetController) {
                     uintptr_t controllerBuf[2] = {};
-                    fn_DialogInstance_GetController(dialog, controllerBuf, 0);
-                    uintptr_t controller = controllerBuf[0];
-                    if (controller != 0) {
-                        // Controller found — check if its type matches
-                        if (fn_IsA((void*)controller, controllerTypeId)) {
-                            *(uintptr_t*)ret = (uintptr_t)dialog;
-                            return retval;
-                        }
+                    fn_DialogInstance_GetController(*(void**)node, controllerBuf, controllerTypeId);
+                    if (controllerBuf[0] != 0) {
+                        // Controller matched — return this dialog
+                        *(uintptr_t*)ret = (uintptr_t)*(void**)node;
+                        return retval;
                     }
                     // Controller didn't match — continue searching
-                } else {
-                    // Can't verify controller; accept dialog type match
-                    *(uintptr_t*)ret = (uintptr_t)dialog;
-                    return retval;
                 }
             }
         }
         // Next node: node + 0x10 -> next pointer
+        // Original: MOV RAX,[RBP+0x48]; MOV RSI,[RAX+0x10]; MOV [RBP+0x48],RSI
         node = *(uintptr_t*)(node + 0x10);
     }
 

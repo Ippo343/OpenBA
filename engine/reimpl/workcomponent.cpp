@@ -137,17 +137,44 @@ static void Reimpl_OnCreate(WorkComponent* self) {
     g_lastHook = "WorkComponent::OnCreate";
 #ifdef _DEBUG
     static int callCount = 0;
-    if (callCount < 3) {
-        printf("[WorkComponent::OnCreate] self=%p workId=%d\n",
-               (void*)self, self->workId);
-        callCount++;
+    if (callCount < 20) {
+        printf("[WorkComponent::OnCreate] self=%p workId=%d owner=%p flags=0x%x\n",
+               (void*)self, self->workId, self->owner, self->flags);
     }
 #endif
 
-    bool available = fn_CheckWorkSlot(self);
-    if (available) {
-        fn_RegisterWorkSlot(self);
+    // Defensive: validate self pointer before accessing fields
+    if (!self) {
+#ifdef _DEBUG
+        printf("[WorkComponent::OnCreate] ERROR: self is NULL!\n");
+#endif
+        return;
     }
+
+    bool available = fn_CheckWorkSlot(self);
+#ifdef _DEBUG
+    if (callCount < 20) {
+        printf("[WorkComponent::OnCreate] CheckWorkSlot returned %d\n", (int)available);
+    }
+#endif
+    if (available) {
+#ifdef _DEBUG
+        if (callCount < 20) {
+            printf("[WorkComponent::OnCreate] calling RegisterWorkSlot...\n");
+        }
+#endif
+        fn_RegisterWorkSlot(self);
+#ifdef _DEBUG
+        if (callCount < 20) {
+            printf("[WorkComponent::OnCreate] RegisterWorkSlot returned OK\n");
+        }
+#endif
+    }
+#ifdef _DEBUG
+    if (callCount < 20) {
+        callCount++;
+    }
+#endif
 }
 
 // ============================================================
@@ -206,15 +233,15 @@ void InstallWorkComponentDraw() {
         return;
     }
 
-    uintptr_t target = ResolveAddr(Module::Exe, 0x14012e6f0);
-    // Prologue: PUSH RBX(2) + SUB RSP,0x20(4) + MOV RBX,RCX(3) + CALL(5) = 14
-    InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 14);
+    // Use vtable hook instead of prologue hook to avoid CALL rel32 relocation issues.
+    // WorkComponent vtable = 0x140164be0, Draw = slot 6 (+0x30)
+    InstallHookVTable(0x140164be0, 6, (void*)Reimpl_Draw, &g_hookDraw);
 #ifdef _DEBUG
-    printf("[WorkComponent] Draw hooked at %p (prologue=14)\n", (void*)target);
+    printf("[WorkComponent] Draw vtable-hooked (slot 6)\n");
 #endif
 }
 
-void RemoveWorkComponentDraw() { RemoveHook(&g_hookDraw); }
+void RemoveWorkComponentDraw() { RemoveHookVTable(&g_hookDraw); }
 
 void InstallWorkComponentOnCreate() {
     fn_CheckWorkSlot = reinterpret_cast<fn_CheckWorkSlot_t>(
@@ -229,12 +256,14 @@ void InstallWorkComponentOnCreate() {
         return;
     }
 
-    uintptr_t target = ResolveAddr(Module::Exe, 0x14012e6c0);
-    // Prologue: PUSH RBX(2) + SUB RSP,0x20(4) + MOV RBX,RCX(3) + CALL(5) = 14
-    InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 14);
+    // Use vtable hook instead of prologue hook to avoid CALL rel32 relocation issues.
+    // The 14-byte prologue contains E8 (CALL rel32) which must be relocated in a
+    // trampoline — vtable patching avoids this entirely.
+    // WorkComponent vtable = 0x140164be0, OnCreate = slot 7 (+0x38)
+    InstallHookVTable(0x140164be0, 7, (void*)Reimpl_OnCreate, &g_hookOnCreate);
 #ifdef _DEBUG
-    printf("[WorkComponent] OnCreate hooked at %p (prologue=14)\n", (void*)target);
+    printf("[WorkComponent] OnCreate vtable-hooked (slot 7)\n");
 #endif
 }
 
-void RemoveWorkComponentOnCreate() { RemoveHook(&g_hookOnCreate); }
+void RemoveWorkComponentOnCreate() { RemoveHookVTable(&g_hookOnCreate); }

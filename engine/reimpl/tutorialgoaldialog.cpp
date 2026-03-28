@@ -239,12 +239,8 @@ static uint64_t Reimpl_OnInit(void* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Find dialog by string name at +0x20
-    // NOTE: FindDialogByName_Impl has a bug with two-part names (e.g. "DialogInstance:WorkPlaceUI").
-    // Use the original fn_FindDialogByName until the reimpl is fixed.
     uint64_t dialogPtr = 0;
-    if (fn_FindDialogByName) {
-        fn_FindDialogByName(&dialogPtr, (void*)(s + 0x20));
-    }
+    FindDialogByName_Impl(&dialogPtr, (void*)(s + 0x20));
 
     if (dialogPtr == 0) {
         return 0;  // dialog not found — return false

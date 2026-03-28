@@ -34,10 +34,11 @@ static fn_CountBuildingsByType_t s_fn_CountBuildingsByType = nullptr;
 typedef uint32_t (*fn_CountProfessionsByType_t)(uintptr_t worldData, uintptr_t typePtr);
 static fn_CountProfessionsByType_t s_fn_CountProfessionsByType = nullptr;
 
-// FUN_14012fbb0 — get total stored resource count for an entity
-// Finds StorageLocationComponent, then sums storage counts.
-typedef int (*fn_GetStoredCount_t)(uintptr_t entity);
-static fn_GetStoredCount_t s_fn_GetStoredCount = nullptr;
+// FUN_14012fbb0 — get work capacity (available job slots) for a WorkPlaceComponent.
+// Internally: finds WorkComponent on the parent entity via IBP at wpComp+0x10,
+// reads cached capacity at WorkComponent+0x30, lazily computes via FUN_14012e5c0 if 0.
+typedef int (*fn_GetWorkCapacity_t)(uintptr_t workplaceComp);
+static fn_GetWorkCapacity_t s_fn_GetWorkCapacity = nullptr;
 
 // FUN_140013920 — cast element to SliderElement (returns null if wrong type)
 // IsDerivedFrom check against g_TypeId_SliderElement (0x140151cf0).
@@ -55,7 +56,7 @@ static void EnsureHelpers() {
     s_fn_ResolveExternalRef = (fn_ResolveExternalRef_t)ResolveAddr(Module::Exe, 0x1400265b0);
     s_fn_CountBuildingsByType = (fn_CountBuildingsByType_t)ResolveAddr(Module::Exe, 0x140092010);
     s_fn_CountProfessionsByType = (fn_CountProfessionsByType_t)ResolveAddr(Module::Exe, 0x1400910a0);
-    s_fn_GetStoredCount = (fn_GetStoredCount_t)ResolveAddr(Module::Exe, 0x14012fbb0);
+    s_fn_GetWorkCapacity = (fn_GetWorkCapacity_t)ResolveAddr(Module::Exe, 0x14012fbb0);
     s_fn_CastToSliderElement = (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);
 
     s_TypeId_BuildingDesc = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7318);
@@ -392,13 +393,15 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     }
 
     // --------------------------------------------------------
-    // Case 6: Stored resource count across buildings of a profession type
+    // Case 6: Available job slots (work capacity) across buildings of a profession type
     // --------------------------------------------------------
-    // Gets profession count, then for each profession slot, looks up the
-    // building BST at worldData+0x160 to find entities, finds their
-    // WorkplaceComponent, and sums GetStoredCount.
+    // Gets profession count from BST at worldData+0x100, then for each entity
+    // of that profession type, finds their WorkPlaceComponent (type 0x1401c80e0),
+    // checks if active (+0x50 != 0), and sums work capacity via helper_fbb0.
+    // helper_fbb0 internally finds WorkComponent on the parent entity and returns
+    // its cached capacity field (+0x30), lazily computing it if needed.
     case 6: {
-        // Get profession type
+        // Resolve profession type (re-resolved inside loop to match original)
         uintptr_t profType = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
         if (!worldData || !s_fn_CountProfessionsByType) break;
@@ -407,9 +410,14 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         int total = 0;
 
         for (int i = 0; i < profCount; i++) {
-            // Look up profession in BST at worldData+0x100
+            // Re-resolve profession type each iteration (matches original)
+            uintptr_t curProfType = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+
+            // BST lookup at worldData+0x100 for this profession type
+            // Re-read worldData each iteration (matches original)
+            worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
             uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x100);
-            uintptr_t* node = BSTFind(bstRoot, profType);
+            uintptr_t* node = BSTFind(bstRoot, curProfType);
             if (!node) continue;
 
             // node[1] = array of entity IBPs, indexed by i
@@ -419,22 +427,22 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
                 fn_InternalBasePtr_CheckPtr(&localEntity);
             }
 
-            // Find WorkplaceComponent (FUN_140002e10, type 0x1401c80e0)
+            // Find WorkPlaceComponent (FUN_140002e10, type 0x1401c80e0)
             uintptr_t workplaceIBP = 0;
             fn_FindComponent_BuildState2((void*)localEntity, &workplaceIBP);
             if (fn_InternalBasePtr_CheckPtr) {
                 fn_InternalBasePtr_CheckPtr(&workplaceIBP);
             }
 
-            // Check if workplace has storage (byte at +0x50 != 0)
+            // Check if workplace is active (byte at +0x50 != 0)
             uintptr_t workplace = workplaceIBP;
             if (workplace && *(uint8_t*)(workplace + 0x50) != 0) {
-                // Get stored count
+                // Get work capacity (available job slots)
                 if (fn_InternalBasePtr_CheckPtr) {
                     fn_InternalBasePtr_CheckPtr(&workplaceIBP);
                 }
-                if (s_fn_GetStoredCount) {
-                    total += s_fn_GetStoredCount(workplaceIBP);
+                if (s_fn_GetWorkCapacity) {
+                    total += s_fn_GetWorkCapacity(workplaceIBP);
                 }
             }
         }

@@ -3725,7 +3725,7 @@ static ReimplEntry g_reimplementations[] = {
     { "TutorialGoalCount::Dtor", InstallTutorialGoalCountDtor, RemoveTutorialGoalCountDtor, true },
     { "TutorialGoalCount::Serialize", InstallTutorialGoalCountSerialize, RemoveTutorialGoalCountSerialize, true },
     { "TutorialGoalCount::Cleanup", InstallTutorialGoalCountCleanup, RemoveTutorialGoalCountCleanup, true },
-    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, false }, // DISABLED: case 6 (AvailableJobs) reimpl wrong + original via saved slot returns garbage
+    { "TutorialGoalCount::Slot8", InstallTutorialGoalCountSlot8, RemoveTutorialGoalCountSlot8, true }, // RE-ENABLED: case 6 fixed (was misidentified as stored count, actually work capacity)
     { "TutorialGoalCount::Ctor", InstallTutorialGoalCountCtor, RemoveTutorialGoalCountCtor, true }, // RE-ENABLED: vtable patch (near Jcc broke trampoline)
     { "TutorialGoalGameSpeed::Dtor", InstallTutorialGoalGameSpeedDtor, RemoveTutorialGoalGameSpeedDtor, true },
     { "TutorialGoalGameSpeed::Serialize", InstallTutorialGoalGameSpeedSerialize, RemoveTutorialGoalGameSpeedSerialize, true },
