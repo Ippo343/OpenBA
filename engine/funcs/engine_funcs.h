@@ -4718,6 +4718,61 @@ typedef void* (*fn_FindUIElementByPath_t)(void* outIBP, void* elementPath, void*
 extern fn_FindUIElementByPath_t fn_FindUIElementByPath;
 
 // ============================================================
+// ComponentEntity dependencies
+// ============================================================
+
+// Component base class type ID (used with fn_IsDerivedFrom to verify components)
+// Stored at exe .rdata 0x1401c72a8, filled at runtime by Component_Register.
+extern uint32_t* g_TypeId_ComponentBase;
+
+// ExeArrayResizeFill: 8-byte elements. Resizes array, copies existing entries,
+// fills new entries with *fillValue (unlike fn_ExeArrayResize which zeroes them).
+// Original: FUN_140003110 (used by ComponentEntity RefreshEntityFlags)
+// Params: (arrayBase, newCount, fillValue) where arrayBase = {ptr, count, capacity}
+typedef void (*fn_ExeArrayResizeFill_t)(void* arrayBase, int newCount, void* fillValue);
+extern fn_ExeArrayResizeFill_t fn_ExeArrayResizeFill;
+
+// ============================================================
+// CitizenBehavior dependencies
+// ============================================================
+
+// CitizenBehavior::CountResources (0x140089ed0) — count resources per profession.
+typedef void (*fn_CitizenBehavior_CountResources_t)(void* self);
+extern fn_CitizenBehavior_CountResources_t fn_CitizenBehavior_CountResources;
+
+// CitizenBehavior::CheckThresholds (0x14008c100) — check resource shortage thresholds.
+typedef void (*fn_CitizenBehavior_CheckThresholds_t)(void* self, void* deltaTime);
+extern fn_CitizenBehavior_CheckThresholds_t fn_CitizenBehavior_CheckThresholds;
+
+// CitizenBehavior::CollectStats (0x14008a730) — collect population statistics.
+typedef void (*fn_CitizenBehavior_CollectStats_t)(void* self);
+extern fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats;
+
+// CitizenBehavior::ProcessPaths (0x1400d6f00) — process pending path calculations.
+typedef uint64_t (*fn_CitizenBehavior_ProcessPaths_t)(void* pathGraph);
+extern fn_CitizenBehavior_ProcessPaths_t fn_CitizenBehavior_ProcessPaths;
+
+// CitizenBehavior::BuildPathGraph (0x1400d70c0) — build/rebuild path distance graph.
+typedef void (*fn_CitizenBehavior_BuildPathGraph_t)(void* pathGraph);
+extern fn_CitizenBehavior_BuildPathGraph_t fn_CitizenBehavior_BuildPathGraph;
+
+// CitizenBehavior::ShuffleSchools (0x1400896a0) — Fisher-Yates shuffle on schools.
+typedef void (*fn_CitizenBehavior_ShuffleSchools_t)(void* self);
+extern fn_CitizenBehavior_ShuffleSchools_t fn_CitizenBehavior_ShuffleSchools;
+
+// ProfessionResourceArray::Init (0x1400177c0) — allocate profession resource array.
+typedef void (*fn_ProfResArray_Init_t)(void* arrayPtr, int count);
+extern fn_ProfResArray_Init_t fn_ProfResArray_Init;
+
+// StatsArray::Init (0x140017640) — allocate stats tracking array.
+typedef void (*fn_StatsArray_Init_t)(void* base, int count);
+extern fn_StatsArray_Init_t fn_StatsArray_Init;
+
+// SummaryArray::Init (0x14000f090) — init summary/notification array.
+typedef void (*fn_SummaryArray_Init_t)(void* base, int count);
+extern fn_SummaryArray_Init_t fn_SummaryArray_Init;
+
+// ============================================================
 // Initialization
 // ============================================================
 

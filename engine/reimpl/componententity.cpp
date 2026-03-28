@@ -5,22 +5,23 @@
 // Extends Object::Internal.
 //
 // Vtable layout (12 slots, Object::Internal base):
-//   +0x00: 0x140021a00 — Dtor(self, flags)
-//   +0x08: 0x1400219b0 — GetTypeInfo (8b, unhookable)
-//   +0x10: 0x1400219a0 — GetTypeId (7b, unhookable)
-//   +0x18: 0x1400c3140 — Slot3/Serialize
-//   +0x20: NULL         — Slot4 (null, skip)
-//   +0x28: 0x140021c90 — Slot5
-//   +0x30: 0x140021c80 — Slot6/GetTypeInfo2 (8b, unhookable)
-//   +0x38: 0x140021c70 — Slot7/GetTypeId2 (7b, unhookable)
-//   +0x40: 0x1400c4b40 — Slot8/Load
-//   +0x48: 0x14003addc — Slot9 base (large, hookable)
-//   +0x50: 0x1400c4a90 — Slot10 (3b, unhookable: xor eax,eax; ret)
-//   +0x58: 0x1400c4b90 — Slot11 (3b, unhookable: ret 0x0)
+//   +0x00: 0x140021a00 -- Dtor(self, flags)           -> DEEP REIMPL
+//   +0x08: 0x1400219b0 -- GetTypeInfo (8b, unhookable)
+//   +0x10: 0x1400219a0 -- GetTypeId (7b, unhookable)
+//   +0x18: 0x1400c3140 -- Slot3/Serialize              -> DEEP REIMPL (hook DISABLED)
+//   +0x20: NULL         -- Slot4 (null, skip)
+//   +0x28: 0x140021c90 -- Slot5                        -> DEEP REIMPL
+//   +0x30: 0x140021c80 -- Slot6/GetTypeInfo2 (8b, unhookable)
+//   +0x38: 0x140021c70 -- Slot7/GetTypeId2 (7b, unhookable)
+//   +0x40: 0x1400c4b40 -- Slot8/Load                   -> DEEP REIMPL
+//   +0x48: 0x14003addc -- Slot9 (_purecall, passthrough OK)
+//   +0x50: 0x1400c4a90 -- Slot10 (3b, unhookable: xor eax,eax; ret)
+//   +0x58: 0x1400c4b90 -- Slot11 (3b, unhookable: ret 0x0)
 
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Entity/componententity_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -34,35 +35,31 @@ static HookInfo g_hookSlot8;
 static HookInfo g_hookSlot9;
 
 // ============================================================
-// Original function typedefs
+// Original function typedefs (for Slot9 passthrough)
 // ============================================================
-typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot3_t)(void* self, void* stream);
-typedef void* (*fn_Slot5_t)(void* self, uint32_t flags);
-typedef void  (*fn_Slot8_t)(void* self);
-typedef void  (*fn_Slot9_t)(void* self);
+typedef void (*fn_Slot9_t)(void* self);
 
 // ============================================================
-// Passthrough wrappers
+// Reimpl wrappers -- delegate to clean code in code/Game/Entity/
 // ============================================================
 static void* Reimpl_Dtor(void* self, uint32_t flags) {
     g_lastHook = "ComponentEntity::Dtor";
-    return ((fn_Dtor_t)g_hookDtor.trampoline)(self, flags);
+    return ComponentEntity_Dtor((ComponentEntity*)self, flags);
 }
 
 static void Reimpl_Slot3(void* self, void* stream) {
     g_lastHook = "ComponentEntity::Slot3";
-    ((fn_Slot3_t)g_hookSlot3.trampoline)(self, stream);
+    ComponentEntity_Serialize((ComponentEntity*)self, stream);
 }
 
 static void* Reimpl_Slot5(void* self, uint32_t flags) {
     g_lastHook = "ComponentEntity::Slot5";
-    return ((fn_Slot5_t)g_hookSlot5.trampoline)(self, flags);
+    return ComponentEntity_Slot5((ComponentEntity*)self, flags);
 }
 
-static void Reimpl_Slot8(void* self) {
+static void Reimpl_Slot8(void* self, void* stream) {
     g_lastHook = "ComponentEntity::Slot8";
-    ((fn_Slot8_t)g_hookSlot8.trampoline)(self);
+    ComponentEntity_Slot8((ComponentEntity*)self, stream);
 }
 
 static void Reimpl_Slot9(void* self) {
@@ -85,7 +82,7 @@ void RemoveComponentEntityDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallComponentEntitySlot3() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400c3140);
-    // Prologue: push rbp(2)+push rsi(1)+push rdi(1)+push r12(2)+push r13(2)+push r14(2)+push r15(2)+sub rsp,0x40(4) = 16 -> 15 (at r15 end)
+    // Prologue: push rbp(2)+push rsi(1)+push rdi(1)+push r12(2)+push r13(2)+push r14(2)+push r15(2)+sub rsp,0x40(4) = 16
     InstallHook(target, (void*)Reimpl_Slot3, &g_hookSlot3, 16);
 #ifdef _DEBUG
     printf("[ComponentEntity] Slot3 hooked at %p\n", (void*)target);
@@ -95,7 +92,7 @@ void RemoveComponentEntitySlot3() { RemoveHook(&g_hookSlot3); }
 
 void InstallComponentEntitySlot5() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140021c90);
-    // Prologue: mov [rsp+8],rcx(5) + push rdi(2) + sub rsp,0x30(4) + mov qword,-2(9) = 15
+    // Prologue: mov [rsp+8],rcx(5) + push rdi(2) + sub rsp,0x30(4) + mov qword,-2(9) = 19
     InstallHook(target, (void*)Reimpl_Slot5, &g_hookSlot5, 19);
 #ifdef _DEBUG
     printf("[ComponentEntity] Slot5 hooked at %p\n", (void*)target);

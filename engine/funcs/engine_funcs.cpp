@@ -989,6 +989,21 @@ uint32_t* g_TypeId_FinishTutorialGoal = nullptr;
 void** g_pSingletonExref_151a80 = nullptr;
 void** g_TutorialInstanceVtable = nullptr;
 
+// ComponentEntity dependencies
+uint32_t* g_TypeId_ComponentBase = nullptr;
+fn_ExeArrayResizeFill_t fn_ExeArrayResizeFill = nullptr;
+
+// CitizenBehavior dependencies
+fn_CitizenBehavior_CountResources_t fn_CitizenBehavior_CountResources = nullptr;
+fn_CitizenBehavior_CheckThresholds_t fn_CitizenBehavior_CheckThresholds = nullptr;
+fn_CitizenBehavior_CollectStats_t fn_CitizenBehavior_CollectStats = nullptr;
+fn_CitizenBehavior_ProcessPaths_t fn_CitizenBehavior_ProcessPaths = nullptr;
+fn_CitizenBehavior_BuildPathGraph_t fn_CitizenBehavior_BuildPathGraph = nullptr;
+fn_CitizenBehavior_ShuffleSchools_t fn_CitizenBehavior_ShuffleSchools = nullptr;
+fn_ProfResArray_Init_t fn_ProfResArray_Init = nullptr;
+fn_StatsArray_Init_t fn_StatsArray_Init = nullptr;
+fn_SummaryArray_Init_t fn_SummaryArray_Init = nullptr;
+
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
 // ============================================================
@@ -3973,6 +3988,47 @@ bool EngineFuncsInit() {
     printf("  TypeId_FTGoal         = %p\n", (void*)g_TypeId_FinishTutorialGoal);
     printf("  SingletonExref_151a80 = %p\n", (void*)g_pSingletonExref_151a80);
     printf("  TutInstVtable         = %p\n", (void*)g_TutorialInstanceVtable);
+#endif
+
+    // ================================================================
+    // Phase L: ComponentEntity dependencies
+    // ================================================================
+    g_TypeId_ComponentBase = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c72a8));
+    fn_ExeArrayResizeFill = reinterpret_cast<fn_ExeArrayResizeFill_t>(
+        ResolveAddr(Module::Exe, 0x140003110));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Phase L: ComponentEntity deps resolved\n");
+    printf("  TypeId_ComponentBase  = %p\n", (void*)g_TypeId_ComponentBase);
+    printf("  ExeArrayResizeFill    = %p\n", (void*)fn_ExeArrayResizeFill);
+#endif
+
+    // ================================================================
+    // Phase L2: CitizenBehavior dependencies
+    // ================================================================
+    fn_CitizenBehavior_CountResources = reinterpret_cast<fn_CitizenBehavior_CountResources_t>(
+        ResolveAddr(Module::Exe, 0x140089ed0));
+    fn_CitizenBehavior_CheckThresholds = reinterpret_cast<fn_CitizenBehavior_CheckThresholds_t>(
+        ResolveAddr(Module::Exe, 0x14008c100));
+    fn_CitizenBehavior_CollectStats = reinterpret_cast<fn_CitizenBehavior_CollectStats_t>(
+        ResolveAddr(Module::Exe, 0x14008a730));
+    fn_CitizenBehavior_ProcessPaths = reinterpret_cast<fn_CitizenBehavior_ProcessPaths_t>(
+        ResolveAddr(Module::Exe, 0x1400d6f00));
+    fn_CitizenBehavior_BuildPathGraph = reinterpret_cast<fn_CitizenBehavior_BuildPathGraph_t>(
+        ResolveAddr(Module::Exe, 0x1400d70c0));
+    fn_CitizenBehavior_ShuffleSchools = reinterpret_cast<fn_CitizenBehavior_ShuffleSchools_t>(
+        ResolveAddr(Module::Exe, 0x1400896a0));
+    fn_ProfResArray_Init = reinterpret_cast<fn_ProfResArray_Init_t>(
+        ResolveAddr(Module::Exe, 0x1400177c0));
+    fn_StatsArray_Init = reinterpret_cast<fn_StatsArray_Init_t>(
+        ResolveAddr(Module::Exe, 0x140017640));
+    fn_SummaryArray_Init = reinterpret_cast<fn_SummaryArray_Init_t>(
+        ResolveAddr(Module::Exe, 0x14000f090));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Phase L2: CitizenBehavior deps resolved\n");
+    printf("  CountResources = %p\n", (void*)fn_CitizenBehavior_CountResources);
+    printf("  CollectStats   = %p\n", (void*)fn_CitizenBehavior_CollectStats);
+    printf("  ProcessPaths   = %p\n", (void*)fn_CitizenBehavior_ProcessPaths);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

@@ -18,6 +18,7 @@
 // after loading a tutorial scenario.
 
 #include "GameUpdateLoop.h"
+#include "Entity/entitylist_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
@@ -522,6 +523,9 @@ static void EnsureInit() {
     CHECK_FN(fn_EventNotifier_FireWithName);
     #undef CHECK_FN
 
+    // Initialize EntityList clean module function pointers
+    EntityList_InitFuncs();
+
     TRACE("[GameUpdateLoop] Function pointers resolved.\n");
 }
 
@@ -602,255 +606,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 TRACE("[GameUpdateLoop::Update] AnimationManager::Update done\n");
 
                 // 3c. EntityList::Update (component ticks)
-                // DEBUG: First call traces entity/component to find hang location.
-                // After that, calls original directly.
+                // Uses custom reimpl — original fn_EntityList_Update (0x1400c4090)
+                // hangs due to a spinlock issue in the hooked environment.
                 TRACE("[GameUpdateLoop::Update] calling EntityList::Update (entityList=%p)...\n", self->m_entityList);
-                {
-                    static int s_updateCallCount = 0;
-                    s_updateCallCount++;
-
-                    // Always use our reimpl — original fn_EntityList_Update hangs (spinlock).
-                    if (true) {
-                        // TRACED VERSION — manually iterate the entity buckets
-                        // EntityList decompile shows:
-                        //   First: tree traversal calling FUN_1400c2de0 per entity (at param_1[0xd])
-                        //   Then: 5 buckets at param_1[3..12], each (array_ptr, count), 16 bytes apart
-                        //   Inner: for each entity, iterate components at entity+0x30 (array), entity+0x38 (count)
-                        //          call component vtable[+0x48](component, deltaTime)
-
-                        uintptr_t el = (uintptr_t)self->m_entityList;
-                        int64_t* elp = (int64_t*)self->m_entityList;
-
-                        // Step 1: accumulate time (first line of original)
-                        *elp = *elp + *(int64_t*)time;
-
-                        // Step 2: tree walk — call FUN_1400c3bd0
-                        typedef void (*fn_EntityList_PreUpdate_t)(uintptr_t self);
-                        static fn_EntityList_PreUpdate_t fn_EL_PreUpdate = nullptr;
-                        if (!fn_EL_PreUpdate) fn_EL_PreUpdate = (fn_EntityList_PreUpdate_t)ResolveAddr(Module::Exe, 0x1400c3bd0);
-                        TRACE("[EntityList::Update] calling PreUpdate tree walk...\n");
-                        fn_EL_PreUpdate(el);
-                        TRACE("[EntityList::Update] PreUpdate done\n");
-
-                        // Step 3: tree node iteration (param_1[0xd] = root of binary tree at +0x68)
-                        // Tree nodes: +0x00 = entity InternalBasePtr, +0x08 = parent, +0x10 = left, +0x18 = right
-                        // FUN_1400c2de0 per entity: checks flag bit 2 (0x4), calls component vtable +0x40 (lifecycle slot)
-                        {
-                            typedef void (*fn_EntityTreeNodeHandler_t)(int64_t entity, void* time);
-                            static fn_EntityTreeNodeHandler_t fn_EntityTreeNodeHandler = nullptr;
-                            if (!fn_EntityTreeNodeHandler)
-                                fn_EntityTreeNodeHandler = (fn_EntityTreeNodeHandler_t)ResolveAddr(Module::Exe, 0x1400c2de0);
-
-                            uintptr_t treeRoot = *(uintptr_t*)(el + 0x68);
-                            TRACE("[EntityList::Update] tree root = %p\n", (void*)treeRoot);
-
-                            if (treeRoot != 0) {
-                                // Find leftmost node
-                                uintptr_t node = treeRoot;
-                                int leftDepth = 0;
-                                while (*(uintptr_t*)(node + 0x10) != 0) {
-                                    node = *(uintptr_t*)(node + 0x10);
-                                    leftDepth++;
-                                    if (leftDepth > 50000) {
-                                        TRACE("[EntityList::Update] ERROR: left descent > 50000, aborting\n");
-                                        break;
-                                    }
-                                }
-                                TRACE("[EntityList::Update] leftmost found at depth %d, node=%p\n", leftDepth, (void*)node);
-
-                                if (leftDepth <= 50000) {
-                                    int safetyCount = 0;
-                                    while (node != 0 && safetyCount < 50000) {
-                                        safetyCount++;
-
-                                        // Process this node
-                                        fn_InternalBasePtr_CheckPtr((void*)node);
-                                        int64_t entity = *(int64_t*)node;
-
-                                        if (safetyCount <= 10) {
-                                            int32_t compCount = *(int32_t*)(entity + 0x38);
-                                            void** compArr = *(void***)(entity + 0x30);
-                                            TRACE("[EntityList::Update] node %d: node=%p entity=%p flags=0x%x compCount=%d vtable=%p\n",
-                                                  safetyCount, (void*)node, (void*)entity,
-                                                  *(uint32_t*)(entity + 0x40), compCount,
-                                                  compCount > 0 ? *(void**)compArr[0] : nullptr);
-                                            // Log each component's vtable slot 8 address
-                                            for (int ci = 0; ci < compCount && ci < 20; ci++) {
-                                                void* comp = compArr[ci];
-                                                void** vtbl = *(void***)comp;
-                                                uint32_t cflags = *(uint32_t*)((uintptr_t)comp + 4);
-                                                TRACE("  comp[%d] = %p vtable=%p slot8=%p flags=0x%x %s\n",
-                                                      ci, comp, vtbl, vtbl[8], cflags,
-                                                      (cflags & 0x4) ? "<-- HAS BIT2" : "");
-                                            }
-                                        }
-
-                                        if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
-                                            fn_InternalBasePtr_CheckPtr((void*)node);
-                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d calling handler (inline)...\n", safetyCount);
-                                            // Inline FUN_1400c2de0: iterate components, call vtable +0x40 on those with flag bit 2
-                                            if ((*(uint32_t*)(entity + 0x40) & 0x4) != 0) {
-                                                int32_t nc = *(int32_t*)(entity + 0x38);
-                                                for (int64_t ci = 0; ci < nc; ci++) {
-                                                    void** compPtr = (void**)(*(uintptr_t*)(entity + 0x30) + ci * 8);
-                                                    fn_InternalBasePtr_CheckPtr((void*)compPtr);
-                                                    void* comp = *compPtr;
-                                                    if ((*(uint32_t*)((uintptr_t)comp + 4) & 0x4) != 0) {
-                                                        fn_InternalBasePtr_CheckPtr((void*)compPtr);
-                                                        comp = *compPtr;
-                                                        void** vtbl = *(void***)comp;
-                                                        typedef void (*Slot8_t)(void*, void*);
-                                                        if (safetyCount <= 10) {
-                                                            TRACE("  node %d comp[%d] slot8=%p calling...\n", safetyCount, (int)ci, vtbl[8]);
-                                                        }
-                                                        ((Slot8_t)vtbl[8])(comp, time);
-                                                        if (safetyCount <= 10) TRACE("  node %d comp[%d] slot8 done\n", safetyCount, (int)ci);
-                                                    }
-                                                    if (*(uint32_t*)(entity + 0x40) & 0x400) break; // entity deleted
-                                                }
-                                            }
-                                        }
-
-                                        if (safetyCount <= 10) {
-                                            TRACE("[EntityList::Update] node %d handler done, finding successor...\n", safetyCount);
-                                        }
-
-                                        // In-order successor
-                                        uintptr_t rightChild = *(uintptr_t*)(node + 0x18);
-                                        if (rightChild != 0) {
-                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: right=%p\n", safetyCount, (void*)rightChild);
-                                            node = rightChild;
-                                            while (*(uintptr_t*)(node + 0x10) != 0) {
-                                                node = *(uintptr_t*)(node + 0x10);
-                                            }
-                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: next=%p\n", safetyCount, (void*)node);
-                                        } else {
-                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: no right, walking up...\n", safetyCount);
-                                            uintptr_t parent = *(uintptr_t*)(node + 0x08);
-                                            while (parent != 0 && *(uintptr_t*)(parent + 0x18) == node) {
-                                                node = parent;
-                                                parent = *(uintptr_t*)(node + 0x08);
-                                            }
-                                            node = parent;
-                                            if (safetyCount <= 10) TRACE("[EntityList::Update] node %d: walked up to %p\n", safetyCount, (void*)node);
-                                        }
-                                    }
-
-                                    if (safetyCount >= 50000) {
-                                        TRACE("[EntityList::Update] WARNING: tree walk hit safety limit\n");
-                                    }
-                                    TRACE("[EntityList::Update] tree walk done (%d nodes)\n", safetyCount);
-                                }
-                            } else {
-                                TRACE("[EntityList::Update] tree empty (root=0)\n");
-                            }
-                        }
-
-                        // Step 4: 5-bucket round-robin
-                        // Buckets start at param_1[3] = offset +0x18 (each bucket = ptr, count = 16 bytes)
-                        // Round-robin index at offset +0xbc (5 uint32_t, one per bucket)
-                        TRACE("[EntityList::Update] starting bucket iteration...\n");
-                        int64_t currentTime = *elp; // accumulated time
-                        // Round-robin cursors at +0xbc (5 × uint32), process counts at +0xa8 (5 × uint32)
-                        uint32_t* cursorArr = reinterpret_cast<uint32_t*>(el + 0xbc);
-                        uint32_t* procCountArr = reinterpret_cast<uint32_t*>(el + 0xa8);
-                        for (int bucket = 0; bucket < 5; bucket++) {
-                            uintptr_t bucketBase = el + 0x18 + bucket * 16;
-                            int64_t* arrBase = *reinterpret_cast<int64_t**>(bucketBase);
-                            int32_t count = *(int32_t*)(bucketBase + 8);
-                            if (count == 0) continue;
-
-                            uint32_t processCount = procCountArr[bucket];
-                            uint32_t cursor = cursorArr[bucket];
-                            if ((int)cursor >= count) cursor = 0;
-
-                            TRACE("[EntityList::Update] bucket %d: %d entities, proc=%u cursor=%u\n",
-                                  bucket, count, processCount, cursor);
-
-                            uint32_t startIdx = cursor;
-                            uint32_t processed = 0;
-                            uint32_t idx = startIdx;
-
-                            if ((int)processCount > 0) {
-                                do {
-                                    // Re-read array base each iteration (original dereferences plVar7 every time)
-                                    // The array may be reallocated during component updates
-                                    arrBase = *reinterpret_cast<int64_t**>(bucketBase);
-
-                                    // Read entity pointer into local and CheckPtr before any access
-                                    int64_t entIBP = arrBase[idx];
-                                    fn_InternalBasePtr_CheckPtr(&entIBP);
-
-                                    // Check deleted flag (bit 10)
-                                    if ((*(uint32_t*)(entIBP + 0x40) >> 10 & 1) == 0) {
-                                        // CheckPtr again before time delta
-                                        fn_InternalBasePtr_CheckPtr(&entIBP);
-                                        int64_t delta = currentTime - *(int64_t*)(entIBP + 0x20);
-
-                                        if (delta > 0) {
-                                            // CheckPtr again before component iteration
-                                            fn_InternalBasePtr_CheckPtr(&entIBP);
-                                            int64_t ent = entIBP;
-
-                                            if ((*(uint32_t*)(ent + 0x40) & 0x8) != 0 &&
-                                                (*(uint32_t*)(ent + 0x40) & 0x400) == 0) {
-
-                                                int32_t compCount = *(int32_t*)(ent + 0x38);
-                                                int64_t deltaTime[1] = { delta };
-
-                                                for (int64_t ci = 0; ci < compCount; ci++) {
-                                                    // Read component IBP and CheckPtr
-                                                    int64_t compIBP = *reinterpret_cast<int64_t*>(
-                                                        *(int64_t*)(ent + 0x30) + ci * 8);
-                                                    fn_InternalBasePtr_CheckPtr(&compIBP);
-
-                                                    // Check component update flag (bit 3 of flags at +0x20)
-                                                    if ((*(uint32_t*)(compIBP + 0x20) >> 3 & 1) != 0) {
-                                                        // CheckPtr again before calling Update
-                                                        fn_InternalBasePtr_CheckPtr(&compIBP);
-                                                        void** vtbl = *(void***)(uintptr_t)compIBP;
-                                                        typedef void (*CompUpdate_t)(void* self, void* time);
-                                                        CompUpdate_t compUpdate = (CompUpdate_t)vtbl[9];
-                                                        compUpdate((void*)(uintptr_t)compIBP, deltaTime);
-                                                    }
-
-                                                    // Reload param_1 (matches original: param_1 = local_res8)
-                                                    elp = reinterpret_cast<int64_t*>(self->m_entityList);
-                                                    currentTime = *elp;
-
-                                                    // Check if entity deleted during update
-                                                    if (*(uint32_t*)(ent + 0x40) & 0x400) break;
-                                                }
-                                            }
-
-                                            // CheckPtr and update timestamp
-                                            fn_InternalBasePtr_CheckPtr(&entIBP);
-                                            *(int64_t*)(entIBP + 0x20) = currentTime;
-                                        }
-                                    }
-
-                                    // Advance with wrap-around
-                                    idx++;
-                                    processed++;
-                                    cursor++;
-                                    // Re-read count (array may have changed size)
-                                    count = *(int32_t*)(bucketBase + 8);
-                                    if ((int64_t)idx >= count) {
-                                        idx = 0;
-                                        cursor = 0;
-                                    }
-                                } while (idx != startIdx && (int)processed < (int)processCount);
-                            }
-
-                            // Save cursor position
-                            cursorArr[bucket] = cursor;
-                            TRACE("[EntityList::Update] bucket %d done\n", bucket);
-                        }
-                        TRACE("[EntityList::Update] all buckets done\n");
-                    } else {
-                        fn_EntityList_Update(self->m_entityList, time);
-                    }
-                }
+                EntityList_Update(reinterpret_cast<EntityList*>(self->m_entityList), time);
                 TRACE("[GameUpdateLoop::Update] EntityList::Update done\n");
 
                 // 3d. Day counter increment
@@ -939,7 +698,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
         // Step 5: EntityList post-update cleanup
         TRACE("[GameUpdateLoop::Update] calling EntityList::PostUpdate...\n");
-        fn_EntityList_PostUpdate(self->m_entityList);
+        EntityList_PostUpdate(reinterpret_cast<EntityList*>(self->m_entityList));
         TRACE("[GameUpdateLoop::Update] EntityList::PostUpdate done\n");
 
         // Step 6: Camera transform update
