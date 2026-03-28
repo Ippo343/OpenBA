@@ -113,19 +113,23 @@ void InstallCropUISlot7() {
 void RemoveCropUISlot7() { RemoveHook(&g_hookSlot7); }
 
 void InstallCropUISlot8() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140078D30);
-    InstallHook(target, (void*)Reimpl_Slot8, &g_hookSlot8, 13);
+    // Bug class 9: 0x140078D30 is shared across CropUI, OrchardUI, PastureUI, BuildUI vtables.
+    // Prologue hook would intercept all callers — use vtable patch for CropUI only.
+    // CropUI vtable = 0x14015d330, Slot8 = +0x40 (index 8)
+    InstallHookVTable(0x14015d330, 8, (void*)Reimpl_Slot8, &g_hookSlot8);
 #ifdef _DEBUG
-    printf("[CropUI] Slot8 hooked at %p\n", (void*)target);
+    printf("[CropUI] Slot8 vtable-hooked (slot 8)\n");
 #endif
 }
-void RemoveCropUISlot8() { RemoveHook(&g_hookSlot8); }
+void RemoveCropUISlot8() { RemoveHookVTable(&g_hookSlot8); }
 
 void InstallCropUISlot9() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x140078D80);
-    InstallHook(target, (void*)Reimpl_Slot9, &g_hookSlot9, 13);
+    // Bug class 9: 0x140078D80 is shared across CropUI, OrchardUI, BuildUI vtables.
+    // Prologue hook would intercept all callers — use vtable patch for CropUI only.
+    // CropUI vtable = 0x14015d330, Slot9 = +0x48 (index 9)
+    InstallHookVTable(0x14015d330, 9, (void*)Reimpl_Slot9, &g_hookSlot9);
 #ifdef _DEBUG
-    printf("[CropUI] Slot9 hooked at %p\n", (void*)target);
+    printf("[CropUI] Slot9 vtable-hooked (slot 9)\n");
 #endif
 }
-void RemoveCropUISlot9() { RemoveHook(&g_hookSlot9); }
+void RemoveCropUISlot9() { RemoveHookVTable(&g_hookSlot9); }
