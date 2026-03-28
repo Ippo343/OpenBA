@@ -28,8 +28,7 @@
 // Vtable overrides:
 //   Slot 3 (Serialize):    0x1400c8ec0 -- REIMPLEMENTED
 //   Slot 4 (AbstractImpl): 0x1400c8ab0 -- REIMPLEMENTED
-//   Slot 5 (Execute):      0x1400c8570 -- DISABLED HOOK (bug class 3: MOV RAX,RSP)
-//                                         Clean impl exists in code/Game/Action/moveto.cpp
+//   Slot 5 (Execute):      0x1400c8570 -- REIMPLEMENTED (vtable hook, bug class 3 prologue)
 //   Slot 6 (Enter):        0x1400c8970 -- REIMPLEMENTED
 //   Slot 7 (Exit):         0x1400c8520 -- REIMPLEMENTED
 //   Slot 8 (CheckEntity):  0x1400c84d0 -- REIMPLEMENTED
@@ -57,12 +56,6 @@ static HookInfo g_hookExit;
 static HookInfo g_hookCheckEntity;
 
 // ============================================================
-// Original function typedefs (for Execute passthrough only)
-// ============================================================
-
-typedef uint64_t (*MoveTo_Execute_t)(void* self, void* actionStack, void* time);
-
-// ============================================================
 // MoveTo::Serialize -- reimplemented
 // ============================================================
 
@@ -82,16 +75,13 @@ static int Reimpl_AbstractImpl(void* self, void* actionStack, void* /*p3*/, void
 }
 
 // ============================================================
-// MoveTo::Execute -- DISABLED HOOK (bug class 3: MOV RAX,RSP)
-// Passthrough only. Clean impl in code/Game/Action/moveto.cpp
-// for standalone exe (MoveTo_Execute_Impl).
+// MoveTo::Execute -- vtable-hooked (bug class 3: MOV RAX,RSP)
+// Reimplemented — delegates to clean code in code/Game/Action/moveto.cpp.
 // ============================================================
 
 static uint64_t Reimpl_Execute(void* self, void* actionStack, void* time) {
     g_lastHook = "MoveTo::Execute";
-    // PASSTHROUGH -- Execute hook is disabled (bug class 3).
-    // MoveTo_Execute_Impl exists for standalone exe compilation.
-    return ((MoveTo_Execute_t)g_hookExecute.trampoline)(self, actionStack, time);
+    return (uint64_t)MoveTo_Execute_Impl(self, actionStack, time);
 }
 
 // ============================================================

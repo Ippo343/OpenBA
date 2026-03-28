@@ -41,10 +41,9 @@ void RemoveTutorialDtor() { RemoveHook(&g_hookTutorialDtor); }
 
 // --- Slot5: Serialize ---
 static HookInfo g_hookTutorialSerialize;
-typedef void (*fn_TutorialSerialize_t)(void* self, void* stream);
 static void Reimpl_TutorialSerialize(void* self, void* stream) {
     g_lastHook = "Tutorial::TutorialSerialize";
-    ((fn_TutorialSerialize_t)g_hookTutorialSerialize.trampoline)(self, stream);
+    Tutorial_Serialize(self, stream);
 }
 
 void InstallTutorialSerialize() {

@@ -19,6 +19,61 @@
 #include <cstdint>
 
 // ============================================================
+// Local function pointers (resolved lazily)
+// ============================================================
+
+// Serializer::Ctor -- dispatch slot 0x140152ad8
+typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
+
+// Serializer::Dtor -- dispatch slot 0x140152ad0
+typedef void (*fn_Serializer_Dtor_t)(void* self);
+static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
+
+// Serializer::Serialize(int*) -- dispatch slot 0x140152ac8
+typedef void (*fn_Serializer_SerializeInt_t)(void* serializer, void* intPtr, const char* name);
+static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
+
+// DynArray resize helper (0x140001bb0) -- resize 8-byte element array
+typedef void (*fn_DynArrayResize_t)(void* arrayField, int newCount);
+static fn_DynArrayResize_t s_fn_DynArrayResize = nullptr;
+
+// Tutorial_helper_6fb0 (0x140026fb0) -- serialize array of ExternalPtr<TutorialStep>
+typedef void (*fn_SerializeStepArray_t)(void* serializer, int count, void* arrayData, void* p4);
+static fn_SerializeStepArray_t s_fn_SerializeStepArray = nullptr;
+
+// FUN_140002340 -- serialize single ExternalPtr<TutorialSetup>
+typedef void (*fn_ExternalPtrSerialize_Setup_t)(void* fieldPtr, void* serializer);
+static fn_ExternalPtrSerialize_Setup_t s_fn_ExternalPtrSerialize_Setup = nullptr;
+
+static bool s_resolved = false;
+
+static void EnsureResolved() {
+    if (s_resolved) return;
+    s_resolved = true;
+
+    void** slot;
+
+    // Serializer dispatch slots
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad8));
+    if (slot && *slot) s_fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(*slot);
+
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ad0));
+    if (slot && *slot) s_fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(*slot);
+
+    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ac8));
+    if (slot && *slot) s_fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(*slot);
+
+    // Direct exe functions
+    s_fn_DynArrayResize = reinterpret_cast<fn_DynArrayResize_t>(
+        ResolveAddr(Module::Exe, 0x140001bb0));
+    s_fn_SerializeStepArray = reinterpret_cast<fn_SerializeStepArray_t>(
+        ResolveAddr(Module::Exe, 0x140026fb0));
+    s_fn_ExternalPtrSerialize_Setup = reinterpret_cast<fn_ExternalPtrSerialize_Setup_t>(
+        ResolveAddr(Module::Exe, 0x140002340));
+}
+
+// ============================================================
 // Tutorial::Dtor (vtable +0x00, 0x140026f50)
 // ============================================================
 // Scalar deleting destructor.
@@ -124,4 +179,64 @@ void* Tutorial_Ctor(void* self) {
     *(int32_t*)(s + 0x38) = -1;  // current step index
 
     return self;
+}
+
+// ============================================================
+// Tutorial::Serialize (vtable +0x28, 0x1400dead0)
+// ============================================================
+// Serializes all Tutorial fields using a Serializer wrapper.
+// Fields serialized:
+//   1. int stepCount at +0x30
+//   2. (on load) resize steps array at +0x28
+//   3. ExternalPtr<TutorialStep> array via helper (0x140026fb0)
+//   4. ExternalPtr<TutorialSetup> at +0x20 via helper (0x140002340)
+//   5. int currentStep at +0x38
+void Tutorial_Serialize(void* self, void* stream) {
+    EnsureResolved();
+
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    // Create Serializer on stack (24 bytes)
+    uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) {
+        s_fn_Serializer_Ctor(serializer, stream, 0);
+    } else {
+        return;
+    }
+
+    // 1. Serialize step count (+0x30)
+    int32_t localCount = *reinterpret_cast<int32_t*>(s + 0x30);
+    if (s_fn_Serializer_SerializeInt) {
+        s_fn_Serializer_SerializeInt(serializer, &localCount, nullptr);
+    }
+
+    // 2. On load: resize steps array
+    uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
+    if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+        // Reading mode — resize array to match deserialized count
+        if (s_fn_DynArrayResize) {
+            s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x28), localCount);
+        }
+    }
+
+    // 3. Serialize steps array (ExternalPtr<TutorialStep>[])
+    void* stepsData = *reinterpret_cast<void**>(s + 0x28);
+    if (s_fn_SerializeStepArray) {
+        s_fn_SerializeStepArray(serializer, localCount, stepsData, nullptr);
+    }
+
+    // 4. Serialize setup ExternalPtr at +0x20
+    if (s_fn_ExternalPtrSerialize_Setup) {
+        s_fn_ExternalPtrSerialize_Setup(reinterpret_cast<void*>(s + 0x20), serializer);
+    }
+
+    // 5. Serialize currentStep at +0x38
+    if (s_fn_Serializer_SerializeInt) {
+        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x38), nullptr);
+    }
+
+    // Destroy Serializer
+    if (s_fn_Serializer_Dtor) {
+        s_fn_Serializer_Dtor(serializer);
+    }
 }

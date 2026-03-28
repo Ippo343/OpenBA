@@ -31,7 +31,7 @@ inline int Tutorial_GetDescription(void* /*self*/) { return 2; }
 
 // Slot5 (vtable +0x28, 0x1400dead0): Serialize.
 // Serializes step count, step external references, setup reference, and current step index.
-// Complex — uses engine serializer + external factory. Kept as trampoline.
+void Tutorial_Serialize(void* self, void* stream);
 
 // Slot6 (vtable +0x30, 0x140026f00): Cleanup.
 // Calls Dtor(self, 0) to clean up, re-initializes base + fields.
