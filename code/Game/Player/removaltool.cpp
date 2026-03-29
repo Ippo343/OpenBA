@@ -526,3 +526,41 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
         fn_MemFreeStatic(selTiles.data);
     }
 }
+
+// ============================================================
+// RemovalTool::CalcPath (vtable +0x68, Slot13)
+// ============================================================
+// Resolved as a direct exe function pointer call.
+//
+// This function is extremely complex (~300 lines of decompiled output):
+//   - Iterates a rectangular grid of cells
+//   - For each cell, checks removability via RemovalTool_sub_48a0
+//   - Creates ComponentEntity copies from template (0x48 bytes each)
+//   - Finds MapComponent (DWORD_1401c79e0) and DestroyComponent (DWORD_1401c75f0)
+//     on entities via typed FindComponent loops
+//   - Handles road removal: checks terrain flags, BST traversal for road tracking,
+//     calls RemovalTool_helper_c700 for road validation
+//   - Handles building removal: checks sub_4770/sub_4670, finds parent entities,
+//     checks destruction status via FUN_14012ead0
+//   - Handles crop removal: checks DWORD_1401c8070 component, BST lookup in
+//     GameWorld+0x118 crop tracker, calls CitizenAI_impl_9ad0
+//   - Calls FUN_1400c48a0 (EntityList_RegisterEntity) to register removal markers
+//   - Calls TradeWork_impl_f370 for road count updates
+//
+// Full reimplementation would require typing ~15 sub-functions and 4+ type IDs.
+// Deferring to a future pass when those dependencies are resolved.
+//
+// Original: 0x1401035e0
+typedef bool (*fn_RemovalToolCalcPath_Exe_t)(void* self, int startCell, int endCell);
+static fn_RemovalToolCalcPath_Exe_t s_fn_RemovalToolCalcPath_Exe = nullptr;
+
+bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell) {
+    if (!s_fn_RemovalToolCalcPath_Exe) {
+        s_fn_RemovalToolCalcPath_Exe = reinterpret_cast<fn_RemovalToolCalcPath_Exe_t>(
+            ResolveAddr(Module::Exe, 0x1401035e0));
+    }
+    if (s_fn_RemovalToolCalcPath_Exe) {
+        return s_fn_RemovalToolCalcPath_Exe(self, startCell, endCell);
+    }
+    return false;
+}

@@ -55,11 +55,12 @@ static void Reimpl_DragPlacementToolDraw(void* self, void* context, char param3)
     DragPlacementTool_Draw_Impl((DragPlacementTool*)self, context, param3);
 }
 
-// --- Slot13: CalcPath ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot13: CalcPath --- REIMPLEMENTED
 static HookInfo g_hookDragPlacementToolCalcPath;
-REIMPL_RSP_PASSTHROUGH(DragPlacementToolCalcPath, g_hookDragPlacementToolCalcPath, "DragPlacementTool::CalcPath")
+static bool Reimpl_DragPlacementToolCalcPath(void* self, int startCell, int endCell) {
+    g_lastHook = "DragPlacementTool::CalcPath";
+    return DragPlacementTool_CalcPath((DragPlacementTool*)self, startCell, endCell);
+}
 
 // ============================================================
 // Slot14: CalcCost — REIMPLEMENTED
@@ -107,7 +108,7 @@ void InstallDragPlacementToolCalcPath() {
     //         MOV [R11-30],-2(8)=19 bytes
     InstallHookRSPSafe(target, (void*)Reimpl_DragPlacementToolCalcPath, &g_hookDragPlacementToolCalcPath, 19);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] CalcPath hooked (RSP-safe) at %p\n", (void*)target);
+    printf("[DragPlacementTool] CalcPath hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolCalcPath() { RemoveHook(&g_hookDragPlacementToolCalcPath); }

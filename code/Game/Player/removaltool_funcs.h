@@ -34,3 +34,12 @@ uint64_t RemovalTool_CalcCost(RemovalTool* self, int startCell, int endCell,
 //   green (0x8000ff00) for removable, red (0xffff0000) for non-removable.
 // Original: 0x140104050
 void RemovalTool_Draw(RemovalTool* self, void* context, char param3);
+
+// CalcPath (vtable +0x68, Slot13): Creates removal marker entities for each cell
+// in the drag selection. Extremely complex (~300 lines): iterates grid cells, checks
+// removability via multiple sub-functions, creates ComponentEntity copies, finds
+// MapComponent/DestroyComponent on entities, handles road/crop/building removal
+// with BST traversals and entity destruction scheduling.
+// Resolved as a direct exe function pointer call due to extreme complexity.
+// Original: 0x1401035e0
+bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell);

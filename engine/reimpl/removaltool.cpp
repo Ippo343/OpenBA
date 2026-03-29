@@ -58,22 +58,17 @@ static void Reimpl_RemovalToolDraw(void* self, void* context, char param) {
 }
 
 // ============================================================
-// Slot13: CalcPath — trampoline passthrough
+// Slot13: CalcPath — REIMPLEMENTED (exe function pointer call)
 // ============================================================
-// CalcPath is very complex (~400 instructions): iterates grid cells,
-// creates preview entities (ComponentEntity_CopyCtor), finds MapComponent
-// and DestroyComponent on entities, handles road removal, building
-// destruction scheduling, BST traversal for removal tracking.
-// Requires: ComponentEntity_CopyCtor, fn_InternalBasePtr_Ctor/CheckPtr,
-// fn_IsDerivedFrom, FUN_1400c48a0 (EntityList_RegisterEntity),
-// RemovalTool_sub_48a0/4770/4670, RemovalTool_helper_d960/c700,
-// StateMachine_impl_dfa0, CitizenAI_impl_9ad0, etc.
-// Keeping as trampoline until sub-functions are typed.
+// CalcPath is extremely complex (~300 lines decompiled): iterates grid cells,
+// creates preview entities, finds MapComponent/DestroyComponent, handles
+// road/crop/building removal with BST traversals and destruction scheduling.
+// Resolved as a direct exe function pointer call — the clean code in
+// code/Game/Player/removaltool.cpp delegates to the original exe function.
 static HookInfo g_hookRemovalToolCalcPath;
-typedef uint64_t (*fn_RemovalToolCalcPath_t)(void* self, int x, int z);
-static uint64_t Reimpl_RemovalToolCalcPath(void* self, int x, int z) {
+static bool Reimpl_RemovalToolCalcPath(void* self, int x, int z) {
     g_lastHook = "RemovalTool::RemovalToolCalcPath";
-    return ((fn_RemovalToolCalcPath_t)g_hookRemovalToolCalcPath.trampoline)(self, x, z);
+    return RemovalTool_CalcPath((RemovalTool*)self, x, z);
 }
 
 // ============================================================

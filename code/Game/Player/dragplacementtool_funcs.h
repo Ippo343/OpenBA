@@ -36,3 +36,10 @@ uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int 
 // CharacterComponent_impl_f5d0 for per-cell terrain validation.
 // Original: 0x1400fbe40
 void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char param3);
+
+// CalcPath (vtable +0x68, Slot13): Creates preview placement entity for drag area.
+// Validates via CalcCost, clears existing path entities, clones a ComponentEntity
+// from description, sets placement coords + rotation on BuildComponent, registers
+// entity with EntityList.
+// Original: 0x1400fb900
+bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endCell);

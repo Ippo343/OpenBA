@@ -538,3 +538,162 @@ void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char pa
         dragArr.free();
     }
 }
+
+// ============================================================
+// Resolved helper function pointers for CalcPath
+// ============================================================
+
+// FUN_1401018d0: clears existing path entities and sets up grid range.
+// Params: (self, minCol, minRow, maxCol, maxRow, entityTemplate)
+typedef void (*fn_ClearPathEntities_t)(void* self, int minCol, int minRow,
+    int maxCol, int maxRow, int64_t entityTemplate);
+static fn_ClearPathEntities_t s_fn_ClearPathEntities = nullptr;
+
+// ComponentEntity_CopyCtor (0x1400c3720): clone entity from description
+typedef void* (*fn_ComponentEntity_CopyCtor_t)(void* self, void* desc);
+static fn_ComponentEntity_CopyCtor_t s_fn_ComponentEntity_CopyCtor = nullptr;
+
+static bool s_calcPathFuncsResolved = false;
+
+static void EnsureCalcPathFuncs() {
+    if (s_calcPathFuncsResolved) return;
+    s_fn_ClearPathEntities = reinterpret_cast<fn_ClearPathEntities_t>(
+        ResolveAddr(Module::Exe, 0x1401018d0));
+    s_fn_ComponentEntity_CopyCtor = reinterpret_cast<fn_ComponentEntity_CopyCtor_t>(
+        ResolveAddr(Module::Exe, 0x1400c3720));
+    s_calcPathFuncsResolved = true;
+}
+
+// ============================================================
+// DragPlacementTool::CalcPath (vtable +0x68, Slot13)
+// ============================================================
+// Creates a preview placement entity for the drag area.
+//
+// Steps:
+//   1. Call CalcCost (vtable+0x70) to validate the area — if non-zero, fail
+//   2. Convert cell indices to grid coords, normalize min/max
+//   3. If dialog has constraints (+0x80), verify selection matches exactly
+//   4. Clear existing path entities via FUN_1401018d0
+//   5. Create a ComponentEntity copy from the description entity
+//   6. Find its BuildComponent and set placement coords + rotation
+//   7. Register entity with the entity list
+//
+// Rotation: 0x5a (90 degrees) if height >= width, else 0.
+//
+// Original: 0x1400fb900
+bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endCell) {
+    EnsureCalcPathFuncs();
+
+    // Call CalcCost via vtable+0x70 to validate
+    // CalcCost takes 7 params: (self, start, end, &outValid, &outCostA, &outCostB, &outLength)
+    // We use local variables for the output params
+    typedef uint64_t (*fn_CalcCost_vt_t)(void* self, int start, int end,
+        uint32_t* outValid, int* outCostA, int* outCostB, uint32_t* outLength);
+    fn_CalcCost_vt_t calcCostFn = *(fn_CalcCost_vt_t*)(*(uintptr_t*)self + 0x70);
+
+    uint32_t outValid = 0;
+    int outCostA = 0;   // width
+    int outCostB = 0;   // height
+    uint32_t outLength = 0;
+
+    uint64_t calcResult = calcCostFn(self, startCell, endCell,
+        &outValid, &outCostA, &outCostB, &outLength);
+
+    if ((int)calcResult != 0) {
+        return false;
+    }
+
+    // Get map grid size
+    int gridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+
+    // Convert cell indices to grid coords
+    int startRow = startCell / gridSize;
+    int startCol = startCell % gridSize;
+    int endRow = endCell / gridSize;
+    int endCol = endCell % gridSize;
+
+    // Normalize to min/max
+    int minCol = startCol, maxCol = endCol;
+    if (endCol < startCol) {
+        minCol = endCol;
+        maxCol = startCol;
+    }
+    int minRow = startRow, maxRow = endRow;
+    if (endRow < startRow) {
+        minRow = endRow;
+        maxRow = startRow;
+    }
+
+    // Check constraints from dialog (+0x10)
+    uintptr_t dlg = (uintptr_t)self->dialogPtr;
+    if (*(char*)(dlg + 0x80) != '\0') {
+        int cGridSize = **(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+        int cStartCol = *(int*)(dlg + 0x98) % cGridSize;
+        int cStartRow = *(int*)(dlg + 0x98) / cGridSize;
+        int cEndCol = *(int*)(dlg + 0x9c) % cGridSize;
+        int cEndRow = *(int*)(dlg + 0x9c) / cGridSize;
+
+        if (minCol != cStartCol || minRow != cStartRow ||
+            cEndCol != maxCol || cEndRow != maxRow) {
+            return false;
+        }
+    }
+
+    // Clear existing path entities
+    uintptr_t placementDesc = (uintptr_t)self->placementDesc;
+    int64_t entityTemplate = *(int64_t*)(placementDesc + 0x38);
+
+    if (s_fn_ClearPathEntities) {
+        s_fn_ClearPathEntities(self, minCol, minRow, maxCol, maxRow, entityTemplate);
+    }
+
+    // Allocate and clone a ComponentEntity from description
+    void* newEntityMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    void* newEntity = nullptr;
+    if (newEntityMem && s_fn_ComponentEntity_CopyCtor) {
+        newEntity = s_fn_ComponentEntity_CopyCtor(newEntityMem, (void*)self->descriptionPtr);
+    }
+
+    // Wrap in InternalBasePtr
+    void* entityIBP = nullptr;
+    if (fn_InternalBasePtr_Ctor) {
+        fn_InternalBasePtr_Ctor(&entityIBP, newEntity);
+    }
+
+    // Find BuildComponent on the entity
+    if (fn_InternalBasePtr_CheckPtr) {
+        fn_InternalBasePtr_CheckPtr(&entityIBP);
+    }
+
+    void* buildCompIBP = nullptr;
+    fn_FindComponent_Build((void*)entityIBP, &buildCompIBP);
+
+    if (fn_InternalBasePtr_CheckPtr) {
+        fn_InternalBasePtr_CheckPtr(&buildCompIBP);
+    }
+
+    uintptr_t buildComp = *(uintptr_t*)&buildCompIBP;
+
+    // Determine rotation: 0x5a (90 degrees) if height >= width, else 0
+    int rotation = 0;
+    if (outCostB >= outCostA) {
+        rotation = 0x5a;  // 90 degrees
+    }
+
+    // Set placement coordinates on BuildComponent
+    *(int16_t*)(buildComp + 0x28) = (int16_t)minCol;
+    *(int16_t*)(buildComp + 0x2a) = (int16_t)minRow;
+    *(int16_t*)(buildComp + 0x2c) = (int16_t)outCostA;  // width
+    *(int16_t*)(buildComp + 0x2e) = (int16_t)outCostB;  // height
+    *(int32_t*)(buildComp + 0x30) = rotation;
+
+    // Register entity with entity list
+    void* entityList = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xe8);
+    int categoryId = *(int*)((uintptr_t)self->descriptionPtr + 0x20);
+
+    if (fn_EntityList_RegisterEntity) {
+        fn_EntityList_RegisterEntity(entityList, &entityIBP, categoryId);
+    }
+
+    return true;
+}
