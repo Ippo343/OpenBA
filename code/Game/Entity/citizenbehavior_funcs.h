@@ -71,7 +71,9 @@ void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTim
 
 // CollectStats (0x14008a730) — collect population statistics.
 // Iterates citizens, collects alive/dead/educated/working counts,
-// pushes ~30+ stat values to history arrays. Delegates to original.
+// computes happiness/health/educated/working percentages, then
+// pushes 8 population stats + 63 profession resource values (21x3)
+// to stats history arrays at +0x150. Clears per-tick accumulators.
 // Ghidra name: FUN_14008a730
 void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self);
 

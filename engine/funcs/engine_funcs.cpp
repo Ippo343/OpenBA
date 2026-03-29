@@ -1045,6 +1045,10 @@ fn_PathBST_FreeRecursive_t fn_PathBST_FreeRecursive = nullptr;
 // === CitizenBehavior remaining core dependencies (Agent D) ===
 fn_NotificationEvent_t fn_NotificationEvent = nullptr;
 
+// === CitizenBehavior FindWorking/FindIdle/FindStudent dependencies ===
+fn_PathDistance_t fn_PathDistance = nullptr;
+fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing = nullptr;
+
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
 // ============================================================
@@ -4183,6 +4187,17 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140095580));
 #ifdef _DEBUG
     printf("  NotificationEvent = %p\n", (void*)fn_NotificationEvent);
+#endif
+
+    // === CitizenBehavior FindWorking/FindIdle/FindStudent dependencies ===
+    fn_PathDistance = reinterpret_cast<fn_PathDistance_t>(
+        ResolveAddr(Module::Exe, 0x140008830));
+    fn_CitizenComponent_AssignHousing = reinterpret_cast<fn_CitizenComponent_AssignHousing_t>(
+        ResolveAddr(Module::Exe, 0x140111ee0));
+#ifdef _DEBUG
+    printf("[EngineFuncs] CitizenBehavior Find deps resolved\n");
+    printf("  PathDistance       = %p\n", (void*)fn_PathDistance);
+    printf("  AssignHousing      = %p\n", (void*)fn_CitizenComponent_AssignHousing);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

@@ -70,7 +70,7 @@ The entity layer manages ComponentEntity objects (the ECS "entity" that owns com
 
 ---
 
-## CitizenBehavior — Status: Near-Complete (2026-03-29)
+## CitizenBehavior — Status: Deep Reimpl Complete (2026-03-29)
 
 | Function | Address | Status | Notes |
 |----------|---------|--------|-------|
@@ -81,12 +81,12 @@ The entity layer manages ComponentEntity objects (the ECS "entity" that owns com
 | FindAny | 0x14008c4b0 | **Reimplemented** | Citizen lookup by profession |
 | CountResources | 0x140089ed0 | **Reimplemented** | Two-phase resource tally across buildings, 21-bit profession flag mapping |
 | CheckThresholds | 0x14008c100 | **Reimplemented** | 5% shortage thresholds, notification events, 120s cooldown |
-| CollectStats | 0x14008a730 | **Delegates** | 600+ line mechanical function, delegates to original |
+| CollectStats | 0x14008a730 | **Reimplemented** | 4-phase: citizen iteration, percentage calc, 71x history push (loop over 21 professions), cleanup |
 | ProcessPaths | 0x1400d6f00 | **Reimplemented** | Up to 7 path calcs/call, BST distance cache, Euclidean fallback |
 | BuildPathGraph | 0x1400d70c0 | **Reimplemented** | Collects building grid IDs, generates entity-building pairs |
-| FindIdle | 0x14008cbf0 | **Delegates** | Complex nested loops, delegates to fn_CitizenList_FindIdle |
-| FindWorking | 0x14008ca20 | **Delegates** | Path distance comparison, delegates to fn_CitizenList_FindWorking |
-| FindStudent | 0x14008c5f0 | **Delegates** | School iteration, delegates to fn_CitizenList_FindStudent |
+| FindIdle | 0x14008cbf0 | **Reimplemented** | Nested room/occupant iteration, two code paths (null profSlot vs distance-based) |
+| FindWorking | 0x14008ca20 | **Reimplemented** | Single loop, path distance comparison, closest idle citizen |
+| FindStudent | 0x14008c5f0 | **Reimplemented** | Shuffles schools, counts idle students per school, picks max |
 | RequestWorker | engine_funcs | Existing | Already resolved |
 | AssignWorker | engine_funcs | Existing | Already resolved |
 | RemoveWorker | engine_funcs | Existing | Already resolved |
@@ -104,5 +104,5 @@ The entity layer manages ComponentEntity objects (the ECS "entity" that owns com
 
 ## Remaining Work
 
-1. **CitizenBehavior delegates**: CollectStats (~600 lines, mechanical), FindIdle/FindWorking/FindStudent (complex nested loops with path distance) — all delegate to original. Could be reimplemented for standalone exe completeness but are low priority.
+1. **Entity module is fully reimplemented** — all 3 classes (ComponentEntity, EntityList, CitizenBehavior) have zero delegates remaining.
 2. **All entity module hooks are now enabled** except the 3 remaining disabled hooks (Modification::SetupFileSystem, WorkComponent::Shutdown, FinishTutorialInstance::Slot5 — unrelated to entity module).

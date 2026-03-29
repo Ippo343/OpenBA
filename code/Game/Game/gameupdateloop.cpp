@@ -196,9 +196,7 @@ static fn_EntityUI_Startup_t fn_EntityUI_Startup = nullptr;
 typedef void (*fn_EntityUI_SetTool_t)(void* entityUI, int64_t tool);
 static fn_EntityUI_SetTool_t fn_EntityUI_SetTool = nullptr;
 
-// CitizenComponent::AssignHousing(citizen, housingPtr)
-typedef void (*fn_CitizenComponent_AssignHousing_t)(void* citizen, void* housingPtr);
-static fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing = nullptr;
+// CitizenComponent::AssignHousing — now shared from engine_funcs.h
 
 // EntityList::Shutdown (FUN_1400c3d30)
 typedef void (*fn_EntityList_Shutdown_t)(void* entityList);
@@ -393,8 +391,7 @@ static void EnsureInit() {
     // Shutdown sub-functions
     fn_EntityUI_SetTool = reinterpret_cast<fn_EntityUI_SetTool_t>(
         ResolveAddr(Module::Exe, 0x140102b60));
-    fn_CitizenComponent_AssignHousing = reinterpret_cast<fn_CitizenComponent_AssignHousing_t>(
-        ResolveAddr(Module::Exe, 0x140111ee0));
+    // fn_CitizenComponent_AssignHousing — resolved centrally in EngineFuncsInit()
     fn_EntityList_Shutdown = reinterpret_cast<fn_EntityList_Shutdown_t>(
         ResolveAddr(Module::Exe, 0x1400c3d30));
     fn_EntityList_Dtor = reinterpret_cast<fn_EntityList_Dtor_t>(

@@ -3,9 +3,9 @@
 2. component:
 3. dialog: Complete 100%
 4. entity: 
-5. game: Complete
+5. game: Complete 100%
 6. goal: Complete 100%
-7. tutorial: Complete
+7. tutorial: Complete 
 8. work: Complete 100%
 9. player: Complete (needs entitiy classes)
 

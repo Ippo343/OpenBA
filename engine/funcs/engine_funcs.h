@@ -4904,6 +4904,21 @@ typedef void (*fn_NotificationEvent_t)(void* notifMgr, int notifType, int severi
 extern fn_NotificationEvent_t fn_NotificationEvent;
 
 // ============================================================
+// CitizenBehavior FindWorking/FindIdle/FindStudent dependencies
+// ============================================================
+
+// PathDistance (FUN_140008830) — compute path distance between two map grid cells.
+// Uses BuildStructure path first; falls back to Euclidean + grid size if no path found.
+typedef int (*fn_PathDistance_t)(int* mapGrid, uint32_t gridIdA, uint32_t gridIdB);
+extern fn_PathDistance_t fn_PathDistance;
+
+// CitizenComponent::AssignHousing (FUN_140111ee0) — assign/clear housing for a citizen.
+typedef void (*fn_CitizenComponent_AssignHousing_t)(void* citizen, void* housingPtr);
+extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
+
+// g_TypeId_ResidenceComponent — already declared above (DAT_1401c7cf0)
+
+// ============================================================
 // Initialization
 // ============================================================
 
