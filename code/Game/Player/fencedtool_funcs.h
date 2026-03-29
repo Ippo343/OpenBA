@@ -39,3 +39,19 @@ void FencedTool_Startup_Impl(FencedTool* self);
 // Two phases: edit-mode tiles + preview-mode tiles with terrain validation.
 // Original: 0x1400dc440
 void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3);
+
+// CalcPath (vtable +0x68, Slot13): Creates fence entities along the drag rectangle.
+// Builds TWO entities per placement: the main area entity (pasture/crop) and
+// the fence entity (posts + side fences). Sets cell coordinates, rotation,
+// transforms, and registers both with the entity list.
+//
+// Extremely complex (~150 lines decompiled): requires entity copy-ctor,
+// component lookups, Math::Transform ops, Graphics::Geometry::SetTransform,
+// linked list management for fence segments (FencedTool_Slot13_sub_bc80,
+// FencedTool_Slot13_sub_b8c0), and entity registration (FUN_1400c48a0).
+//
+// Delegated to original exe function via resolved pointer — full reimplementation
+// blocked on typing ~15 unresolved helper functions.
+// Original: 0x1400dae00
+// Signature: (self, startCell, endCell) -> uint64_t (low byte: 1=success, 0=failure)
+uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t endCell);

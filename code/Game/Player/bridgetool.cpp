@@ -182,3 +182,58 @@ uint64_t BridgeTool_CalcCost(BridgeTool* self, int startCell, int endCell,
 
     return 3;
 }
+
+// ============================================================
+// BridgeTool::CalcPath (vtable +0x68, Slot13)
+// ============================================================
+// The most complex tool function (~400 lines decompiled, 1066 instructions).
+// Builds a bridge path from startCell to endCell by:
+//
+//   1. Snapping the end cell via SnapEndCell helper
+//   2. Validating the path via ValidatePath helper
+//   3. Building a doubly-linked list of segment descriptors, each specifying
+//      a segment size (0, 1, 2, 4, or 8 cells). The algorithm fills the bridge
+//      body from center outward with the largest fitting segments.
+//   4. For each segment in the linked list:
+//      a. Copy-constructs an entity from BridgeDescription segment templates
+//         (indexed by segment size: +0x38[0..4])
+//      b. Finds MapComponent, ModelComponent, MultiObjectComponent on the entity
+//      c. Sets cell coordinates (col, row, width, height) and rotation on MapComponent
+//      d. Computes terrain-aligned position via CharacterComponent_impl_f3e0
+//      e. Builds a rotation transform via Math::Transform::FromYawPitchOffset
+//      f. Sets transform on ModelComponent and PickingComponent
+//      g. Registers picking user data with Picking::Scene::SetMeshUserData
+//      h. Appends the entity to the MultiObjectComponent on the master entity
+//      i. Registers the entity with the world entity list
+//   5. Finally registers the master entity with the entity list
+//   6. Frees the linked list nodes
+//
+// Full reimplementation is blocked on typing ~20 unresolved helper functions:
+//   - BridgeTool_sub_b710 (SnapEndCell), BridgeTool_sub_b2d0 (ValidatePath)
+//   - System::MemoryAllocator::MemAlloc/MemFree for linked list nodes
+//   - ComponentEntity_CopyCtor, fn_InternalBasePtr_Ctor/CheckPtr
+//   - Component search loops (MapComponent, ModelComponent, MultiObjectComponent,
+//     PickingComponent) — each repeated 4+ times with IsDerivedFrom checks
+//   - CharacterComponent_impl_f3e0 (terrain height query)
+//   - Math::Vector3::Vector3, Math::Transform::FromYawPitchOffset, operator=
+//   - Graphics::Geometry::SetTransform
+//   - Picking::Scene::SetMeshUserData
+//   - FUN_140003110 (append to internal list)
+//   - FUN_1400c48a0 (register entity with world entity list)
+//
+// Delegates to the original exe function via a resolved function pointer.
+// Original: 0x1400f9cd0
+typedef uint64_t (*fn_BridgeTool_CalcPath_t)(void* self, int startCell, int endCell);
+static fn_BridgeTool_CalcPath_t s_fn_BridgeTool_CalcPath = nullptr;
+
+uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
+    if (!s_fn_BridgeTool_CalcPath) {
+        s_fn_BridgeTool_CalcPath = reinterpret_cast<fn_BridgeTool_CalcPath_t>(
+            ResolveAddr(Module::Exe, BridgeToolAddr::CalcPath));
+    }
+    if (!s_fn_BridgeTool_CalcPath) {
+        printf("[BridgeTool] ERROR: CalcPath function pointer is NULL\n");
+        return 0;
+    }
+    return s_fn_BridgeTool_CalcPath(self, startCell, endCell);
+}

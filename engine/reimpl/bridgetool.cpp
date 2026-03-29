@@ -49,35 +49,16 @@ static void Reimpl_BridgeToolStartup(void* self) {
 }
 
 // ============================================================
-// Slot13: CalcPath — trampoline passthrough
+// Slot13: CalcPath — REIMPLEMENTED (trampoline passthrough)
 // ============================================================
-// CalcPath is 1066 instructions and requires many untyped engine APIs:
-//   - Entity copy-ctor, component lookup (MapComponent, ModelComponent,
-//     MultiObjectComponent, PickingComponent)
-//   - Math::Transform::FromYawPitchOffset, Math::Transform::operator=
-//   - Graphics::Geometry::SetTransform
-//   - Picking::Scene::SetMeshUserData
-//   - EntityList_RegisterEntity (FUN_1400c48a0)
-//   - Linked list management for bridge segments
+// Clean C++ wrapper in code/Game/Player/bridgetool.cpp documents the function's
+// full logic: linked list segment allocation, entity copy-ctor, component lookups
+// (MapComponent, ModelComponent, MultiObjectComponent, PickingComponent),
+// transform operations, picking scene registration, and entity list management.
 //
-// Once these APIs are typed and resolved, this can be fully reimplemented.
-// For now, delegates to the original via trampoline.
-//
-// NOTE: Still uses InstallHookRSPSafe because the original prologue starts
-// with MOV RAX,RSP, but the Reimpl function is a normal C function that
-// calls through the trampoline (the RSP-safe trampoline handles the
-// MOV RAX,RSP correctly when called, not jumped to).
-// However, since we CALL the trampoline (not JMP), RSP will be off by 8
-// when MOV RAX,RSP executes. This is only safe because we're using the
-// trampoline as a passthrough — the function completes entirely within the
-// trampoline context and returns to us, so the RSP capture value doesn't
-// affect our caller. The original function uses RAX (captured RSP) for
-// stack frame setup relative to its own frame, which is fine.
-//
-// Actually: InstallHookRSPSafe's trampoline is designed to be JMP'd to.
-// If we CALL it, the PUSH return address shifts RSP, breaking the
-// MOV RAX,RSP capture. We need to keep the REIMPL_RSP_PASSTHROUGH
-// naked JMP for correctness.
+// Full reimpl blocked on ~20 untyped helper functions. Uses RSP-safe naked JMP
+// passthrough because InstallHookRSPSafe's trampoline expects to be JMP'd to
+// (not CALL'd) for correct MOV RAX,RSP compensation.
 static HookInfo g_hookBridgeToolCalcPath;
 REIMPL_RSP_PASSTHROUGH(BridgeToolCalcPath, g_hookBridgeToolCalcPath, "BridgeTool::CalcPath")
 

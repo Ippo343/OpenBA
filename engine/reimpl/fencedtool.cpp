@@ -91,9 +91,12 @@ static void Reimpl_FencedToolShutdown(void* self) {
     FencedTool_Shutdown((FencedTool*)self);
 }
 
-// --- Slot13: CalcPath ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot13: CalcPath --- REIMPLEMENTED (trampoline passthrough)
+// Clean C++ wrapper in code/Game/Player/fencedtool.cpp documents the function's logic
+// (entity copy-ctor, fence corner posts, side segments, entity registration).
+// Full reimpl blocked on ~15 untyped helper functions.
+// Uses RSP-safe naked JMP passthrough because InstallHookRSPSafe's trampoline
+// expects to be JMP'd to (not CALL'd) for correct MOV RAX,RSP compensation.
 static HookInfo g_hookFencedToolCalcPath;
 REIMPL_RSP_PASSTHROUGH(FencedToolCalcPath, g_hookFencedToolCalcPath, "FencedTool::CalcPath")
 

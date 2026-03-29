@@ -951,3 +951,44 @@ void FencedTool_Startup_Impl(FencedTool* self) {
         fn_MeshInstance_UpdateHierarchy(self->meshInstance);
     }
 }
+
+// ============================================================
+// FencedTool::CalcPath (vtable +0x68, Slot13)
+// ============================================================
+// Creates fence entities along the drag rectangle perimeter.
+//
+// This function is extremely complex (~150 lines decompiled) and depends on
+// ~15 unresolved helper functions:
+//   - FUN_1400dbf90: anchor/rotation calculation (already resolved as s_fn_FencedTool_AnchorCalc)
+//   - ComponentEntity_CopyCtor: entity deep-copy
+//   - FUN_140004680: entity component accessor
+//   - FUN_140004740: entity component accessor (different type)
+//   - FUN_1401018d0: set cell range on entity
+//   - Entity_ClearPathQueue: clear entity path queue
+//   - Math::Transform::FromYawPitchOffset: build rotation transform
+//   - Math::Transform::operator=: copy transform
+//   - Graphics::Geometry::SetTransform: apply transform to geometry
+//   - FencedTool_helper_90d0: link fence entity to main entity
+//   - FUN_140003110: append entity to internal list
+//   - FUN_1400c48a0: register entity with world entity list
+//   - FencedTool_Slot13_sub_bc80: place corner fence posts (4 calls)
+//   - FencedTool_Slot13_sub_b8c0: place side fence segments (4 calls)
+//
+// Full reimplementation is blocked until these helpers are typed and resolved.
+// Delegates to the original exe function via a resolved function pointer.
+//
+// Original: 0x1400dae00
+typedef uint64_t (*fn_FencedTool_CalcPath_t)(void* self, uint64_t startCell, uint64_t endCell);
+static fn_FencedTool_CalcPath_t s_fn_FencedTool_CalcPath = nullptr;
+
+uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t endCell) {
+    if (!s_fn_FencedTool_CalcPath) {
+        s_fn_FencedTool_CalcPath = reinterpret_cast<fn_FencedTool_CalcPath_t>(
+            ResolveAddr(Module::Exe, FencedToolAddr::CalcPath));
+    }
+    if (!s_fn_FencedTool_CalcPath) {
+        printf("[FencedTool] ERROR: CalcPath function pointer is NULL\n");
+        return 0;
+    }
+    return s_fn_FencedTool_CalcPath(self, startCell, endCell);
+}
