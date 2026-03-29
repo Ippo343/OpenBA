@@ -4795,6 +4795,59 @@ typedef void (*fn_SummaryArray_Init_t)(void* base, int count);
 extern fn_SummaryArray_Init_t fn_SummaryArray_Init;
 
 // ============================================================
+// Player/Tool module — shared engine APIs for tool reimpl
+// ============================================================
+
+// Graphics::Scene::AddObject — adds a Geometry to the scene, returns object ID
+// IAT dispatch slot 0x140151370. RCX=Scene*, RDX=Geometry* -> returns uint32_t
+typedef uint32_t (*fn_SceneAddObject_t)(void* scene, void* geometry);
+extern fn_SceneAddObject_t fn_SceneAddObject;
+
+// Graphics::Scene::RemoveObject — removes object from scene by ID
+// IAT dispatch slot 0x140151360. RCX=Scene*, EDX=objectId
+typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
+extern fn_SceneRemoveObject_t fn_SceneRemoveObject;
+
+// Math::Transform::FromYawPitchOffset — build transform from yaw angle + position
+// IAT dispatch slot 0x140151288. RCX=outTransform, RDX=yawScalar*, R8=offsetVec3*
+typedef void (*fn_Transform_FromYawPitchOffset_t)(void* outTransform, void* yaw, void* offset);
+extern fn_Transform_FromYawPitchOffset_t fn_Transform_FromYawPitchOffset;
+
+// Graphics::Geometry::SetTransform — apply transform to geometry/mesh
+// IAT dispatch slot 0x1401512e0. RCX=Geometry*, RDX=Transform*
+typedef void (*fn_Geometry_SetTransform_t)(void* geometry, void* transform);
+extern fn_Geometry_SetTransform_t fn_Geometry_SetTransform;
+
+// Graphics::MeshInstance::UpdateHierarchy — update mesh bone/transform hierarchy
+// IAT dispatch slot 0x140152888. RCX=MeshInstance*
+typedef void (*fn_MeshInstance_UpdateHierarchy_t)(void* mesh);
+extern fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy;
+
+// CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering
+// Submits colored tile arrays to the scene. Used by all Draw functions.
+// RCX=self, RDX=Context*, R8=tileArray1, R9=tileArray2
+typedef void (*fn_TileRender_t)(void* self, void* context, void* tileArray1, void* tileArray2);
+extern fn_TileRender_t fn_TileRender;
+
+// CharacterComponent_impl_f5d0 (0x14009f5d0) — single-tile terrain validity check
+// Returns true if tile at (x,y) is valid for placement given terrain masks + height constraints.
+typedef bool (*fn_TileValidityCheck_t)(int* mapGrid, int x, int y, uint32_t terrainMask,
+    float heightRef, float heightTol, float param7, char param8, char param9, int64_t param10);
+extern fn_TileValidityCheck_t fn_TileValidityCheck;
+
+// FUN_1400dbf90 — fenced placement region parameter computation
+// Computes fence layout params (bounds, rotation, etc.) from FencedTool state.
+// Returns bool (true=valid placement).
+typedef bool (*fn_FencedPlacementParams_t)(void* self, uint32_t* outParam2, uint32_t* outParam3,
+    uint32_t* outParam4, uint32_t* outParam5, float* outParam6, uint32_t* outParam7);
+extern fn_FencedPlacementParams_t fn_FencedPlacementParams;
+
+// TradeWork_impl_0d00 (0x1400b0d00) — remove radius/highlight overlay
+// RCX=*(g_pGameWorldSingleton+0x110), EDX=overlayId
+typedef void (*fn_HighlightRemove_t)(void* highlightMgr, int overlayId);
+extern fn_HighlightRemove_t fn_HighlightRemove;
+
+// ============================================================
 // Initialization
 // ============================================================
 

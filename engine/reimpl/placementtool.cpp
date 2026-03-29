@@ -43,25 +43,26 @@ static void Reimpl_PlacementToolStartup(void* self) {
     ((fn_PlacementToolStartup_t)g_hookPlacementToolStartup.trampoline)(self);
 }
 
-// --- Slot5: Shutdown2 ---
+// --- Slot5: Shutdown2 --- REIMPLEMENTED
 static HookInfo g_hookPlacementToolShutdown2;
-typedef void (*fn_PlacementToolShutdown2_t)(void* self);
 static void Reimpl_PlacementToolShutdown2(void* self) {
     g_lastHook = "PlacementTool::PlacementToolShutdown2";
-    ((fn_PlacementToolShutdown2_t)g_hookPlacementToolShutdown2.trampoline)(self);
+    PlacementTool_Shutdown2_Impl((PlacementTool*)self);
 }
 
-// --- Slot6: OnKey ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot6: OnKey --- REIMPLEMENTED (rotation + placement input)
 static HookInfo g_hookPlacementToolOnKey;
-REIMPL_RSP_PASSTHROUGH(PlacementToolOnKey, g_hookPlacementToolOnKey, "PlacementTool::OnKey")
+static uint64_t Reimpl_PlacementToolOnKey(void* self, char param2) {
+    g_lastHook = "PlacementTool::OnKey";
+    return PlacementTool_OnKey_Impl((PlacementTool*)self, param2);
+}
 
-// --- Slot7: Serialize ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot7: Serialize --- REIMPLEMENTED (placement preview + cost UI)
 static HookInfo g_hookPlacementToolSerialize;
-REIMPL_RSP_PASSTHROUGH(PlacementToolSerialize, g_hookPlacementToolSerialize, "PlacementTool::Serialize")
+static void Reimpl_PlacementToolSerialize(void* self, void* param2, char param3) {
+    g_lastHook = "PlacementTool::Serialize";
+    PlacementTool_Serialize_Impl((PlacementTool*)self, param2, param3);
+}
 
 // --- Slot8: Draw ---
 // RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)

@@ -568,6 +568,17 @@ fn_KeyMap_Released_t fn_KeyMap_Released = nullptr;
 fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot = nullptr;
 fn_AudioScene_PlayEffect_t fn_AudioScene_PlayEffect = nullptr;
 
+// Player/Tool module — shared engine APIs
+fn_SceneAddObject_t fn_SceneAddObject = nullptr;
+fn_SceneRemoveObject_t fn_SceneRemoveObject = nullptr;
+fn_Transform_FromYawPitchOffset_t fn_Transform_FromYawPitchOffset = nullptr;
+fn_Geometry_SetTransform_t fn_Geometry_SetTransform = nullptr;
+fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy = nullptr;
+fn_TileRender_t fn_TileRender = nullptr;
+fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
+fn_FencedPlacementParams_t fn_FencedPlacementParams = nullptr;
+fn_HighlightRemove_t fn_HighlightRemove = nullptr;
+
 // ModDetailsDialog support
 fn_Element_Hide_t fn_Element_Hide = nullptr;
 fn_Modification_Find_t fn_Modification_Find = nullptr;
@@ -2822,6 +2833,57 @@ bool EngineFuncsInit() {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152830));
         if (dispatch) fn_AudioScene_PlayEffect = reinterpret_cast<fn_AudioScene_PlayEffect_t>(*dispatch);
     }
+
+    // --- Player/Tool module: shared engine APIs ---
+    // Graphics::Scene::AddObject — IAT dispatch slot 0x140151370
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151370));
+        if (dispatch) fn_SceneAddObject = reinterpret_cast<fn_SceneAddObject_t>(*dispatch);
+    }
+    // Graphics::Scene::RemoveObject — IAT dispatch slot 0x140151360
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151360));
+        if (dispatch) fn_SceneRemoveObject = reinterpret_cast<fn_SceneRemoveObject_t>(*dispatch);
+    }
+    // Math::Transform::FromYawPitchOffset — IAT dispatch slot 0x140151288
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151288));
+        if (dispatch) fn_Transform_FromYawPitchOffset = reinterpret_cast<fn_Transform_FromYawPitchOffset_t>(*dispatch);
+    }
+    // Graphics::Geometry::SetTransform — IAT dispatch slot 0x1401512e0
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401512e0));
+        if (dispatch) fn_Geometry_SetTransform = reinterpret_cast<fn_Geometry_SetTransform_t>(*dispatch);
+    }
+    // Graphics::MeshInstance::UpdateHierarchy — IAT dispatch slot 0x140152888
+    {
+        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152888));
+        if (dispatch) fn_MeshInstance_UpdateHierarchy = reinterpret_cast<fn_MeshInstance_UpdateHierarchy_t>(*dispatch);
+    }
+    // CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering (exe function)
+    fn_TileRender = reinterpret_cast<fn_TileRender_t>(
+        ResolveAddr(Module::Exe, 0x1401008c0));
+    // CharacterComponent_impl_f5d0 (0x14009f5d0) — single-tile terrain validity check (exe function)
+    fn_TileValidityCheck = reinterpret_cast<fn_TileValidityCheck_t>(
+        ResolveAddr(Module::Exe, 0x14009f5d0));
+    // FUN_1400dbf90 — fenced placement parameter computation (exe function)
+    fn_FencedPlacementParams = reinterpret_cast<fn_FencedPlacementParams_t>(
+        ResolveAddr(Module::Exe, 0x1400dbf90));
+    // TradeWork_impl_0d00 (0x1400b0d00) — highlight/overlay removal (exe function)
+    fn_HighlightRemove = reinterpret_cast<fn_HighlightRemove_t>(
+        ResolveAddr(Module::Exe, 0x1400b0d00));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Player/Tool APIs resolved:\n");
+    printf("  SceneAddObject            = %p\n", (void*)fn_SceneAddObject);
+    printf("  SceneRemoveObject         = %p\n", (void*)fn_SceneRemoveObject);
+    printf("  Transform_FromYawPitch    = %p\n", (void*)fn_Transform_FromYawPitchOffset);
+    printf("  Geometry_SetTransform     = %p\n", (void*)fn_Geometry_SetTransform);
+    printf("  MeshInstance_UpdateHier   = %p\n", (void*)fn_MeshInstance_UpdateHierarchy);
+    printf("  TileRender                = %p\n", (void*)fn_TileRender);
+    printf("  TileValidityCheck         = %p\n", (void*)fn_TileValidityCheck);
+    printf("  FencedPlacementParams     = %p\n", (void*)fn_FencedPlacementParams);
+    printf("  HighlightRemove           = %p\n", (void*)fn_HighlightRemove);
+#endif
 
     // --- ModDetailsDialog support ---
     fn_Element_Hide = reinterpret_cast<fn_Element_Hide_t>(

@@ -70,11 +70,12 @@ static uint64_t Reimpl_FencedToolOnKey(void* self, char key) {
     return FencedTool_OnKey((FencedTool*)self, key);
 }
 
-// --- Slot7: Serialize ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot7: Serialize --- REIMPLEMENTED (fence preview mesh management)
 static HookInfo g_hookFencedToolSerialize;
-REIMPL_RSP_PASSTHROUGH(FencedToolSerialize, g_hookFencedToolSerialize, "FencedTool::Serialize")
+static void Reimpl_FencedToolSerialize(void* self, void* param2, char param3) {
+    g_lastHook = "FencedTool::Serialize";
+    FencedTool_Serialize_Impl((FencedTool*)self, param2, param3);
+}
 
 // --- Slot8: Draw ---
 // RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
@@ -97,11 +98,14 @@ static void Reimpl_FencedToolShutdown(void* self) {
 static HookInfo g_hookFencedToolCalcPath;
 REIMPL_RSP_PASSTHROUGH(FencedToolCalcPath, g_hookFencedToolCalcPath, "FencedTool::CalcPath")
 
-// --- Slot14: CalcCost ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot14: CalcCost --- REIMPLEMENTED (fence region validation)
 static HookInfo g_hookFencedToolCalcCost;
-REIMPL_RSP_PASSTHROUGH(FencedToolCalcCost, g_hookFencedToolCalcCost, "FencedTool::CalcCost")
+static int Reimpl_FencedToolCalcCost(void* self, int startCell, int endCell,
+        uint32_t* outWidth, int* outHeight, int* outDepth, int* outFenceSegments) {
+    g_lastHook = "FencedTool::CalcCost";
+    return FencedTool_CalcCost_Impl((FencedTool*)self, startCell, endCell,
+        outWidth, outHeight, outDepth, outFenceSegments);
+}
 
 void InstallFencedToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140026930);
