@@ -3853,7 +3853,7 @@ static ReimplEntry g_reimplementations[] = {
     // Phase 5: Miscellaneous Types
     // ================================================================
     { "ComponentEntity::Dtor", InstallComponentEntityDtor, RemoveComponentEntityDtor, true },
-    { "ComponentEntity::Slot3", InstallComponentEntitySlot3, RemoveComponentEntitySlot3, false }, // DISABLED: trampoline shifts local_res vars into Reimpl's frame, corrupts serialization
+    { "ComponentEntity::Slot3", InstallComponentEntitySlot3, RemoveComponentEntitySlot3, true }, // Re-enabled: vtable patching (Bug Class 8 fix)
     { "ComponentEntity::Slot5", InstallComponentEntitySlot5, RemoveComponentEntitySlot5, true },
     { "ComponentEntity::Slot8", InstallComponentEntitySlot8, RemoveComponentEntitySlot8, true },
     // NOTE: ComponentEntity::Slot9 skipped — shared function 0x14003addc

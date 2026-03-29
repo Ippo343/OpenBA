@@ -81,14 +81,14 @@ void InstallComponentEntityDtor() {
 void RemoveComponentEntityDtor() { RemoveHook(&g_hookDtor); }
 
 void InstallComponentEntitySlot3() {
-    uintptr_t target = ResolveAddr(Module::Exe, 0x1400c3140);
-    // Prologue: push rbp(2)+push rsi(1)+push rdi(1)+push r12(2)+push r13(2)+push r14(2)+push r15(2)+sub rsp,0x40(4) = 16
-    InstallHook(target, (void*)Reimpl_Slot3, &g_hookSlot3, 16);
+    // Use vtable patching instead of prologue patching (Bug Class 8 fix).
+    // Vtable at 0x14015fa78, Slot3 = index 3 (offset +0x18).
+    InstallHookVTable(0x14015fa78, 3, (void*)Reimpl_Slot3, &g_hookSlot3);
 #ifdef _DEBUG
-    printf("[ComponentEntity] Slot3 hooked at %p\n", (void*)target);
+    printf("[ComponentEntity] Slot3 hooked via vtable at 0x14015fa78[3]\n");
 #endif
 }
-void RemoveComponentEntitySlot3() { RemoveHook(&g_hookSlot3); }
+void RemoveComponentEntitySlot3() { RemoveHookVTable(&g_hookSlot3); }
 
 void InstallComponentEntitySlot5() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140021c90);

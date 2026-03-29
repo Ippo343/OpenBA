@@ -10,18 +10,20 @@
 //
 // Methods reimplemented:
 //   - EntityList::Update           (0x1400c4090) — custom reimpl (original hangs)
-//   - EntityList::PreUpdate        (0x1400c3bd0) — calls original (no spinlock issue)
-//   - EntityList::PostUpdate       (0x1400c43d0) — calls original (no spinlock issue)
-//   - EntityList::TreeNodeHandler  (0x1400c2de0) — inline reimpl for Update tree walk
-//   - EntityList::PostUpdateNodeHandler (0x1400c2c70) — calls original
-//   - EntityList::RemoveEntity     (0x1400c38e0) — calls original
-//   - EntityList::FlagAggregation  (0x1400c3470) — calls original
-//   - EntityList::Serialize        (0x1400c44a0) — calls original
+//   - EntityList::PreUpdate        (0x1400c3bd0) — deep reimpl
+//   - EntityList::PostUpdate       (0x1400c43d0) — deep reimpl
+//   - EntityList::TreeNodeHandler  (0x1400c2de0) — deep reimpl
+//   - EntityList::PostUpdateNodeHandler (0x1400c2c70) — deep reimpl
+//   - EntityList::PostUpdateStaging(0x1400c3ab0) — deep reimpl (static helper)
+//   - EntityList::RemoveEntity     (0x1400c38e0) — deep reimpl
+//   - EntityList::FlagAggregation  (0x1400c3470) — delegates to ComponentEntity_RefreshEntityFlags
+//   - EntityList::Serialize        (0x1400c44a0) — deep reimpl
 //
 // Decompiled from Application-x64.exe using Ghidra.
 // This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Entity/entitylist_funcs.h"
+#include "Entity/componententity_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -60,6 +62,9 @@ typedef void (*fn_PostUpdateNodeHandler_t)(int64_t entity);
 static fn_PostUpdateNodeHandler_t s_fn_PostUpdateNodeHandler = nullptr;
 
 static bool s_initialized = false;
+
+// Forward declaration for static helper
+static void EntityList_PostUpdateStaging(EntityList* self);
 
 // ============================================================
 // EntityList_InitFuncs — resolve all function pointers
@@ -155,11 +160,53 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time) {
 // EntityList::PostUpdateNodeHandler (0x1400c2c70)
 // ============================================================
 // Per-entity handler during post-update tree walk.
-// Calls original function.
+// Checks entity flag bit 4 (0x10) and calls component vtable +0x50
+// on components that also have flag bit 4 set.
+//
+// Decompiled from 0x1400c2c70:
+//   if ((entity+0x40 & 0x10) && !(entity+0x40 >> 10 & 1))
+//     for each component:
+//       if (comp+0x20 >> 4 & 1)  // component flag bit 4
+//         call comp->vtable[+0x50](comp)
+//       break if entity deleted (entity+0x40 & 0x400)
 void EntityList_PostUpdateNodeHandler(int64_t entity) {
-    if (s_fn_PostUpdateNodeHandler) {
-        s_fn_PostUpdateNodeHandler(entity);
-    }
+    uint32_t entityFlags = *(uint32_t*)(entity + 0x40);
+
+    // Check entity has "needs post-update" flag (bit 4) and is not deleted (bit 10)
+    if ((entityFlags & 0x10) == 0) return;
+    if ((entityFlags >> 10) & 1) return;
+
+    int32_t compCount = *(int32_t*)(entity + 0x38);
+    int64_t ci = 0;
+
+    if (compCount <= 0) return;
+
+    do {
+        // Read component IBP and CheckPtr
+        void* compIBP = (void*)(*(uintptr_t*)(entity + 0x30) + ci * 8);
+        fn_InternalBasePtr_CheckPtr(compIBP);
+        int64_t comp = *(int64_t*)compIBP;
+
+        // Component flags at +0x20, bit 4 = "needs post-update"
+        uint32_t compFlags = *(uint32_t*)((uintptr_t)comp + 0x20);
+
+        if ((compFlags >> 4) & 1) {
+            // CheckPtr again before vtable call
+            fn_InternalBasePtr_CheckPtr(compIBP);
+            comp = *(int64_t*)compIBP;
+
+            // Call component vtable slot +0x50 (slot index 10)
+            void** vtbl = *(void***)(uintptr_t)comp;
+            typedef void (*CompSlot10_t)(void*);
+            ((CompSlot10_t)vtbl[10])((void*)(uintptr_t)comp);
+        }
+
+        ci++;
+
+        // Break if entity was deleted during component processing
+        if (*(uint32_t*)(entity + 0x40) & 0x400) break;
+
+    } while (ci < compCount);
 }
 
 // ============================================================
@@ -209,9 +256,7 @@ void EntityList_Update(EntityList* self, void* time) {
     self->accumulatedTime += *(int64_t*)time;
 
     // Step 2: PreUpdate — process staging arrays into update tree
-    if (s_fn_PreUpdate) {
-        s_fn_PreUpdate(self);
-    }
+    EntityList_PreUpdate(self);
 
     // Step 3: In-order traversal of update tree (+0x68)
     EntityTreeNode* treeRoot = self->updateTreeRoot;
@@ -333,8 +378,8 @@ void EntityList_Update(EntityList* self, void* time) {
     // Original: if (param_1[0x1b] > 0) { PreUpdate; PostUpdateStaging; then remove each }
     int32_t removalCount = self->removalList.count;
     if (removalCount > 0) {
-        if (s_fn_PreUpdate) s_fn_PreUpdate(self);
-        if (s_fn_PostUpdateStaging) s_fn_PostUpdateStaging(self);
+        EntityList_PreUpdate(self);
+        EntityList_PostUpdateStaging(self);
 
         // Process each removal
         for (int64_t i = 0; i < removalCount; i++) {
@@ -350,44 +395,408 @@ void EntityList_Update(EntityList* self, void* time) {
 // ============================================================
 // EntityList::PreUpdate (0x1400c3bd0)
 // ============================================================
+// Processes the staging update array (+0x88/+0x90):
+// For each staged entity IBP, checks if entity has flag bit 2 set and is not deleted.
+//   - If yes: inserts into update tree (+0x68) via BST insert
+//   - If no: searches update tree for the entity and removes it via BST remove
+// Then clears the staging array.
+//
+// Decompiled from 0x1400c3bd0.
 void EntityList_PreUpdate(EntityList* self) {
-    if (s_fn_PreUpdate) {
-        s_fn_PreUpdate(self);
+    int32_t stagingCount = self->stagingUpdate.count;
+    if (stagingCount <= 0) {
+        fn_ExeArrayResize(&self->stagingUpdate, 0);
+        return;
     }
+
+    for (int i = 0; i < stagingCount; i++) {
+        int64_t offset = (int64_t)i * 8;
+        void* ibpPtr = (void*)((uintptr_t)self->stagingUpdate.data + offset);
+
+        fn_InternalBasePtr_CheckPtr(ibpPtr);
+        int64_t entityVal = *(int64_t*)ibpPtr;
+
+        uint32_t entityFlags = *(uint32_t*)(entityVal + 0x40);
+        bool hasUpdateFlag = (entityFlags & 0x4) != 0;
+        bool isDeleted = ((entityFlags >> 10) & 1) != 0;
+
+        if (hasUpdateFlag && !isDeleted) {
+            // Insert into update tree
+            uint64_t outBuf = 0;
+            void* srcIBP = (void*)((uintptr_t)self->stagingUpdate.data + offset);
+            fn_IBPTreeInsert(&self->updateTreeRoot, &outBuf, srcIBP);
+        } else {
+            // Search for entity in update tree, remove if found
+            EntityTreeNode* node = self->updateTreeRoot;
+            void* ibpSrc = (void*)((uintptr_t)self->stagingUpdate.data + offset);
+
+            while (node != nullptr) {
+                fn_InternalBasePtr_CheckPtr(node);
+                uint64_t ibpVal = *(uint64_t*)ibpSrc;
+
+                if (ibpVal < node->entityIBP) {
+                    node = node->left;
+                } else {
+                    fn_InternalBasePtr_CheckPtr(ibpSrc);
+                    if (ibpVal <= node->entityIBP) {
+                        // Found — remove from tree
+                        fn_IBPTreeRemove(&self->updateTreeRoot, node);
+                        break;
+                    }
+                    node = node->right;
+                }
+            }
+        }
+    }
+
+    fn_ExeArrayResize(&self->stagingUpdate, 0);
+}
+
+// ============================================================
+// EntityList::PostUpdateStaging (0x1400c3ab0) — static helper
+// ============================================================
+// Same pattern as PreUpdate but for the post-update tree (+0x78)
+// and staging array (+0x98/+0xa0), checking flag bit 4 (0x10).
+//
+// Decompiled from 0x1400c3ab0.
+static void EntityList_PostUpdateStaging(EntityList* self) {
+    int32_t stagingCount = self->stagingPostUpdate.count;
+    if (stagingCount <= 0) {
+        fn_ExeArrayResize(&self->stagingPostUpdate, 0);
+        return;
+    }
+
+    for (int i = 0; i < stagingCount; i++) {
+        int64_t offset = (int64_t)i * 8;
+        void* ibpPtr = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
+
+        fn_InternalBasePtr_CheckPtr(ibpPtr);
+        int64_t entityVal = *(int64_t*)ibpPtr;
+
+        uint32_t entityFlags = *(uint32_t*)(entityVal + 0x40);
+        bool hasPostUpdateFlag = (entityFlags & 0x10) != 0;
+        bool isDeleted = ((entityFlags >> 10) & 1) != 0;
+
+        if (hasPostUpdateFlag && !isDeleted) {
+            // Insert into post-update tree
+            uint64_t outBuf = 0;
+            void* srcIBP = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
+            fn_IBPTreeInsert(&self->postUpdateTreeRoot, &outBuf, srcIBP);
+        } else {
+            // Search for entity in post-update tree, remove if found
+            EntityTreeNode* node = self->postUpdateTreeRoot;
+            void* ibpSrc = (void*)((uintptr_t)self->stagingPostUpdate.data + offset);
+
+            while (node != nullptr) {
+                fn_InternalBasePtr_CheckPtr(node);
+                uint64_t ibpVal = *(uint64_t*)ibpSrc;
+
+                if (ibpVal < node->entityIBP) {
+                    node = node->left;
+                } else {
+                    fn_InternalBasePtr_CheckPtr(ibpSrc);
+                    if (ibpVal <= node->entityIBP) {
+                        // Found — remove from tree
+                        fn_IBPTreeRemove(&self->postUpdateTreeRoot, node);
+                        break;
+                    }
+                    node = node->right;
+                }
+            }
+        }
+    }
+
+    fn_ExeArrayResize(&self->stagingPostUpdate, 0);
 }
 
 // ============================================================
 // EntityList::PostUpdate (0x1400c43d0)
 // ============================================================
+// Processes post-update staging array, then does in-order tree walk
+// of the post-update tree (+0x78), calling PostUpdateNodeHandler per entity.
+//
+// Decompiled from 0x1400c43d0.
 void EntityList_PostUpdate(EntityList* self) {
-    if (s_fn_PostUpdate) {
-        s_fn_PostUpdate(self);
+    // Step 1: Process staging post-update array
+    EntityList_PostUpdateStaging(self);
+
+    // Step 2: In-order traversal of post-update tree (+0x78)
+    EntityTreeNode* treeRoot = self->postUpdateTreeRoot;
+    if (!treeRoot) return;
+
+    // Find leftmost node (in-order start)
+    EntityTreeNode* node = TreeMinimum(treeRoot);
+
+    while (node) {
+        // CheckPtr on the node
+        fn_InternalBasePtr_CheckPtr((void*)node);
+
+        // Check entity not deleted (bit 10 of flags at entity+0x40)
+        int64_t entity = (int64_t)node->entityIBP;
+        if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
+            fn_InternalBasePtr_CheckPtr((void*)node);
+            EntityList_PostUpdateNodeHandler(entity);
+        }
+
+        // Move to in-order successor
+        node = TreeSuccessor(node);
     }
 }
 
 // ============================================================
 // EntityList::RemoveEntity (0x1400c38e0)
 // ============================================================
+// Removes an entity from its bucket, the master array, and both trees.
+// Also calls InternalBasePtr::DeletePtr to release the entity reference.
+//
+// Entity metadata layout (on the entity itself):
+//   +0x18: int32 — index in master array
+//   +0x1C: packed field — low 24 bits = index in bucket, high 8 bits include bucket ID
+//   +0x1F: int8 — bucket index (0-5, where 6 means "not in any bucket")
+//
+// Decompiled from 0x1400c38e0.
 void EntityList_RemoveEntity(EntityList* self, void* entityIBP) {
-    if (s_fn_RemoveEntity) {
-        s_fn_RemoveEntity(self, entityIBP);
+    fn_InternalBasePtr_CheckPtr(entityIBP);
+    int64_t entity = *(int64_t*)entityIBP;
+
+    // Read bucket index from entity+0x1F
+    int8_t bucketIdx = *(int8_t*)(entity + 0x1F);
+
+    // Step 1: Remove from bucket (if in one; bucket 6 means "none")
+    if (bucketIdx != 6) {
+        // Get bucket array pointer: self + 0x18 + bucketIdx * 0x10
+        uintptr_t bucketBase = (uintptr_t)self + 0x18 + (int64_t)bucketIdx * 0x10;
+
+        // Last element index in bucket
+        uint32_t lastIdx = *(int32_t*)(bucketBase + 0x08) - 1;
+
+        fn_InternalBasePtr_CheckPtr(entityIBP);
+        entity = *(int64_t*)entityIBP;
+
+        // Entity's index within bucket (low 24 bits of +0x1C)
+        uint32_t entityBucketIdx = (*(uint32_t*)(entity + 0x1C) << 8) >> 8;
+
+        if (lastIdx != entityBucketIdx) {
+            // Swap last element into removed element's slot
+            int64_t* bucketData = *(int64_t**)bucketBase;
+            *(int64_t*)(bucketData + entityBucketIdx) = *(int64_t*)(bucketData + lastIdx);
+
+            // Update swapped entity's bucket index field
+            void* swappedIBP = (void*)(*(int64_t**)bucketBase + entityBucketIdx);
+            fn_InternalBasePtr_CheckPtr(swappedIBP);
+            int64_t swappedEntity = *(int64_t*)swappedIBP;
+
+            // Update low 24 bits of +0x1C with new index
+            uint32_t* packedField = (uint32_t*)(swappedEntity + 0x1C);
+            *packedField = *packedField ^ ((*(uint32_t*)(swappedEntity + 0x1C) ^ entityBucketIdx) & 0xFFFFFF);
+        }
+
+        // Shrink bucket array
+        fn_ExeArrayResize((void*)bucketBase, lastIdx);
     }
+
+    // Step 2: Remove from master array (+0x08)
+    int32_t lastMasterIdx = self->masterArray.count - 1;
+
+    fn_InternalBasePtr_CheckPtr(entityIBP);
+    entity = *(int64_t*)entityIBP;
+    int32_t entityMasterIdx = *(int32_t*)(entity + 0x18);
+
+    if (lastMasterIdx != entityMasterIdx) {
+        // Swap last element into removed element's slot
+        int64_t* masterData = (int64_t*)self->masterArray.data;
+        masterData[entityMasterIdx] = masterData[lastMasterIdx];
+
+        // Update swapped entity's master array index
+        void* swappedIBP = (void*)&masterData[entityMasterIdx];
+        fn_InternalBasePtr_CheckPtr(swappedIBP);
+        *(int32_t*)(*(int64_t*)swappedIBP + 0x18) = entityMasterIdx;
+    }
+
+    // Shrink master array
+    fn_ExeArrayResize(&self->masterArray, lastMasterIdx);
+
+    // Step 3: Search and remove from update tree (+0x68)
+    EntityTreeNode* updateNode = self->updateTreeRoot;
+    while (updateNode != nullptr) {
+        fn_InternalBasePtr_CheckPtr(updateNode);
+        if (*(uint64_t*)entityIBP < updateNode->entityIBP) {
+            updateNode = updateNode->left;
+        } else {
+            fn_InternalBasePtr_CheckPtr(entityIBP);
+            if (*(uint64_t*)entityIBP <= updateNode->entityIBP) {
+                break;  // Found
+            }
+            updateNode = updateNode->right;
+        }
+    }
+
+    // Step 4: Search and remove from post-update tree (+0x78)
+    EntityTreeNode* postUpdateNode = self->postUpdateTreeRoot;
+    while (postUpdateNode != nullptr) {
+        fn_InternalBasePtr_CheckPtr(postUpdateNode);
+        if (*(uint64_t*)entityIBP < postUpdateNode->entityIBP) {
+            postUpdateNode = postUpdateNode->left;
+        } else {
+            fn_InternalBasePtr_CheckPtr(entityIBP);
+            if (*(uint64_t*)entityIBP <= postUpdateNode->entityIBP) {
+                break;  // Found
+            }
+            postUpdateNode = postUpdateNode->right;
+        }
+    }
+
+    // Remove found nodes from trees
+    if (updateNode != nullptr) {
+        fn_IBPTreeRemove(&self->updateTreeRoot, updateNode);
+    }
+    if (postUpdateNode != nullptr) {
+        fn_IBPTreeRemove(&self->postUpdateTreeRoot, postUpdateNode);
+    }
+
+    // Step 5: Delete the entity IBP reference
+    fn_InternalBasePtr_DeletePtr(entityIBP);
 }
 
 // ============================================================
 // EntityList::FlagAggregation (0x1400c3470)
 // ============================================================
+// This function at 0x1400c3470 is the SAME function as
+// ComponentEntity::RefreshEntityFlags, already reimplemented
+// in code/Game/Entity/componententity.cpp.
+// Delegates to that implementation.
 void EntityList_FlagAggregation(void* entity) {
-    if (s_fn_FlagAggregation) {
-        s_fn_FlagAggregation(entity);
-    }
+    ComponentEntity_RefreshEntityFlags(reinterpret_cast<ComponentEntity*>(entity));
 }
 
 // ============================================================
 // EntityList::Serialize (0x1400c44a0)
 // ============================================================
+// Save/load the entity list. Steps:
+//   1. Construct Serializer from stream
+//   2. Flush PreUpdate and PostUpdateStaging
+//   3. On save: process removal list
+//   4. Serialize time (System::Time::Serialize)
+//   5. Serialize master array count, then each IBP
+//   6. After load: verify each IBP is a ComponentEntity (clear if not)
+//   7. Serialize bucket data via helper
+//   8. Serialize processCount[5] and cursor[5] arrays
+//   9. Per-entity metadata: master index, bucket index, bucket ID, time
+//
+// Decompiled from 0x1400c44a0.
 void EntityList_Serialize(EntityList* self, void* stream) {
-    if (s_fn_Serialize) {
-        s_fn_Serialize(self, stream);
+    // Step 1: Construct Serializer (local buffer, 0x18 bytes)
+    uint8_t serializerBuf[0x18];
+    void* serializer = serializerBuf;
+    g_fn_Serializer_Ctor(serializer, stream, 0);
+
+    // Step 2: Flush staging arrays
+    EntityList_PreUpdate(self);
+    EntityList_PostUpdateStaging(self);
+
+    // Step 3: On save (stream+0x08 == 1), process removal list
+    if (*(int32_t*)((uintptr_t)stream + 0x08) == 1) {
+        int32_t removalCount = self->removalList.count;
+        if (removalCount > 0) {
+            for (int64_t i = 0; i < removalCount; i++) {
+                uint64_t ibpVal = *((uint64_t*)self->removalList.data + i);
+                uint64_t localIBP = ibpVal;
+                EntityList_RemoveEntity(self, &localIBP);
+            }
+            fn_ExeArrayResize(&self->removalList, 0);
+        }
     }
+
+    // Step 4: Serialize time
+    g_fn_Time_Serialize(self, serializer);
+
+    // Step 5: Serialize master array count
+    int32_t masterCount = self->masterArray.count;
+    int32_t serializedCount = masterCount;
+    g_fn_Serialize_Int(serializer, &serializedCount, nullptr);
+
+    // On load (mode == 0): resize master array to deserialized count
+    void* serializerInner = *(void**)serializer;
+    if (*(int32_t*)((uintptr_t)serializerInner + 0x08) == 0) {
+        fn_ExeArrayResize(&self->masterArray, serializedCount);
+    }
+
+    // Serialize each entity IBP in master array
+    void* ibpIter = self->masterArray.data;
+    int64_t ibpCount = (int64_t)serializedCount;
+    if (ibpCount > 0) {
+        for (int64_t j = 0; j < ibpCount; j++) {
+            void* currentIBP = (void*)((uintptr_t)ibpIter + j * 8);
+            fn_InternalBasePtr_Serialize(currentIBP, serializer);
+
+            // After loading, verify it's a ComponentEntity
+            if (*(void**)currentIBP != nullptr) {
+                bool isDerived = fn_IsDerivedFrom(*(void**)currentIBP, *g_TypeId_ComponentEntity);
+                if (!isDerived) {
+                    *(uint64_t*)currentIBP = 0;
+                }
+            }
+        }
+    }
+
+    // Step 6: Serialize bucket trees via helper (5 buckets starting at +0x18)
+    fn_BucketTreeSerialize(serializer, nullptr, &self->buckets[0]);
+
+    // Step 7: Serialize processCount[5] and cursor[5] as bulk arrays
+    fn_Serializer_SerializeBulk(serializer, 5, self->processCount, nullptr);
+    fn_Serializer_SerializeBulk(serializer, 5, self->cursor, nullptr);
+
+    // Step 8: Per-entity metadata serialization
+    int32_t entityIdx = 0;
+    int64_t ibpOffset = 0;
+    if (self->masterArray.count > 0) {
+        do {
+            uintptr_t masterData = (uintptr_t)self->masterArray.data;
+
+            // Read master array index from entity+0x18
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            int32_t masterIdxField = *(int32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x18);
+
+            // Read bucket index (low 24 bits of entity+0x1C)
+            masterData = (uintptr_t)self->masterArray.data;
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            uint32_t bucketIdxField = (*(uint32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1C) << 8) >> 8;
+
+            // Read bucket ID from entity+0x1F
+            masterData = (uintptr_t)self->masterArray.data;
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            int32_t bucketId = (int32_t)*(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F);
+
+            // Serialize the three metadata fields
+            g_fn_Serialize_Int(serializer, &masterIdxField, nullptr);
+            g_fn_Serialize_Int(serializer, (int32_t*)&bucketIdxField, nullptr);
+            g_fn_Serialize_Int(serializer, &bucketId, nullptr);
+
+            // Serialize entity's timestamp at +0x20 (System::Time)
+            masterData = (uintptr_t)self->masterArray.data;
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            g_fn_Time_Serialize((void*)(*(int64_t*)(masterData + ibpOffset) + 0x20), serializer);
+
+            // Write back deserialized metadata to entity
+            masterData = (uintptr_t)self->masterArray.data;
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            *(int32_t*)(*(int64_t*)(masterData + ibpOffset) + 0x18) = masterIdxField;
+
+            masterData = (uintptr_t)self->masterArray.data;
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            int64_t ent = *(int64_t*)(masterData + ibpOffset);
+            uint32_t* packedField = (uint32_t*)(ent + 0x1C);
+            *packedField = *packedField ^ ((bucketIdxField ^ *(uint32_t*)(ent + 0x1C)) & 0xFFFFFF);
+
+            masterData = (uintptr_t)self->masterArray.data;
+            fn_InternalBasePtr_CheckPtr((void*)(masterData + ibpOffset));
+            *(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F) = (int8_t)bucketId;
+
+            entityIdx++;
+            ibpOffset += 8;
+        } while (entityIdx < self->masterArray.count);
+    }
+
+    // Step 9: Destroy Serializer
+    g_fn_Serializer_Dtor(serializer);
 }

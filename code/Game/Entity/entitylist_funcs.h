@@ -85,16 +85,13 @@ void EntityList_FlagAggregation(void* entity);
 // ============================================================
 // EntityList::Serialize (0x1400c44a0)
 // ============================================================
-// Save/load the entity list. Complex function involving:
+// Save/load the entity list. Steps:
 // - Serializer construction
 // - PreUpdate + PostUpdate staging flush
 // - On save: removal list processing
 // - Time serialization
-// - Master array count + IBP serialization
-// - Tree serialization
-// - Per-bucket processCount and cursor serialization
-// - Per-entity metadata serialization (bucket index, array index, flags)
-//
-// NOTE: This calls the original function via trampoline since the logic
-// is highly complex and the spinlock issue only affects Update.
+// - Master array count + IBP serialization (with IsDerivedFrom validation)
+// - Bucket tree serialization via helper
+// - Per-bucket processCount and cursor bulk serialization
+// - Per-entity metadata serialization (master index, bucket index, bucket ID, time)
 void EntityList_Serialize(EntityList* self, void* stream);

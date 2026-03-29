@@ -4848,6 +4848,62 @@ typedef void (*fn_HighlightRemove_t)(void* highlightMgr, int overlayId);
 extern fn_HighlightRemove_t fn_HighlightRemove;
 
 // ============================================================
+// EntityList dependencies (Agent A)
+// ============================================================
+
+// IBP BST tree insert (0x140021a30)
+typedef void* (*fn_IBPTreeInsert_t)(void* treeRootPtr, void* outBuf, void* ibpPtr);
+extern fn_IBPTreeInsert_t fn_IBPTreeInsert;
+
+// IBP BST tree remove (0x14001a6e0)
+typedef void (*fn_IBPTreeRemove_t)(void* treeRootPtr, void* node);
+extern fn_IBPTreeRemove_t fn_IBPTreeRemove;
+
+// System::Time::Serialize(this, Serializer&)
+typedef void (*g_fn_Time_Serialize_t)(void* self, void* serializer);
+extern g_fn_Time_Serialize_t g_fn_Time_Serialize;
+
+// EntityList bucket+tree serialization helper (0x140021ba0)
+typedef void (*fn_BucketTreeSerialize_t)(void* serializer, void* unused, void* bucketsPtr);
+extern fn_BucketTreeSerialize_t fn_BucketTreeSerialize;
+
+// ============================================================
+// CitizenBehavior Path dependencies (Agent C)
+// ============================================================
+
+// Entity_impl_7fb0 (0x140087fb0) — get grid cell ID for an entity
+typedef int (*fn_Entity_GetGridId_t)(void* entityIBP, float* outPos);
+extern fn_Entity_GetGridId_t fn_Entity_GetGridId;
+
+// BST insert for path distance cache (0x140025a10)
+typedef void* (*fn_PathBST_Insert_t)(void* bstRootPtr, void* outNodePtr, void* keyPtr);
+extern fn_PathBST_Insert_t fn_PathBST_Insert;
+
+// Clear/reset pairs dynamic array (0x140025b30)
+typedef void (*fn_PathPairs_Clear_t)(void* pairsArray);
+extern fn_PathPairs_Clear_t fn_PathPairs_Clear;
+
+// Post-path worker reassignment (0x1400d62a0)
+typedef void (*fn_PathGraph_ReassignWorkers_t)(void* pathGraphBstContext);
+extern fn_PathGraph_ReassignWorkers_t fn_PathGraph_ReassignWorkers;
+
+// Post-path citizen assignment (0x1400d43b0)
+typedef void (*fn_PathGraph_AssignCitizens_t)(void* pathGraph);
+extern fn_PathGraph_AssignCitizens_t fn_PathGraph_AssignCitizens;
+
+// Recursive BST free (0x14000e320)
+typedef void (*fn_PathBST_FreeRecursive_t)(void* bstRootPtr, void* subtreeNode);
+extern fn_PathBST_FreeRecursive_t fn_PathBST_FreeRecursive;
+
+// ============================================================
+// CitizenBehavior remaining core dependencies (Agent D)
+// ============================================================
+
+// Notification event helper (0x140095580)
+typedef void (*fn_NotificationEvent_t)(void* notifMgr, int notifType, int severity, void* entityIBP);
+extern fn_NotificationEvent_t fn_NotificationEvent;
+
+// ============================================================
 // Initialization
 // ============================================================
 

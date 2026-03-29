@@ -1,12 +1,13 @@
 ### Files/Code Areas Left:
-1. action: Complete
+1. action: Complete 100%
 2. component:
-3. dialog: Complete
-4. entity: Complete 
+3. dialog: Complete 100%
+4. entity: 
 5. game: Complete
-6. goal: Complete
+6. goal: Complete 100%
 7. tutorial: Complete
-8. work: Complete
+8. work: Complete 100%
+9. player: Complete (needs entitiy classes)
 
   4. Component (largest, save for last)
 

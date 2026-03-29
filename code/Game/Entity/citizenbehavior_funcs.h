@@ -42,3 +42,50 @@ void CitizenBehavior_ShuffleEntities(CitizenBehaviorRaw* self, uint64_t profId);
 // Assigns housing if found. Returns InternalBasePtr to citizen.
 // Ghidra name: CitizenComponent_impl_c4b0
 void* CitizenBehavior_FindAny(CitizenBehaviorRaw* self, void* retval, void* profSlot, uint64_t profId);
+
+// ProcessPaths (0x1400d6f00) — process pending path distance calculations.
+// Processes up to 7 pairs per call from the PathGraph pairs array.
+// For each pair, computes path cost (or Manhattan fallback) and stores in BST.
+// When all pairs are processed, triggers worker reassignment.
+// Returns true if paths were processed, false if nothing to do.
+// Ghidra name: FUN_1400d6f00
+bool CitizenBehavior_ProcessPaths(PathGraph* pg);
+
+// BuildPathGraph (0x1400d70c0) — build/rebuild the path distance graph.
+// Collects grid cell IDs for all buildings, clears old data, then generates
+// pairs of (entity_cell, building_cell) for each profession's entities.
+// Sets pendingIdx to begin processing on next Update call.
+// Ghidra name: Entity_impl_70c0
+void CitizenBehavior_BuildPathGraph(PathGraph* pg);
+
+// CountResources (0x140089ed0) — count resources across all buildings per profession.
+// Iterates buildings, tallies current/previous resource counts into
+// ProfessionResourceEntry[21] array at +0x170.
+// Ghidra name: Entity_helper_9ed0
+void CitizenBehavior_CountResources(CitizenBehaviorRaw* self);
+
+// CheckThresholds (0x14008c100) — check resource shortage thresholds.
+// Fires notification events when resources drop below 5% of max.
+// Ghidra name: Entity_helper_c100
+void CitizenBehavior_CheckThresholds(CitizenBehaviorRaw* self, int64_t* deltaTime);
+
+// CollectStats (0x14008a730) — collect population statistics.
+// Iterates citizens, collects alive/dead/educated/working counts,
+// pushes ~30+ stat values to history arrays. Delegates to original.
+// Ghidra name: FUN_14008a730
+void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self);
+
+// FindIdle (0x14008cbf0) — find idle citizen near building for worker assignment.
+// Non-trivial return ABI: RCX=this, RDX=hidden_retval, R8+=args.
+// Ghidra name: CitizenComponent_impl_sub_cbf0
+void* CitizenBehavior_FindIdle(CitizenBehaviorRaw* self, void* retval, void* profSlot, uint64_t profId);
+
+// FindWorking (0x14008ca20) — find working citizen nearest to building.
+// Non-trivial return ABI: RCX=this, RDX=hidden_retval, R8+=args.
+// Ghidra name: CitizenComponent_impl_sub_ca20
+void* CitizenBehavior_FindWorking(CitizenBehaviorRaw* self, void* retval, void* profSlot, uint64_t profId);
+
+// FindStudent (0x14008c5f0) — find student from school with most students.
+// Non-trivial return ABI: RCX=this, RDX=hidden_retval, R8+=args.
+// Ghidra name: CitizenComponent_impl_c5f0
+void* CitizenBehavior_FindStudent(CitizenBehaviorRaw* self, void* retval, void* profSlot, uint64_t profId);

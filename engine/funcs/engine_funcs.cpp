@@ -1028,6 +1028,23 @@ fn_ProfResArray_Init_t fn_ProfResArray_Init = nullptr;
 fn_StatsArray_Init_t fn_StatsArray_Init = nullptr;
 fn_SummaryArray_Init_t fn_SummaryArray_Init = nullptr;
 
+// === EntityList dependencies (Agent A) ===
+fn_IBPTreeInsert_t fn_IBPTreeInsert = nullptr;
+fn_IBPTreeRemove_t fn_IBPTreeRemove = nullptr;
+g_fn_Time_Serialize_t g_fn_Time_Serialize = nullptr;
+fn_BucketTreeSerialize_t fn_BucketTreeSerialize = nullptr;
+
+// === CitizenBehavior Path dependencies (Agent C) ===
+fn_Entity_GetGridId_t fn_Entity_GetGridId = nullptr;
+fn_PathBST_Insert_t fn_PathBST_Insert = nullptr;
+fn_PathPairs_Clear_t fn_PathPairs_Clear = nullptr;
+fn_PathGraph_ReassignWorkers_t fn_PathGraph_ReassignWorkers = nullptr;
+fn_PathGraph_AssignCitizens_t fn_PathGraph_AssignCitizens = nullptr;
+fn_PathBST_FreeRecursive_t fn_PathBST_FreeRecursive = nullptr;
+
+// === CitizenBehavior remaining core dependencies (Agent D) ===
+fn_NotificationEvent_t fn_NotificationEvent = nullptr;
+
 // ============================================================
 // Phase A4: Entity::FindComponent and Array Utility Implementations
 // ============================================================
@@ -4125,6 +4142,47 @@ bool EngineFuncsInit() {
     printf("  CountResources = %p\n", (void*)fn_CitizenBehavior_CountResources);
     printf("  CollectStats   = %p\n", (void*)fn_CitizenBehavior_CollectStats);
     printf("  ProcessPaths   = %p\n", (void*)fn_CitizenBehavior_ProcessPaths);
+#endif
+
+    // === EntityList dependencies (Agent A) ===
+    fn_IBPTreeInsert = reinterpret_cast<fn_IBPTreeInsert_t>(
+        ResolveAddr(Module::Exe, 0x140021a30));
+    fn_IBPTreeRemove = reinterpret_cast<fn_IBPTreeRemove_t>(
+        ResolveAddr(Module::Exe, 0x14001a6e0));
+    g_fn_Time_Serialize = reinterpret_cast<g_fn_Time_Serialize_t>(
+        ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
+    fn_BucketTreeSerialize = reinterpret_cast<fn_BucketTreeSerialize_t>(
+        ResolveAddr(Module::Exe, 0x140021ba0));
+#ifdef _DEBUG
+    printf("[EngineFuncs] EntityList deps resolved:\n");
+    printf("  IBPTreeInsert       = %p\n", (void*)fn_IBPTreeInsert);
+    printf("  IBPTreeRemove       = %p\n", (void*)fn_IBPTreeRemove);
+    printf("  Time::Serialize     = %p\n", (void*)g_fn_Time_Serialize);
+    printf("  BucketTreeSerialize = %p\n", (void*)fn_BucketTreeSerialize);
+#endif
+
+    // === CitizenBehavior Path dependencies (Agent C) ===
+    fn_Entity_GetGridId = reinterpret_cast<fn_Entity_GetGridId_t>(
+        ResolveAddr(Module::Exe, 0x140087fb0));
+    fn_PathBST_Insert = reinterpret_cast<fn_PathBST_Insert_t>(
+        ResolveAddr(Module::Exe, 0x140025a10));
+    fn_PathPairs_Clear = reinterpret_cast<fn_PathPairs_Clear_t>(
+        ResolveAddr(Module::Exe, 0x140025b30));
+    fn_PathGraph_ReassignWorkers = reinterpret_cast<fn_PathGraph_ReassignWorkers_t>(
+        ResolveAddr(Module::Exe, 0x1400d62a0));
+    fn_PathGraph_AssignCitizens = reinterpret_cast<fn_PathGraph_AssignCitizens_t>(
+        ResolveAddr(Module::Exe, 0x1400d43b0));
+    fn_PathBST_FreeRecursive = reinterpret_cast<fn_PathBST_FreeRecursive_t>(
+        ResolveAddr(Module::Exe, 0x14000e320));
+#ifdef _DEBUG
+    printf("[EngineFuncs] Path sub-functions resolved\n");
+#endif
+
+    // === CitizenBehavior remaining core dependencies (Agent D) ===
+    fn_NotificationEvent = reinterpret_cast<fn_NotificationEvent_t>(
+        ResolveAddr(Module::Exe, 0x140095580));
+#ifdef _DEBUG
+    printf("  NotificationEvent = %p\n", (void*)fn_NotificationEvent);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
