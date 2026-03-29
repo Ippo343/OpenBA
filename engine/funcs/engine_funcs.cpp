@@ -257,6 +257,8 @@ uint32_t* g_TypeId_ProfessionDescription = nullptr;
 
 // BridgeTool-related type IDs
 uint32_t* g_TypeId_CreateBridgeDescription = nullptr;
+// RemovalTool-related type IDs
+uint32_t* g_TypeId_RemovalDescription = nullptr;
 // g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (same DAT_1401c79e0)
 uint32_t* g_TypeId_ModelComponent = nullptr;
 // g_TypeId_MultiObjectComponent already defined below (~line 444)
@@ -265,6 +267,17 @@ uint32_t* g_TypeId_PickingComponent = nullptr;
 // BridgeTool helper functions
 fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell = nullptr;
 fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath = nullptr;
+
+// DragPlacementTool/FencedTool type IDs
+uint32_t* g_TypeId_CreatePlacementDescription = nullptr;
+uint32_t* g_TypeId_CreateFencedDescription = nullptr;
+uint32_t* g_TypeId_AreaDescription = nullptr;
+uint32_t* g_TypeId_FenceDescription = nullptr;
+uint32_t* g_TypeId_SizeDescription = nullptr;
+
+// DragPlacementTool/FencedTool function pointers
+fn_DragTool_OnKey_t fn_DragTool_OnKey = nullptr;
+fn_DragTool_Shutdown_t fn_DragTool_Shutdown = nullptr;
 
 // ============================================================
 // Game Singletons (Phase A3)
@@ -1874,6 +1887,9 @@ bool EngineFuncsInit() {
     // BridgeTool type IDs
     g_TypeId_CreateBridgeDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c73f8));
+    // RemovalTool type IDs
+    g_TypeId_RemovalDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c74a0));
     // g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (same addr, already resolved above)
     g_TypeId_ModelComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7a50));
@@ -1885,6 +1901,24 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1400fb710));
     fn_BridgeTool_ValidatePath = reinterpret_cast<fn_BridgeTool_ValidatePath_t>(
         ResolveAddr(Module::Exe, 0x1400fb2d0));
+
+    // DragPlacementTool/FencedTool type IDs
+    g_TypeId_CreatePlacementDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7430));
+    g_TypeId_CreateFencedDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c4100));
+    g_TypeId_AreaDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7a18));
+    g_TypeId_FenceDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7a88));
+    g_TypeId_SizeDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7468));
+
+    // DragPlacementTool/FencedTool function pointers
+    fn_DragTool_OnKey = reinterpret_cast<fn_DragTool_OnKey_t>(
+        ResolveAddr(Module::Exe, 0x1400fc6b0));  // DragTool::OnKey
+    fn_DragTool_Shutdown = reinterpret_cast<fn_DragTool_Shutdown_t>(
+        ResolveAddr(Module::Exe, 0x1400fc640));  // DragTool::Shutdown (Slot9)
 
     // CheckboxElement type ID: exref at 0x1401516a8 → pointer → uint32_t typeId
     {

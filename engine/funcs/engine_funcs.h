@@ -598,6 +598,9 @@ extern uint32_t* g_TypeId_ToolUI;                 // DAT_1401c5788
 
 // BridgeTool-related type IDs
 extern uint32_t* g_TypeId_CreateBridgeDescription; // DAT_1401c73f8 (Startup component lookup)
+
+// RemovalTool-related type IDs
+extern uint32_t* g_TypeId_RemovalDescription;      // DAT_1401c74a0 (RemovalTool::Startup component lookup)
 // g_TypeId_MapComponent = g_TypeId_BuildComponent_Slot4 (DAT_1401c79e0) — already declared above
 // g_TypeId_MultiObjectComponent (DAT_1401c7ac0) — already declared below (~line 1448)
 extern uint32_t* g_TypeId_ModelComponent;          // DAT_1401c7a50
@@ -613,6 +616,25 @@ extern fn_BridgeTool_SnapEndCell_t fn_BridgeTool_SnapEndCell;
 // RCX=self(BridgeTool*), EDX=startCell, R8D=endCell, R9=outLength(int*) -> returns bool (1=valid)
 typedef int (*fn_BridgeTool_ValidatePath_t)(void* self, int startCell, int endCell, int* outLength);
 extern fn_BridgeTool_ValidatePath_t fn_BridgeTool_ValidatePath;
+
+// === DragPlacementTool/FencedTool dependencies ===
+
+// DragPlacementTool type IDs
+extern uint32_t* g_TypeId_CreatePlacementDescription; // DAT_1401c7430 (DragPlacementTool::Startup)
+
+// FencedTool type IDs
+extern uint32_t* g_TypeId_CreateFencedDescription;    // DAT_1401c4100 (FencedTool::Startup)
+extern uint32_t* g_TypeId_AreaDescription;            // DAT_1401c7a18 (shared: DragPlacementTool + FencedTool)
+extern uint32_t* g_TypeId_FenceDescription;           // DAT_1401c7a88 (FencedTool::Startup)
+extern uint32_t* g_TypeId_SizeDescription;            // DAT_1401c7468 (FencedTool::Startup)
+
+// FencedTool::OnKey calls DragTool::OnKey as base class
+typedef uint64_t (*fn_DragTool_OnKey_t)(void* self, char key);
+extern fn_DragTool_OnKey_t fn_DragTool_OnKey;
+
+// FencedTool::Shutdown calls DragTool::Shutdown (0x1400fc640)
+typedef void (*fn_DragTool_Shutdown_t)(void* self);
+extern fn_DragTool_Shutdown_t fn_DragTool_Shutdown;
 
 // ============================================================
 // Game Singletons (Phase A3 — exe global pointers)

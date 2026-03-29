@@ -23,6 +23,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Player/placementtool_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -31,7 +32,7 @@ static HookInfo g_hookPlacementToolDtor;
 typedef void* (*fn_PlacementToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_PlacementToolDtor(void* self, uint32_t flags) {
     g_lastHook = "PlacementTool::PlacementToolDtor";
-    return ((fn_PlacementToolDtor_t)g_hookPlacementToolDtor.trampoline)(self, flags);
+    return PlacementTool_Dtor_Impl((PlacementTool*)self, flags);
 }
 
 // --- Slot4: Startup ---

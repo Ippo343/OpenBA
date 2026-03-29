@@ -22,21 +22,27 @@
 //   +0x68: 0x1400dae00 — Slot13 CalcPath (hooked)
 //   +0x70: 0x1400db490 — Slot14 CalcCost (hooked)
 
+#include "FencedTool.h"
+#include "Player/fencedtool_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
-// --- Slot0: Dtor ---
+// ============================================================
+// Slot0: Dtor — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookFencedToolDtor;
-typedef void* (*fn_FencedToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_FencedToolDtor(void* self, uint32_t flags) {
     g_lastHook = "FencedTool::FencedToolDtor";
-    return ((fn_FencedToolDtor_t)g_hookFencedToolDtor.trampoline)(self, flags);
+    return FencedTool_Dtor((FencedTool*)self, flags);
 }
 
-// --- Slot4: Startup ---
+// ============================================================
+// Slot4: Startup — trampoline passthrough (too complex: 5 component lookups,
+// MeshInstance allocation, mesh setup, hierarchy update)
+// ============================================================
 static HookInfo g_hookFencedToolStartup;
 typedef void (*fn_FencedToolStartup_t)(void* self);
 static void Reimpl_FencedToolStartup(void* self) {
@@ -44,22 +50,24 @@ static void Reimpl_FencedToolStartup(void* self) {
     ((fn_FencedToolStartup_t)g_hookFencedToolStartup.trampoline)(self);
 }
 
-// --- Slot5: Shutdown2 ---
+// ============================================================
+// Slot5: Shutdown2 — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookFencedToolShutdown2;
-typedef void (*fn_FencedToolShutdown2_t)(void* self);
 static void Reimpl_FencedToolShutdown2(void* self) {
     g_lastHook = "FencedTool::FencedToolShutdown2";
-    ((fn_FencedToolShutdown2_t)g_hookFencedToolShutdown2.trampoline)(self);
+    FencedTool_Shutdown2((FencedTool*)self);
 }
 
-// --- Slot6: OnKey ---
+// ============================================================
+// Slot6: OnKey — REIMPLEMENTED
 // Bug class 6 fix: FencedTool::OnKey takes (self, key) and forwards key via RDX
 // to DragTool::OnKey internally. Must declare key param to prevent compiler clobbering RDX.
+// ============================================================
 static HookInfo g_hookFencedToolOnKey;
-typedef uint64_t (*fn_FencedToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_FencedToolOnKey(void* self, char key) {
     g_lastHook = "FencedTool::FencedToolOnKey";
-    return ((fn_FencedToolOnKey_t)g_hookFencedToolOnKey.trampoline)(self, key);
+    return FencedTool_OnKey((FencedTool*)self, key);
 }
 
 // --- Slot7: Serialize ---
@@ -74,12 +82,13 @@ REIMPL_RSP_PASSTHROUGH(FencedToolSerialize, g_hookFencedToolSerialize, "FencedTo
 static HookInfo g_hookFencedToolDraw;
 REIMPL_RSP_PASSTHROUGH(FencedToolDraw, g_hookFencedToolDraw, "FencedTool::Draw")
 
-// --- Slot9: Shutdown ---
+// ============================================================
+// Slot9: Shutdown — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookFencedToolShutdown;
-typedef void (*fn_FencedToolShutdown_t)(void* self);
 static void Reimpl_FencedToolShutdown(void* self) {
     g_lastHook = "FencedTool::FencedToolShutdown";
-    ((fn_FencedToolShutdown_t)g_hookFencedToolShutdown.trampoline)(self);
+    FencedTool_Shutdown((FencedTool*)self);
 }
 
 // --- Slot13: CalcPath ---
@@ -98,7 +107,7 @@ void InstallFencedToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140026930);
     InstallHook(target, (void*)Reimpl_FencedToolDtor, &g_hookFencedToolDtor, 19);
 #ifdef _DEBUG
-    printf("[FencedTool] Dtor hooked at %p\n", (void*)target);
+    printf("[FencedTool] Dtor hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveFencedToolDtor() { RemoveHook(&g_hookFencedToolDtor); }
@@ -116,7 +125,7 @@ void InstallFencedToolShutdown2() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dccc0);
     InstallHook(target, (void*)Reimpl_FencedToolShutdown2, &g_hookFencedToolShutdown2, 12);
 #ifdef _DEBUG
-    printf("[FencedTool] Shutdown2 hooked at %p\n", (void*)target);
+    printf("[FencedTool] Shutdown2 hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveFencedToolShutdown2() { RemoveHook(&g_hookFencedToolShutdown2); }
@@ -125,7 +134,7 @@ void InstallFencedToolOnKey() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dcbe0);
     InstallHook(target, (void*)Reimpl_FencedToolOnKey, &g_hookFencedToolOnKey, 13);
 #ifdef _DEBUG
-    printf("[FencedTool] OnKey hooked at %p\n", (void*)target);
+    printf("[FencedTool] OnKey hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveFencedToolOnKey() { RemoveHook(&g_hookFencedToolOnKey); }
@@ -154,7 +163,7 @@ void InstallFencedToolShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dcd10);
     InstallHook(target, (void*)Reimpl_FencedToolShutdown, &g_hookFencedToolShutdown, 12);
 #ifdef _DEBUG
-    printf("[FencedTool] Shutdown hooked at %p\n", (void*)target);
+    printf("[FencedTool] Shutdown hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveFencedToolShutdown() { RemoveHook(&g_hookFencedToolShutdown); }

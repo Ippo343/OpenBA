@@ -28,14 +28,12 @@
 #include <cstdio>
 #include <cstdint>
 
-// --- Slot0: Dtor ---
-// Kept as trampoline: needs Object::Internal::~Internal which isn't resolved as a fn ptr yet.
-// When fn_Internal_Dtor is added, switch to calling DragTool_Dtor() in code/Game/Player.
+// --- Slot0: Dtor --- REIMPLEMENTED
+// Delegates to DragTool_Dtor() in code/Game/Player/dragtool.cpp
 static HookInfo g_hookDragToolDtor;
-typedef void* (*fn_DragToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_DragToolDtor(void* self, uint32_t flags) {
     g_lastHook = "DragTool::DragToolDtor";
-    return ((fn_DragToolDtor_t)g_hookDragToolDtor.trampoline)(self, flags);
+    return DragTool_Dtor((DragTool*)self, flags);
 }
 
 // --- Slot6: OnKey ---
@@ -50,7 +48,7 @@ void InstallDragToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002da20);
     InstallHook(target, (void*)Reimpl_DragToolDtor, &g_hookDragToolDtor, 19);
 #ifdef _DEBUG
-    printf("[DragTool] Dtor hooked at %p\n", (void*)target);
+    printf("[DragTool] Dtor hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveDragToolDtor() { RemoveHook(&g_hookDragToolDtor); }

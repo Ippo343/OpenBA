@@ -22,26 +22,30 @@
 //   +0x68: 0x1400fb900 — Slot13 CalcPath (hooked)
 //   +0x70: 0x1400fbae0 — Slot14 CalcCost (hooked)
 
+#include "DragPlacementTool.h"
+#include "Player/dragplacementtool_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
-// --- Slot0: Dtor ---
+// ============================================================
+// Slot0: Dtor — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookDragPlacementToolDtor;
-typedef void* (*fn_DragPlacementToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_DragPlacementToolDtor(void* self, uint32_t flags) {
     g_lastHook = "DragPlacementTool::DragPlacementToolDtor";
-    return ((fn_DragPlacementToolDtor_t)g_hookDragPlacementToolDtor.trampoline)(self, flags);
+    return DragPlacementTool_Dtor((DragPlacementTool*)self, flags);
 }
 
-// --- Slot4: Startup ---
+// ============================================================
+// Slot4: Startup — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookDragPlacementToolStartup;
-typedef void (*fn_DragPlacementToolStartup_t)(void* self);
 static void Reimpl_DragPlacementToolStartup(void* self) {
     g_lastHook = "DragPlacementTool::DragPlacementToolStartup";
-    ((fn_DragPlacementToolStartup_t)g_hookDragPlacementToolStartup.trampoline)(self);
+    DragPlacementTool_Startup((DragPlacementTool*)self);
 }
 
 // --- Slot8: Draw ---
@@ -56,17 +60,23 @@ REIMPL_RSP_PASSTHROUGH(DragPlacementToolDraw, g_hookDragPlacementToolDraw, "Drag
 static HookInfo g_hookDragPlacementToolCalcPath;
 REIMPL_RSP_PASSTHROUGH(DragPlacementToolCalcPath, g_hookDragPlacementToolCalcPath, "DragPlacementTool::CalcPath")
 
-// --- Slot14: CalcCost ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// ============================================================
+// Slot14: CalcCost — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookDragPlacementToolCalcCost;
-REIMPL_RSP_PASSTHROUGH(DragPlacementToolCalcCost, g_hookDragPlacementToolCalcCost, "DragPlacementTool::CalcCost")
+static uint64_t Reimpl_DragPlacementToolCalcCost(void* self, int startCell, int endCell,
+                                                  uint32_t* outValid, int* outCostA, int* outCostB,
+                                                  uint32_t* outLength) {
+    g_lastHook = "DragPlacementTool::CalcCost";
+    return DragPlacementTool_CalcCost((DragPlacementTool*)self, startCell, endCell,
+                                      outValid, outCostA, outCostB, outLength);
+}
 
 void InstallDragPlacementToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002d900);
     InstallHook(target, (void*)Reimpl_DragPlacementToolDtor, &g_hookDragPlacementToolDtor, 19);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] Dtor hooked at %p\n", (void*)target);
+    printf("[DragPlacementTool] Dtor hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolDtor() { RemoveHook(&g_hookDragPlacementToolDtor); }
@@ -75,7 +85,7 @@ void InstallDragPlacementToolStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400fc3e0);
     InstallHook(target, (void*)Reimpl_DragPlacementToolStartup, &g_hookDragPlacementToolStartup, 15);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] Startup hooked at %p\n", (void*)target);
+    printf("[DragPlacementTool] Startup hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolStartup() { RemoveHook(&g_hookDragPlacementToolStartup); }
@@ -107,7 +117,7 @@ void InstallDragPlacementToolCalcCost() {
     //         PUSH RSI(1)+PUSH RDI(1)+PUSH R12(2)=13 bytes
     InstallHookRSPSafe(target, (void*)Reimpl_DragPlacementToolCalcCost, &g_hookDragPlacementToolCalcCost, 13);
 #ifdef _DEBUG
-    printf("[DragPlacementTool] CalcCost hooked (RSP-safe) at %p\n", (void*)target);
+    printf("[DragPlacementTool] CalcCost hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveDragPlacementToolCalcCost() { RemoveHook(&g_hookDragPlacementToolCalcCost); }

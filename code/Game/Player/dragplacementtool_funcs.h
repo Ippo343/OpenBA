@@ -1,0 +1,29 @@
+#pragma once
+// Function declarations for deeply reimplemented DragPlacementTool methods.
+// Called from engine/reimpl/dragplacementtool.cpp wrappers.
+// No dependency on hooks.h or resolve.h -- portable to standalone exe.
+
+#include "DragPlacementTool.h"
+#include <cstdint>
+
+// Dtor (vtable +0x00): Scalar deleting destructor.
+// Resets vtable chain (DragPlacementTool -> DragTool -> Tool), calls Internal::~Internal,
+// conditionally frees memory if flags & 1.
+// Original: 0x14002d900
+void* DragPlacementTool_Dtor(DragPlacementTool* self, uint32_t flags);
+
+// Startup (vtable +0x20, Slot4): Searches entity component list for two description types:
+//   CreatePlacementDescription (DAT_1401c7430) -> stored at self->placementDesc (+0x38)
+//   AreaDescription (DAT_1401c7a18)            -> stored at self->areaDesc (+0x40)
+// Original: 0x1400fc3e0
+void DragPlacementTool_Startup(DragPlacementTool* self);
+
+// CalcCost (vtable +0x70, Slot14): Calculates placement cost for a rectangular area.
+// Converts start/end cells to grid coordinates, validates size against description
+// min/max constraints (+0x28/+0x2C for min, +0x30/+0x34 for max from placementDesc).
+// Iterates each cell and checks terrain validity using CharacterComponent_impl_f5d0.
+// Returns: 0=success, 1=too small, 2=too big, 3=invalid terrain or overlap
+// Original: 0x1400fbae0
+uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int endCell,
+                                     uint32_t* outValid, int* outCostA, int* outCostB,
+                                     uint32_t* outLength);

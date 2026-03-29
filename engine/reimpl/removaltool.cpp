@@ -22,29 +22,42 @@
 //   +0x68: 0x1401035e0 — Slot13 CalcPath (hooked)
 //   +0x70: 0x140103ef0 — Slot14 CalcCost (hooked)
 
+#include "RemovalTool.h"
+#include "Player/removaltool_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
-// --- Slot0: Dtor ---
+// ============================================================
+// Slot0: Dtor — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookRemovalToolDtor;
-typedef void* (*fn_RemovalToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_RemovalToolDtor(void* self, uint32_t flags) {
     g_lastHook = "RemovalTool::RemovalToolDtor";
-    return ((fn_RemovalToolDtor_t)g_hookRemovalToolDtor.trampoline)(self, flags);
+    return RemovalTool_Dtor((RemovalTool*)self, flags);
 }
 
-// --- Slot4: Startup ---
+// ============================================================
+// Slot4: Startup — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookRemovalToolStartup;
-typedef void (*fn_RemovalToolStartup_t)(void* self);
 static void Reimpl_RemovalToolStartup(void* self) {
     g_lastHook = "RemovalTool::RemovalToolStartup";
-    ((fn_RemovalToolStartup_t)g_hookRemovalToolStartup.trampoline)(self);
+    RemovalTool_Startup((RemovalTool*)self);
 }
 
-// --- Slot8: Draw ---
+// ============================================================
+// Slot8: Draw — trampoline passthrough
+// ============================================================
+// Draw is complex (~200 instructions): iterates grid cells in the removal area,
+// creates preview entities for removable items, builds a dynamic array of
+// cell data (col, row, status, color) for rendering.
+// Requires many untyped engine APIs: MapComponent cell access,
+// CharacterComponent_impl_08c0 (rendering helper), RemovalTool_sub_48a0/4770/4670
+// (entity removal eligibility checks), fn_InternalBasePtr_Ctor/CheckPtr, etc.
+// Keeping as trampoline until sub-functions are typed.
 static HookInfo g_hookRemovalToolDraw;
 typedef void (*fn_RemovalToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_RemovalToolDraw(void* self, void* context, char param) {
@@ -52,7 +65,18 @@ static void Reimpl_RemovalToolDraw(void* self, void* context, char param) {
     ((fn_RemovalToolDraw_t)g_hookRemovalToolDraw.trampoline)(self, context, param);
 }
 
-// --- Slot13: CalcPath ---
+// ============================================================
+// Slot13: CalcPath — trampoline passthrough
+// ============================================================
+// CalcPath is very complex (~400 instructions): iterates grid cells,
+// creates preview entities (ComponentEntity_CopyCtor), finds MapComponent
+// and DestroyComponent on entities, handles road removal, building
+// destruction scheduling, BST traversal for removal tracking.
+// Requires: ComponentEntity_CopyCtor, fn_InternalBasePtr_Ctor/CheckPtr,
+// fn_IsDerivedFrom, FUN_1400c48a0 (EntityList_RegisterEntity),
+// RemovalTool_sub_48a0/4770/4670, RemovalTool_helper_d960/c700,
+// StateMachine_impl_dfa0, CitizenAI_impl_9ad0, etc.
+// Keeping as trampoline until sub-functions are typed.
 static HookInfo g_hookRemovalToolCalcPath;
 typedef uint64_t (*fn_RemovalToolCalcPath_t)(void* self, int x, int z);
 static uint64_t Reimpl_RemovalToolCalcPath(void* self, int x, int z) {
@@ -60,19 +84,21 @@ static uint64_t Reimpl_RemovalToolCalcPath(void* self, int x, int z) {
     return ((fn_RemovalToolCalcPath_t)g_hookRemovalToolCalcPath.trampoline)(self, x, z);
 }
 
-// --- Slot14: CalcCost ---
+// ============================================================
+// Slot14: CalcCost — REIMPLEMENTED
+// ============================================================
 static HookInfo g_hookRemovalToolCalcCost;
-typedef uint64_t (*fn_RemovalToolCalcCost_t)(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d);
-static uint64_t Reimpl_RemovalToolCalcCost(void* self, int x, int z, uint32_t* a, int* b, int* c, int* d) {
+static uint64_t Reimpl_RemovalToolCalcCost(void* self, int x, int z,
+                                           uint32_t* a, int* b, int* c, uint32_t* d) {
     g_lastHook = "RemovalTool::RemovalToolCalcCost";
-    return ((fn_RemovalToolCalcCost_t)g_hookRemovalToolCalcCost.trampoline)(self, x, z, a, b, c, d);
+    return RemovalTool_CalcCost((RemovalTool*)self, x, z, a, b, c, d);
 }
 
 void InstallRemovalToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002e7f0);
     InstallHook(target, (void*)Reimpl_RemovalToolDtor, &g_hookRemovalToolDtor, 19);
 #ifdef _DEBUG
-    printf("[RemovalTool] Dtor hooked at %p\n", (void*)target);
+    printf("[RemovalTool] Dtor hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveRemovalToolDtor() { RemoveHook(&g_hookRemovalToolDtor); }
@@ -81,7 +107,7 @@ void InstallRemovalToolStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140104bd0);
     InstallHook(target, (void*)Reimpl_RemovalToolStartup, &g_hookRemovalToolStartup, 15);
 #ifdef _DEBUG
-    printf("[RemovalTool] Startup hooked at %p\n", (void*)target);
+    printf("[RemovalTool] Startup hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveRemovalToolStartup() { RemoveHook(&g_hookRemovalToolStartup); }
@@ -108,7 +134,7 @@ void InstallRemovalToolCalcCost() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140103ef0);
     InstallHook(target, (void*)Reimpl_RemovalToolCalcCost, &g_hookRemovalToolCalcCost, 15);
 #ifdef _DEBUG
-    printf("[RemovalTool] CalcCost hooked at %p\n", (void*)target);
+    printf("[RemovalTool] CalcCost hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveRemovalToolCalcCost() { RemoveHook(&g_hookRemovalToolCalcCost); }

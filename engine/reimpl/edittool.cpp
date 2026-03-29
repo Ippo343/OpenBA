@@ -23,6 +23,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Player/edittool_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -31,7 +32,7 @@ static HookInfo g_hookEditToolDtor;
 typedef void* (*fn_EditToolDtor_t)(void* self, uint32_t flags);
 static void* Reimpl_EditToolDtor(void* self, uint32_t flags) {
     g_lastHook = "EditTool::EditToolDtor";
-    return ((fn_EditToolDtor_t)g_hookEditToolDtor.trampoline)(self, flags);
+    return EditTool_Dtor_Impl((EditTool*)self, flags);
 }
 
 // --- Slot6: OnKey ---
@@ -52,10 +53,10 @@ static void Reimpl_EditToolStartup(void* self) {
 
 // --- Slot10: Serialize ---
 static HookInfo g_hookEditToolSerialize;
-typedef void (*fn_EditToolSerialize_t)(void* self, void* stream);
-static void Reimpl_EditToolSerialize(void* self, void* stream) {
+typedef bool (*fn_EditToolSerialize_t)(void* self, uint64_t* param_2);
+static bool Reimpl_EditToolSerialize(void* self, uint64_t* param_2) {
     g_lastHook = "EditTool::EditToolSerialize";
-    ((fn_EditToolSerialize_t)g_hookEditToolSerialize.trampoline)(self, stream);
+    return EditTool_Serialize_Impl((EditTool*)self, param_2);
 }
 
 void InstallEditToolDtor() {

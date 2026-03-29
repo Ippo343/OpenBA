@@ -20,6 +20,60 @@
 #include <cstdio>
 
 // ============================================================
+// DragTool vtable addresses (for vtable chain in Dtor)
+// ============================================================
+static void* s_vtable_DragTool = nullptr;
+static void* s_vtable_Tool     = nullptr;
+
+static void EnsureDragToolVtables() {
+    if (!s_vtable_DragTool) {
+        s_vtable_DragTool = (void*)ResolveAddr(Module::Exe, DragToolAddr::Vtable);
+        s_vtable_Tool     = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
+    }
+}
+
+// Object::Internal::~Internal — called from base dtor
+// Resolved via the function pointer slot at 0x140152770
+typedef void (*fn_Internal_Dtor_t)(void* self);
+static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
+
+static void EnsureInternalDtor() {
+    if (!s_fn_Internal_Dtor) {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
+        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
+    }
+}
+
+// ============================================================
+// DragTool::Dtor (vtable +0x00) — Scalar deleting destructor
+// ============================================================
+// Resets vtable chain: DragTool -> Tool, then calls
+// Object::Internal::~Internal for base cleanup. If flags & 1,
+// frees the memory allocation.
+//
+// Original: 0x14002da20
+void* DragTool_Dtor(DragTool* self, uint32_t flags) {
+    EnsureDragToolVtables();
+    EnsureInternalDtor();
+
+    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
+    self->vtable = s_vtable_DragTool;
+    self->vtable = s_vtable_Tool;
+
+    // Call Object::Internal::~Internal
+    if (s_fn_Internal_Dtor) {
+        s_fn_Internal_Dtor(self);
+    }
+
+    // Conditionally free memory
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+
+    return self;
+}
+
+// ============================================================
 // Resolved exe-internal function pointers (set once on first call)
 // ============================================================
 

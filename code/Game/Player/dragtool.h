@@ -9,7 +9,7 @@
 // Dtor (vtable +0x00): Scalar deleting destructor.
 // Resets vtable chain DragTool->Tool, calls Object::Internal::~Internal,
 // conditionally frees memory.
-// Currently delegates to trampoline (needs Object::Internal::~Internal fn ptr).
+// Original: 0x14002da20
 void* DragTool_Dtor(DragTool* self, uint32_t flags);
 
 // OnKey (vtable +0x30, Slot6): Main input handler for click-and-drag tools.
