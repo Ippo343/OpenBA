@@ -19,19 +19,13 @@ void* EditTool_Dtor_Impl(EditTool* self, uint32_t flags);
 bool EditTool_Serialize_Impl(EditTool* self, uint64_t* param_2);
 
 // OnKey (vtable +0x30, Slot6): Entity selection via picking.
-// Casts ray from cursor, finds entity under cursor via Picking::Scene::Intersect,
-// then calls Entity_impl_d3b0 to select/deselect entities.
-// Currently delegates to trampoline — requires many unresolved engine APIs:
-//   FUN_1401005a0 (camera ray), QuarryComponent_impl_a530 (terrain pick),
-//   FUN_1400a0280 (world grid entity lookup), Picking::Scene::Intersect,
-//   Picking::Scene::GetUserData, Entity_impl_d3b0 (entity select handler).
+// Casts ray from cursor, finds entity under cursor via Picking::Scene::Intersect
+// and map hit test. Calls fn_EditTool_SelectEntity to select/deselect entities.
 // Original: 0x1400fd030
+uint64_t EditTool_OnKey_Impl(EditTool* self, char param2);
 
 // Startup (vtable +0x38, Slot7): Initialization and dialog positioning.
 // Gets dialog controller, finds ToolUI and PageToggleUI controllers,
-// positions dialog near clicked entity. Complex UI positioning logic.
-// Currently delegates to trampoline — requires many unresolved engine APIs:
-//   DialogInstance::GetController, Entity_impl_0380 (entity bounding rect),
-//   Element::GetPaddedSize, DialogInstance::SetUpperLeft,
-//   EditTool_helper_6800 (toggle page setup).
+// positions dialog near clicked entity using entity screen rect.
 // Original: 0x1400fcda0
+void EditTool_Startup_Impl(EditTool* self);

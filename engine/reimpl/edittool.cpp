@@ -37,18 +37,16 @@ static void* Reimpl_EditToolDtor(void* self, uint32_t flags) {
 
 // --- Slot6: OnKey ---
 static HookInfo g_hookEditToolOnKey;
-typedef uint64_t (*fn_EditToolOnKey_t)(void* self, char key);
 static uint64_t Reimpl_EditToolOnKey(void* self, char key) {
     g_lastHook = "EditTool::EditToolOnKey";
-    return ((fn_EditToolOnKey_t)g_hookEditToolOnKey.trampoline)(self, key);
+    return EditTool_OnKey_Impl((EditTool*)self, key);
 }
 
 // --- Slot7: Startup ---
 static HookInfo g_hookEditToolStartup;
-typedef void (*fn_EditToolStartup_t)(void* self);
 static void Reimpl_EditToolStartup(void* self) {
     g_lastHook = "EditTool::EditToolStartup";
-    ((fn_EditToolStartup_t)g_hookEditToolStartup.trampoline)(self);
+    EditTool_Startup_Impl((EditTool*)self);
 }
 
 // --- Slot10: Serialize ---
