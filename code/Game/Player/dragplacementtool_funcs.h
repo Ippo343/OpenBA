@@ -27,3 +27,12 @@ void DragPlacementTool_Startup(DragPlacementTool* self);
 uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int endCell,
                                      uint32_t* outValid, int* outCostA, int* outCostB,
                                      uint32_t* outLength);
+
+// Draw (vtable +0x40, Slot8): Renders colored tile overlays for drag area placement.
+// Section 1: If dialog has existing placement at +0x80, renders yellow footprint.
+// Section 2: If param3==0, renders current drag rectangle with per-cell terrain
+// validation (green=valid, red=invalid/too big).
+// Uses CharacterComponent_impl_08c0 for tile rendering and
+// CharacterComponent_impl_f5d0 for per-cell terrain validation.
+// Original: 0x1400fbe40
+void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char param3);

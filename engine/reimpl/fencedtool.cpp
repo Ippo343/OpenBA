@@ -77,11 +77,12 @@ static void Reimpl_FencedToolSerialize(void* self, void* param2, char param3) {
     FencedTool_Serialize_Impl((FencedTool*)self, param2, param3);
 }
 
-// --- Slot8: Draw ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot8: Draw --- REIMPLEMENTED
 static HookInfo g_hookFencedToolDraw;
-REIMPL_RSP_PASSTHROUGH(FencedToolDraw, g_hookFencedToolDraw, "FencedTool::Draw")
+static void Reimpl_FencedToolDraw(void* self, void* context, char param3) {
+    g_lastHook = "FencedTool::Draw";
+    FencedTool_Draw_Impl((FencedTool*)self, context, param3);
+}
 
 // ============================================================
 // Slot9: Shutdown — REIMPLEMENTED

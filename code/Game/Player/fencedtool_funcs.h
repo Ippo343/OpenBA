@@ -28,3 +28,8 @@ void FencedTool_Shutdown(FencedTool* self);
 int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
                               uint32_t* outWidth, int* outHeight, int* outDepth,
                               int* outFenceSegments);
+
+// Draw (vtable +0x40, Slot8): Renders fence placement preview.
+// Two phases: edit-mode tiles + preview-mode tiles with terrain validation.
+// Original: 0x1400dc440
+void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3);

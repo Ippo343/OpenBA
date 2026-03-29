@@ -14,7 +14,7 @@
 //   +0x28: 0x1400de930 — Slot5 (5 bytes JMP rel32, unhookable)
 //   +0x30: 0x1400de6b0 — Slot6 OnKey (hooked) — REIMPLEMENTED
 //   +0x38: 0x1400dd700 — Slot7 (3 bytes RET, unhookable)
-//   +0x40: 0x1400dd3b0 — Slot8 Draw (hooked) — trampoline (complex render logic)
+//   +0x40: 0x1400dd3b0 — Slot8 Draw (hooked) — REIMPLEMENTED
 //   +0x48: 0x1400de920 — Slot9 (3 bytes, unhookable — returns false)
 //   +0x50: 0x1400de8d0 — Slot10 Serialize (hooked) — REIMPLEMENTED
 //   +0x58: 0x140004950 — Slot11 (10 bytes, unhookable)
@@ -41,14 +41,11 @@ static uint64_t Reimpl_PathToolOnKey(void* self, char key) {
     return PathTool_OnKey((PathTool*)self, key);
 }
 
-// --- Slot8: Draw — trampoline passthrough ---
-// Draw is 181 lines of complex dynamic array management and render entry
-// construction. Kept as trampoline until render helpers are fully typed.
+// --- Slot8: Draw --- REIMPLEMENTED
 static HookInfo g_hookPathToolDraw;
-typedef void (*fn_PathToolDraw_t)(void* self, void* context);
 static void Reimpl_PathToolDraw(void* self, void* context) {
     g_lastHook = "PathTool::PathToolDraw";
-    ((fn_PathToolDraw_t)g_hookPathToolDraw.trampoline)(self, context);
+    PathTool_Draw((PathTool*)self, context);
 }
 
 // --- Slot10: Serialize — REIMPLEMENTED ---

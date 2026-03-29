@@ -19,12 +19,14 @@ void* RoadTool_Dtor(RoadTool* self, uint32_t flags);
 void RoadTool_Startup(RoadTool* self);
 
 // Draw (vtable +0x40, Slot8): Renders road preview overlay.
-// Calls DragTool::Draw (shared base behavior via BridgeTool_Draw at Slot8),
-// then reads KeyMap::GetValue(0, 0x16) to set the modifierFlag at +0x40.
-// Always returns 1.
+// Phase 1 (constrained): If description entity has constraints, runs pathfinding
+//   (RoadTool_sub_ce00) with mask 0xa17, renders path tiles with default color.
+// Phase 2 (drag selection): If param3==0, gets start/end cells, checks terrain
+//   validity (mask 0x5e0), tries strict (0xa17) then relaxed (0xff7) pathfinding,
+//   color-codes tiles: green (0xff00ff00) for valid road terrain, red (0xffff0000)
+//   for invalid/occupied, purple(0xff00ff00) for road-valid.
 // Original: 0x140105190
-// NOTE: This function is kept as trampoline passthrough because it calls
-// the base DragTool::Draw which is itself very complex.
+void RoadTool_Draw(RoadTool* self, void* context, char param3);
 
 // --- Unhookable slots (for standalone exe completeness) ---
 

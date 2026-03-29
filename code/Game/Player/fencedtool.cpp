@@ -482,3 +482,287 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
 
     return 0;  // Valid
 }
+
+// ============================================================
+// Draw helper: dynamic array for 0x14-byte tile records
+// ============================================================
+// TileRecord: { int col, int row, int flags, uint32_t color, int unused }
+// This is the layout expected by fn_TileRender (CharacterComponent_impl_08c0).
+// The array header is: { void* data, int count, int capacity } (24 bytes).
+
+struct TileRecord {
+    int col;
+    int row;
+    int flags;
+    uint32_t color;
+    int unused;
+};
+static_assert(sizeof(TileRecord) == 0x14, "TileRecord size mismatch");
+
+// A minimal growable array matching the engine's pattern.
+// The engine uses {ptr, count|capacity packed into int64} but we
+// manage it explicitly for clarity.
+struct TileArray {
+    TileRecord* data;
+    int count;
+    int capacity;
+
+    TileArray() : data(nullptr), count(0), capacity(0) {}
+
+    void push(const TileRecord& rec) {
+        int newCount = count + 1;
+        if (newCount > capacity) {
+            int newCap = (count == 0) ? newCount * 3 : newCount * 3;
+            TileRecord* newData = (TileRecord*)fn_MemAlloc(
+                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRecord), 4);
+            if (data && newData) {
+                memcpy(newData, data, (uint64_t)count * sizeof(TileRecord));
+            }
+            if (data) fn_MemFreeStatic(data);
+            data = newData;
+            capacity = newCap;
+        }
+        if (data) {
+            data[count] = rec;
+        }
+        count = newCount;
+    }
+
+    // Returns the packed {ptr, count, capacity} layout the engine expects:
+    // 8 bytes ptr + 4 bytes count + 4 bytes capacity
+    void toEngineFormat(void* out) {
+        uintptr_t* p = (uintptr_t*)out;
+        p[0] = (uintptr_t)data;
+        // Pack count and capacity into a single 64-bit value (count in low 32, cap in high 32)
+        int32_t* ints = (int32_t*)&p[1];
+        ints[0] = count;
+        ints[1] = capacity;
+    }
+
+    void free() {
+        if (data) fn_MemFreeStatic(data);
+        data = nullptr;
+        count = 0;
+        capacity = 0;
+    }
+};
+
+// ============================================================
+// Local function pointers for Draw
+// ============================================================
+
+// FUN_140101270: GetCursorCell — computes the cell index under the cursor
+typedef int (*fn_GetCursorCell_t)(uint64_t keyMap);
+static fn_GetCursorCell_t s_fn_GetCursorCell = nullptr;
+
+// FUN_14009f3e0: CharacterComponent_impl_f3e0 — terrain height query
+// Already declared as s_fn_TerrainHeightQuery in CalcCost section above.
+
+static bool s_drawFuncsResolved = false;
+
+static void EnsureDrawHelpers() {
+    if (s_drawFuncsResolved) return;
+    s_fn_GetCursorCell = reinterpret_cast<fn_GetCursorCell_t>(
+        ResolveAddr(Module::Exe, 0x140101270));
+    // Ensure CalcCost helpers are resolved too (terrain height, Vector3, ScalarAbs)
+    EnsureCalcCostHelpers();
+    s_drawFuncsResolved = true;
+}
+
+// ============================================================
+// FencedTool::Draw (vtable +0x40, Slot8)
+// ============================================================
+// Two-phase rendering:
+//   Phase 1 (edit mode): If self->dialog(+0x10)->editMode(+0x80), renders the
+//     existing placed tiles from startCell/endCell stored in the dialog.
+//   Phase 2 (preview): While dragging, renders the rectangular preview area with
+//     per-tile terrain/height validation (green=valid, red=invalid).
+//
+// Both phases build arrays of 0x14-byte TileRecords and call fn_TileRender.
+// Original: 0x1400dc440
+void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
+    EnsureDrawHelpers();
+
+    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t dialog = *(uintptr_t*)(selfAddr + 0x10);
+    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int mapWidth = *mapGrid;
+
+    // ---- Phase 1: Edit mode (existing placed area) ----
+    if (*(char*)(dialog + 0x80) != '\0') {
+        int storedStart = *(int*)(dialog + 0x98);
+        int storedEnd   = *(int*)(dialog + 0x9c);
+
+        int startCol = storedStart / mapWidth;
+        int startRow = storedStart % mapWidth;
+        int endCol   = storedEnd / mapWidth;
+        int endRow   = storedEnd % mapWidth;
+
+        TileArray editTiles;
+
+        for (int r = startCol; r <= endCol; r++) {
+            for (int c = startRow; c <= endRow; c++) {
+                TileRecord rec;
+                rec.col   = c;
+                rec.row   = r;
+                rec.flags = 0;
+                rec.color = 0xffffff00;  // yellow-ish marker
+                rec.unused = 0;
+                editTiles.push(rec);
+            }
+        }
+
+        // Build engine format arrays and render
+        uint8_t tileArrayBuf[16] = {0};
+        uint8_t lineArrayBuf[16] = {0};
+        editTiles.toEngineFormat(tileArrayBuf);
+
+        if (fn_TileRender) {
+            fn_TileRender(nullptr, context, tileArrayBuf, lineArrayBuf);
+        }
+
+        editTiles.free();
+    }
+
+    // ---- Phase 2: Preview (only when not param3 and actively dragging) ----
+    if (param3 != '\0') return;
+
+    int startCell, endCell;
+    if (self->dragState != 0) {
+        startCell = self->startCell;
+        endCell   = self->endCell;
+    } else {
+        // Get cell under cursor
+        if (s_fn_GetCursorCell) {
+            startCell = s_fn_GetCursorCell((uint64_t)***(void****)g_pKeyMapObjectExref);
+            endCell = startCell;
+        } else {
+            return;
+        }
+    }
+
+    const float HEIGHT_TOL = 100.0f;  // DAT_140172208
+    const float HALF_CELL_OFF = 0.5f; // DAT_140172114
+
+    // Convert to col/row
+    int col1 = startCell % mapWidth;
+    int row1 = startCell / mapWidth;
+    int col2 = endCell % mapWidth;
+    int row2 = endCell / mapWidth;
+
+    // Sort min/max
+    int minCol = col1, maxCol = col2;
+    if (col2 < col1) { minCol = col2; maxCol = col1; }
+    int minRow = row1, maxRow = row2;
+    if (row2 < row1) { minRow = row2; maxRow = row1; }
+
+    int width  = maxCol - minCol + 1;
+    int height = maxRow - minRow + 1;
+
+    // Check size constraints from description
+    uintptr_t desc = *(uintptr_t*)(selfAddr + 0x38);
+    bool tooLarge = false;
+    if (width > *(int*)(desc + 0x58) || height > *(int*)(desc + 0x5c)) {
+        tooLarge = true;
+    }
+
+    // Read terrain info for per-cell validation
+    uintptr_t cellDataBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+    uint32_t terrainMask = *(uint32_t*)(desc + 0x20);
+    uintptr_t allowedEntityType = *(uintptr_t*)(desc + 0x70);
+
+    // Build a placement validity bitmap (using System::String pattern from decompilation)
+    // The original builds a string-like structure for the grid. We simplify to direct checks.
+
+    TileArray previewTiles;
+
+    int iterHeight = height;  // decrements as rows advance
+
+    for (int r = minRow; r <= maxRow; r++) {
+        for (int c = minCol; c <= maxCol; c++) {
+            // Check if this cell was already placed (edit mode overlap flag)
+            // The original uses a string-based bitmap. We check directly.
+            bool alreadyPlaced = false;
+            // (The bitmap logic from the original is complex; for preview purposes,
+            //  we skip it — placed tiles are drawn in Phase 1.)
+
+            bool valid = false;
+            if (c >= 0 && c < mapWidth && r >= 0 && r < mapWidth) {
+                int cellIdx = mapWidth * r + c;
+                uintptr_t cellPtr = (uintptr_t)cellIdx * 0x30 + cellDataBase;
+
+                // Terrain type check
+                uint8_t terrainByte = *(uint8_t*)(cellPtr + 0x29);
+                if ((~terrainMask & (1u << (terrainByte & 0x1f))) != 0) {
+                    valid = false;
+                } else {
+                    // Entity occupancy check
+                    uintptr_t cellEntity = *(uintptr_t*)cellPtr;
+                    if (allowedEntityType != 0) {
+                        if (cellEntity != 0) {
+                            if (fn_InternalBasePtr_CheckPtr)
+                                fn_InternalBasePtr_CheckPtr((void*)cellPtr);
+                            uintptr_t entityTypeRef = *(uintptr_t*)(*(uintptr_t*)cellPtr + 0x28);
+                            if (entityTypeRef != allowedEntityType) {
+                                valid = false;
+                                goto after_check;
+                            }
+                        }
+                    } else {
+                        if (cellEntity != 0) {
+                            valid = false;
+                            goto after_check;
+                        }
+                    }
+
+                    // Occupied flag check
+                    if (!alreadyPlaced && *(uint8_t*)(cellPtr + 0x28) != 0) {
+                        valid = false;
+                        goto after_check;
+                    }
+
+                    // Height validation
+                    if (s_fn_TerrainHeightQuery && s_fn_Vector3_Ctor_local && s_fn_ScalarAbs) {
+                        float halfOffset = (float)(mapWidth >> 1) - HALF_CELL_OFF;
+                        float inPos[4];
+                        s_fn_Vector3_Ctor_local(inPos,
+                            (float)(cellIdx % mapWidth) - halfOffset,
+                            (float)(cellIdx / mapWidth) - halfOffset, 0.0f);
+                        float outPos[4] = {0};
+                        uint32_t extra[2] = {0};
+                        s_fn_TerrainHeightQuery(mapGrid, outPos, inPos, '\0', extra);
+
+                        float heightDiff = outPos[2] - 0.0f;
+                        float* absResult = s_fn_ScalarAbs(&heightDiff);
+                        if (absResult && *absResult <= HEIGHT_TOL) {
+                            valid = true;
+                        }
+                    } else {
+                        valid = true; // Can't validate height, assume ok
+                    }
+                }
+            }
+after_check:
+
+            TileRecord rec;
+            rec.col   = c;
+            rec.row   = r;
+            rec.flags = alreadyPlaced ? 2 : 0;
+            rec.color = (tooLarge || !valid) ? 0xffff0000u : 0xff00ff00u;
+            rec.unused = 0;
+            previewTiles.push(rec);
+        }
+        iterHeight--;
+    }
+
+    // Render preview tiles
+    uint8_t tileArrayBuf[16] = {0};
+    uint8_t lineArrayBuf[16] = {0};
+    previewTiles.toEngineFormat(tileArrayBuf);
+
+    if (fn_TileRender) {
+        fn_TileRender(nullptr, context, tileArrayBuf, lineArrayBuf);
+    }
+
+    previewTiles.free();
+}

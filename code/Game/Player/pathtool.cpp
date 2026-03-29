@@ -18,6 +18,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 // ============================================================
 // Resolved vtable pointers (set once on first call)
@@ -279,22 +280,185 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
 }
 
 // ============================================================
+// Dynamic array helpers for Draw (0x14-byte tile records, 0x20-byte line records)
+// ============================================================
+// TileRecord: { int col, int row, int type, uint32_t color, int unused }
+// LineRecord: { int col1, int row1, int type, uint32_t color, int unused,
+//               int col2, int row2, float lineWidth }
+
+struct PathTileRecord {
+    int col;
+    int row;
+    int type;         // 4 = point marker
+    uint32_t color;   // 0xfffccc4c
+    int unused;       // 0
+};
+static_assert(sizeof(PathTileRecord) == 0x14, "PathTileRecord size mismatch");
+
+struct PathLineRecord {
+    int col1;
+    int row1;
+    int type;         // 5 = line segment
+    uint32_t color;   // 0xfffccc4c
+    int unused;       // 0
+    int col2;
+    int row2;
+    float lineWidth;  // 0.15f (0x3e19999a)
+};
+static_assert(sizeof(PathLineRecord) == 0x20, "PathLineRecord size mismatch");
+
+// Minimal growable array for tile records
+struct PathTileArray {
+    PathTileRecord* data;
+    int count;
+    int capacity;
+
+    PathTileArray() : data(nullptr), count(0), capacity(0) {}
+
+    void push(const PathTileRecord& rec) {
+        int newCount = count + 1;
+        if (newCount > capacity) {
+            int newCap = (count == 0) ? newCount * 3 : newCount * 3;
+            PathTileRecord* newData = (PathTileRecord*)fn_MemAlloc(
+                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(PathTileRecord), 4);
+            if (data && newData) {
+                memcpy(newData, data, (uint64_t)count * sizeof(PathTileRecord));
+            }
+            if (data) fn_MemFreeStatic(data);
+            data = newData;
+            capacity = newCap;
+        }
+        if (data) data[count] = rec;
+        count = newCount;
+    }
+
+    void toEngineFormat(void* out) {
+        uintptr_t* p = (uintptr_t*)out;
+        p[0] = (uintptr_t)data;
+        int32_t* ints = (int32_t*)&p[1];
+        ints[0] = count;
+        ints[1] = capacity;
+    }
+
+    void free() {
+        if (data) fn_MemFreeStatic(data);
+        data = nullptr;
+        count = 0;
+        capacity = 0;
+    }
+};
+
+// Minimal growable array for line records
+struct PathLineArray {
+    PathLineRecord* data;
+    int count;
+    int capacity;
+
+    PathLineArray() : data(nullptr), count(0), capacity(0) {}
+
+    void push(const PathLineRecord& rec) {
+        int newCount = count + 1;
+        if (newCount > capacity) {
+            int newCap = (count == 0) ? newCount * 3 : newCount * 3;
+            PathLineRecord* newData = (PathLineRecord*)fn_MemAlloc(
+                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(PathLineRecord), 4);
+            if (data && newData) {
+                memcpy(newData, data, (uint64_t)count * sizeof(PathLineRecord));
+            }
+            if (data) fn_MemFreeStatic(data);
+            data = newData;
+            capacity = newCap;
+        }
+        if (data) data[count] = rec;
+        count = newCount;
+    }
+
+    void toEngineFormat(void* out) {
+        uintptr_t* p = (uintptr_t*)out;
+        p[0] = (uintptr_t)data;
+        int32_t* ints = (int32_t*)&p[1];
+        ints[0] = count;
+        ints[1] = capacity;
+    }
+
+    void free() {
+        if (data) fn_MemFreeStatic(data);
+        data = nullptr;
+        count = 0;
+        capacity = 0;
+    }
+};
+
+// ============================================================
 // PathTool::Draw (vtable +0x40, Slot8) — Render path preview overlay
 // ============================================================
-// Builds render entries from path points and line segments, then submits
-// to the debug draw system. This is a complex function (181 lines decompiled)
-// that manages dynamic arrays of render entries.
+// Iterates two data arrays stored in the PathTool:
+//   1. Point markers at +0x40 (int array) / +0x48 (count): single-cell highlights
+//   2. Line segments at +0x50 (int pair array) / +0x58 (count): cell-to-cell lines
 //
-// Since it involves complex dynamic array management with MemAlloc/MemFree and
-// per-cell render entry construction, and calls the internal SubmitDebugDraw
-// helper which handles the actual rendering, we delegate to the original
-// via trampoline for now.
+// For each point marker, converts flat cell index to (col, row) and builds a
+// 0x14-byte TileRecord with type=4, color=0xfffccc4c.
 //
-// TODO: Once the dynamic array helpers and render entry format are fully typed,
-// this can be reimplemented in clean C++.
+// For each line segment, reads two cell indices, converts both to (col, row),
+// and builds a 0x20-byte LineRecord with type=5, color=0xfffccc4c, lineWidth=0.15f.
+//
+// Both arrays are then passed to fn_TileRender which handles the actual GPU
+// vertex submission (material setup, quad generation, etc.).
 //
 // Original: 0x1400dd3b0
-// NOTE: This function is kept as trampoline passthrough in the reimpl wrapper.
+void PathTool_Draw(PathTool* self, void* context) {
+    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int mapWidth = *mapGrid;
+
+    // ---- Build tile array from point markers (+0x40, +0x48) ----
+    PathTileArray tiles;
+    int* pointArray = (int*)self->_field40;
+    int pointCount  = self->_field48;
+
+    for (int i = 0; i < pointCount; i++) {
+        int cellIdx = pointArray[i];
+        PathTileRecord rec;
+        rec.col   = cellIdx % mapWidth;
+        rec.row   = cellIdx / mapWidth;
+        rec.type  = 4;
+        rec.color = 0xfffccc4cu;
+        rec.unused = 0;
+        tiles.push(rec);
+    }
+
+    // ---- Build line array from line segments (+0x50, +0x58) ----
+    PathLineArray lines;
+    int* segArray  = (int*)self->_field50;
+    int segCount   = self->_field58;
+
+    for (int i = 0; i < segCount; i++) {
+        int cellA = segArray[i * 2];
+        int cellB = segArray[i * 2 + 1];
+        PathLineRecord rec;
+        rec.col1      = cellA % mapWidth;
+        rec.row1      = cellA / mapWidth;
+        rec.type      = 5;
+        rec.color     = 0xfffccc4cu;
+        rec.unused    = 0;
+        rec.col2      = cellB % mapWidth;
+        rec.row2      = cellB / mapWidth;
+        rec.lineWidth = 0.15f;  // 0x3e19999a
+        lines.push(rec);
+    }
+
+    // ---- Render via fn_TileRender ----
+    uint8_t tileArrayBuf[16] = {0};
+    uint8_t lineArrayBuf[16] = {0};
+    tiles.toEngineFormat(tileArrayBuf);
+    lines.toEngineFormat(lineArrayBuf);
+
+    if (fn_TileRender) {
+        fn_TileRender(nullptr, context, tileArrayBuf, lineArrayBuf);
+    }
+
+    lines.free();
+    tiles.free();
+}
 
 // ============================================================
 // PathTool::Serialize (vtable +0x50, Slot10) — Entity comparison

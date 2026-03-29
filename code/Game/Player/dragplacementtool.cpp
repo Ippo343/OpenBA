@@ -271,3 +271,270 @@ uint64_t DragPlacementTool_CalcCost(DragPlacementTool* self, int startCell, int 
 
     return 3;
 }
+
+// ============================================================
+// Additional function pointers for Draw
+// ============================================================
+
+// FUN_140101270: ScreenToCell — ray-picks map cell under cursor.
+// Returns cell index (row*gridSize + col), or -1 if no hit.
+typedef int (*fn_ScreenToCell_t)(uint64_t unused);
+static fn_ScreenToCell_t s_fn_ScreenToCell = nullptr;
+
+static bool s_drawFuncsResolved = false;
+
+static void EnsureDrawFuncs() {
+    if (s_drawFuncsResolved) return;
+    s_fn_ScreenToCell = (fn_ScreenToCell_t)ResolveAddr(Module::Exe, 0x140101270);
+    if (!s_pHeightTolerance) {
+        s_pHeightTolerance = (float*)ResolveAddr(Module::Exe, 0x140172208);
+    }
+    if (!s_fn_TerrainValidate) {
+        s_fn_TerrainValidate = (fn_TerrainValidate_t)ResolveAddr(Module::Exe, 0x1400ff5d0);
+    }
+    s_drawFuncsResolved = true;
+}
+
+// ============================================================
+// Tile record: 0x14 bytes, used by CharacterComponent_impl_08c0
+// ============================================================
+struct TileRecord {
+    int32_t  col;    // +0x00
+    int32_t  row;    // +0x04
+    uint32_t flags;  // +0x08 (0=normal, 2=has existing)
+    uint32_t color;  // +0x0C (ARGB: 0xff00ff00=green, 0xffff0000=red, 0xffffff00=yellow)
+    int32_t  extra;  // +0x10
+};
+static_assert(sizeof(TileRecord) == 0x14, "TileRecord size mismatch");
+
+// ============================================================
+// Dynamic tile array: mirrors engine's grow pattern
+// ============================================================
+struct TileArray {
+    TileRecord* data;
+    int32_t count;
+    int32_t capacity;
+
+    TileArray() : data(nullptr), count(0), capacity(0) {}
+
+    void push(const TileRecord& rec) {
+        int newCount = count + 1;
+        if (newCount > capacity) {
+            int newCap = (count == 0) ? newCount : newCount * 3;
+            TileRecord* newData = (TileRecord*)fn_MemAlloc(
+                g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRecord), 4);
+            if (newData && data && count > 0) {
+                memcpy(newData, data, (size_t)count * sizeof(TileRecord));
+            }
+            if (data) {
+                fn_MemFreeStatic(data);
+            }
+            data = newData;
+            capacity = newCap;
+        }
+        if (data) {
+            data[count] = rec;
+        }
+        count = newCount;
+    }
+
+    void free() {
+        if (data) {
+            fn_MemFreeStatic(data);
+            data = nullptr;
+        }
+        count = 0;
+        capacity = 0;
+    }
+};
+
+// ============================================================
+// DragPlacementTool::Draw (vtable +0x40, Slot8)
+// ============================================================
+// Renders colored tile overlays for a drag-based area placement tool.
+//
+// Two main sections:
+// 1. If an existing placement is recorded at dialog+0x80, render its
+//    footprint as yellow tiles (0xffffff00).
+// 2. If param3==0, render the current drag rectangle:
+//    - Get start/end cells from DragTool drag state or ScreenToCell
+//    - Normalize to min/max corners
+//    - Check area size against description constraints
+//    - Validate each cell's terrain, color green/red accordingly
+//    - Pass tile arrays to CharacterComponent_impl_08c0 for rendering
+//
+// Disassembly reference: 0x1400fbe40
+// Key sub-calls:
+//   0x1401008c0 = CharacterComponent_impl_08c0 (tile renderer)
+//   0x1400ff5d0 = CharacterComponent_impl_f5d0 (terrain validate)
+//   0x140101270 = FUN_140101270 (ScreenToCell)
+// Uses: g_pGameWorldSingleton+0xf8 (map grid size pointer)
+//       placementDesc (+0x38) for terrain constraints
+//       dialog controller (+0x10) for existing placement info
+//
+// Original: 0x1400fbe40
+void DragPlacementTool_Draw_Impl(DragPlacementTool* self, void* context, char param3) {
+    EnsureHelpers();
+    EnsureDrawFuncs();
+
+    if (!fn_TileRender) return;
+
+    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+
+    // --- Section 1: Existing placement overlay (yellow tiles) ---
+    uintptr_t dialogCtrl = *(uintptr_t*)(selfAddr + 0x10);
+    if (*(char*)(dialogCtrl + 0x80) != 0) {
+        int gridSize = **(int**)(gameWorld + 0xf8);
+
+        int existStart = *(int*)(dialogCtrl + 0x98);
+        int existEnd = *(int*)(dialogCtrl + 0x9c);
+
+        int existStartCol = existStart % gridSize;
+        int existStartRow = existStart / gridSize;
+        int existEndCol = existEnd % gridSize;
+        int existEndRow = existEnd / gridSize;
+
+        // Build tile array for existing placement footprint
+        TileArray existArr;
+        for (int row = existStartRow; row <= existEndRow; row++) {
+            for (int col = existStartCol; col <= existEndCol; col++) {
+                TileRecord rec;
+                rec.col   = col;
+                rec.row   = row;
+                rec.flags = 0;                // no special flags
+                rec.color = 0xffffff00;       // yellow
+                rec.extra = 0;
+                existArr.push(rec);
+            }
+        }
+
+        // Render existing placement tiles
+        // tileArray2 = existArr, tileArray1 = empty
+        TileArray empty;
+        // CharacterComponent_impl_08c0 signature: (unused, context, &arr1, &arr2)
+        // arr1 = 0x14-byte tile records, arr2 = 0x20-byte road-style records
+        // For placement tools, arr2 is always empty.
+        fn_TileRender(nullptr, context, (void*)&existArr, (void*)&empty);
+        existArr.free();
+    }
+
+    // --- Section 2: Current drag area overlay ---
+    if (param3 == 0) {
+        int startCell, endCell;
+
+        // Get start/end cells based on drag state
+        if (self->dragState == 0) {
+            // Not dragging: use ScreenToCell for both
+            int cell = -1;
+            if (s_fn_ScreenToCell) {
+                cell = s_fn_ScreenToCell(0);
+            }
+            startCell = cell;
+            endCell = cell;
+        } else {
+            // Dragging: start from stored field, end from stored field
+            startCell = self->startCell;
+            endCell = self->endCell;
+        }
+
+        float heightTol = s_pHeightTolerance ? *s_pHeightTolerance : 0.5f;
+        int gridSize = **(int**)(gameWorld + 0xf8);
+
+        // Convert cell indices to (col, row)
+        int startCol = startCell % gridSize;
+        int startRow = startCell / gridSize;
+        int64_t gridSz64 = (int64_t)**(int**)(gameWorld + 0xf8);
+        int endCol = (int)((int64_t)endCell % gridSz64);
+        int endRow = (int)((int64_t)endCell / gridSz64);
+
+        // Normalize to min/max corners
+        uint32_t minCol = (uint32_t)endCol;
+        uint32_t maxCol = (uint32_t)startCol;
+        if ((int)endCol > (int)startCol) {
+            minCol = (uint32_t)startCol;
+            maxCol = (uint32_t)endCol;
+        }
+
+        uint32_t minRow = (uint32_t)startRow;
+        uint32_t maxRow = (uint32_t)endRow;
+        if ((int)endRow < (int)startRow) {
+            minRow = (uint32_t)endRow;
+            maxRow = (uint32_t)startRow;
+        }
+
+        int width = (int)(maxCol - minCol) + 1;
+        int height = (int)(maxRow - minRow) + 1;
+
+        // Check area constraints from placement description
+        uintptr_t desc = (uintptr_t)self->placementDesc;
+        bool tooBig = false;
+        if (desc) {
+            if (*(int*)(desc + 0x28) < width || *(int*)(desc + 0x2C) < height) {
+                tooBig = true;
+            }
+        }
+
+        // Read description fields for terrain validation
+        uint32_t terrainMask = desc ? *(uint32_t*)(desc + 0x20) : 0;
+        char allowOverlap = desc ? *(char*)(desc + 0x24) : 0;
+        int64_t entityTemplate = desc ? *(int64_t*)(desc + 0x38) : 0;
+        int* mapPtr = *(int**)(gameWorld + 0xf8);
+
+        // Build tile array for drag area
+        TileArray dragArr;
+
+        // The original code also reads an occupancy grid string from the map component.
+        // It's at `*(self+0x30)+0x28` passed to sub_1380, accessed as local_98.
+        // In DragPlacementTool::Draw, the occupancy check uses local_98 which is 0 (no grid).
+
+        uint32_t rowIdx = minRow;
+        if ((int)minRow <= (int)maxRow) {
+            // The original code tracks a decrementing counter for occupancy grid indexing.
+            // Since local_98 is always 0 here, the occupancy check always returns false.
+            do {
+                uint32_t colIdx = minCol;
+                if ((int)minCol <= (int)maxCol) {
+                    do {
+                        // Occupancy check: in the original, checks local_98 string
+                        // Since local_98 == 0 in DragPlacementTool::Draw, bVar31 is always false
+                        bool hasExisting = false;
+
+                        // Validate terrain
+                        bool cellValid = false;
+                        if (s_fn_TerrainValidate) {
+                            cellValid = s_fn_TerrainValidate(
+                                mapPtr, colIdx, rowIdx, terrainMask,
+                                0.0f, heightTol, 0.0f,
+                                allowOverlap, hasExisting, entityTemplate);
+                        }
+
+                        // Determine color
+                        uint32_t color;
+                        if (tooBig || !cellValid) {
+                            color = 0xffff0000;  // red
+                        } else {
+                            color = 0xff00ff00;  // green
+                        }
+
+                        TileRecord rec;
+                        rec.col   = (int32_t)colIdx;
+                        rec.row   = (int32_t)rowIdx;
+                        rec.flags = hasExisting ? 2u : 0u;
+                        rec.color = color;
+                        rec.extra = 0;
+                        dragArr.push(rec);
+
+                        colIdx++;
+                    } while ((int)colIdx <= (int)maxCol);
+                }
+                rowIdx++;
+            } while ((int)rowIdx <= (int)maxRow);
+        }
+
+        // Render drag area tiles
+        TileArray empty;
+        fn_TileRender(nullptr, context, (void*)&dragArr, (void*)&empty);
+        dragArr.free();
+    }
+}

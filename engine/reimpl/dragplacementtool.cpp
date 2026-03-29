@@ -48,11 +48,12 @@ static void Reimpl_DragPlacementToolStartup(void* self) {
     DragPlacementTool_Startup((DragPlacementTool*)self);
 }
 
-// --- Slot8: Draw ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV RAX,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot8: Draw --- REIMPLEMENTED (drag area tile overlay rendering)
 static HookInfo g_hookDragPlacementToolDraw;
-REIMPL_RSP_PASSTHROUGH(DragPlacementToolDraw, g_hookDragPlacementToolDraw, "DragPlacementTool::Draw")
+static void Reimpl_DragPlacementToolDraw(void* self, void* context, char param3) {
+    g_lastHook = "DragPlacementTool::Draw";
+    DragPlacementTool_Draw_Impl((DragPlacementTool*)self, context, param3);
+}
 
 // --- Slot13: CalcPath ---
 // RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)

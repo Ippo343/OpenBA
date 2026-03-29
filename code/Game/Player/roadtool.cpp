@@ -9,7 +9,7 @@
 // Hookable slots reimplemented:
 //   Slot0  Dtor    (0x14002e8c0) — scalar deleting destructor
 //   Slot4  Startup (0x1401056e0) — find CreateRoadDescription component
-//   Slot8  Draw    (0x140105190) — kept as trampoline (calls base DragTool::Draw)
+//   Slot8  Draw    (0x140105190) — road path preview rendering
 //
 // Unhookable slots (clean code for standalone exe, NOT hooked):
 //   Slot6  OnKey    (0x140105690) — road-specific drag logic
@@ -328,4 +328,224 @@ uint64_t RoadTool_CalcCost_Impl(RoadTool* self, uint32_t startCell, uint32_t end
     // }
 
     return 3;
+}
+
+// ============================================================
+// Tile entry for rendering (0x14 bytes = 5 uint32_t)
+// ============================================================
+struct TileRenderEntry {
+    uint32_t col;
+    uint32_t row;
+    uint32_t type;     // 0 = flat tile, 1 = road tile
+    uint32_t color;    // ARGB packed color
+    uint32_t extra;    // 0
+};
+static_assert(sizeof(TileRenderEntry) == 0x14, "TileRenderEntry size mismatch");
+
+// Dynamic array holding TileRenderEntry items
+struct TileArray {
+    TileRenderEntry* data;
+    int count;
+    int capacity;
+};
+
+// ============================================================
+// Helper: push a TileRenderEntry into a dynamic array
+// ============================================================
+static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
+    int newCount = arr->count + 1;
+    if (newCount == arr->count) return; // overflow guard
+
+    if (newCount > arr->capacity) {
+        int newCap = (arr->count == 0) ? newCount : newCount * 3;
+        TileRenderEntry* newBuf = (TileRenderEntry*)fn_MemAlloc(
+            g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRenderEntry), 4);
+
+        for (int i = 0; i < arr->count; i++) {
+            newBuf[i] = arr->data[i];
+        }
+        newBuf[arr->count] = *entry;
+
+        if (arr->data != newBuf) {
+            fn_MemFreeStatic(arr->data);
+        }
+
+        arr->data = newBuf;
+        arr->count = newCount;
+        arr->capacity = newCap;
+    } else {
+        arr->data[arr->count] = *entry;
+        arr->count = newCount;
+    }
+}
+
+// ============================================================
+// Resolved exe-internal function pointer for Draw (ScreenToCell)
+// ============================================================
+// FUN_140101270: ScreenToCell — reuses s_fn_ScreenToCell from ResolveRoadToolFuncs
+
+static bool s_roadDrawFuncsResolved = false;
+
+static void ResolveRoadDrawFuncs() {
+    if (s_roadDrawFuncsResolved) return;
+
+    // Road pathfinding — reuse existing s_fn_RoadPathfind
+    if (!s_fn_RoadPathfind) {
+        s_fn_RoadPathfind = reinterpret_cast<fn_RoadPathfind_t>(
+            ResolveAddr(Module::Exe, 0x14009ce00));
+    }
+
+    s_roadDrawFuncsResolved = true;
+}
+
+// ============================================================
+// RoadTool::Draw (vtable +0x40, Slot8)
+// ============================================================
+// Renders colored tile overlay for road placement preview.
+// Two phases:
+//   1. Constrained path from description entity (+0x80 flag)
+//   2. Drag selection with pathfinding (strict then relaxed mask)
+//
+// Original: 0x140105190
+void RoadTool_Draw(RoadTool* self, void* context, char param3) {
+    ResolveRoadDrawFuncs();
+    ResolveRoadToolFuncs();
+
+    int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+    uintptr_t descEntity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    int pathBuf[2048]; // large stack buffer for pathfinding output
+
+    // ---- Phase 1: Constrained path from description entity ----
+    if (*(char*)(descEntity + 0x80) != '\0') {
+        int gridSize = *mapGrid;
+        int constrainStart = *(int*)(descEntity + 0x98);
+        int constrainEnd   = *(int*)(descEntity + 0x9c);
+
+        // Normalize to cell indices
+        int startNorm = gridSize * (constrainStart / gridSize) + constrainStart % gridSize;
+        int endNorm   = gridSize * (constrainEnd / gridSize) + constrainEnd % gridSize;
+
+        int pathLen = 0;
+        if (s_fn_RoadPathfind) {
+            pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, 0xa17, (uint32_t)startNorm,
+                (uint32_t)endNorm, 0, (uintptr_t)pathBuf, self->modifierFlag, 1);
+        }
+
+        // Build tile array from path results
+        TileArray pathTiles = {nullptr, 0, 0};
+        for (int i = 0; i < pathLen; i++) {
+            TileRenderEntry entry;
+            entry.col   = (uint32_t)(pathBuf[i] % *mapGrid);
+            entry.row   = (uint32_t)(pathBuf[i] / *mapGrid);
+            entry.type  = 0;
+            entry.color = 0xffffff00; // yellow default
+            entry.extra = 0;
+            PushTileEntry(&pathTiles, &entry);
+        }
+
+        // Render: path tiles in R8, empty array in R9
+        TileArray emptyTiles = {nullptr, 0, 0};
+        if (fn_TileRender) {
+            fn_TileRender(nullptr, context, &pathTiles, &emptyTiles);
+        }
+
+        fn_MemFreeStatic(emptyTiles.data);
+        fn_MemFreeStatic(pathTiles.data);
+    }
+
+    // ---- Phase 2: Drag selection with pathfinding ----
+    if (param3 == '\0') {
+        uint32_t startCell, endCell;
+
+        if (*(char*)((uintptr_t)self + 0x28) == '\0') {
+            int cell = -1;
+            if (s_fn_ScreenToCell) {
+                cell = s_fn_ScreenToCell(0);
+            }
+            startCell = (uint32_t)cell;
+            endCell   = (uint32_t)cell;
+        } else {
+            startCell = (uint32_t)*(int*)((uintptr_t)self + 0x2c);
+            endCell   = (uint32_t)*(int*)((uintptr_t)self + 0x30);
+        }
+
+        if ((int)startCell < 0) return;
+
+        // Sort cells: ensure start <= end
+        uint32_t sc = startCell, ec = endCell;
+        if ((int)ec >= 0 && (int)ec < (int)sc) {
+            sc = endCell;
+            ec = startCell;
+        }
+
+        if ((int)ec < 0) ec = sc;
+
+        // Get terrain data
+        uintptr_t terrainBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+
+        // Check terrain flags at both cells
+        uint32_t flagA = 1u << (*(uint8_t*)(terrainBase + 0x29 + (uint64_t)sc * 0x30) & 0x1f);
+        uint32_t flagB = 1u << (*(uint8_t*)(terrainBase + 0x29 + (uint64_t)ec * 0x30) & 0x1f);
+        uint32_t combinedFlags = flagA | flagB;
+
+        // Both cells must be valid terrain (mask 0x5e0 clear) and unoccupied
+        bool valid = ((combinedFlags & 0x5e0) == 0) &&
+                     (*(uintptr_t*)(terrainBase + (uint64_t)sc * 0x30) == 0) &&
+                     (*(uintptr_t*)(terrainBase + (uint64_t)ec * 0x30) == 0);
+
+        int pathLen = 0;
+
+        if (valid) {
+            // Try strict pathfinding first (mask: combinedFlags | 0xa17)
+            if (s_fn_RoadPathfind) {
+                pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xa17,
+                    sc, ec, 0, (uintptr_t)pathBuf, self->modifierFlag, 1);
+            }
+        }
+
+        if (pathLen == 0) {
+            // Fallback: relaxed pathfinding (mask: combinedFlags | 0xff7)
+            if (s_fn_RoadPathfind) {
+                pathLen = s_fn_RoadPathfind((uintptr_t)mapGrid, combinedFlags | 0xff7,
+                    sc, ec, 0, (uintptr_t)pathBuf, self->modifierFlag, 0);
+            }
+        }
+
+        if (pathLen > 0) {
+            // Build tile array with per-tile color coding
+            TileArray pathTiles = {nullptr, 0, 0};
+
+            for (int i = 0; i < pathLen; i++) {
+                int cellIdx = pathBuf[i];
+                uintptr_t cellData = terrainBase + (uintptr_t)cellIdx * 0x30;
+                uint8_t terrainByte = *(uint8_t*)(cellData + 0x29);
+                uint32_t terrainFlag = 1u << (terrainByte & 0x1f);
+
+                // Color: green if valid road terrain (0xa17), red if invalid or occupied
+                uint32_t color;
+                if ((terrainFlag & 0xa17) == 0 || *(uintptr_t*)cellData != 0) {
+                    color = 0xffff0000; // red — invalid
+                } else {
+                    color = 0xff00ff00; // green — valid
+                }
+
+                TileRenderEntry entry;
+                entry.col   = (uint32_t)(cellIdx % *mapGrid);
+                entry.row   = (uint32_t)(cellIdx / *mapGrid);
+                entry.type  = 1; // road tile
+                entry.color = color;
+                entry.extra = 0;
+                PushTileEntry(&pathTiles, &entry);
+            }
+
+            // Render: path tiles in R8, empty array in R9
+            TileArray emptyTiles = {nullptr, 0, 0};
+            if (fn_TileRender) {
+                fn_TileRender(nullptr, context, &pathTiles, &emptyTiles);
+            }
+
+            fn_MemFreeStatic(emptyTiles.data);
+            fn_MemFreeStatic(pathTiles.data);
+        }
+    }
 }

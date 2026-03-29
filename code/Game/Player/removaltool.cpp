@@ -201,3 +201,328 @@ uint64_t RemovalTool_CalcCost(RemovalTool* self, int startCell, int endCell,
 
     return 0;
 }
+
+// ============================================================
+// Tile entry for rendering (0x14 bytes = 5 uint32_t)
+// ============================================================
+struct TileRenderEntry {
+    uint32_t col;
+    uint32_t row;
+    uint32_t type;     // 0 = flat tile, 1 = road tile, 3 = removable
+    uint32_t color;    // ARGB packed color
+    uint32_t extra;    // 0
+};
+static_assert(sizeof(TileRenderEntry) == 0x14, "TileRenderEntry size mismatch");
+
+// Dynamic array holding TileRenderEntry items (matches Ghidra pattern)
+struct TileArray {
+    TileRenderEntry* data;
+    int count;
+    int capacity;
+};
+
+// ============================================================
+// Helper: push a TileRenderEntry into a dynamic array
+// ============================================================
+static void PushTileEntry(TileArray* arr, const TileRenderEntry* entry) {
+    int newCount = arr->count + 1;
+    if (newCount == arr->count) return; // overflow guard (mirrors original)
+
+    if (newCount > arr->capacity) {
+        int newCap = (arr->count == 0) ? newCount : newCount * 3;
+        TileRenderEntry* newBuf = (TileRenderEntry*)fn_MemAlloc(
+            g_pMemAllocSingleton, (uint64_t)newCap * sizeof(TileRenderEntry), 4);
+
+        // Copy existing entries
+        for (int i = 0; i < arr->count; i++) {
+            newBuf[i] = arr->data[i];
+        }
+        // Copy new entry at end
+        newBuf[arr->count] = *entry;
+
+        // Free old buffer if different
+        if (arr->data != newBuf) {
+            fn_MemFreeStatic(arr->data);
+        }
+
+        arr->data = newBuf;
+        arr->count = newCount;
+        arr->capacity = newCap;
+    } else {
+        arr->data[arr->count] = *entry;
+        arr->count = newCount;
+    }
+}
+
+// ============================================================
+// Resolved exe-internal function pointers for Draw
+// ============================================================
+
+// RemovalTool_sub_48a0: checks if entity at tile is removable by this tool
+// Returns true if removable.
+typedef bool (*fn_RemovalSub48a0_t)(uintptr_t self, void* entityIBP, uint32_t col, uint32_t row);
+static fn_RemovalSub48a0_t s_fn_RemovalSub48a0 = nullptr;
+
+// RemovalTool_sub_4770: checks if entity can be removed (road check)
+typedef bool (*fn_RemovalSub4770_t)(uintptr_t self, void* entityIBP);
+static fn_RemovalSub4770_t s_fn_RemovalSub4770 = nullptr;
+
+// RemovalTool_sub_4670: checks if entity can be removed (building check)
+typedef bool (*fn_RemovalSub4670_t)(uintptr_t self, void* entityIBP);
+static fn_RemovalSub4670_t s_fn_RemovalSub4670 = nullptr;
+
+// FUN_140003050: gets parent/owner entity from an entity (InternalBasePtr)
+typedef void* (*fn_GetParentEntity_t)(uintptr_t entity, void* retIBP);
+static fn_GetParentEntity_t s_fn_GetParentEntity = nullptr;
+
+// FUN_14012ead0: checks if entity is marked for destruction
+typedef bool (*fn_IsMarkedForDestruction_t)(uintptr_t entity);
+static fn_IsMarkedForDestruction_t s_fn_IsMarkedForDestruction = nullptr;
+
+// FUN_140101270: ScreenToCell
+typedef int (*fn_ScreenToCell_t)(uint64_t unused);
+static fn_ScreenToCell_t s_fn_ScreenToCell = nullptr;
+
+static bool s_drawFuncsResolved = false;
+
+static void ResolveDrawFuncs() {
+    if (s_drawFuncsResolved) return;
+
+    s_fn_RemovalSub48a0 = reinterpret_cast<fn_RemovalSub48a0_t>(
+        ResolveAddr(Module::Exe, 0x1401048a0));
+    s_fn_RemovalSub4770 = reinterpret_cast<fn_RemovalSub4770_t>(
+        ResolveAddr(Module::Exe, 0x140104770));
+    s_fn_RemovalSub4670 = reinterpret_cast<fn_RemovalSub4670_t>(
+        ResolveAddr(Module::Exe, 0x140104670));
+    s_fn_GetParentEntity = reinterpret_cast<fn_GetParentEntity_t>(
+        ResolveAddr(Module::Exe, 0x140003050));
+    s_fn_IsMarkedForDestruction = reinterpret_cast<fn_IsMarkedForDestruction_t>(
+        ResolveAddr(Module::Exe, 0x14012ead0));
+    s_fn_ScreenToCell = reinterpret_cast<fn_ScreenToCell_t>(
+        ResolveAddr(Module::Exe, 0x140101270));
+
+    s_drawFuncsResolved = true;
+}
+
+// ============================================================
+// RemovalTool::Draw (vtable +0x40, Slot8)
+// ============================================================
+// Renders colored tile overlay for removal preview.
+// Two phases:
+//   1. Constrained tiles from description entity (+0x80 flag)
+//   2. Drag selection rectangle with per-tile removability check
+//
+// Original: 0x140104050
+void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
+    ResolveDrawFuncs();
+
+    uintptr_t descEntity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    int* mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+
+    // ---- Phase 1: Constrained entity tiles ----
+    if (*(char*)(descEntity + 0x80) != '\0') {
+        int gridSize = *mapGrid;
+        int constrainStart = *(int*)(descEntity + 0x98);
+        int constrainEnd   = *(int*)(descEntity + 0x9c);
+
+        int startCol = constrainStart % gridSize;
+        int startRow = constrainStart / gridSize;
+        int endCol   = constrainEnd % gridSize;
+        int endRow   = constrainEnd / gridSize;
+
+        // Build entity tile array
+        TileArray entityTiles = {nullptr, 0, 0};
+
+        for (int row = startRow; row <= endRow; row++) {
+            for (int col = startCol; col <= endCol; col++) {
+                TileRenderEntry entry;
+                entry.col   = (uint32_t)col;
+                entry.row   = (uint32_t)row;
+                entry.type  = 0;
+                entry.color = 0xFF000000; // default opaque
+                entry.extra = 0;
+                PushTileEntry(&entityTiles, &entry);
+            }
+        }
+
+        // Render: entity tiles in R8, empty array in R9
+        TileArray emptyTiles = {nullptr, 0, 0};
+        if (fn_TileRender) {
+            fn_TileRender(nullptr, context, &entityTiles, &emptyTiles);
+        }
+
+        // Cleanup
+        fn_MemFreeStatic(emptyTiles.data);
+        fn_MemFreeStatic(entityTiles.data);
+    }
+
+    // ---- Phase 2: Drag selection rectangle ----
+    if (param3 == '\0') {
+        int startCell, endCell;
+
+        if (*(char*)((uintptr_t)self + 0x28) == '\0') {
+            // Not dragging — pick cell under cursor
+            int cell = -1;
+            if (s_fn_ScreenToCell) {
+                cell = s_fn_ScreenToCell(0);
+            }
+            startCell = cell;
+            endCell   = cell;
+        } else {
+            startCell = *(int*)((uintptr_t)self + 0x2c);
+            endCell   = *(int*)((uintptr_t)self + 0x30);
+        }
+
+        if (startCell < 0) return;
+        if (endCell < 0) endCell = startCell;
+
+        int gridSize = *mapGrid;
+
+        // Convert to (row, col) grid coordinates
+        uint32_t startRow2 = (uint32_t)(startCell / gridSize);
+        uint32_t startCol2 = (uint32_t)(startCell % gridSize);
+        uint32_t endRow2   = (uint32_t)(endCell / gridSize);
+        uint32_t endCol2   = (uint32_t)(endCell % gridSize);
+
+        // Compute min/max for bounding rectangle
+        uint32_t minCol = startCol2, maxCol = endCol2;
+        if ((int)endCol2 < (int)startCol2) {
+            minCol = endCol2;
+            maxCol = startCol2;
+        }
+        uint32_t minRow = startRow2, maxRow = endRow2;
+        if ((int)endRow2 < (int)startRow2) {
+            minRow = endRow2;
+            maxRow = startRow2;
+        }
+
+        // Build selection tile array with per-tile removability check
+        TileArray selTiles = {nullptr, 0, 0};
+        mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+
+        uintptr_t removalDesc = (uintptr_t)self->removalDesc;
+
+        for (uint32_t r = minRow; r <= maxRow; r++) {
+            for (uint32_t c = minCol; c <= maxCol; c++) {
+                // Get entity at this tile from map grid
+                int tileIndex = *mapGrid * (int)r + (int)c;
+                uintptr_t tileData = *(uintptr_t*)((uintptr_t)mapGrid + 0x80); // terrain array base
+                uintptr_t cellBase = tileData + (uintptr_t)tileIndex * 0x30;
+
+                // Get entity occupying this tile
+                uintptr_t entityPtr = *(uintptr_t*)cellBase;
+                uintptr_t entityPtr2 = *(uintptr_t*)(cellBase + 8);
+                void* entity;
+                if (entityPtr == 0) {
+                    if (entityPtr2 == 0) {
+                        // No entity — construct null IBP
+                        void* nullIBP = nullptr;
+                        if (fn_InternalBasePtr_Ctor)
+                            fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                        entity = nullIBP;
+                    } else {
+                        entity = (void*)entityPtr2;
+                    }
+                } else {
+                    entity = (void*)entityPtr;
+                }
+
+                // Check removability
+                bool canRemove = false;
+
+                if (s_fn_RemovalSub48a0) {
+                    canRemove = s_fn_RemovalSub48a0((uintptr_t)self, &entity, c, r);
+                }
+
+                if (!canRemove) {
+                    // Additional checks from description flags
+                    mapGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
+
+                    // Check road removal flag (+0x40 on removalDesc)
+                    if (removalDesc && *(char*)(removalDesc + 0x40) != '\0') {
+                        int tileIdx2 = *mapGrid * (int)r + (int)c;
+                        uintptr_t tileData2 = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
+                        uintptr_t cellBase2 = tileData2 + (uintptr_t)tileIdx2 * 0x30;
+                        uint32_t terrainFlag = 1u << (*(uint8_t*)(cellBase2 + 0x29) & 0x1f);
+
+                        // Check if cell has road-type terrain (bits 0 or 1)
+                        if ((terrainFlag & 2) != 0 || (terrainFlag & 1) != 0 ||
+                            *(char*)(cellBase2 + 0x2a) != (char)0xff) {
+                            canRemove = true;
+                        }
+
+                        if (!canRemove) {
+                            // BST traversal at mapGrid + 0x3a (as int* offset = 0xe8 bytes)
+                            int* bstNode = *(int**)((uintptr_t)mapGrid + 0xe8);
+                            while (bstNode != nullptr) {
+                                if (tileIdx2 < *bstNode) {
+                                    bstNode = *(int**)((uintptr_t)bstNode + 0x10);
+                                } else if (tileIdx2 > *bstNode) {
+                                    bstNode = *(int**)((uintptr_t)bstNode + 0x18);
+                                } else {
+                                    canRemove = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!canRemove) {
+                        // Check road removal sub_4770
+                        void* entityCopy1 = entity;
+                        if (s_fn_RemovalSub4770) {
+                            canRemove = s_fn_RemovalSub4770((uintptr_t)self, &entityCopy1);
+                        }
+                    }
+
+                    if (!canRemove) {
+                        // Check building removal sub_4670
+                        void* entityCopy2 = entity;
+                        if (s_fn_RemovalSub4670) {
+                            canRemove = (bool)s_fn_RemovalSub4670((uintptr_t)self, &entityCopy2);
+                        }
+                    }
+
+                    if (!canRemove) {
+                        // Check removeBuildings flag (+0x43) and parent entity destruction
+                        if (removalDesc && *(char*)(removalDesc + 0x43) != '\0' && entity != nullptr) {
+                            void* entityForCheck = entity;
+                            if (fn_InternalBasePtr_CheckPtr)
+                                fn_InternalBasePtr_CheckPtr(&entityForCheck);
+
+                            // Get parent entity
+                            uintptr_t parentIBP = 0;
+                            if (s_fn_GetParentEntity) {
+                                s_fn_GetParentEntity((uintptr_t)entityForCheck, &parentIBP);
+                            }
+                            if (parentIBP != 0) {
+                                if (fn_InternalBasePtr_CheckPtr)
+                                    fn_InternalBasePtr_CheckPtr(&parentIBP);
+                                if (s_fn_IsMarkedForDestruction) {
+                                    canRemove = s_fn_IsMarkedForDestruction(parentIBP);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                TileRenderEntry entry;
+                entry.col   = c;
+                entry.row   = r;
+                entry.type  = canRemove ? 3 : 0;
+                entry.color = canRemove ? 0x8000ff00 : 0xffff0000;
+                entry.extra = 0;
+                PushTileEntry(&selTiles, &entry);
+            }
+        }
+
+        // Render: selection tiles in R8, empty array in R9
+        TileArray emptyTiles2 = {nullptr, 0, 0};
+        if (fn_TileRender) {
+            fn_TileRender(nullptr, context, &selTiles, &emptyTiles2);
+        }
+
+        fn_MemFreeStatic(emptyTiles2.data);
+        fn_MemFreeStatic(selTiles.data);
+    }
+}

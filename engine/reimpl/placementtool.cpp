@@ -64,11 +64,12 @@ static void Reimpl_PlacementToolSerialize(void* self, void* param2, char param3)
     PlacementTool_Serialize_Impl((PlacementTool*)self, param2, param3);
 }
 
-// --- Slot8: Draw ---
-// RE-ENABLED: reimpl doesn't use trampoline (RSP-safe naked JMP passthrough)
-// MOV R11,RSP at prologue byte 0: uses InstallHookRSPSafe + naked JMP detour.
+// --- Slot8: Draw --- REIMPLEMENTED (placement overlay tile rendering)
 static HookInfo g_hookPlacementToolDraw;
-REIMPL_RSP_PASSTHROUGH(PlacementToolDraw, g_hookPlacementToolDraw, "PlacementTool::Draw")
+static void Reimpl_PlacementToolDraw(void* self, void* context, char param3) {
+    g_lastHook = "PlacementTool::Draw";
+    PlacementTool_Draw_Impl((PlacementTool*)self, context, param3);
+}
 
 void InstallPlacementToolDtor() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x14002dc90);

@@ -25,3 +25,12 @@ void RemovalTool_Startup(RemovalTool* self);
 // Original: 0x140103ef0
 uint64_t RemovalTool_CalcCost(RemovalTool* self, int startCell, int endCell,
                               uint32_t* outValid, int* outCostB, int* outCostA, uint32_t* outLength);
+
+// Draw (vtable +0x40, Slot8): Renders tile overlay for removal preview.
+// Phase 1 (constrained): If description entity has constraints, iterates constrained
+//   tile range and renders all tiles with default color via fn_TileRender.
+// Phase 2 (drag selection): If param3==0, iterates drag selection rectangle,
+//   checks each tile for removability (sub_48a0, sub_4770, sub_4670), renders
+//   green (0x8000ff00) for removable, red (0xffff0000) for non-removable.
+// Original: 0x140104050
+void RemovalTool_Draw(RemovalTool* self, void* context, char param3);

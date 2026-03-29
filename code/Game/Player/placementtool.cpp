@@ -141,6 +141,17 @@ static fn_FUN_1400ff9e0_t s_fn_FUN_1400ff9e0 = nullptr;
 typedef int (*fn_HighlightAdd_t)(void* radiusComponent, int cellIndex);
 static fn_HighlightAdd_t s_fn_HighlightAdd = nullptr;
 
+// PlacementTool_OnRemove_sub_1380 — tile render + validate helper at 0x140101380
+// Builds tile record array for placement overlay, validates terrain, then renders.
+// 19 params: (occupancyGrid, context, startCol, startRow, endCol, endRow,
+//   terrainMask, ptr1, ptr2, f1, f2, f3, forceRed, allowOverlap,
+//   occupancyGridPtr, yawInt, yawAngle, isExisting, entityTemplate)
+typedef void (*fn_sub_1380_t)(void* occupancyGrid, void* context, int startCol, int startRow,
+    uint32_t endCol, int endRow, uint32_t terrainMask, void* ptr1, void* ptr2,
+    float f1, float f2, float f3, char forceRed, char allowOverlap,
+    void* occupancyGridPtr, int yawInt, int yawAngle, char isExisting, int64_t entityTemplate);
+static fn_sub_1380_t s_fn_sub_1380 = nullptr;
+
 // DAT_140172248 — constant float (0.5)
 static float* s_pFloat_halfCell = nullptr;
 
@@ -186,6 +197,13 @@ static void EnsureFuncs() {
 
     // Float constants in .rdata
     s_pFloat_halfCell = (float*)ResolveAddr(Module::Exe, 0x140172248);
+
+    // PlacementTool_OnRemove_sub_1380: the big tile render+validate helper
+    // Used by PlacementTool::Draw to render placement overlay tiles.
+    // Takes 19 parameters including placement bounds, terrain info, rotation, etc.
+    // Internally builds 0x14-byte tile records and calls CharacterComponent_impl_08c0.
+    // Original: 0x140101380
+    s_fn_sub_1380 = (fn_sub_1380_t)ResolveAddr(Module::Exe, 0x140101380);
 
     s_funcsResolved = true;
 }
@@ -731,5 +749,131 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         if (s_fn_FUN_1400ffbf0) {
             s_fn_FUN_1400ffbf0(self->dialogPtr);
         }
+    }
+}
+
+// ============================================================
+// PlacementTool::Draw (vtable +0x40, Slot8)
+// ============================================================
+// Renders the placement overlay tiles on the terrain.
+//
+// When param3 == 0 (active placement preview):
+//   1. Call sub_da00 to get placement bounds (startCol/startRow/endCol/endRow)
+//   2. Read rotation from IBP at +0x48 (CheckPtr, then read +0x10)
+//   3. Read description component fields (terrainMask, ptrs, yaw angle, entity template)
+//   4. Delegate to sub_1380 which validates each cell and renders colored overlay tiles
+//
+// Always checks dialog controller (+0x10) for existing placement marker at +0x80:
+//   If hasExistingPlacement, renders that existing placement in yellow via sub_1380.
+//
+// Disassembly reference: 0x1400fdcc0
+// Key sub-calls:
+//   0x1400fda00 = sub_da00 (placement position calc, already resolved)
+//   0x140101380 = sub_1380 (tile render + validate helper)
+// Uses:
+//   fn_InternalBasePtr_CheckPtr_slot for rotation IBP at +0x48
+//   DAT_140172248 = half-cell float constant
+//   descComponent (+0x28), mapComponent (+0x30)
+//
+// Original: 0x1400fdcc0
+void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
+    EnsureFuncs();
+
+    if (!s_fn_sub_1380) return;
+
+    float halfCell = s_pFloat_halfCell ? *s_pFloat_halfCell : 0.5f;
+    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t gameWorld = GetGameWorld();
+
+    // --- Section 1: Active placement preview (param3 == 0) ---
+    if (param3 == 0) {
+        int startCol = 0, startRow = 0;
+        uint32_t endCol = 0;
+        int endRow = 0;
+        float pos[3] = {0.0f, 0.0f, 0.0f};
+        float yaw = 0.0f;
+
+        bool valid = false;
+        if (s_fn_sub_da00) {
+            valid = s_fn_sub_da00(self, &startCol, &startRow,
+                                  (int*)&endCol, &endRow, pos, &yaw);
+        }
+
+        if (valid) {
+            // Read descComponent before CheckPtr (used for yawAngle and entityTemplate)
+            uintptr_t descComp1 = (uintptr_t)self->descComponent;  // +0x28
+
+            // CheckPtr on rotation IBP at +0x48
+            if (s_fn_IBP_CheckPtr) {
+                s_fn_IBP_CheckPtr((void*)(selfAddr + 0x48));
+            }
+
+            // Re-read descComponent after CheckPtr (used for terrainMask, ptrs)
+            uintptr_t descComp2 = (uintptr_t)self->descComponent;  // +0x28
+            uintptr_t mapComp = (uintptr_t)self->mapComponent;     // +0x30
+
+            // Read rotation value: *(*(self+0x48) + 0x10) * 0x5a
+            uintptr_t rotIBP = *(uintptr_t*)(selfAddr + 0x48);
+            int yawInt = *(int*)(rotIBP + 0x10) * 0x5a;  // rotation * 90 degrees
+
+            // yawAngle from first descComponent read (+0x40)
+            int yawAngle = *(int*)(descComp1 + 0x40);
+
+            s_fn_sub_1380(
+                (void*)(mapComp + 0x28),        // param1: mapComponent+0x28
+                context,                         // param2: render context
+                startCol,                        // param3: startCol
+                startRow,                        // param4: startRow
+                endCol,                          // param5: endCol
+                endRow,                          // param6: endRow
+                *(uint32_t*)(descComp2 + 0x20), // param7: terrainMask
+                (void*)(descComp2 + 0x30),      // param8: desc+0x30 (LEA)
+                (void*)(descComp2 + 0x28),      // param9: desc+0x28 (LEA)
+                0.0f,                            // param10
+                halfCell,                        // param11: DAT_140172248
+                0.0f,                            // param12
+                0,                               // param13: forceRed = false
+                0,                               // param14: allowOverlap = false
+                (void*)(mapComp + 0x28),        // param15: mapComp+0x28 (same as param1)
+                yawInt,                          // param16: rotation*90
+                yawAngle,                        // param17: desc+0x40
+                0,                               // param18: isExisting = false
+                *(int64_t*)(descComp1 + 0x50)   // param19: entityTemplate from desc
+            );
+        }
+    }
+
+    // --- Section 2: Existing placement marker (if hasExistingPlacement) ---
+    uintptr_t dialogCtrl = *(uintptr_t*)(selfAddr + 0x10);
+    if (*(char*)(dialogCtrl + 0x80) != 0) {
+        uintptr_t descComp = (uintptr_t)self->descComponent;  // +0x28
+        int mapSz1 = **(int**)(gameWorld + 0xf8);
+        int mapSz2 = **(int**)(gameWorld + 0xf8);  // re-read (matches original)
+
+        int existStart = *(int*)(dialogCtrl + 0x98);
+        int existEnd = *(int*)(dialogCtrl + 0x9c);
+        uint32_t existYaw = *(uint32_t*)(dialogCtrl + 0xa0);
+
+        s_fn_sub_1380(
+            (void*)(uintptr_t)existYaw,         // param1: existYaw as uint->void*
+            context,                             // param2: render context
+            existStart % mapSz2,                // param3: startCol
+            existStart / mapSz2,                // param4: startRow
+            (uint32_t)(existEnd % mapSz1),      // param5: endCol
+            existEnd / mapSz1,                  // param6: endRow
+            *(uint32_t*)(descComp + 0x20),      // param7: terrainMask
+            (void*)(descComp + 0x30),           // param8: desc+0x30
+            (void*)(descComp + 0x28),           // param9: desc+0x28
+            0.0f,                                // param10
+            halfCell,                            // param11
+            0.0f,                                // param12
+            0,                                   // param13: forceRed = false
+            0,                                   // param14: allowOverlap = false
+            (void*)(*(uintptr_t*)(selfAddr + 0x30) + 0x28), // param15: mapComp+0x28
+            existYaw,                            // param16: yawInt
+            *(int*)(descComp + 0x40),           // param17: yaw angle from desc
+            1,                                   // param18: isExisting = true
+            *(int64_t*)(descComp + 0x50)        // param19: entityTemplate
+        );
     }
 }

@@ -14,7 +14,7 @@
 //   +0x28: 0x1401056d0 — Slot5 (3 bytes RET, unhookable)
 //   +0x30: 0x140105690 — Slot6 OnKey (CALL rel32 in prologue — unhookable)
 //   +0x38: 0x140105680 — Slot7 (3 bytes RET, unhookable)
-//   +0x40: 0x140105190 — Slot8 Draw (hooked) — trampoline (calls base DragTool::Draw)
+//   +0x40: 0x140105190 — Slot8 Draw (hooked) — REIMPLEMENTED
 //   +0x48: 0x1400fc640 — Slot9 Shutdown (JZ rel8 in prologue — unhookable)
 //   +0x50: 0x1400268a0 — Slot10 (3 bytes, unhookable — returns false)
 //   +0x58: 0x140004950 — Slot11 (10 bytes, unhookable)
@@ -48,16 +48,12 @@ static void Reimpl_RoadToolStartup(void* self) {
 }
 
 // ============================================================
-// Slot8: Draw — trampoline passthrough
+// Slot8: Draw — REIMPLEMENTED
 // ============================================================
-// Draw calls the shared DragTool::Draw (complex render logic with dynamic
-// arrays) then reads KeyMap modifier flag. Kept as trampoline until the
-// base DragTool::Draw is fully reimplemented.
 static HookInfo g_hookRoadToolDraw;
-typedef void (*fn_RoadToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_RoadToolDraw(void* self, void* context, char param) {
     g_lastHook = "RoadTool::RoadToolDraw";
-    ((fn_RoadToolDraw_t)g_hookRoadToolDraw.trampoline)(self, context, param);
+    RoadTool_Draw((RoadTool*)self, context, param);
 }
 
 // ============================================================
@@ -86,7 +82,7 @@ void InstallRoadToolDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140105190);
     InstallHook(target, (void*)Reimpl_RoadToolDraw, &g_hookRoadToolDraw, 15);
 #ifdef _DEBUG
-    printf("[RoadTool] Draw hooked at %p (trampoline)\n", (void*)target);
+    printf("[RoadTool] Draw hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveRoadToolDraw() { RemoveHook(&g_hookRoadToolDraw); }

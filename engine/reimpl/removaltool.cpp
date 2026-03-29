@@ -49,20 +49,12 @@ static void Reimpl_RemovalToolStartup(void* self) {
 }
 
 // ============================================================
-// Slot8: Draw — trampoline passthrough
+// Slot8: Draw — REIMPLEMENTED
 // ============================================================
-// Draw is complex (~200 instructions): iterates grid cells in the removal area,
-// creates preview entities for removable items, builds a dynamic array of
-// cell data (col, row, status, color) for rendering.
-// Requires many untyped engine APIs: MapComponent cell access,
-// CharacterComponent_impl_08c0 (rendering helper), RemovalTool_sub_48a0/4770/4670
-// (entity removal eligibility checks), fn_InternalBasePtr_Ctor/CheckPtr, etc.
-// Keeping as trampoline until sub-functions are typed.
 static HookInfo g_hookRemovalToolDraw;
-typedef void (*fn_RemovalToolDraw_t)(void* self, void* context, char param);
 static void Reimpl_RemovalToolDraw(void* self, void* context, char param) {
     g_lastHook = "RemovalTool::RemovalToolDraw";
-    ((fn_RemovalToolDraw_t)g_hookRemovalToolDraw.trampoline)(self, context, param);
+    RemovalTool_Draw((RemovalTool*)self, context, param);
 }
 
 // ============================================================
@@ -116,7 +108,7 @@ void InstallRemovalToolDraw() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x140104050);
     InstallHook(target, (void*)Reimpl_RemovalToolDraw, &g_hookRemovalToolDraw, 15);
 #ifdef _DEBUG
-    printf("[RemovalTool] Draw hooked at %p\n", (void*)target);
+    printf("[RemovalTool] Draw hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveRemovalToolDraw() { RemoveHook(&g_hookRemovalToolDraw); }
