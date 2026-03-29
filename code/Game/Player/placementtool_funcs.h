@@ -38,3 +38,10 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* param2, char param3
 // if present, renders that existing placement in yellow via sub_1380.
 // Original: 0x1400fdcc0
 void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3);
+
+// Startup (vtable +0x20, Slot4): Initialization — find components, alloc mesh.
+// Finds 4 components via GetTypeId+IsDerivedFrom loops, resolves RotationSetting IBP,
+// allocates MeshInstance (0x120 bytes), picks random mesh variant, calls SetMesh
+// and UpdateHierarchy.
+// Original: 0x1400fe580
+void PlacementTool_Startup_Impl(PlacementTool* self);

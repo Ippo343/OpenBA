@@ -29,6 +29,12 @@ int FencedTool_CalcCost_Impl(FencedTool* self, int startCell, int endCell,
                               uint32_t* outWidth, int* outHeight, int* outDepth,
                               int* outFenceSegments);
 
+// Startup (vtable +0x20, Slot4): Initializes fenced tool components and mesh.
+// Finds CreateFencedDescription, AreaDescription, FenceDescription, SizeDescription,
+// resolves RotationSetting, allocates MeshInstance for fence preview.
+// Original: 0x1400dcd50
+void FencedTool_Startup_Impl(FencedTool* self);
+
 // Draw (vtable +0x40, Slot8): Renders fence placement preview.
 // Two phases: edit-mode tiles + preview-mode tiles with terrain validation.
 // Original: 0x1400dc440

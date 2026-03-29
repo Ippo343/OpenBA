@@ -35,12 +35,12 @@ static void* Reimpl_PlacementToolDtor(void* self, uint32_t flags) {
     return PlacementTool_Dtor_Impl((PlacementTool*)self, flags);
 }
 
-// --- Slot4: Startup ---
+// --- Slot4: Startup --- REIMPLEMENTED
 static HookInfo g_hookPlacementToolStartup;
 typedef void (*fn_PlacementToolStartup_t)(void* self);
 static void Reimpl_PlacementToolStartup(void* self) {
     g_lastHook = "PlacementTool::PlacementToolStartup";
-    ((fn_PlacementToolStartup_t)g_hookPlacementToolStartup.trampoline)(self);
+    PlacementTool_Startup_Impl((PlacementTool*)self);
 }
 
 // --- Slot5: Shutdown2 --- REIMPLEMENTED

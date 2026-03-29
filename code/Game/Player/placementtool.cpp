@@ -877,3 +877,195 @@ void PlacementTool_Draw_Impl(PlacementTool* self, void* context, char param3) {
         );
     }
 }
+
+// ============================================================
+// PlacementTool::Startup (vtable +0x20, Slot4)
+// ============================================================
+// Initializes the placement tool by finding description components from the
+// entity at +0x20, resolving the RotationSetting IBP, allocating a MeshInstance,
+// and selecting a random mesh variant.
+//
+// Component lookups (FindComponent loops using vtable GetTypeId at +0x10):
+//   1. DAT_1401c7468 (SizeDescription)       -> self->descComponent   (+0x28)
+//   2. DAT_1401c7a18 (AreaDescription)       -> self->mapComponent    (+0x30)
+//   3. DAT_1401c7a88 (FenceDescription)      -> self->createComponent (+0x38)
+//   4. DWORD_1401c4870 (RadiusComponent)     -> self->radiusComponent (+0x40)
+//
+// Then:
+//   5. CheckPtr on IBP at +0x18, IsDerivedFrom RotationSetting, store IBP at +0x48
+//   6. Allocate 0x120-byte MeshInstance, construct, set vtable to 0x14015e240
+//   7. Random::Rand(meshCount) to pick variant
+//   8. SetMesh from variant's mesh array (last entry)
+//   9. UpdateHierarchy on mesh
+//  10. Store variant index at +0x64
+//
+// IAT dispatch slots used:
+//   [0x140152a98] = fn_IsDerivedFrom
+//   [0x140152ab0] = fn_InternalBasePtr_CheckPtr
+//   [0x140152a90] = fn_InternalBasePtr_Ctor
+//   [0x140152b60] = System::MemoryAllocator::MemAlloc
+//   [0x140151490] = Graphics::MeshInstance::MeshInstance (ctor)
+//   [0x1401512e8] = System::Random::Rand
+//   [0x140151498] = Graphics::MeshInstance::SetMesh
+//   [0x140152888] = Graphics::MeshInstance::UpdateHierarchy
+//   [0x1401c63c8] = TypeInfo_RotationSetting (type ID)
+//
+// Original: 0x1400fe580
+
+// Local function pointers for Startup (resolved from IAT dispatch slots)
+typedef void (*fn_MeshInstanceCtor_t)(void* self);
+typedef void (*fn_MeshInstanceSetMesh_t)(void* self, void* mesh);
+
+static fn_MeshInstanceCtor_t s_fn_MeshInstanceCtor = nullptr;
+static fn_MeshInstanceSetMesh_t s_fn_MeshInstanceSetMesh = nullptr;
+static uint32_t* s_pTypeId_RotationSetting = nullptr;
+static void** s_pMeshInstanceVtable = nullptr;
+static bool s_startupFuncsResolved = false;
+
+static void EnsureStartupFuncs() {
+    if (s_startupFuncsResolved) return;
+    EnsureFuncs();  // resolve common funcs (IBP_Ctor, IBP_CheckPtr, etc.)
+
+    auto resolveIAT = [](uintptr_t ghidraAddr) -> void* {
+        uintptr_t slot = ResolveAddr(Module::Exe, ghidraAddr);
+        if (slot) return *reinterpret_cast<void**>(slot);
+        return nullptr;
+    };
+
+    s_fn_MeshInstanceCtor = (fn_MeshInstanceCtor_t)resolveIAT(0x140151490);
+    s_fn_MeshInstanceSetMesh = (fn_MeshInstanceSetMesh_t)resolveIAT(0x140151498);
+
+    // RotationSetting type ID at 0x1401c63c8 (read as uint32_t*)
+    s_pTypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);
+
+    // MeshInstance vtable at 0x14015e240 (LEA, not deref -- direct address in .rdata)
+    s_pMeshInstanceVtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
+
+    s_startupFuncsResolved = true;
+}
+
+void PlacementTool_Startup_Impl(PlacementTool* self) {
+    EnsureStartupFuncs();
+
+    uintptr_t entity = (uintptr_t)self->descriptionPtr;  // +0x20
+
+    // --- Find 4 components via GetTypeId + IsDerivedFrom ---
+    // Component list is at entity+0x28 (pointer array), count at entity+0x30.
+    // The original code loops through components, calls vtable[+0x10] (GetTypeId),
+    // compares, then confirms with IsDerivedFrom. On first type match that fails
+    // IsDerivedFrom, it stops (returns nullptr), matching original break-on-match.
+
+    auto findComp = [&](uint32_t targetTypeId) -> void* {
+        if (!entity || !fn_IsDerivedFrom) return nullptr;
+        int count = *(int*)(entity + 0x30);
+        void** components = *(void***)(entity + 0x28);
+        for (int i = 0; i < count; i++) {
+            void* comp = components[i];
+            if (!comp) continue;
+            typedef uint32_t (*fn_GetTypeId_t)(void* self);
+            fn_GetTypeId_t getTypeId = *(fn_GetTypeId_t*)(*(uintptr_t*)comp + 0x10);
+            uint32_t typeId = getTypeId(comp);
+            if (typeId == targetTypeId) {
+                if (fn_IsDerivedFrom(comp, targetTypeId)) {
+                    return comp;
+                }
+                return nullptr;
+            }
+        }
+        return nullptr;
+    };
+
+    // 1. SizeDescription (DAT_1401c7468) -> descComponent (+0x28)
+    self->descComponent = findComp(*g_TypeId_SizeDescription);
+
+    // 2. AreaDescription (DAT_1401c7a18) -> mapComponent (+0x30)
+    self->mapComponent = findComp(*g_TypeId_AreaDescription);
+
+    // 3. FenceDescription (DAT_1401c7a88) -> createComponent (+0x38)
+    self->createComponent = findComp(*g_TypeId_FenceDescription);
+
+    // 4. RadiusComponent (DWORD_1401c4870) -> radiusComponent (+0x40)
+    self->radiusComponent = findComp(*g_TypeId_RadiusComponent);
+
+    // --- Resolve RotationSetting IBP ---
+    // CheckPtr on IBP at +0x18
+    if (s_fn_IBP_CheckPtr) {
+        s_fn_IBP_CheckPtr((void*)((uintptr_t)self + 0x18));
+    }
+
+    // Read resolved pointer, check IsDerivedFrom RotationSetting
+    void* ibpVal = self->_field18;
+    void* rotSetting = nullptr;
+    if (fn_IsDerivedFrom && s_pTypeId_RotationSetting && ibpVal) {
+        bool isDerived = fn_IsDerivedFrom(ibpVal, *s_pTypeId_RotationSetting);
+        if (isDerived) {
+            rotSetting = ibpVal;
+        }
+    }
+
+    // Construct IBP with the resolved RotationSetting, store at +0x48
+    uint64_t localIBP = 0;
+    if (s_fn_IBP_Ctor) {
+        s_fn_IBP_Ctor(&localIBP, rotSetting);
+    }
+    self->rotationIBP = localIBP;
+
+    // --- Allocate and construct MeshInstance (0x120 bytes) ---
+    void* meshMem = nullptr;
+    if (fn_MemAlloc && g_pMemAllocSingleton) {
+        meshMem = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
+    }
+
+    void* meshInst = nullptr;
+    if (meshMem) {
+        if (s_fn_MeshInstanceCtor) {
+            s_fn_MeshInstanceCtor(meshMem);
+        }
+        // Overwrite vtable to 0x14015e240 (specific MeshInstance subclass vtable)
+        if (s_pMeshInstanceVtable) {
+            *(void**)meshMem = s_pMeshInstanceVtable;
+        }
+        meshInst = meshMem;
+    }
+    self->meshInstance = meshInst;
+
+    // --- Pick random mesh variant ---
+    // createComponent (+0x38) has mesh count at +0x28
+    uintptr_t modelComp = (uintptr_t)self->createComponent;
+    uint32_t meshCount = *(uint32_t*)(modelComp + 0x28);
+
+    // Get game world's Random at +0xd8
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    void* rng = *(void**)(gameWorld + 0xd8);
+
+    uint32_t variant = 0;
+    if (fn_Random_Rand && rng) {
+        variant = fn_Random_Rand(rng, meshCount);
+    }
+
+    // --- Set mesh from variant's mesh array ---
+    // ModelComponent+0x20 points to a mesh array. Each entry is 0x18 bytes:
+    //   +0x00: unknown
+    //   +0x08: pointer to sub-array of mesh pointers
+    //   +0x10: count of entries in sub-array
+    // We select the last entry: subArray[count - 1]
+    uintptr_t meshArray = *(uintptr_t*)(modelComp + 0x20);
+    int64_t variantIdx = (int64_t)(int32_t)variant;
+    uintptr_t entryBase = meshArray + variantIdx * 0x18;
+
+    int subCount = *(int*)(entryBase + 0x10);
+    uintptr_t subArray = *(uintptr_t*)(entryBase + 0x8);
+    void* mesh = *(void**)(subArray + (int64_t)(subCount - 1) * 8);
+
+    if (s_fn_MeshInstanceSetMesh && self->meshInstance) {
+        s_fn_MeshInstanceSetMesh(self->meshInstance, mesh);
+    }
+
+    // --- Update hierarchy ---
+    if (s_fn_MeshUpdateHier && self->meshInstance) {
+        s_fn_MeshUpdateHier(self->meshInstance);
+    }
+
+    // Store variant index
+    self->meshVariant = (int32_t)variant;
+}

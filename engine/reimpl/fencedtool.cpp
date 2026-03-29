@@ -40,14 +40,12 @@ static void* Reimpl_FencedToolDtor(void* self, uint32_t flags) {
 }
 
 // ============================================================
-// Slot4: Startup — trampoline passthrough (too complex: 5 component lookups,
-// MeshInstance allocation, mesh setup, hierarchy update)
+// Slot4: Startup — REIMPLEMENTED
 // ============================================================
 static HookInfo g_hookFencedToolStartup;
-typedef void (*fn_FencedToolStartup_t)(void* self);
 static void Reimpl_FencedToolStartup(void* self) {
     g_lastHook = "FencedTool::FencedToolStartup";
-    ((fn_FencedToolStartup_t)g_hookFencedToolStartup.trampoline)(self);
+    FencedTool_Startup_Impl((FencedTool*)self);
 }
 
 // ============================================================
@@ -121,7 +119,7 @@ void InstallFencedToolStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400dcd50);
     InstallHook(target, (void*)Reimpl_FencedToolStartup, &g_hookFencedToolStartup, 18);
 #ifdef _DEBUG
-    printf("[FencedTool] Startup hooked at %p\n", (void*)target);
+    printf("[FencedTool] Startup hooked at %p (REIMPLEMENTED)\n", (void*)target);
 #endif
 }
 void RemoveFencedToolStartup() { RemoveHook(&g_hookFencedToolStartup); }
