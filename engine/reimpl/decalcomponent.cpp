@@ -23,6 +23,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/decalcomponent_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -35,36 +36,33 @@ static HookInfo g_hookDraw;
 static HookInfo g_hookOnCreate;
 
 // ============================================================
-// Passthrough wrappers
+// Reimpl wrappers -- delegate to clean code
 // ============================================================
-static void Reimpl_Shutdown(void* self, void* stream) {
+static void Reimpl_Shutdown(DecalComponent* self, void* stream) {
     g_lastHook = "DecalComponent::Shutdown";
-    typedef void (*Orig_t)(void*, void*);
-    ((Orig_t)g_hookShutdown.trampoline)(self, stream);
+    DecalComponent_Shutdown(self, stream);
 }
 
-static void Reimpl_Serialize(void* self) {
+static void Reimpl_Serialize(DecalComponent* self) {
     g_lastHook = "DecalComponent::Serialize";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookSerialize.trampoline)(self);
+    DecalComponent_Serialize(self);
 }
 
-static void Reimpl_Draw(void* self) {
+static void Reimpl_Draw(DecalComponent* self) {
     g_lastHook = "DecalComponent::Draw";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookDraw.trampoline)(self);
+    DecalComponent_Draw(self);
 }
 
-static void Reimpl_OnCreate(void* self) {
+static void Reimpl_OnCreate(DecalComponent* self) {
     g_lastHook = "DecalComponent::OnCreate";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookOnCreate.trampoline)(self);
+    DecalComponent_OnCreate(self);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallDecalComponentShutdown() {
+    DecalComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x14011b820);
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG

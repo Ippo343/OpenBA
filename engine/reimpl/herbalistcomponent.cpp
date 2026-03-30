@@ -1,31 +1,11 @@
 // engine/reimpl/herbalistcomponent.cpp
 // Reimplementation of HerbalistComponent lifecycle methods from Application-x64.exe.
 //
-// HerbalistComponent (0x50 bytes) is a ResourceProduceComponent subclass that
-// manages herbalist buildings. Factory at 0x140006b40 does ResourceProduceComponent_Ctor
-// then sets vtable to 0x140159860. No additional fields beyond ResourceProduceComponent.
-//
-// Vtable at 0x140159860. Non-trivial overrides:
-//   Shutdown (0x14004b200) — Only non-trivial method.
-//
-// Note: Serialize, Draw, OnCreate, OnRemove, Update, Slot10, OnUpdate2 are all base no-ops.
-//
-// Shutdown decompilation (0x14004b200, 13 instructions):
-//   PUSH RBX; SUB RSP,0x30; MOV RBX,RDX
-//   CALL 0x14012b4a0  // ResourceProduceComponent parent Shutdown
-//   Create Serializer(stream, version=0)
-//   ~Serializer()
-//   Return
-//
-// This is a minimal Shutdown that just calls the parent ResourceProduceComponent::Shutdown
-// and creates an empty Serializer (no additional data to serialize).
-//
-// Strategy: Passthrough wrapper. The parent class Shutdown does the real work.
-//
-// Prologue size:
-//   Shutdown: 14 (PUSH RBX + SUB RSP,0x30 + MOV RBX,RDX + CALL)
+// HerbalistComponent (0x50 bytes) is a ResourceProduceComponent subclass.
+// Vtable at 0x140159860. Only non-trivial override: Shutdown (0x14004b200).
 
 #include "HerbalistComponent.h"
+#include "Component/herbalistcomponent_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -38,18 +18,19 @@
 static HookInfo g_hookShutdown;
 
 // ============================================================
-// Passthrough wrappers
+// Shutdown (0x14004b200)
 // ============================================================
-static void Reimpl_Shutdown(void* self, void* stream) {
+static void Reimpl_Shutdown(HerbalistComponent* self, void* stream) {
     g_lastHook = "HerbalistComponent::Shutdown";
-    typedef void (*Orig_t)(void*, void*);
-    ((Orig_t)g_hookShutdown.trampoline)(self, stream);
+    HerbalistComponent_Shutdown(self, stream);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallHerbalistComponentShutdown() {
+    HerbalistComponent_InitFuncs();
+
     uintptr_t target = ResolveAddr(Module::Exe, 0x14004b200);
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG

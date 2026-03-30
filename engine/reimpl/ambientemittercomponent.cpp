@@ -41,6 +41,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/ambientemittercomponent_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -51,24 +52,23 @@ static HookInfo g_hookShutdown;
 static HookInfo g_hookDraw;
 
 // ============================================================
-// Passthrough wrappers
+// Reimpl wrappers -- delegate to clean code
 // ============================================================
-static void Reimpl_Shutdown(void* self, void* stream) {
+static void Reimpl_Shutdown(AmbientEmitterComponent* self, void* stream) {
     g_lastHook = "AmbientEmitterComponent::Shutdown";
-    typedef void (*Orig_t)(void*, void*);
-    ((Orig_t)g_hookShutdown.trampoline)(self, stream);
+    AmbientEmitterComponent_Shutdown(self, stream);
 }
 
-static void Reimpl_Draw(void* self) {
+static void Reimpl_Draw(AmbientEmitterComponent* self) {
     g_lastHook = "AmbientEmitterComponent::Draw";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookDraw.trampoline)(self);
+    AmbientEmitterComponent_Draw(self);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallAmbientEmitterComponentShutdown() {
+    AmbientEmitterComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140042f30);
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG

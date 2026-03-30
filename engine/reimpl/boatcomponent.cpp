@@ -18,39 +18,30 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/boatcomponent_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
 // ============================================================
-// Shutdown (0x1400465d0) — passthrough
-// 95-instruction function. Very complex serialization:
-//   1. Component_Serialize base
-//   2. Version block (serializer version 0)
-//   3. InternalBasePtr at +0x28 (entity ref, validated with IsDerivedFrom ComponentEntity)
-//   4. Vector3 at +0x40 (position)
-//   5. Float at +0x4c
-//   6. InternalBasePtr at +0x30 (validated with DAT_1401c7a50 type)
-//   7. InternalBasePtr at +0x38 (validated with DAT_1401c7078 type)
-//   8. Vector3 at +0x50 (direction/target)
-//   9. Int at +0x70 (dock ID, -1 = none)
-//  10. Vector3 array at +0x60 (count at +0x68) — route waypoints
-//      Loop serializes each Vector3 (12 bytes each)
-// Far too complex for reimpl — heavy engine serialization deps.
+// Hook state
 // ============================================================
-typedef void (*BoatShutdown_t)(void* self, void* stream);
 static HookInfo g_hookShutdown;
 
-static void Reimpl_Shutdown(void* self, void* stream) {
+// ============================================================
+// Shutdown (0x1400465d0) -- delegates to clean code
+// ============================================================
+static void Reimpl_Shutdown(BoatComponent* self, void* stream) {
     g_lastHook = "BoatComponent::Shutdown";
-    ((BoatShutdown_t)g_hookShutdown.trampoline)(self, stream);
+    BoatComponent_Shutdown(self, stream);
 }
 
 void InstallBoatComponentShutdown() {
+    BoatComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1400465d0);
     // Prologue: PUSH RDI(2) + SUB RSP,0x50(4) + MOV [RSP+0x20],-2(9) = 15
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
-    printf("[BoatComponent] Shutdown hooked at %p (passthrough, prologue=15)\n", (void*)target);
+    printf("[BoatComponent] Shutdown hooked at %p\n", (void*)target);
 #endif
 }
 void RemoveBoatComponentShutdown() { RemoveHook(&g_hookShutdown); }

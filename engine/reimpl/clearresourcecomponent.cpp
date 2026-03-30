@@ -12,20 +12,9 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/clearresourcecomponent_funcs.h"
 #include <cstdio>
 #include <cstdint>
-
-// ============================================================
-// Helper function pointers
-// ============================================================
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t fn_Component_Serialize = nullptr;
-
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 
 // ============================================================
 // Hook state
@@ -33,52 +22,18 @@ static fn_Serializer_Dtor_t fn_Serializer_Dtor = nullptr;
 static HookInfo g_hookShutdown;
 
 // ============================================================
-// Shutdown (0x1401185E0)
-// Calls Component_Serialize, then creates and immediately destroys two
-// empty Serializer blocks (version 0). This pattern preserves save
-// format compatibility for components that once had serialized fields.
+// Shutdown (0x1401185E0) -- delegates to clean code
 // ============================================================
 static void Reimpl_Shutdown(ClearResourceComponent* self, void* stream) {
     g_lastHook = "ClearResourceComponent::Shutdown";
-    fn_Component_Serialize(self, stream);
-
-    uint8_t serializer1[16];
-    fn_Serializer_Ctor(serializer1, stream, 0);
-    fn_Serializer_Dtor(serializer1);
-
-    uint8_t serializer2[16];
-    fn_Serializer_Ctor(serializer2, stream, 0);
-    fn_Serializer_Dtor(serializer2);
-}
-
-// ============================================================
-// Resolve helpers
-// ============================================================
-static bool ResolveHelpers() {
-    fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t pCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
-    uintptr_t pDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
-    fn_Serializer_Ctor = reinterpret_cast<fn_Serializer_Ctor_t>(
-        *reinterpret_cast<uintptr_t*>(pCtorSlot));
-    fn_Serializer_Dtor = reinterpret_cast<fn_Serializer_Dtor_t>(
-        *reinterpret_cast<uintptr_t*>(pDtorSlot));
-
-    return fn_Component_Serialize && fn_Serializer_Ctor && fn_Serializer_Dtor;
+    ClearResourceComponent_Shutdown(self, stream);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallClearResourceComponentShutdown() {
-    if (!ResolveHelpers()) {
-#ifdef _DEBUG
-        printf("[ClearResourceComponent] ERROR: Failed to resolve helpers\n");
-#endif
-        return;
-    }
-
+    ClearResourceComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401185E0);
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 14);
 #ifdef _DEBUG

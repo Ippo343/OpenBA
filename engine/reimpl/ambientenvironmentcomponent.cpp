@@ -34,6 +34,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Component/ambientenvironmentcomponent_funcs.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -43,39 +44,18 @@
 static HookInfo g_hookUpdate;
 
 // ============================================================
-// Original function pointer (direct call, not trampoline)
-// The trampoline is unreliable for this function because the
-// prologue (17 bytes of pushes + SUB RSP) is long but safe —
-// no RIP-relative instructions. We use the trampoline.
-// ============================================================
-typedef void (*fn_AmbientEnvUpdate_t)(AmbientEnvironmentComponent* self);
-
-// ============================================================
-// Update (0x140043310)
-//
-// Parameters: RCX = this (AmbientEnvironmentComponent*)
-// Note: No deltaTime parameter — single-arg Update.
+// Update (0x140043310) -- delegates to clean code
 // ============================================================
 static void Reimpl_Update(AmbientEnvironmentComponent* self) {
     g_lastHook = "AmbientEnvironmentComponent::Update";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 5) {
-        printf("[AmbientEnvironmentComponent::Update] self=%p field38=%p field40=%d\n",
-               (void*)self, self->field38, self->field40);
-        callCount++;
-    }
-#endif
-
-    // Call original via trampoline — prologue is all register pushes + SUB RSP,
-    // no RIP-relative instructions, so trampoline is safe.
-    ((fn_AmbientEnvUpdate_t)g_hookUpdate.trampoline)(self);
+    AmbientEnvironmentComponent_Update(self);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallAmbientEnvironmentComponentUpdate() {
+    AmbientEnvironmentComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140043310);
     // Prologue: PUSH RBX(2) + PUSH RBP(1) + PUSH RSI(1) + PUSH RDI(1) +
     //   PUSH R12(2) + PUSH R13(2) + PUSH R14(2) + PUSH R15(2) +
