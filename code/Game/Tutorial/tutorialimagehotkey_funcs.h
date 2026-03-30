@@ -45,7 +45,6 @@ void TutorialImageHotKey_Cleanup(void* self);
 void* TutorialImageHotKey_Ctor(void* self);
 
 // Slot9 (vtable +0x48, 0x1400e0420): Display logic.
-// Creates UI element, finds label, resolves hotkey name via KeyMap,
-// sets text on label element.
-// NOTE: Delegates to original via trampoline — requires many unresolved
-// UI/KeyMap engine functions for a full clean reimpl.
+// Creates UI element from imageRef, finds TextElement child, resolves hotkey
+// name via KeyMap, sets text on the TextElement.
+void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog);

@@ -187,20 +187,75 @@ void* TutorialImageInputKey_Ctor(void* self) {
 
 // ============================================================
 // Slot9: Slot9/Update (0x1400e06e0)
-// Complex UI operation -- calls via trampoline for now.
-// Uses: Dialog::CreateElement, Element::FindElementType,
-//       IsDerivedFrom, InternalBasePtr_Ctor, KeyMap::GetDeviceForId,
-//       KeyMap::GetInputForId, FUN_140099c20, TextElement::SetText
 // ============================================================
-// Resolved to original function for passthrough
-static void* s_fn_Slot9_Original = nullptr;
+// Creates a UI element from imageRef, finds a TextElement child,
+// looks up the bound key name from KeyMap using inputId at +0x30,
+// and sets the display text on the TextElement.
+//
+// Params (Win64 ABI):
+//   self = TutorialImageInputKey*
+//   retIBP = InternalBasePtr* (return buffer, also output)
+//   dialog = Dialog* (parent dialog)
+void TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
+    EnsureFuncs();
+    auto p = reinterpret_cast<uint8_t*>(self);
 
-void TutorialImageInputKey_Slot9(void* self, void* param1, void* param2) {
-    if (!s_fn_Slot9_Original) {
-        s_fn_Slot9_Original = (void*)ResolveAddr(Module::Exe, 0x1400e06e0);
+    // 1. Create UI element from imageRef at +0x20
+    if (fn_Dialog_CreateElement)
+        fn_Dialog_CreateElement(dialog, retIBP, *(void**)(p + 0x20));
+
+    // 2. CheckPtr on the returned IBP
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(retIBP);
+
+    // 3. FindElementType — find TextElement child
+    void* element = *(void**)retIBP;
+    uint8_t foundIBP[16] = {};
+    if (fn_Element_FindElementType && g_TypeId_TextElement)
+        fn_Element_FindElementType(element, foundIBP, *g_TypeId_TextElement);
+
+    // 4. CheckPtr on found element
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(foundIBP);
+
+    // 5. IsDerivedFrom check — verify it's a TextElement
+    void* foundObj = *(void**)foundIBP;
+    void* textElement = nullptr;
+    if (fn_IsDerivedFrom && g_TypeId_TextElement && foundObj) {
+        if (fn_IsDerivedFrom(foundObj, *g_TypeId_TextElement))
+            textElement = foundObj;
     }
-    // Complex UI logic with many engine dependencies -- delegate to original
-    typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
-    if (s_fn_Slot9_Original)
-        reinterpret_cast<fn_Slot9_t>(s_fn_Slot9_Original)(self, param1, param2);
+
+    // 6. Wrap in InternalBasePtr
+    void* textRef = nullptr;
+    if (fn_InternalBasePtr_Ctor)
+        fn_InternalBasePtr_Ctor(&textRef, textElement);
+
+    // 7. Get actual KeyMap object (triple deref from exref)
+    void* keymap = nullptr;
+    if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
+        void* step2 = *(void**)*g_pKeyMapObjectExref;
+        if (step2) keymap = *(void**)step2;
+    }
+
+    // 8. Get device type and input index for inputId at +0x30
+    int inputId = *(int*)(p + 0x30);
+    int deviceType = 0;
+    if (fn_KeyMap_GetDeviceForId && keymap)
+        deviceType = fn_KeyMap_GetDeviceForId(keymap, inputId, 0);
+
+    int inputIndex = 0;
+    if (fn_KeyMap_GetInputForId && keymap)
+        inputIndex = fn_KeyMap_GetInputForId(keymap, inputId, 0);
+
+    // 9. Get key name as UI::String
+    uint8_t uiStr[16] = {};
+    if (fn_GetInputKeyName && g_pKeyMapSingleton && *g_pKeyMapSingleton)
+        fn_GetInputKeyName(*g_pKeyMapSingleton, uiStr, deviceType, inputIndex);
+
+    // 10. Set text on the TextElement
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&textRef);
+    if (fn_TextElement_SetText && textRef)
+        fn_TextElement_SetText(textRef, uiStr);
 }

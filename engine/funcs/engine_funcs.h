@@ -571,6 +571,21 @@ extern fn_LabelElement_SetSprite_t fn_LabelElement_SetSprite;
 typedef void (*fn_TextElement_SetText_t)(void* self, void* str);
 extern fn_TextElement_SetText_t fn_TextElement_SetText;
 
+// --- UI::Dialog ---
+
+// Dialog::CreateElement(dialog, retInternalBasePtr, imageExternalRef)
+// Dispatch slot 0x1401528c0. Creates a UI element from an external resource ref.
+typedef void (*fn_Dialog_CreateElement_t)(void* dialog, void* retIBP, void* imageExternalRef);
+extern fn_Dialog_CreateElement_t fn_Dialog_CreateElement;
+
+// --- Input key name helper (exe 0x140099c20) ---
+
+// GetInputKeyName(keyMapContainer, retUIString, deviceType, inputIndex)
+// Member function with hidden retval. Container is *g_pKeyMapSingleton.
+// Returns ptr to retUIString (16-byte UI::String).
+typedef void* (*fn_GetInputKeyName_t)(void* keyMapContainer, void* retUIString, int deviceType, int inputIndex);
+extern fn_GetInputKeyName_t fn_GetInputKeyName;
+
 // ============================================================
 // Exe Type IDs (Phase A2 — .rdata pointers in Application-x64.exe)
 // ============================================================

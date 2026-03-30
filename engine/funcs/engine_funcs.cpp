@@ -229,6 +229,8 @@ fn_LabelElement_SetSprite_t fn_LabelElement_SetSprite = nullptr;
 
 // TextElement
 fn_TextElement_SetText_t fn_TextElement_SetText = nullptr;
+fn_Dialog_CreateElement_t fn_Dialog_CreateElement = nullptr;
+fn_GetInputKeyName_t fn_GetInputKeyName = nullptr;
 
 // ============================================================
 // Exe Type IDs (Phase A2)
@@ -1870,6 +1872,16 @@ bool EngineFuncsInit() {
     if (!fn_TextElement_SetText)
         fn_TextElement_SetText = reinterpret_cast<fn_TextElement_SetText_t>(
             ResolveAddr(Module::Runtime, 0x180042070));
+
+    // --- UI::Dialog ---
+    {
+        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528c0));
+        if (d && *d) fn_Dialog_CreateElement = reinterpret_cast<fn_Dialog_CreateElement_t>(*d);
+    }
+
+    // --- GetInputKeyName (exe 0x140099c20) ---
+    fn_GetInputKeyName = reinterpret_cast<fn_GetInputKeyName_t>(
+        ResolveAddr(Module::Exe, 0x140099c20));
 
     // ================================================================
     // Phase A2: Exe Type IDs (.rdata pointers)

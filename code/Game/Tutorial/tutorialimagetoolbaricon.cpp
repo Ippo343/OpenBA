@@ -217,20 +217,122 @@ void* TutorialImageToolbarIcon_Ctor(void* self) {
 
 // ============================================================
 // Slot9: Slot9/Update (0x1400e0940)
-// Complex UI operation -- calls via original for now.
-// Uses: Dialog::CreateElement, Element::FindElementType,
-//       IsDerivedFrom, InternalBasePtr_Ctor, FUN_140027de0,
-//       fn_Sprite_Ctor_Name, ImageElement::SetSprite,
-//       toolbar component iteration
 // ============================================================
-static void* s_fn_Slot9_Original = nullptr;
+// Creates a UI element from imageRef, finds an ImageElement child,
+// resolves toolbar ref, constructs a Sprite from the toolbar icon data,
+// and sets the sprite on the ImageElement.
+//
+// If field40->+0x58 is null (no component list), uses field40->+0x28
+// (spriteSheet) and field40->+0x38 (spriteName) directly.
+// If non-null, iterates the component list to find a matching
+// BuildRequirementComponent and uses its +0x20/+0x28.
+void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
+    EnsureFuncs();
+    auto p = reinterpret_cast<uint8_t*>(self);
 
-void TutorialImageToolbarIcon_Slot9(void* self, void* param1, void* param2) {
-    if (!s_fn_Slot9_Original) {
-        s_fn_Slot9_Original = (void*)ResolveAddr(Module::Exe, 0x1400e0940);
+    // 1. Create UI element from imageRef at +0x20
+    if (fn_Dialog_CreateElement)
+        fn_Dialog_CreateElement(dialog, retIBP, *(void**)(p + 0x20));
+
+    // 2. CheckPtr on the returned IBP
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(retIBP);
+
+    // 3. FindElementType — find ImageElement child
+    void* element = *(void**)retIBP;
+    uint8_t foundIBP[16] = {};
+    if (fn_Element_FindElementType && g_TypeId_ImageElement)
+        fn_Element_FindElementType(element, foundIBP, *g_TypeId_ImageElement);
+
+    // 4. CheckPtr on found element
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(foundIBP);
+
+    // 5. IsDerivedFrom check — verify it's an ImageElement
+    void* foundObj = *(void**)foundIBP;
+    void* imageElement = nullptr;
+    if (fn_IsDerivedFrom && g_TypeId_ImageElement && foundObj) {
+        if (fn_IsDerivedFrom(foundObj, *g_TypeId_ImageElement))
+            imageElement = foundObj;
     }
-    // Complex UI logic with many engine dependencies -- delegate to original
-    typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
-    if (s_fn_Slot9_Original)
-        reinterpret_cast<fn_Slot9_t>(s_fn_Slot9_Original)(self, param1, param2);
+
+    // 6. Wrap in InternalBasePtr
+    void* imageRef = nullptr;
+    if (fn_InternalBasePtr_Ctor)
+        fn_InternalBasePtr_Ctor(&imageRef, imageElement);
+
+    // 7. Resolve toolbar ref from String at +0x30
+    if (s_fn_ResolveToolbar)
+        s_fn_ResolveToolbar(p + 0x30);
+
+    // 8. Get resolved toolbar object at +0x40
+    uintptr_t toolbar = *(uintptr_t*)(p + 0x40);
+    uint64_t spriteSheet = 0;
+    const void* spriteName = nullptr;
+
+    if (toolbar) {
+        uintptr_t componentList = *(uintptr_t*)(toolbar + 0x58);
+
+        if (componentList == 0) {
+            // No component list — use toolbar's direct sprite data
+            if (s_fn_ResolveToolbar)
+                s_fn_ResolveToolbar(p + 0x30);
+            if (s_fn_ResolveToolbar)
+                s_fn_ResolveToolbar(p + 0x30);
+
+            toolbar = *(uintptr_t*)(p + 0x40); // re-read after resolve
+            spriteSheet = *(uint64_t*)(toolbar + 0x28);
+            spriteName = (const void*)(toolbar + 0x38);
+        } else {
+            // Has component list — iterate to find BuildRequirementComponent
+            if (s_fn_ResolveToolbar)
+                s_fn_ResolveToolbar(p + 0x30);
+
+            componentList = *(uintptr_t*)(toolbar + 0x58);
+            int count = *(int*)(componentList + 0x30);
+            uintptr_t arrayData = *(uintptr_t*)(componentList + 0x28);
+
+            void* matchedComp = nullptr;
+            for (int i = 0; i < count; i++) {
+                void* comp = *(void**)(arrayData + i * 8);
+                if (!comp) continue;
+
+                // Call GetTypeId (vtable +0x10)
+                uintptr_t vtbl = *(uintptr_t*)comp;
+                typedef uint32_t (*fn_GetTypeId_t)(void*);
+                fn_GetTypeId_t getTypeId = (fn_GetTypeId_t)(*(void**)(vtbl + 0x10));
+                uint32_t typeId = getTypeId(comp);
+
+                if (g_TypeId_BuildRequirementComponent &&
+                    typeId == *g_TypeId_BuildRequirementComponent) {
+                    // IsDerivedFrom check
+                    if (fn_IsDerivedFrom &&
+                        fn_IsDerivedFrom(comp, *g_TypeId_BuildRequirementComponent)) {
+                        matchedComp = comp;
+                    }
+                    break;
+                }
+            }
+
+            if (matchedComp) {
+                spriteSheet = *(uint64_t*)((uintptr_t)matchedComp + 0x20);
+                spriteName = (const void*)((uintptr_t)matchedComp + 0x28);
+            } else {
+                // Fallback: use toolbar's direct data (matchedComp stays null)
+                spriteSheet = *(uint64_t*)(toolbar + 0x28);
+                spriteName = (const void*)(toolbar + 0x38);
+            }
+        }
+    }
+
+    // 9. Construct Sprite from spriteSheet + spriteName
+    uint8_t spriteBuf[16] = {};
+    if (fn_Sprite_Sprite && spriteName)
+        fn_Sprite_Sprite(spriteBuf, spriteSheet, spriteName);
+
+    // 10. Set sprite on the ImageElement
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&imageRef);
+    if (fn_ImageElement_SetSprite && imageRef)
+        fn_ImageElement_SetSprite(imageRef, spriteBuf);
 }

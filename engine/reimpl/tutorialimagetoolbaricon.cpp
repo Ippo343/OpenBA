@@ -113,9 +113,7 @@ static HookInfo g_hookSlot9;
 typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
 static void Reimpl_Slot9(void* self, void* param1, void* param2) {
     g_lastHook = "TutorialImageToolbarIcon::Slot9";
-    // Must call trampoline, not the hooked address -- clean code's ResolveAddr
-    // would hit our hook again causing infinite recursion (stack overflow).
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param1, param2);
+    TutorialImageToolbarIcon_Slot9(self, param1, param2);
 }
 
 void InstallTutorialImageToolbarIconSlot9() {

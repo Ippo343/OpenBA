@@ -109,12 +109,11 @@ void RemoveTutorialImageHotKeyCtor() {
 }
 
 // --- Slot9: Slot9 ---
-// Kept as trampoline — requires many unresolved UI/KeyMap engine functions.
 static HookInfo g_hookSlot9;
-typedef void (*fn_Slot9_t)(void* self, void* param1, void* param2);
-static void Reimpl_Slot9(void* self, void* param1, void* param2) {
+typedef void* (*fn_Slot9_t)(void* self, void* param1, void* param2);
+static void* Reimpl_Slot9(void* self, void* param1, void* param2) {
     g_lastHook = "TutorialImageHotKey::Slot9";
-    ((fn_Slot9_t)g_hookSlot9.trampoline)(self, param1, param2);
+    return TutorialImageHotKey_Slot9(self, param1, param2);
 }
 
 void InstallTutorialImageHotKeySlot9() {

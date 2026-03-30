@@ -9,7 +9,7 @@
 
 The tutorial system is a state machine of TutorialSteps, each with setup actions (camera, dialog, restrict player), goal checks (button click, count, game speed), and image overlays (hotkey icons, toolbar icons, input keys). Driven by GameUpdateLoop step 3g.
 
-**Status:** All 17 tutorial classes have deep reimplementations. All 57 hooks enabled (including FinishTutorialInstance::Slot5, re-enabled 2026-03-21).
+**Status:** All 17 tutorial classes fully reimplemented as clean C++. All 57 hooks enabled. No remaining trampolines or delegates — module 100% complete (2026-03-29).
 
 ---
 
@@ -18,7 +18,7 @@ The tutorial system is a state machine of TutorialSteps, each with setup actions
 ### Core
 | Class | Vtable | Hooks | Reimpl Status |
 |-------|--------|-------|---------------|
-| Tutorial | 0x140160740 | 4 (Dtor, Serialize, Cleanup, Ctor) | **Done** — Dtor/Cleanup/Ctor clean, Serialize trampoline |
+| Tutorial | 0x140160740 | 4 (Dtor, Serialize, Cleanup, Ctor) | **Done** — all clean C++ |
 | TutorialStep | 0x140160e90 | 4 (Dtor, Serialize, Cleanup, Init) | **Done** — all clean C++ |
 | TutorialInstance | 0x140160bf8 | 2 (Dtor, Serialize) | **Done** — all clean C++ |
 
@@ -29,7 +29,7 @@ The tutorial system is a state machine of TutorialSteps, each with setup actions
 | TutorialGoalButton | 0x1401607a0 | 5 | **Done** — all clean C++ |
 | TutorialGoalCount | 0x140160800 | 5 | **Done** — all clean C++ (11 count modes) |
 | TutorialGoalGameSpeed | 0x1401608e0 | 5 | **Done** — all clean C++ |
-| TutorialGoalDialog | 0x140160950 | 5 | **Done** — in reimpl (not split to _funcs.h yet) |
+| TutorialGoalDialog | 0x140160950 | 5 | **Done** — all clean C++ |
 
 ### Setups (5 types)
 | Class | Vtable | Hooks | Reimpl Status |
@@ -44,9 +44,9 @@ The tutorial system is a state machine of TutorialSteps, each with setup actions
 | Class | Vtable | Hooks | Reimpl Status |
 |-------|--------|-------|---------------|
 | TutorialImage (base) | 0x140160a40 | 5 (Dtor, Serialize, Cleanup, Ctor, Slot9) | **Done** — all clean C++ |
-| TutorialImageHotKey | 0x140160ab0 | 5 | **Done** — Slot9 trampoline (complex UI API deps) |
-| TutorialImageInputKey | 0x140160b20 | 5 | **Done** — Slot9 delegates to original |
-| TutorialImageToolbarIcon | 0x140160b90 | 5 | **Done** — Slot9 delegates to original |
+| TutorialImageHotKey | 0x140160ab0 | 5 | **Done** — all clean C++ |
+| TutorialImageInputKey | 0x140160b20 | 5 | **Done** — all clean C++ |
+| TutorialImageToolbarIcon | 0x140160b90 | 5 | **Done** — all clean C++ |
 
 ### Achievement Goals
 | Class | Vtable | Hooks | Reimpl Status |
@@ -64,14 +64,16 @@ The tutorial system is a state machine of TutorialSteps, each with setup actions
 
 ## Remaining Work
 
-### Slot9 (Image display) — still uses original code
-The Slot9 methods for TutorialImageHotKey, TutorialImageInputKey, and TutorialImageToolbarIcon delegate to the original function rather than clean C++ reimplementation. These require many unresolved engine UI APIs (Dialog::CreateElement, Input::KeyMap, UI::TextElement::SetText, etc.). Low priority — the hooks work correctly, just not "clean" yet.
+**All items complete as of 2026-03-29.**
 
-### Tutorial::Serialize — still uses trampoline
-The Tutorial core Serialize function is complex (serializes step arrays, external references, current step index) and uses engine serializer dependencies that weren't fully resolved. Works correctly via trampoline.
+### ~~Slot9 (Image display) — still uses original code~~ DONE
+All three Slot9 methods (TutorialImageHotKey, TutorialImageInputKey, TutorialImageToolbarIcon) reimplemented as clean C++ in `code/Game/Tutorial/`. Added `fn_Dialog_CreateElement` (dispatch slot 0x1401528c0) and `fn_GetInputKeyName` (exe 0x140099c20) to engine_funcs.
 
-### TutorialGoalDialog — not split to _funcs.h
-The clean reimplementation lives directly in `engine/reimpl/tutorialgoaldialog.cpp` rather than being split into the proper `code/Game/Tutorial/tutorialgoaldialog.cpp` + `_funcs.h` pattern.
+### ~~Tutorial::Serialize — still uses trampoline~~ DONE (was already complete)
+Tutorial::Serialize was already reimplemented as clean C++ in `code/Game/Tutorial/tutorial.cpp:194-242`. The reimpl wrapper calls it directly — no trampoline.
+
+### ~~TutorialGoalDialog — not split to _funcs.h~~ DONE
+Split to `code/Game/Tutorial/tutorialgoaldialog.cpp` + `tutorialgoaldialog_funcs.h`. The reimpl wrapper now delegates to clean code functions.
 
 ---
 
