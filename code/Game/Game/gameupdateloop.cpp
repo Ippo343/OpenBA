@@ -148,10 +148,9 @@ static fn_Video_Context_SetTime_t fn_Video_Context_SetTime = nullptr;
 typedef void (*fn_Video_Context_SetCamera_t)(void* self, void* viewMatrix, void* projMatrix);
 static fn_Video_Context_SetCamera_t fn_Video_Context_SetCamera = nullptr;
 
-// Math::Transform::AsTransform3(this) -> Transform3* (returns ptr into self)
-// Already in engine_funcs.h as fn_Transform_AsTransform3 but it takes (self, retval)
-// For the Draw path we use the Runtime version that returns in-place
-typedef void* (*fn_Transform3_AsMatrix_t)(void* self);
+// Math::Transform3::AsMatrix(this) -> Matrix (non-trivial return: 64 bytes)
+// MSVC x64 member function ABI: RCX=this, RDX=hidden retval ptr, returns RAX=retval ptr
+typedef void* (*fn_Transform3_AsMatrix_t)(void* self, void* retval);
 static fn_Transform3_AsMatrix_t fn_Transform3_AsMatrix = nullptr;
 
 // Math::Vector3::Normalize(this)
@@ -478,6 +477,12 @@ static void EnsureInit() {
         ResolveExport("?IsPaused@Application@1@QEAA_NXZ"));
     fn_ExternalList_Find = reinterpret_cast<fn_ExternalList_Find_t>(
         ResolveExport("?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z"));
+    if (!fn_ExternalList_Find) {
+        // Fallback: read from exe dispatch slot 0x140152160 (used by Startup at 0x140097c9f)
+        uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140152160);
+        if (dispatchAddr)
+            fn_ExternalList_Find = *reinterpret_cast<fn_ExternalList_Find_t*>(dispatchAddr);
+    }
     fn_Filename_CtorCStr_Local = reinterpret_cast<fn_Filename_CtorCStr_Local_t>(
         ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
     // fn_Filename_Dtor — resolved by EngineFuncsInit()
@@ -804,24 +809,19 @@ post_simulation:
     TRACE("[GameUpdateLoop::Update] Audio::Scene::Update done\n");
 
     // Step 13: Quicksave/quickload key checks
+    // Original asm at 0x1400966c1: triple deref from slot, dispatch call at 0x140151758
+    // Match proven working pattern from dragtool/pathtool — no null guards (original has none).
     {
-        void* keyMap = nullptr;
-        if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
-            void* step2 = *(void**)*g_pKeyMapObjectExref;
-            if (step2) {
-                keyMap = *(void**)step2;
-            }
-        }
+        void* keyMap = ***(void****)g_pKeyMapObjectExref;
 
-        if (keyMap && fn_KeyMap_Pressed) {
-            self->m_quickSavePressed = fn_KeyMap_Pressed(keyMap, 0, 0x21) ? 1 : 0;
-            self->m_quickLoadPressed = fn_KeyMap_Pressed(keyMap, 0, 0x22) ? 1 : 0;
-            TRACE("[GameUpdateLoop::Update] quicksave/quickload key check done (save=%d, load=%d)\n",
-                  self->m_quickSavePressed, self->m_quickLoadPressed);
-        } else {
-            TRACE("[GameUpdateLoop::Update] SKIP quicksave/quickload (keyMap=%p, fn=%p)\n",
-                  keyMap, (void*)fn_KeyMap_Pressed);
+        if (fn_KeyMap_Pressed(keyMap, 0, 0x21)) {
+            self->m_quickSavePressed = 1;
         }
+        if (fn_KeyMap_Pressed(keyMap, 0, 0x22)) {
+            self->m_quickLoadPressed = 1;
+        }
+        TRACE("[GameUpdateLoop::Update] quicksave/quickload checked (save=%d, load=%d)\n",
+              self->m_quickSavePressed, self->m_quickLoadPressed);
     }
 
     // Step 14: SaveLoad::Update if active
@@ -1000,14 +1000,17 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         uintptr_t pc = (uintptr_t)self->m_playerController;
 
-        // Build Transform3 from PlayerController data (offset +0x98 to +0xC4)
-        // Then get view and projection matrices
-        // The decompile copies Transform3 at +0x98 and projection at +0xC8
-        uint8_t transform3[28]; // 7 floats
+        // Original copies Transform3 (7 floats at +0x98) and projection matrix (16 floats at +0xC8)
+        // from PlayerController onto the stack, then calls AsMatrix → SetCamera.
+        // AsMatrix returns Matrix by value (64 bytes) — requires hidden return pointer ABI.
+        uint8_t transform3[28]; // 7 floats = Transform3
         for (int i = 0; i < 7; i++) {
             ((uint32_t*)transform3)[i] = *(uint32_t*)(pc + 0x98 + i * 4);
         }
-        void* viewMatrix = fn_Transform3_AsMatrix(transform3);
+
+        // AsMatrix: RCX=this(Transform3*), RDX=hidden retval(Matrix*), returns RAX=retval
+        uint8_t viewMatrix[64]; // 4x4 float Matrix output buffer
+        fn_Transform3_AsMatrix(transform3, viewMatrix);
 
         // Projection matrix at +0xC8 (16 floats = 64 bytes)
         uint8_t projMatrix[64];
@@ -1536,5 +1539,60 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
     }
 
     TRACE("[GameUpdateLoop::OnScenarioComplete] EXIT\n");
+}
+
+
+// ============================================================
+// GameUpdateLoop::Destroy (0x140019DD0) — Scalar deleting destructor
+// ============================================================
+// Ghidra decompile:
+//   1. Set vtable to GameUpdateLoop vtable
+//   2. Clear g_pGameWorldSingleton to NULL
+//   3. Destroy System::String at +0x28 (m_saveName)
+//   4. Call UpdateLoop::~UpdateLoop (base dtor in Runtime)
+//   5. If flags & 1, free memory
+
+// UpdateLoop::~UpdateLoop (Runtime 0x1800DDDB0)
+typedef void (*fn_UpdateLoop_Dtor_t)(void* self);
+static fn_UpdateLoop_Dtor_t fn_UpdateLoop_Dtor = nullptr;
+
+extern "C"
+void* GameUpdateLoop_Destroy(GameUpdateLoop* self, uint32_t flags) {
+    EnsureInit();
+
+    TRACE("[GameUpdateLoop::Destroy] ENTER (self=%p, flags=0x%x)\n", (void*)self, flags);
+
+    // Resolve UpdateLoop dtor on first call
+    if (!fn_UpdateLoop_Dtor) {
+        fn_UpdateLoop_Dtor = reinterpret_cast<fn_UpdateLoop_Dtor_t>(
+            ResolveExport("??1UpdateLoop@Engine@@UEAA@XZ"));
+        if (!fn_UpdateLoop_Dtor) {
+            fn_UpdateLoop_Dtor = reinterpret_cast<fn_UpdateLoop_Dtor_t>(
+                ResolveAddr(Module::Runtime, 0x1800DDDB0));
+        }
+    }
+
+    // Step 1: Reset vtable to GameUpdateLoop vtable
+    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x14015e2f0);
+    self->vtable = reinterpret_cast<UpdateLoopVtable*>(vtableAddr);
+
+    // Step 2: Clear game world singleton
+    *g_pGameWorldSingleton = nullptr;
+
+    // Step 3: Destroy System::String at +0x28 (m_saveName)
+    fn_String_Dtor(self->m_saveName);
+
+    // Step 4: Call UpdateLoop::~UpdateLoop (base class destructor)
+    if (fn_UpdateLoop_Dtor) {
+        fn_UpdateLoop_Dtor(self);
+    }
+
+    // Step 5: Conditional free
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+
+    TRACE("[GameUpdateLoop::Destroy] EXIT\n");
+    return self;
 }
 

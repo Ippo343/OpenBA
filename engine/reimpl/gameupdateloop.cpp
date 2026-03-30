@@ -63,6 +63,7 @@ extern "C" bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time);
 extern "C" void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha);
 extern "C" void GameUpdateLoop_Startup(GameUpdateLoop* self);
 extern "C" void GameUpdateLoop_Shutdown(GameUpdateLoop* self);
+extern "C" void* GameUpdateLoop_Destroy(GameUpdateLoop* self, uint32_t flags);
 
 // ============================================================
 // Prologue-hooked wrappers (call clean reimpl)
@@ -71,27 +72,27 @@ extern "C" void GameUpdateLoop_Shutdown(GameUpdateLoop* self);
 // Destroy (0x140019DD0) — scalar deleting destructor
 // Prologue: MOV [RSP+8],RCX; PUSH RDI; SUB RSP,0x30; MOV [RSP+0x20],-2
 // 19 bytes, Bug Class 4 (RSP-relative store) — safe for passthrough
+// Delegates to clean reimpl.
 typedef void* (*fn_Destroy_t)(void* self, uint32_t flags);
-static void* Passthrough_Destroy(void* self, uint32_t flags) {
+static void* Reimpl_Destroy(void* self, uint32_t flags) {
     g_lastHook = "GameUpdateLoop::Destroy";
-    return ((fn_Destroy_t)g_hookDestroy.trampoline)(self, flags);
+    return GameUpdateLoop_Destroy((GameUpdateLoop*)self, flags);
 }
 
 // Startup (0x140097C00) — initialize game systems
-// Passthrough for now — Startup reimpl crashes on ExternalList::Find (null fptr).
-// TODO: fix dialog creation in GameUpdateLoop_Startup and switch back.
+// Delegates to clean reimpl. ExternalList::Find crash fixed (dispatch slot fallback).
 typedef void (*fn_Startup_t)(void* self);
-static void Passthrough_Startup(void* self) {
+static void Reimpl_Startup(void* self) {
     g_lastHook = "GameUpdateLoop::Startup";
-    ((fn_Startup_t)g_hookStartup.trampoline)(self);
+    GameUpdateLoop_Startup((GameUpdateLoop*)self);
 }
 
 // Shutdown (0x1400977C0) — tear down game systems
-// Passthrough for now — keep paired with Startup.
+// Delegates to clean reimpl (paired with Startup).
 typedef void (*fn_Shutdown_t)(void* self);
-static void Passthrough_Shutdown(void* self) {
+static void Reimpl_Shutdown(void* self) {
     g_lastHook = "GameUpdateLoop::Shutdown";
-    ((fn_Shutdown_t)g_hookShutdown.trampoline)(self);
+    GameUpdateLoop_Shutdown((GameUpdateLoop*)self);
 }
 
 // Load (0x140096B00) — load resources (759 instructions)
@@ -120,12 +121,11 @@ static bool Reimpl_Update(void* self, void* time) {
 
 // Draw (0x140096010) — render interpolated frame
 // Bug Class 3: MOV RAX,RSP as first instruction — cannot prologue-hook.
-// Passthrough via saved original pointer (vtable patch preserves original function).
-// TODO: switch to GameUpdateLoop_Draw reimpl once Draw crash is debugged.
+// Vtable-patched. Delegates to clean reimpl in code/Game/Game/gameupdateloop.cpp.
 typedef void (*fn_Draw_t)(void* self, float alpha);
-static void Passthrough_Draw(void* self, float alpha) {
+static void Reimpl_Draw(void* self, float alpha) {
     g_lastHook = "GameUpdateLoop::Draw";
-    ((fn_Draw_t)g_origDraw)(self, alpha);
+    GameUpdateLoop_Draw((GameUpdateLoop*)self, alpha);
 }
 
 // ============================================================
@@ -166,7 +166,7 @@ static void RestoreVtableEntry(uintptr_t vtableBase, int slotIndex, void* origin
 
 void InstallGameUpdateLoopDestroy() {
     uintptr_t target = ResolveAddr(Module::Exe, GameUpdateLoopAddr::Destroy);
-    InstallHook(target, (void*)Passthrough_Destroy, &g_hookDestroy, 19);
+    InstallHook(target, (void*)Reimpl_Destroy, &g_hookDestroy, 19);
 #ifdef _DEBUG
     printf("[GameUpdateLoop] Destroy hooked at %p\n", (void*)target);
 #endif
@@ -175,7 +175,7 @@ void RemoveGameUpdateLoopDestroy() { RemoveHook(&g_hookDestroy); }
 
 void InstallGameUpdateLoopStartup() {
     uintptr_t target = ResolveAddr(Module::Exe, GameUpdateLoopAddr::Startup);
-    InstallHook(target, (void*)Passthrough_Startup, &g_hookStartup, 14);
+    InstallHook(target, (void*)Reimpl_Startup, &g_hookStartup, 14);
 #ifdef _DEBUG
     printf("[GameUpdateLoop] Startup hooked at %p\n", (void*)target);
 #endif
@@ -184,7 +184,7 @@ void RemoveGameUpdateLoopStartup() { RemoveHook(&g_hookStartup); }
 
 void InstallGameUpdateLoopShutdown() {
     uintptr_t target = ResolveAddr(Module::Exe, GameUpdateLoopAddr::Shutdown);
-    InstallHook(target, (void*)Passthrough_Shutdown, &g_hookShutdown, 12);
+    InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 12);
 #ifdef _DEBUG
     printf("[GameUpdateLoop] Shutdown hooked at %p\n", (void*)target);
 #endif
@@ -223,7 +223,7 @@ void InstallGameUpdateLoopDraw() {
         g_vtableAddr = ResolveAddr(Module::Exe, GameUpdateLoopAddr::Vtable);
     }
     // Vtable slot 4 = +0x20 = Draw
-    g_origDraw = PatchVtableEntry(g_vtableAddr, 4, (void*)Passthrough_Draw);
+    g_origDraw = PatchVtableEntry(g_vtableAddr, 4, (void*)Reimpl_Draw);
     printf("[GameUpdateLoop] Draw vtable-patched (slot 4, orig=%p)\n", g_origDraw);
 }
 void RemoveGameUpdateLoopDraw() {
