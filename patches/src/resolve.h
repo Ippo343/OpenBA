@@ -1,7 +1,11 @@
 #pragma once
 // Multi-binary address resolution for Banished reimplementation.
 // Translates Ghidra addresses to runtime addresses for any loaded module.
-// Handles ASLR by computing delta at init time.
+//
+// Two build modes:
+//   DLL mode (default):       ASLR delta against loaded original exe/DLLs.
+//   Standalone mode (-DSTANDALONE_EXE): Exe addresses resolved via address
+//       registry of reimplemented functions. Runtime/VideoDX11 still use ASLR.
 
 #include <windows.h>
 #include <cstdint>
@@ -24,13 +28,14 @@ struct ModuleInfo {
 };
 
 // Initialize address resolution for all loaded modules.
-// Returns true if exe + Runtime-x64.dll are resolved.
-// VideoDX11 is optional (may not be loaded yet).
-// Call this after Runtime-x64.dll is confirmed loaded.
+// DLL mode: Returns true if exe + Runtime-x64.dll are resolved.
+// Standalone mode: Returns true if Runtime-x64.dll is resolved (exe is us).
 bool ResolveInit();
 
 // Translate a Ghidra address to a runtime address.
-inline uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// DLL mode: applies ASLR delta for all modules.
+// Standalone mode: Module::Exe queries the address registry; others use ASLR delta.
+uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // Get the ModuleInfo for a module (read-only).
 const ModuleInfo* GetModuleInfo(Module mod);
@@ -53,7 +58,32 @@ inline void WriteGlobal(Module mod, uintptr_t ghidra_addr, T value) {
     *reinterpret_cast<T*>(ResolveAddr(mod, ghidra_addr)) = value;
 }
 
-// --- Inline implementation ---
+// --- Standalone address registry ---
+#ifdef STANDALONE_EXE
+
+// Register a reimplemented function/vtable/global at a Ghidra exe address.
+// Call during static init or from standalone main before game loop.
+void RegisterExeAddr(uintptr_t ghidra_addr, uintptr_t our_addr);
+
+// Batch registration helper
+struct ExeAddrEntry {
+    uintptr_t ghidra_addr;
+    uintptr_t our_addr;
+};
+void RegisterExeAddrs(const ExeAddrEntry* entries, size_t count);
+
+// Query how many exe addresses are registered vs referenced (for progress tracking)
+struct RegistryStats {
+    size_t registered;  // addresses with real implementations
+    size_t stubs;       // addresses hitting NotImplemented stub
+};
+RegistryStats GetRegistryStats();
+
+#endif // STANDALONE_EXE
+
+// --- Inline implementation (DLL mode only) ---
+
+#ifndef STANDALONE_EXE
 
 extern ModuleInfo g_modules[static_cast<int>(Module::COUNT)];
 
@@ -62,3 +92,5 @@ inline uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         static_cast<intptr_t>(ghidra_addr) + g_modules[static_cast<int>(mod)].delta
     );
 }
+
+#endif // !STANDALONE_EXE

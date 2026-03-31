@@ -63,7 +63,29 @@ HDE_OBJECTS = $(addprefix $(OBJ_DIR)/, $(subst /,__,$(HDE_SRCS:.c=.o)))
 DEF_FILE = patches/src/proxy.def
 TARGET = $(BUILD_DIR)/version.dll
 
-.PHONY: all debug release deploy clean undeploy run
+# ============================================================
+# Standalone EXE build
+# ============================================================
+SA_BUILD_DIR = standalone/build
+SA_OBJ_DIR = $(SA_BUILD_DIR)/obj
+SA_TARGET = $(SA_BUILD_DIR)/Application-x64.exe
+
+SA_CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type -MMD -MP -DSTANDALONE_EXE
+SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
+SA_LIBS = -luser32 -ldbghelp
+SA_INCLUDES = -I. -Ipatches/src -Iengine/types -Iengine/funcs -Icode/Game \
+              -Iruntime/types -Iruntime/funcs -Istandalone
+
+# Standalone sources: game logic + engine funcs + runtime src + standalone entry (NO reimpl/patches)
+SA_SRCS = $(GAME_SRC_SRCS) \
+          $(ENGINE_FUNC_SRCS) \
+          $(RUNTIME_FUNC_SRCS) \
+          $(RUNTIME_SRC_SRCS) \
+          $(wildcard standalone/*.cpp)
+
+SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
+
+.PHONY: all debug release deploy clean undeploy run standalone standalone-debug
 
 all: debug
 
@@ -72,6 +94,12 @@ debug: $(TARGET)
 
 release: CXXFLAGS += -O2 -DNDEBUG
 release: $(TARGET)
+
+standalone: SA_CXXFLAGS += -O2 -DNDEBUG
+standalone: $(SA_TARGET)
+
+standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
+standalone-debug: $(SA_TARGET)
 
 # Link all objects into the DLL
 $(TARGET): $(OBJECTS) $(HDE_OBJECTS) $(DEF_FILE) | $(BUILD_DIR)
@@ -177,6 +205,72 @@ $(OBJ_DIR)/runtime__src__network__%.o: runtime/src/network/%.cpp | $(OBJ_DIR)
 $(OBJ_DIR)/runtime__src__achievement__%.o: runtime/src/achievement/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
+# ============================================================
+# Standalone EXE link + compile rules
+# ============================================================
+$(SA_TARGET): $(SA_OBJECTS) | $(SA_BUILD_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ $(SA_OBJECTS) $(SA_LIBS)
+	@echo "Built standalone: $@"
+	@ls -lh $@
+
+$(SA_BUILD_DIR):
+	mkdir -p $(SA_BUILD_DIR)
+
+$(SA_OBJ_DIR):
+	mkdir -p $(SA_OBJ_DIR)
+
+# Standalone compile rules — same source dirs but with STANDALONE_EXE define
+$(SA_OBJ_DIR)/code__Game__Action__%.o: code/Game/Action/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Component__%.o: code/Game/Component/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Dialog__%.o: code/Game/Dialog/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Entity__%.o: code/Game/Entity/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Game__%.o: code/Game/Game/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Goal__%.o: code/Game/Goal/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Player__%.o: code/Game/Player/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Tutorial__%.o: code/Game/Tutorial/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Work__%.o: code/Game/Work/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/engine__funcs__%.o: engine/funcs/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/runtime__funcs__%.o: runtime/funcs/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/runtime__src__ui__%.o: runtime/src/ui/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/runtime__src__system__%.o: runtime/src/system/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/runtime__src__math__%.o: runtime/src/math/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/runtime__src__graphics__%.o: runtime/src/graphics/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+# ============================================================
+# DLL build directories
+# ============================================================
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
@@ -199,6 +293,7 @@ run: deploy
 # Include auto-generated header dependency files
 -include $(OBJECTS:.o=.d)
 -include $(HDE_OBJECTS:.o=.d)
+-include $(SA_OBJECTS:.o=.d)
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(SA_BUILD_DIR)

@@ -1,7 +1,7 @@
 ### Files/Code Areas Left:
 1. action: Complete 100%
-2. component: **Complete 100%** (64/65 components, 134 files in code/Game/Component/)
-3. dialog: Complete 100%
+2. component: Complete 100%
+3. dialog: Complete 100
 4. entity: Complete 100%
 5. game: Near-complete (7/8 GameUpdateLoop slots reimpl, Load passthrough, SaveRestore unhookable, standalone Game functions deferred)
 6. goal: Complete 100%
@@ -25,3 +25,6 @@
 - SpawnTornado, InfectRandomCitizen, StartRandomFire, DestroyAllRawMaterials
 - UpdateTimedEvents
 - All decompiled, depend on EntityList internals + component sub-functions
+
+### Standalone todos:
+  Populate the 582 address registry entries in address_registry.cpp and implement the game's init path (Engine::Create → MainLoop::Run) in standalone/main.cpp.

@@ -119,13 +119,52 @@ forwards all real version.dll calls to system32, and runs our hook code on start
 
 ### Build & Deploy
 ```bash
+# DLL mode (proxy DLL, hooks into original exe)
 mingw32-make debug     # build debug DLL (with console output)
 mingw32-make release   # build release DLL
 mingw32-make deploy    # build + copy to Banished directory
 mingw32-make run       # build + copy + launch game
 mingw32-make undeploy  # remove from Banished directory
-mingw32-make clean     # remove build artifacts
+
+# Standalone EXE mode (replacement exe, links against Runtime DLL)
+mingw32-make standalone        # build release standalone exe
+mingw32-make standalone-debug  # build debug standalone exe
+# Output: standalone/build/Application-x64.exe
+
+mingw32-make clean     # remove all build artifacts (both modes)
 ```
+
+### Dual-Mode Build Architecture
+
+The project supports two build modes from the same `code/Game/` source files:
+
+**DLL mode** (default) — `make debug` / `make deploy`
+- Compiles `code/Game/` + `engine/reimpl/` + `patches/src/` into `version.dll`
+- Hooks original exe at runtime via trampoline patching
+- `ResolveAddr(Module::Exe, addr)` applies ASLR delta to find functions in loaded exe
+- Used for incremental development and testing
+
+**Standalone mode** — `make standalone` / `make standalone-debug`
+- Compiles `code/Game/` + `engine/funcs/` + `standalone/` into `Application-x64.exe`
+- NO hooks, NO reimpl wrappers, NO proxy DLL
+- `ResolveAddr(Module::Exe, addr)` queries an address registry of our reimplemented functions
+- Still loads Runtime-x64.dll + VideoDX11-x64.dll (engine DLLs, ASLR handled normally)
+- Controlled by `-DSTANDALONE_EXE` define (set automatically by Makefile)
+
+**Key files:**
+- `patches/src/resolve.h` — shared header, `#ifdef STANDALONE_EXE` switches inline implementation
+- `standalone/resolve_standalone.cpp` — standalone ResolveAddr + ResolveInit (loads DLLs via LoadLibrary)
+- `standalone/address_registry.cpp` — maps Ghidra exe addresses to our reimplemented code
+- `standalone/main.cpp` — WinMain entry point (replaces DllMain)
+
+**Address registry workflow:** As each exe function gets reimplemented in `code/Game/`, register it
+in `standalone/address_registry.cpp` so standalone mode can find it. Three categories:
+1. **Code functions** (0x140001xxx-0x14014Fxxx): `RegisterExeAddr(addr, (uintptr_t)&OurFunc)`
+2. **IAT dispatch slots** (0x14015xxxx): `RegisterDispatchSlot(addr, runtime_fn_ptr)` — provides .rdata slot storage
+3. **Vtables + type IDs** (0x14015Exxx-0x1401Cxxxx): static vtable arrays + uint32_t storage
+
+**Progress:** 582 unique exe addresses referenced by `code/Game/`, 0 currently registered (0%).
+Run standalone exe to see current coverage stats.
 
 ### Deep Reimplementation Workflow (per function)
 1. **Decompile** in Ghidra → rename, annotate, document struct layout
