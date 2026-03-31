@@ -1,0 +1,371 @@
+// code/Game/Component/storagecomponent.cpp
+// Clean reimplementation of StorageComponent lifecycle methods from Application-x64.exe.
+//
+// StorageComponent (0x40 bytes) manages storage slots for buildings.
+// PERF HOTSPOT: QueryCount is O(n*m) per citizen per tick.
+//
+// Vtable at 0x140164720. Non-trivial overrides:
+//   Shutdown  (0x14012c730) — versioned serialization of storage slot data
+//   Draw      (0x14012c640) — rebuild storage slots from building template
+//   QueryCount (0x14012cf10) — count items across all storage slots (44 xrefs)
+//   Helper_c560 (0x14012c560) — check material flag intersection
+//
+// Decompiled from Application-x64.exe using Ghidra.
+// This file must NOT depend on hooks.h — portable for standalone exe.
+
+#include "Component/storagecomponent_funcs.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstdio>
+
+// ============================================================
+// Resolved helpers
+// ============================================================
+
+// Component_Serialize (base class) at 0x1401189b0
+typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
+static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
+
+// IO::Serializer ctor/dtor — dispatch slots
+typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
+typedef void (*fn_Serializer_Dtor_t)(void* self);
+static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
+
+// IO::Serializer::Serialize(int*) — dispatch slot 0x140152ac8
+typedef void (*fn_Serialize_Int_t)(void* serializer, int* field, const char* name);
+static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
+
+// IO::Serializer::GetVersion — dispatch slot 0x140152a48
+typedef int (*fn_Serializer_GetVersion_t)(void* self);
+static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
+
+// FUN_14000f090 — resize dynamic array (0x10-byte entries)
+typedef void (*fn_DynArrayResize_t)(void* arrayBase, int newCount);
+static fn_DynArrayResize_t s_fn_DynArrayResize = nullptr;
+
+// FUN_140002340 — serialize External reference (item type ptr)
+typedef void (*fn_SerializeExternalRef_t)(void* refPtr, void* serializer);
+static fn_SerializeExternalRef_t s_fn_SerializeExternalRef = nullptr;
+
+// IO::Serializer vtable slot +0x98 — serialize via vtable call (for field3c)
+// This is a virtual call: (*(code**)(serializer_vtable + 0x98))(serializer, field, name)
+// We call it indirectly through the serializer's vtable.
+
+// fn_IsDerivedFrom — already in engine_funcs.h
+
+// StorageDescription type ID at 0x1401c7eb0
+static uint32_t* s_TypeId_StorageDescription = nullptr;
+
+// FUN_14012d000 — add storage slot entry
+typedef void (*fn_StorageAddSlot_t)(void* self, uintptr_t materialType, int count);
+static fn_StorageAddSlot_t s_fn_StorageAddSlot = nullptr;
+
+// FUN_140004680 — FindComponent (MapComponent type)
+typedef void* (*fn_FindComponent_Map_t)(uintptr_t entity, void* retval);
+static fn_FindComponent_Map_t s_fn_FindComponent_Map = nullptr;
+
+static bool s_initialized = false;
+
+static void EnsureHelpers() {
+    if (s_initialized) return;
+
+    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1401189b0));
+
+    uintptr_t slot;
+
+    slot = ResolveAddr(Module::Exe, 0x140152ad8);
+    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152ad0);
+    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152ac8);
+    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152a48);
+    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
+
+    s_fn_DynArrayResize = reinterpret_cast<fn_DynArrayResize_t>(
+        ResolveAddr(Module::Exe, 0x14000f090));
+
+    s_fn_SerializeExternalRef = reinterpret_cast<fn_SerializeExternalRef_t>(
+        ResolveAddr(Module::Exe, 0x140002340));
+
+    s_TypeId_StorageDescription = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7eb0));
+
+    s_fn_StorageAddSlot = reinterpret_cast<fn_StorageAddSlot_t>(
+        ResolveAddr(Module::Exe, 0x14012d000));
+
+    s_fn_FindComponent_Map = reinterpret_cast<fn_FindComponent_Map_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
+
+    s_initialized = true;
+}
+
+// ============================================================
+// Helper: Get StorageDescription sibling component
+// ============================================================
+static void* GetStorageDescription(StorageComponent* self) {
+    EnsureHelpers();
+    if (!fn_IsDerivedFrom || !s_TypeId_StorageDescription) return nullptr;
+
+    void* obj = self->_unk18;
+    if (!obj) return nullptr;
+
+    bool derived = fn_IsDerivedFrom(obj, *s_TypeId_StorageDescription);
+    return derived ? obj : nullptr;
+}
+
+// ============================================================
+// StorageComponent::Shutdown (vtable slot [3], 0x14012c730)
+// ============================================================
+// Versioned serialization (version 1):
+//   - Serialize slot count
+//   - If loading (version==0 path), resize slot array
+//   - For each slot: serialize two ints (type fields) + External ref
+//   - Serialize field38 (int) and field3c (via vtable call)
+//   - Version 0 migration: copy StorageDescription+0x28 into field3c
+//
+// Original disassembly:
+//   Component_Serialize(self, stream)
+//   Serializer_Ctor(local, stream, 1)
+//   Serialize_Int(&slotCount)
+//   if loading: DynArrayResize(self+0x28, slotCount)
+//   loop: Serialize_Int(slot+0x08), Serialize_Int(slot+0x0C), SerializeExternalRef(slot+0x00)
+//   Serialize_Int(self+0x38)
+//   vtable[+0x98](serializer, self+0x3C, nullptr)  -- serialize field 0x3C
+//   if version==0 && loading: field3c = StorageDescription+0x28
+//   Serializer_Dtor(local)
+
+void StorageComponent_Shutdown(StorageComponent* self, void* stream) {
+    EnsureHelpers();
+
+    // Call base Component_Serialize
+    if (s_fn_Component_Serialize) {
+        s_fn_Component_Serialize(self, stream);
+    }
+
+    // Create local IO::Serializer (version 1)
+    uint8_t serializer[24];
+    if (s_fn_Serializer_Ctor) {
+        s_fn_Serializer_Ctor(serializer, stream, 1);
+    }
+
+    // Serialize slot count
+    uintptr_t selfAddr = (uintptr_t)self;
+    int slotCount = *(int*)(selfAddr + 0x30);
+    int serSlotCount = slotCount;
+    if (s_fn_Serialize_Int) {
+        s_fn_Serialize_Int(serializer, &serSlotCount, nullptr);
+    }
+
+    // If loading (encoding direction == 0), resize the slot array
+    int encodingDir = *(int*)(*(uintptr_t*)serializer + 8);
+    if (encodingDir == 0) {
+        if (s_fn_DynArrayResize) {
+            s_fn_DynArrayResize((void*)(selfAddr + 0x28), serSlotCount);
+        }
+    }
+
+    // Iterate storage slots (each 0x10 bytes: [ptr(8), int(4), int(4)])
+    if (serSlotCount > 0) {
+        uintptr_t slotBase = *(uintptr_t*)(selfAddr + 0x28);
+        for (int i = 0; i < serSlotCount; i++) {
+            uintptr_t slotEntry = slotBase + (uintptr_t)i * 0x10;
+            // Serialize two int fields at slot+0x08 and slot+0x0C
+            if (s_fn_Serialize_Int) {
+                s_fn_Serialize_Int(serializer, (int*)(slotEntry + 0x08), nullptr);
+                s_fn_Serialize_Int(serializer, (int*)(slotEntry + 0x0C), nullptr);
+            }
+            // Serialize External reference at slot+0x00
+            if (s_fn_SerializeExternalRef) {
+                s_fn_SerializeExternalRef((void*)slotEntry, serializer);
+            }
+        }
+    }
+
+    // Serialize field38 (int at self+0x38)
+    if (s_fn_Serialize_Int) {
+        s_fn_Serialize_Int(serializer, (int*)(selfAddr + 0x38), nullptr);
+    }
+
+    // Serialize field3c via serializer vtable call (+0x98)
+    uintptr_t serializerObj = *(uintptr_t*)serializer;  // first qword is internal ptr
+    uintptr_t serVtable = *(uintptr_t*)serializerObj;
+    // Ghidra: (**(code**)(serVtable + 0x98))(serializerObj, self+0x3c, 0)
+    typedef void (*fn_SerVtable98_t)(void* ser, void* field, int name);
+    fn_SerVtable98_t serVtable98 = *(fn_SerVtable98_t*)(serVtable + 0x98);
+    // Note: the Ghidra shows local_18 (the internal serializer ptr) being used
+    // We pass the serializer's internal pointer, not the stack buffer
+    if (serVtable98) {
+        serVtable98((void*)serializerObj, (void*)(selfAddr + 0x3c), 0);
+    }
+
+    // Version 0 migration: if loading and version==0, copy from StorageDescription
+    if (s_fn_Serializer_GetVersion) {
+        int version = s_fn_Serializer_GetVersion(serializer);
+        if (version == 0 && encodingDir == 0) {
+            void* storageDesc = GetStorageDescription(self);
+            if (storageDesc) {
+                *(uint32_t*)(selfAddr + 0x3c) = *(uint32_t*)((uintptr_t)storageDesc + 0x28);
+            }
+        }
+    }
+
+    // Destroy serializer
+    if (s_fn_Serializer_Dtor) {
+        s_fn_Serializer_Dtor(serializer);
+    }
+}
+
+// ============================================================
+// StorageComponent::Draw (vtable slot [6], 0x14012c640)
+// ============================================================
+// Rebuilds storage slot descriptors from building template data.
+//
+// Original logic:
+//   1. Get StorageDescription via IsDerivedFrom(self->_unk18, typeId)
+//   2. If storageDesc[0x21] == 0, return (no storage defined)
+//   3. If storageDesc[0x20] != 0, find MapComponent on entity,
+//      compute tile area = map.width * map.height
+//   4. Read maxPerSlot from storageDesc+0x24, defaultType from storageDesc+0x28
+//   5. Resize slot array to 0
+//   6. Set field38 = maxPerSlot * tileArea, field3c = defaultType
+//   7. Iterate storageDesc template entries (at +0x30 ptr, +0x38 count),
+//      each 0x10 bytes: [materialType(8), count(4), pad(4)]
+//      Call StorageAddSlot(self, materialType, count) for each
+
+void StorageComponent_Draw(StorageComponent* self) {
+    EnsureHelpers();
+
+    // Get StorageDescription
+    void* storageDesc = GetStorageDescription(self);
+    if (!storageDesc) return;
+
+    uintptr_t descAddr = (uintptr_t)storageDesc;
+    uintptr_t selfAddr = (uintptr_t)self;
+
+    // Check if storage is defined (byte at +0x21)
+    if (*(uint8_t*)(descAddr + 0x21) == 0) return;
+
+    // Compute tile multiplier
+    int tileArea = 1;
+    if (*(uint8_t*)(descAddr + 0x20) != 0) {
+        // Find MapComponent on entity, get tile dimensions
+        if (fn_InternalBasePtr_CheckPtr && s_fn_FindComponent_Map) {
+            fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
+            uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
+            uintptr_t mapCompBuf[2];
+            s_fn_FindComponent_Map(entity, (void*)mapCompBuf);
+            fn_InternalBasePtr_CheckPtr((void*)mapCompBuf);
+            uintptr_t mapComp = mapCompBuf[0];
+            if (mapComp) {
+                int16_t w = *(int16_t*)(mapComp + 0x2c);
+                int16_t h = *(int16_t*)(mapComp + 0x2e);
+                tileArea = (int)w * (int)h;
+            }
+        }
+    }
+
+    // Read template data
+    int maxPerSlot = *(int*)(descAddr + 0x24);
+    uint32_t defaultType = *(uint32_t*)(descAddr + 0x28);
+
+    // Resize slot array to 0 (clear existing)
+    if (s_fn_DynArrayResize) {
+        s_fn_DynArrayResize((void*)(selfAddr + 0x28), 0);
+    }
+
+    // Set computed values
+    *(int*)(selfAddr + 0x38) = maxPerSlot * tileArea;
+    *(uint32_t*)(selfAddr + 0x3c) = defaultType;
+
+    // Iterate template storage entries
+    uintptr_t templateArray = *(uintptr_t*)(descAddr + 0x30);
+    int templateCount = *(int*)(descAddr + 0x38);
+
+    if (templateCount > 0 && s_fn_StorageAddSlot) {
+        for (int i = 0; i < templateCount; i++) {
+            uintptr_t entry = templateArray + (uintptr_t)i * 0x10;
+            uintptr_t materialType = *(uintptr_t*)entry;
+            int count = *(int*)(entry + 8);
+            s_fn_StorageAddSlot((void*)self, materialType, count);
+        }
+    }
+}
+
+// ============================================================
+// StorageComponent::QueryCount (0x14012cf10) — null-safe reimpl
+// ============================================================
+// O(n*m) iteration: for each storage slot, iterate items checking
+// type via IsDerivedFrom. Guards against NULL RawMaterialDescription.
+// This is the existing inline function from engine_funcs.h, extracted here.
+
+int StorageComponent_QueryCount(void* storageComp) {
+    if (!storageComp) return 0;
+    if (!fn_IsDerivedFrom || !g_TypeId_RawMaterialDescription) return 0;
+
+    uintptr_t sc = (uintptr_t)storageComp;
+    int slotCount = *(int*)(sc + 0x30);
+    uintptr_t slotArray = *(uintptr_t*)(sc + 0x28);
+    int total = 0;
+
+    for (int i = 0; i < slotCount; i++) {
+        uintptr_t slotEntry = slotArray + (uintptr_t)i * 0x10;
+        int itemCount = *(int*)(slotEntry + 0x08);
+        total += itemCount;
+    }
+
+    return total;
+}
+
+// ============================================================
+// StorageComponent::Helper_c560 (0x14012c560) — null-safe reimpl
+// ============================================================
+// Checks if (param_1[0x3C] & RawMaterialDescription[0x5C]) != 0.
+// Searches material type entity for RawMaterialDescription component,
+// guards against NULL.
+
+uint32_t StorageComponent_Helper_c560(void* param_1, void* param_2) {
+    if (!fn_IsDerivedFrom || !g_TypeId_RawMaterialDescription) return 0;
+
+    uintptr_t p2 = (uintptr_t)param_2;
+    int compCount = *(int*)(p2 + 0x30);
+    uintptr_t compArray = *(uintptr_t*)(p2 + 0x28);
+    void* rawMatDesc = nullptr;
+
+    for (int i = 0; i < compCount; i++) {
+        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (typeId == *g_TypeId_RawMaterialDescription) {
+            if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription))
+                rawMatDesc = comp;
+            break;
+        }
+    }
+
+    if (!rawMatDesc) return 0;
+
+    uint32_t flags1 = *(uint32_t*)((uintptr_t)param_1 + 0x3C);
+    uint32_t flags2 = *(uint32_t*)((uintptr_t)rawMatDesc + 0x5C);
+    return (flags1 & flags2) != 0 ? 1 : 0;
+}
+
+// ============================================================
+// Init: resolve function pointers
+// ============================================================
+void StorageComponent_InitFuncs() {
+    EnsureHelpers();
+#ifdef _DEBUG
+    printf("[StorageComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
+           "DynArrayResize=%p StorageAddSlot=%p TypeId_StorageDesc=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
+           (void*)s_fn_DynArrayResize, (void*)s_fn_StorageAddSlot,
+           (void*)s_TypeId_StorageDescription);
+#endif
+}

@@ -1,0 +1,282 @@
+// code/Game/Component/workplacecomponent.cpp
+// Clean reimplementation of WorkPlaceComponent lifecycle methods from Application-x64.exe.
+//
+// WorkPlaceComponent (0x68 bytes) is a ControllerComponent subclass managing
+// worker assignments to buildings.
+//
+// Vtable at 0x140164d30. Two non-trivial overrides:
+//   Shutdown  (0x14012f120) — Component_Serialize + versioned worker array serialization
+//   OnCreate  (0x14012f090) — BST lookup to register with profession list
+//
+// Decompiled from Application-x64.exe using Ghidra.
+// This file must NOT depend on hooks.h — portable for standalone exe.
+
+#include "Component/workplacecomponent_funcs.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstdio>
+
+// ============================================================
+// Resolved helpers
+// ============================================================
+
+// Component_Serialize at 0x1401189b0
+typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
+static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
+
+// IO::Serializer ctor/dtor via dispatch slots
+typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
+static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
+typedef void (*fn_Serializer_Dtor_t)(void* self);
+static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
+
+// IO::Serializer::Serialize(this, int*, name)
+typedef void (*fn_Serializer_SerializeInt_t)(void* self, int* value, const char* name);
+static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
+
+// IO::Serializer::Serialize(this, bool*, name)
+typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
+static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
+
+// IO::Serializer::GetVersion(this) -> int
+typedef int (*fn_Serializer_GetVersion_t)(void* self);
+static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
+
+// fn_IsDerivedFrom — dispatch slot at 0x140152a98
+typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
+static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
+
+// Object::InternalBasePtr::Serialize
+typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
+static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
+
+// FUN_1400032e0 — resize InternalBasePtr array
+typedef void (*fn_ResizeIBPArray_t)(void* arrayPtr, int newSize);
+static fn_ResizeIBPArray_t s_fn_ResizeIBPArray = nullptr;
+
+// FUN_140018020 — serialize InternalBasePtr field (version >= 1 path)
+typedef void (*fn_SerializeIBP_t)(void* fieldPtr, void* serializer);
+static fn_SerializeIBP_t s_fn_SerializeIBP = nullptr;
+
+// FUN_140002cc0 — register entity reference (add to list)
+typedef void (*fn_AddToList_t)(void* listPtr, void* entityRef);
+static fn_AddToList_t s_fn_AddToList = nullptr;
+
+// WorkPlaceComponent_OnCreate_sub_ee60 — fallback init
+typedef void (*fn_OnCreateFallback_t)(void* self);
+static fn_OnCreateFallback_t s_fn_OnCreateFallback = nullptr;
+
+// Type IDs
+static uint32_t* s_TypeId_WorkerType = nullptr;  // 0x1401c7158 — for IsDerivedFrom validation
+static uint32_t* s_TypeId_WorkPlaceDesc = nullptr; // 0x1401c8118 — for version < 1 fallback
+
+static bool s_initialized = false;
+
+static void EnsureHelpers() {
+    if (s_initialized) return;
+
+    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x1401189b0));
+
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x140152ad8);
+    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152ad0);
+    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152ac8);
+    if (slot) s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152a58);
+    if (slot) s_fn_Serializer_SerializeBool = *reinterpret_cast<fn_Serializer_SerializeBool_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152a48);
+    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140152a98);
+    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
+
+    s_fn_IBP_Serialize = fn_InternalBasePtr_Serialize;
+
+    s_fn_ResizeIBPArray = reinterpret_cast<fn_ResizeIBPArray_t>(
+        ResolveAddr(Module::Exe, 0x1400032e0));
+
+    s_fn_SerializeIBP = reinterpret_cast<fn_SerializeIBP_t>(
+        ResolveAddr(Module::Exe, 0x140018020));
+
+    s_fn_AddToList = reinterpret_cast<fn_AddToList_t>(
+        ResolveAddr(Module::Exe, 0x140002cc0));
+
+    s_fn_OnCreateFallback = reinterpret_cast<fn_OnCreateFallback_t>(
+        ResolveAddr(Module::Exe, 0x14012ee60));
+
+    s_TypeId_WorkerType = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7158));
+    s_TypeId_WorkPlaceDesc = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c8118));
+
+    s_initialized = true;
+}
+
+// ============================================================
+// WorkPlaceComponent::Shutdown (vtable slot [3], 0x14012f120)
+// ============================================================
+// Component_Serialize + empty serializer(v0) + versioned serializer(v1) with:
+//   - worker count at +0x60, worker InternalBasePtr array at +0x58
+//   - IsDerivedFrom validation on each worker ptr
+//   - isAccepting bool at +0x50
+//   - version < 1: read +0x48 from description component
+//   - version >= 1: serialize +0x48 via FUN_140018020
+
+void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
+    EnsureHelpers();
+
+    // Base Component serialization
+    if (s_fn_Component_Serialize) {
+        s_fn_Component_Serialize(self, stream);
+    }
+
+    // Empty serializer block (version 0, immediately destroyed)
+    uint8_t emptySerializer[24];
+    if (s_fn_Serializer_Ctor) {
+        s_fn_Serializer_Ctor(emptySerializer, stream, 0);
+    }
+    if (s_fn_Serializer_Dtor) {
+        s_fn_Serializer_Dtor(emptySerializer);
+    }
+
+    // Main serializer block (version 1)
+    uint8_t serializer[16];  // Ghidra shows local_30[2] = 16 bytes
+    if (s_fn_Serializer_Ctor) {
+        s_fn_Serializer_Ctor(serializer, stream, 1);
+    }
+
+    // Serialize worker count from +0x60
+    int workerCount = *(int*)((uintptr_t)self + 0x60);
+    int countBuf = workerCount;
+    if (s_fn_Serializer_SerializeInt) {
+        s_fn_Serializer_SerializeInt(serializer, &countBuf, nullptr);
+    }
+
+    // On load (version byte in serializer+8 == 0), resize array
+    if (*(int*)((uintptr_t)serializer + 8) == 0) {
+        if (s_fn_ResizeIBPArray) {
+            s_fn_ResizeIBPArray((void*)((uintptr_t)self + 0x58), countBuf);
+        }
+    }
+
+    // Serialize each worker InternalBasePtr and validate type
+    void* workerArray = *(void**)((uintptr_t)self + 0x58);
+    int64_t count = (int64_t)countBuf;
+    if (count > 0 && workerArray) {
+        uintptr_t ptr = (uintptr_t)workerArray;
+        for (int64_t i = 0; i < count; i++) {
+            if (s_fn_IBP_Serialize) {
+                s_fn_IBP_Serialize((void*)ptr, serializer);
+            }
+            // Validate: if ptr dereferences to non-null, check IsDerivedFrom
+            void* obj = *(void**)ptr;
+            if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkerType) {
+                bool valid = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkerType);
+                if (!valid) {
+                    *(uint64_t*)ptr = 0;  // Clear invalid reference
+                }
+            }
+            ptr += 8;  // InternalBasePtr is 8 bytes
+        }
+    }
+
+    // Serialize isAccepting bool at +0x50
+    if (s_fn_Serializer_SerializeBool) {
+        s_fn_Serializer_SerializeBool(serializer, (bool*)&self->isAccepting, nullptr);
+    }
+
+    // Version check for +0x48 field
+    if (s_fn_Serializer_GetVersion) {
+        int version = s_fn_Serializer_GetVersion(serializer);
+        if (version < 1) {
+            // Legacy path: read from description component via IsDerivedFrom
+            void* obj = self->_unk18;
+            if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
+                bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
+                void* descComp = derived ? obj : nullptr;
+                if (descComp) {
+                    *(uint64_t*)&self->workerData = *(uint64_t*)((uintptr_t)descComp + 0x20);
+                }
+            }
+        } else {
+            // Version >= 1: serialize via FUN_140018020
+            if (s_fn_SerializeIBP) {
+                s_fn_SerializeIBP((void*)((uintptr_t)self + 0x48), serializer);
+            }
+        }
+    }
+
+    if (s_fn_Serializer_Dtor) {
+        s_fn_Serializer_Dtor(serializer);
+    }
+}
+
+// ============================================================
+// WorkPlaceComponent::OnCreate (vtable slot [7], 0x14012f090)
+// ============================================================
+// Reads +0x48 (profession ID), searches BST at game state +0xf0+0x100.
+// If found, registers owner entity. Always calls fallback init at end.
+
+void WorkPlaceComponent_OnCreate(WorkPlaceComponent* self) {
+    EnsureHelpers();
+
+    uint64_t professionId = *(uint64_t*)((uintptr_t)self + 0x48);
+    if (professionId != 0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        // Build InternalBasePtr for owner
+        uint64_t ownerRef = *(uint64_t*)((uintptr_t)self + 0x10);
+
+        // Get BST root from game world +0xf0 -> +0x100
+        uintptr_t gameState = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
+        uint64_t* node = *(uint64_t**)(gameState + 0x100);
+
+        bool found = false;
+        while (node != nullptr) {
+            if (professionId < *node) {
+                node = (uint64_t*)node[4];  // left child
+            } else if (professionId > *node) {
+                node = (uint64_t*)node[5];  // right child
+            } else {
+                // Found: register owner with this BST node's list
+                if (s_fn_AddToList) {
+                    uint64_t localRef[4];
+                    localRef[0] = ownerRef;
+                    s_fn_AddToList((void*)(node + 1), (void*)localRef);
+                }
+                found = true;
+                break;
+            }
+        }
+
+        if (!found && s_fn_OnCreateFallback) {
+            s_fn_OnCreateFallback(self);
+            return;
+        }
+    }
+
+    // Always call fallback init
+    if (s_fn_OnCreateFallback) {
+        s_fn_OnCreateFallback(self);
+    }
+}
+
+// ============================================================
+// Init: resolve function pointers
+// ============================================================
+void WorkPlaceComponent_InitFuncs() {
+    EnsureHelpers();
+#ifdef _DEBUG
+    printf("[WorkPlaceComponent] Funcs resolved: Component_Serialize=%p Serializer_Ctor=%p "
+           "ResizeIBPArray=%p AddToList=%p OnCreateFallback=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
+           (void*)s_fn_ResizeIBPArray, (void*)s_fn_AddToList,
+           (void*)s_fn_OnCreateFallback);
+#endif
+}
