@@ -2,7 +2,7 @@
 // Reimplementation of CitizenComponent functions from Application-x64.exe.
 //
 // Hooks:
-//   1. Update (0x140112e70) — PASSTHROUGH (largest function, 711 instructions)
+//   1. Update (0x140112e70) — REIMPLEMENTED in code/Game/Component/
 //   2. ShouldSwitchWorkplace (0x1401109e0) — REIMPLEMENTED in code/Game/Component/
 //
 // Original: 0x140112e70 (Update), 0x1401109e0 (ShouldSwitchWorkplace)
@@ -14,8 +14,10 @@
 #include <cstdio>
 #include <cstdint>
 
-// Forward declaration from code/Game/Component/citizencomponent.cpp
+// Forward declarations from code/Game/Component/citizencomponent.cpp
+extern void CitizenComponent_Update(CitizenComponent* self, void* deltaTime);
 extern bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self);
+extern void CitizenComponent_InitFuncs();
 
 // ============================================================
 // Hook state
@@ -24,34 +26,16 @@ static HookInfo g_hookUpdate;
 static HookInfo g_hookShouldSwitch;
 
 // ============================================================
-// Original function typedefs
-// ============================================================
-typedef void (*CitizenComponent_Update_t)(void* self, void* deltaTime);
-typedef bool (*CitizenComponent_ShouldSwitch_t)(CitizenComponent* self);
-
-// ============================================================
-// Update (0x140112e70) — PASSTHROUGH WRAPPER
+// Update (0x140112e70) — Delegates to clean reimplementation.
 // Parameters: RCX = this (CitizenComponent*), RDX = Time* (pointer to int64)
 // ============================================================
 static void Reimpl_Update(CitizenComponent* self, void* deltaTime) {
     g_lastHook = "CitizenComponent::Update";
-#ifdef _DEBUG
-    static int callCount = 0;
-    if (callCount < 5) {
-        int64_t dt = *reinterpret_cast<int64_t*>(deltaTime);
-        printf("[CitizenComponent::Update] self=%p dt=%lld age=%.2f\n",
-               (void*)self, dt, *reinterpret_cast<float*>(
-                   reinterpret_cast<uint8_t*>(self) + 0x3C));
-        callCount++;
-    }
-#endif
-
-    // Call original via trampoline
-    ((CitizenComponent_Update_t)g_hookUpdate.trampoline)(self, deltaTime);
+    CitizenComponent_Update(self, deltaTime);
 }
 
 // ============================================================
-// ShouldSwitchWorkplace (0x1401109e0) — REIMPLEMENTED
+// ShouldSwitchWorkplace (0x1401109e0) — Delegates to clean reimplementation.
 // Parameters: RCX = CitizenComponent*
 // Returns: bool (should citizen switch workplace)
 // ============================================================
@@ -64,6 +48,9 @@ static bool Reimpl_ShouldSwitchWorkplace(CitizenComponent* self) {
 // Install / Remove
 // ============================================================
 void InstallCitizenComponentUpdate() {
+    // Initialize clean code function pointers
+    CitizenComponent_InitFuncs();
+
     // VTable hook: MOV RAX,RSP in prologue breaks with RSP compensation.
     // vtable at 0x140162580, Update = slot 9 (+0x48)
     InstallHookVTable(0x140162580, 9, (void*)Reimpl_Update, &g_hookUpdate);

@@ -1,28 +1,20 @@
 // engine/reimpl/modelcomponent.cpp
-// Reimplementation of ModelComponent lifecycle methods from Application-x64.exe.
+// Hook wrappers for ModelComponent lifecycle methods.
+// Delegates to clean reimplementation in code/Game/Component/modelcomponent.cpp.
 //
-// ModelComponent is the LARGEST component (0x170 bytes). It embeds a
+// ModelComponent (0x170 bytes) is the largest component. It embeds a
 // Graphics::MeshInstance sub-object at +0x28 (0x120 bytes) and a
 // Math::Transform at +0x148 (0x1C bytes).
 //
 // Vtable at 0x140163ba0. Non-trivial overrides:
 //   Shutdown  (0x140124b70) — Serializes mesh state, transform, model variant data
-//   Serialize (0x140124ac0) — Resolves building data, sets mesh from resource arrays
+//   Serialize (0x140124ac0) — Reads building data, sets mesh from resource arrays
 //   Draw      (0x140124a30) — Adds mesh to Graphics::Scene if valid variant
 //   OnCreate  (0x1401249d0) — Removes mesh from Scene, resets modelId
-//   OnRemove  (0x140124960) — Calls MeshInstance vtable, checks IsAnimating, clears draw flag
-//
-// Strategy: All methods are passthrough wrappers. They are deeply coupled to the
-// Graphics::MeshInstance and Graphics::Scene subsystems.
-//
-// Prologue sizes (from disassembly):
-//   Shutdown:  15 (PUSH RDI + SUB RSP,0x40 + MOV [RSP+0x20],-0x2)
-//   Serialize: 12 (MOV [RSP+8],RBX + MOV [RSP+0x10],RSI + PUSH RDI)
-//   Draw:      14 (PUSH RDI + SUB RSP,0x20 + CMP [RCX+0x166],0)
-//   OnCreate:  14 (PUSH RBX + SUB RSP,0x20 + CMP [RCX+0x166],0)
-//   OnRemove:  14 (MOV [RSP+8],RBX + PUSH RDI + SUB RSP,0x20 + MOV RAX,[RCX+0x28])
+//   OnRemove  (0x140124960) — Calls MeshInstance update, checks animating, clears flag
 
 #include "ModelComponent.h"
+#include "Component/modelcomponent_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -39,44 +31,40 @@ static HookInfo g_hookOnCreate;
 static HookInfo g_hookOnRemove;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers (delegate to clean code)
 // ============================================================
-static void Reimpl_Shutdown(void* self, void* stream) {
+static void Reimpl_Shutdown(ModelComponent* self, void* stream) {
     g_lastHook = "ModelComponent::Shutdown";
-    typedef void (*Orig_t)(void*, void*);
-    ((Orig_t)g_hookShutdown.trampoline)(self, stream);
+    ModelComponent_Shutdown(self, stream);
 }
 
-static void Reimpl_Serialize(void* self) {
+static void Reimpl_Serialize(ModelComponent* self) {
     g_lastHook = "ModelComponent::Serialize";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookSerialize.trampoline)(self);
+    ModelComponent_Serialize(self);
 }
 
-static void Reimpl_Draw(void* self) {
+static void Reimpl_Draw(ModelComponent* self) {
     g_lastHook = "ModelComponent::Draw";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookDraw.trampoline)(self);
+    ModelComponent_Draw(self);
 }
 
-static void Reimpl_OnCreate(void* self) {
+static void Reimpl_OnCreate(ModelComponent* self) {
     g_lastHook = "ModelComponent::OnCreate";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookOnCreate.trampoline)(self);
+    ModelComponent_OnCreate(self);
 }
 
 // Note: vtable slot +0x40 implicitly passes RDX (Time*) through to
 // MeshInstance::Update(const Time&). Must forward it or RDX gets clobbered.
-static void Reimpl_OnRemove(void* self, void* time) {
+static void Reimpl_OnRemove(ModelComponent* self, void* time) {
     g_lastHook = "ModelComponent::OnRemove";
-    typedef void (*Orig_t)(void*, void*);
-    ((Orig_t)g_hookOnRemove.trampoline)(self, time);
+    ModelComponent_OnRemove(self, time);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallModelComponentShutdown() {
+    ModelComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140124b70);
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
@@ -86,6 +74,7 @@ void InstallModelComponentShutdown() {
 void RemoveModelComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallModelComponentSerialize() {
+    ModelComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140124ac0);
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
@@ -95,6 +84,7 @@ void InstallModelComponentSerialize() {
 void RemoveModelComponentSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallModelComponentDraw() {
+    ModelComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140124a30);
     InstallHook(target, (void*)Reimpl_Draw, &g_hookDraw, 14);
 #ifdef _DEBUG
@@ -104,6 +94,7 @@ void InstallModelComponentDraw() {
 void RemoveModelComponentDraw() { RemoveHook(&g_hookDraw); }
 
 void InstallModelComponentOnCreate() {
+    ModelComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x1401249d0);
     InstallHook(target, (void*)Reimpl_OnCreate, &g_hookOnCreate, 14);
 #ifdef _DEBUG
@@ -113,6 +104,7 @@ void InstallModelComponentOnCreate() {
 void RemoveModelComponentOnCreate() { RemoveHook(&g_hookOnCreate); }
 
 void InstallModelComponentOnRemove() {
+    ModelComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x140124960);
     InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 14);
 #ifdef _DEBUG

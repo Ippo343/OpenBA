@@ -34,3 +34,6 @@ void BuildComponent_Draw(BuildComponent* self);
 
 // OnCreate (vtable slot [7], 0x140108CB0): Removes component from removal queue.
 void BuildComponent_OnCreate(BuildComponent* self);
+
+// Init: resolve all internal function pointers (called once at startup)
+void BuildComponent_InitFuncs();

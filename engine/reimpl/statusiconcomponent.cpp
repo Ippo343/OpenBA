@@ -1,27 +1,16 @@
 // engine/reimpl/statusiconcomponent.cpp
-// Reimplementation of StatusIconComponent lifecycle methods from Application-x64.exe.
+// Hook wrappers for StatusIconComponent lifecycle methods.
+// Delegates to clean reimplementation in code/Game/Component/statusiconcomponent.cpp.
 //
-// StatusIconComponent (0x108 bytes) displays floating status icons above entities
-// (e.g., hunger, cold, disease). Embeds a Graphics::Geometry sub-object at +0x28
-// (0xC0 bytes, with overridden vtable at 0x14015f0c0).
-//
+// StatusIconComponent (0x108 bytes) displays floating status icons above entities.
 // Vtable at 0x140164620. Non-trivial overrides:
-//   Shutdown  (0x14012bff0) — Serializes iconId field (+0xF0 as uint, then fieldF0)
-//   Serialize (0x14012bed0) — Reads sprite data from building, calls SpriteSheet::GetSpriteCount
-//   OnCreate  (0x14012beb0) — Not a defined function in Ghidra, likely tiny (skip)
-//   OnRemove  (0x14012bbd0) — Massive (160 instr): manages Scene add/remove, positions icon
-//   OnUpdate2 (0x14012bf40) — Scene::AddObject + flags + vtable dispatches
-//
-// Strategy: Passthrough wrappers. All methods are deeply coupled to Graphics::Scene,
-// Geometry, SpriteSheet, and entity positioning subsystems.
-//
-// Prologue sizes:
-//   Shutdown:  15 (PUSH RDI + SUB RSP,0x40 + MOV [RSP+0x20],-0x2)
-//   Serialize: 12 (MOV [RSP+8],RBX + MOV [RSP+0x10],RSI + PUSH RDI)
-//   OnRemove:  15 (PUSH RBP + PUSH RDI + LEA RBP,[RSP-0x4F] + SUB RSP,0x98)
-//   OnUpdate2: 14 (MOV [RSP+0x10],RBX + PUSH RDI + SUB RSP,0x20 + MOV RAX,[RCX])
+//   Shutdown  (0x14012bff0) — Serializes iconId field
+//   Serialize (0x14012bed0) — Reads sprite data from building description
+//   OnRemove  (0x14012bbd0) — Manages Scene add/remove, positions icon
+//   OnUpdate2 (0x14012bf40) — Updates icon visibility
 
 #include "StatusIconComponent.h"
+#include "Component/statusiconcomponent_funcs.h"
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -37,36 +26,33 @@ static HookInfo g_hookOnRemove;
 static HookInfo g_hookOnUpdate2;
 
 // ============================================================
-// Passthrough wrappers
+// Reimplementation wrappers (delegate to clean code)
 // ============================================================
-static void Reimpl_Shutdown(void* self, void* stream) {
+static void Reimpl_Shutdown(StatusIconComponent* self, void* stream) {
     g_lastHook = "StatusIconComponent::Shutdown";
-    typedef void (*Orig_t)(void*, void*);
-    ((Orig_t)g_hookShutdown.trampoline)(self, stream);
+    StatusIconComponent_Shutdown(self, stream);
 }
 
-static void Reimpl_Serialize(void* self) {
+static void Reimpl_Serialize(StatusIconComponent* self) {
     g_lastHook = "StatusIconComponent::Serialize";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookSerialize.trampoline)(self);
+    StatusIconComponent_Serialize(self);
 }
 
-static void Reimpl_OnRemove(void* self) {
+static void Reimpl_OnRemove(StatusIconComponent* self) {
     g_lastHook = "StatusIconComponent::OnRemove";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookOnRemove.trampoline)(self);
+    StatusIconComponent_OnRemove(self);
 }
 
-static void Reimpl_OnUpdate2(void* self) {
+static void Reimpl_OnUpdate2(StatusIconComponent* self) {
     g_lastHook = "StatusIconComponent::OnUpdate2";
-    typedef void (*Orig_t)(void*);
-    ((Orig_t)g_hookOnUpdate2.trampoline)(self);
+    StatusIconComponent_OnUpdate2(self);
 }
 
 // ============================================================
 // Install / Remove
 // ============================================================
 void InstallStatusIconComponentShutdown() {
+    StatusIconComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x14012bff0);
     InstallHook(target, (void*)Reimpl_Shutdown, &g_hookShutdown, 15);
 #ifdef _DEBUG
@@ -76,6 +62,7 @@ void InstallStatusIconComponentShutdown() {
 void RemoveStatusIconComponentShutdown() { RemoveHook(&g_hookShutdown); }
 
 void InstallStatusIconComponentSerialize() {
+    StatusIconComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x14012bed0);
     InstallHook(target, (void*)Reimpl_Serialize, &g_hookSerialize, 15);
 #ifdef _DEBUG
@@ -85,6 +72,7 @@ void InstallStatusIconComponentSerialize() {
 void RemoveStatusIconComponentSerialize() { RemoveHook(&g_hookSerialize); }
 
 void InstallStatusIconComponentOnRemove() {
+    StatusIconComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x14012bbd0);
     InstallHook(target, (void*)Reimpl_OnRemove, &g_hookOnRemove, 15);
 #ifdef _DEBUG
@@ -94,6 +82,7 @@ void InstallStatusIconComponentOnRemove() {
 void RemoveStatusIconComponentOnRemove() { RemoveHook(&g_hookOnRemove); }
 
 void InstallStatusIconComponentOnUpdate2() {
+    StatusIconComponent_InitFuncs();
     uintptr_t target = ResolveAddr(Module::Exe, 0x14012bf40);
     InstallHook(target, (void*)Reimpl_OnUpdate2, &g_hookOnUpdate2, 19);
 #ifdef _DEBUG

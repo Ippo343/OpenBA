@@ -43,18 +43,10 @@ static uint32_t* s_TypeId_MultiObj = nullptr;
 typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
 
-// Entity_ClearPathQueue (FUN_140026a30-like) — FindComponent by type returning IBP
-typedef void* (*fn_FindComponentByType_t)(uintptr_t entity, void* retBuf);
-static fn_FindComponentByType_t s_fn_FindMultiObjComp = nullptr;  // FUN_140004740
-static fn_FindComponentByType_t s_fn_FindChildEntity = nullptr;   // Entity_ClearPathQueue variant
-
-// FUN_140003110 — ExeArrayAppend (8-byte elements)
-typedef void (*fn_ExeArrayAppend_t)(void* arrayBase, int newCount, void* elementPtr);
-static fn_ExeArrayAppend_t s_fn_ExeArrayAppend = nullptr;
-
-// Entity_impl_8f50 — called on StorageComponents during Draw
-typedef void (*fn_Entity_impl_8f50_t)(void* comp);
-static fn_Entity_impl_8f50_t s_fn_Entity_impl_8f50 = nullptr;
+// Original Draw function — delegated because Draw is 300+ instructions with
+// multi-object hierarchy iteration, worker assignment, and storage management
+typedef void (*fn_BuildComponent_Draw_Original_t)(void*);
+static fn_BuildComponent_Draw_Original_t s_fn_Draw_Original = nullptr;
 
 static bool s_helpersResolved = false;
 
@@ -74,14 +66,9 @@ static void EnsureHelpers() {
     s_TypeId_WorkplaceComp = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7ac0);
     s_TypeId_MultiObj = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a88);
 
-    // FUN_140003110 — array append (8-byte elements)
-    s_fn_ExeArrayAppend = (fn_ExeArrayAppend_t)ResolveAddr(Module::Exe, 0x140003110);
-
-    // FUN_140004740 — find component (MultiObject variant)
-    s_fn_FindMultiObjComp = (fn_FindComponentByType_t)ResolveAddr(Module::Exe, 0x140004740);
-
-    // Entity_impl_8f50
-    s_fn_Entity_impl_8f50 = (fn_Entity_impl_8f50_t)ResolveAddr(Module::Exe, 0x1400108f50);
+    // Original Draw (0x140108D40) — delegated due to extreme complexity
+    s_fn_Draw_Original = (fn_BuildComponent_Draw_Original_t)
+        ResolveAddr(Module::Exe, 0x140108D40);
 
     s_helpersResolved = true;
 }
@@ -231,7 +218,7 @@ void BuildComponent_OnCreate(BuildComponent* self) {
 // ============================================================
 // BuildComponent::Draw (vtable slot [6], 0x140108D40)
 // ============================================================
-// Very complex function that:
+// Extremely complex function (300+ Ghidra instructions) that:
 // 1. Checks game debug flags (bit 0 at game+0xD0) — returns if set
 // 2. Gets owner entity, finds MultiObjectComponent children
 // 3. For each child entity, finds BuildComponent and StorageComponent
@@ -240,36 +227,26 @@ void BuildComponent_OnCreate(BuildComponent* self) {
 // 6. Iterates StorageComponent array: calls Entity_impl_8f50
 // 7. Sets buildProgress (+0x4C) to 1, finds WorkplaceComponent, updates progress
 //
-// NOTE: This hook is DISABLED due to RIP-relative prologue (bug class 2).
-// Included here for standalone exe completeness.
-// The implementation below is a faithful translation from Ghidra decompilation
-// but relies on several internal function pointers that may not be fully resolved.
-// For the hooked path, the passthrough delegates to the original exe code.
+// Delegated to original exe code — too many subsystem interactions and vtable
+// dispatches to safely reimplement without full MultiObjectComponent/WorkplaceComponent
+// type coverage. The hook uses InstallHookVTable so the original code is intact.
 
 void BuildComponent_Draw(BuildComponent* self) {
     EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
-    // Check game debug flags — return if bit 0 set
-    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
-    if (*(uint32_t*)(gameWorld + 0xD0) & 1) {
-        return;
+    if (s_fn_Draw_Original) {
+        s_fn_Draw_Original(self);
     }
+}
 
-    // The rest of this function is extremely complex, involving:
-    // - MultiObjectComponent child iteration
-    // - Dynamic array management for BuildComponent/StorageComponent lists
-    // - Worker assignment via vtable +0x38 / +0x60 calls
-    // - WorkplaceComponent progress tracking
-    //
-    // For the standalone exe, this will be fully implemented when all
-    // dependent component types and their vtable functions are available.
-    // Currently, the hook is DISABLED so the original exe code runs.
-    //
-    // TODO: Complete implementation once MultiObjectComponent, worker
-    // assignment vtable calls, and Entity_impl_8f50 are fully typed.
-
+// ============================================================
+// Init: resolve function pointers
+// ============================================================
+void BuildComponent_InitFuncs() {
+    EnsureHelpers();
 #ifdef _DEBUG
-    printf("[BuildComponent::Draw] STUB — original exe code handles this (hook disabled)\n");
+    printf("[BuildComponent] Funcs resolved: IBP_Serialize=%p DrawOriginal=%p "
+           "TypeId_Build=%p TypeId_Storage=%p\n",
+           (void*)s_fn_IBP_Serialize, (void*)s_fn_Draw_Original,
+           (void*)s_TypeId_BuildComp, (void*)s_TypeId_StorageComp);
 #endif
 }
