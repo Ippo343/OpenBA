@@ -68,7 +68,7 @@ TARGET = $(BUILD_DIR)/version.dll
 # ============================================================
 SA_BUILD_DIR = standalone/build
 SA_OBJ_DIR = $(SA_BUILD_DIR)/obj
-SA_TARGET = $(SA_BUILD_DIR)/Application-x64.exe
+SA_TARGET = $(SA_BUILD_DIR)/reimpl-x64.exe
 
 SA_CXXFLAGS = -std=c++17 -Wall -Wextra -Wno-cast-function-type -MMD -MP -DSTANDALONE_EXE
 SA_LDFLAGS = -static-libgcc -static-libstdc++ -mwindows
@@ -85,7 +85,7 @@ SA_SRCS = $(GAME_SRC_SRCS) \
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 
-.PHONY: all debug release deploy clean undeploy run standalone standalone-debug
+.PHONY: all debug release deploy clean undeploy run standalone standalone-debug sa-deploy sa-run
 
 all: debug
 
@@ -289,6 +289,15 @@ undeploy:
 run: deploy
 	cd "$(BANISHED_DIR)" && start Application-x64.exe
 	@echo "Launched Banished with patch"
+
+sa-deploy: standalone-debug
+	cp "$(SA_TARGET)" "$(BANISHED_DIR)/reimpl-x64.exe"
+	rm -f "$(BANISHED_DIR)/standalone_debug.log"
+	@echo "Deployed to $(BANISHED_DIR)/reimpl-x64.exe"
+
+sa-run: sa-deploy
+	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
+	@echo "Launched standalone reimpl"
 
 # Include auto-generated header dependency files
 -include $(OBJECTS:.o=.d)

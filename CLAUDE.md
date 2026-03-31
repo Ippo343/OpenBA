@@ -129,7 +129,9 @@ mingw32-make undeploy  # remove from Banished directory
 # Standalone EXE mode (replacement exe, links against Runtime DLL)
 mingw32-make standalone        # build release standalone exe
 mingw32-make standalone-debug  # build debug standalone exe
-# Output: standalone/build/Application-x64.exe
+mingw32-make sa-deploy         # build debug + copy to Banished directory
+mingw32-make sa-run            # build debug + copy + launch
+# Output: standalone/build/reimpl-x64.exe
 
 mingw32-make clean     # remove all build artifacts (both modes)
 ```
