@@ -37,7 +37,9 @@ static void Reimpl_Shutdown(StorageDisplayComponent* self, void* stream) {
 
 static void Reimpl_Draw(StorageDisplayComponent* self) {
     g_lastHook = "StorageDisplayComponent::Draw";
-    StorageDisplayComponent_Draw(self);
+    // Temporarily call trampoline to test if crash is from our reimpl
+    typedef void (*OrigDraw_t)(StorageDisplayComponent*);
+    ((OrigDraw_t)g_hookDraw.trampoline)(self);
 }
 
 static void Reimpl_OnCreate(StorageDisplayComponent* self) {

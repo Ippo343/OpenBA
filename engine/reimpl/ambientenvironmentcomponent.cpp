@@ -48,7 +48,10 @@ static HookInfo g_hookUpdate;
 // ============================================================
 static void Reimpl_Update(AmbientEnvironmentComponent* self) {
     g_lastHook = "AmbientEnvironmentComponent::Update";
-    AmbientEnvironmentComponent_Update(self);
+    // Must call trampoline directly — AmbientEnvironmentComponent_Update is a
+    // passthrough that resolves the hooked address via ResolveAddr (infinite recursion).
+    typedef void (*OrigUpdate_t)(AmbientEnvironmentComponent*);
+    ((OrigUpdate_t)g_hookUpdate.trampoline)(self);
 }
 
 // ============================================================

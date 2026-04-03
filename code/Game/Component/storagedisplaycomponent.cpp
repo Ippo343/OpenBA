@@ -188,6 +188,12 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
 
     uintptr_t selfAddr = (uintptr_t)self;
 
+#ifdef _DEBUG
+    printf("[StorageDisplayComp::Draw] ENTER self=%p MeshResize=%p\n",
+           (void*)selfAddr, (void*)s_fn_MeshArrayResize);
+    fflush(stdout);
+#endif
+
     // CheckPtr on entity ref
     if (fn_InternalBasePtr_CheckPtr) {
         fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
@@ -221,9 +227,18 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
 
     // Resize display array to width * height
     int totalSlots = width * height;
+#ifdef _DEBUG
+    printf("[StorageDisplayComp::Draw]   w=%d h=%d total=%d arrayBase=%p\n",
+           width, height, totalSlots, (void*)(selfAddr + 0x28));
+    fflush(stdout);
+#endif
     if (s_fn_MeshArrayResize) {
         s_fn_MeshArrayResize((void*)(selfAddr + 0x28), totalSlots);
     }
+#ifdef _DEBUG
+    printf("[StorageDisplayComp::Draw]   MeshResize done\n");
+    fflush(stdout);
+#endif
 
     // Get map info from game state
     if (!s_pGameState || !*s_pGameState) return;

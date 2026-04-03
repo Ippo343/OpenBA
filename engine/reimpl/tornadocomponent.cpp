@@ -27,12 +27,17 @@ static void Reimpl_Shutdown(TornadoComponent* self, void* stream) {
 
 static void Reimpl_Serialize(TornadoComponent* self) {
     g_lastHook = "TornadoComponent::Serialize";
-    TornadoComponent_Serialize(self);
+    // Must call trampoline directly — TornadoComponent_Serialize is a passthrough
+    // that resolves the hooked address via ResolveAddr (infinite recursion).
+    typedef void (*OrigSerialize_t)(TornadoComponent*);
+    ((OrigSerialize_t)g_hookSerialize.trampoline)(self);
 }
 
 static void Reimpl_OnRemove(TornadoComponent* self, void* time) {
     g_lastHook = "TornadoComponent::OnRemove";
-    TornadoComponent_OnRemove(self, time);
+    // Must call trampoline directly — TornadoComponent_OnRemove is a passthrough.
+    typedef void (*OrigOnRemove_t)(TornadoComponent*, void*);
+    ((OrigOnRemove_t)g_hookOnRemove.trampoline)(self, time);
 }
 
 // ============================================================

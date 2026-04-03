@@ -37,7 +37,10 @@ static void Reimpl_Shutdown(CemeteryComponent* self, void* stream) {
 
 static void Reimpl_Draw(CemeteryComponent* self) {
     g_lastHook = "CemeteryComponent::Draw";
-    CemeteryComponent_Draw(self);
+    // Must call trampoline directly — CemeteryComponent_Draw is a passthrough
+    // that resolves the hooked address via ResolveAddr (infinite recursion).
+    typedef void (*OrigDraw_t)(CemeteryComponent*);
+    ((OrigDraw_t)g_hookDraw.trampoline)(self);
 }
 
 static void Reimpl_OnCreate(CemeteryComponent* self) {

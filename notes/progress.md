@@ -26,5 +26,22 @@
 - UpdateTimedEvents
 - All decompiled, depend on EntityList internals + component sub-functions
 
+### Known Bugs (2026-04-03):
+
+**StorageDisplayComponent::Draw reimpl crash**
+- Our reimpl crashes in TradeComponent_impl_f370 (array resize with 0x48-byte elements)
+- Crash happens after MeshArrayResize succeeds, somewhere in the tile iteration loop
+- Trampoline bypass works fine — original code has no issue
+- Currently bypassed: `engine/reimpl/storagedisplaycomponent.cpp` Reimpl_Draw calls trampoline
+- TODO: Compare reimpl loop logic against Ghidra decompilation of 0x140056730
+
+**GameUpdateLoop::Startup null deref**
+- Crash at Runtime-x64.dll + 0x1148BA (Ghidra 0x1801148BA)
+- READ of address 0x40 — RBP=0, null pointer + field offset
+- Last hook: GameUpdateLoop::Startup
+- Happens after StorageDisplayComponent fix, during new game world startup
+- EXE return on stack: 0x140049967 (EXE+0xB9967... check callers)
+- TODO: Decompile RT function at 0x1801148BA, check GameUpdateLoop::Startup reimpl
+
 ### Standalone todos:
   Populate the 582 address registry entries in address_registry.cpp and implement the game's init path (Engine::Create → MainLoop::Run) in standalone/main.cpp.

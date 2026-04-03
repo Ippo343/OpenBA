@@ -27,12 +27,17 @@ static void Reimpl_Shutdown(ZoneComponent* self, void* stream) {
 
 static void Reimpl_Draw(ZoneComponent* self) {
     g_lastHook = "ZoneComponent::Draw";
-    ZoneComponent_Draw(self);
+    // Must call trampoline directly — ZoneComponent_Draw is a passthrough
+    // that resolves the hooked address via ResolveAddr (infinite recursion).
+    typedef void (*OrigDraw_t)(ZoneComponent*);
+    ((OrigDraw_t)g_hookDraw.trampoline)(self);
 }
 
 static void Reimpl_OnCreate(ZoneComponent* self) {
     g_lastHook = "ZoneComponent::OnCreate";
-    ZoneComponent_OnCreate(self);
+    // Must call trampoline directly — ZoneComponent_OnCreate is a passthrough.
+    typedef void (*OrigOnCreate_t)(ZoneComponent*);
+    ((OrigOnCreate_t)g_hookOnCreate.trampoline)(self);
 }
 
 // ============================================================

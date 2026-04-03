@@ -40,7 +40,10 @@ static void Reimpl_Serialize(StatusIconComponent* self) {
 
 static void Reimpl_OnRemove(StatusIconComponent* self) {
     g_lastHook = "StatusIconComponent::OnRemove";
-    StatusIconComponent_OnRemove(self);
+    // Must call trampoline directly — StatusIconComponent_OnRemove is a passthrough
+    // that resolves the hooked address via ResolveAddr (infinite recursion).
+    typedef void (*OrigOnRemove_t)(StatusIconComponent*);
+    ((OrigOnRemove_t)g_hookOnRemove.trampoline)(self);
 }
 
 static void Reimpl_OnUpdate2(StatusIconComponent* self) {

@@ -41,7 +41,10 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 
 static void Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "MapGenerator::Slot5";
-    MapGenerator_Serialize((MapGenerator*)self, stream);
+    // Must call trampoline directly — MapGenerator_Serialize is a passthrough
+    // to the original, and ResolveAddr returns the hooked address (infinite recursion).
+    typedef void (*OrigSlot5_t)(void*, void*);
+    ((OrigSlot5_t)g_hookSlot5.trampoline)(self, stream);
 }
 
 static void Reimpl_Slot6(void* self) {

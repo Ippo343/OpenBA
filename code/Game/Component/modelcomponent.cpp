@@ -70,7 +70,7 @@ static fn_Random_Rand_t s_fn_Random_Rand = nullptr;
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
 static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
 
-// ModelComponent_helper_2b70 (0x140122b70) — notifies entity of model change
+// ModelComponent_helper_2b70 (0x1400c2b70) — notifies entity of model change
 typedef void (*fn_ModelHelper_2b70_t)(void* entity, int param);
 static fn_ModelHelper_2b70_t s_fn_ModelHelper_2b70 = nullptr;
 
@@ -124,7 +124,7 @@ static void EnsureHelpers() {
 
     // Direct exe addresses
     s_fn_ModelHelper_2b70 = reinterpret_cast<fn_ModelHelper_2b70_t>(
-        ResolveAddr(Module::Exe, 0x140122b70));
+        ResolveAddr(Module::Exe, 0x1400c2b70));
 
     s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));

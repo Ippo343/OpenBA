@@ -31,7 +31,10 @@ static void Reimpl_Shutdown(InteractComponent* self, void* stream) {
 
 static void Reimpl_Draw(InteractComponent* self) {
     g_lastHook = "InteractComponent::Draw";
-    InteractComponent_Draw(self);
+    // Must call trampoline directly — InteractComponent_Draw is a passthrough
+    // that resolves the hooked address via ResolveAddr (infinite recursion).
+    typedef void (*OrigDraw_t)(InteractComponent*);
+    ((OrigDraw_t)g_hookDraw.trampoline)(self);
 }
 
 // ============================================================
