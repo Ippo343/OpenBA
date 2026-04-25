@@ -99,71 +99,6 @@ static void EnsureResolved() {
     // one-arg form).
 }
 
-// ============================================================
-// Stage 4: Stub UpdateLoop — minimal vtable so MainLoop::Run can complete one
-// frame. Update() returns false on the first tick so Run's main loop exits
-// immediately, exercising the Startup → Frame → Shutdown → Destroy path.
-// ============================================================
-
-static int s_stubTickCount = 0;
-
-extern "C" {
-
-static void StubUL_Destroy(UpdateLoop* self, int flags) {
-    printf("[StubUL] Destroy flags=%d\n", flags);
-    // Scalar deleting destructor convention: flags & 1 means free the heap alloc.
-    // No member fields need teardown beyond what UpdateLoop base does (none here).
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-}
-
-static void StubUL_Startup(UpdateLoop* self, int64_t remainder) {
-    printf("[StubUL] Startup remainder=%lld\n", (long long)remainder);
-}
-
-static void StubUL_Shutdown(UpdateLoop* self) {
-    printf("[StubUL] Shutdown\n");
-}
-
-static bool StubUL_Update(UpdateLoop* self, void* /*time*/) {
-    s_stubTickCount++;
-    printf("[StubUL] Update tick=%d -> returning false\n", s_stubTickCount);
-    return false;
-}
-
-static void StubUL_Draw(UpdateLoop* self, float /*alpha*/) {
-    static int draws = 0;
-    if (draws++ < 3) printf("[StubUL] Draw\n");
-}
-
-static void StubUL_DrawFailed(UpdateLoop* self) {}
-static void StubUL_Load(UpdateLoop* self) {
-    printf("[StubUL] Load (no-op)\n");
-}
-static void StubUL_SaveRestore(UpdateLoop* self, bool /*save*/, void* /*state*/) {}
-static void StubUL_OnVideoError(UpdateLoop* self) {}
-static void StubUL_OnVideoRestart(UpdateLoop* self) {}
-static const char* StubUL_GetResourceFilename(UpdateLoop* self) { return nullptr; }
-static bool StubUL_AllowsModChanges(UpdateLoop* self) { return false; }
-
-} // extern "C"
-
-static UpdateLoopVtable s_stubVtable = {
-    reinterpret_cast<void*>(&StubUL_Destroy),
-    reinterpret_cast<void*>(&StubUL_Startup),
-    reinterpret_cast<void*>(&StubUL_Shutdown),
-    reinterpret_cast<void*>(&StubUL_Update),
-    reinterpret_cast<void*>(&StubUL_Draw),
-    reinterpret_cast<void*>(&StubUL_DrawFailed),
-    reinterpret_cast<void*>(&StubUL_Load),
-    reinterpret_cast<void*>(&StubUL_SaveRestore),
-    reinterpret_cast<void*>(&StubUL_OnVideoError),
-    reinterpret_cast<void*>(&StubUL_OnVideoRestart),
-    reinterpret_cast<void*>(&StubUL_GetResourceFilename),
-    reinterpret_cast<void*>(&StubUL_AllowsModChanges),
-};
-
 namespace Game {
 
 // Engine instance is 0x6f8 bytes (last field at +0x6f0 + 8). Original uses
@@ -258,23 +193,50 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     }
                 }
 
-                // Stage 4: build a stub UpdateLoop and run one frame through
-                // MainLoop::Run. Run's cleanup will call VCall_Destroy(stub, 1)
-                // which routes to StubUL_Destroy, so we don't free `stub` here.
-                if (s_fn_MainLoop_Run && fn_UpdateLoop_Ctor) {
-                    UpdateLoop* stub = reinterpret_cast<UpdateLoop*>(
-                        fn_MemAlloc(memAllocSingleton, sizeof(UpdateLoop), 8));
-                    printf("[GameMain] StubLoop alloc = %p\n", (void*)stub);
-                    if (stub) {
-                        fn_UpdateLoop_Ctor(stub);   // zeros base, sets m_loadBit=-1
-                        stub->vtable = &s_stubVtable;
-                        printf("[GameMain] StubLoop vtable=%p, calling MainLoop::Run...\n",
-                               (void*)stub->vtable);
-                        s_fn_MainLoop_Run(ml, stub);
-                        printf("[GameMain] MainLoop::Run returned (stub destroyed by Run)\n");
+                // Stage 5b: replace the bare stub UpdateLoop with a real
+                // MenuDialogLoopT (the exe-internal subclass of Engine::DialogLoopT
+                // that drives Dialog\MainMenu.rsc). Its vtable comes from
+                // RegisterMenuDialogLoopVtable() in standalone/menudialogloopt_stubs.cpp,
+                // where individual slots are stubs until reimplemented in code/Game/.
+                //
+                // Allocation/init mirrors the original exe's FUN_140042320:
+                //   1. MemAlloc(0xc00, 8)
+                //   2. Construct String "Dialog\\MainMenu.rsc"
+                //   3. MenuDialogLoopT_Ctor (DialogLoopT base + vtable patch +
+                //      Random + Audio::Scene + zero-init extra fields)
+                //   4. Destroy String
+                //
+                // Update returns false on the first tick so Run exits cleanly.
+                if (s_fn_MainLoop_Run && g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
+                    fn_AudioScene_Ctor && fn_Random_Default_Ctor && fn_String_Ctor_CStr &&
+                    fn_String_Dtor) {
+
+                    UpdateLoop* menuLoop = reinterpret_cast<UpdateLoop*>(
+                        fn_MemAlloc(memAllocSingleton, 0xc00, 8));
+                    printf("[GameMain] MenuDLT alloc = %p (vtable=%p)\n",
+                           (void*)menuLoop, (void*)g_MenuDialogLoopT_Vtable);
+
+                    if (menuLoop) {
+                        // Construct the dialog filename string.
+                        uint8_t menuStr[8] = {};
+                        fn_String_Ctor_CStr(menuStr, "Dialog\\MainMenu.rsc");
+
+                        MenuDialogLoopT_Ctor(menuLoop, menuStr);
+                        printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
+                               (void*)menuLoop->vtable);
+
+                        fn_String_Dtor(menuStr);
+
+                        printf("[GameMain] Calling MainLoop::Run with MenuDLT...\n");
+                        s_fn_MainLoop_Run(ml, menuLoop);
+                        printf("[GameMain] MainLoop::Run returned (MenuDLT destroyed by Run)\n");
                     }
                 } else {
-                    printf("[GameMain] WARN: MainLoop::Run or UpdateLoop ctor missing, skipping stage 4\n");
+                    printf("[GameMain] WARN: missing deps for MenuDLT — Run=%p, "
+                           "Vtable=%p, DialogLoopTCtor=%p, AudioScene=%p, Random=%p\n",
+                           (void*)s_fn_MainLoop_Run, (void*)g_MenuDialogLoopT_Vtable,
+                           (void*)fn_DialogLoopT_Ctor, (void*)fn_AudioScene_Ctor,
+                           (void*)fn_Random_Default_Ctor);
                 }
 
                 if (settings) {

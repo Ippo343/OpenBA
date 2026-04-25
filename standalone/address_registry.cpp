@@ -134,11 +134,17 @@ static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
 static void* g_storage_GameWorldSingleton = nullptr;    // 0x1401c3dd8
 static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 
+// Defined in standalone/menudialogloopt_stubs.cpp.
+extern void RegisterMenuDialogLoopVtable();
+
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
     RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
     RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
     RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
+
+    // --- MenuDialogLoopT vtable (0x14015ed00) — stubs for now ---
+    RegisterMenuDialogLoopVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.
