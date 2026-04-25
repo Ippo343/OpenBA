@@ -193,23 +193,30 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     }
                 }
 
-                // Stage 5b: replace the bare stub UpdateLoop with a real
-                // MenuDialogLoopT (the exe-internal subclass of Engine::DialogLoopT
-                // that drives Dialog\MainMenu.rsc). Its vtable comes from
-                // RegisterMenuDialogLoopVtable() in standalone/menudialogloopt_stubs.cpp,
-                // where individual slots are stubs until reimplemented in code/Game/.
-                //
-                // Allocation/init mirrors the original exe's FUN_140042320:
+                // Stage 5b: build a MenuDialogLoopT (exe-internal subclass of
+                // Engine::DialogLoopT, drives Dialog\MainMenu.rsc).
                 //   1. MemAlloc(0xc00, 8)
                 //   2. Construct String "Dialog\\MainMenu.rsc"
                 //   3. MenuDialogLoopT_Ctor (DialogLoopT base + vtable patch +
                 //      Random + Audio::Scene + zero-init extra fields)
                 //   4. Destroy String
                 //
-                // Update returns false on the first tick so Run exits cleanly.
+                // Stage 5c: wrap MenuDLT in the Loading.rsc DialogLoaderLoopT
+                // (vtable @ 0x140158800). Mirrors the inner branch of the
+                // original GameMain (FUN_140041ef0):
+                //   - MemAlloc(0xb60, 4)
+                //   - Time(0.5f), String "Dialog\\Loading.rsc"
+                //   - Engine::DialogLoaderLoopT::DialogLoaderLoopT(self, &str, menuLoop, &time)
+                //   - patch vtable to g_GameLoadDialogLoopT_Vtable
+                //   - init colors at +0x188/+0x18c (0xff000000), zero +0x190,
+                //     System::Random at +0x194, zero +0xb58 (random text timer),
+                //     zero m_finished at +0x40
+                //
+                // Both Update stubs return false so Run exits on the first tick.
                 if (s_fn_MainLoop_Run && g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
                     fn_AudioScene_Ctor && fn_Random_Default_Ctor && fn_String_Ctor_CStr &&
-                    fn_String_Dtor) {
+                    fn_String_Dtor && fn_DialogLoaderLoopT_Ctor && fn_Time_Ctor_Float &&
+                    g_GameLoadDialogLoopT_Vtable) {
 
                     UpdateLoop* menuLoop = reinterpret_cast<UpdateLoop*>(
                         fn_MemAlloc(memAllocSingleton, 0xc00, 8));
@@ -227,16 +234,62 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                         fn_String_Dtor(menuStr);
 
-                        printf("[GameMain] Calling MainLoop::Run with MenuDLT...\n");
-                        s_fn_MainLoop_Run(ml, menuLoop);
-                        printf("[GameMain] MainLoop::Run returned (MenuDLT destroyed by Run)\n");
+                        // Stage 5c: outer Loading.rsc splash wrapping menuLoop.
+                        UpdateLoop* loadingLoop = reinterpret_cast<UpdateLoop*>(
+                            fn_MemAlloc(memAllocSingleton, 0xb60, 4));
+                        printf("[GameMain] LoadingDLT alloc = %p (vtable=%p)\n",
+                               (void*)loadingLoop, (void*)g_GameLoadDialogLoopT_Vtable);
+
+                        if (loadingLoop) {
+                            uint64_t loadingDelay = 0;
+                            fn_Time_Ctor_Float(&loadingDelay, 0.5f);  // DAT_140172114
+
+                            uint8_t loadingStr[8] = {};
+                            fn_String_Ctor_CStr(loadingStr, "Dialog\\Loading.rsc");
+
+                            fn_DialogLoaderLoopT_Ctor(loadingLoop, loadingStr,
+                                                      menuLoop, &loadingDelay);
+                            printf("[GameMain] LoadingDLT base ctor done\n");
+
+                            // Mirror the post-ctor patches from FUN_140041ef0.
+                            uintptr_t lp = reinterpret_cast<uintptr_t>(loadingLoop);
+                            *(void***)lp                                  // vtable
+                                = g_GameLoadDialogLoopT_Vtable;
+                            *reinterpret_cast<uint32_t*>(lp + 0x188) = 0xff000000;  // color1
+                            *reinterpret_cast<uint32_t*>(lp + 0x18c) = 0xff000000;  // color2
+                            *reinterpret_cast<uint8_t*>(lp + 0x190) = 0;            // fade-done
+                            fn_Random_Default_Ctor(reinterpret_cast<void*>(lp + 0x194));
+                            *reinterpret_cast<uint64_t*>(lp + 0xb58) = 0;           // text timer
+                            *reinterpret_cast<uint8_t*>(lp + 0x40) = 0;             // m_finished
+
+                            fn_String_Dtor(loadingStr);
+                            printf("[GameMain] LoadingDLT vtable patched -> %p, "
+                                   "next=%p\n",
+                                   (void*)loadingLoop->vtable, (void*)menuLoop);
+
+                            printf("[GameMain] Calling MainLoop::Run with LoadingDLT...\n");
+                            s_fn_MainLoop_Run(ml, loadingLoop);
+                            printf("[GameMain] MainLoop::Run returned "
+                                   "(LoadingDLT destroyed by Run; menuLoop "
+                                   "leaked — never transitioned into because "
+                                   "Update returns false on first tick)\n");
+                        } else {
+                            // Fallback: drive MenuDLT directly so we still exit
+                            // cleanly if the splash alloc somehow fails.
+                            printf("[GameMain] WARN: LoadingDLT alloc failed, "
+                                   "falling back to direct MenuDLT Run\n");
+                            s_fn_MainLoop_Run(ml, menuLoop);
+                        }
                     }
                 } else {
-                    printf("[GameMain] WARN: missing deps for MenuDLT — Run=%p, "
-                           "Vtable=%p, DialogLoopTCtor=%p, AudioScene=%p, Random=%p\n",
+                    printf("[GameMain] WARN: missing deps for splash chain — "
+                           "Run=%p, MenuVT=%p, SplashVT=%p, DLLT_Ctor=%p, "
+                           "DLT_Ctor=%p, AudioScene=%p, Random=%p, Time=%p\n",
                            (void*)s_fn_MainLoop_Run, (void*)g_MenuDialogLoopT_Vtable,
+                           (void*)g_GameLoadDialogLoopT_Vtable,
+                           (void*)fn_DialogLoaderLoopT_Ctor,
                            (void*)fn_DialogLoopT_Ctor, (void*)fn_AudioScene_Ctor,
-                           (void*)fn_Random_Default_Ctor);
+                           (void*)fn_Random_Default_Ctor, (void*)fn_Time_Ctor_Float);
                 }
 
                 if (settings) {

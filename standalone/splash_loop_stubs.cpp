@@ -1,0 +1,146 @@
+// standalone/splash_loop_stubs.cpp
+// Standalone-only stub vtable for the exe's splash DialogLoaderLoopT subclass
+// (vtable @ 0x140158800, used for both Dialog\Loading.rsc and Dialog\ShiningRock.rsc
+// in the original GameMain).
+//
+// Layout deduced from disassembly of g_GameLoadDialogLoopT_Vtable:
+//   +0x00  Destroy(self, flags)            — exe 0x140001010 (DialogLoaderLoopT::~ + free)
+//   +0x08  Startup(self)                   — exe 0x140098FA0 (chains base Startup + UI setup)
+//   +0x10  Shutdown(self)                  — exe 0x140098F90 (literal RET 0)
+//   +0x18  Update(self, time)              — exe 0x140098DA0 (random text + base Update)
+//   +0x20  Draw(self, alpha)               — thunk 0x14003A8EE -> Runtime DialogLoaderLoopT::Draw
+//   +0x28  DrawFailed(self)                — thunk 0x14003A90C -> Runtime DialogLoaderLoopT::DrawFailed
+//   +0x30  Load(self)                      — thunk 0x14003A8E8 -> Runtime DialogLoaderLoopT::Load
+//   +0x38  SaveRestore(self, save, state)  — thunk 0x14003A906 -> Runtime DialogLoaderLoopT::SaveRestore
+//   +0x40  OnVideoError(self)              — thunk 0x14003A8C4 -> Runtime DialogLoaderLoopT::OnVideoError
+//   +0x48  OnVideoRestart(self)            — thunk 0x14003A900 -> Runtime DialogLoaderLoopT::OnVideoRestart
+//   +0x50  GetResourceFilename(self)       — thunk 0x14003A8FA -> Runtime DialogLoaderLoopT::GetResourceFilename
+//   +0x58  AllowsModChanges(self)          — thunk 0x14003A8F4 -> Runtime DialogLoaderLoopT::AllowsModChanges
+//   +0x60  CreateDialog(self, retptr)      — exe 0x140099070 (LoaderDialog ctor)
+//
+// First-pass: Startup/Shutdown/Update/Draw/CreateDialog are print-only stubs.
+// Update returns false on the first tick so MainLoop::Run exits cleanly.
+// As real reimpls land in code/Game/Game/, replace the matching stub entry.
+
+#ifdef STANDALONE_EXE
+
+#include "address_registry.h"
+#include "resolve.h"
+#include "engine_funcs.h"
+#include "UpdateLoop.h"
+#include <cstdio>
+#include <cstdint>
+
+namespace {
+
+void Stub_Destroy(UpdateLoop* self, unsigned flags) {
+    printf("[SplashDLT::Destroy] self=%p flags=%u\n", (void*)self, flags);
+    // Skip the real cleanup chain (DialogLoaderLoopT::~DialogLoaderLoopT unwinds
+    // UI::UserInterface, String, Audio::Scene, Random — all leak on this run but
+    // the process exits immediately after MainLoop::Run returns).
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+}
+
+void Stub_Startup(UpdateLoop* self) {
+    printf("[SplashDLT::Startup] self=%p\n", (void*)self);
+    // Real impl chains Engine::DialogLoaderLoopT::Startup + game UI setup.
+}
+
+void Stub_Shutdown(UpdateLoop* self) {
+    printf("[SplashDLT::Shutdown] self=%p\n", (void*)self);
+    // Original is RET 0 (literal no-op).
+}
+
+bool Stub_Update(UpdateLoop* self, void* time) {
+    static int tick = 0;
+    ++tick;
+    printf("[SplashDLT::Update] self=%p time=%p tick=%d -> false\n",
+           (void*)self, time, tick);
+    return false;  // exit MainLoop::Run on first tick
+}
+
+void Stub_Draw(UpdateLoop* self, float alpha) {
+    static int draws = 0;
+    if (draws++ < 3) {
+        printf("[SplashDLT::Draw] self=%p alpha=%f\n", (void*)self, alpha);
+    }
+}
+
+void Stub_DrawFailed(UpdateLoop* self) {
+    printf("[SplashDLT::DrawFailed] self=%p\n", (void*)self);
+}
+
+void Stub_Load(UpdateLoop* self) {
+    printf("[SplashDLT::Load] self=%p\n", (void*)self);
+}
+
+void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {
+    printf("[SplashDLT::SaveRestore] self=%p save=%d state=%p\n",
+           (void*)self, save, state);
+}
+
+void Stub_OnVideoError(UpdateLoop* self) {
+    printf("[SplashDLT::OnVideoError] self=%p\n", (void*)self);
+}
+
+void Stub_OnVideoRestart(UpdateLoop* self) {
+    printf("[SplashDLT::OnVideoRestart] self=%p\n", (void*)self);
+}
+
+const char* Stub_GetResourceFilename(UpdateLoop* self) {
+    (void)self;
+    // Original thunks to Runtime DialogLoaderLoopT::GetResourceFilename which
+    // returns "Game/Loader" (see runtime ?GetResourceFilename@DialogLoaderLoopT).
+    return "Game/Loader";
+}
+
+bool Stub_AllowsModChanges(UpdateLoop* self) {
+    (void)self;
+    // Original thunks to Runtime DialogLoaderLoopT::AllowsModChanges which
+    // returns true (loader screens always permit mod swaps).
+    return true;
+}
+
+void* Stub_CreateDialog(UpdateLoop* self, void* retPtr) {
+    printf("[SplashDLT::CreateDialog] self=%p retPtr=%p (returning null IBP)\n",
+           (void*)self, retPtr);
+    // Pure-virtual override. Real impl creates a UI::DialogInstance subclass
+    // (LoaderDialog) wrapping the loaded .rsc. Return an empty 16-byte
+    // InternalPtr (zeroed) for now.
+    if (retPtr) {
+        uint64_t* p = reinterpret_cast<uint64_t*>(retPtr);
+        p[0] = 0;
+        p[1] = 0;
+    }
+    return retPtr;
+}
+
+// 13-slot vtable — 12 UpdateLoop slots + DialogLoaderLoopT's CreateDialog at +0x60.
+// The original layout reserves a NULL at +0x68 (8 bytes of padding before the next
+// vtable in .rdata), but it is never indexed at runtime so we omit it here.
+void* g_splashDialogLoopVtable[13] = {
+    reinterpret_cast<void*>(&Stub_Destroy),               // +0x00
+    reinterpret_cast<void*>(&Stub_Startup),               // +0x08
+    reinterpret_cast<void*>(&Stub_Shutdown),              // +0x10
+    reinterpret_cast<void*>(&Stub_Update),                // +0x18
+    reinterpret_cast<void*>(&Stub_Draw),                  // +0x20
+    reinterpret_cast<void*>(&Stub_DrawFailed),            // +0x28
+    reinterpret_cast<void*>(&Stub_Load),                  // +0x30
+    reinterpret_cast<void*>(&Stub_SaveRestore),           // +0x38
+    reinterpret_cast<void*>(&Stub_OnVideoError),          // +0x40
+    reinterpret_cast<void*>(&Stub_OnVideoRestart),        // +0x48
+    reinterpret_cast<void*>(&Stub_GetResourceFilename),   // +0x50
+    reinterpret_cast<void*>(&Stub_AllowsModChanges),      // +0x58
+    reinterpret_cast<void*>(&Stub_CreateDialog),          // +0x60
+};
+
+} // namespace
+
+// Called from address_registry.cpp's RegisterVtablesAndTypeIds().
+void RegisterSplashDialogLoopVtable() {
+    RegisterExeAddr(0x140158800, reinterpret_cast<uintptr_t>(g_splashDialogLoopVtable));
+}
+
+#endif // STANDALONE_EXE

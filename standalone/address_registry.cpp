@@ -137,6 +137,9 @@ static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
 // Defined in standalone/menudialogloopt_stubs.cpp.
 extern void RegisterMenuDialogLoopVtable();
 
+// Defined in standalone/splash_loop_stubs.cpp.
+extern void RegisterSplashDialogLoopVtable();
+
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
     RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
@@ -145,6 +148,10 @@ static void RegisterVtablesAndTypeIds() {
 
     // --- MenuDialogLoopT vtable (0x14015ed00) — stubs for now ---
     RegisterMenuDialogLoopVtable();
+
+    // --- Splash DialogLoaderLoopT vtable (0x140158800) — stubs for now ---
+    // Used by both Dialog\Loading.rsc and Dialog\ShiningRock.rsc instances.
+    RegisterSplashDialogLoopVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.
