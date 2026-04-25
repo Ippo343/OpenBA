@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <io.h>      // _get_osfhandle, _fileno
 #include <windows.h>
 #include <dbghelp.h>
 
@@ -46,6 +47,54 @@ struct ProbeBaseTypeInfo {
 };
 
 // ============================================================
+// Reset Video* registry keys to known-safe values BEFORE Engine::Startup.
+//
+// Banished stores all settings under HKCU\Software\Shining Rock Software LLC
+// \Banished. The standalone's incomplete shutdown path writes garbage back —
+// VideoWindowWidth/Height end up as 0, VideoSettings flips to "true" — which
+// makes ValidateConfiguration override the swap-chain dims to 120x0 on the
+// next boot. DX11 then fails to create a B8G8R8A8 color buffer of that size,
+// Engine::Startup returns 0, and we never reach the loader thread.
+//
+// Resetting WindowWidth/Height/X/Y to -1 ("skip override") and VideoSettings
+// to "false" each boot breaks the cycle without touching Persistence::Save.
+// Once standalone has a real shutdown path, this can go away.
+// ============================================================
+static void ResetVideoRegistry() {
+    HKEY hKey = nullptr;
+    LONG rc = RegOpenKeyExW(HKEY_CURRENT_USER,
+                            L"Software\\Shining Rock Software LLC\\Banished",
+                            0, KEY_SET_VALUE | KEY_QUERY_VALUE, &hKey);
+    if (rc != ERROR_SUCCESS) {
+        printf("[Standalone] WARN: ResetVideoRegistry: RegOpenKeyExW failed (%ld)\n", rc);
+        return;
+    }
+
+    auto setDword = [&](const wchar_t* name, DWORD v) {
+        RegSetValueExW(hKey, name, 0, REG_DWORD,
+                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
+    };
+    // Force fullscreen — uses VideoWidth/Height (the desktop dims captured by
+    // the original game's first run) and side-steps the corrupted Window* keys.
+    setDword(L"VideoWindowWidth",  1280);
+    setDword(L"VideoWindowHeight",  720);
+    setDword(L"VideoWindowX",       100);
+    setDword(L"VideoWindowY",       100);
+
+    auto setStr = [&](const wchar_t* name, const wchar_t* val) {
+        // length includes terminator
+        DWORD bytes = (DWORD)((wcslen(val) + 1) * sizeof(wchar_t));
+        RegSetValueExW(hKey, name, 0, REG_SZ,
+                       reinterpret_cast<const BYTE*>(val), bytes);
+    };
+    setStr(L"VideoSettings",   L"true");
+    setStr(L"VideoFullscreen", L"true");
+
+    RegCloseKey(hKey);
+    printf("[Standalone] ResetVideoRegistry: VideoSettings=true VideoFullscreen=true Window=1280x720\n");
+}
+
+// ============================================================
 // Crash handler (simplified version of DLL mode's VEH)
 // ============================================================
 static const char* ExceptionCodeToString(DWORD code) {
@@ -58,11 +107,15 @@ static const char* ExceptionCodeToString(DWORD code) {
     }
 }
 
+// Forward decl — declared above the crash log helpers but defined below.
+static void CrashLogf(const char* fmt, ...);
+
 // Walk the saved CONTEXT via the x64 unwind tables and print one line per
 // frame: <module>!<offset>. No symbol names — Banished ships stripped — but
-// module+offset is what we'd paste into Ghidra anyway.
+// module+offset is what we'd paste into Ghidra anyway. Each line goes to
+// the dedicated crash log via CrashLogf, which writes synchronously.
 static void PrintStackTrace(CONTEXT* origCtx) {
-    fprintf(stderr, "Stack trace:\n");
+    CrashLogf("Stack trace:\n");
     CONTEXT ctx = *origCtx;
 
     for (int frame = 0; frame < 32; frame++) {
@@ -74,12 +127,12 @@ static void PrintStackTrace(CONTEXT* origCtx) {
             GetModuleFileNameA(mod, path, MAX_PATH);
             const char* nm = strrchr(path, '\\');
             uintptr_t off = (uintptr_t)ctx.Rip - (uintptr_t)mod;
-            fprintf(stderr, "  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
-                    frame, nm ? nm + 1 : path, (unsigned long long)off,
-                    (unsigned long long)ctx.Rip, (unsigned long long)ctx.Rsp);
+            CrashLogf("  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
+                      frame, nm ? nm + 1 : path, (unsigned long long)off,
+                      (unsigned long long)ctx.Rip, (unsigned long long)ctx.Rsp);
         } else {
-            fprintf(stderr, "  #%-2d ???                    @ %p          (RSP=%016llX)\n",
-                    frame, (void*)ctx.Rip, (unsigned long long)ctx.Rsp);
+            CrashLogf("  #%-2d ???                    @ %p          (RSP=%016llX)\n",
+                      frame, (void*)ctx.Rip, (unsigned long long)ctx.Rsp);
         }
 
         DWORD64 imageBase = 0;
@@ -102,10 +155,59 @@ static void PrintStackTrace(CONTEXT* origCtx) {
 
         if (!ctx.Rip) break;
     }
-    fflush(stderr);
 }
 
-static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
+// Dedicated crash log handle, opened with FILE_FLAG_WRITE_THROUGH so every
+// WriteFile call commits synchronously to disk. We bypass the CRT entirely
+// because fprintf-to-stderr proved racy under crashing-thread teardown:
+// the kernel write was buffered and got cut mid-line by TerminateProcess.
+static HANDLE g_crashLog = INVALID_HANDLE_VALUE;
+
+static void OpenCrashLog() {
+    g_crashLog = CreateFileA(
+        "standalone_crash.log",
+        GENERIC_WRITE, FILE_SHARE_READ, nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
+        nullptr);
+}
+
+// Synchronous write to the dedicated crash log. Each call commits to disk
+// before returning thanks to FILE_FLAG_WRITE_THROUGH. No stderr mirroring —
+// stderr writes go through the CRT's per-FILE lock which the main thread
+// may be holding, deadlocking us inside the kernel callback.
+static void CrashLogf(const char* fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n <= 0) return;
+    if (n > (int)sizeof(buf)) n = sizeof(buf);
+    if (g_crashLog != INVALID_HANDLE_VALUE) {
+        DWORD wrote = 0;
+        WriteFile(g_crashLog, buf, (DWORD)n, &wrote, nullptr);
+    }
+}
+
+// Force the OS-level file buffers behind stderr/stdout to disk. Used at
+// the END of the crash handler to flush the convenience-mirror to stderr;
+// the crash log itself is FILE_FLAG_WRITE_THROUGH so each CrashLogf is
+// already on disk.
+static void FlushLogsToDisk() {
+    fflush(stderr);
+    fflush(stdout);
+    HANDLE he = (HANDLE)_get_osfhandle(_fileno(stderr));
+    if (he != INVALID_HANDLE_VALUE) FlushFileBuffers(he);
+    HANDLE ho = (HANDLE)_get_osfhandle(_fileno(stdout));
+    if (ho != INVALID_HANDLE_VALUE) FlushFileBuffers(ho);
+}
+
+// Installed via SetUnhandledExceptionFilter — runs ONLY for second-chance
+// exceptions that no SEH __try/__except in the call chain caught. This
+// avoids logging benign first-chance exceptions raised and absorbed by
+// Banished's normal control flow (lazy-commit reads, internal SEH probes).
+static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
     if (code != EXCEPTION_ACCESS_VIOLATION &&
         code != EXCEPTION_ILLEGAL_INSTRUCTION &&
@@ -113,22 +215,31 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    fprintf(stderr, "\n=== STANDALONE CRASH ===\n");
-    fprintf(stderr, "Exception: 0x%08lX (%s)\n", code, ExceptionCodeToString(code));
-    fprintf(stderr, "Address:   %p\n", ep->ExceptionRecord->ExceptionAddress);
+    // Serialize concurrent crashes so two threads can't interleave their
+    // stack traces. Once one thread is holding this CS and starts logging,
+    // the OS will likely terminate before any other crasher gets the lock —
+    // that's fine, we get a complete dump from the first crasher.
+    static CRITICAL_SECTION s_cs;
+    static bool s_csInit = false;
+    if (!s_csInit) { InitializeCriticalSection(&s_cs); s_csInit = true; }
+    EnterCriticalSection(&s_cs);
+
+    CrashLogf("\n=== STANDALONE CRASH ===\n");
+    CrashLogf("Exception: 0x%08lX (%s)\n", code, ExceptionCodeToString(code));
+    CrashLogf("Address:   %p\n", ep->ExceptionRecord->ExceptionAddress);
 
     CONTEXT* ctx = ep->ContextRecord;
-    fprintf(stderr, "RAX=%016llX RCX=%016llX RDX=%016llX RBX=%016llX\n",
-            (unsigned long long)ctx->Rax, (unsigned long long)ctx->Rcx,
-            (unsigned long long)ctx->Rdx, (unsigned long long)ctx->Rbx);
-    fprintf(stderr, "RBP=%016llX RSI=%016llX RDI=%016llX R8 =%016llX\n",
-            (unsigned long long)ctx->Rbp, (unsigned long long)ctx->Rsi,
-            (unsigned long long)ctx->Rdi, (unsigned long long)ctx->R8);
-    fprintf(stderr, "R9 =%016llX R10=%016llX R11=%016llX R12=%016llX\n",
-            (unsigned long long)ctx->R9,  (unsigned long long)ctx->R10,
-            (unsigned long long)ctx->R11, (unsigned long long)ctx->R12);
-    fprintf(stderr, "RIP=%016llX RSP=%016llX\n",
-            (unsigned long long)ctx->Rip, (unsigned long long)ctx->Rsp);
+    CrashLogf("RAX=%016llX RCX=%016llX RDX=%016llX RBX=%016llX\n",
+              (unsigned long long)ctx->Rax, (unsigned long long)ctx->Rcx,
+              (unsigned long long)ctx->Rdx, (unsigned long long)ctx->Rbx);
+    CrashLogf("RBP=%016llX RSI=%016llX RDI=%016llX R8 =%016llX\n",
+              (unsigned long long)ctx->Rbp, (unsigned long long)ctx->Rsi,
+              (unsigned long long)ctx->Rdi, (unsigned long long)ctx->R8);
+    CrashLogf("R9 =%016llX R10=%016llX R11=%016llX R12=%016llX\n",
+              (unsigned long long)ctx->R9,  (unsigned long long)ctx->R10,
+              (unsigned long long)ctx->R11, (unsigned long long)ctx->R12);
+    CrashLogf("RIP=%016llX RSP=%016llX\n",
+              (unsigned long long)ctx->Rip, (unsigned long long)ctx->Rsp);
 
     // Identify the module containing RIP — saves us doing arithmetic by hand.
     {
@@ -140,18 +251,18 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
             GetModuleFileNameA(mod, path, MAX_PATH);
             uintptr_t off = (uintptr_t)ctx->Rip - (uintptr_t)mod;
             const char* nm = strrchr(path, '\\');
-            fprintf(stderr, "Module:    %s + 0x%llX  (base=%p)\n",
-                    nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
+            CrashLogf("Module:    %s + 0x%llX  (base=%p)\n",
+                      nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
         } else {
-            fprintf(stderr, "Module:    UNKNOWN (no module covers RIP)\n");
+            CrashLogf("Module:    UNKNOWN (no module covers RIP)\n");
         }
     }
 
     if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
         const char* op = ep->ExceptionRecord->ExceptionInformation[0] == 0 ? "READ" :
                          ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "EXEC";
-        fprintf(stderr, "Fault: %s of %p\n", op,
-                (void*)ep->ExceptionRecord->ExceptionInformation[1]);
+        CrashLogf("Fault: %s of %p\n", op,
+                  (void*)ep->ExceptionRecord->ExceptionInformation[1]);
     }
 
     // Specialized handler: IsDerivedFrom-NULL-this crash. RIP at Runtime+0xC039A
@@ -160,14 +271,14 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     uintptr_t runtimeBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("Runtime-x64.dll"));
     if (runtimeBase && ctx->Rcx == 0 && ctx->Rip >= runtimeBase + 0xC0390 && ctx->Rip <= runtimeBase + 0xC03A0) {
         uint32_t expectedTypeId = (uint32_t)ctx->Rdx;
-        fprintf(stderr, "IsDerivedFrom NULL-this: factory returned NULL.\n");
-        fprintf(stderr, "  Expected base typeId in RDX = 0x%08X\n", expectedTypeId);
+        CrashLogf("IsDerivedFrom NULL-this: factory returned NULL.\n");
+        CrashLogf("  Expected base typeId in RDX = 0x%08X\n", expectedTypeId);
         uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
         ProbeBaseTypeInfo* head = headAddr ? *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr) : nullptr;
         for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
             if (p->typeId == expectedTypeId) {
-                fprintf(stderr, "  Expected base = %s (parent=%s, factory=%p)\n",
-                        p->name ? p->name : "?", p->parent ? p->parent : "?", p->factoryFn);
+                CrashLogf("  Expected base = %s (parent=%s, factory=%p)\n",
+                          p->name ? p->name : "?", p->parent ? p->parent : "?", p->factoryFn);
                 break;
             }
         }
@@ -176,47 +287,48 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     // Specialized handler: External::Load tree-walk crash. The instruction at
     // Runtime+0xBC73E is `MOV RAX, [RCX+0x10]` with RCX=NULL because the
     // typeId in [RBP+0x48] wasn't found in Factory::_singleton's tree.
-    // Print the typeId and try to find a Runtime type whose CRC32 matches.
     if (runtimeBase && ctx->Rip == runtimeBase + 0xBC73E) {
         uint32_t* typeIdSlot = reinterpret_cast<uint32_t*>(ctx->Rbp + 0x48);
-        // [RBP+0x48] is on the crashed thread's stack — same memory we just
-        // tree-walked through, so the read should be safe. IsBadReadPtr is
-        // racy but fine for a one-shot diagnostic.
         if (!IsBadReadPtr(typeIdSlot, sizeof(uint32_t))) {
             uint32_t typeId = *typeIdSlot;
-            fprintf(stderr, "External::Load: missed typeId=0x%08X at [RBP+0x48]=%p\n",
-                    typeId, (void*)typeIdSlot);
+            CrashLogf("External::Load: missed typeId=0x%08X at [RBP+0x48]=%p\n",
+                      typeId, (void*)typeIdSlot);
 
             uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
             ProbeBaseTypeInfo* head = headAddr ? *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr) : nullptr;
             bool matched = false;
             for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
                 if (p->typeId == typeId) {
-                    fprintf(stderr, "  -> matches REGISTERED type: %s (parent=%s)\n",
-                            p->name ? p->name : "?", p->parent ? p->parent : "?");
+                    CrashLogf("  -> matches REGISTERED type: %s (parent=%s)\n",
+                              p->name ? p->name : "?", p->parent ? p->parent : "?");
                     matched = true;
                     break;
                 }
             }
             if (!matched) {
-                fprintf(stderr, "  -> typeId is NOT in _firstTypeInfo (missing exe-side registration)\n");
+                CrashLogf("  -> typeId is NOT in _firstTypeInfo (missing exe-side registration)\n");
             }
         } else {
-            fprintf(stderr, "External::Load: [RBP+0x48]=%p is unreadable\n", (void*)typeIdSlot);
+            CrashLogf("External::Load: [RBP+0x48]=%p is unreadable\n", (void*)typeIdSlot);
         }
     }
 
     // Check registry stats
     RegistryStats stats = GetRegistryStats();
-    fprintf(stderr, "Registry: %zu registered, %zu stubs hit\n",
-            stats.registered, stats.stubs);
+    CrashLogf("Registry: %zu registered, %zu stubs hit\n",
+              stats.registered, stats.stubs);
 
     PrintStackTrace(ctx);
 
-    fprintf(stderr, "=== END CRASH ===\n");
-    fflush(stderr);
+    CrashLogf("=== END CRASH ===\n");
+    FlushLogsToDisk();
 
-    return EXCEPTION_CONTINUE_SEARCH;
+    LeaveCriticalSection(&s_cs);
+
+    // Avoid the OS unhandled-exception-filter race: terminate the process
+    // ourselves on our own terms. _exit() skips C++ atexit and CRT shutdown
+    // (which is what we want — the engine state is unreliable post-crash).
+    _exit(3);
 }
 
 // ============================================================
@@ -497,8 +609,13 @@ extern "C" void RunStartupSelfTests() {
 // Initialization sequence
 // ============================================================
 static bool Init() {
-    // 1. Install crash handler
-    AddVectoredExceptionHandler(1, CrashHandler);
+    // 1. Install crash handler — only catches second-chance exceptions
+    //    so first-chance AVs absorbed by Banished's SEH chains stay quiet.
+    SetUnhandledExceptionFilter(CrashHandler);
+
+    // 1b. Reset Video* registry keys before anything else reads them.
+    //     Breaks the standalone-shutdown corruption cycle that wedges DX11.
+    ResetVideoRegistry();
 
     // 2. Resolve Runtime-x64.dll and VideoDX11-x64.dll (ASLR)
     printf("[Standalone] Resolving DLLs...\n");
@@ -556,6 +673,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     freopen("standalone_error.log", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
+
+    // Open dedicated crash log (FILE_FLAG_WRITE_THROUGH) — survives the OS
+    // tearing the crashing thread down before stderr buffers commit.
+    OpenCrashLog();
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
     printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);
