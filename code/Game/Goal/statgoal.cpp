@@ -403,6 +403,39 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
 // distinct from the vtable slot in the original layout.
 
 #ifdef STANDALONE_EXE
+
+// ============================================================
+// StatGoal vtable (exe addr 0x1401604c0, 11 slots)
+// Slots we've reimplemented are wired up; inherited Achievement::Goal
+// slots are nullptr placeholders — calling them will crash, but the
+// loader's instantiation path only needs Dtor/Slot5/Slot10. Fill the
+// inherited slots when something virtual-calls them.
+// ============================================================
+// Forward decls — these live below in this same TU with C++ linkage.
+static int StatGoal_Slot3_Trampoline(StatGoal* self) { return StatGoal_Slot3(self); }
+
+static void* g_StatGoal_Vtable[11] = {
+    reinterpret_cast<void*>(&StatGoal_Dtor),               // +0x00 dtor
+    nullptr,                                               // +0x08 Slot1 (Goal inherited)
+    nullptr,                                               // +0x10 Slot2 (Goal inherited)
+    reinterpret_cast<void*>(&StatGoal_Slot3_Trampoline),   // +0x18 Slot3 (returns 1)
+    nullptr,                                               // +0x20 Slot4 (Goal JMP thunk)
+    reinterpret_cast<void*>(&StatGoal_Slot5),              // +0x28 Slot5 / Load
+    reinterpret_cast<void*>(&StatGoal_Slot6),              // +0x30 Slot6 / Cleanup
+    nullptr,                                               // +0x38 Slot7 (Goal stub)
+    reinterpret_cast<void*>(&StatGoal_Slot8),              // +0x40 Slot8 / Check
+    nullptr,                                               // +0x48 Slot9 (Goal stub)
+    reinterpret_cast<void*>(&StatGoal_Slot10),             // +0x50 Slot10 / CreateInstance
+};
+
+#include "address_registry.h"
+
+// Called from address_registry.cpp's RegisterVtablesAndTypeIds() so the
+// exe address 0x1401604c0 resolves to our synthesized vtable.
+extern "C" void RegisterStatGoalVtable() {
+    RegisterExeAddr(0x1401604c0, reinterpret_cast<uintptr_t>(g_StatGoal_Vtable));
+}
+
 extern "C" void* StatGoal_Factory(void) {
     if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
     void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(StatGoal), 8);

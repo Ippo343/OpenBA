@@ -18,6 +18,7 @@
 #include "Object/factory_registration.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 #include <windows.h>
 #include <dbghelp.h>
 
@@ -276,6 +277,136 @@ static void SkipPlatformConfigure() {
 }
 
 // ============================================================
+// Factory self-test: walk _firstTypeInfo to find a registered type by name,
+// invoke its factoryFn (the same pointer External::Load would dispatch to),
+// and validate the resulting object's vtable + ctor-set field defaults.
+//
+// This proves the per-class factory path end-to-end without requiring the
+// loader thread to reach the type. As more types get real factories, add
+// one of these per type so we can validate locally.
+// ============================================================
+struct FieldCheck {
+    uintptr_t offset;
+    uint32_t  expected;
+    int       width;          // 1, 2, or 4 bytes
+    const char* name;
+};
+
+static bool RunFactorySelfTest(const char* typeName,
+                               uintptr_t expectedVtableExeAddr,
+                               size_t expectedSize,
+                               const FieldCheck* fields, size_t fieldCount) {
+    printf("\n[SelfTest %s] start\n", typeName);
+
+    // Refresh g_pMemAllocSingleton from its Runtime DLL slot. The slot is
+    // populated by Engine::Engine::Engine; EngineFuncsInit ran before that
+    // and cached NULL. Without this refresh, factory MemAlloc returns NULL.
+    {
+        void** slot = reinterpret_cast<void**>(
+            ResolveAddr(Module::Runtime, 0x1801fc718));
+        if (slot && *slot && !g_pMemAllocSingleton) {
+            g_pMemAllocSingleton = *slot;
+            printf("[SelfTest %s]   refreshed g_pMemAllocSingleton = %p\n",
+                   typeName, g_pMemAllocSingleton);
+        }
+    }
+
+    uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
+    if (!headAddr) {
+        printf("[SelfTest %s] FAIL: cannot resolve _firstTypeInfo head\n", typeName);
+        return false;
+    }
+    ProbeBaseTypeInfo* head = *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr);
+
+    ProbeBaseTypeInfo* match = nullptr;
+    for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
+        if (p->name && std::strcmp(p->name, typeName) == 0) { match = p; break; }
+    }
+    if (!match) {
+        printf("[SelfTest %s] FAIL: not found in _firstTypeInfo (registration didn't run)\n",
+               typeName);
+        return false;
+    }
+    printf("[SelfTest %s]   found entry @ %p (factoryFn=%p, parent=%s)\n",
+           typeName, (void*)match,
+           match->factoryFn,
+           match->parent ? match->parent : "(null)");
+
+    if (!match->factoryFn) {
+        printf("[SelfTest %s] FAIL: factoryFn is NULL\n", typeName);
+        return false;
+    }
+
+    typedef void* (*Factory_t)(void);
+    void* obj = ((Factory_t)match->factoryFn)();
+    if (!obj) {
+        printf("[SelfTest %s] FAIL: factory returned NULL\n", typeName);
+        return false;
+    }
+    printf("[SelfTest %s]   factory returned %p\n", typeName, obj);
+
+    // Validate vtable
+    uintptr_t expectedVt = ResolveAddr(Module::Exe, expectedVtableExeAddr);
+    void* actualVt = *(void**)obj;
+    if ((uintptr_t)actualVt != expectedVt) {
+        printf("[SelfTest %s] FAIL: vtable %p != expected %p (exe 0x%llx)\n",
+               typeName, actualVt, (void*)expectedVt,
+               (unsigned long long)expectedVtableExeAddr);
+        return false;
+    }
+    printf("[SelfTest %s]   vtable OK (%p)\n", typeName, actualVt);
+
+    // Validate field defaults
+    bool allOk = true;
+    for (size_t i = 0; i < fieldCount; i++) {
+        const FieldCheck& f = fields[i];
+        uint32_t actual = 0;
+        switch (f.width) {
+        case 1: actual = *(uint8_t*) ((uintptr_t)obj + f.offset); break;
+        case 2: actual = *(uint16_t*)((uintptr_t)obj + f.offset); break;
+        case 4: actual = *(uint32_t*)((uintptr_t)obj + f.offset); break;
+        default:
+            printf("[SelfTest %s]   FAIL: bad field width %d for %s\n",
+                   typeName, f.width, f.name);
+            allOk = false; continue;
+        }
+        if (actual != f.expected) {
+            printf("[SelfTest %s]   FAIL: %s @+0x%llx = 0x%X, expected 0x%X\n",
+                   typeName, f.name, (unsigned long long)f.offset, actual, f.expected);
+            allOk = false;
+        }
+    }
+    if (!allOk) return false;
+
+    printf("[SelfTest %s] PASS (sizeof=%zu, %zu fields verified)\n",
+           typeName, expectedSize, fieldCount);
+    // Object intentionally leaked — one-shot startup test, OS reclaims at exit.
+    // Calling the dtor would require the full Goal::~Goal/String chain to be
+    // valid, which is out of scope for the factory test.
+    return true;
+}
+
+// Called from game_main.cpp after Engine::Startup completes (so that the
+// MemoryAllocator singleton is populated). Linked via the extern decl below.
+extern "C" void RunStartupSelfTests() {
+    printf("\n[Standalone] === Running factory self-tests ===\n");
+
+    static const FieldCheck statGoalFields[] = {
+        { 0x30, 5,    4, "statTypeA" },
+        { 0x34, 5,    4, "statTypeB" },
+        { 0x38, 10,   4, "comparisonType" },
+        { 0x3c, 1,    4, "fixedValue" },
+        { 0x40, 0,    1, "requireOtherGoalsMet" },
+        { 0x50, 0xFFFFFFFFu, 4, "statAGeneration" },
+        { 0x68, 0xFFFFFFFFu, 4, "statBGeneration" },
+        { 0x78, 0x20, 4, "statFlags" },
+        { 0x7c, 1,    4, "statSubType" },
+    };
+    RunFactorySelfTest("StatGoal", 0x1401604c0, 0x80,
+                       statGoalFields, sizeof(statGoalFields)/sizeof(*statGoalFields));
+}
+
+// ============================================================
 // Initialization sequence
 // ============================================================
 static bool Init() {
@@ -320,6 +451,9 @@ static bool Init() {
 
     // 7. Skip the launcher dialog — see SkipPlatformConfigure note above.
     SkipPlatformConfigure();
+
+    // RunStartupSelfTests() runs from game_main.cpp after Engine::Startup,
+    // when the MemoryAllocator singleton is finally populated.
 
     printf("[Standalone] Init complete.\n");
     return true;

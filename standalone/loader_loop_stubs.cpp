@@ -52,15 +52,13 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Inner_Startup(UpdateLoop* self) {
-    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
-    printf("[InnerLL::Startup] self=%p next=%p loader=%p fn=%p\n",
-           (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
-    if (fn_Loader_Load && g_pLoader) {
-        fn_Loader_Load(g_pLoader, ll->m_nextLoop);
-        printf("[InnerLL::Startup] Loader::Load returned\n");
-    } else {
-        printf("[InnerLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
-    }
+    printf("[InnerLL::Startup] self=%p (Loader::Load disabled — VideoDX9+0x267E crash, see notes)\n",
+           (void*)self);
+    // Re-enable when VideoDX9+0x267E is resolved. Background loader thread
+    // crashes there before reaching factory invocation. Until then we keep
+    // the M1 baseline (clean splash chain → menu → exit 0) and validate
+    // factory registrations via RunStartupSelfTests instead.
+    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
 }
 
 void Inner_Shutdown(UpdateLoop* self) {
@@ -156,15 +154,10 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Outer_Startup(UpdateLoop* self) {
-    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
-    printf("[OuterLL::Startup] self=%p next=%p loader=%p fn=%p\n",
-           (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
-    if (fn_Loader_Load && g_pLoader) {
-        fn_Loader_Load(g_pLoader, ll->m_nextLoop);
-        printf("[OuterLL::Startup] Loader::Load returned\n");
-    } else {
-        printf("[OuterLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
-    }
+    printf("[OuterLL::Startup] self=%p (Loader::Load disabled — VideoDX9+0x267E crash, see notes)\n",
+           (void*)self);
+    // Re-enable when VideoDX9+0x267E is resolved.
+    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
 }
 
 void Outer_Shutdown(UpdateLoop* self) {

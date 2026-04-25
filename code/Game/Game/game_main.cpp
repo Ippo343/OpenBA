@@ -29,6 +29,12 @@
 #include <cstdint>
 #include <cstring>
 
+#ifdef STANDALONE_EXE
+// Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
+// type, invokes its factory, validates vtable + ctor-set field defaults.
+extern "C" void RunStartupSelfTests();
+#endif
+
 // ============================================================
 // Resolved Runtime DLL functions
 // ============================================================
@@ -175,6 +181,13 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 ResolveAddr(Module::Runtime, 0x1801fc718));
             void* memAllocSingleton = memAllocSingletonPtr ? *memAllocSingletonPtr : nullptr;
             printf("[GameMain] MemAllocSingleton (fresh) = %p\n", memAllocSingleton);
+
+#ifdef STANDALONE_EXE
+            // Validate per-class factory registrations end-to-end now that
+            // Engine::Engine::Engine has populated the MemoryAllocator
+            // singleton. See standalone/main.cpp for the implementation.
+            RunStartupSelfTests();
+#endif
 
             // MainLoop is 0xa0 bytes, 8-byte aligned (matches original GameMain).
             void* ml = fn_MemAlloc(memAllocSingleton, 0xa0, 8);

@@ -19,6 +19,12 @@
 #include <cstdio>
 #include <cstdint>
 
+// Per-class vtable registration entry points. Each lives next to its class's
+// reimplementation in code/Game/<Module>/<Class>.cpp.
+extern "C" {
+    void RegisterStatGoalVtable();
+}
+
 // ============================================================
 // Section 1: CODE FUNCTIONS
 // ============================================================
@@ -158,6 +164,10 @@ static void RegisterVtablesAndTypeIds() {
 
     // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) — stubs ---
     RegisterLoaderLoopVtables();
+
+    // Per-class vtables defined alongside their reimplementation in
+    // code/Game/<Module>/<Class>.cpp — declared at file scope above.
+    RegisterStatGoalVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.
