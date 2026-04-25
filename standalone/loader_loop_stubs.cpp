@@ -52,13 +52,20 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Inner_Startup(UpdateLoop* self) {
-    printf("[InnerLL::Startup] self=%p (Loader::Load disabled — VideoDX9+0x267E crash, see notes)\n",
-           (void*)self);
-    // Re-enable when VideoDX9+0x267E is resolved. Background loader thread
-    // crashes there before reaching factory invocation. Until then we keep
-    // the M1 baseline (clean splash chain → menu → exit 0) and validate
-    // factory registrations via RunStartupSelfTests instead.
-    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
+    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
+    printf("[InnerLL::Startup] self=%p next=%p — Loader::Load DISABLED (DX9 fallback crash)\n",
+           (void*)self, (void*)ll->m_nextLoop);
+    // 2026-04-25 PM: with surgical PlatformConfigure patch, ValidateConfiguration
+    // runs and PlatformStartup picks an active renderer. VideoProbe shows
+    // active=DX9 at Device+0x100 with DX11 plugin loaded but rejected — DX11's
+    // Initialize (DeviceData vtbl[+0x10]) returns false, fall-through to DX9.
+    // Loader thread then crashes in DX9 FUN_180002240 +0x267E reading a NULL
+    // texture pointer at *(self+0x48) — DX9 CreateTexture failed in this
+    // headless context but upload loop runs anyway.
+    // Next step: investigate WHY DX11 Initialize fails (probably HWND/swapchain
+    // setup gap) so the active renderer is DX11 with full DXGI path.
+    // Original: fn_Loader_Load(g_pLoader, ll->m_nextLoop);
+    (void)ll;
 }
 
 void Inner_Shutdown(UpdateLoop* self) {
@@ -154,10 +161,12 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Outer_Startup(UpdateLoop* self) {
-    printf("[OuterLL::Startup] self=%p (Loader::Load disabled — VideoDX9+0x267E crash, see notes)\n",
-           (void*)self);
-    // Re-enable when VideoDX9+0x267E is resolved.
-    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
+    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
+    printf("[OuterLL::Startup] self=%p next=%p — Loader::Load DISABLED (DX9 fallback crash)\n",
+           (void*)self, (void*)ll->m_nextLoop);
+    // See Inner_Startup for the full story — same root cause.
+    // Original: fn_Loader_Load(g_pLoader, ll->m_nextLoop);
+    (void)ll;
 }
 
 void Outer_Shutdown(UpdateLoop* self) {

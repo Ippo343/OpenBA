@@ -246,34 +246,53 @@ static void DumpFirstTypeInfo(const char* tag) {
 }
 
 // ============================================================
-// Patch Engine::Engine::PlatformConfigure (Runtime 0x1800a1670) to always
-// return true. Mirrors the DLL-mode hook in engine/reimpl/platformconfigure.cpp:
-// the launcher's "first run / configure" dialog enables a video-mode probe
-// path that crashes inside VideoDX9+0x267E. Skipping it pins the loader to
-// the deterministic StatGoal-and-beyond code path.
+// Skip the launcher's DialogBoxParamW call inside Engine::PlatformConfigure
+// (Runtime 0x1800a17d4) without bypassing the rest of the function.
+//
+// Original instruction:
+//     1800a17d4: FF 15 F6 9C 0A 00      CALL [DialogBoxParamW IAT slot]
+// We overwrite with:
+//     1800a17d4: B8 01 00 00 00 90      MOV EAX,1 ; NOP
+// so DialogBoxParamW returns 1 (i.e. user pressed "Play"), but everything
+// else in PlatformConfigure runs normally — most importantly:
+//   - Video::Device::ValidateConfiguration (0x1800a17b5, before the call)
+//   - Video::Configuration::Save / IO::Persistence::WriteSettings (after)
+//
+// PlatformConfigure's tail returns `IVar6 == 1`, so after the patch the
+// function returns true. The big "reset" branches at the end are gated on
+// global flags (DAT_1801fc698/_x699) that the dialog handler would have
+// flipped — with the dialog skipped they stay 0 and the resets don't run.
+//
+// This is the M1-friendly replacement for the previous 6-byte entry patch
+// (MOV EAX,1; RET) which short-circuited ValidateConfiguration and may have
+// left Device::_singleton+0x100 pointing at the wrong renderer.
 // ============================================================
 static void SkipPlatformConfigure() {
-    uintptr_t addr = ResolveAddr(Module::Runtime, 0x1800a1670);
-    if (!addr) {
-        printf("[Standalone] WARN: could not resolve PlatformConfigure — popup may appear\n");
+    uintptr_t patchSite = ResolveAddr(Module::Runtime, 0x1800a17d4);
+    if (!patchSite) {
+        printf("[Standalone] WARN: could not resolve PlatformConfigure dialog call site — popup may appear\n");
         return;
     }
-    // MOV EAX, 1 ; RET  (6 bytes). Caller checks return as bool, so EAX=1 satisfies
-    // both byte-test and dword-test paths. Overwrites the SEH-cookie prologue, but
-    // we never unwind through this function so .pdata mismatch is harmless.
-    static const uint8_t patch[] = { 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3 };
+    // Sanity check: refuse to patch if the bytes don't match the indirect CALL we expect.
+    static const uint8_t expected[] = { 0xFF, 0x15, 0xF6, 0x9C, 0x0A, 0x00 };
+    if (memcmp((void*)patchSite, expected, sizeof(expected)) != 0) {
+        printf("[Standalone] WARN: PlatformConfigure dialog call site (%p) mismatched — refusing to patch\n",
+               (void*)patchSite);
+        return;
+    }
+    static const uint8_t patch[] = { 0xB8, 0x01, 0x00, 0x00, 0x00, 0x90 };
     DWORD oldProtect = 0;
-    if (!VirtualProtect((LPVOID)addr, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+    if (!VirtualProtect((LPVOID)patchSite, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
         printf("[Standalone] WARN: VirtualProtect failed for PlatformConfigure (err=%lu)\n",
                GetLastError());
         return;
     }
-    memcpy((void*)addr, patch, sizeof(patch));
+    memcpy((void*)patchSite, patch, sizeof(patch));
     DWORD dummy = 0;
-    VirtualProtect((LPVOID)addr, sizeof(patch), oldProtect, &dummy);
-    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)addr, sizeof(patch));
-    printf("[Standalone] PlatformConfigure (%p) patched to return true (launcher skipped)\n",
-           (void*)addr);
+    VirtualProtect((LPVOID)patchSite, sizeof(patch), oldProtect, &dummy);
+    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)patchSite, sizeof(patch));
+    printf("[Standalone] PlatformConfigure dialog call (%p) patched to MOV EAX,1; NOP — popup skipped, ValidateConfiguration runs\n",
+           (void*)patchSite);
 }
 
 // ============================================================
@@ -386,6 +405,72 @@ static bool RunFactorySelfTest(const char* typeName,
     return true;
 }
 
+// ============================================================
+// Probe the Video subsystem state after Engine::Startup. Tells us:
+//   - Configuration::_singleton[+4]: requested interface index (0=DX9, 1=DX11, 2=GL)
+//   - Device::_singleton[+0xf8]:     active interface index (CreateVideoInterface picked this)
+//   - Device::_singleton[+0x100]:    active DeviceData pointer (read by ImageBuffer::PlatformConstruct)
+//   - Device plugin slots (HMODULEs) at +0xb0, +0xc8, +0xe0
+//
+// The active DeviceData's vtable will reveal the actual renderer in use:
+// pointers in VideoDX11-x64.dll vs. VideoDX9-x64.dll. This pins down the
+// "DX9 or DX11" question that drives the +0x267E crash.
+// ============================================================
+static void DumpVideoState() {
+    void** devSlot = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fe7a8));
+    void** cfgSlot = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fe7a0));
+
+    void* device = devSlot ? *devSlot : nullptr;
+    void* config = cfgSlot ? *cfgSlot : nullptr;
+    printf("\n[VideoProbe] Configuration::_singleton = %p\n", config);
+    if (config) {
+        int interfaceIdx = *reinterpret_cast<int*>((uintptr_t)config + 4);
+        int adapterIdx   = *reinterpret_cast<int*>((uintptr_t)config + 8);
+        int width        = *reinterpret_cast<int*>((uintptr_t)config + 0x0c);
+        int height       = *reinterpret_cast<int*>((uintptr_t)config + 0x10);
+        const char* iname =
+            interfaceIdx == 0 ? "VideoDX9" :
+            interfaceIdx == 1 ? "VideoDX11" :
+            interfaceIdx == 2 ? "VideoGL" : "?";
+        printf("[VideoProbe]   +0x04 interface = %d (%s)\n", interfaceIdx, iname);
+        printf("[VideoProbe]   +0x08 adapter   = %d\n", adapterIdx);
+        printf("[VideoProbe]   +0x0c width     = %d\n", width);
+        printf("[VideoProbe]   +0x10 height    = %d\n", height);
+    }
+
+    printf("[VideoProbe] Device::_singleton        = %p\n", device);
+    if (device) {
+        int activeIdx = *reinterpret_cast<int*>((uintptr_t)device + 0xf8);
+        void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
+        HMODULE dx9   = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xb0);
+        HMODULE dx11  = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xc8);
+        HMODULE gl    = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xe0);
+        printf("[VideoProbe]   +0xf8  active idx  = %d\n", activeIdx);
+        printf("[VideoProbe]   +0x100 active DeviceData = %p\n", activeDD);
+        printf("[VideoProbe]   +0xb0  DX9 HMODULE = %p\n", dx9);
+        printf("[VideoProbe]   +0xc8  DX11 HMODULE = %p\n", dx11);
+        printf("[VideoProbe]   +0xe0  GL HMODULE  = %p\n", gl);
+        if (activeDD) {
+            void* vtbl = *reinterpret_cast<void**>(activeDD);
+            printf("[VideoProbe]   active DeviceData vtable = %p\n", vtbl);
+            HMODULE owner = nullptr;
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                   GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)vtbl, &owner) && owner) {
+                char path[MAX_PATH] = {0};
+                GetModuleFileNameA(owner, path, MAX_PATH);
+                const char* nm = strrchr(path, '\\');
+                printf("[VideoProbe]   active vtable lives in: %s\n", nm ? nm + 1 : path);
+            } else {
+                printf("[VideoProbe]   active vtable in unknown module\n");
+            }
+        }
+    }
+    fflush(stdout);
+}
+
 // Called from game_main.cpp after Engine::Startup completes (so that the
 // MemoryAllocator singleton is populated). Linked via the extern decl below.
 extern "C" void RunStartupSelfTests() {
@@ -404,6 +489,8 @@ extern "C" void RunStartupSelfTests() {
     };
     RunFactorySelfTest("StatGoal", 0x1401604c0, 0x80,
                        statGoalFields, sizeof(statGoalFields)/sizeof(*statGoalFields));
+
+    DumpVideoState();
 }
 
 // ============================================================
