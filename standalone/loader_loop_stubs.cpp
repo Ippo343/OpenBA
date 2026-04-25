@@ -52,11 +52,15 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Inner_Startup(UpdateLoop* self) {
-    printf("[InnerLL::Startup] self=%p (Loader::Load disabled — see project_standalone_stage7_progress.md)\n",
-           (void*)self);
-    // Re-enable when real factories cover the splash-chain types — the
-    // background loader thread crashes on NULL factory results.
-    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
+    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
+    printf("[InnerLL::Startup] self=%p next=%p loader=%p fn=%p\n",
+           (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
+    if (fn_Loader_Load && g_pLoader) {
+        fn_Loader_Load(g_pLoader, ll->m_nextLoop);
+        printf("[InnerLL::Startup] Loader::Load returned\n");
+    } else {
+        printf("[InnerLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
+    }
 }
 
 void Inner_Shutdown(UpdateLoop* self) {
@@ -152,10 +156,15 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Outer_Startup(UpdateLoop* self) {
-    printf("[OuterLL::Startup] self=%p (Loader::Load disabled — see project_standalone_stage7_progress.md)\n",
-           (void*)self);
-    // Re-enable when real factories cover the splash-chain types.
-    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
+    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
+    printf("[OuterLL::Startup] self=%p next=%p loader=%p fn=%p\n",
+           (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
+    if (fn_Loader_Load && g_pLoader) {
+        fn_Loader_Load(g_pLoader, ll->m_nextLoop);
+        printf("[OuterLL::Startup] Loader::Load returned\n");
+    } else {
+        printf("[OuterLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
+    }
 }
 
 void Outer_Shutdown(UpdateLoop* self) {

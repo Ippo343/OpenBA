@@ -57,6 +57,53 @@ static const char* ExceptionCodeToString(DWORD code) {
     }
 }
 
+// Walk the saved CONTEXT via the x64 unwind tables and print one line per
+// frame: <module>!<offset>. No symbol names — Banished ships stripped — but
+// module+offset is what we'd paste into Ghidra anyway.
+static void PrintStackTrace(CONTEXT* origCtx) {
+    fprintf(stderr, "Stack trace:\n");
+    CONTEXT ctx = *origCtx;
+
+    for (int frame = 0; frame < 32; frame++) {
+        HMODULE mod = nullptr;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)(uintptr_t)ctx.Rip, &mod) && mod) {
+            char path[MAX_PATH] = {0};
+            GetModuleFileNameA(mod, path, MAX_PATH);
+            const char* nm = strrchr(path, '\\');
+            uintptr_t off = (uintptr_t)ctx.Rip - (uintptr_t)mod;
+            fprintf(stderr, "  #%-2d %-22s + 0x%-8llX  (RIP=%016llX RSP=%016llX)\n",
+                    frame, nm ? nm + 1 : path, (unsigned long long)off,
+                    (unsigned long long)ctx.Rip, (unsigned long long)ctx.Rsp);
+        } else {
+            fprintf(stderr, "  #%-2d ???                    @ %p          (RSP=%016llX)\n",
+                    frame, (void*)ctx.Rip, (unsigned long long)ctx.Rsp);
+        }
+
+        DWORD64 imageBase = 0;
+        PRUNTIME_FUNCTION fn = RtlLookupFunctionEntry(ctx.Rip, &imageBase, nullptr);
+        if (!fn) {
+            // Leaf or no unwind data — try one manual pop of the return address.
+            // Many leaves have no .pdata entry; the return value lives at [RSP].
+            uintptr_t* sp = reinterpret_cast<uintptr_t*>(ctx.Rsp);
+            if (IsBadReadPtr(sp, sizeof(uintptr_t))) break;
+            ctx.Rip = *sp;
+            ctx.Rsp += 8;
+            if (!ctx.Rip) break;
+            continue;
+        }
+
+        PVOID handlerData = nullptr;
+        ULONG64 establisherFrame = 0;
+        RtlVirtualUnwind(UNW_FLAG_NHANDLER, imageBase, ctx.Rip, fn,
+                         &ctx, &handlerData, &establisherFrame, nullptr);
+
+        if (!ctx.Rip) break;
+    }
+    fflush(stderr);
+}
+
 static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
     if (code != EXCEPTION_ACCESS_VIOLATION &&
@@ -162,6 +209,8 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     RegistryStats stats = GetRegistryStats();
     fprintf(stderr, "Registry: %zu registered, %zu stubs hit\n",
             stats.registered, stats.stubs);
+
+    PrintStackTrace(ctx);
 
     fprintf(stderr, "=== END CRASH ===\n");
     fflush(stderr);
