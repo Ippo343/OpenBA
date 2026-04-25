@@ -234,27 +234,28 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                         fn_String_Dtor(menuStr);
 
-                        // Stage 5c: outer Loading.rsc splash wrapping menuLoop.
-                        UpdateLoop* loadingLoop = reinterpret_cast<UpdateLoop*>(
-                            fn_MemAlloc(memAllocSingleton, 0xb60, 4));
-                        printf("[GameMain] LoadingDLT alloc = %p (vtable=%p)\n",
-                               (void*)loadingLoop, (void*)g_GameLoadDialogLoopT_Vtable);
+                        // Helper: build a splash DialogLoaderLoopT (0xb60 bytes,
+                        // vtable @ 0x140158800) wrapping `next`. Mirrors the
+                        // identical splash setup blocks in FUN_140041ef0.
+                        auto buildSplashDLT = [&](const char* filename, float delaySec,
+                                                  UpdateLoop* next, const char* tag)
+                            -> UpdateLoop* {
+                            UpdateLoop* dlt = reinterpret_cast<UpdateLoop*>(
+                                fn_MemAlloc(memAllocSingleton, 0xb60, 4));
+                            printf("[GameMain] %s alloc = %p (vtable=%p)\n",
+                                   tag, (void*)dlt, (void*)g_GameLoadDialogLoopT_Vtable);
+                            if (!dlt) return nullptr;
 
-                        if (loadingLoop) {
-                            uint64_t loadingDelay = 0;
-                            fn_Time_Ctor_Float(&loadingDelay, 0.5f);  // DAT_140172114
+                            uint64_t delayTime = 0;
+                            fn_Time_Ctor_Float(&delayTime, delaySec);
 
-                            uint8_t loadingStr[8] = {};
-                            fn_String_Ctor_CStr(loadingStr, "Dialog\\Loading.rsc");
+                            uint8_t fileStr[8] = {};
+                            fn_String_Ctor_CStr(fileStr, filename);
 
-                            fn_DialogLoaderLoopT_Ctor(loadingLoop, loadingStr,
-                                                      menuLoop, &loadingDelay);
-                            printf("[GameMain] LoadingDLT base ctor done\n");
+                            fn_DialogLoaderLoopT_Ctor(dlt, fileStr, next, &delayTime);
 
-                            // Mirror the post-ctor patches from FUN_140041ef0.
-                            uintptr_t lp = reinterpret_cast<uintptr_t>(loadingLoop);
-                            *(void***)lp                                  // vtable
-                                = g_GameLoadDialogLoopT_Vtable;
+                            uintptr_t lp = reinterpret_cast<uintptr_t>(dlt);
+                            *(void***)lp = g_GameLoadDialogLoopT_Vtable;
                             *reinterpret_cast<uint32_t*>(lp + 0x188) = 0xff000000;  // color1
                             *reinterpret_cast<uint32_t*>(lp + 0x18c) = 0xff000000;  // color2
                             *reinterpret_cast<uint8_t*>(lp + 0x190) = 0;            // fade-done
@@ -262,23 +263,38 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             *reinterpret_cast<uint64_t*>(lp + 0xb58) = 0;           // text timer
                             *reinterpret_cast<uint8_t*>(lp + 0x40) = 0;             // m_finished
 
-                            fn_String_Dtor(loadingStr);
-                            printf("[GameMain] LoadingDLT vtable patched -> %p, "
-                                   "next=%p\n",
-                                   (void*)loadingLoop->vtable, (void*)menuLoop);
+                            fn_String_Dtor(fileStr);
+                            printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
+                                   "delay=%.2fs\n",
+                                   tag, (void*)dlt->vtable, (void*)next, delaySec);
+                            return dlt;
+                        };
 
-                            printf("[GameMain] Calling MainLoop::Run with LoadingDLT...\n");
-                            s_fn_MainLoop_Run(ml, loadingLoop);
+                        // Stage 5c: Loading.rsc splash wrapping menuLoop.
+                        UpdateLoop* loadingLoop = buildSplashDLT(
+                            "Dialog\\Loading.rsc", 0.5f, menuLoop, "LoadingDLT");
+
+                        // Stage 5d: ShiningRock.rsc splash wrapping LoadingDLT.
+                        // Original GameMain uses DAT_140172174 = 2.0f for delay.
+                        UpdateLoop* shiningRockLoop = loadingLoop
+                            ? buildSplashDLT("Dialog\\ShiningRock.rsc", 2.0f,
+                                             loadingLoop, "ShiningRockDLT")
+                            : nullptr;
+
+                        UpdateLoop* topLoop = shiningRockLoop ? shiningRockLoop
+                                            : loadingLoop ? loadingLoop
+                                            : menuLoop;
+                        if (topLoop) {
+                            printf("[GameMain] Calling MainLoop::Run with %s top "
+                                   "loop = %p...\n",
+                                   shiningRockLoop ? "ShiningRockDLT"
+                                   : loadingLoop ? "LoadingDLT" : "MenuDLT (fallback)",
+                                   (void*)topLoop);
+                            s_fn_MainLoop_Run(ml, topLoop);
                             printf("[GameMain] MainLoop::Run returned "
-                                   "(LoadingDLT destroyed by Run; menuLoop "
-                                   "leaked — never transitioned into because "
-                                   "Update returns false on first tick)\n");
-                        } else {
-                            // Fallback: drive MenuDLT directly so we still exit
-                            // cleanly if the splash alloc somehow fails.
-                            printf("[GameMain] WARN: LoadingDLT alloc failed, "
-                                   "falling back to direct MenuDLT Run\n");
-                            s_fn_MainLoop_Run(ml, menuLoop);
+                                   "(top loop destroyed by Run; inner loops "
+                                   "leak — Update stub returns false on first "
+                                   "tick before transitioning)\n");
                         }
                     }
                 } else {
