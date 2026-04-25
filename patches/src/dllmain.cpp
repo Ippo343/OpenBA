@@ -307,15 +307,34 @@ static void PatchShutdown() {
 #endif
 }
 
+// Returns true when the host process is the original Application-x64.exe.
+// When the standalone reimpl exe (or any other host) loads us — e.g. d3d9.dll
+// pulling in version.dll from the Banished directory — we must NOT run
+// PatchInit, since there is no Application-x64.exe in the address space to hook.
+static bool IsApplicationExeHost() {
+    char path[MAX_PATH] = {0};
+    DWORD n = GetModuleFileNameA(nullptr, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return false;
+    const char* base = path;
+    for (DWORD i = 0; i < n; i++) {
+        if (path[i] == '\\' || path[i] == '/') base = path + i + 1;
+    }
+    return _stricmp(base, "Application-x64.exe") == 0;
+}
+
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID) {
     switch (reason) {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
         if (!ProxyInit()) return FALSE;
-        PatchInit();
+        if (IsApplicationExeHost()) {
+            PatchInit();
+        }
         break;
     case DLL_PROCESS_DETACH:
-        PatchShutdown();
+        if (IsApplicationExeHost()) {
+            PatchShutdown();
+        }
         break;
     }
     return TRUE;

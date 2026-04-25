@@ -14,6 +14,7 @@
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "address_registry.h"
+#include "Game/game_main.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -111,12 +112,13 @@ static bool Init() {
 // ============================================================
 // Entry point
 // ============================================================
-int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Redirect stdout/stderr to log file and console
     AllocConsole();
     freopen("standalone_debug.log", "w", stdout);
-    freopen("CONOUT$", "w", stderr);
+    freopen("standalone_error.log", "w", stderr);
     setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
     printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);
@@ -129,28 +131,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
         return 1;
     }
 
-    // TODO: Enter the game's main loop.
-    // The original exe's entry path is roughly:
-    //   1. Engine::Engine::Create() — initialize engine singleton
-    //   2. Engine::Engine::PlatformConfigure() — launcher dialog
-    //   3. Engine::MainLoop::Run(UpdateLoop*) — main loop
-    //
-    // For now, we just verify init works and report registry coverage.
     printf("\n[Standalone] === INIT SUCCESS ===\n");
     AddressRegistryPrintStats();
     RegistryStats stats = GetRegistryStats();
     printf("[Standalone] Coverage: %zu / 582 exe addresses registered (%.1f%%)\n",
            stats.registered, stats.registered * 100.0 / 582.0);
-    printf("[Standalone] Game loop not yet implemented — exiting.\n");
-    printf("[Standalone] Next step: implement Engine::Engine::Create() + MainLoop::Run()\n");
 
-    MessageBoxA(nullptr,
-        "Standalone init succeeded! Check standalone_debug.log for details.\n"
-        "Game loop not yet implemented.",
-        "Banished Standalone", MB_OK | MB_ICONINFORMATION);
+    printf("\n[Standalone] === ENTERING GameMain ===\n");
+    int rc = Game::RunGameMain(hInstance, lpCmdLine ? lpCmdLine : "");
+    printf("[Standalone] === GameMain returned %d ===\n", rc);
 
     FreeConsole();
-    return 0;
+    return rc;
 }
 
 #endif // STANDALONE_EXE
