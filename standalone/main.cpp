@@ -82,6 +82,23 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     fprintf(stderr, "RIP=%016llX RSP=%016llX\n",
             (unsigned long long)ctx->Rip, (unsigned long long)ctx->Rsp);
 
+    // Identify the module containing RIP — saves us doing arithmetic by hand.
+    {
+        HMODULE mod = nullptr;
+        if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               (LPCSTR)(uintptr_t)ctx->Rip, &mod) && mod) {
+            char path[MAX_PATH] = {0};
+            GetModuleFileNameA(mod, path, MAX_PATH);
+            uintptr_t off = (uintptr_t)ctx->Rip - (uintptr_t)mod;
+            const char* nm = strrchr(path, '\\');
+            fprintf(stderr, "Module:    %s + 0x%llX  (base=%p)\n",
+                    nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
+        } else {
+            fprintf(stderr, "Module:    UNKNOWN (no module covers RIP)\n");
+        }
+    }
+
     if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
         const char* op = ep->ExceptionRecord->ExceptionInformation[0] == 0 ? "READ" :
                          ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "EXEC";
@@ -89,11 +106,29 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
                 (void*)ep->ExceptionRecord->ExceptionInformation[1]);
     }
 
+    // Specialized handler: IsDerivedFrom-NULL-this crash. RIP at Runtime+0xC039A
+    // is the very first vtable read with RCX=NULL (factory returned NULL).
+    // RDX at that point holds the EXPECTED typeId (the External base check).
+    uintptr_t runtimeBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("Runtime-x64.dll"));
+    if (runtimeBase && ctx->Rcx == 0 && ctx->Rip >= runtimeBase + 0xC0390 && ctx->Rip <= runtimeBase + 0xC03A0) {
+        uint32_t expectedTypeId = (uint32_t)ctx->Rdx;
+        fprintf(stderr, "IsDerivedFrom NULL-this: factory returned NULL.\n");
+        fprintf(stderr, "  Expected base typeId in RDX = 0x%08X\n", expectedTypeId);
+        uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
+        ProbeBaseTypeInfo* head = headAddr ? *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr) : nullptr;
+        for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
+            if (p->typeId == expectedTypeId) {
+                fprintf(stderr, "  Expected base = %s (parent=%s, factory=%p)\n",
+                        p->name ? p->name : "?", p->parent ? p->parent : "?", p->factoryFn);
+                break;
+            }
+        }
+    }
+
     // Specialized handler: External::Load tree-walk crash. The instruction at
     // Runtime+0xBC73E is `MOV RAX, [RCX+0x10]` with RCX=NULL because the
     // typeId in [RBP+0x48] wasn't found in Factory::_singleton's tree.
     // Print the typeId and try to find a Runtime type whose CRC32 matches.
-    uintptr_t runtimeBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("Runtime-x64.dll"));
     if (runtimeBase && ctx->Rip == runtimeBase + 0xBC73E) {
         uint32_t* typeIdSlot = reinterpret_cast<uint32_t*>(ctx->Rbp + 0x48);
         // [RBP+0x48] is on the crashed thread's stack — same memory we just

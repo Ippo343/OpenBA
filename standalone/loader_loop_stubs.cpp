@@ -52,13 +52,11 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Inner_Startup(UpdateLoop* self) {
-    printf("[InnerLL::Startup] self=%p (skip Loader::Load — see project_standalone_stage7_progress.md)\n",
+    printf("[InnerLL::Startup] self=%p (Loader::Load disabled — see project_standalone_stage7_progress.md)\n",
            (void*)self);
-    // Stage 7a partial: when fn_Loader_Load is wired, the loader worker thread
-    // hits exe-side types (StatGoal, etc.) that aren't registered. Without REAL
-    // factories returning non-NULL objects, External::Load -> Base::IsDerivedFrom
-    // crashes on NULL `this`. Re-enable once the bulk type registration with
-    // proper factories lands. Original: Loader::Load(g_pLoader, ll->m_nextLoop).
+    // Re-enable when real factories cover the splash-chain types — the
+    // background loader thread crashes on NULL factory results.
+    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
 }
 
 void Inner_Shutdown(UpdateLoop* self) {
@@ -154,9 +152,10 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Outer_Startup(UpdateLoop* self) {
-    printf("[OuterLL::Startup] self=%p (skip Loader::Load — see project_standalone_stage7_progress.md)\n",
+    printf("[OuterLL::Startup] self=%p (Loader::Load disabled — see project_standalone_stage7_progress.md)\n",
            (void*)self);
-    // Same reason as Inner_Startup. Re-enable when factories return non-NULL.
+    // Re-enable when real factories cover the splash-chain types.
+    // Original: fn_Loader_Load(g_pLoader, ((LoaderLoop*)self)->m_nextLoop);
 }
 
 void Outer_Shutdown(UpdateLoop* self) {

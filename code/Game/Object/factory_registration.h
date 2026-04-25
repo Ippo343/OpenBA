@@ -61,19 +61,23 @@ int InvokeAllRegistrations();
 
 }  // namespace Object
 
-// Convenience macro. Expands to a static-init FactoryRegistration object.
+// Convenience macros. Expand to a static-init FactoryRegistration object.
 //   REGISTER_TYPE(Citizen, "Component", &Citizen_Factory, &Citizen_CreateInPlace);
+//   REGISTER_TYPE_FULL(NameDatabase, "Object::External", "ndb",
+//                      &NameDatabase_Factory, &NameDatabase_CreateInPlace);
 //
 // The macro builds a unique name per file via __LINE__ to allow multiple
 // registrations in the same translation unit (e.g. base + derived in one file).
-#define REGISTER_TYPE_IMPL2(name, parent, factory, inplace, lineNum)            \
+#define REGISTER_TYPE_IMPL2(name, parent, abstract, factory, inplace, lineNum)  \
     namespace {                                                                 \
         ::Object::FactoryRegistration g_factory_reg_##lineNum(                  \
-            name, parent, nullptr,                                              \
+            name, parent, abstract,                                             \
             reinterpret_cast<::Object::FactoryFn>(factory),                     \
             reinterpret_cast<::Object::InPlaceCreateFn>(inplace));              \
     }
-#define REGISTER_TYPE_IMPL1(name, parent, factory, inplace, lineNum)            \
-    REGISTER_TYPE_IMPL2(name, parent, factory, inplace, lineNum)
+#define REGISTER_TYPE_IMPL1(name, parent, abstract, factory, inplace, lineNum)  \
+    REGISTER_TYPE_IMPL2(name, parent, abstract, factory, inplace, lineNum)
+#define REGISTER_TYPE_FULL(Name, Parent, Abstract, Factory, InPlace)            \
+    REGISTER_TYPE_IMPL1(#Name, Parent, Abstract, Factory, InPlace, __LINE__)
 #define REGISTER_TYPE(Name, Parent, Factory, InPlace)                           \
-    REGISTER_TYPE_IMPL1(#Name, Parent, Factory, InPlace, __LINE__)
+    REGISTER_TYPE_FULL(Name, Parent, nullptr, Factory, InPlace)
