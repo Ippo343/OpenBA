@@ -142,6 +142,26 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, 0x200, 0, false);
     printf("[GameMain] Engine::Startup returned %u\n", ok);
 
+    // On Engine::Startup failure, dump System::Error::_errorString
+    // (Runtime 0x1801fc720, 8KB) — Engine::Startup's failure paths each call
+    // System::Error::SetText with a unique tag (e.g., "VideoDevice: ..."),
+    // so the string identifies exactly which step bombed.
+    if (ok == 0) {
+        const char* err = reinterpret_cast<const char*>(
+            ResolveAddr(Module::Runtime, 0x1801fc720));
+        if (err && err[0]) {
+            printf("[GameMain] System::Error string after Startup failure:\n");
+            for (int i = 0; i < 1024 && err[i]; i++) {
+                if (i == 0) printf("    | ");
+                fputc(err[i], stdout);
+                if (err[i] == '\n' && err[i+1]) printf("    | ");
+            }
+            fputc('\n', stdout);
+        } else {
+            printf("[GameMain] System::Error string is empty after Startup failure\n");
+        }
+    }
+
     // Probe: dump Factory tree state after Engine::Startup.
     // Engine::Engine::Startup -> Object::Factory::Startup walks _firstTypeInfo
     // and assigns CRC32-derived typeIds (overwriting the 0xFFFFFFFF ctor default).
