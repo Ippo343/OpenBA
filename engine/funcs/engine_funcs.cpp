@@ -877,6 +877,7 @@ fn_VideoDevice_Shutdown_t fn_VideoDevice_Shutdown = nullptr;
 fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError = nullptr;
 fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart = nullptr;
 fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
+fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor = nullptr;
 void** g_pMainLoopSingleton = nullptr;
 fn_UI_EnableCursor_t fn_UI_EnableCursor = nullptr;
 fn_UI_GetFirstDialog_t fn_UI_GetFirstDialog = nullptr;
@@ -3695,6 +3696,10 @@ bool EngineFuncsInit() {
         ResolveExport("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ"));
     fn_MainLoop_SetNextLoop = reinterpret_cast<fn_MainLoop_SetNextLoop_t>(
         ResolveExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
+
+    // Object::BaseTypeInfo
+    fn_BaseTypeInfo_Ctor = reinterpret_cast<fn_BaseTypeInfo_Ctor_t>(
+        ResolveExport("??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z"));
 
     // Engine::MainLoop::_singleton (protected, @1)
     {

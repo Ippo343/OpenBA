@@ -140,6 +140,9 @@ $(OBJ_DIR)/code__Game__Game__%.o: code/Game/Game/%.cpp | $(OBJ_DIR)
 $(OBJ_DIR)/code__Game__Goal__%.o: code/Game/Goal/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
+$(OBJ_DIR)/code__Game__Object__%.o: code/Game/Object/%.cpp | $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
 $(OBJ_DIR)/code__Game__Player__%.o: code/Game/Player/%.cpp | $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
@@ -236,6 +239,9 @@ $(SA_OBJ_DIR)/code__Game__Game__%.o: code/Game/Game/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
 $(SA_OBJ_DIR)/code__Game__Goal__%.o: code/Game/Goal/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+$(SA_OBJ_DIR)/code__Game__Object__%.o: code/Game/Object/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
 $(SA_OBJ_DIR)/code__Game__Player__%.o: code/Game/Player/%.cpp | $(SA_OBJ_DIR)

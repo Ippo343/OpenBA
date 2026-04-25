@@ -3262,6 +3262,20 @@ extern fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart;
 typedef void (*fn_MainLoop_SetNextLoop_t)(void* self, void* loop);
 extern fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop;
 
+// Object::BaseTypeInfo::BaseTypeInfo(this, name, parent, abstract, factory, inPlace)
+// ??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z  (Runtime 0x180006320)
+// Builds the linked list at Runtime DLL's _firstTypeInfo. Object::Factory::Startup
+// later walks this list to populate the typeId tree. The 6-arg ctor stores
+// (name, parent[colon-stripped], abstract, factoryFn, inPlaceCreateFn) into the
+// 0x38-byte BaseTypeInfo slot pointed to by `self`, then prepends to _firstTypeInfo.
+typedef void (*fn_BaseTypeInfo_Ctor_t)(void* self,
+                                       const char* name,
+                                       const char* parent,
+                                       const char* abstract,
+                                       void* factoryFn,
+                                       void* inPlaceCreateFn);
+extern fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor;
+
 // Engine::MainLoop::_singleton (protected)
 extern void** g_pMainLoopSingleton;
 

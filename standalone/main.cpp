@@ -15,6 +15,7 @@
 #include "runtime_funcs.h"
 #include "address_registry.h"
 #include "Game/game_main.h"
+#include "Object/factory_registration.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -104,6 +105,14 @@ static bool Init() {
         printf("[Standalone] WARNING: Some engine functions not resolved (non-critical)\n");
     }
     RuntimeFuncsInit();
+
+    // 5. Drain pending Factory registrations into Runtime _firstTypeInfo.
+    //    Static-init ctors collected them; now we flush by calling
+    //    Object::BaseTypeInfo::BaseTypeInfo for each. Engine::Engine::Startup
+    //    -> Object::Factory::Startup will later walk the list and populate
+    //    the typeId tree.
+    printf("[Standalone] Invoking factory registrations...\n");
+    Object::InvokeAllRegistrations();
 
     printf("[Standalone] Init complete.\n");
     return true;
