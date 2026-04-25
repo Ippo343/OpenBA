@@ -2,13 +2,14 @@
 // Source: standalone/factory_registrations.csv
 // DO NOT EDIT — regenerate from CSV.
 //
-// Bulk registration of all 310 exe-side BaseTypeInfo entries.
-// Every entry uses NullFactory + NullInPlace (placeholder).
+// Bulk registration of all exe-side BaseTypeInfo entries that don't yet
+// have a real factory in code/Game/. Each entry uses NullFactory + NullInPlace
+// (placeholder).
 //
 // As real C++ reimplementations of each class land in
 //   code/Game/<Module>/<Class>.cpp
-// DELETE the matching entry below and add a real REGISTER_TYPE
-// in that per-class file pointing to the real factory.
+// add the typeName to REIMPLEMENTED in tools/gen_factory_registrations.py
+// and re-run codegen. The per-class file's REGISTER_TYPE takes over.
 
 #ifdef STANDALONE_EXE
 #include "factory_registration.h"
@@ -206,7 +207,6 @@ REGISTER_NULL_FACTORY(BuildingGoal, "Achievement::Goal");  // 14014d4d0 Building
 REGISTER_NULL_FACTORY(PopulationGoal, "Achievement::Goal");  // 14014d510 PopulationGoal_RegisterType
 REGISTER_NULL_FACTORY(FinishTutorialGoal, "Achievement::Goal");  // 14014d550 FinishTutorialGoal_RegisterType
 REGISTER_NULL_FACTORY(FinishTutorialInstance, "Achievement::GoalInstance");  // 14014d590 FinishTutorialInstance_RegisterType
-REGISTER_NULL_FACTORY(StatGoal, "Achievement::Goal");  // 14014d5d0 StatGoal_RegisterType
 REGISTER_NULL_FACTORY(TimeGoal, "Achievement::Goal");  // 14014d610 TimeGoal_RegisterType
 REGISTER_NULL_FACTORY(TimeGoalInstance, "Achievement::GoalInstance");  // 14014d650 TimeGoalInstance_RegisterType
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType

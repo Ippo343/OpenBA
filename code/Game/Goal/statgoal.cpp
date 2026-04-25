@@ -388,6 +388,39 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
 }
 
 // ============================================================
+// StatGoal_Factory / StatGoal_CreateInPlace
+// ============================================================
+// Object::Factory entry points. Called from Runtime DLL's External::Load
+// after the typeId tree-walk locates our BaseTypeInfo.
+//
+// Factory: allocate sizeof(StatGoal)=0x80 with 8-byte alignment, then
+// run the in-place constructor. Mirrors the original exe's
+// StatGoal_Factory at 0x140026500 (MemAlloc + StatGoal_Ctor).
+//
+// CreateInPlace: just the constructor (memory provided by caller).
+// Equivalent to the existing StatGoal_Slot10 vtable entry — kept as a
+// separate name because the BaseTypeInfo's inPlaceCreateFn slot is
+// distinct from the vtable slot in the original layout.
+
+#ifdef STANDALONE_EXE
+extern "C" void* StatGoal_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(StatGoal), 8);
+    if (!p) return nullptr;
+    return StatGoal_Ctor_Impl(p);
+}
+
+extern "C" void* StatGoal_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return StatGoal_Ctor_Impl(memory);
+}
+
+#include "Object/factory_registration.h"
+REGISTER_TYPE(StatGoal, "Achievement::Goal",
+              &StatGoal_Factory, &StatGoal_CreateInPlace);
+#endif
+
+// ============================================================
 // StatGoal_Ctor_Impl (0x1400daa80)
 // ============================================================
 // Construct a StatGoal object in pre-allocated memory.

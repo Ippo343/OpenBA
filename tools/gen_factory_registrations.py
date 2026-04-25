@@ -6,11 +6,18 @@
 #
 # Each row registers one exe-side BaseTypeInfo entry with NullFactory + NullInPlace.
 # As real C++ reimplementations of each class land in code/Game/<Module>/<Class>.cpp,
-# DELETE the matching entry from factory_registrations_bulk.cpp and add a real
-# REGISTER_TYPE in the per-class file pointing to the real factory.
+# add the typeName to REIMPLEMENTED below — codegen will skip it, and the real
+# REGISTER_TYPE in the per-class file takes over.
 #
 # Usage: python tools/gen_factory_registrations.py
 import csv, os, sys
+
+# Types whose real factory now lives in a per-class file under code/Game/.
+# Codegen skips these so we don't double-register (which would CRC32-collide
+# in Object::Factory::Startup's tree-insert).
+REIMPLEMENTED = {
+    "StatGoal",   # code/Game/Goal/statgoal.cpp
+}
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSV  = os.path.join(ROOT, "standalone", "factory_registrations.csv")
@@ -49,13 +56,14 @@ def main():
     lines.append("// Source: standalone/factory_registrations.csv")
     lines.append("// DO NOT EDIT — regenerate from CSV.")
     lines.append("//")
-    lines.append("// Bulk registration of all 310 exe-side BaseTypeInfo entries.")
-    lines.append("// Every entry uses NullFactory + NullInPlace (placeholder).")
+    lines.append("// Bulk registration of all exe-side BaseTypeInfo entries that don't yet")
+    lines.append("// have a real factory in code/Game/. Each entry uses NullFactory + NullInPlace")
+    lines.append("// (placeholder).")
     lines.append("//")
     lines.append("// As real C++ reimplementations of each class land in")
     lines.append("//   code/Game/<Module>/<Class>.cpp")
-    lines.append("// DELETE the matching entry below and add a real REGISTER_TYPE")
-    lines.append("// in that per-class file pointing to the real factory.")
+    lines.append("// add the typeName to REIMPLEMENTED in tools/gen_factory_registrations.py")
+    lines.append("// and re-run codegen. The per-class file's REGISTER_TYPE takes over.")
     lines.append("")
     lines.append("#ifdef STANDALONE_EXE")
     lines.append("#include \"factory_registration.h\"")
@@ -87,6 +95,7 @@ def main():
     lines.append("")
 
     abstract_count = 0
+    skipped = []
     for r in rows:
         addr, fname, storage, name, parent, abstract, factory, inplace = r
         type_name = parse_string_literal(name)
@@ -98,6 +107,10 @@ def main():
             continue
         if not type_name.replace("_","").isalnum():
             print(f"WARN: row {addr} name {type_name!r} is not a valid C identifier", file=sys.stderr)
+
+        if type_name in REIMPLEMENTED:
+            skipped.append(type_name)
+            continue
 
         parent_arg = f'"{parent_s}"' if parent_s else "nullptr"
 
@@ -118,7 +131,9 @@ def main():
         f.write("\n".join(lines))
 
     print(f"Wrote {OUT}")
-    print(f"  Entries: {len(rows)} (with abstract: {abstract_count})")
+    print(f"  Entries: {len(rows) - len(skipped)} (with abstract: {abstract_count})")
+    if skipped:
+        print(f"  Skipped (reimplemented): {', '.join(skipped)}")
 
 if __name__ == "__main__":
     main()
