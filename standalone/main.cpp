@@ -245,6 +245,37 @@ static void DumpFirstTypeInfo(const char* tag) {
 }
 
 // ============================================================
+// Patch Engine::Engine::PlatformConfigure (Runtime 0x1800a1670) to always
+// return true. Mirrors the DLL-mode hook in engine/reimpl/platformconfigure.cpp:
+// the launcher's "first run / configure" dialog enables a video-mode probe
+// path that crashes inside VideoDX9+0x267E. Skipping it pins the loader to
+// the deterministic StatGoal-and-beyond code path.
+// ============================================================
+static void SkipPlatformConfigure() {
+    uintptr_t addr = ResolveAddr(Module::Runtime, 0x1800a1670);
+    if (!addr) {
+        printf("[Standalone] WARN: could not resolve PlatformConfigure — popup may appear\n");
+        return;
+    }
+    // MOV EAX, 1 ; RET  (6 bytes). Caller checks return as bool, so EAX=1 satisfies
+    // both byte-test and dword-test paths. Overwrites the SEH-cookie prologue, but
+    // we never unwind through this function so .pdata mismatch is harmless.
+    static const uint8_t patch[] = { 0xB8, 0x01, 0x00, 0x00, 0x00, 0xC3 };
+    DWORD oldProtect = 0;
+    if (!VirtualProtect((LPVOID)addr, sizeof(patch), PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        printf("[Standalone] WARN: VirtualProtect failed for PlatformConfigure (err=%lu)\n",
+               GetLastError());
+        return;
+    }
+    memcpy((void*)addr, patch, sizeof(patch));
+    DWORD dummy = 0;
+    VirtualProtect((LPVOID)addr, sizeof(patch), oldProtect, &dummy);
+    FlushInstructionCache(GetCurrentProcess(), (LPCVOID)addr, sizeof(patch));
+    printf("[Standalone] PlatformConfigure (%p) patched to return true (launcher skipped)\n",
+           (void*)addr);
+}
+
+// ============================================================
 // Initialization sequence
 // ============================================================
 static bool Init() {
@@ -286,6 +317,9 @@ static bool Init() {
     Object::InvokeAllRegistrations();
 
     DumpFirstTypeInfo("AFTER InvokeAllRegistrations");
+
+    // 7. Skip the launcher dialog — see SkipPlatformConfigure note above.
+    SkipPlatformConfigure();
 
     printf("[Standalone] Init complete.\n");
     return true;
