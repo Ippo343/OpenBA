@@ -49,6 +49,9 @@ void Stub_Destroy(UpdateLoop* self, unsigned flags) {
 void Stub_Startup(UpdateLoop* self) {
     printf("[SplashDLT::Startup] self=%p\n", (void*)self);
     // Real impl chains Engine::DialogLoaderLoopT::Startup + game UI setup.
+    // Stage 7a TODO: also calls fn_Loader_Load(g_pLoader, m_nextLoop) — disabled
+    // until Factory has exe types registered (otherwise Object::External::Load
+    // dereferences a NULL Factory tree node). See standalone next-steps memo.
 }
 
 void Stub_Shutdown(UpdateLoop* self) {

@@ -53,6 +53,10 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 
 void Inner_Startup(UpdateLoop* self) {
     printf("[InnerLL::Startup] self=%p\n", (void*)self);
+    // Stage 7a TODO: real impl calls fn_Loader_Load(g_pLoader, m_nextLoop) but
+    // that crashes in Object::External::Load (Runtime+0xBC73E) because the
+    // standalone exe never registers exe-defined types with Factory::_singleton.
+    // Resume once Factory population is wired up.
 }
 
 void Inner_Shutdown(UpdateLoop* self) {
@@ -149,6 +153,10 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 
 void Outer_Startup(UpdateLoop* self) {
     printf("[OuterLL::Startup] self=%p\n", (void*)self);
+    // Stage 7a TODO: real impl calls fn_Loader_Load(g_pLoader, m_nextLoop) but
+    // that crashes in Object::External::Load (Runtime+0xBC73E) because the
+    // standalone exe never registers exe-defined types with Factory::_singleton.
+    // Resume once Factory population is wired up.
 }
 
 void Outer_Shutdown(UpdateLoop* self) {
