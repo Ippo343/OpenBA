@@ -203,11 +203,8 @@ REGISTER_NULL_FACTORY(SendComponentMessage, "Action");  // 14014d3d0 SendCompone
 REGISTER_NULL_FACTORY(Toolbar, "Object::External");  // 14014d410 Toolbar_RegisterType
 REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
 REGISTER_NULL_FACTORY(Weather, "Object::External");  // 14014d490 Weather_RegisterType
-REGISTER_NULL_FACTORY(BuildingGoal, "Achievement::Goal");  // 14014d4d0 BuildingGoal_RegisterType
-REGISTER_NULL_FACTORY(PopulationGoal, "Achievement::Goal");  // 14014d510 PopulationGoal_RegisterType
 REGISTER_NULL_FACTORY(FinishTutorialGoal, "Achievement::Goal");  // 14014d550 FinishTutorialGoal_RegisterType
 REGISTER_NULL_FACTORY(FinishTutorialInstance, "Achievement::GoalInstance");  // 14014d590 FinishTutorialInstance_RegisterType
-REGISTER_NULL_FACTORY(TimeGoal, "Achievement::Goal");  // 14014d610 TimeGoal_RegisterType
 REGISTER_NULL_FACTORY(TimeGoalInstance, "Achievement::GoalInstance");  // 14014d650 TimeGoalInstance_RegisterType
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
 REGISTER_NULL_FACTORY(PathTool, "Tool");  // 14014d6d0 PathTool_RegisterType

@@ -59,6 +59,16 @@ struct FactoryRegistration {
 // Returns count of successful registrations.
 int InvokeAllRegistrations();
 
+// Look up a registered type's typeId by name. Returns the value at
+// storage[0..3] of the matching FactoryRegistration — i.e. BaseTypeInfo.typeId,
+// which Object::Factory::Startup populates with the CRC32 of the type name.
+// Before Factory::Startup runs, returns 0xFFFFFFFF (the sentinel set by
+// BaseTypeInfo::BaseTypeInfo). Returns 0 if `name` was never registered.
+//
+// Use case: each class's GetTypeId virtual (vtable slot +0x10) calls this,
+// caching the result in a function-local static after first hit.
+uint32_t GetTypeIdByName(const char* name);
+
 }  // namespace Object
 
 // Convenience macros. Expand to a static-init FactoryRegistration object.

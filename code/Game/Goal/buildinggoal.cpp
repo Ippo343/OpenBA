@@ -286,3 +286,53 @@ int BuildingGoal_Slot8(BuildingGoal* self) {
 BuildingGoal* BuildingGoal_CreateInstance(BuildingGoal* self) {
     return BuildingGoal_Slot6(self);
 }
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// ============================================================
+// BuildingGoal vtable (exe addr 0x140160300, 11 slots)
+// ============================================================
+static uint32_t BuildingGoal_GetTypeId_Std(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("BuildingGoal");
+    return cached;
+}
+
+static int BuildingGoal_Slot3_Trampoline(BuildingGoal* self) { return BuildingGoal_Slot3(self); }
+
+static void* g_BuildingGoal_Vtable[11] = {
+    reinterpret_cast<void*>(&BuildingGoal_Dtor),                // +0x00 dtor
+    nullptr,                                                    // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&BuildingGoal_GetTypeId_Std),       // +0x10 GetTypeId
+    reinterpret_cast<void*>(&BuildingGoal_Slot3_Trampoline),    // +0x18 Slot3 (returns 2)
+    nullptr,                                                    // +0x20 Slot4 (Goal JMP thunk)
+    reinterpret_cast<void*>(&BuildingGoal_Slot5),               // +0x28 Slot5 / Load
+    reinterpret_cast<void*>(&BuildingGoal_Slot6),               // +0x30 Slot6 / Cleanup
+    nullptr,                                                    // +0x38 Slot7 (base stub)
+    reinterpret_cast<void*>(&BuildingGoal_Slot8),               // +0x40 Slot8 / Check
+    nullptr,                                                    // +0x48 Slot9 (base stub)
+    reinterpret_cast<void*>(&BuildingGoal_CreateInstance),      // +0x50 Slot10 / CreateInstance
+};
+
+extern "C" void RegisterBuildingGoalVtable() {
+    RegisterExeAddr(0x140160300, reinterpret_cast<uintptr_t>(g_BuildingGoal_Vtable));
+}
+
+extern "C" void* BuildingGoal_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    if (!p) return nullptr;
+    return BuildingGoal_Slot6(reinterpret_cast<BuildingGoal*>(p));
+}
+
+extern "C" void* BuildingGoal_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return BuildingGoal_Slot6(reinterpret_cast<BuildingGoal*>(memory));
+}
+
+REGISTER_TYPE(BuildingGoal, "Achievement::Goal",
+              &BuildingGoal_Factory, &BuildingGoal_CreateInPlace);
+#endif

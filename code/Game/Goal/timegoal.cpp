@@ -172,6 +172,69 @@ void* TimeGoal_Dtor(TimeGoal* self, uint32_t flags) {
     return self;
 }
 
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// ============================================================
+// TimeGoal vtable (exe addr 0x140160540, 12 slots)
+// ============================================================
+// Slot +0x10: GetTypeId — returns CRC32 typeId from REGISTER_TYPE storage.
+static uint32_t TimeGoal_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoal");
+    return cached;
+}
+
+// Slot +0x48: Slot9 — returns TimeGoalInstance typeId via *retval.
+// Original: MOV EAX,[TypeInfo_TimeGoalInstance]; MOV [RDX],EAX; MOV RAX,RDX; RET.
+static void* TimeGoal_Slot9_Standalone(void* /*self*/, uint32_t* retval) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoalInstance");
+    if (retval) *retval = cached;
+    return retval;
+}
+
+// Trampolines for inline-defined helpers in timegoal_funcs.h.
+static int TimeGoal_Slot3_Trampoline(TimeGoal* self) { return TimeGoal_Slot3(self); }
+static int TimeGoal_Slot8_Trampoline(TimeGoal* self) { return TimeGoal_Slot8(self); }
+
+static void* g_TimeGoal_Vtable[12] = {
+    reinterpret_cast<void*>(&TimeGoal_Dtor),                // +0x00 dtor
+    nullptr,                                                // +0x08 Slot1
+    reinterpret_cast<void*>(&TimeGoal_GetTypeId),           // +0x10 Slot2 / GetTypeId
+    reinterpret_cast<void*>(&TimeGoal_Slot3_Trampoline),    // +0x18 Slot3 (returns 1)
+    nullptr,                                                // +0x20 Slot4 (Goal JMP thunk)
+    reinterpret_cast<void*>(&TimeGoal_Slot5),               // +0x28 Slot5 / Load
+    reinterpret_cast<void*>(&TimeGoal_Slot6),               // +0x30 Slot6 / Cleanup
+    nullptr,                                                // +0x38 Slot7 (base stub)
+    reinterpret_cast<void*>(&TimeGoal_Slot8_Trampoline),    // +0x40 Slot8 (returns 0)
+    reinterpret_cast<void*>(&TimeGoal_Slot9_Standalone),    // +0x48 Slot9 / GetInstanceTypeId
+    reinterpret_cast<void*>(&TimeGoal_Slot10),              // +0x50 Slot10 / CreateInstance
+    reinterpret_cast<void*>(&TimeGoal_Slot11),              // +0x58 Slot11 / SharedDtor
+};
+
+extern "C" void RegisterTimeGoalVtable() {
+    RegisterExeAddr(0x140160540, reinterpret_cast<uintptr_t>(g_TimeGoal_Vtable));
+}
+
+extern "C" void* TimeGoal_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);  // TimeGoal size = 0x38
+    if (!p) return nullptr;
+    return TimeGoal_Ctor_Impl(p);
+}
+
+extern "C" void* TimeGoal_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return TimeGoal_Ctor_Impl(memory);
+}
+
+REGISTER_TYPE(TimeGoal, "Achievement::Goal",
+              &TimeGoal_Factory, &TimeGoal_CreateInPlace);
+#endif
+
 // ============================================================
 // TimeGoal_Ctor_Impl
 // ============================================================

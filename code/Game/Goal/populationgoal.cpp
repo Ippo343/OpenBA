@@ -160,3 +160,53 @@ int PopulationGoal_Slot8(PopulationGoal* self) {
 PopulationGoal* PopulationGoal_CreateInstance(PopulationGoal* self) {
     return PopulationGoal_Slot6(self);
 }
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// ============================================================
+// PopulationGoal vtable (exe addr 0x140160370, 11 slots)
+// ============================================================
+static uint32_t PopulationGoal_GetTypeId_Std(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("PopulationGoal");
+    return cached;
+}
+
+static int PopulationGoal_Slot3_Trampoline(PopulationGoal* self) { return PopulationGoal_Slot3(self); }
+
+static void* g_PopulationGoal_Vtable[11] = {
+    reinterpret_cast<void*>(&PopulationGoal_Dtor),                // +0x00 dtor
+    nullptr,                                                      // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&PopulationGoal_GetTypeId_Std),       // +0x10 GetTypeId
+    reinterpret_cast<void*>(&PopulationGoal_Slot3_Trampoline),    // +0x18 Slot3 (returns 1)
+    nullptr,                                                      // +0x20 Slot4 (Goal JMP thunk)
+    reinterpret_cast<void*>(&PopulationGoal_Slot5),               // +0x28 Slot5 / Load
+    reinterpret_cast<void*>(&PopulationGoal_Slot6),               // +0x30 Slot6 / Cleanup
+    nullptr,                                                      // +0x38 Slot7 (base stub)
+    reinterpret_cast<void*>(&PopulationGoal_Slot8),               // +0x40 Slot8 / Check
+    nullptr,                                                      // +0x48 Slot9 (base stub)
+    reinterpret_cast<void*>(&PopulationGoal_CreateInstance),      // +0x50 Slot10 / CreateInstance
+};
+
+extern "C" void RegisterPopulationGoalVtable() {
+    RegisterExeAddr(0x140160370, reinterpret_cast<uintptr_t>(g_PopulationGoal_Vtable));
+}
+
+extern "C" void* PopulationGoal_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+    if (!p) return nullptr;
+    return PopulationGoal_Slot6(reinterpret_cast<PopulationGoal*>(p));
+}
+
+extern "C" void* PopulationGoal_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return PopulationGoal_Slot6(reinterpret_cast<PopulationGoal*>(memory));
+}
+
+REGISTER_TYPE(PopulationGoal, "Achievement::Goal",
+              &PopulationGoal_Factory, &PopulationGoal_CreateInPlace);
+#endif

@@ -23,6 +23,9 @@
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
     void RegisterStatGoalVtable();
+    void RegisterTimeGoalVtable();
+    void RegisterBuildingGoalVtable();
+    void RegisterPopulationGoalVtable();
 }
 
 // ============================================================
@@ -168,6 +171,9 @@ static void RegisterVtablesAndTypeIds() {
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
+    RegisterTimeGoalVtable();
+    RegisterBuildingGoalVtable();
+    RegisterPopulationGoalVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.

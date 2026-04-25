@@ -47,6 +47,16 @@ int InvokeAllRegistrations() {
     return n;
 }
 
+uint32_t GetTypeIdByName(const char* name) {
+    if (!name) return 0;
+    for (FactoryRegistration* r = g_pending; r != nullptr; r = r->next) {
+        if (r->typeName && std::strcmp(r->typeName, name) == 0) {
+            return *reinterpret_cast<uint32_t*>(&r->storage);
+        }
+    }
+    return 0;
+}
+
 }  // namespace Object
 
 // ============================================================

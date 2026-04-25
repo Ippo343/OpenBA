@@ -404,20 +404,34 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
 
 #ifdef STANDALONE_EXE
 
+#include "Object/factory_registration.h"
+
 // ============================================================
 // StatGoal vtable (exe addr 0x1401604c0, 11 slots)
 // Slots we've reimplemented are wired up; inherited Achievement::Goal
 // slots are nullptr placeholders — calling them will crash, but the
-// loader's instantiation path only needs Dtor/Slot5/Slot10. Fill the
+// loader's instantiation path only needs Dtor/Slot2/Slot5/Slot10. Fill the
 // inherited slots when something virtual-calls them.
 // ============================================================
 // Forward decls — these live below in this same TU with C++ linkage.
 static int StatGoal_Slot3_Trampoline(StatGoal* self) { return StatGoal_Slot3(self); }
 
+// Slot +0x10: Object::Base::GetTypeId() — virtual that returns the runtime
+// CRC32 typeId. Original exe reads from StatGoal's static BaseTypeInfo at
+// 0x1401C62B0; we read from our REGISTER_TYPE storage instead (same layout,
+// typeId at offset 0). Cached after first lookup.
+static uint32_t StatGoal_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) {
+        cached = ::Object::GetTypeIdByName("StatGoal");
+    }
+    return cached;
+}
+
 static void* g_StatGoal_Vtable[11] = {
     reinterpret_cast<void*>(&StatGoal_Dtor),               // +0x00 dtor
     nullptr,                                               // +0x08 Slot1 (Goal inherited)
-    nullptr,                                               // +0x10 Slot2 (Goal inherited)
+    reinterpret_cast<void*>(&StatGoal_GetTypeId),          // +0x10 Slot2 / GetTypeId
     reinterpret_cast<void*>(&StatGoal_Slot3_Trampoline),   // +0x18 Slot3 (returns 1)
     nullptr,                                               // +0x20 Slot4 (Goal JMP thunk)
     reinterpret_cast<void*>(&StatGoal_Slot5),              // +0x28 Slot5 / Load
@@ -448,7 +462,6 @@ extern "C" void* StatGoal_CreateInPlace(void* memory) {
     return StatGoal_Ctor_Impl(memory);
 }
 
-#include "Object/factory_registration.h"
 REGISTER_TYPE(StatGoal, "Achievement::Goal",
               &StatGoal_Factory, &StatGoal_CreateInPlace);
 #endif
