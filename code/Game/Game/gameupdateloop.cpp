@@ -157,9 +157,7 @@ static fn_Transform3_AsMatrix_t fn_Transform3_AsMatrix = nullptr;
 typedef void (*fn_Vector3_Normalize_t)(void* self);
 static fn_Vector3_Normalize_t fn_Vector3_Normalize = nullptr;
 
-// Engine::MainLoop::SetNextLoop(this, UpdateLoop*)
-typedef void (*fn_MainLoop_SetNextLoop_t)(void* self, void* loop);
-static fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
+// Engine::MainLoop::SetNextLoop — declared in engine_funcs.h, resolved by EngineFuncsInit()
 
 // fn_ImageBuffer_CopyToTexture — available from engine_funcs.h
 
@@ -454,8 +452,7 @@ static void EnsureInit() {
         ResolveExport("?AsMatrix@Transform3@Math@@QEBA?AVMatrix@2@XZ"));
     fn_Vector3_Normalize = reinterpret_cast<fn_Vector3_Normalize_t>(
         ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
-    fn_MainLoop_SetNextLoop = reinterpret_cast<fn_MainLoop_SetNextLoop_t>(
-        ResolveExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
+    // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
     // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
     fn_SaveLoad_Draw = reinterpret_cast<fn_SaveLoad_Draw_t>(
         ResolveExport("?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z"));

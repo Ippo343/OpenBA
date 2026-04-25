@@ -28,8 +28,11 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "UpdateLoop.h"
+#include "DialogLoaderLoopT.h"
+#include "common.h"
 #include <cstdio>
 #include <cstdint>
+#include <windows.h>
 
 namespace {
 
@@ -54,11 +57,37 @@ void Stub_Shutdown(UpdateLoop* self) {
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
-    static int tick = 0;
-    ++tick;
-    printf("[SplashDLT::Update] self=%p time=%p tick=%d -> false\n",
-           (void*)self, time, tick);
-    return false;  // exit MainLoop::Run on first tick
+    DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
+    Time* dt = reinterpret_cast<Time*>(time);
+
+    // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
+    Sleep(14);
+
+    ll->m_elapsedTicks += dt->ticks;
+
+    // Once the splash hold elapses, transition. Skip the m_finished check —
+    // standalone has no real Loader thread, so m_finished stays 0 forever.
+    if (ll->m_elapsedTicks >= ll->m_delayTicks) {
+        UpdateLoop* next = ll->m_nextLoop;
+        void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+        printf("[SplashDLT::Update] self=%p elapsed=%lld delay=%lld -> transition next=%p\n",
+               (void*)self, (long long)ll->m_elapsedTicks,
+               (long long)ll->m_delayTicks, (void*)next);
+        if (next && fn_MainLoop_SetNextLoop && mainLoop) {
+            fn_MainLoop_SetNextLoop(mainLoop, next);
+        }
+        return false;
+    }
+
+    // Throttled trace so 2.0s @ 14ms (~143 ticks) doesn't spam.
+    static int updateCount = 0;
+    ++updateCount;
+    if (updateCount <= 3 || updateCount % 50 == 0) {
+        printf("[SplashDLT::Update] self=%p tick=%d elapsed=%lld delay=%lld\n",
+               (void*)self, updateCount,
+               (long long)ll->m_elapsedTicks, (long long)ll->m_delayTicks);
+    }
+    return true;
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {

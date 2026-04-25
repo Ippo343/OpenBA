@@ -3257,6 +3257,11 @@ extern fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError;
 typedef void (*fn_MainLoop_OnVideoRestart_t)(void* self);
 extern fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart;
 
+// Engine::MainLoop::SetNextLoop(this, UpdateLoop*)
+// ?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z  (Runtime 0x1800dd7a0)
+typedef void (*fn_MainLoop_SetNextLoop_t)(void* self, void* loop);
+extern fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop;
+
 // Engine::MainLoop::_singleton (protected)
 extern void** g_pMainLoopSingleton;
 

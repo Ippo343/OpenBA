@@ -32,6 +32,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "UpdateLoop.h"
+#include "LoaderLoop.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -59,11 +60,19 @@ void Inner_Shutdown(UpdateLoop* self) {
 }
 
 bool Inner_Update(UpdateLoop* self, void* time) {
-    static int tick = 0;
-    ++tick;
-    printf("[InnerLL::Update] self=%p time=%p tick=%d -> false\n",
-           (void*)self, time, tick);
-    return false;  // exit MainLoop::Run on first tick
+    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
+    UpdateLoop* next = ll->m_nextLoop;
+    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+    printf("[InnerLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
+           (void*)self, time, (void*)next, mainLoop);
+    if (next && fn_MainLoop_SetNextLoop && mainLoop) {
+        fn_MainLoop_SetNextLoop(mainLoop, next);
+    } else {
+        printf("[InnerLL::Update] WARN: cannot transition (next=%p fn=%p ml=%p)\n",
+               (void*)next, (void*)fn_MainLoop_SetNextLoop, mainLoop);
+    }
+    self->m_loadBit = -1;
+    return false;
 }
 
 void Inner_Draw(UpdateLoop* self, float alpha) {
@@ -147,10 +156,18 @@ void Outer_Shutdown(UpdateLoop* self) {
 }
 
 bool Outer_Update(UpdateLoop* self, void* time) {
-    static int tick = 0;
-    ++tick;
-    printf("[OuterLL::Update] self=%p time=%p tick=%d -> false\n",
-           (void*)self, time, tick);
+    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
+    UpdateLoop* next = ll->m_nextLoop;
+    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+    printf("[OuterLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
+           (void*)self, time, (void*)next, mainLoop);
+    if (next && fn_MainLoop_SetNextLoop && mainLoop) {
+        fn_MainLoop_SetNextLoop(mainLoop, next);
+    } else {
+        printf("[OuterLL::Update] WARN: cannot transition (next=%p fn=%p ml=%p)\n",
+               (void*)next, (void*)fn_MainLoop_SetNextLoop, mainLoop);
+    }
+    self->m_loadBit = -1;
     return false;
 }
 

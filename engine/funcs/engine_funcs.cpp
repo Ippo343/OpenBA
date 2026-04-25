@@ -876,6 +876,7 @@ fn_VideoDevice_ReleaseDynamic_t fn_VideoDevice_ReleaseDynamic = nullptr;
 fn_VideoDevice_Shutdown_t fn_VideoDevice_Shutdown = nullptr;
 fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError = nullptr;
 fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart = nullptr;
+fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
 void** g_pMainLoopSingleton = nullptr;
 fn_UI_EnableCursor_t fn_UI_EnableCursor = nullptr;
 fn_UI_GetFirstDialog_t fn_UI_GetFirstDialog = nullptr;
@@ -3692,6 +3693,8 @@ bool EngineFuncsInit() {
         ResolveExport("?OnVideoError@MainLoop@Engine@@QEAAXXZ"));
     fn_MainLoop_OnVideoRestart = reinterpret_cast<fn_MainLoop_OnVideoRestart_t>(
         ResolveExport("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ"));
+    fn_MainLoop_SetNextLoop = reinterpret_cast<fn_MainLoop_SetNextLoop_t>(
+        ResolveExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
 
     // Engine::MainLoop::_singleton (protected, @1)
     {
