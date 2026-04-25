@@ -51,16 +51,25 @@ int InvokeAllRegistrations() {
 
 // ============================================================
 // Self-test registration — proves the framework works end-to-end.
-// Removes once we have real per-class registrations in code/Game/.
 // Parent must be either nullptr or the name of another registered type;
 // Factory::Startup's second loop crashes on an unresolvable parent string.
 // ============================================================
 #ifdef STANDALONE_EXE
 namespace {
-    void* SelfTest_Factory(void) { return nullptr; }
-    void* SelfTest_InPlace(void* /*mem*/) { return nullptr; }
+    void* NullFactory(void) { return nullptr; }
+    void* NullInPlace(void* /*mem*/) { return nullptr; }
 }
 REGISTER_TYPE(StandaloneFactoryTest, /*parent=*/nullptr,
-              &SelfTest_Factory, &SelfTest_InPlace);
+              &NullFactory, &NullInPlace);
+
+// Stage 7a: incremental registration of exe-side types as we discover them
+// crashing in External::Load. Each type uses NullFactory — External::Load
+// gracefully bails when the factory returns NULL (param_2==NULL check).
+// Parent MUST be either nullptr or a registered type — Factory::Startup's
+// second loop crashes on unresolvable parents.
+//
+// StatGoal: parent="Achievement::Goal" → colon-stripped to "Goal" (Runtime type).
+//   Discovered via crash diagnostic 2026-04-25: missed typeId 0x2294CCAE.
+REGISTER_TYPE(StatGoal, "Goal", &NullFactory, &NullInPlace);
 #endif
 

@@ -52,11 +52,13 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Inner_Startup(UpdateLoop* self) {
-    printf("[InnerLL::Startup] self=%p\n", (void*)self);
-    // Stage 7a TODO: real impl calls fn_Loader_Load(g_pLoader, m_nextLoop) but
-    // that crashes in Object::External::Load (Runtime+0xBC73E) because the
-    // standalone exe never registers exe-defined types with Factory::_singleton.
-    // Resume once Factory population is wired up.
+    printf("[InnerLL::Startup] self=%p (skip Loader::Load — see project_standalone_stage7_progress.md)\n",
+           (void*)self);
+    // Stage 7a partial: when fn_Loader_Load is wired, the loader worker thread
+    // hits exe-side types (StatGoal, etc.) that aren't registered. Without REAL
+    // factories returning non-NULL objects, External::Load -> Base::IsDerivedFrom
+    // crashes on NULL `this`. Re-enable once the bulk type registration with
+    // proper factories lands. Original: Loader::Load(g_pLoader, ll->m_nextLoop).
 }
 
 void Inner_Shutdown(UpdateLoop* self) {
@@ -152,11 +154,9 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Outer_Startup(UpdateLoop* self) {
-    printf("[OuterLL::Startup] self=%p\n", (void*)self);
-    // Stage 7a TODO: real impl calls fn_Loader_Load(g_pLoader, m_nextLoop) but
-    // that crashes in Object::External::Load (Runtime+0xBC73E) because the
-    // standalone exe never registers exe-defined types with Factory::_singleton.
-    // Resume once Factory population is wired up.
+    printf("[OuterLL::Startup] self=%p (skip Loader::Load — see project_standalone_stage7_progress.md)\n",
+           (void*)self);
+    // Same reason as Inner_Startup. Re-enable when factories return non-NULL.
 }
 
 void Outer_Shutdown(UpdateLoop* self) {

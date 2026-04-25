@@ -30,6 +30,21 @@ extern "C" {
 }
 
 // ============================================================
+// Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
+// and the External::Load crash diagnostic).
+// ============================================================
+struct ProbeBaseTypeInfo {
+    uint32_t typeId;
+    uint32_t pad;
+    const char* name;
+    const char* parent;
+    const char* abstract;
+    void* factoryFn;
+    void* inPlaceFn;
+    ProbeBaseTypeInfo* next;
+};
+
+// ============================================================
 // Crash handler (simplified version of DLL mode's VEH)
 // ============================================================
 static const char* ExceptionCodeToString(DWORD code) {
@@ -55,9 +70,15 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     fprintf(stderr, "Address:   %p\n", ep->ExceptionRecord->ExceptionAddress);
 
     CONTEXT* ctx = ep->ContextRecord;
-    fprintf(stderr, "RAX=%016llX RCX=%016llX RDX=%016llX\n",
+    fprintf(stderr, "RAX=%016llX RCX=%016llX RDX=%016llX RBX=%016llX\n",
             (unsigned long long)ctx->Rax, (unsigned long long)ctx->Rcx,
-            (unsigned long long)ctx->Rdx);
+            (unsigned long long)ctx->Rdx, (unsigned long long)ctx->Rbx);
+    fprintf(stderr, "RBP=%016llX RSI=%016llX RDI=%016llX R8 =%016llX\n",
+            (unsigned long long)ctx->Rbp, (unsigned long long)ctx->Rsi,
+            (unsigned long long)ctx->Rdi, (unsigned long long)ctx->R8);
+    fprintf(stderr, "R9 =%016llX R10=%016llX R11=%016llX R12=%016llX\n",
+            (unsigned long long)ctx->R9,  (unsigned long long)ctx->R10,
+            (unsigned long long)ctx->R11, (unsigned long long)ctx->R12);
     fprintf(stderr, "RIP=%016llX RSP=%016llX\n",
             (unsigned long long)ctx->Rip, (unsigned long long)ctx->Rsp);
 
@@ -66,6 +87,40 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
                          ep->ExceptionRecord->ExceptionInformation[0] == 1 ? "WRITE" : "EXEC";
         fprintf(stderr, "Fault: %s of %p\n", op,
                 (void*)ep->ExceptionRecord->ExceptionInformation[1]);
+    }
+
+    // Specialized handler: External::Load tree-walk crash. The instruction at
+    // Runtime+0xBC73E is `MOV RAX, [RCX+0x10]` with RCX=NULL because the
+    // typeId in [RBP+0x48] wasn't found in Factory::_singleton's tree.
+    // Print the typeId and try to find a Runtime type whose CRC32 matches.
+    uintptr_t runtimeBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("Runtime-x64.dll"));
+    if (runtimeBase && ctx->Rip == runtimeBase + 0xBC73E) {
+        uint32_t* typeIdSlot = reinterpret_cast<uint32_t*>(ctx->Rbp + 0x48);
+        // [RBP+0x48] is on the crashed thread's stack — same memory we just
+        // tree-walked through, so the read should be safe. IsBadReadPtr is
+        // racy but fine for a one-shot diagnostic.
+        if (!IsBadReadPtr(typeIdSlot, sizeof(uint32_t))) {
+            uint32_t typeId = *typeIdSlot;
+            fprintf(stderr, "External::Load: missed typeId=0x%08X at [RBP+0x48]=%p\n",
+                    typeId, (void*)typeIdSlot);
+
+            uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
+            ProbeBaseTypeInfo* head = headAddr ? *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr) : nullptr;
+            bool matched = false;
+            for (ProbeBaseTypeInfo* p = head; p; p = p->next) {
+                if (p->typeId == typeId) {
+                    fprintf(stderr, "  -> matches REGISTERED type: %s (parent=%s)\n",
+                            p->name ? p->name : "?", p->parent ? p->parent : "?");
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                fprintf(stderr, "  -> typeId is NOT in _firstTypeInfo (missing exe-side registration)\n");
+            }
+        } else {
+            fprintf(stderr, "External::Load: [RBP+0x48]=%p is unreadable\n", (void*)typeIdSlot);
+        }
     }
 
     // Check registry stats
@@ -77,6 +132,32 @@ static LONG CALLBACK CrashHandler(EXCEPTION_POINTERS* ep) {
     fflush(stderr);
 
     return EXCEPTION_CONTINUE_SEARCH;
+}
+
+// ============================================================
+// PROBE: walk Runtime's _firstTypeInfo (head @ Runtime 0x1801fc6e0).
+// BaseTypeInfo struct layout: +0x08 name, +0x10 parent, +0x20 factoryFn,
+// +0x30 next. typeId at +0x00 is 0xFFFFFFFF until Factory::Startup runs.
+// ============================================================
+static void DumpFirstTypeInfo(const char* tag) {
+    uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
+    if (!headAddr) {
+        printf("[Probe %s] Could not resolve _firstTypeInfo head address\n", tag);
+        return;
+    }
+    ProbeBaseTypeInfo* head = *reinterpret_cast<ProbeBaseTypeInfo**>(headAddr);
+    int n = 0;
+    printf("[Probe %s] _firstTypeInfo @ 0x%llx, head=%p\n",
+           tag, (unsigned long long)headAddr, (void*)head);
+    for (ProbeBaseTypeInfo* p = head; p != nullptr && n < 1000; p = p->next, n++) {
+        if (n < 5) {
+            printf("[Probe %s]   #%-3d name=%-32s parent=%s\n",
+                   tag, n,
+                   p->name ? p->name : "(null)",
+                   p->parent ? p->parent : "(null)");
+        }
+    }
+    printf("[Probe %s] Total: %d entries\n", tag, n);
 }
 
 // ============================================================
@@ -106,13 +187,21 @@ static bool Init() {
     }
     RuntimeFuncsInit();
 
-    // 5. Drain pending Factory registrations into Runtime _firstTypeInfo.
+    // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
+    //    Confirms Runtime self-registered its types via inlined CRT-init stubs
+    //    at 0x180147xxx. Should print 150+ Runtime types (Dialog, Description,
+    //    Element subclasses, etc.).
+    DumpFirstTypeInfo("BEFORE InvokeAllRegistrations");
+
+    // 6. Drain pending Factory registrations into Runtime _firstTypeInfo.
     //    Static-init ctors collected them; now we flush by calling
     //    Object::BaseTypeInfo::BaseTypeInfo for each. Engine::Engine::Startup
     //    -> Object::Factory::Startup will later walk the list and populate
     //    the typeId tree.
     printf("[Standalone] Invoking factory registrations...\n");
     Object::InvokeAllRegistrations();
+
+    DumpFirstTypeInfo("AFTER InvokeAllRegistrations");
 
     printf("[Standalone] Init complete.\n");
     return true;

@@ -136,6 +136,29 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, 0x200, 0, false);
     printf("[GameMain] Engine::Startup returned %u\n", ok);
 
+    // Probe: dump Factory tree state after Engine::Startup.
+    // Engine::Engine::Startup -> Object::Factory::Startup walks _firstTypeInfo
+    // and assigns CRC32-derived typeIds (overwriting the 0xFFFFFFFF ctor default).
+    // If the walk succeeded, every entry now has a non-FFFFFFFF typeId.
+    {
+        uintptr_t headAddr = ResolveAddr(Module::Runtime, 0x1801fc6e0);
+        struct Probe { uint32_t typeId; uint32_t pad; const char* name; const char* parent;
+                       const char* abstract; void* f; void* ip; Probe* next; };
+        Probe* head = headAddr ? *reinterpret_cast<Probe**>(headAddr) : nullptr;
+        int n = 0, withId = 0;
+        for (Probe* p = head; p && n < 1000; p = p->next, n++) {
+            if (p->typeId != 0xFFFFFFFF) withId++;
+        }
+        printf("[GameMain] Post-Startup _firstTypeInfo: %d entries, %d have non-FF typeId\n",
+               n, withId);
+        // Dump typeId for first 10 entries — sanity-check CRC32 algorithm.
+        int s = 0;
+        for (Probe* p = head; p && s < 10; p = p->next, s++) {
+            printf("[GameMain]   typeId=0x%08X name=%s\n", p->typeId,
+                   p->name ? p->name : "?");
+        }
+    }
+
     if (ok != 0) {
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)
