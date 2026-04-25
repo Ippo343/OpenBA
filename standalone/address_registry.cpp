@@ -64,7 +64,6 @@ static std::unordered_map<uintptr_t, uintptr_t>& GetSlotStorage() {
 
 // Register a dispatch slot: the registry maps ghidra_addr -> &slot_storage[ghidra_addr],
 // and slot_storage[ghidra_addr] holds the actual function pointer.
-__attribute__((unused))
 static void RegisterDispatchSlot(uintptr_t ghidra_addr, uintptr_t fn_ptr) {
     auto& slots = GetSlotStorage();
     slots[ghidra_addr] = fn_ptr;
@@ -74,19 +73,51 @@ static void RegisterDispatchSlot(uintptr_t ghidra_addr, uintptr_t fn_ptr) {
 }
 
 static void RegisterDispatchSlots() {
-    // TODO: Map each .rdata dispatch slot to its Runtime DLL function.
-    // These are resolved via ResolveExport() or ResolveOrdinal() after Runtime DLL loads.
-    //
-    // Pattern:
-    //   void* fn = ResolveExport("?MangledName@@...");
-    //   if (fn) RegisterDispatchSlot(0x14015XXXX, (uintptr_t)fn);
-    //
-    // 233 unique .rdata addresses to fill (0x14015xxxx - 0x1401Cxxxx range).
-    // Many of these are already resolved in engine_funcs.cpp — just need the
-    // Ghidra slot address -> mangled name mapping.
-    //
-    // Priority: the most-used slots (Time::AsSeconds, Random::RandFloat,
-    // CheckPtr, FindComponent, etc.) should be filled first.
+    // Each entry maps an exe .rdata dispatch slot to a Runtime DLL function.
+    // EngineFuncsInit and Description reimpls read these via:
+    //   fn = *(fn_t*)ResolveAddr(Module::Exe, 0x14015XXXX);
+    RegisterDispatchSlot(0x1401518c0,
+        (uintptr_t)ResolveExport("?GetFileVersion@ElementDescription@UI@@UEBAHXZ"));
+    RegisterDispatchSlot(0x1401518f8,
+        (uintptr_t)ResolveExport("?Draw@Element@UI@@UEBAXAEAVSpriteContext@2@E@Z"));
+    RegisterDispatchSlot(0x140151908,
+        (uintptr_t)ResolveExport("?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z"));
+    RegisterDispatchSlot(0x140151900,
+        (uintptr_t)ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z"));
+    RegisterDispatchSlot(0x140151910,
+        (uintptr_t)ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z"));
+    RegisterDispatchSlot(0x140151238,
+        (uintptr_t)ResolveExport("?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z"));
+    RegisterDispatchSlot(0x1401518c8,
+        (uintptr_t)ResolveExport("?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z"));
+    RegisterDispatchSlot(0x1401518b8,
+        (uintptr_t)ResolveExport("??1ElementDescription@UI@@UEAA@XZ"));
+    RegisterDispatchSlot(0x1401518b0,
+        (uintptr_t)ResolveExport("??0ElementDescription@UI@@QEAA@XZ"));
+    RegisterDispatchSlot(0x1401518d0,
+        (uintptr_t)ResolveExport("?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
+    RegisterDispatchSlot(0x1401518d8,
+        (uintptr_t)ResolveExport("??0Element@UI@@QEAA@XZ"));
+    RegisterDispatchSlot(0x1401518e0,
+        (uintptr_t)ResolveExport("??1Element@UI@@UEAA@XZ"));
+    RegisterDispatchSlot(0x1401518e8,
+        (uintptr_t)ResolveExport("?ComputeLayout@Element@UI@@UEAAXHHHH@Z"));
+    RegisterDispatchSlot(0x1401518f0,
+        (uintptr_t)ResolveExport("?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z"));
+    RegisterDispatchSlot(0x140152400,
+        (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
+    RegisterDispatchSlot(0x140152738,
+        (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
+    RegisterDispatchSlot(0x140151650,
+        (uintptr_t)ResolveExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z"));
+    RegisterDispatchSlot(0x1401514c8,
+        (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z"));
+    RegisterDispatchSlot(0x140152b48,
+        (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@XZ"));
+    RegisterDispatchSlot(0x140152770,
+        (uintptr_t)ResolveExport("??1Internal@Object@@UEAA@XZ"));
+    RegisterDispatchSlot(0x140152a30,
+        (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
 }
 
 // ============================================================

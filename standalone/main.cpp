@@ -92,16 +92,17 @@ static bool Init() {
         return false;
     }
 
-    // 3. Resolve engine function pointers from Runtime DLL
+    // 3. Populate address registry (exe dispatch slots, code fns, vtables).
+    //    Must happen BEFORE EngineFuncsInit, which reads from these slots.
+    printf("[Standalone] Initializing address registry...\n");
+    AddressRegistryInit();
+
+    // 4. Resolve engine function pointers from Runtime DLL
     printf("[Standalone] Resolving engine functions...\n");
     if (!EngineFuncsInit()) {
         printf("[Standalone] WARNING: Some engine functions not resolved (non-critical)\n");
     }
     RuntimeFuncsInit();
-
-    // 4. Populate address registry (our reimplemented exe functions)
-    printf("[Standalone] Initializing address registry...\n");
-    AddressRegistryInit();
 
     printf("[Standalone] Init complete.\n");
     return true;
