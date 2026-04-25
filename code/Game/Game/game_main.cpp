@@ -281,15 +281,51 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                              loadingLoop, "ShiningRockDLT")
                             : nullptr;
 
-                        UpdateLoop* topLoop = shiningRockLoop ? shiningRockLoop
+                        // Stage 5e: wrap the splash chain in two LoaderLoop layers.
+                        // Inner LoaderLoop wraps shiningRockLoop, outer LoaderLoop
+                        // wraps inner. Both use fn_LoaderLoop_Ctor with delay 0.0f
+                        // (matches FUN_140041ef0). Vtables come from our stubs in
+                        // standalone/loader_loop_stubs.cpp.
+                        auto buildLoaderLoop = [&](UpdateLoop* next, uintptr_t vtableAddr,
+                                                   const char* tag) -> UpdateLoop* {
+                            if (!next || !fn_LoaderLoop_Ctor) return nullptr;
+                            UpdateLoop* ll = reinterpret_cast<UpdateLoop*>(
+                                fn_MemAlloc(memAllocSingleton, 0x48, 4));
+                            printf("[GameMain] %s alloc = %p\n", tag, (void*)ll);
+                            if (!ll) return nullptr;
+
+                            uint64_t zeroDelay = 0;
+                            fn_Time_Ctor_Float(&zeroDelay, 0.0f);
+                            fn_LoaderLoop_Ctor(ll, next, &zeroDelay);
+
+                            void** vt = reinterpret_cast<void**>(
+                                ResolveAddr(Module::Exe, vtableAddr));
+                            *(void***)ll = vt;
+                            printf("[GameMain] %s ctor done, vtable=%p, next=%p\n",
+                                   tag, (void*)ll->vtable, (void*)next);
+                            return ll;
+                        };
+
+                        UpdateLoop* innerLoader = shiningRockLoop
+                            ? buildLoaderLoop(shiningRockLoop, 0x140158870, "InnerLL")
+                            : nullptr;
+                        UpdateLoop* outerLoader = innerLoader
+                            ? buildLoaderLoop(innerLoader, 0x1401588d0, "OuterLL")
+                            : nullptr;
+
+                        UpdateLoop* topLoop = outerLoader ? outerLoader
+                                            : innerLoader ? innerLoader
+                                            : shiningRockLoop ? shiningRockLoop
                                             : loadingLoop ? loadingLoop
                                             : menuLoop;
+                        const char* topTag = outerLoader ? "OuterLL"
+                                           : innerLoader ? "InnerLL"
+                                           : shiningRockLoop ? "ShiningRockDLT"
+                                           : loadingLoop ? "LoadingDLT"
+                                           : "MenuDLT (fallback)";
                         if (topLoop) {
                             printf("[GameMain] Calling MainLoop::Run with %s top "
-                                   "loop = %p...\n",
-                                   shiningRockLoop ? "ShiningRockDLT"
-                                   : loadingLoop ? "LoadingDLT" : "MenuDLT (fallback)",
-                                   (void*)topLoop);
+                                   "loop = %p...\n", topTag, (void*)topLoop);
                             s_fn_MainLoop_Run(ml, topLoop);
                             printf("[GameMain] MainLoop::Run returned "
                                    "(top loop destroyed by Run; inner loops "

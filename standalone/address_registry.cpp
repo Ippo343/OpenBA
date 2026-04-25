@@ -140,6 +140,9 @@ extern void RegisterMenuDialogLoopVtable();
 // Defined in standalone/splash_loop_stubs.cpp.
 extern void RegisterSplashDialogLoopVtable();
 
+// Defined in standalone/loader_loop_stubs.cpp.
+extern void RegisterLoaderLoopVtables();
+
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
     RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
@@ -152,6 +155,9 @@ static void RegisterVtablesAndTypeIds() {
     // --- Splash DialogLoaderLoopT vtable (0x140158800) — stubs for now ---
     // Used by both Dialog\Loading.rsc and Dialog\ShiningRock.rsc instances.
     RegisterSplashDialogLoopVtable();
+
+    // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) — stubs ---
+    RegisterLoaderLoopVtables();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.
