@@ -23,6 +23,8 @@
 #include "game_main.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "UpdateLoop.h"
+#include "Game/game.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -51,6 +53,8 @@ typedef void     (*fn_Engine_Shutdown_t)(void* self);
 typedef void* (*fn_MainLoop_Ctor_t)(void* self, void* engine);
 // Engine::MainLoop::~MainLoop(this)
 typedef void  (*fn_MainLoop_Dtor_t)(void* self);
+// Engine::MainLoop::Run(this, UpdateLoop*)
+typedef void  (*fn_MainLoop_Run_t)(void* self, UpdateLoop* loop);
 
 static fn_Engine_Ctor_t      s_fn_Engine_Ctor      = nullptr;
 static fn_Engine_Dtor_t      s_fn_Engine_Dtor      = nullptr;
@@ -58,6 +62,7 @@ static fn_Engine_Startup_t   s_fn_Engine_Startup   = nullptr;
 static fn_Engine_Shutdown_t  s_fn_Engine_Shutdown  = nullptr;
 static fn_MainLoop_Ctor_t    s_fn_MainLoop_Ctor    = nullptr;
 static fn_MainLoop_Dtor_t    s_fn_MainLoop_Dtor    = nullptr;
+static fn_MainLoop_Run_t     s_fn_MainLoop_Run     = nullptr;
 
 static void EnsureResolved() {
     if (s_fn_Engine_Ctor) return;
@@ -81,16 +86,83 @@ static void EnsureResolved() {
     s_fn_Engine_Shutdown = reinterpret_cast<fn_Engine_Shutdown_t>(
         ResolveExport("?Shutdown@Engine@1@QEAAXXZ"));
 
-    // Engine::MainLoop ctor / dtor — Ghidra-confirmed addresses.
+    // Engine::MainLoop ctor / dtor / Run — Ghidra-confirmed addresses.
     s_fn_MainLoop_Ctor = reinterpret_cast<fn_MainLoop_Ctor_t>(
         ResolveAddr(Module::Runtime, 0x1800dd6b0));
     s_fn_MainLoop_Dtor = reinterpret_cast<fn_MainLoop_Dtor_t>(
         ResolveAddr(Module::Runtime, 0x1800dd640));
+    s_fn_MainLoop_Run = reinterpret_cast<fn_MainLoop_Run_t>(
+        ResolveAddr(Module::Runtime, 0x1800dd3c0));
 
     // Note: MemAlloc/MemFree come from engine_funcs.h (fn_MemAlloc takes the
     // MemoryAllocator singleton as first arg; fn_MemFreeStatic is the static
     // one-arg form).
 }
+
+// ============================================================
+// Stage 4: Stub UpdateLoop — minimal vtable so MainLoop::Run can complete one
+// frame. Update() returns false on the first tick so Run's main loop exits
+// immediately, exercising the Startup → Frame → Shutdown → Destroy path.
+// ============================================================
+
+static int s_stubTickCount = 0;
+
+extern "C" {
+
+static void StubUL_Destroy(UpdateLoop* self, int flags) {
+    printf("[StubUL] Destroy flags=%d\n", flags);
+    // Scalar deleting destructor convention: flags & 1 means free the heap alloc.
+    // No member fields need teardown beyond what UpdateLoop base does (none here).
+    if (flags & 1) {
+        fn_MemFreeStatic(self);
+    }
+}
+
+static void StubUL_Startup(UpdateLoop* self, int64_t remainder) {
+    printf("[StubUL] Startup remainder=%lld\n", (long long)remainder);
+}
+
+static void StubUL_Shutdown(UpdateLoop* self) {
+    printf("[StubUL] Shutdown\n");
+}
+
+static bool StubUL_Update(UpdateLoop* self, void* /*time*/) {
+    s_stubTickCount++;
+    printf("[StubUL] Update tick=%d -> returning false\n", s_stubTickCount);
+    return false;
+}
+
+static void StubUL_Draw(UpdateLoop* self, float /*alpha*/) {
+    static int draws = 0;
+    if (draws++ < 3) printf("[StubUL] Draw\n");
+}
+
+static void StubUL_DrawFailed(UpdateLoop* self) {}
+static void StubUL_Load(UpdateLoop* self) {
+    printf("[StubUL] Load (no-op)\n");
+}
+static void StubUL_SaveRestore(UpdateLoop* self, bool /*save*/, void* /*state*/) {}
+static void StubUL_OnVideoError(UpdateLoop* self) {}
+static void StubUL_OnVideoRestart(UpdateLoop* self) {}
+static const char* StubUL_GetResourceFilename(UpdateLoop* self) { return nullptr; }
+static bool StubUL_AllowsModChanges(UpdateLoop* self) { return false; }
+
+} // extern "C"
+
+static UpdateLoopVtable s_stubVtable = {
+    reinterpret_cast<void*>(&StubUL_Destroy),
+    reinterpret_cast<void*>(&StubUL_Startup),
+    reinterpret_cast<void*>(&StubUL_Shutdown),
+    reinterpret_cast<void*>(&StubUL_Update),
+    reinterpret_cast<void*>(&StubUL_Draw),
+    reinterpret_cast<void*>(&StubUL_DrawFailed),
+    reinterpret_cast<void*>(&StubUL_Load),
+    reinterpret_cast<void*>(&StubUL_SaveRestore),
+    reinterpret_cast<void*>(&StubUL_OnVideoError),
+    reinterpret_cast<void*>(&StubUL_OnVideoRestart),
+    reinterpret_cast<void*>(&StubUL_GetResourceFilename),
+    reinterpret_cast<void*>(&StubUL_AllowsModChanges),
+};
 
 namespace Game {
 
@@ -153,7 +225,68 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 s_fn_MainLoop_Ctor(ml, &engine);
                 printf("[GameMain] MainLoop constructed.\n");
 
-                // TODO(stage 4): build UpdateLoop chain + MainLoop::Run.
+                // Stage 5a: allocate the Game/KeyMap container (0xe0 bytes, 4-byte
+                // aligned) and run its ctor. Original GameMain follows this with
+                // Game_Register on a settings struct; we skip Game_Register for now
+                // and just zero-init settings to the same hardcoded defaults.
+                void* gameObj = fn_MemAlloc(memAllocSingleton, 0xe0, 4);
+                printf("[GameMain] Game alloc      = %p\n", gameObj);
+                if (gameObj) {
+                    Game_Ctor(gameObj);
+                    printf("[GameMain] Game_Ctor done; KeyMap singleton -> %p\n",
+                           g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+                }
+
+                // Settings struct (0x34 bytes). Defaults from original GameMain.
+                int32_t* settings = reinterpret_cast<int32_t*>(
+                    fn_MemAlloc(memAllocSingleton, 0x34, 4));
+                printf("[GameMain] Settings alloc  = %p\n", (void*)settings);
+                if (settings) {
+                    settings[0] = 100;          // UIScale
+                    settings[1] = 1;            // AutosaveInterval
+                    settings[2] = 100;          // StatusIconOpacity
+                    settings[3] = 1;            // StatusIconEnable + bools at +0x15..0x17
+                    settings[4] = 100;          // StatusIconScale
+                    settings[5] = 0x1010001;    // packed bools (EdgeScroll, ShowCelcius, ShowWeather, AutoSlow)
+                    settings[6] = 1;            // AutoPause
+                    *reinterpret_cast<int64_t*>(&settings[7])  = 0;  // LastOption + LastTerrain
+                    settings[9] = 0;            // LastMapSize
+                    settings[10] = 1;           // LastClimate
+                    *reinterpret_cast<int64_t*>(&settings[11]) = 1;  // LastStart + LastDisaster
+                    if (g_pGameSettingsPtr) {
+                        *g_pGameSettingsPtr = settings;
+                    }
+                }
+
+                // Stage 4: build a stub UpdateLoop and run one frame through
+                // MainLoop::Run. Run's cleanup will call VCall_Destroy(stub, 1)
+                // which routes to StubUL_Destroy, so we don't free `stub` here.
+                if (s_fn_MainLoop_Run && fn_UpdateLoop_Ctor) {
+                    UpdateLoop* stub = reinterpret_cast<UpdateLoop*>(
+                        fn_MemAlloc(memAllocSingleton, sizeof(UpdateLoop), 8));
+                    printf("[GameMain] StubLoop alloc = %p\n", (void*)stub);
+                    if (stub) {
+                        fn_UpdateLoop_Ctor(stub);   // zeros base, sets m_loadBit=-1
+                        stub->vtable = &s_stubVtable;
+                        printf("[GameMain] StubLoop vtable=%p, calling MainLoop::Run...\n",
+                               (void*)stub->vtable);
+                        s_fn_MainLoop_Run(ml, stub);
+                        printf("[GameMain] MainLoop::Run returned (stub destroyed by Run)\n");
+                    }
+                } else {
+                    printf("[GameMain] WARN: MainLoop::Run or UpdateLoop ctor missing, skipping stage 4\n");
+                }
+
+                if (settings) {
+                    if (g_pGameSettingsPtr) *g_pGameSettingsPtr = nullptr;
+                    fn_MemFreeStatic(settings);
+                    printf("[GameMain] Settings freed.\n");
+                }
+                if (gameObj) {
+                    if (g_pKeyMapSingleton) *g_pKeyMapSingleton = nullptr;
+                    fn_MemFreeStatic(gameObj);
+                    printf("[GameMain] Game freed.\n");
+                }
 
                 s_fn_MainLoop_Dtor(ml);
                 fn_MemFreeStatic(ml);

@@ -15,6 +15,7 @@
 #include "resolve.h"
 #include "address_registry.h"
 #include "engine_funcs.h"
+#include "Game/game.h"
 #include <cstdio>
 #include <cstdint>
 
@@ -29,14 +30,12 @@
 //   RegisterExeAddr(0x140025020, (uintptr_t)&Weather_Dtor);
 
 static void RegisterCodeFunctions() {
-    // TODO: As functions are confirmed working in DLL mode, register them here.
     // Each entry maps a Ghidra address to our reimplemented function.
-    //
-    // Pattern:
-    //   RegisterExeAddr(GHIDRA_ADDR, (uintptr_t)&OurFunction);
-    //
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
     // These are exe-internal functions called by code/Game/ via function pointers.
+
+    // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
+    RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
 }
 
 // ============================================================
@@ -127,7 +126,20 @@ static void RegisterDispatchSlots() {
 // the vtable contents (pointing to our reimplemented virtual functions).
 // Type IDs are simple uint32_t globals used by FindComponent.
 
+// Singleton-pointer storage in .data/.bss. The original exe has 8-byte slots
+// for global object pointers (e.g. KeyMap, GameWorld, GameSettings) that get
+// written during Game_Ctor / engine boot. We reserve our own static storage
+// here and register its address; engine_funcs.cpp dereferences these slots.
+static void* g_storage_KeyMapSingleton = nullptr;       // 0x1401c3de8
+static void* g_storage_GameWorldSingleton = nullptr;    // 0x1401c3dd8
+static void* g_storage_GameSettingsPtr = nullptr;       // 0x1401c3de0
+
 static void RegisterVtablesAndTypeIds() {
+    // --- Game singleton pointer storage (initialized to null, written at boot) ---
+    RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
+    RegisterExeAddr(0x1401c3dd8, reinterpret_cast<uintptr_t>(&g_storage_GameWorldSingleton));
+    RegisterExeAddr(0x1401c3de0, reinterpret_cast<uintptr_t>(&g_storage_GameSettingsPtr));
+
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.
     //
