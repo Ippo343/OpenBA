@@ -46,6 +46,106 @@ void LoaderDialog_Slot7(LoaderDialog* self, void* time) {
     uintptr_t s = (uintptr_t)self;
     float elapsed = fn_Time_AsSeconds(time);
     *(float*)(s + 0xC0) += elapsed * 180.0f;
+
+#if defined(STANDALONE_EXE) && 0   // Diagnostic disabled. Re-enable to inspect
+                                   // the element tree built from the loaded
+                                   // .rsc — confirmed (2026-04-26) that
+                                   // GroupDescription::_elements deserializes
+                                   // empty in standalone, leaving the spinner
+                                   // tree unbuilt. Root cause is in External
+                                   // deserialization (see notes/NOTES042626).
+    static void* s_seen[8] = {nullptr};
+    static int s_seenCount = 0;
+    bool firstForThis = true;
+    for (int i = 0; i < s_seenCount; ++i) if (s_seen[i] == self) { firstForThis = false; break; }
+    static int s_calls = 0;
+    if (firstForThis && s_seenCount < 8) {
+        s_seen[s_seenCount++] = self;
+        s_calls = 1;
+
+        auto walk = [](auto&& self_lambda, void* elem, int depth) -> void {
+            if (!elem || depth > 6) return;
+            void* vtbl = *(void**)elem;
+            void** kidsArr = *(void***)((uintptr_t)elem + 0xa0);
+            int    kidsCnt = *(int*) ((uintptr_t)elem + 0xa8);
+            uint32_t flags = *(uint32_t*)((uintptr_t)elem + 0x34);
+            void* parentField = *(void**)((uintptr_t)elem + 0x98);
+            uint64_t f8 = *(uint64_t*)((uintptr_t)elem + 0xf8);
+            for (int i = 0; i < depth; ++i) printf("  ");
+            printf("elem=%p vtbl=%p kids=%d (arr=%p) flags=0x%08x parent@+0x98=%p +0xf8=0x%016llx\n",
+                   elem, vtbl, kidsCnt, kidsArr, flags, parentField, (unsigned long long)f8);
+            for (int i = 0; i < kidsCnt; ++i) {
+                self_lambda(self_lambda, kidsArr[i], depth + 1);
+            }
+        };
+
+        void* rootElem = *(void**)(s + 0x50);
+        printf("[LoaderDialog::Slot7] === element tree dump (self=%p) ===\n", (void*)self);
+        walk(walk, rootElem, 0);
+        printf("[LoaderDialog::Slot7] === end ===\n");
+
+        // Dump dialog External + wrapped Dialog object so we can see whether
+        // deserialization populated _rootElement and _elements.
+        void* dialogExternal = *(void**)(s + 0x18);
+        printf("[LoaderDialog::Slot7] DialogInstance+0x18 (Dialog*) = %p\n", dialogExternal);
+        if (dialogExternal) {
+            void* rootDescIBP = (void*)((uintptr_t)dialogExternal + 0x38);
+            void* rootDesc = *(void**)rootDescIBP;
+            printf("[LoaderDialog::Slot7] Dialog+0x38 (rootDesc IBP at %p) -> %p\n",
+                   rootDescIBP, rootDesc);
+            if (rootDesc) {
+                void* descVtbl = *(void**)rootDesc;
+                int elemCount = *(int*)((uintptr_t)rootDesc + 0x70);
+                void* elemArr = *(void**)((uintptr_t)rootDesc + 0x68);
+                printf("[LoaderDialog::Slot7] rootDesc vtbl=%p +0x68 (elems arr)=%p +0x70 (count)=%d\n",
+                       descVtbl, elemArr, elemCount);
+                // Dump first 0x100 bytes of the description for context.
+                for (int off = 0; off < 0x100; off += 16) {
+                    uint64_t a = *(uint64_t*)((uintptr_t)rootDesc + off);
+                    uint64_t b = *(uint64_t*)((uintptr_t)rootDesc + off + 8);
+                    char ascii[17] = {0};
+                    for (int i = 0; i < 16; ++i) {
+                        unsigned char c = ((unsigned char*)((uintptr_t)rootDesc + off))[i];
+                        ascii[i] = (c >= 32 && c < 127) ? c : '.';
+                    }
+                    printf("    desc+0x%02x: %016llx %016llx |%s|\n", off,
+                           (unsigned long long)a, (unsigned long long)b, ascii);
+                }
+            }
+            // Dump 0x100 bytes of the dialog external + ascii.
+            printf("[LoaderDialog::Slot7] === dialog External hex ===\n");
+            for (int off = 0; off < 0x100; off += 16) {
+                uint64_t a = *(uint64_t*)((uintptr_t)dialogExternal + off);
+                uint64_t b = *(uint64_t*)((uintptr_t)dialogExternal + off + 8);
+                char ascii[17] = {0};
+                for (int i = 0; i < 16; ++i) {
+                    unsigned char c = ((unsigned char*)((uintptr_t)dialogExternal + off))[i];
+                    ascii[i] = (c >= 32 && c < 127) ? c : '.';
+                }
+                printf("    ext+0x%02x: %016llx %016llx |%s|\n", off,
+                       (unsigned long long)a, (unsigned long long)b, ascii);
+            }
+
+            // Inspect the 'sibling' pointers ext+0x20 and ext+0x28 — these
+            // might be other Description objects from the same .rsc.
+            for (int idx = 0; idx < 2; ++idx) {
+                int srcOff = idx == 0 ? 0x20 : 0x28;
+                void* sib = *(void**)((uintptr_t)dialogExternal + srcOff);
+                if (!sib) { printf("    sibling@+0x%02x: null\n", srcOff); continue; }
+                void* sibVtbl = *(void**)sib;
+                int sibCnt = *(int*)((uintptr_t)sib + 0x70);
+                void* sibArr = *(void**)((uintptr_t)sib + 0x68);
+                printf("    sibling@+0x%02x: %p vtbl=%p +0x68(arr)=%p +0x70(cnt)=%d\n",
+                       srcOff, sib, sibVtbl, sibArr, sibCnt);
+            }
+        }
+    } else if (s_calls < 4) {
+        ++s_calls;
+        // Re-probe the +0xf8 of the deepest child (lookup later) — for now
+        // just print our own angle so we know Slot7 keeps firing.
+        printf("[LoaderDialog::Slot7] call=%d angle=%.3f\n", s_calls, *(float*)(s + 0xC0));
+    }
+#endif
 }
 
 #ifdef STANDALONE_EXE

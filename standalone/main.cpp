@@ -351,6 +351,7 @@ static void DumpFirstTypeInfo(const char* tag) {
     int n = 0;
     printf("[Probe %s] _firstTypeInfo @ 0x%llx, head=%p\n",
            tag, (unsigned long long)headAddr, (void*)head);
+    int descMatches = 0;
     for (ProbeBaseTypeInfo* p = head; p != nullptr && n < 1000; p = p->next, n++) {
         if (n < 5) {
             printf("[Probe %s]   #%-3d name=%-32s parent=%s\n",
@@ -358,8 +359,25 @@ static void DumpFirstTypeInfo(const char* tag) {
                    p->name ? p->name : "(null)",
                    p->parent ? p->parent : "(null)");
         }
+        // Spot-check: do the description types referenced in Loading.rsc exist?
+        if (p->name) {
+            const char* targets[] = {
+                "GroupDescription", "RibbonDescription", "ImageDescription",
+                "TextDescription", "AnimatedImageDescription", "ElementDescription",
+                "Dialog", nullptr
+            };
+            for (int i = 0; targets[i]; ++i) {
+                if (strcmp(p->name, targets[i]) == 0) {
+                    printf("[Probe %s] FOUND #%d %s parent=%s\n",
+                           tag, n, p->name, p->parent ? p->parent : "(null)");
+                    ++descMatches;
+                    break;
+                }
+            }
+        }
     }
-    printf("[Probe %s] Total: %d entries\n", tag, n);
+    printf("[Probe %s] Total: %d entries, %d Loading.rsc target descs found\n",
+           tag, n, descMatches);
 }
 
 // ============================================================
