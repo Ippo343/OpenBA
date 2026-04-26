@@ -29,7 +29,9 @@
 #include "engine_funcs.h"
 #include "UpdateLoop.h"
 #include "DialogLoaderLoopT.h"
+#include "MainLoop.h"
 #include "common.h"
+#include "Game/dialogloaderloop.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -157,32 +159,18 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
     (void)alpha;
-    // Mirror Runtime DialogLoaderLoopT::Draw — call UI::UserInterface::Draw on
-    // the embedded UI at +0x60 (DialogLoaderLoopT layout, NOT +0x40 like
-    // DialogLoopT). With no dialog instance yet (Stub_CreateDialog returns
-    // null), the UI's dialog list is empty and Draw effectively just sets the
-    // camera and clears the SpriteContext — enough to avoid the uncleared-
-    // back-buffer flicker we see during the 2.5s splash chain.
+    // Mirror Runtime DialogLoaderLoopT::Draw (0x1800DAE20). Shared body lives in
+    // code/Game/Game/dialogloaderloop.cpp; DLL-mode reaches it via Reimpl_Draw
+    // in engine/reimpl/dialogloaderloop.cpp.
     static int draws = 0;
     bool trace = (draws++ < 3);
 
-    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
-    void* context = mainLoop
-        ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainLoop) + 0x10)
-        : nullptr;
-    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x60);
-
     if (trace) {
-        printf("[SplashDLT::Draw] self=%p alpha=%f mainLoop=%p ctx=%p ui=%p\n",
-               (void*)self, alpha, mainLoop, context, ui);
+        printf("[SplashDLT::Draw] self=%p alpha=%f -> DialogLoaderLoopT_Draw_Impl\n",
+               (void*)self, alpha);
     }
 
-    if (fn_UI_Draw && context) {
-        fn_UI_Draw(ui, context);
-    } else if (trace) {
-        printf("[SplashDLT::Draw] WARN: skipping UI::Draw (fn_UI_Draw=%p ctx=%p)\n",
-               (void*)fn_UI_Draw, context);
-    }
+    DialogLoaderLoopT_Draw_Impl(reinterpret_cast<DialogLoaderLoopT*>(self));
 }
 
 void Stub_DrawFailed(UpdateLoop* self) {

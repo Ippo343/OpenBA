@@ -20,6 +20,7 @@
 #include "hooks.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Game/dialogloaderloop.h"
 #include <windows.h>
 #include <cstdio>
 
@@ -200,47 +201,7 @@ static void Reimpl_Draw(DialogLoaderLoopT* self, float /*alpha*/) {
         drawCount++;
     }
 #endif
-    MainLoop* mainLoop = reinterpret_cast<MainLoop*>(*g_pMainLoopSingleton);
-    uint8_t* ctx = reinterpret_cast<uint8_t*>(mainLoop->m_context);
-
-    // Clear screen: device->Clear(flags=7, color=0, depth=1.0f, stencil=0)
-    void* device = *reinterpret_cast<void**>(ctx + 0x2160);
-    void** deviceVtable = *reinterpret_cast<void***>(device);
-    typedef void (*DeviceClear_t)(void*, uint32_t, uint32_t, float, int);
-    ((DeviceClear_t)deviceVtable[4])(device, 7, 0, 1.0f, 0);
-
-    // Compute elapsed time in seconds (matches original: double → float)
-    float totalSeconds = (float)((double)self->m_elapsedTicks * (*g_Timer_secondsPerTick));
-
-    // 1. Set m_gameTime FIRST (context+0x3C8, float4) — matches original order
-    *reinterpret_cast<float*>(ctx + 0x3C8) = totalSeconds;
-    *reinterpret_cast<uint32_t*>(ctx + 0x3CC) = 0;
-    *reinterpret_cast<uint32_t*>(ctx + 0x3D0) = 0;
-    *reinterpret_cast<uint32_t*>(ctx + 0x3D4) = 0;
-
-    // 2. Intermediate dirty flag: gameTime updated
-    *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x800;
-
-    // 3. Recompute time as double for prevTime/viewTime (matches original's dVar2 path)
-    double dVar2 = (double)self->m_elapsedTicks * (*g_Timer_secondsPerTick);
-
-    // 4. Set m_prevTime (context+0x3B8, float4)
-    *reinterpret_cast<float*>(ctx + 0x3B8) = (float)dVar2;
-    *reinterpret_cast<uint32_t*>(ctx + 0x3BC) = 0;
-    *reinterpret_cast<uint32_t*>(ctx + 0x3C0) = 0;
-    *reinterpret_cast<uint32_t*>(ctx + 0x3C4) = 0;
-
-    // 5. Set m_viewTime (context+0x288, float4)
-    *reinterpret_cast<float*>(ctx + 0x288) = (float)dVar2;
-    *reinterpret_cast<uint32_t*>(ctx + 0x28C) = 0;
-    *reinterpret_cast<uint32_t*>(ctx + 0x290) = 0;
-    *reinterpret_cast<uint32_t*>(ctx + 0x294) = 0;
-
-    // 6. Final dirty flags: time + view updated
-    *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x10800;
-
-    // Draw the UI overlay
-    fn_UI_Draw(GetUI(self), mainLoop->m_context);
+    DialogLoaderLoopT_Draw_Impl(self);
 }
 
 // ============================================================
