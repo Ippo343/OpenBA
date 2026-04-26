@@ -676,3 +676,216 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
         break;
     }
 }
+
+#ifdef STANDALONE_EXE
+
+// ============================================================
+// MainMenuDialog standalone scaffolding
+// ============================================================
+// Provides a 20-slot vtable + factory + REGISTER_TYPE for standalone exe so
+// MenuDLT::CreateDialog can produce a real MainMenuDialog instance instead of
+// returning a null IBP.
+//
+// Vtable layout (exe @ 0x14015f550, 20 slots):
+//   +0x00 Dtor             — sets vtable, ~DialogInstance, free
+//   +0x08 Slot1            — exe returns DAT_1401c5c28 (TypeName const)
+//   +0x10 Slot2            — exe returns DAT_1401c5c20 (TypeId const)
+//   +0x18 Slot3 Persist    — thunk to Runtime DialogInstance::Persist
+//   +0x20 Slot4 Setup      — REIMPL'd in MainMenuDialog_Slot4 (DLL-only; stubbed here)
+//   +0x28 Slot5 Shutdown   — REIMPL'd (DLL-only; stubbed here)
+//   +0x30 Slot6 OnUpdateLayout — thunk
+//   +0x38 Slot7 OnUpdate   — thunk
+//   +0x40 Slot8 OnCommand  — REIMPL'd (DLL-only; stubbed here)
+//   +0x48 Slot9 OnSerializeSettings — thunk
+//   +0x50 Slot10 DIDtor    — ~DialogInstance + free
+//   +0x58..+0x98 Slot11-19 — DialogController interface, all thunks
+//
+// First pass: every slot is a no-op stub. Once Step 3 (rendering) lands and
+// the resource/loader pipeline is alive, the four reimpls (Slot4/5/8/Dtor)
+// can swap in. For now we just need the IBP non-null and Open/Close not to
+// crash through a null vtable slot.
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+namespace {
+
+// Used by Stub_Dtor / Stub_DIDtor to reset the vtable.
+void* GetMainMenuDialogVtable();  // forward decl
+
+// Slot 0 — MainMenuDialog::Dtor. Sets vtable, calls DialogInstance::~DialogInstance,
+// then conditionally frees memory.
+void* StandaloneStub_Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *(void**)self = GetMainMenuDialogVtable();
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// Slot 1 — TypeName placeholder. Exe returns a static value populated by the
+// type registration system. Standalone returns 0 for now (no callers in current
+// boot path).
+uint64_t StandaloneStub_Slot1_TypeName(void* /*self*/) { return 0; }
+
+// Slot 2 — TypeId placeholder.
+uint32_t StandaloneStub_Slot2_TypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("MainMenuDialog");
+    return cached;
+}
+
+// Generic logging stub for the runtime-thunk slots (Slot3/6/7/9/11-19).
+// Most are DialogInstance/DialogController virtuals that the boot path may
+// invoke during Open/Update. Logged once each so we know when wiring matters.
+template <int SlotIdx>
+void StandaloneStub_RuntimeThunk(void* self, ...) {
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[MainMenuDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
+               SlotIdx, self);
+    }
+}
+
+// Slot 4 (Setup) — original reimpl needs the resource pipeline. Stubbed out.
+void StandaloneStub_Slot4_Setup(void* self) {
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[MainMenuDialog::Setup_Stub] self=%p (Slot4 reimpl needs Loader)\n",
+               self);
+    }
+}
+
+// Slot 5 (Shutdown) — depends on game world; stubbed.
+void StandaloneStub_Slot5_Shutdown(void* /*self*/) {}
+
+// Slot 8 (OnCommand) — button dispatcher; without UI elements, never fires.
+void StandaloneStub_Slot8_OnCommand(void* /*self*/, void* /*p2*/, int /*msg*/, int /*id*/) {}
+
+// Slot 10 — DialogInstance::~DialogInstance + conditional free.
+void* StandaloneStub_Slot10_DIDtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void* g_MainMenuDialog_Vtable_Standalone[20] = {
+    reinterpret_cast<void*>(&StandaloneStub_Dtor),                   // +0x00 Dtor
+    reinterpret_cast<void*>(&StandaloneStub_Slot1_TypeName),         // +0x08 Slot1
+    reinterpret_cast<void*>(&StandaloneStub_Slot2_TypeId),           // +0x10 Slot2
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<3>),        // +0x18 Persist
+    reinterpret_cast<void*>(&StandaloneStub_Slot4_Setup),            // +0x20 Setup
+    reinterpret_cast<void*>(&StandaloneStub_Slot5_Shutdown),         // +0x28 Shutdown
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<6>),        // +0x30 OnUpdateLayout
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<7>),        // +0x38 OnUpdate
+    reinterpret_cast<void*>(&StandaloneStub_Slot8_OnCommand),        // +0x40 OnCommand
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<9>),        // +0x48 OnSerializeSettings
+    reinterpret_cast<void*>(&StandaloneStub_Slot10_DIDtor),          // +0x50 DI Dtor
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<11>),       // +0x58 TypeName (sec)
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<12>),       // +0x60 Type (sec)
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<13>),       // +0x68 Persist (sec)
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<14>),       // +0x70 OnOpened
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<15>),       // +0x78 OnClosed
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<16>),       // +0x80 OnUpdateLayout (sec)
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<17>),       // +0x88 OnUpdate (sec)
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<18>),       // +0x90 OnElementEvent
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<19>),       // +0x98 OnSerializeSettings (sec)
+};
+
+void* GetMainMenuDialogVtable() {
+    return reinterpret_cast<void*>(g_MainMenuDialog_Vtable_Standalone);
+}
+
+// In-place construct MainMenuDialog from a MenuDLT loop. Mirrors exe ctor
+// at 0x14009BA30: builds a null parent IBP, calls DialogInstance::DialogInstance
+// with (this, ui_at_+0x40, rsc_at_+0x30, parentIBP, 0, 0, 0), then patches
+// vtable and zeroes the two MainMenuDialog-specific fields (+0xB8 game world,
+// +0xC0 engine instance).
+//
+// Bare-bones standalone fallback: when m_dialogExternal (loop+0x30) is null
+// — which is the case before Loader::Load wires Dialog/MainMenu.rsc —
+// DialogInstance::DialogInstance crashes inside Runtime reading [rsc+0x40].
+// In that case we skip the Runtime ctor and return a zeroed buffer with our
+// vtable patched in. The dialog has no children but downstream stubs are
+// safe (they no-op on zero fields). M2 (Loader::Load) replaces this with a
+// real DialogInstance ctor call.
+void* MainMenuDialog_Ctor_FromLoop(void* mem, void* loop) {
+    if (!mem) return nullptr;
+
+    // Zero the full 0xC8-byte object up front so any field read through the
+    // vtable (e.g. UI::UserInterface dialog list pointer at +0x10) sees zero
+    // instead of uninit'd heap garbage.
+    for (size_t off = 0; off < 0xC8; off += 8) {
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(mem) + off) = 0;
+    }
+
+    uintptr_t lp = reinterpret_cast<uintptr_t>(loop);
+    void* rsc = loop ? *reinterpret_cast<void**>(lp + 0x30) : nullptr;
+
+    if (loop && rsc && fn_DialogInstance_Ctor && fn_InternalBasePtr_Ctor) {
+        // Real construction — rsc is loaded.
+        void* ui = reinterpret_cast<void*>(lp + 0x40);
+        uint8_t parentIBP[8] = {0};
+        fn_InternalBasePtr_Ctor(parentIBP, nullptr);
+        fn_DialogInstance_Ctor(mem, ui, rsc, parentIBP, nullptr, nullptr, 0);
+    } else {
+        printf("[MainMenuDialog_FromLoop] bare-bones init (loop=%p rsc=%p) — "
+               "DialogInstance ctor skipped, awaiting Loader::Load (M2)\n",
+               loop, rsc);
+    }
+
+    *reinterpret_cast<void**>(mem) = GetMainMenuDialogVtable();
+    return mem;
+}
+
+// Factory entry — no-arg, used by Object::Factory::Construct lookups (.rsc loader).
+// Standalone has no .rsc-driven instantiation of MainMenuDialog, so this returns
+// a bare-bones object that won't be wired into UI; primarily satisfies the
+// REGISTER_TYPE contract.
+void* MainMenuDialog_Factory_Bare(void* /*loop*/) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+    if (!p) return nullptr;
+    return MainMenuDialog_Ctor_FromLoop(p, nullptr);
+}
+
+void* MainMenuDialog_CreateInPlace_Bare(void* mem) {
+    return MainMenuDialog_Ctor_FromLoop(mem, nullptr);
+}
+
+}  // namespace
+
+extern "C" void RegisterMainMenuDialogVtable() {
+    RegisterExeAddr(0x14015f550, reinterpret_cast<uintptr_t>(g_MainMenuDialog_Vtable_Standalone));
+}
+
+// Public entry called from MenuDLT::CreateDialog stub.
+extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+        if (retInternalBasePtr) {
+            *reinterpret_cast<uint64_t*>(retInternalBasePtr) = 0;
+        }
+        return retInternalBasePtr;
+    }
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+    void* dlg = MainMenuDialog_Ctor_FromLoop(mem, loop);
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retInternalBasePtr, dlg);
+    return retInternalBasePtr;
+}
+
+// Trampolines to satisfy REGISTER_TYPE's FactoryFn / InPlaceCreateFn signatures.
+extern "C" void* MainMenuDialog_StandaloneFactory(void) {
+    return MainMenuDialog_Factory_Bare(nullptr);
+}
+
+extern "C" void* MainMenuDialog_StandaloneCreateInPlace(void* memory) {
+    return MainMenuDialog_CreateInPlace_Bare(memory);
+}
+
+REGISTER_TYPE(MainMenuDialog, "UI::DialogInstance",
+              &MainMenuDialog_StandaloneFactory, &MainMenuDialog_StandaloneCreateInPlace);
+
+#endif  // STANDALONE_EXE

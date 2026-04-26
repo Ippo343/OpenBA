@@ -823,6 +823,7 @@ void** g_GameLoaderLoop_Vtable = nullptr;
 // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
 fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor = nullptr;
 fn_DialogLoopT_Update_t fn_DialogLoopT_Update = nullptr;
+fn_DialogLoopT_Startup_t fn_DialogLoopT_Startup = nullptr;
 fn_AudioScene_Ctor_t fn_AudioScene_Ctor = nullptr;
 // fn_MenuDialogLoopT_Ctor — REMOVED, now reimplemented as inline MenuDialogLoopT_Ctor() in engine_funcs.h
 void** g_MenuDialogLoopT_Vtable = nullptr;
@@ -3423,6 +3424,12 @@ bool EngineFuncsInit() {
     if (!fn_DialogLoopT_Update) {
         fn_DialogLoopT_Update = reinterpret_cast<fn_DialogLoopT_Update_t>(
             ResolveAddr(Module::Runtime, 0x1800db270));
+    }
+    fn_DialogLoopT_Startup = reinterpret_cast<fn_DialogLoopT_Startup_t>(
+        ResolveExport("?Startup@DialogLoopT@Engine@@UEAAXXZ"));
+    if (!fn_DialogLoopT_Startup) {
+        fn_DialogLoopT_Startup = reinterpret_cast<fn_DialogLoopT_Startup_t>(
+            ResolveAddr(Module::Runtime, 0x1800db2f0));
     }
     fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));

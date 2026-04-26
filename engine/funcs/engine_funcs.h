@@ -2949,6 +2949,14 @@ extern fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor;
 typedef bool (*fn_DialogLoopT_Update_t)(void* self, void* time);
 extern fn_DialogLoopT_Update_t fn_DialogLoopT_Update;
 
+// Engine::DialogLoopT::Startup(self) — Runtime base virtual Startup
+// ?Startup@DialogLoopT@Engine@@UEAAXXZ (Runtime 0x1800db2f0)
+// Calls vtable[12]/CreateDialog to construct the dialog instance, stores at
+// self+0x38 (m_dialogInstance), invokes the dialog's Slot4 (OnOpened/Setup),
+// then pushes the InternalPtr into the UI's pending-open dialog array (+0x68).
+typedef void (*fn_DialogLoopT_Startup_t)(void* self);
+extern fn_DialogLoopT_Startup_t fn_DialogLoopT_Startup;
+
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);

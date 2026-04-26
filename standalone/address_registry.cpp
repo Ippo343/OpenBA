@@ -29,6 +29,7 @@ extern "C" {
     void RegisterTimeGoalInstanceVtable();
     void RegisterFinishTutorialGoalVtable();
     void RegisterFinishTutorialInstanceVtable();
+    void RegisterMainMenuDialogVtable();
 }
 
 // ============================================================
@@ -180,6 +181,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTimeGoalInstanceVtable();
     RegisterFinishTutorialGoalVtable();
     RegisterFinishTutorialInstanceVtable();
+    RegisterMainMenuDialogVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.

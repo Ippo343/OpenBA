@@ -51,6 +51,22 @@ void Stub_Destroy(UpdateLoop* self, int flags) {
 
 void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     printf("[MenuDLT::Startup] self=%p remainder=%lld\n", (void*)self, (long long)remainder);
+    // Original MenuDLT::Startup (exe 0x14009B930) calls Engine::DialogLoopT::Startup
+    // (Runtime 0x1800db2f0) first — that's what creates the dialog via vtable
+    // +0x60 (CreateDialog), stores it at self+0x38 (m_dialogInstance), invokes
+    // its Slot4 (Setup), and pushes the IBP into the UI's dialog list.
+    //
+    // We deliberately DO NOT call fn_DialogLoopT_Startup here. Doing so triggers
+    // CreateDialog (now wired in this commit) which builds a MainMenuDialog from
+    // a NULL m_dialogExternal (since Loader::Load hasn't loaded Dialog/MainMenu.rsc
+    // for MenuDLT). DialogInstance::DialogInstance crashes on the null rsc, OR
+    // (with the bare-bones fallback) the UI list iteration crashes reading the
+    // zero-init dialog's children pointer. Both downstream of the same M2
+    // dependency: MenuDLT needs its rsc loaded before Startup can succeed.
+    //
+    // So this stays a print stub until M2 (Loader::Load for MenuDLT) lands.
+    // The MainMenuDialog vtable + factory in code/Game/Dialog/mainmenudialog.cpp
+    // remain registered so they're ready the moment Startup gets wired.
 }
 
 void Stub_Shutdown(UpdateLoop* self) {
@@ -115,11 +131,18 @@ bool Stub_AllowsModChanges(UpdateLoop* self) {
     return true;
 }
 
+extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr);
+
 void* Stub_CreateDialog(UpdateLoop* self, void* retPtr) {
-    printf("[MenuDLT::CreateDialog] self=%p retPtr=%p (returning null IBP)\n",
-           (void*)self, retPtr);
+    printf("[MenuDLT::CreateDialog] self=%p retPtr=%p\n", (void*)self, retPtr);
     // Pure-virtual in DialogLoopT. Real impl loads & instantiates Dialog\MainMenu.rsc.
-    // Return an empty 16-byte InternalPtr (zeroed) for now.
+    // The supporting MainMenuDialog factory + vtable live in
+    // code/Game/Dialog/mainmenudialog.cpp under #ifdef STANDALONE_EXE; calling
+    // MainMenuDialog_FromMenuDLT(self, retPtr) will instantiate it once the
+    // M2 (Loader::Load) milestone lands and self+0x30 (m_dialogExternal) is
+    // populated. For now return an empty 16-byte InternalPtr — DialogLoopT
+    // currently doesn't call CreateDialog because Stub_Startup skips
+    // DialogLoopT::Startup, but keep the safe fallback regardless.
     if (retPtr) {
         uint64_t* p = reinterpret_cast<uint64_t*>(retPtr);
         p[0] = 0;
