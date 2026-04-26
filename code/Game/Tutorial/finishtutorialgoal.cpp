@@ -124,6 +124,72 @@ FinishTutorialGoal* FinishTutorialGoal_CreateInstance(FinishTutorialGoal* self) 
     return FinishTutorialGoal_Slot6(self);
 }
 
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// ============================================================
+// FinishTutorialGoal vtable (exe addr 0x140160420, 12 slots)
+// ============================================================
+static uint32_t FinishTutorialGoal_GetTypeId_Std(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("FinishTutorialGoal");
+    return cached;
+}
+
+// Slot +0x48: returns FinishTutorialInstance typeId via *retval.
+// Original: MOV EDX,[TypeInfo_FinishTutorialInstance]; MOV [RDX_retval],EDX; MOV RAX,RDX; RET.
+static void* FinishTutorialGoal_Slot9_Standalone(void* /*self*/, uint32_t* retval) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("FinishTutorialInstance");
+    if (retval) *retval = cached;
+    return retval;
+}
+
+// Trampolines for inline-defined helpers in finishtutorialgoal_funcs.h.
+static int FinishTutorialGoal_Slot3_Trampoline(FinishTutorialGoal* self) {
+    return FinishTutorialGoal_Slot3(self);
+}
+static int FinishTutorialGoal_Slot8_Trampoline(FinishTutorialGoal* self) {
+    return FinishTutorialGoal_Slot8(self);
+}
+
+static void* g_FinishTutorialGoal_Vtable[12] = {
+    reinterpret_cast<void*>(&FinishTutorialGoal_Dtor),                  // +0x00 dtor
+    nullptr,                                                            // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&FinishTutorialGoal_GetTypeId_Std),         // +0x10 GetTypeId
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot3_Trampoline),      // +0x18 Slot3 (returns 1)
+    nullptr,                                                            // +0x20 Slot4 (Goal JMP thunk)
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot5),                 // +0x28 Slot5 / Load
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot6),                 // +0x30 Slot6 / Cleanup
+    nullptr,                                                            // +0x38 Slot7 (base stub)
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot8_Trampoline),      // +0x40 Slot8 (returns 0)
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot9_Standalone),      // +0x48 Slot9 / GetInstanceTypeId
+    reinterpret_cast<void*>(&FinishTutorialGoal_CreateInstance),        // +0x50 Slot10 / CreateInstance
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot11),                // +0x58 Slot11 / SharedDtor
+};
+
+extern "C" void RegisterFinishTutorialGoalVtable() {
+    RegisterExeAddr(0x140160420, reinterpret_cast<uintptr_t>(g_FinishTutorialGoal_Vtable));
+}
+
+extern "C" void* FinishTutorialGoal_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);  // size = 0x38
+    if (!p) return nullptr;
+    return FinishTutorialGoal_Slot6(reinterpret_cast<FinishTutorialGoal*>(p));
+}
+
+extern "C" void* FinishTutorialGoal_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return FinishTutorialGoal_Slot6(reinterpret_cast<FinishTutorialGoal*>(memory));
+}
+
+REGISTER_TYPE(FinishTutorialGoal, "Achievement::Goal",
+              &FinishTutorialGoal_Factory, &FinishTutorialGoal_CreateInPlace);
+#endif
+
 // ============================================================
 // FinishTutorialGoal::Slot11 / FinishTutorialInstance::Dtor
 // (vtable +0x58, 0x140026200)

@@ -16,11 +16,13 @@ import csv, os, sys
 # Codegen skips these so we don't double-register (which would CRC32-collide
 # in Object::Factory::Startup's tree-insert).
 REIMPLEMENTED = {
-    "StatGoal",         # code/Game/Goal/statgoal.cpp
-    "TimeGoal",         # code/Game/Goal/timegoal.cpp
-    "BuildingGoal",     # code/Game/Goal/buildinggoal.cpp
-    "PopulationGoal",   # code/Game/Goal/populationgoal.cpp
-    "TimeGoalInstance", # code/Game/Goal/timegoalinstance.cpp
+    "StatGoal",                # code/Game/Goal/statgoal.cpp
+    "TimeGoal",                # code/Game/Goal/timegoal.cpp
+    "BuildingGoal",            # code/Game/Goal/buildinggoal.cpp
+    "PopulationGoal",          # code/Game/Goal/populationgoal.cpp
+    "TimeGoalInstance",        # code/Game/Goal/timegoalinstance.cpp
+    "FinishTutorialGoal",      # code/Game/Tutorial/finishtutorialgoal.cpp
+    "FinishTutorialInstance",  # code/Game/Tutorial/finishtutorialinstance.cpp
 }
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

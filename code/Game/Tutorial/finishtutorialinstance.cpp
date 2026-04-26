@@ -282,3 +282,90 @@ int FinishTutorialInstance_Slot6(FinishTutorialInstance* self) {
 
     return (totalSteps <= currentStep) ? 1 : 0;
 }
+
+// ============================================================
+// In-place constructor used by both Factory and CreateInPlace.
+// The original game allocates FinishTutorialInstance inside FinishTutorialGoal_Slot10
+// when the tutorial starts; the loader path needs an explicit factory because
+// .rsc-stored save games may instantiate one directly.
+//
+// Layout: vtable + GoalInstance(0x10) + currentStep + 2 IBPs = 0x28 bytes.
+// ============================================================
+static void* FinishTutorialInstance_Ctor_Impl(void* memory) {
+    if (!memory) return nullptr;
+
+    typedef void* (*fn_GoalInstanceCtor_t)(void* self);
+    static fn_GoalInstanceCtor_t s_fn_GoalInstanceCtor = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_fn_GoalInstanceCtor = (fn_GoalInstanceCtor_t)ResolveExport(
+            "??0GoalInstance@Achievement@@QEAA@XZ");
+        s_resolved = true;
+    }
+    if (s_fn_GoalInstanceCtor) {
+        s_fn_GoalInstanceCtor(memory);
+    }
+
+    uintptr_t s = (uintptr_t)memory;
+
+    // Set vtable to FinishTutorialInstance
+    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160478);
+    if (vtableAddr) {
+        *(void**)memory = (void*)vtableAddr;
+    }
+
+    // Initialize subclass fields — Slot4 (Startup) will populate the IBPs.
+    *(int32_t*)(s + 0x10) = 0;        // currentStep
+    *(uint64_t*)(s + 0x18) = 0;       // goalPtr (IBP to parent Goal)
+    *(uint64_t*)(s + 0x20) = 0;       // tutorialInst (IBP to TutorialInstance)
+
+    return memory;
+}
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+#include "Tutorial/finishtutorialgoal_funcs.h"  // for FinishTutorialGoal_Slot11 (shared dtor)
+
+// ============================================================
+// FinishTutorialInstance vtable (exe addr 0x140160478, 7 slots)
+// ============================================================
+// Slot +0x00 Dtor: SHARED with FinishTutorialGoal_Slot11 — see finishtutorialgoal.cpp.
+//   The shared dtor sets vtable to FinishTutorialInstance, deletes the IBP at +0x20,
+//   calls GoalInstance::~GoalInstance, optionally frees.
+static uint32_t FinishTutorialInstance_GetTypeId_Std(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("FinishTutorialInstance");
+    return cached;
+}
+
+static void* g_FinishTutorialInstance_Vtable[7] = {
+    reinterpret_cast<void*>(&FinishTutorialGoal_Slot11),                  // +0x00 dtor (SHARED)
+    nullptr,                                                              // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&FinishTutorialInstance_GetTypeId_Std),       // +0x10 GetTypeId
+    reinterpret_cast<void*>(&FinishTutorialInstance_Slot3),               // +0x18 Slot3 / Serialize
+    reinterpret_cast<void*>(&FinishTutorialInstance_Slot4),               // +0x20 Slot4 / Startup
+    reinterpret_cast<void*>(&FinishTutorialInstance_Slot5),               // +0x28 Slot5 / Update
+    reinterpret_cast<void*>(&FinishTutorialInstance_Slot6),               // +0x30 Slot6 / IsComplete
+};
+
+extern "C" void RegisterFinishTutorialInstanceVtable() {
+    RegisterExeAddr(0x140160478, reinterpret_cast<uintptr_t>(g_FinishTutorialInstance_Vtable));
+}
+
+extern "C" void* FinishTutorialInstance_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+    if (!p) return nullptr;
+    return FinishTutorialInstance_Ctor_Impl(p);
+}
+
+extern "C" void* FinishTutorialInstance_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return FinishTutorialInstance_Ctor_Impl(memory);
+}
+
+REGISTER_TYPE(FinishTutorialInstance, "Achievement::GoalInstance",
+              &FinishTutorialInstance_Factory, &FinishTutorialInstance_CreateInPlace);
+#endif
