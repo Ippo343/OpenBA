@@ -2957,6 +2957,16 @@ extern fn_DialogLoopT_Update_t fn_DialogLoopT_Update;
 typedef void (*fn_DialogLoopT_Startup_t)(void* self);
 extern fn_DialogLoopT_Startup_t fn_DialogLoopT_Startup;
 
+// Engine::DialogLoopT::Load(self) — Runtime base virtual Load (vtable +0x30)
+// ?Load@DialogLoopT@Engine@@UEAAXXZ (Runtime 0x1800db140)
+// Reads m_dialogFilename from self+0x28, calls Filename::AdjustDelimiters, then
+// ExternalFactory::FindOrLoad on the path. Stores the resulting External (or null
+// if IsDerivedFrom<Dialog::Description> fails) at self+0x30 (m_dialogExternal).
+// Subclass overrides (e.g., MenuDLT::Load) typically tail-call this then load
+// extra companion resources (audio rsc, scene rsc, particles).
+typedef void (*fn_DialogLoopT_Load_t)(void* self);
+extern fn_DialogLoopT_Load_t fn_DialogLoopT_Load;
+
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);

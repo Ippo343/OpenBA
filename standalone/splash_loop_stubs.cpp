@@ -47,11 +47,32 @@ void Stub_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Stub_Startup(UpdateLoop* self) {
-    printf("[SplashDLT::Startup] self=%p\n", (void*)self);
-    // Real impl chains Engine::DialogLoaderLoopT::Startup + game UI setup.
-    // Stage 7a TODO: also calls fn_Loader_Load(g_pLoader, m_nextLoop) — disabled
-    // until Factory has exe types registered (otherwise Object::External::Load
-    // dereferences a NULL Factory tree node). See standalone next-steps memo.
+    DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
+    UpdateLoop* next = ll->m_nextLoop;
+    printf("[SplashDLT::Startup] self=%p next=%p\n", (void*)self, (void*)next);
+
+    // Step 1: Engine::Loader::Load updates Modification state and calls
+    // SetupFileSystem (needed before ExternalFactory::FindOrLoad can find rsc files
+    // through the mod-aware path). It also signals an event the Loader thread waits
+    // on — but standalone has no Loader thread running, so the actual loading work
+    // we have to perform synchronously below.
+    if (fn_Loader_Load && g_pLoader && next) {
+        fn_Loader_Load(g_pLoader, next);
+        printf("[SplashDLT::Startup] Loader::Load returned (next=%p)\n", (void*)next);
+    }
+
+    // Step 2: synchronously invoke the next loop's vtable[+0x30] Load slot — this
+    // is what the Loader thread would call after waking up. For MenuDLT this fires
+    // our Stub_Load → fn_DialogLoopT_Load → m_dialogExternal populated with
+    // Dialog/MainMenu.rsc.
+    if (next && next->vtable && next->vtable->Load) {
+        typedef void (*LoadFn)(UpdateLoop*);
+        LoadFn loadFn = reinterpret_cast<LoadFn>(next->vtable->Load);
+        printf("[SplashDLT::Startup] invoking next->vtable->Load(%p) at %p\n",
+               (void*)next, (void*)loadFn);
+        loadFn(next);
+        printf("[SplashDLT::Startup] next->Load returned\n");
+    }
 }
 
 void Stub_Shutdown(UpdateLoop* self) {
