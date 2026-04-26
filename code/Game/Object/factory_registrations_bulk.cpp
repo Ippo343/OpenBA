@@ -13,6 +13,7 @@
 
 #ifdef STANDALONE_EXE
 #include "factory_registration.h"
+#include "resolve.h"
 #include <cstdio>
 
 // Per-type tracing factories. When External::Load calls one of these,
@@ -24,8 +25,11 @@ namespace {
 
     // Generic stub that logs the name. Each REGISTER_TYPE entry below
     // points at a unique trampoline that calls this with its typeName.
+    // Highlights with [TRACE!] when inside a TraceExeBegin/End bracket so
+    // hits during fn_DialogLoaderLoopT_Load stand out.
     void* LogAndReturnNull(const char* typeName) {
-        std::fprintf(stderr, "[NullFactory] Hit for type: %s\n", typeName);
+        const char* tag = (g_traceExeCallbacks > 0) ? "[TRACE! NullFactory]" : "[NullFactory]";
+        std::fprintf(stderr, "%s Hit for type: %s\n", tag, typeName);
         std::fflush(stderr);
         return nullptr;
     }

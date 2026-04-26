@@ -58,7 +58,17 @@ void Stub_Startup(UpdateLoop* self) {
     // ourselves synchronously here. Reads m_dialogFilename @ +0x48 and writes
     // the loaded External to m_dialogExternal @ +0x50.
     if (!ll->m_dialogExternal && fn_DialogLoaderLoopT_Load) {
+        // Bracket the load so resolve_standalone logs every exe-side resolution
+        // and the bulk NullFactory marks any hits with [TRACE!]. m_dialogFilename
+        // at self+0x48 is a wchar_t COW wrapper — too risky to deref blind, so
+        // we just tag with self pointer (each splash loop has a unique address).
+        char label[96];
+        std::snprintf(label, sizeof(label),
+                      "fn_DialogLoaderLoopT_Load (Stub_Startup) self=%p",
+                      (void*)self);
+        TraceExeBegin(label);
         fn_DialogLoaderLoopT_Load(self);
+        TraceExeEnd(label);
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Load returned, "
                "m_dialogExternal=%p\n", ll->m_dialogExternal);
     }
@@ -184,7 +194,16 @@ void Stub_Load(UpdateLoop* self) {
     printf("[SplashDLT::Load] self=%p m_dialogExternal(before)=%p\n",
            (void*)self, ll->m_dialogExternal);
     if (fn_DialogLoaderLoopT_Load) {
+        // Same bracket pattern as Stub_Startup. Stub_Load gets called when our
+        // Stub_Startup synchronously drives `next->vtable->Load` on the next
+        // splash loop, so this captures the *second* splash's load too.
+        char label[96];
+        std::snprintf(label, sizeof(label),
+                      "fn_DialogLoaderLoopT_Load (Stub_Load) self=%p",
+                      (void*)self);
+        TraceExeBegin(label);
         fn_DialogLoaderLoopT_Load(self);
+        TraceExeEnd(label);
         printf("[SplashDLT::Load] m_dialogExternal(after)=%p\n", ll->m_dialogExternal);
     } else {
         printf("[SplashDLT::Load] WARN: fn_DialogLoaderLoopT_Load is NULL\n");

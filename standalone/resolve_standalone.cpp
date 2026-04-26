@@ -35,6 +35,24 @@ static std::unordered_map<uintptr_t, uintptr_t>& GetRegistry() {
 static size_t g_stubHits = 0;
 static size_t g_uniqueStubs = 0;
 
+// ============================================================
+// Bracket-window tracer — bumped by TraceExeBegin/End in callers.
+// When > 0, ResolveAddr(Module::Exe, ...) logs every resolution.
+// ============================================================
+volatile int g_traceExeCallbacks = 0;
+
+void TraceExeBegin(const char* label) {
+    fprintf(stderr, "===== [TRACE BEGIN] %s =====\n", label ? label : "(null)");
+    fflush(stderr);
+    g_traceExeCallbacks++;
+}
+
+void TraceExeEnd(const char* label) {
+    if (g_traceExeCallbacks > 0) g_traceExeCallbacks--;
+    fprintf(stderr, "===== [TRACE END] %s =====\n", label ? label : "(null)");
+    fflush(stderr);
+}
+
 // NotImplemented stub — logs and returns 0
 // Safe for most calling conventions (returns 0/nullptr/false)
 static uintptr_t NotImplementedStub_impl(uintptr_t ghidra_addr) {
@@ -74,9 +92,22 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         auto& reg = GetRegistry();
         auto it = reg.find(ghidra_addr);
         if (it != reg.end()) {
+            if (g_traceExeCallbacks > 0) {
+                fprintf(stderr,
+                    "[TRACE] ResolveAddr Exe 0x%llx -> 0x%llx (registered)\n",
+                    (unsigned long long)ghidra_addr,
+                    (unsigned long long)it->second);
+                fflush(stderr);
+            }
             return it->second;
         }
         // Not registered — warn and return 0 (callers should null-check)
+        if (g_traceExeCallbacks > 0) {
+            fprintf(stderr,
+                "[TRACE] ResolveAddr Exe 0x%llx -> NOT IMPLEMENTED\n",
+                (unsigned long long)ghidra_addr);
+            fflush(stderr);
+        }
         NotImplementedStub_impl(ghidra_addr);
         return 0;
     }

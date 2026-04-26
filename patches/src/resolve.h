@@ -79,6 +79,23 @@ struct RegistryStats {
 };
 RegistryStats GetRegistryStats();
 
+// ---- Bracket-window callback tracer ---------------------------------------
+// When non-zero, ResolveAddr(Module::Exe, ...) prints a [TRACE] line for
+// EVERY resolution (registered + unimplemented), and the bulk NullFactory
+// stubs print [TRACE!] when hit. Counter (not bool) so nested brackets
+// nest cleanly — each setter increments, each unsetter decrements.
+//
+// Usage:
+//   TraceExeBegin("fn_DialogLoaderLoopT_Load(self=...)");
+//   fn_DialogLoaderLoopT_Load(self);
+//   TraceExeEnd("fn_DialogLoaderLoopT_Load");
+//
+// The label is echoed verbatim into the log so multiple bracketed regions
+// in one run can be distinguished.
+extern volatile int g_traceExeCallbacks;
+void TraceExeBegin(const char* label);
+void TraceExeEnd(const char* label);
+
 #endif // STANDALONE_EXE
 
 // --- Inline implementation (DLL mode only) ---
