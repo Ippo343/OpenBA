@@ -140,6 +140,14 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
     printf("[GameMain] Engine::Startup(cmdLine=%p, 0x200, 0, false)...\n", (void*)cmdLine);
     unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, 0x200, 0, false);
+    // Engine::Startup somehow disconnects stdout/stderr from the log files
+    // that WinMain freopen()'d (cause TBD — Engine::Startup itself doesn't call
+    // AllocConsole/FreeConsole/SetStdHandle/freopen per Ghidra). Re-redirect
+    // them so subsequent printf reaches the log.
+    freopen("standalone_debug.log", "a", stdout);
+    freopen("standalone_error.log", "a", stderr);
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
     printf("[GameMain] Engine::Startup returned %u\n", ok);
 
     // On Engine::Startup failure, dump System::Error::_errorString

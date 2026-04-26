@@ -2943,6 +2943,12 @@ extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
 typedef void* (*fn_DialogLoopT_Ctor_t)(void* self, void* dialogFilename);
 extern fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor;
 
+// Engine::DialogLoopT::Update(self, Time const&) — Runtime base virtual Update
+// ?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z (Runtime 0x1800db270)
+// Body: calls UI::UserInterface::Update on the embedded UI at self+0x40, returns true.
+typedef bool (*fn_DialogLoopT_Update_t)(void* self, void* time);
+extern fn_DialogLoopT_Update_t fn_DialogLoopT_Update;
+
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);

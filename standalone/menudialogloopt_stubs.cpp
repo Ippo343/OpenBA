@@ -58,10 +58,22 @@ void Stub_Shutdown(UpdateLoop* self) {
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
+    // Delegate to Engine::DialogLoopT::Update — the original MenuDLT::Update
+    // (exe 0x14009B6E0) tail-jumps into it after handling cursor/audio/3D-scene
+    // work we're skipping for now. DialogLoopT::Update calls UI::UserInterface::Update
+    // on the embedded UI at self+0x40 and always returns true, keeping MainLoop::Run
+    // alive on the menu loop.
     static int tick = 0;
     ++tick;
-    printf("[MenuDLT::Update] self=%p time=%p tick=%d -> false\n", (void*)self, time, tick);
-    return false;  // tell MainLoop::Run to bail out
+    if (tick <= 4 || (tick % 300) == 0) {
+        printf("[MenuDLT::Update] self=%p time=%p tick=%d -> DialogLoopT::Update\n",
+               (void*)self, time, tick);
+    }
+    if (!fn_DialogLoopT_Update) {
+        printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
+        return false;
+    }
+    return fn_DialogLoopT_Update(self, time);
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
