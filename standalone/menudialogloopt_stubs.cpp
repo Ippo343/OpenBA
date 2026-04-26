@@ -101,9 +101,37 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
+    (void)alpha;
+    // Mirror original MenuDLT::Draw (exe 0x14009B440): when m_scene (self+0xb90)
+    // is null we skip the 3D scene block and just draw the UI. Standalone
+    // currently has no menu 3D scene set up, so this path is correct here.
+    //
+    //   ctx = engine_singleton->m_context   (engine+0x10)
+    //   UI::UserInterface::Draw(self+0x40, ctx)
+    //
+    // self+0x40 is the embedded UI::UserInterface (DialogLoopT layout).
     static int draws = 0;
-    if (draws++ < 3) {
-        printf("[MenuDLT::Draw] self=%p alpha=%f\n", (void*)self, alpha);
+    bool trace = (draws++ < 3);
+
+    // Use MainLoop singleton's m_context — populated by MainLoop ctor and
+    // unchanged for the run. (g_pEngineSingleton was captured at boot when
+    // the slot was still null, so it can't be read directly.)
+    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+    void* context = mainLoop
+        ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainLoop) + 0x10)
+        : nullptr;
+    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
+
+    if (trace) {
+        printf("[MenuDLT::Draw] self=%p alpha=%f mainLoop=%p ctx=%p ui=%p\n",
+               (void*)self, alpha, mainLoop, context, ui);
+    }
+
+    if (fn_UI_Draw && context) {
+        fn_UI_Draw(ui, context);
+    } else if (trace) {
+        printf("[MenuDLT::Draw] WARN: skipping UI::Draw (fn_UI_Draw=%p ctx=%p)\n",
+               (void*)fn_UI_Draw, context);
     }
 }
 

@@ -70,28 +70,33 @@ static void ResetVideoRegistry() {
         return;
     }
 
-    auto setDword = [&](const wchar_t* name, DWORD v) {
-        RegSetValueExW(hKey, name, 0, REG_DWORD,
-                       reinterpret_cast<const BYTE*>(&v), sizeof(v));
-    };
-    // Force fullscreen — uses VideoWidth/Height (the desktop dims captured by
-    // the original game's first run) and side-steps the corrupted Window* keys.
-    setDword(L"VideoWindowWidth",  1280);
-    setDword(L"VideoWindowHeight",  720);
-    setDword(L"VideoWindowX",       100);
-    setDword(L"VideoWindowY",       100);
-
+    // Banished stores ALL settings as REG_SZ (strings) and parses them with
+    // atoi. Writing REG_DWORD silently fails — Persistence::Load only reads
+    // strings, so DWORD-typed keys appear absent and the engine keeps stale
+    // values. Always write strings.
     auto setStr = [&](const wchar_t* name, const wchar_t* val) {
-        // length includes terminator
         DWORD bytes = (DWORD)((wcslen(val) + 1) * sizeof(wchar_t));
         RegSetValueExW(hKey, name, 0, REG_SZ,
                        reinterpret_cast<const BYTE*>(val), bytes);
     };
+
+    // Force fullscreen — uses VideoWidth/Height (the desktop dims captured by
+    // the original game's first run) and side-steps the corrupted Window* keys.
+    setStr(L"VideoWindowWidth",  L"1280");
+    setStr(L"VideoWindowHeight", L"720");
+    setStr(L"VideoWindowX",      L"100");
+    setStr(L"VideoWindowY",      L"100");
+
+    // Force DX11 (interface index 1). DX9 (index 0) loses its device on idle
+    // events (TestCooperativeLevel → D3DERR_DEVICELOST), which manifests as
+    // BeginFrame returning false → MenuDLT::DrawFailed loop.
+    setStr(L"VideoInterface", L"1");
+
     setStr(L"VideoSettings",   L"true");
     setStr(L"VideoFullscreen", L"true");
 
     RegCloseKey(hKey);
-    printf("[Standalone] ResetVideoRegistry: VideoSettings=true VideoFullscreen=true Window=1280x720\n");
+    printf("[Standalone] ResetVideoRegistry: VideoSettings=true VideoFullscreen=true VideoInterface=1 Window=1280x720 (all REG_SZ)\n");
 }
 
 // ============================================================
@@ -556,14 +561,20 @@ static void DumpVideoState() {
     if (device) {
         int activeIdx = *reinterpret_cast<int*>((uintptr_t)device + 0xf8);
         void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
+        int interfaceCount = *reinterpret_cast<int*>((uintptr_t)device + 0x48);
         HMODULE dx9   = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xb0);
+        void* dx9_GetName  = *reinterpret_cast<void**>((uintptr_t)device + 0xb8);
+        void* dx9_Create   = *reinterpret_cast<void**>((uintptr_t)device + 0xc0);
         HMODULE dx11  = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xc8);
+        void* dx11_GetName = *reinterpret_cast<void**>((uintptr_t)device + 0xd0);
+        void* dx11_Create  = *reinterpret_cast<void**>((uintptr_t)device + 0xd8);
         HMODULE gl    = *reinterpret_cast<HMODULE*>((uintptr_t)device + 0xe0);
+        printf("[VideoProbe]   +0x48  interface count = %d\n", interfaceCount);
         printf("[VideoProbe]   +0xf8  active idx  = %d\n", activeIdx);
         printf("[VideoProbe]   +0x100 active DeviceData = %p\n", activeDD);
-        printf("[VideoProbe]   +0xb0  DX9 HMODULE = %p\n", dx9);
-        printf("[VideoProbe]   +0xc8  DX11 HMODULE = %p\n", dx11);
-        printf("[VideoProbe]   +0xe0  GL HMODULE  = %p\n", gl);
+        printf("[VideoProbe]   slot0 DX9:  HMOD=%p GetName=%p Create=%p\n", dx9, dx9_GetName, dx9_Create);
+        printf("[VideoProbe]   slot1 DX11: HMOD=%p GetName=%p Create=%p\n", dx11, dx11_GetName, dx11_Create);
+        printf("[VideoProbe]   slot2 GL:   HMOD=%p\n", gl);
         if (activeDD) {
             void* vtbl = *reinterpret_cast<void**>(activeDD);
             printf("[VideoProbe]   active DeviceData vtable = %p\n", vtbl);
