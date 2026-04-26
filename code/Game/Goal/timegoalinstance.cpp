@@ -203,3 +203,96 @@ int TimeGoalInstance_Slot6(TimeGoalInstance* self) {
 
     return 0;
 }
+
+// ============================================================
+// In-place constructor used by both Factory and CreateInPlace.
+// Original TimeGoalInstance is allocated by TimeGoal_Slot10 in the running
+// game; the loader path needs an explicit factory because the .rsc loader
+// calls Factory::Construct(typeId) for instances that are stored standalone.
+//
+// Layout: vtable + GoalInstance(0x18) + elapsedTime int64 (+0x20) = 0x28 bytes.
+// ============================================================
+static void* TimeGoalInstance_Ctor_Impl(void* memory) {
+    if (!memory) return nullptr;
+
+    // Call base Achievement::GoalInstance::GoalInstance
+    typedef void* (*fn_GoalInstanceCtor_t)(void* self);
+    static fn_GoalInstanceCtor_t s_fn_GoalInstanceCtor = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_fn_GoalInstanceCtor = (fn_GoalInstanceCtor_t)ResolveExport(
+            "??0GoalInstance@Achievement@@QEAA@XZ");
+        s_resolved = true;
+    }
+    if (s_fn_GoalInstanceCtor) {
+        s_fn_GoalInstanceCtor(memory);
+    }
+
+    uintptr_t s = (uintptr_t)memory;
+
+    // Set vtable to TimeGoalInstance
+    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160598);
+    if (vtableAddr) {
+        *(void**)memory = (void*)vtableAddr;
+    }
+
+    // Initialize elapsedTime to 0
+    *(int64_t*)(s + 0x20) = 0;
+
+    return memory;
+}
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+#include "Goal/timegoal_funcs.h"  // for TimeGoal_Slot11 (shared dtor)
+
+// ============================================================
+// TimeGoalInstance vtable (exe addr 0x140160598, 7 slots)
+// ============================================================
+// Slot +0x00 Dtor: SHARED with TimeGoal_Slot11 — see timegoal.cpp.
+//   The shared dtor sets vtable to TimeGoalInstance, calls
+//   GoalInstance::~GoalInstance, optionally frees. Declared in timegoal_funcs.h.
+
+// Slot +0x10 GetTypeId: returns CRC32 typeId from REGISTER_TYPE storage.
+static uint32_t TimeGoalInstance_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoalInstance");
+    return cached;
+}
+
+// Trampoline for inline-defined TimeGoalInstance_Slot4.
+static int TimeGoalInstance_Slot4_Trampoline(TimeGoalInstance* self) {
+    return TimeGoalInstance_Slot4(self);
+}
+
+static void* g_TimeGoalInstance_Vtable[7] = {
+    reinterpret_cast<void*>(&TimeGoal_Slot11),                        // +0x00 dtor (SHARED)
+    nullptr,                                                          // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&TimeGoalInstance_GetTypeId),             // +0x10 GetTypeId
+    reinterpret_cast<void*>(&TimeGoalInstance_Slot3),                 // +0x18 Slot3 / Serialize
+    reinterpret_cast<void*>(&TimeGoalInstance_Slot4_Trampoline),      // +0x20 Slot4 (returns 0)
+    reinterpret_cast<void*>(&TimeGoalInstance_Slot5),                 // +0x28 Slot5 / Update
+    reinterpret_cast<void*>(&TimeGoalInstance_Slot6),                 // +0x30 Slot6 / IsComplete
+};
+
+extern "C" void RegisterTimeGoalInstanceVtable() {
+    RegisterExeAddr(0x140160598, reinterpret_cast<uintptr_t>(g_TimeGoalInstance_Vtable));
+}
+
+extern "C" void* TimeGoalInstance_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);  // TimeGoalInstance size = 0x28
+    if (!p) return nullptr;
+    return TimeGoalInstance_Ctor_Impl(p);
+}
+
+extern "C" void* TimeGoalInstance_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    return TimeGoalInstance_Ctor_Impl(memory);
+}
+
+REGISTER_TYPE(TimeGoalInstance, "Achievement::GoalInstance",
+              &TimeGoalInstance_Factory, &TimeGoalInstance_CreateInPlace);
+#endif

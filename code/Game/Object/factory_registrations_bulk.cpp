@@ -205,7 +205,6 @@ REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_Stat
 REGISTER_NULL_FACTORY(Weather, "Object::External");  // 14014d490 Weather_RegisterType
 REGISTER_NULL_FACTORY(FinishTutorialGoal, "Achievement::Goal");  // 14014d550 FinishTutorialGoal_RegisterType
 REGISTER_NULL_FACTORY(FinishTutorialInstance, "Achievement::GoalInstance");  // 14014d590 FinishTutorialInstance_RegisterType
-REGISTER_NULL_FACTORY(TimeGoalInstance, "Achievement::GoalInstance");  // 14014d650 TimeGoalInstance_RegisterType
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
 REGISTER_NULL_FACTORY(PathTool, "Tool");  // 14014d6d0 PathTool_RegisterType
 REGISTER_NULL_FACTORY(RotationSetting, "ToolSetting");  // 14014d710 RotationSetting_RegisterType

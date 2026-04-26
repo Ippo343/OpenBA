@@ -20,6 +20,7 @@ REIMPLEMENTED = {
     "TimeGoal",         # code/Game/Goal/timegoal.cpp
     "BuildingGoal",     # code/Game/Goal/buildinggoal.cpp
     "PopulationGoal",   # code/Game/Goal/populationgoal.cpp
+    "TimeGoalInstance", # code/Game/Goal/timegoalinstance.cpp
 }
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
