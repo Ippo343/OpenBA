@@ -49,22 +49,42 @@ void Stub_Destroy(UpdateLoop* self, unsigned flags) {
 void Stub_Startup(UpdateLoop* self) {
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     UpdateLoop* next = ll->m_nextLoop;
-    printf("[SplashDLT::Startup] self=%p next=%p\n", (void*)self, (void*)next);
+    printf("[SplashDLT::Startup] self=%p next=%p m_dialogExternal(before)=%p\n",
+           (void*)self, (void*)next, ll->m_dialogExternal);
 
-    // Step 1: Engine::Loader::Load updates Modification state and calls
-    // SetupFileSystem (needed before ExternalFactory::FindOrLoad can find rsc files
-    // through the mod-aware path). It also signals an event the Loader thread waits
-    // on — but standalone has no Loader thread running, so the actual loading work
-    // we have to perform synchronously below.
-    if (fn_Loader_Load && g_pLoader && next) {
-        fn_Loader_Load(g_pLoader, next);
-        printf("[SplashDLT::Startup] Loader::Load returned (next=%p)\n", (void*)next);
+    // Step 1: load self's own .rsc if not yet loaded. The original game's
+    // Loader thread does this asynchronously before each loop becomes active,
+    // but standalone has no thread — so we call DialogLoaderLoopT::Load on
+    // ourselves synchronously here. Reads m_dialogFilename @ +0x48 and writes
+    // the loaded External to m_dialogExternal @ +0x50.
+    if (!ll->m_dialogExternal && fn_DialogLoaderLoopT_Load) {
+        fn_DialogLoaderLoopT_Load(self);
+        printf("[SplashDLT::Startup] DialogLoaderLoopT::Load returned, "
+               "m_dialogExternal=%p\n", ll->m_dialogExternal);
     }
 
-    // Step 2: synchronously invoke the next loop's vtable[+0x30] Load slot — this
-    // is what the Loader thread would call after waking up. For MenuDLT this fires
-    // our Stub_Load → fn_DialogLoopT_Load → m_dialogExternal populated with
-    // Dialog/MainMenu.rsc.
+    // Step 2: chain DialogLoaderLoopT::Startup. Mirrors original exe
+    // 0x140098FA0 which tail-calls Runtime DialogLoaderLoopT::Startup
+    // (0x1800db000). That function calls our vtable[+0x60] CreateDialog to
+    // produce a LoaderDialog wrapping m_dialogExternal, stores it at
+    // self+0x58 (m_dialogInstance), invokes the dialog's Slot4 (Setup),
+    // pushes the IBP into the UI's pending-open list at self+0x88, then
+    // calls Loader::Load on m_nextLoop.
+    if (ll->m_dialogExternal && fn_DialogLoaderLoopT_Startup) {
+        printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup\n");
+        fn_DialogLoaderLoopT_Startup(self);
+        printf("[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, "
+               "m_dialogInstance=%p\n", ll->m_dialogInstance);
+    } else {
+        printf("[SplashDLT::Startup] WARN: skipping DialogLoaderLoopT::Startup "
+               "(rsc=%p fn=%p)\n", ll->m_dialogExternal,
+               (void*)fn_DialogLoaderLoopT_Startup);
+    }
+
+    // Step 3: synchronously load the next loop's .rsc. DialogLoaderLoopT::Startup
+    // already called Loader::Load(loader, next), but that just signals an event
+    // — without a Loader thread we drive the next->Load() directly here so that
+    // by the time we transition, next has a valid m_dialogExternal too.
     if (next && next->vtable && next->vtable->Load) {
         typedef void (*LoadFn)(UpdateLoop*);
         LoadFn loadFn = reinterpret_cast<LoadFn>(next->vtable->Load);
@@ -83,6 +103,17 @@ void Stub_Shutdown(UpdateLoop* self) {
 bool Stub_Update(UpdateLoop* self, void* time) {
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     Time* dt = reinterpret_cast<Time*>(time);
+
+    // Pump the embedded UI — flushes the pending-open list (where Startup
+    // pushed our LoaderDialog), runs each open dialog's OnUpdate, processes
+    // pending-close, and advances animation. Without this the splash dialog
+    // is created but never moved into the active list, so Draw walks an
+    // empty list and the screen stays blank. Mirrors Runtime
+    // DialogLoaderLoopT::Update @ 0x1800daf20.
+    if (fn_UI_Update) {
+        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+        fn_UI_Update(ui, time);
+    }
 
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
     Sleep(14);
@@ -149,7 +180,15 @@ void Stub_DrawFailed(UpdateLoop* self) {
 }
 
 void Stub_Load(UpdateLoop* self) {
-    printf("[SplashDLT::Load] self=%p\n", (void*)self);
+    DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
+    printf("[SplashDLT::Load] self=%p m_dialogExternal(before)=%p\n",
+           (void*)self, ll->m_dialogExternal);
+    if (fn_DialogLoaderLoopT_Load) {
+        fn_DialogLoaderLoopT_Load(self);
+        printf("[SplashDLT::Load] m_dialogExternal(after)=%p\n", ll->m_dialogExternal);
+    } else {
+        printf("[SplashDLT::Load] WARN: fn_DialogLoaderLoopT_Load is NULL\n");
+    }
 }
 
 void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {
@@ -179,18 +218,16 @@ bool Stub_AllowsModChanges(UpdateLoop* self) {
     return true;
 }
 
+extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr);
+
 void* Stub_CreateDialog(UpdateLoop* self, void* retPtr) {
-    printf("[SplashDLT::CreateDialog] self=%p retPtr=%p (returning null IBP)\n",
-           (void*)self, retPtr);
-    // Pure-virtual override. Real impl creates a UI::DialogInstance subclass
-    // (LoaderDialog) wrapping the loaded .rsc. Return an empty 16-byte
-    // InternalPtr (zeroed) for now.
-    if (retPtr) {
-        uint64_t* p = reinterpret_cast<uint64_t*>(retPtr);
-        p[0] = 0;
-        p[1] = 0;
-    }
-    return retPtr;
+    void* rsc = self ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x50) : nullptr;
+    printf("[SplashDLT::CreateDialog] self=%p retPtr=%p rsc=%p -> LoaderDialog_FromSplashDLT\n",
+           (void*)self, retPtr, rsc);
+    // Mirrors exe LoaderDialog_Ctor3 @ 0x140099070: builds a real DialogInstance
+    // subclass wrapping the loaded .rsc (Dialog/ShiningRock.rsc or
+    // Dialog/Loading.rsc), patches our standalone vtable, returns IBP.
+    return LoaderDialog_FromSplashDLT(self, retPtr);
 }
 
 // 13-slot vtable — 12 UpdateLoop slots + DialogLoaderLoopT's CreateDialog at +0x60.

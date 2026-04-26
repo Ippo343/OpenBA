@@ -2967,6 +2967,25 @@ extern fn_DialogLoopT_Startup_t fn_DialogLoopT_Startup;
 typedef void (*fn_DialogLoopT_Load_t)(void* self);
 extern fn_DialogLoopT_Load_t fn_DialogLoopT_Load;
 
+// Engine::DialogLoaderLoopT::Startup(self) — Runtime DialogLoaderLoopT virtual Startup
+// ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ (Runtime 0x1800db000)
+// Calls vtable[+0x60]/CreateDialog to build the dialog instance, stores at
+// self+0x58 (m_dialogInstance), invokes the dialog's Slot4 (Setup/OnOpened),
+// pushes IBP into the UI's pending-open dialog array at self+0x88, then calls
+// Loader::Load(LoaderLoop::_loader, m_nextLoop). Used by both the ShiningRock
+// splash and the Loading screen.
+typedef void (*fn_DialogLoaderLoopT_Startup_t)(void* self);
+extern fn_DialogLoaderLoopT_Startup_t fn_DialogLoaderLoopT_Startup;
+
+// Engine::DialogLoaderLoopT::Load(self) — Runtime base virtual Load (vtable +0x30)
+// ?Load@DialogLoaderLoopT@Engine@@UEAAXXZ (Runtime 0x1800dad50)
+// Reads m_dialogFilename @ +0x48, calls Filename::AdjustDelimiters, then
+// ExternalFactory::FindOrLoad. Stores resulting External (or null on type
+// mismatch) at +0x50 (m_dialogExternal). Same shape as DialogLoopT::Load
+// but with the DialogLoaderLoopT field offsets.
+typedef void (*fn_DialogLoaderLoopT_Load_t)(void* self);
+extern fn_DialogLoaderLoopT_Load_t fn_DialogLoaderLoopT_Load;
+
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);

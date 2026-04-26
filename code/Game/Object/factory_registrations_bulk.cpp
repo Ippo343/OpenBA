@@ -176,7 +176,6 @@ REGISTER_NULL_FACTORY(Scenario, "::Achievement::Achievement");  // 14014cd10 Sce
 REGISTER_NULL_FACTORY(TerrainGenerator, "Object::External");  // 14014cd50 TerrainGenerator_RegisterType
 REGISTER_NULL_FACTORY(BuildUI, "UI::DialogController");  // 14014cd90 RegisterType_BuildUI
 REGISTER_NULL_FACTORY(CropUI, "SelectResourceUI");  // 14014cdd0 RegisterType_CropUI
-REGISTER_NULL_FACTORY(LoaderDialog, "UI::DialogInstance");  // 14014ce10 RegisterType_LoaderDialog
 REGISTER_NULL_FACTORY(PastureUI, "SelectResourceUI");  // 14014ce90 RegisterType_PastureUI
 REGISTER_NULL_FACTORY(ResidenceUI, "UI::DialogController");  // 14014ced0 RegisterType_ResidenceUI
 REGISTER_NULL_FACTORY(SaveLoadDialog, "UI::DialogInstance");  // 14014cf10 RegisterType_SaveLoadDialog
