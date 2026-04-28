@@ -105,6 +105,155 @@ static void EnsureResolved() {
     // one-arg form).
 }
 
+// ============================================================
+// Partial reimpl of Engine::Engine::Shutdown (Runtime 0x1800db4f0).
+//
+// Mirrors steps 1–13 of the stock Shutdown body — write back configuration,
+// platform-shutdown each subsystem, FreeLibrary the renderer plugins, save
+// settings to the registry, close .pkg files. We deliberately stop short of
+// the dtor+free chain (Achievement/Input/Audio/Video/Application dtors,
+// MemoryAllocator::Shutdown, CoUninitialize) because those crash silently
+// in standalone — most likely tripping over leaked dialog/UI objects that
+// MenuDLT's destroy stub doesn't release.
+//
+// The OS reclaims memory and uninitialises COM on process exit, so skipping
+// the dtor chain only leaks until ExitProcess. Once standalone has a real
+// MenuDLT::Destroy that walks DialogInstance/UserInterface/Audio::Scene,
+// the leaks should shrink to nothing and we can call the stock function.
+// ============================================================
+namespace {
+
+template<typename Fn>
+static Fn ResolveFn(const char* mangled) {
+    return reinterpret_cast<Fn>(ResolveExport(mangled));
+}
+
+static void ShutdownEngineStaged(void* engineP) {
+    using std::uintptr_t;
+    uintptr_t base = reinterpret_cast<uintptr_t>(engineP);
+    auto load_ptr = [&](uintptr_t off) -> void* {
+        return *reinterpret_cast<void**>(base + off);
+    };
+
+    printf("[Shutdown] partial Engine::Shutdown (steps 1-13)\n");
+    fflush(stdout);
+
+    // 1. Write the "skip-reset" bool into Video::Configuration's first byte.
+    if (void* vc = load_ptr(0x6b8)) {
+        *reinterpret_cast<bool*>(vc) =
+            *reinterpret_cast<uint8_t*>(base + 0x6f0) == 0;
+    }
+
+    // 2. AchievementManager::RemoveAll
+    if (void* am = load_ptr(0x6e8)) {
+        if (auto fn = ResolveFn<void(*)(void*)>(
+                "?RemoveAll@AchievementManager@Achievement@@QEAAXXZ"))
+            fn(am);
+    }
+
+    // 3. Input::Device::PlatformShutdown
+    if (void* d = load_ptr(0x6e0)) {
+        if (auto fn = ResolveFn<void(*)(void*)>(
+                "?PlatformShutdown@Device@Input@@AEAAXXZ"))
+            fn(d);
+    }
+
+    // 4. Input::Configuration::Save (skip the FUN_180053440 inner-buffer free)
+    if (void* cfg = load_ptr(0x6d8)) {
+        if (auto save = ResolveFn<void(*)(void*)>(
+                "?Save@Configuration@Input@@QEAAXXZ"))
+            save(cfg);
+    }
+
+    // 5. Audio sub-object teardown — vtable[+0x12] / [+0x2] of two children
+    // at audio_device+0xa90 / +0xa88, then null those slots.
+    if (void* audioDev = load_ptr(0x6d0)) {
+        uintptr_t ad = reinterpret_cast<uintptr_t>(audioDev);
+        if (void* sub1 = *reinterpret_cast<void**>(ad + 0xa90)) {
+            void** vt = *reinterpret_cast<void***>(sub1);
+            reinterpret_cast<void(*)(void*)>(vt[0x90/8])(sub1);
+        }
+        *reinterpret_cast<void**>(ad + 0xa90) = nullptr;
+        if (void* sub2 = *reinterpret_cast<void**>(ad + 0xa88)) {
+            void** vt = *reinterpret_cast<void***>(sub2);
+            reinterpret_cast<void(*)(void*)>(vt[0x10/8])(sub2);
+        }
+        *reinterpret_cast<void**>(ad + 0xa88) = nullptr;
+    }
+
+    // 6. Audio::Configuration::Save
+    if (void* cfg = load_ptr(0x6c8)) {
+        if (auto save = ResolveFn<void(*)(void*)>(
+                "?Save@Configuration@Audio@@QEAAXXZ"))
+            save(cfg);
+    }
+
+    // 7. Video::Device::PlatformShutdown + FreeLibrary on the three plugin
+    // HMODULE slots at video_device+0xb0/+0xc8/+0xe0.
+    if (void* vdev = load_ptr(0x6c0)) {
+        if (auto ps = ResolveFn<void(*)(void*)>(
+                "?PlatformShutdown@Device@Video@@AEAAXXZ"))
+            ps(vdev);
+        uintptr_t pv = reinterpret_cast<uintptr_t>(vdev) + 0xb0;
+        for (int i = 0; i < 3; ++i, pv += 24) {
+            HMODULE m = *reinterpret_cast<HMODULE*>(pv);
+            if (m) FreeLibrary(m);
+            *reinterpret_cast<uint64_t*>(pv) = 0;
+            *reinterpret_cast<uint64_t*>(pv + 8) = 0;
+            *reinterpret_cast<uint64_t*>(pv + 16) = 0;
+        }
+    }
+
+    // 8. Video::Configuration::Save
+    if (void* cfg = load_ptr(0x6b8)) {
+        if (auto save = ResolveFn<void(*)(void*)>(
+                "?Save@Configuration@Video@@QEAAXXZ"))
+            save(cfg);
+    }
+
+    // 9. Application::PlatformShutdown — DestroyWindow + UnregisterClass.
+    if (void* app = load_ptr(0x690)) {
+        if (auto fn = ResolveFn<void(*)(void*)>(
+                "?PlatformShutdown@Application@1@AEAAXXZ"))
+            fn(app);
+    }
+
+    // 10. FreeLibrary on the Modification DLL slot (Runtime 0x1801fc6d0).
+    if (HMODULE* slot = reinterpret_cast<HMODULE*>(
+            ResolveAddr(Module::Runtime, 0x1801fc6d0))) {
+        if (*slot) FreeLibrary(*slot);
+        *slot = nullptr;
+    }
+
+    // 11. Modification::SaveList
+    if (void* mod = load_ptr(0x680)) {
+        if (auto fn = ResolveFn<void(*)(void*)>(
+                "?SaveList@Modification@IO@@QEAAXXZ"))
+            fn(mod);
+    }
+
+    // 12. Persistence::WriteSettings (gated on engine[0x6f1] == 0)
+    if (void* per = load_ptr(0x678)) {
+        if (*reinterpret_cast<uint8_t*>(base + 0x6f1) == 0) {
+            if (auto fn = ResolveFn<void(*)(void*)>(
+                    "?WriteSettings@Persistence@IO@@QEAAXXZ"))
+                fn(per);
+        }
+    }
+
+    // 13. FileSystem::ClosePackages
+    if (void* fs = load_ptr(0x670)) {
+        if (auto fn = ResolveFn<void(*)(void*)>(
+                "?ClosePackages@FileSystem@IO@@QEAAXXZ"))
+            fn(fs);
+    }
+
+    // (14+ deliberately omitted — see header comment.)
+    printf("[Shutdown] done\n"); fflush(stdout);
+}
+
+} // anonymous namespace
+
 namespace Game {
 
 // Engine instance is 0x6f8 bytes (last field at +0x6f0 + 8). Original uses
@@ -425,16 +574,19 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             }
         }
 
-        printf("[GameMain] Engine::Shutdown...\n");
-        s_fn_Engine_Shutdown(&engine);
-        printf("[GameMain] Engine::Shutdown done\n");
+        // BISECT: stepped reimpl of Engine::Engine::Shutdown (Runtime 0x1800db4f0).
+        // The stock function silently terminates the process somewhere inside —
+        // not even our SetUnhandledExceptionFilter sees a fault. We mirror its
+        // body in stages with fflush between each so the last logged step is
+        // the one that killed us.
+        ShutdownEngineStaged(&engine);
     } else {
         fprintf(stderr, "[GameMain] Engine::Startup FAILED\n");
     }
 
-    printf("[GameMain] Destroying Engine...\n");
+    printf("[GameMain] Destroying Engine...\n"); fflush(stdout);
     s_fn_Engine_Dtor(&engine);
-    printf("[GameMain] Engine destroyed.\n");
+    printf("[GameMain] Engine destroyed.\n"); fflush(stdout);
 
     return ok != 0 ? 0 : 3;
 }

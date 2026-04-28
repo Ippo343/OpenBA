@@ -177,6 +177,16 @@ static void OpenCrashLog() {
         nullptr);
 }
 
+// Raw WriteFile of a literal string — CRT-free, used as a progress marker so
+// that even if formatted CrashLogf calls die later, we know how far we got.
+static void CrashLogRaw(const char* msg) {
+    if (g_crashLog == INVALID_HANDLE_VALUE) return;
+    DWORD len = 0;
+    while (msg[len]) ++len;
+    DWORD wrote = 0;
+    WriteFile(g_crashLog, msg, len, &wrote, nullptr);
+}
+
 // Synchronous write to the dedicated crash log. Each call commits to disk
 // before returning thanks to FILE_FLAG_WRITE_THROUGH. No stderr mirroring —
 // stderr writes go through the CRT's per-FILE lock which the main thread
@@ -214,22 +224,21 @@ static void FlushLogsToDisk() {
 // Banished's normal control flow (lazy-commit reads, internal SEH probes).
 static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     DWORD code = ep->ExceptionRecord->ExceptionCode;
-    if (code != EXCEPTION_ACCESS_VIOLATION &&
-        code != EXCEPTION_ILLEGAL_INSTRUCTION &&
-        code != EXCEPTION_STACK_OVERFLOW) {
+    // Filter out benign codes raised + absorbed by Banished's SEH chains
+    // (e.g., FP-control-word probes). Everything else gets logged so we
+    // catch C++ exceptions, breakpoints, and unusual fault codes during
+    // teardown, not just classic AV/IllegalInst/StackOverflow.
+    if (code == 0x40010005 ||           // DBG_CONTROL_C
+        code == DBG_CONTROL_C ||
+        code == DBG_PRINTEXCEPTION_C ||
+        code == 0x4001000A ||           // DBG_PRINTEXCEPTION_WIDE_C
+        code == 0x406D1388) {           // MS_VC_THREADNAME (debugger thread name)
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
-    // Serialize concurrent crashes so two threads can't interleave their
-    // stack traces. Once one thread is holding this CS and starts logging,
-    // the OS will likely terminate before any other crasher gets the lock —
-    // that's fine, we get a complete dump from the first crasher.
-    static CRITICAL_SECTION s_cs;
-    static bool s_csInit = false;
-    if (!s_csInit) { InitializeCriticalSection(&s_cs); s_csInit = true; }
-    EnterCriticalSection(&s_cs);
-
-    CrashLogf("\n=== STANDALONE CRASH ===\n");
+    // No CS — during late teardown the CRT may have torn down thread-safe
+    // statics already, and we'd rather risk interleaved output than hang here.
+    CrashLogRaw("\n=== STANDALONE CRASH ===\n");
     CrashLogf("Exception: 0x%08lX (%s)\n", code, ExceptionCodeToString(code));
     CrashLogf("Address:   %p\n", ep->ExceptionRecord->ExceptionAddress);
 
@@ -328,12 +337,13 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     CrashLogf("=== END CRASH ===\n");
     FlushLogsToDisk();
 
-    LeaveCriticalSection(&s_cs);
-
     // Avoid the OS unhandled-exception-filter race: terminate the process
-    // ourselves on our own terms. _exit() skips C++ atexit and CRT shutdown
-    // (which is what we want — the engine state is unreliable post-crash).
-    _exit(3);
+    // ourselves on our own terms. ExitProcess skips CRT shutdown but still
+    // runs DLL_PROCESS_DETACH; TerminateProcess is more aggressive but
+    // can leave kernel state cluttered. _exit was problematic during late
+    // teardown — go with ExitProcess.
+    ExitProcess(3);
+    return EXCEPTION_EXECUTE_HANDLER;
 }
 
 // ============================================================
@@ -635,6 +645,54 @@ extern "C" void RunStartupSelfTests() {
 }
 
 // ============================================================
+// Window-message hook — log focus / activation messages so we can see what
+// the engine's WindowProc receives when the user clicks outside the window.
+// Installed after Engine::Startup creates the window. Returns false from
+// the hook callback to let the message dispatch normally.
+// ============================================================
+static HHOOK g_msgHook = nullptr;
+
+static const char* WMNameForFocus(UINT m) {
+    switch (m) {
+    case 0x0006: return "WM_ACTIVATE";
+    case 0x001C: return "WM_ACTIVATEAPP";
+    case 0x0007: return "WM_SETFOCUS";
+    case 0x0008: return "WM_KILLFOCUS";
+    case 0x0086: return "WM_NCACTIVATE";
+    case 0x0024: return "WM_GETMINMAXINFO";
+    case 0x0046: return "WM_WINDOWPOSCHANGING";
+    case 0x0047: return "WM_WINDOWPOSCHANGED";
+    case 0x001A: return "WM_SETTINGCHANGE";
+    default:     return nullptr;
+    }
+}
+
+static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
+    if (code >= 0) {
+        auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);
+        if (const char* name = WMNameForFocus(msg->message)) {
+            printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
+                   name, (void*)msg->hwnd,
+                   (unsigned long long)msg->wParam,
+                   (unsigned long long)msg->lParam);
+            fflush(stdout);
+        }
+    }
+    return CallNextHookEx(g_msgHook, code, wParam, lParam);
+}
+
+static void InstallWndMsgHook() {
+    g_msgHook = SetWindowsHookExW(WH_CALLWNDPROC, CallWndProcHook,
+                                  nullptr, GetCurrentThreadId());
+    if (!g_msgHook) {
+        printf("[Standalone] WARN: SetWindowsHookExW failed (%lu) — focus diag disabled\n",
+               GetLastError());
+    } else {
+        printf("[Standalone] Window-message hook installed (focus diag)\n");
+    }
+}
+
+// ============================================================
 // Initialization sequence
 // ============================================================
 static bool Init() {
@@ -684,6 +742,11 @@ static bool Init() {
 
     // 7. Skip the launcher dialog — see SkipPlatformConfigure note above.
     SkipPlatformConfigure();
+
+    // 8. Install thread-local CALLWNDPROC hook so we can see WM_ACTIVATE /
+    //    WM_KILLFOCUS / WM_SETFOCUS messages reaching the engine WindowProc.
+    //    Diagnoses fullscreen focus-loss black-screen issue.
+    InstallWndMsgHook();
 
     // RunStartupSelfTests() runs from game_main.cpp after Engine::Startup,
     // when the MemoryAllocator singleton is finally populated.

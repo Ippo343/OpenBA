@@ -193,7 +193,8 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     //
     // self+0x40 is the embedded UI::UserInterface (DialogLoopT layout).
     static int draws = 0;
-    bool trace = (draws++ < 3);
+    ++draws;
+    bool trace = (draws <= 3) || (draws % 200) == 0;
 
     // Use MainLoop singleton's m_context — populated by MainLoop ctor and
     // unchanged for the run. (g_pEngineSingleton was captured at boot when
@@ -218,7 +219,18 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
 }
 
 void Stub_DrawFailed(UpdateLoop* self) {
-    printf("[MenuDLT::DrawFailed] self=%p\n", (void*)self);
+    // Fired by Engine::MainLoop::Draw when BeginFrame (vtable+0x08 of
+    // Video::Context+0x2160) returns false — i.e. the window is occluded,
+    // minimized, or the DX11 swap chain is in a Reset-needed state. After
+    // this returns, MainLoop::Draw calls Video::Context::Reset which is
+    // the recovery path. Log the first few + every 100th so we can tell
+    // whether Reset is succeeding (Draw resumes) or stuck.
+    static int n = 0;
+    ++n;
+    if (n <= 5 || (n % 100) == 0) {
+        printf("[MenuDLT::DrawFailed] self=%p count=%d\n", (void*)self, n);
+        fflush(stdout);
+    }
 }
 
 void Stub_Load(UpdateLoop* self) {
