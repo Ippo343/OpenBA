@@ -36,8 +36,62 @@
 #include "UpdateLoop.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstring>
 
 namespace {
+
+// Mirror the cursor-loading subset of PlacementTool_Ctor (exe 0x14009A4F0).
+// The original game loads 6 cursors via ExternalList::Find against the Inner
+// LoaderLoop's m_resourceList (populated by the Loader thread). In standalone
+// we have no Loader thread, so we bypass the list and call ExternalFactory::
+// FindOrLoad directly — same end result, just synchronous and on-demand.
+//
+// Cursor field offsets (KeyMap+offset, qword index):
+//   +0x28 (idx 5)  — Cursor/Arrow.rsc:cursor    (DEFAULT, used by MenuDLT)
+//   +0x30 (idx 6)  — Cursor/Hand.rsc:cursor     (used by GameUpdateLoop)
+//   +0x38 (idx 7)  — Cursor/Hourglass.rsc:cursor (used by SaveLoad/Loader screens)
+//   +0x40 (idx 8)  — Cursor/Move.rsc:cursor
+//   +0x48 (idx 9)  — Cursor/Query.rsc:cursor
+//   +0x50 (idx 10) — Cursor/Place.rsc:cursor
+static void EnsureCursorsLoaded() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
+        printf("[CursorLoad] WARN: g_pKeyMapSingleton not populated, skipping\n");
+        return;
+    }
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        printf("[CursorLoad] WARN: ExternalFactory singleton not populated, skipping\n");
+        return;
+    }
+    if (!fn_Filename_CtorCStr || !fn_Filename_Dtor || !fn_ExternalFactory_FindOrLoad) {
+        printf("[CursorLoad] WARN: required engine fns not resolved\n");
+        return;
+    }
+
+    void* keyMap = *g_pKeyMapSingleton;
+    void* factory = *g_pExternalFactorySingleton;
+
+    // Skip if Arrow already loaded (this fn may be called multiple times).
+    if (*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)) {
+        return;
+    }
+
+    auto loadAndStore = [&](uintptr_t offset, const char* name) {
+        uint8_t fnBuf[16] = {};  // System::Filename is 8-16 bytes
+        fn_Filename_CtorCStr(fnBuf, name);
+        void* ext = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
+        fn_Filename_Dtor(fnBuf);
+        *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + offset) = ext;
+        printf("[CursorLoad] %-32s -> %p (KeyMap+0x%02llx)\n",
+               name, ext, (unsigned long long)offset);
+    };
+
+    loadAndStore(0x28, "Cursor/Arrow.rsc:cursor");
+    loadAndStore(0x30, "Cursor/Hand.rsc:cursor");
+    loadAndStore(0x38, "Cursor/Hourglass.rsc:cursor");
+    loadAndStore(0x40, "Cursor/Move.rsc:cursor");
+    loadAndStore(0x48, "Cursor/Query.rsc:cursor");
+    loadAndStore(0x50, "Cursor/Place.rsc:cursor");
+}
 
 void Stub_Destroy(UpdateLoop* self, int flags) {
     printf("[MenuDLT::Destroy] self=%p flags=%d\n", (void*)self, flags);
@@ -75,6 +129,34 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     void* dialogInst = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x38);
     printf("[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=%p\n",
            dialogInst);
+
+    // Mirror the cursor block from original MenuDLT::Startup (exe 0x14009B930):
+    //   UI::SetCursor(ui, *(KeyMap+0x28))    — engine cursor sprite (Cursor/Arrow)
+    //   UI::EnableCursor(ui, true)           — OS cursor visibility
+    // The original game's cursor sprites are populated into KeyMap+0x28..+0x50 by
+    // PlacementTool_Ctor (exe 0x14009A4F0), which the Inner LoaderLoop's Load slot
+    // would call. Standalone has no Loader thread so we load the cursors lazily
+    // here via ExternalFactory::FindOrLoad — same end result, synchronous.
+    EnsureCursorsLoaded();
+
+    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
+    void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    void* arrowCursor = keyMap
+        ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)
+        : nullptr;
+    if (fn_UI_SetCursor && arrowCursor) {
+        fn_UI_SetCursor(ui, reinterpret_cast<uint64_t>(arrowCursor));
+        printf("[MenuDLT::Startup] UI::SetCursor(ui=%p, arrow=%p)\n", ui, arrowCursor);
+    } else {
+        printf("[MenuDLT::Startup] WARN: skipping SetCursor (fn=%p arrow=%p)\n",
+               (void*)fn_UI_SetCursor, arrowCursor);
+    }
+    if (fn_UI_EnableCursor) {
+        fn_UI_EnableCursor(ui, true);
+        printf("[MenuDLT::Startup] UI::EnableCursor(true) called on ui=%p\n", ui);
+    } else {
+        printf("[MenuDLT::Startup] WARN: fn_UI_EnableCursor is NULL\n");
+    }
 }
 
 void Stub_Shutdown(UpdateLoop* self) {

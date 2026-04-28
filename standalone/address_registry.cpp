@@ -131,6 +131,17 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??1Internal@Object@@UEAA@XZ"));
     RegisterDispatchSlot(0x140152a30,
         (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
+
+    // Application::Application::_singleton — Runtime data variable holding the
+    // Application*. The exe normally has a .rdata exref at 0x140152368 that
+    // points to this Runtime variable. engine_funcs.cpp reads:
+    //   exref       = ResolveAddr(Exe, 0x140152368)         -> our slot storage
+    //   *exref      = ResolveAddr(Runtime, 0x1801fc678)     -> &Application::_singleton
+    //   g_pAppSingleton = *exref                             -> &Application::_singleton
+    //   *g_pAppSingleton                                    -> Application*
+    // Without this registration MainMenuDialog::OnCommand can't reach App::Quit.
+    RegisterDispatchSlot(0x140152368,
+        ResolveAddr(Module::Runtime, 0x1801fc678));
 }
 
 // ============================================================

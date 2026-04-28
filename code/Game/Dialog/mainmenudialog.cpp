@@ -15,6 +15,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <windows.h>  // PostQuitMessage fallback in standalone Quit handler
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -748,21 +749,84 @@ void StandaloneStub_RuntimeThunk(void* self, ...) {
     }
 }
 
-// Slot 4 (Setup) — original reimpl needs the resource pipeline. Stubbed out.
+// Slot 4 (Setup) — slim standalone version. Mirrors the button-finding + element
+// ID assignment portion of MainMenuDialog_Slot4 (above). Skips the game-world
+// audio block (no game active in main menu) and the BuildId child dialog
+// (cosmetic version overlay). What's left is just enough to make the OnCommand
+// dispatch work when the user clicks a button.
 void StandaloneStub_Slot4_Setup(void* self) {
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[MainMenuDialog::Setup_Stub] self=%p (Slot4 reimpl needs Loader)\n",
-               self);
+    if (!fn_String_Ctor_CStr || !fn_String_Dtor || !fn_DialogInstance_FindElement ||
+        !fn_InternalBasePtr_CheckPtr || !fn_Element_SetElementId) {
+        printf("[MainMenuDialog::Setup] missing engine fns, skipping element ID assign\n");
+        return;
     }
+    printf("[MainMenuDialog::Setup] self=%p assigning button element IDs\n", self);
+
+    auto findAndAssign = [self](const char* name, int id) {
+        uint8_t nameStr[8] = {};
+        fn_String_Ctor_CStr(nameStr, name);
+        // FindElement uses non-trivial return ABI: RCX=self, RDX=retbuf, R8=name
+        uint8_t retBuf[16] = {};
+        fn_DialogInstance_FindElement(self, retBuf, nameStr);
+        void* elem = *reinterpret_cast<void**>(retBuf);
+        fn_String_Dtor(nameStr);
+        if (elem) {
+            // CheckPtr resolves any lazy/weak pointer inside the IBP, then
+            // SetElementId writes the int into the element.
+            fn_InternalBasePtr_CheckPtr(&elem);
+            fn_Element_SetElementId(elem, id);
+            printf("[Setup]   %-20s -> id=%2d (elem=%p)\n", name, id, elem);
+        } else {
+            printf("[Setup]   %-20s -> NOT FOUND\n", name);
+        }
+    };
+
+    findAndAssign("buttonNew",         kButton_New);
+    findAndAssign("buttonResume",      kButton_Resume);
+    findAndAssign("buttonLoad",        kButton_Load);
+    findAndAssign("buttonSave",        kButton_Save);
+    findAndAssign("buttonOptions",     kButton_Options);
+    findAndAssign("buttonMenu",        kButton_Menu);
+    findAndAssign("buttonQuit",        kButton_Quit);
+    findAndAssign("buttonAchievement", kButton_Achievement);
+    findAndAssign("buttonScenario",    kButton_Scenario);
+    findAndAssign("buttonGoal",        kButton_Goal);
+    findAndAssign("buttonMap",         kButton_Map);
+    findAndAssign("buttonTutorial",    kButton_Tutorial);
+    findAndAssign("buttonMod",         kButton_Mod);
 }
 
 // Slot 5 (Shutdown) — depends on game world; stubbed.
 void StandaloneStub_Slot5_Shutdown(void* /*self*/) {}
 
-// Slot 8 (OnCommand) — button dispatcher; without UI elements, never fires.
-void StandaloneStub_Slot8_OnCommand(void* /*self*/, void* /*p2*/, int /*msg*/, int /*id*/) {}
+// Slot 8 (OnCommand) — button click dispatch. The runtime sends msg=0x12 with
+// param4 = element ID. We mirror the switch from MainMenuDialog_Slot8 above,
+// but for now only Quit is wired (the others need sub-dialog scaffolding that
+// isn't standalone-ready yet — they'll just log a "not wired" warning so we
+// can see clicks register).
+void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
+    if (msg != 0x12) return;
+    printf("[MainMenuDialog::OnCommand] self=%p msg=0x%x id=%d\n", self, msg, id);
+
+    switch (id) {
+    case kButton_Quit:
+        printf("[MainMenuDialog::OnCommand] Quit: fn_App_Quit=%p g_pAppSingleton=%p *g=%p\n",
+               (void*)fn_App_Quit, (void*)g_pAppSingleton,
+               g_pAppSingleton ? *g_pAppSingleton : nullptr);
+        if (fn_App_Quit && g_pAppSingleton && *g_pAppSingleton) {
+            printf("[MainMenuDialog::OnCommand] -> App::Quit\n");
+            fn_App_Quit(*g_pAppSingleton);
+        } else {
+            printf("[MainMenuDialog::OnCommand] WARN: App::Quit not resolved — falling back to PostQuitMessage\n");
+            // Last resort — close the window so the user isn't stuck
+            PostQuitMessage(0);
+        }
+        break;
+    default:
+        printf("[MainMenuDialog::OnCommand] button id=%d not yet wired in standalone\n", id);
+        break;
+    }
+}
 
 // Slot 10 — DialogInstance::~DialogInstance + conditional free.
 void* StandaloneStub_Slot10_DIDtor(void* self, uint32_t flags) {
