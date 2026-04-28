@@ -114,6 +114,10 @@ static const char* ExceptionCodeToString(DWORD code) {
 
 // Forward decl — declared above the crash log helpers but defined below.
 static void CrashLogf(const char* fmt, ...);
+// Forward decl — defined alongside the focus-event message hook, used from
+// RunStartupSelfTests and CallWndProcHook.
+static void DumpSwapChainState(const char* tag);
+static void CaptureBootFullscreenMode();
 
 // Walk the saved CONTEXT via the x64 unwind tables and print one line per
 // frame: <module>!<offset>. No symbol names — Banished ships stripped — but
@@ -642,6 +646,113 @@ extern "C" void RunStartupSelfTests() {
                        statGoalFields, sizeof(statGoalFields)/sizeof(*statGoalFields));
 
     DumpVideoState();
+    DumpSwapChainState("AFTER_ENGINE_STARTUP");
+    CaptureBootFullscreenMode();
+}
+
+// ============================================================
+// Swap-chain state probe — reads IDXGISwapChain at
+// Device::_singleton[+0x100][+0x18] (the active DeviceData's swap chain
+// pointer, populated by VideoDX11!FUN_180004e10 during Engine::Startup),
+// then calls GetFullscreenState (vtable+0x58) and GetDesc (vtable+0x60).
+//
+// The fullscreen-on-focus-loss bug shows up here: standalone enters DXGI
+// exclusive fullscreen, focus-loss makes DXGI silently drop FSE, the
+// window snaps to VideoWindow{Width,Height} (1280x720) — about 2/3 of
+// a 1080p desktop — and Present succeeds but renders to a stale surface.
+// Logging the swap chain's Windowed flag + DXGI_MODE_DESC across focus
+// events tells us whether the engine's recovery (FUN_180004340) is
+// firing AND whether SetFullscreenState(TRUE) succeeds on refocus.
+// ============================================================
+
+// IDXGISwapChain vtable offsets (from dxgi.h; standard COM layout):
+//   +0x00 QueryInterface  +0x08 AddRef          +0x10 Release
+//   +0x18 SetPrivateData  +0x20 SetPDInterface  +0x28 GetPrivateData
+//   +0x30 GetParent       +0x38 GetDevice
+//   +0x40 Present         +0x48 GetBuffer
+//   +0x50 SetFullscreenState  +0x58 GetFullscreenState  +0x60 GetDesc
+//   +0x68 ResizeBuffers   +0x70 ResizeTarget   +0x78 GetContainingOutput
+//   +0x80 GetFrameStatistics  +0x88 GetLastPresentCount
+
+// Natural alignment (no #pragma pack) — matches dxgi.h. HWND is 8-byte
+// aligned on x64, so the compiler inserts 4 bytes of padding after
+// BufferCount, putting OutputWindow at offset 48 and total size at 72.
+struct ProbeDxgiRational { uint32_t Numerator; uint32_t Denominator; };
+struct ProbeDxgiModeDesc {
+    uint32_t Width;
+    uint32_t Height;
+    ProbeDxgiRational RefreshRate;
+    uint32_t Format;
+    uint32_t ScanlineOrdering;
+    uint32_t Scaling;
+};
+struct ProbeDxgiSampleDesc { uint32_t Count; uint32_t Quality; };
+struct ProbeDxgiSwapChainDesc {
+    ProbeDxgiModeDesc   BufferDesc;       // 28 B (offset 0..27)
+    ProbeDxgiSampleDesc SampleDesc;       // 8 B  (offset 28..35)
+    uint32_t            BufferUsage;      // offset 36
+    uint32_t            BufferCount;      // offset 40
+    // 4 bytes implicit padding here
+    uint64_t            OutputWindow;     // offset 48 (HWND)
+    int32_t             Windowed;         // offset 56
+    uint32_t            SwapEffect;       // offset 60
+    uint32_t            Flags;            // offset 64
+    // 4 bytes implicit trailing padding (alignment to 8)
+};
+static_assert(sizeof(ProbeDxgiSwapChainDesc) == 72,
+              "DXGI_SWAP_CHAIN_DESC layout mismatch (expected 72 bytes)");
+static_assert(offsetof(ProbeDxgiSwapChainDesc, OutputWindow) == 48,
+              "OutputWindow offset mismatch");
+static_assert(offsetof(ProbeDxgiSwapChainDesc, Windowed) == 56,
+              "Windowed offset mismatch");
+
+static void DumpSwapChainState(const char* tag) {
+    if (!g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) {
+        printf("[SwapProbe %s] device singleton not populated\n", tag);
+        return;
+    }
+    void* device = *g_pVideoDeviceSingleton;
+    void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
+    if (!activeDD) {
+        printf("[SwapProbe %s] activeDeviceData NULL (Device+0x100)\n", tag);
+        return;
+    }
+    void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
+    if (!swapChain) {
+        printf("[SwapProbe %s] swapChain NULL (activeDD+0x18)\n", tag);
+        return;
+    }
+    void** vt = *reinterpret_cast<void***>(swapChain);
+
+    typedef long (__stdcall *GetFullscreenState_t)(void*, int*, void**);
+    typedef long (__stdcall *GetDesc_t)(void*, ProbeDxgiSwapChainDesc*);
+
+    int fullscreen = -1;
+    void* output = nullptr;
+    long hr1 = ((GetFullscreenState_t)vt[11])(swapChain, &fullscreen, &output);
+
+    ProbeDxgiSwapChainDesc desc{};
+    long hr2 = ((GetDesc_t)vt[12])(swapChain, &desc);
+
+    HWND hwnd = reinterpret_cast<HWND>(desc.OutputWindow);
+    RECT cr{}, wr{};
+    if (hwnd) { GetClientRect(hwnd, &cr); GetWindowRect(hwnd, &wr); }
+    BOOL visible = hwnd ? IsWindowVisible(hwnd) : FALSE;
+    BOOL minimized = hwnd ? IsIconic(hwnd) : FALSE;
+
+    printf("[SwapProbe %s] sc=%p vt=%p\n", tag, swapChain, vt);
+    printf("[SwapProbe %s]   GetFullscreenState hr=0x%08lX fs=%d output=%p\n",
+           tag, hr1, fullscreen, output);
+    printf("[SwapProbe %s]   GetDesc hr=0x%08lX Windowed=%d %ux%u fmt=%u "
+           "BufferCount=%u SwapEffect=%u Flags=0x%X\n",
+           tag, hr2, desc.Windowed, desc.BufferDesc.Width, desc.BufferDesc.Height,
+           desc.BufferDesc.Format, desc.BufferCount, desc.SwapEffect, desc.Flags);
+    printf("[SwapProbe %s]   hwnd=%p visible=%d iconic=%d "
+           "client=%ldx%ld window=%ld,%ld %ldx%ld\n",
+           tag, (void*)hwnd, visible, minimized,
+           cr.right - cr.left, cr.bottom - cr.top,
+           wr.left, wr.top, wr.right - wr.left, wr.bottom - wr.top);
+    fflush(stdout);
 }
 
 // ============================================================
@@ -667,6 +778,55 @@ static const char* WMNameForFocus(UINT m) {
     }
 }
 
+// Captured at boot: was the swap chain created with Windowed=0 (DXGI
+// exclusive fullscreen)? Drives whether ForceVideoContextReset fires on
+// refocus — borderless/windowed swap chains never lose their back buffer
+// across focus events, so the recovery is unnecessary (and the Reset call
+// would visibly flicker the menu for no reason).
+static bool g_bootedExclusiveFullscreen = false;
+
+static void CaptureBootFullscreenMode() {
+    if (!g_pVideoDeviceSingleton || !*g_pVideoDeviceSingleton) return;
+    void* device = *g_pVideoDeviceSingleton;
+    void* activeDD = *reinterpret_cast<void**>((uintptr_t)device + 0x100);
+    if (!activeDD) return;
+    void* swapChain = *reinterpret_cast<void**>((uintptr_t)activeDD + 0x18);
+    if (!swapChain) return;
+    void** vt = *reinterpret_cast<void***>(swapChain);
+    typedef long (__stdcall *GetDesc_t)(void*, ProbeDxgiSwapChainDesc*);
+    ProbeDxgiSwapChainDesc desc{};
+    if (((GetDesc_t)vt[12])(swapChain, &desc) == 0) {
+        g_bootedExclusiveFullscreen = (desc.Windowed == 0);
+        printf("[Standalone] Boot mode: %s\n",
+               g_bootedExclusiveFullscreen ? "DXGI EXCLUSIVE FULLSCREEN"
+                                           : "borderless/windowed");
+    }
+}
+
+// Recovery for the DXGI-exclusive-fullscreen focus-loss bug: on refocus
+// the engine's WM_ACTIVATE handler (VideoDX11!FUN_1800042d0 → FUN_180004340)
+// rebuilds the swap chain + DeviceData RTV/DSV, but the per-frame
+// Video::Context cache at Context+0x2160 still holds stale references to
+// the old back-buffer's RTV/DSV. Calling Video::Context::Reset (the same
+// function the engine itself invokes when BeginFrame fails) flushes that
+// cache so the next Draw rebinds the rebuilt resources. Without this,
+// Present succeeds (returns S_OK) but pixels stay black.
+//
+// No-op when booted in borderless/windowed since DXGI doesn't drop the
+// back buffer across focus events in that mode.
+static void ForceVideoContextReset(const char* tag) {
+    if (!g_bootedExclusiveFullscreen) return;
+    if (!g_pMainLoopSingleton || !*g_pMainLoopSingleton) return;
+    uint8_t* ml = reinterpret_cast<uint8_t*>(*g_pMainLoopSingleton);
+    void* ctx = *reinterpret_cast<void**>(ml + 0x10);
+    if (!ctx || !fn_VideoCtx_Reset) return;
+    *(ml + 0x18) = 0;  // engine clears m_videoContextDirty before Reset
+    fn_VideoCtx_Reset(ctx);
+    printf("[CtxReset %s] Video::Context::Reset(ctx=%p) — FSE refocus recovery\n",
+           tag, ctx);
+    fflush(stdout);
+}
+
 static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code >= 0) {
         auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);
@@ -675,6 +835,19 @@ static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) 
                    name, (void*)msg->hwnd,
                    (unsigned long long)msg->wParam,
                    (unsigned long long)msg->lParam);
+            // Refocus recovery: WM_ACTIVATE w!=0 fires before WM_SETFOCUS but
+            // (importantly) after the engine's own WM_ACTIVATE handler. Calling
+            // Reset here lands on the next Draw frame rather than waiting until
+            // WM_SETFOCUS, eliminating the one-frame flicker we'd otherwise see.
+            // Engine-level FUN_1800042d0 also runs on this same message, but
+            // since WH_CALLWNDPROC fires *before* WindowProc, the engine's
+            // recovery completes between our hook returning and the next frame.
+            // Our Reset clears Video::Context's cached state — which the engine
+            // doesn't touch — so by next frame both sides are fresh.
+            if (msg->message == 0x0006 /*WM_ACTIVATE*/ &&
+                (msg->wParam & 0xFFFF) != 0) {
+                ForceVideoContextReset("WM_ACTIVATE(refocus)");
+            }
             fflush(stdout);
         }
     }
