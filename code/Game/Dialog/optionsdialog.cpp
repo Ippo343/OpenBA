@@ -498,94 +498,137 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
 // ============================================================
 // Startup (0x1400742d0)
 // ============================================================
+//
+// Bisect harness for the standalone-exe Slot4 crash:
+// each major init block is wrapped behind a `static bool s_enable*` flag
+// (default ON in DLL builds, default ON but trivially flippable in standalone).
+// To localize the per-frame KeyMap::Pressed crash, flip flags to false one
+// at a time. See `notes/NOTES030126.md` and the project memory for context.
 void OptionsDialog_Startup(OptionsDialog* self) {
-    // --- Buttons: find, assign IDs, set buttonCancel's hidden flag ---
-    void *buttonOk = nullptr, *buttonCancel = nullptr, *buttonApply = nullptr;
-    FIND_ELEMENT(buttonOk,     "buttonOk");
-    FIND_ELEMENT(buttonCancel, "buttonCancel");
-    FIND_ELEMENT(buttonApply,  "buttonApply");
-    fn_Element_SetElementId(buttonOk,     kButton_Ok);
-    fn_Element_SetElementId(buttonCancel, kButton_Cancel);
-    fn_Element_SetElementId(buttonApply,  kButton_Apply);
-    if (buttonCancel) *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
+    // Bisect knobs — flip these to narrow down the standalone Slot4 crash.
+    // Order mirrors the original Startup body.
+    static const bool s_enableButtons         = true;
+    static const bool s_enableAudioSliders    = true;
+    static const bool s_enableVideoCombos     = true;
+    static const bool s_enableShadowReflCombos= true;
+    static const bool s_enableVidCheckboxes   = true;
+    static const bool s_enableInputList       = true;  // re-enabled after KeyMap default bindings populated at boot
+    static const bool s_enableAutosaveCombo   = true;
+    static const bool s_enableUIScaleSlider   = true;
+    static const bool s_enableGameplayChecks  = true;
+    static const bool s_enableMouseClipCheck  = true;
+    static const bool s_enableTabRestore      = true;
+
+#ifdef STANDALONE_EXE
+    printf("[OptionsDialog::Startup] self=%p  flags: btn=%d aud=%d vid=%d "
+           "sh=%d vchk=%d ilist=%d auto=%d uisc=%d game=%d mclip=%d tab=%d\n",
+           self,
+           (int)s_enableButtons, (int)s_enableAudioSliders, (int)s_enableVideoCombos,
+           (int)s_enableShadowReflCombos, (int)s_enableVidCheckboxes,
+           (int)s_enableInputList, (int)s_enableAutosaveCombo,
+           (int)s_enableUIScaleSlider, (int)s_enableGameplayChecks,
+           (int)s_enableMouseClipCheck, (int)s_enableTabRestore);
+#endif
 
     int32_t* audioVol = g_pAudioConfigSingleton
                         ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
     void* vidCfg = g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr;
     void* inputCfg = g_pInputConfigSingleton ? *g_pInputConfigSingleton : nullptr;
 
-    // Audio sliders
-    FIND_ELEMENT(self->sliderUI,     "sliderUI");
-    FIND_ELEMENT(self->sliderMusic,  "sliderMusic");
-    FIND_ELEMENT(self->sliderAmbient,"sliderAmbient");
-    FIND_ELEMENT(self->sliderEffect, "sliderEffect");
-    fn_Element_SetElementId(self->sliderUI,     kSlider_UI);
-    fn_Element_SetElementId(self->sliderMusic,  kSlider_Music);
-    fn_Element_SetElementId(self->sliderAmbient,kSlider_Ambient);
-    fn_Element_SetElementId(self->sliderEffect, kSlider_Effect);
-    void* audioSliders[4] = { self->sliderUI, self->sliderMusic,
-                               self->sliderAmbient, self->sliderEffect };
-    for (int i = 0; i < 4; i++) {
-        SetSliderRange(audioSliders[i], 0.0f, 100.0f);
-        if (audioVol) SetSliderValue(audioSliders[i], (float)audioVol[i]);
+    // --- Buttons: find, assign IDs, set buttonCancel's hidden flag ---
+    if (s_enableButtons) {
+        void *buttonOk = nullptr, *buttonCancel = nullptr, *buttonApply = nullptr;
+        FIND_ELEMENT(buttonOk,     "buttonOk");
+        FIND_ELEMENT(buttonCancel, "buttonCancel");
+        FIND_ELEMENT(buttonApply,  "buttonApply");
+        fn_Element_SetElementId(buttonOk,     kButton_Ok);
+        fn_Element_SetElementId(buttonCancel, kButton_Cancel);
+        fn_Element_SetElementId(buttonApply,  kButton_Apply);
+        if (buttonCancel) *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
     }
 
-    // Video combos: find + IDs + save config
-    FIND_ELEMENT(self->comboRenderer,  "comboRenderer");
-    FIND_ELEMENT(self->comboAdapter,   "comboAdapter");
-    FIND_ELEMENT(self->comboResolution,"comboResolution");
-    FIND_ELEMENT(self->comboAntialias, "comboAntialias");
-    FIND_ELEMENT(self->comboFilter,    "comboFilter");
-    FIND_ELEMENT(self->comboRefresh,   "comboRefresh");
-    fn_Element_SetElementId(self->comboRenderer,   kCombo_Renderer);
-    fn_Element_SetElementId(self->comboAdapter,    kCombo_Adapter);
-    fn_Element_SetElementId(self->comboResolution, kCombo_Resolution);
-    fn_Element_SetElementId(self->comboRefresh,    kCombo_Refresh);
-    fn_Element_SetElementId(self->comboAntialias,  kCombo_Antialias);
-    fn_Element_SetElementId(self->comboFilter,     kCombo_Filter);
-    if (vidCfg) {
-        self->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
-        self->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
-        self->savedWidth      = *(uint32_t*)((uintptr_t)vidCfg + 0x0C);
-        self->savedHeight     = *(uint32_t*)((uintptr_t)vidCfg + 0x10);
-        self->savedRefreshNum = *(uint32_t*)((uintptr_t)vidCfg + 0x38);
-        self->savedRefreshDen = *(uint32_t*)((uintptr_t)vidCfg + 0x3C);
-        self->savedAntialias  = *(uint32_t*)((uintptr_t)vidCfg + 0x24);
-        self->savedFilter     = *(uint32_t*)((uintptr_t)vidCfg + 0x28);
+    // --- Audio sliders ---
+    if (s_enableAudioSliders) {
+        FIND_ELEMENT(self->sliderUI,     "sliderUI");
+        FIND_ELEMENT(self->sliderMusic,  "sliderMusic");
+        FIND_ELEMENT(self->sliderAmbient,"sliderAmbient");
+        FIND_ELEMENT(self->sliderEffect, "sliderEffect");
+        fn_Element_SetElementId(self->sliderUI,     kSlider_UI);
+        fn_Element_SetElementId(self->sliderMusic,  kSlider_Music);
+        fn_Element_SetElementId(self->sliderAmbient,kSlider_Ambient);
+        fn_Element_SetElementId(self->sliderEffect, kSlider_Effect);
+        void* audioSliders[4] = { self->sliderUI, self->sliderMusic,
+                                   self->sliderAmbient, self->sliderEffect };
+        for (int i = 0; i < 4; i++) {
+            SetSliderRange(audioSliders[i], 0.0f, 100.0f);
+            if (audioVol) SetSliderValue(audioSliders[i], (float)audioVol[i]);
+        }
     }
 
-    // --- Populate all video combo boxes ---
-    OptionsDialog_PopulateVideoComboBoxes(self);
-
-    // Shadow/reflection combos
-    FIND_ELEMENT(self->comboShadowRes,        "comboShadowResolution");
-    FIND_ELEMENT(self->comboShadowQuality,    "comboShadowQuality");
-    FIND_ELEMENT(self->comboReflectionQuality,"comboReflectionQuality");
-    if (vidCfg) {
-        fn_ComboElement_SetCurrentItem(self->comboShadowRes,
-            *(int32_t*)((uintptr_t)vidCfg + 0x2C));
-        fn_ComboElement_SetCurrentItem(self->comboShadowQuality,
-            *(int32_t*)((uintptr_t)vidCfg + 0x30));
-        fn_ComboElement_SetCurrentItem(self->comboReflectionQuality,
-            *(int32_t*)((uintptr_t)vidCfg + 0x34));
+    // --- Video combos: find + IDs + save config + populate ---
+    if (s_enableVideoCombos) {
+        FIND_ELEMENT(self->comboRenderer,  "comboRenderer");
+        FIND_ELEMENT(self->comboAdapter,   "comboAdapter");
+        FIND_ELEMENT(self->comboResolution,"comboResolution");
+        FIND_ELEMENT(self->comboAntialias, "comboAntialias");
+        FIND_ELEMENT(self->comboFilter,    "comboFilter");
+        FIND_ELEMENT(self->comboRefresh,   "comboRefresh");
+        fn_Element_SetElementId(self->comboRenderer,   kCombo_Renderer);
+        fn_Element_SetElementId(self->comboAdapter,    kCombo_Adapter);
+        fn_Element_SetElementId(self->comboResolution, kCombo_Resolution);
+        fn_Element_SetElementId(self->comboRefresh,    kCombo_Refresh);
+        fn_Element_SetElementId(self->comboAntialias,  kCombo_Antialias);
+        fn_Element_SetElementId(self->comboFilter,     kCombo_Filter);
+        if (vidCfg) {
+            self->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
+            self->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
+            self->savedWidth      = *(uint32_t*)((uintptr_t)vidCfg + 0x0C);
+            self->savedHeight     = *(uint32_t*)((uintptr_t)vidCfg + 0x10);
+            self->savedRefreshNum = *(uint32_t*)((uintptr_t)vidCfg + 0x38);
+            self->savedRefreshDen = *(uint32_t*)((uintptr_t)vidCfg + 0x3C);
+            self->savedAntialias  = *(uint32_t*)((uintptr_t)vidCfg + 0x24);
+            self->savedFilter     = *(uint32_t*)((uintptr_t)vidCfg + 0x28);
+        }
+        OptionsDialog_PopulateVideoComboBoxes(self);
     }
 
-    // Checkboxes
-    FIND_ELEMENT(self->checkFullscreen,"checkFullscreen");
-    FIND_ELEMENT(self->checkVSync,     "checkVSync");
-    if (vidCfg) {
-        SetCheckState(self->checkFullscreen, *(uint8_t*)((uintptr_t)vidCfg + 0x40));
-        SetCheckState(self->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
+    // --- Shadow/reflection combos ---
+    if (s_enableShadowReflCombos) {
+        FIND_ELEMENT(self->comboShadowRes,        "comboShadowResolution");
+        FIND_ELEMENT(self->comboShadowQuality,    "comboShadowQuality");
+        FIND_ELEMENT(self->comboReflectionQuality,"comboReflectionQuality");
+        if (vidCfg) {
+            fn_ComboElement_SetCurrentItem(self->comboShadowRes,
+                *(int32_t*)((uintptr_t)vidCfg + 0x2C));
+            fn_ComboElement_SetCurrentItem(self->comboShadowQuality,
+                *(int32_t*)((uintptr_t)vidCfg + 0x30));
+            fn_ComboElement_SetCurrentItem(self->comboReflectionQuality,
+                *(int32_t*)((uintptr_t)vidCfg + 0x34));
+        }
     }
-    FIND_ELEMENT(self->checkSoftwareMouse,"checkSoftwareMouse");
-    if (inputCfg) SetCheckState(self->checkSoftwareMouse,
-                                *(uint8_t*)((uintptr_t)inputCfg + 0x0A));
-    FIND_ELEMENT(self->inputList,"inputList");
-    OptionsDialog_PopulateInputBindList(self);
+
+    // --- Video / input checkboxes (fullscreen, vsync, software mouse) ---
+    if (s_enableVidCheckboxes) {
+        FIND_ELEMENT(self->checkFullscreen,"checkFullscreen");
+        FIND_ELEMENT(self->checkVSync,     "checkVSync");
+        if (vidCfg) {
+            SetCheckState(self->checkFullscreen, *(uint8_t*)((uintptr_t)vidCfg + 0x40));
+            SetCheckState(self->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
+        }
+        FIND_ELEMENT(self->checkSoftwareMouse,"checkSoftwareMouse");
+        if (inputCfg) SetCheckState(self->checkSoftwareMouse,
+                                    *(uint8_t*)((uintptr_t)inputCfg + 0x0A));
+    }
+
+    // --- Input bind list (prime suspect for the per-frame KeyMap::Pressed crash) ---
+    if (s_enableInputList) {
+        FIND_ELEMENT(self->inputList,"inputList");
+        OptionsDialog_PopulateInputBindList(self);
+    }
 
     // --- Autosave combo ---
-    FIND_ELEMENT(self->comboAutosave,"comboAutosave");
-    {
+    if (s_enableAutosaveCombo) {
+        FIND_ELEMENT(self->comboAutosave,"comboAutosave");
         void* stringTable = LoadStringTable("Dialog/StringTable.rsc:autoSave");
         if (stringTable && self->comboAutosave) {
             for (int i = 0; i < 9; i++) {
@@ -606,47 +649,57 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     }
 
     // --- UI scale slider ---
-    FIND_ELEMENT(self->sliderUIScale,"sliderUIScale");
-    SetSliderRange(self->sliderUIScale, 75.0f, 150.0f);
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr) SetSliderValue(self->sliderUIScale, (float)(*g_pGameSettingsPtr)[0]);
-
-    // --- Gameplay settings checkboxes and sliders ---
-    FIND_ELEMENT(self->checkStatusIcon,      "checkStatusIcon");
-    FIND_ELEMENT(self->sliderStatusIcon,     "sliderStatusIcon");
-    FIND_ELEMENT(self->sliderStatusIconScale,"sliderStatusIconScale");
-    FIND_ELEMENT(self->checkShowCelsius,     "checkShowCelsius");
-    FIND_ELEMENT(self->checkEdgeScroll,      "checkEdgeScroll");
-    FIND_ELEMENT(self->checkShowWeather,     "checkShowWeather");
-    FIND_ELEMENT(self->checkAutoslow,        "checkAutoslow");
-    FIND_ELEMENT(self->checkMouseClip,       "checkMouseClip");
-    FIND_ELEMENT(self->checkAutopause,       "checkAutopause");
-
-    if (g_pGameSettingsPtr && *g_pGameSettingsPtr) {
-        int32_t* gs = *g_pGameSettingsPtr;
-        SetCheckState(self->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
-        SetCheckState(self->checkAutopause,  (uint8_t)gs[6]);
-        SetCheckState(self->checkStatusIcon, (uint8_t)gs[3]);
-        SetCheckState(self->checkEdgeScroll, (uint8_t)gs[5]);
-        SetCheckState(self->checkShowCelsius,*(uint8_t*)((uintptr_t)gs + 0x15));
-        SetCheckState(self->checkShowWeather,*(uint8_t*)((uintptr_t)gs + 0x16));
-
-        SetSliderRange(self->sliderStatusIcon, 0.0f, 100.0f);
-        SetSliderValue(self->sliderStatusIcon, (float)gs[2]);
-
-        SetSliderRange(self->sliderStatusIconScale, 25.0f, 200.0f);
-        SetSliderValue(self->sliderStatusIconScale, (float)gs[4]);
+    if (s_enableUIScaleSlider) {
+        FIND_ELEMENT(self->sliderUIScale,"sliderUIScale");
+        SetSliderRange(self->sliderUIScale, 75.0f, 150.0f);
+        if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
+            SetSliderValue(self->sliderUIScale, (float)(*g_pGameSettingsPtr)[0]);
     }
 
-    if (inputCfg) SetCheckState(self->checkMouseClip,
-                                *(uint8_t*)((uintptr_t)inputCfg + 0x08));
+    // --- Gameplay settings checkboxes and sliders ---
+    if (s_enableGameplayChecks) {
+        FIND_ELEMENT(self->checkStatusIcon,      "checkStatusIcon");
+        FIND_ELEMENT(self->sliderStatusIcon,     "sliderStatusIcon");
+        FIND_ELEMENT(self->sliderStatusIconScale,"sliderStatusIconScale");
+        FIND_ELEMENT(self->checkShowCelsius,     "checkShowCelsius");
+        FIND_ELEMENT(self->checkEdgeScroll,      "checkEdgeScroll");
+        FIND_ELEMENT(self->checkShowWeather,     "checkShowWeather");
+        FIND_ELEMENT(self->checkAutoslow,        "checkAutoslow");
+        FIND_ELEMENT(self->checkAutopause,       "checkAutopause");
+
+        if (g_pGameSettingsPtr && *g_pGameSettingsPtr) {
+            int32_t* gs = *g_pGameSettingsPtr;
+            SetCheckState(self->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
+            SetCheckState(self->checkAutopause,  (uint8_t)gs[6]);
+            SetCheckState(self->checkStatusIcon, (uint8_t)gs[3]);
+            SetCheckState(self->checkEdgeScroll, (uint8_t)gs[5]);
+            SetCheckState(self->checkShowCelsius,*(uint8_t*)((uintptr_t)gs + 0x15));
+            SetCheckState(self->checkShowWeather,*(uint8_t*)((uintptr_t)gs + 0x16));
+
+            SetSliderRange(self->sliderStatusIcon, 0.0f, 100.0f);
+            SetSliderValue(self->sliderStatusIcon, (float)gs[2]);
+
+            SetSliderRange(self->sliderStatusIconScale, 25.0f, 200.0f);
+            SetSliderValue(self->sliderStatusIconScale, (float)gs[4]);
+        }
+    }
+
+    // --- MouseClip checkbox (depends on inputCfg) ---
+    if (s_enableMouseClipCheck) {
+        FIND_ELEMENT(self->checkMouseClip,       "checkMouseClip");
+        if (inputCfg) SetCheckState(self->checkMouseClip,
+                                    *(uint8_t*)((uintptr_t)inputCfg + 0x08));
+    }
 
     // --- Tab options: restore last active tab ---
-    FIND_ELEMENT(self->tabOptions,"tabOptions");
-    if (self->tabOptions) {
-        int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
-        // Clamp to valid range — options dialog has 4 tabs (0-3)
-        if (lastTab < 0 || lastTab > 3) lastTab = 0;
-        fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
+    if (s_enableTabRestore) {
+        FIND_ELEMENT(self->tabOptions,"tabOptions");
+        if (self->tabOptions) {
+            int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
+            // Clamp to valid range — options dialog has 4 tabs (0-3)
+            if (lastTab < 0 || lastTab > 3) lastTab = 0;
+            fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
+        }
     }
 }
 
@@ -1621,8 +1674,8 @@ void OptionsStub_RuntimeThunk(void* self, ...) {
 
 // Stub Setup — prints once then no-ops. Used to localize crashes:
 // if commenting out Startup causes the crash to go away, the bug is inside
-// our reimpl; if it persists, it's downstream.
-void OptionsStub_Slot4_NoOp(void* self) {
+// our reimpl; if it persists, it's downstream. Kept around for re-bisecting.
+[[maybe_unused]] void OptionsStub_Slot4_NoOp(void* self) {
     static bool warned = false;
     if (!warned) {
         warned = true;
@@ -1636,7 +1689,8 @@ void* g_OptionsDialog_Vtable_Standalone[10] = {
     reinterpret_cast<void*>(&OptionsStub_Slot1_TypeName),        // +0x08 TypeName
     reinterpret_cast<void*>(&OptionsStub_Slot2_TypeId),          // +0x10 TypeId
     reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<3>),       // +0x18 Persist
-    reinterpret_cast<void*>(&OptionsStub_Slot4_NoOp),            // +0x20 Setup (DIAG stub)
+    // Slot4 — real Startup, with bisect flags inside it (input list off first).
+    reinterpret_cast<void*>(&OptionsDialog_Startup),             // +0x20 Setup
     reinterpret_cast<void*>(&OptionsDialog_Shutdown),            // +0x28 Shutdown
     reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<6>),       // +0x30 OnUpdateLayout
     reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<7>),       // +0x38 OnUpdate

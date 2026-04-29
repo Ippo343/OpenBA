@@ -3408,6 +3408,23 @@ extern fn_KeyMap_ClearInput3_t fn_KeyMap_ClearInput3;
 typedef int (*fn_KeyMap_GetIdForDeviceInput_t)(void* self, int device, int key);
 extern fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput;
 
+// Input::KeyMap::RegisterInput(this, id, deviceType, keyCode, name, flag)
+// ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z (Runtime 0x1800a7e70)
+// name is const char* (PEBD), NOT a String object.
+typedef void (*fn_KeyMap_RegisterInput_t)(void* self, int id, int deviceType,
+                                           int keyCode, const char* name, bool flag);
+extern fn_KeyMap_RegisterInput_t fn_KeyMap_RegisterInput;
+
+// Input::KeyMap::ClearAll(this)
+// ?ClearAll@KeyMap@Input@@QEAAXXZ (Runtime 0x1800a7d20)
+typedef void (*fn_KeyMap_ClearAll_t)(void* self);
+extern fn_KeyMap_ClearAll_t fn_KeyMap_ClearAll;
+
+// Input::KeyMap::Load(this) — loads saved bindings from Persistence over current map
+// ?Load@KeyMap@Input@@QEAAXXZ (Runtime 0x1800a7190)
+typedef void (*fn_KeyMap_Load_t)(void* self);
+extern fn_KeyMap_Load_t fn_KeyMap_Load;
+
 // OptionInputBindDialog ctor (0x140071d30) — creates 0xC8-byte dialog
 // Params: (mem, userInterface, externalResource, internalBasePtrNull)
 typedef void* (*fn_OptionInputBindDialog_Ctor_t)(void* mem, void* userInterface, void* external, void* internalBasePtr);

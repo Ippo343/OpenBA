@@ -535,6 +535,9 @@ fn_KeyMap_SetInput_t fn_KeyMap_SetInput = nullptr;
 fn_KeyMap_ClearInput2_t fn_KeyMap_ClearInput2 = nullptr;
 fn_KeyMap_ClearInput3_t fn_KeyMap_ClearInput3 = nullptr;
 fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput = nullptr;
+fn_KeyMap_RegisterInput_t fn_KeyMap_RegisterInput = nullptr;
+fn_KeyMap_ClearAll_t fn_KeyMap_ClearAll = nullptr;
+fn_KeyMap_Load_t fn_KeyMap_Load = nullptr;
 fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor = nullptr;
 fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
@@ -3781,6 +3784,28 @@ bool EngineFuncsInit() {
         ResolveExport("?ClearInput@KeyMap@Input@@QEAAXHHH@Z"));
     fn_KeyMap_GetIdForDeviceInput = reinterpret_cast<fn_KeyMap_GetIdForDeviceInput_t>(
         ResolveExport("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z"));
+
+    // KeyMap default-binding setup — used by Game_RegisterDefaultInputBindings
+    // (clean reimpl of FUN_1400992f0). Mangled names verified against
+    // Runtime-x64.dll exports in Ghidra.
+    fn_KeyMap_RegisterInput = reinterpret_cast<fn_KeyMap_RegisterInput_t>(
+        ResolveExport("?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z"));
+    if (!fn_KeyMap_RegisterInput) {
+        fn_KeyMap_RegisterInput = reinterpret_cast<fn_KeyMap_RegisterInput_t>(
+            ResolveAddr(Module::Runtime, 0x1800a7e70));
+    }
+    fn_KeyMap_ClearAll = reinterpret_cast<fn_KeyMap_ClearAll_t>(
+        ResolveExport("?ClearAll@KeyMap@Input@@QEAAXXZ"));
+    if (!fn_KeyMap_ClearAll) {
+        fn_KeyMap_ClearAll = reinterpret_cast<fn_KeyMap_ClearAll_t>(
+            ResolveAddr(Module::Runtime, 0x1800a7d20));
+    }
+    fn_KeyMap_Load = reinterpret_cast<fn_KeyMap_Load_t>(
+        ResolveExport("?Load@KeyMap@Input@@QEAAXXZ"));
+    if (!fn_KeyMap_Load) {
+        fn_KeyMap_Load = reinterpret_cast<fn_KeyMap_Load_t>(
+            ResolveAddr(Module::Runtime, 0x1800a7190));
+    }
 
     // Dialog constructors — exe functions
     fn_OptionInputBindDialog_Ctor = reinterpret_cast<fn_OptionInputBindDialog_Ctor_t>(

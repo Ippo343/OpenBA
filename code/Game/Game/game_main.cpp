@@ -25,9 +25,17 @@
 #include "resolve.h"
 #include "UpdateLoop.h"
 #include "Game/game.h"
+#include "Game/inputbindings.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+
+#ifdef STANDALONE_EXE
+// Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
+// into the fake exref chain at slot 0x140151738 so that triple-deref reads
+// (g_pKeyMapObjectExref) reach the real KeyMap inside Input::Configuration.
+extern "C" void SetStandaloneKeyMap(void* keyMap);
+#endif
 
 #ifdef STANDALONE_EXE
 // Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
@@ -384,6 +392,27 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     printf("[GameMain] Game_Ctor done; KeyMap singleton -> %p\n",
                            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
                 }
+
+#ifdef STANDALONE_EXE
+                // Wire the live Input::KeyMap into our fake exref chain so
+                // triple-deref reads of g_pKeyMapObjectExref reach the real
+                // KeyMap. Engine::Startup constructed Input::Configuration at
+                // engine[0x6d8]; its first field is the KeyMap pointer
+                // (Input::Configuration::GetKeyMap is `return *(KeyMap**)this`).
+                void* inputCfg = *reinterpret_cast<void**>(
+                    reinterpret_cast<uintptr_t>(&engine) + 0x6d8);
+                void* keyMap = inputCfg ? *reinterpret_cast<void**>(inputCfg)
+                                        : nullptr;
+                printf("[GameMain] InputConfig=%p  -> KeyMap=%p\n",
+                       inputCfg, keyMap);
+                SetStandaloneKeyMap(keyMap);
+
+                // Populate KeyMap with default bindings (mirror of the original
+                // PlacementTool_Ctor's call to FUN_1400992f0). Must happen
+                // before any dialog opens — OptionsDialog buttons poll
+                // KeyMap::Pressed every frame and will fault on an empty map.
+                Game::RegisterDefaultInputBindings();
+#endif
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
                 int32_t* settings = reinterpret_cast<int32_t*>(
