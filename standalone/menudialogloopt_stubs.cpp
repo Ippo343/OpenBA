@@ -34,6 +34,7 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "UpdateLoop.h"
+#include "Game/menudialogloopt_funcs.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -183,12 +184,11 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
-    (void)alpha;
-    // Mirror original MenuDLT::Draw (exe 0x14009B440): when m_scene (self+0xb90)
-    // is null we skip the 3D scene block and just draw the UI. Standalone
-    // currently has no menu 3D scene set up, so this path is correct here.
-    //
+    // Mirror original MenuDLT::Draw (exe 0x14009B440):
     //   ctx = engine_singleton->m_context   (engine+0x10)
+    //   if (self+0xb90 != null) {  // MenuScene loaded
+    //       <camera setup, sun light, fog, Renderer::Draw>
+    //   }
     //   UI::UserInterface::Draw(self+0x40, ctx)
     //
     // self+0x40 is the embedded UI::UserInterface (DialogLoopT layout).
@@ -206,8 +206,15 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
 
     if (trace) {
-        printf("[MenuDLT::Draw] self=%p alpha=%f mainLoop=%p ctx=%p ui=%p\n",
-               (void*)self, alpha, mainLoop, context, ui);
+        void* menuScene = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(self) + 0xb90);
+        printf("[MenuDLT::Draw] self=%p alpha=%f mainLoop=%p ctx=%p ui=%p menuScene=%p\n",
+               (void*)self, alpha, mainLoop, context, ui, menuScene);
+    }
+
+    // Phase A: render the 3D menu scene before the UI overlay.
+    if (context) {
+        MenuDialogLoopT_DrawScene_PhaseA(self, alpha, context);
     }
 
     if (fn_UI_Draw && context) {
@@ -235,11 +242,12 @@ void Stub_DrawFailed(UpdateLoop* self) {
 
 void Stub_Load(UpdateLoop* self) {
     // Original MenuDLT::Load (exe 0x14009A930) tail-calls Engine::DialogLoopT::Load
-    // first to populate self+0x30 (m_dialogExternal) from m_dialogFilename ("Dialog\MainMenu.rsc"),
-    // then loads companion resources (Audio/Music/Menu.rsc, Game/MenuScene/SceneN.rsc) for the
-    // 3D menu background. We delegate only the base Load — companion 3D scene work is
-    // deferred to M3 (rendering). This is enough to populate m_dialogExternal so that
-    // DialogLoopT::Startup → CreateDialog → MainMenuDialog can succeed.
+    // first to populate self+0x30 (m_dialogExternal) from m_dialogFilename
+    // ("Dialog\MainMenu.rsc"), then loads companion resources (Audio/Music/Menu.rsc,
+    // Game/MenuScene/SceneN.rsc) for the 3D menu background. We delegate the base
+    // Load to Engine::DialogLoopT, then run Phase A scene allocation for the menu
+    // background. Audio music + TradeWork + static-mesh + particle iteration are
+    // out of Phase A scope.
     void* dialogExtBefore = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Load] self=%p m_dialogExternal(before)=%p\n", (void*)self, dialogExtBefore);
     if (!fn_DialogLoopT_Load) {
@@ -249,6 +257,12 @@ void Stub_Load(UpdateLoop* self) {
     fn_DialogLoopT_Load(self);
     void* dialogExtAfter = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Load] m_dialogExternal(after)=%p\n", dialogExtAfter);
+
+    // Phase A: load Game/MenuScene/SceneN.rsc + allocate Renderer/Scene/SunLight/
+    // Transform/MeshInstance and add to global scene list. Failure is non-fatal —
+    // the menu UI still renders without the 3D background.
+    bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+    printf("[MenuDLT::Load] LoadScene_PhaseA returned %s\n", sceneOk ? "true" : "false");
 }
 
 void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {

@@ -785,6 +785,23 @@ fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
 fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
 fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject = nullptr;
+
+// --- MenuScene 3D rendering (Phase A) ---
+fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
+fn_Graphics_Scene_Ctor_t         fn_Graphics_Scene_Ctor         = nullptr;
+fn_Graphics_SunLight_Ctor_t      fn_Graphics_SunLight_Ctor      = nullptr;
+fn_Graphics_SunLight_Set_t       fn_Graphics_SunLight_Set       = nullptr;
+fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
+fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh = nullptr;
+fn_Graphics_Renderer_Draw_t      fn_Graphics_Renderer_Draw      = nullptr;
+fn_Math_Vector3_FromYawPitch_t   fn_Math_Vector3_FromYawPitch   = nullptr;
+fn_Video_Context_SetFog_t        fn_Video_Context_SetFog        = nullptr;
+fn_Math_Transform_Ctor_t         fn_Math_Transform_Ctor         = nullptr;
+fn_Math_Transform3_Identity_t    fn_Math_Transform3_Identity    = nullptr;
+fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
+fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
+fn_Graphics_Camera_SetFrustum_t  fn_Graphics_Camera_SetFrustum  = nullptr;
+
 fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter = nullptr;
 fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume = nullptr;
 fn_Vector3_Equals_t fn_Vector3_Equals = nullptr;
@@ -3366,6 +3383,37 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140002280));
     fn_Graphics_Scene_AddGlobalObject = reinterpret_cast<fn_Graphics_Scene_AddGlobalObject_t>(
         ResolveExport("?AddGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+
+    // --- MenuScene 3D rendering (Phase A) ---
+    fn_Graphics_Renderer_Ctor = reinterpret_cast<fn_Graphics_Renderer_Ctor_t>(
+        ResolveExport("??0Renderer@Graphics@@QEAA@XZ"));
+    fn_Graphics_Scene_Ctor = reinterpret_cast<fn_Graphics_Scene_Ctor_t>(
+        ResolveExport("??0Scene@Graphics@@QEAA@XZ"));
+    fn_Graphics_SunLight_Ctor = reinterpret_cast<fn_Graphics_SunLight_Ctor_t>(
+        ResolveExport("??0SunLight@Graphics@@QEAA@XZ"));
+    fn_Graphics_SunLight_Set = reinterpret_cast<fn_Graphics_SunLight_Set_t>(
+        ResolveExport("?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z"));
+    fn_Graphics_MeshInstance_Ctor = reinterpret_cast<fn_Graphics_MeshInstance_Ctor_t>(
+        ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
+    fn_Graphics_MeshInstance_SetMesh = reinterpret_cast<fn_Graphics_MeshInstance_SetMesh_t>(
+        ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
+    fn_Graphics_Renderer_Draw = reinterpret_cast<fn_Graphics_Renderer_Draw_t>(
+        ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
+    fn_Math_Vector3_FromYawPitch = reinterpret_cast<fn_Math_Vector3_FromYawPitch_t>(
+        ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
+    fn_Video_Context_SetFog = reinterpret_cast<fn_Video_Context_SetFog_t>(
+        ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
+    fn_Math_Transform_Ctor = reinterpret_cast<fn_Math_Transform_Ctor_t>(
+        ResolveExport("??0Transform@Math@@QEAA@XZ"));
+    fn_Math_Transform3_Identity = reinterpret_cast<fn_Math_Transform3_Identity_t>(
+        ResolveExport("?Identity@Transform3@Math@@SA?AV12@XZ"));
+    fn_Volume_Frustum_Ctor = reinterpret_cast<fn_Volume_Frustum_Ctor_t>(
+        ResolveExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z"));
+    fn_Graphics_Camera_Ctor = reinterpret_cast<fn_Graphics_Camera_Ctor_t>(
+        ResolveExport("??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z"));
+    fn_Graphics_Camera_SetFrustum = reinterpret_cast<fn_Graphics_Camera_SetFrustum_t>(
+        ResolveExport("?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z"));
+
     fn_Audio_Scene_MoveEmitter = reinterpret_cast<fn_Audio_Scene_MoveEmitter_t>(
         ResolveExport("?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z"));
     fn_Audio_Scene_SetEmitterVolume = reinterpret_cast<fn_Audio_Scene_SetEmitterVolume_t>(

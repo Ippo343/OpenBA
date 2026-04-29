@@ -25,6 +25,7 @@ REIMPLEMENTED = {
     "FinishTutorialInstance",  # code/Game/Tutorial/finishtutorialinstance.cpp
     "MainMenuDialog",          # code/Game/Dialog/mainmenudialog.cpp
     "LoaderDialog",            # code/Game/Dialog/loaderdialog.cpp
+    "MenuScene",               # code/Game/Game/menuscene.cpp
 }
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

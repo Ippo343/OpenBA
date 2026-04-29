@@ -63,6 +63,7 @@ extern "C" {
     void RegisterOptionsDialogVtable();
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
+    void RegisterMenuSceneVtable();
 }
 
 // ============================================================
@@ -199,6 +200,20 @@ static void RegisterDispatchSlots() {
     // leave this slot zero-filled until something else needs it.
     RegisterDispatchSlot(0x140151728, 0);
 
+    // Object::External::External — dispatch slot for the External base ctor.
+    // MenuScene_Init reads:
+    //   slot = ResolveAddr(Module::Exe, 0x140151e98);
+    //   fn_External_Ctor = *(fn_t*)slot;
+    // So the slot must hold a pointer to the Runtime DLL's External::External.
+    // Mangled: ??0External@Object@@QEAA@XZ (default ctor, public non-virtual).
+    RegisterDispatchSlot(0x140151e98,
+        (uintptr_t)ResolveExport("??0External@Object@@QEAA@XZ"));
+
+    // Object::External::~External — paired dtor for the same dispatch pattern.
+    // MenuScene_Dtor reads slot 0x140151ea0 the same way.
+    RegisterDispatchSlot(0x140151ea0,
+        (uintptr_t)ResolveExport("??1External@Object@@UEAA@XZ"));
+
     // Input::KeyMap exref. Slot stores a level-1 pointer to a "level-2 cell"
     // whose contents are the real KeyMap*. See the comment near
     // g_StandaloneKeyMapPtr above for the reasoning.
@@ -269,6 +284,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterOptionsDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
+    RegisterMenuSceneVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.

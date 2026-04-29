@@ -13,7 +13,6 @@
 
 #ifdef STANDALONE_EXE
 #include "factory_registration.h"
-#include "resolve.h"
 #include <cstdio>
 
 // Per-type tracing factories. When External::Load calls one of these,
@@ -25,11 +24,8 @@ namespace {
 
     // Generic stub that logs the name. Each REGISTER_TYPE entry below
     // points at a unique trampoline that calls this with its typeName.
-    // Highlights with [TRACE!] when inside a TraceExeBegin/End bracket so
-    // hits during fn_DialogLoaderLoopT_Load stand out.
     void* LogAndReturnNull(const char* typeName) {
-        const char* tag = (g_traceExeCallbacks > 0) ? "[TRACE! NullFactory]" : "[NullFactory]";
-        std::fprintf(stderr, "%s Hit for type: %s\n", tag, typeName);
+        std::fprintf(stderr, "[NullFactory] Hit for type: %s\n", typeName);
         std::fflush(stderr);
         return nullptr;
     }
@@ -171,7 +167,6 @@ REGISTER_NULL_FACTORY(ClimateGenerator, "Object::External");  // 14014cac0 Clima
 REGISTER_NULL_FACTORY(Disease, "Object::External");  // 14014cb00 ClimateGenerator_StaticInit
 REGISTER_NULL_FACTORY(EnvironmentDescription, "Object::External");  // 14014cb40 EnvironmentDescription_RegisterType
 REGISTER_NULL_FACTORY(MapGenerator, "Object::External");  // 14014cb80 MapGenerator_RegisterType
-REGISTER_NULL_FACTORY(MenuScene, "Object::External");  // 14014cbc0 MenuScene_RegisterType
 REGISTER_NULL_FACTORY(MusicList, "Object::External");  // 14014cc00 MenuScene_StaticInit
 REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb");  // 14014cc40 MenuScene_Setup
 REGISTER_NULL_FACTORY(Profession, "Object::External");  // 14014cc90 Profession_RegisterType

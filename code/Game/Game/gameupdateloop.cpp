@@ -129,8 +129,12 @@ typedef void (*fn_Graphics_Scene_RemoveGlobalObject_t)(void* scene, void* geomet
 static fn_Graphics_Scene_RemoveGlobalObject_t fn_Graphics_Scene_RemoveGlobalObject = nullptr;
 
 // Graphics::Renderer::Draw(this, Context*, float alpha, Scene*, Camera*)
-typedef void (*fn_Graphics_Renderer_Draw_t)(void* self, void* ctx, float alpha, void* scene, void* camera);
-static fn_Graphics_Renderer_Draw_t fn_Graphics_Renderer_Draw = nullptr;
+// (NB: a global with the same name is declared extern in engine_funcs.h. The two
+// resolve to the same Runtime export when both succeed; we keep the local static
+// here for backward-compat with the existing in-flight reimpl. Local static name
+// renamed to avoid the extern/static clash.)
+typedef void (*fn_Graphics_Renderer_Draw_local_t)(void* self, void* ctx, float alpha, void* scene, void* camera);
+static fn_Graphics_Renderer_Draw_local_t fn_Graphics_Renderer_Draw_local = nullptr;
 
 // Graphics::Renderer::~Renderer(this)
 typedef void (*fn_Graphics_Renderer_Dtor_t)(void* self);
@@ -436,7 +440,7 @@ static void EnsureInit() {
         ResolveExport("?Clean@Scene@Graphics@@QEAAXXZ"));
     fn_Graphics_Scene_RemoveGlobalObject = reinterpret_cast<fn_Graphics_Scene_RemoveGlobalObject_t>(
         ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
-    fn_Graphics_Renderer_Draw = reinterpret_cast<fn_Graphics_Renderer_Draw_t>(
+    fn_Graphics_Renderer_Draw_local = reinterpret_cast<fn_Graphics_Renderer_Draw_local_t>(
         ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEAVScene@2@AEAVCamera@Math@@@Z"));
     fn_Graphics_Renderer_Dtor = reinterpret_cast<fn_Graphics_Renderer_Dtor_t>(
         ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
@@ -968,7 +972,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        fn_Graphics_Renderer_Draw(self->m_renderer, videoCtx, alpha,
+        fn_Graphics_Renderer_Draw_local(self->m_renderer, videoCtx, alpha,
                                   self->m_graphicsScene,
                                   (void*)((uintptr_t)self->m_playerController + 0x34));
     }

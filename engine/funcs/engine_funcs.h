@@ -2769,6 +2769,75 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 typedef void (*fn_Graphics_Scene_AddGlobalObject_t)(void* scene, void* geometry);
 extern fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject;
 
+// ============================================================
+// MenuScene 3D rendering — Runtime DLL Graphics::/Math::/Volume:: functions
+// Used by code/Game/Game/menudialogloopt.cpp (Phase A scene background).
+// ============================================================
+
+// Graphics::Renderer::Renderer() — default ctor. Object size 0x50, alignment 4.
+typedef void* (*fn_Graphics_Renderer_Ctor_t)(void* self);
+extern fn_Graphics_Renderer_Ctor_t fn_Graphics_Renderer_Ctor;
+
+// Graphics::Scene::Scene() — default ctor. Object size 0x78, alignment 8.
+typedef void* (*fn_Graphics_Scene_Ctor_t)(void* self);
+extern fn_Graphics_Scene_Ctor_t fn_Graphics_Scene_Ctor;
+
+// Graphics::SunLight::SunLight() — default ctor. Object size 0x108, alignment 8.
+typedef void* (*fn_Graphics_SunLight_Ctor_t)(void* self);
+extern fn_Graphics_SunLight_Ctor_t fn_Graphics_SunLight_Ctor;
+
+// Graphics::SunLight::Set(direction, color, ambient) — set lighting parameters.
+// RCX=SunLight*, RDX=Vector3* (direction), R8=Vector4* (sun color), R9=Vector4* (ambient color).
+typedef void (*fn_Graphics_SunLight_Set_t)(void* self, void* direction, void* sunColor, void* ambient);
+extern fn_Graphics_SunLight_Set_t fn_Graphics_SunLight_Set;
+
+// Graphics::MeshInstance::MeshInstance() — default ctor. Object size 0x120, alignment 8.
+typedef void* (*fn_Graphics_MeshInstance_Ctor_t)(void* self);
+extern fn_Graphics_MeshInstance_Ctor_t fn_Graphics_MeshInstance_Ctor;
+
+// Graphics::MeshInstance::SetMesh(meshExternalPtr) — assign mesh resource.
+// RCX=MeshInstance*, RDX=ExternalPtr<GraphicsMesh> (8-byte external ptr value).
+typedef void (*fn_Graphics_MeshInstance_SetMesh_t)(void* self, void* meshPtr);
+extern fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh;
+
+// Graphics::Renderer::Draw(context, alpha, scene, camera) — main render call.
+// RCX=Renderer*, RDX=Video::Context*, XMM2=alpha, R9=Scene*, [stack+0x20]=Camera*.
+typedef void (*fn_Graphics_Renderer_Draw_t)(void* self, void* context, float alpha, void* scene, void* camera);
+extern fn_Graphics_Renderer_Draw_t fn_Graphics_Renderer_Draw;
+
+// Math::Vector3::FromYawPitch(retVec, scalarPair) — constructs a direction Vector3
+// from yaw + pitch (scalarPair points to two consecutive Scalar floats).
+// Member style: RCX=retVec (hidden return), RDX=scalarPair, returns retVec.
+typedef void* (*fn_Math_Vector3_FromYawPitch_t)(void* retVec, void* scalarPair);
+extern fn_Math_Vector3_FromYawPitch_t fn_Math_Vector3_FromYawPitch;
+
+// Video::Context::SetFog(fogStart, fogEnd, fogColorVec4) — push fog params.
+// RCX=Context*, XMM1=fogStart, XMM2=fogEnd, R9=Vector4*.
+typedef void (*fn_Video_Context_SetFog_t)(void* context, float fogStart, float fogEnd, void* fogColor);
+extern fn_Video_Context_SetFog_t fn_Video_Context_SetFog;
+
+// Math::Transform::Transform() — default ctor. Object size 0x10C (0x34 transform + 0xD8 camera).
+typedef void* (*fn_Math_Transform_Ctor_t)(void* self);
+extern fn_Math_Transform_Ctor_t fn_Math_Transform_Ctor;
+
+// Math::Transform3::Identity() — returns pointer to a static identity transform.
+typedef void* (*fn_Math_Transform3_Identity_t)();
+extern fn_Math_Transform3_Identity_t fn_Math_Transform3_Identity;
+
+// Volume::Frustum::Frustum(self, fovX, fovY, near, far) — perspective frustum.
+// Member call: RCX=self, RDX=fovX (Scalar*), R8=fovY (Scalar*), R9=near (Scalar*), [+0x20]=far (Scalar*).
+typedef void* (*fn_Volume_Frustum_Ctor_t)(void* self, void* fovX, void* fovY, void* nearZ, void* farZ);
+extern fn_Volume_Frustum_Ctor_t fn_Volume_Frustum_Ctor;
+
+// Graphics::Camera::Camera(frustum, transform3, isPerspective) — non-default ctor.
+// RCX=self, RDX=Frustum*, R8=Transform3*, R9b=isPerspective bool.
+typedef void* (*fn_Graphics_Camera_Ctor_t)(void* self, void* frustum, void* transform3, bool isPerspective);
+extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
+
+// Graphics::Camera::SetFrustum(frustum) — replace the camera's frustum.
+typedef void (*fn_Graphics_Camera_SetFrustum_t)(void* self, void* frustum);
+extern fn_Graphics_Camera_SetFrustum_t fn_Graphics_Camera_SetFrustum;
+
 // Audio::Scene::MoveEmitter — moves an audio emitter from old to new position
 // RCX=Audio::Scene*, EDX=emitterId, R8=oldPos(Vector3*), R9=newPos(Vector3*)
 typedef void (*fn_Audio_Scene_MoveEmitter_t)(void* scene, uint32_t emitterId, void* oldPos, void* newPos);
