@@ -52,23 +52,41 @@ enum MainMenuButtonId {
 // ============================================================
 // Helper: load .rsc resource for dialog construction
 // ============================================================
-// Exe dispatch table entry for the External type ID (0x140151728).
-// At runtime: *dispatch = pointer to Runtime global, **dispatch = uint32_t type ID.
-static uint32_t** g_dispatchExternalTypeId = nullptr;
+// Exe data slot at 0x140151728. The exe loader patches this with the 4-byte
+// type ID for UI::Dialog (NOT DialogInstance — Ghidra mislabeled). Used by
+// LoadDialogResource to validate Dialog/*.rsc resources before construction.
+static uint32_t* g_dialogTypeIdSlot = nullptr;
 
 static void* LoadDialogResource(const char* rscPath) {
     uint8_t filenameBuf[16];
     fn_Filename_CtorCStr(filenameBuf, rscPath);
     void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
+    printf("[LoadDialogResource] '%s' -> FindOrLoad=%p\n", rscPath, resource);
     void* extRes = nullptr;
     if (resource) {
-        // Type check using exe dispatch table — matches original code exactly
-        if (!g_dispatchExternalTypeId) {
-            g_dispatchExternalTypeId = reinterpret_cast<uint32_t**>(
+        // The slot is read as a direct uint32_t in the original (single deref).
+        if (!g_dialogTypeIdSlot) {
+            g_dialogTypeIdSlot = reinterpret_cast<uint32_t*>(
                 ResolveAddr(Module::Exe, 0x140151728));
         }
-        uint32_t typeId = **g_dispatchExternalTypeId;
-        if (fn_IsDerivedFrom(resource, typeId)) {
+        uint32_t typeId = (g_dialogTypeIdSlot ? *g_dialogTypeIdSlot : 0);
+        if (typeId == 0 && fn_Factory_GetTypeIdFromName &&
+            g_pFactorySingleton && *g_pFactorySingleton) {
+            // Standalone: slot wasn't filled by an exe loader, so look up
+            // UI::Dialog via the Runtime factory. g_pFactorySingleton is a
+            // void** pointing into the slot storage; *g points at the
+            // Runtime DLL's _singleton variable; **g is the actual Factory*.
+            void* factoryObj = *(void**)*g_pFactorySingleton;
+            if (factoryObj) {
+                typeId = fn_Factory_GetTypeIdFromName(factoryObj,
+                                                      "Dialog", true);
+                if (g_dialogTypeIdSlot) *g_dialogTypeIdSlot = typeId;
+            }
+        }
+        bool derived = (typeId && fn_IsDerivedFrom(resource, typeId));
+        printf("[LoadDialogResource] '%s' typeId=%u IsDerivedFrom=%d\n",
+               rscPath, typeId, derived ? 1 : 0);
+        if (derived) {
             extRes = resource;
         }
     }
@@ -821,6 +839,10 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
             // Last resort — close the window so the user isn't stuck
             PostQuitMessage(0);
         }
+        break;
+    case kButton_Options:
+        printf("[MainMenuDialog::OnCommand] -> OpenOptions\n");
+        MainMenuDialog_OpenOptions(reinterpret_cast<MainMenuDialog*>(self));
         break;
     default:
         printf("[MainMenuDialog::OnCommand] button id=%d not yet wired in standalone\n", id);

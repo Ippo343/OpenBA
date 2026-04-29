@@ -1556,3 +1556,169 @@ set_binding:
 cleanup:
     fn_String_Dtor(inputNameStr);
 }
+
+#ifdef STANDALONE_EXE
+
+// ============================================================
+// OptionsDialog standalone scaffolding
+// ============================================================
+// Provides a 10-slot vtable + ctor + factory + REGISTER_TYPE so that
+// MainMenuDialog::OpenOptions can produce a real OptionsDialog instance.
+//
+// Vtable layout (exe @ 0x14015ceb0, 10 slots):
+//   +0x00 Slot0 Dtor                — sets vtable, ~DialogInstance, conditional free
+//   +0x08 Slot1 TypeName            — exe const-load
+//   +0x10 Slot2 TypeId              — exe const-load
+//   +0x18 Slot3 Persist             — runtime thunk
+//   +0x20 Slot4 Setup               — REIMPL'd above (OptionsDialog_Startup)
+//   +0x28 Slot5 Shutdown            — REIMPL'd above (OptionsDialog_Shutdown)
+//   +0x30 Slot6 OnUpdateLayout      — runtime thunk
+//   +0x38 Slot7 OnUpdate            — runtime thunk
+//   +0x40 Slot8 OnEvent             — REIMPL'd above (OptionsDialog_OnEvent)
+//   +0x48 Slot9 OnSerializeSettings — runtime thunk
+//
+// 10 slots vs MainMenuDialog's 20: OptionsDialog has only the DialogInstance
+// interface (no DialogController), so no second-vtable block.
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+#include "resolve.h"
+
+namespace {
+
+void* GetOptionsDialogVtable();  // forward decl
+
+// Slot 0 — Dtor. Mirrors generic ~DialogInstance scalar-deleting dtor.
+void* OptionsStub_Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *(void**)self = GetOptionsDialogVtable();
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// Slot 1 — TypeName.
+const char* OptionsStub_Slot1_TypeName(void* /*self*/) { return "OptionsDialog"; }
+
+// Slot 2 — TypeId.
+uint32_t OptionsStub_Slot2_TypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("OptionsDialog");
+    return cached;
+}
+
+// Generic logging stub for the runtime-thunk slots (3, 6, 7, 9). Logs once
+// per slot so we can see when wiring matters.
+template <int SlotIdx>
+void OptionsStub_RuntimeThunk(void* self, ...) {
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[OptionsDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
+               SlotIdx, self);
+    }
+}
+
+// Stub Setup — prints once then no-ops. Used to localize crashes:
+// if commenting out Startup causes the crash to go away, the bug is inside
+// our reimpl; if it persists, it's downstream.
+void OptionsStub_Slot4_NoOp(void* self) {
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[OptionsDialog::Slot4_NoOp] self=%p (Setup stubbed off for "
+               "diagnostics)\n", self);
+    }
+}
+
+void* g_OptionsDialog_Vtable_Standalone[10] = {
+    reinterpret_cast<void*>(&OptionsStub_Dtor),                  // +0x00 Dtor
+    reinterpret_cast<void*>(&OptionsStub_Slot1_TypeName),        // +0x08 TypeName
+    reinterpret_cast<void*>(&OptionsStub_Slot2_TypeId),          // +0x10 TypeId
+    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<3>),       // +0x18 Persist
+    reinterpret_cast<void*>(&OptionsStub_Slot4_NoOp),            // +0x20 Setup (DIAG stub)
+    reinterpret_cast<void*>(&OptionsDialog_Shutdown),            // +0x28 Shutdown
+    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<6>),       // +0x30 OnUpdateLayout
+    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<7>),       // +0x38 OnUpdate
+    reinterpret_cast<void*>(&OptionsDialog_OnEvent),             // +0x40 OnEvent
+    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<9>),       // +0x48 OnSerializeSettings
+};
+
+void* GetOptionsDialogVtable() {
+    return reinterpret_cast<void*>(g_OptionsDialog_Vtable_Standalone);
+}
+
+// In-place ctor — clean reimpl of FUN_140075150.
+// Original mirrors: copy parentIBP to a local stack slot, call
+// DialogInstance::DialogInstance(self, ui, extRes, &localParent, 0, 0, 0),
+// patch *self with vtable_OptionsDialog, zero +0xB8..+0x1B8.
+void* OptionsDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
+                                    void* parentIBP) {
+    if (!self) return nullptr;
+    printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
+           self, ui, extRes, parentIBP);
+
+    // Stack copy of the parent IBP qword (matches original SEH frame layout).
+    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
+
+    if (fn_DialogInstance_Ctor && extRes) {
+        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy,
+                                nullptr, nullptr, 0);
+    } else {
+        printf("[OptionsDialog_Ctor] skipping DialogInstance::DialogInstance "
+               "(fn=%p extRes=%p) — bare-bones init\n",
+               (void*)fn_DialogInstance_Ctor, extRes);
+    }
+
+    *reinterpret_cast<void**>(self) = GetOptionsDialogVtable();
+
+    // Zero +0xB8..+0x1B8 (covers all OptionsDialog-specific fields).
+    OptionsDialog* od = reinterpret_cast<OptionsDialog*>(self);
+    char* base = reinterpret_cast<char*>(od);
+    for (size_t off = 0xB8; off < sizeof(OptionsDialog); off += 8) {
+        *reinterpret_cast<uint64_t*>(base + off) = 0;
+    }
+    return self;
+}
+
+void* OptionsDialog_Factory_Bare(void* /*loop*/) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(OptionsDialog), 8);
+    if (!p) return nullptr;
+    // Bare-bones — no UI/extRes/parent. Caller is the .rsc factory loader,
+    // which currently doesn't instantiate OptionsDialog this way (always
+    // built via MainMenuDialog::OpenOptions). Just zero + vtable.
+    for (size_t off = 0; off < sizeof(OptionsDialog); off += 8) {
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(p) + off) = 0;
+    }
+    *reinterpret_cast<void**>(p) = GetOptionsDialogVtable();
+    return p;
+}
+
+void* OptionsDialog_CreateInPlace_Bare(void* mem) {
+    if (!mem) return nullptr;
+    for (size_t off = 0; off < sizeof(OptionsDialog); off += 8) {
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(mem) + off) = 0;
+    }
+    *reinterpret_cast<void**>(mem) = GetOptionsDialogVtable();
+    return mem;
+}
+
+}  // namespace
+
+extern "C" void RegisterOptionsDialogVtable() {
+    RegisterExeAddr(0x14015ceb0, reinterpret_cast<uintptr_t>(g_OptionsDialog_Vtable_Standalone));
+    RegisterExeAddr(0x140075150, reinterpret_cast<uintptr_t>(&OptionsDialog_Ctor_Standalone));
+}
+
+extern "C" void* OptionsDialog_StandaloneFactory(void) {
+    return OptionsDialog_Factory_Bare(nullptr);
+}
+extern "C" void* OptionsDialog_StandaloneCreateInPlace(void* memory) {
+    return OptionsDialog_CreateInPlace_Bare(memory);
+}
+
+REGISTER_TYPE(OptionsDialog, "UI::DialogInstance",
+              &OptionsDialog_StandaloneFactory, &OptionsDialog_StandaloneCreateInPlace);
+
+#endif  // STANDALONE_EXE

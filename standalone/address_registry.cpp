@@ -31,6 +31,7 @@ extern "C" {
     void RegisterFinishTutorialInstanceVtable();
     void RegisterMainMenuDialogVtable();
     void RegisterLoaderDialogVtable();
+    void RegisterOptionsDialogVtable();
 }
 
 // ============================================================
@@ -142,6 +143,30 @@ static void RegisterDispatchSlots() {
     // Without this registration MainMenuDialog::OnCommand can't reach App::Quit.
     RegisterDispatchSlot(0x140152368,
         ResolveAddr(Module::Runtime, 0x1801fc678));
+
+    // Object::Factory::_singleton — same pattern.
+    // engine_funcs.cpp Phase H reads slot 0x140152760, expecting **slot to
+    // be the live Factory*. Without this, fn_Factory_GetTypeIdFromName +
+    // singleton are unusable, blocking the type-ID fallback in
+    // LoadDialogResource (and many other Factory consumers).
+    RegisterDispatchSlot(0x140152760,
+        ResolveAddr(Module::Runtime, 0x1801fc6e8));
+
+    // UI::Dialog::_typeInfo external — exe slot 0x140151728 in the original
+    // is patched by the loader with the **type ID itself** (4-byte uint),
+    // NOT a pointer to BaseTypeInfo. Original code reads it as
+    // `*(uint32_t*)0x140151728` (single deref), so the slot must contain
+    // the typeId directly.
+    //
+    // Note: Ghidra labels this _typeInfo@DialogInstance based on a heuristic
+    // but the actual type checked here is UI::Dialog (Runtime 0x1801faa88) —
+    // FUN_140064720 loads Dialog/Follow.rsc and runs IsDerivedFrom against
+    // this slot, and the .rsc loads as a UI::Dialog External.
+    //
+    // Type ID isn't known until Factory::Startup runs; LoadDialogResource has
+    // a fallback path that uses fn_Factory_GetTypeIdFromName instead, so we
+    // leave this slot zero-filled until something else needs it.
+    RegisterDispatchSlot(0x140151728, 0);
 }
 
 // ============================================================
@@ -195,6 +220,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterFinishTutorialInstanceVtable();
     RegisterMainMenuDialogVtable();
     RegisterLoaderDialogVtable();
+    RegisterOptionsDialogVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.
