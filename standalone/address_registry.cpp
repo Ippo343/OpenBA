@@ -61,6 +61,8 @@ extern "C" {
     void RegisterMainMenuDialogVtable();
     void RegisterLoaderDialogVtable();
     void RegisterOptionsDialogVtable();
+    void RegisterOptionInputBindDialogVtable();
+    void RegisterMessageDialogVtable();
 }
 
 // ============================================================
@@ -265,6 +267,8 @@ static void RegisterVtablesAndTypeIds() {
     RegisterMainMenuDialogVtable();
     RegisterLoaderDialogVtable();
     RegisterOptionsDialogVtable();
+    RegisterOptionInputBindDialogVtable();
+    RegisterMessageDialogVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.

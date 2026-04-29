@@ -172,6 +172,28 @@ static inline void SetSliderValue(void* elem, float val) {
     if (elem) *(float*)((uintptr_t)elem + 0x128) = val;
 }
 
+// Helper: lazy-resolve g_TypeId_TextElement in standalone mode.
+//
+// In standalone the exe exref slot at 0x140151508 isn't populated by Runtime
+// reflection, so g_TypeId_TextElement starts NULL and every IsDerivedFrom
+// check fails — silently dropping every TextElement::SetText / SetParameter
+// call (resulting in placeholder text from the .rsc surviving on screen).
+// Same pattern as LoadStringTable's StringTable type-id lazy-resolve.
+static void EnsureTextElementTypeId() {
+    if (g_TypeId_TextElement) return;
+    if (!fn_Factory_GetTypeIdFromName || !g_pFactorySingleton || !*g_pFactorySingleton)
+        return;
+    static uint32_t s_lazyId = 0;
+    if (s_lazyId == 0) {
+        void* factoryObj = *(void**)*g_pFactorySingleton;
+        if (factoryObj) {
+            s_lazyId = fn_Factory_GetTypeIdFromName(factoryObj, "TextElement", true);
+            printf("[OptionsDialog] Lazy-resolved TextElement typeId = %u\n", s_lazyId);
+        }
+    }
+    if (s_lazyId != 0) g_TypeId_TextElement = &s_lazyId;
+}
+
 // Helper: load a StringTable resource by path.
 //
 // In standalone mode the .rdata exref slot at 0x140151488 is never written by
@@ -220,8 +242,29 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self);
 // ============================================================
 // Calls Video::Device::ValidateConfiguration to fix up any invalid
 // combinations of renderer/adapter/resolution/antialias settings.
+//
+// 8th arg note: the original (verified in Ghidra @ 0x140072eb0) passes the
+// same `&savedAdapter` field twice — slots [+0x194] for both the 2nd and 8th
+// argument. Not a typo in our reimpl; matches retail.
+//
+// Defensive guard: ValidateConfiguration internally does
+// `*p5 / *p6 == *adapterRefresh / *adapterRefreshDen` to find a refresh-rate
+// match by ratio (Runtime @ 0x1800f7370). If `*p6` (savedRefreshDen) is 0 we
+// hit `idiv 0` -> SIGFPE. That can only happen if the Configuration singleton
+// wasn't populated with refresh defaults before the dialog opened — which in
+// turn only happens if g_pVideoConfigSingleton was NULL at Startup time (so
+// the saved-* fields stayed zero-initialized). In standalone we now fall back
+// to the Runtime DLL's _singleton slot in EngineFuncsInit, but keep this
+// guard as belt-and-braces so a future regression here can't crash the game.
 static void OptionsDialog_ValidateVideoConfig(OptionsDialog* self) {
     if (!fn_VideoDevice_ValidateConfiguration || !g_pVideoDeviceSingleton) return;
+    if (self->savedRefreshDen == 0) {
+        // Defaults from Video::Configuration ctor (Runtime @ 0x1800f6f10): 60/1.
+        // Better to pretend "60Hz" than to crash; the next Apply will write
+        // ValidateConfiguration's clamped values back to the singleton.
+        self->savedRefreshNum = 60;
+        self->savedRefreshDen = 1;
+    }
     fn_VideoDevice_ValidateConfiguration(
         *g_pVideoDeviceSingleton,
         (int*)&self->savedRenderer, (int*)&self->savedAdapter,
@@ -1369,6 +1412,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 // Sets label text from KeyMap string table, sets button key name text,
 // assigns element IDs starting at kInputBind_Base (13).
 void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
+    EnsureTextElementTypeId();
     void* keyMapContainer = GetKeyMapContainer();
     if (!keyMapContainer) return;
     void* keyMap = GetActualKeyMap();  // for method calls (GetDeviceForId, etc.)
@@ -1445,6 +1489,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
 // 6. If result=1 (bound), checks for conflicts and handles them
 // 7. Refreshes the input bind list
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot) {
+    EnsureTextElementTypeId();
     void* keyMapContainer = GetKeyMapContainer();
     if (!keyMapContainer) return;
     void* keyMap = GetActualKeyMap();  // for method calls

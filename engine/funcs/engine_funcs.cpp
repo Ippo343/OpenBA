@@ -2197,6 +2197,13 @@ bool EngineFuncsInit() {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b80));
         if (exref && *exref) {
             g_pInputDeviceSingleton = *exref;
+        } else {
+            // Standalone fallback: the exe exref slot is only populated by Runtime
+            // reflection in retail; standalone never wires it. Resolve the Runtime
+            // DLL export `Input::Device::_singleton` directly.
+            void** p = reinterpret_cast<void**>(
+                ResolveExport("?_singleton@Device@Input@@0PEAV12@EA"));
+            if (p) g_pInputDeviceSingleton = p;
         }
     }
 
@@ -2654,6 +2661,16 @@ bool EngineFuncsInit() {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b78));
         if (exref && *exref) {
             g_pAudioConfigSingleton = *exref;
+        } else {
+            // Standalone fallback: point at Runtime DLL's Audio::Configuration::_singleton
+            // storage (Runtime data var at 0x1801fe758 — set by Audio::Configuration ctor at
+            // 0x1800ddeb0). The exe's exref slot only gets populated by reflection in retail;
+            // standalone never wires it up. The slot may still be NULL here (ctor runs lazily
+            // during Engine::Engine), but it's the right address — saving the slot pointer
+            // means future *g_pAudioConfigSingleton reads see the live singleton.
+            void** runtimeSlot = reinterpret_cast<void**>(
+                ResolveAddr(Module::Runtime, 0x1801fe758));
+            if (runtimeSlot) g_pAudioConfigSingleton = runtimeSlot;
         }
     }
     // Video::Configuration singleton: exe exref at 0x140151b70 -> pointer to singleton
@@ -2661,6 +2678,21 @@ bool EngineFuncsInit() {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151b70));
         if (exref && *exref) {
             g_pVideoConfigSingleton = *exref;
+        } else {
+            // Standalone fallback: point at Runtime DLL's Video::Configuration::_singleton
+            // storage (Runtime data var at 0x1801fe7a0 — set by Video::Configuration ctor at
+            // 0x1800f6f10, which initializes refresh num/den to 60/1 by default). The exe's
+            // exref slot only gets populated by reflection in retail; standalone never wires
+            // it up. The slot may still be NULL here (ctor runs lazily during Engine::Engine),
+            // but it's the right address — saving the slot pointer means future
+            // *g_pVideoConfigSingleton reads see the live singleton.
+            //
+            // Without this fallback, OptionsDialog reads savedRefreshNum/Den as 0, then a
+            // resolution change calls Video::Device::ValidateConfiguration which divides
+            // by den => SIGFPE.
+            void** runtimeSlot = reinterpret_cast<void**>(
+                ResolveAddr(Module::Runtime, 0x1801fe7a0));
+            if (runtimeSlot) g_pVideoConfigSingleton = runtimeSlot;
         }
     }
 
