@@ -26,4 +26,13 @@ namespace Game {
 // unresolved — never crashes if engine fns aren't ready.
 void RegisterDefaultInputBindings();
 
+// Loads the three input localization StringTables (gameKeys, keyNames,
+// globalNames) into the global Game container at offsets +0xC8 / +0xD0 / +0xD8.
+//
+// Original game does this inside PlacementTool_Ctor (FUN_140099ff0) before
+// calling RegisterDefaultInputBindings. Without these tables OptionsDialog's
+// PopulateInputBindList reads NULL when looking up input ID -> display name,
+// causing every row to render the same fallback string ("Menu/Pause").
+void LoadInputNameTables();
+
 } // namespace Game

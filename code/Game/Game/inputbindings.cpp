@@ -152,4 +152,82 @@ void RegisterDefaultInputBindings() {
            kBindingCount);
 }
 
+// ============================================================
+// LoadInputNameTables — replicate the StringTable load slice of
+// PlacementTool_Ctor (FUN_140099ff0) for standalone mode.
+// ============================================================
+//
+// Original assembles the Game container's resource table by calling
+// `Object::ExternalList::Find` for each resource. We don't have the engine's
+// ExternalList wired in standalone (it's populated by the LoaderLoop chain),
+// but `Object::ExternalFactory::FindOrLoad` on the singleton resolves the
+// same files and returns the same StringTable instance. We do the StringTable
+// type check via fn_Factory_GetTypeIdFromName since the .rdata exref slot
+// (0x140151488) is not populated in standalone — see the same pattern in
+// optionsdialog.cpp's LoadStringTable.
+void LoadInputNameTables() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
+        printf("[InputBindings] LoadInputNameTables: KeyMap container NULL\n");
+        return;
+    }
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton
+            || !fn_ExternalFactory_FindOrLoad
+            || !fn_String_Ctor_CStr || !fn_String_Dtor
+            || !fn_Filename_AdjustDelimiters) {
+        printf("[InputBindings] LoadInputNameTables: ExternalFactory or string "
+               "fns not resolved\n");
+        return;
+    }
+
+    // Lazy-resolve StringTable type ID once via Factory::GetTypeIdFromName
+    // (Factory::Startup has already run by this point).
+    static uint32_t s_stringTableTypeId = 0;
+    if (s_stringTableTypeId == 0 && fn_Factory_GetTypeIdFromName
+            && g_pFactorySingleton && *g_pFactorySingleton) {
+        void* factoryObj = *(void**)*g_pFactorySingleton;
+        if (factoryObj) {
+            s_stringTableTypeId =
+                fn_Factory_GetTypeIdFromName(factoryObj, "StringTable", true);
+            printf("[InputBindings] StringTable typeId = %u\n",
+                   s_stringTableTypeId);
+        }
+    }
+
+    auto loadOne = [&](const char* path) -> void* {
+        uint8_t fnameBuf[8];
+        fn_String_Ctor_CStr(fnameBuf, path);
+        fn_Filename_AdjustDelimiters(fnameBuf);
+        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton,
+                                                   fnameBuf);
+        fn_String_Dtor(fnameBuf);
+        if (!ext) {
+            printf("[InputBindings]   '%s' -> NOT FOUND\n", path);
+            return nullptr;
+        }
+        if (s_stringTableTypeId != 0 && fn_IsDerivedFrom
+                && !fn_IsDerivedFrom(ext, s_stringTableTypeId)) {
+            printf("[InputBindings]   '%s' -> WRONG TYPE\n", path);
+            return nullptr;
+        }
+        printf("[InputBindings]   '%s' -> %p\n", path, ext);
+        return ext;
+    };
+
+    char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
+
+    // Slot indexing: param_1[0x19] = byte offset 0x19 * 8 = 0xC8.
+    *reinterpret_cast<void**>(container + 0xC8) =
+        loadOne("Dialog/StringTable.rsc:gameKeys");
+    *reinterpret_cast<void**>(container + 0xD0) =
+        loadOne("Dialog/StringTable.rsc:keyNames");
+    *reinterpret_cast<void**>(container + 0xD8) =
+        loadOne("Dialog/StringTable.rsc:globalNames");
+
+    printf("[InputBindings] Game container input tables: gameKeys=%p "
+           "keyNames=%p globalNames=%p\n",
+           *reinterpret_cast<void**>(container + 0xC8),
+           *reinterpret_cast<void**>(container + 0xD0),
+           *reinterpret_cast<void**>(container + 0xD8));
+}
+
 } // namespace Game

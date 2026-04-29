@@ -172,14 +172,37 @@ static inline void SetSliderValue(void* elem, float val) {
     if (elem) *(float*)((uintptr_t)elem + 0x128) = val;
 }
 
-// Helper: load a StringTable resource by path
+// Helper: load a StringTable resource by path.
+//
+// In standalone mode the .rdata exref slot at 0x140151488 is never written by
+// Runtime reflection, so g_TypeId_StringTable starts NULL and the type-check
+// gate would silently drop every result. We lazy-resolve the type ID on first
+// use via Object::Factory::GetTypeIdFromName ("StringTable", true) — Factory
+// has already populated its tree by Engine::Startup, so this hits a real id.
 static void* LoadStringTable(const char* path) {
     uint8_t filenameBuf[8];
     fn_String_Ctor_CStr(filenameBuf, path);
     fn_Filename_AdjustDelimiters(filenameBuf);
     void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
     fn_String_Dtor(filenameBuf);
-    if (ext && g_TypeId_StringTable && fn_IsDerivedFrom(ext, *g_TypeId_StringTable))
+    if (!ext) return nullptr;
+
+    if (!g_TypeId_StringTable && fn_Factory_GetTypeIdFromName
+            && g_pFactorySingleton && *g_pFactorySingleton) {
+        static uint32_t s_lazyStringTableTypeId = 0;
+        if (s_lazyStringTableTypeId == 0) {
+            void* factoryObj = *(void**)*g_pFactorySingleton;
+            if (factoryObj) {
+                s_lazyStringTableTypeId =
+                    fn_Factory_GetTypeIdFromName(factoryObj, "StringTable", true);
+                printf("[OptionsDialog] Lazy-resolved StringTable typeId = %u\n",
+                       s_lazyStringTableTypeId);
+            }
+        }
+        if (s_lazyStringTableTypeId != 0) g_TypeId_StringTable = &s_lazyStringTableTypeId;
+    }
+
+    if (g_TypeId_StringTable && fn_IsDerivedFrom(ext, *g_TypeId_StringTable))
         return ext;
     return nullptr;
 }
@@ -408,6 +431,13 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
     int modeCount = *(int*)(adapter + 0x10);
     intptr_t modes = *(intptr_t*)(adapter + 8);
 
+#ifdef STANDALONE_EXE
+    printf("[OptionsDialog::PopulateResolutionCombo] savedW=%u savedH=%u modeCount=%d "
+           "renderer=%u adapter=%u\n",
+           self->savedWidth, self->savedHeight, modeCount,
+           self->savedRenderer, self->savedAdapter);
+#endif
+
     fn_InternalBasePtr_CheckPtr(&self->comboResolution);
     fn_ComboElement_RemoveAllItems(self->comboResolution);
 
@@ -415,6 +445,12 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
     for (int i = 0; i < modeCount; i++) {
         uint32_t w = *(uint32_t*)(modes + i * 0x18);
         uint32_t h = *(uint32_t*)(modes + i * 0x18 + 4);
+
+#ifdef STANDALONE_EXE
+        if (i < 5 || (w == self->savedWidth && h == self->savedHeight))
+            printf("[OptionsDialog::PopRes]   mode[%d] = %ux%u%s\n", i, w, h,
+                   (w == self->savedWidth && h == self->savedHeight) ? " <-- MATCH" : "");
+#endif
 
         uint8_t fmtBuf[8];
         fn_String_Format(fmtBuf, "%ix%i", w, h);

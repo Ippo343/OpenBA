@@ -412,6 +412,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // before any dialog opens — OptionsDialog buttons poll
                 // KeyMap::Pressed every frame and will fault on an empty map.
                 Game::RegisterDefaultInputBindings();
+
+                // Load the input localization StringTables that
+                // PlacementTool_Ctor (FUN_140099ff0) normally loads. These map
+                // input ID -> "Move View Forward" etc., used by OptionsDialog's
+                // input bind list.
+                Game::LoadInputNameTables();
 #endif
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
