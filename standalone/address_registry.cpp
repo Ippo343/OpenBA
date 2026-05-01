@@ -92,6 +92,30 @@ extern "C" {
     void Reimpl_ExternalPtr_Serialize_Weather(void* refField, void* serializer);
 }
 
+// M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
+// (decompiled bodies live in code/Game/Game/serialize_struct60b.cpp)
+extern "C" {
+    void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);
+    void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src);
+    void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);
+}
+
+// M3.5 Path B session 3 — typed-ExternalPtr serialize helper at 0x140007140.
+// (decompiled body lives in code/Game/Game/serialize_externals_typed.cpp)
+extern "C" {
+    void Reimpl_ExternalPtr_Serialize_Typed_7140(void* refField, void* serializer);
+}
+
+// M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
+// (decompiled bodies live in code/Game/Game/serialize_resize_helpers.cpp)
+extern "C" {
+    void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);
+}
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -113,6 +137,31 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x14001bff0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_Particle));
     RegisterExeAddr(0x14001b8e0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_GraphicsMesh));
     RegisterExeAddr(0x1400196a0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Weather));
+
+    // ============================================================
+    // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
+    // ============================================================
+    RegisterExeAddr(0x14001f250, reinterpret_cast<uintptr_t>(&Reimpl_Struct60B_Resize));
+    RegisterExeAddr(0x14001f5e0, reinterpret_cast<uintptr_t>(&Reimpl_Struct60B_CopyCtor));
+    RegisterExeAddr(0x14001fb80, reinterpret_cast<uintptr_t>(&Reimpl_Struct60B_DtorRange));
+
+    // ============================================================
+    // M3.5 Path B session 3 — typed-ExternalPtr serialize helper (0x140007140).
+    // Body byte-identical to FUN_14001b8e0 (helper #9, GraphicsMesh) except
+    // the typeInfo source slot — reads BaseTypeInfo* from .rdata slot
+    // 0x140151350 (Graphics::MaterialInstance).
+    // ============================================================
+    RegisterExeAddr(0x140007140, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Typed_7140));
+
+    // ============================================================
+    // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
+    // (uint16, int4, array-of-arrays, mesh-vertex 16B, int)
+    // ============================================================
+    RegisterExeAddr(0x14001c890, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride02));
+    RegisterExeAddr(0x14001efd0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride16A));
+    RegisterExeAddr(0x14001f0a0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_ArrayOfArrays));
+    RegisterExeAddr(0x14001ef10, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride16B));
+    RegisterExeAddr(0x1400021d0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride04));
 }
 
 // ============================================================

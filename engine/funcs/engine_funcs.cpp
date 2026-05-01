@@ -1296,6 +1296,13 @@ fn_Array_Serialize_External_t fn_Array_Serialize_External_Particle = nullptr;
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_GraphicsMesh = nullptr;
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_Weather = nullptr;
 
+// M3.5 Path B session 2 — 0x60B struct array lifecycle helpers.
+fn_Struct60B_Resize_t       fn_Struct60B_Resize             = nullptr;
+fn_Struct60B_CopyCtor_t     fn_Struct60B_CopyCtor           = nullptr;
+fn_Struct60B_DtorRange_t    fn_Struct60B_DtorRange          = nullptr;
+fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride14 = nullptr;
+fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02 = nullptr;
+
 // Runtime DLL primitives needed only by the standalone reimpls.
 fn_Serializer_GetEncoding_t fn_Serializer_GetEncoding = nullptr;
 fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint = nullptr;
@@ -1307,6 +1314,17 @@ fn_Filename_AssignOp_t fn_Filename_AssignOp = nullptr;
 uint32_t** g_ppTypeInfo_GraphicsMesh = nullptr;
 uint32_t** g_ppTypeInfo_Particle = nullptr;
 uint32_t*  g_pTypeId_Weather = nullptr;
+
+// M3.5 Path B session 3 — typed-ExternalPtr serialize helper at 0x140007140.
+fn_ExternalPtr_Serialize_Typed_t fn_ExternalPtr_Serialize_Typed_7140 = nullptr;
+uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
+
+// M3.5 Path B session 5 — additional Geometry::Serialize resize helpers.
+fn_Array_Resize_t fn_Array_Resize_Stride02       = nullptr;  // 0x14001c890
+fn_Array_Resize_t fn_Array_Resize_Stride16A      = nullptr;  // 0x14001efd0
+fn_Array_Resize_t fn_Array_Resize_ArrayOfArrays  = nullptr;  // 0x14001f0a0
+fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
+fn_Array_Resize_t fn_Array_Resize_Stride04       = nullptr;  // 0x1400021d0
 
 // ============================================================
 // Initialization
@@ -4418,6 +4436,50 @@ bool EngineFuncsInit() {
         reinterpret_cast<fn_ExternalPtr_Serialize_t>(
             ResolveAddr(Module::Exe, 0x1400196a0));
 
+    // ============================================================
+    // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
+    // ============================================================
+    fn_Struct60B_Resize = reinterpret_cast<fn_Struct60B_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001f250));
+    fn_Struct60B_CopyCtor = reinterpret_cast<fn_Struct60B_CopyCtor_t>(
+        ResolveAddr(Module::Exe, 0x14001f5e0));
+    fn_Struct60B_DtorRange = reinterpret_cast<fn_Struct60B_DtorRange_t>(
+        ResolveAddr(Module::Exe, 0x14001fb80));
+    fn_Struct60B_SubArrayCopyStride14 = reinterpret_cast<fn_Struct60B_SubArrayCopy_t>(
+        ResolveAddr(Module::Exe, 0x14001fdb0));
+    fn_Struct60B_SubArrayCopyStride02 = reinterpret_cast<fn_Struct60B_SubArrayCopy_t>(
+        ResolveAddr(Module::Exe, 0x14001fe60));
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Path B session 2 (0x60B struct lifecycle) resolved\n");
+    printf("  Struct60B_Resize        = %p\n", (void*)fn_Struct60B_Resize);
+    printf("  Struct60B_CopyCtor      = %p\n", (void*)fn_Struct60B_CopyCtor);
+    printf("  Struct60B_DtorRange     = %p\n", (void*)fn_Struct60B_DtorRange);
+    printf("  Struct60B_SubCopyS14    = %p\n", (void*)fn_Struct60B_SubArrayCopyStride14);
+    printf("  Struct60B_SubCopyS02    = %p\n", (void*)fn_Struct60B_SubArrayCopyStride02);
+#endif
+
+    // ============================================================
+    // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
+    // ============================================================
+    fn_Array_Resize_Stride02 = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001c890));
+    fn_Array_Resize_Stride16A = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001efd0));
+    fn_Array_Resize_ArrayOfArrays = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001f0a0));
+    fn_Array_Resize_Stride16B = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001ef10));
+    fn_Array_Resize_Stride04 = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x1400021d0));
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Path B session 5 (geometry resize helpers) resolved\n");
+    printf("  Array_Resize_Stride02       = %p\n", (void*)fn_Array_Resize_Stride02);
+    printf("  Array_Resize_Stride16A      = %p\n", (void*)fn_Array_Resize_Stride16A);
+    printf("  Array_Resize_ArrayOfArrays  = %p\n", (void*)fn_Array_Resize_ArrayOfArrays);
+    printf("  Array_Resize_Stride16B      = %p\n", (void*)fn_Array_Resize_Stride16B);
+    printf("  Array_Resize_Stride04       = %p\n", (void*)fn_Array_Resize_Stride04);
+#endif
+
     // Runtime DLL primitives — resolve via dispatch slots, fall back to mangled.
     {
         void** slot;
@@ -4481,6 +4543,13 @@ bool EngineFuncsInit() {
     g_pTypeId_Weather = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c6198));
 
+    // M3.5 Path B session 3 — FUN_140007140 + MaterialInstance typeInfo slot.
+    fn_ExternalPtr_Serialize_Typed_7140 =
+        reinterpret_cast<fn_ExternalPtr_Serialize_Typed_t>(
+            ResolveAddr(Module::Exe, 0x140007140));
+    g_ppTypeInfo_MaterialInstance = reinterpret_cast<uint32_t**>(
+        ResolveAddr(Module::Exe, 0x140151350));
+
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
     printf("  Geometry_Init           = %p\n", (void*)fn_Geometry_Init);
@@ -4505,6 +4574,11 @@ bool EngineFuncsInit() {
     printf("  TypeInfo Mesh/Particle  = %p / %p\n",
         (void*)g_ppTypeInfo_GraphicsMesh, (void*)g_ppTypeInfo_Particle);
     printf("  TypeId Weather          = %p\n", (void*)g_pTypeId_Weather);
+    // M3.5 Path B session 3
+    printf("  ExtPtr_Typed_7140       = %p\n",
+        (void*)fn_ExternalPtr_Serialize_Typed_7140);
+    printf("  TypeInfo MaterialInst   = %p\n",
+        (void*)g_ppTypeInfo_MaterialInstance);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl

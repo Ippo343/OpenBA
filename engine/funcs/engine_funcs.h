@@ -5141,6 +5141,97 @@ extern fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_Weather;        // 0x
 typedef void (*fn_ExternalPtr_Serialize_Generic_t)(void* refField, void* serializer, const uint32_t* typeIdPtr);
 
 // ============================================================
+// M3.5 Path B session 2 — 0x60-byte struct array lifecycle helpers
+// ============================================================
+// Used by Geometry::Serialize (FUN_1400b04d0) and the version-gated extra
+// FUN_1400af1a0 to manage the dynamic array at +0x200 (count +0x208) of
+// 0x60-byte structs. Array growth needs a per-element copy-ctor (it owns
+// embedded sub-arrays at +0x08 and +0x18); array shrink needs a sized
+// destructor that releases those embedded sub-arrays' MemAlloc'd buffers.
+//
+// 0x60-byte element layout (from the copy-ctor decompile, FUN_14001f5e0):
+//   +0x00 : qword  (8B)              — copied raw
+//   +0x08 : array<stride=0x14>       — { void* data; int32 count; int32 cap }, deep-copy via fn_Struct60B_HelperFdb0
+//   +0x18 : array<stride=0x02>       — { void* data; int32 count; int32 cap }, deep-copy via fn_Struct60B_HelperFe60
+//   +0x28 : dword                    — copied raw
+//   +0x2c : dword                    — copied raw
+//   +0x30 : dword                    — copied raw
+//   +0x34 : dword                    — copied raw
+//   +0x38 : dword                    — copied raw
+//   +0x3c : byte                     — copied raw
+//   +0x40 : dword                    — copied raw
+//   +0x44 : byte                     — copied raw
+//   +0x48 : dword (float?)           — copied raw
+//   +0x4c : dword (float?)           — copied raw
+//   +0x50 : dword (float?)           — copied raw
+//   +0x54 : dword (float?)           — copied raw
+//   +0x58 : dword (float?)           — copied raw
+//   +0x5c : byte                     — copied raw
+//   +0x5d : byte                     — copied raw
+//
+// On dtor: only the two embedded sub-arrays at +0x08 and +0x18 own heap memory
+// (MemAlloc'd via fn_MemAlloc); the rest of the struct is plain bytes.
+
+// Resize helper for the 0x60-byte struct array at +0x200 — FUN_14001f250.
+// arrayHeader layout: { void* data; int32 count; int32 cap }
+// Calls Struct60B_CopyCtor on grow (per-element), Struct60B_DtorRange on shrink.
+typedef void (*fn_Struct60B_Resize_t)(void* arrayHeader, unsigned int newCount);
+extern fn_Struct60B_Resize_t fn_Struct60B_Resize;  // 0x14001f250
+
+// Copy-ctor for one 0x60B element — FUN_14001f5e0.
+// Returns dst (param_1). Deep-copies the two embedded sub-arrays via
+// the helpers below; raw-copies all other fields.
+typedef void* (*fn_Struct60B_CopyCtor_t)(void* dst, const void* src);
+extern fn_Struct60B_CopyCtor_t fn_Struct60B_CopyCtor;  // 0x14001f5e0
+
+// Per-element destructor loop — FUN_14001fb80.
+// Walks `count` elements starting at `first`, releasing each element's two
+// embedded sub-array buffers (the MemAlloc'd `data` slots at +0x08 and +0x18)
+// and zeroing the headers. Does NOT free the array buffer itself — the caller
+// (Resize) does that after the loop returns.
+//   param_1 (RCX): unused/garbage; original passes the loop iVar4 leftover.
+//   param_2 (RDX): pointer to first element to dtor.
+//   param_3 (R8) : count of elements to dtor.
+typedef void (*fn_Struct60B_DtorRange_t)(void* unused, void* first, int count);
+extern fn_Struct60B_DtorRange_t fn_Struct60B_DtorRange;  // 0x14001fb80
+
+// Sub-helpers used by the copy-ctor for the two embedded sub-arrays.
+// Both perform "free old buffer, alloc new sized buffer, deep-copy elements".
+//
+//   Stride 0x14 (5 dwords / 20 bytes), alignment 2 — FUN_14001fdb0
+//   Stride 0x02 (uint16),               alignment 2 — FUN_14001fe60
+//
+// Signature: returns dst, takes (dst, src) — both 16-byte array headers
+// matching the same layout as Struct60B_Resize's arrayHeader.
+typedef void* (*fn_Struct60B_SubArrayCopy_t)(void* dst, const void* src);
+extern fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride14;  // 0x14001fdb0
+extern fn_Struct60B_SubArrayCopy_t fn_Struct60B_SubArrayCopyStride02;  // 0x14001fe60
+
+// ============================================================
+// M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
+// ============================================================
+// All five share the standard array-resize shape (header = { void* data;
+// int32 count; int32 cap }). They differ in element stride and MemAlloc
+// alignment. The array-of-arrays variant additionally calls a deep-clone
+// helper per outer element to copy the inner Vector2 array.
+//
+//   stride 0x02, align 2 — TradeWork_impl_sub_c890         @ 0x14001c890
+//                          (uint16 array, used for index-buffer + sub-arrays)
+//   stride 0x10, align 4 — TradeWork_impl_b260_sub_efd0    @ 0x14001efd0
+//                          (int4 / Vec4 stride for arrays at +0x1C0/+0x1D0)
+//   stride 0x10, align 8 — TradeWork_impl_sub_f0a0         @ 0x14001f0a0
+//                          (array-of-arrays — deep-clones inner via helper_ff00)
+//   stride 0x10, align 2 — FUN_14001ef10                   @ 0x14001ef10
+//                          (mesh-vertex 16-byte struct copies 2 qwords/elem)
+//   stride 0x04, align 4 — FUN_1400021d0                   @ 0x1400021d0
+//                          (int array — used for +0x220 in Geometry::Serialize)
+extern fn_Array_Resize_t fn_Array_Resize_Stride02;       // 0x14001c890  M3.5 Path B session 5
+extern fn_Array_Resize_t fn_Array_Resize_Stride16A;      // 0x14001efd0  M3.5 Path B session 5
+extern fn_Array_Resize_t fn_Array_Resize_ArrayOfArrays;  // 0x14001f0a0  M3.5 Path B session 5
+extern fn_Array_Resize_t fn_Array_Resize_Stride16B;      // 0x14001ef10  M3.5 Path B session 5
+extern fn_Array_Resize_t fn_Array_Resize_Stride04;       // 0x1400021d0  M3.5 Path B session 5
+
+// ============================================================
 // Runtime DLL primitives used by the MenuScene serialize helpers
 // (resolved by mangled name; many already exist, listed here for reference)
 // ============================================================
@@ -5186,6 +5277,18 @@ extern fn_Filename_AssignOp_t fn_Filename_AssignOp;
 extern uint32_t** g_ppTypeInfo_GraphicsMesh;   // .rdata slot 0x140151f20
 extern uint32_t** g_ppTypeInfo_Particle;       // .rdata slot 0x140151420
 extern uint32_t*  g_pTypeId_Weather;           // direct dword 0x1401c6198
+
+// M3.5 Path B session 3 — additional typed-ExternalPtr serialize helper.
+// FUN_140007140 is byte-identical to FUN_14001b8e0 (helper #9, GraphicsMesh)
+// except for the typeInfo source slot. Reads BaseTypeInfo* from .rdata slot
+// 0x140151350. Confirmed via shared xrefs: CharacterComponent_impl_08c0
+// FindOrLoads "Terrain/Selection.rsc" then calls
+// Graphics::MaterialInstance::Setup on the result, validating against the
+// same slot — so 0x140151350 is the BaseTypeInfo* pointer slot for
+// Graphics::MaterialInstance.
+typedef void (*fn_ExternalPtr_Serialize_Typed_t)(void* refField, void* serializer);
+extern fn_ExternalPtr_Serialize_Typed_t fn_ExternalPtr_Serialize_Typed_7140;  // 0x140007140
+extern uint32_t** g_ppTypeInfo_MaterialInstance;  // .rdata slot 0x140151350
 
 // ============================================================
 // Initialization
