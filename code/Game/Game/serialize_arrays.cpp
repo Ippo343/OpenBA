@@ -146,22 +146,35 @@ extern "C" void Reimpl_Geometry_Init(void* self) {
 //   +0x40  0x14003AAAA   ?
 // ============================================================
 #ifdef STANDALONE_EXE
-namespace {
-void* GeomStub_Dtor(void* self, uint32_t /*flags*/)   { return self; }
-void  GeomStub_Void(void* /*self*/, ...)              { /* no-op */ }
-int   GeomStub_Int0(void* /*self*/, ...)              { return 0; }
-void* GeomStub_Null(void* /*self*/, ...)              { return nullptr; }
+// Real implementations of the 9 vtable slots live in
+// code/Game/Game/geometry_draw.cpp. They're decompiled from the original exe
+// at 0x14001ECC0 / 0x1400AED40 / 0x1400AEA10 / 0x1400AE490 / Runtime IAT
+// thunks, and wired through engine_funcs.h fn_* pointers (resolved via
+// ResolveExport from Runtime DLL exports).
+extern "C" {
+    void* GeomDraw_Dtor(void* self, uint32_t flags);
+    void  GeomDraw_ChunkUpdate(void* self);
+    void  GeomDraw_ItemDraw(void* self, void* context, void* p3, void* p4,
+                            float param5, uint32_t param6);
+    void  GeomDraw_CollectDraw(void* self, void* unused, void* renderer);
+    void  GeomDraw_UpdateAttached(void* self);
+    void* GeomDraw_GetSubTransform(void* self, void* retval, int idx);
+    void* GeomDraw_GetInstanceTransform(void* self, void* retval, int idx, float t);
+    int   GeomDraw_SetSharedInstanceData(void* self, void* context, int idx, float t);
+    bool  GeomDraw_Clean(void* self);
+}
 
+namespace {
 void* g_Geometry_Vtable_Standalone[9] = {
-    reinterpret_cast<void*>(&GeomStub_Dtor),  // +0x00 dtor
-    reinterpret_cast<void*>(&GeomStub_Null),  // +0x08
-    reinterpret_cast<void*>(&GeomStub_Null),  // +0x10
-    reinterpret_cast<void*>(&GeomStub_Void),  // +0x18 Draw
-    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x20
-    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x28
-    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x30
-    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x38
-    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x40
+    reinterpret_cast<void*>(&GeomDraw_Dtor),                  // +0x00 dtor
+    reinterpret_cast<void*>(&GeomDraw_ChunkUpdate),           // +0x08 chunk-streaming
+    reinterpret_cast<void*>(&GeomDraw_ItemDraw),              // +0x10 per-item Draw
+    reinterpret_cast<void*>(&GeomDraw_CollectDraw),           // +0x18 collect Draw
+    reinterpret_cast<void*>(&GeomDraw_UpdateAttached),        // +0x20 UpdateAttached
+    reinterpret_cast<void*>(&GeomDraw_GetSubTransform),       // +0x28 GetSubTransform
+    reinterpret_cast<void*>(&GeomDraw_GetInstanceTransform),  // +0x30 GetInstanceTransform
+    reinterpret_cast<void*>(&GeomDraw_SetSharedInstanceData), // +0x38 SetSharedInstanceData
+    reinterpret_cast<void*>(&GeomDraw_Clean),                 // +0x40 Clean
 };
 }  // namespace
 

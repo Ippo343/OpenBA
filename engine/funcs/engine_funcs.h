@@ -5474,6 +5474,140 @@ extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400;  // 0x140152400  M3.5 
 extern fn_Ser_SerByteArr_t   fn_Ser_Slot_SerByteArr_618;   // 0x140152618  M3.5 Path B session 8
 
 // ============================================================
+// M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
+// ============================================================
+//
+// Real implementations of the 9 vtable slots at exe 0x14015f110, decompiled
+// from the original derived "TerrainGenerator" Geometry class. The vtable
+// layout (verified via Ghidra read of 0x14015f110):
+//   +0x00  dtor                        (exe 0x14001ECC0)
+//   +0x08  chunk-streaming/heightmap   (exe 0x1400AED40 → JMP 0x1400AAD50)
+//   +0x10  per-item Draw               (exe 0x1400AEA10)
+//   +0x18  collect Draw                (exe 0x1400AE490)
+//   +0x20  UpdateAttached              (Runtime IAT thunk → 0x140151F28)
+//   +0x28  GetSubTransform             (Runtime IAT thunk → 0x140152188)
+//   +0x30  GetInstanceTransform        (Runtime IAT thunk → 0x140152280)
+//   +0x38  SetSharedInstanceData       (Runtime IAT thunk → 0x140152278)
+//   +0x40  Clean                       (Runtime IAT thunk → 0x140152190)
+//
+// Runtime export pointers for the per-item / collect Draw bodies. All are
+// resolved via ResolveExport in EngineFuncsInit (fall back to dispatch slot
+// reads when ResolveExport fails). Both DLL and standalone modes use these.
+
+// Renderer / Camera / Frustum primitives (used by collect Draw)
+typedef void* (*fn_Renderer_GetCullCamera_t)(void* renderer);
+extern fn_Renderer_GetCullCamera_t fn_Renderer_GetCullCamera;
+// ?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ
+
+typedef void  (*fn_Renderer_AddDrawItem_t)(void* renderer, void* geometry,
+                                           void* material, uint16_t key1,
+                                           uint16_t key2, float depth,
+                                           float uvScale, int flag,
+                                           void* extraPtr, uint32_t extraInt);
+extern fn_Renderer_AddDrawItem_t fn_Renderer_AddDrawItem;
+// ?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z
+
+typedef int   (*fn_Renderer_GetShader_t)(void* renderer);
+extern fn_Renderer_GetShader_t fn_Renderer_GetShader;
+// ?GetShader@Renderer@Graphics@@QEBAHXZ
+
+// Member fns with hidden return: RCX=this, RDX=retval, R8+=args
+typedef void* (*fn_Camera_GetFrustum_t)(void* camera, void* retval);
+extern fn_Camera_GetFrustum_t fn_Camera_GetFrustum;
+// ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ
+
+typedef uint32_t (*fn_Frustum_Contains_t)(void* frustum, void* box, uint32_t mask);
+extern fn_Frustum_Contains_t fn_Frustum_Contains;
+// ?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z
+
+typedef void* (*fn_Frustum_MulTransform3_t)(void* frustum, void* retval, void* xform3);
+extern fn_Frustum_MulTransform3_t fn_Frustum_MulTransform3;
+// ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z (operator*)
+
+// Math primitives (member fn hidden retval where applicable)
+typedef void* (*fn_Geometry_GetTransform_t)(void* geometry, void* retval);
+extern fn_Geometry_GetTransform_t fn_Geometry_GetTransform;
+// ?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ
+
+typedef void* (*fn_Transform_Inverse_t)(void* xform, void* retval);
+extern fn_Transform_Inverse_t fn_Transform_Inverse;
+// ?Inverse@Transform@Math@@QEBA?AV12@XZ
+
+typedef void* (*fn_Transform_AsMatrix_t)(void* xform, void* retval);
+extern fn_Transform_AsMatrix_t fn_Transform_AsMatrix;
+// ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ
+
+typedef void* (*fn_Transform3_Copy_Ctor_t)(void* self, const void* other);
+extern fn_Transform3_Copy_Ctor_t fn_Transform3_Copy_Ctor;
+// ??0Transform3@Math@@QEAA@AEBV01@@Z
+
+typedef void* (*fn_Vector3_FromFloats_Ctor_t)(void* self, float x, float y, float z);
+extern fn_Vector3_FromFloats_Ctor_t fn_Vector3_FromFloats_Ctor;
+// ??0Vector3@Math@@QEAA@MMM@Z
+
+typedef void* (*fn_InterpolatedState_Transform_Lerp_t)(void* self, void* retval, void* scalar);
+extern fn_InterpolatedState_Transform_Lerp_t fn_InterpolatedState_Transform_Lerp;
+// ?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z
+
+// Video::Context primitives (used by per-item Draw)
+typedef void  (*fn_Context_SetTransform_t)(void* context, int slot, void* matrix);
+extern fn_Context_SetTransform_t fn_Context_SetTransform;
+// ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z
+
+typedef void  (*fn_Context_SetColor_t)(void* context, void* vector4);
+extern fn_Context_SetColor_t fn_Context_SetColor;
+// ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z
+
+typedef void  (*fn_Context_SetVertexBuffer_t)(void* context, void* vb,
+                                              int p0, int p1, int stride);
+extern fn_Context_SetVertexBuffer_t fn_Context_SetVertexBuffer;
+// ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z
+
+typedef void  (*fn_Context_SetImageBuffer_t)(void* context, void* img, int slot);
+extern fn_Context_SetImageBuffer_t fn_Context_SetImageBuffer;
+// ?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z
+
+typedef bool  (*fn_Context_BeginIndexedVertices_t)(void* context, int p0, int p1, int p2);
+extern fn_Context_BeginIndexedVertices_t fn_Context_BeginIndexedVertices;
+// ?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z
+
+typedef void  (*fn_Context_EndIndexedVertices_t)(void* context, int primType);
+extern fn_Context_EndIndexedVertices_t fn_Context_EndIndexedVertices;
+// ?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z
+
+typedef void  (*fn_Context_DrawIndexed_t)(void* context, int primType,
+                                          int a, int b, int c, int d, int e);
+extern fn_Context_DrawIndexed_t fn_Context_DrawIndexed;
+// ?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z
+
+// Inherited base methods of Graphics::Geometry (used by +0x20..+0x40 thunks).
+// These are dispatched via .rdata IAT slots in the original; in standalone we
+// resolve them once and call directly. Signatures inferred from Runtime export
+// mangled names — none are heavily used by the menu-scene render path so the
+// arg layouts are best-effort.
+typedef void  (*fn_Geometry_UpdateAttached_t)(void* self);
+extern fn_Geometry_UpdateAttached_t fn_Geometry_UpdateAttached;
+// ?UpdateAttached@Geometry@Graphics@@UEAAXXZ
+
+typedef void* (*fn_Geometry_GetSubTransform_t)(void* self, void* retval, int idx);
+extern fn_Geometry_GetSubTransform_t fn_Geometry_GetSubTransform;
+// ?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z
+
+typedef void* (*fn_Geometry_GetInstanceTransform_t)(void* self, void* retval,
+                                                    int idx, float t);
+extern fn_Geometry_GetInstanceTransform_t fn_Geometry_GetInstanceTransform;
+// ?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+
+typedef int   (*fn_Geometry_SetSharedInstanceData_t)(void* self, void* context,
+                                                     int idx, float t);
+extern fn_Geometry_SetSharedInstanceData_t fn_Geometry_SetSharedInstanceData;
+// ?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z
+
+typedef bool  (*fn_Geometry_Clean_t)(void* self);
+extern fn_Geometry_Clean_t fn_Geometry_Clean;
+// ?Clean@Geometry@Graphics@@UEAA_NXZ
+
+// ============================================================
 // Initialization
 // ============================================================
 

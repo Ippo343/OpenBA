@@ -1355,6 +1355,32 @@ fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8  = nullptr;  // 0x1401523f8
 fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400  = nullptr;  // 0x140152400
 fn_Ser_SerByteArr_t   fn_Ser_Slot_SerByteArr_618   = nullptr;  // 0x140152618
 
+// M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
+fn_Renderer_GetCullCamera_t            fn_Renderer_GetCullCamera           = nullptr;
+fn_Renderer_AddDrawItem_t              fn_Renderer_AddDrawItem             = nullptr;
+fn_Renderer_GetShader_t                fn_Renderer_GetShader               = nullptr;
+fn_Camera_GetFrustum_t                 fn_Camera_GetFrustum                = nullptr;
+fn_Frustum_Contains_t                  fn_Frustum_Contains                 = nullptr;
+fn_Frustum_MulTransform3_t             fn_Frustum_MulTransform3            = nullptr;
+fn_Geometry_GetTransform_t             fn_Geometry_GetTransform            = nullptr;
+fn_Transform_Inverse_t                 fn_Transform_Inverse                = nullptr;
+fn_Transform_AsMatrix_t                fn_Transform_AsMatrix               = nullptr;
+fn_Transform3_Copy_Ctor_t              fn_Transform3_Copy_Ctor             = nullptr;
+fn_Vector3_FromFloats_Ctor_t           fn_Vector3_FromFloats_Ctor          = nullptr;
+fn_InterpolatedState_Transform_Lerp_t  fn_InterpolatedState_Transform_Lerp = nullptr;
+fn_Context_SetTransform_t              fn_Context_SetTransform             = nullptr;
+fn_Context_SetColor_t                  fn_Context_SetColor                 = nullptr;
+fn_Context_SetVertexBuffer_t           fn_Context_SetVertexBuffer          = nullptr;
+fn_Context_SetImageBuffer_t            fn_Context_SetImageBuffer           = nullptr;
+fn_Context_BeginIndexedVertices_t      fn_Context_BeginIndexedVertices     = nullptr;
+fn_Context_EndIndexedVertices_t        fn_Context_EndIndexedVertices       = nullptr;
+fn_Context_DrawIndexed_t               fn_Context_DrawIndexed              = nullptr;
+fn_Geometry_UpdateAttached_t           fn_Geometry_UpdateAttached          = nullptr;
+fn_Geometry_GetSubTransform_t          fn_Geometry_GetSubTransform         = nullptr;
+fn_Geometry_GetInstanceTransform_t     fn_Geometry_GetInstanceTransform    = nullptr;
+fn_Geometry_SetSharedInstanceData_t    fn_Geometry_SetSharedInstanceData   = nullptr;
+fn_Geometry_Clean_t                    fn_Geometry_Clean                   = nullptr;
+
 // ============================================================
 // Initialization
 // ============================================================
@@ -4729,6 +4755,90 @@ bool EngineFuncsInit() {
     printf("  Ser slot SerSizedRaw_3F8= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_3F8);
     printf("  Ser slot SerSizedRaw_400= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_400);
     printf("  Ser slot SerByteArr_618 = %p\n", (void*)fn_Ser_Slot_SerByteArr_618);
+#endif
+
+    // ============================================================
+    // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
+    // ============================================================
+    // The Renderer / Camera / Frustum / Math / Context primitives backing the
+    // 9-slot derived Geometry vtable. All resolved via ResolveExport from the
+    // Runtime DLL exports. In standalone mode these provide the actual draw
+    // path; in DLL mode they're consulted only by code/Game/Game/geometry_draw.cpp
+    // when the original exe vtable's slot dispatch lands in our cleaned body.
+    fn_Renderer_GetCullCamera = reinterpret_cast<fn_Renderer_GetCullCamera_t>(
+        ResolveExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ"));
+    fn_Renderer_AddDrawItem = reinterpret_cast<fn_Renderer_AddDrawItem_t>(
+        ResolveExport("?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z"));
+    fn_Renderer_GetShader = reinterpret_cast<fn_Renderer_GetShader_t>(
+        ResolveExport("?GetShader@Renderer@Graphics@@QEBAHXZ"));
+    fn_Camera_GetFrustum = reinterpret_cast<fn_Camera_GetFrustum_t>(
+        ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
+    fn_Frustum_Contains = reinterpret_cast<fn_Frustum_Contains_t>(
+        ResolveExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z"));
+    fn_Frustum_MulTransform3 = reinterpret_cast<fn_Frustum_MulTransform3_t>(
+        ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
+    fn_Geometry_GetTransform = reinterpret_cast<fn_Geometry_GetTransform_t>(
+        ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
+    fn_Transform_Inverse = reinterpret_cast<fn_Transform_Inverse_t>(
+        ResolveExport("?Inverse@Transform@Math@@QEBA?AV12@XZ"));
+    fn_Transform_AsMatrix = reinterpret_cast<fn_Transform_AsMatrix_t>(
+        ResolveExport("?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ"));
+    fn_Transform3_Copy_Ctor = reinterpret_cast<fn_Transform3_Copy_Ctor_t>(
+        ResolveExport("??0Transform3@Math@@QEAA@AEBV01@@Z"));
+    fn_Vector3_FromFloats_Ctor = reinterpret_cast<fn_Vector3_FromFloats_Ctor_t>(
+        ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
+    fn_InterpolatedState_Transform_Lerp = reinterpret_cast<fn_InterpolatedState_Transform_Lerp_t>(
+        ResolveExport("?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
+    fn_Context_SetTransform = reinterpret_cast<fn_Context_SetTransform_t>(
+        ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
+    fn_Context_SetColor = reinterpret_cast<fn_Context_SetColor_t>(
+        ResolveExport("?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z"));
+    fn_Context_SetVertexBuffer = reinterpret_cast<fn_Context_SetVertexBuffer_t>(
+        ResolveExport("?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z"));
+    fn_Context_SetImageBuffer = reinterpret_cast<fn_Context_SetImageBuffer_t>(
+        ResolveExport("?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z"));
+    fn_Context_BeginIndexedVertices = reinterpret_cast<fn_Context_BeginIndexedVertices_t>(
+        ResolveExport("?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z"));
+    fn_Context_EndIndexedVertices = reinterpret_cast<fn_Context_EndIndexedVertices_t>(
+        ResolveExport("?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z"));
+    fn_Context_DrawIndexed = reinterpret_cast<fn_Context_DrawIndexed_t>(
+        ResolveExport("?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z"));
+    fn_Geometry_UpdateAttached = reinterpret_cast<fn_Geometry_UpdateAttached_t>(
+        ResolveExport("?UpdateAttached@Geometry@Graphics@@UEAAXXZ"));
+    fn_Geometry_GetSubTransform = reinterpret_cast<fn_Geometry_GetSubTransform_t>(
+        ResolveExport("?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z"));
+    fn_Geometry_GetInstanceTransform = reinterpret_cast<fn_Geometry_GetInstanceTransform_t>(
+        ResolveExport("?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z"));
+    fn_Geometry_SetSharedInstanceData = reinterpret_cast<fn_Geometry_SetSharedInstanceData_t>(
+        ResolveExport("?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z"));
+    fn_Geometry_Clean = reinterpret_cast<fn_Geometry_Clean_t>(
+        ResolveExport("?Clean@Geometry@Graphics@@UEAA_NXZ"));
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Geometry vtable draw primitives resolved\n");
+    printf("  Renderer_GetCullCamera   = %p\n", (void*)fn_Renderer_GetCullCamera);
+    printf("  Renderer_AddDrawItem     = %p\n", (void*)fn_Renderer_AddDrawItem);
+    printf("  Renderer_GetShader       = %p\n", (void*)fn_Renderer_GetShader);
+    printf("  Camera_GetFrustum        = %p\n", (void*)fn_Camera_GetFrustum);
+    printf("  Frustum_Contains         = %p\n", (void*)fn_Frustum_Contains);
+    printf("  Frustum_MulTransform3    = %p\n", (void*)fn_Frustum_MulTransform3);
+    printf("  Geometry_GetTransform    = %p\n", (void*)fn_Geometry_GetTransform);
+    printf("  Transform_Inverse        = %p\n", (void*)fn_Transform_Inverse);
+    printf("  Transform_AsMatrix       = %p\n", (void*)fn_Transform_AsMatrix);
+    printf("  Transform3_Copy_Ctor     = %p\n", (void*)fn_Transform3_Copy_Ctor);
+    printf("  Vector3_FromFloats_Ctor  = %p\n", (void*)fn_Vector3_FromFloats_Ctor);
+    printf("  InterpState_Trans_Lerp   = %p\n", (void*)fn_InterpolatedState_Transform_Lerp);
+    printf("  Context_SetTransform     = %p\n", (void*)fn_Context_SetTransform);
+    printf("  Context_SetColor         = %p\n", (void*)fn_Context_SetColor);
+    printf("  Context_SetVertexBuffer  = %p\n", (void*)fn_Context_SetVertexBuffer);
+    printf("  Context_SetImageBuffer   = %p\n", (void*)fn_Context_SetImageBuffer);
+    printf("  Context_BeginIndexedVtx  = %p\n", (void*)fn_Context_BeginIndexedVertices);
+    printf("  Context_EndIndexedVtx    = %p\n", (void*)fn_Context_EndIndexedVertices);
+    printf("  Context_DrawIndexed      = %p\n", (void*)fn_Context_DrawIndexed);
+    printf("  Geometry_UpdateAttached  = %p\n", (void*)fn_Geometry_UpdateAttached);
+    printf("  Geometry_GetSubTransform = %p\n", (void*)fn_Geometry_GetSubTransform);
+    printf("  Geometry_GetInstanceTr   = %p\n", (void*)fn_Geometry_GetInstanceTransform);
+    printf("  Geometry_SetSharedInst   = %p\n", (void*)fn_Geometry_SetSharedInstanceData);
+    printf("  Geometry_Clean           = %p\n", (void*)fn_Geometry_Clean);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
