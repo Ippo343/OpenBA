@@ -133,6 +133,12 @@ extern "C" {
     void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row);
 }
 
+// M3.5 Path B session 7 — image-buffer heightmap upload helper
+// (decompiled body lives in code/Game/Game/serialize_image_upload.cpp)
+extern "C" {
+    void Reimpl_TradeWork_sub_c780(void* self);
+}
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -199,6 +205,13 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x1400ac1e0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c1e0));
     RegisterExeAddr(0x1400ac880, reinterpret_cast<uintptr_t>(&Reimpl_FUN_1400ac880));
     RegisterExeAddr(0x1400ae270, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_helper_e270));
+
+    // ============================================================
+    // M3.5 Path B session 7 — image-buffer heightmap upload helper
+    //   sub_c780     — alloc ImageBuffer, set NoiseUI vtable, Create + upload
+    //                  (heightmap raw bytes -> Video texture)
+    // ============================================================
+    RegisterExeAddr(0x1400ac780, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c780));
 }
 
 // ============================================================
@@ -370,6 +383,90 @@ extern void RegisterSplashDialogLoopVtable();
 // Defined in standalone/loader_loop_stubs.cpp.
 extern void RegisterLoaderLoopVtables();
 
+// ============================================================
+// M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
+// ============================================================
+// The original exe stores a 10-slot vtable at 0x14015c8c0 that gets installed
+// onto Video::ImageBuffer instances created by NoiseUI / ModDialog / and
+// (per session 7) the Geometry::Serialize heightmap upload helper. Each slot
+// in the original is a thin JMP qword [0x14015XXXX] thunk that the loader
+// fills with Runtime DLL function pointers.
+//
+// In standalone mode we own the storage: WE allocate a 10-slot array, fill it
+// with Runtime exports resolved at boot, and register its address. Code that
+// reads `g_NoiseUI_ImageBufferVtable` (which equals `ResolveAddr(Module::Exe,
+// 0x14015c8c0)`) gets our backing storage and dispatches normally.
+//
+// Slot layout (verified via Ghidra disassembly @ 0x14015c8c0):
+//   [0] +0x00  Dtor             — original 0x1400129D0 (ModDialog_Slot10)
+//   [1] +0x08  TypeName-ish     — JMP [0x140151b20]
+//   [2] +0x10  ?                — JMP [0x140151b28]
+//   [3] +0x18  ?                — JMP [0x140151ae0]
+//   [4] +0x20  ?                — JMP [0x140151240]
+//   [5] +0x28  ?                — JMP [0x140151ae8]
+//   [6] +0x30  ?                — JMP [0x140151b00]
+//   [7] +0x38  ?                — JMP [0x140151b08]
+//   [8] +0x40  ?                — JMP [0x140151b10]
+//   [9] +0x48  Create           — JMP [0x140151a88]  (?Create@ImageBuffer@Video@@)
+//
+// Only slots [0] (dtor) and [9] (Create) are dispatched by code we currently
+// have running in standalone. Other slots are left null — if the engine ever
+// dispatches one and finds it null, the stub will need to be filled with the
+// matching Runtime export. Cascade-risk surface documented in the session 7
+// report. The Runtime exports for the unknown slots can be discovered via
+// Ghidra's `0x14015XXXX` slot pre-loaded values when the Runtime DLL fills
+// them at startup; for now the safe-no-op approach mirrors the
+// "MenuScene_VtblStub_ReturnNull" pattern used elsewhere.
+static void* g_NoiseUI_ImageBufferVtable_Standalone[10] = {0};
+
+// Forward-decl ImageBuffer dtor type — Runtime exports
+//   ??1ImageBuffer@Video@@UEAA@XZ
+typedef void  (*fn_ImgBuf_Dtor_StandaloneVt_t)(void* self);
+typedef bool  (*fn_ImgBuf_Create_StandaloneVt_t)(
+    void* self, int imageType, int usage, int format,
+    unsigned int mipLevels, int width, int height,
+    int filterMode, int addrU, int addrV, int addrW,
+    void* mipData);
+
+// Safe no-op stub for slots [1]..[8] until they're individually resolved.
+static void* NoiseUIImgBuf_VtblStub_ReturnNull(void* /*self*/, ...) {
+    return nullptr;
+}
+
+extern "C" void RegisterNoiseUIImageBufferVtable() {
+    // Resolve slot [0] = ImageBuffer destructor.
+    fn_ImgBuf_Dtor_StandaloneVt_t fnDtor =
+        reinterpret_cast<fn_ImgBuf_Dtor_StandaloneVt_t>(
+            ResolveExport("??1ImageBuffer@Video@@UEAA@XZ"));
+    if (!fnDtor) {
+        fnDtor = reinterpret_cast<fn_ImgBuf_Dtor_StandaloneVt_t>(
+            ResolveAddr(Module::Runtime, 0x1800f2610));
+    }
+
+    // Resolve slot [9] = ImageBuffer::Create — vtable +0x48 in the layout.
+    // Mangled name verified via Ghidra:
+    //   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@
+    //     W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@
+    //     V?$Array@E@Collection@@@Collection@@@Z
+    fn_ImgBuf_Create_StandaloneVt_t fnCreate =
+        reinterpret_cast<fn_ImgBuf_Create_StandaloneVt_t>(
+            ResolveExport("?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z"));
+
+    g_NoiseUI_ImageBufferVtable_Standalone[0] = reinterpret_cast<void*>(fnDtor);
+    g_NoiseUI_ImageBufferVtable_Standalone[1] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[2] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[3] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[4] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[5] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[6] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[7] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[8] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
+    g_NoiseUI_ImageBufferVtable_Standalone[9] = reinterpret_cast<void*>(fnCreate);
+
+    RegisterExeAddr(0x14015c8c0,
+                    reinterpret_cast<uintptr_t>(g_NoiseUI_ImageBufferVtable_Standalone));
+}
+
 static void RegisterVtablesAndTypeIds() {
     // --- Game singleton pointer storage (initialized to null, written at boot) ---
     RegisterExeAddr(0x1401c3de8, reinterpret_cast<uintptr_t>(&g_storage_KeyMapSingleton));
@@ -401,6 +498,10 @@ static void RegisterVtablesAndTypeIds() {
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
     RegisterMenuSceneVtable();
+
+    // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
+    // (used by NoiseUI / ModDialog / Geometry::Serialize image upload helper).
+    RegisterNoiseUIImageBufferVtable();
 
     // TODO: Define static vtable arrays for each game class.
     // Each vtable is an array of function pointers matching the original layout.

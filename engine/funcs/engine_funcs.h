@@ -5362,6 +5362,54 @@ extern fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880;    // 0x1400ac880  M3.
 extern fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270;  // 0x1400ae270  M3.5 Path B session 6
 
 // ============================================================
+// M3.5 Path B session 7 — image-buffer heightmap upload helper
+// ============================================================
+//
+// `TradeWork_impl_sub_c780` @ 0x1400ac780 (~30 instructions). Called from
+// Geometry::Serialize step 14 (final IsLoading-only block) to upload the
+// heightmap raw bytes at self+0x140 into a Video::ImageBuffer at self+0x148
+// using the custom NoiseUI ImageBuffer vtable (g_NoiseUI_ImageBufferVtable @
+// 0x14015c8c0 — exe-resident, also already used by NoiseUI / ModDialog).
+//
+// Body shape (verified via Ghidra disassembly @ 0x1400ac780):
+//   1. img = MemAlloc(0x68, 8)
+//   2. ImageBuffer::ImageBuffer(img)              // Runtime DLL ctor
+//   3. *(void**)img = &g_NoiseUI_ImageBufferVtable
+//   4. self+0x148 = img
+//   5. img->vtbl[0x48/8](img, 0, 2, 5, 0, w, w, 2, 1, 1, 1, 0)
+//        // Create(type=0, usage=2, format=5, mipLevels=0, w, h, FilterMode=2,
+//        //        AddressMode=1, AddressMode=1, AddressMode=1, mipData=null)
+//   6. Device::Lock(*Device::_singleton)
+//   7. ImageBuffer::CopyToTexture(img, self+0x140, w, w)
+//   8. Device::Unlock(*Device::_singleton)
+//
+// All Runtime primitives needed are ALREADY wired in engine_funcs.h:
+//   fn_ImageBuffer_Ctor          (??0ImageBuffer@Video@@QEAA@XZ)
+//   fn_ImageBuffer_CopyToTexture (?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z)
+//   fn_VideoDevice_Lock          (?Lock@Device@Video@@QEAAXXZ, ordinal 3214)
+//   fn_VideoDevice_Unlock        (?Unlock@Device@Video@@QEAAXXZ, ordinal 4462)
+//   g_pVideoDeviceSingleton      (Runtime 0x1801fe7a8)
+//   g_NoiseUI_ImageBufferVtable  (exe 0x14015c8c0, set in Phase Q)
+//
+// The vtable +0x48 slot ("Create") is reached via the exe-resident vtable —
+// see code/Game/Dialog/noiseui.cpp lines 290-299 for the established pattern
+// of dispatching through `*(void**)imageBuffer` slot index 9. The thin exe
+// thunk at 0x14003aa20 forwards to Runtime via .rdata slot 0x140151a88; the
+// underlying Runtime export is:
+//   ?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@
+//      IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@
+//      Collection@@@Collection@@@Z
+//
+// In standalone mode the vtable storage at 0x14015c8c0 needs to live in our
+// .data and contain function pointers we provide (or thin pass-throughs that
+// resolve the Runtime exports at call-time). Since NoiseUI/ModDialog already
+// dereference the vtable directly via slot index 9, the standalone-side
+// vtable scaffolding is shared — see standalone/address_registry.cpp
+// `RegisterNoiseUIImageBufferVtable` (added in this session).
+typedef void (*fn_TradeWork_sub_c780_t)(void* self);
+extern fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780;  // 0x1400ac780  M3.5 Path B session 7
+
+// ============================================================
 // Initialization
 // ============================================================
 

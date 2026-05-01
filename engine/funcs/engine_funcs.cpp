@@ -1336,6 +1336,9 @@ fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
 fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880   = nullptr;  // 0x1400ac880
 fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270 = nullptr;  // 0x1400ae270
 
+// M3.5 Path B session 7 — image-buffer heightmap upload helper.
+fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
+
 // ============================================================
 // Initialization
 // ============================================================
@@ -4631,6 +4634,23 @@ bool EngineFuncsInit() {
     printf("  TradeWork_sub_c1e0      = %p\n", (void*)fn_TradeWork_sub_c1e0);
     printf("  TradeWork_FUN_ac880     = %p\n", (void*)fn_TradeWork_FUN_ac880);
     printf("  TradeWork_helper_e270   = %p\n", (void*)fn_TradeWork_helper_e270);
+#endif
+
+    // ============================================================
+    // M3.5 Path B session 7 — image-buffer heightmap upload helper.
+    // ============================================================
+    // sub_c780 (0x1400ac780) — final IsLoading-only step in
+    // Geometry::Serialize that allocates a Video::ImageBuffer at self+0x148,
+    // sets the custom NoiseUI vtable, and uploads the heightmap raw bytes
+    // (self+0x140) into a texture via Device::Lock + CopyToTexture +
+    // Device::Unlock. All Runtime primitives + the exe vtable address are
+    // already wired (fn_ImageBuffer_*, fn_VideoDevice_Lock/Unlock,
+    // g_pVideoDeviceSingleton, g_NoiseUI_ImageBufferVtable).
+    fn_TradeWork_sub_c780 = reinterpret_cast<fn_TradeWork_sub_c780_t>(
+        ResolveAddr(Module::Exe, 0x1400ac780));
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved\n");
+    printf("  TradeWork_sub_c780      = %p\n", (void*)fn_TradeWork_sub_c780);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
