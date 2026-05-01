@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <io.h>      // _get_osfhandle, _fileno
 #include <windows.h>
 #include <dbghelp.h>
@@ -173,6 +174,7 @@ static void PrintStackTrace(CONTEXT* origCtx) {
 static HANDLE g_crashLog = INVALID_HANDLE_VALUE;
 
 static void OpenCrashLog() {
+    if (g_crashLog != INVALID_HANDLE_VALUE) return;  // idempotent — early init may have opened already
     g_crashLog = CreateFileA(
         "standalone_crash.log",
         GENERIC_WRITE, FILE_SHARE_READ, nullptr,
@@ -348,6 +350,161 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     // teardown — go with ExitProcess.
     ExitProcess(3);
     return EXCEPTION_EXECUTE_HANDLER;
+}
+
+// ============================================================
+// Pure-virtual call handler. libstdc++ exports __cxa_pure_virtual as a
+// weak symbol that aborts via std::terminate; MSVC's CRT exports _purecall
+// with similar behavior. Both bypass our SetUnhandledExceptionFilter so a
+// pure-virtual call shows nothing in standalone_crash.log unless we
+// override them here. Both variants converge on the same body.
+// ============================================================
+static void LogPureVirtualCall(const char* tag, void* retAddr) {
+    if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
+    CrashLogRaw("\n=== STANDALONE PURE-VIRTUAL CALL ===\n");
+    CrashLogf("Tag:            %s\n", tag);
+    CrashLogf("Return address: %p\n", retAddr);
+
+    HMODULE mod = nullptr;
+    if (retAddr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                       (LPCSTR)retAddr, &mod) && mod) {
+        char path[MAX_PATH] = {0};
+        GetModuleFileNameA(mod, path, MAX_PATH);
+        const char* nm = strrchr(path, '\\');
+        uintptr_t off = (uintptr_t)retAddr - (uintptr_t)mod;
+        CrashLogf("Module:         %s + 0x%llX  (base=%p)\n",
+                  nm ? nm + 1 : path, (unsigned long long)off, (void*)mod);
+    }
+
+    CONTEXT ctx;
+    RtlCaptureContext(&ctx);
+    PrintStackTrace(&ctx);
+
+    CrashLogf("=== END PURE-VIRTUAL ===\n");
+    FlushLogsToDisk();
+    ExitProcess(4);
+}
+
+extern "C" void __cxa_pure_virtual() {
+    LogPureVirtualCall("__cxa_pure_virtual", __builtin_return_address(0));
+}
+
+extern "C" void _purecall() {
+    LogPureVirtualCall("_purecall", __builtin_return_address(0));
+}
+
+static void TerminateHandler() {
+    if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
+    CrashLogRaw("\n=== STANDALONE std::terminate() ===\n");
+    CONTEXT ctx;
+    RtlCaptureContext(&ctx);
+    PrintStackTrace(&ctx);
+    CrashLogf("=== END terminate ===\n");
+    FlushLogsToDisk();
+    ExitProcess(5);
+}
+
+// ============================================================
+// MessageBoxW IAT hook for Runtime-x64.dll. MSVC's _purecall handler in
+// Runtime DLL's statically-linked CRT pops MessageBoxW("R6025: pure virtual
+// function call") and BLOCKS until the user clicks OK before abort() runs.
+// Looks like a freeze: log activity stops, no crash log written, and our
+// own __cxa_pure_virtual / std::set_terminate handlers don't fire because
+// the pure-virtual call lives inside the Runtime CRT, not ours.
+//
+// _set_purecall_handler can't help because it only affects the calling
+// CRT. We patch Runtime's IAT entry for user32!MessageBoxW so every call
+// from Runtime DLL routes through our wrapper. If the popup looks like
+// a pure-virtual notice, log + ExitProcess. Otherwise pass through.
+// ============================================================
+typedef int (WINAPI *MessageBoxW_t)(HWND, LPCWSTR, LPCWSTR, UINT);
+static MessageBoxW_t g_realMessageBoxW = nullptr;
+
+static int WINAPI HookedMessageBoxW(HWND hWnd, LPCWSTR text, LPCWSTR caption, UINT type) {
+    char textBuf[1024]    = {0};
+    char captionBuf[256]  = {0};
+    if (text)    WideCharToMultiByte(CP_UTF8, 0, text,    -1, textBuf,    sizeof(textBuf),    nullptr, nullptr);
+    if (caption) WideCharToMultiByte(CP_UTF8, 0, caption, -1, captionBuf, sizeof(captionBuf), nullptr, nullptr);
+
+    // R6025 = MSVC pure-virtual; "pure virtual" covers other CRT variants.
+    bool isPureCall =
+        strstr(textBuf,    "pure virtual") != nullptr ||
+        strstr(textBuf,    "R6025")        != nullptr ||
+        strstr(captionBuf, "R6025")        != nullptr;
+
+    if (isPureCall) {
+        if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
+        CrashLogRaw("\n=== STANDALONE PURE-VIRTUAL (MessageBoxW intercepted) ===\n");
+        CrashLogf("Caption: %s\n", captionBuf[0] ? captionBuf : "(none)");
+        CrashLogf("Text:    %s\n", textBuf[0]    ? textBuf    : "(none)");
+
+        // Stack trace from inside the hook — caller chain leads back to
+        // Runtime's _purecall stub and from there to the bad vtable call.
+        CONTEXT ctx;
+        RtlCaptureContext(&ctx);
+        PrintStackTrace(&ctx);
+
+        CrashLogf("=== END (intercepted) ===\n");
+        FlushLogsToDisk();
+        ExitProcess(6);
+    }
+
+    // Legit popup (launcher dialogs, etc.) — pass through.
+    return g_realMessageBoxW
+        ? g_realMessageBoxW(hWnd, text, caption, type)
+        : MessageBoxW(hWnd, text, caption, type);
+}
+
+// Walk Runtime-x64.dll's import descriptors, find user32!MessageBoxW, and
+// swap the IAT slot to point at HookedMessageBoxW. Returns true on success.
+// The hook stays installed for the process lifetime — no restore needed.
+static bool HookRuntimeMessageBoxW() {
+    HMODULE runtime = GetModuleHandleA("Runtime-x64.dll");
+    if (!runtime) return false;
+
+    auto base = reinterpret_cast<uint8_t*>(runtime);
+    auto* dos = reinterpret_cast<IMAGE_DOS_HEADER*>(base);
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return false;
+    auto* nt = reinterpret_cast<IMAGE_NT_HEADERS*>(base + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE) return false;
+
+    auto& importDir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!importDir.VirtualAddress || !importDir.Size) return false;
+
+    auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + importDir.VirtualAddress);
+    for (; desc->Name; ++desc) {
+        const char* dllName = reinterpret_cast<const char*>(base + desc->Name);
+        if (_stricmp(dllName, "user32.dll") != 0) continue;
+
+        // OriginalFirstThunk holds the name table; FirstThunk is the IAT
+        // (loader fills it with the actual function addresses). If the DLL
+        // was bound, OriginalFirstThunk may still be valid for name lookup.
+        DWORD nameTableRVA = desc->OriginalFirstThunk
+                           ? desc->OriginalFirstThunk
+                           : desc->FirstThunk;
+        auto* nameThunk = reinterpret_cast<IMAGE_THUNK_DATA*>(base + nameTableRVA);
+        auto* iatThunk  = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->FirstThunk);
+
+        for (; nameThunk->u1.AddressOfData; ++nameThunk, ++iatThunk) {
+            if (nameThunk->u1.Ordinal & IMAGE_ORDINAL_FLAG64) continue;
+            auto* imp = reinterpret_cast<IMAGE_IMPORT_BY_NAME*>(
+                base + nameThunk->u1.AddressOfData);
+            if (strcmp(imp->Name, "MessageBoxW") != 0) continue;
+
+            DWORD oldProtect = 0;
+            if (!VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
+                                PAGE_READWRITE, &oldProtect)) {
+                return false;
+            }
+            g_realMessageBoxW = reinterpret_cast<MessageBoxW_t>(iatThunk->u1.Function);
+            iatThunk->u1.Function = reinterpret_cast<uintptr_t>(&HookedMessageBoxW);
+            VirtualProtect(&iatThunk->u1.Function, sizeof(uintptr_t),
+                           oldProtect, &oldProtect);
+            return true;
+        }
+    }
+    return false;
 }
 
 // ============================================================
@@ -873,6 +1030,18 @@ static bool Init() {
     //    so first-chance AVs absorbed by Banished's SEH chains stay quiet.
     SetUnhandledExceptionFilter(CrashHandler);
 
+    // 1a. Open the dedicated crash log NOW (before any pure-virtual /
+    //     terminate handler can be hit). Re-opens are no-ops because
+    //     CREATE_ALWAYS truncates and OpenCrashLog is also called below
+    //     for normal flow — explicit early call here so the pure-virtual
+    //     override has somewhere to write if it fires during init.
+    OpenCrashLog();
+
+    // 1b. Install the std::terminate handler. libstdc++'s __cxa_pure_virtual
+    //     and uncaught C++ exceptions land here; abort() bypasses SEH so
+    //     without this, a pure-virtual call leaves zero log evidence.
+    std::set_terminate(TerminateHandler);
+
     // 1b. Reset Video* registry keys before anything else reads them.
     //     Breaks the standalone-shutdown corruption cycle that wedges DX11.
     ResetVideoRegistry();
@@ -883,6 +1052,17 @@ static bool Init() {
         fprintf(stderr, "[Standalone] FATAL: Could not load Runtime-x64.dll\n");
         fprintf(stderr, "[Standalone] Make sure Runtime-x64.dll is in the same directory.\n");
         return false;
+    }
+
+    // 2a. IAT-hook MessageBoxW in Runtime-x64.dll so MSVC _purecall popups
+    //     get logged + ExitProcess instead of blocking the game on a modal.
+    //     Must run AFTER ResolveInit (Runtime needs to be loaded), but
+    //     BEFORE any code that could trigger a pure-virtual call.
+    if (HookRuntimeMessageBoxW()) {
+        printf("[Standalone] Hooked Runtime-x64.dll!user32!MessageBoxW (real=%p)\n",
+               (void*)g_realMessageBoxW);
+    } else {
+        printf("[Standalone] WARN: failed to hook Runtime!MessageBoxW; pure-virtual popups will block\n");
     }
 
     // 3. Populate address registry (exe dispatch slots, code fns, vtables).

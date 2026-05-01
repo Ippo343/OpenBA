@@ -64,6 +64,7 @@ extern "C" {
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
     void RegisterMenuSceneVtable();
+    void RegisterGeometryVtable();
 }
 
 // ============================================================
@@ -561,6 +562,14 @@ static void RegisterVtablesAndTypeIds() {
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
     RegisterMenuSceneVtable();
+
+    // Geometry / "TerrainGenerator" derived vtable at exe 0x14015f110.
+    // Without this, Reimpl_Geometry_Init's `*self = vtbl` no-ops because
+    // 0x14015f110 isn't registered; the Geometry retains Runtime's base
+    // Graphics::Geometry vtable whose slot +0x18 (Draw) is _purecall.
+    // Renderer::Draw walks Scene+0x60 and dispatches +0x18, popping the
+    // MSVC R6025 MessageBox.
+    RegisterGeometryVtable();
 
     // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
     // (used by NoiseUI / ModDialog / Geometry::Serialize image upload helper).

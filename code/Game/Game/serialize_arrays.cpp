@@ -121,6 +121,58 @@ extern "C" void Reimpl_Geometry_Init(void* self) {
 }
 
 // ============================================================
+// Standalone-only stub vtable for the derived Geometry / "TerrainGenerator"
+// class. The 9-slot exe vtable lives at 0x14015f110; in DLL mode the original
+// exe code backs each slot, but in standalone none of those exe addresses are
+// registered, so the Geometry retained the Runtime base Graphics::Geometry
+// vtable — whose Draw slot (+0x18) is _purecall. Renderer::Draw walks
+// Scene+0x60 and dispatches vtable[+0x18] on every object, hitting MSVC's
+// _purecall handler (a MessageBox).
+//
+// Until the 9 derived methods are reimplemented properly, register a stub
+// vtable here. The slots are best-effort: dtor returns self, Draw is a void
+// no-op (terrain just won't render), the rest return 0/null. The crucial
+// property is that none of them is _purecall.
+//
+// Original exe vtable contents (from Ghidra read of 0x14015f110):
+//   +0x00  0x14001ECC0   dtor
+//   +0x08  0x1400AED40   ?
+//   +0x10  0x1400AEA10   ?
+//   +0x18  0x1400AE490   Draw
+//   +0x20  0x14003AA7A   ?
+//   +0x28  0x14003AAA4   ?
+//   +0x30  0x14003AB22   ?
+//   +0x38  0x14003AB1C   ?
+//   +0x40  0x14003AAAA   ?
+// ============================================================
+#ifdef STANDALONE_EXE
+namespace {
+void* GeomStub_Dtor(void* self, uint32_t /*flags*/)   { return self; }
+void  GeomStub_Void(void* /*self*/, ...)              { /* no-op */ }
+int   GeomStub_Int0(void* /*self*/, ...)              { return 0; }
+void* GeomStub_Null(void* /*self*/, ...)              { return nullptr; }
+
+void* g_Geometry_Vtable_Standalone[9] = {
+    reinterpret_cast<void*>(&GeomStub_Dtor),  // +0x00 dtor
+    reinterpret_cast<void*>(&GeomStub_Null),  // +0x08
+    reinterpret_cast<void*>(&GeomStub_Null),  // +0x10
+    reinterpret_cast<void*>(&GeomStub_Void),  // +0x18 Draw
+    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x20
+    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x28
+    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x30
+    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x38
+    reinterpret_cast<void*>(&GeomStub_Int0),  // +0x40
+};
+}  // namespace
+
+extern "C" void RegisterGeometryVtable() {
+    extern void RegisterExeAddr(uintptr_t exeAddr, uintptr_t standaloneAddr);
+    RegisterExeAddr(0x14015f110,
+                    reinterpret_cast<uintptr_t>(&g_Geometry_Vtable_Standalone));
+}
+#endif
+
+// ============================================================
 // Helper #2 — Transform::Serialize wrapper (FUN_1400988c0)
 // ============================================================
 //
