@@ -330,7 +330,36 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         s_loggedOnce = true;
     }
 
-    // (1) Allocate + ctor a Geometry container at +0x28 if needed.
+    // (1) Construct an OUTER Serializer (version=2) wrapping `stream`, then
+    // String::Serialize on &self->_field20 to advance the stream cursor past
+    // the type-name marker that the file format encodes at the start of
+    // every External payload. Without this prelude the cursor sits at
+    // ASCII type-name bytes ("Gase"/"vers" etc.) and Geometry::Serialize
+    // reads garbage as int counts → infinite-loop in Stream::Read.
+    //
+    // Mirrors original 0x1400a3656..0x1400a366f:
+    //   ??0Serializer@IO@@QEAA@AEAVStream@1@H@Z(outer, stream, 2)
+    //   ?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z(&self+0x20, outer)
+    uint64_t outer_ser[3] = {0, 0, 0};
+    bool outer_ctored = false;
+    if (stream && g_fn_Serializer_Ctor) {
+        g_fn_Serializer_Ctor(outer_ser, stream, 2);
+        outer_ctored = true;
+        if (g_fn_String_Serialize) {
+            g_fn_String_Serialize(&self->_field20, outer_ser);
+        } else {
+            printf("[MenuScene::Slot5_Serialize] g_fn_String_Serialize NULL — "
+                   "stream cursor not advanced past type-name; Geometry "
+                   "deserialize will likely read garbage\n");
+            fflush(stdout);
+        }
+    } else {
+        printf("[MenuScene::Slot5_Serialize] Serializer ctor unavailable — "
+               "skipping outer prelude (terrain will be missing)\n");
+        fflush(stdout);
+    }
+
+    // (2) Allocate + ctor a Geometry container at +0x28 if needed.
     if (self->_field28 == nullptr) {
         if (!fn_MemAlloc || !g_pMemAllocSingleton) {
             printf("[MenuScene::Slot5_Serialize] MemAlloc unavailable — "
@@ -355,16 +384,30 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         }
     }
 
-    // (2) Call into the body serializer + version-gated extra.
-    if (self->_field28 && stream) {
-        Reimpl_TradeWork_impl_04d0(self->_field28, stream);
-        // The original gates the f1a0 call on the OUTER serializer's
-        // GetVersion() > 0. We don't have an outer serializer here; the
-        // outer Slot5 wrapper was where it lived. f1a0's body itself will
-        // construct its own version-4 inner serializer regardless, so we
-        // call it unconditionally — its body is a strict superset of the
-        // legacy schema, gated internally by version checks.
-        Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
+    // (3) Call into the body serializer + version-gated extra.
+    //
+    // DISABLED until the deserialize is debugged end-to-end. The current body
+    // reads garbage counts at multiple steps even after the prelude advances
+    // the cursor — likely a misalignment somewhere in steps 4-8 that makes
+    // step 9 read e.g. -65410 as outerCount. The downstream renderer then
+    // dereferences wild VertexBuffer/IndexBuffer pointers and crashes on
+    // virtual dispatch. Until the alignment bugs are fixed, leave the
+    // Geometry zero-initialized — terrain doesn't render but the menu is
+    // stable. Defensive negative-count guards in the resize helpers are
+    // still in place for any future wiring.
+    //
+    // To re-enable: uncomment below + investigate steps 4-8 in
+    // geometry_serialize.cpp against the original 0x1400b04d0 disasm.
+    (void)Reimpl_TradeWork_impl_04d0;
+    (void)Reimpl_TradeWork_impl_f1a0;
+    // if (self->_field28 && stream) {
+    //     Reimpl_TradeWork_impl_04d0(self->_field28, stream);
+    //     Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
+    // }
+
+    // (4) Dtor the outer Serializer.
+    if (outer_ctored && g_fn_Serializer_Dtor) {
+        g_fn_Serializer_Dtor(outer_ser);
     }
     return;
 #else

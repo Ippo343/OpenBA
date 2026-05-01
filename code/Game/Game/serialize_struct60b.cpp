@@ -257,6 +257,21 @@ void Struct60B_DtorRange_Body(void* /*unused*/, void* first, int count) {
 //   }
 void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
     if (!arrayHeaderPtr) return;
+    // Defensive: when the deserialize stream is misaligned, we may receive a
+    // garbage count (typically a negative int reinterpreted as a huge unsigned).
+    // Without this, oldCount - newCount underflows to ~65k and DtorRange iterates
+    // freeing wild pointers.
+    if (static_cast<int32_t>(newCount) < 0) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Struct60B::Resize] negative-as-unsigned newCount=%u (signed=%d) "
+                   "for header=%p — stream misaligned upstream; leaving array unchanged\n",
+                   newCount, static_cast<int32_t>(newCount), arrayHeaderPtr);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
     if (!fn_MemAlloc || !g_pMemAllocSingleton) {
         static bool s_warned = false;
         if (!s_warned) {

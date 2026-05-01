@@ -54,6 +54,20 @@ namespace {
 void GenericArrayResize(void* arrayHeader, int newCount,
                         size_t stride, int alignment) {
     if (!arrayHeader) return;
+    if (newCount < 0) {
+        // Defensive: a negative count usually means the deserialize stream
+        // was misaligned earlier and we read garbage. Bail out rather than
+        // run the shrink-path which would free wild pointers.
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Resize<S5>] negative newCount=%d for header=%p stride=%zu — "
+                   "stream misaligned upstream; leaving array unchanged\n",
+                   newCount, arrayHeader, stride);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
     if (!fn_MemAlloc || !g_pMemAllocSingleton) {
         static bool s_warned = false;
         if (!s_warned) {
@@ -270,6 +284,19 @@ extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCoun
     }
 #endif
     if (!arrayHeader) return;
+    if (newCount < 0) {
+        // Defensive: see GenericArrayResize note. The shrink-path here would
+        // free wild pointers if oldCount > newCount and newCount is negative.
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Resize<AoA>] negative newCount=%d for header=%p — "
+                   "stream misaligned upstream; leaving array unchanged\n",
+                   newCount, arrayHeader);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
     if (!fn_MemAlloc || !g_pMemAllocSingleton) {
         static bool s_warned = false;
         if (!s_warned) {

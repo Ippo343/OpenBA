@@ -209,24 +209,18 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     serIntField(selfBytes + 0xD0);
     serIntField(selfBytes + 0xD4);
 
-    // ---- Step 3: Serialize uint16 array at +0xD8 (count=+0xE0). ----
+    // ---- Step 3: Serialize 2-byte-element array at +0xD8 (count=+0xE0). ----
+    // Verified original disasm @ 0x1400b0589..0x1400b05ce: local_count is the
+    // ELEMENT count (no shift). Both resize and serialize use it directly.
+    // The original calls slot 0x1401523f8 (F = short*); slot 0x140152488
+    // (G = ushort*) reads identical bytes, so we route through serUSArr.
     int32_t local_count = *reinterpret_cast<int32_t*>(selfBytes + 0xE0);
     serIntField(&local_count);
     if (SerializerInner(serializer) == 0) {
-        // Loading: resize the uint16 array (stride 0x02).
-        Reimpl_Array_Resize_Stride02(selfBytes + 0xD8, local_count >> 1);
-        // NOTE: original passes (count >> 1) — uint16 stride means
-        // local_count is a byte count. Verified at 0x1400b06c2.
+        Reimpl_Array_Resize_Stride02(selfBytes + 0xD8, local_count);
     }
     if (serUSArr) {
         uint16_t* arr16 = *reinterpret_cast<uint16_t**>(selfBytes + 0xD8);
-        // Original at 0x1400b05ce uses slot 0x1401523f8 (raw bytes) — but
-        // the count semantics there are byte-count, not element-count. Use the
-        // sized-raw slot instead.
-        // Fall through; we mimic with serUSArr only if it's the right shape.
-        // The original disasm:
-        //   IO::Serializer::Serialize(serializer, count, ushort*, name);
-        // is the bulk uint16 form (slot 0x140152488).
         if (arr16) serUSArr(serializer, local_count, arr16, nullptr);
     }
 

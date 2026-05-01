@@ -299,6 +299,44 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z"));
     RegisterDispatchSlot(0x140152400,
         (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
+
+    // ----------------------------------------------------------------
+    // M3.5 cleanup — IO::Serializer dispatch slots (Geometry::Serialize)
+    // ----------------------------------------------------------------
+    // Slots verified against fn_TradeWork_impl_04d0 (0x1400b04d0) call sites:
+    //   ctor  takes (this, Stream&, version)        — single-arg, RDX/R8 set by caller
+    //   dtor  takes (this)                          — single-arg
+    //   Int/Bool/Byte/Float take (this, T*, name)
+    //   UShort/Short/Byte arrays take (this, count, T*, name)
+    //   GetVersion takes (this) -> int
+    // Without these, terrain heightmap soft-fails and the menu renders empty.
+    RegisterDispatchSlot(0x140152ad8,
+        (uintptr_t)ResolveExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z"));
+    RegisterDispatchSlot(0x140152ad0,
+        (uintptr_t)ResolveExport("??1Serializer@IO@@QEAA@XZ"));
+    RegisterDispatchSlot(0x140152ac8,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z"));
+    RegisterDispatchSlot(0x140152410,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
+    RegisterDispatchSlot(0x140152a58,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z"));
+    RegisterDispatchSlot(0x140152a60,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z"));
+    RegisterDispatchSlot(0x140152a48,
+        (uintptr_t)ResolveExport("?GetVersion@Serializer@IO@@QEBAHXZ"));
+    RegisterDispatchSlot(0x140152488,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAGPEBD@Z"));
+    RegisterDispatchSlot(0x1401523f8,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
+    RegisterDispatchSlot(0x140152618,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
+    RegisterDispatchSlot(0x1401526b8,
+        (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    RegisterDispatchSlot(0x140152668,
+        (uintptr_t)ResolveExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z"));
+    RegisterDispatchSlot(0x140152660,
+        (uintptr_t)ResolveExport("?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z"));
+
     RegisterDispatchSlot(0x140152738,
         (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
     RegisterDispatchSlot(0x140151650,
