@@ -264,9 +264,11 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
 // equivalence.
 
 extern "C" void Reimpl_TradeWork_sub_c780(void* self) {
+#ifndef STANDALONE_EXE
     if (fn_TradeWork_sub_c780) {
         fn_TradeWork_sub_c780(self);
         return;
     }
+#endif
     TradeWork_impl_sub_c780_Body(self);
 }

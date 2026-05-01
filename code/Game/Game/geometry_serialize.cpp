@@ -640,17 +640,21 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
 // mode, no exe code), we fall through to our cleaned C body.
 
 extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream) {
+#ifndef STANDALONE_EXE
     if (fn_TradeWork_impl_04d0) {
         fn_TradeWork_impl_04d0(self, stream);
         return;
     }
+#endif
     TradeWork_impl_04d0_Body(self, stream);
 }
 
 extern "C" void Reimpl_TradeWork_impl_f1a0(void* self, void* stream) {
+#ifndef STANDALONE_EXE
     if (fn_TradeWork_impl_f1a0) {
         fn_TradeWork_impl_f1a0(self, stream);
         return;
     }
+#endif
     TradeWork_impl_f1a0_Body(self, stream);
 }

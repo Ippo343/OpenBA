@@ -5092,6 +5092,18 @@ extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 typedef void* (*fn_Geometry_Init_t)(void* self);
 extern fn_Geometry_Init_t fn_Geometry_Init;
 
+// Runtime DLL ctors used by Reimpl_Geometry_Init when the cleaned body runs
+// (standalone mode, where fn_Geometry_Init resolves back to the wrapper).
+//   ??0Geometry@Graphics@@QEAA@XZ      — Runtime 0x1800a4270
+//   ??0VertexBuffer@Video@@QEAA@XZ     — Runtime 0x1800f55f0
+//   ??0IndexBuffer@Video@@QEAA@XZ      — Runtime 0x1800f3490
+typedef void (*fn_Graphics_Geometry_Ctor_t)(void* self);
+extern fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor;
+typedef void (*fn_Video_VertexBuffer_Ctor_t)(void* self);
+extern fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor;
+typedef void (*fn_Video_IndexBuffer_Ctor_t)(void* self);
+extern fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor;
+
 // Transform serialize wrapper — FUN_1400988c0. Wraps a Stream in a Serializer
 // then serializes Math::Transform + Vector3 (at +0x1c) + 3 floats (+0x28..+0x30).
 typedef void (*fn_Transform_SerializeWrapper_t)(void* transform, void* stream);

@@ -168,10 +168,12 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
 extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(
     void* refField, void* serializer) {
 
+#ifndef STANDALONE_EXE
     if (fn_ExternalPtr_Serialize_GraphicsMesh) {
         fn_ExternalPtr_Serialize_GraphicsMesh(refField, serializer);
         return;
     }
+#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
@@ -187,10 +189,12 @@ extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(
 extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
     void* refField, void* serializer) {
 
+#ifndef STANDALONE_EXE
     if (fn_ExternalPtr_Serialize_Weather) {
         fn_ExternalPtr_Serialize_Weather(refField, serializer);
         return;
     }
+#endif
 
     // Weather typeId is a direct dword (no double-deref).
     const uint32_t* typeIdPtr = g_pTypeId_Weather;

@@ -30,37 +30,94 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 // ============================================================
 // Helper #1 — Geometry init (FUN_1400b00e0)
 // ============================================================
 //
-// Standalone: this constructs a 0x230-byte Geometry container with embedded
-// VertexBuffer/IndexBuffer pairs at +0x100/+0x120 and +0x160/+0x180. The
-// vtable PTR_TradeWork_impl_ecc0_14015f110 lives in exe .rdata. We pass
-// through to the original exe address; if it can't be resolved (Runtime not
-// loaded), warn and zero the buffer minimally so callers don't see UB.
+// Constructs a 0x230-byte Graphics::Geometry-derived container ("TerrainGenerator"
+// per the type-name string at exe 0x14015f158). Layout per Ghidra disasm of
+// FUN_1400b00e0:
+//   +0x000  Graphics::Geometry::Geometry(self)        — base ctor (0xb8 bytes)
+//   +0x000  vtable = exe 0x14015f110 (derived 9-slot)
+//   +0x0c0..+0x0f8  zeroed (mesh state slots)
+//   +0x100  Video::VertexBuffer ctor (~0x20 bytes)
+//   +0x120  Video::IndexBuffer  ctor (~0x30 bytes)
+//   +0x150,+0x158  zeroed
+//   +0x160  Video::VertexBuffer ctor
+//   +0x180  Video::IndexBuffer  ctor
+//   +0x1a0..+0x228  zeroed
+//   +0x030  = 1  (state flag)
+//
+// DLL mode: fn_Geometry_Init holds the original exe code → passthrough.
+// Standalone mode: fn_Geometry_Init resolves to ourselves via the address
+//                  registry, so we run the cleaned body using Runtime DLL
+//                  ctors directly (no recursion).
 extern "C" void Reimpl_Geometry_Init(void* self) {
     if (!self) return;
 
+#ifndef STANDALONE_EXE
     if (fn_Geometry_Init) {
         fn_Geometry_Init(self);
         return;
     }
+#endif
 
-    static bool s_warned = false;
-    if (!s_warned) {
-        printf("[Geometry::Init] fn_Geometry_Init unresolved (self=%p) — "
-               "zeroing 0x230 bytes as best-effort fallback\n", self);
-        fflush(stdout);
-        s_warned = true;
+    if (!fn_Graphics_Geometry_Ctor || !fn_Video_VertexBuffer_Ctor ||
+        !fn_Video_IndexBuffer_Ctor) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Geometry::Init] Runtime ctors unresolved "
+                   "(GeomC=%p VB=%p IB=%p) — zero-fill fallback (self=%p)\n",
+                   (void*)fn_Graphics_Geometry_Ctor,
+                   (void*)fn_Video_VertexBuffer_Ctor,
+                   (void*)fn_Video_IndexBuffer_Ctor, self);
+            fflush(stdout);
+            s_warned = true;
+        }
+        memset(self, 0, 0x230);
+        return;
     }
-    // Best-effort: zero the structure so subsequent Serialize doesn't read
-    // garbage. The original sets +0x30 = 1 and constructs sub-buffers; we
-    // leave those zero — the loader will write them via Serialize.
-    for (uint64_t i = 0; i < 0x230 / 8; ++i) {
-        reinterpret_cast<uint64_t*>(self)[i] = 0;
+
+    fn_Graphics_Geometry_Ctor(self);
+
+    // Override base vtable with the derived "TerrainGenerator" 9-slot vtable.
+    // The exe-resident vtable at 0x14015f110 holds 9 fn ptrs to exe code; in
+    // standalone mode those code addresses may not be registered, but the
+    // vtable pointer itself is needed so virtual dispatch through the
+    // geometry has *something*. Callers in the Slot5 path (TradeWork_impl_04d0
+    // / _f1a0) don't dispatch through this vtable, so leaving exe slot
+    // contents unresolved is safe for the immediate menu render.
+    uintptr_t vtbl = ResolveAddr(Module::Exe, 0x14015f110);
+    if (vtbl) {
+        *reinterpret_cast<uintptr_t*>(self) = vtbl;
     }
+
+    auto* base = reinterpret_cast<uint8_t*>(self);
+    *reinterpret_cast<uint64_t*>(base + 0xc0) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0xc8) = 0;
+    *reinterpret_cast<uint32_t*>(base + 0xd0) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0xd8) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0xe0) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0xe8) = 0;
+    *reinterpret_cast<uint32_t*>(base + 0xf0) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0xf8) = 0;
+
+    fn_Video_VertexBuffer_Ctor(base + 0x100);
+    fn_Video_IndexBuffer_Ctor(base + 0x120);
+
+    *reinterpret_cast<uint64_t*>(base + 0x150) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0x158) = 0;
+
+    fn_Video_VertexBuffer_Ctor(base + 0x160);
+    fn_Video_IndexBuffer_Ctor(base + 0x180);
+
+    for (int off = 0x1a0; off <= 0x228; off += 8) {
+        *reinterpret_cast<uint64_t*>(base + off) = 0;
+    }
+
+    *reinterpret_cast<uint32_t*>(base + 0x30) = 1;
 }
 
 // ============================================================
@@ -73,10 +130,12 @@ extern "C" void Reimpl_Geometry_Init(void* self) {
 extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
     if (!transform || !stream) return;
 
+#ifndef STANDALONE_EXE
     if (fn_Transform_SerializeWrapper) {
         fn_Transform_SerializeWrapper(transform, stream);
         return;
     }
+#endif
 
     static bool s_warned = false;
     if (!s_warned) {
@@ -185,26 +244,32 @@ void GenericArrayResize(void* arrayHeader, int newCount,
 // Helpers #3-#5 — Array resize variants
 // ============================================================
 extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
+#ifndef STANDALONE_EXE
     if (fn_Array_Resize_Stride20) {
         fn_Array_Resize_Stride20(arrayHeader, newCount);
         return;
     }
+#endif
     GenericArrayResize(arrayHeader, newCount, 0x20, 4);
 }
 
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
+#ifndef STANDALONE_EXE
     if (fn_Array_Resize_Stride08) {
         fn_Array_Resize_Stride08(arrayHeader, newCount);
         return;
     }
+#endif
     GenericArrayResize(arrayHeader, newCount, 0x08, 8);
 }
 
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
+#ifndef STANDALONE_EXE
     if (fn_Array_Resize_Stride14) {
         fn_Array_Resize_Stride14(arrayHeader, newCount);
         return;
     }
+#endif
     GenericArrayResize(arrayHeader, newCount, 0x14, 4);
 }
 
@@ -223,10 +288,12 @@ extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
                                                 void* arrayBase) {
     if (!serializer || !arrayBase || count == 0) return;
 
+#ifndef STANDALONE_EXE
     if (fn_Array_Serialize_Stride20) {
         fn_Array_Serialize_Stride20(serializer, count, arrayBase);
         return;
     }
+#endif
     if (!g_fn_Serialize_Bool /* unused, just confirms serialize plumbing */) {
         // Soft-fail: we have no Serializer_Serialize_* primitives wired.
         // Returning early at least prevents memory corruption.
@@ -455,10 +522,12 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
 extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
     void* serializer, int count, void* arrayBase) {
 
+#ifndef STANDALONE_EXE
     if (fn_Array_Serialize_External_GraphicsMesh) {
         fn_Array_Serialize_External_GraphicsMesh(serializer, count, arrayBase);
         return;
     }
+#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
@@ -472,10 +541,12 @@ extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
 extern "C" void Reimpl_Array_Serialize_External_Particle(
     void* serializer, int count, void* arrayBase) {
 
+#ifndef STANDALONE_EXE
     if (fn_Array_Serialize_External_Particle) {
         fn_Array_Serialize_External_Particle(serializer, count, arrayBase);
         return;
     }
+#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_Particle && *g_ppTypeInfo_Particle) {

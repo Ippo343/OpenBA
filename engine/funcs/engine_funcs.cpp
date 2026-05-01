@@ -1284,6 +1284,9 @@ fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 // M3.5 — MenuScene::Serialize generic helpers
 // ============================================================
 fn_Geometry_Init_t fn_Geometry_Init = nullptr;
+fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
+fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
+fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
 fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper = nullptr;
 
 fn_Array_Resize_t fn_Array_Resize_Stride20 = nullptr;
@@ -4437,6 +4440,13 @@ bool EngineFuncsInit() {
     // ============================================================
     fn_Geometry_Init = reinterpret_cast<fn_Geometry_Init_t>(
         ResolveAddr(Module::Exe, 0x1400b00e0));
+    // Runtime ctors used by the standalone Reimpl_Geometry_Init body.
+    fn_Graphics_Geometry_Ctor = reinterpret_cast<fn_Graphics_Geometry_Ctor_t>(
+        ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
+    fn_Video_VertexBuffer_Ctor = reinterpret_cast<fn_Video_VertexBuffer_Ctor_t>(
+        ResolveExport("??0VertexBuffer@Video@@QEAA@XZ"));
+    fn_Video_IndexBuffer_Ctor = reinterpret_cast<fn_Video_IndexBuffer_Ctor_t>(
+        ResolveExport("??0IndexBuffer@Video@@QEAA@XZ"));
     fn_Transform_SerializeWrapper = reinterpret_cast<fn_Transform_SerializeWrapper_t>(
         ResolveAddr(Module::Exe, 0x1400988c0));
 
@@ -4579,6 +4589,9 @@ bool EngineFuncsInit() {
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
     printf("  Geometry_Init           = %p\n", (void*)fn_Geometry_Init);
+    printf("  Graphics_Geometry_Ctor  = %p\n", (void*)fn_Graphics_Geometry_Ctor);
+    printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
+    printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
     printf("  Transform_SerializeWrap = %p\n", (void*)fn_Transform_SerializeWrapper);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
         (void*)fn_Array_Resize_Stride20,

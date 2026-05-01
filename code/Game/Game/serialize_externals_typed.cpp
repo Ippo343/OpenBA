@@ -168,12 +168,15 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
 extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
     void* refField, void* serializer) {
 
-    // Prefer trampoline to original when available (DLL mode + standalone
-    // resolutions where the exe code function is reachable).
+    // Prefer trampoline to original when available (DLL mode). In standalone,
+    // fn_ExternalPtr_Serialize_Typed_7140 resolves back to ourselves via the
+    // address registry, so we always run the cleaned body here.
+#ifndef STANDALONE_EXE
     if (fn_ExternalPtr_Serialize_Typed_7140) {
         fn_ExternalPtr_Serialize_Typed_7140(refField, serializer);
         return;
     }
+#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {

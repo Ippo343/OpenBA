@@ -354,24 +354,30 @@ void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
 // trace can verify equivalence.
 
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount) {
+#ifndef STANDALONE_EXE
     if (fn_Struct60B_Resize) {
         fn_Struct60B_Resize(arrayHeader, newCount);
         return;
     }
+#endif
     Struct60B_Resize_Body(arrayHeader, newCount);
 }
 
 extern "C" void* Reimpl_Struct60B_CopyCtor(void* dst, const void* src) {
+#ifndef STANDALONE_EXE
     if (fn_Struct60B_CopyCtor) {
         return fn_Struct60B_CopyCtor(dst, src);
     }
+#endif
     return Struct60B_CopyCtor_Body(dst, src);
 }
 
 extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count) {
+#ifndef STANDALONE_EXE
     if (fn_Struct60B_DtorRange) {
         fn_Struct60B_DtorRange(unused, first, count);
         return;
     }
+#endif
     Struct60B_DtorRange_Body(unused, first, count);
 }

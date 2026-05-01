@@ -514,10 +514,12 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 // mode, no exe code), we fall through to our cleaned C body.
 
 extern "C" void Reimpl_TradeWork_sub_c1e0(void* self) {
+#ifndef STANDALONE_EXE
     if (fn_TradeWork_sub_c1e0) {
         fn_TradeWork_sub_c1e0(self);
         return;
     }
+#endif
     TradeWork_impl_sub_c1e0_Body(self);
 }
 
@@ -527,16 +529,20 @@ extern "C" void Reimpl_FUN_1400ac880(void* self,
                                      int cellSize_x,
                                      int cellSize_y,
                                      int16_t* vertOut) {
+#ifndef STANDALONE_EXE
     if (fn_TradeWork_FUN_ac880) {
         fn_TradeWork_FUN_ac880(self, colStart, rowStart, cellSize_x, cellSize_y, vertOut);
         return;
     }
+#endif
     FUN_1400ac880_Body(self, colStart, rowStart, cellSize_x, cellSize_y, vertOut);
 }
 
 extern "C" void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row) {
+#ifndef STANDALONE_EXE
     if (fn_TradeWork_helper_e270) {
         return fn_TradeWork_helper_e270(self, retbuf, col, row);
     }
+#endif
     return TradeWork_helper_e270_Body(self, retbuf, col, row);
 }
