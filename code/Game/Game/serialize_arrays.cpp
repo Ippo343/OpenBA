@@ -1,0 +1,495 @@
+// code/Game/Game/serialize_arrays.cpp
+// Generic Geometry/Transform/Array serialize helpers used by MenuScene::Slot5.
+//
+// Decompiled from Application-x64.exe. These helpers are not MenuScene-
+// specific — Geometry::Serialize and other scene serializers reuse them.
+//
+// Helper map (M3.5 / notes/M35_recon.md):
+//   #1 Geometry init                — exe 0x1400b00e0  (no cascade)
+//   #2 Transform::Serialize wrapper — exe 0x1400988c0  (no cascade)
+//   #3 Array_Resize stride 0x20     — exe 0x14001baf0  (no cascade)
+//   #4 Array_Resize stride 0x08     — exe 0x140001bb0  (no cascade)
+//   #5 Array_Resize stride 0x14     — exe 0x14001bf10  (no cascade)
+//   #6 Array_Serialize stride 0x20  — exe 0x14001bbf0  (no cascade)
+//   #7 Array_Serialize_External GraphicsMesh — exe 0x14001bcc0  (CASCADE)
+//   #8 Array_Serialize_External Particle     — exe 0x14001bff0  (CASCADE)
+//
+// Helpers #7/#8 share a byte-identical body that differs only in the
+// BaseTypeInfo* slot it dereferences. We extract that body into a single
+// generic implementation parameterized by typeIdPtr.
+//
+// **param_4 mystery (recon question 2):** the Ghidra decompile of #7 and #8
+// shows `undefined8 param_4` threaded into the function but never read past
+// `local_res20 = param_4` (which is then overwritten with GetReferenceId's
+// return). The caller (MenuScene::Slot5 at 0x1400a3779/0x1400a3928) never
+// sets R9 — only RCX/RDX/R8 are loaded before the CALL. **param_4 is
+// decompiler noise** (R9 leftover from prior code), so our reimpl signature
+// drops it entirely.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstdio>
+
+// ============================================================
+// Helper #1 — Geometry init (FUN_1400b00e0)
+// ============================================================
+//
+// Standalone: this constructs a 0x230-byte Geometry container with embedded
+// VertexBuffer/IndexBuffer pairs at +0x100/+0x120 and +0x160/+0x180. The
+// vtable PTR_TradeWork_impl_ecc0_14015f110 lives in exe .rdata. We pass
+// through to the original exe address; if it can't be resolved (Runtime not
+// loaded), warn and zero the buffer minimally so callers don't see UB.
+extern "C" void Reimpl_Geometry_Init(void* self) {
+    if (!self) return;
+
+    if (fn_Geometry_Init) {
+        fn_Geometry_Init(self);
+        return;
+    }
+
+    static bool s_warned = false;
+    if (!s_warned) {
+        printf("[Geometry::Init] fn_Geometry_Init unresolved (self=%p) — "
+               "zeroing 0x230 bytes as best-effort fallback\n", self);
+        fflush(stdout);
+        s_warned = true;
+    }
+    // Best-effort: zero the structure so subsequent Serialize doesn't read
+    // garbage. The original sets +0x30 = 1 and constructs sub-buffers; we
+    // leave those zero — the loader will write them via Serialize.
+    for (uint64_t i = 0; i < 0x230 / 8; ++i) {
+        reinterpret_cast<uint64_t*>(self)[i] = 0;
+    }
+}
+
+// ============================================================
+// Helper #2 — Transform::Serialize wrapper (FUN_1400988c0)
+// ============================================================
+//
+// Wraps a Stream in a Serializer, then delegates to Math::Transform::Serialize
+// + Math::Vector3::Serialize at +0x1c + 3 IO::Serializer::Serialize(float)
+// calls at +0x28/+0x2c/+0x30.
+extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
+    if (!transform || !stream) return;
+
+    if (fn_Transform_SerializeWrapper) {
+        fn_Transform_SerializeWrapper(transform, stream);
+        return;
+    }
+
+    static bool s_warned = false;
+    if (!s_warned) {
+        printf("[Transform::SerializeWrapper] unresolved — Transform fields "
+               "remain at default values (transform=%p stream=%p)\n",
+               transform, stream);
+        fflush(stdout);
+        s_warned = true;
+    }
+}
+
+// ============================================================
+// Generic dynamic-array resize implementation
+// ============================================================
+//
+// Layout of arrayHeader (16 bytes):
+//   +0x00: void*  data        — buffer base (or NULL)
+//   +0x08: int32  count       — current length (visible to caller)
+//   +0x0C: int32  capacity    — allocated slots (>= count)
+//
+// Algorithm matches FUN_14001baf0 / FUN_140001bb0 / FUN_14001bf10:
+//   if (newCount == count) return;
+//   if (newCount > capacity) {
+//       capacity = newCount;
+//       if (newCount == count + 1 && count != 0) capacity = newCount * 3;
+//       newBuf = MemAlloc(capacity * stride, alignment);
+//       (caller continues below to copy)
+//   }
+//   for slot in [start..newCount):
+//       if (slot < oldCount) memcpy elem from oldBuf
+//       else if (newBuf was reallocated) zero-init elem
+//   if (oldBuf != newBuf) MemFree(oldBuf)
+//
+// `start` = oldCount when buf didn't reallocate, else 0.
+//
+// Note: the stride-0x20 and stride-0x14 variants only memcpy the first
+// `min(slot, oldCount)` elements; new-slot zero-init is implicit because
+// MemAlloc returns zeroed memory in MSVC-allocator land. The stride-0x08
+// variant is more explicit (writes 0 when slot >= oldCount).
+namespace {
+
+void GenericArrayResize(void* arrayHeader, int newCount,
+                        size_t stride, int alignment) {
+    if (!arrayHeader) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Resize] MemAlloc unavailable — leaving array unchanged "
+                   "(header=%p newCount=%d stride=%zu)\n",
+                   arrayHeader, newCount, stride);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
+    void** dataSlot = reinterpret_cast<void**>(hdr + 0x00);
+    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
+    int32_t* capSlot = reinterpret_cast<int32_t*>(hdr + 0x0C);
+
+    int oldCount = *countSlot;
+    if (newCount == oldCount) return;
+
+    void* oldData = *dataSlot;
+    *countSlot = newCount;
+
+    if (*capSlot < newCount) {
+        *capSlot = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *capSlot = newCount * 3;
+        }
+        size_t bytes = static_cast<size_t>(*capSlot) * stride;
+        void* newBuf = fn_MemAlloc(g_pMemAllocSingleton, bytes, alignment);
+        *dataSlot = newBuf;
+    }
+
+    int copyStart = (oldData == *dataSlot) ? oldCount : 0;
+    auto* dst = reinterpret_cast<uint8_t*>(*dataSlot);
+
+    for (int slot = copyStart; slot < newCount; ++slot) {
+        size_t off = static_cast<size_t>(slot) * stride;
+        uint8_t* dstElem = dst + off;
+        if (!dstElem) continue;
+        if (slot < oldCount) {
+            const uint8_t* srcElem = reinterpret_cast<const uint8_t*>(oldData) + off;
+            // memcpy by stride
+            for (size_t i = 0; i < stride; ++i) {
+                dstElem[i] = srcElem[i];
+            }
+        } else if (oldData != *dataSlot) {
+            for (size_t i = 0; i < stride; ++i) {
+                dstElem[i] = 0;
+            }
+        }
+    }
+
+    if (oldData != *dataSlot && oldData != nullptr) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    }
+}
+
+} // namespace
+
+// ============================================================
+// Helpers #3-#5 — Array resize variants
+// ============================================================
+extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
+    if (fn_Array_Resize_Stride20) {
+        fn_Array_Resize_Stride20(arrayHeader, newCount);
+        return;
+    }
+    GenericArrayResize(arrayHeader, newCount, 0x20, 4);
+}
+
+extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
+    if (fn_Array_Resize_Stride08) {
+        fn_Array_Resize_Stride08(arrayHeader, newCount);
+        return;
+    }
+    GenericArrayResize(arrayHeader, newCount, 0x08, 8);
+}
+
+extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
+    if (fn_Array_Resize_Stride14) {
+        fn_Array_Resize_Stride14(arrayHeader, newCount);
+        return;
+    }
+    GenericArrayResize(arrayHeader, newCount, 0x14, 4);
+}
+
+// ============================================================
+// Helper #6 — Array_Serialize stride 0x20 (FUN_14001bbf0)
+// ============================================================
+//
+// Per element (0x20 bytes = 7 floats + 2 shorts):
+//   +0x00, +0x04, +0x08, +0x0c, +0x10, +0x14, +0x18 — 7 floats
+//   +0x1c, +0x1e — 2 shorts
+//
+// In the decompile pfVar1 is offset to (base+8) so the relative writes are
+// pfVar1[-2..+4] = 7 floats and pfVar1[+5] / +0x16 = the two shorts.
+extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
+                                                uint32_t count,
+                                                void* arrayBase) {
+    if (!serializer || !arrayBase || count == 0) return;
+
+    if (fn_Array_Serialize_Stride20) {
+        fn_Array_Serialize_Stride20(serializer, count, arrayBase);
+        return;
+    }
+    if (!g_fn_Serialize_Bool /* unused, just confirms serialize plumbing */) {
+        // Soft-fail: we have no Serializer_Serialize_* primitives wired.
+        // Returning early at least prevents memory corruption.
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Serialize_S20] no float-serialize primitive — skipping %u elems\n",
+                   count);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    auto* base = reinterpret_cast<uint8_t*>(arrayBase);
+    for (uint32_t i = 0; i < count; ++i) {
+        uint8_t* elem = base + static_cast<size_t>(i) * 0x20;
+        // Use Serialize_Uint with a float* cast — both serialize 4-byte fields
+        // through the same encoder-vtable slot for raw types. Original passes
+        // them as floats, but the wire format is identical for (uint32, float).
+        for (int off = 0; off < 7; ++off) {
+            if (fn_Serializer_Serialize_Uint) {
+                fn_Serializer_Serialize_Uint(serializer,
+                    reinterpret_cast<uint32_t*>(elem + off * 4),
+                    nullptr);
+            }
+        }
+        // Two shorts at +0x1c and +0x1e — Serializer has a short overload
+        // (slot vtable+0x80 in the original). For lack of a dedicated wired
+        // primitive, treat them as a single uint32 for now. This is a TODO
+        // if tests reveal endianness issues.
+        if (fn_Serializer_Serialize_Uint) {
+            fn_Serializer_Serialize_Uint(serializer,
+                reinterpret_cast<uint32_t*>(elem + 0x1c),
+                nullptr);
+        }
+    }
+}
+
+// ============================================================
+// Generic shared body for ExternalPtr-array serialize (#7 / #8)
+// ============================================================
+//
+// Identical to the single-ref helper (in serialize_externals.cpp) but loops
+// `count` times, treating param_3 as an array of External* at stride 8.
+//
+// Cascade safety: when typeIdPtr is null OR the underlying typeId is 0 (Runtime
+// hasn't registered the type yet), we skip the FindOrLoad call and the
+// IsDerivedFrom validation. This prevents NullFactory crashes during early
+// load and matches the "graceful no-op" pattern from
+// feedback_factory_cascade_strategy.md.
+namespace {
+
+void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
+                                   const uint32_t* typeIdPtr,
+                                   const char* typeName) {
+    if (!serializer || count <= 0 || !arrayBase) return;
+
+    // Required Runtime primitives. If any are missing, log once and bail.
+    if (!fn_Serializer_GetEncoding || !fn_ExternalFactory_FindOrLoad ||
+        !fn_IsDerivedFrom || !fn_ExternalFactory_IsReferenceModeEnabled ||
+        !fn_External_GetPath || !fn_Filename_Ctor || !fn_Filename_Dtor ||
+        !fn_Filename_AssignOp || !g_fn_String_Serialize ||
+        !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Serialize_External<%s>] runtime primitives unwired — "
+                   "skipping %d elements (cascade-safe no-op)\n",
+                   typeName ? typeName : "?", count);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    void* factory = *g_pExternalFactorySingleton;
+
+    // Resolve typeId — null/zero means "type not yet registered". Skip
+    // IsDerivedFrom validation in that case.
+    uint32_t typeId = 0;
+    bool typeIdResolved = false;
+    if (typeIdPtr) {
+        typeId = *typeIdPtr;
+        typeIdResolved = (typeId != 0);
+    }
+    if (!typeIdResolved) {
+        static bool s_typeWarned = false;
+        if (!s_typeWarned) {
+            printf("[Array::Serialize_External<%s>] typeId not yet registered — "
+                   "loading without type validation (count=%d)\n",
+                   typeName ? typeName : "?", count);
+            fflush(stdout);
+            s_typeWarned = true;
+        }
+    }
+
+    // Encoding state. Slot vtable+0x10 returns 3 for "saving in
+    // export-by-path" mode where we walk existing pointers through GetPath +
+    // FindOrLoad without serializing anything.
+    void* encoding = fn_Serializer_GetEncoding(serializer);
+    if (!encoding) return;
+    using EncodingStateFn = int (*)(void*);
+    EncodingStateFn getStateFn = nullptr;
+    {
+        void* vtable = *reinterpret_cast<void**>(encoding);
+        getStateFn = reinterpret_cast<EncodingStateFn>(
+            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtable) + 0x10));
+    }
+    int encState = getStateFn ? getStateFn(encoding) : 0;
+
+    // Each element of arrayBase is an External* slot (8 bytes).
+    auto* slots = reinterpret_cast<void**>(arrayBase);
+    for (int i = 0; i < count; ++i) {
+        void** slot = &slots[i];
+
+        if (encState == 3) {
+            // Path-export mode: only walk existing pointers, never write.
+            if (!*slot) continue;
+            uint8_t pathBuf[8] = {0};
+            void* pathFn = *slot;
+            void* path = fn_External_GetPath(pathFn, pathBuf);
+            void* found = fn_ExternalFactory_FindOrLoad(factory, path);
+            if (found && typeIdResolved) {
+                fn_IsDerivedFrom(found, typeId);
+            }
+            // Filename returned by GetPath is a stack-local Filename; it owns
+            // a System::String reference that we must release via dtor.
+            // Original calls Filename::~Filename on local_70 here.
+            fn_Filename_Dtor(pathBuf);
+            continue;
+        }
+
+        // Load/save mode. Build a temporary Filename used to round-trip the
+        // path through the serializer.
+        uint8_t fnameBuf[8] = {0};
+        fn_Filename_Ctor(fnameBuf);
+
+        bool refMode = fn_ExternalFactory_IsReferenceModeEnabled(factory);
+
+        if (refMode) {
+            // Reference-mode: serialize a uint reference id.
+            uint32_t refId = 0xFFFFFFFFu;
+            if (*slot) {
+                refId = fn_ExternalFactory_GetReferenceId(factory, *slot);
+            }
+
+            // Branch decision matches original's:
+            //   if (slot==NULL || *(int*)(*serializer + 8) != 0 || refId != UINT_MAX)
+            //       Serialize(refId)
+            //       if (refId != UINT_MAX) {
+            //           if loading: GetPathForReferenceId + Filename::operator=
+            //           goto loadPathBranch
+            //       }
+            //   else Serialize(refId)  // also UINT_MAX
+            int serializerInner = *reinterpret_cast<int*>(
+                reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
+
+            bool needsPathSerialize = false;
+            if (!*slot || serializerInner != 0 || refId != 0xFFFFFFFFu) {
+                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                if (refId != 0xFFFFFFFFu) {
+                    if (serializerInner == 0) {
+                        // Loading path: ask the factory for the actual path
+                        // and assign into our temp Filename.
+                        uint8_t tmpFn[8] = {0};
+                        // Member function with hidden retval: RCX=this, RDX=retbuf, R8=refId.
+                        fn_ExternalFactory_GetPathForReferenceId(factory, tmpFn, refId);
+                        fn_Filename_AssignOp(fnameBuf, tmpFn);
+                        fn_Filename_Dtor(tmpFn);
+                    }
+                    needsPathSerialize = true;
+                }
+            } else {
+                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+            }
+
+            if (needsPathSerialize) {
+                int innerCheck = *reinterpret_cast<int*>(
+                    reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
+                if (innerCheck == 0) {
+                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    void* result = nullptr;
+                    if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                        result = loaded;
+                    }
+                    *slot = result;
+                }
+            }
+        } else {
+            // Plain mode: serialize a bool flag, then a string path if true.
+            bool hasRef = (*slot != nullptr);
+            g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
+            if (hasRef) {
+                if (*slot) {
+                    uint8_t pathBuf[8] = {0};
+                    void* path = fn_External_GetPath(*slot, pathBuf);
+                    fn_Filename_AssignOp(fnameBuf, path);
+                    fn_Filename_Dtor(pathBuf);
+                }
+                g_fn_String_Serialize(fnameBuf, serializer);
+
+                int innerCheck = *reinterpret_cast<int*>(
+                    reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serializer)) + 8);
+                if (innerCheck == 0) {
+                    void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
+                    void* result = nullptr;
+                    if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                        result = loaded;
+                    }
+                    *slot = result;
+                }
+            }
+        }
+
+        fn_Filename_Dtor(fnameBuf);
+    }
+}
+
+} // namespace
+
+// ============================================================
+// Helpers #7 / #8 — Array_Serialize_External (CASCADE)
+// ============================================================
+//
+// #7 GraphicsMesh exref array (typeInfo @ slot 0x140151f20)
+extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
+    void* serializer, int count, void* arrayBase) {
+
+    if (fn_Array_Serialize_External_GraphicsMesh) {
+        fn_Array_Serialize_External_GraphicsMesh(serializer, count, arrayBase);
+        return;
+    }
+
+    const uint32_t* typeIdPtr = nullptr;
+    if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
+        typeIdPtr = *g_ppTypeInfo_GraphicsMesh;  // BaseTypeInfo*[0] == typeId
+    }
+    ArraySerializeExternalGeneric(serializer, count, arrayBase,
+                                  typeIdPtr, "Graphics::GraphicsMesh");
+}
+
+// #8 Particle exref array (typeInfo @ slot 0x140151420)
+extern "C" void Reimpl_Array_Serialize_External_Particle(
+    void* serializer, int count, void* arrayBase) {
+
+    if (fn_Array_Serialize_External_Particle) {
+        fn_Array_Serialize_External_Particle(serializer, count, arrayBase);
+        return;
+    }
+
+    const uint32_t* typeIdPtr = nullptr;
+    if (g_ppTypeInfo_Particle && *g_ppTypeInfo_Particle) {
+        typeIdPtr = *g_ppTypeInfo_Particle;
+    }
+    ArraySerializeExternalGeneric(serializer, count, arrayBase,
+                                  typeIdPtr, "Graphics::Particle");
+}
+
+// ============================================================
+// STANDALONE_EXE: address registry hooks
+// ============================================================
+//
+// In standalone we do NOT have the original exe's code mapped. The
+// fn_Geometry_Init / fn_Array_Resize_* / etc. function pointers above stay
+// null when ResolveAddr can't find them, and the Reimpl_* fallbacks above
+// kick in. To wire the registry up, see standalone/address_registry.cpp.

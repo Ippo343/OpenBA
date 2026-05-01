@@ -5082,6 +5082,112 @@ extern fn_CitizenComponent_AssignHousing_t fn_CitizenComponent_AssignHousing;
 // g_TypeId_ResidenceComponent — already declared above (DAT_1401c7cf0)
 
 // ============================================================
+// M3.5 — MenuScene::Serialize generic helpers (Geometry/Transform serialize,
+// dynamic-array resize/serialize, ExternalPtr serialize)
+// ============================================================
+
+// Geometry init helper — FUN_1400b00e0. Initializes a Graphics::Geometry-derived
+// scene-mesh container at +0x230 bytes. Calls Graphics::Geometry base ctor, sets
+// vtable, zeros internal fields, constructs embedded VertexBuffer/IndexBuffer pairs.
+typedef void* (*fn_Geometry_Init_t)(void* self);
+extern fn_Geometry_Init_t fn_Geometry_Init;
+
+// Transform serialize wrapper — FUN_1400988c0. Wraps a Stream in a Serializer
+// then serializes Math::Transform + Vector3 (at +0x1c) + 3 floats (+0x28..+0x30).
+typedef void (*fn_Transform_SerializeWrapper_t)(void* transform, void* stream);
+extern fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper;
+
+// Dynamic-array resize helpers — three flavors that share the same capacity-
+// growth structure but differ by element stride. The argument is a pointer to a
+// 16-byte array header: { void* data; int32 count; int32 capacity; }.
+//
+//   stride 0x20 — FUN_14001baf0  (alignment 4 on alloc, copies 8 dwords/elem)
+//   stride 0x08 — FUN_140001bb0  (alignment 8 on alloc, copies 1 qword/elem)
+//   stride 0x14 — FUN_14001bf10  (alignment 4 on alloc, copies 5 dwords/elem)
+typedef void (*fn_Array_Resize_t)(void* arrayHeader, int newCount);
+extern fn_Array_Resize_t fn_Array_Resize_Stride20;  // 0x14001baf0
+extern fn_Array_Resize_t fn_Array_Resize_Stride08;  // 0x140001bb0
+extern fn_Array_Resize_t fn_Array_Resize_Stride14;  // 0x14001bf10
+
+// Array element serialize helper for the +0x30 array on MenuScene (stride 0x20).
+// Each element packs 7 floats + 2 shorts; serializes them in order.
+// FUN_14001bbf0.
+typedef void (*fn_Array_Serialize_Stride20_t)(void* serializer, uint32_t count, void* arrayBase);
+extern fn_Array_Serialize_Stride20_t fn_Array_Serialize_Stride20;
+
+// ExternalPtr-array serialize helpers (CASCADE — FindOrLoad + IsDerivedFrom on
+// each element). Both ~250 instructions, byte-identical bodies, only the
+// BaseTypeInfo* slot differs:
+//   stride 0x08 array of GraphicsMesh exrefs — FUN_14001bcc0  (typeInfo @ slot 0x140151f20)
+//   stride 0x08 array of Particle    exrefs — FUN_14001bff0  (typeInfo @ slot 0x140151420)
+// param_4 in the Ghidra decompile is decompiler noise — R9 is never set by the
+// caller (MenuScene::Slot5 / Geometry::Serialize), so the variable is dead.
+typedef void (*fn_Array_Serialize_External_t)(void* serializer, int count, void* arrayBase);
+extern fn_Array_Serialize_External_t fn_Array_Serialize_External_GraphicsMesh;  // 0x14001bcc0
+extern fn_Array_Serialize_External_t fn_Array_Serialize_External_Particle;       // 0x14001bff0
+
+// Single ExternalPtr serialize helpers (CASCADE — FindOrLoad + IsDerivedFrom).
+// Identical bodies; only the typeInfo source differs:
+//   GraphicsMesh exref (+0x70) — FUN_14001b8e0  (typeInfo @ slot 0x140151f20)
+//   Weather      exref (+0x80) — FUN_1400196a0  (typeId  @ direct dword 0x1401c6198)
+typedef void (*fn_ExternalPtr_Serialize_t)(void* refField, void* serializer);
+extern fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_GraphicsMesh;  // 0x14001b8e0
+extern fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_Weather;        // 0x1400196a0
+
+// Generic shared body, parameterized by typeId. Used internally by both single
+// and array variants in standalone reimpl.
+//   typeIdPtr: when non-null, *typeIdPtr is the type id to validate against.
+//              when null, a printf warning is emitted and validation is skipped.
+typedef void (*fn_ExternalPtr_Serialize_Generic_t)(void* refField, void* serializer, const uint32_t* typeIdPtr);
+
+// ============================================================
+// Runtime DLL primitives used by the MenuScene serialize helpers
+// (resolved by mangled name; many already exist, listed here for reference)
+// ============================================================
+
+// IO::Serializer::GetEncoding — dispatch slot 0x1401529f8.
+// Returns Encoding* (used to query IsLoading/IsSaving via slot vtable+0x10).
+typedef void* (*fn_Serializer_GetEncoding_t)(void* self);
+extern fn_Serializer_GetEncoding_t fn_Serializer_GetEncoding;
+
+// IO::Serializer::Serialize(uint&, const char* name) — dispatch slot 0x140152a50.
+// (The bool variant at 0x140152a58 is already declared as g_fn_Serialize_Bool.)
+typedef void (*fn_Serializer_Serialize_Uint_t)(void* self, uint32_t* field, const char* name);
+extern fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint;
+
+// Object::ExternalFactory::IsReferenceModeEnabled — dispatch slot 0x140151218.
+typedef bool (*fn_ExternalFactory_IsReferenceModeEnabled_t)(void* self);
+extern fn_ExternalFactory_IsReferenceModeEnabled_t fn_ExternalFactory_IsReferenceModeEnabled;
+
+// Object::ExternalFactory::GetReferenceId — dispatch slot 0x140151220.
+typedef uint32_t (*fn_ExternalFactory_GetReferenceId_t)(void* self, void* external);
+extern fn_ExternalFactory_GetReferenceId_t fn_ExternalFactory_GetReferenceId;
+
+// Object::ExternalFactory::GetPathForReferenceId — dispatch slot 0x140151228.
+// Member function returning Filename: hidden retval ABI -> RCX=this, RDX=retbuf, R8=refId.
+typedef void* (*fn_ExternalFactory_GetPathForReferenceId_t)(void* self, void* retFilename, uint32_t refId);
+extern fn_ExternalFactory_GetPathForReferenceId_t fn_ExternalFactory_GetPathForReferenceId;
+
+// System::Filename::operator= — dispatch slot 0x1401529e0. Returns dst (Filename&).
+typedef void* (*fn_Filename_AssignOp_t)(void* dst, const void* src);
+extern fn_Filename_AssignOp_t fn_Filename_AssignOp;
+
+// ============================================================
+// MenuScene serialize helper — typeInfo storage (standalone-only)
+// ============================================================
+// In the original exe these are .rdata BaseTypeInfo*-pointer slots filled by
+// the Runtime DLL's type-registration plumbing during startup. Standalone
+// either resolves them from Runtime DLL exports or leaves them null and the
+// helpers gracefully no-op (cascade fix is a later step).
+//
+// The exe disasm reads typeId via a single deref:
+//     MOV RCX,[0x140151f20]  ; pointer to BaseTypeInfo
+//     MOV EDX,[RCX]          ; *(uint*)BaseTypeInfo == typeId
+extern uint32_t** g_ppTypeInfo_GraphicsMesh;   // .rdata slot 0x140151f20
+extern uint32_t** g_ppTypeInfo_Particle;       // .rdata slot 0x140151420
+extern uint32_t*  g_pTypeId_Weather;           // direct dword 0x1401c6198
+
+// ============================================================
 // Initialization
 // ============================================================
 

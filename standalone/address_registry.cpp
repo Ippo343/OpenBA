@@ -76,6 +76,22 @@ extern "C" {
 //   #include "Game/weather_funcs.h"
 //   RegisterExeAddr(0x140025020, (uintptr_t)&Weather_Dtor);
 
+// M3.5 — MenuScene::Serialize generic helpers
+// (decompiled bodies live in code/Game/Game/serialize_arrays.cpp +
+//  code/Game/Game/serialize_externals.cpp)
+extern "C" {
+    void Reimpl_Geometry_Init(void* self);
+    void Reimpl_Transform_SerializeWrapper(void* transform, void* stream);
+    void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount);
+    void Reimpl_Array_Serialize_Stride20(void* serializer, uint32_t count, void* arrayBase);
+    void Reimpl_Array_Serialize_External_GraphicsMesh(void* serializer, int count, void* arrayBase);
+    void Reimpl_Array_Serialize_External_Particle(void* serializer, int count, void* arrayBase);
+    void Reimpl_ExternalPtr_Serialize_GraphicsMesh(void* refField, void* serializer);
+    void Reimpl_ExternalPtr_Serialize_Weather(void* refField, void* serializer);
+}
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -83,6 +99,20 @@ static void RegisterCodeFunctions() {
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
+
+    // ============================================================
+    // M3.5 — MenuScene::Serialize generic helpers
+    // ============================================================
+    RegisterExeAddr(0x1400b00e0, reinterpret_cast<uintptr_t>(&Reimpl_Geometry_Init));
+    RegisterExeAddr(0x1400988c0, reinterpret_cast<uintptr_t>(&Reimpl_Transform_SerializeWrapper));
+    RegisterExeAddr(0x14001baf0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride20));
+    RegisterExeAddr(0x140001bb0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride08));
+    RegisterExeAddr(0x14001bf10, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride14));
+    RegisterExeAddr(0x14001bbf0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_Stride20));
+    RegisterExeAddr(0x14001bcc0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_GraphicsMesh));
+    RegisterExeAddr(0x14001bff0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_Particle));
+    RegisterExeAddr(0x14001b8e0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_GraphicsMesh));
+    RegisterExeAddr(0x1400196a0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Weather));
 }
 
 // ============================================================

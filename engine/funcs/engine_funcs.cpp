@@ -1281,6 +1281,34 @@ fn_ObjectInternal_Dtor_t fn_ObjectInternal_Dtor = nullptr;
 fn_StateMachine_ReleaseTasks_t fn_StateMachine_ReleaseTasks = nullptr;
 
 // ============================================================
+// M3.5 — MenuScene::Serialize generic helpers
+// ============================================================
+fn_Geometry_Init_t fn_Geometry_Init = nullptr;
+fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper = nullptr;
+
+fn_Array_Resize_t fn_Array_Resize_Stride20 = nullptr;
+fn_Array_Resize_t fn_Array_Resize_Stride08 = nullptr;
+fn_Array_Resize_t fn_Array_Resize_Stride14 = nullptr;
+fn_Array_Serialize_Stride20_t fn_Array_Serialize_Stride20 = nullptr;
+
+fn_Array_Serialize_External_t fn_Array_Serialize_External_GraphicsMesh = nullptr;
+fn_Array_Serialize_External_t fn_Array_Serialize_External_Particle = nullptr;
+fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_GraphicsMesh = nullptr;
+fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize_Weather = nullptr;
+
+// Runtime DLL primitives needed only by the standalone reimpls.
+fn_Serializer_GetEncoding_t fn_Serializer_GetEncoding = nullptr;
+fn_Serializer_Serialize_Uint_t fn_Serializer_Serialize_Uint = nullptr;
+fn_ExternalFactory_IsReferenceModeEnabled_t fn_ExternalFactory_IsReferenceModeEnabled = nullptr;
+fn_ExternalFactory_GetReferenceId_t fn_ExternalFactory_GetReferenceId = nullptr;
+fn_ExternalFactory_GetPathForReferenceId_t fn_ExternalFactory_GetPathForReferenceId = nullptr;
+fn_Filename_AssignOp_t fn_Filename_AssignOp = nullptr;
+
+uint32_t** g_ppTypeInfo_GraphicsMesh = nullptr;
+uint32_t** g_ppTypeInfo_Particle = nullptr;
+uint32_t*  g_pTypeId_Weather = nullptr;
+
+// ============================================================
 // Initialization
 // ============================================================
 
@@ -4358,6 +4386,125 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] CitizenBehavior Find deps resolved\n");
     printf("  PathDistance       = %p\n", (void*)fn_PathDistance);
     printf("  AssignHousing      = %p\n", (void*)fn_CitizenComponent_AssignHousing);
+#endif
+
+    // ============================================================
+    // M3.5 — MenuScene::Serialize generic helpers
+    // ============================================================
+    fn_Geometry_Init = reinterpret_cast<fn_Geometry_Init_t>(
+        ResolveAddr(Module::Exe, 0x1400b00e0));
+    fn_Transform_SerializeWrapper = reinterpret_cast<fn_Transform_SerializeWrapper_t>(
+        ResolveAddr(Module::Exe, 0x1400988c0));
+
+    fn_Array_Resize_Stride20 = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001baf0));
+    fn_Array_Resize_Stride08 = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x140001bb0));
+    fn_Array_Resize_Stride14 = reinterpret_cast<fn_Array_Resize_t>(
+        ResolveAddr(Module::Exe, 0x14001bf10));
+    fn_Array_Serialize_Stride20 = reinterpret_cast<fn_Array_Serialize_Stride20_t>(
+        ResolveAddr(Module::Exe, 0x14001bbf0));
+
+    fn_Array_Serialize_External_GraphicsMesh =
+        reinterpret_cast<fn_Array_Serialize_External_t>(
+            ResolveAddr(Module::Exe, 0x14001bcc0));
+    fn_Array_Serialize_External_Particle =
+        reinterpret_cast<fn_Array_Serialize_External_t>(
+            ResolveAddr(Module::Exe, 0x14001bff0));
+    fn_ExternalPtr_Serialize_GraphicsMesh =
+        reinterpret_cast<fn_ExternalPtr_Serialize_t>(
+            ResolveAddr(Module::Exe, 0x14001b8e0));
+    fn_ExternalPtr_Serialize_Weather =
+        reinterpret_cast<fn_ExternalPtr_Serialize_t>(
+            ResolveAddr(Module::Exe, 0x1400196a0));
+
+    // Runtime DLL primitives — resolve via dispatch slots, fall back to mangled.
+    {
+        void** slot;
+        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529f8));
+        if (slot && *slot)
+            fn_Serializer_GetEncoding = reinterpret_cast<fn_Serializer_GetEncoding_t>(*slot);
+        else
+            fn_Serializer_GetEncoding = reinterpret_cast<fn_Serializer_GetEncoding_t>(
+                ResolveExport("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ"));
+
+        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152a50));
+        if (slot && *slot)
+            fn_Serializer_Serialize_Uint = reinterpret_cast<fn_Serializer_Serialize_Uint_t>(*slot);
+        else
+            fn_Serializer_Serialize_Uint = reinterpret_cast<fn_Serializer_Serialize_Uint_t>(
+                ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
+
+        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151218));
+        if (slot && *slot)
+            fn_ExternalFactory_IsReferenceModeEnabled =
+                reinterpret_cast<fn_ExternalFactory_IsReferenceModeEnabled_t>(*slot);
+        else
+            fn_ExternalFactory_IsReferenceModeEnabled =
+                reinterpret_cast<fn_ExternalFactory_IsReferenceModeEnabled_t>(
+                    ResolveExport("?IsReferenceModeEnabled@ExternalFactory@Object@@QEBA_NXZ"));
+
+        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151220));
+        if (slot && *slot)
+            fn_ExternalFactory_GetReferenceId =
+                reinterpret_cast<fn_ExternalFactory_GetReferenceId_t>(*slot);
+        else
+            fn_ExternalFactory_GetReferenceId =
+                reinterpret_cast<fn_ExternalFactory_GetReferenceId_t>(
+                    ResolveExport("?GetReferenceId@ExternalFactory@Object@@QEBAIPEBVExternal@2@@Z"));
+
+        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151228));
+        if (slot && *slot)
+            fn_ExternalFactory_GetPathForReferenceId =
+                reinterpret_cast<fn_ExternalFactory_GetPathForReferenceId_t>(*slot);
+        else
+            fn_ExternalFactory_GetPathForReferenceId =
+                reinterpret_cast<fn_ExternalFactory_GetPathForReferenceId_t>(
+                    ResolveExport("?GetPathForReferenceId@ExternalFactory@Object@@QEBA?AVFilename@System@@I@Z"));
+
+        slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529e0));
+        if (slot && *slot)
+            fn_Filename_AssignOp = reinterpret_cast<fn_Filename_AssignOp_t>(*slot);
+        else
+            fn_Filename_AssignOp = reinterpret_cast<fn_Filename_AssignOp_t>(
+                ResolveExport("??4Filename@System@@QEAAAEAV01@AEBV01@@Z"));
+    }
+
+    // BaseTypeInfo* slots / typeId storage. These get filled by Runtime DLL
+    // type-registration plumbing in the original; in standalone they may be
+    // null until the underlying type registers, in which case the helpers
+    // below detect null and emit a one-shot warning instead of crashing.
+    g_ppTypeInfo_GraphicsMesh = reinterpret_cast<uint32_t**>(
+        ResolveAddr(Module::Exe, 0x140151f20));
+    g_ppTypeInfo_Particle = reinterpret_cast<uint32_t**>(
+        ResolveAddr(Module::Exe, 0x140151420));
+    g_pTypeId_Weather = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6198));
+
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 MenuScene::Serialize helpers resolved\n");
+    printf("  Geometry_Init           = %p\n", (void*)fn_Geometry_Init);
+    printf("  Transform_SerializeWrap = %p\n", (void*)fn_Transform_SerializeWrapper);
+    printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
+        (void*)fn_Array_Resize_Stride20,
+        (void*)fn_Array_Resize_Stride08,
+        (void*)fn_Array_Resize_Stride14);
+    printf("  Array_Serialize_S20     = %p\n", (void*)fn_Array_Serialize_Stride20);
+    printf("  ExtArr GraphicsMesh/Part= %p / %p\n",
+        (void*)fn_Array_Serialize_External_GraphicsMesh,
+        (void*)fn_Array_Serialize_External_Particle);
+    printf("  ExtPtr Mesh/Weather     = %p / %p\n",
+        (void*)fn_ExternalPtr_Serialize_GraphicsMesh,
+        (void*)fn_ExternalPtr_Serialize_Weather);
+    printf("  Serializer_GetEncoding  = %p\n", (void*)fn_Serializer_GetEncoding);
+    printf("  Serializer_Serialize_U  = %p\n", (void*)fn_Serializer_Serialize_Uint);
+    printf("  EFactory_IsRefModeEn    = %p\n", (void*)fn_ExternalFactory_IsReferenceModeEnabled);
+    printf("  EFactory_GetReferenceId = %p\n", (void*)fn_ExternalFactory_GetReferenceId);
+    printf("  EFactory_GetPathForRef  = %p\n", (void*)fn_ExternalFactory_GetPathForReferenceId);
+    printf("  Filename_AssignOp       = %p\n", (void*)fn_Filename_AssignOp);
+    printf("  TypeInfo Mesh/Particle  = %p / %p\n",
+        (void*)g_ppTypeInfo_GraphicsMesh, (void*)g_ppTypeInfo_Particle);
+    printf("  TypeId Weather          = %p\n", (void*)g_pTypeId_Weather);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
