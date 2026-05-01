@@ -45,6 +45,11 @@ static fn_TreeCleanup_t s_fn_TreeCleanup = nullptr;
 typedef void (*fn_MenuScene_Serialize_Orig_t)(void* self, void* stream);
 static fn_MenuScene_Serialize_Orig_t s_fn_Serialize_Orig = nullptr;
 
+// M3.5 Path B session 8 — top-level Geometry serializers used by the
+// standalone Slot5 branch.
+extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream);
+extern "C" void Reimpl_TradeWork_impl_f1a0(void* self, void* stream);
+
 // ============================================================
 // Lazy-init resolver
 // ============================================================
@@ -286,19 +291,80 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     EnsureResolved();
 
 #ifdef STANDALONE_EXE
-    // Standalone: 0x1400a3630 isn't in the exe registry and the helper chain
-    // (Color::Serialize, Vector4::Serialize, Geometry/Transform serialize,
-    // typed ExternalPtr serialize, dynamic-array serialize) isn't wired yet.
-    // Skip serialization and let the caller see a default-init MenuScene.
-    // Phase A's load/draw are null-tolerant, so the menu renders with the
-    // ctor-supplied atmosphere defaults instead of the .rsc payload.
-    static bool s_warned = false;
-    if (!s_warned) {
-        printf("[MenuScene::Slot5_Serialize] standalone no-op "
-               "(self=%p stream=%p; scene data not loaded)\n",
-               (void*)self, stream);
+    // M3.5 Path B session 8 — Geometry deserialize sub-sequence.
+    //
+    // Mirrors the Geometry-allocation + serialize calls inside the original
+    // MenuScene_Slot5 (0x1400a3630), specifically:
+    //   0x1400a36c4: CALL 0x1400b00e0   ; Geometry ctor on freshly-allocated 0x230B buffer
+    //   0x1400a36d5: CALL 0x1400b04d0   ; TradeWork_impl_04d0 (Geometry::Serialize body)
+    //   0x1400a36f0: CALL 0x1400af1a0   ; TradeWork_impl_f1a0 (version-gated extra)
+    //
+    // We skip the surrounding Slot5 body (String name, atmosphere colors,
+    // version-gated arrays, etc.) — those depend on Color::Serialize +
+    // Vector4::Serialize + Array_Serialize_External_Particle/GraphicsMesh
+    // helpers that aren't yet wired into a clean reimpl. Phase A's load/draw
+    // is null-tolerant for those fields; the goal of session 8 is just that
+    // the Geometry container at +0x28 deserializes end-to-end so terrain
+    // renders.
+    //
+    // Allocate a fresh Geometry on load if there isn't one already. We
+    // assume IsLoading by default (the standalone path only loads .rsc
+    // payloads — never saves at this level). The original guards on
+    // serializer's IsLoading flag plus `*(int*)(serializer + 8) == 0`,
+    // but we don't have a parent serializer here; instead we trust the
+    // stream's IsLoading state (read by the inner serializers).
+    //
+    // CASCADE risk: TradeWork_impl_04d0 calls FUN_140007140 three times
+    // and FUN_140020150 once, all against MaterialInstance typeInfo slot
+    // 0x140151350. If MaterialInstance isn't yet REGISTER_TYPE'd in
+    // standalone, those cascades log one-shot warnings and skip. The
+    // 0x60B per-element serializer (TradeWork_impl_ffa0) will likewise
+    // soft-fail per element. The image-buffer upload (TradeWork_sub_c780)
+    // soft-fails if VideoDevice::_singleton isn't ready. Worst case: the
+    // menu shows the ctor-supplied atmosphere defaults instead of terrain.
+    static bool s_loggedOnce = false;
+    if (!s_loggedOnce) {
+        printf("[MenuScene::Slot5_Serialize] standalone Geometry-deserialize path "
+               "(self=%p stream=%p)\n", (void*)self, stream);
         fflush(stdout);
-        s_warned = true;
+        s_loggedOnce = true;
+    }
+
+    // (1) Allocate + ctor a Geometry container at +0x28 if needed.
+    if (self->_field28 == nullptr) {
+        if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+            printf("[MenuScene::Slot5_Serialize] MemAlloc unavailable — "
+                   "skipping Geometry alloc (terrain will be missing)\n");
+            fflush(stdout);
+        } else {
+            void* geom = fn_MemAlloc(g_pMemAllocSingleton, 0x230, 8);
+            if (geom) {
+                if (fn_Geometry_Init) {
+                    fn_Geometry_Init(geom);
+                } else {
+                    // Fallback: zero-fill. The session 5 helpers should still
+                    // resize correctly given a zeroed header.
+                    memset(geom, 0, 0x230);
+                }
+                self->_field28 = geom;
+            } else {
+                printf("[MenuScene::Slot5_Serialize] MemAlloc(0x230) failed — "
+                       "no Geometry container, skipping deserialize\n");
+                fflush(stdout);
+            }
+        }
+    }
+
+    // (2) Call into the body serializer + version-gated extra.
+    if (self->_field28 && stream) {
+        Reimpl_TradeWork_impl_04d0(self->_field28, stream);
+        // The original gates the f1a0 call on the OUTER serializer's
+        // GetVersion() > 0. We don't have an outer serializer here; the
+        // outer Slot5 wrapper was where it lived. f1a0's body itself will
+        // construct its own version-4 inner serializer regardless, so we
+        // call it unconditionally — its body is a strict superset of the
+        // legacy schema, gated internally by version checks.
+        Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
     }
     return;
 #else

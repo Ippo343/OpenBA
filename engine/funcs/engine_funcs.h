@@ -5410,6 +5410,58 @@ typedef void (*fn_TradeWork_sub_c780_t)(void* self);
 extern fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780;  // 0x1400ac780  M3.5 Path B session 7
 
 // ============================================================
+// M3.5 Path B session 8 — final assembly: Geometry::Serialize body + extra
+// ============================================================
+//
+// Two top-level serializers driven from MenuScene::Serialize @ 0x1400a3630
+// (callsites verified via Ghidra disassembly):
+//
+//   0x1400a36d5: CALL 0x1400b04d0   ; TradeWork_impl_04d0  — Geometry::Serialize body
+//   0x1400a36f0: CALL 0x1400af1a0   ; TradeWork_impl_f1a0  — version-gated extra
+//
+// `TradeWork_impl_04d0` (~700 bytes) walks 15 steps that own the heightmap,
+// vertex/index buffers, image-buffer upload, two parallel int4 arrays, an
+// array-of-arrays, the 0x60B struct array, and four typed-ExternalPtr
+// cascades (MaterialInstance via FUN_140007140 and FUN_140020150).
+// `TradeWork_impl_f1a0` (~196 bytes) is the version-gated extra schema-stream
+// (constructs a separate IO::Serializer with version 4) reading the OLD
+// schema's +0x1F0 + +0x200 arrays before the new-schema +0x210.
+//
+// Both call into the M3.5 session 2-7 helper graph plus IO::Serializer's
+// dispatch slots (0x140152ad8 ctor, 0x140152ad0 dtor, 0x140152ac8 int,
+// 0x140152410 byte, 0x140152a58 bool, 0x140152a60 float, 0x140152a48 GetVer,
+// 0x140152488 ushort-array, 0x1401523f8 / 0x140152400 sized-raw,
+// 0x140152618 SerializeBytes, 0x1401526b8 Vector2::Serialize). The cleaned-C
+// body resolves these slots lazily and per-step soft-fails on cascade misses.
+typedef void (*fn_TradeWork_impl_04d0_t)(void* self, void* stream);
+extern fn_TradeWork_impl_04d0_t fn_TradeWork_impl_04d0;  // 0x1400b04d0  M3.5 Path B session 8
+typedef void (*fn_TradeWork_impl_f1a0_t)(void* self, void* stream);
+extern fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0;  // 0x1400af1a0  M3.5 Path B session 8
+
+// First-class typedefs for the IO::Serializer dispatch slots that session 8
+// exercises heavily. Session 4 had these as locally-cached lazy-resolve
+// statics; session 8 promotes them to externs so geometry_serialize.cpp +
+// future serialize sites can share. Pointers themselves are resolved in
+// EngineFuncsInit() — fall back to ResolveExport for the standalone-mode
+// case where the .rdata slot is unfilled until Runtime DLL loads.
+//
+// All slots verified by Ghidra MCP: `disassemble_function 0x1400b04d0 CALL`.
+// M3.5 Path B session 8
+typedef void (*fn_Ser_SerInt_t      )(void* serializer, int32_t* field, const char* name);
+typedef void (*fn_Ser_SerByte_t     )(void* serializer, uint8_t* field, const char* name);
+typedef void (*fn_Ser_SerFloat_t    )(void* serializer, float*   field, const char* name);
+typedef void (*fn_Ser_SerUShortArr_t)(void* serializer, int32_t count, uint16_t* data, const char* name);
+typedef void (*fn_Ser_SerSizedRaw_t )(void* serializer, int32_t bytes, void* ptr, const char* name);
+typedef void (*fn_Ser_SerByteArr_t  )(void* serializer, int32_t count, void* ptr, const char* name);
+extern fn_Ser_SerInt_t       fn_Ser_Slot_SerInt_AC8;       // 0x140152ac8  M3.5 Path B session 8
+extern fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410;      // 0x140152410  M3.5 Path B session 8
+extern fn_Ser_SerFloat_t     fn_Ser_Slot_SerFloat_A60;     // 0x140152a60  M3.5 Path B session 8
+extern fn_Ser_SerUShortArr_t fn_Ser_Slot_SerUShortArr_488; // 0x140152488  M3.5 Path B session 8
+extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8;  // 0x1401523f8  M3.5 Path B session 8
+extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400;  // 0x140152400  M3.5 Path B session 8
+extern fn_Ser_SerByteArr_t   fn_Ser_Slot_SerByteArr_618;   // 0x140152618  M3.5 Path B session 8
+
+// ============================================================
 // Initialization
 // ============================================================
 

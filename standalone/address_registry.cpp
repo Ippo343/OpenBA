@@ -139,6 +139,13 @@ extern "C" {
     void Reimpl_TradeWork_sub_c780(void* self);
 }
 
+// M3.5 Path B session 8 — Geometry::Serialize body + version-gated extra
+// (decompiled bodies live in code/Game/Game/geometry_serialize.cpp)
+extern "C" {
+    void Reimpl_TradeWork_impl_04d0(void* self, void* stream);
+    void Reimpl_TradeWork_impl_f1a0(void* self, void* stream);
+}
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -212,6 +219,17 @@ static void RegisterCodeFunctions() {
     //                  (heightmap raw bytes -> Video texture)
     // ============================================================
     RegisterExeAddr(0x1400ac780, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c780));
+
+    // ============================================================
+    // M3.5 Path B session 8 — Geometry::Serialize body + version-gated extra
+    //   impl_04d0    — main 15-step Geometry::Serialize body (master schema, v6)
+    //   impl_f1a0    — version-gated extra serialize (parallel schema, v4)
+    //
+    // Both walk the helper graph established in sessions 2-7 and call into
+    // the IO::Serializer dispatch slots (lazy-resolved within the reimpl).
+    // ============================================================
+    RegisterExeAddr(0x1400b04d0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_impl_04d0));
+    RegisterExeAddr(0x1400af1a0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_impl_f1a0));
 }
 
 // ============================================================

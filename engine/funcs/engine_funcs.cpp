@@ -1339,6 +1339,19 @@ fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270 = nullptr;  // 0x1400ae270
 // M3.5 Path B session 7 — image-buffer heightmap upload helper.
 fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
 
+// M3.5 Path B session 8 — Geometry::Serialize body + extra serialize.
+fn_TradeWork_impl_04d0_t fn_TradeWork_impl_04d0 = nullptr;  // 0x1400b04d0
+fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0 = nullptr;  // 0x1400af1a0
+
+// M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
+fn_Ser_SerInt_t       fn_Ser_Slot_SerInt_AC8       = nullptr;  // 0x140152ac8
+fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410      = nullptr;  // 0x140152410
+fn_Ser_SerFloat_t     fn_Ser_Slot_SerFloat_A60     = nullptr;  // 0x140152a60
+fn_Ser_SerUShortArr_t fn_Ser_Slot_SerUShortArr_488 = nullptr;  // 0x140152488
+fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8  = nullptr;  // 0x1401523f8
+fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400  = nullptr;  // 0x140152400
+fn_Ser_SerByteArr_t   fn_Ser_Slot_SerByteArr_618   = nullptr;  // 0x140152618
+
 // ============================================================
 // Initialization
 // ============================================================
@@ -4651,6 +4664,50 @@ bool EngineFuncsInit() {
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 7 (image-buffer upload) resolved\n");
     printf("  TradeWork_sub_c780      = %p\n", (void*)fn_TradeWork_sub_c780);
+#endif
+
+    // ============================================================
+    // M3.5 Path B session 8 — Geometry::Serialize body + extra.
+    // ============================================================
+    // Top-level pair driven from MenuScene::Serialize. Both bodies are also
+    // reimplemented in code/Game/Game/geometry_serialize.cpp; the address
+    // registry maps these exe addresses to the reimpl entry points so
+    // standalone mode runs the cleaned C body when the function pointer here
+    // resolves to NULL.
+    fn_TradeWork_impl_04d0 = reinterpret_cast<fn_TradeWork_impl_04d0_t>(
+        ResolveAddr(Module::Exe, 0x1400b04d0));
+    fn_TradeWork_impl_f1a0 = reinterpret_cast<fn_TradeWork_impl_f1a0_t>(
+        ResolveAddr(Module::Exe, 0x1400af1a0));
+
+    // M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
+    {
+        void** sp;
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ac8));
+        if (sp && *sp) fn_Ser_Slot_SerInt_AC8 = reinterpret_cast<fn_Ser_SerInt_t>(*sp);
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152410));
+        if (sp && *sp) fn_Ser_Slot_SerByte_410 = reinterpret_cast<fn_Ser_SerByte_t>(*sp);
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152a60));
+        if (sp && *sp) fn_Ser_Slot_SerFloat_A60 = reinterpret_cast<fn_Ser_SerFloat_t>(*sp);
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152488));
+        if (sp && *sp) fn_Ser_Slot_SerUShortArr_488 = reinterpret_cast<fn_Ser_SerUShortArr_t>(*sp);
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401523f8));
+        if (sp && *sp) fn_Ser_Slot_SerSizedRaw_3F8 = reinterpret_cast<fn_Ser_SerSizedRaw_t>(*sp);
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152400));
+        if (sp && *sp) fn_Ser_Slot_SerSizedRaw_400 = reinterpret_cast<fn_Ser_SerSizedRaw_t>(*sp);
+        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152618));
+        if (sp && *sp) fn_Ser_Slot_SerByteArr_618 = reinterpret_cast<fn_Ser_SerByteArr_t>(*sp);
+    }
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved\n");
+    printf("  TradeWork_impl_04d0     = %p\n", (void*)fn_TradeWork_impl_04d0);
+    printf("  TradeWork_impl_f1a0     = %p\n", (void*)fn_TradeWork_impl_f1a0);
+    printf("  Ser slot SerInt_AC8     = %p\n", (void*)fn_Ser_Slot_SerInt_AC8);
+    printf("  Ser slot SerByte_410    = %p\n", (void*)fn_Ser_Slot_SerByte_410);
+    printf("  Ser slot SerFloat_A60   = %p\n", (void*)fn_Ser_Slot_SerFloat_A60);
+    printf("  Ser slot SerUShortArr   = %p\n", (void*)fn_Ser_Slot_SerUShortArr_488);
+    printf("  Ser slot SerSizedRaw_3F8= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_3F8);
+    printf("  Ser slot SerSizedRaw_400= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_400);
+    printf("  Ser slot SerByteArr_618 = %p\n", (void*)fn_Ser_Slot_SerByteArr_618);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
