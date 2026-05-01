@@ -398,12 +398,10 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     //
     // To re-enable: uncomment below + investigate steps 4-8 in
     // geometry_serialize.cpp against the original 0x1400b04d0 disasm.
-    (void)Reimpl_TradeWork_impl_04d0;
-    (void)Reimpl_TradeWork_impl_f1a0;
-    // if (self->_field28 && stream) {
-    //     Reimpl_TradeWork_impl_04d0(self->_field28, stream);
-    //     Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
-    // }
+    if (self->_field28 && stream) {
+        Reimpl_TradeWork_impl_04d0(self->_field28, stream);
+        Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
+    }
 
     // (4) Dtor the outer Serializer.
     if (outer_ctored && g_fn_Serializer_Dtor) {

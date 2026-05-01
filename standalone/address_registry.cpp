@@ -330,6 +330,13 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
     RegisterDispatchSlot(0x140152618,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
+    // Bulk int array: Serialize(int count, int* data, name).
+    // Used in many places (TradeWork, MoveTo, AutoPickup, etc.) and required
+    // for Geometry::Serialize step 11 (+0x220 vertex-int array, count=901
+    // observed; without this the cursor was advancing wrong → step 13 read
+    // garbage count).
+    RegisterDispatchSlot(0x140151278,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z"));
     RegisterDispatchSlot(0x1401526b8,
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x140152668,

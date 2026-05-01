@@ -3809,6 +3809,14 @@ bool EngineFuncsInit() {
         fn_Filename_CtorString = reinterpret_cast<fn_Filename_CtorString_t>(
             ResolveAddr(Module::Runtime, 0x18000c780));
 
+    // Default ctor (no-arg). Mangled name verified via Ghidra Runtime DLL
+    // 0x180006220 — body is 8-byte zero-init.
+    fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(
+        ResolveExport("??0Filename@System@@QEAA@XZ"));
+    if (!fn_Filename_Ctor)
+        fn_Filename_Ctor = reinterpret_cast<fn_Filename_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x180006220));
+
     fn_Filename_CtorCStr = reinterpret_cast<fn_Filename_CtorCStr_t>(
         ResolveExport("??0Filename@System@@QEAA@PEBD@Z"));
     if (!fn_Filename_CtorCStr)

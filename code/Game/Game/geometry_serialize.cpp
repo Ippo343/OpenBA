@@ -115,13 +115,20 @@ Fn ResolveSlot(uintptr_t exeAddr, Fn& cache, bool& triedOnce, const char* tag) {
     return cache;
 }
 
-// Helper: read the inner `serializerInner` flag at *(int*)(*serializer + 8).
-// Original disasm checks this to decide load (0) vs save (1) path.
+// Helper: read the inner load/save flag.
+//
+// IO::Serializer ctor (Runtime 0x1800b9960) stores layout:
+//   [0]: Stream* (the wrapped stream)
+//   [8]: encoding (returned by stream encoding factory virtual call)
+// So `local_50[0]` is the stream pointer. The original decompile reads
+// `*(int*)(local_50[0] + 8) == 0` — this is offset 8 of the **stream**, which
+// holds the IsLoading flag (0 = loading, 1 = saving). Earlier we mis-read
+// vtable+8 because we assumed local_50[0] was a vtable.
 inline int SerializerInner(void* serializer) {
     if (!serializer) return -1;
-    void* vt = *reinterpret_cast<void**>(serializer);
-    if (!vt) return -1;
-    return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(vt) + 8);
+    void* streamPtr = *reinterpret_cast<void**>(serializer);
+    if (!streamPtr) return -1;
+    return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(streamPtr) + 8);
 }
 
 // Hard-pinned dispatch via shared globals — when the slot itself isn't
@@ -236,12 +243,11 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     int byteCount = gridSize * gridSize * 4;
     void* heightBuf = nullptr;
 
-    // The original checks `*(int*)(stream + 8) == 0` (stream's load flag),
-    // not the local serializer's. The stream itself carries this state.
+    // The original checks `*(int*)(stream + 8) == 0` (stream's load flag).
+    // This is offset 8 of the stream object directly — IsLoading=0, IsSaving=1.
     int streamInner = -1;
     if (stream) {
-        void* svt = *reinterpret_cast<void**>(stream);
-        if (svt) streamInner = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(svt) + 8);
+        streamInner = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(stream) + 8);
     }
 
     if (streamInner == 0) {
@@ -440,18 +446,16 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         if (SerializerInner(serializer) == 0) {
             Reimpl_Array_Resize_Stride04(selfBytes + 0x220, c);
         }
-        if (serUSArr) {
-            // Note: original at 0x1400b0a3f calls FUN_1400021d0 (resize),
-            // then does Serialize(serializer, count, int*, name) via slot
-            // 0x140152488 (kSlot_SerUShortArr per disassembly). The slot at
-            // 0x140152488 is the bulk uint16 array — but for ints the same
-            // slot apparently works (serializing 4-byte chunks). The original
-            // call shape passes the slot 4-byte ints despite the ushort
-            // typing; we mirror.
+        // Original at 0x1400b0a55 calls slot 0x140151278 (NOT 0x140152488).
+        // Slot 0x140151278 = `IO::Serializer::Serialize(int count, int* data, name)` —
+        // bulk INT array (4 bytes per element). Slot 0x140152488 is the bulk
+        // uint16 variant — wrong stride for stride-04 int array.
+        typedef void (*FnSerIntArr_t)(void* serializer, int32_t count, int32_t* data, const char* name);
+        static FnSerIntArr_t s_serIntArr = nullptr; static bool t_serIntArr = false;
+        FnSerIntArr_t serIntArr = ResolveSlot(0x140151278, s_serIntArr, t_serIntArr, "Serialize_IntArr");
+        if (serIntArr) {
             int32_t* iarr = *reinterpret_cast<int32_t**>(selfBytes + 0x220);
-            if (iarr) {
-                serUSArr(serializer, c, reinterpret_cast<uint16_t*>(iarr), nullptr);
-            }
+            if (iarr) serIntArr(serializer, c, iarr, nullptr);
         }
     }
 
