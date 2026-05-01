@@ -116,6 +116,23 @@ extern "C" {
     void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);
 }
 
+// M3.5 Path B session 4 — per-element 0x60B + typed-ExternalPtr-array serialize
+// (decompiled bodies live in code/Game/Game/serialize_struct60b_serialize.cpp)
+extern "C" {
+    void Reimpl_Struct60B_Serialize(void* serializer, int count, void* arrayBase);
+    void Reimpl_Array_Serialize_External_MaterialInstance(
+        void* serializer, int count, void* arrayBase);
+}
+
+// M3.5 Path B session 6 — heightmap mesh-build path helpers
+// (decompiled bodies live in code/Game/Game/serialize_heightmap_mesh.cpp)
+extern "C" {
+    void  Reimpl_TradeWork_sub_c1e0(void* self);
+    void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
+                               int cellSize_x, int cellSize_y, int16_t* vertOut);
+    void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row);
+}
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -162,6 +179,26 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x14001f0a0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_ArrayOfArrays));
     RegisterExeAddr(0x14001ef10, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride16B));
     RegisterExeAddr(0x1400021d0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride04));
+
+    // ============================================================
+    // M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
+    // array serialize (Geometry::Serialize cascade points 10 + 13).
+    //   FUN_14001ffa0 — per-element 0x60B serialize (calls FUN_140007140 inside)
+    //   FUN_140020150 — typed-ExternalPtr array serialize (Graphics::MaterialInstance,
+    //                   typeInfo slot 0x140151350)
+    // ============================================================
+    RegisterExeAddr(0x14001ffa0, reinterpret_cast<uintptr_t>(&Reimpl_Struct60B_Serialize));
+    RegisterExeAddr(0x140020150, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_MaterialInstance));
+
+    // ============================================================
+    // M3.5 Path B session 6 — heightmap mesh-build path helpers
+    //   sub_c1e0     — top-level mesh builder (allocates Vertex/IndexBuffers)
+    //   FUN_ac880    — per-cell vertex compute
+    //   helper_e270  — vertex normal compute via heightmap deltas
+    // ============================================================
+    RegisterExeAddr(0x1400ac1e0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c1e0));
+    RegisterExeAddr(0x1400ac880, reinterpret_cast<uintptr_t>(&Reimpl_FUN_1400ac880));
+    RegisterExeAddr(0x1400ae270, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_helper_e270));
 }
 
 // ============================================================

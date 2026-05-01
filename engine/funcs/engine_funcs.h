@@ -5291,6 +5291,77 @@ extern fn_ExternalPtr_Serialize_Typed_t fn_ExternalPtr_Serialize_Typed_7140;  //
 extern uint32_t** g_ppTypeInfo_MaterialInstance;  // .rdata slot 0x140151350
 
 // ============================================================
+// M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
+// array serialize (Geometry::Serialize step 10 + step 13 cascades)
+// ============================================================
+//
+// TradeWork_impl_ffa0 (0x14001ffa0) — ~70 instructions. Per-element serializer
+// for the 0x60B struct array at MenuScene::geometry +0x200 (and the version-
+// gated +0x1F0 array). For each 0x60-byte element it:
+//   1. CALL FUN_140007140(elem+0x00, serializer)  — typed ExternalPtr serialize
+//      (Graphics::MaterialInstance via slot 0x140151350) — CASCADE.
+//   2. Serialize 5 ints (+0x28 .. +0x38)
+//   3. Serialize 1 byte (+0x3c)
+//   4. Serialize 1 int (+0x40)
+//   5. Serialize 1 bool (+0x44)
+//   6. Serialize 5 floats (+0x48 .. +0x58)
+//   7. Serialize 1 bool (+0x5c)
+//   8. version >= 2: Serialize 1 bool (+0x5d)
+//   9. version >= 1: TradeWork_impl_sub_f9c0 — uint16-stride sub-array serialize
+//      (count + raw bytes) reading from the elem+0x08 array header.
+typedef void (*fn_Struct60B_Serialize_t)(void* serializer, int count, void* arrayBase);
+extern fn_Struct60B_Serialize_t fn_Struct60B_Serialize;  // 0x14001ffa0  M3.5 Path B session 4
+
+// TradeWork_impl_sub_0150 (0x140020150) — ~150 instructions, byte-identical
+// shape to FUN_14001bcc0/FUN_14001bff0 (Array_Serialize_External). Loops
+// `count` times, per-element FindOrLoad + IsDerivedFrom against the
+// BaseTypeInfo* at .rdata slot 0x140151350 (Graphics::MaterialInstance — same
+// slot as FUN_140007140; verified via disassembly:
+//   140020340: MOV RAX, qword ptr [0x140151350]
+//   140020347: MOV EDX, dword ptr [RAX]
+//   14002034c: CALL [0x140152a98] ; IsDerivedFrom).
+// Used by Geometry::Serialize step 13 for the +0x210 array (count +0x218).
+typedef void (*fn_Array_Serialize_External_Typed_t)(void* serializer, int count, void* arrayBase);
+extern fn_Array_Serialize_External_Typed_t fn_Array_Serialize_External_MaterialInstance;  // 0x140020150  M3.5 Path B session 4
+
+// ============================================================
+// M3.5 Path B session 6 — heightmap mesh-build path
+// ============================================================
+//
+// Three exe-internal helpers from `TradeWork_impl_04d0` step 5 (mesh-build
+// pipeline). All three live in the 0x1400acxxx / 0x1400aexxx range — NOT
+// the 0x1400Cxxxx area the original recon claimed.
+//
+// Verified addresses (Ghidra search_functions_enhanced):
+//   sub_c1e0     @ 0x1400ac1e0 — top-level mesh builder (~150 instr, 5 xrefs)
+//   FUN_ac880    @ 0x1400ac880 — per-cell vertex compute (~70 instr)
+//   helper_e270  @ 0x1400ae270 — vertex normal compute (~40 instr, 3 xrefs)
+//
+// Math constants used by the per-cell compute (also verified in Ghidra):
+//   g_fUVScale       @ 0x14017214c = 1.0f
+//   DAT_140172214    @ 0x140172214 = 127.5f
+//   DAT_140172264    @ 0x140172264 = 16384.0f
+//   DAT_140172270    @ 0x140172270 = -1/256.0
+//   DAT_140172174    @ 0x140172174 = 2.0f
+// (Embedded inline as constexpr in code/Game/Game/serialize_heightmap_mesh.cpp.)
+//
+// Runtime DLL primitives invoked (resolved via dispatch slots and/or mangled
+// export fallback in the reimpl body itself — no global wiring needed):
+//   ?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z   (slot 0x140152668)
+//   ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z       (slot 0x140152690)
+//   ?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z    (slot 0x140152660)
+//   ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z        (slot 0x140152698)
+//   ?Normalize@Vector3@Math@@QEBA?AV12@XZ         (slot 0x1401512c0)
+typedef void  (*fn_TradeWork_sub_c1e0_t)   (void* self);
+typedef void  (*fn_TradeWork_FUN_ac880_t)  (void* self, int colStart, int rowStart,
+                                             int cellSize_x, int cellSize_y,
+                                             int16_t* vertOut);
+typedef void* (*fn_TradeWork_helper_e270_t)(void* self, void* retbuf, int col, int row);
+extern fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0;     // 0x1400ac1e0  M3.5 Path B session 6
+extern fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880;    // 0x1400ac880  M3.5 Path B session 6
+extern fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270;  // 0x1400ae270  M3.5 Path B session 6
+
+// ============================================================
 // Initialization
 // ============================================================
 

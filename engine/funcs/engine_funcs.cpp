@@ -1326,6 +1326,16 @@ fn_Array_Resize_t fn_Array_Resize_ArrayOfArrays  = nullptr;  // 0x14001f0a0
 fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
 fn_Array_Resize_t fn_Array_Resize_Stride04       = nullptr;  // 0x1400021d0
 
+// M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
+// array serialize (Geometry::Serialize cascade points 10 + 13).
+fn_Struct60B_Serialize_t                fn_Struct60B_Serialize                       = nullptr;  // 0x14001ffa0
+fn_Array_Serialize_External_Typed_t     fn_Array_Serialize_External_MaterialInstance = nullptr;  // 0x140020150
+
+// M3.5 Path B session 6 — heightmap mesh-build path helpers.
+fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
+fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880   = nullptr;  // 0x1400ac880
+fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270 = nullptr;  // 0x1400ae270
+
 // ============================================================
 // Initialization
 // ============================================================
@@ -4579,6 +4589,48 @@ bool EngineFuncsInit() {
         (void*)fn_ExternalPtr_Serialize_Typed_7140);
     printf("  TypeInfo MaterialInst   = %p\n",
         (void*)g_ppTypeInfo_MaterialInstance);
+#endif
+
+    // ============================================================
+    // M3.5 Path B session 4 — per-element 0x60B + typed-ExternalPtr-array.
+    // ============================================================
+    // FUN_14001ffa0 — 0x60B per-element serialize (calls FUN_140007140 inside,
+    // followed by 14 primitive serializes + version-gated extras + sub_f9c0).
+    fn_Struct60B_Serialize = reinterpret_cast<fn_Struct60B_Serialize_t>(
+        ResolveAddr(Module::Exe, 0x14001ffa0));
+    // FUN_140020150 — typed-ExternalPtr array serialize. typeInfo source is
+    // .rdata slot 0x140151350 (same as FUN_140007140, Graphics::MaterialInstance).
+    // Verified via disassembly: 140020340: MOV RAX,[0x140151350].
+    fn_Array_Serialize_External_MaterialInstance =
+        reinterpret_cast<fn_Array_Serialize_External_Typed_t>(
+            ResolveAddr(Module::Exe, 0x140020150));
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Path B session 4 (0x60B + typed-array serialize) resolved\n");
+    printf("  Struct60B_Serialize             = %p\n",
+        (void*)fn_Struct60B_Serialize);
+    printf("  Array_Serialize_Ext_MatInstance = %p\n",
+        (void*)fn_Array_Serialize_External_MaterialInstance);
+#endif
+
+    // ============================================================
+    // M3.5 Path B session 6 — heightmap mesh-build path helpers.
+    // ============================================================
+    // sub_c1e0 (0x1400ac1e0) — top-level mesh builder. Called from
+    // Geometry::Serialize step 5 to allocate VertexBuffer/IndexBuffer at
+    // self+0x100/+0x120 and fill them from the deserialized heightmap.
+    fn_TradeWork_sub_c1e0 = reinterpret_cast<fn_TradeWork_sub_c1e0_t>(
+        ResolveAddr(Module::Exe, 0x1400ac1e0));
+    // FUN_1400ac880 — per-cell vertex-block compute (writes 16-byte verts).
+    fn_TradeWork_FUN_ac880 = reinterpret_cast<fn_TradeWork_FUN_ac880_t>(
+        ResolveAddr(Module::Exe, 0x1400ac880));
+    // helper_e270 (0x1400ae270) — vertex normal compute via heightmap deltas.
+    fn_TradeWork_helper_e270 = reinterpret_cast<fn_TradeWork_helper_e270_t>(
+        ResolveAddr(Module::Exe, 0x1400ae270));
+#ifdef _DEBUG
+    printf("[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved\n");
+    printf("  TradeWork_sub_c1e0      = %p\n", (void*)fn_TradeWork_sub_c1e0);
+    printf("  TradeWork_FUN_ac880     = %p\n", (void*)fn_TradeWork_FUN_ac880);
+    printf("  TradeWork_helper_e270   = %p\n", (void*)fn_TradeWork_helper_e270);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
