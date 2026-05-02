@@ -14,6 +14,7 @@
 #include "engine_funcs.h"
 #include "runtime_funcs.h"
 #include "address_registry.h"
+#include "renderdoc_integration.h"
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
@@ -1125,6 +1126,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
     printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);
+
+    // Probe for RenderDoc. If the exe was launched via RenderDoc's UI,
+    // renderdoc.dll is already loaded into the process and we can drive
+    // captures programmatically. No-op when not attached.
+    RenderDocIntegration::Init();
 
     if (!Init()) {
         MessageBoxA(nullptr,

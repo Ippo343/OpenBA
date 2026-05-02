@@ -348,9 +348,14 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     if (!self || !context) return;
 
     static int s_calls = 0;
+#ifdef STANDALONE_EXE
+    constexpr const char* kRenderTag = "A/B-RENDER-STANDALONE";
+#else
+    constexpr const char* kRenderTag = "A/B-RENDER-DLL      ";
+#endif
     if (s_calls == 0) {
-        printf("[GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
-               self, context, param5, param6);
+        printf("[%s] [GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
+               kRenderTag, self, context, param5, param6);
         fflush(stdout);
     }
     ++s_calls;
@@ -652,6 +657,13 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     }
     // Original arg order at LAB_1400aed0e:
     //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
+    if (s_calls <= 3) {
+        printf("[%s] DrawIndexed(ctx=%p, 0, start=%d, scale=%d, 0, primCount=%d, 1) "
+               "fnPtr=%p\n",
+               kRenderTag, context, start, scale, primCount,
+               (void*)fn_Context_DrawIndexed);
+        fflush(stdout);
+    }
     fn_Context_DrawIndexed(context, 0, start, scale, 0, primCount, 1);
 }
 

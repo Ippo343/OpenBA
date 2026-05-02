@@ -33,6 +33,7 @@
 #include "address_registry.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "renderdoc_integration.h"
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include <cstdio>
@@ -234,6 +235,15 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     } else if (trace) {
         printf("[MenuDLT::Draw] WARN: skipping UI::Draw (fn_UI_Draw=%p ctx=%p)\n",
                (void*)fn_UI_Draw, context);
+    }
+
+    // Auto-trigger a RenderDoc capture on draw 10 if RenderDoc is attached.
+    // By this point the camera is stable, terrain is uploaded, and the menu
+    // UI is drawn. Capturing one such frame is enough to inspect the GPU
+    // state (which RTV is bound, what gets drawn, depth/cull, etc.).
+    if (RenderDocIntegration::IsAttached()) {
+        if (draws == 10) RenderDocIntegration::TriggerCapture();
+        RenderDocIntegration::OnFrame();
     }
 }
 
