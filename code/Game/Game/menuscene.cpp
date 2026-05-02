@@ -403,6 +403,74 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
     }
 
+    // (3.5) Camera Transform deserialize — original Slot5 calls this AFTER
+    // the Geometry deserialize and BEFORE the atmosphere colors. Without it
+    // MenuScene+0x88 stays at the ctor's identity transform and the menu
+    // camera is stuck at world origin → entire 3D scene renders behind/inside
+    // the terrain → black screen. See FUN_1400988c0 in exe + memory file
+    // project_terrain_render_status.md (2026-05-01).
+    if (stream) {
+        void* xform = reinterpret_cast<uint8_t*>(self) + 0x88;
+        // In standalone, fn_Transform_SerializeWrapper resolves to a
+        // NOT_IMPLEMENTED stub via the address registry — DON'T call it,
+        // use the inline path. In DLL mode, the wrapper points at the real
+        // exe function, so prefer it.
+#ifndef STANDALONE_EXE
+        if (fn_Transform_SerializeWrapper) {
+            fn_Transform_SerializeWrapper(xform, stream);
+        } else
+#endif
+        if (g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
+                   fn_Math_Transform_Serialize && fn_Math_Vector3_Serialize &&
+                   fn_Serializer_Serialize_Float) {
+            // Inline the FUN_1400988c0 body: inner Serializer (v=0) wraps
+            // stream; serialize Math::Transform (28B) + Math::Vector3 (12B at
+            // +0x1c) + 3 floats (+0x28, +0x2C, +0x30); dtor.
+            uint64_t inner_ser[3] = {0, 0, 0};
+            g_fn_Serializer_Ctor(inner_ser, stream, 0);
+            fn_Math_Transform_Serialize(xform, inner_ser);
+            fn_Math_Vector3_Serialize(reinterpret_cast<uint8_t*>(xform) + 0x1C,
+                                      inner_ser);
+            fn_Serializer_Serialize_Float(inner_ser,
+                reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x28),
+                nullptr);
+            fn_Serializer_Serialize_Float(inner_ser,
+                reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x2C),
+                nullptr);
+            fn_Serializer_Serialize_Float(inner_ser,
+                reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x30),
+                nullptr);
+            g_fn_Serializer_Dtor(inner_ser);
+            static bool s_logged = false;
+            if (!s_logged) {
+                const float* xf = reinterpret_cast<const float*>(xform);
+                printf("[MenuScene::Slot5_Serialize] camera Transform "
+                       "deserialized: pos=(%.2f, %.2f, %.2f) "
+                       "qrot=(%.3f, %.3f, %.3f, %.3f) +0x1c=(%.2f,%.2f,%.2f) "
+                       "+0x28=%.2f +0x2c=%.2f +0x30=%.2f\n",
+                       xf[0], xf[1], xf[2],
+                       xf[3], xf[4], xf[5], xf[6],
+                       xf[7], xf[8], xf[9],
+                       xf[10], xf[11], xf[12]);
+                fflush(stdout);
+                s_logged = true;
+            }
+        } else {
+            static bool s_warned = false;
+            if (!s_warned) {
+                printf("[MenuScene::Slot5_Serialize] Transform serialize primitives "
+                       "unwired (TWrapper=%p MathT=%p MathV3=%p SerFloat=%p) — "
+                       "camera will stay at identity, screen black\n",
+                       (void*)fn_Transform_SerializeWrapper,
+                       (void*)fn_Math_Transform_Serialize,
+                       (void*)fn_Math_Vector3_Serialize,
+                       (void*)fn_Serializer_Serialize_Float);
+                fflush(stdout);
+                s_warned = true;
+            }
+        }
+    }
+
     // (4) Dtor the outer Serializer.
     if (outer_ctored && g_fn_Serializer_Dtor) {
         g_fn_Serializer_Dtor(outer_ser);

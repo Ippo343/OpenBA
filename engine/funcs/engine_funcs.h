@@ -5109,6 +5109,20 @@ extern fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor;
 typedef void (*fn_Transform_SerializeWrapper_t)(void* transform, void* stream);
 extern fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper;
 
+// Math::Transform::Serialize — Runtime export (28-byte Transform pos/rot/scale).
+typedef void (*fn_Math_Transform_Serialize_t)(void* transform, void* serializer);
+extern fn_Math_Transform_Serialize_t fn_Math_Transform_Serialize;
+
+// Math::Vector3::Serialize — Runtime export (12-byte Vector3).
+typedef void (*fn_Math_Vector3_Serialize_t)(void* vector3, void* serializer);
+extern fn_Math_Vector3_Serialize_t fn_Math_Vector3_Serialize;
+
+// IO::Serializer::Serialize(float*, char* name) — single-float serialize. There
+// are several Serialize overloads on Serializer (int/uint/bool/float/etc.); this
+// is the (float*) variant, mangled as ?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z.
+typedef void (*fn_Serializer_Serialize_Float_t)(void* serializer, float* value, const char* name);
+extern fn_Serializer_Serialize_Float_t fn_Serializer_Serialize_Float;
+
 // Dynamic-array resize helpers — three flavors that share the same capacity-
 // growth structure but differ by element stride. The argument is a pointer to a
 // 16-byte array header: { void* data; int32 count; int32 capacity; }.

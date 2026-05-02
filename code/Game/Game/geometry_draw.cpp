@@ -560,14 +560,93 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         printf("[ItemDraw img]  vtable=%p q1=%p q2=%p q3=%p\n",
                (void*)imq[0], (void*)imq[1], (void*)imq[2], (void*)imq[3]);
 
-        // Material at self+0xF8 — first 8 qwords. q0 is the Runtime DLL
-        // MaterialInstance vtable; q5/q6 typically point to shader resources.
+        // Material at self+0xF8 — full 0x60-byte struct (12 qwords).
+        // MaterialInstance layout (from Runtime ctor 0x180103980 + Setup 0x180102c90):
+        //   +0x00..+0x18 vtable + Object::External fields (vt + 3 zeros)
+        //   +0x20 (u32) GenerateTextures-flag at byte +0x24, uninit pad at +0x26
+        //   +0x28 (ptr) Material* — Setup reads (this+0x28)+0x28+pass*8 → VideoProgram
+        //   +0x30 (ptr) per-pass param sets array (Array<TextureBinding> stride 0x20)
+        //   +0x38 (count + cap) Array<? size 0x18>
+        //   +0x40 (ptr) constant source — Setup reads +0x40 base + +0x18*idx
+        //   +0x48 ?
+        //   +0x50 (ptr) texture array — Setup reads +0x50+8 +0x10*idx
+        //   +0x58 (count) texture count — used in GenerateTextures loop
         void* mat = *reinterpret_cast<void**>(selfBytes + 0xF8);
         if (mat) {
             const uint64_t* mq = reinterpret_cast<const uint64_t*>(mat);
-            printf("[ItemDraw Material @%p]: vt=%p q1=%p q2=%p q3=%p q4=%p q5=%p q6=%p q7=%p\n",
-                   mat, (void*)mq[0], (void*)mq[1], (void*)mq[2], (void*)mq[3],
-                   (void*)mq[4], (void*)mq[5], (void*)mq[6], (void*)mq[7]);
+            printf("[ItemDraw Material @%p]: vt=%p\n", mat, (void*)mq[0]);
+            printf("    +0x08..0x18 (External): %p %p %p\n", (void*)mq[1], (void*)mq[2], (void*)mq[3]);
+            printf("    +0x20 flags : %016llx (byte+0x24=%u, [0x24]nonzero→GenerateTextures)\n",
+                   (unsigned long long)mq[4],
+                   *((const uint8_t*)mat + 0x24));
+            printf("    +0x28 Material*=%p  +0x30 paramSets=%p  +0x38 cnt/cap=%016llx\n",
+                   (void*)mq[5], (void*)mq[6], (unsigned long long)mq[7]);
+            printf("    +0x40 constSrc=%p   +0x48 ?       =%p\n", (void*)mq[8], (void*)mq[9]);
+            printf("    +0x50 texArr  =%p   +0x58 texCnt  =%016llx\n",
+                   (void*)mq[10], (unsigned long long)mq[11]);
+
+            // Walk MaterialInstance+0x50 texture array. Each entry is 0x10
+            // bytes: an Object::ExternalPtr<ImageBuffer> = {External*, refId}
+            // typically. Setup's texture loop reads
+            //   `*((this+0x50) + 8 + texIdx*0x10)` = entry+8 = wrapped ptr.
+            // If wrapped ptr is null, SetImageBuffer binds null to context →
+            // pixel shader samples zero → black output.
+            void* texArr = (void*)mq[10];
+            uint32_t texCnt = static_cast<uint32_t>(mq[11] & 0xFFFFFFFFu);
+            if (texArr) {
+                const uint8_t* tab = reinterpret_cast<const uint8_t*>(texArr);
+                printf("    texArr layout (stride 0x10, count %u):\n", texCnt);
+                // Entry layout (per FindTexture + SetTexture decomp):
+                //   entry+0..+7  = System::String name (8B handle)
+                //   entry+8..+15 = ExternalPtr<ImageBuffer> = ImageBuffer*
+                //                  (this is what MaterialInstance::Setup binds
+                //                   to context — the actual texture handle)
+                for (uint32_t i = 0; i < texCnt && i < 8; ++i) {
+                    const uint64_t* entry =
+                        reinterpret_cast<const uint64_t*>(tab + i * 0x10);
+                    void* nameStr = (void*)entry[0];
+                    void* imgBuf  = (void*)entry[1];
+                    char nameBuf[16] = {0};
+                    if (nameStr) {
+                        memcpy(nameBuf, nameStr, 15);
+                        nameBuf[15] = 0;
+                    }
+                    printf("      [%u] name=\"%s\" imgBuf=%p\n", i, nameBuf, imgBuf);
+                    if (imgBuf) {
+                        const uint64_t* ib =
+                            reinterpret_cast<const uint64_t*>(imgBuf);
+                        printf("          ImageBuffer @%p: vt=%p +0x08=%p +0x10=%p +0x60(data)=%p\n",
+                               imgBuf, (void*)ib[0], (void*)ib[1], (void*)ib[2],
+                               (void*)ib[12]);
+                    }
+                }
+            }
+
+            // Walk to the VideoProgram for pass 0: (mat+0x28) → (M+0x28) → +0*8.
+            void* matInner = (void*)mq[5];
+            if (matInner) {
+                const uint64_t* mi = reinterpret_cast<const uint64_t*>(matInner);
+                printf("    Material* inner @%p: vt=%p +0x08=%p +0x10=%p +0x18=%p +0x20=%p +0x28(progArr)=%p +0x30=%p\n",
+                       matInner, (void*)mi[0], (void*)mi[1], (void*)mi[2], (void*)mi[3],
+                       (void*)mi[4], (void*)mi[5], (void*)mi[6]);
+                void* progArr = (void*)mi[5];   // Material+0x28
+                if (progArr) {
+                    void* prog0 = *reinterpret_cast<void**>(progArr);  // pass-0 VideoProgram
+                    printf("    pass-0 VideoProgram*=%p\n", prog0);
+                    if (prog0) {
+                        const uint64_t* pq = reinterpret_cast<const uint64_t*>(prog0);
+                        printf("        VP+0x00 vt=%p +0x08=%p +0x10=%p +0x18=%p\n",
+                               (void*)pq[0], (void*)pq[1], (void*)pq[2], (void*)pq[3]);
+                        // SetupShaders reads +0x20=vsLayout, +0x28=ps,
+                        // +0x30=gs, +0x38=inputLayout. Null means shader not
+                        // compiled/loaded → fragments output black.
+                        printf("        VP+0x20 vs/layout=%p +0x28 ps=%p +0x30 gs=%p +0x38 inputLayout=%p\n",
+                               (void*)pq[4], (void*)pq[5], (void*)pq[6], (void*)pq[7]);
+                        printf("        VP+0x40=%p +0x48=%p +0x50=%p +0x58=%p\n",
+                               (void*)pq[8], (void*)pq[9], (void*)pq[10], (void*)pq[11]);
+                    }
+                }
+            }
         }
         fflush(stdout);
     }

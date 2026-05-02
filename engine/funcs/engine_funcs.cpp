@@ -1288,6 +1288,9 @@ fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
 fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper = nullptr;
+fn_Math_Transform_Serialize_t   fn_Math_Transform_Serialize   = nullptr;
+fn_Math_Vector3_Serialize_t     fn_Math_Vector3_Serialize     = nullptr;
+fn_Serializer_Serialize_Float_t fn_Serializer_Serialize_Float = nullptr;
 
 fn_Array_Resize_t fn_Array_Resize_Stride20 = nullptr;
 fn_Array_Resize_t fn_Array_Resize_Stride08 = nullptr;
@@ -4484,6 +4487,12 @@ bool EngineFuncsInit() {
         ResolveExport("??0IndexBuffer@Video@@QEAA@XZ"));
     fn_Transform_SerializeWrapper = reinterpret_cast<fn_Transform_SerializeWrapper_t>(
         ResolveAddr(Module::Exe, 0x1400988c0));
+    fn_Math_Transform_Serialize = reinterpret_cast<fn_Math_Transform_Serialize_t>(
+        ResolveExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    fn_Math_Vector3_Serialize = reinterpret_cast<fn_Math_Vector3_Serialize_t>(
+        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    fn_Serializer_Serialize_Float = reinterpret_cast<fn_Serializer_Serialize_Float_t>(
+        ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z"));
 
     fn_Array_Resize_Stride20 = reinterpret_cast<fn_Array_Resize_t>(
         ResolveAddr(Module::Exe, 0x14001baf0));
@@ -4628,6 +4637,9 @@ bool EngineFuncsInit() {
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
     printf("  Transform_SerializeWrap = %p\n", (void*)fn_Transform_SerializeWrapper);
+    printf("  Math_Transform_Serial   = %p\n", (void*)fn_Math_Transform_Serialize);
+    printf("  Math_Vector3_Serial     = %p\n", (void*)fn_Math_Vector3_Serialize);
+    printf("  Serializer_Float        = %p\n", (void*)fn_Serializer_Serialize_Float);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
         (void*)fn_Array_Resize_Stride20,
         (void*)fn_Array_Resize_Stride08,

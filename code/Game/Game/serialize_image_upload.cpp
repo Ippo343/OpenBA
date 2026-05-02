@@ -183,6 +183,22 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
     // (2) Run the base ImageBuffer ctor (sets default vtable, zeros fields).
     fn_ImageBuffer_Ctor(img);
 
+    // Diagnostic: dump ImageBuffer struct after ctor to verify
+    // PlatformConstruct populated +0x50/+0x58 (linked-list ptrs) and +0x60
+    // (ImageBufferData wrapper). Black-screen triage 2026-05-01.
+    {
+        const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);
+        printf("[sub_c780] post-ctor img=%p:\n", img);
+        printf("    +0x00..0x18 vtbl=%p q1=%p q2=%p q3=%p\n",
+               (void*)iq[0], (void*)iq[1], (void*)iq[2], (void*)iq[3]);
+        printf("    +0x20..0x40 (params)= %p %p %p %p\n",
+               (void*)iq[4], (void*)iq[5], (void*)iq[6], (void*)iq[7]);
+        printf("    +0x40..0x60 = %p %p %p %p\n",
+               (void*)iq[8], (void*)iq[9], (void*)iq[10], (void*)iq[11]);
+        printf("    +0x60 (ImageBufferData) = %p\n", (void*)iq[12]);
+        fflush(stdout);
+    }
+
     // (3) Override the vtable with the NoiseUI/ModDialog/Geometry shared one.
     *reinterpret_cast<uintptr_t*>(img) = g_NoiseUI_ImageBufferVtable;
 
@@ -225,7 +241,7 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    fnCreate(img,
+    bool createOk = fnCreate(img,
              /*imageType */ 0,
              /*usage     */ 2,
              /*format    */ 5,
@@ -238,17 +254,45 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
              /*addrW     */ 1,
              /*mipData   */ nullptr);
 
+    // Diagnostic: verify Create populated the buffer params/data slots.
+    {
+        const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);
+        printf("[sub_c780] post-Create img=%p createOk=%d width=%d:\n",
+               img, (int)createOk, width);
+        printf("    +0x20..0x40 (params)= %p %p %p %p\n",
+               (void*)iq[4], (void*)iq[5], (void*)iq[6], (void*)iq[7]);
+        printf("    +0x40..0x60 = %p %p %p %p\n",
+               (void*)iq[8], (void*)iq[9], (void*)iq[10], (void*)iq[11]);
+        printf("    +0x60 (ImageBufferData) = %p\n", (void*)iq[12]);
+        fflush(stdout);
+    }
+
     // (7) Lock the device, copy heightmap bytes -> texture, unlock.
     void* device = *g_pVideoDeviceSingleton;
     fn_VideoDevice_Lock(device);
 
     void* heightmapBytes = *reinterpret_cast<void**>(selfBytes + kHeightmapBytesOffset);
+    printf("[sub_c780] CopyToTexture(img=%p, bytes=%p, w=%d, h=%d)\n",
+           img, heightmapBytes, width, width);
+    if (heightmapBytes) {
+        const uint8_t* hb = reinterpret_cast<const uint8_t*>(heightmapBytes);
+        printf("    first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x\n",
+               hb[0], hb[1], hb[2], hb[3], hb[4], hb[5], hb[6], hb[7],
+               hb[8], hb[9], hb[10], hb[11], hb[12], hb[13], hb[14], hb[15]);
+    }
+    fflush(stdout);
     fn_ImageBuffer_CopyToTexture(img, heightmapBytes, width, width);
 
     // Re-fetch — original disassembly reads `[0x140151a80]` then `[RAX]` again
     // for the Unlock call; preserves the same indirection level we used above.
     void* deviceForUnlock = *g_pVideoDeviceSingleton;
     fn_VideoDevice_Unlock(deviceForUnlock);
+
+    {
+        const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);
+        printf("[sub_c780] DONE img=%p — final +0x60=%p\n", img, (void*)iq[12]);
+        fflush(stdout);
+    }
 }
 
 } // namespace
