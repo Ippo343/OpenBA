@@ -16,6 +16,13 @@
     "vscode": {
       "command": "cmd",
       "args": ["/c", "npx", "vscode-as-mcp-server"]
+    },
+    "renderdoc": {
+      "command": "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\renderdoc_mcp\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "renderdoc_mcp"],
+      "env": {
+        "RENDERDOC_MODULE_PATH": "C:\\code\\GIT\\untitled_rev_eng_project\\tools\\renderdoc_mcp\\runtime"
+      }
     }
   }
 }

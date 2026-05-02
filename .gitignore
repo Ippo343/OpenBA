@@ -8,6 +8,10 @@ tools/ghidra_mcp/.venv/
 tools/ghidra_mcp/GhidraMCP-3.0.0.zip
 tools/ghidra_mcp/bridge_mcp_ghidra.py
 
+# RenderDoc MCP (cloned source + built binaries — see notes for build steps)
+tools/renderdoc_mcp/
+tools/renderdoc_build/
+
 # Ghidra project files
 *.gpr
 *.rep/

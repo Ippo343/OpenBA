@@ -80,13 +80,13 @@ struct RENDERDOC_API_1_4_0 {
 
     pRENDERDOC_TriggerCapture              TriggerCapture;
 
-    // 2 slots for IsTargetControlConnected/LaunchReplayUI.
+    // 3 slots for IsTargetControlConnected/LaunchReplayUI/SetActiveWindow.
+    // (TriggerMultiFrameCapture sits AFTER EndFrameCapture, not here — easy
+    //  to get wrong and end up calling IsFrameCapturing where we expected
+    //  StartFrameCapture, silently producing zero captures.)
     void* slot_unused12;
     void* slot_unused13;
-
-    // 2 slots for SetActiveWindow/TriggerMultiFrameCapture.
     void* slot_unused14;
-    void* slot_unused15;
 
     pRENDERDOC_StartFrameCapture           StartFrameCapture;
     pRENDERDOC_IsFrameCapturing            IsFrameCapturing;
