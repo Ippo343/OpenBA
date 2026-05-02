@@ -471,7 +471,113 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         }
     }
 
-    // (4) Dtor the outer Serializer.
+    // (4) Tail of MenuScene::Slot5 — runs UNCONDITIONALLY in original
+    // (outside the cVar2/IsValid encoding gate). Uses the outer Serializer
+    // we already constructed at step 1, so the cursor is in sync with the
+    // file. We MUST run the array/extPtr reads before the atmosphere block
+    // even if the menu scene's payload has count=0 entries — otherwise the
+    // cursor mis-aligns and atmosphere fields read garbage.
+    //
+    // Maps to original 0x1400a3705..0x1400a3825 (5 calls + atmosphere):
+    //   ?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z(outer, &count38, NULL)
+    //   FUN_14001baf0(field30, count38)        ; resize stride-0x20 array
+    //   FUN_14001bbf0(outer, count38, field30) ; serialize array elements
+    //   ?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z(outer, &count48, NULL)
+    //   FUN_140001bb0(field40, count48)        ; resize stride-0x08 array
+    //   FUN_14001bcc0(outer, count48, field40) ; serialize ext-ptr array
+    //   FUN_14001b8e0(&field70, outer)         ; single ext-ptr (GraphicsMesh)
+    //   Math::Vector4::Serialize(field+0x1B4, outer)
+    //   System::Color::Serialize(field+0x194, outer)  x3
+    //   Serializer::Serialize_Float(outer, field+0x1A0, NULL) x5
+    if (outer_ctored && g_fn_Serialize_Int) {
+        // ----- Array #1 (+0x30, stride 0x20) -----
+        int count38 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field38) & 0xFFFFFFFF);
+        g_fn_Serialize_Int(outer_ser, &count38, nullptr);
+        if (count38 > 0 && fn_Array_Resize_Stride20) {
+            fn_Array_Resize_Stride20(&self->_field30, count38);
+        }
+        if (count38 > 0 && fn_Array_Serialize_Stride20) {
+            fn_Array_Serialize_Stride20(outer_ser, static_cast<uint32_t>(count38),
+                                        self->_field30);
+        }
+
+        // ----- Array #2 (+0x40, stride 0x08, GraphicsMesh exrefs) -----
+        int count48 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field48) & 0xFFFFFFFF);
+        g_fn_Serialize_Int(outer_ser, &count48, nullptr);
+        if (count48 > 0 && fn_Array_Resize_Stride08) {
+            fn_Array_Resize_Stride08(&self->_field40, count48);
+        }
+        if (count48 > 0 && fn_Array_Serialize_External_GraphicsMesh) {
+            fn_Array_Serialize_External_GraphicsMesh(outer_ser, count48, self->_field40);
+        }
+
+        // ----- Single ExternalPtr at +0x70 (GraphicsMesh) -----
+        if (fn_ExternalPtr_Serialize_GraphicsMesh) {
+            fn_ExternalPtr_Serialize_GraphicsMesh(&self->_field70, outer_ser);
+        }
+
+        // ----- Atmosphere: Vector4 + 3 Colors + 5 Floats -----
+        if (fn_Math_Vector4_Serialize) {
+            fn_Math_Vector4_Serialize(reinterpret_cast<uint8_t*>(self) + 0x1B4, outer_ser);
+        }
+        if (fn_System_Color_Serialize) {
+            fn_System_Color_Serialize(&self->ambientColor, outer_ser);
+            fn_System_Color_Serialize(&self->sunColor,     outer_ser);
+            fn_System_Color_Serialize(&self->skyColor,     outer_ser);
+            // Color::Serialize from Runtime appears to write only the RGB
+            // bytes and leave alpha at zero; Init defaults use 0xFF and the
+            // renderer's uint32→Vector4 conversion treats the alpha byte as
+            // the 4th component (which downstream lighting/fog math may
+            // multiply against). Force opaque alpha so the deserialized
+            // colors land in the same range as the Init defaults.
+            self->ambientColor |= 0xFF000000;
+            self->sunColor     |= 0xFF000000;
+            self->skyColor     |= 0xFF000000;
+        }
+        if (fn_Serializer_Serialize_Float) {
+            fn_Serializer_Serialize_Float(outer_ser, &self->fogStart,         nullptr);
+            fn_Serializer_Serialize_Float(outer_ser, &self->fogEnd,           nullptr);
+            fn_Serializer_Serialize_Float(outer_ser, &self->fogDensity,       nullptr);
+            fn_Serializer_Serialize_Float(outer_ser, &self->sunIntensity,     nullptr);
+            fn_Serializer_Serialize_Float(outer_ser, &self->ambientIntensity, nullptr);
+        }
+
+        // 2026-05-02 diagnostic confirmed: even with Init-default atmosphere
+        // (ambientColor=0xff595965, sunColor=0xffcbcbbc, etc.) screen stays
+        // black. Atmosphere alignment is NOT the screen-black culprit. Bug is
+        // downstream in the render path (clear color, depth state, sun light
+        // dispatch, or Renderer::Draw consuming our reimpl's geometry).
+        static bool s_atmosLogged = false;
+        if (!s_atmosLogged) {
+            const float* v4 = reinterpret_cast<const float*>(
+                reinterpret_cast<uint8_t*>(self) + 0x1B4);
+            printf("[MenuScene::Slot5_Serialize] atmosphere deserialized: "
+                   "amb=0x%08x sun=0x%08x sky=0x%08x "
+                   "fogStart=%.2f fogEnd=%.2f fogDensity=%.3f "
+                   "sunInt=%.2f ambInt=%.2f "
+                   "vec4_at_1b4=(%.3f,%.3f,%.3f,%.3f) "
+                   "(arr30 count=%d arr40 count=%d)\n",
+                   self->ambientColor, self->sunColor, self->skyColor,
+                   self->fogStart, self->fogEnd, self->fogDensity,
+                   self->sunIntensity, self->ambientIntensity,
+                   v4[0], v4[1], v4[2], v4[3],
+                   count38, count48);
+            fflush(stdout);
+            s_atmosLogged = true;
+        }
+    } else {
+        static bool s_warnedTail = false;
+        if (!s_warnedTail) {
+            printf("[MenuScene::Slot5_Serialize] tail unwired "
+                   "(outer_ctored=%d Ser_Int=%p) — atmosphere left at Init defaults\n",
+                   outer_ctored ? 1 : 0,
+                   (void*)g_fn_Serialize_Int);
+            fflush(stdout);
+            s_warnedTail = true;
+        }
+    }
+
+    // (5) Dtor the outer Serializer.
     if (outer_ctored && g_fn_Serializer_Dtor) {
         g_fn_Serializer_Dtor(outer_ser);
     }

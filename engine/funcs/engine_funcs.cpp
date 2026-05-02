@@ -1291,6 +1291,8 @@ fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
 fn_Transform_SerializeWrapper_t fn_Transform_SerializeWrapper = nullptr;
 fn_Math_Transform_Serialize_t   fn_Math_Transform_Serialize   = nullptr;
 fn_Math_Vector3_Serialize_t     fn_Math_Vector3_Serialize     = nullptr;
+fn_Math_Vector4_Serialize_t     fn_Math_Vector4_Serialize     = nullptr;
+fn_System_Color_Serialize_t     fn_System_Color_Serialize     = nullptr;
 fn_Serializer_Serialize_Float_t fn_Serializer_Serialize_Float = nullptr;
 
 fn_Array_Resize_t fn_Array_Resize_Stride20 = nullptr;
@@ -4494,6 +4496,10 @@ bool EngineFuncsInit() {
         ResolveExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     fn_Math_Vector3_Serialize = reinterpret_cast<fn_Math_Vector3_Serialize_t>(
         ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    fn_Math_Vector4_Serialize = reinterpret_cast<fn_Math_Vector4_Serialize_t>(
+        ResolveExport("?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    fn_System_Color_Serialize = reinterpret_cast<fn_System_Color_Serialize_t>(
+        ResolveExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z"));
     fn_Serializer_Serialize_Float = reinterpret_cast<fn_Serializer_Serialize_Float_t>(
         ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z"));
 
@@ -4642,6 +4648,8 @@ bool EngineFuncsInit() {
     printf("  Transform_SerializeWrap = %p\n", (void*)fn_Transform_SerializeWrapper);
     printf("  Math_Transform_Serial   = %p\n", (void*)fn_Math_Transform_Serialize);
     printf("  Math_Vector3_Serial     = %p\n", (void*)fn_Math_Vector3_Serialize);
+    printf("  Math_Vector4_Serial     = %p\n", (void*)fn_Math_Vector4_Serialize);
+    printf("  System_Color_Serial     = %p\n", (void*)fn_System_Color_Serialize);
     printf("  Serializer_Float        = %p\n", (void*)fn_Serializer_Serialize_Float);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
         (void*)fn_Array_Resize_Stride20,

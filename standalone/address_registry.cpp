@@ -352,6 +352,15 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z"));
     RegisterDispatchSlot(0x1401526b8,
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    // MenuScene Slot5 atmospheric block — Vector4 + Color serialize.
+    // Slots used at exe 0x1400a3796 (Vector4) and 0x1400a37aa..1400a37c6 (Color x3).
+    // Without these, the post-Geometry tail of MenuScene::Serialize hits a
+    // NOT_IMPLEMENTED dispatch slot and the menu-scene fog/sky/sun colors
+    // stay at MenuScene_Init defaults (or zero for sun yaw/pitch).
+    RegisterDispatchSlot(0x140151ed0,
+        (uintptr_t)ResolveExport("?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    RegisterDispatchSlot(0x140151ee0,
+        (uintptr_t)ResolveExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x140152668,
         (uintptr_t)ResolveExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z"));
     RegisterDispatchSlot(0x140152690,

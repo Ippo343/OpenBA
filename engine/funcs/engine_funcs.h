@@ -5128,6 +5128,18 @@ extern fn_Math_Transform_Serialize_t fn_Math_Transform_Serialize;
 typedef void (*fn_Math_Vector3_Serialize_t)(void* vector3, void* serializer);
 extern fn_Math_Vector3_Serialize_t fn_Math_Vector3_Serialize;
 
+// Math::Vector4::Serialize — Runtime export (16-byte Vector4).
+// Slot in exe is 0x140151ed0; mangled name
+// `?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z`.
+typedef void (*fn_Math_Vector4_Serialize_t)(void* vector4, void* serializer);
+extern fn_Math_Vector4_Serialize_t fn_Math_Vector4_Serialize;
+
+// System::Color::Serialize — Runtime export (4-byte ARGB color).
+// Slot in exe is 0x140151ee0; mangled name
+// `?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z`.
+typedef void (*fn_System_Color_Serialize_t)(void* color, void* serializer);
+extern fn_System_Color_Serialize_t fn_System_Color_Serialize;
+
 // IO::Serializer::Serialize(float*, char* name) — single-float serialize. There
 // are several Serialize overloads on Serializer (int/uint/bool/float/etc.); this
 // is the (float*) variant, mangled as ?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z.
