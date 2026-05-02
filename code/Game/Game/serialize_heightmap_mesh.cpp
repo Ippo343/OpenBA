@@ -324,23 +324,28 @@ extern "C" void FUN_1400ac880_Body(void* self,
 // ============================================================
 //
 // Top-level helper: builds the vertex buffer + index buffer for the entire
-// terrain mesh. Walks the master grid (gridSize / cellSize cells per side),
-// fills each cell's vertex block via FUN_1400ac880, uploads to VertexBuffer,
-// then constructs a triangle-list index buffer with checkerboard winding.
+// terrain mesh. Walks the chunk grid (chunksPerSide × chunksPerSide), fills
+// each chunk's vertex block via FUN_1400ac880, uploads to VertexBuffer, then
+// constructs a single per-chunk triangle-list index buffer with checkerboard
+// winding (every chunk shares the same IB).
 //
 // param_1 (self) : Geometry container — fields used:
-//   self+0xc0 : int gridSize        (master heightmap dimension, e.g. 256)
-//   self+0xc8 : int gridCells       (gridSize / cellSize per side; +0xc8 = also "cellGridSize")
-//   self+0xcc : int cellSize        (per-cell vertex grid edge — typically 8 or so)
-//   self+0xd0 : int gridLevels      (heightmap-storage dimension, may differ slightly)
-//   self+0xd4 : int vertsPerCell    (per-cell vertex count = cellSize^2 typically)
-//   self+0xd8 : int16* heightmap    (deserialized heightmap buffer)
-//   self+0x100: VertexBuffer        (master mesh vertex buffer)
-//   self+0x120: IndexBuffer         (master mesh index buffer)
+//   self+0xC0 : int gridSize       (full heightmap edge in cells, e.g. 768)
+//   self+0xC8 : int chunkSize      (per-chunk cell edge, e.g. 32). The original
+//                                    disasm reads this as `*(param_1+200)` and
+//                                    uses it BOTH as the divisor for
+//                                    chunksPerSide AND as the chunk-stride and
+//                                    the IB inner-loop bound.
+//   self+0xCC : int vertsPerSide   (per-chunk vertex edge = chunkSize+1, e.g. 33)
+//   self+0xD0 : int gridLevels     (heightmap-storage dimension, e.g. gridSize+1)
+//   self+0xD4 : int vertsPerChunk  (vertsPerSide², e.g. 1089)
+//   self+0xD8 : int16* heightmap   (deserialized heightmap buffer)
+//   self+0x100: VertexBuffer       (master mesh vertex buffer)
+//   self+0x120: IndexBuffer        (per-chunk index buffer, shared across chunks)
 //
-// Note: Ghidra labels +0xc8 as "200" decimal in the decompile; that's the
-// same field. It's both gridSize/cellSize AND used as the index-buffer's
-// cell count (the inner double-loop walks gridCells x gridCells).
+// chunksPerSide = gridSize / chunkSize is computed locally — NOT a stored
+// field. (Earlier this reimpl conflated +0xC8 with chunksPerSide; that was
+// wrong and over-allocated the VB by a factor of (chunkSize/chunksPerSide)².)
 extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     if (!self) return;
 
@@ -370,72 +375,124 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 
     uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
 
-    int gridSize     = *reinterpret_cast<int*>(selfBytes + 0xc0);
-    int cellGridSize = *reinterpret_cast<int*>(selfBytes + 0xc8);  // also "200" in disasm
-    int cellSize     = *reinterpret_cast<int*>(selfBytes + 0xcc);
-    int vertsPerCell = *reinterpret_cast<int*>(selfBytes + 0xd4);
+    // Field map (verified vs original sub_c1e0 disasm + Geometry CollectDraw/ItemDraw):
+    //   self+0xC0 : int gridSize       — full heightmap edge in cells (e.g. 768)
+    //   self+0xC8 : int chunkSize      — per-chunk cell edge (e.g. 32). Original
+    //                                     disasm reads this as `*(param_1+200)` and
+    //                                     uses it BOTH as the divisor for
+    //                                     chunksPerSide AND as the chunk-stride.
+    //   self+0xCC : int vertsPerSide   — per-chunk vertex edge (chunkSize+1, e.g. 33).
+    //                                     Used as the vertex-grid edge passed to
+    //                                     FUN_1400ac880, AND as the row-stride for
+    //                                     index-buffer vertex IDs.
+    //   self+0xD4 : int vertsPerChunk  — vertsPerSide² (e.g. 1089).
+    //
+    // chunksPerSide = gridSize / chunkSize is computed locally — NOT a stored
+    // field. Earlier the variable was named `cellGridSize` and read directly
+    // from +0xC8 (which is wrong — that's chunkSize).
+    int gridSize       = *reinterpret_cast<int*>(selfBytes + 0xC0);
+    int chunkSize      = *reinterpret_cast<int*>(selfBytes + 0xC8);
+    int vertsPerSide   = *reinterpret_cast<int*>(selfBytes + 0xCC);
+    int vertsPerChunk  = *reinterpret_cast<int*>(selfBytes + 0xD4);
+    int chunksPerSide  = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
 
-    if (cellGridSize <= 0 || cellSize <= 0 || vertsPerCell <= 0) {
+    if (chunksPerSide <= 0 || chunkSize <= 0 || vertsPerSide <= 0 || vertsPerChunk <= 0) {
         static bool s_warned = false;
         if (!s_warned) {
-            printf("[sub_c1e0] zero/negative grid params (gridSize=%d cellGridSize=%d cellSize=%d "
-                   "vertsPerCell=%d) — skipping\n",
-                   gridSize, cellGridSize, cellSize, vertsPerCell);
+            printf("[sub_c1e0] zero/negative grid params (gridSize=%d chunkSize=%d "
+                   "vertsPerSide=%d vertsPerChunk=%d chunksPerSide=%d) — skipping\n",
+                   gridSize, chunkSize, vertsPerSide, vertsPerChunk, chunksPerSide);
             fflush(stdout);
             s_warned = true;
         }
         return;
     }
 
-    // (1) Allocate the per-cell scratch vert buffer using the existing
+    // (1) Allocate the per-chunk scratch vert buffer using the existing
     //     stride-0x10 resize helper. arrayHeader is a 16-byte stack-local.
     struct ArrayHeader16 { void* data; int32_t count; int32_t cap; };
     ArrayHeader16 scratch{nullptr, 0, 0};
 
     if (fn_Array_Resize_Stride16B) {
-        fn_Array_Resize_Stride16B(&scratch, vertsPerCell);
+        fn_Array_Resize_Stride16B(&scratch, vertsPerChunk);
     } else {
         // Fallback: direct alloc.
-        scratch.cap   = vertsPerCell;
-        scratch.count = vertsPerCell;
+        scratch.cap   = vertsPerChunk;
+        scratch.count = vertsPerChunk;
         scratch.data  = fn_MemAlloc(g_pMemAllocSingleton,
-                                    static_cast<uint64_t>(vertsPerCell) * 0x10, 2);
+                                    static_cast<uint64_t>(vertsPerChunk) * 0x10, 2);
     }
 
     int16_t* vertScratch = reinterpret_cast<int16_t*>(scratch.data);
 
     // (2) Allocate the master VertexBuffer at self+0x100.
-    //     Total size = vertsPerCell * cellGridSize^2 * 16 bytes.
-    int totalVerts  = vertsPerCell * cellGridSize * cellGridSize;
+    //     Total size = vertsPerChunk * chunksPerSide² * 16 bytes.
+    int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
     int totalVbSize = totalVerts * 0x10;
-    s_VertexBufferCreate(selfBytes + 0x100, totalVbSize, /*dynamic=*/false,
-                         /*initialData=*/nullptr);
+    bool createOk = s_VertexBufferCreate(selfBytes + 0x100, totalVbSize, /*dynamic=*/false,
+                                         /*initialData=*/nullptr);
 
-    // (3) Walk the cell grid, filling each cell and uploading to VertexBuffer.
+    printf("[sub_c1e0] entry self=%p gridSize=%d chunkSize=%d chunksPerSide=%d "
+           "vertsPerSide=%d vertsPerChunk=%d totalVbSize=%d (0x%x) createOk=%d\n",
+           self, gridSize, chunkSize, chunksPerSide, vertsPerSide, vertsPerChunk,
+           totalVbSize, totalVbSize, createOk);
+    {
+        // Dump the freshly-Created VB struct so we can see the post-Create state
+        // of the VertexBufferData wrapper and its vtable.
+        const uint64_t* vbq = reinterpret_cast<const uint64_t*>(selfBytes + 0x100);
+        printf("[sub_c1e0] VB after Create: q0=%016llx q1=%016llx q2=%016llx q3=%016llx\n",
+               (unsigned long long)vbq[0], (unsigned long long)vbq[1],
+               (unsigned long long)vbq[2], (unsigned long long)vbq[3]);
+        if (vbq[1]) {
+            const uint64_t* vbd = reinterpret_cast<const uint64_t*>(vbq[1]);
+            printf("[sub_c1e0] VertexBufferData @%p: vtable=%016llx q1=%016llx q2=%016llx\n",
+                   (void*)vbq[1], (unsigned long long)vbd[0],
+                   (unsigned long long)vbd[1], (unsigned long long)vbd[2]);
+        }
+        fflush(stdout);
+    }
+
+    // (3) Walk the chunk grid, filling each chunk and uploading to VertexBuffer.
+    int firstSetReturned = -1;
     if (vertScratch) {
-        for (int cellRow = 0; cellRow < cellGridSize; ++cellRow) {
-            for (int cellCol = 0; cellCol < cellGridSize; ++cellCol) {
-                int colStart = cellSize * cellCol;
-                int rowStart = cellSize * cellRow;
+        for (int chunkRow = 0; chunkRow < chunksPerSide; ++chunkRow) {
+            for (int chunkCol = 0; chunkCol < chunksPerSide; ++chunkCol) {
+                int colStart = chunkSize * chunkCol;
+                int rowStart = chunkSize * chunkRow;
 
                 FUN_1400ac880_Body(self, colStart, rowStart,
-                                   cellSize, cellSize, vertScratch);
+                                   vertsPerSide, vertsPerSide, vertScratch);
 
-                int byteOffset = (cellRow * cellGridSize + cellCol) * vertsPerCell * 0x10;
-                int byteSize   = vertsPerCell * 0x10;
-                s_VertexBufferSet(selfBytes + 0x100, byteSize, byteOffset, vertScratch);
+                int byteOffset = (chunkRow * chunksPerSide + chunkCol) * vertsPerChunk * 0x10;
+                int byteSize   = vertsPerChunk * 0x10;
+                bool ok = s_VertexBufferSet(selfBytes + 0x100, byteSize, byteOffset, vertScratch);
+
+                if (chunkRow == 0 && chunkCol == 0) {
+                    firstSetReturned = ok ? 1 : 0;
+                    // Dump first vertex from scratch (should be (-gridSize/2, -gridSize/2, h, 0xFF))
+                    // to confirm FUN_1400ac880 wrote real data.
+                    int16_t* v0 = vertScratch;
+                    printf("[sub_c1e0] chunk(0,0) scratch v0: x=%d y=%d h=%d w3=%d uvU=%d uvV=%d "
+                           "n_xyzpad=%02x %02x %02x %02x  Set->%d  byteOff=%d byteSz=%d\n",
+                           v0[0], v0[1], v0[2], v0[3], v0[4], v0[5],
+                           ((uint8_t*)v0)[0xC], ((uint8_t*)v0)[0xD],
+                           ((uint8_t*)v0)[0xE], ((uint8_t*)v0)[0xF],
+                           ok ? 1 : 0, byteOffset, byteSize);
+                    fflush(stdout);
+                }
             }
         }
     }
+    printf("[sub_c1e0] cell loop complete; first Set returned %d\n", firstSetReturned);
+    fflush(stdout);
 
-    // (4) Build the index buffer.
-    //     Total quads  = cellGridSize^2
-    //     Total tris   = totalQuads * 2
-    //     Total idx    = totalQuads * 6 (uint16)
-    //     Total bytes  = totalQuads * 12
-    int gridCells = cellGridSize * cellGridSize;
-    int idxCount  = gridCells * 6;
-    int idxBytes  = gridCells * 12;
+    // (4) Build the index buffer. The IB describes the topology of ONE chunk
+    //     (chunkSize × chunkSize quads); every chunk shares this IB. Vertex IDs
+    //     use `row * vertsPerSide + col` because each chunk has vertsPerSide²
+    //     vertices in row-major order.
+    int quadsPerChunk = chunkSize * chunkSize;
+    int idxCount      = quadsPerChunk * 6;
+    int idxBytes      = quadsPerChunk * 12;
 
     int16_t* idxBuf = nullptr;
     if (idxCount > 0) {
@@ -457,16 +514,18 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
 
     // (6) Fill the index buffer — checkerboard quad winding.
     //     Two triangles per quad, alternating diagonal direction by parity.
+    //     Loop iterates over the chunkSize × chunkSize quads of one chunk;
+    //     vertex IDs are `row * vertsPerSide + col`.
     if (idxBuf && idxCount > 0) {
         int idx = 0;
-        for (int row = 0; row < cellGridSize; ++row) {
-            for (int col = 0; col < cellGridSize; ++col) {
+        for (int row = 0; row < chunkSize; ++row) {
+            for (int col = 0; col < chunkSize; ++col) {
                 int16_t v_tl = static_cast<int16_t>(
-                    static_cast<int16_t>(row) * static_cast<int16_t>(cellSize) +
+                    static_cast<int16_t>(row) * static_cast<int16_t>(vertsPerSide) +
                     static_cast<int16_t>(col));            // top-left
                 int16_t v_tr = static_cast<int16_t>(v_tl + 1); // top-right
                 int16_t v_bl = static_cast<int16_t>(
-                    (static_cast<int16_t>(row) + 1) * static_cast<int16_t>(cellSize) +
+                    (static_cast<int16_t>(row) + 1) * static_cast<int16_t>(vertsPerSide) +
                     static_cast<int16_t>(col));            // bottom-left
                 int16_t v_br = static_cast<int16_t>(v_bl + 1); // bottom-right
 
@@ -490,7 +549,10 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
         }
 
         // (7) Upload the indices.
-        s_IndexBufferSet(selfBytes + 0x120, idxBytes, 0, idxBuf);
+        bool ibSetOk = s_IndexBufferSet(selfBytes + 0x120, idxBytes, 0, idxBuf);
+        printf("[sub_c1e0] IB Set returned %d (idxBytes=%d quadsPerChunk=%d)\n",
+               ibSetOk ? 1 : 0, idxBytes, quadsPerChunk);
+        fflush(stdout);
     }
 
     // (8) Free the scratch buffers (matches the original's MemFree(idxBuf);
@@ -501,6 +563,178 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     if (scratch.data) {
         fn_MemFreeStatic(scratch.data);
     }
+}
+
+// ============================================================
+// Chunk-streaming — FUN_1400AAD50 (per-frame dirty-chunk upload)
+// ============================================================
+//
+// Vtable +0x08 of the derived Geometry class. Decompiled from exe 0x1400AAD50
+// (the function that JMP-thunk 0x1400AED40 dispatches to). The original walks
+// a binary tree of "dirty" chunk indices at self+0xE8, regenerates each
+// chunk's vertices via FUN_1400ac880, and uploads them into the master
+// VertexBuffer at self+0x100 via Video::VertexBuffer::Set.
+//
+// Tree layout — each node is a 0x28-byte allocation (System::MemoryAllocator::MemAlloc
+// with align=8). Field offsets (verified from disasm):
+//   +0x00  int   chunkIdx (the linear chunk index = row*chunksPerSide + col)
+//   +0x08  void* parent
+//   +0x10  void* left  child
+//   +0x18  void* right child
+//   +0x20  uint  AVL balance / height (set by inserter, ignored here)
+//
+// In addition to chunk-streaming, the original also handles re-marking entity
+// elements at self+0x1F0 whose bbox overlaps any rebuilt chunk. We omit that
+// path for now — the menu scene has zero entities (self+0x1F8 == 0) so it's
+// dead code there; document the omission and the disasm for the in-game
+// follow-up. See `notes/M35_geom_serialize_findings.md` for the spec.
+//
+// Cascade safety: if VertexBuffer::Set is unresolved we soft-fail with a
+// one-shot warning and return early — better than corrupting the dirty tree.
+extern "C" void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
+                                      int cellSize_x, int cellSize_y,
+                                      int16_t* vertOut);
+
+void GeometryChunkUpdate_Body(void* self) {
+    if (!self) return;
+
+    uint8_t* selfBytes = reinterpret_cast<uint8_t*>(self);
+
+    // self+0xF0 is the "dirty tree non-empty" flag (4 bytes). The original
+    // tests this as the first thing — when no chunks are dirty, return.
+    if (*reinterpret_cast<int32_t*>(selfBytes + 0xF0) == 0) return;
+
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[GeometryChunkUpdate] MemAlloc/Free unavailable — skipping\n");
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    ResolveRuntimePtrs();
+    if (!s_VertexBufferSet) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[GeometryChunkUpdate] VertexBuffer::Set unresolved — "
+                   "dirty chunks will not upload (terrain stops updating)\n");
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    int gridSize       = *reinterpret_cast<int*>(selfBytes + 0xC0);
+    int chunkSize      = *reinterpret_cast<int*>(selfBytes + 0xC8);
+    int vertsPerSide   = *reinterpret_cast<int*>(selfBytes + 0xCC);
+    int vertsPerChunk  = *reinterpret_cast<int*>(selfBytes + 0xD4);
+    int chunksPerSide  = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
+
+    if (chunksPerSide <= 0 || vertsPerChunk <= 0) return;
+
+    // Allocate the per-chunk scratch vertex buffer (16-byte stride).
+    struct ArrayHeader16 { void* data; int32_t count; int32_t cap; };
+    ArrayHeader16 scratch{nullptr, 0, 0};
+    if (fn_Array_Resize_Stride16B) {
+        fn_Array_Resize_Stride16B(&scratch, vertsPerChunk);
+    } else {
+        scratch.cap = scratch.count = vertsPerChunk;
+        scratch.data = fn_MemAlloc(g_pMemAllocSingleton,
+                                   static_cast<uint64_t>(vertsPerChunk) * 0x10, 2);
+    }
+    int16_t* vertScratch = reinterpret_cast<int16_t*>(scratch.data);
+    if (!vertScratch) return;
+
+    // Recursive in-order walk of the dirty-chunk tree. Mirrors the original's
+    // threaded-BST traversal but using the call stack — depth is O(log N) for
+    // a balanced AVL, max ~10 even for 18x18 chunks.
+    auto* treeRoot = *reinterpret_cast<void**>(selfBytes + 0xE8);
+
+    auto upload = [&](void* node) {
+        uint8_t* n = reinterpret_cast<uint8_t*>(node);
+        int chunkIdx = *reinterpret_cast<int*>(n);
+        int row = chunkIdx / chunksPerSide;
+        int col = chunkIdx % chunksPerSide;
+
+        // Generate this chunk's vertices into the scratch buffer, then upload.
+        Reimpl_FUN_1400ac880(self,
+                             col * chunkSize, row * chunkSize,
+                             vertsPerSide, vertsPerSide,
+                             vertScratch);
+
+        int byteSize   = vertsPerChunk * 0x10;
+        int byteOffset = (row * chunksPerSide + col) * vertsPerChunk * 0x10;
+        s_VertexBufferSet(selfBytes + 0x100, byteSize, byteOffset, vertScratch);
+    };
+
+    // Iterative in-order walk to avoid std::function or recursive lambdas.
+    // We use the parent links on each node (offset 0x08) to ascend.
+    if (treeRoot) {
+        // Descend to leftmost.
+        void* node = treeRoot;
+        while (true) {
+            void* leftChild = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x10);
+            if (!leftChild) break;
+            node = leftChild;
+        }
+
+        while (node) {
+            upload(node);
+
+            // Move to in-order successor:
+            void* rightChild = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18);
+            if (rightChild) {
+                node = rightChild;
+                while (true) {
+                    void* leftChild = *reinterpret_cast<void**>(
+                        reinterpret_cast<uint8_t*>(node) + 0x10);
+                    if (!leftChild) break;
+                    node = leftChild;
+                }
+            } else {
+                // Walk up while we're the right child of our parent.
+                while (true) {
+                    void* parent = *reinterpret_cast<void**>(
+                        reinterpret_cast<uint8_t*>(node) + 0x08);
+                    if (!parent) { node = nullptr; break; }
+                    void* parentRight = *reinterpret_cast<void**>(
+                        reinterpret_cast<uint8_t*>(parent) + 0x18);
+                    if (parentRight != node) {
+                        node = parent;
+                        break;
+                    }
+                    node = parent;
+                }
+            }
+        }
+    }
+
+    // Free the dirty tree (recursive post-order via FUN_140014c30 in the
+    // original — equivalent to "free children, then self").
+    auto freeNode = [&](auto&& self_, void* node) -> void {
+        if (!node) return;
+        uint8_t* n = reinterpret_cast<uint8_t*>(node);
+        self_(self_, *reinterpret_cast<void**>(n + 0x10));
+        self_(self_, *reinterpret_cast<void**>(n + 0x18));
+        fn_MemFreeStatic(node);
+    };
+    freeNode(freeNode, treeRoot);
+
+    *reinterpret_cast<void**>(selfBytes + 0xE8) = nullptr;
+    *reinterpret_cast<int32_t*>(selfBytes + 0xF0) = 0;
+
+    // Free scratch buffer.
+    if (scratch.data) {
+        fn_MemFreeStatic(scratch.data);
+    }
+
+    // TODO (in-game): the original also walks the entity SoA at self+0x1F0
+    // (count +0x1F8) for each rebuilt chunk, and re-meshes any entity whose
+    // bbox overlaps the chunk's region (via FUN_1400ace40). Skipped here
+    // because the menu scene has no entities. Re-add when in-game terrain
+    // editing wants entity re-meshing on terraform.
 }
 
 } // anonymous namespace
@@ -545,4 +779,14 @@ extern "C" void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col,
     }
 #endif
     return TradeWork_helper_e270_Body(self, retbuf, col, row);
+}
+
+extern "C" void Reimpl_GeometryChunkUpdate(void* self) {
+#ifndef STANDALONE_EXE
+    if (fn_Geometry_ChunkUpdate) {
+        fn_Geometry_ChunkUpdate(self);
+        return;
+    }
+#endif
+    GeometryChunkUpdate_Body(self);
 }

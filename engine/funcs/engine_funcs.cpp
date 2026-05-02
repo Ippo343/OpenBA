@@ -1338,6 +1338,7 @@ fn_Array_Serialize_External_Typed_t     fn_Array_Serialize_External_MaterialInst
 fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
 fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880   = nullptr;  // 0x1400ac880
 fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270 = nullptr;  // 0x1400ae270
+fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate  = nullptr;  // 0x1400aad50  M3.5 chunk-stream
 
 // M3.5 Path B session 7 — image-buffer heightmap upload helper.
 fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
@@ -4689,11 +4690,17 @@ bool EngineFuncsInit() {
     // helper_e270 (0x1400ae270) — vertex normal compute via heightmap deltas.
     fn_TradeWork_helper_e270 = reinterpret_cast<fn_TradeWork_helper_e270_t>(
         ResolveAddr(Module::Exe, 0x1400ae270));
+    // Chunk-streaming (0x1400aad50, dispatched via JMP thunk 0x1400aed40 from
+    // Geometry vtable +0x08). Per-frame walk of dirty-chunk tree at self+0xE8
+    // that re-uploads regenerated vertex data via Video::VertexBuffer::Set.
+    fn_Geometry_ChunkUpdate = reinterpret_cast<fn_Geometry_ChunkUpdate_t>(
+        ResolveAddr(Module::Exe, 0x1400aad50));
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Path B session 6 (heightmap mesh build) resolved\n");
     printf("  TradeWork_sub_c1e0      = %p\n", (void*)fn_TradeWork_sub_c1e0);
     printf("  TradeWork_FUN_ac880     = %p\n", (void*)fn_TradeWork_FUN_ac880);
     printf("  TradeWork_helper_e270   = %p\n", (void*)fn_TradeWork_helper_e270);
+    printf("  Geometry_ChunkUpdate    = %p\n", (void*)fn_Geometry_ChunkUpdate);
 #endif
 
     // ============================================================

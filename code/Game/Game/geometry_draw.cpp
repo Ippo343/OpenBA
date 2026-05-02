@@ -54,17 +54,21 @@ extern "C" void* GeomDraw_Dtor(void* self, uint32_t /*flags*/) {
 }
 
 // ============================================================
-// Slot +0x08 — chunk-streaming / heightmap rebuild stub
+// Slot +0x08 — chunk-streaming / heightmap rebuild
 // ============================================================
 //
 // Original is a 5-byte JMP-rel32 thunk (exe 0x1400AED40 → 0x1400AAD50). The
-// target rebuilds vertex buffer regions for any "dirty" heightmap chunks
-// queued in self+0xE8. For the menu scene this never gets called (Serialize
-// already populated the initial chunks), so a no-op is safe. If terrain stops
-// updating dynamically in-game later, this is the place to wire up the real
-// body.
-extern "C" void GeomDraw_ChunkUpdate(void* /*self*/) {
-    // no-op
+// target walks the binary tree of dirty chunks at self+0xE8, regenerates each
+// chunk's vertices via FUN_1400ac880, and uploads them into the master
+// VertexBuffer at self+0x100 via Video::VertexBuffer::Set.
+//
+// Body lives in serialize_heightmap_mesh.cpp next to the related helpers
+// (FUN_1400ac880, helper_e270, sub_c1e0) and shares its lazy Runtime
+// resolution machinery.
+extern "C" void Reimpl_GeometryChunkUpdate(void* self);
+
+extern "C" void GeomDraw_ChunkUpdate(void* self) {
+    Reimpl_GeometryChunkUpdate(self);
 }
 
 // ============================================================
@@ -533,61 +537,37 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     int32_t start = (chunksPerSide * row + col) * scale;
 
     if (s_calls == 1) {
-        // Dump the inline VB struct (32B at +0x100) and IB struct (48B at +0x120)
-        // first 16 bytes each, to verify they're constructed and populated.
+        // Dump the embedded VB/IB structs at +0x100 and +0x120, plus the
+        // ImageBuffer wrapper. Note: vbq[1] / ibq[1] are pointers to
+        // VertexBufferData / IndexBufferData *wrapper structs* (vtable +
+        // VideoDX11 internal fields) — NOT raw vertex/index bytes. Earlier
+        // sessions misread this and chased a phantom "VB has garbage" bug.
+        // The actual vertex/index data lives inside the GPU-bound buffer
+        // managed by VideoDX11; the wrapper struct holds D3D handles, not
+        // CPU-readable contents. Verify uploads via sub_c1e0's diagnostic
+        // prints (in serialize_heightmap_mesh.cpp) instead.
         const uint64_t* vbq = reinterpret_cast<const uint64_t*>(selfBytes + 0x100);
         const uint64_t* ibq = reinterpret_cast<const uint64_t*>(selfBytes + 0x120);
         const uint64_t* imq = reinterpret_cast<const uint64_t*>(imgBuf);
         printf("[ItemDraw default] imgBuf=%p VB=%p IB=%p key=0x%x row=%d col=%d primCount=%d scale=%d start=%d\n",
                imgBuf, (void*)(selfBytes + 0x100), (void*)(selfBytes + 0x120),
                key, row, col, primCount, scale, start);
-        printf("[ItemDraw VB]   q0=%016llx q1=%016llx q2=%016llx q3=%016llx\n",
-               (unsigned long long)vbq[0], (unsigned long long)vbq[1],
-               (unsigned long long)vbq[2], (unsigned long long)vbq[3]);
-        printf("[ItemDraw IB]   q0=%016llx q1=%016llx q2=%016llx q3=%016llx q4=%016llx q5=%016llx\n",
-               (unsigned long long)ibq[0], (unsigned long long)ibq[1],
-               (unsigned long long)ibq[2], (unsigned long long)ibq[3],
-               (unsigned long long)ibq[4], (unsigned long long)ibq[5]);
-        printf("[ItemDraw img]  q0=%016llx q1=%016llx q2=%016llx q3=%016llx\n",
-               (unsigned long long)imq[0], (unsigned long long)imq[1],
-               (unsigned long long)imq[2], (unsigned long long)imq[3]);
+        printf("[ItemDraw VB]   size=0x%llx VBData=%p (next=%p prev=%p)\n",
+               (unsigned long long)vbq[0], (void*)vbq[1], (void*)vbq[2], (void*)vbq[3]);
+        printf("[ItemDraw IB]   size=0x%llx IBData=%p (more=%p,%p,%p,%p)\n",
+               (unsigned long long)ibq[0], (void*)ibq[1], (void*)ibq[2],
+               (void*)ibq[3], (void*)ibq[4], (void*)ibq[5]);
+        printf("[ItemDraw img]  vtable=%p q1=%p q2=%p q3=%p\n",
+               (void*)imq[0], (void*)imq[1], (void*)imq[2], (void*)imq[3]);
 
-        // Dereference the VB data pointer (q1) and dump first 8 vertices (128B at stride 16).
-        // If terrain mesh was actually uploaded we'd see real position/uv float values.
-        // If zeros or garbage, the vertex buffer was never populated.
-        const float* vbData = reinterpret_cast<const float*>(vbq[1]);
-        if (vbData) {
-            printf("[ItemDraw VB data @%p] first 8 verts (16B each):\n", (void*)vbData);
-            for (int v = 0; v < 8; ++v) {
-                printf("  v%d: %.3f %.3f %.3f %.3f\n",
-                       v, vbData[v*4+0], vbData[v*4+1], vbData[v*4+2], vbData[v*4+3]);
-            }
-        } else {
-            printf("[ItemDraw VB data] data pointer NULL — VB is uninitialized!\n");
-        }
-
-        // Also dereference IB data pointer (q1 = 0x03401358 in last log)
-        const uint16_t* ibData = reinterpret_cast<const uint16_t*>(ibq[1]);
-        if (ibData) {
-            printf("[ItemDraw IB data @%p] first 18 indices:\n", (const void*)ibData);
-            printf("  %u %u %u  %u %u %u  %u %u %u  %u %u %u  %u %u %u  %u %u %u\n",
-                   ibData[0], ibData[1], ibData[2],
-                   ibData[3], ibData[4], ibData[5],
-                   ibData[6], ibData[7], ibData[8],
-                   ibData[9], ibData[10], ibData[11],
-                   ibData[12], ibData[13], ibData[14],
-                   ibData[15], ibData[16], ibData[17]);
-        }
-
-        // Material at self+0xF8 — first 16 qwords. Look for a vtable in q0
-        // (Runtime DLL ~0x180000000+ or our exe), and shader pointers later.
+        // Material at self+0xF8 — first 8 qwords. q0 is the Runtime DLL
+        // MaterialInstance vtable; q5/q6 typically point to shader resources.
         void* mat = *reinterpret_cast<void**>(selfBytes + 0xF8);
         if (mat) {
             const uint64_t* mq = reinterpret_cast<const uint64_t*>(mat);
-            printf("[ItemDraw Material @%p]:\n", mat);
-            for (int i = 0; i < 8; ++i) {
-                printf("  q%d: %016llx\n", i, (unsigned long long)mq[i]);
-            }
+            printf("[ItemDraw Material @%p]: vt=%p q1=%p q2=%p q3=%p q4=%p q5=%p q6=%p q7=%p\n",
+                   mat, (void*)mq[0], (void*)mq[1], (void*)mq[2], (void*)mq[3],
+                   (void*)mq[4], (void*)mq[5], (void*)mq[6], (void*)mq[7]);
         }
         fflush(stdout);
     }

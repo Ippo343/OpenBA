@@ -132,6 +132,7 @@ extern "C" {
     void  Reimpl_FUN_1400ac880(void* self, int colStart, int rowStart,
                                int cellSize_x, int cellSize_y, int16_t* vertOut);
     void* Reimpl_TradeWork_helper_e270(void* self, void* retbuf, int col, int row);
+    void  Reimpl_GeometryChunkUpdate(void* self);
 }
 
 // M3.5 Path B session 7 — image-buffer heightmap upload helper
@@ -213,6 +214,17 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x1400ac1e0, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_sub_c1e0));
     RegisterExeAddr(0x1400ac880, reinterpret_cast<uintptr_t>(&Reimpl_FUN_1400ac880));
     RegisterExeAddr(0x1400ae270, reinterpret_cast<uintptr_t>(&Reimpl_TradeWork_helper_e270));
+
+    // ============================================================
+    // M3.5 — Geometry chunk-streaming (per-frame dirty-chunk upload)
+    //   0x1400aad50 — body (called via JMP thunk from vtable +0x08)
+    //   0x1400aed40 — JMP thunk (the actual vtable target)
+    // The vtable slot in g_Geometry_Vtable_Standalone already routes to
+    // GeomDraw_ChunkUpdate -> Reimpl_GeometryChunkUpdate, so registering
+    // these addresses is for any out-of-band callers using ResolveAddr.
+    // ============================================================
+    RegisterExeAddr(0x1400aad50, reinterpret_cast<uintptr_t>(&Reimpl_GeometryChunkUpdate));
+    RegisterExeAddr(0x1400aed40, reinterpret_cast<uintptr_t>(&Reimpl_GeometryChunkUpdate));
 
     // ============================================================
     // M3.5 Path B session 7 — image-buffer heightmap upload helper
@@ -342,8 +354,12 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x140152668,
         (uintptr_t)ResolveExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z"));
+    RegisterDispatchSlot(0x140152690,
+        (uintptr_t)ResolveExport("?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z"));
     RegisterDispatchSlot(0x140152660,
         (uintptr_t)ResolveExport("?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z"));
+    RegisterDispatchSlot(0x140152698,
+        (uintptr_t)ResolveExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z"));
 
     RegisterDispatchSlot(0x140152738,
         (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));

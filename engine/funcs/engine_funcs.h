@@ -5369,9 +5369,11 @@ typedef void  (*fn_TradeWork_FUN_ac880_t)  (void* self, int colStart, int rowSta
                                              int cellSize_x, int cellSize_y,
                                              int16_t* vertOut);
 typedef void* (*fn_TradeWork_helper_e270_t)(void* self, void* retbuf, int col, int row);
+typedef void  (*fn_Geometry_ChunkUpdate_t) (void* self);
 extern fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0;     // 0x1400ac1e0  M3.5 Path B session 6
 extern fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880;    // 0x1400ac880  M3.5 Path B session 6
 extern fn_TradeWork_helper_e270_t fn_TradeWork_helper_e270;  // 0x1400ae270  M3.5 Path B session 6
+extern fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate;   // 0x1400aad50  M3.5 — chunk-streaming
 
 // ============================================================
 // M3.5 Path B session 7 — image-buffer heightmap upload helper
