@@ -795,6 +795,7 @@ fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
 fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh = nullptr;
 fn_Graphics_Renderer_Draw_t      fn_Graphics_Renderer_Draw      = nullptr;
 fn_Math_Vector3_FromYawPitch_t   fn_Math_Vector3_FromYawPitch   = nullptr;
+fn_Math_Transform_FromLookAt_t   fn_Math_Transform_FromLookAt   = nullptr;
 fn_Video_Context_SetFog_t        fn_Video_Context_SetFog        = nullptr;
 fn_Math_Transform_Ctor_t         fn_Math_Transform_Ctor         = nullptr;
 fn_Math_Transform3_Identity_t    fn_Math_Transform3_Identity    = nullptr;
@@ -3506,6 +3507,8 @@ bool EngineFuncsInit() {
         ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
     fn_Math_Vector3_FromYawPitch = reinterpret_cast<fn_Math_Vector3_FromYawPitch_t>(
         ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
+    fn_Math_Transform_FromLookAt = reinterpret_cast<fn_Math_Transform_FromLookAt_t>(
+        ResolveExport("?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z"));
     fn_Video_Context_SetFog = reinterpret_cast<fn_Video_Context_SetFog_t>(
         ResolveExport("?SetFog@Context@Video@@QEAAXMMAEBVVector4@Math@@@Z"));
     fn_Math_Transform_Ctor = reinterpret_cast<fn_Math_Transform_Ctor_t>(

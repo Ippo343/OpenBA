@@ -165,17 +165,29 @@ void Stub_Shutdown(UpdateLoop* self) {
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
-    // Delegate to Engine::DialogLoopT::Update — the original MenuDLT::Update
-    // (exe 0x14009B6E0) tail-jumps into it after handling cursor/audio/3D-scene
-    // work we're skipping for now. DialogLoopT::Update calls UI::UserInterface::Update
-    // on the embedded UI at self+0x40 and always returns true, keeping MainLoop::Run
-    // alive on the menu loop.
+    // Original MenuDLT::Update (exe 0x14009B6E0) does three things before tail-
+    // jumping into Engine::DialogLoopT::Update:
+    //   1. UI::SetCursor + Mod-update + audio pause/resume + audio update.
+    //      We skip these for the standalone menu — UI uses the cursor we set in
+    //      Startup, audio is silent, no mods.
+    //   2. 3D camera animation: orbit yaw + FromLookAt → SetCameraToWorld.
+    //      THIS we must do, otherwise the Camera stays at identity and the
+    //      terrain projects to nothing visible (black background).
+    //   3. Per-frame mesh/particle Update + scene Clean.
+    //      Phase B/C — skipped (no static meshes / particles in Phase A).
     static int tick = 0;
     ++tick;
     if (tick <= 4 || (tick % 300) == 0) {
-        printf("[MenuDLT::Update] self=%p time=%p tick=%d -> DialogLoopT::Update\n",
+        printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
                (void*)self, time, tick);
     }
+
+    // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
+    if (time && fn_Time_AsSeconds) {
+        float dt = fn_Time_AsSeconds(time);
+        MenuDialogLoopT_UpdateCamera_PhaseA(self, dt);
+    }
+
     if (!fn_DialogLoopT_Update) {
         printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
         return false;

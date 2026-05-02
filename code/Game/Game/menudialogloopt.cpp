@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 // ============================================================
 // MenuDLT struct field offsets (Engine::DialogLoopT subclass)
@@ -363,28 +364,18 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     // All scaled by 1.0/255.0 to a Vector4 (alpha = 1.0f).
     uint8_t* ms = reinterpret_cast<uint8_t*>(menuScene);
 
-    // YawPitch source: MenuScene+0x1AC (4-byte float — single Scalar pointing to
-    // a 2-Scalar pair? Looking again at the disasm:
-    //   local_res18[0] = *(undefined4*)(menuScene+0x1ac);
-    //   ...calls FromYawPitch(local_58, &local_res18)
-    // So local_res18 holds ONE Scalar, but FromYawPitch takes (Scalar*, Scalar*) per
-    // the mangled signature. The second scalar comes from elsewhere on the stack.
-    // Re-checking the disasm: the function writes local_res18[0] only and passes
-    // &local_res18 — meaning FromYawPitch reads two consecutive scalars at that ptr.
-    // But the second slot was uninitialized in the original locals view; Ghidra just
-    // didn't track it. In reality only one Scalar is read (Vector3::FromYawPitch
-    // takes yawPtr, pitchPtr).
-    //
-    // The signature is: ?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z
-    // = static Vector3 FromYawPitch(const Scalar& yaw, const Scalar& pitch).
-    // We pass the same address for both as a fallback for now; the actual yaw +
-    // pitch are stored at +0x1AC (single float in original). Approximation that
-    // gives a sensible direction even if not pixel-identical.
-    float yawPitch = *reinterpret_cast<float*>(ms + 0x1AC);
-    float scalarPair[2] = { yawPitch, yawPitch };
+    // SunLight direction is yaw + pitch derived from MenuScene+0x1AC..+0x1B3.
+    // Verified via disassembly of MenuDLT::Draw (exe 0x14009b440):
+    //   yaw   = *(float*)(menuScene + 0x1AC)
+    //   pitch = -*(float*)(menuScene + 0x1B0)   (XOR'd with sign-flip mask 0x80000000)
+    // FromYawPitch is `static Vector3 FromYawPitch(const Scalar& yaw, const Scalar& pitch)`
+    // — three machine args (RCX=retval, RDX=yaw, R8=pitch). Earlier code passed
+    // only 2 args, which left R8 holding garbage and produced a junk direction.
+    float sunYaw   = *reinterpret_cast<float*>(ms + 0x1AC);
+    float sunPitch = -*reinterpret_cast<float*>(ms + 0x1B0);
 
     uint8_t dirVec[16] = {};  // Vector3 = 12 bytes, padded to 16 for safety
-    fn_Math_Vector3_FromYawPitch(dirVec, &scalarPair[0]);
+    fn_Math_Vector3_FromYawPitch(dirVec, &sunYaw, &sunPitch);
 
     // Build sun color Vector4 (RGBA at +0x194..+0x196 + alpha=1.0f).
     float sunColor[4];
@@ -436,4 +427,116 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     void* camera = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transform) + 0x34);
 
     fn_Graphics_Renderer_Draw(renderer, context, alpha, gScene, camera);
+}
+
+// ============================================================
+// Per-frame camera derivation (from MainMenuDialog_impl_b6e0 + helper_83f0)
+// ============================================================
+// Mirror of the camera-animation block in MenuDLT::Update (exe 0x14009b6e0):
+//
+//   1. Animate scrollX (yaw) at MenuDLT+0xb78:
+//        animYaw[+0xb78] += dt * 0.005f  (DAT_1401721b4 = spin speed)
+//        sin(animYaw), cos(animYaw)
+//        transform[+0x28] = cos(animYaw) * 5.0f + cachedYaw[+0xb7c]
+//        (DAT_140172174 = 5.0f orbit radius — the same const used as helper-8660 nearZ)
+//
+//   2. Build a camera-eye position from the outer Transform fields and look-at:
+//        fwd = Vector3::FromYawPitch(transform[+0x28], transform[+0x2C])
+//        eye = lookAtTarget[+0x1C..+0x24] - fwd * distance[+0x30]
+//        new = Math::Transform::FromLookAt(eye, lookAtTarget)
+//        transform[+0x00..+0x18] = new   (overwrites pos+quat — first 28B)
+//
+//   3. Convert to Transform3 and apply to embedded Camera:
+//        t3 = Math::Transform::AsTransform3(transform)
+//        Graphics::Camera::SetCameraToWorld(transform+0x34, t3)
+//
+// The deserialized values from .rsc are read but the leading 28B (Math::Transform
+// pos+quat) are overwritten each frame by FromLookAt. Only the lookAtTarget at
+// +0x1C..+0x27, the (animated) yaw at +0x28, the pitch at +0x2C, and the
+// distance at +0x30 actually matter as inputs.
+void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
+    void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
+    if (!menuScene) return;
+
+    void* transform = Field<void*>(self, MenuDLTOff::transform_bb8);
+    if (!transform) return;
+
+    if (!fn_Math_Vector3_FromYawPitch || !fn_Math_Transform_FromLookAt ||
+        !fn_Transform_AsTransform3 || !fn_Camera_SetCameraToWorld) {
+        static int warned = 0;
+        if (warned++ < 3) {
+            printf("[MenuDLT::UpdateCamera] missing fn ptrs (FromYP=%p FromLA=%p "
+                   "AsT3=%p SetCTW=%p) — skipping\n",
+                   (void*)fn_Math_Vector3_FromYawPitch,
+                   (void*)fn_Math_Transform_FromLookAt,
+                   (void*)fn_Transform_AsTransform3,
+                   (void*)fn_Camera_SetCameraToWorld);
+        }
+        return;
+    }
+
+    // 1. Animate yaw at MenuDLT+0xb78 (live) using cached scrollX at +0xb7c.
+    //    Constants from the original exe:
+    //      DAT_1401721b4 = 0.005f  (yaw spin rate, rad/sec)
+    //      DAT_140172174 = 5.0f    (orbit radius)
+    static constexpr float kYawSpinRate    = 0.005f;
+    static constexpr float kYawOrbitRadius = 5.0f;
+    constexpr uintptr_t animYawOff = 0xb78;
+
+    float animYaw = Field<float>(self, animYawOff) + deltaSeconds * kYawSpinRate;
+    Field<float>(self, animYawOff) = animYaw;
+
+    float cosAnim = std::cos(animYaw);
+    float cachedYaw = Field<float>(self, MenuDLTOff::scrollX_b7c);
+
+    // Update transform[+0x28] (yaw input to FromYawPitch) with the orbit offset.
+    Field<float>(transform, 0x28) = cosAnim * kYawOrbitRadius + cachedYaw;
+
+    // 2. Build the eye position using FromYawPitch direction + lookAtTarget - dist.
+    //    Inputs read from outer Transform:
+    //      yaw      = transform[+0x28]  (just updated)
+    //      pitch    = transform[+0x2C]  (deserialized from .rsc)
+    //      target   = transform[+0x1C..+0x24]  (Vector3 lookAtTarget)
+    //      distance = transform[+0x30]
+    float yawScalar   = Field<float>(transform, 0x28);
+    float pitchScalar = Field<float>(transform, 0x2C);
+    float distance    = Field<float>(transform, 0x30);
+    float* targetPtr  = reinterpret_cast<float*>(
+        reinterpret_cast<uintptr_t>(transform) + 0x1C);
+
+    float fwdVec[4] = {};  // Vector3 + pad
+    fn_Math_Vector3_FromYawPitch(fwdVec, &yawScalar, &pitchScalar);
+
+    float eyeVec[3];
+    eyeVec[0] = targetPtr[0] - fwdVec[0] * distance;
+    eyeVec[1] = targetPtr[1] - fwdVec[1] * distance;
+    eyeVec[2] = targetPtr[2] - fwdVec[2] * distance;
+
+    // FromLookAt returns a Math::Transform (28B = pos vec3 + quat).
+    uint8_t newTransformBuf[32] = {};
+    fn_Math_Transform_FromLookAt(newTransformBuf, eyeVec, targetPtr);
+
+    // Copy the 28 bytes back into transform[+0x00..+0x1B] (overwrites pos+quat —
+    // the lookAtTarget at +0x1C and yaw/pitch/distance at +0x28+ are preserved).
+    std::memcpy(transform, newTransformBuf, 28);
+
+    // 3. Convert to Transform3 (48B = 3x4 matrix) and apply to Camera at +0x34.
+    uint8_t t3Buf[64] = {};  // Transform3 = 48B, padded
+    fn_Transform_AsTransform3(transform, t3Buf);
+    void* camera = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transform) + 0x34);
+    fn_Camera_SetCameraToWorld(camera, t3Buf);
+
+    // Diagnostic: log the first few frames so we can verify the camera transform
+    // is non-identity (the underlying bug we're fixing).
+    static int logCount = 0;
+    if (logCount++ < 5) {
+        float* pos = reinterpret_cast<float*>(transform);
+        printf("[MenuDLT::UpdateCamera] frame=%d animYaw=%.3f yaw=%.3f pitch=%.3f "
+               "dist=%.3f target=(%.2f,%.2f,%.2f) eye=(%.2f,%.2f,%.2f) "
+               "camPos=(%.2f,%.2f,%.2f)\n",
+               logCount, animYaw, yawScalar, pitchScalar, distance,
+               targetPtr[0], targetPtr[1], targetPtr[2],
+               eyeVec[0], eyeVec[1], eyeVec[2],
+               pos[0], pos[1], pos[2]);
+    }
 }

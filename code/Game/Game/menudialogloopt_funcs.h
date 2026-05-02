@@ -33,3 +33,19 @@ bool MenuDialogLoopT_LoadScene_PhaseA(void* self);
 //
 // No-op if self+0xb90 (the MenuScene External) is null.
 void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context);
+
+// MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
+// MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the
+// camera eye from the deserialized lookAtTarget/yaw/pitch/distance fields,
+// rebuilds the Math::Transform via FromLookAt, converts to Transform3 and
+// applies to the embedded Camera via SetCameraToWorld.
+//
+// Without this, the Camera's view matrix stays at identity (set by the
+// Camera ctor) regardless of what was deserialized — so the renderer projects
+// terrain through an identity camera at world origin and the menu is black.
+//
+// Caller invokes this each tick (Engine::DialogLoopT::Update path), passing
+// the frame's deltaSeconds (time-as-seconds — see System::Time::AsSeconds).
+//
+// No-op if self+0xb90 (MenuScene) or self+0xbb8 (Transform) are null.
+void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds);

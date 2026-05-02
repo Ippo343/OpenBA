@@ -2805,11 +2805,22 @@ extern fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh;
 typedef void (*fn_Graphics_Renderer_Draw_t)(void* self, void* context, float alpha, void* scene, void* camera);
 extern fn_Graphics_Renderer_Draw_t fn_Graphics_Renderer_Draw;
 
-// Math::Vector3::FromYawPitch(retVec, scalarPair) — constructs a direction Vector3
-// from yaw + pitch (scalarPair points to two consecutive Scalar floats).
-// Member style: RCX=retVec (hidden return), RDX=scalarPair, returns retVec.
-typedef void* (*fn_Math_Vector3_FromYawPitch_t)(void* retVec, void* scalarPair);
+// Math::Vector3::FromYawPitch(retVec, yaw, pitch) — constructs a direction
+// Vector3 from yaw + pitch (each a `Math::Scalar const&` = float*).
+// Static fn returning struct >8B → RCX=retVec (hidden return), RDX=yaw,
+// R8=pitch. Note: Ghidra often drops R8 in the decompile — verified via
+// disassembly of MainMenuDialog_helper_83f0 (0x1400983f0) and MenuDLT::Draw
+// (0x14009b440), both of which set R8 explicitly via LEA before the call.
+typedef void* (*fn_Math_Vector3_FromYawPitch_t)(void* retVec, void* yaw, void* pitch);
 extern fn_Math_Vector3_FromYawPitch_t fn_Math_Vector3_FromYawPitch;
+
+// Math::Transform::FromLookAt(retval, eye, target) — static fn that builds a
+// compact Math::Transform (28B = pos vec3 + quat) looking from `eye` toward
+// `target`. Used by the menu camera derivation (MainMenuDialog_helper_83f0 at
+// exe 0x1400983f0). Mangled: ?FromLookAt@Transform@Math@@SA?AV12@AEBVVector3@2@0@Z
+// Static fn returning struct >8B → RCX=retval, RDX=eye, R8=target.
+typedef void* (*fn_Math_Transform_FromLookAt_t)(void* retval, void* eye, void* target);
+extern fn_Math_Transform_FromLookAt_t fn_Math_Transform_FromLookAt;
 
 // Video::Context::SetFog(fogStart, fogEnd, fogColorVec4) — push fog params.
 // RCX=Context*, XMM1=fogStart, XMM2=fogEnd, R9=Vector4*.
