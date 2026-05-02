@@ -168,6 +168,11 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     float zMin = kChunkZMin;
     float zMax = kChunkZMin + kChunkZRange;
 
+    int dbgVisible = 0;
+    int dbgCulled = 0;
+    uint32_t dbgFirstFew[8] = {0};
+    int dbgFirstFewN = 0;
+
     for (int i = 0; i < chunkCount; ++i) {
         for (int j = 0; j < chunkCount; ++j) {
             float xmin = static_cast<float>(j) * chunkSizeF - fHalfGrid;
@@ -180,18 +185,76 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
             float box[6] = { xmin, ymin, zMin, xmax, ymax, zMax };
 
             uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
+            if (s_calls == 1 && dbgFirstFewN < 8) {
+                dbgFirstFew[dbgFirstFewN++] = r;
+            }
             if (r != 0x40) {
+                ++dbgVisible;
                 // Visible (or partial). Queue a draw item.
                 uint16_t key2 = static_cast<uint16_t>((i << 6) | j);
                 fn_Renderer_AddDrawItem(renderer, self, matInst0, materialKey,
                                         key2, 0.0f, uvScale, 1, nullptr, 0);
+            } else {
+                ++dbgCulled;
             }
         }
+    }
+
+    if (s_calls == 1) {
+        // Read camera transform translation (Transform3 layout: 9 floats rotation + 3 floats translation = 48 bytes).
+        // Common layout: last 12 bytes = translation. Print first 12 floats so we can see what we got.
+        const float* camFloats = reinterpret_cast<const float*>(cameraTransform3);
+        const float* invFloats = reinterpret_cast<const float*>(selfInvTransform3);
+        printf("[CollectDraw] grid=%d chunkSize=%d chunkCount=%d halfGrid=%.1f matKey=%u mat0=%p\n",
+               gridSize, chunkSize, chunkCount, fHalfGrid, materialKey, matInst0);
+        printf("[CollectDraw] camera=%p selfXform=%p (Transform 28B), uvScale=%.3f\n",
+               camera, self, uvScale);
+        // Dump camera struct fields around 0x60..0xC0 — first 24 floats — so we can
+        // see whether the world transform lives at a different offset than +0x64.
+        if (camera) {
+            const float* cam = reinterpret_cast<const float*>(camera);
+            printf("[CollectDraw] Camera floats @+0x00..0x60 (24f):\n");
+            for (int row = 0; row < 6; ++row) {
+                printf("  +0x%02x: %.3f %.3f %.3f %.3f\n",
+                       row * 16, cam[row*4+0], cam[row*4+1], cam[row*4+2], cam[row*4+3]);
+            }
+            printf("[CollectDraw] Camera floats @+0x60..0xC0 (24f):\n");
+            for (int row = 0; row < 6; ++row) {
+                int off = 0x60 + row * 16;
+                const float* p = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(camera) + off);
+                printf("  +0x%02x: %.3f %.3f %.3f %.3f\n", off, p[0], p[1], p[2], p[3]);
+            }
+        }
+        printf("[CollectDraw] cameraT3 (12 floats): %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f\n",
+               camFloats[0], camFloats[1], camFloats[2],
+               camFloats[3], camFloats[4], camFloats[5],
+               camFloats[6], camFloats[7], camFloats[8],
+               camFloats[9], camFloats[10], camFloats[11]);
+        printf("[CollectDraw] invSelfT3 (12 floats): %.3f %.3f %.3f / %.3f %.3f %.3f / %.3f %.3f %.3f / %.3f %.3f %.3f\n",
+               invFloats[0], invFloats[1], invFloats[2],
+               invFloats[3], invFloats[4], invFloats[5],
+               invFloats[6], invFloats[7], invFloats[8],
+               invFloats[9], invFloats[10], invFloats[11]);
+        printf("[CollectDraw] terrain cull: visible=%d culled=%d  first8 r-vals: %u %u %u %u %u %u %u %u\n",
+               dbgVisible, dbgCulled,
+               dbgFirstFew[0], dbgFirstFew[1], dbgFirstFew[2], dbgFirstFew[3],
+               dbgFirstFew[4], dbgFirstFew[5], dbgFirstFew[6], dbgFirstFew[7]);
+        // Sample box at chunk (0,0) to compare with cull camera position
+        float bxmin = -fHalfGrid;
+        float bymin = -fHalfGrid;
+        printf("[CollectDraw] chunk(0,0) box=(%.1f,%.1f,%.1f .. %.1f,%.1f,%.1f)\n",
+               bxmin, bymin, zMin, bxmin + chunkSizeF, bymin + chunkSizeF, zMax);
+        fflush(stdout);
     }
 
     // 5. If the renderer's shader != 1 (i.e., not shadow-only pass), emit
     //    the auxiliary draw items for the SoA arrays.
     int shader = fn_Renderer_GetShader(renderer);
+    if (s_calls <= 3) {
+        printf("[CollectDraw call#%d] Renderer::GetShader=%d (1=shadow-only-skip-decals)\n",
+               s_calls, shader);
+        fflush(stdout);
+    }
     if (shader == 1) return;
 
     int count1C8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1C8);
@@ -312,6 +375,24 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     uint8_t matrixBuf[0x40] = {0};   // Math::Matrix is 64 bytes
     fn_Transform_AsMatrix(lerpedTransform, matrixBuf);
     fn_Context_SetTransform(context, 0, matrixBuf);
+
+    if (s_calls == 1) {
+        const float* xfFloats = reinterpret_cast<const float*>(lerpedTransform);
+        const float* mxFloats = reinterpret_cast<const float*>(matrixBuf);
+        printf("[ItemDraw] lerpedXform 7f: %.3f %.3f %.3f / %.3f %.3f %.3f / %.3f\n",
+               xfFloats[0], xfFloats[1], xfFloats[2],
+               xfFloats[3], xfFloats[4], xfFloats[5], xfFloats[6]);
+        printf("[ItemDraw] matrix row0: %.3f %.3f %.3f %.3f\n",
+               mxFloats[0], mxFloats[1], mxFloats[2], mxFloats[3]);
+        printf("[ItemDraw] matrix row3: %.3f %.3f %.3f %.3f\n",
+               mxFloats[12], mxFloats[13], mxFloats[14], mxFloats[15]);
+        int32_t cs = *reinterpret_cast<int32_t*>(selfBytes + 0xC8);
+        int32_t sc = *reinterpret_cast<int32_t*>(selfBytes + 0xD4);
+        int32_t gs = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
+        printf("[ItemDraw] gridSize=%d chunkSize=%d scale(+0xD4)=%d  → primCount=%d\n",
+               gs, cs, sc, cs*cs*6);
+        fflush(stdout);
+    }
 
     // 3. SetColor(1,1,1, lerp(uvScaleA, uvScaleB)).
     //    Layout from disasm: local_78/74/70 = 1.0f, local_6c = lerp result.
@@ -450,7 +531,69 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     int32_t row = static_cast<int32_t>((key >> 6) & 0x3F);
     int32_t col = static_cast<int32_t>(key & 0x3F);
     int32_t start = (chunksPerSide * row + col) * scale;
-    fn_Context_DrawIndexed(context, 0, 0, primCount, 0, start, 1);
+
+    if (s_calls == 1) {
+        // Dump the inline VB struct (32B at +0x100) and IB struct (48B at +0x120)
+        // first 16 bytes each, to verify they're constructed and populated.
+        const uint64_t* vbq = reinterpret_cast<const uint64_t*>(selfBytes + 0x100);
+        const uint64_t* ibq = reinterpret_cast<const uint64_t*>(selfBytes + 0x120);
+        const uint64_t* imq = reinterpret_cast<const uint64_t*>(imgBuf);
+        printf("[ItemDraw default] imgBuf=%p VB=%p IB=%p key=0x%x row=%d col=%d primCount=%d scale=%d start=%d\n",
+               imgBuf, (void*)(selfBytes + 0x100), (void*)(selfBytes + 0x120),
+               key, row, col, primCount, scale, start);
+        printf("[ItemDraw VB]   q0=%016llx q1=%016llx q2=%016llx q3=%016llx\n",
+               (unsigned long long)vbq[0], (unsigned long long)vbq[1],
+               (unsigned long long)vbq[2], (unsigned long long)vbq[3]);
+        printf("[ItemDraw IB]   q0=%016llx q1=%016llx q2=%016llx q3=%016llx q4=%016llx q5=%016llx\n",
+               (unsigned long long)ibq[0], (unsigned long long)ibq[1],
+               (unsigned long long)ibq[2], (unsigned long long)ibq[3],
+               (unsigned long long)ibq[4], (unsigned long long)ibq[5]);
+        printf("[ItemDraw img]  q0=%016llx q1=%016llx q2=%016llx q3=%016llx\n",
+               (unsigned long long)imq[0], (unsigned long long)imq[1],
+               (unsigned long long)imq[2], (unsigned long long)imq[3]);
+
+        // Dereference the VB data pointer (q1) and dump first 8 vertices (128B at stride 16).
+        // If terrain mesh was actually uploaded we'd see real position/uv float values.
+        // If zeros or garbage, the vertex buffer was never populated.
+        const float* vbData = reinterpret_cast<const float*>(vbq[1]);
+        if (vbData) {
+            printf("[ItemDraw VB data @%p] first 8 verts (16B each):\n", (void*)vbData);
+            for (int v = 0; v < 8; ++v) {
+                printf("  v%d: %.3f %.3f %.3f %.3f\n",
+                       v, vbData[v*4+0], vbData[v*4+1], vbData[v*4+2], vbData[v*4+3]);
+            }
+        } else {
+            printf("[ItemDraw VB data] data pointer NULL — VB is uninitialized!\n");
+        }
+
+        // Also dereference IB data pointer (q1 = 0x03401358 in last log)
+        const uint16_t* ibData = reinterpret_cast<const uint16_t*>(ibq[1]);
+        if (ibData) {
+            printf("[ItemDraw IB data @%p] first 18 indices:\n", (const void*)ibData);
+            printf("  %u %u %u  %u %u %u  %u %u %u  %u %u %u  %u %u %u  %u %u %u\n",
+                   ibData[0], ibData[1], ibData[2],
+                   ibData[3], ibData[4], ibData[5],
+                   ibData[6], ibData[7], ibData[8],
+                   ibData[9], ibData[10], ibData[11],
+                   ibData[12], ibData[13], ibData[14],
+                   ibData[15], ibData[16], ibData[17]);
+        }
+
+        // Material at self+0xF8 — first 16 qwords. Look for a vtable in q0
+        // (Runtime DLL ~0x180000000+ or our exe), and shader pointers later.
+        void* mat = *reinterpret_cast<void**>(selfBytes + 0xF8);
+        if (mat) {
+            const uint64_t* mq = reinterpret_cast<const uint64_t*>(mat);
+            printf("[ItemDraw Material @%p]:\n", mat);
+            for (int i = 0; i < 8; ++i) {
+                printf("  q%d: %016llx\n", i, (unsigned long long)mq[i]);
+            }
+        }
+        fflush(stdout);
+    }
+    // Original arg order at LAB_1400aed0e:
+    //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
+    fn_Context_DrawIndexed(context, 0, start, scale, 0, primCount, 1);
 }
 
 // ============================================================
