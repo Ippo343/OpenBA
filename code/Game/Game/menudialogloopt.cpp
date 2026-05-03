@@ -301,6 +301,26 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
     // hardcode to avoid an extra ResolveAddr indirection.
     constexpr float kUVScale = 1.0f;
 
+    // One-shot dump of first 8 elements to diagnose cursor garbage vs. real data.
+    // Element layout (0x20 bytes): +0x00..0x17 unknown, +0x18 yaw(float),
+    // +0x1c meshIdx(int16), +0x1e matIdx(int16).
+    static bool s_dumpedElems = false;
+    if (!s_dumpedElems) {
+        s_dumpedElems = true;
+        int32_t dumpN = (meshCount < 8) ? meshCount : 8;
+        printf("[MenuDLT::PhaseB] elem dump (first %d of %d, stride 0x20):\n", dumpN, meshCount);
+        for (int32_t k = 0; k < dumpN; ++k) {
+            const uint8_t* e = elemArr + static_cast<size_t>(k) * 0x20;
+            const uint32_t* w = reinterpret_cast<const uint32_t*>(e);
+            int16_t mi = *reinterpret_cast<const int16_t*>(e + 0x1c);
+            int16_t ma = *reinterpret_cast<const int16_t*>(e + 0x1e);
+            float   yw = *reinterpret_cast<const float*>(e + 0x18);
+            printf("  [%2d] meshIdx=%d matIdx=%d yaw=%.4f  bytes: %08x %08x %08x %08x | %08x %08x %08x %08x\n",
+                   k, (int)mi, (int)ma, yw, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
+        }
+        fflush(stdout);
+    }
+
     int32_t added = 0;
     int32_t matSlotsTotal = 0;
     int32_t skippedBadIdx = 0;
@@ -336,13 +356,25 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
         void* meshExtPtr = meshArr[meshIdx];
         fn_Graphics_MeshInstance_SetMesh(inst, meshExtPtr);
 
-        // Geometry::SetTransform(FromYawPitchOffset(yaw, 0, {0,0,0})).
-        // FromYawPitchOffset is `static Transform FromYawPitchOffset(Scalar yaw, Vector3 offset)` —
-        // hidden retval ptr (RCX), RDX=&yaw, R8=&offset. Returns 28-byte Transform.
-        float yaw = *reinterpret_cast<const float*>(elem + 0x18);
-        float zeroVec[3] = {0.f, 0.f, 0.f};
+        // Geometry::SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem.pos)).
+        // FromYawPitchOffset is `static Transform FromYawPitchOffset(Scalar& yaw,
+        // Scalar& pitch, Vector3& offset)` — hidden retval ptr (RCX), RDX=&yaw,
+        // R8=&pitch, R9=&offset. Returns ~28-byte Transform.
+        // Per-element layout (verified against helper_3b60 disasm @ 0x1400a3b60):
+        //   elem+0x00..0x0b = Vector3 position (X,Y,Z)
+        //   elem+0x0c..0x17 = scale floats → MeshInstance+0x10c..0x114
+        //   elem+0x18      = yaw
+        //   elem+0x1c      = meshIdx (int16)
+        //   elem+0x1e      = matIdx (int16)
+        float yaw   = *reinterpret_cast<const float*>(elem + 0x18);
+        float pitch = 0.f;
+        float offset[3] = {
+            *reinterpret_cast<const float*>(elem + 0x00),
+            *reinterpret_cast<const float*>(elem + 0x04),
+            *reinterpret_cast<const float*>(elem + 0x08),
+        };
         uint8_t transformBuf[32] = {};
-        fn_Transform_FromYawPitchOffset(transformBuf, &yaw, zeroVec);
+        fn_Transform_FromYawPitchOffset(transformBuf, &yaw, &pitch, offset);
         fn_Geometry_SetTransform(inst, transformBuf);
 
         // Copy 3 dwords + scale into MeshInstance fields.

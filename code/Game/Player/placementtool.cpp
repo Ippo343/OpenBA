@@ -58,8 +58,9 @@ typedef bool (*fn_KeyMapPressed_t)(void* keyMap, int slot, int keyId);
 static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
 
 // Math::Transform::FromYawPitchOffset — IAT dispatch slot [0x140151288]
-// Verified from Serialize disasm at 0x1400fe003: CALL [0x140151288]
-typedef void (*fn_TransformFromYaw_t)(void* outTransform, void* yaw, void* offset);
+// Real signature: static Transform FromYawPitchOffset(Scalar& yaw, Scalar& pitch, Vector3& offset)
+// RCX=retval, RDX=&yaw, R8=&pitch, R9=&offset.
+typedef void (*fn_TransformFromYaw_t)(void* outTransform, const void* yaw, const void* pitch, const void* offset);
 static fn_TransformFromYaw_t s_fn_TransformFromYaw = nullptr;
 
 // Graphics::Geometry::SetTransform — IAT dispatch slot [0x1401512e0]
@@ -580,18 +581,19 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         }
     }
 
-    // Set transform: FromYawPitchOffset(outTransform, &yaw, &zeroOffset)
-    // The yaw comes from sub_da00 output. Offset is zero vector.
+    // Set transform: FromYawPitchOffset(outTransform, &yaw, &pitch=0, &offset=zero)
+    // The yaw comes from sub_da00 output. Pitch and offset are zero.
     uint8_t localTransform[96];
     memset(localTransform, 0, sizeof(localTransform));
-    int zeroVec = 0;
+    float zeroPitch = 0.f;
+    float zeroOffset[3] = {0.f, 0.f, 0.f};
 
     // Original stores yaw into [RBP-0x78], passes that as XMM6/param
     // yaw[0] already has the float yaw value from sub_da00
     if (s_fn_TransformFromYaw) {
         // Match original: MOVSS [RBP-0x78], XMM6 then LEA RDX,[RBP-0x78]
         float yawVal = yaw[0];
-        s_fn_TransformFromYaw(localTransform, &yawVal, &zeroVec);
+        s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, zeroOffset);
     }
 
     if (s_fn_GeomSetTransform && self->meshInstance) {

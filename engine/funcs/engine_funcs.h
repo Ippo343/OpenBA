@@ -5009,9 +5009,12 @@ extern fn_SceneAddObject_t fn_SceneAddObject;
 typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
 extern fn_SceneRemoveObject_t fn_SceneRemoveObject;
 
-// Math::Transform::FromYawPitchOffset — build transform from yaw angle + position
-// IAT dispatch slot 0x140151288. RCX=outTransform, RDX=yawScalar*, R8=offsetVec3*
-typedef void (*fn_Transform_FromYawPitchOffset_t)(void* outTransform, void* yaw, void* offset);
+// Math::Transform::FromYawPitchOffset — build transform from yaw + pitch + offset
+// IAT dispatch slot 0x140151288. Static method, hidden retval ptr in RCX.
+// RCX=outTransform, RDX=&yaw(Scalar), R8=&pitch(Scalar), R9=&offset(Vector3).
+// Mangled: ?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z
+// (the `0` after the first AEBVScalar means "same as previous arg" — second Scalar&)
+typedef void (*fn_Transform_FromYawPitchOffset_t)(void* outTransform, const void* yaw, const void* pitch, const void* offset);
 extern fn_Transform_FromYawPitchOffset_t fn_Transform_FromYawPitchOffset;
 
 // Graphics::Geometry::SetTransform — apply transform to geometry/mesh

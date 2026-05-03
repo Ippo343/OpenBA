@@ -56,7 +56,8 @@ typedef void (*fn_TileToWorld_t)(void* mapInfo, float* outPos, float* inPos, cha
 static fn_TileToWorld_t s_fn_TileToWorld = nullptr;
 
 // Math::Transform::FromYawPitchOffset — via dispatch slot 0x140151288
-typedef void* (*fn_FromYawPitchOffset_t)(void* out, void* yaw, void* pitch);
+// Real: static Transform FromYawPitchOffset(Scalar& yaw, Scalar& pitch, Vector3& offset)
+typedef void* (*fn_FromYawPitchOffset_t)(void* out, const void* yaw, const void* pitch, const void* offset);
 static fn_FromYawPitchOffset_t s_fn_FromYawPitchOffset = nullptr;
 
 // Graphics::Geometry::SetTransform — via dispatch slot 0x1401512e0
@@ -286,8 +287,12 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
         uintptr_t displayArray = *(uintptr_t*)(selfAddr + 0x28);
         uint8_t transformBuf[72];
         void* transform = nullptr;
+        // pitchBits holds the actual yaw value (alternated by tile); yawBits=0
+        // is the pitch. Offset is zero. (Variable naming is intentionally swapped
+        // to match the original call's argument order.)
+        float zeroOffset[3] = {0.f, 0.f, 0.f};
         if (s_fn_FromYawPitchOffset) {
-            transform = s_fn_FromYawPitchOffset(transformBuf, &pitchBits, &yawBits);
+            transform = s_fn_FromYawPitchOffset(transformBuf, &pitchBits, &yawBits, zeroOffset);
         }
 
         // Apply transform to geometry

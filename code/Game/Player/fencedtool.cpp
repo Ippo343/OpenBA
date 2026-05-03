@@ -264,13 +264,15 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
                 }
             }
 
-            // Build transform from yaw with zero offset
+            // Build transform from yaw with zero pitch + zero offset.
+            // Real signature: FromYawPitchOffset(retval, &yaw, &pitch, &offset)
             uint8_t localTransform[96];
             memset(localTransform, 0, sizeof(localTransform));
-            uint32_t zeroVec = 0;
+            float zeroPitch = 0.f;
+            float zeroOffset[3] = {0.f, 0.f, 0.f};
 
             if (fn_Transform_FromYawPitchOffset) {
-                fn_Transform_FromYawPitchOffset(localTransform, outYaw, &zeroVec);
+                fn_Transform_FromYawPitchOffset(localTransform, outYaw, &zeroPitch, zeroOffset);
             }
 
             // Set transform on mesh
