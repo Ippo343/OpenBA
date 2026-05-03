@@ -120,9 +120,8 @@ static fn_AchievementManager_SetEventHandler_t fn_AchievementManager_SetEventHan
 typedef bool (*fn_UI_PausesGame_t)(void* self);
 static fn_UI_PausesGame_t fn_UI_PausesGame = nullptr;
 
-// Graphics::Scene::Clean(this) (Runtime)
-typedef void (*fn_Graphics_Scene_Clean_t)(void* scene);
-static fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean = nullptr;
+// Graphics::Scene::Clean(this) — moved to engine_funcs.{h,cpp}; reuse the
+// project-wide extern so MenuDLT can also call it.
 
 // Graphics::Scene::RemoveGlobalObject(this, Geometry*) (Runtime)
 typedef void (*fn_Graphics_Scene_RemoveGlobalObject_t)(void* scene, void* geometry);
@@ -436,8 +435,7 @@ static void EnsureInit() {
     // These resolve directly to Runtime-x64.dll function addresses.
     fn_UI_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
         ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
-    fn_Graphics_Scene_Clean = reinterpret_cast<fn_Graphics_Scene_Clean_t>(
-        ResolveExport("?Clean@Scene@Graphics@@QEAAXXZ"));
+    // fn_Graphics_Scene_Clean is now resolved in engine_funcs.cpp (extern).
     fn_Graphics_Scene_RemoveGlobalObject = reinterpret_cast<fn_Graphics_Scene_RemoveGlobalObject_t>(
         ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
     fn_Graphics_Renderer_Draw_local = reinterpret_cast<fn_Graphics_Renderer_Draw_local_t>(

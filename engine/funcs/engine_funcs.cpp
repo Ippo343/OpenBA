@@ -789,6 +789,8 @@ fn_Graphics_Scene_AddObject_t       fn_Graphics_Scene_AddObject       = nullptr;
 fn_Graphics_GraphicsMesh_GetMaterialList_t fn_Graphics_GraphicsMesh_GetMaterialList = nullptr;
 fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_SetMaterialInstance = nullptr;
 fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
+fn_Graphics_ParticleInstance_IncrementInstanceIndex_t fn_Graphics_ParticleInstance_IncrementInstanceIndex = nullptr;
+fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean = nullptr;
 
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
@@ -3514,15 +3516,21 @@ bool EngineFuncsInit() {
         ResolveExport("?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Z"));
     fn_Graphics_ParticleSystemInstance_Ctor = reinterpret_cast<fn_Graphics_ParticleSystemInstance_Ctor_t>(
         ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
+    fn_Graphics_ParticleInstance_IncrementInstanceIndex = reinterpret_cast<fn_Graphics_ParticleInstance_IncrementInstanceIndex_t>(
+        ResolveExport("?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ"));
+    fn_Graphics_Scene_Clean = reinterpret_cast<fn_Graphics_Scene_Clean_t>(
+        ResolveExport("?Clean@Scene@Graphics@@QEAAXXZ"));
     printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
            "  Scene::AddObject              = %p\n"
            "  GraphicsMesh::GetMaterialList = %p\n"
            "  MeshInstance::SetMatInstance  = %p\n"
-           "  ParticleSystemInstance::Ctor  = %p\n",
+           "  ParticleSystemInstance::Ctor  = %p\n"
+           "  ParticleInstance::IncrementInstanceIndex = %p\n",
            (void*)fn_Graphics_Scene_AddObject,
            (void*)fn_Graphics_GraphicsMesh_GetMaterialList,
            (void*)fn_Graphics_MeshInstance_SetMaterialInstance,
-           (void*)fn_Graphics_ParticleSystemInstance_Ctor);
+           (void*)fn_Graphics_ParticleSystemInstance_Ctor,
+           (void*)fn_Graphics_ParticleInstance_IncrementInstanceIndex);
     fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---

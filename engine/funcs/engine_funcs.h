@@ -2793,6 +2793,21 @@ extern fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_S
 typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
 extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
 
+// Graphics::ParticleInstance::IncrementInstanceIndex() — advances the
+// Runtime's static _frameIndex counter. ParticleSystemInstance::Update
+// early-returns if `emit+0x2c == _frameIndex`, so this MUST be called
+// once per render frame for baked particle systems to actually simulate
+// after their first update. Mirrors what Renderer::Render does in retail.
+typedef void (*fn_Graphics_ParticleInstance_IncrementInstanceIndex_t)(void);
+extern fn_Graphics_ParticleInstance_IncrementInstanceIndex_t fn_Graphics_ParticleInstance_IncrementInstanceIndex;
+
+// Graphics::Scene::Clean(this) — walks scene objects and calls Geometry::Clean
+// (vtable +0x40) on each that has a dirty bit set. Must be called once per
+// frame after all per-instance Update calls; without it, transform/bounds
+// updates don't propagate to the renderer's per-frame state, causing flicker.
+typedef void (*fn_Graphics_Scene_Clean_t)(void* scene);
+extern fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean;
+
 // ============================================================
 // MenuScene 3D rendering — Runtime DLL Graphics::/Math::/Volume:: functions
 // Used by code/Game/Game/menudialogloopt.cpp (Phase A scene background).

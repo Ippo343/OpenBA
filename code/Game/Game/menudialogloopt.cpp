@@ -473,6 +473,7 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         // particle.vtable[+0x48](particle, particleResource) — SetParticleSystem
         // (or whatever slot 9 is on the runtime ParticleSystemInstance vtable).
         void** vtable = *reinterpret_cast<void***>(inst);
+
         if (vtable && vtable[9]) {
             using fn_set_t = void (*)(void* self, void* res);
             reinterpret_cast<fn_set_t>(vtable[9])(inst, particleResource);
@@ -527,8 +528,10 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
 // don't spawn sprites, so chimneys don't smoke.
 void MenuDialogLoopT_TickParticles(void* self, void* time) {
     if (!self || !time) return;
+
     void** arr   = Field<void**>(self,  MenuDLTOff::partInstArr_bd0);
     int32_t count = Field<int32_t>(self, MenuDLTOff::partInstCnt_bd8);
+
     if (!arr || count <= 0) return;
     for (int32_t i = 0; i < count; ++i) {
         void* inst = arr[i];
@@ -538,6 +541,20 @@ void MenuDialogLoopT_TickParticles(void* self, void* time) {
             using fn_t = void (*)(void* self, void* time);
             reinterpret_cast<fn_t>(vtable[1])(inst, time);
         }
+    }
+
+    // Match retail MenuDLT::Update ordering (exe 0x14009b6e0):
+    //   per-instance Update loop  →  _frameIndex++  →  Scene::Clean
+    // Order matters: incrementing _frameIndex BEFORE the Update loop would
+    // make every shared-emit-state instance early-return on its first update;
+    // and skipping Scene::Clean leaves Geometry dirty bits set, causing the
+    // Renderer to read stale bounds/transforms each frame (visible flicker).
+    if (fn_Graphics_ParticleInstance_IncrementInstanceIndex) {
+        fn_Graphics_ParticleInstance_IncrementInstanceIndex();
+    }
+    void* scene = Field<void*>(self, 0xba0);
+    if (scene && fn_Graphics_Scene_Clean) {
+        fn_Graphics_Scene_Clean(scene);
     }
 }
 
