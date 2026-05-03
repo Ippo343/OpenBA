@@ -400,6 +400,148 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
 }
 
 // ============================================================
+// Phase C: particle iteration (chimney smoke, fountains, etc)
+// ============================================================
+// Mirror of the particle loop in MenuDLT::Load (exe 0x14009A930). Steps for
+// each element 0..MenuScene+0x58:
+//   1. Allocate ParticleSystemInstance (0xe0 bytes, align 8) + ctor.
+//      (Original sets vtable to PTR_FUN_14015ecb0 — skipped, default Runtime
+//      vtable handles the menu case.)
+//   2. Append to MenuDLT+0xbe0 (all-instance array, shared with meshes).
+//   3. Configure via MenuScene_helper_3ca0 (exe 0x1400a3ca0):
+//      - particle.vtable[+0x48](particle, particleResource)
+//        where particleResource = MenuScene+0x60 array indexed by elem[+0x10]
+//      - SetTransform(FromYawPitchOffset(elem[+0xc] yaw, 0 pitch, elem[+0x00] offset))
+//      - vtable[+0x08](particle, Time(0)) — initial Update tick.
+//   4. Append to MenuDLT+0xbd0 (particle-only array — drives per-frame Update).
+//   5. Scene::AddObject(scene, particle) → uint32 id, append to MenuDLT+0xbf0.
+//
+// Per-element layout in MenuScene+0x50 (stride 0x14 = 5*4):
+//   elem+0x00 = Vector3 offset (12B)
+//   elem+0x0c = yaw (float)
+//   elem+0x10 = particle resource index (int32 into MenuScene+0x60 array)
+void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* scene) {
+    if (!menuScene || !scene) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton ||
+        !fn_Graphics_ParticleSystemInstance_Ctor ||
+        !fn_Graphics_Scene_AddObject ||
+        !fn_Geometry_SetTransform || !fn_Transform_FromYawPitchOffset ||
+        !fn_Time_Ctor_Float) {
+        printf("[MenuDLT::PhaseC] missing required fn ptrs "
+               "(PSICtor=%p AddObj=%p GeomSetT=%p T_FYPO=%p TimeC=%p) — skipping\n",
+               (void*)fn_Graphics_ParticleSystemInstance_Ctor,
+               (void*)fn_Graphics_Scene_AddObject,
+               (void*)fn_Geometry_SetTransform,
+               (void*)fn_Transform_FromYawPitchOffset,
+               (void*)fn_Time_Ctor_Float);
+        return;
+    }
+
+    int32_t particleCount = Field<int32_t>(menuScene, 0x58);
+    if (particleCount <= 0) {
+        printf("[MenuDLT::PhaseC] MenuScene+0x58 count=%d — no particles\n", particleCount);
+        return;
+    }
+
+    uint8_t* elemArr = Field<uint8_t*>(menuScene, 0x50);
+    void**   resArr  = Field<void**>(menuScene, 0x60);
+    if (!elemArr || !resArr) {
+        printf("[MenuDLT::PhaseC] elemArr=%p resArr=%p (count=%d) — skipping\n",
+               (void*)elemArr, (void*)resArr, particleCount);
+        return;
+    }
+
+    int32_t added = 0;
+    for (int32_t i = 0; i < particleCount; ++i) {
+        // 1. Allocate + construct ParticleSystemInstance.
+        void* inst = fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8);
+        if (!inst) continue;
+        fn_Graphics_ParticleSystemInstance_Ctor(inst);
+
+        // 2. Append to all-instance array (+0xbe0).
+        void** allSlot = reinterpret_cast<void**>(
+            AppendToDynArray(self, MenuDLTOff::allInstArr_be0, sizeof(void*)));
+        if (allSlot) *allSlot = inst;
+
+        // 3. helper_3ca0 inline:
+        //    Element layout: elem+0x00 = Vector3 offset, elem+0x0c = yaw,
+        //                    elem+0x10 = resource index.
+        const uint8_t* elem = elemArr + static_cast<size_t>(i) * 0x14;
+        int32_t resIdx = *reinterpret_cast<const int32_t*>(elem + 0x10);
+        void* particleResource = resArr[resIdx];
+
+        // particle.vtable[+0x48](particle, particleResource) — SetParticleSystem
+        // (or whatever slot 9 is on the runtime ParticleSystemInstance vtable).
+        void** vtable = *reinterpret_cast<void***>(inst);
+        if (vtable && vtable[9]) {
+            using fn_set_t = void (*)(void* self, void* res);
+            reinterpret_cast<fn_set_t>(vtable[9])(inst, particleResource);
+        }
+
+        // SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem[0..0xb])).
+        float yaw   = *reinterpret_cast<const float*>(elem + 0x0c);
+        float pitch = 0.f;
+        float offset[3] = {
+            *reinterpret_cast<const float*>(elem + 0x00),
+            *reinterpret_cast<const float*>(elem + 0x04),
+            *reinterpret_cast<const float*>(elem + 0x08),
+        };
+        uint8_t transformBuf[32] = {};
+        fn_Transform_FromYawPitchOffset(transformBuf, &yaw, &pitch, offset);
+        fn_Geometry_SetTransform(inst, transformBuf);
+
+        // Initial Update(Time(0)).
+        uint8_t timeBuf[8] = {};
+        fn_Time_Ctor_Float(timeBuf, 0.0f);
+        if (vtable && vtable[1]) {
+            using fn_upd_t = void (*)(void* self, void* time);
+            reinterpret_cast<fn_upd_t>(vtable[1])(inst, timeBuf);
+        }
+
+        // 4. Append to particle-only array (+0xbd0) — drives per-frame Update.
+        void** partSlot = reinterpret_cast<void**>(
+            AppendToDynArray(self, MenuDLTOff::partInstArr_bd0, sizeof(void*)));
+        if (partSlot) *partSlot = inst;
+
+        // 5. Scene::AddObject + append id.
+        unsigned int id = fn_Graphics_Scene_AddObject(scene, inst);
+        uint32_t* idSlot = reinterpret_cast<uint32_t*>(
+            AppendToDynArray(self, MenuDLTOff::sceneIdArr_bf0, sizeof(uint32_t)));
+        if (idSlot) *idSlot = id;
+        ++added;
+    }
+
+    printf("[MenuDLT::PhaseC] particles: added=%d/%d\n", added, particleCount);
+    fflush(stdout);
+}
+
+// ============================================================
+// Per-frame particle Update — iterate MenuDLT+0xbd0 and dispatch vtable+0x08.
+// ============================================================
+// Mirrors the inner loop of MenuDLT::Update (exe 0x14009b6e0):
+//   for (i = 0; i < self+0xbd8; ++i) {
+//     particle = ((Geometry**)self+0xbd0)[i];
+//     particle->vtable[+0x08](particle, time);
+//   }
+// Without this, particles are added to the scene but never simulate — emitters
+// don't spawn sprites, so chimneys don't smoke.
+void MenuDialogLoopT_TickParticles(void* self, void* time) {
+    if (!self || !time) return;
+    void** arr   = Field<void**>(self,  MenuDLTOff::partInstArr_bd0);
+    int32_t count = Field<int32_t>(self, MenuDLTOff::partInstCnt_bd8);
+    if (!arr || count <= 0) return;
+    for (int32_t i = 0; i < count; ++i) {
+        void* inst = arr[i];
+        if (!inst) continue;
+        void** vtable = *reinterpret_cast<void***>(inst);
+        if (vtable && vtable[1]) {
+            using fn_t = void (*)(void* self, void* time);
+            reinterpret_cast<fn_t>(vtable[1])(inst, time);
+        }
+    }
+}
+
+// ============================================================
 // Phase A: Load — allocate scene + add to render list
 // ============================================================
 bool MenuDialogLoopT_LoadScene_PhaseA(void* self) {
@@ -550,7 +692,10 @@ bool MenuDialogLoopT_LoadScene_PhaseA(void* self) {
     // --- Phase B: static-mesh array iteration (props/buildings/foliage) ---
     MenuDialogLoopT_LoadStaticMeshes_PhaseB(self, menuScene, gScene);
 
-    // Skip TradeWork (gameSettings[0x16]) and particle iteration — out of scope.
+    // --- Phase C: particle iteration (chimney smoke, etc) ---
+    MenuDialogLoopT_LoadParticles_PhaseC(self, menuScene, gScene);
+
+    // Skip TradeWork (gameSettings[0x16]) — DLC ship, out of scope.
 
     printf("[MenuDLT::LoadScene] OK: renderer=%p gScene=%p sunLight=%p transform=%p "
            "mainMesh=%p sceneGeom=%p staticMeshCount=%d\n",
@@ -663,10 +808,10 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
 // Mirror of the camera-animation block in MenuDLT::Update (exe 0x14009b6e0):
 //
 //   1. Animate scrollX (yaw) at MenuDLT+0xb78:
-//        animYaw[+0xb78] += dt * 0.005f  (DAT_1401721b4 = spin speed)
+//        animYaw[+0xb78] += dt * 11.25f  (DAT_1401721b4 = spin scale)
 //        sin(animYaw), cos(animYaw)
-//        transform[+0x28] = cos(animYaw) * 5.0f + cachedYaw[+0xb7c]
-//        (DAT_140172174 = 5.0f orbit radius — the same const used as helper-8660 nearZ)
+//        transform[+0x28] = cos(animYaw) * 2.0f + cachedYaw[+0xb7c]
+//        (DAT_140172174 = 2.0f orbit radius — the same const used as helper-8660 nearZ)
 //
 //   2. Build a camera-eye position from the outer Transform fields and look-at:
 //        fwd = Vector3::FromYawPitch(transform[+0x28], transform[+0x2C])
@@ -704,17 +849,24 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
     }
 
     // 1. Animate yaw at MenuDLT+0xb78 (live) using cached scrollX at +0xb7c.
-    //    Constants from the original exe:
-    //      DAT_1401721b4 = 0.005f  (yaw spin rate, rad/sec)
-    //      DAT_140172174 = 5.0f    (orbit radius)
-    static constexpr float kYawSpinRate    = 0.005f;
-    static constexpr float kYawOrbitRadius = 5.0f;
+    //    Constants from the original exe (verified via Ghidra read_memory):
+    //      DAT_1401721b4 = 11.25  (yaw spin rate, *degrees* per AsSeconds unit)
+    //      DAT_140172174 = 2.0    (orbit radius — also doubles as helper-8660 nearZ)
+    //
+    // Banished's Math::Scalar uses **degrees**, so animYaw accumulates in
+    // degrees and the cosine must be evaluated as cos(deg2rad(animYaw)).
+    // The original calls Math::Scalar::SinCos which takes degrees; using
+    // std::cos directly without conversion treats animYaw as radians and
+    // produces a ~60x-faster wiggle (period ~0.56s vs the intended ~32s).
+    static constexpr float kYawSpinRate    = 11.25f;     // deg/sec
+    static constexpr float kYawOrbitRadius = 2.0f;       // deg
+    static constexpr float kDegToRad       = 3.14159265358979323846f / 180.0f;
     constexpr uintptr_t animYawOff = 0xb78;
 
     float animYaw = Field<float>(self, animYawOff) + deltaSeconds * kYawSpinRate;
     Field<float>(self, animYawOff) = animYaw;
 
-    float cosAnim = std::cos(animYaw);
+    float cosAnim = std::cos(animYaw * kDegToRad);
     float cachedYaw = Field<float>(self, MenuDLTOff::scrollX_b7c);
 
     // Update transform[+0x28] (yaw input to FromYawPitch) with the orbit offset.

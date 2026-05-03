@@ -542,6 +542,58 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             fn_Serializer_Serialize_Float(outer_ser, &self->ambientIntensity, nullptr);
         }
 
+        // ----- v2-gated tail: Weather extPtr + +0x78 float + particle array
+        //                       + particle resource exrefs ----------------
+        // Maps to original 0x1400a3779..0x1400a3825 (the `if (1 < iVar3)` block).
+        // We always run it since our outer is v2; the stream's version field
+        // dictates serialize behavior internally.
+        if (fn_ExternalPtr_Serialize_Weather) {
+            // Weather externalPtr at +0x80 (FUN_1400196a0).
+            fn_ExternalPtr_Serialize_Weather(&self->_field80, outer_ser);
+        }
+        if (fn_Serializer_Serialize_Float) {
+            // Single float at +0x78 (the v2-only "scene-time" or similar).
+            fn_Serializer_Serialize_Float(outer_ser, &self->_field78, nullptr);
+        }
+
+        // ----- Particle element array (+0x50, stride 0x14: 4 floats + 1 int) -----
+        int count58 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field58) & 0xFFFFFFFF);
+        g_fn_Serialize_Int(outer_ser, &count58, nullptr);
+        if (count58 > 0 && fn_Array_Resize_Stride14) {
+            fn_Array_Resize_Stride14(&self->_field50, count58);
+        }
+        // Per-element serialize (inlined in original; not a separate helper).
+        if (count58 > 0 && self->_field50 && fn_Serializer_Serialize_Float) {
+            uint8_t* base = reinterpret_cast<uint8_t*>(self->_field50);
+            for (int i = 0; i < count58; ++i) {
+                uint8_t* elem = base + static_cast<size_t>(i) * 0x14;
+                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x00), nullptr);  // offset.x
+                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x04), nullptr);  // offset.y
+                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x08), nullptr);  // offset.z
+                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x0C), nullptr);  // yaw
+                g_fn_Serialize_Int(outer_ser, reinterpret_cast<int*>(elem + 0x10), nullptr);              // resIdx
+            }
+        }
+
+        // ----- Particle resource exrefs (+0x60, stride 0x08, FUN_14001bff0) -----
+        int count68 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field68) & 0xFFFFFFFF);
+        g_fn_Serialize_Int(outer_ser, &count68, nullptr);
+        if (count68 > 0 && fn_Array_Resize_Stride08) {
+            fn_Array_Resize_Stride08(&self->_field60, count68);
+        }
+        if (count68 > 0 && fn_Array_Serialize_External_Particle) {
+            fn_Array_Serialize_External_Particle(outer_ser, count68, self->_field60);
+        }
+
+        static bool s_particleLogged = false;
+        if (!s_particleLogged) {
+            printf("[MenuScene::Slot5_Serialize] particles deserialized: "
+                   "count58=%d (elem array) count68=%d (resource exrefs)\n",
+                   count58, count68);
+            fflush(stdout);
+            s_particleLogged = true;
+        }
+
         // 2026-05-02 diagnostic confirmed: even with Init-default atmosphere
         // (ambientColor=0xff595965, sunColor=0xffcbcbbc, etc.) screen stays
         // black. Atmosphere alignment is NOT the screen-black culprit. Bug is

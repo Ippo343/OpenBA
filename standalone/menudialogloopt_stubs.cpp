@@ -189,6 +189,13 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         MenuDialogLoopT_UpdateCamera_PhaseA(self, dt);
     }
 
+    // Per-frame particle simulation tick (chimney smoke, etc). Without this
+    // particles are added to the scene at Load but never simulate — emitters
+    // don't spawn sprites, so smokestacks render empty.
+    if (time) {
+        MenuDialogLoopT_TickParticles(self, time);
+    }
+
     if (!fn_DialogLoopT_Update) {
         printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
         return false;

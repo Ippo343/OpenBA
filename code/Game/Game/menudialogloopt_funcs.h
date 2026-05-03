@@ -36,6 +36,26 @@ bool MenuDialogLoopT_LoadScene_PhaseA(void* self);
 // No-op if either pointer is null or required fn pointers are missing.
 void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* scene);
 
+// MenuDialogLoopT_LoadParticles_PhaseC — mirror the particle loop of
+// MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x50 (count =
+// MenuScene+0x58), allocate a Graphics::ParticleSystemInstance, configure it
+// via the equivalent of MenuScene_helper_3ca0 (vtable+0x48 SetParticleSystem,
+// SetTransform from element yaw+offset, Update with t=0), and add it to both
+// the all-instance array (+0xbe0) and the particle-only array (+0xbd0). Per-
+// frame Update iterates +0xbd0 — that's what makes smokestack chimneys emit
+// smoke.
+//
+// menuScene is the loaded MenuScene External (self+0xb90).
+// scene     is the Graphics::Scene the particles get added to (self+0xba0).
+// No-op if either pointer is null or required fn pointers are missing.
+void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* scene);
+
+// MenuDialogLoopT_TickParticles — per-frame Update on each entry of the
+// particle-only array at MenuDLT+0xbd0. Calls vtable+0x08 (Update(Time*)) on
+// each particle so emitters spawn/age sprites. Caller is the per-frame
+// Stub_Update path after the camera derivation step.
+void MenuDialogLoopT_TickParticles(void* self, void* time);
+
 // MenuDialogLoopT_DrawScene_PhaseA — mirror the 3D `if (self+0xb90)` block of
 // MenuDLT::Draw (exe 0x14009b440). Caller invokes this BEFORE UI::Draw.
 //
