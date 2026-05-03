@@ -149,24 +149,8 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     if (camera) {
         fn_Camera_GetFrustum(camera, cameraFrustumBuf);
     }
-    if (s_calls == 1) {
-        const float* cf = reinterpret_cast<const float*>(cameraFrustumBuf);
-        printf("[CollectDraw] cameraFrustum[0..0x60] (after GetFrustum):\n");
-        for (int row = 0; row < 6; ++row) {
-            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n", row*16,
-                   cf[row*4+0], cf[row*4+1], cf[row*4+2], cf[row*4+3]);
-        }
-    }
     // worldFrustum = cameraFrustum * cameraTransform3
     fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, cameraTransform3);
-    if (s_calls == 1) {
-        const float* wf = reinterpret_cast<const float*>(worldFrustumBuf);
-        printf("[CollectDraw] worldFrustum[0..0x60] (after cameraFrust * cameraT3):\n");
-        for (int row = 0; row < 6; ++row) {
-            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n", row*16,
-                   wf[row*4+0], wf[row*4+1], wf[row*4+2], wf[row*4+3]);
-        }
-    }
     // localFrustum = worldFrustum * geometryInverseTransform3
     fn_Frustum_MulTransform3(worldFrustumBuf, localFrustumBuf, selfInvTransform3);
 
@@ -188,26 +172,6 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     float zMin = kChunkZMin;
     float zMax = kChunkZMin + kChunkZRange;
 
-    int dbgVisible = 0;
-    int dbgCulled = 0;
-    uint32_t dbgFirstFew[8] = {0};
-    int dbgFirstFewN = 0;
-
-    if (s_calls == 1) {
-        const float* lf = reinterpret_cast<const float*>(localFrustumBuf);
-        printf("[CollectDraw] localFrustumBuf[0..0x60] (6 vec4 = 6 planes):\n");
-        for (int row = 0; row < 6; ++row) {
-            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n",
-                   row*16, lf[row*4+0], lf[row*4+1], lf[row*4+2], lf[row*4+3]);
-        }
-        printf("[CollectDraw] localFrustumBuf[0x60..0xC0] (next 6 vec4):\n");
-        for (int row = 0; row < 6; ++row) {
-            int off = 0x60 + row*16;
-            const float* p = reinterpret_cast<const float*>(localFrustumBuf + off);
-            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n", off, p[0], p[1], p[2], p[3]);
-        }
-    }
-
     for (int i = 0; i < chunkCount; ++i) {
         for (int j = 0; j < chunkCount; ++j) {
             float xmin = static_cast<float>(j) * chunkSizeF - fHalfGrid;
@@ -215,85 +179,21 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
             float xmax = xmin + chunkSizeF;
             float ymax = ymin + chunkSizeF;
 
-            // Allocate Box on stack — original lays out the 6 floats by
-            // building a Vector3 (xmax,ymax,zmax) and gluing xmin/ymin/zmin in.
+            // Box layout passed to Frustum::Contains: {xmin,ymin,zmin, xmax,ymax,zmax}.
             float box[6] = { xmin, ymin, zMin, xmax, ymax, zMax };
 
             uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
-            if (s_calls == 1 && dbgFirstFewN < 8) {
-                dbgFirstFew[dbgFirstFewN++] = r;
-            }
-            if (s_calls == 1 && i == 12 && j == 11) {
-                printf("[CollectDraw] chunk(i=12,j=11) box=(%.1f,%.1f,%.1f .. %.1f,%.1f,%.1f) r=0x%x\n",
-                       box[0], box[1], box[2], box[3], box[4], box[5], r);
-            }
             if (r != 0x40) {
-                ++dbgVisible;
-                // Visible (or partial). Queue a draw item.
                 uint16_t key2 = static_cast<uint16_t>((i << 6) | j);
                 fn_Renderer_AddDrawItem(renderer, self, matInst0, materialKey,
                                         key2, 0.0f, uvScale, 1, nullptr, 0);
-            } else {
-                ++dbgCulled;
             }
         }
-    }
-
-    if (s_calls == 1) {
-        // Read camera transform translation (Transform3 layout: 9 floats rotation + 3 floats translation = 48 bytes).
-        // Common layout: last 12 bytes = translation. Print first 12 floats so we can see what we got.
-        const float* camFloats = reinterpret_cast<const float*>(cameraTransform3);
-        const float* invFloats = reinterpret_cast<const float*>(selfInvTransform3);
-        printf("[CollectDraw] grid=%d chunkSize=%d chunkCount=%d halfGrid=%.1f matKey=%u mat0=%p\n",
-               gridSize, chunkSize, chunkCount, fHalfGrid, materialKey, matInst0);
-        printf("[CollectDraw] camera=%p selfXform=%p (Transform 28B), uvScale=%.3f\n",
-               camera, self, uvScale);
-        // Dump camera struct fields around 0x60..0xC0 — first 24 floats — so we can
-        // see whether the world transform lives at a different offset than +0x64.
-        if (camera) {
-            const float* cam = reinterpret_cast<const float*>(camera);
-            printf("[CollectDraw] Camera floats @+0x00..0x60 (24f):\n");
-            for (int row = 0; row < 6; ++row) {
-                printf("  +0x%02x: %.3f %.3f %.3f %.3f\n",
-                       row * 16, cam[row*4+0], cam[row*4+1], cam[row*4+2], cam[row*4+3]);
-            }
-            printf("[CollectDraw] Camera floats @+0x60..0xC0 (24f):\n");
-            for (int row = 0; row < 6; ++row) {
-                int off = 0x60 + row * 16;
-                const float* p = reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(camera) + off);
-                printf("  +0x%02x: %.3f %.3f %.3f %.3f\n", off, p[0], p[1], p[2], p[3]);
-            }
-        }
-        printf("[CollectDraw] cameraT3 (12 floats): %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f / %.2f %.2f %.2f\n",
-               camFloats[0], camFloats[1], camFloats[2],
-               camFloats[3], camFloats[4], camFloats[5],
-               camFloats[6], camFloats[7], camFloats[8],
-               camFloats[9], camFloats[10], camFloats[11]);
-        printf("[CollectDraw] invSelfT3 (12 floats): %.3f %.3f %.3f / %.3f %.3f %.3f / %.3f %.3f %.3f / %.3f %.3f %.3f\n",
-               invFloats[0], invFloats[1], invFloats[2],
-               invFloats[3], invFloats[4], invFloats[5],
-               invFloats[6], invFloats[7], invFloats[8],
-               invFloats[9], invFloats[10], invFloats[11]);
-        printf("[CollectDraw] terrain cull: visible=%d culled=%d  first8 r-vals: %u %u %u %u %u %u %u %u\n",
-               dbgVisible, dbgCulled,
-               dbgFirstFew[0], dbgFirstFew[1], dbgFirstFew[2], dbgFirstFew[3],
-               dbgFirstFew[4], dbgFirstFew[5], dbgFirstFew[6], dbgFirstFew[7]);
-        // Sample box at chunk (0,0) to compare with cull camera position
-        float bxmin = -fHalfGrid;
-        float bymin = -fHalfGrid;
-        printf("[CollectDraw] chunk(0,0) box=(%.1f,%.1f,%.1f .. %.1f,%.1f,%.1f)\n",
-               bxmin, bymin, zMin, bxmin + chunkSizeF, bymin + chunkSizeF, zMax);
-        fflush(stdout);
     }
 
     // 5. If the renderer's shader != 1 (i.e., not shadow-only pass), emit
     //    the auxiliary draw items for the SoA arrays.
     int shader = fn_Renderer_GetShader(renderer);
-    if (s_calls <= 3) {
-        printf("[CollectDraw call#%d] Renderer::GetShader=%d (1=shadow-only-skip-decals)\n",
-               s_calls, shader);
-        fflush(stdout);
-    }
     if (shader == 1) return;
 
     int count1C8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1C8);
@@ -383,14 +283,9 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     if (!self || !context) return;
 
     static int s_calls = 0;
-#ifdef STANDALONE_EXE
-    constexpr const char* kRenderTag = "A/B-RENDER-STANDALONE";
-#else
-    constexpr const char* kRenderTag = "A/B-RENDER-DLL      ";
-#endif
     if (s_calls == 0) {
-        printf("[%s] [GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
-               kRenderTag, self, context, param5, param6);
+        printf("[GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
+               self, context, param5, param6);
         fflush(stdout);
     }
     ++s_calls;
@@ -419,24 +314,6 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     uint8_t matrixBuf[0x40] = {0};   // Math::Matrix is 64 bytes
     fn_Transform_AsMatrix(lerpedTransform, matrixBuf);
     fn_Context_SetTransform(context, 0, matrixBuf);
-
-    if (s_calls == 1) {
-        const float* xfFloats = reinterpret_cast<const float*>(lerpedTransform);
-        const float* mxFloats = reinterpret_cast<const float*>(matrixBuf);
-        printf("[ItemDraw] lerpedXform 7f: %.3f %.3f %.3f / %.3f %.3f %.3f / %.3f\n",
-               xfFloats[0], xfFloats[1], xfFloats[2],
-               xfFloats[3], xfFloats[4], xfFloats[5], xfFloats[6]);
-        printf("[ItemDraw] matrix row0: %.3f %.3f %.3f %.3f\n",
-               mxFloats[0], mxFloats[1], mxFloats[2], mxFloats[3]);
-        printf("[ItemDraw] matrix row3: %.3f %.3f %.3f %.3f\n",
-               mxFloats[12], mxFloats[13], mxFloats[14], mxFloats[15]);
-        int32_t cs = *reinterpret_cast<int32_t*>(selfBytes + 0xC8);
-        int32_t sc = *reinterpret_cast<int32_t*>(selfBytes + 0xD4);
-        int32_t gs = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
-        printf("[ItemDraw] gridSize=%d chunkSize=%d scale(+0xD4)=%d  → primCount=%d\n",
-               gs, cs, sc, cs*cs*6);
-        fflush(stdout);
-    }
 
     // 3. SetColor(1,1,1, lerp(uvScaleA, uvScaleB)).
     //    Layout from disasm: local_78/74/70 = 1.0f, local_6c = lerp result.
@@ -576,129 +453,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     int32_t col = static_cast<int32_t>(key & 0x3F);
     int32_t start = (chunksPerSide * row + col) * scale;
 
-    if (s_calls == 1) {
-        // Dump the embedded VB/IB structs at +0x100 and +0x120, plus the
-        // ImageBuffer wrapper. Note: vbq[1] / ibq[1] are pointers to
-        // VertexBufferData / IndexBufferData *wrapper structs* (vtable +
-        // VideoDX11 internal fields) — NOT raw vertex/index bytes. Earlier
-        // sessions misread this and chased a phantom "VB has garbage" bug.
-        // The actual vertex/index data lives inside the GPU-bound buffer
-        // managed by VideoDX11; the wrapper struct holds D3D handles, not
-        // CPU-readable contents. Verify uploads via sub_c1e0's diagnostic
-        // prints (in serialize_heightmap_mesh.cpp) instead.
-        const uint64_t* vbq = reinterpret_cast<const uint64_t*>(selfBytes + 0x100);
-        const uint64_t* ibq = reinterpret_cast<const uint64_t*>(selfBytes + 0x120);
-        const uint64_t* imq = reinterpret_cast<const uint64_t*>(imgBuf);
-        printf("[ItemDraw default] imgBuf=%p VB=%p IB=%p key=0x%x row=%d col=%d primCount=%d scale=%d start=%d\n",
-               imgBuf, (void*)(selfBytes + 0x100), (void*)(selfBytes + 0x120),
-               key, row, col, primCount, scale, start);
-        printf("[ItemDraw VB]   size=0x%llx VBData=%p (next=%p prev=%p)\n",
-               (unsigned long long)vbq[0], (void*)vbq[1], (void*)vbq[2], (void*)vbq[3]);
-        printf("[ItemDraw IB]   size=0x%llx IBData=%p (more=%p,%p,%p,%p)\n",
-               (unsigned long long)ibq[0], (void*)ibq[1], (void*)ibq[2],
-               (void*)ibq[3], (void*)ibq[4], (void*)ibq[5]);
-        printf("[ItemDraw img]  vtable=%p q1=%p q2=%p q3=%p\n",
-               (void*)imq[0], (void*)imq[1], (void*)imq[2], (void*)imq[3]);
-
-        // Material at self+0xF8 — full 0x60-byte struct (12 qwords).
-        // MaterialInstance layout (from Runtime ctor 0x180103980 + Setup 0x180102c90):
-        //   +0x00..+0x18 vtable + Object::External fields (vt + 3 zeros)
-        //   +0x20 (u32) GenerateTextures-flag at byte +0x24, uninit pad at +0x26
-        //   +0x28 (ptr) Material* — Setup reads (this+0x28)+0x28+pass*8 → VideoProgram
-        //   +0x30 (ptr) per-pass param sets array (Array<TextureBinding> stride 0x20)
-        //   +0x38 (count + cap) Array<? size 0x18>
-        //   +0x40 (ptr) constant source — Setup reads +0x40 base + +0x18*idx
-        //   +0x48 ?
-        //   +0x50 (ptr) texture array — Setup reads +0x50+8 +0x10*idx
-        //   +0x58 (count) texture count — used in GenerateTextures loop
-        void* mat = *reinterpret_cast<void**>(selfBytes + 0xF8);
-        if (mat) {
-            const uint64_t* mq = reinterpret_cast<const uint64_t*>(mat);
-            printf("[ItemDraw Material @%p]: vt=%p\n", mat, (void*)mq[0]);
-            printf("    +0x08..0x18 (External): %p %p %p\n", (void*)mq[1], (void*)mq[2], (void*)mq[3]);
-            printf("    +0x20 flags : %016llx (byte+0x24=%u, [0x24]nonzero→GenerateTextures)\n",
-                   (unsigned long long)mq[4],
-                   *((const uint8_t*)mat + 0x24));
-            printf("    +0x28 Material*=%p  +0x30 paramSets=%p  +0x38 cnt/cap=%016llx\n",
-                   (void*)mq[5], (void*)mq[6], (unsigned long long)mq[7]);
-            printf("    +0x40 constSrc=%p   +0x48 ?       =%p\n", (void*)mq[8], (void*)mq[9]);
-            printf("    +0x50 texArr  =%p   +0x58 texCnt  =%016llx\n",
-                   (void*)mq[10], (unsigned long long)mq[11]);
-
-            // Walk MaterialInstance+0x50 texture array. Each entry is 0x10
-            // bytes: an Object::ExternalPtr<ImageBuffer> = {External*, refId}
-            // typically. Setup's texture loop reads
-            //   `*((this+0x50) + 8 + texIdx*0x10)` = entry+8 = wrapped ptr.
-            // If wrapped ptr is null, SetImageBuffer binds null to context →
-            // pixel shader samples zero → black output.
-            void* texArr = (void*)mq[10];
-            uint32_t texCnt = static_cast<uint32_t>(mq[11] & 0xFFFFFFFFu);
-            if (texArr) {
-                const uint8_t* tab = reinterpret_cast<const uint8_t*>(texArr);
-                printf("    texArr layout (stride 0x10, count %u):\n", texCnt);
-                // Entry layout (per FindTexture + SetTexture decomp):
-                //   entry+0..+7  = System::String name (8B handle)
-                //   entry+8..+15 = ExternalPtr<ImageBuffer> = ImageBuffer*
-                //                  (this is what MaterialInstance::Setup binds
-                //                   to context — the actual texture handle)
-                for (uint32_t i = 0; i < texCnt && i < 8; ++i) {
-                    const uint64_t* entry =
-                        reinterpret_cast<const uint64_t*>(tab + i * 0x10);
-                    void* nameStr = (void*)entry[0];
-                    void* imgBuf  = (void*)entry[1];
-                    char nameBuf[16] = {0};
-                    if (nameStr) {
-                        memcpy(nameBuf, nameStr, 15);
-                        nameBuf[15] = 0;
-                    }
-                    printf("      [%u] name=\"%s\" imgBuf=%p\n", i, nameBuf, imgBuf);
-                    if (imgBuf) {
-                        const uint64_t* ib =
-                            reinterpret_cast<const uint64_t*>(imgBuf);
-                        printf("          ImageBuffer @%p: vt=%p +0x08=%p +0x10=%p +0x60(data)=%p\n",
-                               imgBuf, (void*)ib[0], (void*)ib[1], (void*)ib[2],
-                               (void*)ib[12]);
-                    }
-                }
-            }
-
-            // Walk to the VideoProgram for pass 0: (mat+0x28) → (M+0x28) → +0*8.
-            void* matInner = (void*)mq[5];
-            if (matInner) {
-                const uint64_t* mi = reinterpret_cast<const uint64_t*>(matInner);
-                printf("    Material* inner @%p: vt=%p +0x08=%p +0x10=%p +0x18=%p +0x20=%p +0x28(progArr)=%p +0x30=%p\n",
-                       matInner, (void*)mi[0], (void*)mi[1], (void*)mi[2], (void*)mi[3],
-                       (void*)mi[4], (void*)mi[5], (void*)mi[6]);
-                void* progArr = (void*)mi[5];   // Material+0x28
-                if (progArr) {
-                    void* prog0 = *reinterpret_cast<void**>(progArr);  // pass-0 VideoProgram
-                    printf("    pass-0 VideoProgram*=%p\n", prog0);
-                    if (prog0) {
-                        const uint64_t* pq = reinterpret_cast<const uint64_t*>(prog0);
-                        printf("        VP+0x00 vt=%p +0x08=%p +0x10=%p +0x18=%p\n",
-                               (void*)pq[0], (void*)pq[1], (void*)pq[2], (void*)pq[3]);
-                        // SetupShaders reads +0x20=vsLayout, +0x28=ps,
-                        // +0x30=gs, +0x38=inputLayout. Null means shader not
-                        // compiled/loaded → fragments output black.
-                        printf("        VP+0x20 vs/layout=%p +0x28 ps=%p +0x30 gs=%p +0x38 inputLayout=%p\n",
-                               (void*)pq[4], (void*)pq[5], (void*)pq[6], (void*)pq[7]);
-                        printf("        VP+0x40=%p +0x48=%p +0x50=%p +0x58=%p\n",
-                               (void*)pq[8], (void*)pq[9], (void*)pq[10], (void*)pq[11]);
-                    }
-                }
-            }
-        }
-        fflush(stdout);
-    }
     // Original arg order at LAB_1400aed0e:
     //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
-    if (s_calls <= 3) {
-        printf("[%s] DrawIndexed(ctx=%p, 0, start=%d, scale=%d, 0, primCount=%d, 1) "
-               "fnPtr=%p\n",
-               kRenderTag, context, start, scale, primCount,
-               (void*)fn_Context_DrawIndexed);
-        fflush(stdout);
-    }
     fn_Context_DrawIndexed(context, 0, start, scale, 0, primCount, 1);
 }
 

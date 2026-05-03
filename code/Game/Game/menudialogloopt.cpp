@@ -114,29 +114,21 @@ static void* MenuScene_Helper_8800(void* transformObj) {
 
     void* ident = fn_Math_Transform3_Identity();
 
-    // Frustum ctor takes 4 Scalar* args (fovX, fovY, near, far via the disasm:
-    // RDX=fovX, R8=fovY, R9=near, [+0x20]=far). We allocate locals matching the
-    // original's argument layout. Note: original uses near=1.0, far=100.0,
-    // fovY=fovX=90.0 — confirmed by disassembly inspection of FUN_140098800.
+    // Frustum ctor takes 4 Scalar* args in order (near, far, fovX, fovY) — the
+    // first two are stored as raw plane distances, the last two are interpreted
+    // as half-FOV angles (in degrees) for sin/cos. Confirmed by decompile of
+    // FUN_140098800 + Volume::Frustum::Frustum (Runtime 0x1800fa1e0).
     float fovX = MenuSceneConst::kHelper8800_FovX;
     float fovY = MenuSceneConst::kHelper8800_FovY;
     float nearZ = MenuSceneConst::kHelper8800_NearZ;
     float farZ  = MenuSceneConst::kHelper8800_FarZ;
 
-    // 0xC0 bytes for Frustum (Runtime opaque, but original allocates 120 bytes
-    // local stack). We use a generous fixed-size buffer.
     uint8_t frustumBuf[0x80] = {};
-    fn_Volume_Frustum_Ctor(frustumBuf, &fovX, &fovY, &nearZ, &farZ);
+    fn_Volume_Frustum_Ctor(frustumBuf, &nearZ, &farZ, &fovX, &fovY);
 
     // Camera ctor: self = transform+0x34, frustum, transform3, isPerspective=true
     void* cameraObj = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transformObj) + 0x34);
     fn_Graphics_Camera_Ctor(cameraObj, frustumBuf, ident, true);
-    {
-        const float* cam = reinterpret_cast<const float*>(cameraObj);
-        printf("[Helper8800] cam+0x60..0xC0 after ctor: ");
-        for (int i = 0x18; i < 0x30; ++i) printf("%.3f ", cam[i]);
-        printf("\n");
-    }
     return transformObj;
 }
 
@@ -145,26 +137,17 @@ static void* MenuScene_Helper_8800(void* transformObj) {
 // we use the simple fovX = aspect * fovY frustum and skip the ultrawide clamp.
 // This matches the original's behavior for aspect <= 16/9.
 static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float nearZ, float farZ) {
-    static int s_diag = 0;
-    bool diag = (s_diag++ < 2);
     if (!fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_SetFrustum ||
         !g_pVideoConfigSingleton || !*g_pVideoConfigSingleton) {
-        if (diag) {
-            printf("[Helper8660] EARLY-RETURN FrustC=%p SetFrust=%p VideoCfgPtr=%p VideoCfg=%p\n",
-                   (void*)fn_Volume_Frustum_Ctor, (void*)fn_Graphics_Camera_SetFrustum,
-                   (void*)g_pVideoConfigSingleton,
-                   g_pVideoConfigSingleton ? *g_pVideoConfigSingleton : nullptr);
-        }
         return;
     }
     void* videoConfig = *g_pVideoConfigSingleton;
     int width  = Field<int>(videoConfig, 0x4);
     int height = Field<int>(videoConfig, 0x8);
+    // VideoConfig is filled lazily by the runtime in standalone Phase A; until
+    // it has real dimensions, fall back to 16:9 reference aspect (matches the
+    // original's DAT_140172170 = 1.7778).
     if (height <= 0) {
-        // VideoConfig not populated yet (Runtime fills it lazily in standalone Phase A).
-        // Use 16:9 reference aspect — matches the original's DAT_140172170 = 1.7778.
-        if (diag) printf("[Helper8660] VideoConfig empty (w=%d h=%d) — using 16:9 fallback\n",
-                         width, height);
         width = 16;
         height = 9;
     }
@@ -174,32 +157,11 @@ static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float near
     // (Original ultrawide clamp at aspect > 16/9 omitted — Phase A MVP.)
 
     uint8_t frustumBuf[0x80] = {};
-    fn_Volume_Frustum_Ctor(frustumBuf, &fovX, &fovY_deg, &nearZ, &farZ);
+    fn_Volume_Frustum_Ctor(frustumBuf, &nearZ, &farZ, &fovX, &fovY_deg);
 
     // Camera lives at transform+0x34.
     void* cameraObj = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transformObj) + 0x34);
-
-    if (diag) {
-        const float* fb = reinterpret_cast<const float*>(frustumBuf);
-        printf("[Helper8660] %dx%d aspect=%.4f fovX=%.2f fovY=%.2f near=%.2f far=%.2f\n",
-               width, height, aspect, fovX, fovY_deg, nearZ, farZ);
-        printf("[Helper8660] frustumBuf[0..0x40]: %.4f %.4f %.4f %.4f / %.4f %.4f %.4f %.4f / %.4f %.4f %.4f %.4f / %.4f %.4f %.4f %.4f\n",
-               fb[0], fb[1], fb[2], fb[3], fb[4], fb[5], fb[6], fb[7],
-               fb[8], fb[9], fb[10], fb[11], fb[12], fb[13], fb[14], fb[15]);
-        const float* cam = reinterpret_cast<const float*>(cameraObj);
-        printf("[Helper8660] camera+0x60..0xC0 BEFORE SetFrustum: ");
-        for (int i = 0x18; i < 0x30; ++i) printf("%.3f ", cam[i]);
-        printf("\n");
-    }
-
     fn_Graphics_Camera_SetFrustum(cameraObj, frustumBuf);
-
-    if (diag) {
-        const float* cam = reinterpret_cast<const float*>(cameraObj);
-        printf("[Helper8660] camera+0x60..0xC0 AFTER SetFrustum:  ");
-        for (int i = 0x18; i < 0x30; ++i) printf("%.3f ", cam[i]);
-        printf("\n");
-    }
 }
 
 // Mirror of MenuScene_helper_a3a0 (exe 0x14001a3a0) — copy 13 dwords + Camera::operator=

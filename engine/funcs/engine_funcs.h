@@ -2835,9 +2835,12 @@ extern fn_Math_Transform_Ctor_t fn_Math_Transform_Ctor;
 typedef void* (*fn_Math_Transform3_Identity_t)();
 extern fn_Math_Transform3_Identity_t fn_Math_Transform3_Identity;
 
-// Volume::Frustum::Frustum(self, fovX, fovY, near, far) — perspective frustum.
-// Member call: RCX=self, RDX=fovX (Scalar*), R8=fovY (Scalar*), R9=near (Scalar*), [+0x20]=far (Scalar*).
-typedef void* (*fn_Volume_Frustum_Ctor_t)(void* self, void* fovX, void* fovY, void* nearZ, void* farZ);
+// Volume::Frustum::Frustum(self, near, far, fovX, fovY) — perspective frustum.
+// Arg ORDER (verified via FUN_140098800 + Frustum::Frustum @ Runtime 0x1800fa1e0):
+//   RCX=self, RDX=near (Scalar*), R8=far (Scalar*), R9=fovX (Scalar*), [+0x20]=fovY (Scalar*).
+// near/far are stored as raw plane distances; fovX/fovY are half-angles in degrees
+// (used for sin/cos when computing side-plane normals).
+typedef void* (*fn_Volume_Frustum_Ctor_t)(void* self, void* nearZ, void* farZ, void* fovX, void* fovY);
 extern fn_Volume_Frustum_Ctor_t fn_Volume_Frustum_Ctor;
 
 // Graphics::Camera::Camera(frustum, transform3, isPerspective) — non-default ctor.

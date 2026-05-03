@@ -627,10 +627,11 @@ static void MenuScene_TransformInit_Standalone(void* transformObj) {
 
     void* ident = fn_Math_Transform3_Identity();
 
-    // Frustum ctor — original uses near=1.0, far=100.0, fovX=fovY=90.0.
+    // Frustum ctor: arg order is (near, far, fovX, fovY). Original uses
+    // near=1.0, far=100.0, fovX=fovY=90.0 (FUN_140098800).
     float fovX = 90.0f, fovY = 90.0f, nearZ = 1.0f, farZ = 100.0f;
     uint8_t frustumBuf[0x80] = {};
-    fn_Volume_Frustum_Ctor(frustumBuf, &fovX, &fovY, &nearZ, &farZ);
+    fn_Volume_Frustum_Ctor(frustumBuf, &nearZ, &farZ, &fovX, &fovY);
 
     // Camera lives at transform+0x34 (per the embedded Camera at +0x34 inside
     // the 0x10C-byte Transform block).
