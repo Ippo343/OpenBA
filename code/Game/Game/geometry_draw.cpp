@@ -149,8 +149,24 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     if (camera) {
         fn_Camera_GetFrustum(camera, cameraFrustumBuf);
     }
+    if (s_calls == 1) {
+        const float* cf = reinterpret_cast<const float*>(cameraFrustumBuf);
+        printf("[CollectDraw] cameraFrustum[0..0x60] (after GetFrustum):\n");
+        for (int row = 0; row < 6; ++row) {
+            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n", row*16,
+                   cf[row*4+0], cf[row*4+1], cf[row*4+2], cf[row*4+3]);
+        }
+    }
     // worldFrustum = cameraFrustum * cameraTransform3
     fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, cameraTransform3);
+    if (s_calls == 1) {
+        const float* wf = reinterpret_cast<const float*>(worldFrustumBuf);
+        printf("[CollectDraw] worldFrustum[0..0x60] (after cameraFrust * cameraT3):\n");
+        for (int row = 0; row < 6; ++row) {
+            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n", row*16,
+                   wf[row*4+0], wf[row*4+1], wf[row*4+2], wf[row*4+3]);
+        }
+    }
     // localFrustum = worldFrustum * geometryInverseTransform3
     fn_Frustum_MulTransform3(worldFrustumBuf, localFrustumBuf, selfInvTransform3);
 
@@ -177,6 +193,21 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     uint32_t dbgFirstFew[8] = {0};
     int dbgFirstFewN = 0;
 
+    if (s_calls == 1) {
+        const float* lf = reinterpret_cast<const float*>(localFrustumBuf);
+        printf("[CollectDraw] localFrustumBuf[0..0x60] (6 vec4 = 6 planes):\n");
+        for (int row = 0; row < 6; ++row) {
+            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n",
+                   row*16, lf[row*4+0], lf[row*4+1], lf[row*4+2], lf[row*4+3]);
+        }
+        printf("[CollectDraw] localFrustumBuf[0x60..0xC0] (next 6 vec4):\n");
+        for (int row = 0; row < 6; ++row) {
+            int off = 0x60 + row*16;
+            const float* p = reinterpret_cast<const float*>(localFrustumBuf + off);
+            printf("  +0x%02x: %.4f %.4f %.4f %.4f\n", off, p[0], p[1], p[2], p[3]);
+        }
+    }
+
     for (int i = 0; i < chunkCount; ++i) {
         for (int j = 0; j < chunkCount; ++j) {
             float xmin = static_cast<float>(j) * chunkSizeF - fHalfGrid;
@@ -191,6 +222,10 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
             uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
             if (s_calls == 1 && dbgFirstFewN < 8) {
                 dbgFirstFew[dbgFirstFewN++] = r;
+            }
+            if (s_calls == 1 && i == 12 && j == 11) {
+                printf("[CollectDraw] chunk(i=12,j=11) box=(%.1f,%.1f,%.1f .. %.1f,%.1f,%.1f) r=0x%x\n",
+                       box[0], box[1], box[2], box[3], box[4], box[5], r);
             }
             if (r != 0x40) {
                 ++dbgVisible;
