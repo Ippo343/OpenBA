@@ -107,10 +107,13 @@ void Stub_Startup(UpdateLoop* self) {
         printf("[SplashDLT::Startup] next->Load returned\n");
     }
 
-    // Step 4: trigger the Startup-reveal fade (instant black -> animated reveal
-    // over ~0.25s). Mirrors the SetFullscreenFade pair in OptionsDialog_impl_8fa0
-    // (exe 0x140098FA0). The fade animation runs entirely inside Runtime UI
-    // code — we just install the sprite + flip the rate/alpha state here.
+    // Trigger reveal AFTER all synchronous loads complete (DialogLoaderLoopT::
+    // Load + Startup + next->Load = MenuDLT::Load can take 100ms+). If we
+    // triggered before, the first Stub_Update post-Startup gets a huge
+    // accumulated dt that advances alpha far past 1.0 in a single tick (e.g.
+    // alpha=1.0 → 0.667 in one frame, causing a visible sudden-reveal flash
+    // instead of a smooth animation). Triggering AFTER means the first Update
+    // tick has a normal small dt and the reveal animates frame-by-frame.
     void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
@@ -143,33 +146,22 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
     // Once the splash hold elapses, kick off the fade-OUT (to opaque black)
     // and wait one extra tick before transitioning. Mirrors the original
-    // FUN_140098DA0 (LoaderLoop::Update) sequence: when IsFinished first
-    // turns true, call SetFullscreenFade(true /*toward opaque*/) and only
-    // call Exit on the *next* tick once alpha[+0xF4] is back to 0 — except
-    // we transition when alpha reaches 1.0 (fully covered) so the next loop
-    // can do its own reveal cleanly. Without this, splashes hard-cut.
+    // FUN_140098DA0 (LoaderLoop::Update) sequence.
     if (ll->m_elapsedTicks >= ll->m_delayTicks) {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
 
-        // Lazy state: track whether we've already triggered the fade-out for
-        // this loop instance. Static keyed on `self` pointer covers the case
-        // where Stub_Update fires repeatedly for two different splash loops.
         static UpdateLoop* fadeOutInitiatedFor = nullptr;
         if (fadeOutInitiatedFor != self) {
             fadeOutInitiatedFor = self;
             UIFade::EnsureFadeSprite(ui);
-            UIFade::TriggerFadeIn(ui);  // "fade IN to opaque" — covers screen
+            UIFade::TriggerFadeIn(ui);
             printf("[SplashDLT::Update] self=%p kicked fade-out-to-black, "
                    "waiting for alpha=1\n", (void*)self);
-            return true;  // hold for at least one more tick
+            return true;
         }
 
-        // Wait until alpha has reached 1.0 (fully opaque) before transitioning
-        // so the cut between loops happens behind a black screen. ~0.25s of
-        // fade time at the engine's 4.0/sec rate.
         float alpha = UIFade::GetCurrentAlpha(ui);
         if (alpha < 0.99f) {
-            // Still fading — keep ticking so UI::Update can advance the curve.
             return true;
         }
 

@@ -35,6 +35,13 @@
 // into the fake exref chain at slot 0x140151738 so that triple-deref reads
 // (g_pKeyMapObjectExref) reach the real KeyMap inside Input::Configuration.
 extern "C" void SetStandaloneKeyMap(void* keyMap);
+
+// Defined in standalone/menudialogloopt_stubs.cpp. Loads
+// Dialog/SpriteSheet.rsc + constructs the "White" / "SaveLoadEmpty" Sprites
+// into KeyMap+0xa0/+0xa8/+0xb8 (mirror of PlacementTool_Ctor's last segment).
+// Idempotent. Called early in RunGameMain so SplashDLT::Stub_Startup's fade
+// trigger finds a populated KeyMap+0xa8 and the overlay actually renders.
+extern "C" void StandaloneEnsureSpriteSheetLoaded();
 #endif
 
 #ifdef STANDALONE_EXE
@@ -418,6 +425,15 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // input ID -> "Move View Forward" etc., used by OptionsDialog's
                 // input bind list.
                 Game::LoadInputNameTables();
+
+                // Load Dialog/SpriteSheet.rsc + construct the "White" /
+                // "SaveLoadEmpty" Sprites into KeyMap+0xa8/+0xb8 (mirror of
+                // PlacementTool_Ctor's last segment). Required BEFORE MainLoop::
+                // Run because SplashDLT::Stub_Startup triggers fullscreen-fade
+                // reveals that read KeyMap+0xa8 — without the sprite, the fade
+                // STATE machine still runs but no overlay actually renders, so
+                // splash transitions hard-cut as visible flashes.
+                ::StandaloneEnsureSpriteSheetLoaded();
 #endif
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.

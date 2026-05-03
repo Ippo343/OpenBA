@@ -96,6 +96,81 @@ static void EnsureCursorsLoaded() {
     loadAndStore(0x50, "Cursor/Place.rsc:cursor");
 }
 
+}  // namespace
+
+// Mirror the SpriteSheet block from PlacementTool_Ctor (exe 0x140099ff0,
+// last segment). The original loads Dialog/SpriteSheet.rsc into KeyMap+0xa0,
+// then constructs two named Sprites ("White" at +0xa8/+0xb0, "SaveLoadEmpty"
+// at +0xb8/+0xc0). The "White" sprite is what UI::UserInterface uses for
+// the fullscreen-fade overlay (read by OptionsDialog_helper_9260 from
+// KeyMap+0xa8/+0xb0 and passed to SetFullscreenFadeSprite).
+//
+// Without this, KeyMap+0xa8 stays null, EnsureFadeSprite installs a null
+// sheet into UI+0xE0, and Runtime UI::Draw skips the overlay (gates on
+// sheet != 0). The fade STATE machine still runs but nothing visible
+// covers the screen during transitions → hard-cut flashes.
+//
+// Idempotent — exits early if SpriteSheet already loaded. Exposed so
+// game_main.cpp can call it BEFORE MainLoop::Run starts (so SplashDLT's
+// fade triggers find a populated KeyMap+0xa8 too, not just MenuDLT).
+extern "C" void StandaloneEnsureSpriteSheetLoaded() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!fn_Filename_CtorCStr || !fn_Filename_Dtor ||
+        !fn_ExternalFactory_FindOrLoad || !fn_Sprite_Ctor ||
+        !fn_String_Ctor_CStr || !fn_String_Dtor) {
+        printf("[SpriteSheetLoad] WARN: missing engine fns, skipping\n");
+        return;
+    }
+
+    void* keyMap = *g_pKeyMapSingleton;
+    void* factory = *g_pExternalFactorySingleton;
+    uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
+
+    // Skip if SpriteSheet already loaded.
+    if (*reinterpret_cast<void**>(kmBase + 0xa0)) return;
+
+    // Step 1: load Dialog/SpriteSheet.rsc into KeyMap+0xa0.
+    uint8_t fnBuf[16] = {};
+    fn_Filename_CtorCStr(fnBuf, "Dialog/SpriteSheet.rsc");
+    void* spriteSheet = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
+    fn_Filename_Dtor(fnBuf);
+    *reinterpret_cast<void**>(kmBase + 0xa0) = spriteSheet;
+    printf("[SpriteSheetLoad] Dialog/SpriteSheet.rsc -> %p (KeyMap+0xa0)\n",
+           spriteSheet);
+    if (!spriteSheet) return;
+
+    // Step 2: construct named Sprites and store at KeyMap+0xa8/+0xb0 ("White")
+    // and +0xb8/+0xc0 ("SaveLoadEmpty"). fn_Sprite_Ctor signature is
+    // (retval, spriteSheetExt, name) — non-trivial-return ABI but the helper
+    // typedef already returns void* (the retbuf). We pass a 16-byte stack
+    // buffer as retval and copy it into KeyMap.
+    auto buildSprite = [&](uintptr_t kmOffset, const char* name) {
+        uint8_t spriteBuf[16] = {};
+        uint8_t nameStr[8] = {};
+        fn_String_Ctor_CStr(nameStr, name);
+        fn_Sprite_Ctor(spriteBuf,
+                       reinterpret_cast<uint64_t>(spriteSheet),
+                       nameStr);
+        fn_String_Dtor(nameStr);
+        *reinterpret_cast<uint64_t*>(kmBase + kmOffset)       =
+            *reinterpret_cast<uint64_t*>(&spriteBuf[0]);
+        *reinterpret_cast<uint64_t*>(kmBase + kmOffset + 8)   =
+            *reinterpret_cast<uint64_t*>(&spriteBuf[8]);
+        printf("[SpriteSheetLoad] Sprite(\"%s\") -> sheet=%p idx=%d "
+               "(KeyMap+0x%02llx)\n",
+               name,
+               *reinterpret_cast<void**>(&spriteBuf[0]),
+               *reinterpret_cast<int32_t*>(&spriteBuf[8]),
+               (unsigned long long)kmOffset);
+    };
+
+    buildSprite(0xa8, "White");           // fullscreen-fade overlay sprite
+    buildSprite(0xb8, "SaveLoadEmpty");   // save/load placeholder sprite
+}
+
+namespace {
+
 void Stub_Destroy(UpdateLoop* self, int flags) {
     printf("[MenuDLT::Destroy] self=%p flags=%d\n", (void*)self, flags);
     // Skip the real cleanup chain for now (Audio::Scene dtor, Engine::DialogLoopT dtor,
@@ -141,6 +216,7 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // would call. Standalone has no Loader thread so we load the cursors lazily
     // here via ExternalFactory::FindOrLoad — same end result, synchronous.
     EnsureCursorsLoaded();
+    StandaloneEnsureSpriteSheetLoaded();
 
     void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
     void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
