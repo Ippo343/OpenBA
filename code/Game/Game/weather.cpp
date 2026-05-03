@@ -203,3 +203,92 @@ void Weather_Serialize(Weather* self, void* stream) {
     // Destroy serializer
     g_fn_Serializer_Dtor(serializer);
 }
+
+// ============================================================
+// STANDALONE_EXE scaffolding — Weather factory + vtable + REGISTER_TYPE
+// ============================================================
+// Mirrors the StatGoal pattern in code/Game/Goal/statgoal.cpp.
+//
+// Original retail vtable @ 0x140160290 (9 slots):
+//   +0x00 Dtor                  (Weather_ScalarDtor   @ 0x140025020)
+//   +0x08 GetTypeName           (Weather_Slot1        @ 0x140024fa0) — returns "Weather"
+//   +0x10 GetTypeId             (Weather_Slot2        @ 0x140024f90) — returns CRC32 typeId
+//   +0x18 ?Slot3                (Weather_Shutdown     @ 0x1400d3e40) — returns 5
+//   +0x20 Compile (External)    (External::Compile JT @ 0x14003a912)
+//   +0x28 Slot5/Serialize       (Weather_Slot5        @ 0x1400d3c90)
+//   +0x30 Slot6/Cleanup         (Weather_Cleanup      @ 0x140025000)
+//   +0x38 Slot7/Draw shim       (vtable[0](this,0)    @ 0x140001640)
+//   +0x40 Slot8/CreateInPlace   (Weather_OnRemove     @ 0x140024ff0)
+//
+// For the MenuScene deserialize-only call path, only Slot5 (Serialize) and
+// Slot8 (CreateInPlace) really need to fire. Other inherited slots are wired
+// to retail addresses via ResolveAddr fallback when something virtual-calls
+// them.
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+
+// Slot +0x08: GetTypeName — returns "Weather".
+static const char* Weather_GetTypeName(void* /*self*/) {
+    return "Weather";
+}
+
+// Slot +0x10: GetTypeId — returns CRC32 typeId set by Factory::Startup.
+static uint32_t Weather_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) {
+        cached = ::Object::GetTypeIdByName("Weather");
+    }
+    return cached;
+}
+
+// Slot +0x18: matches retail Weather_Shutdown — returns 5 (external category enum).
+static uint64_t Weather_Slot3_StaticInt(void* /*self*/) {
+    return 5;
+}
+
+// Slot +0x40 trampoline (BaseTypeInfo inPlaceCreateFn). The retail Weather_OnRemove
+// is the in-place ctor (same as Weather_Init on already-allocated memory).
+static void* Weather_Slot8_InPlace(void* memory) {
+    if (!memory) return nullptr;
+    Weather_Init(reinterpret_cast<Weather*>(memory));
+    return memory;
+}
+
+static void* g_Weather_Vtable[9] = {
+    reinterpret_cast<void*>(&Weather_Dtor),                // +0x00 dtor
+    reinterpret_cast<void*>(&Weather_GetTypeName),         // +0x08 GetTypeName
+    reinterpret_cast<void*>(&Weather_GetTypeId),           // +0x10 GetTypeId
+    reinterpret_cast<void*>(&Weather_Slot3_StaticInt),     // +0x18 returns 5
+    nullptr,                                               // +0x20 External::Compile (jumptable; unused on menu path)
+    reinterpret_cast<void*>(&Weather_Serialize),           // +0x28 Slot5
+    reinterpret_cast<void*>(&Weather_Cleanup),             // +0x30 Slot6
+    nullptr,                                               // +0x38 Slot7 (Draw-shim; unused on menu path)
+    reinterpret_cast<void*>(&Weather_Slot8_InPlace),       // +0x40 in-place ctor
+};
+
+#include "address_registry.h"
+
+extern "C" void RegisterWeatherVtable() {
+    RegisterExeAddr(WeatherAddr::Vtable, reinterpret_cast<uintptr_t>(g_Weather_Vtable));
+}
+
+extern "C" void* Weather_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(Weather), 8);
+    if (!p) return nullptr;
+    Weather_Init(reinterpret_cast<Weather*>(p));
+    return p;
+}
+
+extern "C" void* Weather_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    Weather_Init(reinterpret_cast<Weather*>(memory));
+    return memory;
+}
+
+REGISTER_TYPE(Weather, "Object::External",
+              &Weather_Factory, &Weather_CreateInPlace);
+
+#endif // STANDALONE_EXE

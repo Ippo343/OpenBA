@@ -26,6 +26,7 @@ REIMPLEMENTED = {
     "MainMenuDialog",          # code/Game/Dialog/mainmenudialog.cpp
     "LoaderDialog",            # code/Game/Dialog/loaderdialog.cpp
     "MenuScene",               # code/Game/Game/menuscene.cpp
+    "Weather",                 # code/Game/Game/weather.cpp
 }
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -65,6 +65,7 @@ extern "C" {
     void RegisterMessageDialogVtable();
     void RegisterMenuSceneVtable();
     void RegisterGeometryVtable();
+    void RegisterWeatherVtable();
 }
 
 // ============================================================
@@ -587,6 +588,10 @@ static void RegisterVtablesAndTypeIds() {
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
     RegisterMenuSceneVtable();
+
+    // Weather vtable + factory at exe 0x140160290 — needed for MenuScene
+    // particle deserialization (fn_ExternalPtr_Serialize_Weather).
+    RegisterWeatherVtable();
 
     // Geometry / "TerrainGenerator" derived vtable at exe 0x14015f110.
     // Without this, Reimpl_Geometry_Init's `*self = vtbl` no-ops because

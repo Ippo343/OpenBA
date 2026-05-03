@@ -199,7 +199,6 @@ REGISTER_NULL_FACTORY(RemoveNaturalResource, "Action");  // 14014d390 RemoveNatu
 REGISTER_NULL_FACTORY(SendComponentMessage, "Action");  // 14014d3d0 SendComponentMessage_RegisterType
 REGISTER_NULL_FACTORY(Toolbar, "Object::External");  // 14014d410 Toolbar_RegisterType
 REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
-REGISTER_NULL_FACTORY(Weather, "Object::External");  // 14014d490 Weather_RegisterType
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
 REGISTER_NULL_FACTORY(PathTool, "Tool");  // 14014d6d0 PathTool_RegisterType
 REGISTER_NULL_FACTORY(RotationSetting, "ToolSetting");  // 14014d710 RotationSetting_RegisterType
