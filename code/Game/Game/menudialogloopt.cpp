@@ -267,6 +267,10 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
         return;
     }
 
+    // Count is read from MenuScene+0x38 just like the original (FUN_14009a930
+    // line: `if (0 < *(int *)(*(longlong *)(param_1 + 0xb90) + 0x38))`).
+    // Menu scenes have ~12-15K props (foliage, rocks, decals); the variation
+    // between runs is because MenuDLT::Load picks Scene[0..9].rsc randomly.
     int32_t meshCount    = Field<int32_t>(menuScene, 0x38);
     int32_t meshArrCount = Field<int32_t>(menuScene, 0x48);  // arr40 count (bound for meshIdx)
     printf("[MenuDLT::PhaseB] MenuScene+0x38=%d (arr30 elems) +0x48=%d (arr40 GraphicsMesh count)\n",
@@ -274,17 +278,6 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
     if (meshCount <= 0) {
         printf("[MenuDLT::PhaseB] MenuScene+0x38 count=%d — no static meshes\n", meshCount);
         return;
-    }
-
-    // The Geometry::Serialize body cursor is known to mis-align in standalone,
-    // producing wildly inflated counts (12k+). A real menu scene has well under
-    // 256 props. Cap aggressively to avoid sweeping garbage memory until the
-    // serializer alignment is fixed.
-    constexpr int32_t kSanityMax = 256;
-    if (meshCount > kSanityMax) {
-        printf("[MenuDLT::PhaseB] count=%d > %d — capping (Geometry::Serialize cursor bug)\n",
-               meshCount, kSanityMax);
-        meshCount = kSanityMax;
     }
 
     // Element array ptr at MenuScene+0x30 (Collection::Array data ptr).
@@ -300,26 +293,6 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
     // g_fUVScale — exe DAT_14017214c, value 1.0f. Not registered as a slot;
     // hardcode to avoid an extra ResolveAddr indirection.
     constexpr float kUVScale = 1.0f;
-
-    // One-shot dump of first 8 elements to diagnose cursor garbage vs. real data.
-    // Element layout (0x20 bytes): +0x00..0x17 unknown, +0x18 yaw(float),
-    // +0x1c meshIdx(int16), +0x1e matIdx(int16).
-    static bool s_dumpedElems = false;
-    if (!s_dumpedElems) {
-        s_dumpedElems = true;
-        int32_t dumpN = (meshCount < 8) ? meshCount : 8;
-        printf("[MenuDLT::PhaseB] elem dump (first %d of %d, stride 0x20):\n", dumpN, meshCount);
-        for (int32_t k = 0; k < dumpN; ++k) {
-            const uint8_t* e = elemArr + static_cast<size_t>(k) * 0x20;
-            const uint32_t* w = reinterpret_cast<const uint32_t*>(e);
-            int16_t mi = *reinterpret_cast<const int16_t*>(e + 0x1c);
-            int16_t ma = *reinterpret_cast<const int16_t*>(e + 0x1e);
-            float   yw = *reinterpret_cast<const float*>(e + 0x18);
-            printf("  [%2d] meshIdx=%d matIdx=%d yaw=%.4f  bytes: %08x %08x %08x %08x | %08x %08x %08x %08x\n",
-                   k, (int)mi, (int)ma, yw, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
-        }
-        fflush(stdout);
-    }
 
     int32_t added = 0;
     int32_t matSlotsTotal = 0;
@@ -340,7 +313,8 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
         int16_t meshIdx = *reinterpret_cast<const int16_t*>(elem + 0x1c);
         int16_t matIdx  = *reinterpret_cast<const int16_t*>(elem + 0x1e);
 
-        // Guard against bogus meshIdx (Geometry::Serialize cursor bug — see cap above).
+        // Defensive bound check on meshIdx — keeps id arrays in sync if a future
+        // serializer regression ever produces an out-of-range index.
         if (meshIdx < 0 || meshIdx >= meshArrCount) {
             // Skip but don't continue — we still appended an empty inst to +0xbe0
             // and need to add it to scene to keep id arrays in sync.
