@@ -36,6 +36,7 @@
 #include "renderdoc_integration.h"
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
+#include "Game/uifade.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -159,6 +160,12 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     } else {
         printf("[MenuDLT::Startup] WARN: fn_UI_EnableCursor is NULL\n");
     }
+
+    // Trigger Startup-reveal fade — instant black -> animated reveal over ~0.25s.
+    // Without this, the splash->menu transition hard-cuts. The original calls
+    // SetFullscreenFade twice from OptionsDialog_impl_8fa0 in the same shape.
+    UIFade::EnsureFadeSprite(ui);
+    UIFade::TriggerReveal(ui);
 }
 
 void Stub_Shutdown(UpdateLoop* self) {
@@ -239,8 +246,19 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     if (trace) {
         void* menuScene = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(self) + 0xb90);
-        printf("[MenuDLT::Draw] self=%p alpha=%f mainLoop=%p ctx=%p ui=%p menuScene=%p\n",
+        printf("[MenuDLT::Draw] self=%p frameAlpha=%f mainLoop=%p ctx=%p ui=%p menuScene=%p\n",
                (void*)self, alpha, mainLoop, context, ui, menuScene);
+    }
+
+    // Per-frame fade alpha trace — log first 5 + every 30th draw so the curve
+    // is visible in standalone_debug.log without spamming. UI is at self+0x40
+    // for MenuDLT (DialogLoopT subclass).
+    {
+        static int draws = 0;
+        ++draws;
+        if (draws <= 5 || (draws % 30) == 0) {
+            UIFade::LogState("MenuDLT::Draw", ui);
+        }
     }
 
     // Phase A: render the 3D menu scene before the UI overlay.

@@ -32,6 +32,7 @@
 #include "MainLoop.h"
 #include "common.h"
 #include "Game/dialogloaderloop.h"
+#include "Game/uifade.h"
 #include <cstdio>
 #include <cstdint>
 #include <windows.h>
@@ -105,6 +106,14 @@ void Stub_Startup(UpdateLoop* self) {
         loadFn(next);
         printf("[SplashDLT::Startup] next->Load returned\n");
     }
+
+    // Step 4: trigger the Startup-reveal fade (instant black -> animated reveal
+    // over ~0.25s). Mirrors the SetFullscreenFade pair in OptionsDialog_impl_8fa0
+    // (exe 0x140098FA0). The fade animation runs entirely inside Runtime UI
+    // code — we just install the sprite + flip the rate/alpha state here.
+    void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+    UIFade::EnsureFadeSprite(ui);
+    UIFade::TriggerReveal(ui);
 }
 
 void Stub_Shutdown(UpdateLoop* self) {
@@ -132,14 +141,44 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
     ll->m_elapsedTicks += dt->ticks;
 
-    // Once the splash hold elapses, transition. Skip the m_finished check —
-    // standalone has no real Loader thread, so m_finished stays 0 forever.
+    // Once the splash hold elapses, kick off the fade-OUT (to opaque black)
+    // and wait one extra tick before transitioning. Mirrors the original
+    // FUN_140098DA0 (LoaderLoop::Update) sequence: when IsFinished first
+    // turns true, call SetFullscreenFade(true /*toward opaque*/) and only
+    // call Exit on the *next* tick once alpha[+0xF4] is back to 0 — except
+    // we transition when alpha reaches 1.0 (fully covered) so the next loop
+    // can do its own reveal cleanly. Without this, splashes hard-cut.
     if (ll->m_elapsedTicks >= ll->m_delayTicks) {
+        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+
+        // Lazy state: track whether we've already triggered the fade-out for
+        // this loop instance. Static keyed on `self` pointer covers the case
+        // where Stub_Update fires repeatedly for two different splash loops.
+        static UpdateLoop* fadeOutInitiatedFor = nullptr;
+        if (fadeOutInitiatedFor != self) {
+            fadeOutInitiatedFor = self;
+            UIFade::EnsureFadeSprite(ui);
+            UIFade::TriggerFadeIn(ui);  // "fade IN to opaque" — covers screen
+            printf("[SplashDLT::Update] self=%p kicked fade-out-to-black, "
+                   "waiting for alpha=1\n", (void*)self);
+            return true;  // hold for at least one more tick
+        }
+
+        // Wait until alpha has reached 1.0 (fully opaque) before transitioning
+        // so the cut between loops happens behind a black screen. ~0.25s of
+        // fade time at the engine's 4.0/sec rate.
+        float alpha = UIFade::GetCurrentAlpha(ui);
+        if (alpha < 0.99f) {
+            // Still fading — keep ticking so UI::Update can advance the curve.
+            return true;
+        }
+
         UpdateLoop* next = ll->m_nextLoop;
         void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
-        printf("[SplashDLT::Update] self=%p elapsed=%lld delay=%lld -> transition next=%p\n",
+        printf("[SplashDLT::Update] self=%p elapsed=%lld delay=%lld "
+               "fade-alpha=%.3f -> transition next=%p\n",
                (void*)self, (long long)ll->m_elapsedTicks,
-               (long long)ll->m_delayTicks, (void*)next);
+               (long long)ll->m_delayTicks, alpha, (void*)next);
         if (next && fn_MainLoop_SetNextLoop && mainLoop) {
             fn_MainLoop_SetNextLoop(mainLoop, next);
         }
@@ -158,16 +197,24 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
-    (void)alpha;
+    (void)alpha;  // frame-blend interpolation, not the fade alpha
     // Mirror Runtime DialogLoaderLoopT::Draw (0x1800DAE20). Shared body lives in
     // code/Game/Game/dialogloaderloop.cpp; DLL-mode reaches it via Reimpl_Draw
     // in engine/reimpl/dialogloaderloop.cpp.
     static int draws = 0;
-    bool trace = (draws++ < 3);
+    ++draws;
+    bool trace = (draws <= 3);
 
     if (trace) {
-        printf("[SplashDLT::Draw] self=%p alpha=%f -> DialogLoaderLoopT_Draw_Impl\n",
+        printf("[SplashDLT::Draw] self=%p frameAlpha=%f -> DialogLoaderLoopT_Draw_Impl\n",
                (void*)self, alpha);
+    }
+
+    // Per-frame fade alpha trace — log first 5 frames + every 10th so the curve
+    // is visible in standalone_debug.log without spamming. UI is at self+0x60
+    // for DialogLoaderLoopT.
+    if (draws <= 5 || (draws % 10) == 0) {
+        UIFade::LogState("SplashDLT::Draw", reinterpret_cast<uint8_t*>(self) + 0x60);
     }
 
     DialogLoaderLoopT_Draw_Impl(reinterpret_cast<DialogLoaderLoopT*>(self));
