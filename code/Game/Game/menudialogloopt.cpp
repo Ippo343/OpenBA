@@ -746,18 +746,23 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
                           MenuSceneConst::kHelper8660_NearZ,
                           MenuSceneConst::kHelper8660_FarZ);
 
-    // SunLight::Set(direction, color, ambient).
-    // Direction comes from yaw+pitch at MenuScene+0x1AC.. (two consecutive Scalars).
-    // Color and ambient are packed RGB byte triples at MenuScene+0x194..0x199:
-    //   +0x194 = ambient.r, +0x195 = ambient.g, +0x196 = ambient.b
-    //   +0x198 = sun.r,     +0x199 = sun.g,     +0x19A = sun.b
-    // All scaled by 1.0/255.0 to a Vector4 (alpha = 1.0f).
+    // SunLight::Set(self, dir*, sunVec4*, ambientVec4*).
+    // Color uint32s are stored as ARGB-packed (A=high, R-G-B descending), which
+    // means the LE byte layout of e.g. ambientColor (+0x194) is:
+    //   ms[0x194] = B, ms[0x195] = G, ms[0x196] = R, ms[0x197] = A
+    // The runtime expects each Vector4 in (R, G, B, 1.0) order, so we read the
+    // bytes in REVERSE: (byte+2, byte+1, byte+0, 1.0). This mirrors the original
+    // disasm (exe 0x14009b440) which feeds e.g. (ms[0x196], ms[0x195], ms[0x194])
+    // for ambient and (ms[0x19A], ms[0x199], ms[0x198]) for sun.
     uint8_t* ms = reinterpret_cast<uint8_t*>(menuScene);
 
     // SunLight direction is yaw + pitch derived from MenuScene+0x1AC..+0x1B3.
     // Verified via disassembly of MenuDLT::Draw (exe 0x14009b440):
     //   yaw   = *(float*)(menuScene + 0x1AC)
     //   pitch = -*(float*)(menuScene + 0x1B0)   (XOR'd with sign-flip mask 0x80000000)
+    // The struct labels these as sunIntensity/ambientIntensity but the disasm
+    // reads them as a sun-direction yaw/pitch pair; defaults of 120°/65° fit
+    // a directional-light orientation, not an intensity scalar.
     // FromYawPitch is `static Vector3 FromYawPitch(const Scalar& yaw, const Scalar& pitch)`
     // — three machine args (RCX=retval, RDX=yaw, R8=pitch). Earlier code passed
     // only 2 args, which left R8 holding garbage and produced a junk direction.
@@ -767,21 +772,25 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     uint8_t dirVec[16] = {};  // Vector3 = 12 bytes, padded to 16 for safety
     fn_Math_Vector3_FromYawPitch(dirVec, &sunYaw, &sunPitch);
 
-    // Build sun color Vector4 (RGBA at +0x194..+0x196 + alpha=1.0f).
-    float sunColor[4];
-    sunColor[0] = static_cast<float>(ms[0x194]) / MenuSceneConst::kColorScale255;
-    sunColor[1] = static_cast<float>(ms[0x195]) / MenuSceneConst::kColorScale255;
-    sunColor[2] = static_cast<float>(ms[0x196]) / MenuSceneConst::kColorScale255;
-    sunColor[3] = 1.0f;
+    // Sun color Vector4 — read sun field at +0x198..+0x19A in BGR memory order,
+    // pack as RGB (byte+2 → x, byte+1 → y, byte+0 → z, 1.0 → w).
+    float sunColorVec[4];
+    sunColorVec[0] = static_cast<float>(ms[0x19A]) / MenuSceneConst::kColorScale255;
+    sunColorVec[1] = static_cast<float>(ms[0x199]) / MenuSceneConst::kColorScale255;
+    sunColorVec[2] = static_cast<float>(ms[0x198]) / MenuSceneConst::kColorScale255;
+    sunColorVec[3] = 1.0f;
 
-    // Build ambient color Vector4 (+0x198..+0x19A).
-    float ambient[4];
-    ambient[0] = static_cast<float>(ms[0x198]) / MenuSceneConst::kColorScale255;
-    ambient[1] = static_cast<float>(ms[0x199]) / MenuSceneConst::kColorScale255;
-    ambient[2] = static_cast<float>(ms[0x19A]) / MenuSceneConst::kColorScale255;
-    ambient[3] = 1.0f;
+    // Ambient color Vector4 — same byte-reverse pattern over the ambient field
+    // at +0x194..+0x196.
+    float ambientVec[4];
+    ambientVec[0] = static_cast<float>(ms[0x196]) / MenuSceneConst::kColorScale255;
+    ambientVec[1] = static_cast<float>(ms[0x195]) / MenuSceneConst::kColorScale255;
+    ambientVec[2] = static_cast<float>(ms[0x194]) / MenuSceneConst::kColorScale255;
+    ambientVec[3] = 1.0f;
 
-    fn_Graphics_SunLight_Set(sunLight, dirVec, ambient, sunColor);
+    // Original arg order: SunLight::Set(self, dir, sunVec4, ambientVec4) — R8 is
+    // sun, R9 is ambient.
+    fn_Graphics_SunLight_Set(sunLight, dirVec, sunColorVec, ambientVec);
 
     // Push sky color into Video::Context+0x3b8/+0x288 and OR fog-enable bits.
     // Original disasm:
@@ -795,11 +804,12 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     std::memcpy(ctxBytes + 0x288, ms + 0x1B4, 16);
     *reinterpret_cast<uint32_t*>(ctxBytes + 0x10) |= 0x10800;
 
-    // Build fog color Vector4 from MenuScene+0x19C..+0x19E (sky/fog color RGB) + density.
+    // Fog color Vector4 — same BGR-in-memory → RGB-Vector4 byte reverse over the
+    // skyColor field at +0x19C..+0x19E. The 4th component is fog density (not 1.0).
     float fogColor[4];
-    fogColor[0] = static_cast<float>(ms[0x19C]) / MenuSceneConst::kColorScale255;
+    fogColor[0] = static_cast<float>(ms[0x19E]) / MenuSceneConst::kColorScale255;
     fogColor[1] = static_cast<float>(ms[0x19D]) / MenuSceneConst::kColorScale255;
-    fogColor[2] = static_cast<float>(ms[0x19E]) / MenuSceneConst::kColorScale255;
+    fogColor[2] = static_cast<float>(ms[0x19C]) / MenuSceneConst::kColorScale255;
     fogColor[3] = *reinterpret_cast<float*>(ms + 0x1A8);  // density
 
     float fogStart = *reinterpret_cast<float*>(ms + 0x1A0);

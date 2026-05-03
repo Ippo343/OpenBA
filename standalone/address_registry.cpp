@@ -353,6 +353,12 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z"));
     RegisterDispatchSlot(0x1401526b8,
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    // Math::Vector3::Serialize — required by Weather::Serialize (velocityDir at
+    // weather+0x2C). Without it, Weather_Serialize null-derefs s_fn_Vector3_Serialize
+    // when MenuScene's +0x80 Weather extPtr loads (intermittent: only on scenes
+    // that reference an Environment/*.rsc).
+    RegisterDispatchSlot(0x140152a68,
+        (uintptr_t)ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     // MenuScene Slot5 atmospheric block — Vector4 + Color serialize.
     // Slots used at exe 0x1400a3796 (Vector4) and 0x1400a37aa..1400a37c6 (Color x3).
     // Without these, the post-Geometry tail of MenuScene::Serialize hits a
