@@ -28,6 +28,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -442,6 +443,15 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     bool typeIdResolved = false;
     if (typeIdPtr) {
         typeId = *typeIdPtr;
+        typeIdResolved = (typeId != 0);
+    }
+    // Lazy resolution path — see serialize_externals.cpp for rationale.
+    if (!typeIdResolved && typeName) {
+        const char* simple = typeName;
+        for (const char* p = typeName; *p; ++p) {
+            if (p[0] == ':' && p[1] == ':') simple = p + 2;
+        }
+        typeId = ::Object::ResolveTypeIdByNameLazy(simple);
         typeIdResolved = (typeId != 0);
     }
     if (!typeIdResolved) {

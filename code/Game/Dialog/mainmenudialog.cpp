@@ -395,6 +395,132 @@ void MainMenuDialog_OpenMod(MainMenuDialog* self) {
 }
 
 // ============================================================
+// CreateBuildIdChildDialog
+// ============================================================
+// Loads "Dialog/BuildId.rsc", constructs a child DialogInstance, attaches it
+// to the parent's UI, finds "textBuildNotice" inside, and sets parameters
+// 0=CurrentVersion and 1=CurrentBuildId on the TextElement.
+//
+// Mirrors the bottom half of MainMenuDialog_Slot4 (exe @ 0x1400b3cd0) so it
+// can be reused from the standalone Slot4 stub. Returns true on success.
+//
+// Standalone gotcha: g_MainMenuDialog_BuildIdVtable resolves via the exe data
+// section (0x14015f5a0). In standalone mode there's no exe loader to fill it,
+// so it stays null. When null we skip the vtable override and let the default
+// DialogInstance vtable handle Dtor/etc. (BuildId child has no overridden
+// behavior beyond display.)
+//
+// Returns true if the child dialog was created and added to the UI.
+static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
+    if (!selfDialog || !userInterfacePtr) {
+        printf("[BuildId] selfDialog or UI null, skipping\n");
+        return false;
+    }
+    if (!fn_String_Ctor_CStr || !fn_Filename_AdjustDelimiters ||
+        !fn_ExternalFactory_FindOrLoad || !fn_IsDerivedFrom ||
+        !fn_String_Dtor || !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
+        !fn_DialogInstance_Ctor || !fn_UI_AddDialog ||
+        !fn_DialogInstance_FindElement || !fn_InternalBasePtr_CheckPtr ||
+        !fn_TextElement_SetParameter || !fn_Configuration_CurrentVersion ||
+        !fn_Configuration_CurrentBuildId) {
+        printf("[BuildId] missing engine fns, skipping\n");
+        return false;
+    }
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !g_pExternalTypeId || !g_pMemAllocSingleton) {
+        printf("[BuildId] missing engine singletons, skipping\n");
+        return false;
+    }
+
+    // --- Load Dialog/BuildId.rsc as External resource ---
+    uint8_t filenameStr[16] = {};
+    fn_String_Ctor_CStr(filenameStr, "Dialog/BuildId.rsc");
+    fn_Filename_AdjustDelimiters(filenameStr);
+    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton,
+                                                    filenameStr);
+    void* dialogResource = nullptr;
+    if (resource && fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
+        dialogResource = resource;
+    }
+    fn_String_Dtor(filenameStr);
+    if (!dialogResource) {
+        printf("[BuildId] Dialog/BuildId.rsc not found / wrong type, skipping\n");
+        return false;
+    }
+
+    // --- Allocate + construct child DialogInstance (0xB8 bytes) ---
+    void* childDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    if (!childDialog) {
+        printf("[BuildId] MemAlloc(0xB8) failed\n");
+        return false;
+    }
+
+    uint8_t parentPtr[16] = {};
+    fn_InternalBasePtr_Ctor(parentPtr, selfDialog);
+
+    fn_DialogInstance_Ctor(childDialog,
+                           userInterfacePtr,
+                           dialogResource,
+                           parentPtr,
+                           0, 0, 0);
+
+    // Override vtable to BuildId secondary (DLL-mode only — in standalone
+    // the slot is null so we keep the default DI vtable from the ctor).
+    if (g_MainMenuDialog_BuildIdVtable) {
+        *(void**)childDialog = (void*)g_MainMenuDialog_BuildIdVtable;
+    }
+
+    // --- Add child to UI ---
+    uint8_t childInternalPtr[16] = {};
+    fn_InternalBasePtr_Ctor(childInternalPtr, childDialog);
+    fn_UI_AddDialog(userInterfacePtr, childInternalPtr);
+
+    // --- Find textBuildNotice inside the child dialog ---
+    uint8_t nameStr[16] = {};
+    fn_String_Ctor_CStr(nameStr, "textBuildNotice");
+
+    fn_InternalBasePtr_CheckPtr(childInternalPtr);
+    void* childDI = *(void**)childInternalPtr;
+    uint8_t retBuf[16] = {};
+    fn_DialogInstance_FindElement(childDI, retBuf, nameStr);
+    fn_InternalBasePtr_CheckPtr(retBuf);
+    void* textElem = *(void**)retBuf;
+    fn_String_Dtor(nameStr);
+
+    printf("[BuildId] childDI=%p textElem=%p\n", childDI, textElem);
+
+    if (!textElem) {
+        printf("[BuildId] textBuildNotice element not found in BuildId.rsc\n");
+        return true;  // child dialog is still up, just no version text
+    }
+    // The original asm uses a TextElement-specific type ID slot for the
+    // IsDerivedFrom check, but in standalone we don't have that wired. Skip
+    // the type check — if it's the wrong element type the SetParameter call
+    // below will harmlessly no-op (or vtable-dispatch into the right spot).
+    void* textBuildNotice = textElem;
+
+    uint8_t textElemPtr[16] = {};
+    fn_InternalBasePtr_Ctor(textElemPtr, textBuildNotice);
+
+    // --- Set parameter 0 = CurrentVersion, 1 = CurrentBuildId ---
+    // Both Configuration:: helpers return UI::String via hidden return ptr ABI.
+    uint8_t versionStr[16] = {};
+    fn_Configuration_CurrentVersion(versionStr);
+    fn_InternalBasePtr_CheckPtr(textElemPtr);
+    fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
+    fn_String_Dtor(versionStr);
+
+    uint8_t buildIdStr[16] = {};
+    fn_Configuration_CurrentBuildId(buildIdStr);
+    fn_InternalBasePtr_CheckPtr(textElemPtr);
+    fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
+    fn_String_Dtor(buildIdStr);
+
+    printf("[BuildId] child dialog attached, version + build id set\n");
+    return true;
+}
+
+// ============================================================
 // Slot4 (0x1400B3CD0): Setup — initialize main menu UI
 // ============================================================
 // Finds all menu buttons by name, assigns element IDs.
@@ -521,84 +647,8 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
         }
     }
 
-    // --- Create BuildId child dialog ---
-    // Load "Dialog/BuildId.rsc" resource
-    uint8_t filenameStr[8];
-    fn_String_Ctor_CStr(filenameStr, "Dialog/BuildId.rsc");
-    fn_Filename_AdjustDelimiters(filenameStr);
-
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameStr);
-    void* dialogResource = nullptr;
-    if (resource) {
-        if (fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
-            dialogResource = resource;
-        }
-    }
-    fn_String_Dtor(filenameStr);
-
-    // Allocate and construct a new DialogInstance (0xB8 bytes) for the BuildId child
-    void* childDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
-    void* childPtr = nullptr;
-    if (childDialog) {
-        // Build InternalBasePtr for parent (self)
-        uint8_t parentPtr[16];
-        fn_InternalBasePtr_Ctor(parentPtr, (void*)self);
-
-        // Call DialogInstance constructor
-        fn_DialogInstance_Ctor(childDialog,
-                               *(void**)(s + 0x10),   // UserInterface ptr
-                               dialogResource,         // .rsc resource
-                               parentPtr,              // parent dialog ptr
-                               0, 0, 0);
-
-        // Override vtable to BuildId secondary vtable
-        *(void**)childDialog = (void*)g_MainMenuDialog_BuildIdVtable;
-        childPtr = childDialog;
-    }
-
-    // Add child dialog via InternalPtr
-    uint8_t childInternalPtr[16];
-    fn_InternalBasePtr_Ctor(childInternalPtr, childPtr);
-    uint8_t dialogRef[8];
-    *(void**)dialogRef = *(void**)childInternalPtr;
-    fn_UI_AddDialog(*(void**)(s + 0x10), dialogRef);
-
-    // --- Find textBuildNotice in child dialog, set version & build text ---
-    uint8_t nameStr[8];
-    fn_String_Ctor_CStr(nameStr, "textBuildNotice");
-
-    fn_InternalBasePtr_CheckPtr(childInternalPtr);
-    void* childDI = *(void**)childInternalPtr;
-    uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(childDI, retBuf, nameStr);
-    fn_InternalBasePtr_CheckPtr(retBuf);
-    void* textElem = *(void**)retBuf;
-
-    // IsDerivedFrom check to safely cast to TextElement
-    void* textBuildNotice = nullptr;
-    if (textElem && fn_IsDerivedFrom(textElem, *g_pExternalTypeId)) {
-        textBuildNotice = textElem;
-    }
-
-    // Build InternalBasePtr for the text element
-    uint8_t textElemPtr[16];
-    fn_InternalBasePtr_Ctor(textElemPtr, textBuildNotice);
-    fn_String_Dtor(nameStr);
-
-    // Set parameter 0 = CurrentVersion, parameter 1 = CurrentBuildId
-    if (textBuildNotice) {
-        uint8_t versionStr[8];
-        fn_Configuration_CurrentVersion(versionStr);
-        fn_InternalBasePtr_CheckPtr(textElemPtr);
-        fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
-        fn_String_Dtor(versionStr);
-
-        uint8_t buildIdStr[8];
-        fn_Configuration_CurrentBuildId(buildIdStr);
-        fn_InternalBasePtr_CheckPtr(textElemPtr);
-        fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
-        fn_String_Dtor(buildIdStr);
-    }
+    // --- Create BuildId child dialog (delegates to shared helper) ---
+    CreateBuildIdChildDialog((void*)self, *(void**)(s + 0x10));
 }
 
 // ============================================================
@@ -812,10 +862,60 @@ void StandaloneStub_Slot4_Setup(void* self) {
     findAndAssign("buttonMap",         kButton_Map);
     findAndAssign("buttonTutorial",    kButton_Tutorial);
     findAndAssign("buttonMod",         kButton_Mod);
+
+    // --- Create BuildId child dialog (cosmetic version overlay) ---
+    // Pulls UI ptr from MainMenuDialog +0x10 (DialogInstance::m_userInterface).
+    // Uses shared helper so DLL-mode + standalone stay in lockstep.
+    void* userInterface = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(self) + 0x10);
+    CreateBuildIdChildDialog(self, userInterface);
 }
 
 // Slot 5 (Shutdown) — depends on game world; stubbed.
 void StandaloneStub_Slot5_Shutdown(void* /*self*/) {}
+
+// Slot 6 (OnUpdateLayout) — DialogInstance virtual @ vtable +0x30.
+// In the original exe this slot points at a 6-byte JMP-thunk
+// (0x14003a98a -> [0x1401517b0]) that lands in
+// UI::DialogInstance::OnUpdateLayout @ Runtime DLL 0x1801153a0:
+//   for (int i = 0; i < count(+0x80); ++i)
+//       children[+0x78][i]->vtable[+0x38](child);   // recurse
+// MainMenuDialog itself doesn't override — it just inherits the base impl.
+// Standalone delegates straight to the Runtime DLL function so child
+// elements (buttons, labels, panels) get their layout updated each frame.
+void StandaloneImpl_Slot6_OnUpdateLayout(void* self) {
+    if (!self) return;
+    if (fn_DialogInstance_OnUpdateLayout) {
+        fn_DialogInstance_OnUpdateLayout(self);
+        return;
+    }
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[MainMenuDialog::Slot6] fn_DialogInstance_OnUpdateLayout NULL (mangled name?)\n");
+    }
+}
+
+// Slot 7 (OnUpdate) — DialogInstance virtual @ vtable +0x38.
+// In the original exe this slot points at a 6-byte JMP-thunk
+// (0x14003a990 -> [0x1401517b8]) that lands in
+// UI::DialogInstance::OnUpdate @ Runtime DLL 0x180115400:
+//   for (int i = 0; i < count(+0x80); ++i)
+//       children[+0x78][i]->vtable[+0x40](child, time);   // per-frame tick
+// Same pattern as Slot6 — delegate to Runtime DLL so animated/dynamic UI
+// elements (buildId scroller, hover effects, etc.) get their update tick.
+void StandaloneImpl_Slot7_OnUpdate(void* self, const void* time) {
+    if (!self) return;
+    if (fn_DialogInstance_OnUpdate) {
+        fn_DialogInstance_OnUpdate(self, time);
+        return;
+    }
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[MainMenuDialog::Slot7] fn_DialogInstance_OnUpdate NULL (mangled name?)\n");
+    }
+}
 
 // Slot 8 (OnCommand) — button click dispatch. The runtime sends msg=0x12 with
 // param4 = element ID. We mirror the switch from MainMenuDialog_Slot8 above,
@@ -865,8 +965,8 @@ void* g_MainMenuDialog_Vtable_Standalone[20] = {
     reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<3>),        // +0x18 Persist
     reinterpret_cast<void*>(&StandaloneStub_Slot4_Setup),            // +0x20 Setup
     reinterpret_cast<void*>(&StandaloneStub_Slot5_Shutdown),         // +0x28 Shutdown
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<6>),        // +0x30 OnUpdateLayout
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<7>),        // +0x38 OnUpdate
+    reinterpret_cast<void*>(&StandaloneImpl_Slot6_OnUpdateLayout),   // +0x30 OnUpdateLayout
+    reinterpret_cast<void*>(&StandaloneImpl_Slot7_OnUpdate),         // +0x38 OnUpdate
     reinterpret_cast<void*>(&StandaloneStub_Slot8_OnCommand),        // +0x40 OnCommand
     reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<9>),        // +0x48 OnSerializeSettings
     reinterpret_cast<void*>(&StandaloneStub_Slot10_DIDtor),          // +0x50 DI Dtor

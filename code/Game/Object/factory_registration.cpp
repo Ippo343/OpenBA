@@ -57,6 +57,66 @@ uint32_t GetTypeIdByName(const char* name) {
     return 0;
 }
 
+// Tiny per-name cache. Names are static string literals from the call sites,
+// so we compare pointers (after a strcmp on first miss). 16 entries is
+// plenty for the External-serialize helper set (Mesh, Particle, MaterialInst,
+// Weather, ...) and avoids any heap allocation.
+namespace {
+struct TypeIdCacheEntry {
+    const char* name;
+    uint32_t    typeId;
+};
+constexpr int kTypeIdCacheSize = 16;
+static TypeIdCacheEntry s_typeIdCache[kTypeIdCacheSize] = {};
+}  // namespace
+
+uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
+    if (!simpleName || !*simpleName) return 0;
+
+    // 1. Cache lookup (pointer-equal first, strcmp fallback for safety).
+    for (int i = 0; i < kTypeIdCacheSize; ++i) {
+        const char* n = s_typeIdCache[i].name;
+        if (!n) break;
+        if (n == simpleName || std::strcmp(n, simpleName) == 0) {
+            return s_typeIdCache[i].typeId;
+        }
+    }
+
+    // 2. Try Runtime DLL Factory (covers self-registered Runtime types).
+    uint32_t typeId = 0;
+    if (fn_Factory_GetTypeIdFromName && g_pFactorySingleton
+            && *g_pFactorySingleton) {
+        // Triple deref: dispatch slot -> pointer -> Factory*. See the same
+        // pattern in inputbindings.cpp / engine_funcs.h FindDialogByName_Impl.
+        void* factoryObj = *(void**)*g_pFactorySingleton;
+        if (factoryObj) {
+            typeId = fn_Factory_GetTypeIdFromName(
+                factoryObj, simpleName, /*includeBase=*/true);
+        }
+    }
+
+    // 3. Fallback to exe-side REGISTER_TYPE list.
+    if (typeId == 0) {
+        typeId = GetTypeIdByName(simpleName);
+    }
+
+    // 4. Cache the result (even 0, to avoid re-querying every call) at the
+    // first empty slot. If the cache is full, we just pay the lookup cost.
+    for (int i = 0; i < kTypeIdCacheSize; ++i) {
+        if (s_typeIdCache[i].name == nullptr) {
+            s_typeIdCache[i].name   = simpleName;
+            s_typeIdCache[i].typeId = typeId;
+            break;
+        }
+    }
+
+    if (typeId != 0) {
+        std::printf("[FactoryReg] ResolveTypeIdByNameLazy(\"%s\") = 0x%08x\n",
+                    simpleName, typeId);
+    }
+    return typeId;
+}
+
 }  // namespace Object
 
 // ============================================================

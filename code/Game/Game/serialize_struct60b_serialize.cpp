@@ -32,6 +32,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -370,6 +371,13 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     bool typeIdResolved = false;
     if (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance) {
         typeId = **g_ppTypeInfo_MaterialInstance;
+        typeIdResolved = (typeId != 0);
+    }
+    // Lazy resolution: in standalone the .rdata BaseTypeInfo* slot stays null,
+    // so ask Object::Factory directly (it sees Runtime-DLL-self-registered
+    // Graphics::MaterialInstance).
+    if (!typeIdResolved) {
+        typeId = ::Object::ResolveTypeIdByNameLazy("MaterialInstance");
         typeIdResolved = (typeId != 0);
     }
     if (!typeIdResolved) {

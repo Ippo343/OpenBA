@@ -2283,6 +2283,20 @@ typedef void (*fn_DialogInstance_AddController_t)(void* self, uint32_t typeId,
     int p3, int p4, void* external, void* nameStr);
 extern fn_DialogInstance_AddController_t fn_DialogInstance_AddController;
 
+// UI::DialogInstance::OnUpdateLayout(this) — virtual, slot +0x30
+// Iterates child elements at +0x78 (count at +0x80) and dispatches their
+// OnUpdateLayout virtual (child vtable +0x38). Mangled:
+//   ?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ — Runtime DLL @ 0x1801153a0
+typedef void (*fn_DialogInstance_OnUpdateLayout_t)(void* self);
+extern fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout;
+
+// UI::DialogInstance::OnUpdate(this, Time const&) — virtual, slot +0x38
+// Iterates child elements at +0x78 (count at +0x80) and dispatches their
+// OnUpdate virtual (child vtable +0x40) with the time pointer. Mangled:
+//   ?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z — Runtime DLL @ 0x180115400
+typedef void (*fn_DialogInstance_OnUpdate_t)(void* self, const void* time);
+extern fn_DialogInstance_OnUpdate_t fn_DialogInstance_OnUpdate;
+
 // ============================================================
 // ModDialog helper functions (exe-local)
 // ============================================================

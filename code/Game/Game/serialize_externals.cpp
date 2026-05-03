@@ -17,6 +17,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -56,6 +57,17 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
     bool typeIdResolved = false;
     if (typeIdPtr) {
         typeId = *typeIdPtr;
+        typeIdResolved = (typeId != 0);
+    }
+    // Lazy resolution path: in standalone mode the .rdata BaseTypeInfo* slot
+    // is uninitialized, so typeIdPtr stays null. Ask Object::Factory directly
+    // by simple class name (strip leading "Graphics::" / etc.).
+    if (!typeIdResolved && typeName) {
+        const char* simple = typeName;
+        for (const char* p = typeName; *p; ++p) {
+            if (p[0] == ':' && p[1] == ':') simple = p + 2;
+        }
+        typeId = ::Object::ResolveTypeIdByNameLazy(simple);
         typeIdResolved = (typeId != 0);
     }
     if (!typeIdResolved) {

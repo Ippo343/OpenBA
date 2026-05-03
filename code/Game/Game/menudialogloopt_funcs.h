@@ -65,6 +65,31 @@ void MenuDialogLoopT_TickParticles(void* self, void* time);
 // No-op if self+0xb90 (the MenuScene External) is null.
 void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context);
 
+// MenuDialogLoopT_TickAudio — per-frame Audio::Device::Update tick.
+//
+// Original MainLoop::Run (Runtime 0x1800dd3c0) calls Audio::Device::Update
+// EXACTLY ONCE before entering the main loop, never again per-frame. The
+// Update fn (Runtime 0x1800de520) only iterates the 64 platform channels
+// and calls FreeChannelPlatform on those marked done — i.e. it cleans up
+// finished sounds so new sounds can be queued. With it firing only once,
+// any sound that finishes after startup leaves its channel marked done
+// forever, eventually starving the audio system.
+//
+// Calling per-frame (idempotent — does nothing if no channels are flagged
+// done) keeps the channel pool fresh and matches the cadence of the per-
+// scene Audio::Scene::Update calls the original game makes from each
+// loop's Update slot.
+//
+// Fetches Audio::Device live from the MainLoop singleton (m_engine+0x6d0)
+// and null-guards both pointers + the resolved fn pointer. No-op if any
+// of the chain is unavailable yet (e.g., during early loader-loop ticks
+// before the engine subsystems have been fully wired).
+//
+// Caller invokes this each tick from the loop's Update slot, passing the
+// current Time pointer (System::Time, 8-byte engine-tick value, same as
+// what's passed to MenuDLT::Update).
+void MenuDialogLoopT_TickAudio(void* time);
+
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
 // MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the
 // camera eye from the deserialized lookAtTarget/yaw/pitch/distance fields,

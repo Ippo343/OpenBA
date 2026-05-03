@@ -947,3 +947,66 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
                pos[0], pos[1], pos[2]);
     }
 }
+
+// ============================================================
+// MenuDialogLoopT_TickAudio — per-frame Audio::Device::Update
+// ============================================================
+// Pull Audio::Device live from MainLoop->m_engine+0x6d0 (offset confirmed
+// by Engine::Engine::GetAudioDevice at Runtime 0x18000c970:
+// `return *(Device**)(this + 0x6d0);`).
+//
+// Note: CLAUDE.md/MEMORY.md sometimes lists Audio::Device at engine+0x6e0,
+// but Ghidra disassembly + engine/reimpl/mainloop.cpp's GetAudioDevice
+// helper both confirm +0x6d0. (+0x6e0 is the Input::Device offset.)
+void MenuDialogLoopT_TickAudio(void* time) {
+    if (!fn_AudioDevice_Update) {
+        // First-call diagnostic so we notice if the resolve ever silently
+        // returns NULL on a future build. Logged once.
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            printf("[MenuDLT::TickAudio] WARN: fn_AudioDevice_Update is NULL\n");
+        }
+        return;
+    }
+    if (!time) return;
+    if (!g_pMainLoopSingleton || !*g_pMainLoopSingleton) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            printf("[MenuDLT::TickAudio] WARN: MainLoop singleton not populated\n");
+        }
+        return;
+    }
+    void* mainLoop = *g_pMainLoopSingleton;
+    void* engine   = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(mainLoop) + 0x78);  // MainLoop::m_engine
+    if (!engine) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            printf("[MenuDLT::TickAudio] WARN: MainLoop->m_engine is NULL\n");
+        }
+        return;
+    }
+    void* audioDevice = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(engine) + 0x6d0);  // Engine::m_audioDevice
+    if (!audioDevice) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            printf("[MenuDLT::TickAudio] WARN: Engine[+0x6d0] (Audio::Device) is NULL\n");
+        }
+        return;
+    }
+
+    // Trace first few ticks so we can confirm the call is firing.
+    static int tickCount = 0;
+    if (tickCount < 3) {
+        printf("[MenuDLT::TickAudio] tick=%d audioDevice=%p time=%p -> Audio::Device::Update\n",
+               tickCount, audioDevice, time);
+        ++tickCount;
+    }
+
+    fn_AudioDevice_Update(audioDevice, time);
+}

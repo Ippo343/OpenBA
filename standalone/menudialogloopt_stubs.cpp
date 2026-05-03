@@ -196,6 +196,17 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         MenuDialogLoopT_TickParticles(self, time);
     }
 
+    // Per-frame Audio::Device::Update. Original MainLoop::Run only fires
+    // this once at startup, but the function is just channel cleanup
+    // (FreeChannelPlatform on done channels) — calling per-frame keeps
+    // the platform channel pool fresh so any sound that gets played can
+    // be reaped. Side task from project_standalone_roadmap.md ("Audio:
+    // Audio::Device::Update per-frame is not called"). Null-guarded
+    // inside the helper.
+    if (time) {
+        MenuDialogLoopT_TickAudio(time);
+    }
+
     if (!fn_DialogLoopT_Update) {
         printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
         return false;

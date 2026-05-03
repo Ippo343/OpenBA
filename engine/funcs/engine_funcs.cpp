@@ -638,6 +638,8 @@ fn_Modification_RefreshList_t fn_Modification_RefreshList = nullptr;
 fn_Modification_SaveList_t fn_Modification_SaveList = nullptr;
 fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
 fn_DialogInstance_AddController_t fn_DialogInstance_AddController = nullptr;
+fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout = nullptr;
+fn_DialogInstance_OnUpdate_t fn_DialogInstance_OnUpdate = nullptr;
 // fn_ModDialog_RefreshDisplay — REPLACED with static ModDialog_RefreshDisplay_Impl() in moddialog.cpp
 // fn_ModDialog_ToggleMod — REPLACED with inline impl in moddialog.cpp
 // fn_ModDialog_MoveToTop — REPLACED with inline impl in moddialog.cpp
@@ -3163,6 +3165,25 @@ bool EngineFuncsInit() {
         void** dispatchPtr = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a60));
         if (dispatchPtr) fn_DialogInstance_AddController =
             reinterpret_cast<fn_DialogInstance_AddController_t>(*dispatchPtr);
+    }
+
+    // --- DialogInstance::OnUpdateLayout / OnUpdate (dispatch slots 0x1401517b0/0x1401517b8) ---
+    // These back the 6-byte JMP-thunks at exe 0x14003a98a (slot +0x30) and
+    // 0x14003a990 (slot +0x38). In standalone we wire them directly so the
+    // MainMenuDialog vtable (and any other dialog) can dispatch child layout
+    // / per-frame updates through the Runtime DLL.
+    fn_DialogInstance_OnUpdateLayout = reinterpret_cast<fn_DialogInstance_OnUpdateLayout_t>(
+        ResolveExport("?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ"));
+    if (!fn_DialogInstance_OnUpdateLayout) {
+        fn_DialogInstance_OnUpdateLayout = reinterpret_cast<fn_DialogInstance_OnUpdateLayout_t>(
+            ResolveAddr(Module::Runtime, 0x1801153a0));
+    }
+
+    fn_DialogInstance_OnUpdate = reinterpret_cast<fn_DialogInstance_OnUpdate_t>(
+        ResolveExport("?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z"));
+    if (!fn_DialogInstance_OnUpdate) {
+        fn_DialogInstance_OnUpdate = reinterpret_cast<fn_DialogInstance_OnUpdate_t>(
+            ResolveAddr(Module::Runtime, 0x180115400));
     }
 
     // --- ModDialog helper functions ---

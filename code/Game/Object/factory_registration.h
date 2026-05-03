@@ -69,6 +69,22 @@ int InvokeAllRegistrations();
 // caching the result in a function-local static after first hit.
 uint32_t GetTypeIdByName(const char* name);
 
+// Lazy resolve a type ID at runtime via Object::Factory::GetTypeIdFromName
+// (Runtime DLL). Walks the live factory tree, so it sees both exe-side
+// REGISTER_TYPE entries AND Runtime-DLL-self-registered types like
+// Graphics::MaterialInstance / Graphics::GraphicsMesh / Graphics::Particle.
+//
+// Used by the External-serialize helpers in code/Game/Game/serialize_*.cpp
+// when their .rdata BaseTypeInfo* slot is uninitialized in standalone mode.
+//
+// `simpleName` is the class name without namespace (e.g. "MaterialInstance",
+// not "Graphics::MaterialInstance"). The helper caches per-name results in
+// a small static table to avoid re-walking the factory tree every serialize.
+//
+// Returns 0 when the Factory singleton or fn_Factory_GetTypeIdFromName is
+// not yet wired (caller should fall back to skip-validation).
+uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
+
 }  // namespace Object
 
 // Convenience macros. Expand to a static-init FactoryRegistration object.
