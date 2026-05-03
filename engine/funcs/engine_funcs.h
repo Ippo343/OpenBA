@@ -2769,6 +2769,30 @@ extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 typedef void (*fn_Graphics_Scene_AddGlobalObject_t)(void* scene, void* geometry);
 extern fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject;
 
+// Graphics::Scene::AddObject — adds a per-instance Geometry; returns id (uint).
+// RCX=Graphics::Scene*, RDX=Geometry*  ->  EAX = handle id.
+typedef unsigned int (*fn_Graphics_Scene_AddObject_t)(void* scene, void* geometry);
+extern fn_Graphics_Scene_AddObject_t fn_Graphics_Scene_AddObject;
+
+// Graphics::GraphicsMesh::GetMaterialList(int) — returns a pointer to a
+// Collection::Array<ExternalPtr<MaterialInstance>> stored at offset matIdx*0x10
+// inside GraphicsMesh+0x70. Member function returning >8B uses MS x64 ABI:
+// RCX=this(GraphicsMesh*), RDX=int matIdx → returns Array* in RAX.
+// Array layout: +0x00 = data ptr (8-byte ExternalPtrs), +0x08 = count.
+typedef void* (*fn_Graphics_GraphicsMesh_GetMaterialList_t)(void* self, int matIdx);
+extern fn_Graphics_GraphicsMesh_GetMaterialList_t fn_Graphics_GraphicsMesh_GetMaterialList;
+
+// Graphics::MeshInstance::SetMaterialInstance(int idx, ExternalPtr<MaterialInstance>)
+// Writes the 8-byte ExternalPtr value into MeshInstance+0xC8 + idx*8.
+// RCX=MeshInstance*, RDX=int, R8=ExternalPtr value (8 bytes).
+typedef void (*fn_Graphics_MeshInstance_SetMaterialInstance_t)(void* self, int idx, void* matExtPtr);
+extern fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_SetMaterialInstance;
+
+// Graphics::ParticleSystemInstance::ParticleSystemInstance() — default ctor.
+// Object size 0xe0, alignment 8.
+typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
+extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
+
 // ============================================================
 // MenuScene 3D rendering — Runtime DLL Graphics::/Math::/Volume:: functions
 // Used by code/Game/Game/menudialogloopt.cpp (Phase A scene background).

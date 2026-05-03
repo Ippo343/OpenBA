@@ -785,6 +785,10 @@ fn_AudioObjectGroup_Ctor_t fn_AudioObjectGroup_Ctor = nullptr;
 fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
 fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject = nullptr;
+fn_Graphics_Scene_AddObject_t       fn_Graphics_Scene_AddObject       = nullptr;
+fn_Graphics_GraphicsMesh_GetMaterialList_t fn_Graphics_GraphicsMesh_GetMaterialList = nullptr;
+fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_SetMaterialInstance = nullptr;
+fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
 
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
@@ -3045,15 +3049,26 @@ bool EngineFuncsInit() {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151360));
         if (dispatch) fn_SceneRemoveObject = reinterpret_cast<fn_SceneRemoveObject_t>(*dispatch);
     }
-    // Math::Transform::FromYawPitchOffset — IAT dispatch slot 0x140151288
+    // Math::Transform::FromYawPitchOffset — IAT dispatch slot 0x140151288;
+    // the slot is empty in standalone so we also fall back to ResolveExport.
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151288));
-        if (dispatch) fn_Transform_FromYawPitchOffset = reinterpret_cast<fn_Transform_FromYawPitchOffset_t>(*dispatch);
+        if (dispatch && *dispatch) {
+            fn_Transform_FromYawPitchOffset = reinterpret_cast<fn_Transform_FromYawPitchOffset_t>(*dispatch);
+        } else {
+            fn_Transform_FromYawPitchOffset = reinterpret_cast<fn_Transform_FromYawPitchOffset_t>(
+                ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
+        }
     }
-    // Graphics::Geometry::SetTransform — IAT dispatch slot 0x1401512e0
+    // Graphics::Geometry::SetTransform — IAT dispatch slot 0x1401512e0; same fallback.
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401512e0));
-        if (dispatch) fn_Geometry_SetTransform = reinterpret_cast<fn_Geometry_SetTransform_t>(*dispatch);
+        if (dispatch && *dispatch) {
+            fn_Geometry_SetTransform = reinterpret_cast<fn_Geometry_SetTransform_t>(*dispatch);
+        } else {
+            fn_Geometry_SetTransform = reinterpret_cast<fn_Geometry_SetTransform_t>(
+                ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
+        }
     }
     // Graphics::MeshInstance::UpdateHierarchy — IAT dispatch slot 0x140152888
     {
@@ -3491,6 +3506,24 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140002280));
     fn_Graphics_Scene_AddGlobalObject = reinterpret_cast<fn_Graphics_Scene_AddGlobalObject_t>(
         ResolveExport("?AddGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+    fn_Graphics_Scene_AddObject = reinterpret_cast<fn_Graphics_Scene_AddObject_t>(
+        ResolveExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z"));
+    fn_Graphics_GraphicsMesh_GetMaterialList = reinterpret_cast<fn_Graphics_GraphicsMesh_GetMaterialList_t>(
+        ResolveExport("?GetMaterialList@GraphicsMesh@Graphics@@QEBAAEBV?$Array@V?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Collection@@H@Z"));
+    fn_Graphics_MeshInstance_SetMaterialInstance = reinterpret_cast<fn_Graphics_MeshInstance_SetMaterialInstance_t>(
+        ResolveExport("?SetMaterialInstance@MeshInstance@Graphics@@QEAAXHV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@@Z"));
+    fn_Graphics_ParticleSystemInstance_Ctor = reinterpret_cast<fn_Graphics_ParticleSystemInstance_Ctor_t>(
+        ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
+    printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
+           "  Scene::AddObject              = %p\n"
+           "  GraphicsMesh::GetMaterialList = %p\n"
+           "  MeshInstance::SetMatInstance  = %p\n"
+           "  ParticleSystemInstance::Ctor  = %p\n",
+           (void*)fn_Graphics_Scene_AddObject,
+           (void*)fn_Graphics_GraphicsMesh_GetMaterialList,
+           (void*)fn_Graphics_MeshInstance_SetMaterialInstance,
+           (void*)fn_Graphics_ParticleSystemInstance_Ctor);
+    fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---
     fn_Graphics_Renderer_Ctor = reinterpret_cast<fn_Graphics_Renderer_Ctor_t>(

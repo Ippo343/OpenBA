@@ -52,6 +52,18 @@ namespace MenuDLTOff {
     constexpr uintptr_t sunLight_bb0    = 0xbb0;
     constexpr uintptr_t transform_bb8   = 0xbb8;
     constexpr uintptr_t sceneGeom_bc0   = 0xbc0;
+    // Phase B/C: dynamic arrays for static-mesh + particle instances.
+    // Layout per array: data ptr / count int / capacity int (12 bytes total
+    // but aligned to 16 in struct so each array spans .._00..0x10 bytes).
+    constexpr uintptr_t partInstArr_bd0 = 0xbd0;  // data: ParticleSystemInstance*
+    constexpr uintptr_t partInstCnt_bd8 = 0xbd8;
+    constexpr uintptr_t partInstCap_bdc = 0xbdc;
+    constexpr uintptr_t allInstArr_be0  = 0xbe0;  // data: Geometry* (mesh + particle, shared)
+    constexpr uintptr_t allInstCnt_be8  = 0xbe8;
+    constexpr uintptr_t allInstCap_bec  = 0xbec;
+    constexpr uintptr_t sceneIdArr_bf0  = 0xbf0;  // data: uint32 ids
+    constexpr uintptr_t sceneIdCnt_bf8  = 0xbf8;
+    constexpr uintptr_t sceneIdCap_bfc  = 0xbfc;
 }
 
 // Helper: read/write fields by offset (matches the project's prevailing style).
@@ -176,6 +188,209 @@ static void MenuScene_CopyTransform(void* destTransform, const void* srcTransfor
     std::memcpy(reinterpret_cast<uint8_t*>(destTransform) + 0x34,
                 reinterpret_cast<const uint8_t*>(srcTransformBlock) + 0x34,
                 0x10C - 0x34);
+}
+
+// ============================================================
+// Phase B: append-only dynamic array helpers
+// ============================================================
+// Mirrors the inline grow-and-append pattern the original uses for the
+// MenuDLT+0xbd0/+0xbe0/+0xbf0 arrays. Layout per array:
+//   data ptr  : <off+0x0> = void*
+//   count int : <off+0x8> = int32
+//   cap   int : <off+0xc> = int32
+// Growth rule: needed = count+1; if cap < needed, set cap = needed*3 (or
+// needed*1 when count was 0); MemAlloc(cap*stride, alignFromStride); copy
+// old elements; MemFree old buffer if reallocated.
+// stride must be 4 (id array) or 8 (ptr array).
+static void* AppendToDynArray(void* self, uintptr_t arrOff, size_t stride) {
+    void*    oldData  = Field<void*>(self, arrOff + 0x0);
+    int32_t  oldCount = Field<int32_t>(self, arrOff + 0x8);
+    int32_t  oldCap   = Field<int32_t>(self, arrOff + 0xC);
+    int32_t  newCount = oldCount + 1;
+
+    Field<int32_t>(self, arrOff + 0x8) = newCount;
+
+    if (oldCap < newCount) {
+        int32_t newCap = newCount;
+        if (oldCount != 0) newCap = newCount * 3;
+        Field<int32_t>(self, arrOff + 0xC) = newCap;
+        size_t bytes = static_cast<size_t>(newCap) * stride;
+        size_t align = stride;  // 4 or 8
+        void* newData = fn_MemAlloc(g_pMemAllocSingleton, bytes, align);
+        if (oldData && newData) {
+            std::memcpy(newData, oldData, static_cast<size_t>(oldCount) * stride);
+        }
+        Field<void*>(self, arrOff + 0x0) = newData;
+        if (oldData && newData != oldData && fn_MemFreeStatic) {
+            fn_MemFreeStatic(oldData);
+        }
+    }
+    // Return pointer to the new (uninitialized) slot.
+    void* data = Field<void*>(self, arrOff + 0x0);
+    return reinterpret_cast<uint8_t*>(data) + static_cast<size_t>(oldCount) * stride;
+}
+
+// ============================================================
+// Phase B: static-mesh iteration (props/buildings/foliage)
+// ============================================================
+// Mirrors the original MenuDLT::Load static-mesh loop (exe 0x14009A930). For
+// each element of MenuScene+0x30 (count=MenuScene+0x38, stride=0x20):
+//   1. Alloc 0x120-byte MeshInstance, default-construct.
+//      (Original overrides vtable[0] with PTR_EnvironmentDescription_vslot10_14015e240
+//       — we keep the default Runtime vtable; the override only changes some
+//       per-frame envmap behavior, not basic visibility.)
+//   2. Append the new instance ptr to MenuDLT+0xbe0 (shared with particles).
+//   3. Per-element setup (mirrors MenuScene_helper_3b60 at exe 0x1400a3b60):
+//      - Read elem+0x0c..0x1e (3 dwords + yaw + meshIdx + matIdx).
+//      - SetMesh(meshArray[meshIdx]) where meshArray = *(void**)(MenuScene+0x40).
+//      - Geometry::SetTransform(FromYawPitchOffset(yaw, 0, {0,0,0})).
+//      - Write inst+0x10c/0x110/0x114 from elem+0x0c/0x10/0x14.
+//      - Write inst+0x118 = g_fUVScale (1.0f from exe DAT_14017214c).
+//      - Iterate GraphicsMesh::GetMaterialList(matIdx) and call
+//        MeshInstance::SetMaterialInstance for each entry.
+//      - Vtable+0x08 (Update) called with Time(0).
+//   4. Scene::AddObject(scene, instance) → uint32 id, append to MenuDLT+0xbf0.
+void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* scene) {
+    if (!menuScene || !scene) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Graphics_MeshInstance_Ctor ||
+        !fn_Graphics_MeshInstance_SetMesh || !fn_Graphics_Scene_AddObject ||
+        !fn_Geometry_SetTransform || !fn_Transform_FromYawPitchOffset ||
+        !fn_Time_Ctor_Float) {
+        printf("[MenuDLT::PhaseB] missing required fn ptrs "
+               "(MICtor=%p MISetM=%p AddObj=%p GeomSetT=%p T_FYPO=%p TimeC=%p) — skipping\n",
+               (void*)fn_Graphics_MeshInstance_Ctor,
+               (void*)fn_Graphics_MeshInstance_SetMesh,
+               (void*)fn_Graphics_Scene_AddObject,
+               (void*)fn_Geometry_SetTransform,
+               (void*)fn_Transform_FromYawPitchOffset,
+               (void*)fn_Time_Ctor_Float);
+        return;
+    }
+
+    int32_t meshCount    = Field<int32_t>(menuScene, 0x38);
+    int32_t meshArrCount = Field<int32_t>(menuScene, 0x48);  // arr40 count (bound for meshIdx)
+    printf("[MenuDLT::PhaseB] MenuScene+0x38=%d (arr30 elems) +0x48=%d (arr40 GraphicsMesh count)\n",
+           meshCount, meshArrCount);
+    if (meshCount <= 0) {
+        printf("[MenuDLT::PhaseB] MenuScene+0x38 count=%d — no static meshes\n", meshCount);
+        return;
+    }
+
+    // The Geometry::Serialize body cursor is known to mis-align in standalone,
+    // producing wildly inflated counts (12k+). A real menu scene has well under
+    // 256 props. Cap aggressively to avoid sweeping garbage memory until the
+    // serializer alignment is fixed.
+    constexpr int32_t kSanityMax = 256;
+    if (meshCount > kSanityMax) {
+        printf("[MenuDLT::PhaseB] count=%d > %d — capping (Geometry::Serialize cursor bug)\n",
+               meshCount, kSanityMax);
+        meshCount = kSanityMax;
+    }
+
+    // Element array ptr at MenuScene+0x30 (Collection::Array data ptr).
+    uint8_t* elemArr = Field<uint8_t*>(menuScene, 0x30);
+    // GraphicsMesh ExternalPtr array data at *(MenuScene+0x40).
+    void** meshArr  = Field<void**>(menuScene, 0x40);
+    if (!elemArr || !meshArr) {
+        printf("[MenuDLT::PhaseB] elemArr=%p meshArr=%p (count=%d) — skipping\n",
+               (void*)elemArr, (void*)meshArr, meshCount);
+        return;
+    }
+
+    // g_fUVScale — exe DAT_14017214c, value 1.0f. Not registered as a slot;
+    // hardcode to avoid an extra ResolveAddr indirection.
+    constexpr float kUVScale = 1.0f;
+
+    int32_t added = 0;
+    int32_t matSlotsTotal = 0;
+    int32_t skippedBadIdx = 0;
+    for (int32_t i = 0; i < meshCount; ++i) {
+        // 1. Allocate + construct MeshInstance.
+        void* inst = fn_MemAlloc(g_pMemAllocSingleton, 0x120, 8);
+        if (!inst) continue;
+        fn_Graphics_MeshInstance_Ctor(inst);
+
+        // 2. Append to MenuDLT+0xbe0 (shared instance list).
+        void** slotPtr = reinterpret_cast<void**>(
+            AppendToDynArray(self, MenuDLTOff::allInstArr_be0, sizeof(void*)));
+        if (slotPtr) *slotPtr = inst;
+
+        // 3. Per-element setup — mirror MenuScene_helper_3b60.
+        const uint8_t* elem = elemArr + static_cast<size_t>(i) * 0x20;
+        int16_t meshIdx = *reinterpret_cast<const int16_t*>(elem + 0x1c);
+        int16_t matIdx  = *reinterpret_cast<const int16_t*>(elem + 0x1e);
+
+        // Guard against bogus meshIdx (Geometry::Serialize cursor bug — see cap above).
+        if (meshIdx < 0 || meshIdx >= meshArrCount) {
+            // Skip but don't continue — we still appended an empty inst to +0xbe0
+            // and need to add it to scene to keep id arrays in sync.
+            unsigned int id0 = fn_Graphics_Scene_AddObject(scene, inst);
+            uint32_t* idSlot0 = reinterpret_cast<uint32_t*>(
+                AppendToDynArray(self, MenuDLTOff::sceneIdArr_bf0, sizeof(uint32_t)));
+            if (idSlot0) *idSlot0 = id0;
+            ++skippedBadIdx;
+            continue;
+        }
+
+        // SetMesh(meshArray[meshIdx]) — value passed is the 8-byte ExternalPtr.
+        void* meshExtPtr = meshArr[meshIdx];
+        fn_Graphics_MeshInstance_SetMesh(inst, meshExtPtr);
+
+        // Geometry::SetTransform(FromYawPitchOffset(yaw, 0, {0,0,0})).
+        // FromYawPitchOffset is `static Transform FromYawPitchOffset(Scalar yaw, Vector3 offset)` —
+        // hidden retval ptr (RCX), RDX=&yaw, R8=&offset. Returns 28-byte Transform.
+        float yaw = *reinterpret_cast<const float*>(elem + 0x18);
+        float zeroVec[3] = {0.f, 0.f, 0.f};
+        uint8_t transformBuf[32] = {};
+        fn_Transform_FromYawPitchOffset(transformBuf, &yaw, zeroVec);
+        fn_Geometry_SetTransform(inst, transformBuf);
+
+        // Copy 3 dwords + scale into MeshInstance fields.
+        Field<uint32_t>(inst, 0x10c) = *reinterpret_cast<const uint32_t*>(elem + 0x0c);
+        Field<uint32_t>(inst, 0x110) = *reinterpret_cast<const uint32_t*>(elem + 0x10);
+        Field<uint32_t>(inst, 0x114) = *reinterpret_cast<const uint32_t*>(elem + 0x14);
+        Field<float>   (inst, 0x118) = kUVScale;
+
+        // Iterate GetMaterialList(matIdx) and SetMaterialInstance per slot.
+        if (fn_Graphics_GraphicsMesh_GetMaterialList && fn_Graphics_MeshInstance_SetMaterialInstance &&
+            meshExtPtr) {
+            // meshExtPtr is an ExternalPtr; the actual GraphicsMesh* is
+            // either the same pointer or wrapped — but the Runtime fn
+            // expects the GraphicsMesh* (it dereferences this+0x70). We pass
+            // meshExtPtr directly because the Runtime overload signature
+            // already takes the typed pointer.
+            void* matList = fn_Graphics_GraphicsMesh_GetMaterialList(meshExtPtr, matIdx);
+            if (matList) {
+                int32_t matCount = Field<int32_t>(matList, 0x08);
+                void**  matData  = Field<void**>(matList, 0x00);
+                for (int32_t m = 0; m < matCount && matData; ++m) {
+                    fn_Graphics_MeshInstance_SetMaterialInstance(inst, m, matData[m]);
+                }
+                matSlotsTotal += matCount;
+            }
+        }
+
+        // Vtable+0x08 (Update) with Time(0).
+        uint8_t timeBuf[8] = {};
+        fn_Time_Ctor_Float(timeBuf, 0.0f);
+        void** vtable = *reinterpret_cast<void***>(inst);
+        if (vtable && vtable[1]) {
+            using fn_t = void (*)(void* self, void* time);
+            reinterpret_cast<fn_t>(vtable[1])(inst, timeBuf);
+        }
+
+        // 4. Scene::AddObject + append id.
+        unsigned int id = fn_Graphics_Scene_AddObject(scene, inst);
+        uint32_t* idSlot = reinterpret_cast<uint32_t*>(
+            AppendToDynArray(self, MenuDLTOff::sceneIdArr_bf0, sizeof(uint32_t)));
+        if (idSlot) *idSlot = id;
+        ++added;
+    }
+
+    printf("[MenuDLT::PhaseB] static meshes: added=%d/%d wired=%d skipped(badIdx)=%d "
+           "(%d material slots)\n",
+           added, meshCount, added - skippedBadIdx, skippedBadIdx, matSlotsTotal);
+    fflush(stdout);
 }
 
 // ============================================================
@@ -326,12 +541,15 @@ bool MenuDialogLoopT_LoadScene_PhaseA(void* self) {
         Field<float>(self, MenuDLTOff::scrollY_b80) = Field<float>(transform, 0x2C);
     }
 
-    // Skip TradeWork (gameSettings[0x16]) and static-mesh / particle iteration —
-    // out of scope for Phase A.
+    // --- Phase B: static-mesh array iteration (props/buildings/foliage) ---
+    MenuDialogLoopT_LoadStaticMeshes_PhaseB(self, menuScene, gScene);
+
+    // Skip TradeWork (gameSettings[0x16]) and particle iteration — out of scope.
 
     printf("[MenuDLT::LoadScene] OK: renderer=%p gScene=%p sunLight=%p transform=%p "
-           "mainMesh=%p sceneGeom=%p\n",
-           renderer, gScene, sunLight, transform, mainMesh, sceneGeom);
+           "mainMesh=%p sceneGeom=%p staticMeshCount=%d\n",
+           renderer, gScene, sunLight, transform, mainMesh, sceneGeom,
+           Field<int32_t>(menuScene, 0x38));
     return true;
 }
 

@@ -25,6 +25,17 @@
 // MenuScene resource fails to load (no scene background — UI-only menu).
 bool MenuDialogLoopT_LoadScene_PhaseA(void* self);
 
+// MenuDialogLoopT_LoadStaticMeshes_PhaseB — mirror the static-mesh loop of
+// MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x30 (count =
+// MenuScene+0x38), allocate a Graphics::MeshInstance, set its mesh + transform
+// + material list, and add it to the global scene via Scene::AddObject. Result
+// is the props/buildings/foliage of the menu background.
+//
+// menuScene is the loaded MenuScene External (self+0xb90).
+// scene     is the Graphics::Scene the meshes get added to (self+0xba0).
+// No-op if either pointer is null or required fn pointers are missing.
+void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* scene);
+
 // MenuDialogLoopT_DrawScene_PhaseA — mirror the 3D `if (self+0xb90)` block of
 // MenuDLT::Draw (exe 0x14009b440). Caller invokes this BEFORE UI::Draw.
 //
