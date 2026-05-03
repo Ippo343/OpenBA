@@ -492,7 +492,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
             void* path = fn_External_GetPath(pathFn, pathBuf);
             void* found = fn_ExternalFactory_FindOrLoad(factory, path);
             if (found && typeIdResolved) {
-                fn_IsDerivedFrom(found, typeId);
+                ::Object::IsDerivedFromOrTrust(found, typeId);
             }
             // Filename returned by GetPath is a stack-local Filename; it owns
             // a System::String reference that we must release via dtor.
@@ -551,7 +551,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
                 if (innerCheck == 0) {
                     void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
                     void* result = nullptr;
-                    if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                    if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
                     }
                     *slot = result;
@@ -575,7 +575,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
                 if (innerCheck == 0) {
                     void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
                     void* result = nullptr;
-                    if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                    if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
                     }
                     *slot = result;

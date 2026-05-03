@@ -413,7 +413,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
             void* path = fn_External_GetPath(*slot, pathBuf);
             void* found = fn_ExternalFactory_FindOrLoad(factory, path);
             if (found && typeIdResolved) {
-                fn_IsDerivedFrom(found, typeId);
+                ::Object::IsDerivedFromOrTrust(found, typeId);
             }
             fn_Filename_Dtor(pathBuf);
             continue;
@@ -456,7 +456,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 if (innerCheck == 0) {
                     void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
                     void* result = nullptr;
-                    if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                    if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
                     }
                     *slot = result;
@@ -479,7 +479,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                 if (innerCheck == 0) {
                     void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
                     void* result = nullptr;
-                    if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                    if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                         result = loaded;
                     }
                     *slot = result;

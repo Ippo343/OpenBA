@@ -93,7 +93,7 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
         void* path = fn_External_GetPath(*refField, pathBuf);
         void* found = fn_ExternalFactory_FindOrLoad(factory, path);
         if (found && typeIdResolved) {
-            fn_IsDerivedFrom(found, typeId);
+            ::Object::IsDerivedFromOrTrust(found, typeId);
         }
         fn_Filename_Dtor(pathBuf);
         return;
@@ -135,7 +135,7 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
             if (innerCheck == 0) {
                 void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
                 void* result = nullptr;
-                if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                     result = loaded;
                 }
                 *refField = result;
@@ -158,7 +158,7 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
             if (innerCheck == 0) {
                 void* loaded = fn_ExternalFactory_FindOrLoad(factory, fnameBuf);
                 void* result = nullptr;
-                if (loaded && (!typeIdResolved || fn_IsDerivedFrom(loaded, typeId))) {
+                if (loaded && (!typeIdResolved || ::Object::IsDerivedFromOrTrust(loaded, typeId))) {
                     result = loaded;
                 }
                 *refField = result;

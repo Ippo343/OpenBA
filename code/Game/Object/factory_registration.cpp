@@ -117,6 +117,17 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
     return typeId;
 }
 
+bool IsDerivedFromOrTrust(void* obj, uint32_t typeId) {
+#ifdef STANDALONE_EXE
+    (void)typeId;
+    return obj != nullptr;
+#else
+    if (!obj) return false;
+    if (!fn_IsDerivedFrom) return true;  // can't validate → trust
+    return fn_IsDerivedFrom(obj, typeId);
+#endif
+}
+
 }  // namespace Object
 
 // ============================================================
