@@ -545,6 +545,27 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                              loadingLoop, "ShiningRockDLT")
                             : nullptr;
 
+                        // Pre-load each splash's own .rsc on the main thread BEFORE
+                        // MainLoop::Run starts. Boot is non-rendering (no swap chain
+                        // Present yet from gameplay code), so blocking ~56ms here is
+                        // invisible — whereas blocking those same ms inside
+                        // SplashDLT::Stub_Startup happens after Engine::Startup has
+                        // already presented at least one frame, so the user sees a
+                        // brief flash of the DX11 initial backbuffer color before
+                        // the splash appears. Loading the .rsc up front populates
+                        // m_dialogExternal so Stub_Startup's fallback synchronous
+                        // load is skipped.
+                        if (fn_DialogLoaderLoopT_Load) {
+                            if (shiningRockLoop) {
+                                printf("[GameMain] pre-loading ShiningRock.rsc\n");
+                                fn_DialogLoaderLoopT_Load(shiningRockLoop);
+                            }
+                            if (loadingLoop) {
+                                printf("[GameMain] pre-loading Loading.rsc\n");
+                                fn_DialogLoaderLoopT_Load(loadingLoop);
+                            }
+                        }
+
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.
                         // Inner LoaderLoop wraps shiningRockLoop, outer LoaderLoop
                         // wraps inner. Both use fn_LoaderLoop_Ctor with delay 0.0f

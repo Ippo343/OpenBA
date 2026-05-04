@@ -34,6 +34,8 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "renderdoc_integration.h"
+#include "stall_debug.h"
+#include "common.h"
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
@@ -182,6 +184,7 @@ void Stub_Destroy(UpdateLoop* self, int flags) {
 }
 
 void Stub_Startup(UpdateLoop* self, int64_t remainder) {
+    StallDebug::Phase startupPhase("MenuDLT::Stub_Startup");
     void* dialogExt = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Startup] self=%p remainder=%lld m_dialogExternal=%p\n",
            (void*)self, (long long)remainder, dialogExt);
@@ -213,10 +216,17 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // Loading splash has fully faded to black (alpha=1.0), so the synchronous
     // ~125ms freeze for PhaseA is invisible to the user. Failure is non-fatal —
     // the menu UI still renders without the 3D background.
-    bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+    bool sceneOk;
+    {
+        StallDebug::Phase phaseA("MenuDLT LoadScene_PhaseA (15K AddGlobalObject calls)");
+        sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+    }
     printf("[MenuDLT::Startup] LoadScene_PhaseA returned %s\n", sceneOk ? "true" : "false");
 
-    fn_DialogLoopT_Startup(self);
+    {
+        StallDebug::Phase dialogPhase("MenuDLT fn_DialogLoopT_Startup");
+        fn_DialogLoopT_Startup(self);
+    }
     void* dialogInst = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x38);
     printf("[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=%p\n",
            dialogInst);
@@ -262,6 +272,7 @@ void Stub_Shutdown(UpdateLoop* self) {
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
+    StallDebug::Tick("MenuDLT::Update");
     // Original MenuDLT::Update (exe 0x14009B6E0) does three things before tail-
     // jumping into Engine::DialogLoopT::Update:
     //   1. UI::SetCursor + Mod-update + audio pause/resume + audio update.
@@ -277,6 +288,31 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     if (tick <= 4 || (tick % 300) == 0) {
         printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
                (void*)self, time, tick);
+    }
+
+    // Clamp the first tick's dt to ~16ms. Stub_Startup blocks for ~540ms while
+    // LoadScene_PhaseA runs synchronously on the main thread; the first
+    // Update tick post-Startup gets all that accumulated time as `dt`. If we
+    // forward it as-is to fn_DialogLoopT_Update, fn_UI_Update advances the
+    // fade alpha by `dt * rate * 4 = 0.54 * -1.0 * 4 = -2.16` in a single
+    // tick, which clamps to alpha=0 immediately and skips the entire fade-in
+    // animation — the menu pops in instantly instead of revealing smoothly
+    // (visible as a flash). One-frame clamp is enough; subsequent ticks have
+    // normal small dt because the load is done.
+    int64_t origTicks = 0;
+    bool clamped = false;
+    if (tick <= 1 && time && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
+        Time* tm = reinterpret_cast<Time*>(time);
+        origTicks = tm->ticks;
+        int64_t maxTicks = *g_Timer_ticksPerSecond / 60;  // ~16.67ms
+        if (origTicks > maxTicks) {
+            tm->ticks = maxTicks;
+            clamped = true;
+            printf("[MenuDLT::Update] tick=%d dt clamped from %lld to %lld "
+                   "(%.2fms) — was post-LoadScene_PhaseA stall accumulator\n",
+                   tick, (long long)origTicks, (long long)maxTicks,
+                   (double)maxTicks * 1000.0 / (double)*g_Timer_ticksPerSecond);
+        }
     }
 
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
@@ -307,10 +343,17 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
         return false;
     }
-    return fn_DialogLoopT_Update(self, time);
+    bool result = fn_DialogLoopT_Update(self, time);
+
+    // Restore the original dt so MainLoop's frame accounting stays correct.
+    if (clamped) {
+        reinterpret_cast<Time*>(time)->ticks = origTicks;
+    }
+    return result;
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
+    StallDebug::Tick("MenuDLT::Draw");
     // Mirror original MenuDLT::Draw (exe 0x14009B440):
     //   ctx = engine_singleton->m_context   (engine+0x10)
     //   if (self+0xb90 != null) {  // MenuScene loaded

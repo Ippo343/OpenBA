@@ -3,6 +3,7 @@
 #ifdef STANDALONE_EXE
 
 #include "async_loader.h"
+#include "stall_debug.h"
 #include "UpdateLoop.h"
 #include <atomic>
 #include <cstdio>
@@ -31,12 +32,16 @@ unsigned __stdcall WorkerProc(void* param) {
     if (loop && loop->vtable && loop->vtable->Load) {
         typedef void (*LoadFn)(UpdateLoop*);
         LoadFn fn = reinterpret_cast<LoadFn>(loop->vtable->Load);
-        std::printf("[AsyncLoader] worker thread loop=%p Load=%p — start\n",
-                    (void*)loop, (void*)fn);
+        double startMs = StallDebug::NowMs();
+        std::printf("[AsyncLoader] worker thread loop=%p Load=%p — start "
+                    "(t=%.2fms)\n",
+                    (void*)loop, (void*)fn, startMs);
         std::fflush(stdout);
         fn(loop);
-        std::printf("[AsyncLoader] worker thread loop=%p — done\n",
-                    (void*)loop);
+        double endMs = StallDebug::NowMs();
+        std::printf("[AsyncLoader] worker thread loop=%p — done "
+                    "(t=%.2fms, duration=%.2fms)\n",
+                    (void*)loop, endMs, endMs - startMs);
         std::fflush(stdout);
     } else {
         std::printf("[AsyncLoader] worker thread WARN loop=%p has no Load slot\n",

@@ -32,6 +32,7 @@
 #include "MainLoop.h"
 #include "common.h"
 #include "async_loader.h"
+#include "stall_debug.h"
 #include "Game/dialogloaderloop.h"
 #include "Game/uifade.h"
 #include <cstdio>
@@ -51,6 +52,7 @@ void Stub_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Stub_Startup(UpdateLoop* self) {
+    StallDebug::Phase startupPhase("SplashDLT::Stub_Startup");
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     UpdateLoop* next = ll->m_nextLoop;
     printf("[SplashDLT::Startup] self=%p next=%p m_dialogExternal(before)=%p\n",
@@ -62,6 +64,7 @@ void Stub_Startup(UpdateLoop* self) {
     // ourselves synchronously here. Reads m_dialogFilename @ +0x48 and writes
     // the loaded External to m_dialogExternal @ +0x50.
     if (!ll->m_dialogExternal && fn_DialogLoaderLoopT_Load) {
+        StallDebug::Phase ownLoadPhase("SplashDLT own-rsc DialogLoaderLoopT::Load");
         // Bracket the load so resolve_standalone logs every exe-side resolution
         // and the bulk NullFactory marks any hits with [TRACE!]. m_dialogFilename
         // at self+0x48 is a wchar_t COW wrapper — too risky to deref blind, so
@@ -88,6 +91,7 @@ void Stub_Startup(UpdateLoop* self) {
     // completion event and run our own async loader for next->vtable->Load
     // below — see Step 3.
     if (ll->m_dialogExternal && fn_DialogLoaderLoopT_Startup) {
+        StallDebug::Phase chainPhase("SplashDLT fn_DialogLoaderLoopT_Startup");
         printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup "
                "(creates dialog + pushes to UI; Runtime Loader::Load is "
                "kicked but ignored)\n");
@@ -125,6 +129,7 @@ void Stub_Shutdown(UpdateLoop* self) {
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
+    StallDebug::Tick("SplashDLT::Update");
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     Time* dt = reinterpret_cast<Time*>(time);
 
@@ -134,9 +139,38 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // is created but never moved into the active list, so Draw walks an
     // empty list and the screen stays blank. Mirrors Runtime
     // DialogLoaderLoopT::Update @ 0x1800daf20.
+    //
+    // Clamp first-tick dt: Stub_Startup ran synchronously and may have spent
+    // 60-100ms+ doing the own-rsc load (first splash) or ~3ms (subsequent
+    // splashes). Either way, MainLoop accumulates that time and feeds it back
+    // as the first Update's dt. UI::Update advances the fade alpha by
+    // dt * rate * 4, so a 1029ms boot-to-first-frame stall (common on the
+    // very first splash because Engine::Startup + MainLoop init dominates)
+    // would clamp the reveal alpha to 0 in one tick and skip the entire
+    // fade-in animation. Limit dt to ~16ms (one 60Hz frame) on the first tick
+    // so the fade animates frame-by-frame.
+    int64_t origTicks = 0;
+    bool clamped = false;
+    if (ll->m_elapsedTicks == 0 && dt && g_Timer_ticksPerSecond &&
+        *g_Timer_ticksPerSecond > 0) {
+        origTicks = dt->ticks;
+        int64_t maxTicks = *g_Timer_ticksPerSecond / 60;
+        if (origTicks > maxTicks) {
+            dt->ticks = maxTicks;
+            clamped = true;
+            printf("[SplashDLT::Update] self=%p first-tick dt clamped from %lld "
+                   "to %lld (~16ms) — Startup stall accumulator\n",
+                   (void*)self, (long long)origTicks, (long long)maxTicks);
+        }
+    }
+
     if (fn_UI_Update) {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
         fn_UI_Update(ui, time);
+    }
+
+    if (clamped) {
+        dt->ticks = origTicks;
     }
 
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
@@ -204,6 +238,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 }
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
+    StallDebug::Tick("SplashDLT::Draw");
     (void)alpha;  // frame-blend interpolation, not the fade alpha
     // Mirror Runtime DialogLoaderLoopT::Draw (0x1800DAE20). Shared body lives in
     // code/Game/Game/dialogloaderloop.cpp; DLL-mode reaches it via Reimpl_Draw

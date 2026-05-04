@@ -15,6 +15,7 @@
 #include "runtime_funcs.h"
 #include "address_registry.h"
 #include "renderdoc_integration.h"
+#include "stall_debug.h"
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
@@ -1126,6 +1127,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
 
     printf("[Standalone] Banished Reimplementation - Standalone EXE\n");
     printf("[Standalone] Build: %s %s\n", __DATE__, __TIME__);
+
+    // Boot the stall detector so subsequent [Stall] log lines are tagged with
+    // milliseconds since boot. Used to hunt remaining splash-flash sources.
+    StallDebug::Initialize();
 
     // Probe for RenderDoc. If the exe was launched via RenderDoc's UI,
     // renderdoc.dll is already loaded into the process and we can drive

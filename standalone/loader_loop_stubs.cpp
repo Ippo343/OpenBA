@@ -31,6 +31,7 @@
 #include "address_registry.h"
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "stall_debug.h"
 #include "UpdateLoop.h"
 #include "LoaderLoop.h"
 #include <cstdio>
@@ -52,6 +53,7 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Inner_Startup(UpdateLoop* self) {
+    StallDebug::Phase phase("InnerLL::Startup");
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     printf("[InnerLL::Startup] self=%p next=%p loader=%p fn=%p\n",
            (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
@@ -68,6 +70,7 @@ void Inner_Shutdown(UpdateLoop* self) {
 }
 
 bool Inner_Update(UpdateLoop* self, void* time) {
+    StallDebug::Tick("InnerLL::Update");
     // Inner_Load is a noop in standalone (PlacementTool init is done lazily
     // from elsewhere), so there is no async work to wait for. Transition
     // immediately to next (ShiningRockSplash). The splash itself uses our
@@ -157,6 +160,7 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 }
 
 void Outer_Startup(UpdateLoop* self) {
+    StallDebug::Phase phase("OuterLL::Startup");
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     printf("[OuterLL::Startup] self=%p next=%p loader=%p fn=%p\n",
            (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
@@ -173,6 +177,7 @@ void Outer_Shutdown(UpdateLoop* self) {
 }
 
 bool Outer_Update(UpdateLoop* self, void* time) {
+    StallDebug::Tick("OuterLL::Update");
     // Outer_Load is a noop, transition immediately to InnerLL.
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     UpdateLoop* next = ll->m_nextLoop;
