@@ -31,6 +31,7 @@
 #include "DialogLoaderLoopT.h"
 #include "MainLoop.h"
 #include "common.h"
+#include "async_loader.h"
 #include "Game/dialogloaderloop.h"
 #include "Game/uifade.h"
 #include <cstdio>
@@ -81,10 +82,15 @@ void Stub_Startup(UpdateLoop* self) {
     // (0x1800db000). That function calls our vtable[+0x60] CreateDialog to
     // produce a LoaderDialog wrapping m_dialogExternal, stores it at
     // self+0x58 (m_dialogInstance), invokes the dialog's Slot4 (Setup),
-    // pushes the IBP into the UI's pending-open list at self+0x88, then
-    // calls Loader::Load on m_nextLoop.
+    // pushes the IBP into the UI's pending-open list at self+0x88, then calls
+    // Loader::Load(&_loader, m_nextLoop). The Runtime Loader thread hangs in
+    // standalone (Engine+0x6c0 audio sub-object deadlock), so we ignore its
+    // completion event and run our own async loader for next->vtable->Load
+    // below — see Step 3.
     if (ll->m_dialogExternal && fn_DialogLoaderLoopT_Startup) {
-        printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup\n");
+        printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup "
+               "(creates dialog + pushes to UI; Runtime Loader::Load is "
+               "kicked but ignored)\n");
         fn_DialogLoaderLoopT_Startup(self);
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, "
                "m_dialogInstance=%p\n", ll->m_dialogInstance);
@@ -94,26 +100,20 @@ void Stub_Startup(UpdateLoop* self) {
                (void*)fn_DialogLoaderLoopT_Startup);
     }
 
-    // Step 3: synchronously load the next loop's .rsc. DialogLoaderLoopT::Startup
-    // already called Loader::Load(loader, next), but that just signals an event
-    // — without a Loader thread we drive the next->Load() directly here so that
-    // by the time we transition, next has a valid m_dialogExternal too.
-    if (next && next->vtable && next->vtable->Load) {
-        typedef void (*LoadFn)(UpdateLoop*);
-        LoadFn loadFn = reinterpret_cast<LoadFn>(next->vtable->Load);
-        printf("[SplashDLT::Startup] invoking next->vtable->Load(%p) at %p\n",
-               (void*)next, (void*)loadFn);
-        loadFn(next);
-        printf("[SplashDLT::Startup] next->Load returned\n");
+    // Step 3: kick our standalone async loader on next->vtable->Load. This
+    // replaces the Runtime Engine::Loader thread (which hangs in standalone
+    // mode). The worker thread runs MenuDLT::Load (or LoadingSplash::Load
+    // etc.) in parallel with this splash's Update/Draw, so the splash
+    // animation no longer freezes for ~125ms while MenuDLT::Load runs.
+    // Stub_Update gates the transition on AsyncLoader::IsAsyncLoadBusy().
+    if (next) {
+        AsyncLoader::StartAsyncLoad(next);
     }
 
-    // Trigger reveal AFTER all synchronous loads complete (DialogLoaderLoopT::
-    // Load + Startup + next->Load = MenuDLT::Load can take 100ms+). If we
-    // triggered before, the first Stub_Update post-Startup gets a huge
-    // accumulated dt that advances alpha far past 1.0 in a single tick (e.g.
-    // alpha=1.0 → 0.667 in one frame, causing a visible sudden-reveal flash
-    // instead of a smooth animation). Triggering AFTER means the first Update
-    // tick has a normal small dt and the reveal animates frame-by-frame.
+    // Trigger reveal. With async loading, only Step 1's own-rsc load is
+    // synchronous (~10ms for ShiningRock/Loading splashes; usually skipped
+    // because m_dialogExternal was populated by an upstream load). The reveal
+    // gets a normal first-tick dt and animates frame-by-frame.
     void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
@@ -162,6 +162,21 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
         float alpha = UIFade::GetCurrentAlpha(ui);
         if (alpha < 0.99f) {
+            return true;
+        }
+
+        // Wait for our async loader worker to finish loading m_nextLoop's
+        // resources before transitioning. AsyncLoader::StartAsyncLoad was
+        // called from Stub_Startup with `next` as its argument; the worker
+        // thread runs `next->vtable->Load(next)` and flips a done flag.
+        // (We bypass the Runtime g_pLoaderFlags because the Runtime Loader
+        // thread hangs internally on Engine+0x6c0 audio access in standalone.)
+        if (AsyncLoader::IsAsyncLoadBusy()) {
+            static int waitCount = 0;
+            if ((waitCount++ % 30) == 0) {
+                printf("[SplashDLT::Update] self=%p fade=%.3f waiting for "
+                       "AsyncLoader\n", (void*)self, alpha);
+            }
             return true;
         }
 

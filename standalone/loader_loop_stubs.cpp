@@ -68,6 +68,10 @@ void Inner_Shutdown(UpdateLoop* self) {
 }
 
 bool Inner_Update(UpdateLoop* self, void* time) {
+    // Inner_Load is a noop in standalone (PlacementTool init is done lazily
+    // from elsewhere), so there is no async work to wait for. Transition
+    // immediately to next (ShiningRockSplash). The splash itself uses our
+    // standalone AsyncLoader for its own next-loop load.
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     UpdateLoop* next = ll->m_nextLoop;
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
@@ -75,9 +79,6 @@ bool Inner_Update(UpdateLoop* self, void* time) {
            (void*)self, time, (void*)next, mainLoop);
     if (next && fn_MainLoop_SetNextLoop && mainLoop) {
         fn_MainLoop_SetNextLoop(mainLoop, next);
-    } else {
-        printf("[InnerLL::Update] WARN: cannot transition (next=%p fn=%p ml=%p)\n",
-               (void*)next, (void*)fn_MainLoop_SetNextLoop, mainLoop);
     }
     self->m_loadBit = -1;
     return false;
@@ -172,6 +173,7 @@ void Outer_Shutdown(UpdateLoop* self) {
 }
 
 bool Outer_Update(UpdateLoop* self, void* time) {
+    // Outer_Load is a noop, transition immediately to InnerLL.
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     UpdateLoop* next = ll->m_nextLoop;
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
@@ -179,9 +181,6 @@ bool Outer_Update(UpdateLoop* self, void* time) {
            (void*)self, time, (void*)next, mainLoop);
     if (next && fn_MainLoop_SetNextLoop && mainLoop) {
         fn_MainLoop_SetNextLoop(mainLoop, next);
-    } else {
-        printf("[OuterLL::Update] WARN: cannot transition (next=%p fn=%p ml=%p)\n",
-               (void*)next, (void*)fn_MainLoop_SetNextLoop, mainLoop);
     }
     self->m_loadBit = -1;
     return false;

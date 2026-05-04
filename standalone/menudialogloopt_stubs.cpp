@@ -203,6 +203,19 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
                "(would crash in DialogInstance ctor)\n");
         return;
     }
+
+    // Phase A: load Game/MenuScene/SceneN.rsc + allocate Renderer/Scene/SunLight/
+    // Transform/MeshInstance + add 15K static meshes / 123 particle instances to
+    // the global scene list. Runs on the MAIN thread here (not on the AsyncLoader
+    // worker) because Graphics_Scene_AddGlobalObject is not thread-safe — running
+    // it on a worker leaves the scene's slot table with torn vtable pointers,
+    // crashing Scene::Clean on the first Update tick. We get here only after the
+    // Loading splash has fully faded to black (alpha=1.0), so the synchronous
+    // ~125ms freeze for PhaseA is invisible to the user. Failure is non-fatal —
+    // the menu UI still renders without the 3D background.
+    bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+    printf("[MenuDLT::Startup] LoadScene_PhaseA returned %s\n", sceneOk ? "true" : "false");
+
     fn_DialogLoopT_Startup(self);
     void* dialogInst = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x38);
     printf("[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=%p\n",
@@ -378,10 +391,17 @@ void Stub_Load(UpdateLoop* self) {
     // Original MenuDLT::Load (exe 0x14009A930) tail-calls Engine::DialogLoopT::Load
     // first to populate self+0x30 (m_dialogExternal) from m_dialogFilename
     // ("Dialog\MainMenu.rsc"), then loads companion resources (Audio/Music/Menu.rsc,
-    // Game/MenuScene/SceneN.rsc) for the 3D menu background. We delegate the base
-    // Load to Engine::DialogLoopT, then run Phase A scene allocation for the menu
-    // background. Audio music + TradeWork + static-mesh + particle iteration are
-    // out of Phase A scope.
+    // Game/MenuScene/SceneN.rsc) for the 3D menu background.
+    //
+    // In standalone, this Stub_Load runs on the AsyncLoader worker thread (kicked
+    // by Loading splash's Stub_Startup). Only thread-safe work goes here:
+    // fn_DialogLoopT_Load is safe (it's a single-call resource load with internal
+    // refcounting). MenuDialogLoopT_LoadScene_PhaseA is NOT — it iterates 15K+
+    // calls to Graphics_Scene_AddGlobalObject which mutates global scene state in
+    // a way that produced corrupted vtable reads on first Update tick when run on
+    // a worker thread. The PhaseA scene allocation has been moved to Stub_Startup
+    // (main thread, runs while screen is fully faded to black so the freeze is
+    // invisible to the user — see Stub_Startup below).
     void* dialogExtBefore = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Load] self=%p m_dialogExternal(before)=%p\n", (void*)self, dialogExtBefore);
     if (!fn_DialogLoopT_Load) {
@@ -390,13 +410,8 @@ void Stub_Load(UpdateLoop* self) {
     }
     fn_DialogLoopT_Load(self);
     void* dialogExtAfter = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
-    printf("[MenuDLT::Load] m_dialogExternal(after)=%p\n", dialogExtAfter);
-
-    // Phase A: load Game/MenuScene/SceneN.rsc + allocate Renderer/Scene/SunLight/
-    // Transform/MeshInstance and add to global scene list. Failure is non-fatal —
-    // the menu UI still renders without the 3D background.
-    bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
-    printf("[MenuDLT::Load] LoadScene_PhaseA returned %s\n", sceneOk ? "true" : "false");
+    printf("[MenuDLT::Load] m_dialogExternal(after)=%p (PhaseA deferred to Startup)\n",
+           dialogExtAfter);
 }
 
 void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {
