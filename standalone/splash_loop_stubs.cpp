@@ -154,6 +154,9 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     if (ll->m_elapsedTicks == 0 && dt && g_Timer_ticksPerSecond &&
         *g_Timer_ticksPerSecond > 0) {
         origTicks = dt->ticks;
+        double dtMs = (double)origTicks * 1000.0 / (double)*g_Timer_ticksPerSecond;
+        printf("[SplashDLT::Update] self=%p first-tick dt=%lld (%.2fms)\n",
+               (void*)self, (long long)origTicks, dtMs);
         int64_t maxTicks = *g_Timer_ticksPerSecond / 60;
         if (origTicks > maxTicks) {
             dt->ticks = maxTicks;

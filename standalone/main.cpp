@@ -83,8 +83,6 @@ static void ResetVideoRegistry() {
                        reinterpret_cast<const BYTE*>(val), bytes);
     };
 
-    // Force fullscreen — uses VideoWidth/Height (the desktop dims captured by
-    // the original game's first run) and side-steps the corrupted Window* keys.
     setStr(L"VideoWindowWidth",  L"1280");
     setStr(L"VideoWindowHeight", L"720");
     setStr(L"VideoWindowX",      L"100");
@@ -95,11 +93,19 @@ static void ResetVideoRegistry() {
     // BeginFrame returning false → MenuDLT::DrawFailed loop.
     setStr(L"VideoInterface", L"1");
 
-    setStr(L"VideoSettings",   L"true");
-    setStr(L"VideoFullscreen", L"true");
+    setStr(L"VideoSettings", L"true");
+
+    // Windowed-mode toggle — flip to "false" for windowed (DWM-composited),
+    // "true" for exclusive fullscreen. Used to A/B test whether splash flashes
+    // come from DWM compositor invalidating the window during ~125ms+ stalls.
+    // Windowed mode keeps DWM in the loop (so any DWM-paint glitches show);
+    // fullscreen bypasses DWM (so any glitches must come from our code).
+    const wchar_t* fullscreen = L"false";  // <-- change to L"true" to revert
+    setStr(L"VideoFullscreen", fullscreen);
 
     RegCloseKey(hKey);
-    printf("[Standalone] ResetVideoRegistry: VideoSettings=true VideoFullscreen=true VideoInterface=1 Window=1280x720 (all REG_SZ)\n");
+    printf("[Standalone] ResetVideoRegistry: VideoSettings=true VideoFullscreen=%ls "
+           "VideoInterface=1 Window=1280x720 (all REG_SZ)\n", fullscreen);
 }
 
 // ============================================================
@@ -986,9 +992,30 @@ static void ForceVideoContextReset(const char* tag) {
     fflush(stdout);
 }
 
+// Swap the engine's window-class background brush from the default WHITE_BRUSH
+// to a black brush, so the brief moment between window creation and the first
+// DX11 Present doesn't show as a white flash. We do this once on the first
+// engine-window message we observe in CallWndProcHook (don't have access to
+// the HWND any earlier, since the Runtime DLL creates the window).
+static void EnsureBlackWindowBrush(HWND hwnd) {
+    static bool done = false;
+    if (done || !hwnd) return;
+    HBRUSH black = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    if (!black) return;
+    HBRUSH old = (HBRUSH)SetClassLongPtrW(hwnd, GCLP_HBRBACKGROUND, (LONG_PTR)black);
+    InvalidateRect(hwnd, nullptr, TRUE);  // force a repaint with the new brush
+    UpdateWindow(hwnd);
+    done = true;
+    printf("[Standalone] Swapped window class background brush from %p to "
+           "BLACK_BRUSH (%p) on hwnd=%p\n", (void*)old, (void*)black, (void*)hwnd);
+}
+
 static LRESULT CALLBACK CallWndProcHook(int code, WPARAM wParam, LPARAM lParam) {
     if (code >= 0) {
         auto* msg = reinterpret_cast<CWPSTRUCT*>(lParam);
+        // Swap the class brush on the first message we ever see (any window).
+        // The engine's main HWND is whichever one gets messages first.
+        EnsureBlackWindowBrush(msg->hwnd);
         if (const char* name = WMNameForFocus(msg->message)) {
             printf("[WndMsg] %-20s hwnd=%p w=%llx l=%llx\n",
                    name, (void*)msg->hwnd,
@@ -1131,6 +1158,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     // Boot the stall detector so subsequent [Stall] log lines are tagged with
     // milliseconds since boot. Used to hunt remaining splash-flash sources.
     StallDebug::Initialize();
+    // 16ms threshold catches anything that would drop a frame at 60Hz.
+    StallDebug::SetStallThresholdMs(16.0);
 
     // Probe for RenderDoc. If the exe was launched via RenderDoc's UI,
     // renderdoc.dll is already loaded into the process and we can drive
