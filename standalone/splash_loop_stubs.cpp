@@ -32,6 +32,7 @@
 #include "MainLoop.h"
 #include "common.h"
 #include "async_loader.h"
+#include "chunked_scene_loader.h"
 #include "stall_debug.h"
 #include "Game/dialogloaderloop.h"
 #include "Game/uifade.h"
@@ -109,7 +110,13 @@ void Stub_Startup(UpdateLoop* self) {
     // mode). The worker thread runs MenuDLT::Load (or LoadingSplash::Load
     // etc.) in parallel with this splash's Update/Draw, so the splash
     // animation no longer freezes for ~125ms while MenuDLT::Load runs.
-    // Stub_Update gates the transition on AsyncLoader::IsAsyncLoadBusy().
+    // Stub_Update gates the transition on AsyncLoader::IsAsyncLoadBusy()
+    // and ChunkedSceneLoader::IsBusy().
+    //
+    // Note: ChunkedSceneLoader::Init has already run during boot (from
+    // RunGameMain in code/Game/Game/game_main.cpp), so MenuDLT struct
+    // fields (+0xb90 menuScene, +0xb98 renderer, etc.) are populated and
+    // PhaseB chunks are ready to be Tick()'d in Stub_Update below.
     if (next) {
         AsyncLoader::StartAsyncLoad(next);
     }
@@ -176,6 +183,19 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         dt->ticks = origTicks;
     }
 
+    // Drive the chunked scene loader. Each tick processes ~500 PhaseB
+    // elements (~17ms of work, well within a 60Hz frame budget) so the
+    // splash's loading animation keeps moving while the heavy 12K-15K
+    // static-mesh iteration runs in the background. When the chunk
+    // function reports done, ChunkedSceneLoader::Tick auto-runs LoadSceneA3
+    // (particles) and clears IsBusy() — the transition gate below waits
+    // on this in addition to AsyncLoader::IsAsyncLoadBusy().
+    if (ChunkedSceneLoader::IsBusy()) {
+        StallDebug::Phase phase("SplashDLT ChunkedSceneLoader::Tick");
+        int processed = ChunkedSceneLoader::Tick(500);
+        (void)processed;
+    }
+
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
     Sleep(14);
 
@@ -213,6 +233,20 @@ bool Stub_Update(UpdateLoop* self, void* time) {
             if ((waitCount++ % 30) == 0) {
                 printf("[SplashDLT::Update] self=%p fade=%.3f waiting for "
                        "AsyncLoader\n", (void*)self, alpha);
+            }
+            return true;
+        }
+
+        // Also wait for the chunked scene loader to finish PhaseB+A3.
+        // Only active when next was the terminal MenuDLT (Init runs from
+        // Stub_Startup gated on m_nextLoop==nullptr). Without this gate,
+        // the splash transitions before chunking completes and MenuDLT
+        // would have to finish synchronously — re-introducing the freeze.
+        if (ChunkedSceneLoader::IsBusy()) {
+            static int waitCount = 0;
+            if ((waitCount++ % 30) == 0) {
+                printf("[SplashDLT::Update] self=%p fade=%.3f waiting for "
+                       "ChunkedSceneLoader\n", (void*)self, alpha);
             }
             return true;
         }

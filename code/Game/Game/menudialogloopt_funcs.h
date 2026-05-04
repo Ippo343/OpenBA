@@ -13,9 +13,13 @@
 // calls and the helper_a3a0/+0xb7c/+0xb80 transform copy. Skips:
 //   - Audio/Music/Menu.rsc load (audio music ext stored at self+0xb88).
 //   - TradeWork (gameSettings[0x16] gated DLC).
-//   - Static-mesh array iteration (Phase B).
-//   - Particle-system iteration (Phase C).
 //   - The exe-side vtable overrides (PTR_FUN_14015e290, _vslot10_14015e240).
+//
+// SYNCHRONOUS all-in-one entry point used by DLL mode and the standalone
+// Stub_Startup fallback path. It internally calls LoadSceneA1 +
+// LoadStaticMeshes_PhaseB + LoadSceneA3 in sequence (~542ms blocking).
+// Standalone's Loading splash drives those three pieces independently to
+// chunk PhaseB across multiple Update ticks (see ChunkedSceneLoader).
 //
 // Caller must already have invoked Engine::DialogLoopT::Load (which populates
 // self+0x30 with the dialog External). On entry self+0xb90 is expected to be
@@ -25,16 +29,69 @@
 // MenuScene resource fails to load (no scene background — UI-only menu).
 bool MenuDialogLoopT_LoadScene_PhaseA(void* self);
 
+// MenuDialogLoopT_LoadSceneA1 — pre-PhaseB block of MenuDLT::Load. Loads the
+// random Game/MenuScene/SceneN.rsc, allocates the 5 scene-graph objects
+// (Renderer/Scene/SunLight/Transform/MeshInstance, ~10ms), wires the main
+// mesh, adds the 3 global objects, copies the deserialized transform.
+//
+// Cheap (~10ms) — does NOT iterate the 12K-15K-element static-mesh array.
+// Standalone calls this from the Loading splash's Stub_Startup so the
+// MenuScene External + scene-graph fields are populated before chunked
+// PhaseB starts; DLL mode reaches it through LoadScene_PhaseA above.
+//
+// Returns true on success, false if the MenuScene resource fails to load.
+bool MenuDialogLoopT_LoadSceneA1(void* self);
+
+// MenuDialogLoopT_LoadSceneA3 — post-PhaseB particle iteration wrapper.
+// Reads menuScene/scene from MenuDLT struct fields and calls
+// LoadParticles_PhaseC. Thin wrapper for symmetry with LoadSceneA1.
+void MenuDialogLoopT_LoadSceneA3(void* self);
+
 // MenuDialogLoopT_LoadStaticMeshes_PhaseB — mirror the static-mesh loop of
 // MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x30 (count =
 // MenuScene+0x38), allocate a Graphics::MeshInstance, set its mesh + transform
 // + material list, and add it to the global scene via Scene::AddObject. Result
 // is the props/buildings/foliage of the menu background.
 //
+// SYNCHRONOUS all-in-one wrapper for DLL mode. Internally calls
+// PhaseB_InitState + PhaseB_TickChunk(totalCount) which processes every
+// element in a single call (~542ms blocking on the main thread).
+//
 // menuScene is the loaded MenuScene External (self+0xb90).
 // scene     is the Graphics::Scene the meshes get added to (self+0xba0).
 // No-op if either pointer is null or required fn pointers are missing.
 void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* scene);
+
+// PhaseB chunked-iteration state. Captured by InitState; advanced by
+// TickChunk one chunk at a time. Standalone uses this to spread the 542ms
+// loop across multiple Loading splash Update ticks so the splash animation
+// keeps running smoothly instead of freezing for a single long block.
+struct MenuDialogLoopT_PhaseBState {
+    void*    self;            // MenuDLT* — receives appended array data
+    void*    menuScene;       // MenuScene External (loaded by LoadSceneA1)
+    void*    scene;           // Graphics::Scene the meshes get added to
+    uint8_t* elemArr;         // MenuScene+0x30 — element array data ptr
+    void**   meshArr;         // MenuScene+0x40 — GraphicsMesh ExternalPtr array
+    int32_t  meshArrCount;    // MenuScene+0x48 — bound for meshIdx
+    int32_t  totalCount;      // MenuScene+0x38 — total elements (snapshot)
+    int32_t  index;           // current iteration index (0..totalCount)
+    // Stats — accumulated across chunks, printed on completion.
+    int32_t  added;
+    int32_t  skippedBadIdx;
+    int32_t  matSlotsTotal;
+};
+
+// Initialize a chunked-loop state. Validates fn pointers + array bounds.
+// Sets state->totalCount=0 on any failure so PhaseB_TickChunk early-exits.
+// Caller checks (state->totalCount > 0) to confirm work needs doing.
+void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
+                                      void* self, void* menuScene, void* scene);
+
+// Process up to maxElements elements of the PhaseB iteration. Returns the
+// number of elements processed this call. Returns 0 when the loop has fully
+// completed (state->index == state->totalCount). Caller drives this across
+// multiple Update ticks.
+int32_t MenuDialogLoopT_PhaseB_TickChunk(MenuDialogLoopT_PhaseBState* state, int32_t maxElements);
 
 // MenuDialogLoopT_LoadParticles_PhaseC — mirror the particle loop of
 // MenuDLT::Load (exe 0x14009A930). For each element of MenuScene+0x50 (count =

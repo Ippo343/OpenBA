@@ -48,6 +48,14 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded();
 // Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
 // type, invokes its factory, validates vtable + ctor-set field defaults.
 extern "C" void RunStartupSelfTests();
+
+// Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
+// MenuDialogLoopT_LoadSceneA1 (~10ms — small allocs + one .rsc load) inline
+// and captures the chunked PhaseB iteration state. We invoke this during
+// boot so the heavy iteration can be ticked across the Loading splash's
+// Update frames (driven from splash_loop_stubs.cpp Stub_Update). Boot is
+// non-rendering, so the synchronous A1 cost is invisible.
+#include "chunked_scene_loader.h"
 #endif
 
 // ============================================================
@@ -564,6 +572,21 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                                 printf("[GameMain] pre-loading Loading.rsc\n");
                                 fn_DialogLoaderLoopT_Load(loadingLoop);
                             }
+                        }
+
+                        // Pre-run MenuDLT's LoadSceneA1 here in boot. Boot is
+                        // non-rendering (no swap chain Present yet from
+                        // gameplay code), so the ~10ms A1 cost is invisible.
+                        // After this, MenuDLT struct fields (+0xb90 menuScene,
+                        // +0xb98 renderer, etc.) are populated; the Loading
+                        // splash's Stub_Update will Tick(500) the chunked
+                        // PhaseB iteration each frame so the splash keeps
+                        // animating while the heavy 12K-15K static-mesh loop
+                        // runs in chunks. (Driving Init from the splash
+                        // crashed inside VideoDX11 — see splash_loop_stubs.cpp.)
+                        if (menuLoop) {
+                            printf("[GameMain] pre-running ChunkedSceneLoader::Init for MenuDLT\n");
+                            ChunkedSceneLoader::Init(menuLoop);
                         }
 
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.

@@ -207,21 +207,28 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
         return;
     }
 
-    // Phase A: load Game/MenuScene/SceneN.rsc + allocate Renderer/Scene/SunLight/
-    // Transform/MeshInstance + add 15K static meshes / 123 particle instances to
-    // the global scene list. Runs on the MAIN thread here (not on the AsyncLoader
-    // worker) because Graphics_Scene_AddGlobalObject is not thread-safe — running
-    // it on a worker leaves the scene's slot table with torn vtable pointers,
-    // crashing Scene::Clean on the first Update tick. We get here only after the
-    // Loading splash has fully faded to black (alpha=1.0), so the synchronous
-    // ~125ms freeze for PhaseA is invisible to the user. Failure is non-fatal —
-    // the menu UI still renders without the 3D background.
-    bool sceneOk;
-    {
-        StallDebug::Phase phaseA("MenuDLT LoadScene_PhaseA (15K AddGlobalObject calls)");
-        sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+    // Phase A: by the time MenuDLT activates, the Loading splash's
+    // ChunkedSceneLoader has already run LoadSceneA1 + chunked PhaseB +
+    // LoadSceneA3 (driven from splash_loop_stubs.cpp Stub_Startup +
+    // Stub_Update across the splash's display period). MenuDLT::Stub_Startup
+    // just confirms the work was done and falls back to synchronous
+    // LoadScene_PhaseA recovery if some boot path skipped the splash chain
+    // (e.g. direct MenuDLT entry from a debug harness).
+    void* menuSceneExt = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(self) + 0xb90);
+    if (!menuSceneExt) {
+        printf("[MenuDLT::Startup] WARN: scene fields empty (Loading splash "
+               "didn't run ChunkedSceneLoader) — falling back to synchronous "
+               "LoadScene_PhaseA\n");
+        StallDebug::Phase phaseA("MenuDLT LoadScene_PhaseA fallback");
+        bool sceneOk = MenuDialogLoopT_LoadScene_PhaseA(self);
+        printf("[MenuDLT::Startup] fallback LoadScene_PhaseA returned %s\n",
+               sceneOk ? "true" : "false");
+    } else {
+        printf("[MenuDLT::Startup] scene already populated by Loading "
+               "splash ChunkedSceneLoader (menuScene=%p) — skipping "
+               "LoadScene_PhaseA\n", menuSceneExt);
     }
-    printf("[MenuDLT::Startup] LoadScene_PhaseA returned %s\n", sceneOk ? "true" : "false");
 
     {
         StallDebug::Phase dialogPhase("MenuDLT fn_DialogLoopT_Startup");
@@ -263,6 +270,8 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // Trigger Startup-reveal fade — instant black -> animated reveal over ~0.25s.
     // Without this, the splash->menu transition hard-cuts. The original calls
     // SetFullscreenFade twice from OptionsDialog_impl_8fa0 in the same shape.
+    // Chunked PhaseB completed during the Loading splash, so the scene is
+    // fully populated by now — we can fade in immediately.
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
 }
