@@ -369,13 +369,24 @@ static void EnsureInit() {
         ResolveAddr(Module::Exe, 0x1401026a0));
     fn_PlayerController_CalcTransform = reinterpret_cast<fn_PlayerController_CalcTransform_t>(
         ResolveAddr(Module::Exe, 0x1400983f0));
-    // AchievementInstance methods — indirect via .rdata dispatch tables in exe
-    fn_AchievementInstance_Update = *reinterpret_cast<fn_AchievementInstance_Update_t*>(
-        ResolveAddr(Module::Exe, 0x140152058));
-    fn_AchievementInstance_IsMet = *reinterpret_cast<fn_AchievementInstance_IsMet_t*>(
-        ResolveAddr(Module::Exe, 0x140152048));
-    fn_AchievementInstance_HasFailed = *reinterpret_cast<fn_AchievementInstance_HasFailed_t*>(
-        ResolveAddr(Module::Exe, 0x140152060));
+    // AchievementInstance methods — indirect via .rdata dispatch tables in exe.
+    // In standalone these dispatch slots are unregistered, so ResolveAddr returns
+    // 0; guard the deref (a NULL slot crashed EnsureInit on the New Game path,
+    // since EnsureInit runs from every GameUpdateLoop vtable method). A NULL fn
+    // pointer is fine here — CHECK_FN only warns, and every call site is gated by
+    // the m_game==null world guards (and the new-game path skips AchievementInstance
+    // entirely). Registering these slots properly is M5 work.
+    {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152058);
+        fn_AchievementInstance_Update = slot
+            ? *reinterpret_cast<fn_AchievementInstance_Update_t*>(slot) : nullptr;
+        slot = ResolveAddr(Module::Exe, 0x140152048);
+        fn_AchievementInstance_IsMet = slot
+            ? *reinterpret_cast<fn_AchievementInstance_IsMet_t*>(slot) : nullptr;
+        slot = ResolveAddr(Module::Exe, 0x140152060);
+        fn_AchievementInstance_HasFailed = slot
+            ? *reinterpret_cast<fn_AchievementInstance_HasFailed_t*>(slot) : nullptr;
+    }
     fn_QuickSave = reinterpret_cast<fn_QuickSave_t>(
         ResolveAddr(Module::Exe, 0x140095da0));
     fn_CalcWindFactor = reinterpret_cast<fn_CalcWindFactor_t>(
@@ -434,9 +445,13 @@ static void EnsureInit() {
         ResolveAddr(Module::Exe, 0x140095750));
 
     // Runtime function pointers (resolved by mangled name)
-    // AnimationManager::Update — indirect via .rdata dispatch at 0x140152050
-    fn_AnimationManager_Update = *reinterpret_cast<fn_AnimationManager_Update_t*>(
-        ResolveAddr(Module::Exe, 0x140152050));
+    // AnimationManager::Update — indirect via .rdata dispatch at 0x140152050.
+    // Same standalone-unregistered guard as the AchievementInstance slots above.
+    {
+        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152050);
+        fn_AnimationManager_Update = slot
+            ? *reinterpret_cast<fn_AnimationManager_Update_t*>(slot) : nullptr;
+    }
     // Runtime functions — resolved via ResolveExport (by mangled name)
     // These resolve directly to Runtime-x64.dll function addresses.
     fn_UI_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
@@ -554,6 +569,26 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 
 extern "C"
 bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
+    // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
+    // in-game world build) is not yet implemented, so on the new-game path
+    // m_game (+0xF8) is still null when the loader chain transitions in. Every
+    // step below dereferences the unbuilt world, AND EnsureInit() below resolves
+    // dispatch slots (e.g. 0x140152058 = AchievementInstance::Update) that are
+    // unregistered in standalone and null-deref. So this guard MUST run before
+    // EnsureInit. Hold with a no-op tick until Load runs — remove once Load
+    // constructs the world (project_newgame_path_roadmap Stage C). The STAGE C
+    // marker has already fired by this point.
+    if (self->m_game == nullptr) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            fprintf(stderr, "[GameUpdateLoop::Update] world not built "
+                    "(m_game==null) — Stage C cliff, holding (no-op tick)\n");
+            fflush(stderr);
+        }
+        return true;
+    }
+
     EnsureInit();
 
     s_frameNum++;
@@ -903,6 +938,21 @@ post_simulation:
 
 extern "C"
 void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
+    // Stage C entry guard (TEMPORARY): see GameUpdateLoop_Update — must run
+    // before EnsureInit (which null-derefs an unregistered dispatch slot in
+    // standalone). m_game is null until GameUpdateLoop::Load builds the world;
+    // the draw path dereferences the unbuilt world (UI, renderer, scenes).
+    if (self->m_game == nullptr) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            fprintf(stderr, "[GameUpdateLoop::Draw] world not built "
+                    "(m_game==null) — Stage C cliff, skipping draw\n");
+            fflush(stderr);
+        }
+        return;
+    }
+
     EnsureInit();
 
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
@@ -1078,6 +1128,22 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
 extern "C"
 void GameUpdateLoop_Startup(GameUpdateLoop* self) {
+    // Stage C entry guard (TEMPORARY): see GameUpdateLoop_Update — must run
+    // before EnsureInit (which null-derefs an unregistered dispatch slot in
+    // standalone). On the new-game path m_game (+0xF8) is null until
+    // GameUpdateLoop::Load builds the world; Startup dereferences m_userInterface
+    // (+0x98, also null) below. Skip cleanly until Load is implemented.
+    if (self->m_game == nullptr) {
+        static bool logged = false;
+        if (!logged) {
+            logged = true;
+            fprintf(stderr, "[GameUpdateLoop::Startup] world not built "
+                    "(m_game==null) — Stage C cliff, skipping startup\n");
+            fflush(stderr);
+        }
+        return;
+    }
+
     EnsureInit();
 
     TRACE("[GameUpdateLoop::Startup] ENTER (self=%p)\n", (void*)self);
@@ -1224,6 +1290,18 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     EnsureInit();
 
     TRACE("[GameUpdateLoop::Shutdown] ENTER (self=%p)\n", (void*)self);
+
+    // Stage C entry guard (TEMPORARY): on the new-game path the world was never
+    // built (GameUpdateLoop::Load is a stub), so m_game (+0xF8) is null and the
+    // teardown below dereferences unbuilt subsystems (m_entityUI, m_userInterface,
+    // m_audioScene, m_citizenList). Nothing was constructed, so there is nothing
+    // to tear down — return. (Destroy still runs afterward to free the loop.)
+    if (self->m_game == nullptr) {
+        fprintf(stderr, "[GameUpdateLoop::Shutdown] world not built (m_game==null) "
+                "— Stage C cliff, nothing to tear down\n");
+        fflush(stderr);
+        return;
+    }
 
     // Clear achievement event handler
     TRACE("[GameUpdateLoop::Shutdown] clearing achievement event handler...\n");

@@ -439,6 +439,35 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         MenuDialogLoopT_TickAudio(time);
     }
 
+    // Stage C entry: poll the pending-next-loop written by NewGameDialog::
+    // StartGame's SetDialogLoaderNextLoop (MenuDLT+0xb68). Once the fullscreen
+    // fade-to-black settles (UI fade RATE at self+0x130 == UI(+0x40)+0xF0 == 0.0),
+    // advance the MainLoop to the queued loader chain (outer LoaderLoop ->
+    // GameLoadDialogLoopT -> AsyncLoader -> GameUpdateLoop::Load). Mirrors retail
+    // MenuDialogLoopT::Update (exe 0x14009b6e0) and our own GameUpdateLoop::Update
+    // transition (gameupdateloop.cpp:886). Without this the menu loop never
+    // advances and we never reach the in-game world build. Done BEFORE the
+    // DialogLoopT::Update tail-call, matching retail ordering (reads the fade
+    // state the prior tick's UI::Update settled).
+    {
+        void* pendingLoop = *(void**)(reinterpret_cast<uintptr_t>(self) + 0xb68);
+        float fadeRate    = *(float*)(reinterpret_cast<uintptr_t>(self) + 0x130);
+        if (pendingLoop && fadeRate == 0.0f) {
+            void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
+            fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
+                    "fade settled (rate=0) -> MainLoop::SetNextLoop\n", pendingLoop);
+            fflush(stderr);
+            if (fn_MainLoop_SetNextLoop && mainLoop) {
+                fn_MainLoop_SetNextLoop(mainLoop, pendingLoop);
+            } else {
+                fprintf(stderr, "[MenuDLT::Update] WARN: cannot advance "
+                        "(fn_MainLoop_SetNextLoop=%p mainLoop=%p)\n",
+                        (void*)fn_MainLoop_SetNextLoop, mainLoop);
+                fflush(stderr);
+            }
+        }
+    }
+
     if (!fn_DialogLoopT_Update) {
         printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
         return false;
