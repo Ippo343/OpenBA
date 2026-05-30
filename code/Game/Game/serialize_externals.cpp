@@ -213,3 +213,29 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
                                 typeIdPtr, "Weather");
 }
+
+// ============================================================
+// 0x14000bf40 — Object::ExternalPtr<StringTable>::Serialize
+//   (project name fn_ExternalPtr_Serialize2). Byte-identical to
+//   FUN_14001b8e0 / FUN_140007140; only the type-validation slot differs
+//   (0x140151488 = g_TypeId_StringTable). Every generator's +0x20 ExternalPtr
+//   field is serialized through this. In standalone fn_ExternalPtr_Serialize2
+//   was NULL (0x14000bf40 unregistered) so the generators SKIPPED their +0x20
+//   read, mis-advancing the stream cursor for every subsequent field. Wiring
+//   this keeps each generator's element-deserialize byte-aligned.
+// ============================================================
+extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
+    void* refField, void* serializer) {
+#ifndef STANDALONE_EXE
+    if (fn_ExternalPtr_Serialize2) {           // trampoline in DLL mode
+        fn_ExternalPtr_Serialize2(refField, serializer);
+        return;
+    }
+#endif
+    // g_TypeId_StringTable is wired in engine_funcs.cpp (exref 0x140151488).
+    // May be null in standalone until StringTable registers — the generic body
+    // handles that (loads without type validation rather than crashing).
+    const uint32_t* typeIdPtr = g_TypeId_StringTable;
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
+                                typeIdPtr, "StringTable");
+}

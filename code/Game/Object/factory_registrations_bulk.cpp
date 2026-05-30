@@ -163,16 +163,13 @@ REGISTER_NULL_FACTORY(UpgradeUI, "UI::DialogController");  // 14014c9c0 Register
 REGISTER_NULL_FACTORY(UpgradeUIConfig, "UI::DialogControllerConfig");  // 14014ca00 UpgradeUIConfig_Register
 REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 RegisterType_WorkPlaceUI
 REGISTER_NULL_FACTORY(AnimAudioEvent, "Graphics::AnimationEvent");  // 14014ca80 AnimAudioEvent_RegisterType
-REGISTER_NULL_FACTORY(ClimateGenerator, "Object::External");  // 14014cac0 ClimateGenerator_RegisterType
 REGISTER_NULL_FACTORY(Disease, "Object::External");  // 14014cb00 ClimateGenerator_StaticInit
 REGISTER_NULL_FACTORY(EnvironmentDescription, "Object::External");  // 14014cb40 EnvironmentDescription_RegisterType
-REGISTER_NULL_FACTORY(MapGenerator, "Object::External");  // 14014cb80 MapGenerator_RegisterType
 REGISTER_NULL_FACTORY(MusicList, "Object::External");  // 14014cc00 MenuScene_StaticInit
 REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb");  // 14014cc40 MenuScene_Setup
 REGISTER_NULL_FACTORY(Profession, "Object::External");  // 14014cc90 Profession_RegisterType
 REGISTER_NULL_FACTORY(ProfessionList, "Object::External");  // 14014ccd0 ProfessionList_RegisterType
 REGISTER_NULL_FACTORY(Scenario, "::Achievement::Achievement");  // 14014cd10 Scenario_RegisterType
-REGISTER_NULL_FACTORY(TerrainGenerator, "Object::External");  // 14014cd50 TerrainGenerator_RegisterType
 REGISTER_NULL_FACTORY(BuildUI, "UI::DialogController");  // 14014cd90 RegisterType_BuildUI
 REGISTER_NULL_FACTORY(CropUI, "SelectResourceUI");  // 14014cdd0 RegisterType_CropUI
 REGISTER_NULL_FACTORY(PastureUI, "SelectResourceUI");  // 14014ce90 RegisterType_PastureUI

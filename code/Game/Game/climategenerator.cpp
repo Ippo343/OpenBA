@@ -201,3 +201,97 @@ void ClimateGenerator_Init(ClimateGenerator* self) {
     // Zero the 0xC0-byte climate data block at +0x44
     memset(self->_climateData, 0, 0xC0);
 }
+
+// ============================================================
+// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
+// ============================================================
+// ClimateGenerator is an exe-defined Object::External subclass (name
+// "ClimateGenerator", parent "Object::External", typeId ~CRC32 = 0x1cf9f3b3,
+// size 0x110). In standalone the exe's *_RegisterType never runs, so without
+// this block ExternalFactory::FindOrLoad("Game/Climate/ClimateList.rsc")'s
+// per-element load hits a NullFactory and crashes inside Runtime IsDerivedFrom.
+//
+// Vtable @ 0x14015e140 (9 Object::External slots; verified via read_memory):
+//   +0x00 Dtor       0x140018f60  -> ClimateGenerator_Dtor      (reimpl)
+//   +0x08 GetTypeInfo 0x140018ee0 -> ReturnNull stub            (returns BaseTypeInfo*; null safe, not used on load)
+//   +0x10 GetTypeId  0x140018ed0  -> ClimateGenerator_GetTypeId (returns ~CRC32 typeId)
+//   +0x18 GetVersion 0x1400930b0  -> Return3 stub               (exe body = `mov eax,3; ret` — file format v3)
+//   +0x20 Compile    0x14003a912  -> Return0 stub               (shared External::Compile thunk; not used on load)
+//   +0x28 Serialize  0x140092fa0  -> ClimateGenerator_Serialize (reimpl)
+//   +0x30 Cleanup    0x140018f40  -> ClimateGenerator_Cleanup   (reimpl)
+//   +0x38 GetDesc    0x140001640  -> Return0 stub               (shared base forwarder; not used on load)
+//   +0x40 Slot8      0x140018f30  -> ClimateGenerator_Slot8     (reimpl)
+// Mirrors the StatGoal/MenuScene standalone pattern.
+//
+// IMPORTANT: GetVersion MUST return 3. Object::External::Load gates the element
+// Serialize on `fileVersion == obj->GetVersion()`; a wrong constant silently
+// drops the element and the climate combo comes up empty.
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// GetTypeId (+0x10): return the runtime CRC32 typeId for "ClimateGenerator".
+static uint32_t ClimateGenerator_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ClimateGenerator");
+    return cached;
+}
+
+// Adapter trampolines so vtable slots match the raw (void*, ...) shape.
+static void* ClimateGenerator_Dtor_Trampoline(void* self, uint32_t flags) {
+    return ClimateGenerator_Dtor(reinterpret_cast<ClimateGenerator*>(self), flags);
+}
+static void ClimateGenerator_Serialize_Trampoline(void* self, void* stream) {
+    ClimateGenerator_Serialize(reinterpret_cast<ClimateGenerator*>(self), stream);
+}
+static void ClimateGenerator_Cleanup_Trampoline(void* self) {
+    ClimateGenerator_Cleanup(reinterpret_cast<ClimateGenerator*>(self));
+}
+static void* ClimateGenerator_Slot8_Trampoline(void* self) {
+    return ClimateGenerator_Slot8(reinterpret_cast<ClimateGenerator*>(self));
+}
+
+// Safe const-return stubs for non-reimplemented slots (mirror exe behavior).
+static int   ClimateGenerator_VtblStub_Return3(void* /*self*/) { return 3; } // GetVersion
+static int   ClimateGenerator_VtblStub_Return0(void* /*self*/) { return 0; }
+static void* ClimateGenerator_VtblStub_ReturnNull(void* /*self*/, ...) { return nullptr; }
+
+static void* g_ClimateGenerator_Vtable_Standalone[11] = {
+    reinterpret_cast<void*>(&ClimateGenerator_Dtor_Trampoline),     // +0x00 Dtor
+    reinterpret_cast<void*>(&ClimateGenerator_VtblStub_ReturnNull), // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&ClimateGenerator_GetTypeId),           // +0x10 GetTypeId
+    reinterpret_cast<void*>(&ClimateGenerator_VtblStub_Return3),    // +0x18 GetVersion (mov eax,3)
+    reinterpret_cast<void*>(&ClimateGenerator_VtblStub_Return0),    // +0x20 Compile (unused on load)
+    reinterpret_cast<void*>(&ClimateGenerator_Serialize_Trampoline),// +0x28 Serialize
+    reinterpret_cast<void*>(&ClimateGenerator_Cleanup_Trampoline),  // +0x30 Cleanup
+    reinterpret_cast<void*>(&ClimateGenerator_VtblStub_Return0),    // +0x38 GetDesc forwarder (unused on load)
+    reinterpret_cast<void*>(&ClimateGenerator_Slot8_Trampoline),    // +0x40 Slot8
+    reinterpret_cast<void*>(&ClimateGenerator_VtblStub_ReturnNull), // +0x48 (over-read guard)
+    reinterpret_cast<void*>(&ClimateGenerator_VtblStub_ReturnNull), // +0x50 (over-read guard)
+};
+
+extern "C" void RegisterClimateGeneratorVtable() {
+    RegisterExeAddr(ClimateGeneratorAddr::Vtable,
+                    reinterpret_cast<uintptr_t>(g_ClimateGenerator_Vtable_Standalone));
+}
+
+extern "C" void* ClimateGenerator_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(ClimateGenerator), 8);
+    if (!p) return nullptr;
+    ClimateGenerator_Init(reinterpret_cast<ClimateGenerator*>(p));
+    return p;
+}
+
+extern "C" void* ClimateGenerator_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    ClimateGenerator_Init(reinterpret_cast<ClimateGenerator*>(memory));
+    return memory;
+}
+
+REGISTER_TYPE(ClimateGenerator, "Object::External",
+              &ClimateGenerator_Factory, &ClimateGenerator_CreateInPlace);
+
+#endif // STANDALONE_EXE

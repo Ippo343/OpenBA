@@ -67,6 +67,9 @@ extern "C" {
     void RegisterMenuSceneVtable();
     void RegisterGeometryVtable();
     void RegisterWeatherVtable();
+    void RegisterClimateGeneratorVtable();
+    void RegisterMapGeneratorVtable();
+    void RegisterTerrainGeneratorVtable();
 }
 
 // ============================================================
@@ -93,6 +96,7 @@ extern "C" {
     void Reimpl_Array_Serialize_External_Particle(void* serializer, int count, void* arrayBase);
     void Reimpl_ExternalPtr_Serialize_GraphicsMesh(void* refField, void* serializer);
     void Reimpl_ExternalPtr_Serialize_Weather(void* refField, void* serializer);
+    void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 }
 
 // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
@@ -171,6 +175,11 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x14001bff0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Serialize_External_Particle));
     RegisterExeAddr(0x14001b8e0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_GraphicsMesh));
     RegisterExeAddr(0x1400196a0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Weather));
+    // Object::ExternalPtr<StringTable>::Serialize (fn_ExternalPtr_Serialize2).
+    // EVERY generator's (+0x20) ExternalPtr field serializes through this; if
+    // unregistered it is NULL so the generators skip the field and the element
+    // stream cursor mis-aligns. Body in code/Game/Game/serialize_externals.cpp.
+    RegisterExeAddr(0x14000bf40, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable));
 
     // ============================================================
     // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
@@ -352,6 +361,16 @@ static void RegisterDispatchSlots() {
     // garbage count).
     RegisterDispatchSlot(0x140151278,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAHPEBD@Z"));
+    // Bulk FLOAT array: Serialize(int count, float* data, name) — HPEAM form.
+    // Required by ClimateGenerator::Serialize for its 48-float (+0x44) block.
+    RegisterDispatchSlot(0x140151ea8,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAMPEBD@Z"));
+    // System::Filename ctor/dtor — used by Terrain/Map generator Serialize for
+    // the stack-temp Filename wrappers around filename String reads.
+    RegisterDispatchSlot(0x140151d40,
+        (uintptr_t)ResolveExport("??0Filename@System@@QEAA@XZ"));
+    RegisterDispatchSlot(0x1401529e8,
+        (uintptr_t)ResolveExport("??1Filename@System@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401526b8,
         (uintptr_t)ResolveExport("?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z"));
     // Math::Vector3::Serialize — required by Weather::Serialize (velocityDir at
@@ -600,6 +619,16 @@ static void RegisterVtablesAndTypeIds() {
     // Weather vtable + factory at exe 0x140160290 — needed for MenuScene
     // particle deserialization (fn_ExternalPtr_Serialize_Weather).
     RegisterWeatherVtable();
+
+    // World-generator types (Climate/Map/Terrain) — exe-defined Object::External
+    // subclasses loaded as elements of the NewGameDialog combo list .rsc files.
+    // Each registers its verified 9-slot vtable so ExternalFactory::FindOrLoad's
+    // per-element load resolves a real factory instead of NullFactory crashing in
+    // Runtime IsDerivedFrom. REGISTER_TYPE entries live next to the reimpls in
+    // code/Game/Game/{climate,map,terrain}generator.cpp.
+    RegisterClimateGeneratorVtable();
+    RegisterMapGeneratorVtable();
+    RegisterTerrainGeneratorVtable();
 
     // Geometry / "TerrainGenerator" derived vtable at exe 0x14015f110.
     // Without this, Reimpl_Geometry_Init's `*self = vtbl` no-ops because

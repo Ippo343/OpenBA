@@ -104,6 +104,9 @@ static void EnsureGeneratorListsLoaded() {
 
     auto loadInto = [&](size_t off, const char* path) {
         if (*reinterpret_cast<void**>(container + off)) return;  // already loaded
+        printf("[NewGameDialog] generator list LOADING '%s' (container+0x%zx)...\n",
+               path, off);
+        fflush(stdout);
         uint8_t fnameBuf[8];
         fn_String_Ctor_CStr(fnameBuf, path);
         fn_Filename_AdjustDelimiters(fnameBuf);
@@ -112,6 +115,7 @@ static void EnsureGeneratorListsLoaded() {
         *reinterpret_cast<void**>(container + off) = ext;  // trust FindOrLoad
         printf("[NewGameDialog] generator list '%s' -> %p (container+0x%zx)\n",
                path, ext, off);
+        fflush(stdout);
     };
 
     loadInto(0x10, "Game/Climate/ClimateList.rsc");
@@ -321,11 +325,16 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     // Standalone: loading the three generator ExternalLists would populate the
     // combos, BUT ExternalFactory::FindOrLoad runs an internal IsDerivedFrom that
     // NULL-derefs against the incomplete standalone factory tree (the
-    // ClimateGenerator/MapGenerator/TerrainGenerator resource types have no
-    // REGISTER_TYPE yet — see feedback_factory_cascade_strategy). Until those
-    // factories are wired, leave the combos empty so the dialog still opens.
-    // Flip this flag once the generator factories are registered.
-    static const bool s_loadGeneratorLists = false;
+    // ClimateGenerator/MapGenerator/TerrainGenerator resource types are now
+    // REGISTER_TYPE'd with real factories + verified 9-slot vtables (each
+    // GetVersion stub returns the exe's constant: Climate 3 / Map 8 / Terrain 4,
+    // so Object::External::Load's fileVersion gate passes and the element
+    // Serialize runs). The required dispatch slots (float-array 0x140151ea8,
+    // Filename ctor/dtor 0x140151d40/0x1401529e8) and the shared ExternalPtr
+    // helper (0x14000bf40) are wired in address_registry.cpp. With those in
+    // place FindOrLoad's internal IsDerivedFrom resolves cleanly, so load the
+    // three generator lists to populate the combos for real.
+    static const bool s_loadGeneratorLists = true;
     if (s_loadGeneratorLists) EnsureGeneratorListsLoaded();
 #endif
 

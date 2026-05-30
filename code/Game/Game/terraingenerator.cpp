@@ -293,3 +293,97 @@ void TerrainGenerator_Init(TerrainGenerator* self) {
     self->_field80 = nullptr;
     self->_field88 = nullptr;
 }
+
+// ============================================================
+// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
+// ============================================================
+// TerrainGenerator is an exe-defined Object::External subclass (name
+// "TerrainGenerator", parent "Object::External", typeId ~CRC32 = 0x562a2462,
+// size 0x90). Loaded as each element of Game/Terrain/TerrainList.rsc
+// (Valleys/Mountains .rsc). Without this block ExternalFactory::FindOrLoad's
+// per-element load hits a NullFactory and crashes in Runtime IsDerivedFrom.
+//
+// Vtable @ 0x14015f170 (9 Object::External slots; verified via read_memory):
+//   +0x00 Dtor       0x140020600 -> TerrainGenerator_Dtor      (reimpl)
+//   +0x08 GetTypeInfo 0x140020580 -> ReturnNull stub           (mov rax,[0x1401c5b48]; ret; null safe on load)
+//   +0x10 GetTypeId  0x140020570 -> TerrainGenerator_GetTypeId (mov eax,[0x1401c5b40]; returns ~CRC32 typeId)
+//   +0x18 GetVersion 0x1400b1800 -> Return4 stub               (exe body = `mov eax,4; ret` — file format v4)
+//   +0x20 Compile    0x14003a912 -> Return0 stub               (shared External::Compile thunk; unused on load)
+//   +0x28 Serialize  0x1400b1690 -> TerrainGenerator_Serialize (reimpl)
+//   +0x30 Cleanup    0x1400205e0 -> TerrainGenerator_Cleanup   (reimpl)
+//   +0x38 GetDesc    0x140001640 -> Return0 stub               (shared base forwarder; unused on load)
+//   +0x40 Slot8      0x1400205d0 -> TerrainGenerator_Slot8     (reimpl)
+//
+// IMPORTANT: GetVersion MUST return 4 (verified: exe body is `mov eax,4; ret`).
+// Object::External::Load gates the element Serialize on
+// `fileVersion == obj->GetVersion()`; a wrong constant silently drops the
+// element and the terrain combo comes up empty.
+
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// GetTypeId (+0x10): runtime CRC32 typeId for "TerrainGenerator".
+static uint32_t TerrainGenerator_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("TerrainGenerator");
+    return cached;
+}
+
+// Adapter trampolines so vtable slots match the raw (void*, ...) shape.
+static void* TerrainGenerator_Dtor_Trampoline(void* self, uint32_t flags) {
+    return TerrainGenerator_Dtor(reinterpret_cast<TerrainGenerator*>(self), flags);
+}
+static void TerrainGenerator_Serialize_Trampoline(void* self, void* stream) {
+    TerrainGenerator_Serialize(reinterpret_cast<TerrainGenerator*>(self), stream);
+}
+static void TerrainGenerator_Cleanup_Trampoline(void* self) {
+    TerrainGenerator_Cleanup(reinterpret_cast<TerrainGenerator*>(self));
+}
+static void* TerrainGenerator_Slot8_Trampoline(void* self) {
+    return TerrainGenerator_Slot8(reinterpret_cast<TerrainGenerator*>(self));
+}
+
+// Safe const-return stubs for non-reimplemented slots (mirror exe behavior).
+static int   TerrainGenerator_VtblStub_Return4(void* /*self*/) { return 4; } // GetVersion
+static int   TerrainGenerator_VtblStub_Return0(void* /*self*/) { return 0; }
+static void* TerrainGenerator_VtblStub_ReturnNull(void* /*self*/, ...) { return nullptr; }
+
+static void* g_TerrainGenerator_Vtable_Standalone[11] = {
+    reinterpret_cast<void*>(&TerrainGenerator_Dtor_Trampoline),     // +0x00 Dtor
+    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_ReturnNull), // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&TerrainGenerator_GetTypeId),           // +0x10 GetTypeId
+    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_Return4),    // +0x18 GetVersion (mov eax,4)
+    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_Return0),    // +0x20 Compile (unused on load)
+    reinterpret_cast<void*>(&TerrainGenerator_Serialize_Trampoline),// +0x28 Serialize
+    reinterpret_cast<void*>(&TerrainGenerator_Cleanup_Trampoline),  // +0x30 Cleanup
+    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_Return0),    // +0x38 GetDesc forwarder (unused on load)
+    reinterpret_cast<void*>(&TerrainGenerator_Slot8_Trampoline),    // +0x40 Slot8
+    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_ReturnNull), // +0x48 (over-read guard)
+    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_ReturnNull), // +0x50 (over-read guard)
+};
+
+extern "C" void RegisterTerrainGeneratorVtable() {
+    RegisterExeAddr(TerrainGeneratorAddr::Vtable,
+                    reinterpret_cast<uintptr_t>(g_TerrainGenerator_Vtable_Standalone));
+}
+
+extern "C" void* TerrainGenerator_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(TerrainGenerator), 8);
+    if (!p) return nullptr;
+    TerrainGenerator_Init(reinterpret_cast<TerrainGenerator*>(p));
+    return p;
+}
+
+extern "C" void* TerrainGenerator_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    TerrainGenerator_Init(reinterpret_cast<TerrainGenerator*>(memory));
+    return memory;
+}
+
+REGISTER_TYPE(TerrainGenerator, "Object::External",
+              &TerrainGenerator_Factory, &TerrainGenerator_CreateInPlace);
+
+#endif // STANDALONE_EXE
