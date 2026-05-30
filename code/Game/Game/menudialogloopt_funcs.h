@@ -147,6 +147,45 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context);
 // what's passed to MenuDLT::Update).
 void MenuDialogLoopT_TickAudio(void* time);
 
+// MenuDialogLoopT_LoadMusic — mirror the first block of MenuDLT::Load (exe
+// 0x14009a930): load Audio/Music/Menu.rsc via ExternalFactory::FindOrLoad and
+// store the External at self+0xb88. The original type-checks the result against
+// the SoundEffect type info; standalone trusts FindOrLoad's return (the Runtime
+// factory tree is incomplete so IsDerivedFrom NULL-derefs — same convention as
+// LoadSceneA1's MenuScene load).
+//
+// Loading the music does NOT start playback — that happens in StartMusic below
+// (the original splits load (Load slot) from play (Startup slot)). Safe to call
+// on the AsyncLoader worker thread (it's a plain refcounted resource load like
+// Engine::DialogLoopT::Load).
+//
+// Returns true if the music External loaded (self+0xb88 non-null).
+bool MenuDialogLoopT_LoadMusic(void* self);
+
+// MenuDialogLoopT_StartMusic — mirror the audio block of MenuDLT::Startup (exe
+// 0x14009b930), run AFTER Engine::DialogLoopT::Startup:
+//   1. self+0xd0 = &Audio::Scene(self+0xb30)   — register the loop's audio
+//      scene with the DialogInstance base (where UI sound effects route).
+//   2. Audio::Scene::PlayEffect(scene@+0xb30, music@+0xb88, soundType=2, &Time(0))
+//      — start the looping menu music on the music channel (2).
+//
+// No-op'd safely if the music External (self+0xb88) is null or PlayEffect isn't
+// resolved. Call on the main thread (Startup), after LoadMusic populated +0xb88.
+void MenuDialogLoopT_StartMusic(void* self);
+
+// MenuDialogLoopT_TickAudioScene — mirror the per-frame Audio::Scene::Update of
+// MenuDLT::Update (exe 0x14009b6e0): advance the embedded Audio::Scene (+0xb30)
+// each frame so the music (and any ambient/3D channels) keeps streaming.
+//
+// The original gates this behind Application::IsPaused and toggles
+// Audio::Scene::Pause(channel 2) on pause-state transitions. The standalone
+// main menu is never paused, so we always tick Update and skip the pause branch.
+//
+// Calls Audio::Scene::Update(scene@+0xb30, elapsedTime, Time(0),
+//   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f). No-op if fn_Audio_Scene_Update
+// is unresolved. Caller passes the frame's System::Time pointer.
+void MenuDialogLoopT_TickAudioScene(void* self, void* time);
+
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of
 // MenuDLT::Update (exe 0x14009b6e0). Animates the orbit yaw, derives the
 // camera eye from the deserialized lookAtTarget/yaw/pitch/distance fields,

@@ -1095,6 +1095,17 @@ extern fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter;
 typedef void (*fn_Audio_Scene_Pause_t)(void* scene, int channel, bool pause);
 extern fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause;
 
+// Audio::Scene::Update(this, Time, Time, Random&, Vector3 const&, float) -> bool
+// ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z
+// Runtime 0x1800df6c0. Per-frame tick that advances the scene's audio channels
+// (music, ambient, 3D emitters). MenuDLT::Update (exe 0x14009b6e0) calls it with
+//   (scene@+0xb30, elapsedTime, Time(0), &Random@+0x168, &listenerVec3{0,0,0}, 0.0f)
+// when the app is not paused. The two Time args are 8-byte System::Time values
+// passed by register value; Random/Vector3 args are passed by pointer.
+typedef bool (*fn_Audio_Scene_Update_t)(void* scene, int64_t time1, int64_t time2,
+                                        void* rng, const void* listenerVec3, float f);
+extern fn_Audio_Scene_Update_t fn_Audio_Scene_Update;
+
 // ScenarioDialog helper: loads the selected scenario — NOW REIMPLEMENTED
 // fn_ScenarioDialog_LoadSelected replaced by inline code in scenariodialog.cpp
 

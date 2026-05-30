@@ -31,3 +31,6 @@ Thumbs.db
 #toolkit files
 /ToolKit/
 ghidbackup.zip
+
+#misc
+*.lock

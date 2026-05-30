@@ -364,6 +364,7 @@ fn_LabelElement_GetSprite_t fn_LabelElement_GetSprite = nullptr;
 fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName = nullptr;
 fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter = nullptr;
 fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
+fn_Audio_Scene_Update_t fn_Audio_Scene_Update = nullptr;
 // fn_ScenarioDialog_LoadSelected — REMOVED, now reimplemented in scenariodialog.cpp
 fn_SaveLoad_Update_t fn_SaveLoad_Update = nullptr;
 fn_Persistence_GetSavePath_t fn_Persistence_GetSavePath = nullptr;
@@ -2369,6 +2370,16 @@ bool EngineFuncsInit() {
         uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140152030);
         if (dispatchAddr)
             fn_Audio_Scene_Pause = *reinterpret_cast<fn_Audio_Scene_Pause_t*>(dispatchAddr);
+    }
+
+    // Audio::Scene::Update — Runtime 0x1800df6c0. Per-frame channel advance
+    // (music/ambient/3D). Resolve by mangled export, fall back to direct Runtime
+    // address (the exe dispatch slot 0x140152078 holds the same export).
+    fn_Audio_Scene_Update = reinterpret_cast<fn_Audio_Scene_Update_t>(
+        ResolveExport("?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"));
+    if (!fn_Audio_Scene_Update) {
+        fn_Audio_Scene_Update = reinterpret_cast<fn_Audio_Scene_Update_t>(
+            ResolveAddr(Module::Runtime, 0x1800df6c0));
     }
 
     // ScenarioDialog helper — fn_ScenarioDialog_LoadSelected REMOVED, now reimplemented

@@ -87,9 +87,15 @@ static fn_PlayerController_CalcTransform_t fn_PlayerController_CalcTransform = n
 
 // Audio::Scene::Update (Runtime)
 // RCX=scene, RDX=time, R8=scaledTime, R9=random, stack=listenerPos, stack=windFactor
-typedef void (*fn_Audio_Scene_Update_t)(void* scene, int64_t time, int64_t scaledTime,
+// NB: engine_funcs.h declares a project-wide fn_Audio_Scene_Update (used by the
+// menu loop) with the verified signature (..., AEBVVector3, float). This local
+// copy is kept distinct (fn_GUL_*) to preserve GameUpdateLoop's existing
+// uint32_t-windFactor call shape unchanged; the two resolve the same Runtime
+// export (?Update@Scene@Audio@@...). Both are ABI-identical (6th arg is a 4-byte
+// stack slot either way).
+typedef void (*fn_GUL_AudioSceneUpdate_t)(void* scene, int64_t time, int64_t scaledTime,
                                         void* random, void* listenerPos, uint32_t windFactor);
-static fn_Audio_Scene_Update_t fn_Audio_Scene_Update = nullptr;
+static fn_GUL_AudioSceneUpdate_t fn_GUL_AudioSceneUpdate = nullptr;
 
 // Audio::Scene::StopAll (Runtime)
 // RCX=scene
@@ -442,7 +448,7 @@ static void EnsureInit() {
         ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEAVScene@2@AEAVCamera@Math@@@Z"));
     fn_Graphics_Renderer_Dtor = reinterpret_cast<fn_Graphics_Renderer_Dtor_t>(
         ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
-    fn_Audio_Scene_Update = reinterpret_cast<fn_Audio_Scene_Update_t>(
+    fn_GUL_AudioSceneUpdate = reinterpret_cast<fn_GUL_AudioSceneUpdate_t>(
         ResolveExport("?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"));
     fn_Audio_Scene_StopAll = reinterpret_cast<fn_Audio_Scene_StopAll_t>(
         ResolveExport("?StopAll@Scene@Audio@@QEAAXXZ"));
@@ -507,7 +513,7 @@ static void EnsureInit() {
     CHECK_FN(fn_AnimationManager_Update);
     CHECK_FN(fn_UI_PausesGame);
     CHECK_FN(fn_Graphics_Scene_Clean);
-    CHECK_FN(fn_Audio_Scene_Update);
+    CHECK_FN(fn_GUL_AudioSceneUpdate);
     CHECK_FN(fn_Audio_Scene_StopAll);
     CHECK_FN(fn_Video_Context_SetTime);
     CHECK_FN(fn_Video_Context_SetCamera);
@@ -794,12 +800,12 @@ post_simulation:
             speedMul = *(int32_t*)(entityUI + 0x34);
         }
 
-        if (fn_Audio_Scene_Update && fn_Time_Ctor_Seconds && fn_CalcWindFactor) {
+        if (fn_GUL_AudioSceneUpdate && fn_Time_Ctor_Seconds && fn_CalcWindFactor) {
             float seconds = fn_Time_AsSeconds(time);
             int64_t scaledTime[1];
             fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMul * (*g_fAudioTimeScale));
             uint32_t windFactor = fn_CalcWindFactor(scaledTime);
-            fn_Audio_Scene_Update(self->m_audioScene, *(int64_t*)time, scaledTime[0],
+            fn_GUL_AudioSceneUpdate(self->m_audioScene, *(int64_t*)time, scaledTime[0],
                                   self->m_random, listenerPos, windFactor);
         } else {
             TRACE("[GameUpdateLoop::Update] SKIP Audio::Scene::Update (NULL fptr)\n");

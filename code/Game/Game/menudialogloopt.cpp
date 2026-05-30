@@ -43,8 +43,10 @@
 //   +0xbc8: TradeWork* — DLC ship (Phase A skips)
 //   +0xbd0..+0xbfc: dynamic arrays for static meshes/particles (Phase B/C)
 namespace MenuDLTOff {
+    constexpr uintptr_t audioScene_b30  = 0xb30;  // embedded Audio::Scene (0x38 bytes)
     constexpr uintptr_t scrollX_b7c     = 0xb7c;
     constexpr uintptr_t scrollY_b80     = 0xb80;
+    constexpr uintptr_t musicExt_b88    = 0xb88;  // External* — Audio/Music/Menu.rsc
     constexpr uintptr_t menuSceneExt_b90 = 0xb90;
     constexpr uintptr_t renderer_b98    = 0xb98;
     constexpr uintptr_t graphicsScene_ba0 = 0xba0;
@@ -1114,4 +1116,117 @@ void MenuDialogLoopT_TickAudio(void* time) {
     }
 
     fn_AudioDevice_Update(audioDevice, time);
+}
+
+// ============================================================
+// MenuDialogLoopT_LoadMusic — load Audio/Music/Menu.rsc into self+0xb88
+// ============================================================
+// Mirror of the first block of MenuDLT::Load (exe 0x14009a930), which runs
+// right after Engine::DialogLoopT::Load:
+//   Filename f("Audio/Music/Menu.rsc");
+//   External* e = ExternalFactory::FindOrLoad(_singleton, f);
+//   if (e && IsDerivedFrom(e, SoundEffect typeinfo)) keep; else null;
+//   *(External**)(self+0xb88) = e;
+// Standalone trusts FindOrLoad's return and skips the IsDerivedFrom check (the
+// Runtime factory tree is incomplete → IsDerivedFrom NULL-derefs; same
+// convention as LoadSceneA1's MenuScene load). Playback is started later in
+// StartMusic (the original splits Load from the Startup-time PlayEffect).
+bool MenuDialogLoopT_LoadMusic(void* self) {
+    if (!self) return false;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !fn_ExternalFactory_FindOrLoad || !fn_Filename_CtorCStr || !fn_Filename_Dtor) {
+        printf("[MenuDLT::LoadMusic] missing factory/filename helpers — skipping\n");
+        return false;
+    }
+
+    void* factory = *g_pExternalFactorySingleton;
+    uint8_t fnBuf[16] = {};  // System::Filename
+    fn_Filename_CtorCStr(fnBuf, "Audio/Music/Menu.rsc");
+    void* music = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
+    fn_Filename_Dtor(fnBuf);
+
+    Field<void*>(self, MenuDLTOff::musicExt_b88) = music;
+    printf("[MenuDLT::LoadMusic] Audio/Music/Menu.rsc -> %p (self+0xb88)\n", music);
+    return music != nullptr;
+}
+
+// ============================================================
+// MenuDialogLoopT_StartMusic — register audio scene + play menu music
+// ============================================================
+// Mirror of the audio portion of MenuDLT::Startup (exe 0x14009b930), run AFTER
+// Engine::DialogLoopT::Startup:
+//   *(Scene**)(self+0xd0) = (Scene*)(self+0xb30);   // dialog base audio scene
+//   Audio::Scene::PlayEffect(self+0xb30, *(self+0xb88), 2, &Time(0));
+// soundType/channel 2 is the music channel (same channel Pause toggles in
+// MenuDLT::Update). PlayEffect's 1st arg is an ExternalPtr<SoundEffect> (the
+// 8-byte External* value stored at +0xb88); the 4th is a const Time& (pointer).
+void MenuDialogLoopT_StartMusic(void* self) {
+    if (!self) return;
+
+    // 1. Register the loop's embedded Audio::Scene (+0xb30) with the
+    //    DialogInstance base at +0xd0 (where UI sound effects route). The
+    //    original writes this even before PlayEffect.
+    void* audioScene = reinterpret_cast<void*>(
+        reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
+    Field<void*>(self, 0xd0) = audioScene;
+
+    // 2. Play the looping menu music.
+    void* music = Field<void*>(self, MenuDLTOff::musicExt_b88);
+    if (!music) {
+        printf("[MenuDLT::StartMusic] no music External at +0xb88 — silent menu\n");
+        return;
+    }
+    if (!fn_Audio_Scene_PlayEffect) {
+        printf("[MenuDLT::StartMusic] fn_Audio_Scene_PlayEffect unresolved — skipping\n");
+        return;
+    }
+
+    int64_t timeZero = 0;  // System::Time(0) — 8-byte zero ticks, passed by const ref.
+    uint32_t handle = fn_Audio_Scene_PlayEffect(
+        audioScene, reinterpret_cast<uint64_t>(music), 2, &timeZero);
+    printf("[MenuDLT::StartMusic] PlayEffect(scene=%p music=%p chan=2) -> handle=%u\n",
+           audioScene, music, handle);
+    fflush(stdout);
+}
+
+// ============================================================
+// MenuDialogLoopT_TickAudioScene — per-frame Audio::Scene::Update
+// ============================================================
+// Mirror of the Audio::Scene::Update call in MenuDLT::Update (exe 0x14009b6e0):
+//   if (!Application::IsPaused()) {
+//       Audio::Scene::Update(self+0xb30, *(Time*)time, Time(0),
+//                            &Random(self+0x168), &listenerVec3{0,0,0}, 0.0f);
+//   }
+// The standalone main menu is never paused, so we always tick (and skip the
+// Application::IsPaused / Audio::Scene::Pause(channel 2) transition logic). This
+// is what advances the music stream each frame — without it PlayEffect starts
+// the music but it never progresses.
+void MenuDialogLoopT_TickAudioScene(void* self, void* time) {
+    if (!self || !time) return;
+    if (!fn_Audio_Scene_Update) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            printf("[MenuDLT::TickAudioScene] WARN: fn_Audio_Scene_Update is NULL — "
+                   "menu music will not advance\n");
+        }
+        return;
+    }
+
+    void* audioScene = reinterpret_cast<void*>(
+        reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
+    void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
+
+    int64_t elapsed  = *reinterpret_cast<int64_t*>(time);  // *(u64*)time — System::Time ticks
+    int64_t timeZero = 0;                                  // Time(0), passed by value
+    float listenerVec3[3] = { 0.0f, 0.0f, 0.0f };          // origin listener (2D menu music)
+
+    fn_Audio_Scene_Update(audioScene, elapsed, timeZero, rng, listenerVec3, 0.0f);
+
+    static int n = 0;
+    if (n < 3) {
+        ++n;
+        printf("[MenuDLT::TickAudioScene] Audio::Scene::Update(scene=%p) tick=%d\n",
+               audioScene, n);
+    }
 }

@@ -274,6 +274,13 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // fully populated by now — we can fade in immediately.
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
+
+    // Start the menu music. Mirrors the Audio::Scene::PlayEffect block near the
+    // end of the original MenuDLT::Startup (exe 0x14009b930): registers the
+    // loop's Audio::Scene (self+0xb30) at the DialogInstance base (self+0xd0) and
+    // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Stub_Load) on the
+    // music channel. Per-frame Audio::Scene::Update (Stub_Update) advances it.
+    MenuDialogLoopT_StartMusic(self);
 }
 
 void Stub_Shutdown(UpdateLoop* self) {
@@ -335,6 +342,16 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // don't spawn sprites, so smokestacks render empty.
     if (time) {
         MenuDialogLoopT_TickParticles(self, time);
+    }
+
+    // Per-frame Audio::Scene::Update — advances the menu music stream (and any
+    // ambient/3D channels) on the loop's embedded Audio::Scene (self+0xb30).
+    // Mirrors MenuDLT::Update (exe 0x14009b6e0). Must run BEFORE the
+    // Audio::Device::Update channel reaper below, matching retail frame order.
+    // Without this, StartMusic's PlayEffect starts the music but it never
+    // progresses (no new sample buffers get queued).
+    if (time) {
+        MenuDialogLoopT_TickAudioScene(self, time);
     }
 
     // Per-frame Audio::Device::Update. Original MainLoop::Run only fires
@@ -464,6 +481,13 @@ void Stub_Load(UpdateLoop* self) {
     void* dialogExtAfter = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Load] m_dialogExternal(after)=%p (PhaseA deferred to Startup)\n",
            dialogExtAfter);
+
+    // Load the menu music (Audio/Music/Menu.rsc -> self+0xb88). Mirrors the
+    // music-load block at the top of the original MenuDLT::Load (exe 0x14009a930).
+    // Like fn_DialogLoopT_Load this is a plain refcounted ExternalFactory load,
+    // safe to run on the AsyncLoader worker thread (no scene-graph mutation).
+    // Playback is started later from Stub_Startup (main thread).
+    MenuDialogLoopT_LoadMusic(self);
 }
 
 void Stub_SaveRestore(UpdateLoop* self, bool save, void* state) {
