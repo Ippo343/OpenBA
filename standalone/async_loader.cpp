@@ -33,18 +33,18 @@ unsigned __stdcall WorkerProc(void* param) {
         typedef void (*LoadFn)(UpdateLoop*);
         LoadFn fn = reinterpret_cast<LoadFn>(loop->vtable->Load);
         double startMs = StallDebug::NowMs();
-        std::printf("[AsyncLoader] worker thread loop=%p Load=%p — start "
+        printf("[AsyncLoader] worker thread loop=%p Load=%p — start "
                     "(t=%.2fms)\n",
                     (void*)loop, (void*)fn, startMs);
         std::fflush(stdout);
         fn(loop);
         double endMs = StallDebug::NowMs();
-        std::printf("[AsyncLoader] worker thread loop=%p — done "
+        printf("[AsyncLoader] worker thread loop=%p — done "
                     "(t=%.2fms, duration=%.2fms)\n",
                     (void*)loop, endMs, endMs - startMs);
         std::fflush(stdout);
     } else {
-        std::printf("[AsyncLoader] worker thread WARN loop=%p has no Load slot\n",
+        printf("[AsyncLoader] worker thread WARN loop=%p has no Load slot\n",
                     (void*)loop);
     }
     job->done.store(true, std::memory_order_release);
@@ -54,7 +54,7 @@ unsigned __stdcall WorkerProc(void* param) {
 void DrainPriorJob() {
     if (!g_currentJob) return;
     if (!g_currentJob->done.load(std::memory_order_acquire)) {
-        std::printf("[AsyncLoader] DrainPriorJob: waiting on prior worker\n");
+        printf("[AsyncLoader] DrainPriorJob: waiting on prior worker\n");
         WaitForSingleObject(g_currentJob->thread, INFINITE);
     }
     if (g_currentJob->thread) {
@@ -69,19 +69,19 @@ void DrainPriorJob() {
 void StartAsyncLoad(UpdateLoop* loop) {
     DrainPriorJob();
     if (!loop) {
-        std::printf("[AsyncLoader] StartAsyncLoad: null loop, skipping\n");
+        printf("[AsyncLoader] StartAsyncLoad: null loop, skipping\n");
         return;
     }
     LoadJob* job = new LoadJob{loop, {false}, nullptr};
     job->thread = reinterpret_cast<HANDLE>(_beginthreadex(
         nullptr, 0, &WorkerProc, job, 0, nullptr));
     if (!job->thread) {
-        std::printf("[AsyncLoader] _beginthreadex failed (errno=%d), running "
+        printf("[AsyncLoader] _beginthreadex failed (errno=%d), running "
                     "load synchronously on caller thread\n", errno);
         WorkerProc(job);  // fallback — at least don't lose the load
     }
     g_currentJob = job;
-    std::printf("[AsyncLoader] StartAsyncLoad: spawned worker for loop=%p "
+    printf("[AsyncLoader] StartAsyncLoad: spawned worker for loop=%p "
                 "thread=%p\n", (void*)loop, (void*)job->thread);
 }
 

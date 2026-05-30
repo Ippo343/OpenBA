@@ -173,7 +173,7 @@ void MD_Stub_RuntimeThunk(void* self, ...) {
     static bool warned = false;
     if (!warned) {
         warned = true;
-        std::printf("[MessageDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
+        printf("[MessageDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
                     SlotIdx, self);
     }
 }
@@ -229,7 +229,7 @@ void* GetMessageDialogVtable() {
 void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                     void* parentIBP) {
     if (!self) return nullptr;
-    std::printf("[MessageDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
+    printf("[MessageDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
                 self, ui, extRes, parentIBP);
 
     uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
@@ -238,7 +238,7 @@ void* MessageDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
         fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy,
                                nullptr, nullptr, 0);
     } else {
-        std::printf("[MessageDialog_Ctor] skipping DialogInstance::DialogInstance "
+        printf("[MessageDialog_Ctor] skipping DialogInstance::DialogInstance "
                     "(fn=%p extRes=%p) — bare-bones init\n",
                     (void*)fn_DialogInstance_Ctor, extRes);
     }

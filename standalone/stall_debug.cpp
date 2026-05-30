@@ -32,7 +32,7 @@ void Initialize() {
     g_lastTickMs = 0.0;
     g_lastTickTag = "(boot)";
     g_initialized = true;
-    std::printf("[Stall] Initialize: freq=%lld Hz boot=%lld\n",
+    printf("[Stall] Initialize: freq=%lld Hz boot=%lld\n",
                 (long long)g_freq.QuadPart, (long long)g_bootCounter.QuadPart);
     std::fflush(stdout);
 }
@@ -53,7 +53,7 @@ void Tick(const char* tag) {
     double now = NowMs();
     double gap = now - g_lastTickMs;
     if (gap > g_thresholdMs) {
-        std::printf("[Stall] gap=%.2fms (>%.0fms threshold) — was \"%s\" "
+        printf("[Stall] gap=%.2fms (>%.0fms threshold) — was \"%s\" "
                     "now \"%s\" t=%.2fms\n",
                     gap, g_thresholdMs, g_lastTickTag, tag, now);
         std::fflush(stdout);
@@ -64,26 +64,26 @@ void Tick(const char* tag) {
 
 void BeginPhase(const char* name) {
     if (!g_initialized) return;
-    std::printf("[Stall] BEGIN %s @ t=%.2fms\n", name, NowMs());
+    printf("[Stall] BEGIN %s @ t=%.2fms\n", name, NowMs());
     std::fflush(stdout);
 }
 
 void EndPhase(const char* name) {
     if (!g_initialized) return;
-    std::printf("[Stall] END   %s @ t=%.2fms\n", name, NowMs());
+    printf("[Stall] END   %s @ t=%.2fms\n", name, NowMs());
     std::fflush(stdout);
 }
 
 Phase::Phase(const char* n) : name(n), startMs(NowMs()) {
     if (!g_initialized) return;
-    std::printf("[Stall] BEGIN %s @ t=%.2fms\n", name, startMs);
+    printf("[Stall] BEGIN %s @ t=%.2fms\n", name, startMs);
     std::fflush(stdout);
 }
 
 Phase::~Phase() {
     if (!g_initialized) return;
     double now = NowMs();
-    std::printf("[Stall] END   %-40s duration=%.2fms (t=%.2fms)\n",
+    printf("[Stall] END   %-40s duration=%.2fms (t=%.2fms)\n",
                 name, now - startMs, now);
     std::fflush(stdout);
 }

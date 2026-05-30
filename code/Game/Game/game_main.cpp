@@ -584,10 +584,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // animating while the heavy 12K-15K static-mesh loop
                         // runs in chunks. (Driving Init from the splash
                         // crashed inside VideoDX11 — see splash_loop_stubs.cpp.)
+#ifdef STANDALONE_EXE
                         if (menuLoop) {
                             printf("[GameMain] pre-running ChunkedSceneLoader::Init for MenuDLT\n");
                             ChunkedSceneLoader::Init(menuLoop);
                         }
+#endif
 
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.
                         // Inner LoaderLoop wraps shiningRockLoop, outer LoaderLoop

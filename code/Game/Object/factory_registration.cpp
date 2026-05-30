@@ -43,7 +43,7 @@ int InvokeAllRegistrations() {
                              reinterpret_cast<void*>(r->inPlaceCreateFn));
         n++;
     }
-    std::printf("[FactoryReg] Registered %d types into Runtime _firstTypeInfo\n", n);
+    printf("[FactoryReg] Registered %d types into Runtime _firstTypeInfo\n", n);
     return n;
 }
 
@@ -111,7 +111,7 @@ uint32_t ResolveTypeIdByNameLazy(const char* simpleName) {
     }
 
     if (typeId != 0) {
-        std::printf("[FactoryReg] ResolveTypeIdByNameLazy(\"%s\") = 0x%08x\n",
+        printf("[FactoryReg] ResolveTypeIdByNameLazy(\"%s\") = 0x%08x\n",
                     simpleName, typeId);
     }
     return typeId;

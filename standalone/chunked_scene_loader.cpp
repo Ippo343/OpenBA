@@ -24,7 +24,7 @@ double g_chunkMaxMs = 0.0;
 
 void Init(void* menuDltSelf) {
     if (!menuDltSelf) {
-        std::printf("[ChunkedSceneLoader] Init: null menuDltSelf — skipping\n");
+        printf("[ChunkedSceneLoader] Init: null menuDltSelf — skipping\n");
         std::fflush(stdout);
         return;
     }
@@ -33,7 +33,7 @@ void Init(void* menuDltSelf) {
         return;
     }
     if (g_busy) {
-        std::printf("[ChunkedSceneLoader] Init: WARN: prior load still busy "
+        printf("[ChunkedSceneLoader] Init: WARN: prior load still busy "
                     "(self=%p, new=%p) — overwriting\n",
                     g_menuDltSelf, menuDltSelf);
     }
@@ -45,7 +45,7 @@ void Init(void* menuDltSelf) {
     g_chunkMaxMs   = 0.0;
     g_initStartMs  = StallDebug::NowMs();
 
-    std::printf("[ChunkedSceneLoader] Init: self=%p — running LoadSceneA1 (small "
+    printf("[ChunkedSceneLoader] Init: self=%p — running LoadSceneA1 (small "
                 "allocs + MenuScene.rsc load)\n", menuDltSelf);
     std::fflush(stdout);
 
@@ -55,7 +55,7 @@ void Init(void* menuDltSelf) {
         a1Ok = MenuDialogLoopT_LoadSceneA1(menuDltSelf);
     }
     if (!a1Ok) {
-        std::printf("[ChunkedSceneLoader] Init: LoadSceneA1 returned false — no "
+        printf("[ChunkedSceneLoader] Init: LoadSceneA1 returned false — no "
                     "scene background; skipping PhaseB\n");
         std::fflush(stdout);
         g_busy = false;
@@ -70,7 +70,7 @@ void Init(void* menuDltSelf) {
 
     MenuDialogLoopT_PhaseB_InitState(&g_state, menuDltSelf, menuScene, scene);
     if (g_state.totalCount <= 0) {
-        std::printf("[ChunkedSceneLoader] Init: PhaseB has no work "
+        printf("[ChunkedSceneLoader] Init: PhaseB has no work "
                     "(totalCount=%d) — running A3 immediately\n",
                     g_state.totalCount);
         std::fflush(stdout);
@@ -80,7 +80,7 @@ void Init(void* menuDltSelf) {
     }
 
     g_busy = true;
-    std::printf("[ChunkedSceneLoader] Init: ready — PhaseB has %d elements to "
+    printf("[ChunkedSceneLoader] Init: ready — PhaseB has %d elements to "
                 "process (chunked across Update ticks)\n",
                 g_state.totalCount);
     std::fflush(stdout);
@@ -100,7 +100,7 @@ int Tick(int maxElements) {
     bool done = (g_state.index >= g_state.totalCount);
     // Log first + last tick always; every 5th tick in between.
     if (g_tickCount == 1 || done || (g_tickCount % 5) == 0) {
-        std::printf("[ChunkedSceneLoader] Tick #%d: processed=%d cumProgress=%d/%d "
+        printf("[ChunkedSceneLoader] Tick #%d: processed=%d cumProgress=%d/%d "
                     "(%.1f%%) chunkDur=%.2fms\n",
                     g_tickCount, processed, g_state.index, g_state.totalCount,
                     g_state.totalCount > 0
@@ -117,7 +117,7 @@ int Tick(int maxElements) {
             MenuDialogLoopT_LoadSceneA3(g_menuDltSelf);
         }
         double totalMs = endMs - g_initStartMs;
-        std::printf("[ChunkedSceneLoader] DONE: ticks=%d sumChunkMs=%.2f "
+        printf("[ChunkedSceneLoader] DONE: ticks=%d sumChunkMs=%.2f "
                     "maxChunkMs=%.2f initToDoneMs=%.2f (PhaseB %d elements)\n",
                     g_tickCount, g_chunkSumMs, g_chunkMaxMs, totalMs,
                     g_state.totalCount);

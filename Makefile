@@ -89,13 +89,18 @@ SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 
 all: debug
 
+# Strip all printf() debug logging in release builds (zero runtime cost).
+# See patches/src/log_strip.h for details. -include must use a forward-slash
+# path so it resolves the same on MSYS2 bash and from VS Code task shells.
+STRIP_LOGS_FLAGS = -DBANISHED_STRIP_LOGS -include patches/src/log_strip.h
+
 debug: CXXFLAGS += -g -O0 -D_DEBUG
 debug: $(TARGET)
 
-release: CXXFLAGS += -O2 -DNDEBUG
+release: CXXFLAGS += -O2 -DNDEBUG $(STRIP_LOGS_FLAGS)
 release: $(TARGET)
 
-standalone: SA_CXXFLAGS += -O2 -DNDEBUG
+standalone: SA_CXXFLAGS += -O3 -DNDEBUG $(STRIP_LOGS_FLAGS)
 standalone: $(SA_TARGET)
 
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG

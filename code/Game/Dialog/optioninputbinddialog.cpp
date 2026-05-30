@@ -263,7 +263,7 @@ void OIBD_Stub_RuntimeThunk(void* self, ...) {
     static bool warned = false;
     if (!warned) {
         warned = true;
-        std::printf("[OptionInputBindDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
+        printf("[OptionInputBindDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
                     SlotIdx, self);
     }
 }
@@ -328,7 +328,7 @@ void* GetOptionInputBindDialogVtable() {
 void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                             void* parentIBP) {
     if (!self) return nullptr;
-    std::printf("[OptionInputBindDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
+    printf("[OptionInputBindDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
                 self, ui, extRes, parentIBP);
 
     // Stack copy of the parent IBP qword (matches original SEH frame layout
@@ -340,7 +340,7 @@ void* OptionInputBindDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
         fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy,
                                nullptr, nullptr, 0);
     } else {
-        std::printf("[OptionInputBindDialog_Ctor] skipping DialogInstance::DialogInstance "
+        printf("[OptionInputBindDialog_Ctor] skipping DialogInstance::DialogInstance "
                     "(fn=%p extRes=%p) — bare-bones init\n",
                     (void*)fn_DialogInstance_Ctor, extRes);
     }
