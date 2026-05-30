@@ -927,6 +927,10 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     printf("[MainMenuDialog::OnCommand] self=%p msg=0x%x id=%d\n", self, msg, id);
 
     switch (id) {
+    case kButton_New:
+        printf("[MainMenuDialog::OnCommand] -> OpenNewGame\n");
+        MainMenuDialog_OpenNewGame(reinterpret_cast<MainMenuDialog*>(self));
+        break;
     case kButton_Quit:
         printf("[MainMenuDialog::OnCommand] Quit: fn_App_Quit=%p g_pAppSingleton=%p *g=%p\n",
                (void*)fn_App_Quit, (void*)g_pAppSingleton,

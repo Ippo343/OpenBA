@@ -61,6 +61,7 @@ extern "C" {
     void RegisterMainMenuDialogVtable();
     void RegisterLoaderDialogVtable();
     void RegisterOptionsDialogVtable();
+    void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
     void RegisterMessageDialogVtable();
     void RegisterMenuSceneVtable();
@@ -591,6 +592,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterMainMenuDialogVtable();
     RegisterLoaderDialogVtable();
     RegisterOptionsDialogVtable();
+    RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();
     RegisterMessageDialogVtable();
     RegisterMenuSceneVtable();

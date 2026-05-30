@@ -31,19 +31,113 @@ static void* FindElement(void* dialog, const char* name) {
 }
 
 // ============================================================
+// Lazy type-ID resolution (standalone safety)
+// ============================================================
+// In standalone the exe .rdata type-ID slots (g_TypeId_MapGenerator etc.) are
+// never populated by Runtime reflection, so they start NULL and every
+// `*g_TypeId_X` deref in Slot4 is a read of address 0 (hard crash). Mirror the
+// OptionsDialog/inputbindings StringTable pattern: lazy-resolve each via
+// Object::Factory::GetTypeIdFromName into a static, then point the global at it.
+// No-op in DLL mode (the slots are already non-null there).
+static uint32_t* LazyTypeId(uint32_t* current, const char* typeName, uint32_t* storage) {
+    if (current) return current;
+    if (!fn_Factory_GetTypeIdFromName || !g_pFactorySingleton || !*g_pFactorySingleton)
+        return nullptr;
+    if (*storage == 0) {
+        void* factoryObj = *(void**)*g_pFactorySingleton;
+        if (factoryObj) {
+            *storage = fn_Factory_GetTypeIdFromName(factoryObj, typeName, true);
+            printf("[NewGameDialog] Lazy-resolved %s typeId = %u\n", typeName, *storage);
+        }
+    }
+    return (*storage != 0) ? storage : nullptr;
+}
+
+static void EnsureGeneratorTypeIds() {
+    static uint32_t s_map = 0, s_climate = 0, s_terrain = 0, s_nameDB = 0;
+    if (!g_TypeId_MapGenerator)
+        g_TypeId_MapGenerator = LazyTypeId(g_TypeId_MapGenerator, "MapGenerator", &s_map);
+    if (!g_TypeId_ClimateGenerator)
+        g_TypeId_ClimateGenerator = LazyTypeId(g_TypeId_ClimateGenerator, "ClimateGenerator", &s_climate);
+    if (!g_TypeId_TerrainGenerator)
+        g_TypeId_TerrainGenerator = LazyTypeId(g_TypeId_TerrainGenerator, "TerrainGenerator", &s_terrain);
+    if (!g_TypeId_NameDatabase)
+        g_TypeId_NameDatabase = LazyTypeId(g_TypeId_NameDatabase, "NameDatabase", &s_nameDB);
+}
+
+// Type-check a loaded resource. In STANDALONE the Runtime factory tree is
+// incomplete, so Object::IsDerivedFrom walks up the type's parent chain into a
+// NULL factory and crashes (NULL-this). Per feedback_factory_cascade_strategy we
+// trust FindOrLoad's result and skip the derivation check. DLL mode keeps the
+// real check (full factory tree present). typeIdPtr is passed (not deref'd in
+// standalone) so a still-unresolved (NULL) type-ID can't fault at the call site.
+static inline bool ResourceIsType(void* resource, uint32_t* typeIdPtr) {
+    if (!resource) return false;
+#ifdef STANDALONE_EXE
+    (void)typeIdPtr;
+    return true;
+#else
+    return typeIdPtr && fn_IsDerivedFrom(resource, *typeIdPtr);
+#endif
+}
+
+#ifdef STANDALONE_EXE
+// ============================================================
+// EnsureGeneratorListsLoaded (standalone) — populate the combos for real
+// ============================================================
+// Slot4 reads the three world-generator ExternalLists from the Game/KeyMap
+// container (g_pKeyMapSingleton): +0x10 climate, +0x18 map/start-condition,
+// +0x20 terrain. Retail fills them in GameContainer_Init (exe 0x140099db0) via
+// Object::ExternalList::Find on the master list (with the External base type-id
+// 0xE771F47F). Standalone has no master list and never runs that init, so the
+// slots are NULL and the combos come up empty. Mirror inputbindings.cpp::
+// LoadInputNameTables: ExternalFactory::FindOrLoad each list .rsc directly and
+// trust the result (the IsDerivedFrom type-check crashes against the incomplete
+// standalone factory tree — see feedback_factory_cascade_strategy). Idempotent.
+static void EnsureGeneratorListsLoaded() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !fn_ExternalFactory_FindOrLoad || !fn_String_Ctor_CStr ||
+        !fn_String_Dtor || !fn_Filename_AdjustDelimiters) return;
+
+    char* container = reinterpret_cast<char*>(*g_pKeyMapSingleton);
+
+    auto loadInto = [&](size_t off, const char* path) {
+        if (*reinterpret_cast<void**>(container + off)) return;  // already loaded
+        uint8_t fnameBuf[8];
+        fn_String_Ctor_CStr(fnameBuf, path);
+        fn_Filename_AdjustDelimiters(fnameBuf);
+        void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnameBuf);
+        fn_String_Dtor(fnameBuf);
+        *reinterpret_cast<void**>(container + off) = ext;  // trust FindOrLoad
+        printf("[NewGameDialog] generator list '%s' -> %p (container+0x%zx)\n",
+               path, ext, off);
+    };
+
+    loadInto(0x10, "Game/Climate/ClimateList.rsc");
+    loadInto(0x18, "Game/StartCondition/StartConditions.rsc");
+    loadInto(0x20, "Game/Terrain/TerrainList.rsc");
+}
+#endif  // STANDALONE_EXE
+
+// ============================================================
 // Helper: populate combo from ExternalList with type check
 // ============================================================
 static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
                                     uint32_t typeId, int visibilityOffset) {
+    // Standalone safety: the generator ExternalLists (KeyMap +0x10/+0x18/+0x20)
+    // may be unpopulated if the Game resource container hasn't run yet — leave
+    // the combo empty rather than dereferencing a null list. (No-op in DLL mode.)
+    if (!externalList) return;
     int count = fn_ExternalList_GetResourceCount(externalList);
     for (int i = 0; i < count; i++) {
         // ExternalList+0x20 holds pointer to the resource pointer array
         void** ptrArray = *(void***)((uintptr_t)externalList + 0x20);
         void* resource = ptrArray[i];
 
-        // IsDerivedFrom check
+        // IsDerivedFrom check (trust-helper: skips the crashing walk in standalone)
         void* typed = nullptr;
-        if (fn_IsDerivedFrom(resource, typeId)) {
+        if (ResourceIsType(resource, &typeId)) {
             typed = resource;
         }
 
@@ -84,15 +178,35 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 // NameDatabase, then checks if it ends in "vill" and appends "e" to make "ville".
 // Original: 0x140099ac0.
 static void* GenerateTownName(void* retStr, void* random, int maxLen) {
+#ifdef STANDALONE_EXE
+    // Standalone: ExternalFactory::FindOrLoad("Game/Names/Cities.ndb") NULL-derefs
+    // inside its OWN internal IsDerivedFrom (the NameDatabase factory subtree is
+    // incomplete), and NameDatabase::GenerateName (exe 0x1400a4b30) isn't
+    // reimplemented anyway. Skip the load entirely and use a placeholder so the
+    // OK button stays enabled. DLL mode does the real name generation below.
+    (void)random; (void)maxLen;
+    fn_String_Ctor_CStr(retStr, "New Town");
+    return retStr;
+#else
     // Load NameDatabase resource
     uint8_t filenameBuf[8];
     fn_Filename_CtorCStr(filenameBuf, "Game/Names/Cities.ndb");
     void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
     void* nameDB = nullptr;
-    if (resource && fn_IsDerivedFrom(resource, *g_TypeId_NameDatabase)) {
+    if (ResourceIsType(resource, g_TypeId_NameDatabase)) {
         nameDB = resource;
     }
     fn_Filename_Dtor(filenameBuf);
+
+    // Standalone fallback: NameDatabase::GenerateName (exe 0x1400a4b30) isn't
+    // reimplemented and/or the NameDatabase type-ID/resource didn't resolve.
+    // Produce a valid placeholder String so the caller's SetText/Dtor don't
+    // operate on uninitialized memory (and the OK button stays enabled so the
+    // Start path remains testable). No-op in DLL mode.
+    if (!fn_NameDB_GenerateName || !nameDB) {
+        fn_String_Ctor_CStr(retStr, "New Town");
+        return retStr;
+    }
 
     // Generate name using inner algorithm (retry loop, binary search uniqueness check)
     fn_NameDB_GenerateName(retStr, nameDB, random, 5, maxLen);
@@ -116,6 +230,7 @@ static void* GenerateTownName(void* retStr, void* random, int maxLen) {
     }
 
     return retStr;
+#endif  // STANDALONE_EXE
 }
 
 static void GenerateRandomName(void* editNamePtr, void* random) {
@@ -159,6 +274,9 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
 // Helper: update description text from selected map generator
 // ============================================================
 static void UpdateDescription(NewGameDialog* self) {
+    // Standalone safety: skip if the map-generator list/type-ID is unresolved
+    // (covers both Slot4 and the OnEvent combo-change call site).
+    if (!self->mapGeneratorList || !g_TypeId_MapGenerator) return;
     uintptr_t s = (uintptr_t)self;
 
     fn_InternalBasePtr_CheckPtr(&self->comboCondition);
@@ -170,7 +288,7 @@ static void UpdateDescription(NewGameDialog* self) {
     void* resource = ptrArray[selectedIdx];
 
     void* mapGen = nullptr;
-    if (fn_IsDerivedFrom(resource, *g_TypeId_MapGenerator)) {
+    if (ResourceIsType(resource, g_TypeId_MapGenerator)) {
         mapGen = resource;
     }
 
@@ -196,6 +314,21 @@ static void UpdateDescription(NewGameDialog* self) {
 void NewGameDialog_Slot4(NewGameDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
+    // Standalone: lazy-resolve the generator/NameDB type-IDs (the exe .rdata
+    // slots are NULL until resolved via the Factory). No-op in DLL mode.
+    EnsureGeneratorTypeIds();
+#ifdef STANDALONE_EXE
+    // Standalone: loading the three generator ExternalLists would populate the
+    // combos, BUT ExternalFactory::FindOrLoad runs an internal IsDerivedFrom that
+    // NULL-derefs against the incomplete standalone factory tree (the
+    // ClimateGenerator/MapGenerator/TerrainGenerator resource types have no
+    // REGISTER_TYPE yet — see feedback_factory_cascade_strategy). Until those
+    // factories are wired, leave the combos empty so the dialog still opens.
+    // Flip this flag once the generator factories are registered.
+    static const bool s_loadGeneratorLists = false;
+    if (s_loadGeneratorLists) EnsureGeneratorListsLoaded();
+#endif
+
     // --- Find all UI elements ---
     self->editName       = FindElement(self, "editName");
     self->editSeed       = FindElement(self, "editSeed");
@@ -207,22 +340,25 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     self->comboDisaster  = FindElement(self, "comboDisaster");
 
     // --- Cache ExternalList pointers from keymap singleton ---
-    void* keyMapData = *g_pKeyMapSingleton;
-    self->mapGeneratorList     = *(void**)((uintptr_t)keyMapData + 0x18);
-    self->climateGeneratorList = *(void**)((uintptr_t)keyMapData + 0x10);
-    self->terrainGeneratorList = *(void**)((uintptr_t)keyMapData + 0x20);
+    void* keyMapData = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
+    if (keyMapData) {
+        self->mapGeneratorList     = *(void**)((uintptr_t)keyMapData + 0x18);
+        self->climateGeneratorList = *(void**)((uintptr_t)keyMapData + 0x10);
+        self->terrainGeneratorList = *(void**)((uintptr_t)keyMapData + 0x20);
+    }
 
-    // --- Populate map generator combo (comboCondition) ---
-    PopulateGeneratorCombo((void**)&self->comboCondition, self->mapGeneratorList,
-                           *g_TypeId_MapGenerator, 0x38);
-
-    // --- Populate climate combo ---
-    PopulateGeneratorCombo((void**)&self->comboClimate, self->climateGeneratorList,
-                           *g_TypeId_ClimateGenerator, 0x30);
-
-    // --- Populate terrain combo ---
-    PopulateGeneratorCombo((void**)&self->comboTerrain, self->terrainGeneratorList,
-                           *g_TypeId_TerrainGenerator, 0x30);
+    // --- Populate generator combos. Guarded for standalone: the type-ID pointers
+    //     may still be NULL (deref would crash) and the ExternalLists may be
+    //     unpopulated (PopulateGeneratorCombo null-checks the list internally). ---
+    if (g_TypeId_MapGenerator)
+        PopulateGeneratorCombo((void**)&self->comboCondition, self->mapGeneratorList,
+                               *g_TypeId_MapGenerator, 0x38);
+    if (g_TypeId_ClimateGenerator)
+        PopulateGeneratorCombo((void**)&self->comboClimate, self->climateGeneratorList,
+                               *g_TypeId_ClimateGenerator, 0x30);
+    if (g_TypeId_TerrainGenerator)
+        PopulateGeneratorCombo((void**)&self->comboTerrain, self->terrainGeneratorList,
+                               *g_TypeId_TerrainGenerator, 0x30);
 
     // --- Find button elements ---
     void* buttonNewName = FindElement(self, "buttonNewName");
@@ -249,15 +385,20 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     fn_InternalBasePtr_CheckPtr(&self->comboCondition);
     fn_Element_SetElementId(self->comboCondition, 4);
 
-    // --- Generate random name ---
-    GenerateRandomName(&self->editName, (void*)(s + 0x118));
+    // --- Generate random name (guarded: editName must be present) ---
+    if (self->editName)
+        GenerateRandomName(&self->editName, (void*)(s + 0x118));
 
-    // --- Generate random seed ---
-    GenerateRandomSeed(&self->editSeed, (void*)(s + 0x118));
+    // --- Generate random seed (guarded: editSeed must be present) ---
+    if (self->editSeed)
+        GenerateRandomSeed(&self->editSeed, (void*)(s + 0x118));
 
     // --- Restore saved combo selections from game settings ---
-    void* settings = *g_pNewGameSettings;
+    // Standalone: g_pNewGameSettings (exe-data slot) may be NULL — skip the
+    // whole restore block rather than dereferencing null. No-op in DLL mode.
+    void* settings = (g_pNewGameSettings ? *g_pNewGameSettings : nullptr);
     uintptr_t cfg = (uintptr_t)settings;
+    if (settings) {
 
     // Map condition/generator combo (+0x2c)
     {
@@ -359,6 +500,8 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         }
     }
 
+    }  // end if (settings) — standalone null-settings guard
+
     // --- Update description text from selected map generator ---
     UpdateDescription(self);
 }
@@ -403,21 +546,21 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     void** mapPtrArray = *(void***)((uintptr_t)self->mapGeneratorList + 0x20);
     void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
     void* mapGen = nullptr;
-    if (fn_IsDerivedFrom(mapGenResource, *g_TypeId_MapGenerator)) mapGen = mapGenResource;
+    if (ResourceIsType(mapGenResource, g_TypeId_MapGenerator)) mapGen = mapGenResource;
 
     fn_InternalBasePtr_CheckPtr(&self->comboClimate);
     void* climateItem = fn_ComboElement_GetItemData(self->comboClimate, climateIdx);
     void** climatePtrArray = *(void***)((uintptr_t)self->climateGeneratorList + 0x20);
     void* climateResource = climatePtrArray[(intptr_t)climateItem];
     void* climateGen = nullptr;
-    if (fn_IsDerivedFrom(climateResource, *g_TypeId_ClimateGenerator)) climateGen = climateResource;
+    if (ResourceIsType(climateResource, g_TypeId_ClimateGenerator)) climateGen = climateResource;
 
     fn_InternalBasePtr_CheckPtr(&self->comboTerrain);
     void* terrainItem = fn_ComboElement_GetItemData(self->comboTerrain, terrainIdx);
     void** terrainPtrArray = *(void***)((uintptr_t)self->terrainGeneratorList + 0x20);
     void* terrainResource = terrainPtrArray[(intptr_t)terrainItem];
     void* terrainGen = nullptr;
-    if (fn_IsDerivedFrom(terrainResource, *g_TypeId_TerrainGenerator)) terrainGen = terrainResource;
+    if (ResourceIsType(terrainResource, g_TypeId_TerrainGenerator)) terrainGen = terrainResource;
 
     // Get terrain size index
     fn_InternalBasePtr_CheckPtr(&self->comboTerrainSize);
@@ -596,3 +739,185 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
     typedef void (*fn_SetEnabled_t)(void*, int);
     ((fn_SetEnabled_t)vtable[8])(okBtn, len > 0 ? 1 : 0);
 }
+
+#ifdef STANDALONE_EXE
+
+// ============================================================
+// NewGameDialog standalone scaffolding
+// ============================================================
+// Provides the 10-slot DialogInstance vtable + a standalone in-place ctor +
+// factory + REGISTER_TYPE so MainMenuDialog::OpenNewGame can construct a real
+// NewGameDialog in standalone mode (no exe loader / no trampoline). Mirrors the
+// OptionsDialog template (code/Game/Dialog/optionsdialog.cpp).
+//
+// Vtable layout (exe @ 0x14015c920, 10 slots — verified via read_memory):
+//   +0x00 Slot0 Dtor             — 0x140012cc0 (scalar-deleting dtor thunk)
+//   +0x08 Slot1 TypeName         — 0x140012c60 (const-load)
+//   +0x10 Slot2 TypeId           — 0x140012c50 (const-load)
+//   +0x18 Slot3 Persist          — 0x14003a948 (runtime thunk)
+//   +0x20 Slot4 Startup          — 0x1400706d0  → NewGameDialog_Slot4 (REIMPL'd)
+//   +0x28 Slot5 Shutdown         — 0x1400706c0  → NewGameDialog_Shutdown (REIMPL'd)
+//   +0x30 Slot6 OnUpdateLayout   — 0x140070650  → NewGameDialog_Slot6 (REIMPL'd, OK-btn sync)
+//   +0x38 Slot7 OnUpdate         — 0x14003a990 (runtime thunk → DialogInstance::OnUpdate)
+//   +0x40 Slot8 OnEvent          — 0x140070110  → NewGameDialog_OnEvent (REIMPL'd)
+//   +0x48 Slot9 OnSerializeSettings — 0x14003a954 (runtime thunk)
+//
+// The real ctor is exe 0x140071040 (Ghidra mislabels it "NewGameDialog_CopyCtor";
+// it is the 5-arg ctor that MainMenuDialog::OpenNewGame calls). 0x140071120 is the
+// Dtor. fn_NewGameDialog_Ctor (engine_funcs.cpp) resolves 0x140071040 — we register
+// our standalone ctor at that address below.
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+#include "resolve.h"
+
+namespace {
+
+void* GetNewGameDialogVtable();  // forward decl
+
+// Slot 0 — Dtor. Mirrors generic ~DialogInstance scalar-deleting dtor.
+void* NewGameStub_Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *(void**)self = GetNewGameDialogVtable();
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// Slot 1 — TypeName.
+const char* NewGameStub_Slot1_TypeName(void* /*self*/) { return "NewGameDialog"; }
+
+// Slot 2 — TypeId.
+uint32_t NewGameStub_Slot2_TypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("NewGameDialog");
+    return cached;
+}
+
+// Generic logging stub for the runtime-thunk slots (3, 9). Logs once per slot.
+template <int SlotIdx>
+void NewGameStub_RuntimeThunk(void* self, ...) {
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[NewGameDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
+               SlotIdx, self);
+    }
+}
+
+// Slot 7 (OnUpdate, +0x38) — original is a base thunk into
+// UI::DialogInstance::OnUpdate which recurses children each frame (this is where
+// child element Update fires — combos, edits, buttons + UI hover/click sounds).
+// Delegate straight to the Runtime function so the dialog's controls tick.
+void NewGameImpl_Slot7_OnUpdate(void* self, const void* time) {
+    if (!self) return;
+    if (fn_DialogInstance_OnUpdate) {
+        fn_DialogInstance_OnUpdate(self, time);
+        return;
+    }
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        printf("[NewGameDialog::Slot7] fn_DialogInstance_OnUpdate NULL (mangled name?)\n");
+    }
+}
+
+void* g_NewGameDialog_Vtable_Standalone[10] = {
+    reinterpret_cast<void*>(&NewGameStub_Dtor),               // +0x00 Dtor
+    reinterpret_cast<void*>(&NewGameStub_Slot1_TypeName),     // +0x08 TypeName
+    reinterpret_cast<void*>(&NewGameStub_Slot2_TypeId),       // +0x10 TypeId
+    reinterpret_cast<void*>(&NewGameStub_RuntimeThunk<3>),    // +0x18 Persist
+    reinterpret_cast<void*>(&NewGameDialog_Slot4),            // +0x20 Startup
+    reinterpret_cast<void*>(&NewGameDialog_Shutdown),         // +0x28 Shutdown
+    reinterpret_cast<void*>(&NewGameDialog_Slot6),            // +0x30 OnUpdateLayout (OK-btn sync)
+    reinterpret_cast<void*>(&NewGameImpl_Slot7_OnUpdate),     // +0x38 OnUpdate
+    reinterpret_cast<void*>(&NewGameDialog_OnEvent),          // +0x40 OnEvent
+    reinterpret_cast<void*>(&NewGameStub_RuntimeThunk<9>),    // +0x48 OnSerializeSettings
+};
+
+void* GetNewGameDialogVtable() {
+    return reinterpret_cast<void*>(g_NewGameDialog_Vtable_Standalone);
+}
+
+// In-place ctor — clean reimpl of exe 0x140071040 ("NewGameDialog_CopyCtor").
+// Signature matches fn_NewGameDialog_Ctor_t (self, ui, extRes, nullParent,
+// parentMenuIBP). Mirrors the decompile:
+//   DialogInstance::DialogInstance(self, ui, extRes, &nullParent, 0,0,0)
+//   *self = vtable_NewGameDialog
+//   zero +0xB8..+0x110 (the 12 element-pointer fields)
+//   System::Random::Random(self+0x118)
+//   worldSetup(+0xAE0) = *parentMenuIBP   (the MainMenuDialog, used by StartGame)
+void* NewGameDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
+                                    void* nullParent, void* parentMenuIBP) {
+    if (!self) return nullptr;
+    printf("[NewGameDialog_Ctor] self=%p ui=%p extRes=%p nullParent=%p parentMenu=%p\n",
+           self, ui, extRes, nullParent, parentMenuIBP);
+
+    uint64_t parentCopy = nullParent ? *reinterpret_cast<uint64_t*>(nullParent) : 0;
+
+    if (fn_DialogInstance_Ctor && extRes) {
+        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
+    } else {
+        printf("[NewGameDialog_Ctor] skipping DialogInstance::DialogInstance "
+               "(fn=%p extRes=%p) — bare-bones init\n",
+               (void*)fn_DialogInstance_Ctor, extRes);
+    }
+
+    *reinterpret_cast<void**>(self) = GetNewGameDialogVtable();
+
+    // Zero +0xB8..+0x110 inclusive (comboTerrain .. terrainGeneratorList).
+    char* base = reinterpret_cast<char*>(self);
+    for (size_t off = 0xB8; off <= 0x110; off += 8) {
+        *reinterpret_cast<uint64_t*>(base + off) = 0;
+    }
+
+    // System::Random sub-object at +0x118.
+    if (fn_Random_Default_Ctor) {
+        fn_Random_Default_Ctor(base + 0x118);
+    }
+
+    // worldSetup (+0xAE0) = *parentMenuIBP (the MainMenuDialog ptr).
+    *reinterpret_cast<uint64_t*>(base + 0xAE0) =
+        parentMenuIBP ? *reinterpret_cast<uint64_t*>(parentMenuIBP) : 0;
+
+    return self;
+}
+
+void* NewGameDialog_Factory_Bare(void* /*loop*/) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(NewGameDialog), 8);
+    if (!p) return nullptr;
+    for (size_t off = 0; off < sizeof(NewGameDialog); off += 8) {
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(p) + off) = 0;
+    }
+    *reinterpret_cast<void**>(p) = GetNewGameDialogVtable();
+    return p;
+}
+
+void* NewGameDialog_CreateInPlace_Bare(void* mem) {
+    if (!mem) return nullptr;
+    for (size_t off = 0; off < sizeof(NewGameDialog); off += 8) {
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(mem) + off) = 0;
+    }
+    *reinterpret_cast<void**>(mem) = GetNewGameDialogVtable();
+    return mem;
+}
+
+}  // namespace
+
+extern "C" void RegisterNewGameDialogVtable() {
+    RegisterExeAddr(0x14015c920, reinterpret_cast<uintptr_t>(g_NewGameDialog_Vtable_Standalone));
+    RegisterExeAddr(0x140071040, reinterpret_cast<uintptr_t>(&NewGameDialog_Ctor_Standalone));
+}
+
+extern "C" void* NewGameDialog_StandaloneFactory(void) {
+    return NewGameDialog_Factory_Bare(nullptr);
+}
+extern "C" void* NewGameDialog_StandaloneCreateInPlace(void* memory) {
+    return NewGameDialog_CreateInPlace_Bare(memory);
+}
+
+REGISTER_TYPE(NewGameDialog, "UI::DialogInstance",
+              &NewGameDialog_StandaloneFactory, &NewGameDialog_StandaloneCreateInPlace);
+
+#endif  // STANDALONE_EXE
