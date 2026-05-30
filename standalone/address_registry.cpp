@@ -154,6 +154,9 @@ extern "C" {
     void Reimpl_TradeWork_impl_f1a0(void* self, void* stream);
 }
 
+// M5 — GameUpdateLoop::Load (world build) registers its own exe addrs + float consts.
+extern "C" void RegisterGameUpdateLoopLoadAddrs();
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -161,6 +164,11 @@ static void RegisterCodeFunctions() {
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
+
+    // M5 — PlayerController CalcTransform/UpdateCamera + the in-game loop's .rdata
+    // float constants (1.0 / audio-time-scale / camera params). Without these,
+    // gameupdateloop.cpp's EnsureInit resolves them to NULL and Update/Draw fault.
+    RegisterGameUpdateLoopLoadAddrs();
 
     // ============================================================
     // M3.5 — MenuScene::Serialize generic helpers

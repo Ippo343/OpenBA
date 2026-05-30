@@ -52,6 +52,8 @@ extern "C" {
     void  GameUpdateLoop_Shutdown(void* self);
     bool  GameUpdateLoop_Update(void* self, void* time);
     void  GameUpdateLoop_Draw(void* self, float alpha);
+    // +0x30 Load — the M5 world build (code/Game/Game/gameupdateloop_load.cpp).
+    void  GameUpdateLoop_Load(void* self);
 }
 
 namespace {
@@ -62,27 +64,13 @@ void GUL_DrawFailed(void* self) {
     (void)self;
 }
 
-// +0x30 Load — the Stage-C cliff (GameUpdateLoop::Load @ 0x140096b00 builds the
-// in-game world: Random, camera, Renderer, EntityList, Game, Weather,
-// WorldGeometry, SunLight, SkyMesh, the Graphics/Audio/Picking scenes,
-// AnimationManager, SaveLoad, then world-gen). UNIMPLEMENTED in standalone.
-// The GameLoadDialogLoopT's AsyncLoader worker calls this on a background
-// thread. For Stage B we just log that we arrived — proving the New Game
-// transition path works end-to-end up to the world bring-up.
-void GUL_Load(void* self) {
-    // Log to BOTH streams: stdout (debug log) is block-buffered/unreliable on
-    // this path, but stderr (error log) flushes — so this line is the
-    // definitive proof that the registered GameUpdateLoop vtable's +0x30 slot
-    // gets dispatched by the GameLoadDialogLoopT AsyncLoader worker.
-    fprintf(stderr,
-            "[GameUpdateLoop::Load] self=%p — STAGE C cliff reached "
-            "(world bring-up not implemented; project_newgame_path_roadmap "
-            "Stage C). Real body @ exe 0x140096b00; first dependency is "
-            "Filename ctor via dispatch slot 0x1401516f8.\n",
-            self);
-    fflush(stderr);
-    printf("[GameUpdateLoop::Load] self=%p — STAGE C cliff reached\n", self);
-}
+// +0x30 Load — the M5 world build. Now routes to the real reimpl in
+// code/Game/Game/gameupdateloop_load.cpp (GameUpdateLoop_Load), which builds
+// the in-game subsystems (Random, camera, Renderer, EntityList, Game, Weather,
+// WorldGeometry, SunLight, the Graphics/Audio/Picking scenes, AnimationManager,
+// SaveLoad). First slice defers the 8 resource Finds, the SkyMesh MeshInstance,
+// and the deep worldgen — see project_gameupdateloop_load_map. The
+// GameLoadDialogLoopT AsyncLoader worker dispatches this slot on a background thread.
 
 // +0x38 SaveRestore(self, saveFlag, savedState, outParam) — serializes loop
 // state to/from a Save::SavedState. Never invoked when GENERATING a new game
@@ -130,7 +118,7 @@ void* g_GameUpdateLoop_Vtable_Standalone[12] = {
     reinterpret_cast<void*>(&GameUpdateLoop_Update),        // +0x18
     reinterpret_cast<void*>(&GameUpdateLoop_Draw),          // +0x20
     reinterpret_cast<void*>(&GUL_DrawFailed),               // +0x28
-    reinterpret_cast<void*>(&GUL_Load),                     // +0x30
+    reinterpret_cast<void*>(&GameUpdateLoop_Load),          // +0x30 (real M5 world build)
     reinterpret_cast<void*>(&GUL_SaveRestore),              // +0x38
     reinterpret_cast<void*>(&GUL_OnVideoError),             // +0x40
     reinterpret_cast<void*>(&GUL_OnVideoRestart),           // +0x48

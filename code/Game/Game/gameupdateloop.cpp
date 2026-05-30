@@ -342,6 +342,22 @@ static void EnsureInit() {
 
     TRACE("[GameUpdateLoop] Resolving function pointers...\n");
 
+    // [GUARD-M5] g_pEngineSingleton is resolved in engine_funcs via exref slot
+    // 0x140151440, which is unregistered in standalone (→ null). GameUpdateLoop::Draw
+    // reads engine+0x10 (video context), +0x68 (frame time), +0x30 (shadow mode).
+    // In standalone the object carrying those fields is the MainLoop itself — the
+    // working menu Draw stub sources the video context from *(MainLoop + 0x10)
+    // (menudialogloopt_stubs.cpp). NOTE the EngineInstance at MainLoop+0x78 is a
+    // DIFFERENT object (audio @ +0x6d0); its +0x10 is not the context. So point
+    // g_pEngineSingleton at the MainLoop slot: *g_pEngineSingleton == MainLoop.
+    if (!g_pEngineSingleton && g_pMainLoopSingleton && *g_pMainLoopSingleton) {
+        g_pEngineSingleton = g_pMainLoopSingleton;
+        fprintf(stderr, "[GUL] g_pEngineSingleton := MainLoop singleton (%p -> ctx=%p)\n",
+                (void*)*g_pEngineSingleton,
+                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*g_pEngineSingleton) + 0x10));
+        fflush(stderr);
+    }
+
     // Exe globals (indirect — .rdata dispatch table pointers into Runtime .data)
     g_pp_rootOnlyUpdates = reinterpret_cast<bool**>(ResolveAddr(Module::Exe, 0x140151f30));
     g_pp_frameIndex = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x140151f38));
@@ -459,8 +475,17 @@ static void EnsureInit() {
     // fn_Graphics_Scene_Clean is now resolved in engine_funcs.cpp (extern).
     fn_Graphics_Scene_RemoveGlobalObject = reinterpret_cast<fn_Graphics_Scene_RemoveGlobalObject_t>(
         ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+    // [FIX-M5] The mangled name here was wrong (AEAVScene/Camera@Math); the correct
+    // signature is const-ref Scene + Camera@Graphics (AEBVScene@2@ AEBVCamera@2@) —
+    // the same export engine_funcs resolves as fn_Graphics_Renderer_Draw. The wrong
+    // name resolved NULL → Draw's Renderer::Draw call crashed (EXEC of 0). Prefer the
+    // already-resolved global; fall back to the corrected mangled name.
     fn_Graphics_Renderer_Draw_local = reinterpret_cast<fn_Graphics_Renderer_Draw_local_t>(
-        ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEAVScene@2@AEAVCamera@Math@@@Z"));
+        fn_Graphics_Renderer_Draw);
+    if (!fn_Graphics_Renderer_Draw_local) {
+        fn_Graphics_Renderer_Draw_local = reinterpret_cast<fn_Graphics_Renderer_Draw_local_t>(
+            ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
+    }
     fn_Graphics_Renderer_Dtor = reinterpret_cast<fn_Graphics_Renderer_Dtor_t>(
         ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
     fn_GUL_AudioSceneUpdate = reinterpret_cast<fn_GUL_AudioSceneUpdate_t>(
@@ -635,7 +660,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 void* game = self->m_game;
                 void* timedEventQueue = *(void**)((uint8_t*)game + 0x78);
                 TRACE("[GameUpdateLoop::Update] calling Game::UpdateTimedEvents (queue=%p)...\n", timedEventQueue);
-                fn_Game_UpdateTimedEvents(timedEventQueue, time);
+                if (fn_Game_UpdateTimedEvents) fn_Game_UpdateTimedEvents(timedEventQueue, time); // [GUARD-M5]
                 TRACE("[GameUpdateLoop::Update] Game::UpdateTimedEvents done\n");
 
                 // 3b. AnimationManager::Update
@@ -644,7 +669,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                     **g_pp_rootOnlyUpdates = rootOnly;
                 }
                 TRACE("[GameUpdateLoop::Update] calling AnimationManager::Update (rootOnly=%d)...\n", (int)rootOnly);
-                fn_AnimationManager_Update(self->m_animationManager, time, rootOnly);
+                if (fn_AnimationManager_Update) fn_AnimationManager_Update(self->m_animationManager, time, rootOnly); // [GUARD-M5] slot 0x140152050 unregistered
                 TRACE("[GameUpdateLoop::Update] AnimationManager::Update done\n");
 
                 // 3c. EntityList::Update (component ticks)
@@ -669,12 +694,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
                 // 3e. Weather::ResetTime
                 TRACE("[GameUpdateLoop::Update] calling Weather_ResetTime...\n");
-                fn_Weather_ResetTime(self->m_weather, time);
+                if (fn_Weather_ResetTime) fn_Weather_ResetTime(self->m_weather, time); // [GUARD-M5]
                 TRACE("[GameUpdateLoop::Update] Weather_ResetTime done\n");
 
                 // 3f. CitizenBehavior::Update / Map::Update
                 TRACE("[GameUpdateLoop::Update] calling CitizenList::Update (citizenList=%p)...\n", self->m_citizenList);
-                fn_CitizenList_Update(self->m_citizenList, time);
+                if (fn_CitizenList_Update) fn_CitizenList_Update(self->m_citizenList, time); // [GUARD-M5]
                 TRACE("[GameUpdateLoop::Update] CitizenList::Update done\n");
 
                 // 3g. Tutorial frame/time increment
@@ -733,8 +758,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
             float seconds = fn_Time_AsSeconds(time);
             int64_t scaledTime[1];
             fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMultiplier);
-            void* achievementMgr = **g_ppAchievementManager;
-            fn_AchievementManager_Update(achievementMgr, scaledTime);
+            // g_ppAchievementManager (exe slot 0x1401514f0) is unregistered in
+            // standalone (M5 first slice) — guard the triple-deref. Re-enable the
+            // AchievementManager tick once that singleton/slot is wired.
+            if (g_ppAchievementManager && *g_ppAchievementManager && **g_ppAchievementManager) {
+                void* achievementMgr = **g_ppAchievementManager;
+                fn_AchievementManager_Update(achievementMgr, scaledTime);
+            }
         }
         TRACE("[GameUpdateLoop::Update] AchievementManager::Update done\n");
 
@@ -757,9 +787,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     }
 
 post_simulation:
-    // Step 7: Ambient sound update
+    // Step 7: Ambient sound update — fn_AmbientSound_Update (exe FUN_1400a40e0)
+    // not yet wired in standalone. [GUARD-M5]
     TRACE("[GameUpdateLoop::Update] calling AmbientSound::Update...\n");
-    fn_AmbientSound_Update(self->m_ambientSoundData);
+    if (fn_AmbientSound_Update) fn_AmbientSound_Update(self->m_ambientSoundData);
     TRACE("[GameUpdateLoop::Update] AmbientSound::Update done\n");
 
     // Step 8: World geometry vtable call (terrain update)
@@ -789,7 +820,7 @@ post_simulation:
             // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
             bool noInputFocus = (*(uint8_t*)((uintptr_t)self->m_userInterface + 0xd9) == 0);
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
-            int64_t result = fn_EntityUI_Update(self->m_entityUI, *(int64_t*)time, noInputFocus);
+            int64_t result = fn_EntityUI_Update ? fn_EntityUI_Update(self->m_entityUI, *(int64_t*)time, noInputFocus) : 1; // [GUARD-M5]
             cursorIndex = (int)result;
             TRACE("[GameUpdateLoop::Update] EntityUI::Update done (cursorIndex=%d)\n", cursorIndex);
         }
@@ -804,9 +835,11 @@ post_simulation:
     // Step 11: Set cursor
     TRACE("[GameUpdateLoop::Update] setting cursor (index=%d)...\n", cursorIndex);
     {
-        void* keyMapMgr = *g_pKeyMapSingleton;
-        uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
-        fn_UI_SetCursor(self->m_userInterface, cursorVal);
+        void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
+        if (keyMapMgr) {
+            uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
+            fn_UI_SetCursor(self->m_userInterface, cursorVal);
+        }
     }
     TRACE("[GameUpdateLoop::Update] cursor set\n");
 
@@ -865,7 +898,7 @@ post_simulation:
     }
 
     // Step 14: SaveLoad::Update if active
-    if (self->m_saveLoad != nullptr) {
+    if (self->m_saveLoad != nullptr && fn_SaveLoad_Update) {  // [GUARD-M5]
         TRACE("[GameUpdateLoop::Update] calling SaveLoad::Update...\n");
         fn_SaveLoad_Update(self->m_saveLoad, time);
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
@@ -983,7 +1016,9 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         uint8_t* imageCapture = (uint8_t*)self->m_imageCapture;
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        if (*(int64_t*)(imageCapture + 8) == 0) {
+        // [GUARD-M5] fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is unwired in
+        // standalone; skip the image-capture terrain-refresh dance entirely.
+        if (fn_ImageCapture_DrawCheck && *(int64_t*)(imageCapture + 8) == 0) {
             // Remove and re-add global objects for terrain update
             void* gameWorld = *g_pGameWorldSingleton;
             void* graphicsScene = *(void**)((uintptr_t)gameWorld + 0x60);
@@ -1010,7 +1045,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        fn_Weather_DrawUpdate(self->m_weather, videoCtx);
+        if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(self->m_weather, videoCtx); // [GUARD-M5]
     }
     TRACE("[GameUpdateLoop::Draw] Weather::DrawUpdate done\n");
 
@@ -1153,116 +1188,141 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     *(void**)((uintptr_t)self->m_userInterface + 0x90) = self->m_audioScene;
 
     // Setup UI references (cursors, lists, etc.)
+    // fn_SetupUIRefs (exe FUN_140099260) is not reimplemented/registered in
+    // standalone yet (M5 first slice) — guard until it lands. [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling SetupUIRefs...\n");
-    fn_SetupUIRefs(*g_pKeyMapSingleton, self->m_userInterface);
+    if (fn_SetupUIRefs) fn_SetupUIRefs(*g_pKeyMapSingleton, self->m_userInterface);
     TRACE("[GameUpdateLoop::Startup] SetupUIRefs done\n");
 
     // Set default cursor
     TRACE("[GameUpdateLoop::Startup] setting default cursor...\n");
     {
-        void* keyMapMgr = *g_pKeyMapSingleton;
-        uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
-        fn_UI_SetCursor(self->m_userInterface, cursorVal);
+        void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
+        if (keyMapMgr) {
+            uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
+            fn_UI_SetCursor(self->m_userInterface, cursorVal);
+        }
     }
 
     // Enable cursor
     TRACE("[GameUpdateLoop::Startup] enabling cursor...\n");
     fn_UI_EnableCursor(self->m_userInterface, true);
 
-    // ProfessionList startup
+    // ProfessionList startup — m_professionList is DEFERRED (null) in the M5 first
+    // slice (the Profession.rsc Find is a factory-cascade landmine, not yet wired).
+    // Guard until ProfessionList's standalone REGISTER_TYPE lands.
     TRACE("[GameUpdateLoop::Startup] calling ProfessionList::Startup...\n");
-    fn_ProfessionList_Startup(self->m_professionList);
+    if (self->m_professionList) fn_ProfessionList_Startup(self->m_professionList);
     TRACE("[GameUpdateLoop::Startup] ProfessionList::Startup done\n");
+
+    // Game HUD dialogs (Toolbar/EventNotify/AutoSave) are DEFERRED in the M5 first
+    // slice: they require the loop's resource list (m_resourceList, +0x08 — the
+    // standalone loader does not populate it yet, so ExternalList::Find faults) AND
+    // their exe dialog ctors (not reimplemented). Disable the whole section until
+    // both are wired. [GUARD-M5]
+    const bool kCreateGameDialogs = false;
 
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
-    {
+    if (kCreateGameDialogs) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
 
         // Find the Dialog resource in the ExternalList
         void* foundBase = nullptr;
-        uint32_t typeInfo = *g_pDialogTypeId;
+        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
         int64_t findResult[2]; // Filename + typeInfo pair
         findResult[0] = 0;
         fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
 
         void* dialogRes = nullptr;
-        if (foundBase != nullptr) {
+        if (foundBase != nullptr && g_pDialogTypeId) {
             if (fn_IsDerivedFrom(foundBase, *g_pDialogTypeId)) {
                 dialogRes = foundBase;
             }
         }
         fn_Filename_Dtor(filename);
 
-        // Allocate and construct ToolbarDialog (0x108 bytes)
+        // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
         void* toolbar = nullptr;
-        if (mem != nullptr) {
+        if (mem != nullptr && fn_ToolbarDialog_Ctor) {
             int64_t nullParent[1] = {0};
             fn_InternalBasePtr_Ctor(nullParent, nullptr);
             toolbar = fn_ToolbarDialog_Ctor(mem, self->m_userInterface, dialogRes, nullParent, nullptr);
         }
 
-        // Add to UI
-        int64_t dialogPtr[1];
-        fn_InternalBasePtr_Ctor(dialogPtr, toolbar);
-        fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+        // Add to UI (only if the dialog was actually constructed).
+        if (toolbar) {
+            int64_t dialogPtr[1];
+            fn_InternalBasePtr_Ctor(dialogPtr, toolbar);
+            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+        } else if (mem) {
+            fn_MemFreeStatic(mem);
+        }
     }
     TRACE("[GameUpdateLoop::Startup] Toolbar dialog added\n");
 
     // Create and add EventNotify dialog
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
-    {
+    if (kCreateGameDialogs) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
-        uint32_t typeInfo = *g_pDialogTypeId;
+        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
         fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
         fn_Filename_Dtor(filename);
 
-        // Allocate EventNotify (0xF0 bytes)
+        // Allocate EventNotify (0xF0 bytes). [GUARD-M5]
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xF0, 8);
         void* eventNotify = nullptr;
-        if (mem != nullptr) {
+        if (mem != nullptr && fn_EventNotifyDialog_Ctor) {
             eventNotify = fn_EventNotifyDialog_Ctor(mem);
         }
 
-        int64_t dialogPtr[1];
-        fn_InternalBasePtr_Ctor(dialogPtr, eventNotify);
-        fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+        if (eventNotify) {
+            int64_t dialogPtr[1];
+            fn_InternalBasePtr_Ctor(dialogPtr, eventNotify);
+            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+        } else if (mem) {
+            fn_MemFreeStatic(mem);
+        }
     }
     TRACE("[GameUpdateLoop::Startup] EventNotify dialog added\n");
 
     // Create and add AutoSave dialog
     TRACE("[GameUpdateLoop::Startup] creating AutoSave dialog...\n");
-    {
+    if (kCreateGameDialogs) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/AutoSave.rsc");
         void* foundBase = nullptr;
-        uint32_t typeInfo = *g_pDialogTypeId;
+        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
         fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
 
         void* dialogRes = nullptr;
-        if (foundBase != nullptr) {
+        if (foundBase != nullptr && g_pDialogTypeId) {
             if (fn_IsDerivedFrom(foundBase, *g_pDialogTypeId)) {
                 dialogRes = foundBase;
             }
         }
         fn_Filename_Dtor(filename);
 
-        // Allocate AutoSave dialog (0xD0 bytes)
+        // Allocate AutoSave dialog (0xD0 bytes). [GUARD-M5]
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
         void* autoSave = nullptr;
-        if (mem != nullptr) {
+        if (mem != nullptr && fn_AutoSaveDialog_Ctor) {
             int64_t nullParent[1] = {0};
             fn_InternalBasePtr_Ctor(nullParent, nullptr);
             autoSave = fn_AutoSaveDialog_Ctor(mem, self->m_userInterface, dialogRes, nullParent);
         }
 
-        int64_t dialogPtr[1];
-        fn_InternalBasePtr_Ctor(dialogPtr, autoSave);
-        fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+        if (autoSave) {
+            int64_t dialogPtr[1];
+            fn_InternalBasePtr_Ctor(dialogPtr, autoSave);
+            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+        } else if (mem) {
+            fn_MemFreeStatic(mem);
+        }
     }
     TRACE("[GameUpdateLoop::Startup] AutoSave dialog added\n");
 
@@ -1272,9 +1332,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     fn_UI_SetFullscreenFade(self->m_userInterface, false, 0xFF000000, false);
     TRACE("[GameUpdateLoop::Startup] fullscreen fade set\n");
 
-    // EntityUI startup
+    // EntityUI startup — fn_EntityUI_Startup (exe FUN_140101ee0) not yet wired in
+    // standalone (M5 first slice). [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling EntityUI::Startup...\n");
-    fn_EntityUI_Startup(self->m_entityUI);
+    if (fn_EntityUI_Startup) fn_EntityUI_Startup(self->m_entityUI);
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");
@@ -1305,7 +1366,7 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
 
     // Clear achievement event handler
     TRACE("[GameUpdateLoop::Shutdown] clearing achievement event handler...\n");
-    {
+    if (g_ppAchievementManager && *g_ppAchievementManager && **g_ppAchievementManager) {
         void* achievementMgr = **g_ppAchievementManager;
         fn_AchievementManager_SetEventHandler(achievementMgr, nullptr);
     }
