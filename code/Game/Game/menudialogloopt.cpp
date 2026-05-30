@@ -1190,6 +1190,62 @@ void MenuDialogLoopT_StartMusic(void* self) {
 }
 
 // ============================================================
+// MenuDialogLoopT_BindUISounds — bind UI hover/press/click sound effects
+// ============================================================
+// Mirror of the sound-binding block of OptionsDialog_helper_9260 (exe
+// 0x140099260) — the per-UI setup MenuDLT::Startup invokes right after
+// Engine::DialogLoopT::Startup. It copies five SoundEffect Externals from the
+// KeyMap/PlacementTool container (g_pKeyMapSingleton, populated by
+// PlacementTool_Ctor at 0x140099db0) into the UserInterface's sound table at
+// UI+0x98+id*8.
+//
+// UserInterface::Play(ui, id) (Runtime 0x1801223d0) reads UI+0x98+id*8 and, if
+// non-null, plays it through the audio scene at UI+0x90. The element framework
+// fires Play automatically — confirmed callers: ButtonElement::Update plays
+// id 4 on press and id 5 on click; Element::Update plays id 3 on drag-drop;
+// Slider/Scroll::Update play their own. All run inside the
+// Engine::DialogLoopT::Update we already invoke each frame, so NO explicit
+// per-element call is needed — only the sound table + audio scene must be set.
+//
+//   soundId 2 (UI+0xa8) <- KeyMap+0x70  Audio/UI/BeginDragEffect
+//   soundId 3 (UI+0xb0) <- KeyMap+0x78  Audio/UI/EndDragEffect    (drag drop)
+//   soundId 4 (UI+0xb8) <- KeyMap+0x60  Audio/UI/ButtonDownEffect (press)
+//   soundId 5 (UI+0xc0) <- KeyMap+0x68  Audio/UI/ButtonUpEffect   (click)
+//   soundId 6 (UI+0xc8) <- KeyMap+0x58  Audio/UI/AlertEffect
+//
+// UI is embedded at MenuDLT+0x40 (DialogLoopT layout), so UI+0x90 == self+0xd0
+// — exactly the field StartMusic sets to the embedded Audio::Scene (+0xb30), so
+// these sounds route through the same scene we tick each frame (TickAudioScene).
+//
+// The five SoundEffect Externals must already be loaded into the KeyMap
+// container: in DLL mode PlacementTool_Ctor (driven by the Loader thread) does
+// it; in standalone EnsureUISoundsLoaded() loads them on demand before this
+// runs. Copying a null slot is harmless — Play no-ops on a null entry. Each
+// slot is an 8-byte Object::ExternalPtr<SoundEffect> (raw External*), copied
+// by value exactly as helper_9260 does (no SetSound call).
+void MenuDialogLoopT_BindUISounds(void* self) {
+    if (!self) return;
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
+        printf("[MenuDLT::BindUISounds] KeyMap container not populated — UI silent\n");
+        return;
+    }
+    void* keyMap = *g_pKeyMapSingleton;
+    void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
+
+    Field<void*>(ui, 0xa8) = Field<void*>(keyMap, 0x70);  // BeginDrag  (id 2)
+    Field<void*>(ui, 0xb0) = Field<void*>(keyMap, 0x78);  // EndDrag    (id 3)
+    Field<void*>(ui, 0xb8) = Field<void*>(keyMap, 0x60);  // ButtonDown (id 4)
+    Field<void*>(ui, 0xc0) = Field<void*>(keyMap, 0x68);  // ButtonUp   (id 5)
+    Field<void*>(ui, 0xc8) = Field<void*>(keyMap, 0x58);  // Alert      (id 6)
+
+    printf("[MenuDLT::BindUISounds] ui=%p beginDrag=%p endDrag=%p btnDown=%p "
+           "btnUp=%p alert=%p\n",
+           ui, Field<void*>(ui, 0xa8), Field<void*>(ui, 0xb0),
+           Field<void*>(ui, 0xb8), Field<void*>(ui, 0xc0), Field<void*>(ui, 0xc8));
+    fflush(stdout);
+}
+
+// ============================================================
 // MenuDialogLoopT_TickAudioScene — per-frame Audio::Scene::Update
 // ============================================================
 // Mirror of the Audio::Scene::Update call in MenuDLT::Update (exe 0x14009b6e0):

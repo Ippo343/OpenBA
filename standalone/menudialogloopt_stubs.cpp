@@ -98,6 +98,67 @@ static void EnsureCursorsLoaded() {
     loadAndStore(0x50, "Cursor/Place.rsc:cursor");
 }
 
+// Mirror the UI-sound block of PlacementTool_Ctor (exe 0x140099db0), which
+// loads nine Audio/UI/*Effect.rsc SoundEffects into the KeyMap/PlacementTool
+// container at +0x58..+0x98 — the slots right after the cursors. The retail
+// Loader thread runs PlacementTool_Ctor; standalone has none, so we load them
+// on demand exactly like EnsureCursorsLoaded (synchronous ExternalFactory::
+// FindOrLoad, no IsDerivedFrom check — the Runtime factory tree is incomplete).
+//
+// MenuDialogLoopT_BindUISounds then copies five of these (BeginDrag/EndDrag/
+// ButtonDown/ButtonUp/Alert) into the menu UserInterface so the element
+// framework plays hover/press/click sounds automatically. The other four
+// (PlacementMove/Thunk/Error/Warning) are in-game placement-tool sounds —
+// loaded here for completeness/M5 but not bound to the menu UI.
+//
+// Container slot offsets match PlacementTool_Ctor's param_1[0xb..0x13]:
+//   +0x58 Alert  +0x60 ButtonDown  +0x68 ButtonUp  +0x70 BeginDrag
+//   +0x78 EndDrag  +0x80 PlacementMove  +0x88 PlacementThunk
+//   +0x90 PlacementError  +0x98 Warning
+static void EnsureUISoundsLoaded() {
+    if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) {
+        printf("[UISoundLoad] WARN: g_pKeyMapSingleton not populated, skipping\n");
+        return;
+    }
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        printf("[UISoundLoad] WARN: ExternalFactory singleton not populated, skipping\n");
+        return;
+    }
+    if (!fn_Filename_CtorCStr || !fn_Filename_Dtor || !fn_ExternalFactory_FindOrLoad) {
+        printf("[UISoundLoad] WARN: required engine fns not resolved\n");
+        return;
+    }
+
+    void* keyMap = *g_pKeyMapSingleton;
+    void* factory = *g_pExternalFactorySingleton;
+    uintptr_t kmBase = reinterpret_cast<uintptr_t>(keyMap);
+
+    // Skip if AlertEffect (first sound slot) already loaded.
+    if (*reinterpret_cast<void**>(kmBase + 0x58)) {
+        return;
+    }
+
+    auto loadAndStore = [&](uintptr_t offset, const char* name) {
+        uint8_t fnBuf[16] = {};  // System::Filename
+        fn_Filename_CtorCStr(fnBuf, name);
+        void* ext = fn_ExternalFactory_FindOrLoad(factory, fnBuf);
+        fn_Filename_Dtor(fnBuf);
+        *reinterpret_cast<void**>(kmBase + offset) = ext;
+        printf("[UISoundLoad] %-34s -> %p (KeyMap+0x%02llx)\n",
+               name, ext, (unsigned long long)offset);
+    };
+
+    loadAndStore(0x58, "Audio/UI/AlertEffect.rsc");
+    loadAndStore(0x60, "Audio/UI/ButtonDownEffect.rsc");
+    loadAndStore(0x68, "Audio/UI/ButtonUpEffect.rsc");
+    loadAndStore(0x70, "Audio/UI/BeginDragEffect.rsc");
+    loadAndStore(0x78, "Audio/UI/EndDragEffect.rsc");
+    loadAndStore(0x80, "Audio/UI/PlacementMoveEffect.rsc");
+    loadAndStore(0x88, "Audio/UI/PlacementThunkEffect.rsc");
+    loadAndStore(0x90, "Audio/UI/PlacementErrorEffect.rsc");
+    loadAndStore(0x98, "Audio/UI/WarningEffect.rsc");
+}
+
 }  // namespace
 
 // Mirror the SpriteSheet block from PlacementTool_Ctor (exe 0x140099ff0,
@@ -247,6 +308,11 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // here via ExternalFactory::FindOrLoad — same end result, synchronous.
     EnsureCursorsLoaded();
     StandaloneEnsureSpriteSheetLoaded();
+    // Load the UI hover/press/click SoundEffects into the KeyMap container
+    // (retail does this in PlacementTool_Ctor via the Loader thread, which
+    // standalone lacks). MenuDialogLoopT_BindUISounds below copies them into
+    // the UserInterface's sound table.
+    EnsureUISoundsLoaded();
 
     void* ui = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x40);
     void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
@@ -281,6 +347,14 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // plays Audio/Music/Menu.rsc (loaded into self+0xb88 by Stub_Load) on the
     // music channel. Per-frame Audio::Scene::Update (Stub_Update) advances it.
     MenuDialogLoopT_StartMusic(self);
+
+    // Bind the UI hover/press/click sounds onto the embedded UserInterface
+    // (self+0x40), mirroring OptionsDialog_helper_9260's sound block. Must run
+    // after StartMusic wired the audio scene at self+0xd0 (== UI+0x90) and
+    // after EnsureUISoundsLoaded populated the KeyMap container. The element
+    // framework (ButtonElement/Element::Update, driven by fn_DialogLoopT_Update
+    // in Stub_Update) then plays these automatically on hover/click.
+    MenuDialogLoopT_BindUISounds(self);
 }
 
 void Stub_Shutdown(UpdateLoop* self) {
