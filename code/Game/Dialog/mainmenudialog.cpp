@@ -992,8 +992,16 @@ void* GetMainMenuDialogVtable() {
 // In-place construct MainMenuDialog from a MenuDLT loop. Mirrors exe ctor
 // at 0x14009BA30: builds a null parent IBP, calls DialogInstance::DialogInstance
 // with (this, ui_at_+0x40, rsc_at_+0x30, parentIBP, 0, 0, 0), then patches
-// vtable and zeroes the two MainMenuDialog-specific fields (+0xB8 game world,
-// +0xC0 engine instance).
+// vtable and sets the two MainMenuDialog-specific fields:
+//   +0xB8 = game world ptr (0 at the menu; only set once a game is active)
+//   +0xC0 = the OWNING LOOP (param_1 == the MenuDLT) — original does
+//           `*(this+0xc0) = param_1`. NOT the engine, despite earlier comments.
+// This +0xC0 wiring is load-bearing: NewGameDialog::StartGame reads
+// worldSetup(==this MainMenuDialog)+0xC0 to decide its transition path. If it
+// is 0, StartGame falls into the SetEngineNextLoop(worldSetup+0xB8) branch and
+// dereferences a NULL engine (AV read of +0x98) — the Stage-B blocker. With
+// +0xC0 = loop it correctly takes SetDialogLoaderNextLoop(loop) and writes
+// loop+0xb68 (the loop's pending next-loop).
 //
 // Bare-bones standalone fallback: when m_dialogExternal (loop+0x30) is null
 // — which is the case before Loader::Load wires Dialog/MainMenu.rsc —
@@ -1026,6 +1034,14 @@ void* MainMenuDialog_Ctor_FromLoop(void* mem, void* loop) {
                "DialogInstance ctor skipped, awaiting Loader::Load (M2)\n",
                loop, rsc);
     }
+
+    // +0xC0 = the owning loop (matches original `*(this+0xc0) = param_1`).
+    // +0xB8 (game world) stays 0 — already zeroed above. Required so
+    // NewGameDialog::StartGame takes the SetDialogLoaderNextLoop path instead
+    // of dereferencing a NULL engine. Only meaningful when constructed from a
+    // real loop (bare factory paths pass loop=nullptr and leave it 0).
+    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(mem) + 0xC0) =
+        reinterpret_cast<uint64_t>(loop);
 
     *reinterpret_cast<void**>(mem) = GetMainMenuDialogVtable();
     return mem;

@@ -499,6 +499,10 @@ extern void RegisterSplashDialogLoopVtable();
 // Defined in standalone/loader_loop_stubs.cpp.
 extern void RegisterLoaderLoopVtables();
 
+// Defined in standalone/gameupdateloop_stubs.cpp — the in-game simulation loop
+// vtable (0x14015e2f0). Built by NewGameDialog::StartGame on "OK".
+extern void RegisterGameUpdateLoopVtable();
+
 // ============================================================
 // M3.5 Path B session 7 — NoiseUI ImageBuffer vtable scaffolding
 // ============================================================
@@ -598,6 +602,13 @@ static void RegisterVtablesAndTypeIds() {
 
     // --- LoaderLoop vtables (0x140158870 inner + 0x1401588d0 outer) — stubs ---
     RegisterLoaderLoopVtables();
+
+    // --- GameUpdateLoop vtable (0x14015e2f0) — in-game simulation loop ---
+    // NewGameDialog::StartGame writes this onto the freshly-allocated
+    // GameUpdateLoop; without it the loop gets a NULL vptr. Slots 0-4 are the
+    // clean reimpls (Destroy/Startup/Shutdown/Update/Draw); the rest are stubs
+    // (GetResourceFilename returns "Game/Game"; Load logs the Stage-C cliff).
+    RegisterGameUpdateLoopVtable();
 
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.

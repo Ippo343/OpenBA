@@ -602,6 +602,10 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     // then sets next loop on the appropriate engine or dialog loader target.
     {
         uintptr_t ws = (uintptr_t)self->worldSetup;
+        fprintf(stderr, "[NewGameDialog::StartGame] ENTER self=%p worldSetup=%p "
+                "GameUpdateLoop_Vtable=%p\n", (void*)self, (void*)ws,
+                (void*)g_GameUpdateLoop_Vtable);
+        fflush(stderr);
 
         // Step 1: Allocate and construct GameUpdateLoop (0x160 bytes)
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
@@ -676,17 +680,28 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
         // Step 4: Set next loop
         // In StartNewGame, the check is: +0xC0 (loaderLoop1) == 0 -> use engine at +0xB8
         uintptr_t loaderLoop1 = *(uintptr_t*)(ws + 0xC0);
+        uintptr_t engPtr0 = *(uintptr_t*)(ws + 0xB8);
+        fprintf(stderr, "[NewGameDialog::StartGame] loops built game=%p dl=%p outer=%p; "
+                "ws+0xC0(loop)=%p ws+0xB8(engine)=%p -> %s\n",
+                pGameLoop, pDlLoop, pOuterLoop, (void*)loaderLoop1, (void*)engPtr0,
+                loaderLoop1 ? "SetDialogLoaderNextLoop(loop)" : "SetEngineNextLoop(engine)");
+        fflush(stderr);
         if (loaderLoop1 == 0) {
-            uintptr_t engPtr = *(uintptr_t*)(ws + 0xB8);
-            SetEngineNextLoop(engPtr, pOuterLoop);
+            SetEngineNextLoop(engPtr0, pOuterLoop);
         } else {
             SetDialogLoaderNextLoop(loaderLoop1, pOuterLoop);
         }
+        fprintf(stderr, "[NewGameDialog::StartGame] EXIT — next loop set, "
+                "transition pending\n");
+        fflush(stderr);
     }
 }
 
 void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData) {
     uintptr_t s = (uintptr_t)self;
+    fprintf(stderr, "[NewGameDialog::OnEvent] self=%p type=0x%x data=%d\n",
+            (void*)self, eventType, eventData);
+    fflush(stderr);
 
     if (eventType == 0x12) {
         // Button click
