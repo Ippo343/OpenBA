@@ -62,6 +62,66 @@ static void* (*s_fn_Filename_Ctor)(void* self) = nullptr;
 static void (*s_fn_Filename_Dtor)(void* self) = nullptr;
 
 // ============================================================
+// Standalone reimplementations of the +0x80 terrain-data-array helpers.
+// In standalone these exe addresses aren't mapped, so ResolveAddr returns
+// null and the size table never deserializes (gen+0x80 stays null -> worldgen
+// reads dim=0). These faithful reimpls (decompiled from FUN_1400206b0 /
+// FUN_140020870) populate the size table so the in-game terrain build works.
+// Each row is a SizeRow: 17 ints, stride 0x44; row[0] = map dimension.
+// ============================================================
+
+// FUN_1400206b0 -- stride-0x44 dynamic-array resize. New rows get the engine
+// default SizeRow template (row[0]=256, etc.).
+static void Reimpl_TerrainDataResize(void* arrayField, int newCount) {
+    if (!arrayField || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    uint8_t* hdr = reinterpret_cast<uint8_t*>(arrayField);
+    int oldCount = *reinterpret_cast<int*>(hdr + 8);
+    if (newCount == oldCount) return;
+    void* oldPtr = *reinterpret_cast<void**>(hdr + 0);
+    *reinterpret_cast<int*>(hdr + 8) = newCount;
+    if (*reinterpret_cast<int*>(hdr + 0xc) < newCount) {
+        *reinterpret_cast<int*>(hdr + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0)
+            *reinterpret_cast<int*>(hdr + 0xc) = newCount * 3;
+        int cap = *reinterpret_cast<int*>(hdr + 0xc);
+        *reinterpret_cast<void**>(hdr + 0) =
+            fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(cap) * 0x44, 4);
+    }
+    int start = (oldPtr == *reinterpret_cast<void**>(hdr + 0)) ? oldCount : 0;
+    uint8_t* dstBase = *reinterpret_cast<uint8_t**>(hdr + 0);
+    uint8_t* srcBase = reinterpret_cast<uint8_t*>(oldPtr);
+    static const int32_t kDefaultRow[17] = {
+        0x100, 0x32, 10, 0x14, 0, 10, 0x14, 3, 1, 1000000, 0,
+        1, 10, 0x14, 0x23, 6, 0xc
+    };
+    for (long long i = start; i < newCount; ++i) {
+        int32_t* d = reinterpret_cast<int32_t*>(dstBase + i * 0x44);
+        if (!d) continue;
+        if (i < oldCount) {
+            const int32_t* s = reinterpret_cast<const int32_t*>(srcBase + i * 0x44);
+            for (int k = 0; k < 17; ++k) d[k] = s[k];
+        } else {
+            for (int k = 0; k < 17; ++k) d[k] = kDefaultRow[k];
+        }
+    }
+    if (oldPtr != *reinterpret_cast<void**>(hdr + 0) && oldPtr) fn_MemFreeStatic(oldPtr);
+}
+
+// FUN_140020870 -- serialize `count` rows of 17 ints each. NOTE row[9] is
+// serialized LAST (after row[16]) -- this field order must match the .rsc write
+// order exactly or the stream misaligns.
+static void Reimpl_TerrainDataSerialize(void* serializer, uint32_t count, void* arrayPtr) {
+    if (static_cast<int>(count) <= 0 || !arrayPtr || !g_fn_Serialize_Int) return;
+    static const int kOrder[17] = { 0,1,2,3,4,5,6,7,8,10,11,12,13,14,15,16,9 };
+    int32_t* row = reinterpret_cast<int32_t*>(arrayPtr);
+    for (uint32_t r = 0; r < count; ++r) {
+        for (int k = 0; k < 17; ++k)
+            g_fn_Serialize_Int(serializer, &row[kOrder[k]], nullptr);
+        row += 17;
+    }
+}
+
+// ============================================================
 // TerrainGenerator_InitFuncs -- resolve local function pointers
 // ============================================================
 void TerrainGenerator_InitFuncs() {
@@ -69,13 +129,15 @@ void TerrainGenerator_InitFuncs() {
     s_fn_ResolveFilenameString = reinterpret_cast<void(*)(void*)>(
         ResolveAddr(Module::Exe, 0x14001fd10));
 
-    // FUN_1400206b0 -- terrain data array resize
+    // FUN_1400206b0 -- terrain data array resize (standalone fallback to reimpl)
     s_fn_TerrainDataResize = reinterpret_cast<void(*)(void*, int)>(
         ResolveAddr(Module::Exe, 0x1400206b0));
+    if (!s_fn_TerrainDataResize) s_fn_TerrainDataResize = &Reimpl_TerrainDataResize;
 
-    // FUN_140020870 -- terrain data array serialize
+    // FUN_140020870 -- terrain data array serialize (standalone fallback to reimpl)
     s_fn_TerrainDataSerialize = reinterpret_cast<void(*)(void*, uint32_t, void*)>(
         ResolveAddr(Module::Exe, 0x140020870));
+    if (!s_fn_TerrainDataSerialize) s_fn_TerrainDataSerialize = &Reimpl_TerrainDataSerialize;
 
     // Filename ctor/dtor from exports
     if (fn_Filename_Ctor) {

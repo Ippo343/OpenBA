@@ -32,6 +32,7 @@
 // ============================================================
 extern "C" void* Reimpl_Geometry_Init(void* self);            // FUN_1400b00e0 (serialize_arrays.cpp)
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
+extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 
 // ============================================================
 // Load-specific Runtime resolves not yet in engine_funcs.h
@@ -746,8 +747,39 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // Step 30 — AchievementManager::SetEventHandler — GUARDED (slot 0x1401514f0 not yet
     // registered in standalone, so g_ppAchievementManager is null → skip cleanly).
 
-    // Step 31 — worldgen (new-game branch) — DEFERRED (milestone 5b: terrain + citizens).
-    // No map arrays allocated, no citizens spawned, camera position left at ctor default.
+    // Step 31 — worldgen (new-game branch, savedState==0). M5 5b first-light:
+    // build the terrain mesh (base perlin island) + the gameplay tile-grid map
+    // arrays. DEFERRED to later 5b slices: TradeComponent trade-map resize,
+    // CreateNaturalResource (trees/stone — spawns worker threads), and
+    // FUN_1400a3300 start-town + initial-citizen spawn (which also sets the
+    // camera position — until then the camera stays at the ctor default, framing
+    // the map centre at the origin). See code/Game/Game/worldgen.cpp.
+    static const bool kEnableWorldgen = true;
+    if (kEnableWorldgen && *(void**)(p + 0x58) == nullptr /*new game*/) {
+        void* worldGeom  = *(void**)(p + 0x110);
+        void* terrainGen = *(void**)(p + 0x48);
+        int   sizeIdx    = *(int32_t*)(p + 0x34);
+        uint32_t seed    = *(uint32_t*)(p + 0x30);
+        if (worldGeom && terrainGen) {
+            WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
+
+            // Map dimension from the terrain size-table row (sizeRow[0]).
+            int32_t* sizeTable = *(int32_t**)((uint8_t*)terrainGen + 0x80);
+            uint32_t dim = sizeTable ? *(uint32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : 0;
+
+            // Gameplay tile-grid arrays at the map struct (+0x148): store dim,
+            // allocate two dim*dim arrays (+0x18/+0x28), zero the +0x28 one.
+            void* mapStruct = *(void**)(p + 0x148);
+            if (mapStruct && dim > 0) {
+                *(uint32_t*)((uint8_t*)mapStruct + 4) = dim;
+                int n = (int)(dim * dim);
+                Reimpl_Array_Resize_Stride04((uint8_t*)mapStruct + 0x28, n);
+                Reimpl_Array_Resize_Stride04((uint8_t*)mapStruct + 0x18, n);
+                void* arr = *(void**)((uint8_t*)mapStruct + 0x28);
+                if (arr) memset(arr, 0, (size_t)n * 4);
+            }
+        }
+    }
 
     // Step 32 — AchievementInstance — SKIPPED on new game (achievementId == -1).
     *(void**)(p + 0x150) = nullptr;
@@ -759,7 +791,18 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         void* gScene = *(void**)(p + 0x60);   // g_pGameWorld+0x60
         if (gScene && fn_Graphics_Scene_AddGlobalObject) {
             if (*(void**)(p + 0x110)) fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x110)); // WorldGeom
-            if (*(void**)(p + 0x100)) fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x100)); // SunLight
+            // M5 5b first-light: DEFER the SunLight. Adding it makes Renderer::Draw
+            // run SunLight::DrawShadowMap (a shadow pass) which draws the terrain
+            // with a shadow shader / render-target that standalone hasn't set up →
+            // crash in Context::BindResources. The menu never hits this (no sun
+            // shadows). Skipping the SunLight skips the shadow pass; the terrain
+            // renders in the main pass (lit by ambient). Re-enable once the shadow
+            // map is wired (or after disabling SunLight shadow-casting). Verified
+            // via GDB watchpoint session 2026-05-30: geometry is NOT corrupted;
+            // the crash is purely the shadow-pass draw.
+            static const bool kAddSunLight = false;
+            if (kAddSunLight && *(void**)(p + 0x100))
+                fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x100)); // SunLight
             // SkyMesh deferred → not added
         }
         void* aScene = *(void**)(p + 0x78);   // g_pGameWorld+0x78
