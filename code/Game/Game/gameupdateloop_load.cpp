@@ -791,16 +791,17 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         void* gScene = *(void**)(p + 0x60);   // g_pGameWorld+0x60
         if (gScene && fn_Graphics_Scene_AddGlobalObject) {
             if (*(void**)(p + 0x110)) fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x110)); // WorldGeom
-            // M5 5b first-light: DEFER the SunLight. Adding it makes Renderer::Draw
-            // run SunLight::DrawShadowMap (a shadow pass) which draws the terrain
-            // with a shadow shader / render-target that standalone hasn't set up →
-            // crash in Context::BindResources. The menu never hits this (no sun
-            // shadows). Skipping the SunLight skips the shadow pass; the terrain
-            // renders in the main pass (lit by ambient). Re-enable once the shadow
-            // map is wired (or after disabling SunLight shadow-casting). Verified
-            // via GDB watchpoint session 2026-05-30: geometry is NOT corrupted;
-            // the crash is purely the shadow-pass draw.
-            static const bool kAddSunLight = false;
+            // M5 5b lighting: add the SunLight so the directional light + ambient
+            // light the terrain in the main render pass (Renderer::Draw dispatches the
+            // light's vtable+0x50 SunLight::Draw → Context::SetLight + DrawItemList).
+            // The crashing shadow pass (SunLight::DrawShadowMap, vtable+0x48) is gated by
+            // renderer+0x3c, which GameUpdateLoop::Draw step 6 forces to 0 in standalone
+            // ("Shadows: Off") — the shadow draw never runs, so the terrain renders lit
+            // without the unwired shadow shader/render-target. Verified against the
+            // proven menu path (which adds its SunLight the same way) + the Runtime
+            // decompiles (Renderer::Draw 0x180104bb0, SunLight::Draw 0x1801067b0,
+            // DrawShadowMap 0x180106bc0, AddScene 0x180105700).
+            static const bool kAddSunLight = true;
             if (kAddSunLight && *(void**)(p + 0x100))
                 fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x100)); // SunLight
             // SkyMesh deferred → not added

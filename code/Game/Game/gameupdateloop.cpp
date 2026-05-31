@@ -1049,11 +1049,27 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     }
     TRACE("[GameUpdateLoop::Draw] Weather::DrawUpdate done\n");
 
-    // Step 6: Copy renderer shadow mode from engine
+    // Step 6: Copy renderer shadow mode from engine.
+    // renderer+0x3c is the shadow mode: Renderer::AddScene (Runtime 0x180105700) stores it
+    // as the main draw group's +0xe8, and Renderer::Draw (0x180104bb0) reads it back into
+    // renderer+0x3c before dispatching each global object's vtable+0x48 (DrawShadowMap) /
+    // vtable+0x50 (Draw). SunLight::DrawShadowMap (0x180106bc0) is gated by
+    // `if (renderer+0x3c != 0)`; SunLight::Draw (0x1801067b0, main pass) is NOT — it always
+    // runs Context::SetLight + Renderer::DrawItemList to light and render the terrain.
     {
         void* engine = *g_pEngineSingleton;
-        *(uint32_t*)((uintptr_t)self->m_renderer + 0x3c) =
-            *(uint32_t*)((uintptr_t)engine + 0x30);
+        uint32_t shadowMode = *(uint32_t*)((uintptr_t)engine + 0x30);
+#ifdef STANDALONE_EXE
+        // Standalone has not wired the sun-shadow render pass: with shadow mode != 0,
+        // SunLight::DrawShadowMap draws the terrain into a shadow map using a shadow
+        // shader / render-target that standalone never set up, crashing in VideoDX11
+        // Context::BindResources. Force 0 ("Shadows: Off"): the shadow pass early-returns
+        // while the main lit pass still renders the terrain. (Also: g_pEngineSingleton ==
+        // MainLoop in standalone, so engine+0x30 is not the real shadow-quality field.)
+        // Re-enable once the shadow pass is wired. See gameupdateloop_load.cpp step 33.
+        shadowMode = 0;
+#endif
+        *(uint32_t*)((uintptr_t)self->m_renderer + 0x3c) = shadowMode;
     }
 
     // Step 7: Graphics::Renderer::Draw
