@@ -157,6 +157,9 @@ extern "C" {
 // M5 — GameUpdateLoop::Load (world build) registers its own exe addrs + float consts.
 extern "C" void RegisterGameUpdateLoopLoadAddrs();
 
+// M5 5c — Map terrain-position query (fn_MapGetTerrainPos = FUN_14009f3e0, ~100 call sites).
+extern "C" void RegisterMapQueryAddrs();
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -169,6 +172,9 @@ static void RegisterCodeFunctions() {
     // float constants (1.0 / audio-time-scale / camera params). Without these,
     // gameupdateloop.cpp's EnsureInit resolves them to NULL and Update/Draw fault.
     RegisterGameUpdateLoopLoadAddrs();
+
+    // M5 5c — terrain height/world-pos query (camera, tile classifier, ~100 component sites).
+    RegisterMapQueryAddrs();
 
     // ============================================================
     // M3.5 — MenuScene::Serialize generic helpers

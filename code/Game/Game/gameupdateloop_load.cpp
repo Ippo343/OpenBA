@@ -778,6 +778,51 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                 void* arr = *(void**)((uint8_t*)mapStruct + 0x28);
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
+
+            // [M5 5c DIAG] Start-town (FUN_1400a3300) prerequisite probe. Dumps the
+            // state of startConfig (mapGen = loop+0x40), the Game tile grid (Game+0x80),
+            // and the camera target, WITHOUT calling FUN_1400a3300 yet. Remove once
+            // start-town is implemented. See project_newgame_path_roadmap / task #6/#7.
+            {
+                uint8_t* mapGen = *(uint8_t**)(p + 0x40);   // startConfig (MapGenerator rsc)
+                uint8_t* game   = *(uint8_t**)(p + 0xf8);
+                uint8_t* wgeom  = *(uint8_t**)(p + 0x110);
+                uint8_t* pctrl  = *(uint8_t**)(p + 0xe0);
+                fprintf(stderr, "[startTown::DIAG] mapGen(loop+0x40)=%p game=%p worldGeom=%p playerCtrl=%p\n",
+                        mapGen, game, wgeom, pctrl);
+                if (mapGen) {
+                    fprintf(stderr, "[startTown::DIAG]   mapGen+0x3c(townSize)=%d\n",
+                            *(int32_t*)(mapGen + 0x3c));
+                    fprintf(stderr, "[startTown::DIAG]   pools: a0=%p a8(cnt)=%d | b0=%p b8(cnt)=%d | "
+                            "c0=%p c8(cnt)=%d | d0=%p d8(cnt)=%d | e0=%d e4=%d e8=%d\n",
+                            *(void**)(mapGen + 0xa0), *(int32_t*)(mapGen + 0xa8),
+                            *(void**)(mapGen + 0xb0), *(int32_t*)(mapGen + 0xb8),
+                            *(void**)(mapGen + 0xc0), *(int32_t*)(mapGen + 0xc8),
+                            *(void**)(mapGen + 0xd0), *(int32_t*)(mapGen + 0xd8),
+                            *(int32_t*)(mapGen + 0xe0), *(int32_t*)(mapGen + 0xe4),
+                            *(int32_t*)(mapGen + 0xe8));
+                }
+                if (game) {
+                    fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p\n",
+                            *(int32_t*)game, *(void**)(game + 0x80));
+                }
+                if (wgeom)
+                    fprintf(stderr, "[startTown::DIAG]   worldGeom+0xc0(dim)=%d\n", *(int32_t*)(wgeom + 0xc0));
+                // Keystone sanity: sample terrain height via the new fn_MapGetTerrainPos
+                // (FUN_14009f3e0) at map centre + a few offsets. Banished valley => centre
+                // should be low/buildable, edges higher.
+                if (fn_MapGetTerrainPos) {
+                    const float pts[4][2] = {{0,0},{-100,0},{100,100},{-120,-120}};
+                    for (int i = 0; i < 4; ++i) {
+                        float in[3] = { pts[i][0], pts[i][1], 0.0f };
+                        float out[3] = {0,0,0};
+                        fn_MapGetTerrainPos(game, out, in, 1, nullptr);
+                        fprintf(stderr, "[startTown::DIAG]   height@(%.0f,%.0f) = %.3f\n",
+                                pts[i][0], pts[i][1], out[2]);
+                    }
+                }
+                fflush(stderr);
+            }
         }
     }
 

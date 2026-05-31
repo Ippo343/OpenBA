@@ -127,9 +127,34 @@ static void wg_EnsureInit() {
     fflush(stderr);
 }
 
-// Toggle: full f390 feature pipeline vs first-light (e5d0 only). Feature stages
-// (paths/rivers/erosion/smoothing) land in later slices.
+// Toggle: full f390 feature pipeline vs first-light (e5d0 only).
+// The feature stages are what carve the buildable lowland out of the e5d0 dome:
+// e5d0 leaves a ~8-height dome everywhere; the coastline ring + rivers + ranges
+// geometry feed the e910/ec50 feature stamps, whose `h = maskB*h*maskA - maskC`
+// pinches the carved regions down toward sea level (buildable) while uncarved
+// areas stay high (mountains). Reverse-engineered + reimplemented per stage in
+// worldgen_f390_{coastline,ranges,rivers,erosion}.cpp (m5-f390 agents, 2026-05-31).
+//
+// TEMPORARILY DISABLED (2026-05-31): the stages are implemented + compile, but enabling
+// them corrupts the hf-embedded System::Random (its MT index at hf+0xA18 = Random+0x9c0
+// gets a state-value written into it during the pipeline), so the next Random::Rand()
+// does state[~2e9] -> OOB read crash (caught in cd150 line 555). Diagnosis via GDB
+// hardware watchpoint: the corruption is NOT from coastline's in-bounds ring-buffer
+// writes; likely a System::Random init/size mismatch (real c4b0 default-constructs the
+// embedded Random before seeding; we memset+seed) OR a heap overflow adjacent to hf.
+// Left e5d0-only (working dome terrain) until the corruption is root-caused. See
+// project_starttown_a3300 / the f390-random-corruption task.
 static constexpr bool kFullPipeline = false;
+
+// f390 feature/normalization stages (each operates on the heightfield `hf`).
+extern "C" void wg_f390_coastline(void* hf);   // cd090 — coastline ring -> patchList
+extern "C" void wg_f390_ranges(void* hf);      // cd150 — mountain ranges -> listC
+extern "C" void wg_f390_paths(void* hf);       // ccf60 — secondary paths -> patchList
+extern "C" void wg_f390_rivers(void* hf);      // cd460 — river network -> listB
+extern "C" void wg_f390_stamp(void* hf);       // e910  — feature stamp BUILD (carves height)
+extern "C" void wg_f390_erosion(void* hf);     // cc080 — droplet erosion
+extern "C" void wg_f390_carve(void* hf);       // ec50  — feature stamp finalize/carve
+extern "C" void wg_f390_smooth(void* hf);      // c350  — 3-tap box-blur (called twice)
 
 // ============================================================
 // e5d0 — base perlin heightmap (the single load-bearing gen function).
@@ -208,8 +233,17 @@ static void wg_HeightmapPipeline_f390(int32_t* hf) {
     wg_BaseHeightmap_e5d0(hf);
 
     if (kFullPipeline) {
-        // DEFERRED later slices: cd090/cd150/ccf60 (paths/ranges),
-        // cd460/e910 (rivers/stamp), cc080 (erosion), ec50/c350x2 (finalize/smooth).
+        // Verified f390 order (blueprint §0). g_pGameWorldSingleton+0x24 stage
+        // counters (1..5) are progress hints only; omitted (no consumer in standalone).
+        wg_f390_coastline(hf);   // cd090  (gworld+0x24 = 2)
+        wg_f390_ranges(hf);      // cd150
+        wg_f390_paths(hf);       // ccf60
+        wg_f390_rivers(hf);      // cd460  (gworld+0x24 = 3)
+        wg_f390_stamp(hf);       // e910   — first carve pass
+        wg_f390_erosion(hf);     // cc080  (gworld+0x24 = 4)
+        wg_f390_carve(hf);       // ec50   (gworld+0x24 = 5) — finalize carve
+        wg_f390_smooth(hf);      // c350
+        wg_f390_smooth(hf);      // c350 (second pass)
     }
 }
 
