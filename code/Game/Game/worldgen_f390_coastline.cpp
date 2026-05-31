@@ -311,6 +311,12 @@ static void coastline_Subdivide_cc510(void* self, void** arrPtr, int lo, int hi,
     int span = hi - lo;
     if (span <= 1) return;
 
+    // RNG is the hf-embedded System::Random at self+0x58 — NOT self (hf base). Passing
+    // `self` made the MT core read/write a window shifted -0x58, and its twist clobbered
+    // the real Random's index at hf+0x58 with a state value -> later Rand() did state[~1.7e9]
+    // -> OOB crash. (cc850 / SubdivideSeg already pass +0x58; only this call was wrong.)
+    void* rng = (uint8_t*)self + HF_RANDOM;
+
     uint8_t* base = (uint8_t*)*arrPtr;
     float* pLo = (float*)(base + (size_t)lo * PATHPT_STRIDE);
     float* pHi = (float*)(base + (size_t)hi * PATHPT_STRIDE);
@@ -340,7 +346,7 @@ static void coastline_Subdivide_cc510(void* self, void** arrPtr, int lo, int hi,
         bool innerOK = false;
         float eHi[2], eLo[2];
         while (!innerOK) {
-            float t = (s_RandFloatTol ? s_RandFloatTol(self) : 0.0f) * limB * kMidAmp_0_666;
+            float t = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * limB * kMidAmp_0_666;
             candX = nX * t + midX;
             candY = nY * t + midY;
 

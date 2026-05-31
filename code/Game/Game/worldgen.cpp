@@ -134,17 +134,10 @@ static void wg_EnsureInit() {
 // pinches the carved regions down toward sea level (buildable) while uncarved
 // areas stay high (mountains). Reverse-engineered + reimplemented per stage in
 // worldgen_f390_{coastline,ranges,rivers,erosion}.cpp (m5-f390 agents, 2026-05-31).
-//
-// TEMPORARILY DISABLED (2026-05-31): the stages are implemented + compile, but enabling
-// them corrupts the hf-embedded System::Random (its MT index at hf+0xA18 = Random+0x9c0
-// gets a state-value written into it during the pipeline), so the next Random::Rand()
-// does state[~2e9] -> OOB read crash (caught in cd150 line 555). Diagnosis via GDB
-// hardware watchpoint: the corruption is NOT from coastline's in-bounds ring-buffer
-// writes; likely a System::Random init/size mismatch (real c4b0 default-constructs the
-// embedded Random before seeding; we memset+seed) OR a heap overflow adjacent to hf.
-// Left e5d0-only (working dome terrain) until the corruption is root-caused. See
-// project_starttown_a3300 / the f390-random-corruption task.
-static constexpr bool kFullPipeline = false;
+// Random-corruption bug fixed 2026-05-31: coastline_Subdivide_cc510 passed `self`
+// (hf base) instead of `self+0x58` to the RNG, shifting the MT window -0x58 and
+// clobbering the real Random index. Fixed in worldgen_f390_coastline.cpp.
+static constexpr bool kFullPipeline = true;
 
 // f390 feature/normalization stages (each operates on the heightfield `hf`).
 extern "C" void wg_f390_coastline(void* hf);   // cd090 — coastline ring -> patchList
