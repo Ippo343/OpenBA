@@ -33,6 +33,7 @@
 extern "C" void* Reimpl_Geometry_Init(void* self);            // FUN_1400b00e0 (serialize_arrays.cpp)
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
+extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 
 // ============================================================
 // Load-specific Runtime resolves not yet in engine_funcs.h
@@ -779,6 +780,14 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                 if (arr) memset(arr, 0, (size_t)n * 4);
             }
 
+            // M5 5c — build the gameplay TILE GRID at Game+0x80 (front-half of
+            // CreateNaturalResource): classify every cell into a terrain type
+            // (buildable / shore / water / mountain). Prerequisite for the
+            // start-town spiral spawn-finder. See code/Game/Game/maptilegrid.cpp.
+            void* game = *(void**)(p + 0xf8);
+            if (game && dim > 0)
+                MapTileGrid_Build(game, (int)dim);
+
             // [M5 5c DIAG] Start-town (FUN_1400a3300) prerequisite probe. Dumps the
             // state of startConfig (mapGen = loop+0x40), the Game tile grid (Game+0x80),
             // and the camera target, WITHOUT calling FUN_1400a3300 yet. Remove once
@@ -803,8 +812,22 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                             *(int32_t*)(mapGen + 0xe8));
                 }
                 if (game) {
-                    fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p\n",
-                            *(int32_t*)game, *(void**)(game + 0x80));
+                    int gdim = *(int32_t*)game;
+                    uint8_t* cells = *(uint8_t**)(game + 0x80);
+                    fprintf(stderr, "[startTown::DIAG]   *game(dim)=%d  tileGrid(*(game+0x80))=%p  cnt=%d\n",
+                            gdim, cells, *(int32_t*)(game + 0x88));
+                    // Tile-type histogram (2=buildable 6/10=mountain 7=shore 8=deep water).
+                    if (cells && gdim > 0) {
+                        int hist[16] = {0};
+                        int total = gdim * gdim;
+                        for (int i = 0; i < total; ++i) {
+                            uint8_t t = cells[(size_t)i * 0x30 + 0x29];
+                            hist[t < 16 ? t : 0]++;
+                        }
+                        fprintf(stderr, "[startTown::DIAG]   tiles: buildable(2)=%d shore(7)=%d "
+                                "deepWater(8)=%d mtnLo(10)=%d mtnHi(6)=%d\n",
+                                hist[2], hist[7], hist[8], hist[10], hist[6]);
+                    }
                 }
                 if (wgeom)
                     fprintf(stderr, "[startTown::DIAG]   worldGeom+0xc0(dim)=%d\n", *(int32_t*)(wgeom + 0xc0));
