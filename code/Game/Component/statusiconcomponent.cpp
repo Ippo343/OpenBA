@@ -289,3 +289,12 @@ void StatusIconComponent_InitFuncs() {
            (void*)s_fn_OnRemove_Original);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(StatusIconComponent, 0x108, 0xC2)
+REGISTER_TYPE(StatusIconComponent, "Component",
+              &StatusIconComponent_Factory, &StatusIconComponent_CreateInPlace);
+#endif // STANDALONE_EXE

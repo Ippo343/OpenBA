@@ -518,3 +518,12 @@ void StorageDisplayComponent_InitFuncs() {
            (void*)s_fn_SetDisplayMesh, (void*)s_pGameState);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(StorageDisplayComponent, 0x38, 0xCB)
+REGISTER_TYPE(StorageDisplayComponent, "Component",
+              &StorageDisplayComponent_Factory, &StorageDisplayComponent_CreateInPlace);
+#endif // STANDALONE_EXE

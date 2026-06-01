@@ -114,3 +114,27 @@ void PopulationComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ============================================================
+// Standalone factory (Foundation D — component instantiation)
+// ============================================================
+// In the standalone exe the original is not mapped, so the engine's
+// Object::Factory::CreateObject(typeId) must resolve to a C++ factory here — the
+// component analogue of the Foundation C description factories. Without it the
+// type stays NullFactory and ComponentEntity_CtorFromDescription gets a null
+// component (silently) — the entity spawns but is empty.
+//
+// Produces an inert-but-valid component via the shared infrastructure (see
+// component_factory_base.h): correct size (0x70) + Object::Internal base + shared
+// stub vtable + the real capability flags (+0x20 = 0xCB, from PopulationComponent_Ctor
+// 0x1400546d0) + zeroed body. The component still registers in the world entity
+// list and its update/draw buckets; the stubbed Update/Draw are safe no-ops until
+// the real methods get true standalone reimpls.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(PopulationComponent, 0x70, 0xCB)
+REGISTER_TYPE(PopulationComponent, "Component",
+              &PopulationComponent_Factory, &PopulationComponent_CreateInPlace);
+#endif // STANDALONE_EXE

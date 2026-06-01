@@ -421,3 +421,15 @@ void ModelComponent_InitFuncs() {
            (void*)s_fn_ModelHelper_2b70, (void*)s_fn_EntityNotify);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid ModelComponent: size 0x170 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x83 (from ModelComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(ModelComponent, 0x170, 0x83)
+REGISTER_TYPE(ModelComponent, "Component",
+              &ModelComponent_Factory, &ModelComponent_CreateInPlace);
+#endif // STANDALONE_EXE

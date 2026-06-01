@@ -329,3 +329,15 @@ void CitizenAIComponent_InitFuncs() {
            (void*)s_pStorageTypeId, s_pStorageTypeId ? *s_pStorageTypeId : 0);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// size 0xd0 (CitizenAIComponent_Factory MemAlloc), flags 0x89 (Ctor 0x14010fb70:
+// Component base sets +0x20=0x80, leaf OR 0x89 => 0x89).
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(CitizenAIComponent, 0xd0, 0x89)
+REGISTER_TYPE(CitizenAIComponent, "Component",
+              &CitizenAIComponent_Factory, &CitizenAIComponent_CreateInPlace);
+#endif // STANDALONE_EXE

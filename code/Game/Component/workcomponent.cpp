@@ -185,3 +185,15 @@ void WorkComponent_InitFuncs() {
            (void*)s_fn_RegisterWorkSlot);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// size 0x38 (WorkComponent_Factory MemAlloc), flags 0x83 (Ctor 0x14012e820:
+// Component base sets +0x20=0x80, leaf OR 0x3 => 0x83).
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(WorkComponent, 0x38, 0x83)
+REGISTER_TYPE(WorkComponent, "Component",
+              &WorkComponent_Factory, &WorkComponent_CreateInPlace);
+#endif // STANDALONE_EXE

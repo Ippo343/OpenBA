@@ -60,3 +60,15 @@ void QuarryComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid QuarryComponent: size 0x28 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x83 (from QuarryComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(QuarryComponent, 0x28, 0x83)
+REGISTER_TYPE(QuarryComponent, "Component",
+              &QuarryComponent_Factory, &QuarryComponent_CreateInPlace);
+#endif // STANDALONE_EXE

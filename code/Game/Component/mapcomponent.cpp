@@ -255,3 +255,12 @@ void MapComponent_InitFuncs() {
            (void*)s_fn_TerrainClear);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(MapComponent, 0x38, 0x83)
+REGISTER_TYPE(MapComponent, "Component",
+              &MapComponent_Factory, &MapComponent_CreateInPlace);
+#endif // STANDALONE_EXE

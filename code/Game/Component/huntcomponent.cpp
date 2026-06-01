@@ -114,3 +114,12 @@ void HuntComponent_InitFuncs() {
            (void*)s_fn_ComputeTerrainSpeed);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(HuntComponent, 0x58, 0x88)
+REGISTER_TYPE(HuntComponent, "ResourceProduceComponent",
+              &HuntComponent_Factory, &HuntComponent_CreateInPlace);
+#endif // STANDALONE_EXE

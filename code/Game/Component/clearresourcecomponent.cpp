@@ -79,3 +79,12 @@ void ClearResourceComponent_InitFuncs() {
            (void*)s_fn_Serializer_Dtor);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(ClearResourceComponent, 0x48, 0x80)
+REGISTER_TYPE(ClearResourceComponent, "ControllerComponent",
+              &ClearResourceComponent_Factory, &ClearResourceComponent_CreateInPlace);
+#endif // STANDALONE_EXE

@@ -280,3 +280,12 @@ void WorkPlaceComponent_InitFuncs() {
            (void*)s_fn_OnCreateFallback);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(WorkPlaceComponent, 0x68, 0x82)
+REGISTER_TYPE(WorkPlaceComponent, "ControllerComponent",
+              &WorkPlaceComponent_Factory, &WorkPlaceComponent_CreateInPlace);
+#endif // STANDALONE_EXE

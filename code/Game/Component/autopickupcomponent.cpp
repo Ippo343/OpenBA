@@ -164,3 +164,17 @@ void AutoPickupComponent_InitFuncs() {
            (void*)s_TypeId_AutoPickupDesc);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid AutoPickupComponent so Object::Factory::CreateObject(typeId)
+// resolves during ComponentEntity_CtorFromDescription instead of NullFactory.
+// size 0x40 (AutoPickupComponent_Factory MemAlloc), flags 0x80 (Ctor 0x140044ae0:
+// Component base sets +0x20=0x80, leaf BTS bit7 => 0x80).
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(AutoPickupComponent, 0x40, 0x80)
+REGISTER_TYPE(AutoPickupComponent, "Component",
+              &AutoPickupComponent_Factory, &AutoPickupComponent_CreateInPlace);
+#endif // STANDALONE_EXE

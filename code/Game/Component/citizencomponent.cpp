@@ -1185,3 +1185,12 @@ void CitizenComponent_InitFuncs() {
            (void*)s_fn_AssignWorkplace, (void*)s_fn_CheckPtr_slot);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(CitizenComponent, 0x290, 0xCB)
+REGISTER_TYPE(CitizenComponent, "Component",
+              &CitizenComponent_Factory, &CitizenComponent_CreateInPlace);
+#endif // STANDALONE_EXE

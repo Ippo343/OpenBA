@@ -260,3 +260,15 @@ void ResidenceComponent_InitFuncs() {
            (void*)s_fn_ResidenceInit, (void*)s_fn_RegisterEntity);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid ResidenceComponent: size 0x60 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x82 (from ResidenceComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(ResidenceComponent, 0x60, 0x82)
+REGISTER_TYPE(ResidenceComponent, "ControllerComponent",
+              &ResidenceComponent_Factory, &ResidenceComponent_CreateInPlace);
+#endif // STANDALONE_EXE

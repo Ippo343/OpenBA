@@ -227,3 +227,12 @@ void BoatComponent_InitFuncs() {
            (void*)s_fn_Vector3_Serialize);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(BoatComponent, 0x98, 0x80)
+REGISTER_TYPE(BoatComponent, "ControllerComponent",
+              &BoatComponent_Factory, &BoatComponent_CreateInPlace);
+#endif // STANDALONE_EXE

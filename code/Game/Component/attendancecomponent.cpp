@@ -98,3 +98,15 @@ void AttendanceComponent_InitFuncs() {
            (void*)s_fn_ProcessAttendanceQueue);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid AttendanceComponent: size 0x58 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x8a (from AttendanceComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(AttendanceComponent, 0x58, 0x8a)
+REGISTER_TYPE(AttendanceComponent, "ControllerComponent",
+              &AttendanceComponent_Factory, &AttendanceComponent_CreateInPlace);
+#endif // STANDALONE_EXE

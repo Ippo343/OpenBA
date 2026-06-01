@@ -86,3 +86,15 @@ void MarketComponent_InitFuncs() {
            (void*)s_fn_Serializer_Dtor);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid MarketComponent: size 0x50 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x80 (from MarketComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(MarketComponent, 0x50, 0x80)
+REGISTER_TYPE(MarketComponent, "ResourceProduceComponent",
+              &MarketComponent_Factory, &MarketComponent_CreateInPlace);
+#endif // STANDALONE_EXE

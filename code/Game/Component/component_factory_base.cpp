@@ -1,0 +1,75 @@
+// code/Game/Component/component_factory_base.cpp
+// Shared inert-component factory infrastructure — see component_factory_base.h.
+
+#include "Component/component_factory_base.h"
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstring>
+
+#ifdef STANDALONE_EXE
+
+namespace {
+
+// Shared scalar-deleting destructor (vtable slot +0x00). For a freshly-spawned
+// inert component the body is zeroed (no owned arrays/refs to release), so this
+// only frees the object itself when the deleting flag (bit 0) is set — matching
+// the tail of every component's *_ScalarDtor.
+void* Inert_ScalarDtor(void* self, uint32_t flags) {
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// Safe no-op for every non-dtor slot. Returns 0 in RAX, which reads correctly as
+// void / int / pointer under the Win64 ABI regardless of the slot's real
+// signature.
+void* Inert_Stub(void*, ...) { return nullptr; }
+
+// One vtable shared by every inert component. 48 slots is comfortable headroom
+// over the largest real component vtable, so any in-range virtual call lands on a
+// stub rather than reading past the array.
+void* g_InertComponentVtable[48] = {
+    reinterpret_cast<void*>(&Inert_ScalarDtor),  // +0x00 ScalarDtor
+    // slots +0x08 .. +0x178 — filled below at first use.
+};
+bool g_vtableInit = false;
+
+void EnsureVtable() {
+    if (g_vtableInit) return;
+    for (int i = 1; i < 48; ++i)
+        g_InertComponentVtable[i] = reinterpret_cast<void*>(&Inert_Stub);
+    g_vtableInit = true;
+}
+
+}  // namespace
+
+namespace ComponentFactory {
+
+void InitInert(void* self, size_t size, uint32_t flags) {
+    EnsureVtable();
+    // Object::Internal base (sets +0x00 vtable + internal linkage at +0x08).
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    *(void**)s            = g_InertComponentVtable;  // +0x00 our shared vtable
+    *(void**)(s + 0x10)   = nullptr;                 // +0x10 owner IBP
+    *(void**)(s + 0x18)   = nullptr;                 // +0x18 description
+    *(uint32_t*)(s + 0x20) = flags;                  // +0x20 capability flags
+
+    // Zero the component body (everything past the Component base, +0x28..size).
+    // The Object::Internal base fields (+0x00 vtable, +0x08 linkage) and the
+    // Component base (+0x10/+0x18/+0x20) are set explicitly above.
+    if (size > 0x28)
+        std::memset(s + 0x28, 0, size - 0x28);
+}
+
+void* MakeInert(size_t size, uint32_t flags) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, 8);
+    if (!p) return nullptr;
+    InitInert(p, size, flags);
+    return p;
+}
+
+}  // namespace ComponentFactory
+
+#endif  // STANDALONE_EXE

@@ -93,3 +93,15 @@ void CharacterComponent_InitFuncs() {
            (void*)s_fn_Character_UpdateAnimation);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid CharacterComponent: size 0x80 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x8f (from CharacterComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(CharacterComponent, 0x80, 0x8f)
+REGISTER_TYPE(CharacterComponent, "Component",
+              &CharacterComponent_Factory, &CharacterComponent_CreateInPlace);
+#endif // STANDALONE_EXE

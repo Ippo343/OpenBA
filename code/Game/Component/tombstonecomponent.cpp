@@ -203,3 +203,12 @@ void TombstoneComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(TombstoneComponent, 0x30, 0x88)
+REGISTER_TYPE(TombstoneComponent, "Component",
+              &TombstoneComponent_Factory, &TombstoneComponent_CreateInPlace);
+#endif // STANDALONE_EXE

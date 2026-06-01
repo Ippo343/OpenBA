@@ -235,3 +235,12 @@ void AmbientEmitterComponent_InitFuncs() {
            (void*)s_fn_AudioSetup);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(AmbientEmitterComponent, 0x48, 0xC3)
+REGISTER_TYPE(AmbientEmitterComponent, "Component",
+              &AmbientEmitterComponent_Factory, &AmbientEmitterComponent_CreateInPlace);
+#endif // STANDALONE_EXE

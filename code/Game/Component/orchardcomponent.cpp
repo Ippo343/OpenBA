@@ -134,3 +134,12 @@ void OrchardComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(OrchardComponent, 0x68, 0x80)
+REGISTER_TYPE(OrchardComponent, "ControllerComponent",
+              &OrchardComponent_Factory, &OrchardComponent_CreateInPlace);
+#endif // STANDALONE_EXE

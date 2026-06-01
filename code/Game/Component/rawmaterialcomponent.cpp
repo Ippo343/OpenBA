@@ -415,3 +415,12 @@ void RawMaterialComponent_InitFuncs() {
            (void*)s_fn_RegisterDrawItem);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(RawMaterialComponent, 0x40, 0x89)
+REGISTER_TYPE(RawMaterialComponent, "Component",
+              &RawMaterialComponent_Factory, &RawMaterialComponent_CreateInPlace);
+#endif // STANDALONE_EXE

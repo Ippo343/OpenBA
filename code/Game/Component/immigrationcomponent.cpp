@@ -199,3 +199,12 @@ void ImmigrationComponent_InitFuncs() {
            (void*)fn_InternalBasePtr_Serialize);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(ImmigrationComponent, 0x68, 0x80)
+REGISTER_TYPE(ImmigrationComponent, "ControllerComponent",
+              &ImmigrationComponent_Factory, &ImmigrationComponent_CreateInPlace);
+#endif // STANDALONE_EXE

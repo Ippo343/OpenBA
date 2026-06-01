@@ -132,3 +132,12 @@ void StorageLocationComponent_InitFuncs() {
            (void*)s_pGameState);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(StorageLocationComponent, 0x48, 0x82)
+REGISTER_TYPE(StorageLocationComponent, "ControllerComponent",
+              &StorageLocationComponent_Factory, &StorageLocationComponent_CreateInPlace);
+#endif // STANDALONE_EXE

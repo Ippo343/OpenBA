@@ -250,3 +250,12 @@ void BuildComponent_InitFuncs() {
            (void*)s_TypeId_BuildComp, (void*)s_TypeId_StorageComp);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(BuildComponent, 0x78, 0x83)
+REGISTER_TYPE(BuildComponent, "ControllerComponent",
+              &BuildComponent_Factory, &BuildComponent_CreateInPlace);
+#endif // STANDALONE_EXE

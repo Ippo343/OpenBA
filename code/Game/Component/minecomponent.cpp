@@ -62,3 +62,12 @@ void MineComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(MineComponent, 0x28, 0x80)
+REGISTER_TYPE(MineComponent, "Component",
+              &MineComponent_Factory, &MineComponent_CreateInPlace);
+#endif // STANDALONE_EXE

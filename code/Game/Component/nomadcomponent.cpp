@@ -159,3 +159,18 @@ void NomadComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// In standalone the original exe is not mapped, so Object::Factory::CreateObject
+// must resolve to a C++ factory here. Produces an inert-but-valid NomadComponent
+// (size 0x78, +0x20 capability flags 0x82, Object::Internal base + shared stub
+// vtable, zeroed body). Size from NomadComponent_Factory MemAlloc; flags from the
+// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(NomadComponent, 0x78, 0x82)
+REGISTER_TYPE(NomadComponent, "ControllerComponent",
+              &NomadComponent_Factory, &NomadComponent_CreateInPlace);
+#endif // STANDALONE_EXE

@@ -182,3 +182,15 @@ void CropFieldComponent_InitFuncs() {
            (void*)s_fn_SerializeEntityList);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid CropFieldComponent: size 0x68 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x80 (from CropFieldComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(CropFieldComponent, 0x68, 0x80)
+REGISTER_TYPE(CropFieldComponent, "ControllerComponent",
+              &CropFieldComponent_Factory, &CropFieldComponent_CreateInPlace);
+#endif // STANDALONE_EXE

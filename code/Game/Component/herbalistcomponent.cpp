@@ -90,3 +90,18 @@ void HerbalistComponent_InitFuncs() {
            (void*)s_fn_ParentShutdown);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// In standalone the original exe is not mapped, so Object::Factory::CreateObject
+// must resolve to a C++ factory here. Produces an inert-but-valid HerbalistComponent
+// (size 0x50, +0x20 capability flags 0x80, Object::Internal base + shared stub
+// vtable, zeroed body). Size from HerbalistComponent_Factory MemAlloc; flags from the
+// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(HerbalistComponent, 0x50, 0x80)
+REGISTER_TYPE(HerbalistComponent, "ResourceProduceComponent",
+              &HerbalistComponent_Factory, &HerbalistComponent_CreateInPlace);
+#endif // STANDALONE_EXE

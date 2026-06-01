@@ -314,3 +314,15 @@ void GrowthComponent_InitFuncs() {
            s_pWorldSingleton ? *s_pWorldSingleton : nullptr);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid GrowthComponent: size 0x50 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0xcb (from GrowthComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(GrowthComponent, 0x50, 0xcb)
+REGISTER_TYPE(GrowthComponent, "Component",
+              &GrowthComponent_Factory, &GrowthComponent_CreateInPlace);
+#endif // STANDALONE_EXE

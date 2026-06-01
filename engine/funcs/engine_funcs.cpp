@@ -1282,6 +1282,45 @@ void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
     *pCount = newCount;
 }
 
+// ExeArrayResizeFill_CppImpl: 8-byte elements. Grows/shrinks an array; on growth,
+// new entries are filled with *fillValue (existing entries are copied on realloc).
+// Faithful reimpl of FUN_140003110 (assigned to fn_ExeArrayResizeFill at init).
+// Pure C++ so it works in standalone (the exe is not mapped, so ResolveAddr on
+// 0x140003110 returns NULL there) and in DLL mode alike — mirrors the fn_ExeArrayResize
+// family. WAS THE START-TOWN SPAWN BUG: left NULL in standalone, so EntityList::
+// RegisterEntity silently skipped the master-array append (entity count stayed 0).
+static void ExeArrayResizeFill_CppImpl(void* arrayBase, int newCount, void* fillValue) {
+    uint8_t* base   = (uint8_t*)arrayBase;
+    void**   pData  = (void**)base;
+    int*     pCount = (int*)(base + 0x08);
+    int*     pCap   = (int*)(base + 0x0C);
+
+    int oldCount = *pCount;
+    if (newCount == oldCount) return;
+
+    void* oldData = *pData;
+    *pCount = newCount;
+
+    if (*pCap < newCount) {
+        int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        *pCap  = newCap;
+        *pData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);
+    }
+
+    // start = oldCount when the buffer was reused (only new tail filled); 0 when it
+    // was reallocated (re-copy existing [0,oldCount) from the old buffer, then fill).
+    int start = (oldData == *pData) ? oldCount : 0;
+    if (start < newCount && *pData) {
+        uint64_t* dst    = (uint64_t*)*pData;
+        uint64_t* oldArr = (uint64_t*)oldData;
+        uint64_t  fill   = fillValue ? *(uint64_t*)fillValue : 0;
+        for (int i = start; i < newCount; i++)
+            dst[i] = (i < oldCount) ? oldArr[i] : fill;
+    }
+
+    if (oldData != *pData) fn_MemFreeStatic(oldData);
+}
+
 // ============================================================
 // BuildStructure Work class helpers
 // ============================================================
@@ -4463,8 +4502,10 @@ bool EngineFuncsInit() {
     // ================================================================
     g_TypeId_ComponentBase = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c72a8));
-    fn_ExeArrayResizeFill = reinterpret_cast<fn_ExeArrayResizeFill_t>(
-        ResolveAddr(Module::Exe, 0x140003110));
+    // Pure C++ reimpl (FUN_140003110) — NOT exe-resolved: in standalone the exe is
+    // not mapped, so ResolveAddr(0x140003110) would return NULL and EntityList::
+    // RegisterEntity would silently skip its array appends.
+    fn_ExeArrayResizeFill = &ExeArrayResizeFill_CppImpl;
 #ifdef _DEBUG
     printf("[EngineFuncs] Phase L: ComponentEntity deps resolved\n");
     printf("  TypeId_ComponentBase  = %p\n", (void*)g_TypeId_ComponentBase);

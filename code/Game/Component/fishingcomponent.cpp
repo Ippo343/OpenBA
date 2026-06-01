@@ -112,3 +112,18 @@ void FishingComponent_InitFuncs() {
            (void*)s_fn_Serializer_SerializeBool, (void*)s_fn_Serializer_SerializeFloat);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// In standalone the original exe is not mapped, so Object::Factory::CreateObject
+// must resolve to a C++ factory here. Produces an inert-but-valid FishingComponent
+// (size 0x58, +0x20 capability flags 0x80, Object::Internal base + shared stub
+// vtable, zeroed body). Size from FishingComponent_Factory MemAlloc; flags from the
+// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(FishingComponent, 0x58, 0x80)
+REGISTER_TYPE(FishingComponent, "ResourceProduceComponent",
+              &FishingComponent_Factory, &FishingComponent_CreateInPlace);
+#endif // STANDALONE_EXE

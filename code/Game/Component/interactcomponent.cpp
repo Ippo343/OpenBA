@@ -233,3 +233,18 @@ void InteractComponent_InitFuncs() {
            (void*)s_TypeId_Interact);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// In standalone the original exe is not mapped, so Object::Factory::CreateObject
+// must resolve to a C++ factory here. Produces an inert-but-valid InteractComponent
+// (size 0x38, +0x20 capability flags 0x81, Object::Internal base + shared stub
+// vtable, zeroed body). Size from InteractComponent_Factory MemAlloc; flags from the
+// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(InteractComponent, 0x38, 0x81)
+REGISTER_TYPE(InteractComponent, "Component",
+              &InteractComponent_Factory, &InteractComponent_CreateInPlace);
+#endif // STANDALONE_EXE

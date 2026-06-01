@@ -279,3 +279,12 @@ void ConsumeProduceComponent_InitFuncs() {
            (void*)s_fn_IsDerivedFrom_dispatch);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+COMPONENT_INERT_FACTORY(ConsumeProduceComponent, 0x70, 0x80)
+REGISTER_TYPE(ConsumeProduceComponent, "ResourceProduceComponent",
+              &ConsumeProduceComponent_Factory, &ConsumeProduceComponent_CreateInPlace);
+#endif // STANDALONE_EXE

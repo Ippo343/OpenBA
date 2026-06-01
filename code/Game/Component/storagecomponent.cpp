@@ -369,3 +369,18 @@ void StorageComponent_InitFuncs() {
            (void*)s_TypeId_StorageDescription);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// In standalone the original exe is not mapped, so Object::Factory::CreateObject
+// must resolve to a C++ factory here. Produces an inert-but-valid StorageComponent
+// (size 0x40, +0x20 capability flags 0x81, Object::Internal base + shared stub
+// vtable, zeroed body). Size from StorageComponent_Factory MemAlloc; flags from the
+// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(StorageComponent, 0x40, 0x81)
+REGISTER_TYPE(StorageComponent, "Component",
+              &StorageComponent_Factory, &StorageComponent_CreateInPlace);
+#endif // STANDALONE_EXE

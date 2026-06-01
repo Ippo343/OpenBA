@@ -169,3 +169,15 @@ void FruitComponent_InitFuncs() {
            (void*)s_pGameState, (void*)s_pFruitResourceTypeId, (void*)fn_IsDerivedFrom);
 #endif
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// Inert-but-valid FruitComponent: size 0x38 + Object::Internal base + shared stub
+// vtable + capability flags +0x20=0x88 (from FruitComponent_Ctor) + zeroed body.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(FruitComponent, 0x38, 0x88)
+REGISTER_TYPE(FruitComponent, "Component",
+              &FruitComponent_Factory, &FruitComponent_CreateInPlace);
+#endif // STANDALONE_EXE

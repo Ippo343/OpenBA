@@ -209,3 +209,18 @@ void TerraformComponent_InitFuncs() {
 
     s_initialized = true;
 }
+
+// ===== Standalone factory (Foundation D — component instantiation) =====
+// In standalone the original exe is not mapped, so Object::Factory::CreateObject
+// must resolve to a C++ factory here. Produces an inert-but-valid TerraformComponent
+// (size 0x48, +0x20 capability flags 0x83, Object::Internal base + shared stub
+// vtable, zeroed body). Size from TerraformComponent_Factory MemAlloc; flags from the
+// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "Component/component_factory_base.h"
+
+COMPONENT_INERT_FACTORY(TerraformComponent, 0x48, 0x83)
+REGISTER_TYPE(TerraformComponent, "Component",
+              &TerraformComponent_Factory, &TerraformComponent_CreateInPlace);
+#endif // STANDALONE_EXE
