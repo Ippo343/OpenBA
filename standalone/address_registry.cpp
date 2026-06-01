@@ -70,6 +70,41 @@ extern "C" {
     void RegisterClimateGeneratorVtable();
     void RegisterMapGeneratorVtable();
     void RegisterTerrainGeneratorVtable();
+
+    // M5 5c Foundation C — entity description types (template sub-descriptions).
+    void RegisterComponentDescriptionVtable();
+    void RegisterBuildDescriptionVtable();
+    void RegisterWorkDescriptionVtable();
+    void RegisterWorkPlaceDescriptionVtable();
+    void RegisterResidenceDescriptionVtable();
+    void RegisterZoneDescriptionVtable();
+    void RegisterMapDescriptionVtable();
+    void RegisterCreatePlacedDescriptionVtable();
+    void RegisterCreateDragDescriptionVtable();
+    void RegisterCharacterDescriptionVtable();
+    void RegisterCitizenDescriptionVtable();
+    void RegisterCitizenAIDescriptionVtable();
+    void RegisterStateMachineDescriptionVtable();
+    void RegisterNaturalResourceDescriptionVtable();
+    void RegisterAbsorbResourceDescriptionVtable();
+    void RegisterUIDescriptionVtable();
+    void RegisterToolbarDescriptionVtable();
+    void RegisterStatusIconDescriptionVtable();
+    void RegisterAmbientEmitterDescriptionVtable();
+    void RegisterInteractDescriptionVtable();
+    void RegisterClearAreaDescriptionVtable();
+    void RegisterDestroyDescriptionVtable();
+    void RegisterStorageDescriptionVtable();
+    void RegisterStorageLocationDescriptionVtable();
+    void RegisterStorageDisplayDescriptionVtable();
+    void RegisterModelDescriptionVtable();
+    void RegisterPickingDescriptionVtable();
+    void RegisterHighlightDescriptionVtable();
+    void RegisterDecalDescriptionVtable();
+    void RegisterParticleDescriptionVtable();
+    void RegisterHerdDescriptionVtable();
+    void RegisterPopulationDescriptionVtable();
+    void RegisterAnimalDescriptionVtable();
 }
 
 // ============================================================
@@ -667,6 +702,57 @@ static void RegisterVtablesAndTypeIds() {
     RegisterClimateGeneratorVtable();
     RegisterMapGeneratorVtable();
     RegisterTerrainGeneratorVtable();
+
+    // M5 5c Foundation C — entity description factories. Each registers its
+    // verified vtable so ExternalFactory::FindOrLoad's per-sub-description load
+    // resolves a real factory + Serialize instead of NullFactory. The matching
+    // REGISTER_TYPE entries live next to the reimpls in code/Game/Component/
+    // <type>.cpp; their NullFactory stubs were removed from factory_registrations_bulk.
+    RegisterComponentDescriptionVtable();
+    RegisterBuildDescriptionVtable();
+    RegisterWorkDescriptionVtable();
+    RegisterWorkPlaceDescriptionVtable();
+    RegisterResidenceDescriptionVtable();
+    RegisterZoneDescriptionVtable();
+    RegisterMapDescriptionVtable();
+    RegisterCreatePlacedDescriptionVtable();
+    RegisterCreateDragDescriptionVtable();
+    RegisterCharacterDescriptionVtable();
+    RegisterCitizenDescriptionVtable();
+    RegisterCitizenAIDescriptionVtable();
+    RegisterStateMachineDescriptionVtable();
+    RegisterNaturalResourceDescriptionVtable();
+    RegisterAbsorbResourceDescriptionVtable();
+    RegisterUIDescriptionVtable();
+    RegisterToolbarDescriptionVtable();
+    RegisterStatusIconDescriptionVtable();
+    RegisterAmbientEmitterDescriptionVtable();
+    RegisterInteractDescriptionVtable();
+    RegisterClearAreaDescriptionVtable();
+    RegisterDestroyDescriptionVtable();
+    RegisterStorageDescriptionVtable();
+    RegisterStorageLocationDescriptionVtable();
+    RegisterStorageDisplayDescriptionVtable();
+    RegisterModelDescriptionVtable();
+    RegisterPickingDescriptionVtable();
+    RegisterHighlightDescriptionVtable();
+    RegisterDecalDescriptionVtable();
+    RegisterParticleDescriptionVtable();
+    RegisterHerdDescriptionVtable();
+    RegisterPopulationDescriptionVtable();
+    RegisterAnimalDescriptionVtable();
+
+    // Foundation C helper — single ExternalPtr field serialize (FUN_140002340 =
+    // fn_ExternalPtr_BuildSerialize). Resolves via ResolveAddr(Module::Exe) so it
+    // is NULL in standalone unless registered; many description ExternalPtr fields
+    // (Herd/Population/NaturalResource/Citizen) depend on it. Stream-identical to
+    // the generic ExternalPtr serialize → reuse the StringTable reimpl body.
+    RegisterExeAddr(0x140002340, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable));
+
+    // Foundation C helper — single ExternalRef<Profession> field serialize
+    // (NaturalResource +0x78, Citizen +0x20/+0x28/+0x30). Stream-identical to the
+    // generic ExternalPtr serialize; reuse the StringTable reimpl body.
+    RegisterExeAddr(0x140018020, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable));
 
     // Geometry / "TerrainGenerator" derived vtable at exe 0x14015f110.
     // Without this, Reimpl_Geometry_Init's `*self = vtbl` no-ops because

@@ -143,6 +143,27 @@ static bool SpawnAndRegister(void* tmpl, void* entityList) {
     return ent != nullptr;
 }
 
+// Resolve a pool entry's description template. ResolveExternalByName uses
+// find-only Find (templates aren't preloaded in standalone), so it misses; use
+// FindOrLoad (load-on-miss) which loads the Template\*.rsc from the mounted
+// packages now that the entity-description factories are registered (Foundation
+// C). Caches the result in entry+0x10.
+static void* StartTown_ResolveTemplate(uint8_t* entry) {
+    ResolveExternalByName_Impl(entry);                       // try the cheap cached path first
+    void* tmpl = *(void**)(entry + EXTREF_TEMPLATE);
+    if (tmpl) return tmpl;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !fn_Filename_CtorString || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
+        return nullptr;
+    void* factory = *g_pExternalFactorySingleton;
+    uint8_t fname[8] = {0};
+    fn_Filename_CtorString(fname, entry);                    // String -> Filename
+    tmpl = fn_ExternalFactory_FindOrLoad(factory, fname);
+    fn_Filename_Dtor(fname);
+    *(void**)(entry + EXTREF_TEMPLATE) = tmpl;               // cache
+    return tmpl;
+}
+
 // ComponentEntity_impl_09e0 (0x1400a09e0): the simplest spawn pass. For each
 // entry in the pool at startConfig+0x90 (count at +0x98), resolve its template
 // and spawn+register a copy. No transforms, no terrain queries.
@@ -153,8 +174,9 @@ static int StartTown_SpawnSimplePool(uint8_t* startConfig, void* entityList) {
     int spawned = 0;
     for (int i = 0; i < count; ++i) {
         uint8_t* entry = pool + (size_t)i * POOLENTRY_STRIDE;
-        ResolveExternalByName_Impl(entry);                  // updates entry+0x10
-        void* tmpl = *(void**)(entry + EXTREF_TEMPLATE);
+        void* tmpl = StartTown_ResolveTemplate(entry);
+        fprintf(stderr, "[startTown::spawn] simple[%d] tmpl=%p\n", i, tmpl);
+        fflush(stderr);
         if (SpawnAndRegister(tmpl, entityList)) ++spawned;
     }
     return spawned;
