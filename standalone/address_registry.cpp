@@ -105,6 +105,56 @@ extern "C" {
     void RegisterHerdDescriptionVtable();
     void RegisterPopulationDescriptionVtable();
     void RegisterAnimalDescriptionVtable();
+    // wave 2 (economy / farming / services / tools)
+    void RegisterAmbientEnvironmentDescriptionVtable();
+    void RegisterAttendanceDescriptionVtable();
+    void RegisterAutoPickupDescriptionVtable();
+    void RegisterBoatDescriptionVtable();
+    void RegisterCaptureBoxDescriptionVtable();
+    void RegisterCemeteryDescriptionVtable();
+    void RegisterClearResourceDescriptionVtable();
+    void RegisterConsumeProduceDescriptionVtable();
+    void RegisterCreateBridgeDescriptionVtable();
+    void RegisterCreateFencedDescriptionVtable();
+    void RegisterCreatePathDescriptionVtable();
+    void RegisterCreateRemovalDescriptionVtable();
+    void RegisterCreateRoadDescriptionVtable();
+    void RegisterCropFieldDescriptionVtable();
+    void RegisterDiseaseDescriptionVtable();
+    void RegisterEnvironmentDescriptionVtable();
+    void RegisterFireDescriptionVtable();
+    void RegisterFishingDescriptionVtable();
+    void RegisterFloorDescriptionVtable();
+    void RegisterForesterDescriptionVtable();
+    void RegisterFruitDescriptionVtable();
+    void RegisterFrustumOutlineDescriptionVtable();
+    void RegisterGrowthDescriptionVtable();
+    void RegisterHappinessDescriptionVtable();
+    void RegisterHealerDescriptionVtable();
+    void RegisterHerbalistDescriptionVtable();
+    void RegisterHuntDescriptionVtable();
+    void RegisterImmigrationDescriptionVtable();
+    void RegisterLivestockDescriptionVtable();
+    void RegisterMarketDescriptionVtable();
+    void RegisterMarketLocationDescriptionVtable();
+    void RegisterMineDescriptionVtable();
+    void RegisterMultiObjectDescriptionVtable();
+    void RegisterNomadDescriptionVtable();
+    void RegisterOrchardDescriptionVtable();
+    void RegisterPastureDescriptionVtable();
+    void RegisterQuarryDescriptionVtable();
+    void RegisterRadiusDescriptionVtable();
+    void RegisterRawMaterialDescriptionVtable();
+    void RegisterSelectDescriptionVtable();
+    void RegisterSpawnDescriptionVtable();
+    void RegisterTerraformDescriptionVtable();
+    void RegisterTombstoneDescriptionVtable();
+    void RegisterTornadoDescriptionVtable();
+    void RegisterTrackerDescriptionVtable();
+    void RegisterTradeDescriptionVtable();
+    void RegisterValueDescriptionVtable();
+    void RegisterWellDescriptionVtable();
+    void RegisterWildAnimalDescriptionVtable();
 }
 
 // ============================================================
@@ -741,6 +791,63 @@ static void RegisterVtablesAndTypeIds() {
     RegisterHerdDescriptionVtable();
     RegisterPopulationDescriptionVtable();
     RegisterAnimalDescriptionVtable();
+    // wave 2 (economy / farming / services / tools)
+    RegisterAmbientEnvironmentDescriptionVtable();
+    RegisterAttendanceDescriptionVtable();
+    RegisterAutoPickupDescriptionVtable();
+    RegisterBoatDescriptionVtable();
+    RegisterCaptureBoxDescriptionVtable();
+    RegisterCemeteryDescriptionVtable();
+    RegisterClearResourceDescriptionVtable();
+    RegisterConsumeProduceDescriptionVtable();
+    RegisterCreateBridgeDescriptionVtable();
+    RegisterCreateFencedDescriptionVtable();
+    RegisterCreatePathDescriptionVtable();
+    RegisterCreateRemovalDescriptionVtable();
+    RegisterCreateRoadDescriptionVtable();
+    RegisterCropFieldDescriptionVtable();
+    RegisterDiseaseDescriptionVtable();
+    RegisterEnvironmentDescriptionVtable();
+    RegisterFireDescriptionVtable();
+    RegisterFishingDescriptionVtable();
+    RegisterFloorDescriptionVtable();
+    RegisterForesterDescriptionVtable();
+    RegisterFruitDescriptionVtable();
+    RegisterFrustumOutlineDescriptionVtable();
+    RegisterGrowthDescriptionVtable();
+    RegisterHappinessDescriptionVtable();
+    RegisterHealerDescriptionVtable();
+    RegisterHerbalistDescriptionVtable();
+    RegisterHuntDescriptionVtable();
+    RegisterImmigrationDescriptionVtable();
+    RegisterLivestockDescriptionVtable();
+    RegisterMarketDescriptionVtable();
+    RegisterMarketLocationDescriptionVtable();
+    RegisterMineDescriptionVtable();
+    RegisterMultiObjectDescriptionVtable();
+    RegisterNomadDescriptionVtable();
+    RegisterOrchardDescriptionVtable();
+    RegisterPastureDescriptionVtable();
+    RegisterQuarryDescriptionVtable();
+    RegisterRadiusDescriptionVtable();
+    RegisterRawMaterialDescriptionVtable();
+    RegisterSelectDescriptionVtable();
+    RegisterSpawnDescriptionVtable();
+    RegisterTerraformDescriptionVtable();
+    RegisterTombstoneDescriptionVtable();
+    RegisterTornadoDescriptionVtable();
+    RegisterTrackerDescriptionVtable();
+    RegisterTradeDescriptionVtable();
+    RegisterValueDescriptionVtable();
+    RegisterWellDescriptionVtable();
+    RegisterWildAnimalDescriptionVtable();
+
+    // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
+    // registered). The single-ExternalPtr variants are stream-identical to the
+    // StringTable serialize; the array resizers map to the proven stride helpers.
+    RegisterExeAddr(0x14000b7b0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable)); // ref-mode ExtPtr (Floor/Terraform)
+    RegisterExeAddr(0x140007140, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Typed_7140));   // typed ExtPtr (Nomad)
+    RegisterExeAddr(0x14000bd30, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable)); // ExtPtr variant
 
     // Foundation C helper — single ExternalPtr field serialize (FUN_140002340 =
     // fn_ExternalPtr_BuildSerialize). Resolves via ResolveAddr(Module::Exe) so it
