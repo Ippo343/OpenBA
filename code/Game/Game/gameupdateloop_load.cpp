@@ -34,6 +34,7 @@ extern "C" void* Reimpl_Geometry_Init(void* self);            // FUN_1400b00e0 (
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
+extern "C" void  StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
 
 // ============================================================
 // Load-specific Runtime resolves not yet in engine_funcs.h
@@ -787,6 +788,26 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             void* game = *(void**)(p + 0xf8);
             if (game && dim > 0)
                 MapTileGrid_Build(game, (int)dim);
+
+            // M5 5c — camera: spiral-search the buildable tile grid for the
+            // start-town spawn tile and frame it. Writes the look-at target to
+            // PlayerController+0x1c/+0x20/+0x24, exactly as Load does after
+            // FUN_1400a3300 (call site 0x14009761d). The ECS spawn at the same
+            // tile is deferred. See code/Game/Game/starttown.cpp.
+            {
+                void* startCfg   = *(void**)(p + 0x40);   // mapGen
+                void* playerCtrl = *(void**)(p + 0xe0);
+                if (startCfg && playerCtrl && game && dim > 0) {
+                    float camPos[3] = { 0, 0, 0 };
+                    StartTown_ComputeCamera(startCfg, game, camPos);
+                    *(float*)((uint8_t*)playerCtrl + 0x1c) = camPos[0];
+                    *(float*)((uint8_t*)playerCtrl + 0x20) = camPos[1];
+                    *(float*)((uint8_t*)playerCtrl + 0x24) = camPos[2];
+                    fprintf(stderr, "[startTown::DIAG]   camPos = (%.2f, %.2f, %.2f)\n",
+                            camPos[0], camPos[1], camPos[2]);
+                    fflush(stderr);
+                }
+            }
 
             // [M5 5c DIAG] Start-town (FUN_1400a3300) prerequisite probe. Dumps the
             // state of startConfig (mapGen = loop+0x40), the Game tile grid (Game+0x80),
