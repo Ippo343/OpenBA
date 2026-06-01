@@ -160,6 +160,13 @@ extern "C" void RegisterGameUpdateLoopLoadAddrs();
 // M5 5c — Map terrain-position query (fn_MapGetTerrainPos = FUN_14009f3e0, ~100 call sites).
 extern "C" void RegisterMapQueryAddrs();
 
+// M5 5c Foundation B — ECS spawn primitives (bodies in
+// code/Game/Entity/componententity.cpp). C++ linkage: declared with the exact
+// signatures so the mangled names match the definitions.
+struct ComponentEntity;
+ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
+void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -175,6 +182,12 @@ static void RegisterCodeFunctions() {
 
     // M5 5c — terrain height/world-pos query (camera, tile classifier, ~100 component sites).
     RegisterMapQueryAddrs();
+
+    // M5 5c Foundation B — ECS spawn primitives. Registering these makes
+    // fn_EntityFactory_CreateEntity (0x1400c3720) and fn_EntityList_RegisterEntity
+    // (0x1400c48a0) resolve to our reimpls (EngineFuncsInit runs after this).
+    RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
+    RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
 
     // ============================================================
     // M3.5 — MenuScene::Serialize generic helpers

@@ -102,3 +102,10 @@ void ComponentEntity_ShutdownComponents(ComponentEntity* self);
 // Only runs if entityFlags bit 7 (0x80) is set.
 // For each component where Component+0x20 bit 7 is set, calls vtable+0x20.
 void ComponentEntity_StartupComponents(ComponentEntity* self);
+
+// EntityList::RegisterEntity (0x1400c48a0): adds a freshly-instantiated entity
+// (wrapped in an InternalBasePtr) to the world entity list under a category.
+// Assigns id/owner/category-handle, registers update/draw buckets + main array
+// + per-category bucket, runs the OnAdded lifecycle pass. Registered for
+// standalone so fn_EntityList_RegisterEntity resolves to it.
+void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);

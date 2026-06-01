@@ -198,51 +198,148 @@ void MapGenerator_Init(MapGenerator* self) {
 // (array resize with copy, ExternalRef factory resolution) are tightly coupled
 // to the exe's memory allocator and factory system.
 //
-// STANDALONE mode: the original (0x1400a2980) doesn't exist, so we deserialize
-// the SCALAR PREFIX only — enough for the NewGameDialog start-condition combo,
-// which displays the name String (+0x28) and gates visibility on the enabled
-// bool (+0x38). We deliberately STOP before the 7 dynamic-array loops:
-//   - their resize helpers (FUN_14001b270/340/4e0/6c0) are exe-code (NULL here),
-//   - and the original's loop bodies are INLINE and deref the array pointer, so
-//     running them with a skipped (NULL) resize would crash on a null array.
-// Per the ExternalList load model each generator loads from its OWN .rsc file
-// with its own stream that closes when Serialize returns, so stopping early
-// leaves later fields default WITHOUT corrupting siblings or the list. The full
-// field set (resource lists, descRefs) is only needed once map generation
-// actually runs (M5 / GameUpdateLoop::Load) — wire the array helpers then.
+// STANDALONE mode: the original (0x1400a2980) isn't in our process (we ARE the
+// exe), so the FULL deserialize is reimplemented in clean C++ below. This reads
+// the entire MapGenerator stream — scalar header AND every dynamic pool — so the
+// start-condition data (citizen families, structures, resource/cull lists, env
+// template refs) is actually present for the start-town ECS spawn.
 //
-// Prefix order mirrors the original 0x1400a2980 head exactly:
-//   Serializer(local,stream,0); ExternalPtr(+0x20); String(+0x28 name);
-//   String(+0x30); bool(+0x38 enabled); int(+0x3c subdivisions);
-//   float(+0x40 scale); ~Serializer.
+// FRESH-LOAD ASSUMPTION: Serialize runs once on a freshly-constructed
+// MapGenerator (Init zeroed every count/cap/ptr). So the exe array-resize
+// helpers (FUN_14001b270/340/4e0/6c0) collapse to "alloc count*stride + init
+// each element" — the copy/destruct (grow/shrink) paths never execute. See
+// MG_AllocArray below. (If Serialize were ever re-run on a populated generator,
+// the old buffers would leak; not a concern for new-game load.)
+//
+// RESOLVE DEFERRED: the original resolves each ExternalRef name to a template
+// during deserialize (FUN_14001b1d0). We SKIP that here — every start-town
+// spawn pass re-resolves each entry lazily via ResolveExternalByName before use
+// (e.g. ComponentEntity_impl_09e0/_1fc0/_02f0, FUN_1400a12b0). So the pools just
+// store the names; resolution happens at spawn time.
+//
+// Stream order mirrors the original 0x1400a2980 EXACTLY (note the non-monotonic
+// tail: +0x118, +0x138, +0x130, +0x150, +0x158, +0x170).
+#ifdef STANDALONE_EXE
+namespace {
+// Fresh-load dynamic array: set header {ptr@0, count@8, cap@0xC} and allocate
+// count*stride bytes. Returns the new buffer (uninitialized — caller inits).
+void* MG_AllocArray(void* header, int count, int stride) {
+    uint8_t* h = reinterpret_cast<uint8_t*>(header);
+    *(int32_t*)(h + 8)   = count;
+    *(int32_t*)(h + 0xc) = count;
+    void* buf = (count > 0 && fn_MemAlloc && g_pMemAllocSingleton)
+                ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * (uint32_t)stride, 8)
+                : nullptr;
+    *(void**)h = buf;
+    return buf;
+}
+// Read a count int from the stream into *countField; return it.
+int MG_ReadCount(void* serializer, void* countField) {
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, countField, nullptr);
+    return *(int32_t*)countField;
+}
+// Read a pool of ExternalRef entries (stride 0x18: String@0, gen@8=-1, ptr@0x10=0).
+// header/countField are the array header and its count int in the struct.
+void MG_ReadRefPool(void* serializer, void* header, void* countField) {
+    int n = MG_ReadCount(serializer, countField);
+    uint8_t* e = reinterpret_cast<uint8_t*>(MG_AllocArray(header, n, 0x18));
+    for (int i = 0; i < n; ++i, e += 0x18) {
+        *(uint64_t*)e        = 0;            // String (empty)
+        *(int32_t*)(e + 8)   = -1;           // factory generation (unresolved)
+        *(uint64_t*)(e + 0x10) = 0;          // resolved template ptr
+        if (g_fn_String_Serialize) g_fn_String_Serialize(e, serializer);  // read name
+    }
+}
+} // namespace
+#endif
+
 void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
 #ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) g_fn_Serializer_Ctor(serializer, stream, 0);
-
-    // +0x20 ExternalPtr (CRITICAL: advances the cursor so the name reads from
-    // the correct offset). fn_ExternalPtr_Serialize2 == exe 0x14000bf40.
-    if (fn_ExternalPtr_Serialize2)
-        fn_ExternalPtr_Serialize2(s + 0x20, serializer);
-
-    // +0x28 name String (shown in the combo), +0x30 String
-    if (g_fn_String_Serialize) {
-        g_fn_String_Serialize(s + 0x28, serializer);
-        g_fn_String_Serialize(s + 0x30, serializer);
+    if (!g_fn_Serializer_Ctor || !g_fn_String_Serialize || !g_fn_Serialize_Int ||
+        !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float || !fn_ExternalPtr_Serialize2) {
+        return;  // missing a Runtime serialize primitive — can't proceed
     }
-    // +0x38 enabled bool (combo visibility gate at visibilityOffset 0x38)
-    if (g_fn_Serialize_Bool)
-        g_fn_Serialize_Bool(serializer, s + 0x38, nullptr);
-    // +0x3c subdivisions int
-    if (g_fn_Serialize_Int)
-        g_fn_Serialize_Int(serializer, s + 0x3c, nullptr);
-    // +0x40 scale float
-    if (fn_Serializer_Serialize_Float)
-        fn_Serializer_Serialize_Float(serializer, &self->scale, nullptr);
+    g_fn_Serializer_Ctor(serializer, stream, 0);
 
-    // STOP — do not read the +0x68 array count (would enter null-array loops).
+    // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
+    //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
+    fn_ExternalPtr_Serialize2(s + 0x20, serializer);   // +0x20 _stringTable ref
+    g_fn_String_Serialize(s + 0x28, serializer);       // +0x28 _name
+    g_fn_String_Serialize(s + 0x30, serializer);       // +0x30 _description
+    g_fn_Serialize_Bool(serializer, s + 0x38, nullptr);// +0x38 _exposed
+    g_fn_Serialize_Int(serializer, s + 0x3c, nullptr); // +0x3c _startAreaSize (townSize)
+    fn_Serializer_Serialize_Float(serializer, &self->scale, nullptr);     // +0x40 _citizenRadius
+    g_fn_String_Serialize(s + 0x48, serializer);       // +0x48 _citizen template ref
+
+    // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
+    {
+        int n = MG_ReadCount(serializer, s + 0x68);
+        uint8_t* e = reinterpret_cast<uint8_t*>(MG_AllocArray(s + 0x60, n, 8));
+        for (int i = 0; i < n; ++i, e += 8) {
+            *(uint64_t*)e = 0;
+            g_fn_Serialize_Bool(serializer, e, nullptr);        // _educated
+            g_fn_Serialize_Int(serializer, e + 4, nullptr);     // _maxChildCount
+        }
+    }
+
+    // --- refArray1 (+0x70): ExternalRef pool ---
+    MG_ReadRefPool(serializer, s + 0x70, s + 0x78);
+
+    // --- _structures: InitialStructure[] (stride 0x30: String@0, gen@8, ptr@0x10,
+    //     int _offsetX@0x18, _offsetY@0x1c, _width@0x20, _height@0x24, _rotation@0x28) ---
+    {
+        int n = MG_ReadCount(serializer, s + 0x88);
+        uint8_t* e = reinterpret_cast<uint8_t*>(MG_AllocArray(s + 0x80, n, 0x30));
+        for (int i = 0; i < n; ++i, e += 0x30) {
+            *(uint64_t*)e          = 0;          // String (empty)
+            *(int32_t*)(e + 8)     = -1;         // gen
+            *(uint64_t*)(e + 0x10) = 0;          // ptr
+            *(uint64_t*)(e + 0x18) = 0;          // _offsetX, _offsetY
+            *(uint64_t*)(e + 0x20) = 0xFFFFFFFFFFFFFFFFULL;  // _width=-1, _height=-1
+            *(int32_t*)(e + 0x28)  = 0;          // _rotation
+            g_fn_String_Serialize(e, serializer);            // _structure ref name
+            g_fn_Serialize_Int(serializer, e + 0x18, nullptr);  // _offsetX
+            g_fn_Serialize_Int(serializer, e + 0x1c, nullptr);  // _offsetY
+            g_fn_Serialize_Int(serializer, e + 0x20, nullptr);  // _width
+            g_fn_Serialize_Int(serializer, e + 0x24, nullptr);  // _height
+            g_fn_Serialize_Int(serializer, e + 0x28, nullptr);  // _rotation
+        }
+    }
+
+    // --- refArray3..refArray7 (+0x90,+0xA0,+0xB0,+0xC0,+0xD0): ExternalRef pools ---
+    MG_ReadRefPool(serializer, s + 0x90, s + 0x98);
+    MG_ReadRefPool(serializer, s + 0xa0, s + 0xa8);
+    MG_ReadRefPool(serializer, s + 0xb0, s + 0xb8);
+    MG_ReadRefPool(serializer, s + 0xc0, s + 0xc8);
+    MG_ReadRefPool(serializer, s + 0xd0, s + 0xd8);
+
+    // --- scalar tail (cull counts, initial resource counts, livestock params) ---
+    g_fn_Serialize_Int(serializer, s + 0xe0, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0xe4, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0xe8, nullptr);
+    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0xec), nullptr);
+    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0xf0), nullptr);
+    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0xf4), nullptr);
+    g_fn_Serialize_Int(serializer, s + 0xf8, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0xfc, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0x100, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0x104, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0x108, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0x10c, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0x110, nullptr);
+    g_fn_Serialize_Int(serializer, s + 0x114, nullptr);
+
+    // --- env template refs + interleaved scalars (EXACT stream order) ---
+    g_fn_String_Serialize(s + 0x118, serializer);       // descRef1 (terrain)
+    g_fn_String_Serialize(s + 0x138, serializer);       // descRef2 (climate)
+    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x130), nullptr); // terrainAmplitude
+    g_fn_Serialize_Int(serializer, s + 0x150, nullptr); // chunkSize
+    g_fn_String_Serialize(s + 0x158, serializer);       // descRef3 (vegetation)
+    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x170), nullptr);
+
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
     return;
 #else

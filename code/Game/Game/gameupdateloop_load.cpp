@@ -35,6 +35,7 @@ extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 extern "C" void  StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
+extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);                    // starttown.cpp (M5 5c — ECS spawn)
 
 // ============================================================
 // Load-specific Runtime resolves not yet in engine_funcs.h
@@ -806,6 +807,11 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                     fprintf(stderr, "[startTown::DIAG]   camPos = (%.2f, %.2f, %.2f)\n",
                             camPos[0], camPos[1], camPos[2]);
                     fflush(stderr);
+
+                    // M5 5c increment #3 — ECS spawn (FUN_1400a3300 steps 4-7).
+                    // world base = the GameUpdateLoop (= g_pGameWorldSingleton):
+                    // world+0xf8 = Game, world+0xe8 = entity list.
+                    StartTown_SpawnEntities(startCfg, p);
                 }
             }
 

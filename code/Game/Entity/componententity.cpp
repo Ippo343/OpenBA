@@ -613,3 +613,117 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
 
     return self;
 }
+
+// ============================================================
+// EntityList registration (FUN_1400c48a0 + helpers) — Foundation B
+// ============================================================
+// In standalone these exe primitives resolve to NULL until registered, so they
+// are reimplemented here in clean C++ and registered at their Ghidra addresses
+// (address_registry.cpp). Used by the start-town ECS spawn.
+
+// FUN_1400c33e0 — register an entity in its owner's update/draw buckets when the
+// update(bit2)/draw(bit4) capability changed vs oldFlags. This is the same tail
+// logic as RefreshEntityFlags but with an explicit oldFlags (here always 0, so a
+// freshly-added entity with update/draw components gets bucketed).
+//   EntityList +0x88 = update array (count +0x90), +0x98 = draw array (count +0xa0)
+static void ComponentEntity_RegisterUpdateDraw(ComponentEntity* self, uint32_t oldFlags) {
+    if (self->entityList == nullptr) return;
+    uintptr_t el = (uintptr_t)self->entityList;
+    uint32_t changed = oldFlags ^ self->entityFlags;
+    if ((changed & 4) != 0) {
+        int updateCount = *(int*)(el + 0x90) + 1;
+        uintptr_t ibp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor((void*)&ibp, self);
+        if (fn_ExeArrayResizeFill) fn_ExeArrayResizeFill((void*)(el + 0x88), updateCount, (void*)&ibp);
+    }
+    if ((changed & 0x10) != 0) {
+        int drawCount = *(int*)(el + 0xa0) + 1;
+        uintptr_t ibp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor((void*)&ibp, self);
+        if (fn_ExeArrayResizeFill) fn_ExeArrayResizeFill((void*)(el + 0x98), drawCount, (void*)&ibp);
+    }
+}
+
+// FUN_1400c2f60 — "OnAdded" lifecycle pass. If entityFlags bit 0 is set, call
+// each component's vtable+0x30 (register-with-systems) for components whose
+// Component+0x20 bit 0 is set.
+static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
+    if ((self->entityFlags & 1) == 0) return;
+    int count = self->componentCount;
+    uintptr_t arr = (uintptr_t)self->components;
+    for (int i = 0; i < count; i++) {
+        uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
+        uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+        if ((*(uint8_t*)(compPtr + 0x20) & 1) != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
+            compPtr = *(uintptr_t*)ibpAddr;
+            uintptr_t vt = *(uintptr_t*)compPtr;
+            typedef void (*fn_t)(void*);
+            (*(fn_t*)(vt + 0x30))((void*)compPtr);
+        }
+    }
+}
+
+// FUN_1400c48a0 — EntityList::RegisterEntity(entityList, &entityIBP, category).
+// Adds a freshly-instantiated entity to the world entity list. Offsets verified
+// against the disassembly:
+//   entityList+0xE0 (byte) : "closed" flag — if set, drop (delete) the entity.
+//   entityList+0x08        : main entity array header {ptr@+0x08,count@+0x10,cap@+0x14}.
+//                            entity id = the pre-insert main count.
+//   entityList[0]          : copied to entity+0x20 (externals).
+//   per-category C: bucket header at entityList+0x18+C*0x10 (count at +0x20+C*0x10).
+//   entity+0x1C low-24     = bucket index (pre-insert bucket count); +0x1F = category.
+//   category 6 = no bucket (entity+0x1C low-24 set to 0xFFFFFF sentinel).
+// Also registers update/draw (c33e0) and runs the OnAdded pass (c2f60).
+void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int category) {
+    EnsureResolved();
+    uint8_t* el = (uint8_t*)entityListV;
+    if (!el || !entityIBP) return;
+
+    if (*(int8_t*)(el + 0xE0) != 0) {                  // list closed → drop the entity
+        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(entityIBP);
+        return;
+    }
+
+    // Resolve the entity pointer (CheckPtr each time, matching the original).
+    auto entity = [&]() -> uint8_t* {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
+        return *(uint8_t**)entityIBP;
+    };
+
+    uint8_t* ent = entity();
+    *(void**)(ent + 0x10) = el;                         // owner = entityList
+    int32_t id = *(int32_t*)(el + 0x10);               // id = current main-array count
+    ent = entity();
+    *(int32_t*)(ent + 0x18) = id;
+    ent = entity();
+    *(void**)(ent + 0x20) = *(void**)el;               // externals = entityList[0]
+    ent = entity();
+    ComponentEntity_RegisterUpdateDraw((ComponentEntity*)ent, 0);
+
+    // Append to the main entity array (count -> id+1).
+    if (fn_ExeArrayResizeFill)
+        fn_ExeArrayResizeFill((void*)(el + 0x08), id + 1, entityIBP);
+
+    ent = entity();
+    *(int8_t*)(ent + 0x1F) = (int8_t)category;          // category byte (handle high byte)
+    if (category == 6) {
+        ent = entity();
+        *(uint32_t*)(ent + 0x1C) |= 0xFFFFFF;           // no category bucket
+    } else {
+        // bucket index = current per-category bucket count (count field aliases
+        // the +(C+2)*0x10 slot read by the original).
+        uint32_t bucketIdx = *(uint32_t*)(el + (uintptr_t)(category + 2) * 0x10);
+        ent = entity();
+        uint32_t* pf = (uint32_t*)(ent + 0x1C);
+        *pf ^= (*pf ^ bucketIdx) & 0xFFFFFF;            // low-24 = bucket index
+        uint8_t* bucket = el + (uintptr_t)category * 0x10 + 0x18;
+        int bcount = *(int32_t*)(bucket + 8);
+        if (fn_ExeArrayResizeFill)
+            fn_ExeArrayResizeFill((void*)bucket, bcount + 1, entityIBP);
+    }
+
+    ent = entity();
+    ComponentEntity_OnAddedPass((ComponentEntity*)ent);
+}

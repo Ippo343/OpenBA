@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
 #include <cmath>
 
 static constexpr int   CELL_STRIDE = 0x30;
@@ -99,4 +100,115 @@ extern "C" void StartTown_ComputeCamera(void* startConfig, void* game, float cam
     int tileX = (*(int32_t*)game) >> 1, tileY = tileX;      // default = map center
     StartTown_FindSpawnTile(game, size, &tileX, &tileY);
     StartTown_TileToWorld(game, tileX, tileY, camPosOut);
+}
+
+// ============================================================================
+// ECS SPAWN — the spawn portion of FUN_1400a3300 (steps 4-7). Built up one
+// pool at a time. The shared keystones already exist:
+//   * ResolveExternalByName_Impl  — resolve a pool entry's description template
+//   * fn_EntityFactory_CreateEntity (= ComponentEntity_CopyCtor, 0x1400c3720)
+//       — instantiate a fresh ComponentEntity from a template
+//   * fn_InternalBasePtr_Ctor     — wrap the new entity in a tracked IBP
+//   * fn_EntityList_RegisterEntity (FUN_1400c48a0) — register with the world
+//       entity list at world+0xe8 under a category id (= *(template+0x20))
+//
+// The world base (= g_pGameWorldSingleton in the original) is the GameUpdateLoop
+// instance, passed in explicitly from Load. world+0xf8 = Game, world+0xe8 =
+// entity list.
+// ============================================================================
+
+// A start-config pool entry is an ExternalRef (0x18 bytes):
+//   +0x00 System::String name   +0x08 int gen   +0x10 External* template
+static constexpr int POOLENTRY_STRIDE = 0x18;
+static constexpr int EXTREF_TEMPLATE  = 0x10;
+static constexpr int ENTITY_SIZE      = 0x48;   // ComponentEntity allocation
+static constexpr int TEMPLATE_CATEGORY = 0x20;  // *(template+0x20) = entity-list category
+static constexpr int WORLD_ENTITYLIST = 0xe8;   // world+0xe8 = entity list
+
+// Instantiate one entity from a resolved template and register it. Returns true
+// if an entity was created. Mirrors the inner body shared by every spawn loop.
+static bool SpawnAndRegister(void* tmpl, void* entityList) {
+    if (!tmpl) return false;
+    // Foundation B (ECS instantiate/register) not yet wired in standalone: these
+    // exe primitives resolve to NULL until reimplemented. Guard so a populated
+    // pool can't fault here before B lands.
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
+        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return false;
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+    void* ibp = nullptr;
+    fn_InternalBasePtr_Ctor(&ibp, ent);
+    int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
+    fn_EntityList_RegisterEntity(entityList, &ibp, category);
+    return ent != nullptr;
+}
+
+// ComponentEntity_impl_09e0 (0x1400a09e0): the simplest spawn pass. For each
+// entry in the pool at startConfig+0x90 (count at +0x98), resolve its template
+// and spawn+register a copy. No transforms, no terrain queries.
+static int StartTown_SpawnSimplePool(uint8_t* startConfig, void* entityList) {
+    const int count = *(int32_t*)(startConfig + 0x98);
+    uint8_t* pool = *(uint8_t**)(startConfig + 0x90);
+    if (count <= 0 || !pool) return 0;
+    int spawned = 0;
+    for (int i = 0; i < count; ++i) {
+        uint8_t* entry = pool + (size_t)i * POOLENTRY_STRIDE;
+        ResolveExternalByName_Impl(entry);                  // updates entry+0x10
+        void* tmpl = *(void**)(entry + EXTREF_TEMPLATE);
+        if (SpawnAndRegister(tmpl, entityList)) ++spawned;
+    }
+    return spawned;
+}
+
+// Spawn entry point — called from Load after the camera is framed. Builds up the
+// start-town entities. Currently: the simple pool (impl_09e0) only.
+extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
+    if (!startConfig || !world) return;
+    uint8_t* sc = (uint8_t*)startConfig;
+    void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
+    if (!entityList) { fprintf(stderr, "[startTown::spawn] entityList NULL — abort\n"); fflush(stderr); return; }
+
+    // DIAG — dump every spawn pool's count so we know what's populated.
+    fprintf(stderr, "[startTown::spawn] pools: simple(+0x98)=%d bldg(+0x88)=%d "
+            "resource(+0x78)=%d citizenFam(+0x68)=%d\n",
+            *(int32_t*)(sc + 0x98), *(int32_t*)(sc + 0x88),
+            *(int32_t*)(sc + 0x78), *(int32_t*)(sc + 0x68));
+    fflush(stderr);
+
+    // DIAG — fn-pointer state + per-pool first-entry resolution probe.
+    fprintf(stderr, "[startTown::spawn] fns: CreateEntity=%p Register=%p IBPCtor=%p MemAlloc=%p ExtFactory=%p\n",
+            (void*)fn_EntityFactory_CreateEntity, (void*)fn_EntityList_RegisterEntity,
+            (void*)fn_InternalBasePtr_Ctor, (void*)fn_MemAlloc,
+            g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+    // Probe: resolve the first entry of each pool + the mapGen _citizen ref
+    // (+0x48, a known "Template\Citizen.rsc" reference). Dump the String text so
+    // we can tell a deserialize bug (garbage text) from a missing-resource issue
+    // (correct text but Find fails). System::String = ptr to char buffer.
+    auto dumpStr = [](void* strField) -> const char* {
+        char* p = *(char**)strField;
+        return p ? p : "(null)";
+    };
+    struct { const char* tag; int off; } probes[] = {
+        { "citizenRef(+0x48)", 0x48 },
+        { "resource(+0x70)", 0x70 }, { "structure(+0x80)", 0x80 }, { "simple(+0x90)", 0x90 },
+    };
+    for (auto& p : probes) {
+        uint8_t* base;
+        if (p.off == 0x48) base = sc + 0x48;                    // inline ExternalRef
+        else { base = *(uint8_t**)(sc + p.off);                 // array pool
+               if (!base || *(int32_t*)(sc + p.off + 8) <= 0) { fprintf(stderr, "[startTown::probe] %s empty\n", p.tag); continue; } }
+        ResolveExternalByName_Impl(base);
+        fprintf(stderr, "[startTown::probe] %s gen=%d tmpl=%p name=\"%.40s\"\n",
+                p.tag, *(int32_t*)(base + 8), *(void**)(base + 0x10), dumpStr(base));
+    }
+    fflush(stderr);
+
+    // EntityList main-array count lives at entityList+0x10 (Foundation B); log it
+    // before/after to confirm registration actually adds entities to the world.
+    int before = *(int32_t*)((uint8_t*)entityList + 0x10);
+    int n = StartTown_SpawnSimplePool(sc, entityList);
+    int after = *(int32_t*)((uint8_t*)entityList + 0x10);
+    fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
+            "entityList count %d -> %d\n", n, before, after);
+    fflush(stderr);
 }
