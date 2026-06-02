@@ -1171,6 +1171,16 @@ void fn_ExeArrayResize(void* arrayBase, int newCount) {
     int oldCount = *pCount;
     int oldCap   = *pCap;
 
+    // Sanity guard: an absurd newCount means the caller passed a corrupted count
+    // (e.g. a template desc whose component-count field read as garbage). Bail
+    // loudly instead of MemAlloc'ing a multi-GB block (segfault).
+    if (newCount < 0 || newCount > 0x100000) {
+        fprintf(stderr, "[fn_ExeArrayResize] ABSURD newCount=%d (base=%p oldCount=%d oldCap=%d) — bail\n",
+                newCount, arrayBase, oldCount, oldCap);
+        fflush(stderr);
+        return;
+    }
+
     if (newCount > oldCap) {
         int newCap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
         void* newData = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap * 8, 8);

@@ -550,6 +550,18 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
     uintptr_t desc = (uintptr_t)descriptionPtr;
     int descCompCount = *(int*)(desc + 0x30);
 
+    // Sanity guard: a corrupted/unexpected description (component-count field read
+    // as garbage) would size the component array to an absurd value and segfault in
+    // fn_ExeArrayResize. Bail loudly with the desc pointer so the bad template is
+    // identifiable. (Seen intermittently during resource scatter — likely heap
+    // corruption upstream or an unexpected desc layout.)
+    if (descCompCount < 0 || descCompCount > 256) {
+        fprintf(stderr, "[CtorFromDesc] ABSURD descCompCount=%d desc=%p — entity gets 0 components\n",
+                descCompCount, descriptionPtr);
+        fflush(stderr);
+        descCompCount = 0;
+    }
+
     // First pass: count components with non-zero type IDs
     int validCount = 0;
     if (descCompCount > 0) {

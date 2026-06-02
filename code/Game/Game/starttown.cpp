@@ -585,9 +585,89 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     return spawned;
 }
 
+// ============================================================================
+// ENVIRONMENT pool — ComponentEntity_impl_02f0 (0x1400a02f0). Three sub-passes of
+// ambient/environment entities (all cosmetic — audio emitters + ambient volumes):
+//   1. Ambient EMITTERS spaced along the worldGeom path/edge list
+//      (worldGeom+0x1e0 array, count +0x1e8; each entry {Vector2* pts, int n}).
+//      Walks each polyline accumulating segment length; every time the running
+//      length passes the spacing threshold (startConfig+0x130) it drops an emitter
+//      (template = ExternalRef at startConfig+0x118). The original then positions
+//      the AmbientEmitterComponent + moves its audio emitter (Audio::Scene::
+//      MoveEmitter).
+//   2. Ambient ENVIRONMENT volumes on a coarse chunk grid (stride =
+//      startConfig+0x150) over the map (template = startConfig+0x138). The
+//      original inits each via AmbientEnvironmentComponent_impl_36a0.
+//   3. One global ENVIRONMENT entity (template = startConfig+0x158), positioned at
+//      a height offset (startConfig+0x170) above the terrain.
+//
+// As with the other pools, only instantiate + register is done here; the
+// component positioning / audio / init dispatch on real (non-inert) components and
+// are GUARDED OFF. The entities exist + are registered. Defensive guards: null
+// templates, chunk stride <= 0 (would infinite-loop the grid), and per-pass caps.
+// ============================================================================
+
+static int StartTown_SpawnEnvironment(uint8_t* startConfig, void* world) {
+    void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
+    void* worldGeom  = *(void**)((uint8_t*)world + 0x110);
+    void* game       = *(void**)((uint8_t*)world + 0xf8);
+    if (!entityList) return 0;
+
+    int n1 = 0, n2 = 0, n3 = 0;
+    static constexpr int ENV_PASS_CAP = 2000;
+
+    // Pass 1 — emitters along worldGeom polylines.
+    void* emitterTmpl = StartTown_ResolveTemplate(startConfig + 0x118);
+    const float spacing = *(float*)(startConfig + 0x130);
+    if (emitterTmpl && worldGeom && spacing > 0.0f) {
+        const int pathCount = *(int32_t*)((uint8_t*)worldGeom + 0x1e8);
+        uint8_t* pathArr    = *(uint8_t**)((uint8_t*)worldGeom + 0x1e0);
+        if (pathArr) {
+            for (int i = 0; i < pathCount && n1 < ENV_PASS_CAP; ++i) {
+                uint8_t* entry = pathArr + (size_t)i * 0x10;
+                const float* pts = *(const float**)entry;
+                const int ptCount = *(int32_t*)(entry + 8);
+                if (!pts || ptCount < 2) continue;
+                float accum = 0.0f;
+                for (int j = 1; j < ptCount && n1 < ENV_PASS_CAP; ++j) {
+                    const float dx = pts[2 * j]     - pts[2 * (j - 1)];
+                    const float dy = pts[2 * j + 1] - pts[2 * (j - 1) + 1];
+                    accum += sqrtf(dx * dx + dy * dy);
+                    if (accum >= spacing) {
+                        if (SpawnAndRegister(emitterTmpl, entityList)) ++n1;
+                        accum = 0.0f;
+                    }
+                }
+            }
+        }
+    }
+
+    // Pass 2 — ambient environment volumes on a chunk grid.
+    void* ambTmpl = StartTown_ResolveTemplate(startConfig + 0x138);
+    const int chunk = *(int32_t*)(startConfig + 0x150);
+    const int dim   = game ? *(int32_t*)game : 0;
+    if (ambTmpl && chunk > 0 && dim > 0) {
+        for (int y = 0; y < dim && n2 < ENV_PASS_CAP; y += chunk)
+            for (int x = 0; x < dim && n2 < ENV_PASS_CAP; x += chunk)
+                if (SpawnAndRegister(ambTmpl, entityList)) ++n2;
+    }
+
+    // Pass 3 — the single global environment entity.
+    void* envTmpl = StartTown_ResolveTemplate(startConfig + 0x158);
+    if (envTmpl && SpawnAndRegister(envTmpl, entityList)) ++n3;
+
+    fprintf(stderr, "[startTown::env] emitters=%d ambient=%d(chunk=%d) global=%d "
+            "(paths=%d, emitterTmpl=%p ambTmpl=%p envTmpl=%p)\n",
+            n1, n2, chunk, n3,
+            worldGeom ? *(int32_t*)((uint8_t*)worldGeom + 0x1e8) : -1,
+            emitterTmpl, ambTmpl, envTmpl);
+    fflush(stderr);
+    return n1 + n2 + n3;
+}
+
 // Spawn entry point — called from Load after the camera is framed. Builds up the
 // start-town entities: structures (impl_1fc0) + citizens (impl_0dd0) + resources
-// (impl_a12b0) + simple pool (impl_09e0).
+// (impl_a12b0) + environment (impl_02f0) + simple pool (impl_09e0).
 extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     if (!startConfig || !world) return;
     uint8_t* sc = (uint8_t*)startConfig;
@@ -669,10 +749,17 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
             nr, afterCitizens, afterRes);
     fflush(stderr);
 
+    // ENVIRONMENT (impl_02f0) — ambient emitters + environment volumes.
+    int ne = StartTown_SpawnEnvironment(sc, world);
+    int afterEnv = *(int32_t*)((uint8_t*)entityList + 0x10);
+    fprintf(stderr, "[startTown::spawn] environment: spawned %d; entityList count %d -> %d\n",
+            ne, afterRes, afterEnv);
+    fflush(stderr);
+
     // SIMPLE pool (impl_09e0) — population/deer.
     int n = StartTown_SpawnSimplePool(sc, entityList);
     int after = *(int32_t*)((uint8_t*)entityList + 0x10);
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
-            "entityList count %d -> %d\n", n, afterRes, after);
+            "entityList count %d -> %d\n", n, afterEnv, after);
     fflush(stderr);
 }
