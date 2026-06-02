@@ -85,7 +85,7 @@ SA_SRCS = $(GAME_SRC_SRCS) \
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 
-.PHONY: all debug release deploy clean undeploy run standalone standalone-debug sa-deploy sa-run
+.PHONY: all debug release deploy clean undeploy run standalone standalone-debug sa-deploy sa-run sa-run-menu
 
 all: debug
 
@@ -307,8 +307,14 @@ sa-deploy: standalone-debug
 	@echo "Deployed to $(BANISHED_DIR)/reimpl-x64.exe"
 
 sa-run: sa-deploy
+	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 start reimpl-x64.exe
+	@echo "Launched standalone reimpl (BANISHED_AUTOSTART=1 -> auto New Game)"
+
+# Same as sa-run but stops at the main menu (no auto-new-game). Use when you
+# want to exercise the menu itself.
+sa-run-menu: sa-deploy
 	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
-	@echo "Launched standalone reimpl"
+	@echo "Launched standalone reimpl (menu only, no autostart)"
 
 # Include auto-generated header dependency files
 -include $(OBJECTS:.o=.d)

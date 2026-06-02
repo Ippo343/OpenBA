@@ -795,6 +795,10 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
 #include "address_registry.h"
 #include "resolve.h"
 
+// Defined in standalone/autostart.cpp — the auto-new-game driver reads this to
+// find the dialog opened by MainMenuDialog::OpenNewGame.
+extern "C" void* g_StandaloneNewGameDialog;
+
 namespace {
 
 void* GetNewGameDialogVtable();  // forward decl
@@ -903,6 +907,11 @@ void* NewGameDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
     // worldSetup (+0xAE0) = *parentMenuIBP (the MainMenuDialog ptr).
     *reinterpret_cast<uint64_t*>(base + 0xAE0) =
         parentMenuIBP ? *reinterpret_cast<uint64_t*>(parentMenuIBP) : 0;
+
+    // Publish the just-constructed dialog so the auto-start driver
+    // (standalone/autostart.cpp) can locate it and fire Start once Slot4 has
+    // populated the combos + OK button. Harmless when autostart is disabled.
+    g_StandaloneNewGameDialog = self;
 
     return self;
 }

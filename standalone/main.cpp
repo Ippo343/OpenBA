@@ -16,6 +16,7 @@
 #include "address_registry.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
+#include "autostart.h"
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
@@ -1129,6 +1130,10 @@ static bool Init() {
     //    WM_KILLFOCUS / WM_SETFOCUS messages reaching the engine WindowProc.
     //    Diagnoses fullscreen focus-loss black-screen issue.
     InstallWndMsgHook();
+
+    // 9. Latch the BANISHED_AUTOSTART env var. When set, the menu update loop
+    //    auto-drives New Game -> Start (see standalone/autostart.cpp).
+    AutoStart::Init();
 
     // RunStartupSelfTests() runs from game_main.cpp after Engine::Startup,
     // when the MemoryAllocator singleton is finally populated.

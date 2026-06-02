@@ -39,6 +39,7 @@
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
+#include "autostart.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
@@ -379,6 +380,14 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         printf("[MenuDLT::Update] self=%p time=%p tick=%d -> UpdateCamera + DialogLoopT::Update\n",
                (void*)self, time, tick);
     }
+
+    // Auto-start driver (env-var gated): once the menu has settled, inject the
+    // New Game + Start button clicks so the standalone walks straight into a
+    // new game without manual clicking. No-op unless BANISHED_AUTOSTART is set.
+    // Runs before the DialogLoopT::Update tail-call below so the injected click
+    // is processed in the same frame, and its queued next-loop is picked up by
+    // the Stage C poll on a subsequent tick.
+    AutoStart::TickMenu(self);
 
     // Clamp the first tick's dt to ~16ms. Stub_Startup blocks for ~540ms while
     // LoadScene_PhaseA runs synchronously on the main thread; the first

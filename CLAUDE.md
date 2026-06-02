@@ -130,11 +130,35 @@ mingw32-make undeploy  # remove from Banished directory
 mingw32-make standalone        # build release standalone exe
 mingw32-make standalone-debug  # build debug standalone exe
 mingw32-make sa-deploy         # build debug + copy to Banished directory
-mingw32-make sa-run            # build debug + copy + launch
+mingw32-make sa-run            # build debug + copy + launch (AUTO-STARTS a new game)
+mingw32-make sa-run-menu       # same, but stops at the main menu (no autostart)
 # Output: standalone/build/reimpl-x64.exe
 
 mingw32-make clean     # remove all build artifacts (both modes)
 ```
+
+### Standalone Test Driver (default testing path)
+
+**`mingw32-make sa-run` is the default way to test the standalone build.** It sets
+`BANISHED_AUTOSTART=1`, which makes the menu loop auto-drive **menu → New Game →
+Start** with no manual clicking, landing directly in the in-game world build. This
+is the path to use for verifying any rendering / gameplay / world-build change.
+
+- **Mechanism**: `standalone/autostart.cpp` ticks a state machine from
+  `MenuDLT::Stub_Update`. It injects the two already-reimplemented button-click
+  events via the dialog vtable slot-8 handlers (`MainMenuDialog::OnCommand` id=0
+  "buttonNew", then `NewGameDialog::OnEvent` data=2 "buttonOk") — no input
+  simulation. The existing Stage-C transition in `MenuDLT::Update` then advances
+  to the queued GameUpdateLoop chain, exactly like a manual click.
+- **Enable**: `BANISHED_AUTOSTART` env var (any value except `0`/`false`). A numeric
+  value > 1 overrides the menu settle-frame count (default 60). `make sa-run` sets it;
+  a direct launch of `reimpl-x64.exe` leaves it unset and stops at the menu.
+- **Trace**: grep `standalone_debug.log` for `[AutoStart]` lines (each step logs).
+  A 600-frame (~10s) timeout aborts the Start injection if `NewGameDialog::buttonOk`
+  (+0xF0) never populates, rather than crashing on half-built combos.
+- **VS Code**: launch config **"Launch Standalone (debug, autostart new game)"**
+  sets the env var for the debuggee; "Launch Standalone (debug)" stops at the menu.
+- To exercise the menu itself (not auto-advance), use `make sa-run-menu`.
 
 ### Dual-Mode Build Architecture
 
