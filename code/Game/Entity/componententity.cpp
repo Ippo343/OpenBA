@@ -140,6 +140,7 @@ void ComponentEntity_StartupComponents(ComponentEntity* self) {
         }
 
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+        if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
         uint32_t compFlags = *(uint32_t*)(compPtr + 0x20);
         if (((compFlags >> 7) & 1) != 0) {
             if (fn_InternalBasePtr_CheckPtr) {
@@ -176,6 +177,7 @@ void ComponentEntity_RefreshEntityFlags(ComponentEntity* self) {
                 fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             }
             uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+            if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
             // Component::+0x20 is a uint16 containing capability flags
             uint16_t compFlags = *(uint16_t*)(compPtr + 0x20);
             self->entityFlags |= (uint32_t)compFlags;
@@ -611,15 +613,27 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
 
             // Resolve the component IBP (the original CopyCtor calls CheckPtr
             // before the field writes) then set owner (+0x10) and description
-            // (+0x18). Guard against a null component (factory miss).
+            // (+0x18).
             if (fn_InternalBasePtr_CheckPtr) {
                 fn_InternalBasePtr_CheckPtr((void*)&newIBP);
             }
             void* compPtr = (void*)newIBP;
-            if (compPtr) {
-                *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
-                *(uintptr_t*)((uintptr_t)compPtr + 0x18) = compTemplate;
+            if (!compPtr) {
+                // STANDALONE: this component typeId has no working factory (the
+                // Runtime/our factory tree is incomplete — e.g. a Tree's component
+                // whose Foundation-D factory is missing). The original game always
+                // has every factory, so it never hits this. Skip the component
+                // rather than insert a null slot that crashes the array readers
+                // (RefreshEntityFlags / OnAddedPass / StartupComponents).
+                static int s_warned = 0;
+                if (s_warned < 32) {
+                    fprintf(stderr, "[CtorFromDesc] no factory for component typeId 0x%08x — skipped\n", typeId);
+                    fflush(stderr); s_warned++;
+                }
+                continue;
             }
+            *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
+            *(uintptr_t*)((uintptr_t)compPtr + 0x18) = compTemplate;
 
             // Store in component array
             uintptr_t compArr = (uintptr_t)self->components;
@@ -627,6 +641,12 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
             insertIdx++;
         }
     }
+
+    // Correct the array count: fn_ExeArrayResize sized it to validCount, but in
+    // standalone some components may have been skipped (missing factory), so the
+    // real populated count is insertIdx. Leaving it at validCount would let the
+    // readers walk past the last valid slot into uninitialised memory.
+    self->componentCount = insertIdx;
 
     // Refresh flags and call startup on flagged components
     ComponentEntity_RefreshEntityFlags(self);
@@ -676,6 +696,7 @@ static void ComponentEntity_OnAddedPass(ComponentEntity* self) {
         uintptr_t ibpAddr = arr + (uintptr_t)i * 8;
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
         uintptr_t compPtr = *(uintptr_t*)ibpAddr;
+        if (!compPtr) continue;   // defensive: skip null component (standalone factory miss)
         if ((*(uint8_t*)(compPtr + 0x20) & 1) != 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)ibpAddr);
             compPtr = *(uintptr_t*)ibpAddr;

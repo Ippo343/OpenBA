@@ -454,9 +454,140 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList) {
     return spawned;
 }
 
+// ============================================================================
+// RESOURCES pool — FUN_1400a12b0 (0x1400a12b0). Perlin-noise scatter of natural
+// resources (trees / stone / iron) across the whole map, excluding the town site.
+//
+// For each entry in the pool at startConfig+0x70 (count +0x78, stride 0x18):
+//   * resolve the template (e.g. Template\NaturalResourceRock.rsc) and find its
+//     NaturalResourceDescription (the scatter config)
+//   * build a Perlin octave from the desc's frequency fields and walk every map
+//     cell: place a resource where  perlin*0.5+0.5 >= density-threshold (+0x34)
+//     AND Random::RandFloat <= density (+0x38)
+//   * reject cells that are already occupied (Game+0x80 cell +0x08 != 0) or within
+//     the town exclusion radius (sizeSq), or whose terrain height is outside
+//     [+0x3c, +0x40) or whose slope < +0x44
+//   * instantiate the resource entity (CopyCtor) and register it
+//
+// NaturalResourceDescription scatter fields (verified vs naturalresourcedescription.cpp):
+//   +0x28/+0x2c perlin persistance/octaves   +0x30 coord scale divisor
+//   +0x34 density threshold   +0x38 random density
+//   +0x3c/+0x40 height min/max   +0x44 slope min
+//
+// The original then sets the resource's grid cell + growth/age + model variant via
+// NaturalResourceComponent helpers (Entity_impl_6540, FUN_140120db0,
+// ComponentEntity_impl_5cc0) + a per-variant model selection (FUN_1401253d0). All
+// dispatch on real (non-inert) components, so that block is GUARDED OFF — the
+// resource entities exist + are registered but carry inert components and don't
+// render, same gate as structures/citizens. a12b0 also queries height/slope via a
+// Picking-ray variant of QuarryComponent_helper_aa20 (NULL in standalone); we use
+// the heightmap sampler (fn_MapGetTerrainPos, which fills height + slope) instead.
+// ============================================================================
+
+static constexpr int RES_ARR      = 0x70;     // startConfig+0x70 resource pool array
+static constexpr int RES_CNT      = 0x78;     // startConfig+0x78 resource pool count
+static constexpr int RES_STRIDE   = 0x18;     // pool entry stride (ExternalRef)
+static constexpr int CELL_OCCUPANT = 0x08;    // cell +0x08 = occupant ptr (0 = free)
+// Safety cap: map-wide scatter over dim^2 cells x N pools can produce tens of
+// thousands of entities; until the inert-instantiation path is proven fast we
+// bound each pool and log if the cap is hit (no silent truncation). Per-pool
+// (not total) so every resource type gets exercised.
+static constexpr int RES_POOL_CAP = 400;
+
+static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
+                                    int spawnX, int spawnY, int sizeSq) {
+    const int count = *(int32_t*)(startConfig + RES_CNT);
+    uint8_t* pool   = *(uint8_t**)(startConfig + RES_ARR);
+    if (count <= 0 || !pool) return 0;
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
+        !fn_InternalBasePtr_Ctor || !fn_MemAlloc ||
+        !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
+        !fn_Random_RandTol || !fn_Random_RandFloat || !fn_MapGetTerrainPos) {
+        fprintf(stderr, "[startTown::res] primitives unwired — skip\n"); fflush(stderr);
+        return 0;
+    }
+
+    void* game = *(void**)((uint8_t*)world + 0xf8);
+    if (!game) return 0;
+    const int dim = *(int32_t*)game;
+    uint8_t* cells = *(uint8_t**)((uint8_t*)game + GAME_CELLS);
+    void* rng = *(void**)((uint8_t*)world + 0xd8);
+    if (dim <= 0 || !cells || !rng) return 0;
+
+    void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
+    const float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    const uint32_t tidNatRes = TypeId("NaturalResourceDescription");
+
+    int spawned = 0;
+    for (int e = 0; e < count; ++e) {
+        uint8_t* entry = pool + (size_t)e * RES_STRIDE;
+        const char* ename = *(char**)entry ? *(char**)entry : "(null)";
+        fprintf(stderr, "[startTown::res] begin [%d] name=\"%.48s\"\n", e, ename);
+        fflush(stderr);
+        void* tmpl = StartTown_ResolveTemplate(entry);
+        if (!tmpl) continue;
+        uint8_t* desc = (uint8_t*)FindDescriptionOnTemplate(tmpl, tidNatRes);
+        if (!desc) { fprintf(stderr, "[startTown::res] [%d] no NaturalResourceDescription\n", e); fflush(stderr); continue; }
+
+        const float persist  = *(float*)(desc + 0x28);
+        const float octaves  = *(float*)(desc + 0x2c);
+        float div            = *(float*)(desc + 0x30);
+        if (div == 0.0f) div = 1.0f;
+        const float scale    = uvScale / div;
+        const float threshold = *(float*)(desc + 0x34);
+        const float density   = *(float*)(desc + 0x38);
+        const float hMin      = *(float*)(desc + 0x3c);
+        const float hMax      = *(float*)(desc + 0x40);
+        const float slopeMin  = *(float*)(desc + 0x44);
+        const int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
+
+        int s1 = fn_Random_RandTol(rng, 0x7ffffff);
+        int s2 = fn_Random_RandTol(rng, 0x7ffffff);
+        uint8_t perlin[0x100] = {};
+        fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
+
+        int poolSpawned = 0;
+        bool capped = false;
+        for (int y = 0; y < dim && !capped; ++y) {
+            for (int x = 0; x < dim; ++x) {
+                float p = fn_PerlinNoise_Generate(perlin, (float)x * scale, (float)y * scale);
+                if (threshold > p * 0.5f + 0.5f) continue;
+                if (fn_Random_RandFloat(rng) > density) continue;
+
+                const int idx = dim * y + x;
+                if (*(void**)(cells + (size_t)idx * CELL_STRIDE + CELL_OCCUPANT)) continue;  // occupied
+                const int dy = y - spawnY, dx = x - spawnX;
+                if (dy * dy + dx * dx < sizeSq) continue;                                     // town exclusion
+
+                // Terrain height + slope from the heightmap sampler.
+                const float center = (float)(dim >> 1) - kCenterBias;
+                float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
+                float pos[3] = {0,0,0}, tri[3] = {0,0,0};
+                fn_MapGetTerrainPos(game, pos, in, 0, tri);
+                const float h = pos[2], slope = tri[2];
+                if (h < hMin || h >= hMax || slope < slopeMin) continue;
+
+                // Instantiate + register (component grid/growth/model deferred — inert).
+                void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+                void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+                uintptr_t entIBP = 0;
+                fn_InternalBasePtr_Ctor(&entIBP, ent);
+                fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+                if (ent) { ++spawned; ++poolSpawned; }
+                if (poolSpawned >= RES_POOL_CAP) { capped = true; break; }
+            }
+        }
+        fprintf(stderr, "[startTown::res] [%d] tmpl=%p desc=%p thr=%.3f dens=%.3f h[%.2f,%.2f) slope>=%.2f -> %d%s\n",
+                e, tmpl, desc, threshold, density, hMin, hMax, slopeMin, poolSpawned,
+                capped ? " (CAPPED)" : "");
+        fflush(stderr);
+    }
+    return spawned;
+}
+
 // Spawn entry point — called from Load after the camera is framed. Builds up the
-// start-town entities: structures (impl_1fc0) + citizens (impl_0dd0) + simple
-// pool (impl_09e0).
+// start-town entities: structures (impl_1fc0) + citizens (impl_0dd0) + resources
+// (impl_a12b0) + simple pool (impl_09e0).
 extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     if (!startConfig || !world) return;
     uint8_t* sc = (uint8_t*)startConfig;
@@ -528,10 +659,20 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
             nc, afterStruct, afterCitizens);
     fflush(stderr);
 
+    // RESOURCES (impl_a12b0) — perlin scatter of trees/stone/iron across the map,
+    // excluding the town site (radius = townSize, sizeSq = size*size).
+    int resSize = *(int32_t*)(sc + 0x3c);
+    if (resSize <= 0) resSize = 1;
+    int nr = StartTown_SpawnResources(sc, world, spawnX, spawnY, resSize * resSize);
+    int afterRes = *(int32_t*)((uint8_t*)entityList + 0x10);
+    fprintf(stderr, "[startTown::spawn] resources: spawned %d; entityList count %d -> %d\n",
+            nr, afterCitizens, afterRes);
+    fflush(stderr);
+
     // SIMPLE pool (impl_09e0) — population/deer.
     int n = StartTown_SpawnSimplePool(sc, entityList);
     int after = *(int32_t*)((uint8_t*)entityList + 0x10);
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
-            "entityList count %d -> %d\n", n, afterCitizens, after);
+            "entityList count %d -> %d\n", n, afterRes, after);
     fflush(stderr);
 }
