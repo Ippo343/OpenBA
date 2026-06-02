@@ -78,6 +78,18 @@ void Profession_InitFuncs() {
     s_fn_ExternalPtr_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x14000bd30));
 
+    // Standalone fallbacks: the exe IAT dispatch slots above resolve to NULL when
+    // the original exe isn't mapped (standalone). Fall back to the Runtime-resolved
+    // engine_funcs globals so the SAME Serialize works in both modes. The
+    // ExternalPtr variants are stream-identical to fn_ExternalPtr_BuildSerialize.
+    if (!s_fn_Serializer_Ctor)  s_fn_Serializer_Ctor  = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
+    if (!s_fn_Serializer_Dtor)  s_fn_Serializer_Dtor  = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
+    if (!s_fn_Serialize_Int)    s_fn_Serialize_Int    = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)g_fn_Serialize_Int);
+    if (!s_fn_Serialize_Bool)   s_fn_Serialize_Bool   = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)g_fn_Serialize_Bool);
+    if (!s_fn_Serialize_Float)  s_fn_Serialize_Float  = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)fn_Serializer_Serialize_Float);
+    if (!s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
+    if (!s_fn_ExternalPtr_Serialize)  s_fn_ExternalPtr_Serialize  = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
+
 #ifdef _DEBUG
     printf("[Profession] InitFuncs: SerCtor=%p SerDtor=%p SerInt=%p SerBool=%p SerFloat=%p\n",
            (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
@@ -183,6 +195,7 @@ void* Profession_Slot8(Profession* self) {
 // Original: 0x1400a8f10
 // Creates a Serializer(stream, version=0), then serializes each field.
 void Profession_Serialize(Profession* self, void* stream) {
+    Profession_InitFuncs();   // idempotent; ensures serializer fns resolved (standalone)
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) {
         // Cannot serialize without serializer functions
         return;
@@ -228,3 +241,57 @@ void Profession_Serialize(Profession* self, void* stream) {
 
     s_fn_Serializer_Dtor(serializer);
 }
+
+// ============================================================
+// Standalone factory scaffolding
+// ============================================================
+// Profession is an Object::External type referenced by CitizenDescription (the
+// citizen-template closure FindOrLoads Profession\*.rsc). In standalone it was a
+// NullFactory stub → crash. Real factory + the reimpl'd Serialize above (now with
+// engine-global fallbacks) make it loadable. vtable @ 0x14015efa0 (9 slots,
+// +0x00..+0x40; GetVersion=3, Serialize +0x28, CreateInPlace +0x40).
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t Profession_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("Profession");
+    return cached;
+}
+static int   Prof_Return3(void* /*self*/)  { return 3; }   // GetVersion = 3
+static int   Prof_Return0(void* /*self*/)  { return 0; }
+static void* Prof_ReturnNull(void*, ...)   { return nullptr; }
+
+static void* g_Prof_Vtable[9] = {
+    reinterpret_cast<void*>(&Profession_Dtor),       // +0x00 dtor
+    reinterpret_cast<void*>(&Prof_ReturnNull),       // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&Profession_GetTypeId),  // +0x10 GetTypeId
+    reinterpret_cast<void*>(&Prof_Return3),          // +0x18 GetVersion=3
+    reinterpret_cast<void*>(&Prof_Return0),          // +0x20 Compile thunk
+    reinterpret_cast<void*>(&Profession_Serialize),  // +0x28 Serialize
+    reinterpret_cast<void*>(&Profession_Cleanup),    // +0x30 Cleanup
+    reinterpret_cast<void*>(&Prof_Return0),          // +0x38 GetDesc forwarder
+    reinterpret_cast<void*>(&Profession_Slot8),      // +0x40 CreateInPlace
+};
+
+extern "C" void RegisterProfessionVtable() {
+    RegisterExeAddr(ProfessionAddr::Vtable, reinterpret_cast<uintptr_t>(g_Prof_Vtable));
+}
+
+extern "C" void* Profession_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+    if (!p) return nullptr;
+    Profession_Init(reinterpret_cast<Profession*>(p));
+    return p;
+}
+extern "C" void* Profession_CreateInPlace(void* mem) {
+    if (!mem) return nullptr;
+    Profession_Init(reinterpret_cast<Profession*>(mem));
+    return mem;
+}
+
+REGISTER_TYPE(Profession, "Object::External",
+              &Profession_Factory, &Profession_CreateInPlace);
+#endif

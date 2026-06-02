@@ -155,6 +155,8 @@ extern "C" {
     void RegisterValueDescriptionVtable();
     void RegisterWellDescriptionVtable();
     void RegisterWildAnimalDescriptionVtable();
+    void RegisterAnimAudioEventVtable();
+    void RegisterProfessionVtable();
 }
 
 // ============================================================
@@ -841,6 +843,14 @@ static void RegisterVtablesAndTypeIds() {
     RegisterValueDescriptionVtable();
     RegisterWellDescriptionVtable();
     RegisterWildAnimalDescriptionVtable();
+
+    // M5 5c citizens — AnimAudioEvent (Graphics::AnimationEvent subclass) is part of
+    // the Character animation closure; without a real factory the citizen template
+    // load hit "[NullFactory] Hit for type: AnimAudioEvent". See animaudioevent.cpp.
+    RegisterAnimAudioEventVtable();
+
+    // M5 5c citizens — Profession (Object::External) referenced by CitizenDescription.
+    RegisterProfessionVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

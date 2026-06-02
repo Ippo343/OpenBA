@@ -96,11 +96,13 @@ REGISTER_NULL_FACTORY(TradeUI, "UI::DialogController");  // 14014c980 RegisterTy
 REGISTER_NULL_FACTORY(UpgradeUI, "UI::DialogController");  // 14014c9c0 RegisterType_UpgradeUI
 REGISTER_NULL_FACTORY(UpgradeUIConfig, "UI::DialogControllerConfig");  // 14014ca00 UpgradeUIConfig_Register
 REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 RegisterType_WorkPlaceUI
-REGISTER_NULL_FACTORY(AnimAudioEvent, "Graphics::AnimationEvent");  // 14014ca80 AnimAudioEvent_RegisterType
+// AnimAudioEvent — real factory now lives in code/Game/Component/animaudioevent.cpp
+//   (was: REGISTER_NULL_FACTORY(AnimAudioEvent, "Graphics::AnimationEvent"); // 14014ca80)
 REGISTER_NULL_FACTORY(Disease, "Object::External");  // 14014cb00 ClimateGenerator_StaticInit
 REGISTER_NULL_FACTORY(MusicList, "Object::External");  // 14014cc00 MenuScene_StaticInit
 REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb");  // 14014cc40 MenuScene_Setup
-REGISTER_NULL_FACTORY(Profession, "Object::External");  // 14014cc90 Profession_RegisterType
+// Profession — real factory now lives in code/Game/Game/profession.cpp
+//   (was: REGISTER_NULL_FACTORY(Profession, "Object::External"); // 14014cc90)
 REGISTER_NULL_FACTORY(ProfessionList, "Object::External");  // 14014ccd0 ProfessionList_RegisterType
 REGISTER_NULL_FACTORY(Scenario, "::Achievement::Achievement");  // 14014cd10 Scenario_RegisterType
 REGISTER_NULL_FACTORY(BuildUI, "UI::DialogController");  // 14014cd90 RegisterType_BuildUI

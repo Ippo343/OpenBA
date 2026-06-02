@@ -352,8 +352,111 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     return spawned;
 }
 
+// ============================================================================
+// CITIZENS pool — CitizenComponent_impl_0dd0 (0x1400a0dd0) + sub_1040 (0x1400a1040).
+// Spawns the initial colonists. For each family entry (startConfig+0x60, count
+// +0x68, stride 8: {bool _educated@+0, int _maxChildCount@+4}) the original:
+//   * spawns 2 adults (one male, one female) and links them as spouses
+//     (CitizenComponent+0x250 cross-reference)
+//   * spawns Rand(0.._maxChildCount) children attached to the mother
+//     (CitizenComponent_helper_68a0)
+//
+// Every colonist is instantiated from the shared citizen template — an
+// ExternalRef at startConfig+0x48 ({String name@+0x48, int gen@+0x50,
+// External* template@+0x58}) — via CopyCtor, then the original runs
+// FUN_140117080 to initialise the CitizenComponent: random name, age, gender,
+// model variant + world transform, education, housing assignment, movement
+// speed, AnimalComponent animation state.
+//
+// That init dereferences the CitizenComponent's real sub-objects (owner entity
+// IBP +0x10, AnimalComponent IBP +0x278, CitizenDescription +0x288, housing
+// +0x1f0/+0x248) — all ZEROED on our inert components (Foundation D/E) — and
+// calls a chain of exe helpers (Entity_ClearPathQueue, FUN_1401253d0,
+// FUN_140003870, FUN_1400a4c60, CitizenComponent_Setup{Young,Elder},
+// CitizenComponent_AssignHousing, AnimalComponent_impl_a1f0) that are NULL in
+// standalone. So the init block — and the spouse/child linking, which walks the
+// same CitizenComponent fields — is GUARDED OFF, exactly like the structures'
+// render transform. The citizen entities still exist in the world with their
+// full (inert) component sets; animating them needs a real CitizenComponent
+// (the "Foundation F"-class gate, shared with visible buildings).
+//
+// Type ids confirmed via RegisterType DATA xrefs: CitizenComponent = 1401c7158,
+// CitizenDescription = 1401c7190 (the "CitizenAI" naming on the exe helpers is a
+// misnomer; the component is CitizenComponent).
+// ============================================================================
+
+static constexpr int CITIZEN_REF    = 0x48;    // startConfig+0x48 = citizen ExternalRef
+static constexpr int FAMILY_ARR     = 0x60;    // startConfig+0x60 = family array
+static constexpr int FAMILY_CNT     = 0x68;    // startConfig+0x68 = family count
+static constexpr int FAMILY_STRIDE  = 8;       // {bool _educated@+0, int _maxChildCount@+4}
+
+// Instantiate one colonist entity from the resolved citizen template and register
+// it with the world. Returns the raw entity pointer (for optional later linking)
+// or nullptr. CitizenComponent initialisation (FUN_140117080) is deferred — see
+// the section header.
+static void* SpawnOneCitizen(void* citizenTemplate, void* entityList) {
+    if (!citizenTemplate) return nullptr;
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, citizenTemplate) : nullptr;
+    uintptr_t entIBP = 0;
+    fn_InternalBasePtr_Ctor(&entIBP, ent);
+    int category = *(int32_t*)((uint8_t*)citizenTemplate + TEMPLATE_CATEGORY);
+    fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+    return ent;
+}
+
+// CitizenComponent_impl_0dd0 — spawn the founding families.
+static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList) {
+    const int famCount  = *(int32_t*)(startConfig + FAMILY_CNT);
+    uint8_t*  families  = *(uint8_t**)(startConfig + FAMILY_ARR);
+    if (famCount <= 0 || !families) return 0;
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
+        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return 0;
+
+    // Resolve the shared citizen template once (ExternalRef at startConfig+0x48,
+    // same {name,gen,template} layout the pool entries use).
+    void* citizenTemplate = StartTown_ResolveTemplate(startConfig + CITIZEN_REF);
+    if (!citizenTemplate) {
+        fprintf(stderr, "[startTown::citizen] citizen template unresolved\n");
+        fflush(stderr);
+        return 0;
+    }
+
+    // Child count uses the world RNG (g_pGameWorldSingleton+0xd8), as the original
+    // does. The exact sequence already diverges from vanilla (we skip the many
+    // RandFloat/RandFloatTol draws inside the deferred init), so this only needs
+    // to produce a plausible population.
+    void* rng = nullptr;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        rng = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8);
+
+    int spawned = 0;
+    for (int f = 0; f < famCount; ++f) {
+        uint8_t* fam = families + (size_t)f * FAMILY_STRIDE;
+        const int educated    = *(int8_t*)fam;
+        const int maxChildren = *(int32_t*)(fam + 4);
+
+        // Two adults (male + female).
+        if (SpawnOneCitizen(citizenTemplate, entityList)) ++spawned;
+        if (SpawnOneCitizen(citizenTemplate, entityList)) ++spawned;
+
+        // Children: Rand(0.._maxChildCount).
+        int kids = 0;
+        if (rng && fn_Random_Rand && maxChildren >= 0)
+            kids = (int)fn_Random_Rand(rng, maxChildren + 1);
+        for (int c = 0; c < kids; ++c)
+            if (SpawnOneCitizen(citizenTemplate, entityList)) ++spawned;
+
+        fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d\n",
+                f, educated, maxChildren, kids);
+        fflush(stderr);
+    }
+    return spawned;
+}
+
 // Spawn entry point — called from Load after the camera is framed. Builds up the
-// start-town entities: structures (impl_1fc0) + simple pool (impl_09e0).
+// start-town entities: structures (impl_1fc0) + citizens (impl_0dd0) + simple
+// pool (impl_09e0).
 extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     if (!startConfig || !world) return;
     uint8_t* sc = (uint8_t*)startConfig;
@@ -418,10 +521,17 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
             ns, before, afterStruct);
     fflush(stderr);
 
+    // CITIZENS (impl_0dd0) — the founding families.
+    int nc = StartTown_SpawnCitizens(sc, entityList);
+    int afterCitizens = *(int32_t*)((uint8_t*)entityList + 0x10);
+    fprintf(stderr, "[startTown::spawn] citizens: spawned %d; entityList count %d -> %d\n",
+            nc, afterStruct, afterCitizens);
+    fflush(stderr);
+
     // SIMPLE pool (impl_09e0) — population/deer.
     int n = StartTown_SpawnSimplePool(sc, entityList);
     int after = *(int32_t*)((uint8_t*)entityList + 0x10);
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
-            "entityList count %d -> %d\n", n, afterStruct, after);
+            "entityList count %d -> %d\n", n, afterCitizens, after);
     fflush(stderr);
 }
