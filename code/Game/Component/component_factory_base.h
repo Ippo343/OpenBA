@@ -36,6 +36,11 @@
 
 namespace ComponentFactory {
 
+// Slot count for an inert component vtable. 48 slots is comfortable headroom over
+// the largest real component vtable, so any in-range virtual call lands on a stub
+// rather than reading past the array.
+constexpr size_t kInertVtableSlots = 48;
+
 // In-place init of an inert component at `self` (already-allocated `size` bytes):
 // Object::Internal base, shared stub vtable, +0x20 = flags, zeroed body.
 void  InitInert(void* self, size_t size, uint32_t flags);
@@ -43,14 +48,43 @@ void  InitInert(void* self, size_t size, uint32_t flags);
 // Allocate (`size` bytes, 8-align) + InitInert. Returns nullptr on alloc failure.
 void* MakeInert(size_t size, uint32_t flags);
 
+// Foundation E — typed variants. Identical to the above, but install a per-type
+// vtable (`vtable`, a kInertVtableSlots-element array owned by the caller/macro)
+// whose slot +0x10 (GetTypeId) is `getTypeIdFn`. The find-loops in the start-town
+// spawn pools (structures/citizens/resources/environment) locate a component on a
+// freshly-instantiated entity by calling its vtable+0x10 and comparing the result
+// to the target type id; the shared all-stubs vtable returns 0 there, so no
+// component is ever found and the loop writes through a null IBP. A real per-type
+// GetTypeId makes those loops resolve our inert components. The vtable is filled
+// once on first use (from the shared stub table) and reused for every instance of
+// that type. `getTypeIdFn` must be a `uint32_t(*)(void*)` (returns the id in EAX).
+void  InitInertTyped(void* self, size_t size, uint32_t flags,
+                     void** vtable, void* getTypeIdFn);
+void* MakeInertTyped(size_t size, uint32_t flags,
+                     void** vtable, void* getTypeIdFn);
+
 }  // namespace ComponentFactory
 
 // Emits XxxComponent_Factory()/XxxComponent_CreateInPlace() for REGISTER_TYPE.
+// Each component gets its own vtable so slot +0x10 returns the component's real
+// type id (via Object::GetTypeIdByName, cached) — required for the spawn-pool
+// component find-loops. Every other slot stays an inert stub. Requires
+// "Object/factory_registration.h" to be included for ::Object::GetTypeIdByName.
 #define COMPONENT_INERT_FACTORY(Name, Size, Flags)                              \
-    extern "C" void* Name##_Factory(void) {                                     \
-        return ::ComponentFactory::MakeInert((Size), (Flags));                  \
-    }                                                                           \
-    static void* Name##_CreateInPlace(void* mem) {                              \
-        if (mem) ::ComponentFactory::InitInert(mem, (Size), (Flags));           \
-        return mem;                                                             \
+    static uint32_t Name##_InertGetTypeId(void*) {                             \
+        static uint32_t cached = 0;                                            \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
+        return cached;                                                         \
+    }                                                                          \
+    static void* Name##_InertVtable[::ComponentFactory::kInertVtableSlots];    \
+    extern "C" void* Name##_Factory(void) {                                    \
+        return ::ComponentFactory::MakeInertTyped((Size), (Flags),            \
+            Name##_InertVtable,                                                \
+            reinterpret_cast<void*>(&Name##_InertGetTypeId));                  \
+    }                                                                          \
+    static void* Name##_CreateInPlace(void* mem) {                            \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),     \
+            Name##_InertVtable,                                                \
+            reinterpret_cast<void*>(&Name##_InertGetTypeId));                  \
+        return mem;                                                           \
     }

@@ -18,6 +18,7 @@
 #include "Entity/componententity_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -532,9 +533,17 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
     *(uint8_t*)(s + 0x1F) = 0;
     self->externals = nullptr;
     self->description = descriptionPtr;             // +0x28
-    self->components = nullptr;
-    self->componentCount = 0;
-    self->entityFlags = 0;
+    self->components = nullptr;                     // +0x30 array data
+    self->componentCount = 0;                       // +0x38 array count
+    *(uint32_t*)(s + 0x3c) = 0;                     // +0x3c array capacity
+    self->entityFlags = 0;                          // +0x40
+
+    // The entity block comes from MemAlloc(0x48), which does NOT zero memory. The
+    // original CopyCtor zeroes the full component-array header (data/count/cap);
+    // leaving +0x3c (capacity) as heap garbage makes fn_ExeArrayResize below see a
+    // bogus oldCap >= newCount and skip the allocation, leaving components==null
+    // and crashing the insert. (Latent until the description +0x40 fix made
+    // validCount > 0.)
 
     uintptr_t desc = (uintptr_t)descriptionPtr;
     int descCompCount = *(int*)(desc + 0x30);
@@ -577,12 +586,17 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
                 newObj = fn_Factory_CreateObject(factoryPtr, typeId);
             }
 
-            // Verify it derives from Component
+            // Verify it derives from Component. In standalone the Runtime factory
+            // tree is incomplete, so raw fn_IsDerivedFrom rejects valid inert
+            // components (returns false / NULL-derefs) — trust a non-null
+            // CreateObject result instead (Object::IsDerivedFromOrTrust). This path
+            // only began executing once the description +0x40 GetComponentTypeId
+            // was implemented; before that typeId was always 0 and no component was
+            // ever created, masking the missing CheckPtr below.
             void* newComp = nullptr;
-            if (newObj && fn_IsDerivedFrom && g_TypeId_ComponentBase) {
-                if (fn_IsDerivedFrom(newObj, *g_TypeId_ComponentBase)) {
-                    newComp = newObj;
-                }
+            if (newObj && Object::IsDerivedFromOrTrust(
+                              newObj, g_TypeId_ComponentBase ? *g_TypeId_ComponentBase : 0)) {
+                newComp = newObj;
             }
 
             // Create IBP for new component and owner
@@ -595,10 +609,17 @@ ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void
                 fn_InternalBasePtr_Ctor((void*)&ownerIBP, self);
             }
 
-            // Set component owner (+0x10) and description (+0x18)
+            // Resolve the component IBP (the original CopyCtor calls CheckPtr
+            // before the field writes) then set owner (+0x10) and description
+            // (+0x18). Guard against a null component (factory miss).
+            if (fn_InternalBasePtr_CheckPtr) {
+                fn_InternalBasePtr_CheckPtr((void*)&newIBP);
+            }
             void* compPtr = (void*)newIBP;
-            *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
-            *(uintptr_t*)((uintptr_t)compPtr + 0x18) = compTemplate;
+            if (compPtr) {
+                *(uintptr_t*)((uintptr_t)compPtr + 0x10) = ownerIBP;
+                *(uintptr_t*)((uintptr_t)compPtr + 0x18) = compTemplate;
+            }
 
             // Store in component array
             uintptr_t compArr = (uintptr_t)self->components;

@@ -20,6 +20,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -182,8 +183,177 @@ static int StartTown_SpawnSimplePool(uint8_t* startConfig, void* entityList) {
     return spawned;
 }
 
+// ============================================================================
+// STRUCTURES pool — ComponentEntity_impl_1fc0 (0x1400a1fc0). Spawns the initial
+// buildings (e.g. StorageBarn x2 on Medium) around the start-town spawn tile.
+//
+// For each entry in the pool at startConfig+0x80 (count +0x88, stride 0x30):
+//   * instantiate the template (CopyCtor) and wrap it in an IBP
+//   * read the placement footprint from the template's CreatePlacedDescription
+//     (+0x44 width, +0x48 height), falling back to the entry's own +0x20/+0x24
+//   * derive the tile position: spawnTile + entry offset (+0x18 dx, +0x1c dy),
+//     swapping width/height for the 90/270-degree orientations (+0x28)
+//   * find the MapComponent on the new entity and write its grid placement
+//     (+0x28 tileX, +0x2a tileY, +0x2c w, +0x2e h, +0x30 rotation)
+//   * register the entity in the world list (category = template+0x20)
+//
+// The original then sets up the ModelComponent render transform + a random mesh
+// variant (Graphics::Geometry::SetTransform / MeshInstance::SetMesh). Those
+// dispatch on the component's Geometry sub-object, which is zeroed on our inert
+// components (Foundation D/E) — so the rendering block is guarded off until
+// ModelComponent graduates to a real renderable. The entity still exists in the
+// world at its correct grid footprint.
+// ============================================================================
+
+static constexpr int STRUCT_STRIDE   = 0x30;   // structure pool entry stride
+static constexpr int ENTRY_OFFX      = 0x18;
+static constexpr int ENTRY_OFFY      = 0x1c;
+static constexpr int ENTRY_DEF_W     = 0x20;   // entry footprint fallback width
+static constexpr int ENTRY_DEF_H     = 0x24;   // entry footprint fallback height
+static constexpr int ENTRY_ORIENT    = 0x28;   // entry orientation code (degrees)
+static constexpr int ENT_COMP_ARR    = 0x30;   // entity component-IBP array
+static constexpr int ENT_COMP_CNT    = 0x38;   // entity component count
+static constexpr int DESC_SUB_ARR    = 0x28;   // template/description sub-block array
+static constexpr int DESC_SUB_CNT    = 0x30;   // template/description sub-block count
+static constexpr int ROT_FULL        = 0x168;  // 360 (rotation modulus)
+
+// Cached type id by name (after Object::Factory::Startup these are stable CRC32s).
+static uint32_t TypeId(const char* name) {
+    return ::Object::GetTypeIdByName(name);
+}
+
+// Component find-loop over a freshly-instantiated entity. Each entity component
+// slot holds an IBP (CheckPtr resolves it); match on vtable+0x10 (GetTypeId).
+// Returns the resolved component pointer, or nullptr.
+static void* FindComponentOnEntity(void* entity, uint32_t typeId) {
+    if (!entity || typeId == 0 || !fn_InternalBasePtr_CheckPtr) return nullptr;
+    uint8_t* e = (uint8_t*)entity;
+    int count = *(int32_t*)(e + ENT_COMP_CNT);
+    uintptr_t arr = *(uintptr_t*)(e + ENT_COMP_ARR);
+    for (int i = 0; i < count; ++i) {
+        void** slot = (void**)(arr + (uintptr_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        uintptr_t vt = *(uintptr_t*)comp;
+        typedef uint32_t (*fn_GetTypeId_t)(void*);
+        uint32_t id = (*(fn_GetTypeId_t*)(vt + 0x10))(comp);
+        if (id == typeId) return comp;
+    }
+    return nullptr;
+}
+
+// Description find-loop over a template's sub-block list. Each slot is a raw
+// description pointer (no IBP); match on vtable+0x10 (GetTypeId). Returns the
+// description pointer or nullptr.
+static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
+    if (!tmpl || typeId == 0) return nullptr;
+    uint8_t* t = (uint8_t*)tmpl;
+    int count = *(int32_t*)(t + DESC_SUB_CNT);
+    uintptr_t arr = *(uintptr_t*)(t + DESC_SUB_ARR);
+    for (int i = 0; i < count; ++i) {
+        void* desc = *(void**)(arr + (uintptr_t)i * 8);
+        if (!desc) continue;
+        uintptr_t vt = *(uintptr_t*)desc;
+        typedef uint32_t (*fn_GetTypeId_t)(void*);
+        uint32_t id = (*(fn_GetTypeId_t*)(vt + 0x10))(desc);
+        if (id == typeId) return desc;
+    }
+    return nullptr;
+}
+
+// ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
+static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
+                                     int spawnX, int spawnY) {
+    const int count = *(int32_t*)(startConfig + 0x88);
+    uint8_t* pool   = *(uint8_t**)(startConfig + 0x80);
+    if (count <= 0 || !pool) return 0;
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
+        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_MemAlloc)
+        return 0;
+
+    const uint32_t tidCreatePlaced = TypeId("CreatePlacedDescription");
+    const uint32_t tidMapComponent = TypeId("MapComponent");
+
+    int spawned = 0;
+    for (int i = 0; i < count; ++i) {
+        uint8_t* entry = pool + (size_t)i * STRUCT_STRIDE;
+
+        void* tmpl = StartTown_ResolveTemplate(entry);
+        if (!tmpl) {
+            fprintf(stderr, "[startTown::struct] [%d] template unresolved\n", i);
+            fflush(stderr);
+            continue;
+        }
+
+        // Instantiate + wrap.
+        void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+        void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+        uintptr_t entIBP = 0;
+        fn_InternalBasePtr_Ctor(&entIBP, ent);
+
+        // Footprint: CreatePlacedDescription on the template, else entry defaults.
+        int w0, h0;
+        void* placed = FindDescriptionOnTemplate(tmpl, tidCreatePlaced);
+        if (placed) {
+            w0 = *(int32_t*)((uint8_t*)placed + 0x44);
+            h0 = *(int32_t*)((uint8_t*)placed + 0x48);
+        } else {
+            w0 = *(int32_t*)(entry + ENTRY_DEF_W);
+            h0 = *(int32_t*)(entry + ENTRY_DEF_H);
+        }
+
+        const int offX   = *(int32_t*)(entry + ENTRY_OFFX);
+        const int offY   = *(int32_t*)(entry + ENTRY_OFFY);
+        const int orient = *(int32_t*)(entry + ENTRY_ORIENT);
+        const int tileX  = spawnX + offX;
+        const int tileY  = spawnY + offY;
+
+        // 90 / -90 / 270 degrees swap the footprint axes.
+        int fpW = w0, fpH = h0;
+        if (orient == 0x5a || orient == -0x5a || orient == 0x10e) { fpW = h0; fpH = w0; }
+
+        int rot = orient;
+        while (rot < 0) rot += ROT_FULL;
+
+        // MapComponent grid placement (resolvable now that components carry a real
+        // GetTypeId — Foundation E).
+        fn_InternalBasePtr_CheckPtr(&entIBP);
+        void* entity = (void*)entIBP;
+
+        void* mapComp = FindComponentOnEntity(entity, tidMapComponent);
+        if (mapComp) {
+            uintptr_t mapIBP = 0;
+            fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
+            fn_InternalBasePtr_CheckPtr(&mapIBP);
+            uint8_t* mc = (uint8_t*)mapIBP;
+            if (mc) {
+                *(int16_t*)(mc + 0x28) = (int16_t)tileX;
+                *(int16_t*)(mc + 0x2a) = (int16_t)tileY;
+                *(int16_t*)(mc + 0x2c) = (int16_t)fpW;
+                *(int16_t*)(mc + 0x2e) = (int16_t)fpH;
+                *(int32_t*)(mc + 0x30) = rot;
+            }
+        }
+
+        // Render transform + random mesh variant (ModelComponent) deferred: those
+        // dispatch on the component's Geometry sub-object, zeroed on inert
+        // components. See header comment.
+
+        // Register with the world entity list (category = template+0x20).
+        int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
+        fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+
+        fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
+                i, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
+        fflush(stderr);
+        if (ent) ++spawned;
+    }
+    return spawned;
+}
+
 // Spawn entry point — called from Load after the camera is framed. Builds up the
-// start-town entities. Currently: the simple pool (impl_09e0) only.
+// start-town entities: structures (impl_1fc0) + simple pool (impl_09e0).
 extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     if (!startConfig || !world) return;
     uint8_t* sc = (uint8_t*)startConfig;
@@ -225,12 +395,33 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     }
     fflush(stderr);
 
+    // Recompute the start-town spawn tile (deterministic: same grid + spiral as
+    // StartTown_ComputeCamera). The structures/citizens/resources are placed
+    // relative to this tile, exactly as FUN_1400a3300 does with the tile it found
+    // once and reused for both the camera and the spawn passes.
+    void* game = *(void**)((uint8_t*)world + 0xf8);
+    int spawnX = (game ? *(int32_t*)game : 0) >> 1, spawnY = spawnX;
+    if (game) {
+        int size = *(int32_t*)(sc + 0x3c);
+        if (size <= 0) size = 1;
+        StartTown_FindSpawnTile(game, size, &spawnX, &spawnY);
+    }
+
     // EntityList main-array count lives at entityList+0x10 (Foundation B); log it
     // before/after to confirm registration actually adds entities to the world.
     int before = *(int32_t*)((uint8_t*)entityList + 0x10);
+
+    // STRUCTURES (impl_1fc0) — the initial buildings.
+    int ns = StartTown_SpawnStructures(sc, entityList, spawnX, spawnY);
+    int afterStruct = *(int32_t*)((uint8_t*)entityList + 0x10);
+    fprintf(stderr, "[startTown::spawn] structures: spawned %d; entityList count %d -> %d\n",
+            ns, before, afterStruct);
+    fflush(stderr);
+
+    // SIMPLE pool (impl_09e0) — population/deer.
     int n = StartTown_SpawnSimplePool(sc, entityList);
     int after = *(int32_t*)((uint8_t*)entityList + 0x10);
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
-            "entityList count %d -> %d\n", n, before, after);
+            "entityList count %d -> %d\n", n, afterStruct, after);
     fflush(stderr);
 }

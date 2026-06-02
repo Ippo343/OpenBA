@@ -24,20 +24,32 @@ void* Inert_ScalarDtor(void* self, uint32_t flags) {
 // signature.
 void* Inert_Stub(void*, ...) { return nullptr; }
 
-// One vtable shared by every inert component. 48 slots is comfortable headroom
-// over the largest real component vtable, so any in-range virtual call lands on a
-// stub rather than reading past the array.
-void* g_InertComponentVtable[48] = {
+// One vtable shared by every inert component that does NOT need a real GetTypeId
+// (legacy InitInert path). 48 slots is comfortable headroom over the largest real
+// component vtable, so any in-range virtual call lands on a stub rather than
+// reading past the array.
+void* g_InertComponentVtable[ComponentFactory::kInertVtableSlots] = {
     reinterpret_cast<void*>(&Inert_ScalarDtor),  // +0x00 ScalarDtor
-    // slots +0x08 .. +0x178 — filled below at first use.
+    // slots +0x08 .. — filled below at first use.
 };
 bool g_vtableInit = false;
 
 void EnsureVtable() {
     if (g_vtableInit) return;
-    for (int i = 1; i < 48; ++i)
+    for (size_t i = 1; i < ComponentFactory::kInertVtableSlots; ++i)
         g_InertComponentVtable[i] = reinterpret_cast<void*>(&Inert_Stub);
     g_vtableInit = true;
+}
+
+// Fill a per-type inert vtable (Foundation E): every slot a stub except +0x00
+// (scalar dtor) and +0x10 (the type's real GetTypeId). Idempotent — slot +0x10 is
+// the fill sentinel, so this runs once per type and is reused for every instance.
+void FillTypedVtable(void** vt, void* getTypeIdFn) {
+    if (vt[2] == getTypeIdFn) return;            // already filled for this type
+    vt[0] = reinterpret_cast<void*>(&Inert_ScalarDtor);   // +0x00 ScalarDtor
+    for (size_t i = 1; i < ComponentFactory::kInertVtableSlots; ++i)
+        vt[i] = reinterpret_cast<void*>(&Inert_Stub);
+    vt[2] = getTypeIdFn;                          // +0x10 GetTypeId (real)
 }
 
 }  // namespace
@@ -67,6 +79,29 @@ void* MakeInert(size_t size, uint32_t flags) {
     void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, 8);
     if (!p) return nullptr;
     InitInert(p, size, flags);
+    return p;
+}
+
+void InitInertTyped(void* self, size_t size, uint32_t flags,
+                    void** vtable, void* getTypeIdFn) {
+    FillTypedVtable(vtable, getTypeIdFn);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    *(void**)s            = vtable;                   // +0x00 per-type vtable
+    *(void**)(s + 0x10)   = nullptr;                  // +0x10 owner IBP
+    *(void**)(s + 0x18)   = nullptr;                  // +0x18 description
+    *(uint32_t*)(s + 0x20) = flags;                   // +0x20 capability flags
+    if (size > 0x28)
+        std::memset(s + 0x28, 0, size - 0x28);
+}
+
+void* MakeInertTyped(size_t size, uint32_t flags,
+                     void** vtable, void* getTypeIdFn) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, 8);
+    if (!p) return nullptr;
+    InitInertTyped(p, size, flags, vtable, getTypeIdFn);
     return p;
 }
 

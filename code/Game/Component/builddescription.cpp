@@ -135,6 +135,11 @@ static void* BuildDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr;
 
 static void* BuildDescription_CreateInPlace(void* memory);
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* BuildDescription_GetComponentTypeId(void*, void* out) {
+    return ::Object::WriteComponentTypeId(out, "BuildComponent");
+}
+
 static void* g_BuildDescription_Vtable[11] = {
     reinterpret_cast<void*>(&BuildDescription_Dtor),               // +0x00 Dtor
     reinterpret_cast<void*>(&BuildDescription_VtblStub_ReturnNull),// +0x08 GetTypeInfo
@@ -144,7 +149,7 @@ static void* g_BuildDescription_Vtable[11] = {
     reinterpret_cast<void*>(&BuildDescription_Serialize),          // +0x28 Serialize
     reinterpret_cast<void*>(&BuildDescription_VtblStub_Return0),   // +0x30 Cleanup
     reinterpret_cast<void*>(&BuildDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&BuildDescription_VtblStub_ReturnNull),// +0x40 Slot8
+    reinterpret_cast<void*>(&BuildDescription_GetComponentTypeId),// +0x40 GetComponentTypeId
     reinterpret_cast<void*>(&BuildDescription_CreateInPlace),      // +0x48 CreateInPlace
     reinterpret_cast<void*>(&BuildDescription_VtblStub_ReturnNull),// +0x50 (guard)
 };
