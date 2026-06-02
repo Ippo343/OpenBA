@@ -61,6 +61,9 @@ static void* MultiObjectDescription_VtblStub_ReturnNull(void*, ...)  { return nu
 
 static void* MultiObjectDescription_CreateInPlace(void* memory);
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* MultiObjectDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "MultiObjectComponent"); }
+
 static void* g_MultiObjectDescription_Vtable[11] = {
     reinterpret_cast<void*>(&MultiObjectDescription_Dtor),               // +0x00 Dtor
     reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_ReturnNull),// +0x08 Slot1
@@ -70,7 +73,7 @@ static void* g_MultiObjectDescription_Vtable[11] = {
     reinterpret_cast<void*>(&MultiObjectDescription_Serialize),          // +0x28 Serialize
     reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_Return0),   // +0x30 Cleanup
     reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_ReturnNull),// +0x40 Slot8
+    reinterpret_cast<void*>(&MultiObjectDescription_GetComponentTypeId),// +0x40 Slot8
     reinterpret_cast<void*>(&MultiObjectDescription_CreateInPlace),      // +0x48 CreateInPlace
     reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_ReturnNull),// +0x50 (guard)
 };

@@ -1070,6 +1070,11 @@ fn_SummaryArray_Init_t fn_SummaryArray_Init = nullptr;
 // === EntityList dependencies (Agent A) ===
 fn_IBPTreeInsert_t fn_IBPTreeInsert = nullptr;
 fn_IBPTreeRemove_t fn_IBPTreeRemove = nullptr;
+
+// Standalone plain-BST fallback for the EntityList update/draw trees (defined in
+// code/Game/Entity/entitylist.cpp). Used when the exe AVL tree is unmapped.
+extern "C" void* IBPTreeInsert_CppImpl(void*, void*, void*);
+extern "C" void  IBPTreeRemove_CppImpl(void*, void*);
 g_fn_Time_Serialize_t g_fn_Time_Serialize = nullptr;
 fn_BucketTreeSerialize_t fn_BucketTreeSerialize = nullptr;
 
@@ -4545,6 +4550,15 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140021a30));
     fn_IBPTreeRemove = reinterpret_cast<fn_IBPTreeRemove_t>(
         ResolveAddr(Module::Exe, 0x14001a6e0));
+    // Standalone: the exe AVL tree (0x140021a30 / 0x14001a6e0) is unmapped, so the
+    // above resolve to NULL — EntityList::PreUpdate would crash the first Update
+    // tick once a spawned entity has an update-capable component. Fall back to our
+    // plain-BST reimplementation (entitylist.cpp), which is functionally
+    // equivalent for the in-order walks the engine performs.
+    if (!fn_IBPTreeInsert)
+        fn_IBPTreeInsert = reinterpret_cast<fn_IBPTreeInsert_t>(&IBPTreeInsert_CppImpl);
+    if (!fn_IBPTreeRemove)
+        fn_IBPTreeRemove = reinterpret_cast<fn_IBPTreeRemove_t>(&IBPTreeRemove_CppImpl);
     g_fn_Time_Serialize = reinterpret_cast<g_fn_Time_Serialize_t>(
         ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
     fn_BucketTreeSerialize = reinterpret_cast<fn_BucketTreeSerialize_t>(

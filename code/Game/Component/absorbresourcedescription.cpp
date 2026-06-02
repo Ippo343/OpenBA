@@ -94,6 +94,9 @@ static void* AbsorbResourceDescription_Slot8_Tramp(void* self) {
 //   +0x18 GetVersion 0x140105d90 (mov eax,1) | +0x20 Compile 0x14003a912
 //   +0x28 Serialize 0x140105d50 (empty) | +0x30 Cleanup 0x14002eb30
 //   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x14002eb80 | +0x48 0x14002eae0
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* AbsorbResourceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "AbsorbResourceComponent"); }
+
 static void* g_AbsorbResourceDescription_Vtable[11] = {
     reinterpret_cast<void*>(&AbsorbResourceDescription_Dtor_Tramp),      // +0x00
     reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturnNull),  // +0x08 GetTypeInfo
@@ -103,7 +106,7 @@ static void* g_AbsorbResourceDescription_Vtable[11] = {
     reinterpret_cast<void*>(&AbsorbResourceDescription_Serialize_Tramp), // +0x28
     reinterpret_cast<void*>(&AbsorbResourceDescription_Cleanup_Tramp),   // +0x30
     reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&AbsorbResourceDescription_Slot8_Tramp),     // +0x40
+    reinterpret_cast<void*>(&AbsorbResourceDescription_GetComponentTypeId),     // +0x40
     reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturnNull),  // +0x48 guard
     reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturnNull),  // +0x50 guard
 };

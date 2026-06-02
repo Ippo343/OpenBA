@@ -138,6 +138,9 @@ static void* CharacterDescription_Slot8_Tramp(void* self) {
 //   +0x18 GetVersion 0x140109ec0 (mov eax,6) | +0x20 Compile 0x14003a912
 //   +0x28 Serialize 0x140109dd0 | +0x30 Cleanup 0x14002fa10
 //   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x14002fa30 | +0x48 0x14002fa00
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* CharacterDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "CharacterComponent"); }
+
 static void* g_CharacterDescription_Vtable[11] = {
     reinterpret_cast<void*>(&CharacterDescription_Dtor_Tramp),      // +0x00
     reinterpret_cast<void*>(&CharacterDescription_VtblReturnNull),  // +0x08 GetTypeInfo
@@ -147,7 +150,7 @@ static void* g_CharacterDescription_Vtable[11] = {
     reinterpret_cast<void*>(&CharacterDescription_Serialize_Tramp), // +0x28
     reinterpret_cast<void*>(&CharacterDescription_Cleanup_Tramp),   // +0x30
     reinterpret_cast<void*>(&CharacterDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&CharacterDescription_Slot8_Tramp),     // +0x40
+    reinterpret_cast<void*>(&CharacterDescription_GetComponentTypeId),     // +0x40
     reinterpret_cast<void*>(&CharacterDescription_VtblReturnNull),  // +0x48 guard
     reinterpret_cast<void*>(&CharacterDescription_VtblReturnNull),  // +0x50 guard
 };

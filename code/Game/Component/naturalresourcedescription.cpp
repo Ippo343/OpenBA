@@ -204,6 +204,9 @@ static void* NaturalResourceDescription_Slot8_Tramp(void* self) {
 //   +0x18 GetVersion 0x140125fc0 (mov eax,4) | +0x20 Compile 0x14003a912
 //   +0x28 Serialize 0x140125e10 | +0x30 Cleanup 0x140036620
 //   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x140036640 | +0x48 0x140036610
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* NaturalResourceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "NaturalResourceComponent"); }
+
 static void* g_NaturalResourceDescription_Vtable[11] = {
     reinterpret_cast<void*>(&NaturalResourceDescription_Dtor_Tramp),      // +0x00
     reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturnNull),  // +0x08 GetTypeInfo
@@ -213,7 +216,7 @@ static void* g_NaturalResourceDescription_Vtable[11] = {
     reinterpret_cast<void*>(&NaturalResourceDescription_Serialize_Tramp), // +0x28
     reinterpret_cast<void*>(&NaturalResourceDescription_Cleanup_Tramp),   // +0x30
     reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&NaturalResourceDescription_Slot8_Tramp),     // +0x40
+    reinterpret_cast<void*>(&NaturalResourceDescription_GetComponentTypeId),     // +0x40
     reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturnNull),  // +0x48 guard
     reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturnNull),  // +0x50 guard
 };

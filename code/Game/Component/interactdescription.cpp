@@ -146,6 +146,9 @@ static int   Vtbl_GetVersion(void*) { return kVersion; }
 static int   Vtbl_Return0(void*) { return 0; }
 static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* InteractDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "InteractComponent"); }
+
 static void* g_Vtable[11] = {
     reinterpret_cast<void*>(&InteractDescription_Dtor),      // +0x00
     reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x08 GetTypeInfo
@@ -155,7 +158,7 @@ static void* g_Vtable[11] = {
     reinterpret_cast<void*>(&InteractDescription_Serialize), // +0x28
     reinterpret_cast<void*>(&Vtbl_Return0),                  // +0x30 Cleanup
     reinterpret_cast<void*>(&Vtbl_Return0),                  // +0x38 GetDesc
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x40 Slot8
+    reinterpret_cast<void*>(&InteractDescription_GetComponentTypeId),               // +0x40 Slot8
     reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x48 guard
     reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x50 guard
 };

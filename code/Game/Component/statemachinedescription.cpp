@@ -95,6 +95,9 @@ static void* StateMachineDescription_Slot8_Tramp(void* self) {
 //   +0x18 GetVersion 0x14012bb40 (mov eax,1) | +0x20 Compile 0x14003a912
 //   +0x28 Serialize 0x14012bb00 (empty) | +0x30 Cleanup 0x1400383e0
 //   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x140038430 | +0x48 0x140038390
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* StateMachineDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "StateMachineComponent"); }
+
 static void* g_StateMachineDescription_Vtable[11] = {
     reinterpret_cast<void*>(&StateMachineDescription_Dtor_Tramp),      // +0x00
     reinterpret_cast<void*>(&StateMachineDescription_VtblReturnNull),  // +0x08 GetTypeInfo
@@ -104,7 +107,7 @@ static void* g_StateMachineDescription_Vtable[11] = {
     reinterpret_cast<void*>(&StateMachineDescription_Serialize_Tramp), // +0x28
     reinterpret_cast<void*>(&StateMachineDescription_Cleanup_Tramp),   // +0x30
     reinterpret_cast<void*>(&StateMachineDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&StateMachineDescription_Slot8_Tramp),     // +0x40
+    reinterpret_cast<void*>(&StateMachineDescription_GetComponentTypeId),     // +0x40
     reinterpret_cast<void*>(&StateMachineDescription_VtblReturnNull),  // +0x48 guard
     reinterpret_cast<void*>(&StateMachineDescription_VtblReturnNull),  // +0x50 guard
 };

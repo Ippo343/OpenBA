@@ -88,6 +88,9 @@ static int  StorageLocationDescription_Ver(void*)        { return 2; }
 static int  StorageLocationDescription_Ret0(void*)       { return 0; }
 static void* StorageLocationDescription_RetNull(void*, ...) { return nullptr; }
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* StorageLocationDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "StorageLocationComponent"); }
+
 static void* g_StorageLocationDescription_Vtable[11] = {
     reinterpret_cast<void*>(&StorageLocationDescription_Dtor),       // +0x00
     reinterpret_cast<void*>(&StorageLocationDescription_RetNull),    // +0x08 GetTypeInfo
@@ -97,7 +100,7 @@ static void* g_StorageLocationDescription_Vtable[11] = {
     reinterpret_cast<void*>(&StorageLocationDescription_Serialize),  // +0x28 Serialize
     reinterpret_cast<void*>(&StorageLocationDescription_Cleanup),    // +0x30 Cleanup
     reinterpret_cast<void*>(&StorageLocationDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&StorageLocationDescription_Slot8),      // +0x40 Slot8
+    reinterpret_cast<void*>(&StorageLocationDescription_GetComponentTypeId),      // +0x40 Slot8
     reinterpret_cast<void*>(&StorageLocationDescription_RetNull),    // +0x48 guard
     reinterpret_cast<void*>(&StorageLocationDescription_RetNull),    // +0x50 guard
 };

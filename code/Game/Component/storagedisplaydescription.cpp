@@ -77,6 +77,9 @@ static int  StorageDisplayDescription_Ver(void*)        { return 1; }
 static int  StorageDisplayDescription_Ret0(void*)       { return 0; }
 static void* StorageDisplayDescription_RetNull(void*, ...) { return nullptr; }
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* StorageDisplayDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "StorageDisplayComponent"); }
+
 static void* g_StorageDisplayDescription_Vtable[11] = {
     reinterpret_cast<void*>(&StorageDisplayDescription_Dtor),       // +0x00
     reinterpret_cast<void*>(&StorageDisplayDescription_RetNull),    // +0x08 GetTypeInfo
@@ -86,7 +89,7 @@ static void* g_StorageDisplayDescription_Vtable[11] = {
     reinterpret_cast<void*>(&StorageDisplayDescription_Serialize),  // +0x28 Serialize
     reinterpret_cast<void*>(&StorageDisplayDescription_Cleanup),    // +0x30 Cleanup
     reinterpret_cast<void*>(&StorageDisplayDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&StorageDisplayDescription_Slot8),      // +0x40 Slot8
+    reinterpret_cast<void*>(&StorageDisplayDescription_GetComponentTypeId),      // +0x40 Slot8
     reinterpret_cast<void*>(&StorageDisplayDescription_RetNull),    // +0x48 guard
     reinterpret_cast<void*>(&StorageDisplayDescription_RetNull),    // +0x50 guard
 };

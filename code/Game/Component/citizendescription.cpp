@@ -237,6 +237,9 @@ static void* CitizenDescription_Slot8_Tramp(void* self) {
 //   +0x18 GetVersion 0x140114e00 (mov eax,17) | +0x20 Compile 0x14003a912
 //   +0x28 Serialize 0x140114900 | +0x30 Cleanup 0x1400301c0
 //   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x1400301e0 | +0x48 0x1400301b0
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* CitizenDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "CitizenComponent"); }
+
 static void* g_CitizenDescription_Vtable[11] = {
     reinterpret_cast<void*>(&CitizenDescription_Dtor_Tramp),      // +0x00
     reinterpret_cast<void*>(&CitizenDescription_VtblReturnNull),  // +0x08 GetTypeInfo
@@ -246,7 +249,7 @@ static void* g_CitizenDescription_Vtable[11] = {
     reinterpret_cast<void*>(&CitizenDescription_Serialize_Tramp), // +0x28
     reinterpret_cast<void*>(&CitizenDescription_Cleanup_Tramp),   // +0x30
     reinterpret_cast<void*>(&CitizenDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&CitizenDescription_Slot8_Tramp),     // +0x40
+    reinterpret_cast<void*>(&CitizenDescription_GetComponentTypeId),     // +0x40
     reinterpret_cast<void*>(&CitizenDescription_VtblReturnNull),  // +0x48 guard
     reinterpret_cast<void*>(&CitizenDescription_VtblReturnNull),  // +0x50 guard
 };

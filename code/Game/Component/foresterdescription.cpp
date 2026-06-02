@@ -63,6 +63,9 @@ static int   ForesterDescription_Stub_Return0(void* /*self*/) { return 0; }
 static void* ForesterDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
 static void* ForesterDescription_CreateInPlace(void* memory);
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* ForesterDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ForesterComponent"); }
+
 static void* g_ForesterDescription_Vtable[11] = {
     reinterpret_cast<void*>(&ForesterDescription_Dtor),            // +0x00
     reinterpret_cast<void*>(&ForesterDescription_Stub_ReturnNull), // +0x08
@@ -72,7 +75,7 @@ static void* g_ForesterDescription_Vtable[11] = {
     reinterpret_cast<void*>(&ForesterDescription_Serialize),       // +0x28 Serialize
     reinterpret_cast<void*>(&ForesterDescription_Stub_Return0),    // +0x30
     reinterpret_cast<void*>(&ForesterDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&ForesterDescription_Stub_ReturnNull), // +0x40
+    reinterpret_cast<void*>(&ForesterDescription_GetComponentTypeId), // +0x40
     reinterpret_cast<void*>(&ForesterDescription_CreateInPlace),   // +0x48 CreateInPlace
     reinterpret_cast<void*>(&ForesterDescription_Stub_ReturnNull), // +0x50 guard
 };

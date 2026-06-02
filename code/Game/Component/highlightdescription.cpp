@@ -152,6 +152,9 @@ static int  HighlightDescription_Ver(void*)        { return 2; }
 static int  HighlightDescription_Ret0(void*)       { return 0; }
 static void* HighlightDescription_RetNull(void*, ...) { return nullptr; }
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* HighlightDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "HighlightComponent"); }
+
 static void* g_HighlightDescription_Vtable[11] = {
     reinterpret_cast<void*>(&HighlightDescription_Dtor),       // +0x00
     reinterpret_cast<void*>(&HighlightDescription_RetNull),    // +0x08 GetTypeInfo
@@ -161,7 +164,7 @@ static void* g_HighlightDescription_Vtable[11] = {
     reinterpret_cast<void*>(&HighlightDescription_Serialize),  // +0x28 Serialize
     reinterpret_cast<void*>(&HighlightDescription_Cleanup),    // +0x30 Cleanup
     reinterpret_cast<void*>(&HighlightDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&HighlightDescription_Slot8),      // +0x40 Slot8
+    reinterpret_cast<void*>(&HighlightDescription_GetComponentTypeId),      // +0x40 Slot8
     reinterpret_cast<void*>(&HighlightDescription_RetNull),    // +0x48 guard
     reinterpret_cast<void*>(&HighlightDescription_RetNull),    // +0x50 guard
 };

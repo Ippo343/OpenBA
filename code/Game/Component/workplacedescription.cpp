@@ -88,6 +88,9 @@ static void* WorkPlaceDescription_VtblStub_ReturnNull(void*, ...)  { return null
 
 static void* WorkPlaceDescription_CreateInPlace(void* memory);
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* WorkPlaceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "WorkPlaceComponent"); }
+
 static void* g_WorkPlaceDescription_Vtable[11] = {
     reinterpret_cast<void*>(&WorkPlaceDescription_Dtor),               // +0x00 Dtor
     reinterpret_cast<void*>(&WorkPlaceDescription_VtblStub_ReturnNull),// +0x08 GetTypeInfo
@@ -97,7 +100,7 @@ static void* g_WorkPlaceDescription_Vtable[11] = {
     reinterpret_cast<void*>(&WorkPlaceDescription_Serialize),          // +0x28 Serialize
     reinterpret_cast<void*>(&WorkPlaceDescription_VtblStub_Return0),   // +0x30 Cleanup
     reinterpret_cast<void*>(&WorkPlaceDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&WorkPlaceDescription_VtblStub_ReturnNull),// +0x40 Slot8
+    reinterpret_cast<void*>(&WorkPlaceDescription_GetComponentTypeId),// +0x40 Slot8
     reinterpret_cast<void*>(&WorkPlaceDescription_CreateInPlace),      // +0x48 CreateInPlace
     reinterpret_cast<void*>(&WorkPlaceDescription_VtblStub_ReturnNull),// +0x50 (guard)
 };

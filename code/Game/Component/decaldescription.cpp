@@ -164,6 +164,9 @@ static int  DecalDescription_Ver(void*)        { return 4; }
 static int  DecalDescription_Ret0(void*)       { return 0; }
 static void* DecalDescription_RetNull(void*, ...) { return nullptr; }
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* DecalDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "DecalComponent"); }
+
 static void* g_DecalDescription_Vtable[11] = {
     reinterpret_cast<void*>(&DecalDescription_Dtor),       // +0x00
     reinterpret_cast<void*>(&DecalDescription_RetNull),    // +0x08 GetTypeInfo
@@ -173,7 +176,7 @@ static void* g_DecalDescription_Vtable[11] = {
     reinterpret_cast<void*>(&DecalDescription_Serialize),  // +0x28 Serialize
     reinterpret_cast<void*>(&DecalDescription_Cleanup),    // +0x30 Cleanup
     reinterpret_cast<void*>(&DecalDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&DecalDescription_Slot8),      // +0x40 Slot8
+    reinterpret_cast<void*>(&DecalDescription_GetComponentTypeId),      // +0x40 Slot8
     reinterpret_cast<void*>(&DecalDescription_RetNull),    // +0x48 guard
     reinterpret_cast<void*>(&DecalDescription_RetNull),    // +0x50 guard
 };

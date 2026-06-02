@@ -89,6 +89,9 @@ static int   FireDescription_Stub_Return0(void* /*self*/) { return 0; }
 static void* FireDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
 static void* FireDescription_CreateInPlace(void* memory);
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* FireDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "FireComponent"); }
+
 static void* g_FireDescription_Vtable[11] = {
     reinterpret_cast<void*>(&FireDescription_Dtor),             // +0x00
     reinterpret_cast<void*>(&FireDescription_Stub_ReturnNull),  // +0x08
@@ -98,7 +101,7 @@ static void* g_FireDescription_Vtable[11] = {
     reinterpret_cast<void*>(&FireDescription_Serialize),        // +0x28 Serialize
     reinterpret_cast<void*>(&FireDescription_Stub_Return0),     // +0x30
     reinterpret_cast<void*>(&FireDescription_Stub_Return0),     // +0x38
-    reinterpret_cast<void*>(&FireDescription_Stub_ReturnNull),  // +0x40
+    reinterpret_cast<void*>(&FireDescription_GetComponentTypeId),  // +0x40
     reinterpret_cast<void*>(&FireDescription_CreateInPlace),    // +0x48 CreateInPlace
     reinterpret_cast<void*>(&FireDescription_Stub_ReturnNull),  // +0x50 guard
 };

@@ -61,6 +61,9 @@ static void* TrackerDescription_VtblStub_ReturnNull(void*, ...)  { return nullpt
 
 static void* TrackerDescription_CreateInPlace(void* memory);
 
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* TrackerDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "TrackerComponent"); }
+
 static void* g_TrackerDescription_Vtable[11] = {
     reinterpret_cast<void*>(&TrackerDescription_Dtor),               // +0x00 Dtor
     reinterpret_cast<void*>(&TrackerDescription_VtblStub_ReturnNull),// +0x08 Slot1
@@ -70,7 +73,7 @@ static void* g_TrackerDescription_Vtable[11] = {
     reinterpret_cast<void*>(&TrackerDescription_Serialize),          // +0x28 Serialize
     reinterpret_cast<void*>(&TrackerDescription_VtblStub_Return0),   // +0x30 Cleanup
     reinterpret_cast<void*>(&TrackerDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_ReturnNull),// +0x40 Slot8
+    reinterpret_cast<void*>(&TrackerDescription_GetComponentTypeId),// +0x40 Slot8
     reinterpret_cast<void*>(&TrackerDescription_CreateInPlace),      // +0x48 CreateInPlace
     reinterpret_cast<void*>(&TrackerDescription_VtblStub_ReturnNull),// +0x50 (guard)
 };

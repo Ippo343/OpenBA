@@ -88,6 +88,9 @@ static void* ZoneDescription_CreateInPlace(void* memory);
 //   +0x38 GetDesc     -> Return0 (shared base forwarder; unused on load)
 //   +0x40 Slot8       -> ReturnNull (unused on load)
 //   +0x48 CreateInPlace-> ZoneDescription_CreateInPlace
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* ZoneDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ZoneComponent"); }
+
 static void* g_ZoneDescription_Vtable[11] = {
     reinterpret_cast<void*>(&ZoneDescription_Dtor),               // +0x00
     reinterpret_cast<void*>(&ZoneDescription_VtblStub_ReturnNull),// +0x08
@@ -97,7 +100,7 @@ static void* g_ZoneDescription_Vtable[11] = {
     reinterpret_cast<void*>(&ZoneDescription_Serialize),          // +0x28
     reinterpret_cast<void*>(&ZoneDescription_VtblStub_Return0),   // +0x30
     reinterpret_cast<void*>(&ZoneDescription_VtblStub_Return0),   // +0x38
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_ReturnNull),// +0x40
+    reinterpret_cast<void*>(&ZoneDescription_GetComponentTypeId),// +0x40
     reinterpret_cast<void*>(&ZoneDescription_CreateInPlace),      // +0x48
     reinterpret_cast<void*>(&ZoneDescription_VtblStub_ReturnNull),// +0x50 (over-read guard)
 };

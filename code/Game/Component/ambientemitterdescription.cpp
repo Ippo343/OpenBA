@@ -98,6 +98,9 @@ static int   Vtbl_Return0(void*) { return 0; }
 static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 
 // Vtable @ 0x140158ae0 (Object::External 9-slot layout). +0x18 GetVersion=2.
+// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
+static void* AmbientEmitterDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "AmbientEmitterComponent"); }
+
 static void* g_Vtable[11] = {
     reinterpret_cast<void*>(&AmbientEmitterDescription_Dtor),      // +0x00
     reinterpret_cast<void*>(&Vtbl_ReturnNull),                     // +0x08 GetTypeInfo
@@ -107,7 +110,7 @@ static void* g_Vtable[11] = {
     reinterpret_cast<void*>(&AmbientEmitterDescription_Serialize), // +0x28
     reinterpret_cast<void*>(&Vtbl_Return0),                        // +0x30 Cleanup
     reinterpret_cast<void*>(&Vtbl_Return0),                        // +0x38 GetDesc
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),                     // +0x40 Slot8
+    reinterpret_cast<void*>(&AmbientEmitterDescription_GetComponentTypeId),                     // +0x40 Slot8
     reinterpret_cast<void*>(&Vtbl_ReturnNull),                     // +0x48 guard
     reinterpret_cast<void*>(&Vtbl_ReturnNull),                     // +0x50 guard
 };
