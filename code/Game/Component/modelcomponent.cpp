@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -69,6 +70,20 @@ static fn_Random_Rand_t s_fn_Random_Rand = nullptr;
 // System::Time::Time(Time*, float) — dispatch slot at 0x140152b00
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
 static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
+
+// Graphics::MeshInstance::MeshInstance — default ctor, dispatch slot 0x140151490.
+// Used by the real (Foundation F) ModelComponent factory to construct the
+// embedded MeshInstance sub-object at +0x28.
+typedef void* (*fn_MeshInstance_Ctor_t)(void* self);
+static fn_MeshInstance_Ctor_t s_fn_MeshInstance_Ctor = nullptr;
+
+// Graphics::MeshInstance::~MeshInstance — dispatch slot 0x1401514a8.
+typedef void (*fn_MeshInstance_Dtor_t)(void* self);
+static fn_MeshInstance_Dtor_t s_fn_MeshInstance_Dtor = nullptr;
+
+// Math::Transform::Transform — default ctor (identity), dispatch slot 0x140151328.
+typedef void* (*fn_Transform_Ctor_t)(void* self);
+static fn_Transform_Ctor_t s_fn_Transform_Ctor = nullptr;
 
 // ModelComponent_helper_2b70 (0x1400c2b70) — notifies entity of model change
 typedef void (*fn_ModelHelper_2b70_t)(void* entity, int param);
@@ -122,6 +137,16 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
 
+    // Foundation F — sub-object ctors/dtor for the real ModelComponent factory.
+    slot = ResolveAddr(Module::Exe, 0x140151490);
+    if (slot) s_fn_MeshInstance_Ctor = *reinterpret_cast<fn_MeshInstance_Ctor_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x1401514a8);
+    if (slot) s_fn_MeshInstance_Dtor = *reinterpret_cast<fn_MeshInstance_Dtor_t*>(slot);
+
+    slot = ResolveAddr(Module::Exe, 0x140151328);
+    if (slot) s_fn_Transform_Ctor = *reinterpret_cast<fn_Transform_Ctor_t*>(slot);
+
     // Direct exe addresses
     s_fn_ModelHelper_2b70 = reinterpret_cast<fn_ModelHelper_2b70_t>(
         ResolveAddr(Module::Exe, 0x1400c2b70));
@@ -141,13 +166,22 @@ static void EnsureHelpers() {
 // ============================================================
 static void* GetMultiObjDescription(uintptr_t self) {
     EnsureHelpers();
-    if (!fn_IsDerivedFrom || !s_TypeId_MultiObjDesc) return nullptr;
 
     void* obj = *(void**)(self + 0x18);
     if (!obj) return nullptr;
 
+#ifdef STANDALONE_EXE
+    // The standalone Runtime factory tree is incomplete, so fn_IsDerivedFrom
+    // returns false for legit descriptions. ComponentEntity::CtorFromDescription
+    // has already linked +0x18 to this component's ModelDescription template, so
+    // trust the non-null pointer (matches the IsDerivedFromOrTrust policy used
+    // throughout the spawn path).
+    return obj;
+#else
+    if (!fn_IsDerivedFrom || !s_TypeId_MultiObjDesc) return nullptr;
     bool derived = fn_IsDerivedFrom(obj, *s_TypeId_MultiObjDesc);
     return derived ? obj : nullptr;
+#endif
 }
 
 // ============================================================
@@ -156,12 +190,14 @@ static void* GetMultiObjDescription(uintptr_t self) {
 // Description +0x20 = array of variant groups (each 0x18 bytes, sub-array ptr at +8)
 // variant group[variantIdx] has sub-array at +8, indexed by modelVariant * 8
 static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t modelVariant) {
-    if (!desc || modelVariant < 0) return nullptr;
+    if (!desc || modelVariant < 0 || variantIdx < 0) return nullptr;
     uintptr_t d = (uintptr_t)desc;
     // desc+0x20 points to array of variant groups
     uintptr_t groupArray = *(uintptr_t*)(d + 0x20);
+    if (!groupArray) return nullptr;            // description carries no meshes
     // Each group is 0x18 bytes; get the one at variantIdx
     uintptr_t group = *(uintptr_t*)(groupArray + 8 + (int64_t)variantIdx * 0x18);
+    if (!group) return nullptr;
     // Index into sub-array by modelVariant
     void* meshResource = *(void**)(group + (int64_t)modelVariant * 8);
     return meshResource;
@@ -274,13 +310,27 @@ void ModelComponent_Serialize(ModelComponent* self) {
     *(int16_t*)(s + 0x166) = modelVariant;
 
     // If variant >= 0, set the mesh
+    void* meshResource = nullptr;
     if (modelVariant >= 0 && s_fn_MeshInstance_SetMesh) {
-        void* meshResource = GetMeshFromDescription(
+        meshResource = GetMeshFromDescription(
             desc, *(int16_t*)(s + 0x164), modelVariant);
         if (meshResource) {
             s_fn_MeshInstance_SetMesh((void*)(s + 0x28), meshResource);
         }
     }
+
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    // Foundation F one-shot diagnostic: confirm the description carries mesh data.
+    static int s_serLog = 0;
+    if (s_serLog < 10) {
+        ++s_serLog;
+        fprintf(stderr, "[ModelComponent::Startup] self=%p desc=%p variantIdx=%d "
+                "modelVariant=%d meshGroups@+0x20=%p mesh=%p\n",
+                (void*)self, desc, (int)*(int16_t*)(s + 0x164), (int)modelVariant,
+                *(void**)(d + 0x20), meshResource);
+        fflush(stderr);
+    }
+#endif
 }
 
 // ============================================================
@@ -324,6 +374,16 @@ void ModelComponent_Draw(ModelComponent* self) {
             if (scene) {
                 uint32_t id = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
                 *(uint32_t*)(s + 0x16c) = id;
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+                static int s_drawLog = 0;
+                if (s_drawLog < 10) {
+                    ++s_drawLog;
+                    fprintf(stderr, "[ModelComponent::OnAdded] self=%p scene=%p "
+                            "modelVariant=%d sceneObjId=%u\n",
+                            (void*)self, scene, (int)modelVariant, id);
+                    fflush(stderr);
+                }
+#endif
             }
         }
     }
@@ -422,14 +482,91 @@ void ModelComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid ModelComponent: size 0x170 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x83 (from ModelComponent_Ctor) + zeroed body.
+// ===== Standalone factory (Foundation F — real renderable ModelComponent) =====
+// Unlike the inert components (Foundation D/E), ModelComponent graduates to a
+// REAL factory: it constructs the embedded Graphics::MeshInstance (+0x28) and
+// Math::Transform (+0x148) sub-objects and installs a real vtable whose
+// lifecycle slots route to the reimplemented methods above. The spawn chain
+// then drives rendering for free — ComponentEntity::CtorFromDescription calls
+// vtable+0x20 (Startup = ModelComponent_Serialize, sets the mesh from the
+// description) during instantiation, and OnAddedPass calls vtable+0x30
+// (OnAdded = ModelComponent_Draw, registers the geometry in Graphics::Scene).
+// Mirrors the exe constructor at 0x140124d20.
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(ModelComponent, 0x170, 0x83)
+// GetTypeId (vtable +0x10): return the ModelComponent type id, cached.
+static uint32_t ModelComponent_Real_GetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ModelComponent");
+    return cached;
+}
+
+// ScalarDtor (vtable +0x00): destroy the embedded MeshInstance, free if deleting.
+static void* ModelComponent_Real_ScalarDtor(void* self, uint32_t flags) {
+    EnsureHelpers();
+    if (self && s_fn_MeshInstance_Dtor)
+        s_fn_MeshInstance_Dtor((void*)((uintptr_t)self + 0x28));
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// Safe no-op for every slot we don't override (base Component behaviour). Returns
+// 0 in RAX, which reads correctly as void/int/pointer under the Win64 ABI.
+static void* ModelComponent_Real_Stub(void*, ...) { return nullptr; }
+
+// 24 slots — comfortable headroom over the original 19-slot vtable (0x140163ba0).
+static void* g_ModelComponent_RealVtable[24];
+static bool  g_mcVtableInit = false;
+
+static void EnsureRealVtable() {
+    if (g_mcVtableInit) return;
+    for (int i = 0; i < 24; ++i)
+        g_ModelComponent_RealVtable[i] = reinterpret_cast<void*>(&ModelComponent_Real_Stub);
+    g_ModelComponent_RealVtable[0] = reinterpret_cast<void*>(&ModelComponent_Real_ScalarDtor); // +0x00
+    g_ModelComponent_RealVtable[2] = reinterpret_cast<void*>(&ModelComponent_Real_GetTypeId);  // +0x10
+    g_ModelComponent_RealVtable[3] = reinterpret_cast<void*>(&ModelComponent_Shutdown);        // +0x18 stream serialize
+    g_ModelComponent_RealVtable[4] = reinterpret_cast<void*>(&ModelComponent_Serialize);       // +0x20 Startup (set mesh)
+    g_ModelComponent_RealVtable[6] = reinterpret_cast<void*>(&ModelComponent_Draw);            // +0x30 OnAdded (scene add)
+    g_ModelComponent_RealVtable[7] = reinterpret_cast<void*>(&ModelComponent_OnCreate);        // +0x38
+    g_ModelComponent_RealVtable[8] = reinterpret_cast<void*>(&ModelComponent_OnRemove);        // +0x40
+    g_mcVtableInit = true;
+}
+
+// In-place construct a real ModelComponent at `self` (0x170 bytes). Mirrors the
+// exe ctor 0x140124d20: Internal base, our vtable, MeshInstance(+0x28),
+// Transform(+0x148), variant/scale = 0, modelId = -1, flags |= 0x83.
+static void* ModelComponent_InitReal(void* self) {
+    EnsureHelpers();
+    EnsureRealVtable();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    *(void**)s          = g_ModelComponent_RealVtable;  // +0x00 our vtable
+    *(void**)(s + 0x10) = nullptr;                       // +0x10 owner IBP (set by CtorFromDescription)
+    *(void**)(s + 0x18) = nullptr;                       // +0x18 description (set by CtorFromDescription)
+    *(uint32_t*)(s + 0x20) = 0x83;                       // +0x20 capability flags
+
+    // Zero the component body, then construct the embedded sub-objects.
+    std::memset(s + 0x28, 0, 0x170 - 0x28);
+    if (s_fn_MeshInstance_Ctor) s_fn_MeshInstance_Ctor(s + 0x28);   // +0x28 Graphics::MeshInstance
+    if (s_fn_Transform_Ctor)    s_fn_Transform_Ctor(s + 0x148);     // +0x148 Math::Transform
+    *(int64_t*)(s + 0x164) = 0;                          // variantIdx / modelVariant / scale
+    *(int32_t*)(s + 0x16c) = -1;                         // modelId = not in scene
+    return self;
+}
+
+extern "C" void* ModelComponent_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x170, 8);
+    if (!p) return nullptr;
+    return ModelComponent_InitReal(p);
+}
+
+static void* ModelComponent_CreateInPlace(void* mem) {
+    return mem ? ModelComponent_InitReal(mem) : nullptr;
+}
+
 REGISTER_TYPE(ModelComponent, "Component",
               &ModelComponent_Factory, &ModelComponent_CreateInPlace);
 #endif // STANDALONE_EXE

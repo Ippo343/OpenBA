@@ -264,7 +264,7 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
-                                     int spawnX, int spawnY) {
+                                     void* game, int spawnX, int spawnY) {
     const int count = *(int32_t*)(startConfig + 0x88);
     uint8_t* pool   = *(uint8_t**)(startConfig + 0x80);
     if (count <= 0 || !pool) return 0;
@@ -272,8 +272,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_MemAlloc)
         return 0;
 
-    const uint32_t tidCreatePlaced = TypeId("CreatePlacedDescription");
-    const uint32_t tidMapComponent = TypeId("MapComponent");
+    const uint32_t tidCreatePlaced  = TypeId("CreatePlacedDescription");
+    const uint32_t tidMapComponent  = TypeId("MapComponent");
+    const uint32_t tidModelComponent = TypeId("ModelComponent");
 
     int spawned = 0;
     for (int i = 0; i < count; ++i) {
@@ -336,9 +337,40 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             }
         }
 
-        // Render transform + random mesh variant (ModelComponent) deferred: those
-        // dispatch on the component's Geometry sub-object, zeroed on inert
-        // components. See header comment.
+        // Foundation F — set the ModelComponent world transform so its OnAdded
+        // (ModelComponent_Draw, fired by RegisterEntity -> OnAddedPass below) places
+        // the mesh at the building footprint centre. Mirrors the transform block of
+        // ComponentEntity_impl_1fc0 (call site 0x1400a24bc): footprint centre =
+        // midpoint of the origin/far corner terrain positions; yaw = raw orient;
+        // pitch = 0. ModelComponent_Draw then calls Geometry::SetTransform(+0x28,
+        // +0x148). Without this the mesh would render at the world origin.
+        if (game && fn_MapGetTerrainPos && fn_Transform_FromYawPitchOffset) {
+            void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
+            if (modelComp) {
+                uintptr_t mcIBP = 0;
+                fn_InternalBasePtr_Ctor(&mcIBP, modelComp);
+                fn_InternalBasePtr_CheckPtr(&mcIBP);
+                uint8_t* mc = (uint8_t*)mcIBP;
+                int dim = *(int32_t*)game;
+                if (mc && dim > 0) {
+                    const float half = (float)(dim >> 1);
+                    // Origin corner (tileX, tileY) and far corner (tileX+fpW, tileY+fpH).
+                    int idx1 = dim * tileY + tileX;
+                    float in1[3] = { (float)(idx1 % dim) - half, (float)(idx1 / dim) - half, 0.0f };
+                    float p1[3] = {0,0,0};
+                    fn_MapGetTerrainPos(game, p1, in1, 0, nullptr);
+                    int idx2 = (tileY + fpH) * dim + tileX + fpW;
+                    float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
+                    float p2[3] = {0,0,0};
+                    fn_MapGetTerrainPos(game, p2, in2, 0, nullptr);
+                    float center[3] = { (p1[0]+p2[0])*0.5f, (p1[1]+p2[1])*0.5f, (p1[2]+p2[2])*0.5f };
+                    float yaw = (float)orient, pitch = 0.0f;
+                    // Writes the Transform straight into ModelComponent+0x148.
+                    fn_Transform_FromYawPitchOffset((void*)(mc + 0x148), &yaw, &pitch, center);
+                    *(float*)(mc + 0x168) = yaw;
+                }
+            }
+        }
 
         // Register with the world entity list (category = template+0x20).
         int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
@@ -726,7 +758,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     int before = *(int32_t*)((uint8_t*)entityList + 0x10);
 
     // STRUCTURES (impl_1fc0) — the initial buildings.
-    int ns = StartTown_SpawnStructures(sc, entityList, spawnX, spawnY);
+    int ns = StartTown_SpawnStructures(sc, entityList, game, spawnX, spawnY);
     int afterStruct = *(int32_t*)((uint8_t*)entityList + 0x10);
     fprintf(stderr, "[startTown::spawn] structures: spawned %d; entityList count %d -> %d\n",
             ns, before, afterStruct);

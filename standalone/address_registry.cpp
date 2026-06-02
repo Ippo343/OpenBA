@@ -511,6 +511,43 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140152698,
         (uintptr_t)ResolveExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z"));
 
+    // ----------------------------------------------------------------
+    // Foundation F — Graphics render-path dispatch slots (ModelComponent).
+    // ----------------------------------------------------------------
+    // The real (non-inert) ModelComponent constructs a Graphics::MeshInstance
+    // sub-object at +0x28 and a Math::Transform at +0x148, then its lifecycle
+    // methods (Startup=+0x20 sets the mesh from the description, OnAdded=+0x30
+    // registers the geometry in Graphics::Scene) drive rendering. All of these
+    // are Runtime-x64.dll exports; the exe reaches them through these .rdata
+    // dispatch slots, which the loader fills by name at startup — in standalone
+    // we fill them here. Names recovered from the exe's slot->name RVA table.
+    RegisterDispatchSlot(0x140151490,                       // MeshInstance ctor
+        (uintptr_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
+    RegisterDispatchSlot(0x1401514a8,                       // MeshInstance dtor
+        (uintptr_t)ResolveExport("??1MeshInstance@Graphics@@UEAA@XZ"));
+    RegisterDispatchSlot(0x140151498,                       // MeshInstance::SetMesh
+        (uintptr_t)ResolveExport("?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z"));
+    RegisterDispatchSlot(0x1401514b0,                       // MeshInstance::IsAnimating
+        (uintptr_t)ResolveExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ"));
+    RegisterDispatchSlot(0x140152990,                       // MeshInstance::Serialize
+        (uintptr_t)ResolveExport("?Serialize@MeshInstance@Graphics@@QEAAXAEAVSerializer@IO@@@Z"));
+    RegisterDispatchSlot(0x140151328,                       // Math::Transform ctor
+        (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@XZ"));
+    RegisterDispatchSlot(0x1401522e0,                       // Math::Transform::Serialize
+        (uintptr_t)ResolveExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    RegisterDispatchSlot(0x1401512e0,                       // Geometry::SetTransform
+        (uintptr_t)ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
+    RegisterDispatchSlot(0x140151370,                       // Scene::AddObject
+        (uintptr_t)ResolveExport("?AddObject@Scene@Graphics@@QEAAIPEAVGeometry@2@@Z"));
+    RegisterDispatchSlot(0x140151360,                       // Scene::RemoveObject
+        (uintptr_t)ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
+    RegisterDispatchSlot(0x140152468,                       // Serializer::Serialize(short*)
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAFPEBD@Z"));
+    RegisterDispatchSlot(0x1401512e8,                       // Random::Rand(range)
+        (uintptr_t)ResolveExport("?Rand@Random@System@@QEAAII@Z"));
+    RegisterDispatchSlot(0x140152b00,                       // System::Time::Time(float)
+        (uintptr_t)ResolveExport("??0Time@System@@QEAA@M@Z"));
+
     RegisterDispatchSlot(0x140152738,
         (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
     RegisterDispatchSlot(0x140151650,
