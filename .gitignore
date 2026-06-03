@@ -34,3 +34,4 @@ ghidbackup.zip
 
 #misc
 *.lock
+*.log

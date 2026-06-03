@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <cstdlib>
 
 // ============================================================
 // MenuDLT struct field offsets (Engine::DialogLoopT subclass)
@@ -663,6 +664,19 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // Engine::Random lives at self+0x168 (UpdateLoop base + DialogLoopT field area).
     void* sceneRng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
     uint32_t variant = fn_Random_Rand(sceneRng, 10);
+
+#ifdef STANDALONE_EXE
+    // Diagnostic lever: BANISHED_MENU_SCENE pins the menu scene index (0..9) so
+    // the otherwise-random MenuScene/SceneN.rsc choice becomes deterministic.
+    // Lets us reproduce the intermittent menu heap-overflow per-scene instead
+    // of waiting for the RNG to land on the bad one. Unset = normal random pick.
+    if (const char* pin = std::getenv("BANISHED_MENU_SCENE")) {
+        unsigned forced = static_cast<unsigned>(std::atoi(pin)) % 10u;
+        printf("[MenuDLT::LoadScene] BANISHED_MENU_SCENE pinned scene %u "
+               "(rng would have picked %u)\n", forced, variant);
+        variant = forced;
+    }
+#endif
 
     // Format the scene path (Game/MenuScene/Scene{0..9}.rsc).
     uint8_t stringBuf[16] = {};

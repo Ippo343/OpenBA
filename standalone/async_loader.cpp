@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 #include <process.h>
 #include <windows.h>
 
@@ -66,6 +67,39 @@ void DrainPriorJob() {
 
 } // namespace
 
+// Root-cause fix for the intermittent menu/startup heap-corruption crash:
+// run the load on the CALLER (main) thread by default, NOT a worker thread.
+//
+// The engine allocator System::MemoryAllocator::Allocate (Runtime 0x1800c6e60)
+// is NOT thread-safe — it manipulates the boundary-tag free-list
+// (UnlinkFreeTag/LinkFreeTag) WITHOUT taking the allocator critical section
+// (+0x640), which only Free/MemFree take. Running `next->vtable->Load`
+// (heavy External::Load allocation, e.g. achievement/goal FindOrLoad) on a
+// worker thread while the main thread also allocates (ChunkedSceneLoader::Tick
+// building 12-15K menu-scene props, plus per-frame UI/Draw) races the shared
+// free-list → a clobbered link → a wild pointer that the next Allocate follows
+// to an access violation. ~1/3 of menu launches crashed this way; two threads
+// were caught simultaneously faulting inside Allocate on the same wild ptr.
+//
+// MenuDLT::Load is only ~85ms, and the expensive scene chunking still animates
+// the splash via ChunkedSceneLoader on the main thread AFTER this returns, so
+// the visible cost is a single ~85ms hitch — well worth eliminating the race.
+// StartAsyncLoad is used ONLY by the menu splash chain (splash_loop_stubs.cpp);
+// the in-game world build goes through fn_Loader_Load instead, so this is
+// surgical to the menu path.
+//
+// Set BANISHED_ASYNC_LOAD=1 to opt back into the (racy) worker thread — kept
+// for experimentation, e.g. once the allocator is made thread-safe by patching
+// Allocate to take the critical section.
+static bool AsyncLoadOptIn() {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* e = getenv("BANISHED_ASYNC_LOAD");
+        cached = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return cached != 0;
+}
+
 void StartAsyncLoad(UpdateLoop* loop) {
     DrainPriorJob();
     if (!loop) {
@@ -73,6 +107,17 @@ void StartAsyncLoad(UpdateLoop* loop) {
         return;
     }
     LoadJob* job = new LoadJob{loop, {false}, nullptr};
+    if (!AsyncLoadOptIn()) {
+        printf("[AsyncLoader] running load synchronously on caller thread "
+               "(default — avoids non-thread-safe-allocator race; set "
+               "BANISHED_ASYNC_LOAD=1 for the old worker thread)\n");
+        WorkerProc(job);          // sets job->done = true
+        job->thread = nullptr;
+        g_currentJob = job;       // DrainPriorJob will just delete it
+        return;
+    }
+    printf("[AsyncLoader] BANISHED_ASYNC_LOAD set — using worker thread "
+           "(WARNING: races the non-thread-safe allocator, may crash)\n");
     job->thread = reinterpret_cast<HANDLE>(_beginthreadex(
         nullptr, 0, &WorkerProc, job, 0, nullptr));
     if (!job->thread) {

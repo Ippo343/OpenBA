@@ -45,6 +45,16 @@
 #include <cstdint>
 #include <cstdio>
 
+// Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
+// BANISHED_REDZONE is unset). Localizes which Geometry::Serialize step trips a
+// tail-canary so the displaced free-list crash can be root-caused.
+#ifdef STANDALONE_EXE
+#include "redzone_alloc.h"
+#define RZ_CHECK(tag) RedzoneAlloc_ValidateAll(tag)
+#else
+#define RZ_CHECK(tag) ((void)0)
+#endif
+
 // External reimpl entry points from sibling sessions.
 extern "C" void  Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);
 extern "C" void  Reimpl_Struct60B_Serialize(void* serializer, int count, void* arrayBase);
@@ -202,6 +212,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         if (serInt) serInt(serializer, reinterpret_cast<int32_t*>(field), nullptr);
     };
 
+    RZ_CHECK("geom 04d0 entry");
+
     // ---- Step 1: Construct local Serializer with version 6. ----
     CallSerializerCtor(serializer, stream, 6);
 
@@ -230,6 +242,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         uint16_t* arr16 = *reinterpret_cast<uint16_t**>(selfBytes + 0xD8);
         if (arr16) serUSArr(serializer, local_count, arr16, nullptr);
     }
+
+    RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
 
     // ---- Step 4: Typed-ExternalPtr serialize at +0xF8 (CASCADE). ----
     // CASCADE: MaterialInstance (slot 0x140151350). Session 3 reimpl logs
@@ -267,6 +281,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         // Fallback to the SerializeBulk variant from engine_funcs.
         fn_Serializer_SerializeBulk(serializer, byteCount, heightBuf, nullptr);
     }
+
+    RZ_CHECK("geom 04d0 after step5 (sub_c1e0 mesh build + heightBuf)");
 
     // ---- Step 6: Version-gated mesh-vert/idx buffer block. ----
     int version = getVer ? getVer(serializer) : 6;
@@ -334,6 +350,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         }
     }
 
+    RZ_CHECK("geom 04d0 after step6 (vertex/index arrays)");
+
     // ---- Step 7: Two more typed-ExternalPtr serializes at +0x150 / +0x158 (CASCADE x2). ----
     // CASCADE: MaterialInstance again (same typeInfo slot as step 4).
     Reimpl_ExternalPtr_Serialize_Typed_7140(selfBytes + 0x150, serializer);
@@ -382,6 +400,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         }
     }
 
+    RZ_CHECK("geom 04d0 after step8 (int4 arrays +0x1C0/+0x1D0)");
+
     // ---- Step 9: Array-of-arrays at +0x1E0 (count +0x1E8). ----
     // Outer 16-byte stride; inner = Vector2 (8B/elem).
     {
@@ -424,6 +444,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         }
     }
 
+    RZ_CHECK("geom 04d0 after step9 (array-of-arrays +0x1E0)");
+
     // ---- Step 10: Complex 0x60B struct array at +0x200 (count +0x208) (CASCADE x N). ----
     // Resize via session 2 helper (handles copy-ctor/dtor of embedded sub-arrays);
     // per-element serialize via session 4 helper.
@@ -438,6 +460,8 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         void* arrBase = *reinterpret_cast<void**>(selfBytes + 0x200);
         Reimpl_Struct60B_Serialize(serializer, c, arrBase);
     }
+
+    RZ_CHECK("geom 04d0 after step10 (Struct60B array +0x200)");
 
     // ---- Step 11: Version 4+ array at +0x220 (count +0x228), stride 0x04. ----
     if (version >= 4) {
@@ -530,8 +554,11 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         }
     }
 
+    RZ_CHECK("geom 04d0 after step14 (VB/IB create + image upload)");
+
     // ---- Step 15: Local Serializer dtor. ----
     CallSerializerDtor(serializer);
+    RZ_CHECK("geom 04d0 exit");
 }
 
 // ============================================================
@@ -556,6 +583,8 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     auto serIntField = [&](void* field) {
         if (serInt) serInt(serializer, reinterpret_cast<int32_t*>(field), nullptr);
     };
+
+    RZ_CHECK("geom f1a0 entry");
 
     // ---- Step 1: Construct local Serializer with version 4. ----
     CallSerializerCtor(serializer, stream, 4);
@@ -622,6 +651,8 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
         void* base = *reinterpret_cast<void**>(selfBytes + 0x210);
         Reimpl_Array_Serialize_External_MaterialInstance(serializer, c, base);
     }
+
+    RZ_CHECK("geom f1a0 before dtor");
 
     // ---- Step 6: Local Serializer dtor. ----
     CallSerializerDtor(serializer);

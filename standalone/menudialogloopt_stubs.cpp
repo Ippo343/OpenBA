@@ -35,6 +35,7 @@
 #include "engine_funcs.h"
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
+#include "redzone_alloc.h"
 #include "common.h"
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
@@ -364,6 +365,10 @@ void Stub_Shutdown(UpdateLoop* self) {
 
 bool Stub_Update(UpdateLoop* self, void* time) {
     StallDebug::Tick("MenuDLT::Update");
+    // Per-frame heap-integrity check (no-op unless BANISHED_REDZONE set). Catches
+    // free-list poisoning that surfaces during the steady-state menu loop, where
+    // our alloc/free are rare so the alloc/free auto-scan rarely fires.
+    RedzoneAlloc_HeapCheck("menu Update (per-frame)");
     // Original MenuDLT::Update (exe 0x14009B6E0) does three things before tail-
     // jumping into Engine::DialogLoopT::Update:
     //   1. UI::SetCursor + Mod-update + audio pause/resume + audio update.
