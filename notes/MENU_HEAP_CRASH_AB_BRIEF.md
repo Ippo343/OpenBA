@@ -1,5 +1,20 @@
 # Menu heap crash — A/B hunt brief (for the next agent)
 
+> ## ✅ RESOLVED 2026-06-02 — read this first
+> The hypothesis below (achievement/goal path-string buffer overflow) was **WRONG** — those path
+> strings were just data in flight on the loading thread (a red herring; attribution was correctly
+> flagged unreliable). The real cause was a **concurrent-allocation data race**: the engine allocator
+> `System::MemoryAllocator::Allocate` (Runtime `0x1800c6e60`) takes **NO lock** (only `Free` takes the
+> CS at `allocator+0x640`), and our standalone **AsyncLoader** ran `next->vtable->Load` (heavy
+> External::Load alloc) on a **worker thread** while the **main thread** ran `ChunkedSceneLoader::Tick`
+> (12-15K menu-scene props → heavy alloc). Two threads racing the unlocked free-list → clobbered link →
+> wild-ptr AV. Smoking gun: rz_crashtrace_7 shows **two threads simultaneously faulting inside Allocate
+> on the same wild ptr** (worker via FindOrLoad, main via WinMain).
+> **FIX**: `standalone/async_loader.cpp` now runs the load **synchronously on the caller thread by
+> default** (set `BANISHED_ASYNC_LOAD=1` for the old worker). ~85ms hitch, scene chunking still animates.
+> Validated: baseline 3 crashes/14, sync 0 crashes/15+. Full writeup in memory `project_menu_heap_crash.md`.
+> The original (now-disproven) hunt plan is preserved below for historical context.
+
 ## Goal
 Pinpoint and fix the **intermittent menu/startup heap crash** in the standalone exe
 (`reimpl-x64.exe`). It is **free-list poisoning** in the engine allocator caused by a

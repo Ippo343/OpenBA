@@ -1,19 +1,25 @@
 // standalone/async_loader.h
-// Standalone-only async loader for UpdateLoop::Load slot.
+// Standalone-only loader for the UpdateLoop::Load slot (menu splash chain).
 //
-// Mirrors the role of Runtime Engine::Loader (a System::Thread that runs
-// `next->vtable->Load(next)` in the background while the main thread keeps
-// drawing the splash). The Runtime Loader::Run dereferences Engine+0x6c0
-// (some audio sub-object) which deadlocks/hangs in our standalone exe; rather
-// than chase that, we run our own worker thread that calls the next loop's
-// Load slot directly. The Runtime Loader thread still gets kicked by
-// fn_DialogLoaderLoopT_Startup but its hung state is harmless — we don't
-// gate the splash transition on its completion event.
+// Mirrors the role of Runtime Engine::Loader, which runs `next->vtable->Load`
+// while the main thread draws the splash. The Runtime Loader::Run dereferences
+// Engine+0x6c0 (an audio sub-object) which deadlocks/hangs in standalone, so we
+// drive the next loop's Load slot ourselves.
 //
-// Usage:
+// IMPORTANT: By DEFAULT this now runs Load SYNCHRONOUSLY on the caller thread,
+// NOT a worker thread. The engine allocator (MemoryAllocator::Allocate) is not
+// thread-safe (it skips the critical section that Free takes), so loading on a
+// worker while the main thread allocates (ChunkedSceneLoader::Tick, UI/Draw)
+// raced the free-list and crashed ~1/3 of menu launches. Synchronous load
+// removes the concurrency; the heavy scene chunking still animates the splash
+// afterward on the main thread. Set BANISHED_ASYNC_LOAD=1 to opt back into the
+// (racy) worker thread. See async_loader.cpp for the full root-cause writeup.
+//
+// Usage (unchanged):
 //   StartAsyncLoad(menuDlt);    // from SplashDLT::Stub_Startup
 //   while (IsAsyncLoadBusy()) { ... }   // SplashDLT::Stub_Update polls
 //   // transition to menuDlt once IsAsyncLoadBusy() returns false
+//   (in the default sync path IsAsyncLoadBusy() returns false immediately.)
 
 #pragma once
 
