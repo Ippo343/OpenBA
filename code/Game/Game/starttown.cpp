@@ -262,6 +262,29 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
     return nullptr;
 }
 
+// Foundation F — give an entity's ModelComponent a world transform so its OnAdded
+// (ModelComponent_Draw, fired by RegisterEntity -> OnAddedPass) places the mesh at
+// `worldPos` with `yawDeg` yaw. MUST be called after the entity is instantiated and
+// BEFORE it is registered (OnAdded runs during registration). `entity` is the raw
+// ComponentEntity pointer. Without this the mesh renders at the world origin.
+static void SetEntityModelTransform(void* entity, uint32_t tidModel,
+                                    const float worldPos[3], float yawDeg) {
+    if (!entity || tidModel == 0 || !fn_Transform_FromYawPitchOffset ||
+        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
+        return;
+    void* mc = FindComponentOnEntity(entity, tidModel);
+    if (!mc) return;
+    uintptr_t mcIBP = 0;
+    fn_InternalBasePtr_Ctor(&mcIBP, mc);
+    fn_InternalBasePtr_CheckPtr(&mcIBP);
+    uint8_t* m = (uint8_t*)mcIBP;
+    if (!m) return;
+    float yaw = yawDeg, pitch = 0.0f;
+    float off[3] = { worldPos[0], worldPos[1], worldPos[2] };
+    fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, off);
+    *(float*)(m + 0x168) = yaw;
+}
+
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -549,6 +572,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
     const float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     const uint32_t tidNatRes = TypeId("NaturalResourceDescription");
+    const uint32_t tidModel  = TypeId("ModelComponent");
 
     int spawned = 0;
     for (int e = 0; e < count; ++e) {
@@ -599,11 +623,16 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 const float h = pos[2], slope = tri[2];
                 if (h < hMin || h >= hMax || slope < slopeMin) continue;
 
-                // Instantiate + register (component grid/growth/model deferred — inert).
+                // Instantiate, place its model at the tile (Foundation F), register.
                 void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
                 void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
                 uintptr_t entIBP = 0;
                 fn_InternalBasePtr_Ctor(&entIBP, ent);
+                // Single-tile resource: place the mesh at its terrain position with a
+                // random yaw (natural foliage/rock orientation). pos = the terrain
+                // sample already computed above for the height/slope test.
+                float yawDeg = fn_Random_RandFloat ? fn_Random_RandFloat(rng) * 360.0f : 0.0f;
+                SetEntityModelTransform(ent, tidModel, pos, yawDeg);
                 fn_EntityList_RegisterEntity(entityList, &entIBP, category);
                 if (ent) { ++spawned; ++poolSpawned; }
                 if (poolSpawned >= RES_POOL_CAP) { capped = true; break; }
