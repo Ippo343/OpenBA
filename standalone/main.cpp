@@ -17,6 +17,7 @@
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
 #include "autostart.h"
+#include "redzone_alloc.h"
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
@@ -346,6 +347,13 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
     RegistryStats stats = GetRegistryStats();
     CrashLogf("Registry: %zu registered, %zu stubs hit\n",
               stats.registered, stats.stubs);
+
+    // Free-list poisoning diagnosis: walk the engine allocator's boundary tags
+    // and dump the corrupted block + its physical predecessor's vtable (= the
+    // class whose buffer overflowed). Output goes to standalone_debug.log.
+    // Works on a fully-native run (no redzone shim needed).
+    CrashLogf("(heap-dump → standalone_debug.log)\n");
+    RedzoneAlloc_HeapDump("CrashHandler");
 
     PrintStackTrace(ctx);
 
@@ -1106,6 +1114,13 @@ static bool Init() {
         printf("[Standalone] WARNING: Some engine functions not resolved (non-critical)\n");
     }
     RuntimeFuncsInit();
+
+    // 4a. Optional heap-overflow detector (BANISHED_REDZONE env var). Wraps
+    //     fn_MemAlloc/fn_MemFreeStatic with tail-canary redzones so an OOB
+    //     write in the menu/geometry deserialize is caught at the source via
+    //     RedzoneAlloc_ValidateAll() checkpoints, instead of crashing later in
+    //     the allocator free-list. No-op unless the env var is set.
+    RedzoneAlloc_Install();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs

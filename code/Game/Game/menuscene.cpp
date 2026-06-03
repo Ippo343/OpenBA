@@ -20,6 +20,15 @@
 #include <cstdio>
 #include <cstring>
 
+// Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
+// BANISHED_REDZONE is unset).
+#ifdef STANDALONE_EXE
+#include "redzone_alloc.h"
+#define RZ_CHECK(tag) RedzoneAlloc_ValidateAll(tag)
+#else
+#define RZ_CHECK(tag) ((void)0)
+#endif
+
 // ============================================================
 // Local function typedefs (resolved lazily)
 // ============================================================
@@ -398,10 +407,12 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     //
     // To re-enable: uncomment below + investigate steps 4-8 in
     // geometry_serialize.cpp against the original 0x1400b04d0 disasm.
+    RZ_CHECK("Slot5 before geometry deserialize");
     if (self->_field28 && stream) {
         Reimpl_TradeWork_impl_04d0(self->_field28, stream);
         Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
     }
+    RZ_CHECK("Slot5 after geometry deserialize");
 
     // (3.5) Camera Transform deserialize — original Slot5 calls this AFTER
     // the Geometry deserialize and BEFORE the atmosphere colors. Without it
@@ -501,6 +512,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
                                         self->_field30);
         }
 
+        RZ_CHECK("Slot5 after arr30 (stride0x20 instances)");
+
         // ----- Array #2 (+0x40, stride 0x08, GraphicsMesh exrefs) -----
         int count48 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field48) & 0xFFFFFFFF);
         g_fn_Serialize_Int(outer_ser, &count48, nullptr);
@@ -510,6 +523,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         if (count48 > 0 && fn_Array_Serialize_External_GraphicsMesh) {
             fn_Array_Serialize_External_GraphicsMesh(outer_ser, count48, self->_field40);
         }
+
+        RZ_CHECK("Slot5 after arr40 (GraphicsMesh exrefs)");
 
         // ----- Single ExternalPtr at +0x70 (GraphicsMesh) -----
         if (fn_ExternalPtr_Serialize_GraphicsMesh) {
@@ -575,6 +590,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             }
         }
 
+        RZ_CHECK("Slot5 after particle elem array (+0x50)");
+
         // ----- Particle resource exrefs (+0x60, stride 0x08, FUN_14001bff0) -----
         int count68 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field68) & 0xFFFFFFFF);
         g_fn_Serialize_Int(outer_ser, &count68, nullptr);
@@ -633,6 +650,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     if (outer_ctored && g_fn_Serializer_Dtor) {
         g_fn_Serializer_Dtor(outer_ser);
     }
+    RZ_CHECK("Slot5 exit");
     return;
 #else
     if (s_fn_Serialize_Orig) {
