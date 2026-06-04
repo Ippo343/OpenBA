@@ -18,6 +18,7 @@
 #include "stall_debug.h"
 #include "autostart.h"
 #include "redzone_alloc.h"
+#include "allocator_lock.h"
 #include "Game/game_main.h"
 #include "Object/factory_registration.h"
 #include <cstdio>
@@ -1121,6 +1122,14 @@ static bool Init() {
     //     RedzoneAlloc_ValidateAll() checkpoints, instead of crashing later in
     //     the allocator free-list. No-op unless the env var is set.
     RedzoneAlloc_Install();
+
+    // 4b. Make the Runtime engine allocator thread-safe. Allocate() takes no
+    //     lock while Free() does; the background Loader thread (achievement /
+    //     external load) allocates concurrently with the main thread's menu
+    //     scene build -> free-list corruption -> intermittent heap crash. The
+    //     detour funnels Allocate through the same CS Free uses. Env-gated by
+    //     BANISHED_ALLOC_LOCK (default on). See allocator_lock.cpp.
+    InstallAllocatorLock();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs

@@ -104,7 +104,8 @@ REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb");  // 14014cc
 // Profession — real factory now lives in code/Game/Game/profession.cpp
 //   (was: REGISTER_NULL_FACTORY(Profession, "Object::External"); // 14014cc90)
 REGISTER_NULL_FACTORY(ProfessionList, "Object::External");  // 14014ccd0 ProfessionList_RegisterType
-REGISTER_NULL_FACTORY(Scenario, "::Achievement::Achievement");  // 14014cd10 Scenario_RegisterType
+// Scenario: real standalone factory in code/Game/Game/scenario.cpp (hand-removed;
+// menu-loader factory cascade). Add "Scenario" to REIMPLEMENTED in the codegen.
 REGISTER_NULL_FACTORY(BuildUI, "UI::DialogController");  // 14014cd90 RegisterType_BuildUI
 REGISTER_NULL_FACTORY(CropUI, "SelectResourceUI");  // 14014cdd0 RegisterType_CropUI
 REGISTER_NULL_FACTORY(PastureUI, "SelectResourceUI");  // 14014ce90 RegisterType_PastureUI

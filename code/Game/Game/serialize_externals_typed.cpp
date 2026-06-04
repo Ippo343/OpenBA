@@ -196,3 +196,27 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
                                      serializer, typeIdPtr,
                                      "Graphics::MaterialInstance");
 }
+
+// ============================================================
+// Scenario's typed ExternalPtr serializers (menu-loader factory cascade).
+// ============================================================
+// FUN_140019ec0 (MapGenerator), FUN_14001a0c0 (TerrainGenerator),
+// FUN_1400194a0 (ClimateGenerator) — same body as 7140, differing only by the
+// hardcoded TypeInfo_<Gen> the original uses for IsDerivedFrom. Registered at
+// their exe addresses (address_registry.cpp) so Scenario_Serialize resolves
+// them; without these the three ExtPtr fields (Scenario +0x70/+0x78/+0x80)
+// aren't read and the loader stream misaligns -> downstream garbage typeId ->
+// crash. The typeId is resolved lazily by name (the generators are registered
+// elsewhere), so no .rdata typeInfo slot is needed here.
+extern "C" void Reimpl_ExternalPtr_Serialize_MapGenerator(void* refField, void* serializer) {
+    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
+                                     serializer, nullptr, "MapGenerator");
+}
+extern "C" void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, void* serializer) {
+    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
+                                     serializer, nullptr, "TerrainGenerator");
+}
+extern "C" void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer) {
+    ExternalPtrSerializeGeneric_7140(reinterpret_cast<void**>(refField),
+                                     serializer, nullptr, "ClimateGenerator");
+}
