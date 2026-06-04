@@ -36,6 +36,7 @@
 #include "renderdoc_integration.h"
 #include "stall_debug.h"
 #include "redzone_alloc.h"
+#include "frame_limiter.h"
 #include "common.h"
 #include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
@@ -497,6 +498,13 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
 void Stub_Draw(UpdateLoop* self, float alpha) {
     StallDebug::Tick("MenuDLT::Draw");
+    // Frame-rate ceiling. The Runtime main loop (MainLoop::Frame) is uncapped —
+    // it only SwitchToThread()s, so the menu otherwise spins one core to 100%.
+    // Tick() at frame start paces us to (display refresh + headroom) FPS; it's a
+    // no-op whenever an external limiter (vsync/G-Sync/RTSS) already holds the
+    // rate at or below refresh. This is the per-frame chokepoint we own, since
+    // the outer Frame loop lives in the Runtime DLL.
+    FrameLimiter::Tick();
     // Mirror original MenuDLT::Draw (exe 0x14009B440):
     //   ctx = engine_singleton->m_context   (engine+0x10)
     //   if (self+0xb90 != null) {  // MenuScene loaded
@@ -523,6 +531,8 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
             reinterpret_cast<uintptr_t>(self) + 0xb90);
         printf("[MenuDLT::Draw] self=%p frameAlpha=%f mainLoop=%p ctx=%p ui=%p menuScene=%p\n",
                (void*)self, alpha, mainLoop, context, ui, menuScene);
+        printf("[MenuDLT::Draw] fps=%.1f (cap=%.1f)\n",
+               FrameLimiter::GetFps(), FrameLimiter::GetCapFps());
     }
 
     // Per-frame fade alpha trace — log first 5 + every 30th draw so the curve

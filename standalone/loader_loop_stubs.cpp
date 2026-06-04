@@ -36,8 +36,34 @@
 #include "LoaderLoop.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 
 namespace {
+
+// The engine's Engine::Loader::Load(loop) spawns a background Loader thread
+// (ThreadFunc -> Loader::Run -> UpdateLoop::LoadResources) that loads the loop's
+// "<GetResourceFilename>Resources.rsc" and recursively resolves its ENTIRE
+// dependency tree (FindOrLoad -> External::Load -> ExternalList::Serialize ->
+// zlib). For the inner loop that's "Game/GlobalResources.rsc", and in the
+// standalone's incomplete resource/FileSystem environment that recursive load
+// NEVER terminates — the thread pegs a full CPU core forever (the root cause of
+// the "menu 100% CPU"; verified non-terminating, ~1.5 cores for 600+ CPU-sec).
+//
+// BUT we can't simply skip it: boot DEPENDS on the Game/Global resources it
+// loads (skipping it crashes boot 6/6). So this stays ENABLED by default; the
+// real fix is to make the Game/Global load terminate (the standalone's resource
+// path-resolution/caching, tied to the disabled Modification::SetupFileSystem,
+// makes FindOrLoad never dedup -> endless re-load). Until then, the env var is
+// an opt-OUT purely for investigation (expect a boot crash with it set):
+//   BANISHED_SKIP_ENGINE_LOADER=1  -> skip Engine::Loader::Load
+bool SkipEngineLoader() {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* e = getenv("BANISHED_SKIP_ENGINE_LOADER");
+        cached = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return cached != 0;
+}
 
 // ============================================================
 // Inner LoaderLoop stubs (vtable @ 0x140158870)
@@ -57,7 +83,11 @@ void Inner_Startup(UpdateLoop* self) {
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     printf("[InnerLL::Startup] self=%p next=%p loader=%p fn=%p\n",
            (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
-    if (fn_Loader_Load && g_pLoader) {
+    if (SkipEngineLoader()) {
+        printf("[InnerLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
+               "Engine::Loader::Load (background loader pegs a core, but boot "
+               "depends on Game/Global; expect a crash).\n");
+    } else if (fn_Loader_Load && g_pLoader) {
         fn_Loader_Load(g_pLoader, ll->m_nextLoop);
         printf("[InnerLL::Startup] Loader::Load returned\n");
     } else {
@@ -164,7 +194,10 @@ void Outer_Startup(UpdateLoop* self) {
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     printf("[OuterLL::Startup] self=%p next=%p loader=%p fn=%p\n",
            (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
-    if (fn_Loader_Load && g_pLoader) {
+    if (SkipEngineLoader()) {
+        printf("[OuterLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
+               "Engine::Loader::Load (see InnerLL note; expect a crash).\n");
+    } else if (fn_Loader_Load && g_pLoader) {
         fn_Loader_Load(g_pLoader, ll->m_nextLoop);
         printf("[OuterLL::Startup] Loader::Load returned\n");
     } else {
