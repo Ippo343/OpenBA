@@ -240,3 +240,80 @@ void Scenario_Init(Scenario* self) {
     self->climateGenerator   = nullptr;  // +0x80
     self->_field88           = nullptr;  // +0x88: String (zeroed = empty)
 }
+
+// ============================================================
+// Standalone scaffolding — vtable + factory + type registration
+// ============================================================
+// Mirrors the StatGoal pattern (code/Game/Goal/statgoal.cpp). Required so the
+// menu-startup engine Loader thread can instantiate a Scenario when External::
+// Load reads one out of the Game/Global resource tree. Without it the loader
+// hits `[NullFactory] Hit for type: Scenario` -> IsDerivedFrom(NULL) -> crash.
+//
+// Original registration (Scenario_RegisterType @0x14014cd10):
+//   BaseTypeInfo(&TypeInfo_Scenario, "Scenario", "::Achievement::Achievement",
+//                null, Scenario_Factory(0x14001e9f0), Scenario_Cleanup).
+//
+// Only the load-critical vtable slots are wired (Dtor/GetTypeId/GetFileVersion/
+// Serialize, plus Cleanup/Init). The base Achievement::Serialize (0x18009e070)
+// serializes its own fields without virtual-calling any Scenario slot, so the
+// inherited base-thunk slots stay null during load — same as StatGoal.
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// Slot2 (vtable +0x10): GetTypeId — original returns the static TypeInfo_Scenario
+// typeId; standalone reads it from REGISTER_TYPE storage.
+static uint32_t Scenario_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("Scenario");
+    return cached;
+}
+
+// Slot8 (vtable +0x40): in-place Init with the original's null guard, returning
+// self (raw vtable slot signature).
+static void* Scenario_Slot8_Init(void* self) {
+    if (self) Scenario_Init(reinterpret_cast<Scenario*>(self));
+    return self;
+}
+
+static void* g_Scenario_Vtable[13] = {
+    reinterpret_cast<void*>(&Scenario_Dtor),          // +0x00 Dtor
+    nullptr,                                           // +0x08 Slot1 (BaseTypeInfo ptr)
+    reinterpret_cast<void*>(&Scenario_GetTypeId),      // +0x10 Slot2 GetTypeId
+    reinterpret_cast<void*>(&Scenario_Slot3),          // +0x18 Slot3 GetFileVersion
+    nullptr,                                           // +0x20 Slot4 (base JMP thunk)
+    reinterpret_cast<void*>(&Scenario_Serialize),      // +0x28 Slot5 Serialize
+    reinterpret_cast<void*>(&Scenario_Cleanup),        // +0x30 Slot6 Cleanup
+    nullptr,                                           // +0x38 Slot7 (base stub)
+    reinterpret_cast<void*>(&Scenario_Slot8_Init),     // +0x40 Slot8 Init
+    nullptr,                                           // +0x48 Slot9 (null in original)
+    nullptr,                                           // +0x50 Slot10 (base thunk)
+    nullptr,                                           // +0x58 Slot11 (base thunk)
+    nullptr,                                           // +0x60 Slot12 (base thunk)
+};
+
+extern "C" void RegisterScenarioVtable() {
+    RegisterExeAddr(ScenarioAddr::Vtable, reinterpret_cast<uintptr_t>(g_Scenario_Vtable));
+}
+
+extern "C" void* Scenario_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x90, 8);  // Scenario size = 0x90
+    if (!p) return nullptr;
+    Scenario_Init(reinterpret_cast<Scenario*>(p));
+    return p;
+}
+
+extern "C" void* Scenario_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    Scenario_Init(reinterpret_cast<Scenario*>(memory));
+    return memory;
+}
+
+// Parent string matches the original Scenario_RegisterType exactly (leading "::");
+// Factory::Startup resolves the parent by literal name against registered types.
+REGISTER_TYPE(Scenario, "::Achievement::Achievement",
+              &Scenario_Factory, &Scenario_CreateInPlace);
+
+#endif // STANDALONE_EXE

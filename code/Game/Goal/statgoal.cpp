@@ -135,9 +135,13 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         if (filenameCtor) filenameCtor(filenameBuf);
         g_fn_String_Serialize((void*)(s + 0x48), serializerBuf);
 
-        // If loading (version == 0), resolve the ExternalPtr
-        void* serObj = *(void**)(serializerBuf + 8);
-        if (serObj && *(int*)((uintptr_t)serObj + 0x8) == 0) {
+        // If loading (mode == 0), resolve the ExternalPtr.
+        // Original (0x1400da960): RAX = *(serializer+0) [the reader/writer], then
+        // check *(int*)(RAX+8) == 0. serializerBuf+0 is the reader, NOT serializerBuf+8
+        // (that is the field-dispatch object). Reading the wrong field mis-gates the
+        // External resolve.
+        void* reader = *(void**)(serializerBuf + 0);
+        if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x48));
             }
@@ -148,8 +152,8 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         if (filenameCtor) filenameCtor(filenameBuf);
         g_fn_String_Serialize((void*)(s + 0x60), serializerBuf);
 
-        serObj = *(void**)(serializerBuf + 8);
-        if (serObj && *(int*)((uintptr_t)serObj + 0x8) == 0) {
+        reader = *(void**)(serializerBuf + 0);
+        if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x60));
             }

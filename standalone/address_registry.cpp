@@ -53,6 +53,7 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 extern "C" {
     void RegisterStatGoalVtable();
     void RegisterTimeGoalVtable();
+    void RegisterScenarioVtable();
     void RegisterBuildingGoalVtable();
     void RegisterPopulationGoalVtable();
     void RegisterTimeGoalInstanceVtable();
@@ -198,6 +199,10 @@ extern "C" {
 // (decompiled body lives in code/Game/Game/serialize_externals_typed.cpp)
 extern "C" {
     void Reimpl_ExternalPtr_Serialize_Typed_7140(void* refField, void* serializer);
+    // Scenario's typed ExternalPtr serializers (menu-loader factory cascade).
+    void Reimpl_ExternalPtr_Serialize_MapGenerator(void* refField, void* serializer);
+    void Reimpl_ExternalPtr_Serialize_TerrainGenerator(void* refField, void* serializer);
+    void Reimpl_ExternalPtr_Serialize_ClimateGenerator(void* refField, void* serializer);
 }
 
 // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
@@ -309,6 +314,13 @@ static void RegisterCodeFunctions() {
     // 0x140151350 (Graphics::MaterialInstance).
     // ============================================================
     RegisterExeAddr(0x140007140, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Typed_7140));
+
+    // Scenario's three typed ExternalPtr serializers (menu-loader factory cascade).
+    // Same body as 7140; without these Scenario_Serialize skips its +0x70/+0x78/
+    // +0x80 ExtPtr fields and the loader stream misaligns -> crash.
+    RegisterExeAddr(0x140019ec0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_MapGenerator));
+    RegisterExeAddr(0x14001a0c0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_TerrainGenerator));
+    RegisterExeAddr(0x1400194a0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_ClimateGenerator));
 
     // ============================================================
     // M3.5 Path B session 5 — additional Geometry::Serialize resize helpers
@@ -468,6 +480,27 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
     RegisterDispatchSlot(0x140152618,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
+
+    // Achievement::Goal::Serialize — base serialize for StatGoal/TimeGoal/etc.
+    // (virtual, Runtime export `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z`,
+    //  Runtime addr 0x18009ee20). StatGoal_Slot5/TimeGoal read this slot via
+    //  ResolveAddr(Module::Exe, 0x140152840) and call it FIRST to consume the base
+    //  Goal fields (an External ref at +0x20 + a String at +0x28) from the stream.
+    //  Without it, s_fn_GoalSerialize stays NULL and the base call is SKIPPED, so
+    //  every subsequent field read is shifted early. For goals whose statA is a
+    //  non-empty resource ref (e.g. Achievement/Uneducated_noschool.crs -> stat
+    //  "Template\SchoolHouse.rsc"), the misaligned String::Serialize reads the
+    //  length word from the wrong offset (high bit clear -> WIDE path) and over-reads
+    //  past the 127-byte resource, hanging IO::CompressedStream::Read in a
+    //  zero-progress loop — the standalone menu "100% CPU" loader-thread spin.
+    {
+        uintptr_t goalSerialize =
+            (uintptr_t)ResolveExport("?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z");
+        if (!goalSerialize)
+            goalSerialize = ResolveAddr(Module::Runtime, 0x18009ee20);
+        RegisterDispatchSlot(0x140152840, goalSerialize);
+    }
+
     // Bulk int array: Serialize(int count, int* data, name).
     // Used in many places (TradeWork, MoveTo, AutoPickup, etc.) and required
     // for Geometry::Serialize step 11 (+0x220 vertex-int array, count=901
@@ -765,6 +798,7 @@ static void RegisterVtablesAndTypeIds() {
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
     RegisterTimeGoalVtable();
+    RegisterScenarioVtable();
     RegisterBuildingGoalVtable();
     RegisterPopulationGoalVtable();
     RegisterTimeGoalInstanceVtable();

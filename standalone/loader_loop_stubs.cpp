@@ -65,6 +65,49 @@ bool SkipEngineLoader() {
     return cached != 0;
 }
 
+// After fn_Loader_Load spawns the engine Loader thread (Loader::Run ->
+// LoadResources -> recursive External::Load = thousands of Allocate calls), the
+// stub Update normally transitions IMMEDIATELY, so that thread loads the
+// achievement/scenario tree CONCURRENTLY with the main thread's menu-scene build.
+// MemoryAllocator::Allocate AND the internal Free both mutate the boundary-tag
+// free-list without a shared lock (only MemFree wraps Free with the CS), so the
+// two threads corrupt the free-list -> intermittent crash inside Free
+// (Runtime 0x1800c6c00). See [[project_menu_heap_crash]].
+//
+// Fix: block here until the loader finishes (Thread::WaitForFinish waits on the
+// loader thread's completion event). The main thread is parked (not allocating)
+// while the loader runs alone -> no concurrent allocation -> no free-list race.
+// If the loader crashes mid-run, the standalone CrashHandler ExitProcess'es, so
+// this can't deadlock. Env opt-OUT: BANISHED_SYNC_ENGINE_LOADER=0.
+bool SyncEngineLoader() {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* e = getenv("BANISHED_SYNC_ENGINE_LOADER");
+        cached = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
+    }
+    return cached != 0;
+}
+
+typedef void (*fn_WaitForFinish_t)(void* thread);
+void WaitForEngineLoader() {
+    if (!SyncEngineLoader() || !g_pLoader) return;
+    static fn_WaitForFinish_t s_wait = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_wait = reinterpret_cast<fn_WaitForFinish_t>(
+            ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
+        if (!s_wait)
+            s_wait = reinterpret_cast<fn_WaitForFinish_t>(
+                ResolveAddr(Module::Runtime, 0x1800ca5f0));
+        s_resolved = true;
+    }
+    if (s_wait) {
+        printf("[EngineLoader] waiting for loader thread to finish (sync)...\n");
+        s_wait(g_pLoader);
+        printf("[EngineLoader] loader thread finished\n");
+    }
+}
+
 // ============================================================
 // Inner LoaderLoop stubs (vtable @ 0x140158870)
 // ============================================================
@@ -90,6 +133,7 @@ void Inner_Startup(UpdateLoop* self) {
     } else if (fn_Loader_Load && g_pLoader) {
         fn_Loader_Load(g_pLoader, ll->m_nextLoop);
         printf("[InnerLL::Startup] Loader::Load returned\n");
+        WaitForEngineLoader();
     } else {
         printf("[InnerLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
     }
@@ -200,6 +244,7 @@ void Outer_Startup(UpdateLoop* self) {
     } else if (fn_Loader_Load && g_pLoader) {
         fn_Loader_Load(g_pLoader, ll->m_nextLoop);
         printf("[OuterLL::Startup] Loader::Load returned\n");
+        WaitForEngineLoader();
     } else {
         printf("[OuterLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
     }
