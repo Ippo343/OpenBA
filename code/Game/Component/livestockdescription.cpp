@@ -38,7 +38,8 @@ void LivestockDescription_Serialize(void* self, void* stream) {
     g_fn_Serializer_Ctor(serializer, stream, 1);
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x2c), nullptr);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x28);   // enum +0x28
+    if (g_fn_Serializer_GetVersion && g_fn_Serializer_GetVersion(serializer) > 0)
+        SerializerEncodingVCall(serializer, 0x98, s + 0x28);   // enum +0x28 (version-gated)
     g_fn_Serializer_Dtor(serializer);
 #else
     (void)self; (void)stream;

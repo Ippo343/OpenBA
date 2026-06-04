@@ -31,7 +31,10 @@ void CropFieldDescription_Serialize(void* self, void* stream) {
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 1);
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x24), nullptr);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
+    // Original version-gates the enum: if (0 < GetVersion()) { enum +0x20 }
+    if (g_fn_Serializer_GetVersion && g_fn_Serializer_GetVersion(serializer) > 0) {
+        SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20 (version-gated)
+    }
     g_fn_Serializer_Dtor(serializer);
 #else
     (void)self; (void)stream;
