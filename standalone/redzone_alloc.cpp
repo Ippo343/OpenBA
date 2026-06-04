@@ -26,6 +26,7 @@ namespace {
 // the corrupted boundary tag. Set BANISHED_REDZONE_PAD=<bytes> to re-enable the
 // tail canary (useful only for contiguous overruns of OUR buffers).
 size_t   g_pad      = 0;
+bool     g_zeroOnAlloc = false;       // BANISHED_REDZONE_ZERO=1 diagnostic
 constexpr uint8_t kCanary   = 0xAB;   // fill byte for the tail redzone
 constexpr int    kBtFrames  = 8;      // captured alloc backtrace depth
 
@@ -145,6 +146,16 @@ int ValidateAllLocked(const char* tag) {
 void* ShimAlloc(void* singleton, uint64_t size, int alignment) {
     void* p = g_realAlloc(singleton, size + g_pad, alignment);
     if (!p) return p;  // alloc failed — nothing to stamp
+    // Diagnostic (BANISHED_REDZONE_ZERO=1): zero-fill every allocation we hand
+    // out. The engine allocator is a boundary-tag free-list over VirtualAlloc
+    // and does NOT re-zero reused freed blocks, so a reused block returns with
+    // stale bytes. If our reimpl reads an uninitialized slot as a pointer (e.g.
+    // a not-yet-deserialized External*/Filename) it then writes through garbage
+    // → heap corruption. Zeroing here (PAD=0, so NO layout change) tests that
+    // "uninitialized/stale pointer" hypothesis: if the intermittent menu crash
+    // vanishes with this on, the bug is a stale-read; if it persists, it's a
+    // genuine OOB overrun or a Runtime-side allocation we don't intercept.
+    if (g_zeroOnAlloc) memset(p, 0, (size_t)size);
     if (g_pad) memset(CanaryPtr(p, (size_t)size), kCanary, g_pad);
     {
         std::lock_guard<std::mutex> lk(g_mutex);
@@ -216,12 +227,15 @@ void RedzoneAlloc_Install() {
     if (const char* w = getenv("BANISHED_REDZONE_WATCH")) {
         g_watchIntervalMs = atoi(w);  // 0 = tight spin
     }
+    if (const char* z = getenv("BANISHED_REDZONE_ZERO")) {
+        g_zeroOnAlloc = (z[0] && z[0] != '0' && z[0] != 'f' && z[0] != 'F');
+    }
     fn_MemAlloc      = &ShimAlloc;
     fn_MemFreeStatic = &ShimFree;
     g_enabled = true;
-    printf("[REDZONE] installed: tailPad=%zu bytes (0=native layout), "
+    printf("[REDZONE] installed: tailPad=%zu bytes (0=native layout), zeroOnAlloc=%d, "
            "autoScanEvery=%u, watchdog=%dms, real alloc=%p free=%p exeBase=%p\n",
-           g_pad, g_scanEvery, g_watchIntervalMs,
+           g_pad, (int)g_zeroOnAlloc, g_scanEvery, g_watchIntervalMs,
            (void*)g_realAlloc, (void*)g_realFree, (void*)g_exeBase);
     fflush(stdout);
 

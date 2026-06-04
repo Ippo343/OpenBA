@@ -1,7 +1,182 @@
 # Menu heap crash — RESUME-HERE plan for the next agent (2026-06-04)
 
 > Read this WITH the memory file `project_menu_heap_crash.md` (full history + reversals). This doc is the
-> actionable plan. The crash is precisely characterized; the goal now is to pin the ONE wild-write instruction.
+> actionable plan.
+
+## ★★★ 2026-06-04 SESSION 2c — WATCHPOINT FIRED: bit-32 free-list-link corruption CONFIRMED + caught ★★★
+The `alloc+0x88` watchpoint DOES fire — but only under the **redzone build** (`BANISHED_REDZONE=1`), which
+surfaces the bucket-head face (the no-redzone grind kept hitting the MaterialInstance face instead). Driver
+`notes/wp_driver.sh` (now redzone + `wmic`-reap) caught it on run 40 (`notes/wp_runs/run_40.txt`):
+- Watchpoint on bucket-12 head: **Old value `0x3390140` → New value `0x103390140`** = `0x3390140 + 0x100000000`
+  (the deterministic **bit-32 flip**, confirmed).
+- Writing instruction: `System::MemoryAllocator::UnlinkFreeTag+0x174` `mov %rdx,0x28(%r8,%rcx,8)`
+  (r8=allocator `0x5ff700`, rcx=bucket **12**, rdx=the value). **rdx arrived ALREADY corrupt** = `0x103390140`,
+  while r11/r14 hold the CORRECT `0x3390140` and rdi=`0x1ffffffffff` (the free-list relative-offset mask). So
+  `UnlinkFreeTag` merely **propagated** an already-corrupt link from the free tag at `0x3390140` into the
+  bucket head; the head write is NOT the source.
+- Backtrace = pure Runtime **MainMenu dialog load**: `UnlinkFreeTag ← Allocate ← AllocateLocked(ours) ←
+  String::SetLength ← System::operator+ ← FindOrLoad ← Dialog::operator= ← ButtonDescription::Serialize ←
+  External::Load ← ... (Ribbon/GroupDescription::Serialize)`. Our code is NOT on this stack (only the
+  AllocateLocked lock-wrapper) → the corruption was planted EARLIER (geometry deserialize) into a then-live
+  object whose field later became this free block's link.
+- **This UNIFIES both faces**: one root = a bit-32-corrupted free-list link planted by our geometry code →
+  later `Allocate` either crashes following the wild link (bucket-head face, Runtime+0xC74C3 / UnlinkFreeTag)
+  OR returns a bad/overlapping block that becomes a MaterialInstance with a NULL texture ptr (BuildParameters
+  face). NO_GEOM avoids both.
+- The corrupt value's low 32 bits == the block's own low address; the flip is +0x100000000 = setting bit 0 of
+  the link's HIGH dword (`block_link+4`). This matches a `*(int32*)(stalePtr-4) += 1` **refcount increment
+  through a stale Filename/String pointer** that lands on a free/again-to-be-free block's link high-dword
+  (the static-audit agent's #1 hypothesis). Caveat to reconcile: zeroing OUR heap allocs did NOT fix it — but
+  the Filename temporaries are 8-byte STACK buffers (`uint8_t fnameBuf[8]` etc.), not heap, so zeroing our
+  heap allocs wouldn't neutralize a stale stack-Filename refcount op.
+
+### ★★★ ROOT MECHANISM DECODED (session 2c, 2nd catch run_5_SAVED.txt) — Filename/String USE-AFTER-FREE ★★★
+Enhanced catch dumped the corrupt free block + full `UnlinkFreeTag` disasm. CONCLUSIVE:
+- Free-list links are **relative offsets**: `UnlinkFreeTag` does `rdx=*(tag)`, decodes `next = tag + (rdx &
+  0x1ffffffffff)` (mask in rdi), stores it as the bucket head, then `and %rdi,(%rdx)` derefs `next` → AV if wild.
+- The corrupt link qword at `tag+0` = **`0x0000000100000000`**: low dword 0 (the real/legit offset), **high
+  dword (tag+4) = 1**. That makes the offset `0x100000000` → `next = tag + 4GB = 0x103340140` (wild).
+- **`tag+4` is exactly where the block's live `System::String` kept its REFCOUNT.** The block still contains the
+  freed path strings (`Dialog\…rsc:resource`, `Game\Terrain\TerrainList.rsc:resource`, `C:\GOG Games\…`) at
+  `tag+8` onward, with refcount slot at tag+4.
+- So: a `System::String` (a resource-path Filename) was **freed** (block linked into bucket-12, high dword
+  cleared to 0), and then **our geometry code did a refcount op on the already-freed String**, writing `1` back
+  to `tag+4` (use-after-free) → corrupts the free-list link's high dword → bit-32 → wild allocator write later.
+- This is a **Filename/String refcount IMBALANCE / use-after-free** in our geometry serialize helpers
+  (serialize_externals.cpp / serialize_externals_typed.cpp / serialize_arrays.cpp /
+  serialize_struct60b_serialize.cpp) — a Filename/String whose backing String we over-release (Dtor one too
+  many / fail to incr) so it's freed while a stack `fnameBuf`/`pathBuf` still points at it, then a later
+  `fn_Filename_Dtor`/`AssignOp`/copy increments-or-touches the dead refcount. (Explains why heap-zeroing didn't
+  help: the imbalance is in refcount bookkeeping, not an uninitialized buffer.)
+
+### FIX-HUNT NEXT STEP (session 3)
+Audit the System::Filename/String refcount BALANCE in our 4 serialize helpers against the Runtime semantics of
+`fn_External_GetPath`, `fn_Filename_Ctor`, `fn_Filename_AssignOp`, `fn_Filename_Dtor`, `g_fn_String_Serialize`
+(decompile each in Ghidra-Runtime to learn whether each INCREMENTs/borrows/CONSUMEs a ref). The flow per
+element is `Ctor(fnameBuf); GetPath(*slot,pathBuf); AssignOp(fnameBuf,pathBuf); Dtor(pathBuf); String_Serialize(
+fnameBuf); ... Dtor(fnameBuf)` — find the op whose ref semantics we modeled wrong (prime suspect: does
+`fn_External_GetPath` RETURN a borrowed ref that we then `Dtor` (over-release), or does `g_fn_String_Serialize`
+on LOAD replace fnameBuf's String without releasing the old, etc.). To confirm a fix: rebuild, then the redzone
+loop (`notes/wp_driver.sh` style, or `zero_ab.sh` reused) should drop from ~100% crash to 0, AND the menu
+background image should render (same root as the "missing bg image" symptom). The watchpoint
+(`notes/catch_wp.gdb`, redzone) is the regression check — it should never fire post-fix.
+
+### (older) catch the SOURCE write (one level up from UnlinkFreeTag) — SUPERSEDED, mechanism now known
+The head watchpoint catches the propagation; now catch the write that sets bit-32 on the *block's* link. Options:
+1. **Re-derive + watch the live object**: under the redzone watchpoint run, when it catches at UnlinkFreeTag,
+   the corrupt tag is at r11/r14 (e.g. `0x3390140`); its link high-dword is at `tag_link+4`. The wild write
+   hit that address while the block was LIVE, during geometry. Re-run watching that address is hard (varies),
+   BUT: instrument OUR geometry serialize to, after each helper, scan recently-freed/live blocks for a link
+   whose high dword != 0 — or simpler, **audit the refcount path**: every `fn_Filename_Dtor` / `fn_Filename_AssignOp`
+   / `g_fn_String_Serialize` call in serialize_externals.cpp / serialize_externals_typed.cpp /
+   serialize_arrays.cpp / serialize_struct60b_serialize.cpp operates on an 8-byte stack Filename — find the one
+   that can hold a STALE/garbage string pointer (e.g. `fn_External_GetPath(*slot, pathBuf)` when `*slot` is a
+   non-null garbage External, then `fn_Filename_Dtor(pathBuf)` decrements at garbage-4). The `*slot` would have
+   to be non-null garbage; check whether ANY External slot/refField our geometry reads is un-initialized in a
+   path zeroing-our-heap doesn't cover (Runtime-allocated container, or a stack/struct field).
+2. **Disassemble `UnlinkFreeTag` from entry** (Runtime `??UnlinkFreeTag@MemoryAllocator@System@@`) to find the
+   exact offset where rdx (the corrupt link) was loaded from the tag — confirms the link field offset, then
+   correlate to what our code writes at that offset of a live object.
+
+## ★★ 2026-06-04 SESSION 2 — DOMINANT CRASH PRECISELY PINNED (major reframe) ★★
+The "wild bit-32 write on the bucket-12 head (alloc+0x88)" that the rest of this doc chases is the **RARE**
+face — under GDB it essentially never fires (watchpoint on alloc+0x88 ran ~11 times, 0 catches). The
+**DOMINANT** crash (what actually kills ~all runs) is a **NULL texture deref**, now pinned exactly:
+
+- **Crash site**: `Graphics::MaterialInstance::BuildParameters+0x1363` (Runtime+0x103933).
+  Disasm of the loop: `count = *(int*)(this+0x58)` (=1, correct); `data = *(void**)(this+0x50)`;
+  per element it does `mov (rcx),rax` (rax = the param's *resolved* object pointer) then
+  `cmpl $0x4, 0x2c(rax)` → **rax is NULL** → AV reading null+0x2c.
+- **The object**: `this` = a `MaterialInstance` for **`Dialog\Sprite\Background\MainMenuMaterial.rsc:resource`**
+  (the menu dialog's background material), loaded via `SpriteSheet::Serialize → External::Load → FindOrLoad`
+  during `Stub_Load → fn_DialogLoopT_Load` (the MainMenu.rsc dialog load). NOT during the geometry deserialize
+  itself — geometry runs earlier (splash chain) and leaves state that makes THIS later load fail.
+- **The null**: the material's single parameter is **`"diffuse"`** (name string intact in the heap) which
+  references texture **`Dialog\Sprite\Background\MainMenuTexture.rsc:resource`** (path string intact in the
+  heap). The param descriptor is fully intact; only the **resolved texture pointer** (element[0]+8) is NULL
+  → the texture's `FindOrLoad` returned NULL.
+- **Evidence favors a RESOURCE/FACTORY-STATE failure, NOT a heap OOB write**: (a) the redzone crash dump
+  reports **heap metadata intact** (no tag/free-link corruption); (b) the param name + texture path strings
+  are perfectly intact — only the resolved pointer is a CLEAN null (an OOB overrun would leave garbage and/or
+  corrupt the adjacent descriptor); (c) **zeroing every one of OUR allocations did NOT change the crash**
+  (A/B below). So the leading hypothesis is now: **our geometry MaterialInstance deserialize poisons the
+  Runtime `ExternalFactory` reference table / resource cache**, so the dialog's later `FindOrLoad` of
+  MainMenuTexture.rsc returns null. (The rare bucket-head bit-32 write may be a separate or downstream face.)
+
+### How it was pinned (reproduce the inspection)
+- New launch config **"Launch Standalone (debug, redzone)"** (added to .vscode/launch.json): sets
+  `BANISHED_REDZONE=1`. **With redzone the crash is ~100% deterministic in ~1s** (vs intermittent ~37%
+  without) — ideal for a reliable GDB stop. CAVEAT: redzone perturbs timing; `BANISHED_NO_MENU_GEOM=1` does
+  NOT cleanly stop the redzone crash (it instead misaligns the stream → camera=zeros → different failure), so
+  don't use NO_MENU_GEOM as a clean control under redzone.
+- At the line-185 breakpoint (geometry_serialize.cpp), run `-exec handle SIGSEGV stop nopass print` then
+  `disable 2`, then `continue` → GDB stops cleanly at the AV (the app's own crash handler does NOT run, so no
+  hang). Then `x/30i $pc-110`, `info registers`, and walk `this`(=r15) +0x50/+0x58.
+- **Zombie reaping**: redzone-crashed processes hang unkillable by taskkill/SIGTERM — reap with
+  `wmic process where "name='reimpl-x64.exe'" delete`. (taskkill //IM and `timeout` SIGTERM do NOT work.)
+
+### A/B test infrastructure added this session (kept, all env-gated/default-inert)
+- `standalone/redzone_alloc.cpp`: new **`BANISHED_REDZONE_ZERO=1`** mode — zero-fills every allocation handed
+  out by our `fn_MemAlloc` shim (PAD=0, no layout change). A/B result: **ZERO=0 → 15/15 crash, ZERO=1 →
+  15/15 crash** → zeroing our allocations does NOT fix it → NOT a stale/uninitialized read in our buffers.
+  (Caveat: only zeros OUR allocations, not Runtime's; the MaterialInstance/texture are Runtime-allocated.)
+- Scripts (in notes/): `catch_wp.gdb` (alloc+0x88 watchpoint), `wp_driver.sh` (relaunch-until-watchpoint),
+  `zero_ab.sh` (robust launch/poll-crash.log/wmic-reap A/B loop). `wp_runs/` = raw gdb run dumps.
+
+### Session 2b — texture IS path-loaded; the crash is a HEISENBUG (instrumentation suppresses it)
+Batch-GDB trace (`notes/fol_trace.gdb`, logs every `FindOrLoad` path arg `*(char**)$rdx`, NO inferior calls —
+`strstr` in a breakpoint condition/`if` is ABANDONED by GDB because another of the ~90 threads interrupts the
+inferior call, so it cannot be used here):
+- **MainMenuTexture.rsc IS FindOrLoad'd by PATH** during the dialog load — the full menu dialog sequence is
+  `Dialog\MainMenu.rsc...` → `Dialog\Sprite\Background\MainMenu.rsc:resource` → `...MainMenuMaterial.rsc` →
+  `...MainMenuTexture.rsc` (FOL #~2818-2831 of ~3957). So it's a plain path load, NOT a ref-id lookup; the
+  factory-ref-id-poisoning theory is weaker than expected.
+- **The FindOrLoad breakpoint (~3957 break/continue) SUPPRESSED the crash** — that run reached the menu clean
+  (exit 124 timeout, got all the way to Audio\UI\*.rsc loads). The crash is **timing/layout-sensitive**: redzone
+  (per-alloc mutex) → ~100% crash in ~1s; heavy main-thread instrumentation → 0% crash. A true Heisenbug.
+- **`BANISHED_SYNC_ENGINE_LOADER=1` does NOT help** (5/5 still crash under redzone) → NOT the engine-loader
+  thread race. So the timing-sensitivity is NOT that background loader.
+- Net: the texture's resolved pointer is NULL in crashing runs but the resource clearly CAN load (clean runs +
+  the instrumented run load it). So either (a) `FindOrLoad` intermittently returns NULL due to heap/loader
+  state, or (b) the resolved pointer is WRITTEN non-null then NULLED by a layout-dependent OOB write. Can't
+  distinguish by observation (it suppresses the crash).
+
+### DECISIVE NEXT STEP (session 3) — GUARD PAGES (the right tool for a Heisenbug OOB write)
+Live observation suppresses the crash, so stop trying to *watch* it and instead make any overrun fault AT the
+write, layout-independently: add a redzone mode that VirtualAlloc's each of OUR `fn_MemAlloc` allocations into
+its own region with a trailing `PAGE_NOACCESS` guard page (classic PageHeap, but for OUR allocations — the
+engine's boundary-tag allocator never guards). A contiguous overrun of any of our geometry buffers then faults
+**at the exact overrunning instruction** regardless of heap layout (so it does NOT Heisenbug away like the
+downstream null does). Implement in `standalone/redzone_alloc.cpp` (`BANISHED_REDZONE_GUARD=1`): on alloc,
+`VirtualAlloc(size rounded to page + one guard page, PAGE_READWRITE)`, place the user block at the END of the
+last data page so its tail abuts the guard page, `VirtualProtect(guardPage, PAGE_NOACCESS)`; track base for
+free (`VirtualFree`). Caveats: only catches CONTIGUOUS overruns of OUR buffers (not wild/indexed writes — but
+this DOMINANT face may well be contiguous; the bucket-head face was the one called "wild/indexed"); heavy
+(page per alloc) but fine for a diagnostic run under GDB. Run under "Launch Standalone (debug, redzone)" + the
+guard env; GDB stops at the faulting write → that's the bug. Trace file: `notes/fol_trace.gdb`.
+
+### (lower priority) Alt next step — texture-slot hardware watchpoint
+If guard pages miss it (wild write, or the overrun is into a Runtime block past OUR guard), then it's likely
+`FindOrLoad` genuinely returning NULL: break at `MaterialInstance::Serialize` for MainMenuMaterial (filter
+without strstr — e.g. ignore-count to the dialog phase, ~FOL #2570+), find the param's texture-ptr slot
+address, HW-watch it to see if it's written non-null then nulled (OOB) vs never written (load returned null).
+
+### (original) Find why FindOrLoad returns NULL when geometry ran:
+1. Under the redzone GDB config, set a breakpoint on `Object::ExternalFactory::FindOrLoad` (or the texture
+   `External::Load`) and inspect the path arg + return value for MainMenuTexture.rsc — confirm it returns null.
+2. Compare the `ExternalFactory` reference-id table / resource cache state right before that lookup vs a
+   no-geometry run. Prime suspect: our `Struct60B_ArraySerializeMaterialInstance_Body` (FUN_140020150,
+   +0x210 array) and `ExternalPtrSerializeGeneric_7140` (Struct60B +0x00) refMode path —
+   `GetReferenceId`/`GetPathForReferenceId` may register a WRONG ref-id → poisons the factory so the later
+   texture lookup resolves null. Verify our refId round-trip against the original FUN_140020150 disassembly.
+3. Alternatively/also: the dialog material loads textures the geometry materials already touched — check for a
+   shared-resource cache entry our geometry load left in a bad state.
+
+(The plan below — pinning the bucket-head wild write — is the RARE face; deprioritize unless the texture-null
+lead dead-ends.)
+
+---
+## (Earlier plan — the RARE bucket-head face; deprioritized, see above)
 
 ## TL;DR of where we are
 - **Bug**: standalone `reimpl-x64.exe` menu crashes ~25-37% of runs with engine-allocator **free-list

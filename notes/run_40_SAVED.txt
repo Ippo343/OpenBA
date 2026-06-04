@@ -1,0 +1,296 @@
+Breakpoint 1 at 0x14006b8f5: file code/Game/Game/geometry_serialize.cpp, line 185.
+[New Thread 4304.0x5098]
+[New Thread 4304.0x1164]
+[New Thread 4304.0x5af0]
+[New Thread 4304.0x4d08]
+[New Thread 4304.0x55fc]
+[New Thread 4304.0x1fb8]
+[New Thread 4304.0x25ac]
+[New Thread 4304.0x888]
+[New Thread 4304.0x3d08]
+[Thread 4304.0x3d08 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 4304.0x4100]
+[Thread 4304.0x4100 exited with code 0]
+[New Thread 4304.0x2244]
+[New Thread 4304.0x650]
+[New Thread 4304.0x480]
+[New Thread 4304.0x286c]
+[New Thread 4304.0x42d4]
+[New Thread 4304.0x15f4]
+[New Thread 4304.0x53c]
+[New Thread 4304.0x2a5c]
+[New Thread 4304.0x4fcc]
+[New Thread 4304.0x20f4]
+[New Thread 4304.0x282c]
+[New Thread 4304.0x180c]
+[New Thread 4304.0x38c]
+[New Thread 4304.0xd08]
+[New Thread 4304.0x17f4]
+[New Thread 4304.0x2588]
+[New Thread 4304.0x5aa4]
+[Thread 4304.0x2588 exited with code 0]
+[Thread 4304.0x20f4 exited with code 0]
+[Thread 4304.0x15f4 exited with code 0]
+[Thread 4304.0x17f4 exited with code 0]
+[Thread 4304.0x180c exited with code 0]
+[Thread 4304.0x42d4 exited with code 0]
+[Thread 4304.0x53c exited with code 0]
+[Thread 4304.0x38c exited with code 0]
+[Thread 4304.0x286c exited with code 0]
+[Thread 4304.0xd08 exited with code 0]
+[Thread 4304.0x2a5c exited with code 0]
+[Thread 4304.0x282c exited with code 0]
+[Thread 4304.0x4fcc exited with code 0]
+[Thread 4304.0x650 exited with code 0]
+[Thread 4304.0x480 exited with code 0]
+[Thread 4304.0x2244 exited with code 0]
+[Thread 4304.0x5aa4 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 4304.0x4370]
+[Thread 4304.0x4370 exited with code 0]
+[New Thread 4304.0x58f0]
+[New Thread 4304.0x2208]
+[New Thread 4304.0x3bbc]
+[New Thread 4304.0x5bac]
+[New Thread 4304.0x4794]
+[New Thread 4304.0x5b74]
+[New Thread 4304.0x3234]
+[New Thread 4304.0x2eb4]
+[New Thread 4304.0x92c]
+[New Thread 4304.0x33a0]
+[New Thread 4304.0x5c54]
+[New Thread 4304.0x529c]
+[New Thread 4304.0x55ec]
+[New Thread 4304.0x5d98]
+[New Thread 4304.0x5fd4]
+[New Thread 4304.0x29bc]
+[New Thread 4304.0x2014]
+[Thread 4304.0x29bc exited with code 0]
+[Thread 4304.0x5b74 exited with code 0]
+[Thread 4304.0x3234 exited with code 0]
+[Thread 4304.0x5c54 exited with code 0]
+[Thread 4304.0x55ec exited with code 0]
+[Thread 4304.0x33a0 exited with code 0]
+[Thread 4304.0x5d98 exited with code 0]
+[Thread 4304.0x529c exited with code 0]
+[Thread 4304.0x2eb4 exited with code 0]
+[Thread 4304.0x4794 exited with code 0]
+[Thread 4304.0x5fd4 exited with code 0]
+[Thread 4304.0x92c exited with code 0]
+[Thread 4304.0x5bac exited with code 0]
+[Thread 4304.0x2208 exited with code 0]
+[Thread 4304.0x3bbc exited with code 0]
+[Thread 4304.0x58f0 exited with code 0]
+[Thread 4304.0x2014 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 4304.0x27d0]
+[Thread 4304.0x27d0 exited with code 0]
+[New Thread 4304.0x5ea0]
+[New Thread 4304.0x3a4c]
+[New Thread 4304.0x30f8]
+[New Thread 4304.0x24b0]
+[New Thread 4304.0x3c30]
+[New Thread 4304.0x2640]
+[New Thread 4304.0x2e40]
+[New Thread 4304.0x44c8]
+[New Thread 4304.0x1a58]
+[New Thread 4304.0x54e8]
+[New Thread 4304.0x550]
+[New Thread 4304.0x3098]
+[New Thread 4304.0x2ff4]
+[New Thread 4304.0x3a48]
+[New Thread 4304.0x176c]
+[New Thread 4304.0x42c8]
+[New Thread 4304.0x1588]
+[Thread 4304.0x42c8 exited with code 0]
+[Thread 4304.0x550 exited with code 0]
+[Thread 4304.0x24b0 exited with code 0]
+[Thread 4304.0x176c exited with code 0]
+[Thread 4304.0x1a58 exited with code 0]
+[Thread 4304.0x3098 exited with code 0]
+[Thread 4304.0x3a48 exited with code 0]
+[Thread 4304.0x3c30 exited with code 0]
+[Thread 4304.0x54e8 exited with code 0]
+[Thread 4304.0x2e40 exited with code 0]
+[Thread 4304.0x44c8 exited with code 0]
+[Thread 4304.0x2ff4 exited with code 0]
+[Thread 4304.0x2640 exited with code 0]
+[Thread 4304.0x3a4c exited with code 0]
+[Thread 4304.0x30f8 exited with code 0]
+[Thread 4304.0x5ea0 exited with code 0]
+[Thread 4304.0x1588 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 4304.0x5578]
+[Thread 4304.0x5578 exited with code 0]
+[New Thread 4304.0x225c]
+[New Thread 4304.0x3980]
+[New Thread 4304.0xd60]
+[New Thread 4304.0x5bf4]
+[New Thread 4304.0x439c]
+[New Thread 4304.0x50e0]
+[New Thread 4304.0x3460]
+[New Thread 4304.0x5954]
+[New Thread 4304.0x2004]
+[New Thread 4304.0x2f28]
+[New Thread 4304.0x1890]
+[New Thread 4304.0x16c4]
+[New Thread 4304.0x4b24]
+[New Thread 4304.0x6b0]
+[New Thread 4304.0x56d4]
+[New Thread 4304.0x4258]
+[New Thread 4304.0x446c]
+[New Thread 4304.0x5f80]
+[New Thread 4304.0x4df4]
+[New Thread 4304.0x5928]
+[New Thread 4304.0x2c18]
+[New Thread 4304.0x6c4]
+[New Thread 4304.0x30e4]
+[New Thread 4304.0xcfc]
+[New Thread 4304.0x2c4]
+[New Thread 4304.0x1758]
+[New Thread 4304.0x5368]
+[New Thread 4304.0x4074]
+[New Thread 4304.0x2d78]
+[New Thread 4304.0x5a6c]
+[New Thread 4304.0x4950]
+[New Thread 4304.0x4608]
+[New Thread 4304.0x4d3c]
+
+Thread 1 hit Breakpoint 1, (anonymous namespace)::TradeWork_impl_04d0_Body (self=0x3521c28, stream=0x5ff370) at code/Game/Game/geometry_serialize.cpp:185
+185	    if (!self || !stream) return;
+Hardware watchpoint 2: *(unsigned long long*)((char*)g_pMemAllocSingleton + 0x88)
+=== WP_ARMED alloc=0x5ff700 head=0x0 ===
+[New Thread 4304.0x48a0]
+[New Thread 4304.0x5d0]
+[New Thread 4304.0x590c]
+[New Thread 4304.0x5498]
+[New Thread 4304.0x4b0c]
+[New Thread 4304.0x2eb0]
+[New Thread 4304.0x5188]
+[New Thread 4304.0x4e2c]
+[New Thread 4304.0x5124]
+[New Thread 4304.0x2098]
+[New Thread 4304.0x1794]
+[New Thread 4304.0x46c4]
+[New Thread 4304.0x50a0]
+[New Thread 4304.0x1ea0]
+
+Thread 1 hit Hardware watchpoint 2: *(unsigned long long*)((char*)g_pMemAllocSingleton + 0x88)
+
+Old value = 54067520
+New value = 4349034816
+0x00007ff8d69a74c3 in Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+=== STOPPED ===
+head now = 0x103390140
+rip            0x7ff8d69a74c3      0x7ff8d69a74c3 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+179>
+rax            0xc                 12
+rbx            0x0                 0
+rcx            0xc                 12
+rdx            0x103390140         4349034816
+rsi            0x5fe618            6284824
+rdi            0x1ffffffffff       2199023255551
+rbp            0x28                0x28
+rsp            0x5fe4e8            0x5fe4e8
+r8             0x5ff700            6289152
+r9             0x0                 0
+r10            0x3fffffffffff      70368744177663
+r11            0x3390140           54067520
+r12            0x7                 7
+r13            0x0                 0
+r14            0x3390140           54067520
+r15            0x5ff700            6289152
+=== BACKTRACE ===
+#0  0x00007ff8d69a74c3 in Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#1  0x00007ff8d69a6f08 in Runtime-x64!?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#2  0x00007ff6cc61792e in (anonymous namespace)::AllocateLocked (self=0x5ff700, size=30, align=4) at standalone/allocator_lock.cpp:55
+        cs = 0x5ffd40
+        r = 0xfffffffffffffffe
+#3  0x00007ff8d69a82a2 in Runtime-x64!?SetLength@String@System@@AEAAXH@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#4  0x00007ff8d69a94c8 in Runtime-x64!??HSystem@@YA?AVString@0@AEBV10@0@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#5  0x00007ff8d699f3fd in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#6  0x00007ff8d6919215 in Runtime-x64!??4Dialog@UI@@QEAAAEAV01@AEBV01@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#7  0x00007ff8d69f144b in Runtime-x64!?Serialize@ButtonDescription@UI@@UEAA_NAEAVStream@IO@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#8  0x00007ff8d699c82e in Runtime-x64!?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#9  0x00007ff8d699f555 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#10 0x00007ff8d692967d in Runtime-x64!?IsA@Base@Object@@QEBA_NI@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#11 0x00007ff8d69b5fcf in Runtime-x64!?Serialize@RibbonDescription@UI@@UEAA_NAEAVStream@IO@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#12 0x00007ff8d699c82e in Runtime-x64!?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#13 0x00007ff8d699f555 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#14 0x00007ff8d692967d in Runtime-x64!?IsA@Base@Object@@QEBA_NI@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#15 0x00007ff8d69f7d96 in Runtime-x64!?Serialize@GroupDescription@UI@@UEAA_NAEAVStream@IO@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#16 0x00007ff8d699c82e in Runtime-x64!?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#17 0x00007ff8d699f555 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#18 0x00007ff8d692967d in Runtime-x64!?IsA@Base@Object@@QEBA_NI@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#19 0x00007ff8d69f7d96 in Runtime-x64!?Serialize@GroupDescription@UI@@UEAA_NAEAVStream@IO@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#20 0x00007ff8d699c82e in Runtime-x64!?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#21 0x00007ff8d699f555 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#22 0x00007ff8d6919215 in Runtime-x64!??4Dialog@UI@@QEAAAEAV01@AEBV01@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#23 0x00007ff8d69f3130 in Runtime-x64!?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#24 0x00007ff8d699c82e in Runtime-x64!?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#25 0x00007ff8d699f555 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#26 0x00007ff8d69bb18d in Runtime-x64!?Load@DialogLoopT@Engine@@UEAAXXZ () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#27 0x00007ff6cc61d705 in (anonymous namespace)::Stub_Load (self=0x34b80c8) at standalone/menudialogloopt_stubs.cpp:607
+        dialogExtBefore = 0x0
+        dialogExtAfter = 0x3486a78
+#28 0x00007ff6cc618339 in AsyncLoader::StartAsyncLoad(UpdateLoop*) ()
+No symbol table info available.
+#29 0x00007ff6cc622ebe in (anonymous namespace)::Stub_Startup(UpdateLoop*) ()
+No symbol table info available.
+#30 0x00007ff8d69bd0da in Runtime-x64!?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#31 0x00007ff8d69bd293 in Runtime-x64!?Frame@MainLoop@Engine@@QEAA_N_N@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#32 0x00007ff8d69bd486 in Runtime-x64!?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#33 0x00007ff6cc5c5b0a in Game::RunGameMain(HINSTANCE__*, char const*) ()
+No symbol table info available.
+#34 0x00007ff6cc61c411 in WinMain (hInstance=0x7ff6cc560000, lpCmdLine=0x105a07 "") at standalone/main.cpp:1230
+        stats = {registered = 235, stubs = 346}
+        rc = 0
+#35 0x00007ff6cc6dfac1 in main (argc=<optimized out>, argv=<optimized out>, envp=<optimized out>) at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexewin.c:70
+        hInstance = <optimized out>
+        lpCmdLine = <optimized out>
+        nShowCmd = <optimized out>
+#36 0x00007ff6cc5612ee in __tmainCRTStartup () at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexe.c:272
+        lock_free = <optimized out>
+        fiberid = <optimized out>
+        nested = <optimized out>
+#37 0x00007ff6cc5613e6 in WinMainCRTStartup () at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexe.c:162
+        ret = 255
+=== DISAS AROUND PC ===
+   0x7ff8d69a74ab <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+155>:	test   %ecx,%ecx
+   0x7ff8d69a74ad <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+157>:	jne    0x7ff8d69a74cc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+188>
+   0x7ff8d69a74af <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+159>:	movslq %eax,%rcx
+   0x7ff8d69a74b2 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+162>:	test   %rdx,%rdx
+   0x7ff8d69a74b5 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+165>:	jne    0x7ff8d69a74be <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+174>
+   0x7ff8d69a74b7 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+167>:	mov    %rdx,0x28(%r8,%rcx,8)
+   0x7ff8d69a74bc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+172>:	jmp    0x7ff8d69a750d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+253>
+   0x7ff8d69a74be <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+174>:	mov    %rdx,0x28(%r8,%rcx,8)
+=== DONE ===
