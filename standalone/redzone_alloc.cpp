@@ -657,7 +657,33 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
                 RZOut("[REDZONE-DUMP] bucket %d: free node @%p (block %p) OUT OF RANGE "
                        "— prior node @%p has the corrupt link\n",
                        bucket, (void*)curFT, (void*)block, (void*)prevFT);
-                if (prevFT) dumpOverflower(prevFT - 8);  // overflower precedes the clobbered block
+                if (prevFT) {
+                    dumpOverflower(prevFT - 8);  // overflower precedes the clobbered block
+                } else {
+                    // Bucket HEAD itself was clobbered. The corrupt value usually
+                    // differs from the real free node only in its HIGH bytes (e.g.
+                    // +0x100000000 = a byte at +4 flipped). Reconstruct the in-range
+                    // node by grafting each range's high 32 bits onto the corrupt
+                    // node's low 32 bits, then dump the LIVE block physically before
+                    // it = the overflow source (names the class via its vtable).
+                    uint64_t corruptLow = reinterpret_cast<uint64_t>(curFT) & 0xffffffffULL;
+                    for (int rr = 0; rr < rangeCnt; ++rr) {
+                        uint8_t* rg2 = ranges + (size_t)rr * 0x18;
+                        if (IsBadReadPtr(rg2, 0x18)) continue;
+                        uint8_t* s2 = *reinterpret_cast<uint8_t**>(rg2 + 0x00);
+                        uint8_t* e2 = *reinterpret_cast<uint8_t**>(rg2 + 0x08);
+                        if (!s2 || !e2) continue;
+                        uint64_t hi = reinterpret_cast<uint64_t>(s2) & ~0xffffffffULL;
+                        uint8_t* cand = reinterpret_cast<uint8_t*>(hi | corruptLow);
+                        if (cand >= s2 && cand < e2) {
+                            RZOut("[REDZONE-DUMP]   reconstructed in-range node @%p "
+                                  "(corrupt low32 grafted onto range hi) — dumping its predecessor:\n",
+                                  (void*)cand);
+                            dumpOverflower(cand - 8);
+                            break;
+                        }
+                    }
+                }
                 ++found; break;
             }
             uint64_t link = *reinterpret_cast<uint64_t*>(curFT);
