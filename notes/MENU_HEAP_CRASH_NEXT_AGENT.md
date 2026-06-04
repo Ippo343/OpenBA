@@ -3,7 +3,44 @@
 > Read this WITH the memory file `project_menu_heap_crash.md` (full history + reversals). This doc is the
 > actionable plan.
 
-## ✅✅✅ 2026-06-04 SESSION 2f — ROOT CAUSE FIXED (committed 6ae0019): stride-8 array in-place-grow didn't zero new slots ✅✅✅
+## ⚠️ 2026-06-04 SESSION 2g — CHECKPOINT: the fix is REAL but the FULL-SPEED menu is STILL broken (residual corruption) ⚠️
+HONEST status after validating at FULL SPEED (not just GDB):
+- **The stride-8 fix (6ae0019) is real** (GDB watchpoint A/B proves it eliminates the bucket-head free-list
+  corruption). But it is **NOT sufficient** — at FULL SPEED the menu still crashes/hangs at `MainLoop::Run`,
+  never reaching the screen. There is **≥1 residual corruption source** (one captured full-speed crash showed
+  the free-list links INTACT → a DIFFERENT face than the bucket-head one I fixed).
+- **NOT a regression I introduced**: the session-start commit `a619eac` (before ANY of my changes) ALSO
+  crashes/hangs identically at full speed (2/3 runs died with `[REDZONE-DUMP] free-list ...`). The full-speed
+  menu was already broken; my GDB-only validation masked it. The memory's "~75% clean menu" is likely a STALE
+  older state (predates the a34e1f6/2e49454/d3f9405 prior-session commits — one of THOSE may have regressed
+  full-speed; worth bisecting `a34e1f6..a619eac` at full speed).
+- **KEY METHODOLOGY GAP for next session: GDB CHANGES THE BUG.** Under GDB (and BANISHED_REDZONE) the menu
+  progresses far (that's how the watchpoint caught it + I validated the fix); at full speed it fails.
+  **Validate fixes at FULL SPEED**, not just under the debugger.
+- **FS-relative (a682b15, default-on) converts the full-speed CRASH into a 95%-CPU HANG** at MainLoop::Run.
+  Net-negative for usability + a debugging confound. For full-speed crash-hunting, run
+  `BANISHED_NO_FS_RELATIVE=1` (to see the actual crash, not the hang) — or revert a682b15. (Not reverted this
+  session, per user.)
+- **Detection gotcha (cost real time):** a 0-byte `standalone_crash.log` is a NON-FATAL VEH first-chance log,
+  NOT process death. Detect crashes by **process death** (`tasklist` alive=0), NOT crash.log existence. The
+  full-speed menu currently NEVER reaches `[MenuDLT::Draw]` — it hangs/crashes at `MainLoop::Run` right after
+  the game_main menu-scene PRE-LOAD (MenuScene::Factory/Slot5 logs appear, then `Calling MainLoop::Run` is the
+  last line).
+
+### NEXT SESSION — hunt the residual full-speed corruption
+1. FULL-SPEED crash detector: loop launch (NO gdb), `BANISHED_NO_FS_RELATIVE=1`, sleep ~15s, check `tasklist`
+   alive=0 (crash) vs alive=1 (hang/menu). `BANISHED_REDZONE=1` still gives the survivable `[REDZONE-DUMP]`
+   heap dump on a full-speed crash — use it to characterize the residual face (free-list bucket/link vs a
+   live-object null like MaterialInstance).
+2. Bisect: does the stride-8 fix REDUCE the full-speed crash rate vs a619eac (several runs each)?
+3. For the RESIDUAL face (links intact at crash), watch a different victim, OR run the redzone heap WALKER at
+   full speed (`BANISHED_REDZONE_SCAN=<N>` / `BANISHED_REDZONE_WATCH=<ms>`) to catch live-block corruption, OR
+   re-audit the OTHER stride arrays (20/14) + the Struct60B +0x00 ExternalPtr raw-copy on in-place grow.
+4. Defensive complete fix to try: make `GenericArrayResize` zero new slots UNCONDITIONALLY for ALL strides
+   (allocator returns DIRTY memory; harmless for data arrays) — verify at FULL SPEED.
+5. Also possible separate issue: the menu-CPU loader spin (95% CPU) — [[project_menu_cpu_loader_thread]].
+
+## ✅ 2026-06-04 SESSION 2f — stride-8 fix (committed 6ae0019): REAL fix for the bucket-head face (GDB-validated; NOT sufficient at full speed — see 2g)
 `Reimpl_Array_Resize_Stride08` used the shared `GenericArrayResize`, which only zero-fills new slots on the
 REALLOC path — leaving them DIRTY on **in-place grow** (capacity already sufficient). The original
 `FUN_140001bb0` zeros new slots UNCONDITIONALLY (both paths); the engine's boundary-tag allocator returns
