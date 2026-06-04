@@ -319,6 +319,25 @@ extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
     GenericArrayResize(arrayHeader, newCount, 0x20, 4);
 }
 
+// NOTE (heap-corruption fix): the stride-0x08 array holds raw 8-byte POINTERS
+// (e.g. the Geometry +0x210 External*/MaterialInstance ref array). The original
+// FUN_140001bb0 zeroes EVERY new slot (slot >= oldCount) on BOTH the in-place
+// grow and realloc paths — see Ghidra decompile, the `else if (puVar1) *puVar1=0`
+// branch runs unconditionally. This is essential because
+// System::MemoryAllocator::Allocate (Runtime 0x1800c6e60) returns DIRTY memory
+// (boundary-tag allocator, no zero-fill); a non-zeroed new pointer slot would
+// retain a STALE pointer from a previously-freed block. A later serialize pass
+// (sub_0150 / ArraySerializeExternalGeneric) then treats that stale pointer as a
+// live External* and runs External::GetPath / Filename refcount ops on the
+// already-freed System::String — incrementing the refcount slot at (strPtr-4),
+// which is exactly (freedBlock+4), i.e. the high dword of the allocator's
+// free-list link → the deterministic +0x100000000 bit-32 flip → wild allocator
+// write → menu heap crash.
+//
+// The shared GenericArrayResize only zeroes new slots on the realloc path
+// (`else if oldData != *dataSlot`), leaving in-place-grow new slots dirty — the
+// divergence from the original. We therefore implement stride-8 with its own
+// faithful body that zeroes new slots unconditionally.
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
 #ifndef STANDALONE_EXE
     if (fn_Array_Resize_Stride08) {
@@ -326,7 +345,56 @@ extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
         return;
     }
 #endif
-    GenericArrayResize(arrayHeader, newCount, 0x08, 8);
+    if (!arrayHeader) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            printf("[Array::Resize<8>] MemAlloc unavailable — leaving array unchanged "
+                   "(header=%p newCount=%d)\n", arrayHeader, newCount);
+            fflush(stdout);
+            s_warned = true;
+        }
+        return;
+    }
+
+    auto* hdr = reinterpret_cast<uint8_t*>(arrayHeader);
+    void** dataSlot = reinterpret_cast<void**>(hdr + 0x00);
+    int32_t* countSlot = reinterpret_cast<int32_t*>(hdr + 0x08);
+    int32_t* capSlot = reinterpret_cast<int32_t*>(hdr + 0x0C);
+
+    int oldCount = *countSlot;
+    if (newCount == oldCount) return;
+
+    void* oldData = *dataSlot;
+    *countSlot = newCount;
+
+    if (*capSlot < newCount) {
+        *capSlot = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *capSlot = newCount * 3;
+        }
+        size_t bytes = static_cast<size_t>(*capSlot) * 0x08;
+        *dataSlot = fn_MemAlloc(g_pMemAllocSingleton, bytes, 8);
+    }
+
+    int copyStart = (oldData == *dataSlot) ? oldCount : 0;
+    auto* dst = reinterpret_cast<uint64_t*>(*dataSlot);
+    if (dst) {
+        for (int slot = copyStart; slot < newCount; ++slot) {
+            if (slot < oldCount) {
+                // Copy live pointer from old buffer.
+                dst[slot] = reinterpret_cast<const uint64_t*>(oldData)[slot];
+            } else {
+                // Zero new slot (matches FUN_140001bb0 — prevents stale-pointer
+                // use-after-free; the allocator does NOT zero-fill).
+                dst[slot] = 0;
+            }
+        }
+    }
+
+    if (oldData != *dataSlot && oldData != nullptr) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+    }
 }
 
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
