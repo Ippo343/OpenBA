@@ -28,7 +28,12 @@ void PastureDescription_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
+    // enum +0x20 is VERSION-GATED in the original (0x140128220): only read when
+    // Serializer::GetVersion() > 0. Reading it unconditionally over-reads past a
+    // version-0 resource -> CompressedStream::Read zero-progress spin.
+    if (g_fn_Serializer_GetVersion && g_fn_Serializer_GetVersion(serializer) > 0) {
+        SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
+    }
     g_fn_Serializer_Dtor(serializer);
 #else
     (void)self; (void)stream;

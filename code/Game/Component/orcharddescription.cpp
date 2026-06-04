@@ -38,7 +38,13 @@ void OrchardDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serializer, s + 0x24, nullptr);
     g_fn_Serialize_Int(serializer, s + 0x28, nullptr);
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x2c), nullptr);
-    SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
+    // enum +0x20 is VERSION-GATED in the original (0x140052300): only read when
+    // Serializer::GetVersion() > 0. The field was added in a later resource
+    // version; Orchard.rsc is version 0, so reading it unconditionally over-reads
+    // 4 bytes past the resource -> CompressedStream::Read zero-progress spin.
+    if (g_fn_Serializer_GetVersion && g_fn_Serializer_GetVersion(serializer) > 0) {
+        SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
+    }
     g_fn_Serializer_Dtor(serializer);
 #else
     (void)self; (void)stream;
