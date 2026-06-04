@@ -59,14 +59,23 @@ static fn_ExtPtr_ClimateGen_Serialize_t s_fn_ExtPtr_ClimateGen_Serialize = nullp
 static void EnsureResolved() {
     if (s_fn_Achievement_Ctor) return;  // already resolved
 
+    // Achievement::Achievement base methods. The old ordinals (0x26d..0x309)
+    // are STALE — in the shipped Runtime-x64.dll they resolve to unrelated
+    // functions (0x26d -> ~LayoutElement, 0x26e -> ~Light, 0x309 ->
+    // EdgeMeshInstance::operator new), so Scenario_Init called ~LayoutElement on
+    // the fresh Scenario and freed garbage -> heap corruption. Resolve by
+    // verified Runtime address instead (ResolveAddr applies the ASLR delta in
+    // both DLL and standalone modes). Addresses confirmed in Ghidra:
+    //   ctor 0x18009e240, ~Achievement 0x18009e180,
+    //   GetFileVersion (vtable+0x18) 0x18009e170, Serialize 0x18009e070.
     s_fn_Achievement_Ctor = reinterpret_cast<fn_Achievement_Ctor_t>(
-        ResolveOrdinal(0x26d));
+        ResolveAddr(Module::Runtime, 0x18009e240));
     s_fn_Achievement_Dtor = reinterpret_cast<fn_Achievement_Dtor_local_t>(
-        ResolveOrdinal(0x26e));
+        ResolveAddr(Module::Runtime, 0x18009e180));
     s_fn_Achievement_GetFileVersion = reinterpret_cast<fn_Achievement_GetFileVersion_t>(
-        ResolveOrdinal(0x26f));
+        ResolveAddr(Module::Runtime, 0x18009e170));
     s_fn_Achievement_Serialize = reinterpret_cast<fn_Achievement_Serialize_t>(
-        ResolveOrdinal(0x309));
+        ResolveAddr(Module::Runtime, 0x18009e070));
 
     s_fn_ExtPtr_MapGen_Serialize = reinterpret_cast<fn_ExtPtr_MapGen_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140019ec0));
