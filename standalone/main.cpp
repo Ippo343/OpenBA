@@ -222,6 +222,15 @@ static void CrashLogf(const char* fmt, ...) {
     }
 }
 
+// Sink for RedzoneAlloc_HeapDump — writes each already-formatted line straight
+// to the write-through crash log so the dump survives a re-entrant fault.
+static void CrashLogSink(const char* s) {
+    if (g_crashLog == INVALID_HANDLE_VALUE || !s) return;
+    DWORD len = 0; while (s[len]) ++len;
+    DWORD wrote = 0;
+    WriteFile(g_crashLog, s, len, &wrote, nullptr);
+}
+
 // Force the OS-level file buffers behind stderr/stdout to disk. Used at
 // the END of the crash handler to flush the convenience-mirror to stderr;
 // the crash log itself is FILE_FLAG_WRITE_THROUGH so each CrashLogf is
@@ -351,10 +360,14 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
 
     // Free-list poisoning diagnosis: walk the engine allocator's boundary tags
     // and dump the corrupted block + its physical predecessor's vtable (= the
-    // class whose buffer overflowed). Output goes to standalone_debug.log.
+    // class whose buffer overflowed). Output is mirrored to the WRITE-THROUGH
+    // crash log via the sink (stdout/debug.log output was lost — the dump faults
+    // mid-walk in crash context before its unbuffered lines commit).
     // Works on a fully-native run (no redzone shim needed).
-    CrashLogf("(heap-dump → standalone_debug.log)\n");
+    CrashLogf("(heap-dump follows; also mirrored to standalone_debug.log)\n");
+    RedzoneAlloc_SetDumpSink(&CrashLogSink);
     RedzoneAlloc_HeapDump("CrashHandler");
+    RedzoneAlloc_SetDumpSink(nullptr);
 
     PrintStackTrace(ctx);
 

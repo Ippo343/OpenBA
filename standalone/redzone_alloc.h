@@ -52,4 +52,12 @@ int RedzoneAlloc_HeapCheck(const char* tag);
 // Does not abort, does not take the allocator lock.
 extern "C" void RedzoneAlloc_HeapDump(const char* tag);
 
+// Free-list LINK validation at a code checkpoint. Aborts (exit 0x124) naming
+// the tag at the first corrupt forward link. Only active under BANISHED_REDZONE.
+extern "C" int RedzoneAlloc_CheckLinks(const char* tag);
+
+// Optional write-through sink so the crash-context dump survives a re-entrant
+// fault. The crash handler sets this to its FILE_FLAG_WRITE_THROUGH logger.
+extern "C" void RedzoneAlloc_SetDumpSink(void (*sink)(const char*));
+
 #endif // STANDALONE_EXE

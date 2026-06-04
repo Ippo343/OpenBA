@@ -276,6 +276,9 @@ $(SA_OBJ_DIR)/runtime__src__math__%.o: runtime/src/math/%.cpp | $(SA_OBJ_DIR)
 $(SA_OBJ_DIR)/runtime__src__graphics__%.o: runtime/src/graphics/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 
+$(SA_OBJ_DIR)/runtime__src__io__%.o: runtime/src/io/%.cpp | $(SA_OBJ_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
 $(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
 

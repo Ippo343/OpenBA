@@ -16,6 +16,7 @@
 #include "address_registry.h"
 #include "engine_funcs.h"
 #include "Game/game.h"
+#include "../runtime/src/io/serializer.h"  // RtSerializer_* reimpl forwarders (env-gated)
 #include <cstdio>
 #include <cstdint>
 
@@ -673,6 +674,33 @@ static void RegisterDispatchSlots() {
     // original exe's disasm.
     RegisterDispatchSlot(0x140151738,
         reinterpret_cast<uintptr_t>(&g_StandaloneKeyMapMid));
+
+    // ----------------------------------------------------------------
+    // IO::Serializer reimpl wrappers (runtime/src/io/serializer.cpp)
+    // ----------------------------------------------------------------
+    // These OVERRIDE the Runtime-fn registrations above for the same exe
+    // dispatch slots, routing the standalone deserialize through OUR clean,
+    // debuggable C++ forwarders. Each wrapper checks BANISHED_REIMPL_SERIALIZER
+    // ONCE: UNSET (default) => it tail-calls the resolved Runtime original, so
+    // the default build is byte-identical to before. SET to "1" => the clean
+    // reimpl runs and can be stepped with source while watching the stream
+    // cursor (MemoryStream + 0x24) advance.
+    //
+    // Registered LAST so the slot map's value for each address is our wrapper.
+    RegisterDispatchSlot(0x140152ac8, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_Int));    // Serialize(int&)
+    RegisterDispatchSlot(0x140152a60, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_Float));  // Serialize(float&)
+    RegisterDispatchSlot(0x140152a58, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_Bool));   // Serialize(bool&)
+    RegisterDispatchSlot(0x140152410, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UChar));  // Serialize(uchar&)
+    RegisterDispatchSlot(0x140152418, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UChar));  // Serialize(uchar&) (NameDB alias)
+    RegisterDispatchSlot(0x140152a50, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UInt));   // Serialize(uint&)
+    RegisterDispatchSlot(0x140152a48, reinterpret_cast<uintptr_t>(&RtSerializer_GetVersion));       // GetVersion()
+    RegisterDispatchSlot(0x140152488, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UShortArr)); // Serialize(cnt,ushort*)
+    RegisterDispatchSlot(0x140151278, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_IntArr));    // Serialize(cnt,int*)
+    RegisterDispatchSlot(0x1401523f8, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_ShortArr));  // Serialize(cnt,short*)
+    RegisterDispatchSlot(0x140152490, reinterpret_cast<uintptr_t>(&RtSerializer_Serialize_UCharArr));  // Serialize(cnt,uchar*) (NameDB bulk)
+    RegisterDispatchSlot(0x140152400, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes(size,void*)
+    RegisterDispatchSlot(0x140152618, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes (alt slot)
+    RegisterDispatchSlot(0x140152478, reinterpret_cast<uintptr_t>(&RtSerializer_SerializeBytes));      // SerializeBytes (NameDB alias)
 }
 
 // ============================================================

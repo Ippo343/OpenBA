@@ -5,6 +5,7 @@
 #include "redzone_alloc.h"
 #include "engine_funcs.h"
 
+#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -231,10 +232,76 @@ void RedzoneAlloc_Install() {
 
 bool RedzoneAlloc_Enabled() { return g_enabled; }
 
+// Forward decl — RZOut is defined in a later anonymous-namespace block (anon
+// namespaces merge across the TU, so this refers to the same function).
+namespace { void RZOut(const char* fmt, ...); }
+
 int RedzoneAlloc_ValidateAll(const char* tag) {
     if (!g_enabled) return 0;
     std::lock_guard<std::mutex> lk(g_mutex);
     return ValidateAllLocked(tag);
+}
+
+// Free-list LINK validation, callable at a code checkpoint (e.g. between
+// deserialize steps) to find the exact step that corrupts a freed block's
+// forward link. Walks every size bucket's free chain and validates each
+// signed-41-bit relative forward link points back into a committed range.
+// On the first corrupt link it prints the checkpoint tag + the clobbered
+// block body, then aborts (exit 0x124) so the tag names the culprit step.
+// Quiescent-allocator assumption: only call from single-threaded reimpl code
+// (no concurrent Allocate mutating the free list). Enabled only under
+// BANISHED_REDZONE (so production runs are unaffected).
+extern "C" int RedzoneAlloc_CheckLinks(const char* tag) {
+    if (!g_enabled || !g_pMemAllocSingleton) return 0;
+    uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
+    if (IsBadReadPtr(alloc, 0x18)) return 0;
+    uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
+    int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
+    if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) return 0;
+
+    auto inAnyRange = [&](uint8_t* a) -> bool {
+        for (int r = 0; r < rangeCnt; ++r) {
+            uint8_t* rg = ranges + (size_t)r * 0x18;
+            if (IsBadReadPtr(rg, 0x18)) continue;
+            uint8_t* s = *reinterpret_cast<uint8_t**>(rg + 0x00);
+            uint8_t* e = *reinterpret_cast<uint8_t**>(rg + 0x08);
+            if (s && e && a >= s && a < e) return true;
+        }
+        return false;
+    };
+
+    for (int bucket = 0; bucket < 0xC0; ++bucket) {
+        uint8_t* curFT = *reinterpret_cast<uint8_t**>(alloc + 0x28 + (size_t)bucket * 8);
+        uint8_t* prevFT = nullptr;
+        int guard = 0;
+        while (curFT && ++guard < 2000000) {
+            uint8_t* block = curFT - 8;
+            if (IsBadReadPtr(curFT, 8) || !inAnyRange(block)) {
+                RZOut("[REDZONE-LINK] CORRUPTION first seen at checkpoint '%s' "
+                      "(bucket %d): free node @%p (block %p) out of range; "
+                      "prev node @%p\n",
+                      tag ? tag : "?", bucket, (void*)curFT, (void*)block, (void*)prevFT);
+                fflush(stdout);
+                ExitProcess(0x124);
+            }
+            uint64_t link = *reinterpret_cast<uint64_t*>(curFT);
+            int64_t off = (int64_t)(link << 23) >> 23;
+            if (off == 0) break;
+            uint8_t* next = curFT + off;
+            if (IsBadReadPtr(next, 8) || !inAnyRange(next - 8)) {
+                RZOut("[REDZONE-LINK] CORRUPTION first seen at checkpoint '%s' "
+                      "(bucket %d): free block @%p forward link qword=%016llx "
+                      "off=%lld -> next=%p (out of range)\n",
+                      tag ? tag : "?", bucket, (void*)block,
+                      (unsigned long long)link, (long long)off, (void*)next);
+                fflush(stdout);
+                ExitProcess(0x124);
+            }
+            prevFT = curFT;
+            curFT = next;
+        }
+    }
+    return 0;
 }
 
 // ============================================================
@@ -259,6 +326,25 @@ bool ReadablePtr(const void* p, size_t n) {
     return p && !IsBadReadPtr(p, n);
 }
 
+// Optional secondary output sink for the crash-context heap dump. The crash
+// handler sets this to a write-through (FILE_FLAG_WRITE_THROUGH) logger so the
+// dump's findings survive even if a re-entrant fault kills the process
+// mid-walk. printf-to-stdout (debug.log) is unbuffered but was observed to
+// produce NO output in crash context (the dump faults before its first line
+// commits), so this sink is the reliable path. RZOut() emits to BOTH.
+void (*g_rzSink)(const char*) = nullptr;
+
+void RZOut(const char* fmt, ...) {
+    char buf[1024];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n < 0) return;
+    printf("%s", buf);
+    if (g_rzSink) g_rzSink(buf);
+}
+
 // Resolve a code/vtable address to "module.dll+0xOFF" for identifying the
 // owning class. Engine objects store their vtable pointer at +0x00, so dumping
 // the preceding block's first qword and resolving it names the overflower.
@@ -270,11 +356,11 @@ void PrintModOff(const char* label, uint64_t addr) {
         char path[MAX_PATH] = {0};
         GetModuleFileNameA(mod, path, MAX_PATH);
         const char* nm = strrchr(path, '\\');
-        printf("[REDZONE-HEAP]   %s = %s+0x%llX\n",
+        RZOut("[REDZONE-HEAP]   %s = %s+0x%llX\n",
                label, nm ? nm + 1 : path,
                (unsigned long long)(addr - (uintptr_t)mod));
     } else {
-        printf("[REDZONE-HEAP]   %s = 0x%016llx (not in a module)\n",
+        RZOut("[REDZONE-HEAP]   %s = 0x%016llx (not in a module)\n",
                label, (unsigned long long)addr);
     }
 }
@@ -429,16 +515,23 @@ int RedzoneAlloc_HeapCheck(const char* tag) {
 // block and dumps the physically-PRECEDING block's first qword (its vtable for
 // an engine object) resolved to module+offset = the class whose buffer
 // overflowed. Does NOT take the allocator critical section (crash context).
+// Install a secondary, write-through output sink for the crash-context dump.
+// The crash handler points this at its FILE_FLAG_WRITE_THROUGH logger so the
+// dump survives even if a re-entrant fault terminates the process mid-walk.
+extern "C" void RedzoneAlloc_SetDumpSink(void (*sink)(const char*)) {
+    g_rzSink = sink;
+}
+
 extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     if (!g_pMemAllocSingleton) {
-        printf("[REDZONE-DUMP] no allocator singleton\n"); fflush(stdout);
+        RZOut("[REDZONE-DUMP] no allocator singleton\n"); fflush(stdout);
         return;
     }
     uint8_t* alloc = reinterpret_cast<uint8_t*>(g_pMemAllocSingleton);
-    if (IsBadReadPtr(alloc, 0x18)) { printf("[REDZONE-DUMP] singleton unreadable\n"); return; }
+    if (IsBadReadPtr(alloc, 0x18)) { RZOut("[REDZONE-DUMP] singleton unreadable\n"); return; }
     uint8_t* ranges   = *reinterpret_cast<uint8_t**>(alloc + 0x00);
     int      rangeCnt = *reinterpret_cast<int*>(alloc + 0x08);
-    printf("[REDZONE-DUMP] '%s': allocator=%p ranges=%p cnt=%d\n",
+    RZOut("[REDZONE-DUMP] '%s': allocator=%p ranges=%p cnt=%d\n",
            tag ? tag : "?", (void*)alloc, (void*)ranges, rangeCnt);
     if (!ranges || rangeCnt <= 0 || rangeCnt >= 4096) { fflush(stdout); return; }
 
@@ -448,7 +541,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
         if (!block || IsBadReadPtr(block, 0x10)) return;
         const uint64_t* q = reinterpret_cast<const uint64_t*>(block);
         size_t pb = (size_t)(q[0] & 0x1ffffffffffULL) * 4;
-        printf("[REDZONE-DUMP]   OVERFLOWER block @%p tag=%016llx size=%zu (payload %zu):\n",
+        RZOut("[REDZONE-DUMP]   OVERFLOWER block @%p tag=%016llx size=%zu (payload %zu):\n",
                (void*)block, (unsigned long long)q[0], pb, pb >= 8 ? pb - 8 : 0);
         PrintModOff("overflower user+0 (vtable?)", q[1]);
         uint8_t* u = block + 8;
@@ -459,18 +552,18 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
             uint64_t v = *reinterpret_cast<uint64_t*>(u + i*8);
             // Show ASCII for each byte too (catches embedded strings/paths).
             char asc[9]; for (int b = 0; b < 8; ++b) { char c = (char)((v >> (b*8)) & 0xff); asc[b] = (c >= 32 && c < 127) ? c : '.'; } asc[8] = 0;
-            printf("[REDZONE-DUMP]     user+0x%02zx = %016llx  '%s'\n",
+            RZOut("[REDZONE-DUMP]     user+0x%02zx = %016llx  '%s'\n",
                    i*8, (unsigned long long)v, asc);
         }
         if (g_enabled && g_live) {
             auto it = g_live->find(u);
             if (it != g_live->end()) {
-                printf("[REDZONE-DUMP]   overflower IS OURS reqSize=%zu seq=%u — alloc backtrace:\n",
+                RZOut("[REDZONE-DUMP]   overflower IS OURS reqSize=%zu seq=%u — alloc backtrace:\n",
                        it->second.reqSize, it->second.seq);
                 for (int i = 0; i < it->second.btCount; ++i)
                     PrintModOff("    bt", (uint64_t)it->second.bt[i]);
             } else {
-                printf("[REDZONE-DUMP]   overflower NOT in our table (Runtime-allocated or stale)\n");
+                RZOut("[REDZONE-DUMP]   overflower NOT in our table (Runtime-allocated or stale)\n");
             }
         }
     };
@@ -488,14 +581,14 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
         int guard = 0;
         while (p < end && ++guard < 4000000) {
             if (IsBadReadPtr(p, 8)) {
-                printf("[REDZONE-DUMP] range %d: unreadable block @%p prev=%p\n",
+                RZOut("[REDZONE-DUMP] range %d: unreadable block @%p prev=%p\n",
                        r, (void*)p, (void*)prev);
                 ++found; break;
             }
             uint64_t blkTag = *reinterpret_cast<uint64_t*>(p);
             size_t blkBytes = (size_t)(blkTag & 0x1ffffffffffULL) * 4;
             if (blkBytes < 8 || p + blkBytes > end) {
-                printf("[REDZONE-DUMP] range %d [%p..%p): CORRUPT block @%p "
+                RZOut("[REDZONE-DUMP] range %d [%p..%p): CORRUPT block @%p "
                        "tag=0x%016llx size=%zu\n",
                        r, (void*)start, (void*)end, (void*)p,
                        (unsigned long long)blkTag, blkBytes);
@@ -516,7 +609,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
     // Bucket heads live at allocator + 0x28 + bucket*8 for buckets [0, 0xC0).
     // An OOB write into a freed block's body clobbers this link → Allocate
     // follows it to a wild address → crash. Tags stay intact, so pass 1 misses it.
-    printf("[REDZONE-DUMP] no tag corruption — validating free-list LINKS...\n");
+    RZOut("[REDZONE-DUMP] no tag corruption — validating free-list LINKS...\n");
     auto inAnyRange = [&](uint8_t* a) -> bool {
         for (int r = 0; r < rangeCnt; ++r) {
             uint8_t* rg = ranges + (size_t)r * 0x18;
@@ -545,7 +638,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
             if (pp == badBlock && prev) {
                 dumpBlockInfo(prev);
             } else {
-                printf("[REDZONE-DUMP]   (could not locate preceding block of %p)\n",
+                RZOut("[REDZONE-DUMP]   (could not locate preceding block of %p)\n",
                        (void*)badBlock);
             }
             break;
@@ -561,7 +654,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
         while (curFT && ++guard < 2000000) {
             uint8_t* block = curFT - 8;
             if (IsBadReadPtr(curFT, 8) || !inAnyRange(block)) {
-                printf("[REDZONE-DUMP] bucket %d: free node @%p (block %p) OUT OF RANGE "
+                RZOut("[REDZONE-DUMP] bucket %d: free node @%p (block %p) OUT OF RANGE "
                        "— prior node @%p has the corrupt link\n",
                        bucket, (void*)curFT, (void*)block, (void*)prevFT);
                 if (prevFT) dumpOverflower(prevFT - 8);  // overflower precedes the clobbered block
@@ -572,13 +665,13 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
             if (off == 0) break;                          // end of chain
             uint8_t* next = curFT + off;
             if (IsBadReadPtr(next, 8) || !inAnyRange(next - 8)) {
-                printf("[REDZONE-DUMP] bucket %d: free block @%p has CORRUPTED forward link "
+                RZOut("[REDZONE-DUMP] bucket %d: free block @%p has CORRUPTED forward link "
                        "qword=%016llx off=%lld -> next=%p (out of range)\n",
                        bucket, (void*)block, (unsigned long long)link,
                        (long long)off, (void*)next);
                 if (!IsBadReadPtr(block, 0x28)) {
                     const uint64_t* q = reinterpret_cast<const uint64_t*>(block);
-                    printf("[REDZONE-DUMP]   clobbered free block body: "
+                    RZOut("[REDZONE-DUMP]   clobbered free block body: "
                            "tag=%016llx +8=%016llx +10=%016llx +18=%016llx +20=%016llx\n",
                            (unsigned long long)q[0], (unsigned long long)q[1],
                            (unsigned long long)q[2], (unsigned long long)q[3],
@@ -591,7 +684,7 @@ extern "C" void RedzoneAlloc_HeapDump(const char* tag) {
             curFT = next;
         }
     }
-    if (!found) printf("[REDZONE-DUMP] free-list forward links also intact "
+    if (!found) RZOut("[REDZONE-DUMP] free-list forward links also intact "
                        "(corruption may be in the high-bit prev links or a bucket head)\n");
     fflush(stdout);
 }

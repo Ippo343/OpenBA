@@ -18,13 +18,14 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
 // BANISHED_REDZONE is unset).
 #ifdef STANDALONE_EXE
 #include "redzone_alloc.h"
-#define RZ_CHECK(tag) RedzoneAlloc_ValidateAll(tag)
+#define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
 #else
 #define RZ_CHECK(tag) ((void)0)
 #endif
@@ -408,9 +409,24 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // To re-enable: uncomment below + investigate steps 4-8 in
     // geometry_serialize.cpp against the original 0x1400b04d0 disasm.
     RZ_CHECK("Slot5 before geometry deserialize");
-    if (self->_field28 && stream) {
-        Reimpl_TradeWork_impl_04d0(self->_field28, stream);
-        Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
+    // The menu Geometry/terrain deserialize (TradeWork_impl_04d0 + _f1a0) MUST
+    // run: besides building the terrain, it advances the stream cursor past the
+    // geometry payload so the camera Transform (step 3.5) and the atmosphere/
+    // particle tail (step 4) read from the correct offset. Skipping it leaves
+    // the camera at a zero (degenerate) transform and misaligns the tail
+    // (observed: pos/qrot all zero, menu hangs). It is, however, the source of
+    // the intermittent menu heap crash — see geometry_serialize.cpp for the
+    // OOB fix. BANISHED_NO_MENU_GEOM=1 skips it (diagnostic only; breaks the menu).
+    {
+        static int s_noGeom = -1;
+        if (s_noGeom < 0) {
+            const char* e = getenv("BANISHED_NO_MENU_GEOM");
+            s_noGeom = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (!s_noGeom && self->_field28 && stream) {
+            Reimpl_TradeWork_impl_04d0(self->_field28, stream);
+            Reimpl_TradeWork_impl_f1a0(self->_field28, stream);
+        }
     }
     RZ_CHECK("Slot5 after geometry deserialize");
 
