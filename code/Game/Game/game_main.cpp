@@ -45,6 +45,13 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded();
 #endif
 
 #ifdef STANDALONE_EXE
+// Defined in code/Game/Game/filesystem_setup.cpp. Relativizes the engine
+// FileSystem's resource directories so resource paths resolve relative to the
+// working dir (install dir) instead of long absolute "C:\GOG Games\..." strings.
+// Must run AFTER Engine::Startup (FileSystem allocated + SetupDirectories done)
+// and BEFORE the first resource load. See that file's header for rationale.
+namespace Game { extern "C" void FileSystem_MakePathsRelative(); }
+
 // Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
 // type, invokes its factory, validates vtable + ctor-set field defaults.
 extern "C" void RunStartupSelfTests();
@@ -366,6 +373,24 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     }
 
     if (ok != 0) {
+#ifdef STANDALONE_EXE
+        // Relativize the engine FileSystem resource directories now, before any
+        // resource is loaded. Turns long absolute install-dir + WinData resource
+        // paths into short relative "WinData/..." paths (working dir = install
+        // dir). Candidate fix for the intermittent menu heap crash
+        // (a System::String UAF whose freed block held an absolute resource
+        // path). Opt-OUT via BANISHED_NO_FS_RELATIVE=1 for A/B testing.
+        {
+            const char* e = getenv("BANISHED_NO_FS_RELATIVE");
+            if (!(e && *e && e[0] != '0')) {
+                Game::FileSystem_MakePathsRelative();
+            } else {
+                printf("[GameMain] BANISHED_NO_FS_RELATIVE set — keeping absolute "
+                       "FileSystem paths\n");
+            }
+        }
+#endif
+
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)
         printf("[GameMain] MainLoop ctor      = %p\n", (void*)s_fn_MainLoop_Ctor);

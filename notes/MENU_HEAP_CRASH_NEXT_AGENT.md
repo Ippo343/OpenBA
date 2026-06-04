@@ -49,6 +49,24 @@ Enhanced catch dumped the corrupt free block + full `UnlinkFreeTag` disasm. CONC
   `fn_Filename_Dtor`/`AssignOp`/copy increments-or-touches the dead refcount. (Explains why heap-zeroing didn't
   help: the imbalance is in refcount bookkeeping, not an uninitialized buffer.)
 
+### ★ Session 2e — ABSOLUTE-PATH hypothesis FALSIFIED (clean A/B) ★
+An agent decompiled the whole FileSystem chain + implemented path relativization and A/B-tested it:
+- **Premise was wrong**: standalone DOES run the FileSystem setup. `Engine::Startup` (Runtime 0x1800db8a0,
+  called from game_main.cpp) → `FileSystem::Startup` (0x1800abc50) → `SetupDirectories` (0x1800abd00) mounts
+  base `WinData/*.pkg` and sets the 3 dir Filenames (fs `0x1801fc6a8`: +0x00 source, +0x08 data, +0x10 pack).
+  `Modification::SetupFileSystem` (0x1800aebb0) IS invoked via `Engine::Loader::Load` (0x1800dc050); with 0
+  mods it's a near no-op. Absolute paths come from `GetRootDirectory` (0x1800ad650) = exe dir — SAME as the
+  real game. `FindOrLoad` dedup (via `ExpandRelativePath` 0x1800bd360) works regardless.
+- **A/B (same binary, BANISHED_REDZONE=1)**: abs paths 12/12 crash, relative paths 12/12 crash, baseline
+  10/10. **Path length/content has ZERO effect.** => the corrupt block merely HAPPENING to hold path strings
+  is incidental (bucket-12 = ~30-byte allocs = often small Strings). The `+0x100000000` write to a freed
+  block's `+4` is still the mechanism, but it is a **genuine OOB write in the geometry deserialize that does
+  NOT depend on resource-path content**. Drop the path-length lead entirely.
+- LEFT IN PLACE (uncommitted, correct + harmless, default-on, opt-out `BANISHED_NO_FS_RELATIVE=1`):
+  `code/Game/Game/filesystem_setup.cpp` (`Game::FileSystem_MakePathsRelative`) + game_main.cpp wiring. It
+  genuinely shortens resource paths and MAY help the menu-CPU loader churn ([[project_menu_cpu_loader_thread]])
+  — but it is NOT the crash fix. Decide whether to keep or make inert.
+
 ### Session 2d — refcount AUDIT progress (the obvious helpers are NOT the bug)
 Diffed our reimpl against the original exe Filename/refcount sequence:
 - **`FUN_14001b8e0`** (single ExternalPtr) and **`FUN_14001bcc0`** (External array) — our
