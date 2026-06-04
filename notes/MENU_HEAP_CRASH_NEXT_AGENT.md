@@ -3,6 +3,32 @@
 > Read this WITH the memory file `project_menu_heap_crash.md` (full history + reversals). This doc is the
 > actionable plan.
 
+## ✅✅✅ 2026-06-04 SESSION 2f — ROOT CAUSE FIXED (committed 6ae0019): stride-8 array in-place-grow didn't zero new slots ✅✅✅
+`Reimpl_Array_Resize_Stride08` used the shared `GenericArrayResize`, which only zero-fills new slots on the
+REALLOC path — leaving them DIRTY on **in-place grow** (capacity already sufficient). The original
+`FUN_140001bb0` zeros new slots UNCONDITIONALLY (both paths); the engine's boundary-tag allocator returns
+DIRTY memory, so this is load-bearing. For the **stride-8 External* pointer arrays** (Geometry +0x210
+MaterialInstance, MenuScene +0x40 GraphicsMesh / +0x60 Particle exrefs), a dirty new slot keeps a **stale
+freed-External pointer**; the serialize then runs `External::GetPath`/a Filename refcount op on the
+already-freed `System::String`, doing `*(int*)(strPtr-4) += 1` which lands on the freed block's free-list link
+high dword (`block+4`) → the deterministic `+0x100000000` bit-32 flip → wild `UnlinkFreeTag`/`Allocate`.
+FIX = a dedicated stride-8 resize body matching `FUN_140001bb0` byte-for-byte (zero new slots unconditionally).
+
+**VALIDATION (HW watchpoint on the bucket-12 head, redzone build, GDB; FS-relative isolated off both arms):**
+- baseline (no fix): **1 watchpoint catch + 9 SIGSEGV / 29 runs** (~34% corruption events)
+- fixed:            **0 catches + 0 SIGSEGV / 40 runs**  (P(0/40 | 34%) ≈ 1e-7)
+This is THE fix. It eliminates the bucket-head free-list corruption that unifies both crash faces (and the
+"missing menu images" non-fatal face). NOTE: at full speed the fatal crash was always RARE (the corruption
+mostly manifests non-fatally as missing textures); GDB's slowdown amplifies it to a SIGSEGV/catch, which is why
+the watchpoint loop is the sensitive detector. (Earlier "100% crash" measurements were a FALSE POSITIVE — the
+0-byte `standalone_crash.log` is a non-fatal VEH first-chance log, NOT process death; verify crashes by process
+death, not crash.log existence.)
+
+**REMAINING TO CONFIRM:** whether the "missing images/buttons" (non-fatal texture-null face) is FULLY gone with
+the fix or a residual second source remains. Same-root prediction = gone (the fix removes the bad-block hand-out
+that nulls MaterialInstance textures). Needs a visual check of the deployed fix build. If residual: re-run the
+session 2d audit on the OTHER stride arrays / Struct60B for the same un-zeroed-in-place-grow class.
+
 ## ★★★ 2026-06-04 SESSION 2c — WATCHPOINT FIRED: bit-32 free-list-link corruption CONFIRMED + caught ★★★
 The `alloc+0x88` watchpoint DOES fire — but only under the **redzone build** (`BANISHED_REDZONE=1`), which
 surfaces the bucket-head face (the no-redzone grind kept hitting the MaterialInstance face instead). Driver
