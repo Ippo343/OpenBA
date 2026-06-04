@@ -191,6 +191,38 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount) {
 }
 
 // ============================================================
+// Helper #6 — stride 0x0C 3-int array (FUN_14001c7c0)
+// ============================================================
+//
+// MemAlloc(cap*0xc, 4). Per element: copy 3 dwords (12 bytes). Used by
+// NameDatabase::Serialize for its +0x20 syllable-table array.
+extern "C" void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount) {
+#ifndef STANDALONE_EXE
+    if (void* f = (void*)ResolveAddr(Module::Exe, 0x14001c7c0)) {
+        reinterpret_cast<void(*)(void*, int)>(f)(arrayHeader, newCount);
+        return;
+    }
+#endif
+    GenericArrayResize(arrayHeader, newCount, 0x0C, 4);
+}
+
+// ============================================================
+// Helper #7 — stride 0x01 byte buffer (FUN_14000a590)
+// ============================================================
+//
+// MemAlloc(cap, 1). Per element: copy 1 byte. Used by NameDatabase::Serialize
+// for its +0x40 packed-character buffer (and by PlantArea work in-game).
+extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount) {
+#ifndef STANDALONE_EXE
+    if (void* f = (void*)ResolveAddr(Module::Exe, 0x14000a590)) {
+        reinterpret_cast<void(*)(void*, int)>(f)(arrayHeader, newCount);
+        return;
+    }
+#endif
+    GenericArrayResize(arrayHeader, newCount, 0x01, 1);
+}
+
+// ============================================================
 // Inlined: TradeWork_helper_ff00 — deep-clone inner Vector2 array
 // ============================================================
 //

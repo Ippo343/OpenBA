@@ -62,6 +62,36 @@ bool LockDisabledByEnv() {
     return (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F'));
 }
 
+// --- Free lock -------------------------------------------------------------
+// System::MemoryAllocator::Free (Runtime 0x1800c6c00) mutates the same
+// boundary-tag free-list (Link/UnlinkFreeTag) but takes NO critical section —
+// only MemFree (the static wrapper) does. Runtime-internal code calls the raw
+// Free directly (bypassing MemFree), so a background thread freeing races the
+// now-locked Allocate on the main thread → free-list corruption (the residual
+// intermittent menu crash that the Allocate lock alone doesn't cover).
+//
+// We can't reuse the Allocate patch verbatim: Free's prologue is
+//   48 85 D2            TEST RDX,RDX
+//   0F 84 4F 02 00 00   JZ  Free+0x258      (rel32 — null-ptr early-out)
+//   48 8B C4            MOV RAX,RSP          (frame-pointer setup)
+// The rel32 JZ can't be relocated by a plain byte-copy. But our wrapper does
+// the null check itself, so the trampoline never needs the JZ: it only
+// reproduces `MOV RAX,RSP` and jumps to Free+12 (the rest of the body, at its
+// original address, with intact .pdata unwind). The body's prologue/epilogue
+// are RSP-relative and balanced, so running it one call-frame deeper is safe.
+// CRITICAL_SECTION is recursive, so MemFree→Free re-entry just bumps the count.
+typedef void (*FreeFn)(void* self, void* ptr);
+FreeFn g_origFreeBody = nullptr;  // trampoline: MOV RAX,RSP; JMP Free+12
+
+void FreeLocked(void* self, void* ptr) {
+    if (!ptr) return;  // reproduce the original TEST RDX,RDX; JZ early-out
+    LPCRITICAL_SECTION cs =
+        reinterpret_cast<LPCRITICAL_SECTION>(reinterpret_cast<uint8_t*>(self) + 0x640);
+    EnterCriticalSection(cs);
+    g_origFreeBody(self, ptr);
+    LeaveCriticalSection(cs);
+}
+
 } // namespace
 
 bool InstallAllocatorLock() {
@@ -127,6 +157,77 @@ bool InstallAllocatorLock() {
     fprintf(stderr, "[AllocLock] MemoryAllocator::Allocate is now thread-safe "
             "(takes self+0x640, tramp=%p, wrapper=%p)\n",
             tramp, reinterpret_cast<void*>(&AllocateLocked));
+    fflush(stderr);
+    return true;
+}
+
+bool InstallFreeLock() {
+    if (LockDisabledByEnv()) return true;  // same gate as the Allocate lock
+    {
+        const char* e = getenv("BANISHED_FREE_LOCK");
+        if (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) {
+            fprintf(stderr, "[AllocLock] Free lock disabled via BANISHED_FREE_LOCK=0\n");
+            fflush(stderr);
+            return true;
+        }
+    }
+
+    uintptr_t freeAddr = ResolveAddr(Module::Runtime, 0x1800c6c00);
+    if (!freeAddr) {
+        fprintf(stderr, "[AllocLock] could not resolve Free (0x1800c6c00)\n");
+        fflush(stderr);
+        return false;
+    }
+
+    // Validate the 12-byte prologue we overwrite: TEST RDX,RDX; JZ rel32; MOV RAX,RSP.
+    static const uint8_t expected[12] = {
+        0x48,0x85,0xD2, 0x0F,0x84,0x4F,0x02,0x00,0x00, 0x48,0x8B,0xC4
+    };
+    if (memcmp(reinterpret_cast<void*>(freeAddr), expected, sizeof(expected)) != 0) {
+        fprintf(stderr, "[AllocLock] Free prologue at %p does not match expected — refusing to patch\n",
+                reinterpret_cast<void*>(freeAddr));
+        fflush(stderr);
+        return false;
+    }
+
+    // Trampoline: MOV RAX,RSP (reproduce the clobbered frame-pointer setup) then
+    // JMP to Free+12 (continue the body at its original address). The wrapper
+    // already handled the null case, so the JZ at +3 is intentionally dropped.
+    uint8_t* tramp = reinterpret_cast<uint8_t*>(
+        VirtualAlloc(nullptr, 64, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE));
+    if (!tramp) {
+        fprintf(stderr, "[AllocLock] VirtualAlloc for Free trampoline failed (err=%lu)\n", GetLastError());
+        fflush(stderr);
+        return false;
+    }
+    tramp[0] = 0x48; tramp[1] = 0x8B; tramp[2] = 0xC4;        // MOV RAX,RSP
+    tramp[3] = 0xFF; tramp[4] = 0x25;                          // JMP qword ptr [RIP+0]
+    tramp[5] = 0x00; tramp[6] = 0x00; tramp[7] = 0x00; tramp[8] = 0x00;
+    uint64_t cont = static_cast<uint64_t>(freeAddr + 12);
+    memcpy(tramp + 9, &cont, 8);
+    FlushInstructionCache(GetCurrentProcess(), tramp, 17);
+    g_origFreeBody = reinterpret_cast<FreeFn>(tramp);
+
+    // Patch Free[0..11]: MOV RAX, &FreeLocked; JMP RAX  (12 bytes, RAX not an input).
+    uint8_t patch[12];
+    patch[0] = 0x48; patch[1] = 0xB8;
+    uint64_t wrapper = reinterpret_cast<uint64_t>(&FreeLocked);
+    memcpy(patch + 2, &wrapper, 8);
+    patch[10] = 0xFF; patch[11] = 0xE0;  // JMP RAX
+
+    DWORD oldProtect = 0;
+    if (!VirtualProtect(reinterpret_cast<void*>(freeAddr), 12, PAGE_EXECUTE_READWRITE, &oldProtect)) {
+        fprintf(stderr, "[AllocLock] VirtualProtect (Free) failed (err=%lu)\n", GetLastError());
+        fflush(stderr);
+        return false;
+    }
+    memcpy(reinterpret_cast<void*>(freeAddr), patch, 12);
+    VirtualProtect(reinterpret_cast<void*>(freeAddr), 12, oldProtect, &oldProtect);
+    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(freeAddr), 12);
+
+    fprintf(stderr, "[AllocLock] MemoryAllocator::Free is now thread-safe "
+            "(takes self+0x640, tramp=%p, wrapper=%p)\n",
+            tramp, reinterpret_cast<void*>(&FreeLocked));
     fflush(stderr);
     return true;
 }

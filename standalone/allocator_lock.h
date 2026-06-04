@@ -21,4 +21,10 @@
 // Returns true if the detour was installed (or intentionally skipped via env).
 bool InstallAllocatorLock();
 
+// Detours the raw System::MemoryAllocator::Free (0x1800c6c00) — which mutates
+// the free-list with no lock — so it takes the same critical section, closing
+// the Allocate-vs-raw-Free race. Call after InstallAllocatorLock. Gated by
+// BANISHED_ALLOC_LOCK (shared) and BANISHED_FREE_LOCK (free-lock-specific).
+bool InstallFreeLock();
+
 #endif // STANDALONE_EXE

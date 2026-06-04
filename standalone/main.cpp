@@ -1130,6 +1130,10 @@ static bool Init() {
     //     detour funnels Allocate through the same CS Free uses. Env-gated by
     //     BANISHED_ALLOC_LOCK (default on). See allocator_lock.cpp.
     InstallAllocatorLock();
+    // 4b. Also lock the raw Free (0x1800c6c00) — it mutates the same free-list
+    //     with no CS, so a background-thread Free races the now-locked Allocate.
+    //     Closes the residual intermittent menu heap crash. See allocator_lock.cpp.
+    InstallFreeLock();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs

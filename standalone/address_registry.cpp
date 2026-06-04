@@ -158,6 +158,7 @@ extern "C" {
     void RegisterWildAnimalDescriptionVtable();
     void RegisterAnimAudioEventVtable();
     void RegisterProfessionVtable();
+    void RegisterNameDatabaseVtable();
 }
 
 // ============================================================
@@ -213,6 +214,8 @@ extern "C" {
     void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount);
     void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount);
     void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount);
+    void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount);
 }
 
 // M3.5 Path B session 4 — per-element 0x60B + typed-ExternalPtr-array serialize
@@ -331,6 +334,9 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x14001f0a0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_ArrayOfArrays));
     RegisterExeAddr(0x14001ef10, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride16B));
     RegisterExeAddr(0x1400021d0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride04));
+    // NameDatabase::Serialize array resizers (code/Game/Game/namedatabase.cpp)
+    RegisterExeAddr(0x14001c7c0, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Stride0C));
+    RegisterExeAddr(0x14000a590, reinterpret_cast<uintptr_t>(&Reimpl_Array_Resize_Byte));
 
     // ============================================================
     // M3.5 Path B session 4 — per-element 0x60B serialize + typed-ExternalPtr
@@ -479,6 +485,16 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x1401523f8,
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAFPEBD@Z"));
     RegisterDispatchSlot(0x140152618,
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
+    // NameDatabase::Serialize (0x1400a45e0) dispatch slots — distinct .rdata
+    // slots that resolve to the same IO::Serializer overloads as above.
+    RegisterDispatchSlot(0x140152478,   // SerializeBytes(count, void*, name) — array1 field0
+        (uintptr_t)ResolveExport("?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z"));
+    RegisterDispatchSlot(0x140152418,   // Serialize(uchar&) — array1 field1
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
+    RegisterDispatchSlot(0x140152a50,   // Serialize(uint&) — array1 field2
+        (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
+    RegisterDispatchSlot(0x140152490,   // Serialize(count, uchar*, name) — array3 bulk
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
 
     // Achievement::Goal::Serialize — base serialize for StatGoal/TimeGoal/etc.
@@ -922,6 +938,10 @@ static void RegisterVtablesAndTypeIds() {
 
     // M5 5c citizens — Profession (Object::External) referenced by CitizenDescription.
     RegisterProfessionVtable();
+
+    // Menu-load — NameDatabase (.ndb, Object::External) loaded by MenuScene_Setup
+    // during DialogLoaderLoopT::Load; was a NullFactory crash. See namedatabase.cpp.
+    RegisterNameDatabaseVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

@@ -100,7 +100,8 @@ REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 Regist
 //   (was: REGISTER_NULL_FACTORY(AnimAudioEvent, "Graphics::AnimationEvent"); // 14014ca80)
 REGISTER_NULL_FACTORY(Disease, "Object::External");  // 14014cb00 ClimateGenerator_StaticInit
 REGISTER_NULL_FACTORY(MusicList, "Object::External");  // 14014cc00 MenuScene_StaticInit
-REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb");  // 14014cc40 MenuScene_Setup
+// NameDatabase — real factory now lives in code/Game/Game/namedatabase.cpp
+//   (was: REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb"); // 14014cc40 MenuScene_Setup)
 // Profession — real factory now lives in code/Game/Game/profession.cpp
 //   (was: REGISTER_NULL_FACTORY(Profession, "Object::External"); // 14014cc90)
 REGISTER_NULL_FACTORY(ProfessionList, "Object::External");  // 14014ccd0 ProfessionList_RegisterType
