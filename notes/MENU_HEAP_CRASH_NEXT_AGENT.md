@@ -49,7 +49,37 @@ Enhanced catch dumped the corrupt free block + full `UnlinkFreeTag` disasm. CONC
   `fn_Filename_Dtor`/`AssignOp`/copy increments-or-touches the dead refcount. (Explains why heap-zeroing didn't
   help: the imbalance is in refcount bookkeeping, not an uninitialized buffer.)
 
-### FIX-HUNT NEXT STEP (session 3)
+### Session 2d — refcount AUDIT progress (the obvious helpers are NOT the bug)
+Diffed our reimpl against the original exe Filename/refcount sequence:
+- **`FUN_14001b8e0`** (single ExternalPtr) and **`FUN_14001bcc0`** (External array) — our
+  `serialize_externals.cpp` / `serialize_arrays.cpp` match them EXACTLY: every `Filename::Filename` /
+  `operator=` / `~Filename` / `String::Serialize` / `GetPath` / `GetPathForReferenceId` is balanced and
+  placed identically (per-iteration Ctor/Dtor of the working `fnameBuf`; GetPath/GetPathForRefId return a
+  by-value owned `Filename` into a temp that we then `~`). NOT the bug.
+- **`fn_Filename_AssignOp` resolves correctly** to `??4Filename@System@@QEAAAEAV01@AEBV01@@Z` (the real
+  refcounting `operator=`): its exe dispatch slot `0x1401529e0` is NOT registered in standalone, so it falls
+  back to the correct `ResolveExport`. (If it were a non-refcounting copy, `op=(fnameBuf,pathBuf)` wouldn't
+  incr → `~pathBuf` frees the shared String → `fnameBuf` dangles → UAF. Ruled out.)
+- So the imbalance is NOT in the two primary External helpers. REMAINING SUSPECTS (narrowed): (1) the
+  Struct60B per-element `FUN_14001ffa0` + typed MaterialInstance array `FUN_140020150` (`serialize_struct60b_
+  serialize.cpp`) — not yet line-diffed; (2) `fn_Filename_Ctor`/`fn_Filename_Dtor`/`g_fn_String_Serialize`
+  resolutions (verify the exe dispatch slots they try FIRST aren't registered to a wrong fn); (3) a
+  **standalone-specific absolute-path interaction**: standalone disables `Modification::SetupFileSystem` so
+  resources resolve to long `C:\GOG Games\Banished\…` ABSOLUTE paths (the corrupt block literally held one);
+  the catch backtrace shows the trapping Allocate was inside `String::SetLength ← System::operator+`
+  (path concat) in `FindOrLoad` — our geometry loads may leave the shared `ExternalFactory` path cache /
+  ref table holding an over-/under-referenced absolute-path String that the later dialog load frees+touches.
+
+### DECISIVE pin (session 3) — dynamic refcount watch (static audit of the main helpers came up clean)
+Catch the SOURCE increment directly: under the redzone watchpoint run, when it stops at `UnlinkFreeTag` the
+corrupt block addr is in r11/r14 (e.g. `0x3340140`); but that's too late. Instead, since the corrupt blocks
+cluster (`0x3340140`/`0x3390140` across catches — bucket-12, ~30-byte String path buffers), try: (a) compare
+DLL-hook mode (original exe code) vs standalone for the SAME load with the redzone shim — if the original
+DOESN'T corrupt, binary-search which of our reimpl helpers, when swapped back to the trampoline, stops it;
+(b) OR wire enough of `Modification::SetupFileSystem` to make paths RELATIVE (short) and see if the crash
+vanishes — confirms the absolute-path lifetime interaction; (c) OR line-diff `FUN_140020150`/`FUN_14001ffa0`.
+
+### FIX-HUNT NEXT STEP (session 3) — original plan
 Audit the System::Filename/String refcount BALANCE in our 4 serialize helpers against the Runtime semantics of
 `fn_External_GetPath`, `fn_Filename_Ctor`, `fn_Filename_AssignOp`, `fn_Filename_Dtor`, `g_fn_String_Serialize`
 (decompile each in Ghidra-Runtime to learn whether each INCREMENTs/borrows/CONSUMEs a ref). The flow per
