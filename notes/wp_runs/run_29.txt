@@ -1,0 +1,351 @@
+Breakpoint 1 at 0x14006cae5: file code/Game/Game/geometry_serialize.cpp, line 185.
+[New Thread 8.0xc30]
+[New Thread 8.0x5c4]
+[New Thread 8.0xab0]
+[New Thread 8.0x75c]
+[New Thread 8.0x4854]
+[New Thread 8.0x2634]
+[New Thread 8.0x3334]
+[New Thread 8.0x39c4]
+[New Thread 8.0x16b4]
+[Thread 8.0x16b4 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 8.0x31c8]
+[Thread 8.0x31c8 exited with code 0]
+[New Thread 8.0x382c]
+[New Thread 8.0x2f08]
+[New Thread 8.0x36b4]
+[New Thread 8.0x4a94]
+[New Thread 8.0x2cc0]
+[New Thread 8.0x20cc]
+[New Thread 8.0x254c]
+[New Thread 8.0x2208]
+[New Thread 8.0x940]
+[New Thread 8.0x41bc]
+[New Thread 8.0x3dd0]
+[New Thread 8.0x3d3c]
+[New Thread 8.0x17f0]
+[New Thread 8.0x5154]
+[New Thread 8.0x3728]
+[New Thread 8.0x3eb8]
+[New Thread 8.0x432c]
+[Thread 8.0x3eb8 exited with code 0]
+[Thread 8.0x3d3c exited with code 0]
+[Thread 8.0x254c exited with code 0]
+[Thread 8.0x3728 exited with code 0]
+[Thread 8.0x5154 exited with code 0]
+[Thread 8.0x20cc exited with code 0]
+[Thread 8.0x2cc0 exited with code 0]
+[Thread 8.0x4a94 exited with code 0]
+[Thread 8.0x3dd0 exited with code 0]
+[Thread 8.0x2208 exited with code 0]
+[Thread 8.0x940 exited with code 0]
+[Thread 8.0x41bc exited with code 0]
+[Thread 8.0x17f0 exited with code 0]
+[Thread 8.0x2f08 exited with code 0]
+[Thread 8.0x36b4 exited with code 0]
+[Thread 8.0x382c exited with code 0]
+[Thread 8.0x432c exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 8.0x4d94]
+[Thread 8.0x4d94 exited with code 0]
+[New Thread 8.0x2e18]
+[New Thread 8.0x5ddc]
+[New Thread 8.0x3c84]
+[New Thread 8.0x12fc]
+[New Thread 8.0x3648]
+[New Thread 8.0x4c94]
+[New Thread 8.0x3224]
+[New Thread 8.0x112c]
+[New Thread 8.0x3b6c]
+[New Thread 8.0x16ac]
+[New Thread 8.0x1618]
+[New Thread 8.0x36e4]
+[New Thread 8.0x53c8]
+[New Thread 8.0x5d54]
+[New Thread 8.0x5ea4]
+[New Thread 8.0x3e0c]
+[New Thread 8.0x2cb8]
+[Thread 8.0x3e0c exited with code 0]
+[Thread 8.0x5ea4 exited with code 0]
+[Thread 8.0x3648 exited with code 0]
+[Thread 8.0x16ac exited with code 0]
+[Thread 8.0x5d54 exited with code 0]
+[Thread 8.0x1618 exited with code 0]
+[Thread 8.0x3224 exited with code 0]
+[Thread 8.0x112c exited with code 0]
+[Thread 8.0x4c94 exited with code 0]
+[Thread 8.0x12fc exited with code 0]
+[Thread 8.0x3b6c exited with code 0]
+[Thread 8.0x36e4 exited with code 0]
+[Thread 8.0x53c8 exited with code 0]
+[Thread 8.0x5ddc exited with code 0]
+[Thread 8.0x3c84 exited with code 0]
+[Thread 8.0x2e18 exited with code 0]
+[Thread 8.0x2cb8 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 8.0x1fa8]
+[Thread 8.0x1fa8 exited with code 0]
+[New Thread 8.0x53fc]
+[New Thread 8.0x5490]
+[New Thread 8.0x30d8]
+[New Thread 8.0x45d0]
+[New Thread 8.0x20a4]
+[New Thread 8.0x2f4c]
+[New Thread 8.0x5ee4]
+[New Thread 8.0x25dc]
+[New Thread 8.0x37d8]
+[New Thread 8.0x29b0]
+[New Thread 8.0x2e0c]
+[New Thread 8.0x2720]
+[New Thread 8.0x5d8c]
+[New Thread 8.0x2324]
+[New Thread 8.0x29ac]
+[New Thread 8.0x4f2c]
+[New Thread 8.0x5a0c]
+[Thread 8.0x4f2c exited with code 0]
+[Thread 8.0x5d8c exited with code 0]
+[Thread 8.0x5ee4 exited with code 0]
+[Thread 8.0x25dc exited with code 0]
+[Thread 8.0x29ac exited with code 0]
+[Thread 8.0x2e0c exited with code 0]
+[Thread 8.0x2324 exited with code 0]
+[Thread 8.0x45d0 exited with code 0]
+[Thread 8.0x20a4 exited with code 0]
+[Thread 8.0x37d8 exited with code 0]
+[Thread 8.0x2720 exited with code 0]
+[Thread 8.0x29b0 exited with code 0]
+[Thread 8.0x2f4c exited with code 0]
+[Thread 8.0x5490 exited with code 0]
+[Thread 8.0x30d8 exited with code 0]
+[Thread 8.0x53fc exited with code 0]
+[Thread 8.0x5a0c exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 8.0x4bcc]
+[Thread 8.0x4bcc exited with code 0]
+[New Thread 8.0x1070]
+[New Thread 8.0x5068]
+[New Thread 8.0x48f0]
+[New Thread 8.0x1660]
+[New Thread 8.0x554c]
+[New Thread 8.0x2ffc]
+[New Thread 8.0x3b70]
+[New Thread 8.0x526c]
+[New Thread 8.0x27b8]
+[New Thread 8.0x4934]
+[New Thread 8.0x4d38]
+[New Thread 8.0x4790]
+[New Thread 8.0x5b94]
+[New Thread 8.0x2ff0]
+[New Thread 8.0x4b84]
+[New Thread 8.0x51f0]
+[New Thread 8.0x4e24]
+[New Thread 8.0x2718]
+[New Thread 8.0x5b00]
+[New Thread 8.0x57f4]
+[New Thread 8.0x561c]
+[New Thread 8.0x4c64]
+[New Thread 8.0x4880]
+[New Thread 8.0x3c70]
+[New Thread 8.0x3184]
+[New Thread 8.0x3058]
+[New Thread 8.0x5960]
+[New Thread 8.0x5954]
+[New Thread 8.0x12dc]
+[New Thread 8.0x5724]
+[New Thread 8.0x1fb8]
+[New Thread 8.0x32f8]
+[New Thread 8.0x395c]
+
+Thread 1 hit Breakpoint 1, (anonymous namespace)::TradeWork_impl_04d0_Body (self=0x3681c38, stream=0x5ff2e0) at code/Game/Game/geometry_serialize.cpp:185
+185	    if (!self || !stream) return;
+Hardware watchpoint 2: *(unsigned long long*)((char*)g_pMemAllocSingleton + 0x88)
+=== WP_ARMED alloc=0x5ff680 head=0x0 ===
+[New Thread 8.0x4058]
+
+Thread 1 hit Hardware watchpoint 2: *(unsigned long long*)((char*)g_pMemAllocSingleton + 0x88)
+
+Old value = 55509312
+New value = 4350476608
+0x00007ff8d69a74c3 in Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+=== STOPPED ===
+head now = 0x1034f0140
+rip            0x7ff8d69a74c3      0x7ff8d69a74c3 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+179>
+rax            0xc                 12
+rbx            0x0                 0
+rcx            0xc                 12
+rdx            0x1034f0140         4350476608
+rsi            0x5ff008            6287368
+rdi            0x1ffffffffff       2199023255551
+rbp            0x30                0x30
+rsp            0x5feed8            0x5feed8
+r8             0x5ff680            6289024
+r9             0x0                 0
+r10            0x3fffffffffff      70368744177663
+r11            0x34f0140           55509312
+r12            0xc                 12
+r13            0x0                 0
+r14            0x34f0140           55509312
+r15            0x5ff680            6289024
+=== BACKTRACE ===
+#0  0x00007ff8d69a74c3 in Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#1  0x00007ff8d69a6f08 in Runtime-x64!?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#2  0x00007ff7ee458d1e in (anonymous namespace)::AllocateLocked (self=0x5ff680, size=35, align=4) at standalone/allocator_lock.cpp:55
+        cs = 0x5ffcc0
+        r = 0x5ffcc0
+#3  0x00007ff8d69a82a2 in Runtime-x64!?SetLength@String@System@@AEAAXH@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#4  0x00007ff8d69a94c8 in Runtime-x64!??HSystem@@YA?AVString@0@AEBV10@0@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#5  0x00007ff8d699f422 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#6  0x00007ff8d690f41d in Runtime-x64!?CreateInPlaceObject@External@Object@@SAPEAVBase@2@PEAX@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#7  0x00007ff8d69f32d6 in Runtime-x64!?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#8  0x00007ff8d699c82e in Runtime-x64!?Load@External@Object@@SAPEAV12@AEBVFilename@System@@PEAV12@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#9  0x00007ff8d699f555 in Runtime-x64!?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#10 0x00007ff8d69bb18d in Runtime-x64!?Load@DialogLoopT@Engine@@UEAAXXZ () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#11 0x00007ff7ee45eaf5 in (anonymous namespace)::Stub_Load (self=0x36180c8) at standalone/menudialogloopt_stubs.cpp:607
+        dialogExtBefore = 0x0
+        dialogExtAfter = 0x35e6a78
+#12 0x00007ff7ee459729 in AsyncLoader::StartAsyncLoad(UpdateLoop*) ()
+No symbol table info available.
+#13 0x00007ff7ee4642ae in (anonymous namespace)::Stub_Startup(UpdateLoop*) ()
+No symbol table info available.
+#14 0x00007ff8d69bd0da in Runtime-x64!?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#15 0x00007ff8d69bd293 in Runtime-x64!?Frame@MainLoop@Engine@@QEAA_N_N@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#16 0x00007ff8d69bd486 in Runtime-x64!?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#17 0x00007ff7ee4070e7 in Game::RunGameMain (hInstance=0x7ff7ee3a0000, cmdLine=0x755a37 "") at code/Game/Game/game_main.cpp:664
+        shiningRockLoop = 0x3618cd0
+        buildLoaderLoop = {__memAllocSingleton = @0x5ff678}
+        innerLoader = 0x3681960
+        topLoop = 0x36819b0
+        menuStr = "\000\000\000\000\000\000\000"
+        buildSplashDLT = {__memAllocSingleton = @0x5ff678}
+        loadingLoop = 0x35e69f0
+        outerLoader = 0x36819b0
+        topTag = 0x7ff7ee52c465 <fn_SM_CancelWork+2397> "OuterLL"
+        menuLoop = 0x36180c8
+        gameObj = 0x35d5b50
+        inputCfg = 0x35cfc30
+        keyMap = 0x35d1a88
+        settings = 0x35d9580
+        memAllocSingletonPtr = 0x7ff8d6adc718
+        memAllocSingleton = 0x5ff680
+        ml = 0x35cf5f8
+        engine = {bytes = "\000\000\034\000\000\000\000\000\001\000\000\000\002\000\000\000\000\000\000 ", '\000' <repeats 15 times>, " ", '\000' <repeats 36 times>, "@<5\004", '\000' <repeats 12 times>, "Pp5\004", '\000' <repeats 12 times>, "\230G5\004", '\000' <repeats 28 times>, "@\001O\003\001", '\000' <repeats 11 times>, "PK5\004", '\000' <repeats 44 times>...}
+        ok = 1
+#18 0x00007ff7ee45d801 in WinMain (hInstance=0x7ff7ee3a0000, lpCmdLine=0x755a37 "") at standalone/main.cpp:1230
+        stats = {registered = 235, stubs = 346}
+        rc = 0
+#19 0x00007ff7ee520f71 in main (argc=<optimized out>, argv=<optimized out>, envp=<optimized out>) at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexewin.c:70
+        hInstance = <optimized out>
+        lpCmdLine = <optimized out>
+        nShowCmd = <optimized out>
+#20 0x00007ff7ee3a12ee in __tmainCRTStartup () at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexe.c:272
+        lock_free = <optimized out>
+        fiberid = <optimized out>
+        nested = <optimized out>
+#21 0x00007ff7ee3a13e6 in WinMainCRTStartup () at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexe.c:162
+        ret = 255
+=== DISAS AROUND PC ===
+   0x7ff8d69a74ab <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+155>:	test   %ecx,%ecx
+   0x7ff8d69a74ad <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+157>:	jne    0x7ff8d69a74cc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+188>
+   0x7ff8d69a74af <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+159>:	movslq %eax,%rcx
+   0x7ff8d69a74b2 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+162>:	test   %rdx,%rdx
+   0x7ff8d69a74b5 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+165>:	jne    0x7ff8d69a74be <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+174>
+   0x7ff8d69a74b7 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+167>:	mov    %rdx,0x28(%r8,%rcx,8)
+   0x7ff8d69a74bc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+172>:	jmp    0x7ff8d69a750d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+253>
+   0x7ff8d69a74be <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+174>:	mov    %rdx,0x28(%r8,%rcx,8)
+=== CORRUPT TAG BLOCK (r14) ===
+0x34f0140:	0x0000000100000000	0x455c676f6c616944
+0x34f0150:	0x6f697461756c6176	0x6957006373722e6e
+0x34f0160:	0x0000000000000030	0x000010000000000e
+0x34f0170:	0x0000000200000025	0x7265545c656d6147
+0x34f0180:	0x7265545c6e696172	0x7473694c6e696172
+0x34f0190:	0x7365723a6373722e	0x000000656372756f
+0x34f01a0:	0x0000000000000004	0x0000000003c0efa8
+0x34f01b0:	0x000008000000000a	0x0000000100000016
+0x34f01c0:	0x4720474f475c3a43	0x7365725c73656d61
+0x34f01d0:	0x00005c656372756f	0x0000000000000028
+0x34f01e0:	0x00000000035ba8e8	0x4720474f00000089
+0x34f01f0:	0x00007ff8d6a35860	0x69575c6400000000
+=== CORRUPT TAG BLOCK (r11) ===
+0x34f0140:	0x0000000100000000	0x455c676f6c616944
+0x34f0150:	0x6f697461756c6176	0x6957006373722e6e
+0x34f0160:	0x0000000000000030	0x000010000000000e
+0x34f0170:	0x0000000200000025	0x7265545c656d6147
+=== UnlinkFreeTag full disas ===
+Dump of assembler code from 0x7ff8d69a740a to 0x7ff8d69a74db:
+   0x00007ff8d69a740a <Runtime-x64!?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z+250>:	int3
+   0x00007ff8d69a740b <Runtime-x64!?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z+251>:	int3
+   0x00007ff8d69a740c <Runtime-x64!?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z+252>:	int3
+   0x00007ff8d69a740d <Runtime-x64!?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z+253>:	int3
+   0x00007ff8d69a740e <Runtime-x64!?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z+254>:	int3
+   0x00007ff8d69a740f <Runtime-x64!?LinkFreeTag@MemoryAllocator@System@@AEAAXPEAUMemoryTag@12@@Z+255>:	int3
+   0x00007ff8d69a7410 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+0>:	mov    %rdi,0x8(%rsp)
+   0x00007ff8d69a7415 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+5>:	mov    -0x8(%rdx),%r10
+   0x00007ff8d69a7419 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+9>:	movabs $0x1ffffffffff,%rdi
+   0x00007ff8d69a7423 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+19>:	mov    %rdx,%r11
+   0x00007ff8d69a7426 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+22>:	mov    %r10,%rax
+   0x00007ff8d69a7429 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+25>:	mov    %rcx,%r8
+   0x00007ff8d69a742c <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+28>:	and    %rdi,%rax
+   0x00007ff8d69a742f <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+31>:	shl    $0x2,%rax
+   0x00007ff8d69a7433 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+35>:	cmp    $0x200,%rax
+   0x00007ff8d69a7439 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+41>:	ja     0x7ff8d69a7440 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+48>
+   0x00007ff8d69a743b <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+43>:	sar    $0x2,%eax
+   0x00007ff8d69a743e <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+46>:	jmp    0x7ff8d69a746d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+93>
+   0x00007ff8d69a7440 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+48>:	mov    $0x20,%ecx
+   0x00007ff8d69a7445 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+53>:	lea    0x20(%rcx),%r9d
+   0x00007ff8d69a7449 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+57>:	nopl   0x0(%rax)
+   0x00007ff8d69a7450 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+64>:	mov    %rax,%rdx
+   0x00007ff8d69a7453 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+67>:	shr    %cl,%rdx
+   0x00007ff8d69a7456 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+70>:	test   %rdx,%rdx
+   0x00007ff8d69a7459 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+73>:	je     0x7ff8d69a7461 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+81>
+   0x00007ff8d69a745b <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+75>:	sub    %ecx,%r9d
+   0x00007ff8d69a745e <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+78>:	mov    %rdx,%rax
+   0x00007ff8d69a7461 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+81>:	sar    %ecx
+   0x00007ff8d69a7463 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+83>:	jne    0x7ff8d69a7450 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+64>
+   0x00007ff8d69a7465 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+85>:	sub    %r9d,%eax
+   0x00007ff8d69a7468 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+88>:	add    $0xb6,%eax
+   0x00007ff8d69a746d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+93>:	mov    (%r11),%rdx
+   0x00007ff8d69a7470 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+96>:	sar    $0x17,%r10
+   0x00007ff8d69a7474 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+100>:	mov    %rdx,%rcx
+   0x00007ff8d69a7477 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+103>:	and    $0xffffffffff800000,%r10
+   0x00007ff8d69a747e <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+110>:	shr    $0x29,%rcx
+   0x00007ff8d69a7482 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+114>:	or     %rcx,%r10
+   0x00007ff8d69a7485 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+117>:	jne    0x7ff8d69a748c <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+124>
+   0x00007ff8d69a7487 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+119>:	xor    %r9d,%r9d
+   0x00007ff8d69a748a <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+122>:	jmp    0x7ff8d69a7490 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+128>
+   0x00007ff8d69a748c <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+124>:	lea    (%r10,%r11,1),%r9
+   0x00007ff8d69a7490 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+128>:	shl    $0x17,%rdx
+   0x00007ff8d69a7494 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+132>:	sar    $0x17,%rdx
+   0x00007ff8d69a7498 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+136>:	test   %rdx,%rdx
+   0x00007ff8d69a749b <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+139>:	je     0x7ff8d69a74a0 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+144>
+   0x00007ff8d69a749d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+141>:	add    %r11,%rdx
+   0x00007ff8d69a74a0 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+144>:	movabs $0x3fffffffffff,%r10
+   0x00007ff8d69a74aa <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+154>:	test   %r9,%r9
+   0x00007ff8d69a74ad <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+157>:	jne    0x7ff8d69a74cc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+188>
+   0x00007ff8d69a74af <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+159>:	movslq %eax,%rcx
+   0x00007ff8d69a74b2 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+162>:	test   %rdx,%rdx
+   0x00007ff8d69a74b5 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+165>:	jne    0x7ff8d69a74be <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+174>
+   0x00007ff8d69a74b7 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+167>:	mov    %rdx,0x28(%r8,%rcx,8)
+   0x00007ff8d69a74bc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+172>:	jmp    0x7ff8d69a750d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+253>
+   0x00007ff8d69a74be <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+174>:	mov    %rdx,0x28(%r8,%rcx,8)
+=> 0x00007ff8d69a74c3 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+179>:	and    %rdi,(%rdx)
+   0x00007ff8d69a74c6 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+182>:	and    %r10,-0x8(%rdx)
+   0x00007ff8d69a74ca <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+186>:	jmp    0x7ff8d69a750d <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+253>
+   0x00007ff8d69a74cc <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+188>:	movabs $0xfffffe0000000000,%rcx
+   0x00007ff8d69a74d6 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+198>:	and    %rcx,(%r9)
+   0x00007ff8d69a74d9 <Runtime-x64!?UnlinkFreeTag@MemoryAllocator@System@@AEAAXPEAUFreeTag@12@0@Z+201>:	test   %rdx,%rdx
+End of assembler dump.
+=== DONE ===

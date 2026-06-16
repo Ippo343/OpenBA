@@ -3,6 +3,100 @@
 > Read this WITH the memory file `project_menu_heap_crash.md` (full history + reversals). This doc is the
 > actionable plan.
 
+## ★★★ 2026-06-15 SESSION 3 — the UAF is RUNTIME-INTERNAL, not in our explicit Filename calls (major narrowing) ★★★
+Resume here. Big results this session (several dead theories KILLED, mechanism decoded exactly):
+
+1. **All-strides zeroing fix applied + MEASURED — NOT the residual fix.** Generalized the stride-8
+   in-place-grow zeroing to the shared `GenericArrayResize` (both copies: serialize_arrays.cpp +
+   serialize_resize_helpers.cpp now zero new slots UNCONDITIONALLY on both realloc AND in-place-grow,
+   matching the original exe). Faithful + correct (KEEP), but **full-speed crash rate UNCHANGED at ~20%**
+   (4/20). So the residual face is NOT the dirty-in-place-grow class.
+
+2. **NEW reliable full-speed test harness** (`notes/fullspeed_detect.sh`, `notes/fullspeed_capture.sh`):
+   detect crashes by PROCESS DEATH (tasklist), NO redzone/gdb (true full speed), `BANISHED_NO_FS_RELATIVE=1`.
+   stdout/standalone_debug.log is LOST on hard-kill — **stderr/standalone_error.log is the reliable channel**
+   (FrameLimiter prints there; key on it, NOT the stdout "MenuDLT::Draw"). On a fatal crash the CrashHandler
+   writes a full dump (regs + module+off + native heap-walk + stack) to standalone_crash.log.
+
+3. **3 full-speed crash dumps captured** (`notes/wp_runs/fs_crash_{4,5,11}.txt`): 2/3 = the bucket-12
+   free-list bit-32 face is STILL happening (Runtime+0xC74C3/4EA Allocate, corrupt fwd link
+   `0xffffffff00000000` = block+0xC=refcount=−1); the clobbered block holds a resource-path String
+   ("Font\FontMedium…resource"). 1/3 = the MaterialInstance NULL-read (Runtime+0x102C9F, RCX=0). Same two
+   faces as before — the stride-8 fix did NOT clear them at full speed.
+
+4. **Filename-size theory FALSIFIED.** Disassembled the Runtime ctors (objdump on Runtime-x64.dll): both
+   `Filename::Filename()` (0x180006220) and `Filename(char*)` (0x180026cf0) do `movq $0,(rcx)` = **8 bytes**.
+   System::Filename = a single 8-byte System::String*. The `fnameBuf[8]` buffers are CORRECTLY sized.
+   STOP chasing the stack-overflow side-lead.
+
+5. **Exact refcount idiom decoded** (objdump; addresses via Python GetProcAddress, the engine_funcs.cpp
+   numeric fallbacks are STALE — ResolveExport is what actually resolves): String ptr → char data;
+   **refcount at string−4**; alloc base string−8. `~Filename`(0x180006980)=`decl [string−4]`+free-if-0;
+   `operator=`(0x180006770)=release-old + `incl [src−4]` AddRef-new; `GetPath`(0x180102970→real
+   0x180006250) returns an OWNED (AddRef'd) copy; `GetPathForReferenceId`(0x1800bf1d0) returns OWNED
+   (AddRef'd). **The corrupting instruction is a `decl`/`incl [string−4]` on an ALREADY-FREED String**
+   (block+4 = refcount slot = the free-list-link high dword → ±1 = the bit-32 flip).
+
+6. **ALL our External serialize helpers VERIFIED FAITHFUL** (line-diffed vs Ghidra decompile this session):
+   `FUN_140007140` (7140, called 227×/load) and `FUN_140020150` (the +0x210 MaterialInstance array, the one
+   session 2d left un-diffed) — both match our reimpls exactly; every Ctor/GetPath/AssignOp paired with a
+   Dtor; Struct60B_Resize zeroes new elements; refcounts balanced. NOT the imbalance.
+
+7. **Geometry CONFIRMED as the crash source at full speed** (reliable detector): `BANISHED_NO_MENU_GEOM=1`
+   → **0 process-death crashes / 15** (just hangs). vs ~20-36% baseline. (The old "NO_GEOM→0" was measured
+   with the unreliable crash-log detector; now confirmed by process death.)
+
+8. **★ DECISIVE NEW FINDING: the corrupting refcount op is NOT at our explicit Filename calls.** Added an
+   env-gated interposer `standalone/filename_dtor_check.cpp` (`BANISHED_FNDTOR_CHECK=1`, default-inert) that
+   wraps the global `fn_Filename_Dtor` AND `fn_Filename_AssignOp`: before delegating, it reads the operand
+   String's refcount and logs the caller if refcount ≤ 0 (i.e. a UAF release/AddRef at OUR call site).
+   **Installed correctly (real dtor=0x…6980) but fired 0× across 8 full-speed crashes.** ⇒ The over-release/
+   AddRef-on-freed happens INSIDE Runtime code (the real ~Filename/operator= called internally by Runtime,
+   or a Runtime String op), operating on state OUR geometry deserialize sets up — NOT in our serialize
+   helpers. This kills the entire "our helper over-releases a Filename" family (6 sessions' focus).
+
+### WHERE THE BUG IS NOW (session-3 conclusion)
+A **Runtime-internal** String refcount op corrupts a freed bucket-12 path-String, triggered by what our
+GEOMETRY deserialize feeds the Runtime (NO_GEOM=clean; our explicit Filename ops are clean). Geometry's
+Runtime touchpoints = ~230 `ExternalFactory::FindOrLoad(MaterialInstance)` calls (+0x150/+0x158, the +0x210
+array, and 227× Struct60B +0x00) + GetReferenceId/GetPathForReferenceId on the factory ref-table. Leading
+hypothesis (= session 2's, now the ONLY surviving one): our geometry load leaves the **Runtime ExternalFactory
+ref-id table / resource cache** holding an over-/under-referenced path String, which a later Runtime op
+(another FindOrLoad, the factory's own bookkeeping, or MaterialInstance::Serialize loading a SpriteSheet/
+texture) releases-or-AddRefs after free.
+
+### DECISIVE NEXT STEP (session 4) — catch the Runtime-internal source write
+Our-call-site interposition is exhausted (clean). Need the EXACT Runtime instruction:
+- **(A) Dynamic HW watchpoint, self-armed.** When the engine Free (0x1800c6c00 / fn_MemFreeStatic) frees a
+  bucket-12-sized block whose body looks like a String (small header + ASCII chars), program DR0 (via
+  GetThreadContext/SetThreadContext on all threads, or AddVectoredExceptionHandler + single-step) to watch
+  block+4 (the refcount slot) for WRITE; on fire, log RIP + stack. ASLR-robust (address derived at runtime).
+  This pins the exact Runtime `decl/incl` and its caller. Build on standalone/redzone_alloc.cpp (it already
+  hooks free + walks the heap).
+- **(B) Poison-on-free + scan.** Hook Free to write a sentinel (e.g. 0x7F7F7F7F) into freed bucket-12 blocks'
+  +4; at geometry checkpoints scan freed blocks for +4 != sentinel ⇒ caught the UAF window (gives "when/which
+  block", not the instruction — pair with A for the instruction).
+- **(C) Wrap the factory ops.** Interpose `fn_ExternalFactory_FindOrLoad` / `GetReferenceId` /
+  `GetPathForReferenceId` (globals our code calls) to dump, per call during geometry, the returned External's
+  internal path-String pointer + its refcount, and watch for a refcount that goes 1→0→(used). Cheaper than A,
+  tests the ref-table hypothesis directly.
+- **(D) DLL-hook-mode A/B** (version.dll, original exe geometry code runs, same Runtime): if it does NOT
+  corrupt, the trigger is a standalone-only difference (incomplete type/factory registration: 235 registered
+  /358 stubs — a MaterialInstance/SpriteSheet load may resolve differently → a half-constructed object with
+  off refcounts). Confirms whether to chase factory-registration completeness vs a genuine Runtime bug.
+
+### Build/test (session-3 harness)
+- `mingw32-make standalone-debug` → cp standalone/build/reimpl-x64.exe to "C:/GOG Games/Banished/".
+- Full-speed crash rate: `RUNS=20 bash notes/fullspeed_detect.sh` (CRASH=process death; key on stderr
+  FrameLimiter for "alive", NOT stdout).
+- Capture dumps: `bash notes/fullspeed_capture.sh` (preserves standalone_crash.log per crash).
+- UAF-at-our-sites check (now proven clean): `BANISHED_FNDTOR_CHECK=1` (logs to standalone_error.log).
+- Reap zombies with `wmic process where "name='reimpl-x64.exe'" delete`.
+- Kept this session (all default-inert/correct): the all-strides zeroing fix; filename_dtor_check.cpp;
+  the two .sh harnesses; the 3 fs_crash dumps.
+
+---
+
 ## ⚠️ 2026-06-04 SESSION 2g — CHECKPOINT: the fix is REAL but the FULL-SPEED menu is STILL broken (residual corruption) ⚠️
 HONEST status after validating at FULL SPEED (not just GDB):
 - **The stride-8 fix (6ae0019) is real** (GDB watchpoint A/B proves it eliminates the bucket-head free-list

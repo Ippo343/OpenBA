@@ -1,0 +1,266 @@
+Breakpoint 1 at 0x14006cae5: file code/Game/Game/geometry_serialize.cpp, line 185.
+[New Thread 21296.0x4844]
+[New Thread 21296.0x2b2c]
+[New Thread 21296.0xba4]
+[New Thread 21296.0x5280]
+[New Thread 21296.0x4190]
+[New Thread 21296.0x4d74]
+[New Thread 21296.0x3128]
+[New Thread 21296.0x1dfc]
+[New Thread 21296.0x3af8]
+[Thread 21296.0x3af8 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 21296.0x401c]
+[Thread 21296.0x401c exited with code 0]
+[New Thread 21296.0x2eb4]
+[New Thread 21296.0x3cec]
+[New Thread 21296.0x30b8]
+[New Thread 21296.0x50a8]
+[New Thread 21296.0x5634]
+[New Thread 21296.0x382c]
+[New Thread 21296.0x4cc4]
+[New Thread 21296.0x584c]
+[New Thread 21296.0x51d8]
+[New Thread 21296.0x4c44]
+[New Thread 21296.0x153c]
+[New Thread 21296.0x15f4]
+[New Thread 21296.0x586c]
+[New Thread 21296.0x1ce0]
+[New Thread 21296.0xb50]
+[New Thread 21296.0x3c68]
+[New Thread 21296.0x11e0]
+[Thread 21296.0x3c68 exited with code 0]
+[Thread 21296.0x51d8 exited with code 0]
+[Thread 21296.0x584c exited with code 0]
+[Thread 21296.0x15f4 exited with code 0]
+[Thread 21296.0x5634 exited with code 0]
+[Thread 21296.0x1ce0 exited with code 0]
+[Thread 21296.0x586c exited with code 0]
+[Thread 21296.0x153c exited with code 0]
+[Thread 21296.0x4c44 exited with code 0]
+[Thread 21296.0x382c exited with code 0]
+[Thread 21296.0x4cc4 exited with code 0]
+[Thread 21296.0xb50 exited with code 0]
+[Thread 21296.0x50a8 exited with code 0]
+[Thread 21296.0x3cec exited with code 0]
+[Thread 21296.0x30b8 exited with code 0]
+[Thread 21296.0x2eb4 exited with code 0]
+[Thread 21296.0x11e0 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 21296.0x1120]
+[Thread 21296.0x1120 exited with code 0]
+[New Thread 21296.0x45f0]
+[New Thread 21296.0x6a4]
+[New Thread 21296.0x5710]
+[New Thread 21296.0x2ff0]
+[New Thread 21296.0x4520]
+[New Thread 21296.0x50a0]
+[New Thread 21296.0xfb8]
+[New Thread 21296.0x3158]
+[New Thread 21296.0x5288]
+[New Thread 21296.0x25bc]
+[New Thread 21296.0x3bbc]
+[New Thread 21296.0x510c]
+[New Thread 21296.0x2c88]
+[New Thread 21296.0x3a60]
+[New Thread 21296.0x3d3c]
+[New Thread 21296.0x4918]
+[New Thread 21296.0x42c0]
+[Thread 21296.0x4918 exited with code 0]
+[Thread 21296.0x3a60 exited with code 0]
+[Thread 21296.0x2ff0 exited with code 0]
+[Thread 21296.0x25bc exited with code 0]
+[Thread 21296.0x3d3c exited with code 0]
+[Thread 21296.0x510c exited with code 0]
+[Thread 21296.0xfb8 exited with code 0]
+[Thread 21296.0x5288 exited with code 0]
+[Thread 21296.0x4520 exited with code 0]
+[Thread 21296.0x2c88 exited with code 0]
+[Thread 21296.0x50a0 exited with code 0]
+[Thread 21296.0x3bbc exited with code 0]
+[Thread 21296.0x3158 exited with code 0]
+[Thread 21296.0x6a4 exited with code 0]
+[Thread 21296.0x5710 exited with code 0]
+[Thread 21296.0x45f0 exited with code 0]
+[Thread 21296.0x42c0 exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 21296.0x3bd0]
+[Thread 21296.0x3bd0 exited with code 0]
+[New Thread 21296.0x5d54]
+[New Thread 21296.0x42a8]
+[New Thread 21296.0x13e8]
+[New Thread 21296.0x34e8]
+[New Thread 21296.0x3984]
+[New Thread 21296.0x2504]
+[New Thread 21296.0x2768]
+[New Thread 21296.0x5b6c]
+[New Thread 21296.0x3560]
+[New Thread 21296.0x1d78]
+[New Thread 21296.0x3470]
+[New Thread 21296.0x2a84]
+[New Thread 21296.0x4600]
+[New Thread 21296.0x2dfc]
+[New Thread 21296.0x1c38]
+[New Thread 21296.0x2c18]
+[New Thread 21296.0x351c]
+[Thread 21296.0x2c18 exited with code 0]
+[Thread 21296.0x1d78 exited with code 0]
+[Thread 21296.0x3984 exited with code 0]
+[Thread 21296.0x2dfc exited with code 0]
+[Thread 21296.0x4600 exited with code 0]
+[Thread 21296.0x2a84 exited with code 0]
+[Thread 21296.0x34e8 exited with code 0]
+[Thread 21296.0x5b6c exited with code 0]
+[Thread 21296.0x2768 exited with code 0]
+[Thread 21296.0x3470 exited with code 0]
+[Thread 21296.0x2504 exited with code 0]
+[Thread 21296.0x1c38 exited with code 0]
+[Thread 21296.0x3560 exited with code 0]
+[Thread 21296.0x42a8 exited with code 0]
+[Thread 21296.0x13e8 exited with code 0]
+[Thread 21296.0x5d54 exited with code 0]
+[Thread 21296.0x351c exited with code 0]
+warning: Temporarily disabling breakpoints for unloaded shared library "C:\Windows\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_b7cca8360c0d57e9\nvgpucomp64.dll"
+[New Thread 21296.0x3324]
+[Thread 21296.0x3324 exited with code 0]
+[New Thread 21296.0x3e0c]
+[New Thread 21296.0x608]
+[New Thread 21296.0x54e4]
+[New Thread 21296.0x1be0]
+[New Thread 21296.0x3e08]
+[New Thread 21296.0x3138]
+[New Thread 21296.0x5e0c]
+[New Thread 21296.0x3994]
+[New Thread 21296.0x4b6c]
+[New Thread 21296.0x52e4]
+[New Thread 21296.0x16c4]
+[New Thread 21296.0x1788]
+[New Thread 21296.0x2eb0]
+[New Thread 21296.0x4184]
+[New Thread 21296.0x4270]
+[New Thread 21296.0x2d78]
+[New Thread 21296.0x356c]
+[New Thread 21296.0x3ce8]
+[New Thread 21296.0x5738]
+[New Thread 21296.0x1cd4]
+[New Thread 21296.0x2a70]
+[New Thread 21296.0x3048]
+[New Thread 21296.0x1ba0]
+[New Thread 21296.0x597c]
+[New Thread 21296.0x4540]
+[New Thread 21296.0x3098]
+[New Thread 21296.0x4778]
+[New Thread 21296.0x2a28]
+[New Thread 21296.0x3460]
+[New Thread 21296.0x176c]
+[New Thread 21296.0x4d84]
+[New Thread 21296.0x3cbc]
+[New Thread 21296.0x4640]
+
+Thread 1 hit Breakpoint 1, (anonymous namespace)::TradeWork_impl_04d0_Body (self=0x35f1c28, stream=0x5ff2e0) at code/Game/Game/geometry_serialize.cpp:185
+185	    if (!self || !stream) return;
+Hardware watchpoint 2: *(unsigned long long*)((char*)g_pMemAllocSingleton + 0x88)
+=== WP_ARMED alloc=0x5ff680 head=0x0 ===
+[New Thread 21296.0x376c]
+[New Thread 21296.0x41dc]
+[New Thread 21296.0x23ec]
+[New Thread 21296.0x1a08]
+[New Thread 21296.0x1888]
+[New Thread 21296.0x168c]
+[New Thread 21296.0x1d64]
+[New Thread 21296.0x5d44]
+[New Thread 21296.0x5124]
+[New Thread 21296.0x5700]
+[New Thread 21296.0x388c]
+[New Thread 21296.0x38bc]
+[New Thread 21296.0x3f74]
+[New Thread 21296.0x543c]
+
+Thread 1 received signal SIGSEGV, Segmentation fault.
+0x00007ff8eb273a19 in ?? () from C:\Windows\system32\XAudio2_7.dll
+=== STOPPED ===
+head now = 0x415cb30
+rip            0x7ff8eb273a19      0x7ff8eb273a19
+rax            0xfffe              65534
+rbx            0x354f9f8           55900664
+rcx            0x54                84
+rdx            0x353ec78           55831672
+rsi            0x2f720090          796000400
+rdi            0x4249b18           69507864
+rbp            0x5ff370            0x5ff370
+rsp            0x5ff158            0x5ff158
+r8             0x54                84
+r9             0x0                 0
+r10            0x0                 0
+r11            0x0                 0
+r12            0x0                 0
+r13            0x353ec78           55831672
+r14            0x54                84
+r15            0x353e1d8           55828952
+=== BACKTRACE ===
+#0  0x00007ff8eb273a19 in ?? () from C:\Windows\system32\XAudio2_7.dll
+No symbol table info available.
+#1  0x00007ff8eb27681f in ?? () from C:\Windows\system32\XAudio2_7.dll
+No symbol table info available.
+#2  0x00007ff8d69be82a in Runtime-x64!?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#3  0x00007ff8d69bfb1c in Runtime-x64!?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#4  0x00007ff7ee412849 in MenuDialogLoopT_TickAudioScene(void*, void*) ()
+No symbol table info available.
+#5  0x00007ff7ee45e5e7 in (anonymous namespace)::Stub_Update (self=0x35880c8, time=0x353f640) at standalone/menudialogloopt_stubs.cpp:443
+        tick = 1
+        origTicks = 16666
+        clamped = false
+        result = 64
+#6  0x00007ff8d69bd0e7 in Runtime-x64!?Update@MainLoop@Engine@@QEAA_NAEBVTime@System@@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#7  0x00007ff8d69bd293 in Runtime-x64!?Frame@MainLoop@Engine@@QEAA_N_N@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#8  0x00007ff8d69bd486 in Runtime-x64!?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z () from C:\GOG Games\Banished\Runtime-x64.dll
+No symbol table info available.
+#9  0x00007ff7ee4070e7 in Game::RunGameMain (hInstance=0x7ff7ee3a0000, cmdLine=0x785a37 "") at code/Game/Game/game_main.cpp:664
+        shiningRockLoop = 0x3588cd0
+        buildLoaderLoop = {__memAllocSingleton = @0x5ff678}
+        innerLoader = 0x35f1920
+        topLoop = 0x35f1970
+        menuStr = "\000\000\000\000\000\000\000"
+        buildSplashDLT = {__memAllocSingleton = @0x5ff678}
+        loadingLoop = 0x35569f0
+        outerLoader = 0x35f1970
+        topTag = 0x7ff7ee52c465 <fn_SM_CancelWork+2397> "OuterLL"
+        menuLoop = 0x35880c8
+        gameObj = 0x3545b50
+        inputCfg = 0x353fc30
+        keyMap = 0x3541a88
+        settings = 0x3549580
+        memAllocSingletonPtr = 0x7ff8d6adc718
+        memAllocSingleton = 0x5ff680
+        ml = 0x353f5f8
+        engine = {bytes = "\000\000\034\000\000\000\000\000\001\000\000\000\002\000\000\000\000\000\000 ", '\000' <repeats 15 times>, " ", '\000' <repeats 36 times>, "–,ø\003", '\000' <repeats 28 times>, "p»\025\004", '\000' <repeats 28 times>, "0À\025\004", '\000' <repeats 964 times>...}
+        ok = 1
+#10 0x00007ff7ee45d801 in WinMain (hInstance=0x7ff7ee3a0000, lpCmdLine=0x785a37 "") at standalone/main.cpp:1230
+        stats = {registered = 235, stubs = 346}
+        rc = 0
+#11 0x00007ff7ee520f71 in main (argc=<optimized out>, argv=<optimized out>, envp=<optimized out>) at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexewin.c:70
+        hInstance = <optimized out>
+        lpCmdLine = <optimized out>
+        nShowCmd = <optimized out>
+#12 0x00007ff7ee3a12ee in __tmainCRTStartup () at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexe.c:272
+        lock_free = <optimized out>
+        fiberid = <optimized out>
+        nested = <optimized out>
+#13 0x00007ff7ee3a13e6 in WinMainCRTStartup () at C:/M/B/src/mingw-w64/mingw-w64-crt/crt/crtexe.c:162
+        ret = 255
+=== DISAS AROUND PC ===
+   0x7ff8eb273a01:	mov    0x50(%rsp),%esi
+   0x7ff8eb273a05:	add    $0x30,%rsp
+   0x7ff8eb273a09:	pop    %rdi
+   0x7ff8eb273a0a:	ret
+   0x7ff8eb273a0b:	int3
+   0x7ff8eb273a0c:	int3
+   0x7ff8eb273a0d:	int3
+   0x7ff8eb273a0e:	int3
+=== CORRUPT TAG BLOCK (r14) ===
+0x54:	C:/code/GIT/untitled_rev_eng_project/notes/catch_wp.gdb:28: Error in sourced command file:
+Cannot access memory at address 0x54

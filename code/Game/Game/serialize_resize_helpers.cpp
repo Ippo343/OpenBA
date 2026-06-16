@@ -113,7 +113,14 @@ void GenericArrayResize(void* arrayHeader, int newCount,
             for (size_t i = 0; i < stride; ++i) {
                 dstElem[i] = srcElem[i];
             }
-        } else if (oldData != *dataSlot) {
+        } else {
+            // Zero EVERY new slot unconditionally (both realloc and in-place
+            // grow) — matches the original exe resize functions. The engine
+            // allocator returns DIRTY memory; on an in-place grow the new
+            // slots retain stale bytes (potentially a freed-block pointer),
+            // which a later serialize can treat as live and free → free-list
+            // corruption. See the matching note in serialize_arrays.cpp
+            // GenericArrayResize.
             for (size_t i = 0; i < stride; ++i) {
                 dstElem[i] = 0;
             }

@@ -237,10 +237,14 @@ extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream)
 //
 // `start` = oldCount when buf didn't reallocate, else 0.
 //
-// Note: the stride-0x20 and stride-0x14 variants only memcpy the first
-// `min(slot, oldCount)` elements; new-slot zero-init is implicit because
-// MemAlloc returns zeroed memory in MSVC-allocator land. The stride-0x08
-// variant is more explicit (writes 0 when slot >= oldCount).
+// Note: ALL variants zero every new slot (slot >= oldCount) on BOTH paths,
+// matching the original exe resize functions. An earlier version assumed
+// "MemAlloc returns zeroed memory" and only zeroed on the realloc path —
+// that was WRONG (the engine boundary-tag allocator at Runtime 0x1800c6e60
+// returns DIRTY memory), and on an in-place grow it left new slots holding
+// stale bytes (a freed-block pointer) → free-list corruption when a later
+// serialize treated the stale pointer as live. See the unconditional-zero
+// branch below.
 namespace {
 
 void GenericArrayResize(void* arrayHeader, int newCount,
@@ -292,7 +296,20 @@ void GenericArrayResize(void* arrayHeader, int newCount,
             for (size_t i = 0; i < stride; ++i) {
                 dstElem[i] = srcElem[i];
             }
-        } else if (oldData != *dataSlot) {
+        } else {
+            // Zero EVERY new slot (slot >= oldCount) on BOTH the realloc and
+            // the in-place-grow path — matching the original exe resize
+            // functions (e.g. FUN_140001bb0), which zero unconditionally.
+            // The engine's boundary-tag allocator (Runtime 0x1800c6e60) hands
+            // out DIRTY memory, and on an in-place grow the new slots are NOT
+            // freshly allocated — they hold STALE bytes from whatever last
+            // lived in that capacity. For the Struct60B element arrays
+            // (stride 0x20 / 0x14) each slot embeds sub-array headers
+            // {data*, count, cap}; a stale data pointer there is treated as a
+            // live buffer by the subsequent Struct60B_Serialize resize and
+            // gets freed/realloced → free-list corruption (same UAF class as
+            // the stride-8 fix, one level deeper). Zeroing is faithful and
+            // harmless for plain data arrays (they get fully overwritten).
             for (size_t i = 0; i < stride; ++i) {
                 dstElem[i] = 0;
             }

@@ -37,6 +37,9 @@ extern "C" {
     __declspec(dllexport) unsigned long AmdPowerXpressRequestHighPerformance = 1;
 }
 
+// Session-3 diagnostic installer (standalone/filename_dtor_check.cpp).
+extern "C" void InstallFilenameDtorCheck();
+
 // ============================================================
 // Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
 // and the External::Load crash diagnostic).
@@ -1147,6 +1150,12 @@ static bool Init() {
     //     with no CS, so a background-thread Free races the now-locked Allocate.
     //     Closes the residual intermittent menu heap crash. See allocator_lock.cpp.
     InstallFreeLock();
+
+    // 4c. Diagnostic (session 3): interpose fn_Filename_Dtor to catch the
+    //     System::String use-after-free that plants the bucket-12 free-list
+    //     corruption. Env-gated BANISHED_FNDTOR_CHECK (default OFF), logs to
+    //     stderr. See standalone/filename_dtor_check.cpp.
+    InstallFilenameDtorCheck();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs
