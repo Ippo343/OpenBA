@@ -51,6 +51,7 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded();
 // Must run AFTER Engine::Startup (FileSystem allocated + SetupDirectories done)
 // and BEFORE the first resource load. See that file's header for rationale.
 namespace Game { extern "C" void FileSystem_MakePathsRelative(); }
+namespace Game { extern "C" void FileSystem_PinDataDir(); }
 
 // Defined in standalone/main.cpp. Walks _firstTypeInfo for each registered
 // type, invokes its factory, validates vtable + ctor-set field defaults.
@@ -388,6 +389,10 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 printf("[GameMain] BANISHED_NO_FS_RELATIVE set — keeping absolute "
                        "FileSystem paths\n");
             }
+            // Session 4 menu-heap-crash fix-test (env BANISHED_PIN_DATADIR):
+            // pin the dir Strings' refcounts so the data-dir String can't erode
+            // to 0 and get freed-then-AddRef'd. No-op unless the env is set.
+            Game::FileSystem_PinDataDir();
         }
 #endif
 

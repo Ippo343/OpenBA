@@ -39,6 +39,8 @@ extern "C" {
 
 // Session-3 diagnostic installer (standalone/filename_dtor_check.cpp).
 extern "C" void InstallFilenameDtorCheck();
+// Session-4 diagnostic installer (standalone/filename_runtime_hook.cpp).
+extern "C" void InstallFilenameRuntimeHook();
 
 // ============================================================
 // Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
@@ -1156,6 +1158,15 @@ static bool Init() {
     //     corruption. Env-gated BANISHED_FNDTOR_CHECK (default OFF), logs to
     //     stderr. See standalone/filename_dtor_check.cpp.
     InstallFilenameDtorCheck();
+
+    // 4d. Diagnostic (session 4): detour the ACTUAL Runtime ~Filename /
+    //     operator= functions (not our global pointers, which fired 0x in
+    //     session 3 because the UAF is Runtime-internal) so every caller routes
+    //     through a refcount==0 check before the dec/inc. Catches the
+    //     Runtime-internal use-after-free that plants the bucket-12 free-list
+    //     corruption, with the geometry call stack. Env-gated BANISHED_FNHOOK
+    //     (default OFF). See standalone/filename_runtime_hook.cpp.
+    InstallFilenameRuntimeHook();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs

@@ -168,6 +168,46 @@ extern "C" void FileSystem_MakePathsRelative() {
     fflush(stdout);
 }
 
+// Session 4 fix-test for the intermittent menu heap crash. The crash is a
+// use-after-free of the FileSystem **data-directory** String (fs+0x08): its
+// refcount baseline is 2, but it erodes 2->1->0 over geometry's ~230
+// ExternalFactory::ExpandRelativePath / FindOrLoad calls (a Runtime-internal
+// over-release), after which it is freed yet GetDataDirectory keeps AddRef'ing
+// the dead String -> the +0x100000000 free-list bit-32 flip -> crash.
+// (Pinned via standalone/filename_runtime_hook.cpp: BANISHED_FNHOOK catches the
+// AddRef-on-freed at GetDataDirectory 0x180007bd0; BANISHED_FNHOOK_DATADIR
+// catches the freeing MemFree inside ExpandRelativePath 0x1800bd360.)
+//
+// FIX/CONFIRM: bump the three directory Strings' refcounts by a large constant
+// so the erosion can never reach 0 (these dir Strings live for the whole
+// process anyway, so an intentional permanent reference is harmless). If this
+// makes the menu crash vanish, the data-dir-String erosion is confirmed as THE
+// root cause. Env-gated BANISHED_PIN_DATADIR (default OFF for clean A/B).
+extern "C" void FileSystem_PinDataDir() {
+    const char* e = getenv("BANISHED_PIN_DATADIR");
+    if (!(e && *e && e[0] != '0')) return;
+
+    void** fsSlot = reinterpret_cast<void**>(
+        ResolveAddr(Module::Runtime, 0x1801fc6a8));
+    uint8_t* fs = fsSlot ? reinterpret_cast<uint8_t*>(*fsSlot) : nullptr;
+    if (!fs) {
+        printf("[PinDataDir] SKIP: FileSystem::_singleton is NULL\n");
+        return;
+    }
+    const uintptr_t kBump = 0x00100000;  // huge, but far from the int32 ceiling
+    static const uintptr_t kOffs[] = { 0x00, 0x08, 0x10 };
+    for (uintptr_t off : kOffs) {
+        void* str = *reinterpret_cast<void**>(fs + off);
+        if (!str) continue;
+        int* rc = reinterpret_cast<int*>(str) - 1;
+        int before = *rc;
+        *rc = before + (int)kBump;
+        printf("[PinDataDir] fs+0x%02zx String=%p refcount %d -> %d (\"%s\")\n",
+               (size_t)off, str, before, *rc, FilenameCStr(fs + off));
+    }
+    fflush(stdout);
+}
+
 } // namespace Game
 
 #endif // STANDALONE_EXE

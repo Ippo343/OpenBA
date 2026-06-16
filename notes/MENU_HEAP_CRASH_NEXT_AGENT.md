@@ -3,6 +3,99 @@
 > Read this WITH the memory file `project_menu_heap_crash.md` (full history + reversals). This doc is the
 > actionable plan.
 
+## ★★★★ 2026-06-15 SESSION 4 — UAF SOURCE CAUGHT: GetDataDirectory AddRefs a FREED fs+0x08 data-dir String ★★★★
+Resume here. Session 3 proved the UAF is Runtime-internal but couldn't see it (its `filename_dtor_check.cpp`
+wrapped the GLOBAL fn-pointers = only OUR calls). Session 4 **caught the exact instruction + victim**.
+
+**The instrument (NEW, kept): `standalone/filename_runtime_hook.cpp`, env `BANISHED_FNHOOK=1` (default-inert).**
+Detours the ACTUAL Runtime Filename refcount functions (byte-patch + trampoline, same mechanic as
+allocator_lock.cpp) so EVERY caller — incl. Runtime-internal — routes through a refcount==0 (freed) check
+BEFORE the dec/inc, logging a deep symbolized stack. Detoured:
+  - `~Filename`            0x180006980  (dec)
+  - `operator=(String&)`   0x180006770  (dec dst-old + inc src)
+  - `operator=(Filename&)` 0x180007d40  (dec dst-old + inc src)
+  - `Filename(const String&)` ctor 0x1800067d0  (inc src AddRef)   ← THE CULPRIT
+Install in main.cpp after InstallFreeLock (InstallFilenameRuntimeHook). Test harness: `notes/fnhook_capture.sh`
+(BANISHED_NO_FS_RELATIVE=1 BANISHED_FNHOOK=1; preserves standalone_error.log per crash to notes/wp_runs/).
+
+**KEY RESULT — dtor + op=(String) fired 0× across 6 crashes (incl. a confirmed bucket-12 link crash); adding
+the from-String ctor + op=(Filename) → FIRED IMMEDIATELY + DETERMINISTICALLY.** The corrupting op is:
+  **`Filename(const String&)` ctor doing `inc [String−4]` on a String with refcount==0 (a FREED bucket-12 block).**
+
+**THE VICTIM (pinned via Ghidra):** the immediate caller is `IO::FileSystem::GetDataDirectory`
+(Runtime 0x180007bd0; the `inc` site is +0x2a = 0x180007bfa). Its entire body is
+`Filename::Filename(retval, this+8)` — i.e. it AddRef-copies the FileSystem's **data-directory Filename at
+fs+0x08** (fs = `IO::FileSystem::_singleton` @ Runtime **0x1801fc6a8**). **That fs+0x08 String's refcount is 0
+= it has been FREED** while the FileSystem still holds it. Every later `GetDataDirectory` (called by FindOrLoad
+path resolution) AddRefs the dead String → writes 1 into the freed block's free-list-link high dword
+(block+0xC = String−4) → the deterministic **+0x100000000 bit-32 flip** → wild Allocate later = the crash.
+
+**Call chain (run 1/4/5, identical every time):** menu load `splash_loop_stubs → async_loader →
+menudialogloopt_stubs` → Runtime `External::Load` (0x1800db140, frame +0x4d) → FindOrLoad → 0xbd831
+(ExpandRelativePath area) → **GetDataDirectory 0x7bfa → Filename(String&) inc on freed fs+0x08 String.**
+The freed block currently holds dialog-resource path bytes (`Dialog\StringTable.rsc`, `Dialog\SharedElements.rsc`,
+`C:\GOG Games\Banished\Wi[nData]`) — incidental reuse content; the victim IS the data-dir String.
+
+**Both crash faces confirmed at full speed + UNIFIED:** the bucket-12 link-corruption crash (Runtime+0xC74C3
+WRITE) AND the `MaterialInstance::BuildParameters` null-texture READ (Runtime+0x103933) both occur; the UAF
+report correlates with the link face (run 4 even SURVIVED with the UAF present = Heisenbug: the bit-32 flip
+sometimes lands on a fatal free-list path, sometimes benign/missing-texture). NO_GEOM→0 still holds.
+
+**NOT `FileSystem_MakePathsRelative`** (filesystem_setup.cpp): the harness runs `BANISHED_NO_FS_RELATIVE=1` and
+run-1's path was still absolute `C:\GOG Games\…` → relativization did NOT fire. So a **Runtime-internal
+over-release** drives fs+0x08's String to 0 during geometry's ~230 FindOrLoad path resolutions (each calls
+GetDataDirectory → AddRef+release; one path nets an extra release, OR fs+0x08's baseline refcount is set too
+low for standalone).
+
+### The over-release site + the function (session 4, found)
+- **`BANISHED_FNHOOK_DATADIR=1`** (added) watches the fs+0x08 String: logs RELEASE(dec) ops at refcount≤2 +
+  any op at ≤0, AND **detours the real Runtime `MemFreeStatic` (0x1800c7ad0)** to log when the data-dir
+  String's BLOCK is actually freed (`[FNHook] *** DATADIR-FREE ***`), with the caller stack.
+- **The freeing MemFree is inside `Object::ExternalFactory::ExpandRelativePath` (Runtime 0x1800bd360)** —
+  caught at +0x446 (0xbd7a6), called from FindOrLoad (0xbf35e). ExpandRelativePath calls `GetDataDirectory`
+  (AddRef) and chains `System::operator+` to build the full resource path, with a long inlined refcount
+  cleanup. The freeing dec there is just where the eroded refcount finally crosses 0 — the **EXTRA releases
+  accumulate over the ~230 prior ExpandRelativePath/FindOrLoad calls during geometry**; this is RETAIL Runtime
+  code (so retail doesn't erode — a STANDALONE-specific condition makes the data-dir String's baseline erode).
+  The freed-then-AddRef'd path is literally `C:\GOG Games\Banished\WinData\…` = the data-dir String itself
+  (not incidental reuse).
+
+### FIX-TEST RESULT (session 4): pinning the data-dir String is NECESSARY-BUT-INSUFFICIENT
+`code/Game/Game/filesystem_setup.cpp` `FileSystem_PinDataDir()` (env **`BANISHED_PIN_DATADIR=1`**, default OFF;
+wired in game_main.cpp RunGameMain) bumps fs+0x00/+0x08/+0x10 String refcounts by 0x100000 after Engine::Startup.
+A/B (BANISHED_NO_FS_RELATIVE=1, process-death detector):
+- **PIN ON: 4 crashes / 24 (~17%) — UNCHANGED from the ~20% baseline.** So the pin is NOT a sufficient fix.
+- **BUT with `PIN + FNHOOK`, alive runs show UAF=0** (vs UAF=2 on no-pin alive runs) — the pin DOES protect the
+  data-dir String; its specific AddRef-on-freed no longer fires. The pin applied correctly (PinDataDir-msgs=3).
+- **⇒ CONCLUSION: the over-release in `ExpandRelativePath` is GENERAL** — it erodes path-String refcounts
+  broadly, not just the data-dir String. The data-dir String was merely the most-reused / most-visible victim
+  (every FindOrLoad touches it via GetDataDirectory). Pinning ONE String just moves the fatal flip to another
+  eroded path-String (and/or the `MaterialInstance::BuildParameters` null-texture face Runtime+0x103933 = a
+  resolved-pointer that the same factory-state bug nulls). NO single-String pin will fix it.
+
+### DECISIVE NEXT STEP (session 5) — fix the GENERAL over-release in the path/factory load
+The bug is a Runtime-internal over-release of resource-path Strings during `ExternalFactory::ExpandRelativePath`
+/ `FindOrLoad` (0x1800bd360 / FindOrLoad), exercised ~230× by geometry. It is RETAIL code, so a STANDALONE
+condition makes it erode. Hunt that condition:
+- **Generalize the FNHOOK watch to ALL path Strings, not just fs+0x08.** In filename_runtime_hook.cpp, drop the
+  `str==CurrentDataDirString()` filter and instead log any RELEASE that takes a String to 0 (free) whose stack
+  is inside ExpandRelativePath/operator+ — find the dec with NO matching AddRef. The full ExpandRelativePath
+  decompile (this session's transcript) has many inlined `*(int*)(X-4) -= 1; if 0 MemFree` blocks + several
+  `System::operator+` chains and a GetDataDirectory called TWICE (top + packfile-fallback). Suspect: a
+  `System::operator+` overload whose ref contract we feed wrong, or a temp double-freed on one branch.
+- **DLL-mode A/B (the cleanest discriminator):** run version.dll mode (original exe geometry code + same
+  Runtime) with FNHOOK installed; if the data-dir UAF does NOT fire there, the trigger is a standalone-only
+  difference our geometry FindOrLoads introduce (encoding/ref-mode state, or the 235/358 factory-registration
+  gap producing a half-constructed object). If it DOES fire in DLL mode too, it's a genuine our-reimpl bug in
+  the geometry serialize feeding ExpandRelativePath a bad path.
+- **Or the targeted instrument:** detour `System::operator+` (the String concat the path build uses) + the
+  GetDataDirectory return-temp lifetime, and diff standalone vs retail refcount deltas for ONE FindOrLoad.
+- KEEP `FileSystem_PinDataDir` (env-gated, off) as a diagnostic lever — it cleanly proves "data-dir face vs
+  other face" in future A/Bs. Build: `mingw32-make standalone-debug` (cd repo root first). Deploy to
+  `C:/GOG Games/Banished/reimpl-x64.exe`. Reap: `wmic process where "name='reimpl-x64.exe'" delete`.
+
+---
+
 ## ★★★ 2026-06-15 SESSION 3 — the UAF is RUNTIME-INTERNAL, not in our explicit Filename calls (major narrowing) ★★★
 Resume here. Big results this session (several dead theories KILLED, mechanism decoded exactly):
 
