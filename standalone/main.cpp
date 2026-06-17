@@ -1170,17 +1170,18 @@ static bool Init() {
     //     (default OFF). See standalone/filename_runtime_hook.cpp.
     InstallFilenameRuntimeHook();
 
-    // 4e. THE MENU CRASH FIX (session 5): serialize Runtime
-    //     ExternalFactory::FindOrLoad with a global recursive CS. The entire
-    //     intermittent menu heap crash is a concurrency race between the main
-    //     thread and the Runtime background loader thread, both calling the
-    //     non-thread-safe FindOrLoad/External::Load (racy factory-cache Add +
-    //     racy String refcount inc/dec) — corrupting both the free-list (the
-    //     bucket-12 link crash) and the factory cache (FindOrLoad returns NULL
-    //     for a real resource -> texture/dialog null deref). Serializing it
-    //     gives 0 crashes / 44 runs vs ~33% baseline. Default ON; opt out with
-    //     BANISHED_NO_FOL_LOCK=1. The same installer also provides the default-
-    //     OFF BANISHED_FOL_NULLWATCH diagnostic. See filename_runtime_hook.cpp.
+    // 4e. THE MENU CRASH FIX (session 5): serialize the Runtime resource loader
+    //     with one global recursive CS taken at BOTH ExternalFactory::FindOrLoad
+    //     AND External::Load. The intermittent menu heap crash is a concurrency
+    //     race between the main thread and the Runtime background loader thread,
+    //     both calling the non-thread-safe FindOrLoad/External::Load (racy
+    //     factory-cache Add + racy String refcount inc/dec) — corrupting both the
+    //     free-list (the bucket-12 link crash, Runtime+0xC74C3) and the factory
+    //     cache (FindOrLoad returns NULL for a real resource -> texture/dialog
+    //     null deref). Serializing gives 0 crashes / 24 (pure default), all
+    //     drawing the menu, vs ~33% baseline. Locking External::Load too covers
+    //     its other callers + the in-game world-build load path. Default ON; opt
+    //     out with BANISHED_NO_FOL_LOCK=1. See filename_runtime_hook.cpp.
     InstallFindOrLoadWatch();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
