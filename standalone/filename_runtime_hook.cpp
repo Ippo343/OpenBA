@@ -501,8 +501,31 @@ FindOrLoadFn     g_origFindOrLoad   = nullptr;
 ExternalLoadFn   g_origExternalLoad = nullptr;
 CRITICAL_SECTION g_resCS;  // shared recursive lock for FindOrLoad + External::Load
 
+// BANISHED_FOL_TRACE=1: log every FindOrLoad/External::Load filename (capped) to
+// find non-terminating / looping loads. Default OFF (no behavior change). A
+// System::Filename's first member is a COW String = char* buffer, so the path
+// text is *(char**)fname.
+static int   g_folTrace = -1;
+static LONG  g_folTraceN = 0;
+static const char* FolFnameText(void* fname) {
+    if (!fname || IsBadReadPtr(fname, 8)) return "(badfname)";
+    char* p = *(char**)fname;
+    if (!p || IsBadReadPtr(p, 1)) return "(null)";
+    return p;
+}
+static inline void FolTrace(const char* tag, void* fname) {
+    if (g_folTrace < 0) { const char* e = getenv("BANISHED_FOL_TRACE"); g_folTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (!g_folTrace) return;
+    LONG n = InterlockedIncrement(&g_folTraceN);
+    if (n > 20000) return;
+    fprintf(stderr, "[FOLTrace#%ld] %s tid=%lu \"%s\"\n", (long)n, tag,
+            (unsigned long)GetCurrentThreadId(), FolFnameText(fname));
+    fflush(stderr);
+}
+
 void* FindOrLoadWrapper(void* self, void* fname) {
     EnterCriticalSection(&g_resCS);
+    FolTrace("FindOrLoad", fname);
     void* r = g_origFindOrLoad(self, fname);
     LeaveCriticalSection(&g_resCS);
     return r;
@@ -510,6 +533,7 @@ void* FindOrLoadWrapper(void* self, void* fname) {
 
 void* ExternalLoadWrapper(void* fname, void* ext) {
     EnterCriticalSection(&g_resCS);
+    FolTrace("ExtLoad", fname);
     void* r = g_origExternalLoad(fname, ext);
     LeaveCriticalSection(&g_resCS);
     return r;
