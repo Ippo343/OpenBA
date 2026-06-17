@@ -160,6 +160,8 @@ extern "C" {
     void RegisterAnimAudioEventVtable();
     void RegisterProfessionVtable();
     void RegisterNameDatabaseVtable();
+    void RegisterDiseaseVtable();
+    void RegisterProfessionListVtable();
 }
 
 // ============================================================
@@ -970,6 +972,16 @@ static void RegisterVtablesAndTypeIds() {
     // Menu-load — NameDatabase (.ndb, Object::External) loaded by MenuScene_Setup
     // during DialogLoaderLoopT::Load; was a NullFactory crash. See namedatabase.cpp.
     RegisterNameDatabaseVtable();
+
+    // In-game worldgen — Disease (Object::External) loaded by the climate/environment
+    // resource list during BuildTerrain; was a NullFactory stub → IsDerivedFrom(NULL)
+    // crash @Runtime+0xC039A (masked as a "BuildTerrain hang"). See disease.cpp.
+    RegisterDiseaseVtable();
+
+    // In-game worldgen — ProfessionList (Object::External, Profession.rsc) loaded
+    // during the world build; same IsDerivedFrom(NULL) NullFactory crash. See
+    // professionlist.cpp.
+    RegisterProfessionListVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

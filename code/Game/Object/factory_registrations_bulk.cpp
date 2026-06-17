@@ -98,13 +98,17 @@ REGISTER_NULL_FACTORY(UpgradeUIConfig, "UI::DialogControllerConfig");  // 14014c
 REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 RegisterType_WorkPlaceUI
 // AnimAudioEvent — real factory now lives in code/Game/Component/animaudioevent.cpp
 //   (was: REGISTER_NULL_FACTORY(AnimAudioEvent, "Graphics::AnimationEvent"); // 14014ca80)
-REGISTER_NULL_FACTORY(Disease, "Object::External");  // 14014cb00 ClimateGenerator_StaticInit
+// Disease — real factory now lives in code/Game/Game/disease.cpp (External 0x48,
+//   vtable 0x14015e190, GetVersion=2). Was a NullFactory stub → IsDerivedFrom(NULL)
+//   crash during the in-game worldgen resource load. // 14014cb00 ClimateGenerator_StaticInit
 REGISTER_NULL_FACTORY(MusicList, "Object::External");  // 14014cc00 MenuScene_StaticInit
 // NameDatabase — real factory now lives in code/Game/Game/namedatabase.cpp
 //   (was: REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb"); // 14014cc40 MenuScene_Setup)
 // Profession — real factory now lives in code/Game/Game/profession.cpp
 //   (was: REGISTER_NULL_FACTORY(Profession, "Object::External"); // 14014cc90)
-REGISTER_NULL_FACTORY(ProfessionList, "Object::External");  // 14014ccd0 ProfessionList_RegisterType
+// ProfessionList — real factory now lives in code/Game/Game/professionlist.cpp
+//   (External 0x50, vtable 0x14015ef50, GetVersion=2). Was a NullFactory stub →
+//   IsDerivedFrom(NULL) crash during the in-game worldgen resource load. // 14014ccd0 ProfessionList_RegisterType
 // Scenario: real standalone factory in code/Game/Game/scenario.cpp (hand-removed;
 // menu-loader factory cascade). Add "Scenario" to REIMPLEMENTED in the codegen.
 REGISTER_NULL_FACTORY(BuildUI, "UI::DialogController");  // 14014cd90 RegisterType_BuildUI

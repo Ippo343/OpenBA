@@ -1583,10 +1583,14 @@ inline void ResolveExternalByName_Impl(void* nameString) {
     void* found = fn_ExternalFactory_Find(factory, filename);
     fn_Filename_Dtor(filename);
 
-    // Validate the found object is the expected type (Description base)
+    // Validate the found object is the expected type (Description base).
+    // In standalone the exe-side type-id storage (g_TypeId_BuildComponent ->
+    // DAT_1401c7318) is unregistered, so the global is NULL — dereferencing it
+    // would fault. Per the factory-cascade strategy ([[feedback_factory_cascade_strategy]])
+    // trust the FindOrLoad/Find result when the type-id check can't run.
     void* result = nullptr;
     if (found) {
-        if (fn_IsDerivedFrom(found, *g_TypeId_BuildComponent)) {
+        if (!g_TypeId_BuildComponent || fn_IsDerivedFrom(found, *g_TypeId_BuildComponent)) {
             result = found;
         }
     }

@@ -50,6 +50,13 @@ void ProfessionList_InitFuncs() {
     s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140018020));
 
+    // Standalone fallbacks: the exe IAT dispatch slots resolve to NULL when the
+    // original exe isn't mapped. Fall back to the Runtime-resolved engine_funcs
+    // globals so the SAME Serialize works in both modes.
+    if (!s_fn_Serializer_Ctor) s_fn_Serializer_Ctor = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
+    if (!s_fn_Serializer_Dtor) s_fn_Serializer_Dtor = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
+    if (!s_fn_ExternalPtrProf_Serialize) s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
+
 #ifdef _DEBUG
     printf("[ProfessionList] InitFuncs: SerCtor=%p SerDtor=%p ExtPtrProfSer=%p\n",
            (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor,
@@ -142,6 +149,7 @@ void* ProfessionList_Slot8(ProfessionList* self) {
 // ExternalPtr<Profession> refs at +0x30, +0x38, +0x40, +0x48
 // using FUN_140018020 (typed ExternalPtr serialize).
 void ProfessionList_Serialize(ProfessionList* self, void* stream) {
+    ProfessionList_InitFuncs();   // idempotent; ensures serializer fns resolved (standalone)
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) {
         return;
     }
@@ -160,3 +168,57 @@ void ProfessionList_Serialize(ProfessionList* self, void* stream) {
 
     s_fn_Serializer_Dtor(serializer);
 }
+
+// ============================================================
+// Standalone factory scaffolding
+// ============================================================
+// ProfessionList (Object::External, 0x50) is loaded from Profession.rsc during the
+// in-game world build (GameUpdateLoop::Load step 1-4 / climate setup). In standalone
+// it was a NullFactory stub → IsDerivedFrom(NULL) crash @Runtime+0xC039A. Real factory
+// + the reimpl'd Serialize above (loads the 4 Profession refs) make it loadable.
+// vtable @ 0x14015ef50 (9 slots); GetVersion=2, Serialize +0x28, factory 0x14001e5c0.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t ProfessionList_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ProfessionList");
+    return cached;
+}
+static int   PL_Return2(void* /*self*/) { return 2; }   // GetVersion = 2
+static int   PL_Return0(void* /*self*/) { return 0; }
+static void* PL_ReturnNull(void*, ...)  { return nullptr; }
+
+static void* g_PL_Vtable[9] = {
+    reinterpret_cast<void*>(&ProfessionList_Dtor),      // +0x00 Dtor
+    reinterpret_cast<void*>(&PL_ReturnNull),            // +0x08 GetTypeInfo
+    reinterpret_cast<void*>(&ProfessionList_GetTypeId), // +0x10 GetTypeId (used by IsDerivedFrom)
+    reinterpret_cast<void*>(&PL_Return2),               // +0x18 GetVersion=2
+    reinterpret_cast<void*>(&PL_Return0),               // +0x20 Compile thunk
+    reinterpret_cast<void*>(&ProfessionList_Serialize), // +0x28 Serialize
+    reinterpret_cast<void*>(&ProfessionList_Cleanup),   // +0x30 Cleanup
+    reinterpret_cast<void*>(&PL_Return0),               // +0x38
+    reinterpret_cast<void*>(&ProfessionList_Slot8),     // +0x40 CreateInPlace
+};
+
+extern "C" void RegisterProfessionListVtable() {
+    RegisterExeAddr(ProfessionListAddr::Vtable, reinterpret_cast<uintptr_t>(g_PL_Vtable));
+}
+
+extern "C" void* ProfessionList_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
+    if (!p) return nullptr;
+    ProfessionList_Init(reinterpret_cast<ProfessionList*>(p));
+    return p;
+}
+extern "C" void* ProfessionList_CreateInPlace(void* mem) {
+    if (!mem) return nullptr;
+    ProfessionList_Init(reinterpret_cast<ProfessionList*>(mem));
+    return mem;
+}
+
+REGISTER_TYPE(ProfessionList, "Object::External",
+              &ProfessionList_Factory, &ProfessionList_CreateInPlace);
+#endif
