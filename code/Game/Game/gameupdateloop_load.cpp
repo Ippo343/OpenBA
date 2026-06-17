@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cmath>
+#include <atomic>
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -526,6 +527,20 @@ static inline void* AllocSub(uint64_t size, int align) {
 // GameUpdateLoop::Load (0x140096b00) — orchestration
 // ============================================================
 extern "C" void GameUpdateLoop_Load(void* loopVoid) {
+    // Idempotency guard: with the engine resource preload skipped
+    // (BANISHED_SKIP_GAME_PRELOAD), the Runtime Engine::Loader thread finishes
+    // LoadResources fast and ALSO dispatches the loop's Load (+0x30), so this runs
+    // CONCURRENTLY with the main-thread AsyncLoader build on the SAME loop —
+    // racily double-spawning into the entity buckets (null entries → crash in
+    // EntityList_Update). Atomically claim each loop so it is built exactly once;
+    // a duplicate/concurrent dispatch for the same loop returns immediately.
+    static std::atomic<void*> s_loadingLoop{nullptr};
+    if (s_loadingLoop.exchange(loopVoid) == loopVoid) {
+        fprintf(stderr, "[GUL::Load] duplicate Load for loop=%p — skipping (already built/building)\n", loopVoid);
+        fflush(stderr);
+        return;
+    }
+
     LoadEnsureInit();
     uint8_t* p = (uint8_t*)loopVoid;
 

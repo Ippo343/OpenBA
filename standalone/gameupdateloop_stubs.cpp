@@ -42,6 +42,7 @@
 #include "engine_funcs.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
 
 // Clean reimpls in code/Game/Game/gameupdateloop.cpp. Declared extern "C" there;
 // void* self here is ABI-identical to the real GameUpdateLoop* and avoids
@@ -98,6 +99,26 @@ void GUL_OnVideoRestart(void* self) {
 // exactly this — returning NULL/empty makes the loader fail to find game data.
 const char* GUL_GetResourceFilename(void* self) {
     (void)self;
+    // The engine's UpdateLoop::LoadResources (Runtime 0x1800dd7d0) calls this slot
+    // and, if it returns non-null, FindOrLoads "<ret>Resources.rsc" + its ENTIRE
+    // recursive dependency tree (the master ExternalList of all game
+    // ComponentDescriptions). In standalone that recursive load is NON-TERMINATING
+    // (no FindOrLoad dedup, tied to the disabled Modification::SetupFileSystem) and
+    // holds the FOL serialize lock forever on the Engine::Loader thread, permanently
+    // starving the main-thread world build — the in-game load never completes.
+    //
+    // DEFAULT: return null so LoadResources skips that block and the loader
+    // terminates immediately. Our GameUpdateLoop_Load loads what the world build
+    // needs on-demand, so the eager preload is redundant for first-light — with it
+    // skipped the world builds (~1480 entities) and GameUpdateLoop::Update ticks
+    // per-frame (verified 2026-06-17). Opt back in (e.g. once FindOrLoad dedup is
+    // fixed and the full preload terminates) with BANISHED_GAME_PRELOAD=1.
+    static int s_preload = -1;
+    if (s_preload < 0) {
+        const char* e = getenv("BANISHED_GAME_PRELOAD");
+        s_preload = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    if (!s_preload) return nullptr;
     return "Game/Game";
 }
 
