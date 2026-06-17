@@ -375,19 +375,19 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
     if (ok != 0) {
 #ifdef STANDALONE_EXE
-        // Relativize the engine FileSystem resource directories now, before any
-        // resource is loaded. Turns long absolute install-dir + WinData resource
-        // paths into short relative "WinData/..." paths (working dir = install
-        // dir). Candidate fix for the intermittent menu heap crash
-        // (a System::String UAF whose freed block held an absolute resource
-        // path). Opt-OUT via BANISHED_NO_FS_RELATIVE=1 for A/B testing.
+        // Relativize the engine FileSystem resource directories. This was a
+        // CANDIDATE crash mitigation (session 2e) that has been RULED OUT and is
+        // ACTIVELY HARMFUL: with it on, the menu either crashes or stalls (never
+        // draws) — A/B (session 5): FS-rel ON => crash/stall in every run; FS-rel
+        // OFF => menu draws. The real menu-crash fix is the FindOrLoad serialize
+        // lock (InstallFindOrLoadWatch). So this is now DEFAULT OFF; opt IN with
+        // BANISHED_FS_RELATIVE=1 only for path-shortening experiments.
         {
-            const char* e = getenv("BANISHED_NO_FS_RELATIVE");
-            if (!(e && *e && e[0] != '0')) {
+            const char* e = getenv("BANISHED_FS_RELATIVE");
+            if (e && *e && e[0] != '0') {
+                printf("[GameMain] BANISHED_FS_RELATIVE set — relativizing FileSystem "
+                       "paths (experimental; known to break the menu)\n");
                 Game::FileSystem_MakePathsRelative();
-            } else {
-                printf("[GameMain] BANISHED_NO_FS_RELATIVE set — keeping absolute "
-                       "FileSystem paths\n");
             }
             // Session 4 menu-heap-crash fix-test (env BANISHED_PIN_DATADIR):
             // pin the dir Strings' refcounts so the data-dir String can't erode

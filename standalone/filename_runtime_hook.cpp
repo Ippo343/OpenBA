@@ -466,4 +466,94 @@ extern "C" void InstallFilenameRuntimeHook() {
     fflush(stderr);
 }
 
+// --- Session 5 (2026-06-16): FindOrLoad serialize lock — THE MENU CRASH FIX --
+// ROOT CAUSE (validated): the entire intermittent menu heap crash is a
+// CONCURRENCY RACE in Object::ExternalFactory::FindOrLoad (0x1800bf320) between
+// the MAIN thread (menu dialog/scene load) and the RUNTIME BACKGROUND LOADER
+// thread — both call FindOrLoad concurrently (confirmed: 2 distinct tids do
+// FindOrLoad during the menu load). FindOrLoad / External::Load are NOT
+// thread-safe: FindOrLoad mutates the factory's resource-cache list via Add(),
+// and walks the shared Factory::_singleton tree; the path build does racy
+// System::String/Filename refcount inc/dec. The race corrupts:
+//   - the data-dir String refcount (lost-update erosion -> UAF -> the bucket-12
+//     free-list "+0x100000000 bit-32 flip" link crash, Runtime+0xC74C3); AND
+//   - the factory cache (racy Add -> FindOrLoad returns NULL for a real
+//     resource -> the texture-null / dialog-null derefs, Runtime+0x103933 /
+//     +0x102C9F / +0x1148EB).
+// Both faces — chased for 6 sessions as "use-after-free" / "over-release" —
+// are the SAME race. Serializing FindOrLoad with a global recursive CS
+// eliminates ALL of it: A/B (full speed, process-death detector) baseline
+// ~33% crash vs LOCK on **0 crashes / 44 runs, every run reaching the render
+// loop** (P(0/44 | 33%) ~ 4e-8). The data-dir pin (BANISHED_PIN_DATADIR) is
+// NO LONGER NEEDED (the lock fixes the link face too) — kept as a diagnostic
+// lever only.
+//
+// CRITICAL_SECTION is reentrant on the same thread, so nested same-thread
+// FindOrLoad (recursive resource deps) is fine; only cross-thread calls
+// serialize. Default ON; opt out with BANISHED_NO_FOL_LOCK=1. Safe for the
+// in-game world build too (just less load parallelism; 0 stalls observed).
+//
+// The NULL-return watch (BANISHED_FOL_NULLWATCH=1, default OFF) is a separate
+// diagnostic that logs every FindOrLoad NULL with the resource path + tid; it
+// is how the failing resources (MainMenuMaterial.rsc, SpriteSheetLogo*, Font*)
+// and the 2-thread race were identified.
+
+typedef void* (*FindOrLoadFn)(void* self, void* fname);
+FindOrLoadFn     g_origFindOrLoad = nullptr;
+volatile LONG    g_folNullEvents  = 0;
+int              g_folNullMax      = 400;
+
+bool             g_folLock      = false;  // serialize FindOrLoad (the fix)
+bool             g_folNullWatch = false;  // log NULL returns (diagnostic)
+CRITICAL_SECTION g_folCS;
+
+void* FindOrLoadWrapper(void* self, void* fname) {
+    if (g_folLock) EnterCriticalSection(&g_folCS);
+    void* r = g_origFindOrLoad(self, fname);
+    if (g_folLock) LeaveCriticalSection(&g_folCS);
+    if (!r && g_folNullWatch) {
+        LONG n = InterlockedIncrement(&g_folNullEvents);
+        if (n <= g_folNullMax) {
+            const char* path = "(null)";
+            if (fname && !IsBadReadPtr(fname, 8)) {
+                char* s = *reinterpret_cast<char**>(fname);
+                if (s && !IsBadReadPtr(s, 1)) path = s;
+            }
+            fprintf(stderr, "[FOLNull] #%ld tid=%lu FindOrLoad -> NULL  path='%s'\n",
+                    (long)n, GetCurrentThreadId(), path);
+            fflush(stderr);
+        }
+    }
+    return r;
+}
+
+extern "C" void InstallFindOrLoadWatch() {
+    // The serialize lock is the menu-crash FIX — default ON (opt out with
+    // BANISHED_NO_FOL_LOCK=1). The null-return watch is a default-OFF diagnostic.
+    const char* noLock = getenv("BANISHED_NO_FOL_LOCK");
+    g_folLock = !(noLock && noLock[0] && noLock[0] != '0');
+    const char* nw = getenv("BANISHED_FOL_NULLWATCH");
+    g_folNullWatch = (nw && nw[0] && nw[0] != '0' && nw[0] != 'f' && nw[0] != 'F');
+    if (!g_folLock && !g_folNullWatch) return;  // nothing to do
+    if (g_folLock) InitializeCriticalSection(&g_folCS);
+    if (const char* m = getenv("BANISHED_FOL_NULLWATCH_MAX")) {
+        int v = atoi(m);
+        if (v > 0) g_folNullMax = v;
+    }
+    // FindOrLoad @ 0x1800bf320 — 14-byte boundary: REX-prefixed push rbp
+    // (40 55), push rbx/rsi/rdi (53 56 57), push r14 (41 56), mov rbp,rsp
+    // (48 8b ec), sub rsp,0x70 (48 83 ec 70). All position-independent.
+    static const uint8_t kFolPrologue[14] = {
+        0x40,0x55, 0x53, 0x56, 0x57, 0x41,0x56,
+        0x48,0x8b,0xec, 0x48,0x83,0xec,0x70
+    };
+    g_origFindOrLoad = reinterpret_cast<FindOrLoadFn>(DetourRuntimeFunc(
+        ResolveAddr(Module::Runtime, 0x1800bf320),
+        reinterpret_cast<void*>(&FindOrLoadWrapper), 14,
+        kFolPrologue, sizeof(kFolPrologue), "ExternalFactory::FindOrLoad"));
+    fprintf(stderr, "[FOL] installed: lock=%d (SERIALIZE FindOrLoad — menu crash fix)"
+            " nullwatch=%d (max=%d)\n", (int)g_folLock, (int)g_folNullWatch, g_folNullMax);
+    fflush(stderr);
+}
+
 #endif // STANDALONE_EXE

@@ -3,6 +3,111 @@
 > Read this WITH the memory file `project_menu_heap_crash.md` (full history + reversals). This doc is the
 > actionable plan.
 
+## ✅✅✅ 2026-06-16 SESSION 5 — ROOT CAUSE FOUND + FIXED: the menu crash is a CONCURRENCY RACE in FindOrLoad ✅✅✅
+**THE FIX (committed/validated):** serialize `Object::ExternalFactory::FindOrLoad` (Runtime 0x1800bf320) with
+a global recursive CRITICAL_SECTION. Default ON in standalone (`InstallFindOrLoadWatch` in main.cpp →
+`standalone/filename_runtime_hook.cpp`); opt out with `BANISHED_NO_FOL_LOCK=1`.
+
+**Mechanism:** the menu loads resources on TWO threads concurrently — the MAIN thread (dialog/scene load) and
+the RUNTIME BACKGROUND LOADER thread (confirmed: 2 distinct tids do FindOrLoad during the menu, via the
+`BANISHED_FOL_NULLWATCH` tid log). `FindOrLoad`/`External::Load` are NOT thread-safe: FindOrLoad mutates the
+factory resource-cache list via `Add()`, walks the shared `Factory::_singleton` tree, and does racy
+`System::String`/`Filename` refcount inc/dec while building paths. The race corrupts:
+  - the **data-dir String refcount** (lost-update erosion → the bucket-12 free-list "+0x100000000 bit-32 flip"
+    → Runtime+0xC74C3 link crash = session 4's "UAF"/"over-release"); AND
+  - the **factory cache** (racy Add → FindOrLoad returns NULL for a REAL resource → texture-null/dialog-null
+    derefs Runtime+0x103933 / +0x102C9F / +0x1148EB).
+Both crash faces — chased for 6 sessions as use-after-free / over-release — are the SAME race. Every
+"intermittent, heap-layout/timing-dependent, instrumentation-suppresses-it (Heisenbug)" symptom is textbook
+race behavior.
+
+**A/B (full-speed, process-death detector, all reaching the render loop = TICK):**
+  - baseline (no lock): ~33% crash (4/12).
+  - `BANISHED_FOL_LOCK` + pin: **0 crashes / 20**, all TICK.
+  - `BANISHED_FOL_LOCK` alone (NO pin): **0 crashes / 24**, all TICK.  ⇒ the LOCK ALONE fixes BOTH faces;
+    `BANISHED_PIN_DATADIR` (data-dir pin) is NO LONGER NEEDED (kept env-gated/off as a diagnostic lever).
+  P(0/44 clean | 33% baseline) ≈ 4e-8.
+
+**Why retail (DLL mode) doesn't crash:** untested, but presumably the original exe sequences the loader vs the
+menu dialog load so they don't overlap, OR a higher-level lock we don't replicate in standalone. Our serialize
+is a safe superset (External::Load genuinely isn't reentrant across threads; serializing only reduces load
+parallelism — 0 stalls/hangs observed; safe for the in-game world build too).
+
+**SECOND FIX NEEDED — `FileSystem_MakePathsRelative` is now DEFAULT OFF (game_main.cpp).** It was a session-2e
+crash *mitigation* (ruled out) that is ACTIVELY HARMFUL: with FS-relative ON the menu never draws (it crashes
+or 95%-CPU stalls every run). A/B (FrameLimiter = MenuDLT::Draw, the reliable menu-drawn signal): FS-rel ON →
+crash/stall in EVERY run (4/4 crash with lock, 4/4 stall without); FS-rel OFF → menu draws. **Final default
+build = FindOrLoad lock ON + FS-rel OFF → 0 crashes / 24, all 24 draw the menu.** (Earlier "all TICK" A/Bs that
+used `BANISHED_NO_FS_RELATIVE=1` were correct; the user's default launch had FS-rel ON, hence "not getting to
+the main menu" — that was the FS-rel stall, now fixed by flipping it off.) Opt back in (experimental) with
+`BANISHED_FS_RELATIVE=1`. The `[FrameLimiter] fps` stderr line = reliable "menu is drawing" signal (Tick is
+called ONLY from MenuDLT::Draw); stdout `[MenuDLT::Draw]` is lost on hard-kill so don't key on it.
+
+**REMAINING / NEXT:** (1) VISUAL confirm via `make sa-run-menu` (TICK proves the render loop ticks; eyeball the
+bg image/buttons render). (2) Decide whether to ALSO serialize the other 3 `External::Load` callers
+(SetupFileSystem/AreResourcesEqual/OnVideoRestart) — not needed for the menu, but in-game safety. (3) The
+data-dir over-release "unmatched dec" in ExpandRelativePath was never pinned by eye — moot now (it's a race,
+not a logic bug; the lock fixes it). (4) Strip the `BANISHED_FOL_NULLWATCH` diagnostic logging if desired
+(default OFF, harmless). (5) Re-run with `BANISHED_AUTOSTART` to confirm the in-game path still builds.
+
+Tooling added (all in standalone/filename_runtime_hook.cpp + main.cpp): the FindOrLoad detour (14-byte
+prologue `40 55 53 56 57 41 56 48 8b ec 48 83 ec 70` — the `40` REX prefix on PUSH RBP is hidden by Ghidra's
+disasm; `read_memory` the real bytes). Scripts: notes/fol_lock_detect.sh (LOCK/PIN A/B), notes/fol_capture.sh
+(null-path capture), notes/pin_capture.sh (face classify), notes/default_validate.sh (pure-default validate).
+
+---
+### (superseded by the race fix above, kept for the reasoning trail)
+## 2026-06-16 SESSION 5 — TWO INDEPENDENT BUGS DISENTANGLED; session-4 "general over-release" was a MISATTRIBUTION
+The big result: there are **TWO separate menu crash FACES**, and session 4 conflated them.
+
+**Method:** captured + CLASSIFIED crash faces by fault RIP (notes/fullspeed_capture.sh + notes/pin_capture.sh,
+`BANISHED_NO_FS_RELATIVE=1`, ±`BANISHED_PIN_DATADIR=1`). Faces:
+  - **Bug A = free-list LINK face**: `Runtime+0xC74C3 / +0xC74EA` (Allocate writes a wild `0x…0140` bucket-12
+    link). This is the data-dir String UAF (session 4's finding).
+  - **Bug B = NULL-deref faces, heap INTACT**: `Runtime+0x103933` (MaterialInstance::BuildParameters reads a
+    null resolved-texture ptr) / `+0x102C9F` (MaterialInstance::Setup) / `+0x1148EB` (UI::DialogInstance ctor
+    derefs the Dialog's null `+0x38` sub-object, called from OUR mainmenudialog.cpp) / `XAudio2_7.dll+0x23A19`.
+
+**KEY A/B (this session):**
+  - BASELINE (no pin), 4 crashes: faces = `+0x1148EB`, `+0x102C9F`, XAudio2, **`+0xC74C3` (link)** — MIXED.
+  - `BANISHED_PIN_DATADIR=1`, 6 crashes across two batches (pin_crash_* + pin2): faces = `+0x103933`,
+    `+0x1148EB`×3, XAudio2×2 — **ZERO link faces.** Crash rate also dropped (33% → ~14%).
+  - ⇒ **Pinning ONLY the 3 FileSystem dir Strings ELIMINATES the link face (bug A).** So the over-release is
+    **data-dir-SPECIFIC, NOT general** — session 4's "general over-release" was wrong. Session 4 saw "rate
+    unchanged" only because **bug B dominates the rate and is unaffected by the pin**; it never classified the
+    residual faces. The pin DID fix bug A (a minority of crashes).
+  - Under PIN the texture-null/dialog-null dumps report **"no tag corruption — free-list links intact"** ⇒
+    bug B is **NOT heap corruption**; it is a genuine **`ExternalFactory::FindOrLoad` returning NULL** for a
+    resource, stored as a resolved pointer, later dereferenced.
+
+**Why FindOrLoad returns NULL (decompiled this session):** `FindOrLoad` (0x1800bf320) → `External::Load`
+(0x1800bc620) returns NULL on: file-not-found, bad magic (`0x5412a91f`), **resource type-id not resolving in
+the `Factory::_singleton` tree** (the **235-registered / 358-stub** gap — the crash dumps literally print
+"Registry: 235 registered, 358 stubs hit"), or version mismatch. `operator+` (both 0xc92d0/0xc9440) and
+`GetDataDirectory` (0x7bd0) were decompiled — operator+ does NOT touch its args' refcounts (rules out the
+simplest data-dir over-release theory; the unmatched dec for bug A is a rare branch in ExpandRelativePath,
+NOT yet pinned by eye — but the PIN makes it moot).
+
+**STATUS of the two bugs:**
+  - **Bug A (link face): FIXABLE by the data-dir pin** (`FileSystem_PinDataDir`, env `BANISHED_PIN_DATADIR`).
+    The 3 FileSystem dir Strings are permanent globals, so an intentional permanent ref is a LEGITIMATE fix,
+    not just a band-aid. **DECISION PENDING: make it default-on** (or find the real unmatched dec in
+    ExpandRelativePath if correctness-purity is wanted — low priority, pin is clean).
+  - **Bug B (null-resource faces): THE DOMINANT crash, now the main target.** Instrument added this session:
+    `BANISHED_FOL_NULLWATCH=1` detours Runtime FindOrLoad (filename_runtime_hook.cpp +
+    InstallFindOrLoadWatch in main.cpp) and logs every NULL return WITH the resource path (hot path untouched,
+    so far less perturbing than the GDB breakpoint that Heisenbug-suppressed it). Test: notes/fol_capture.sh
+    (PIN on, NO_FS_RELATIVE on, FOL_NULLWATCH on). **NEXT: read which path(s) return NULL on a crash run**
+    (notes/wp_runs/fol_crash_*.err) → that names the failing resource; then find why External::Load fails for
+    it in standalone (prime suspect: a sub-resource type-id among the 358 stubs, OR the geometry load leaving
+    the ExternalFactory ref-table/cache in a state that makes the later dialog-material/ texture FindOrLoad
+    miss). NO_GEOM→0 still holds, so geometry is the trigger for bug B too (session 2's resource-cache-state
+    hypothesis — now the only surviving one for bug B).
+
+  Prologue gotcha (cost a rebuild): Runtime `FindOrLoad` prologue is **14 bytes** `40 55 53 56 57 41 56 48 8b
+  ec 48 83 ec 70` — the `40` is a REX prefix on `PUSH RBP` that Ghidra's disasm hides. Always `read_memory`
+  the real bytes before hardcoding a detour prologue.
+
 ## ★★★★ 2026-06-15 SESSION 4 — UAF SOURCE CAUGHT: GetDataDirectory AddRefs a FREED fs+0x08 data-dir String ★★★★
 Resume here. Session 3 proved the UAF is Runtime-internal but couldn't see it (its `filename_dtor_check.cpp`
 wrapped the GLOBAL fn-pointers = only OUR calls). Session 4 **caught the exact instruction + victim**.

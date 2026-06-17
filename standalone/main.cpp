@@ -41,6 +41,8 @@ extern "C" {
 extern "C" void InstallFilenameDtorCheck();
 // Session-4 diagnostic installer (standalone/filename_runtime_hook.cpp).
 extern "C" void InstallFilenameRuntimeHook();
+// Session-5 diagnostic installer (standalone/filename_runtime_hook.cpp).
+extern "C" void InstallFindOrLoadWatch();
 
 // ============================================================
 // Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
@@ -1167,6 +1169,19 @@ static bool Init() {
     //     corruption, with the geometry call stack. Env-gated BANISHED_FNHOOK
     //     (default OFF). See standalone/filename_runtime_hook.cpp.
     InstallFilenameRuntimeHook();
+
+    // 4e. THE MENU CRASH FIX (session 5): serialize Runtime
+    //     ExternalFactory::FindOrLoad with a global recursive CS. The entire
+    //     intermittent menu heap crash is a concurrency race between the main
+    //     thread and the Runtime background loader thread, both calling the
+    //     non-thread-safe FindOrLoad/External::Load (racy factory-cache Add +
+    //     racy String refcount inc/dec) — corrupting both the free-list (the
+    //     bucket-12 link crash) and the factory cache (FindOrLoad returns NULL
+    //     for a real resource -> texture/dialog null deref). Serializing it
+    //     gives 0 crashes / 44 runs vs ~33% baseline. Default ON; opt out with
+    //     BANISHED_NO_FOL_LOCK=1. The same installer also provides the default-
+    //     OFF BANISHED_FOL_NULLWATCH diagnostic. See filename_runtime_hook.cpp.
+    InstallFindOrLoadWatch();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs
