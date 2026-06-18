@@ -267,6 +267,11 @@ struct ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 
+// In-game HUD — ToolbarDialog ctor reimpl (FUN_1400b9910), body in
+// code/Game/Dialog/toolbardialog.cpp. C++ linkage (not extern "C").
+void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
+                              void* parentPtr, void* toolbarData);
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -288,6 +293,12 @@ static void RegisterCodeFunctions() {
     // (0x1400c48a0) resolve to our reimpls (EngineFuncsInit runs after this).
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
+
+    // In-game HUD bring-up — route the exe ToolbarDialog ctor (FUN_1400b9910) to
+    // our reimpl so GameUpdateLoop::Startup can build the toolbar from the
+    // preloaded Dialog/Toolbar.rsc. EngineFuncsInit (runs after this) then
+    // resolves fn_ToolbarDialog_Ctor to ToolbarDialog_Ctor_Impl.
+    RegisterExeAddr(0x1400b9910, reinterpret_cast<uintptr_t>(&ToolbarDialog_Ctor_Impl));
 
     // ============================================================
     // M3.5 — MenuScene::Serialize generic helpers

@@ -117,6 +117,11 @@ const char* GUL_GetResourceFilename(void* self) {
     if (s_preload < 0) {
         const char* e = getenv("BANISHED_GAME_PRELOAD");
         s_preload = (e && *e && e[0] != '0') ? 1 : 0;
+        printf("[GUL::GetResourceFilename] preload=%s -> returning %s\n",
+               s_preload ? "ON (BANISHED_GAME_PRELOAD)" : "off (default)",
+               s_preload ? "\"Game/Game\" (engine will recursively preload the "
+                           "HUD/dialog/toolbar resource tree)" : "null (skip preload)");
+        fflush(stdout);
     }
     if (!s_preload) return nullptr;
     return "Game/Game";

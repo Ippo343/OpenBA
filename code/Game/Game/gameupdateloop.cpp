@@ -25,6 +25,15 @@
 #include <cstdint>
 #include <cmath>
 
+#ifdef STANDALONE_EXE
+// Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
+// used as a standalone fallback for the Dialog type-id when the exe data slot
+// isn't registered. ResolveTypeIdByNameLazy walks the LIVE Runtime factory tree,
+// so it sees Runtime-self-registered types like "Dialog" (GetTypeIdByName only
+// knows our exe-side REGISTER_TYPE entries and returns 0 for Dialog).
+namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
+#endif
+
 // ============================================================
 // Exe globals (resolved at init time from .rdata/.data addresses)
 // ============================================================
@@ -535,6 +544,17 @@ static void EnsureInit() {
 
     // Dialog type ID
     g_pDialogTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4138));
+#ifdef STANDALONE_EXE
+    // Standalone: the exe's Dialog type-id storage at 0x1401c4138 is unregistered,
+    // so ResolveAddr returns 0. Fall back to the runtime type registry — "Dialog"
+    // (parent External) is self-registered by Runtime at startup, so
+    // GetTypeIdByName yields the same id the exe slot would hold.
+    if (!g_pDialogTypeId) {
+        static uint32_t s_dialogTypeId = 0;
+        if (s_dialogTypeId == 0) s_dialogTypeId = ::Object::ResolveTypeIdByNameLazy("Dialog");
+        g_pDialogTypeId = &s_dialogTypeId;
+    }
+#endif
 
     // Bulk null-check all ResolveExport pointers
     #define CHECK_FN(fn) if (!(fn)) TRACE("[GameUpdateLoop] WARNING: " #fn " is NULL!\n")
@@ -1179,6 +1199,24 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
 extern "C"
 void GameUpdateLoop_Startup(GameUpdateLoop* self) {
+    // [HUD-DIAG] Unconditional one-shot: confirm Startup is invoked at all, and
+    // whether the world is already built (m_game set) when it runs. If Startup
+    // fires before Load (m_game==null), it early-returns forever and the HUD
+    // would never be created — an ordering bug we must catch here.
+    {
+        static bool s_called = false;
+        if (!s_called) {
+            s_called = true;
+            fprintf(stderr, "[HUD-DIAG] Startup CALLED self=%p m_game=%p "
+                    "m_userInterface=%p m_resourceList(+0x08)=%p\n",
+                    (void*)self,
+                    self ? (void*)self->m_game : nullptr,
+                    self ? (void*)self->m_userInterface : nullptr,
+                    self ? (void*)self->m_resourceList : nullptr);
+            fflush(stderr);
+        }
+    }
+
     // Stage C entry guard (TEMPORARY): see GameUpdateLoop_Update — must run
     // before EnsureInit (which null-derefs an unregistered dispatch slot in
     // standalone). On the new-game path m_game (+0xF8) is null until
@@ -1236,11 +1274,52 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // standalone loader does not populate it yet, so ExternalList::Find faults) AND
     // their exe dialog ctors (not reimplemented). Disable the whole section until
     // both are wired. [GUARD-M5]
+    // [HUD-DIAG] One-shot probe: did the preload populate the loop's resource
+    // list (+0x08)? And does ExternalList::Find resolve the toolbar Dialog
+    // resource out of it? This is the gate for enabling HUD creation below.
+    {
+        static bool s_diag = false;
+        if (!s_diag) {
+            s_diag = true;
+            void* rl = self->m_resourceList;
+            fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p Find=%p FilenameCtor=%p "
+                    "Dtor=%p DialogTypeId=%p(val=%u) ToolbarCtor=%p UI_AddDialog=%p IsDerivedFrom=%p\n",
+                    rl, (void*)fn_ExternalList_Find, (void*)fn_Filename_CtorCStr_Local,
+                    (void*)fn_Filename_Dtor, (void*)g_pDialogTypeId,
+                    g_pDialogTypeId ? *g_pDialogTypeId : 0u,
+                    (void*)fn_ToolbarDialog_Ctor, (void*)fn_UI_AddDialog, (void*)fn_IsDerivedFrom);
+            fflush(stderr);
+            if (rl && fn_ExternalList_Find && fn_Filename_CtorCStr_Local) {
+                uint8_t fnbuf[8];
+                fn_Filename_CtorCStr_Local(fnbuf, "Dialog/Toolbar.rsc");
+                void* foundBase = nullptr;
+                uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0u;
+                fn_ExternalList_Find(rl, &foundBase, fnbuf, &typeInfo);
+                fprintf(stderr, "[HUD-DIAG] ExternalList::Find(\"Dialog/Toolbar.rsc\") -> foundBase=%p\n",
+                        foundBase);
+                fflush(stderr);
+                if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
+            } else {
+                fprintf(stderr, "[HUD-DIAG] Find probe skipped (resourceList or fns null)\n");
+                fflush(stderr);
+            }
+        }
+    }
+
     const bool kCreateGameDialogs = false;
+    // HUD bring-up (incremental): the Toolbar ctor + Dialog type-id are now wired
+    // (address_registry 0x1400b9910 -> ToolbarDialog_Ctor_Impl; g_pDialogTypeId
+    // falls back to ResolveTypeIdByNameLazy("Dialog")), and the preload populates
+    // m_resourceList so Find resolves Dialog/Toolbar.rsc with a valid dialogRes.
+    // STILL GATED OFF: ToolbarDialog_Ctor_Impl then derefs more unwired exe
+    // data-slots in standalone — g_TypeId_ToolbarItem (0x1401c6128 -> null) and
+    // g_ToolbarDialog_Vtable (0x14015fa00 -> 0, no standalone ToolbarDialog UI
+    // vtable exists yet). Flip true once those are wired (next: toolbar vtable).
+    const bool kCreateToolbar = false;
 
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
-    if (kCreateGameDialogs) {
+    if (kCreateToolbar) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
 
@@ -1259,10 +1338,17 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         }
         fn_Filename_Dtor(filename);
 
+        fprintf(stderr, "[HUD] Toolbar: foundBase=%p dialogRes=%p Ctor=%p UI=%p\n",
+                foundBase, dialogRes, (void*)fn_ToolbarDialog_Ctor, (void*)self->m_userInterface);
+        fflush(stderr);
+
         // Allocate and construct ToolbarDialog (0x108 bytes). [GUARD-M5]
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
         void* toolbar = nullptr;
-        if (mem != nullptr && fn_ToolbarDialog_Ctor) {
+        // Require a valid dialog resource — ToolbarDialog_Ctor_Impl reads the
+        // toolbar item list out of it and faults on null. If type-id resolution
+        // failed (dialogRes null), skip construction rather than crash.
+        if (mem != nullptr && fn_ToolbarDialog_Ctor && dialogRes != nullptr) {
             int64_t nullParent[1] = {0};
             fn_InternalBasePtr_Ctor(nullParent, nullptr);
             toolbar = fn_ToolbarDialog_Ctor(mem, self->m_userInterface, dialogRes, nullParent, nullptr);
@@ -1273,9 +1359,13 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             int64_t dialogPtr[1];
             fn_InternalBasePtr_Ctor(dialogPtr, toolbar);
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
-        } else if (mem) {
-            fn_MemFreeStatic(mem);
+            fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p\n", toolbar);
+        } else {
+            fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p Ctor=%p) — freeing\n",
+                    mem, (void*)fn_ToolbarDialog_Ctor);
+            if (mem) fn_MemFreeStatic(mem);
         }
+        fflush(stderr);
     }
     TRACE("[GameUpdateLoop::Startup] Toolbar dialog added\n");
 
