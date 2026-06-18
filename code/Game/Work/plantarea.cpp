@@ -163,7 +163,7 @@ bool PlantArea_ResolveFuncs() {
     s_fn_BST_Insert = reinterpret_cast<PAW_BST_Insert_t>(
         ResolveAddr(Module::Exe, 0x140029a40));
     s_fn_BST_Remove = reinterpret_cast<PAW_BST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x140029a60));
+        ResolveAddr(Module::Exe, 0x14001ca60));  // was 0x140029a60 (mid-function; true remove entry is 0x14001ca60)
     s_fn_BST_Serialize = reinterpret_cast<PAW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140029de0));
     s_fn_BST_RecursiveFree = reinterpret_cast<PAW_BST_RecursiveFree_t>(
