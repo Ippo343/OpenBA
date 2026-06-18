@@ -349,6 +349,10 @@ extern void RegisterComponentBatch_economy();
 extern void RegisterComponentBatch_nature();
 extern void RegisterComponentBatch_visuals();
 
+// Work registration wave (2026-06-18) — shared base-helper sub-batch.
+// reg file: standalone/reg_work_base.cpp ; bodies: code/Game/Work/work_base_reimpl.cpp.
+extern void RegisterWorkBaseBatch();
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
@@ -359,6 +363,9 @@ static void RegisterCodeFunctions() {
     RegisterComponentBatch_economy();
     RegisterComponentBatch_nature();
     RegisterComponentBatch_visuals();
+
+    // Work registration wave — shared base helpers (FindComponent family + tree free).
+    RegisterWorkBaseBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
