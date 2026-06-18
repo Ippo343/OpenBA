@@ -162,6 +162,87 @@ void HappinessComponent_OnCreate(HappinessComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_14004a300 (FishingComponent_impl_a300: notify the population
+//   manager of a fishing tile, mapping the description's mode to a state id)
+// ============================================================
+// Despite the local typedef name (SetEntityIndex), this reads the FishingDescription
+// off owner+0x18 (type 0x1401c42f8), locates the fishing-target component (type
+// 0x1401c4870) on the host, the MapComponent (FUN_140004680) for tile coords, maps
+// desc+0x20 (0..4) to a state id, and calls FishingComponent_helper_f990 (0x14009f990).
+typedef void* (*fn_FC_FindMap_t)(uintptr_t entity, void* retbuf);   // 0x140004680
+typedef void (*fn_FC_Helper_f990_t)(int* mgr, int state, int x, int y,
+                                    int resourceId, short param6);    // 0x14009f990
+static fn_FC_FindMap_t      s_fc_FindMap = nullptr;
+static fn_FC_Helper_f990_t  s_fc_Helper = nullptr;
+static uint32_t*            s_fc_pTId_FishingDesc = nullptr;   // 0x1401c42f8
+static uint32_t*            s_fc_pTId_Target = nullptr;        // 0x1401c4870
+static bool s_fcResolved = false;
+static void EnsureFishingHelpers() {
+    if (s_fcResolved) return;
+    s_fc_FindMap = reinterpret_cast<fn_FC_FindMap_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fc_Helper  = reinterpret_cast<fn_FC_Helper_f990_t>(ResolveAddr(Module::Exe, 0x14009f990));
+    s_fc_pTId_FishingDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c42f8));
+    s_fc_pTId_Target      = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4870));
+    s_fcResolved = true;
+}
+
+void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
+    EnsureHelpers();
+    EnsureFishingHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    if (!s_pGameWorld || !*s_pGameWorld) return;
+
+    void* descObj = *(void**)(self + 0x18);
+    void* desc = (fn_IsDerivedFrom && s_fc_pTId_FishingDesc &&
+                  fn_IsDerivedFrom(descObj, *s_fc_pTId_FishingDesc)) ? descObj : nullptr;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    int64_t host = *(int64_t*)(*(int64_t*)(self + 0x10) + 0x28);
+
+    // Find the fishing-target component (type 0x1401c4870) on the host
+    void* targetComp = nullptr;
+    if (s_fc_pTId_Target) {
+        int count = *(int*)(host + 0x30);
+        int64_t arr = *(int64_t*)(host + 0x28);
+        for (int i = 0; i < count; i++) {
+            void* comp = *(void**)(arr + (int64_t)i * 8);
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == *s_fc_pTId_Target) {
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_fc_pTId_Target))
+                    targetComp = comp;
+                break;
+            }
+        }
+    }
+
+    // Find the MapComponent for tile coords
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    uint8_t mapBuf[8] = {0};
+    if (s_fc_FindMap) s_fc_FindMap(*(uintptr_t*)(self + 0x10), mapBuf);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mapBuf);
+    int64_t mapComp = *(int64_t*)mapBuf;
+
+    // Map description mode (desc+0x20) to a state id (default 5)
+    int state = 5;
+    switch (desc ? *(int*)((uintptr_t)desc + 0x20) : -1) {
+        case 0: state = 0; break;
+        case 1: state = 1; break;
+        case 2: state = 2; break;
+        case 3: state = 3; break;
+        case 4: state = 4; break;
+        default: break;
+    }
+
+    int x = ((int)*(int16_t*)(mapComp + 0x2c) >> 1) + (int)*(int16_t*)(mapComp + 0x28);
+    int y = ((int)*(int16_t*)(mapComp + 0x2e) >> 1) + (int)*(int16_t*)(mapComp + 0x2a);
+    int resourceId = targetComp ? *(int*)((uintptr_t)targetComp + 0x28) : 0;
+
+    if (s_fc_Helper)
+        s_fc_Helper(*(int**)((uintptr_t)*s_pGameWorld + 0xf8), state, x, y, resourceId, param2);
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void HappinessComponent_InitFuncs() {

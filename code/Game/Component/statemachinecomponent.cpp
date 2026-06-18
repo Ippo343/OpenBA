@@ -424,6 +424,86 @@ state_walk:
     }
 }
 
+// ============================================================
+// Reimpl of FUN_1400a9660 (StateMachine::Tick: advance the active state-node
+//   chain, firing Enter/Update/Exit/Transition virtuals)
+// ============================================================
+// Faithful port of the Ghidra decompilation. param_1 points at the StateMachine.
+// Byte fields: +0x08 = currentInput, +0x09 = activeState, +0x0a = pendingState
+// (0xff sentinel = none), +0x0b = transitionState. param_1[0] = active node ptr.
+// Node vtable slots used: +0x00 Step(int)->int, +0x18 Enter, +0x20 Update,
+// +0x28 OnState, +0x30/+0x38 Transition; node+0x08 parent, node+0x10 first child.
+void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) {
+    int64_t* sm = (int64_t*)smP;
+    typedef char (*VFn_self_sm_t)(int64_t* node, int64_t* sm);
+    typedef int  (*VFn_step_t)(int64_t* node, int input);
+    typedef void (*VFn_onstate_t)(int64_t* node, int64_t* sm, int a, int b);
+    typedef char (*VFn_trans_t)(int64_t* node, int64_t* sm, int64_t time);
+
+    if (*(char*)((uintptr_t)sm + 10) < 0) goto LAB_transition;
+    do {
+        do {
+            if ((char)sm[1] >= 0) {
+                int iVar5 = (int)*(char*)((uintptr_t)sm + 9);
+                int64_t* node = (int64_t*)sm[0];
+                while (((iVar5 < 0 ||
+                        (((VFn_self_sm_t)(*(uintptr_t*)(*node + 0x20)))(node, sm) == '\0')) &&
+                       ((node = (int64_t*)node[1]) != nullptr))) {
+                    iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
+                }
+                if (*(char*)((uintptr_t)sm + 0xb) >= 0) {
+                    ((VFn_onstate_t)(*(uintptr_t*)(*(int64_t*)sm[0] + 0x28)))(
+                        (int64_t*)sm[0], sm,
+                        (int)*(char*)((uintptr_t)sm + 9),
+                        (int)*(char*)((uintptr_t)sm + 0xb));
+                }
+            }
+            *(char*)((uintptr_t)sm + 8) = *(char*)((uintptr_t)sm + 10);
+            // Walk to the chain tail (node+0x10 = child pointer)
+            int64_t* tail = (int64_t*)sm[0];
+            for (int64_t* p = (int64_t*)((int64_t*)sm[0])[2]; p != nullptr; p = (int64_t*)p[2]) {
+                tail = p;
+            }
+            sm[0] = (int64_t)tail;
+            char c = ((VFn_step_t)(*(uintptr_t*)*tail))(tail, (int)*(char*)((uintptr_t)sm + 10)) & 0xff;
+            *(char*)((uintptr_t)sm + 9) = c;
+            while (c < 0) {
+                int64_t* up = *(int64_t**)(sm[0] + 8);
+                sm[0] = (int64_t)up;
+                c = ((VFn_step_t)(*(uintptr_t*)*up))(up, (int)(char)sm[1]) & 0xff;
+                *(char*)((uintptr_t)sm + 9) = c;
+            }
+            int iVar5 = (int)*(char*)((uintptr_t)sm + 9);
+            int64_t* node = (int64_t*)sm[0];
+            *(int16_t*)((uintptr_t)sm + 10) = (int16_t)0xffff;
+            while (((iVar5 < 0 ||
+                    (((VFn_self_sm_t)(*(uintptr_t*)(*node + 0x18)))(node, sm) == '\0')) &&
+                   ((node = (int64_t*)node[1]) != nullptr))) {
+                iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
+            }
+        } while (*(char*)((uintptr_t)sm + 10) >= 0);
+    LAB_transition:
+        if (param4 != '\0' && (char)sm[1] >= 0) {
+            int iVar5 = (int)*(char*)((uintptr_t)sm + 9);
+            int64_t* node = (int64_t*)sm[0];
+            if (param3 == '\0') {
+                while (((iVar5 < 0 ||
+                        (((VFn_trans_t)(*(uintptr_t*)(*node + 0x30)))(node, sm, time) == '\0')) &&
+                       ((node = (int64_t*)node[1]) != nullptr))) {
+                    iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
+                }
+            } else {
+                while (((iVar5 < 0 ||
+                        (((VFn_trans_t)(*(uintptr_t*)(*node + 0x38)))(node, sm, time) == '\0')) &&
+                       ((node = (int64_t*)node[1]) != nullptr))) {
+                    iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
+                }
+            }
+            param4 = '\0';
+        }
+    } while (*(char*)((uintptr_t)sm + 10) >= 0);
+}
+
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x58 (StateMachineComponent_Factory MemAlloc), flags 0xcd (Ctor
 // 0x14012ba30: Component base sets +0x20=0x80, leaf OR 0xcd => 0xcd).

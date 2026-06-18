@@ -306,17 +306,11 @@ void InteractComponent_Draw(InteractComponent* self) {
 void InteractComponent_InitFuncs() {
     EnsureHelpers();
 
-    // Pre-resolve the Draw original
-    if (!s_fn_InteractDraw_Original) {
-        s_fn_InteractDraw_Original = reinterpret_cast<fn_InteractDraw_Original_t>(
-            ResolveAddr(Module::Exe, 0x140123110));
-    }
-
 #ifdef _DEBUG
     printf("[InteractComponent] Funcs resolved: Serialize=%p IBP_Serialize=%p "
-           "DrawOrig=%p TypeId=%p\n",
+           "FindWorkplace=%p TypeId=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_InteractDraw_Original,
+           (void*)s_fn_FindMultiObjComp,
            (void*)s_TypeId_Interact);
 #endif
 }

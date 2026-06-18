@@ -121,6 +121,83 @@ void TradeComponent_OnCreate(TradeComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_14005c220 (TradeComponent_impl_c220: build the trade name list
+//   and item table from the TradeDescription template)
+// ============================================================
+// Reads the TradeDescription off owner+0x18 (type 0x1401c4bb8). Resizes the
+// trade-name array (+0x30) to desc+0x50 and fills each with a random merchant
+// name from FUN_1400a4c60; resizes the item table (+0x40) to desc+0x40 and copies
+// resource ids from desc+0x38 (0x18 stride -> 0xc stride).
+typedef void (*fn_TC_ResizeNames_t)(int64_t* field, int count);   // 0x14000e760
+typedef void (*fn_TC_ResizeItems_t)(int64_t* field, int count);   // 0x14000e8d0
+typedef uint32_t (*fn_TC_Rand_t)(void* random, int n);            // slot 0x1401512e8
+typedef void* (*fn_TC_GenName_t)(void* outStr, void* random, char which);  // 0x1400a4c60
+typedef void (*fn_TC_StrAssign_t)(void* dst, void* src);          // slot 0x1401514c0
+typedef void (*fn_TC_StrDtor_t)(void* str);                       // slot 0x140152af0
+static fn_TC_ResizeNames_t s_tc_ResizeNames = nullptr;
+static fn_TC_ResizeItems_t s_tc_ResizeItems = nullptr;
+static fn_TC_Rand_t       s_tc_Rand = nullptr;
+static fn_TC_GenName_t    s_tc_GenName = nullptr;
+static fn_TC_StrAssign_t  s_tc_StrAssign = nullptr;
+static fn_TC_StrDtor_t    s_tc_StrDtor = nullptr;
+static uint32_t*          s_tc_pTId_TradeDesc = nullptr;  // 0x1401c4bb8
+static bool s_tcSetupResolved = false;
+static void EnsureTradeSetupHelpers() {
+    if (s_tcSetupResolved) return;
+    s_tc_ResizeNames = reinterpret_cast<fn_TC_ResizeNames_t>(ResolveAddr(Module::Exe, 0x14000e760));
+    s_tc_ResizeItems = reinterpret_cast<fn_TC_ResizeItems_t>(ResolveAddr(Module::Exe, 0x14000e8d0));
+    s_tc_GenName     = reinterpret_cast<fn_TC_GenName_t>(ResolveAddr(Module::Exe, 0x1400a4c60));
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x1401512e8);
+    if (slot) s_tc_Rand = *reinterpret_cast<fn_TC_Rand_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x1401514c0);
+    if (slot) s_tc_StrAssign = *reinterpret_cast<fn_TC_StrAssign_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152af0);
+    if (slot) s_tc_StrDtor = *reinterpret_cast<fn_TC_StrDtor_t*>(slot);
+    s_tc_pTId_TradeDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4bb8));
+    s_tcSetupResolved = true;
+}
+
+void TradeComponent_Setup(void* selfP) {
+    EnsureTradeSetupHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    void* descObj = *(void**)(self + 0x18);
+    void* desc = (fn_IsDerivedFrom && s_tc_pTId_TradeDesc &&
+                  fn_IsDerivedFrom(descObj, *s_tc_pTId_TradeDesc)) ? descObj : nullptr;
+
+    // Resize the name array (+0x30) to desc+0x50
+    if (s_tc_ResizeNames)
+        s_tc_ResizeNames((int64_t*)(self + 0x30), *(int*)((uintptr_t)desc + 0x50));
+
+    // Fill each name slot with a random merchant name
+    int nameCount = *(int*)(self + 0x38);
+    void* random = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+    for (int i = 0; i < nameCount; i++) {
+        uint32_t r = s_tc_Rand ? s_tc_Rand(random, 2) : 0;
+        uint8_t strBuf[8] = {0};
+        if (s_tc_GenName) s_tc_GenName(strBuf, random, (char)(r == 0));
+        void* dst = (void*)((int64_t)i * 0x20 + *(int64_t*)(self + 0x30));
+        if (s_tc_StrAssign) s_tc_StrAssign(dst, strBuf);
+        if (s_tc_StrDtor) s_tc_StrDtor(strBuf);
+    }
+
+    // Resize the item table (+0x40) to desc+0x40
+    if (s_tc_ResizeItems)
+        s_tc_ResizeItems((int64_t*)(self + 0x40), *(int*)((uintptr_t)desc + 0x40));
+
+    // Copy resource ids from desc+0x38 (0x18 stride) into item table (0xc stride)
+    int itemCount = *(int*)(self + 0x48);
+    int64_t srcBase = *(int64_t*)((uintptr_t)desc + 0x38);
+    int64_t dstBase = *(int64_t*)(self + 0x40);
+    for (int i = 0; i < itemCount; i++) {
+        *(uint32_t*)(dstBase + (int64_t)i * 0xc) = *(uint32_t*)(srcBase + (int64_t)i * 0x18);
+        *(int*)(dstBase + (int64_t)i * 0xc + 4) = i;
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void TradeComponent_InitFuncs() {
