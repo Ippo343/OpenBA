@@ -82,7 +82,6 @@ REGISTER_NULL_FACTORY(HotKeyToolTipUI, "UI::DialogController");  // 14014c100 Re
 REGISTER_NULL_FACTORY(ImmigrationUI, "UI::DialogController");  // 14014c140 RegisterType_ImmigrationUI
 REGISTER_NULL_FACTORY(MapParamsDialog, "UI::DialogInstance");  // 14014c180 RegisterType_MapParamsDialog
 REGISTER_NULL_FACTORY(MapUI, "UI::DialogController");  // 14014c1c0 RegisterType_MapUI
-REGISTER_NULL_FACTORY(FrustumOutlineElement, "Element");  // 14014c240 FrustumOutlineElement_RegisterType
 REGISTER_NULL_FACTORY(MessageDialog, "UI::DialogInstance");  // 14014c280 RegisterType_MessageDialog
 REGISTER_NULL_FACTORY(ModBrowseUI, "UI::DialogController");  // 14014c2c0 RegisterType_ModBrowseUI
 REGISTER_NULL_FACTORY(ModDetailsDialog, "UI::DialogInstance");  // 14014c300 RegisterType_ModDetailsDialog
@@ -102,7 +101,6 @@ REGISTER_NULL_FACTORY(ResourceLimitUIConfig, "UI::DialogControllerConfig");  // 
 REGISTER_NULL_FACTORY(ScenarioDialog, "UI::DialogInstance");  // 14014c680 RegisterType_ScenarioDialog
 REGISTER_NULL_FACTORY(SelectResourceUI, "UI::DialogController");  // 14014c6c0 RegisterType_SelectResourceUI
 REGISTER_NULL_FACTORY(SpriteCaptureUI, "UI::DialogController");  // 14014c700 RegisterType_SpriteCaptureUI
-REGISTER_NULL_FACTORY(CaptureBoxElement, "Element");  // 14014c780 CaptureBoxElement_RegisterType
 REGISTER_NULL_FACTORY(StatusBarUI, "UI::DialogController");  // 14014c7c0 RegisterType_StatusBarUI
 REGISTER_NULL_FACTORY(StatusIconUI, "UI::DialogController");  // 14014c800 RegisterType_StatusIconUI
 REGISTER_NULL_FACTORY(StatusIconUIConfig, "UI::DialogControllerConfig");  // 14014c840 StatusIconUIConfig_Register

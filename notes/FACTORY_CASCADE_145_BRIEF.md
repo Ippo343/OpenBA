@@ -188,6 +188,32 @@ block; DELETE `REGISTER_NULL_FACTORY(X, "Action")` from the bulk file.
   Tool/ToolSetting/DragTool/Component/Description/ControllerComponent/ComponentEntity/
   TutorialInstance/TutorialGoal/TutorialSetup — _purecall, never instantiated, trivial abstract regs).
 
+### PROGRESS 2026-06-18 (cont.) — misc Element types DONE. 80 → 78 active stubs.
+- **FrustumOutlineElement + CaptureBoxElement DONE** (UI::Element subclasses, sizes 0xd8/0xe0).
+  New standalone-only files code/Game/Component/{frustumoutlineelement,captureboxelement}.cpp.
+  Factory ports the exe ctor (0x140012400 / 0x140013eb0): MemAlloc → fn_Element_Ctor (UI::Element
+  base, dispatch 0x1401518d8) → fn_Sprite_DefaultCtor2 (UI::Sprite default, dispatch 0x140152b48)
+  at +0xc0 → type field at +0xd0 (FrustumOutline=-1; CaptureBox +0xd0/+0xd8=0). DORMANT-SAFE:
+  does NOT install the exe subclass vtable (0x14015c2a0 / 0x14015d440 — large Element vtables of
+  exe→Runtime thunks that don't resolve standalone); keeps the working UI::Element base vtable.
+  Divergence: GetTypeId reports Element, subclass overrides not applied. OK — no path instantiates
+  them. No RegisterExeAddr/registry edit needed (REGISTER_TYPE static-init only). Smoke: builds,
+  0 crashes/NullFactory, 300 addrs (unchanged — no vtable regs).
+- **Tornado DEFERRED** (Graphics::Particle, size 0x90, ctor FUN_1400d23c0, vtable 0x140160190):
+  needs a NEW engine-func for `Graphics::Particle::Particle` base ctor (not yet wired) + float
+  field block + 2 `System::Time::Time(field, g_fUVScale)` (fn_Time_Ctor_Float exists). One dormant
+  concrete landmine left; wire the Particle ctor first.
+- **Abstract bases NOT converted (intentional — cosmetic):** REGISTER_NULL_FACTORY already expands
+  to `REGISTER_TYPE(Name, Parent, NullFactory, NullInPlace)`, so the ~14 abstract bases (Action,
+  Work, AutoPickupWork, Tool, ToolSetting, DragTool, Component, Description, ControllerComponent,
+  ComponentEntity, TutorialInstance, TutorialGoal, TutorialSetup, ResourceProduceComponent[factory=
+  AutoPickupWork_Factory_Abstract]) are ALREADY registered with correct name+parent — the hierarchy
+  is complete and the NullFactory never fires (they're _purecall, never instantiated). Converting to
+  a proper abstract factory is purely cosmetic; left for the very end. ResourceProduceComponent
+  belongs here (it is abstract), NOT in misc.
+- **REMAINING (78):** ~61 UI dialogs (do with HUD, task #10) + ~14 abstract bases (cosmetic) +
+  Tornado (1 concrete, needs Particle ctor).
+
 ### Original status (pre-implementation):
 - Build/test: `mingw32-make sa-deploy`; run via `cmd //c start "" reimpl-x64.exe` from
   `C:\GOG Games\Banished` with `BANISHED_AUTOSTART=1` (RTSS/Afterburner must be CLOSED —
