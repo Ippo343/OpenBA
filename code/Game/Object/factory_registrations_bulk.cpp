@@ -76,58 +76,22 @@ namespace {
 //   (Action keystone; vtable 0x140158950, size 0x40). // 14014a580 PlayAnimation_RegisterType
 // ShowTool — real standalone factory in code/Game/Action (factory cascade Action family).
 // PopulationComponent: real standalone factory in code/Game/Component/populationcomponent.cpp (hand-removed; see Foundation D)
-REGISTER_NULL_FACTORY(AchievementDialog, "UI::DialogInstance");  // 14014bc80 RegisterType_AchievementDialog
-REGISTER_NULL_FACTORY(AttendanceUI, "UI::DialogController");  // 14014bcc0 RegisterType_AttendanceUI
-REGISTER_NULL_FACTORY(AutoSaveDialog, "UI::DialogInstance");  // 14014bd00 RegisterType_AutoSaveDialog
-REGISTER_NULL_FACTORY(BuildRequirementUI, "UI::DialogController");  // 14014bd40 RegisterType_BuildRequirementUI
-REGISTER_NULL_FACTORY(CemeteryUI, "UI::DialogController");  // 14014bd80 RegisterType_CemeteryUI
-REGISTER_NULL_FACTORY(ConsumeProduceUI, "UI::DialogController");  // 14014bdc0 RegisterType_ConsumeProduceUI
-REGISTER_NULL_FACTORY(ControlUI, "UI::DialogController");  // 14014be00 RegisterType_ControlUI
-REGISTER_NULL_FACTORY(ControlUIConfig, "UI::DialogControllerConfig");  // 14014be40 ControlUIConfig_Register
-REGISTER_NULL_FACTORY(DebugUI, "DialogController");  // 14014be80 RegisterType_DebugUI
-REGISTER_NULL_FACTORY(CitizenUI, "UI::DialogController");  // 14014bec0 RegisterType_CitizenUI
-REGISTER_NULL_FACTORY(DestroyUI, "UI::DialogController");  // 14014bf00 RegisterType_DestroyUI
-REGISTER_NULL_FACTORY(EntityUI, "UI::DialogController");  // 14014bf40 RegisterType_EntityUI
-REGISTER_NULL_FACTORY(EventLogUI, "UI::DialogController");  // 14014bf80 RegisterType_EventLogUI
-REGISTER_NULL_FACTORY(EventNotifyDialog, "UI::DialogInstance");  // 14014bfc0 RegisterType_EventNotifyDialog
-REGISTER_NULL_FACTORY(EventPopupDialog, "UI::DialogInstance");  // 14014c000 RegisterType_EventPopupDialog
-REGISTER_NULL_FACTORY(FollowDialog, "UI::DialogInstance");  // 14014c040 RegisterType_FollowDialog
-REGISTER_NULL_FACTORY(GoalDialog, "UI::DialogInstance");  // 14014c080 RegisterType_GoalDialog
-REGISTER_NULL_FACTORY(HelpUI, "UI::DialogController");  // 14014c0c0 RegisterType_HelpUI
-REGISTER_NULL_FACTORY(HotKeyToolTipUI, "UI::DialogController");  // 14014c100 RegisterType_HotKeyToolTipUI
-REGISTER_NULL_FACTORY(ImmigrationUI, "UI::DialogController");  // 14014c140 RegisterType_ImmigrationUI
-REGISTER_NULL_FACTORY(MapParamsDialog, "UI::DialogInstance");  // 14014c180 RegisterType_MapParamsDialog
-REGISTER_NULL_FACTORY(MapUI, "UI::DialogController");  // 14014c1c0 RegisterType_MapUI
-REGISTER_NULL_FACTORY(MessageDialog, "UI::DialogInstance");  // 14014c280 RegisterType_MessageDialog
-REGISTER_NULL_FACTORY(ModBrowseUI, "UI::DialogController");  // 14014c2c0 RegisterType_ModBrowseUI
-REGISTER_NULL_FACTORY(ModDetailsDialog, "UI::DialogInstance");  // 14014c300 RegisterType_ModDetailsDialog
-REGISTER_NULL_FACTORY(ModDialog, "UI::DialogInstance");  // 14014c340 RegisterType_ModDialog
-REGISTER_NULL_FACTORY(ModUploadDialog, "UI::DialogInstance");  // 14014c380 RegisterType_ModUploadDialog
-REGISTER_NULL_FACTORY(NewGameDialog, "UI::DialogInstance");  // 14014c3c0 RegisterType_NewGameDialog
-REGISTER_NULL_FACTORY(NoiseUI, "UI::DialogController");  // 14014c400 RegisterType_NoiseUI
-REGISTER_NULL_FACTORY(OptionsDialog, "public UI::DialogInstance");  // 14014c440 RegisterType_OptionsDialog
-REGISTER_NULL_FACTORY(OptionInputBindDialog, "MessageDialog");  // 14014c480 RegisterType_OptionInputBindDialog
-REGISTER_NULL_FACTORY(OrchardUI, "SelectResourceUI");  // 14014c4c0 RegisterType_OrchardUI
-REGISTER_NULL_FACTORY(PageToggleUI, "UI::DialogController");  // 14014c500 RegisterType_PageToggleUI
-REGISTER_NULL_FACTORY(ProductionUI, "UI::DialogController");  // 14014c540 RegisterType_ProductionUI
-REGISTER_NULL_FACTORY(ProfessionUI, "UI::DialogController");  // 14014c580 RegisterType_ProfessionUI
-REGISTER_NULL_FACTORY(RadiusUI, "UI::DialogController");  // 14014c5c0 RegisterType_RadiusUI
-REGISTER_NULL_FACTORY(ResourceLimitUI, "UI::DialogController");  // 14014c600 RegisterType_ResourceLimitUI
-REGISTER_NULL_FACTORY(ResourceLimitUIConfig, "UI::DialogControllerConfig");  // 14014c640 ResourceLimitUIConfig_Register
-REGISTER_NULL_FACTORY(ScenarioDialog, "UI::DialogInstance");  // 14014c680 RegisterType_ScenarioDialog
-REGISTER_NULL_FACTORY(SelectResourceUI, "UI::DialogController");  // 14014c6c0 RegisterType_SelectResourceUI
-REGISTER_NULL_FACTORY(SpriteCaptureUI, "UI::DialogController");  // 14014c700 RegisterType_SpriteCaptureUI
-REGISTER_NULL_FACTORY(StatusBarUI, "UI::DialogController");  // 14014c7c0 RegisterType_StatusBarUI
-REGISTER_NULL_FACTORY(StatusIconUI, "UI::DialogController");  // 14014c800 RegisterType_StatusIconUI
-REGISTER_NULL_FACTORY(StatusIconUIConfig, "UI::DialogControllerConfig");  // 14014c840 StatusIconUIConfig_Register
-REGISTER_NULL_FACTORY(StorageCapacityUI, "UI::DialogController");  // 14014c880 RegisterType_StorageCapacityUI
-REGISTER_NULL_FACTORY(TitleDescToolTipUI, "UI::DialogController");  // 14014c8c0 RegisterType_TitleDescToolTipUI
-REGISTER_NULL_FACTORY(ToolUI, "UI::DialogController");  // 14014c900 RegisterType_ToolUI
-REGISTER_NULL_FACTORY(TownHallUI, "UI::DialogController");  // 14014c940 RegisterType_TownHallUI
-REGISTER_NULL_FACTORY(TradeUI, "UI::DialogController");  // 14014c980 RegisterType_TradeUI
-REGISTER_NULL_FACTORY(UpgradeUI, "UI::DialogController");  // 14014c9c0 RegisterType_UpgradeUI
-REGISTER_NULL_FACTORY(UpgradeUIConfig, "UI::DialogControllerConfig");  // 14014ca00 UpgradeUIConfig_Register
-REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 RegisterType_WorkPlaceUI
+// ============================================================================
+// UI DIALOG FAMILY — factory cascade final family (2026-06-18).
+// The 58 concrete dialog/controller/config types below now have real
+// dormant-safe standalone factories in
+//   code/Game/Dialog/ui_dialog_stub_factories.cpp
+// (MemAlloc real exe size + zero + minimal vtable + REGISTER_TYPE). They were
+// REGISTER_NULL_FACTORY stubs here. The 4 reachable dialogs that already have
+// full reimpl factories in their own .cpp are likewise no longer stubbed here:
+//   MessageDialog        -> code/Game/Dialog/messagedialog.cpp
+//   NewGameDialog        -> code/Game/Dialog/newgamedialog.cpp
+//   OptionsDialog        -> code/Game/Dialog/optionsdialog.cpp
+//   OptionInputBindDialog-> code/Game/Dialog/optioninputbinddialog.cpp
+// SelectResourceUI is abstract in the exe (factory == purecall stub); it is the
+// registered parent of OrchardUI/CropUI/PastureUI, so it stays here as an
+// abstract registration.
+REGISTER_ABSTRACT_FACTORY(SelectResourceUI, "UI::DialogController");  // 14014c6c0 RegisterType_SelectResourceUI (abstract/purecall)
 // AnimAudioEvent — real factory now lives in code/Game/Component/animaudioevent.cpp
 //   (was: REGISTER_NULL_FACTORY(AnimAudioEvent, "Graphics::AnimationEvent"); // 14014ca80)
 // Disease — real factory now lives in code/Game/Game/disease.cpp (External 0x48,
@@ -146,13 +110,9 @@ REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 Regist
 //   IsDerivedFrom(NULL) crash during the in-game worldgen resource load. // 14014ccd0 ProfessionList_RegisterType
 // Scenario: real standalone factory in code/Game/Game/scenario.cpp (hand-removed;
 // menu-loader factory cascade). Add "Scenario" to REIMPLEMENTED in the codegen.
-REGISTER_NULL_FACTORY(BuildUI, "UI::DialogController");  // 14014cd90 RegisterType_BuildUI
-REGISTER_NULL_FACTORY(CropUI, "SelectResourceUI");  // 14014cdd0 RegisterType_CropUI
-REGISTER_NULL_FACTORY(PastureUI, "SelectResourceUI");  // 14014ce90 RegisterType_PastureUI
-REGISTER_NULL_FACTORY(ResidenceUI, "UI::DialogController");  // 14014ced0 RegisterType_ResidenceUI
-REGISTER_NULL_FACTORY(SaveLoadDialog, "UI::DialogInstance");  // 14014cf10 RegisterType_SaveLoadDialog
-REGISTER_NULL_FACTORY(StorageUI, "UI::DialogController");  // 14014cf50 RegisterType_StorageUI
-REGISTER_NULL_FACTORY(ToolbarDialog, "UI::DialogInstance");  // 14014cf90 RegisterType_ToolbarDialog
+// BuildUI / CropUI / PastureUI / ResidenceUI / SaveLoadDialog / StorageUI /
+// ToolbarDialog — real dormant-safe factories in
+//   code/Game/Dialog/ui_dialog_stub_factories.cpp (UI dialog family).
 // ComponentEntity — real standalone factory now lives in
 //   code/Game/Entity/componententity.cpp (MemAlloc 0x48 -> ComponentEntity_CtorDefault,
 //   exe factory 0x1400219c0). Was a NullFactory stub.
@@ -181,10 +141,10 @@ REGISTER_ABSTRACT_FACTORY(Action, "Object::Internal");  // 14014d010 Action_Regi
 // Tutorial — real standalone factory in code/Game/Tutorial/tutorial.cpp (factory cascade External family).
 REGISTER_ABSTRACT_FACTORY(TutorialGoal, "Object::External");  // 14014d790 TutorialGoal_RegisterType
 // TutorialGoalButton — real standalone factory in code/Game/Tutorial/tutorialgoalbutton.cpp (factory cascade External family).
-REGISTER_NULL_FACTORY(TutorialGoalDialog, "TutorialGoal");  // 14014d810 RegisterType_TutorialGoalDialog
+// TutorialGoalDialog — real dormant-safe factory in code/Game/Dialog/ui_dialog_stub_factories.cpp (UI dialog family).
 // TutorialGoalGameSpeed — real standalone factory in code/Game/Tutorial/tutorialgoalgamespeed.cpp (factory cascade External family).
 // TutorialGoalCount — real standalone factory in code/Game/Tutorial/tutorialgoalcount.cpp (factory cascade External family).
-REGISTER_NULL_FACTORY(TutorialHighlightDialog, "UI::DialogInstance");  // 14014d8d0 RegisterType_TutorialHighlightDialog
+// TutorialHighlightDialog — real dormant-safe factory in code/Game/Dialog/ui_dialog_stub_factories.cpp (UI dialog family).
 // TutorialImage — real standalone factory in code/Game/Tutorial/tutorialimage.cpp (factory cascade External family).
 // TutorialImageHotKey — real standalone factory in code/Game/Tutorial/tutorialimagehotkey.cpp (factory cascade External family).
 // TutorialImageInputKey — real standalone factory in code/Game/Tutorial/tutorialimageinputkey.cpp (factory cascade External family).
@@ -195,11 +155,11 @@ REGISTER_NULL_FACTORY(TutorialHighlightDialog, "UI::DialogInstance");  // 14014d
 //   (was: REGISTER_NULL_FACTORY(TutorialInstance, "Object::Internal");) // 14014da10 TutorialInstance_RegisterType
 REGISTER_ABSTRACT_FACTORY(TutorialSetup, "Object::External");  // 14014da50 TutorialSetup_RegisterType
 // TutorialSetupCamera — real standalone factory in code/Game/Tutorial/tutorialsetupcamera.cpp (factory cascade External family).
-REGISTER_NULL_FACTORY(TutorialSetupDialog, "TutorialSetup");  // 14014dad0 RegisterType_TutorialSetupDialog
+// TutorialSetupDialog — real dormant-safe factory in code/Game/Dialog/ui_dialog_stub_factories.cpp (UI dialog family).
 // TutorialSetupGameSpeed — real standalone factory in code/Game/Tutorial/tutorialsetupgamespeed.cpp (factory cascade External family).
 // TutorialSetupRestrictPlayer — real standalone factory in code/Game/Tutorial/tutorialsetuprestrictplayer.cpp (factory cascade External family).
 // TutorialStep — real standalone factory in code/Game/Tutorial/tutorialstep.cpp (factory cascade External family).
-REGISTER_NULL_FACTORY(TutorialUI, "UI::DialogController");  // 14014dbd0 RegisterType_TutorialUI
+// TutorialUI — real dormant-safe factory in code/Game/Dialog/ui_dialog_stub_factories.cpp (UI dialog family).
 REGISTER_ABSTRACT_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_RegisterType
 // BuildRoad — real standalone factory in code/Game/Work/buildroad.cpp (Work keystone; vtable 0x140161020, size 0x70).
 // BuildStructure — real standalone factory in code/Game/Work/buildstructure.cpp (factory cascade Work family).
