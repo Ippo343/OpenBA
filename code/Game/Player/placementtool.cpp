@@ -1071,3 +1071,43 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     // Store variant index
     self->meshVariant = (int32_t)variant;
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// PlacementTool: size 0x70, parent Tool, 13-slot vtable @ 0x140161d20.
+// (PlacementTool_Ctor's ~25-resource slot-map init is elided; dormant type.)
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t PlacementTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PlacementTool");
+    return c;
+}
+static void* g_PlacementTool_Vtable[13] = {
+    (void*)&PlacementTool_Dtor_Impl,      // +0x00 Dtor
+    (void*)&Tool_Slot1,                   // +0x08
+    (void*)&PlacementTool_GetTypeId,      // +0x10 GetTypeId
+    (void*)&Tool_Persist,                 // +0x18 Serialize (base)
+    (void*)&PlacementTool_Startup_Impl,   // +0x20 Startup
+    (void*)&PlacementTool_Shutdown2_Impl, // +0x28 Shutdown2
+    (void*)&PlacementTool_OnKey_Impl,     // +0x30 OnKey
+    (void*)&PlacementTool_Serialize_Impl, // +0x38 Serialize (preview)
+    (void*)&PlacementTool_Draw_Impl,      // +0x40 Draw
+    (void*)&Tool_Ret0,                    // +0x48
+    (void*)&Tool_Ret0,                    // +0x50
+    (void*)&Tool_Ret0,                    // +0x58
+    (void*)&Tool_Ret0,                    // +0x60
+};
+extern "C" void RegisterPlacementToolVtable() {
+    RegisterExeAddr(0x140161d20, (uintptr_t)g_PlacementTool_Vtable);
+}
+extern "C" void* PlacementTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x70, g_PlacementTool_Vtable, 0);}
+extern "C" void* PlacementTool_Factory_SA(void) {
+    return Tool_Alloc(0x70, g_PlacementTool_Vtable, 0);
+}
+REGISTER_TYPE(PlacementTool, "Tool", &PlacementTool_Factory_SA, &PlacementTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

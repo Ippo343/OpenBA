@@ -221,6 +221,18 @@ extern "C" {
     void RegisterTutorialSetupGameSpeedVtable();
     void RegisterTutorialSetupRestrictPlayerVtable();
     void RegisterTutorialStepVtable();
+
+    // Factory cascade — Tool family (Object::Internal -> Tool / DragTool /
+    // ToolSetting; shared base in code/Game/Player/tool_base_standalone.cpp).
+    void RegisterBridgeToolVtable();
+    void RegisterDragPlacementToolVtable();
+    void RegisterEditToolVtable();
+    void RegisterFencedToolVtable();
+    void RegisterPathToolVtable();
+    void RegisterPlacementToolVtable();
+    void RegisterRemovalToolVtable();
+    void RegisterRoadToolVtable();
+    void RegisterRotationSettingVtable();
 }
 
 // ============================================================
@@ -1122,6 +1134,17 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTutorialSetupGameSpeedVtable();
     RegisterTutorialSetupRestrictPlayerVtable();
     RegisterTutorialStepVtable();
+
+    // Factory cascade — Tool family (shared base tool_base_standalone.cpp).
+    RegisterBridgeToolVtable();
+    RegisterDragPlacementToolVtable();
+    RegisterEditToolVtable();
+    RegisterFencedToolVtable();
+    RegisterPathToolVtable();
+    RegisterPlacementToolVtable();
+    RegisterRemovalToolVtable();
+    RegisterRoadToolVtable();
+    RegisterRotationSettingVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

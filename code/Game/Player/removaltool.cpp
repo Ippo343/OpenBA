@@ -564,3 +564,45 @@ bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell) {
     }
     return false;
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// RemovalTool: size 0x40, parent DragTool, 15-slot vtable @ 0x140161de0.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Player/dragtool.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t RemovalTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("RemovalTool");
+    return c;
+}
+static void* g_RemovalTool_Vtable[15] = {
+    (void*)&RemovalTool_Dtor,      // +0x00 Dtor
+    (void*)&Tool_Slot1,            // +0x08
+    (void*)&RemovalTool_GetTypeId, // +0x10 GetTypeId
+    (void*)&Tool_Persist,          // +0x18 Serialize
+    (void*)&RemovalTool_Startup,   // +0x20 Startup
+    (void*)&Tool_Ret0,             // +0x28
+    (void*)&DragTool_OnKey,        // +0x30 OnKey (base)
+    (void*)&Tool_Ret0,             // +0x38
+    (void*)&RemovalTool_Draw,      // +0x40 Draw
+    (void*)&Tool_Ret0,             // +0x48
+    (void*)&Tool_Ret0,             // +0x50
+    (void*)&Tool_Ret0,             // +0x58
+    (void*)&Tool_Ret0,             // +0x60
+    (void*)&RemovalTool_CalcPath,  // +0x68 CalcPath
+    (void*)&RemovalTool_CalcCost,  // +0x70 CalcCost
+};
+extern "C" void RegisterRemovalToolVtable() {
+    RegisterExeAddr(0x140161de0, (uintptr_t)g_RemovalTool_Vtable);
+}
+extern "C" void* RemovalTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x40, g_RemovalTool_Vtable, 1);}
+extern "C" void* RemovalTool_Factory_SA(void) {
+    return Tool_Alloc(0x40, g_RemovalTool_Vtable, 1);
+}
+REGISTER_TYPE(RemovalTool, "DragTool", &RemovalTool_Factory_SA, &RemovalTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

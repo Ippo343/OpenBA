@@ -549,3 +549,45 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
         }
     }
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// RoadTool: size 0x48, parent DragTool, 15-slot vtable @ 0x140161e70.
+// NOTE: slot13 CalcPath is not reimplemented (stubbed); slot14 CalcCost is.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t RoadTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("RoadTool");
+    return c;
+}
+static void* g_RoadTool_Vtable[15] = {
+    (void*)&RoadTool_Dtor,        // +0x00 Dtor
+    (void*)&Tool_Slot1,           // +0x08
+    (void*)&RoadTool_GetTypeId,   // +0x10 GetTypeId
+    (void*)&Tool_Persist,         // +0x18 Serialize
+    (void*)&RoadTool_Startup,     // +0x20 Startup
+    (void*)&Tool_Ret0,            // +0x28
+    (void*)&RoadTool_OnKey_Impl,  // +0x30 OnKey
+    (void*)&Tool_Ret0,            // +0x38
+    (void*)&RoadTool_Draw,        // +0x40 Draw
+    (void*)&Tool_Ret0,            // +0x48
+    (void*)&Tool_Ret0,            // +0x50
+    (void*)&Tool_Ret0,            // +0x58
+    (void*)&Tool_Ret0,            // +0x60
+    (void*)&Tool_Ret0,            // +0x68 CalcPath (not reimplemented)
+    (void*)&RoadTool_CalcCost_Impl, // +0x70 CalcCost
+};
+extern "C" void RegisterRoadToolVtable() {
+    RegisterExeAddr(0x140161e70, (uintptr_t)g_RoadTool_Vtable);
+}
+extern "C" void* RoadTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x48, g_RoadTool_Vtable, 1);}
+extern "C" void* RoadTool_Factory_SA(void) {
+    return Tool_Alloc(0x48, g_RoadTool_Vtable, 1);
+}
+REGISTER_TYPE(RoadTool, "DragTool", &RoadTool_Factory_SA, &RoadTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

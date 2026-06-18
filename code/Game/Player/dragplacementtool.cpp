@@ -697,3 +697,45 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
 
     return true;
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// DragPlacementTool: size 0x48, parent DragTool, 15-slot vtable @ 0x140161b90.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Player/dragtool.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t DragPlacementTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("DragPlacementTool");
+    return c;
+}
+static void* g_DragPlacementTool_Vtable[15] = {
+    (void*)&DragPlacementTool_Dtor,      // +0x00 Dtor
+    (void*)&Tool_Slot1,                  // +0x08
+    (void*)&DragPlacementTool_GetTypeId, // +0x10 GetTypeId
+    (void*)&Tool_Persist,                // +0x18 Serialize
+    (void*)&DragPlacementTool_Startup,   // +0x20 Startup
+    (void*)&Tool_Ret0,                   // +0x28
+    (void*)&DragTool_OnKey,              // +0x30 OnKey (base)
+    (void*)&Tool_Ret0,                   // +0x38
+    (void*)&DragPlacementTool_Draw_Impl, // +0x40 Draw
+    (void*)&Tool_Ret0,                   // +0x48
+    (void*)&Tool_Ret0,                   // +0x50
+    (void*)&Tool_Ret0,                   // +0x58
+    (void*)&Tool_Ret0,                   // +0x60
+    (void*)&DragPlacementTool_CalcPath,  // +0x68 CalcPath
+    (void*)&DragPlacementTool_CalcCost,  // +0x70 CalcCost
+};
+extern "C" void RegisterDragPlacementToolVtable() {
+    RegisterExeAddr(0x140161b90, (uintptr_t)g_DragPlacementTool_Vtable);
+}
+extern "C" void* DragPlacementTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x48, g_DragPlacementTool_Vtable, 1);}
+extern "C" void* DragPlacementTool_Factory_SA(void) {
+    return Tool_Alloc(0x48, g_DragPlacementTool_Vtable, 1);
+}
+REGISTER_TYPE(DragPlacementTool, "DragTool", &DragPlacementTool_Factory_SA, &DragPlacementTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

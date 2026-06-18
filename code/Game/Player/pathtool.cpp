@@ -478,3 +478,44 @@ bool PathTool_Serialize(PathTool* self, uint64_t* param2) {
     // Compare the stream value to the selected entity
     return *param2 == self->selectedEntity;
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// PathTool: size 0x60, parent Tool, 13-slot vtable @ 0x140160680.
+// slot12 returns 4 (tool type id); other base slots stubbed.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t PathTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PathTool");
+    return c;
+}
+static int PathTool_Slot12(void*) { return 4; }  // exe 0x1400de910 returns 4
+static void* g_PathTool_Vtable[13] = {
+    (void*)&PathTool_Dtor,       // +0x00 Dtor
+    (void*)&Tool_Slot1,          // +0x08
+    (void*)&PathTool_GetTypeId,  // +0x10 GetTypeId
+    (void*)&Tool_Persist,        // +0x18 Serialize (base)
+    (void*)&Tool_Ret0,           // +0x20 (exe RET nop)
+    (void*)&Tool_Ret0,           // +0x28 (cleanup highlight)
+    (void*)&PathTool_OnKey,      // +0x30 OnKey
+    (void*)&Tool_Ret0,           // +0x38 (exe RET nop)
+    (void*)&PathTool_Draw,       // +0x40 Draw
+    (void*)&Tool_Ret0,           // +0x48 (returns false)
+    (void*)&PathTool_Serialize,  // +0x50 Serialize
+    (void*)&Tool_Ret0,           // +0x58
+    (void*)&PathTool_Slot12,     // +0x60 (returns 4)
+};
+extern "C" void RegisterPathToolVtable() {
+    RegisterExeAddr(0x140160680, (uintptr_t)g_PathTool_Vtable);
+}
+extern "C" void* PathTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x60, g_PathTool_Vtable, 0);}
+extern "C" void* PathTool_Factory_SA(void) {
+    return Tool_Alloc(0x60, g_PathTool_Vtable, 0);
+}
+REGISTER_TYPE(PathTool, "Tool", &PathTool_Factory_SA, &PathTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

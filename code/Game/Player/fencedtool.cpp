@@ -994,3 +994,44 @@ uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t
     }
     return s_fn_FencedTool_CalcPath(self, startCell, endCell);
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// FencedTool: size 0x70, parent DragTool, 15-slot vtable @ 0x1401605d0.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t FencedTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("FencedTool");
+    return c;
+}
+static void* g_FencedTool_Vtable[15] = {
+    (void*)&FencedTool_Dtor,          // +0x00 Dtor
+    (void*)&Tool_Slot1,               // +0x08
+    (void*)&FencedTool_GetTypeId,     // +0x10 GetTypeId
+    (void*)&Tool_Persist,             // +0x18 Serialize (base)
+    (void*)&FencedTool_Startup_Impl,  // +0x20 Startup
+    (void*)&FencedTool_Shutdown2,     // +0x28 Shutdown2
+    (void*)&FencedTool_OnKey,         // +0x30 OnKey
+    (void*)&FencedTool_Serialize_Impl,// +0x38 Serialize (preview mesh)
+    (void*)&FencedTool_Draw_Impl,     // +0x40 Draw
+    (void*)&FencedTool_Shutdown,      // +0x48 Shutdown
+    (void*)&Tool_Ret0,                // +0x50
+    (void*)&Tool_Ret0,                // +0x58
+    (void*)&Tool_Ret0,                // +0x60
+    (void*)&FencedTool_CalcPath_Impl, // +0x68 CalcPath
+    (void*)&FencedTool_CalcCost_Impl, // +0x70 CalcCost
+};
+extern "C" void RegisterFencedToolVtable() {
+    RegisterExeAddr(0x1401605d0, (uintptr_t)g_FencedTool_Vtable);
+}
+extern "C" void* FencedTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x70, g_FencedTool_Vtable, 1);}
+extern "C" void* FencedTool_Factory_SA(void) {
+    return Tool_Alloc(0x70, g_FencedTool_Vtable, 1);
+}
+REGISTER_TYPE(FencedTool, "DragTool", &FencedTool_Factory_SA, &FencedTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

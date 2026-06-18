@@ -158,9 +158,6 @@ REGISTER_NULL_FACTORY(Action, "Object::Internal");  // 14014d010 Action_Register
 // SendComponentMessage — real standalone factory in code/Game/Action (factory cascade Action family).
 // Toolbar: real standalone factory in code/Game/Game/toolbar.cpp (hand-removed; factory cascade for BANISHED_GAME_PRELOAD). // 14014d410 Toolbar_RegisterType
 REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
-REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
-REGISTER_NULL_FACTORY(PathTool, "Tool");  // 14014d6d0 PathTool_RegisterType
-REGISTER_NULL_FACTORY(RotationSetting, "ToolSetting");  // 14014d710 RotationSetting_RegisterType
 // Tutorial — real standalone factory in code/Game/Tutorial/tutorial.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialGoal, "Object::External");  // 14014d790 TutorialGoal_RegisterType
 // TutorialGoalButton — real standalone factory in code/Game/Tutorial/tutorialgoalbutton.cpp (factory cascade External family).
@@ -203,13 +200,7 @@ REGISTER_NULL_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_Regi
 // TendArea — real standalone factory in code/Game/Work/tendarea.cpp (factory cascade Work family).
 // TradeWork — real standalone factory in code/Game/Work/tradework.cpp (factory cascade Work family).
 REGISTER_NULL_FACTORY(Work, "Object::Internal");  // 14014e190 Work_RegisterType
-REGISTER_NULL_FACTORY(BridgeTool, "DragTool");  // 14014e1d0 BridgeTool_RegisterType
-REGISTER_NULL_FACTORY(DragPlacementTool, "DragTool");  // 14014e210 DragPlacementTool_RegisterType
 REGISTER_NULL_FACTORY(DragTool, "Tool");  // 14014e250 DragTool_RegisterType
-REGISTER_NULL_FACTORY(EditTool, "Tool");  // 14014e290 EditTool_RegisterType
-REGISTER_NULL_FACTORY(PlacementTool, "Tool");  // 14014e2d0 PlacementTool_RegisterType
-REGISTER_NULL_FACTORY(RemovalTool, "DragTool");  // 14014e310 RemovalTool_RegisterType
-REGISTER_NULL_FACTORY(RoadTool, "DragTool");  // 14014e350 RoadTool_RegisterType
 REGISTER_NULL_FACTORY(Tool, "Object::Internal");  // 14014e390 Tool_StaticInit
 REGISTER_NULL_FACTORY(ToolSetting, "Object::Internal");  // 14014e3d0 ToolSetting_RegisterType
 REGISTER_NULL_FACTORY(Component, "Object::Internal");  // 14014ea10 Component_Register

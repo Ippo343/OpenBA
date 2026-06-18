@@ -237,3 +237,46 @@ uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
     }
     return s_fn_BridgeTool_CalcPath(self, startCell, endCell);
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade). See
+// tool_base_standalone.h + notes/FACTORY_CASCADE_145_BRIEF.md.
+// BridgeTool: size 0x40, parent DragTool, 15-slot vtable @ 0x140161b00.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Player/dragtool.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t BridgeTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("BridgeTool");
+    return c;
+}
+static void* g_BridgeTool_Vtable[15] = {
+    (void*)&BridgeTool_Dtor,      // +0x00 Dtor
+    (void*)&Tool_Slot1,           // +0x08 slot1 (null)
+    (void*)&BridgeTool_GetTypeId, // +0x10 GetTypeId
+    (void*)&Tool_Persist,         // +0x18 Serialize (base)
+    (void*)&BridgeTool_Startup,   // +0x20 Startup
+    (void*)&Tool_Ret0,            // +0x28
+    (void*)&DragTool_OnKey,       // +0x30 OnKey (DragTool base)
+    (void*)&Tool_Ret0,            // +0x38
+    (void*)&Tool_Ret0,            // +0x40
+    (void*)&Tool_Ret0,            // +0x48
+    (void*)&Tool_Ret0,            // +0x50
+    (void*)&Tool_Ret0,            // +0x58
+    (void*)&Tool_Ret0,            // +0x60
+    (void*)&BridgeTool_CalcPath,  // +0x68 CalcPath
+    (void*)&BridgeTool_CalcCost,  // +0x70 CalcCost
+};
+extern "C" void RegisterBridgeToolVtable() {
+    RegisterExeAddr(0x140161b00, (uintptr_t)g_BridgeTool_Vtable);
+}
+extern "C" void* BridgeTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x40, g_BridgeTool_Vtable, 1);}
+extern "C" void* BridgeTool_Factory_SA(void) {
+    return Tool_Alloc(0x40, g_BridgeTool_Vtable, 1);
+}
+REGISTER_TYPE(BridgeTool, "DragTool", &BridgeTool_Factory_SA, &BridgeTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE

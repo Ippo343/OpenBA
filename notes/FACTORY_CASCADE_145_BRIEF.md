@@ -152,6 +152,42 @@ block; DELETE `REGISTER_NULL_FACTORY(X, "Action")` from the bulk file.
   EditTool/PlacementTool/RemovalTool/RoadTool/FencedTool/PathTool/RotationSetting) → misc (Tornado/
   FrustumOutlineElement/CaptureBoxElement/Component subtypes/Description) → UI dialogs (57, LAST, with HUD).
 
+### PROGRESS 2026-06-18 — Tool family DONE. 89 → 80 active NullFactory stubs.
+- **Tool family — 9 concrete types DONE** (8 tools + RotationSetting). Shared base
+  `code/Game/Player/tool_base_standalone.{h,cpp}` (Tool_ScalarDtor / Tool_Slot1(null) /
+  Tool_Persist(slot3 serialize nop) / Tool_Ret0(generic stub) / Tool_InitInPlace / Tool_Alloc;
+  dragBase flag sets DragTool base cell defaults bytes [0x2c,0x38)=0xFF = startCell/endCell/
+  lastEndCell -1). Three vtable shapes ground-truthed from Ghidra memory:
+  * **DragTool-derived (15 slots, dragBase=1):** BridgeTool(0x40,vt 0x140161b00),
+    DragPlacementTool(0x48,0x140161b90), FencedTool(0x70,0x1401605d0),
+    RemovalTool(0x40,0x140161de0), RoadTool(0x48,0x140161e70). slot6 OnKey wired to the
+    shared DragTool_OnKey reimpl (dragtool.cpp) for Bridge/DragPlacement/Removal.
+  * **Tool-derived (13 slots, dragBase=0):** EditTool(0x38,0x140161ca0),
+    PathTool(0x60,0x140160680; slot12 returns 4), PlacementTool(0x70,0x140161d20;
+    ~25-resource slot-map ctor init elided — dormant).
+  * **ToolSetting-derived (4 slots):** RotationSetting(0x18,vt 0x140160710) — no reimpl
+    file, new standalone-only code/Game/Player/rotationsetting.cpp.
+  Each block: per-type GetTypeId (GetTypeIdByName), vtable array wiring the reimplemented
+  slots (Dtor/Startup/OnKey/Draw/Serialize/Shutdown/CalcPath/CalcCost per funcs.h docs) +
+  Tool_Ret0 stubs elsewhere, RegisterXVtable (RegisterExeAddr exe-vtable→our array),
+  Factory_SA (Tool_Alloc) + CreateInPlace_SA (Tool_InitInPlace), REGISTER_TYPE. Slot
+  role→function mapping taken from the per-tool *_funcs.h headers. Exe factory pattern
+  confirmed: <Tool>_Factory = MemAlloc(size,8) → <Tool>_Ctor; base purecall=0x14003addc,
+  slot3 Persist=0x14003a95a. RoadTool slot13 CalcPath not reimplemented (stubbed).
+- **Validated**: standalone-debug builds+links clean; smoke (BANISHED_AUTOSTART=1) = **300
+  addrs registered (51.5%, +9 over Tutorial's 291), 0 crashes, 0 NullFactory/IsDerivedFrom
+  hits**, engine starts + swapchain + window visible. Types are dormant (current paths
+  don't instantiate them) so registration count is the verification; slot fidelity trusted
+  from funcs.h + ground truth (not all 9×15 slots dispatch-tested).
+- **Abstract base divergence**: factory zeros [0x10,size) + drag defaults but elides
+  type-specific ctor field init (e.g. PlacementTool's resource slot map). Faithful enough
+  for landmine removal; if a type is ever actually driven, port its full <Tool>_Ctor.
+- **NEXT families** (recommended order): misc (4: Tornado/Graphics::Particle,
+  FrustumOutlineElement+CaptureBoxElement/Element, ResourceProduceComponent/ControllerComponent)
+  → UI dialogs (~61, LAST, with HUD bring-up) → abstract bases (~13: Action/Work/AutoPickupWork/
+  Tool/ToolSetting/DragTool/Component/Description/ControllerComponent/ComponentEntity/
+  TutorialInstance/TutorialGoal/TutorialSetup — _purecall, never instantiated, trivial abstract regs).
+
 ### Original status (pre-implementation):
 - Build/test: `mingw32-make sa-deploy`; run via `cmd //c start "" reimpl-x64.exe` from
   `C:\GOG Games\Banished` with `BANISHED_AUTOSTART=1` (RTSS/Afterburner must be CLOSED —

@@ -520,3 +520,42 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
 
     return 1;
 }
+
+// ============================================================
+// Standalone factory + vtable (factory cascade).
+// EditTool: size 0x38, parent Tool, 13-slot vtable @ 0x140161ca0.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "tool_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t EditTool_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("EditTool");
+    return c;
+}
+static void* g_EditTool_Vtable[13] = {
+    (void*)&EditTool_Dtor_Impl,      // +0x00 Dtor
+    (void*)&Tool_Slot1,              // +0x08
+    (void*)&EditTool_GetTypeId,      // +0x10 GetTypeId
+    (void*)&Tool_Persist,            // +0x18 Serialize (base)
+    (void*)&Tool_Ret0,               // +0x20
+    (void*)&Tool_Ret0,               // +0x28
+    (void*)&EditTool_OnKey_Impl,     // +0x30 OnKey
+    (void*)&EditTool_Startup_Impl,   // +0x38 Startup
+    (void*)&Tool_Ret0,               // +0x40
+    (void*)&Tool_Ret0,               // +0x48
+    (void*)&EditTool_Serialize_Impl, // +0x50 Serialize (entity ref)
+    (void*)&Tool_Ret0,               // +0x58
+    (void*)&Tool_Ret0,               // +0x60
+};
+extern "C" void RegisterEditToolVtable() {
+    RegisterExeAddr(0x140161ca0, (uintptr_t)g_EditTool_Vtable);
+}
+extern "C" void* EditTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x38, g_EditTool_Vtable, 0);}
+extern "C" void* EditTool_Factory_SA(void) {
+    return Tool_Alloc(0x38, g_EditTool_Vtable, 0);
+}
+REGISTER_TYPE(EditTool, "Tool", &EditTool_Factory_SA, &EditTool_CreateInPlace_SA);
+#endif // STANDALONE_EXE
