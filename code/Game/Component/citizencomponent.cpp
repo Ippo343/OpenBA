@@ -200,13 +200,13 @@ static void EnsureHelpers() {
 
     // Direct exe addresses for CitizenComponent sub-functions
     s_fn_TryFindPartner = reinterpret_cast<fn_TryFindPartner_t>(
-        ResolveAddr(Module::Exe, 0x14010fe40));
+        ResolveAddr(Module::Exe, 0x140111840));  // CitizenComponent::TryFindPartner (CALL @140112f82 in Update); 0x14010fe40 was helper_fe40 (wrong fn)
     s_fn_AssignState = reinterpret_cast<fn_AssignState_t>(
         ResolveAddr(Module::Exe, 0x140113af0));  // CitizenComponent::AssignState (CALL @140112f9e in Update)
     s_fn_HandleLifeEvent = reinterpret_cast<fn_HandleLifeEvent_t>(
         ResolveAddr(Module::Exe, 0x140116dd0));  // CitizenComponent::HandleLifeEvent (6 CALLs in Update)
     s_fn_UpdateHealth = reinterpret_cast<fn_UpdateHealth_t>(
-        ResolveAddr(Module::Exe, 0x140111b90));
+        ResolveAddr(Module::Exe, 0x1401127d0));  // CitizenComponent::UpdateHealth (CALL @1401131b9 in Update); 0x140111b90 was helper_1b90 (repro helper, wrong fn)
     s_fn_ConsumeFood = reinterpret_cast<fn_ConsumeFood_t>(
         ResolveAddr(Module::Exe, 0x140112990));  // CitizenComponent::ConsumeFood (CALL @1401133e7 in Update)
     s_fn_ConsumeFuel = reinterpret_cast<fn_ConsumeFuel_t>(
