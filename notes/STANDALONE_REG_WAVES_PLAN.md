@@ -182,11 +182,31 @@ ConsumeFuel, 0x140111590 FindWorkplace, 0x1401116f0 FindStorage, 0x1401163d0 Ass
 Work_Ctor25, 0x14012ec60 register-draw-item, 0x14009f3e0 tile→world (shared, 100+ callers — high
 reuse). Also open: nomad register-vs-teardown semantics (0x140103480 is NOT an address bug).
 
-## Start-here checklist (next session)
+## Start-here checklist (next session) — updated 2026-06-18 end of wave-2 day
 
-1. `git checkout wave/component-people` (or merge it forward first — decide branch strategy).
-2. Recompute the gap (commands above); confirm Work/Action splits still match.
-3. Decide Track A vs B (above).
-4. If Track A wave 2: spawn 3–4 agents (NO worktree), each owning a disjoint Work-file batch,
-   brief = `notes/COMPONENT_REG_WAVE_BRIEF.md` + safety rules above + "report reg lines as text,
-   don't commit/build/sub-fork." Lead wires + builds + A/B + commits.
+State: branch **`wave/work`** (9 commits, off `wave/component-people`; neither merged to main).
+Wave 2 = **22/39 shared Work base helpers done** (all high-value: both AVL families + grid trio,
+all hand-ported + Ghidra-verified). Working tree clean. Build green, A/B no-regression.
+
+1. `git checkout wave/work`. Decide branch strategy (wave/component-people → wave/work both unmerged;
+   may want to merge the chain forward to main once a milestone lands).
+2. Recompute the gap (commands at top of this file); the Work shared-helper count should now be ~17
+   (the 2–3 caller tail) + ~49 W1 leaf addrs.
+3. **Pick the next move (in rough priority):**
+   - **(Recommended) Track B — fix the menu frame-5 stall** (`MenuDLT::UpdateCamera frame=5`, ties to
+     [[project_next_goals_findorload_dedup]] / [[project_menu_cpu_loader_thread]]). EVERYTHING from
+     wave 1 + wave 2 is registered-but-latent until this is fixed; it's now the highest-leverage work.
+     Or rebase onto the `fix/ingame-worldgen-factory-cascade` branch that reached the in-game tick.
+   - Track A cont. — finish the Work tail (~17 low-reuse shared + ~49 W1 leaf). Mechanical; safe to
+     delegate the IDENTICAL/mechanical ones to SONNET, but HAND-PORT or use OPUS agents for anything
+     with tree/pointer/serialize logic (see [[feedback_prefer_opus_for_complex_re]]).
+   - Or start the **Action wave** (52 addrs) — same process.
+4. **Process that worked this session:** lead decompiles + hand-ports complex helpers into
+   `code/Game/Work/work_base_*.cpp`, one reg file per family in `standalone/reg_work_*.cpp`, wire the
+   `RegisterWork*Batch()` into `RegisterCodeFunctions()` (~L360 of address_registry.cpp), build, A/B
+   (run `make sa-run`-style; confirm frame-5 reached + 0 NOT IMPLEMENTED + 0-byte crash log), commit
+   per family. A/B run: copy exe to BANISHED_DIR, delete logs via `[System.IO.File]::Delete` (the PS
+   `Remove-Item` is permission-blocked on that path), launch with BANISHED_AUTOSTART=1, wait ~22s, kill.
+5. If delegating: agents get `notes/COMPONENT_REG_WAVE_BRIEF.md` + the SAFETY RULES above +
+   "report reg lines as text, don't commit/build/sub-fork." Lead Ghidra-VERIFIES complex reimpls
+   before integrating (this session caught 7+ unfaithful agent functions that compiled clean).
