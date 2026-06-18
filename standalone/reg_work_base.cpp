@@ -23,6 +23,11 @@ extern void* WorkBase_FindComponent_6270(uintptr_t, void*);  // 0x140006270 type
 extern void WorkBase_TreeNodeFree_14c30(void*, void*);       // 0x140014c30 children +0x10/+0x18
 extern void WorkBase_TreeNodeFree_e320(void*, void*);        // 0x14000e320 children +0x18/+0x20
 
+// Work base lifecycle (work_base_reimpl.cpp)
+extern void    WorkBase_TaskListCleanup_c5400(void*);                       // 0x1400c5400
+extern void    WorkBase_Serialize_f7400(void*, void*);                      // 0x1400f7400
+extern uint8_t WorkBase_ValidateTask_f7100(void*, void*, void*, void**);    // 0x1400f7100
+
 void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x140002ed0, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_2ed0));
     RegisterExeAddr(0x140002f90, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_2f90));
@@ -31,5 +36,8 @@ void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x140006270, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_6270));
     RegisterExeAddr(0x140014c30, reinterpret_cast<uintptr_t>(&WorkBase_TreeNodeFree_14c30));
     RegisterExeAddr(0x14000e320, reinterpret_cast<uintptr_t>(&WorkBase_TreeNodeFree_e320));
+    RegisterExeAddr(0x1400c5400, reinterpret_cast<uintptr_t>(&WorkBase_TaskListCleanup_c5400));
+    RegisterExeAddr(0x1400f7400, reinterpret_cast<uintptr_t>(&WorkBase_Serialize_f7400));
+    RegisterExeAddr(0x1400f7100, reinterpret_cast<uintptr_t>(&WorkBase_ValidateTask_f7100));
 }
 #endif

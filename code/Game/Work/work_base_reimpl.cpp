@@ -128,3 +128,126 @@ void WorkBase_TreeNodeFree_e320(void* root, void* node) {
         if (fn_MemFreeStatic) fn_MemFreeStatic(node);
     }
 }
+
+// ============================================================
+// Work base lifecycle
+// ============================================================
+
+// Reimpl of FUN_1400c5400 (TaskListCleanup) — cancel all pending work actions.
+// self layout: [0]=action-list array base, +8=count(int), +0x10=IBP, +0x18=int sentinel.
+// For each populated list slot, walk the singly-linked action chain (next at node+0x10),
+// invoking each action's vtable +0x40 (cancel/abort); then DeletePtr the slot IBP and
+// re-init it to null. Finally reset the +0x18 sentinel to -1 and clear the +0x10 IBP.
+// Caller signature: void fn(void* self)
+void WorkBase_TaskListCleanup_c5400(void* self) {
+    uintptr_t* p = reinterpret_cast<uintptr_t*>(self);
+    uintptr_t base = reinterpret_cast<uintptr_t>(self);
+    int count = *reinterpret_cast<int*>(base + 8);
+    uintptr_t arr = p[0];
+    for (int i = 0; i < count; i++) {
+        uintptr_t slot = arr + static_cast<uintptr_t>(i) * 8;
+        void* node = *reinterpret_cast<void**>(slot);
+        if (!node) continue;
+        void* cur = node;
+        do {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
+            // action vtable +0x40 — cancel/abort (implicit this = cur)
+            (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<uintptr_t*>(cur) + 0x40))(cur);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
+            cur = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(cur) + 0x10);  // node[2] = next
+        } while (cur != nullptr);
+        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(slot));
+        uintptr_t nul = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nul, nullptr);
+        *reinterpret_cast<uintptr_t*>(slot) = nul;
+    }
+    *reinterpret_cast<int*>(base + 0x18) = -1;
+    if (p[2] != 0) {
+        if (fn_InternalBasePtr_DeletePtr) fn_InternalBasePtr_DeletePtr(&p[2]);
+        uintptr_t nul = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nul, nullptr);
+        p[2] = nul;
+    }
+}
+
+// Reimpl of FUN_1400f7400 (Work::Serialize) — serialize a Work task (version 3 stream).
+// Two task-target IBPs at +0x10 (must derive ComponentEntity) and +0x18 (must derive
+// type 0x1401c8070) are post-validated and nulled on type mismatch; ints at +0x20/+0x28;
+// +0x24 is version-gated (copied from +0x20 pre-v1); two Times + an int at +0x30..+0x40
+// added at v3+.   Caller signature: void fn(void* self, void* stream)
+void WorkBase_Serialize_f7400(void* self, void* stream) {
+    EnsureTypeIds();
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    uint64_t ser[3];  // IO::Serializer, 0x18 bytes on the original's stack
+    if (!g_fn_Serializer_Ctor) return;
+    g_fn_Serializer_Ctor(ser, stream, 3);
+
+    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x10), ser);
+    if (*reinterpret_cast<void**>(s + 0x10) && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
+        if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x10), *g_TypeId_ComponentEntity))
+            *reinterpret_cast<void**>(s + 0x10) = nullptr;
+    }
+    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(s + 0x18), ser);
+    if (*reinterpret_cast<void**>(s + 0x18) && fn_IsDerivedFrom && s_pTid_3050) {
+        if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x18), *s_pTid_3050))
+            *reinterpret_cast<void**>(s + 0x18) = nullptr;
+    }
+    if (g_fn_Serialize_Int) {
+        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x20), nullptr);
+        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x28), nullptr);
+    }
+    int ver = g_fn_Serializer_GetVersion ? g_fn_Serializer_GetVersion(ser) : 0;
+    if (ver < 1)
+        *reinterpret_cast<int*>(s + 0x24) = *reinterpret_cast<int*>(s + 0x20);
+    else if (g_fn_Serialize_Int)
+        g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x24), nullptr);
+    if ((g_fn_Serializer_GetVersion ? g_fn_Serializer_GetVersion(ser) : 0) > 2) {
+        if (g_fn_Time_Serialize) {
+            g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x30), ser);
+            g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
+        }
+        if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, reinterpret_cast<void*>(s + 0x40), nullptr);
+    }
+    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(ser);
+}
+
+// Reimpl of FUN_1400f7100 (Work::CanStartWork / ValidateTask) — does the given
+// CitizenAIComponent IBP currently own a CompleteTask whose id (+0x30) matches this
+// Work's task id (self+0x20)? The CitizenAIComponent's action container is at +0x278
+// (array base +0x48, count +0x60 inclusive). Returns 1 (+ the matching task IBP through
+// `out`) on the first match, else 0.
+// Caller signature: uint8_t fn(void* self, void* citizenAI, void* taskIBP, void** out)
+uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
+    if (*reinterpret_cast<uintptr_t*>(taskIBP) == 0) return 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
+    void* obj = *reinterpret_cast<void**>(taskIBP);
+    uint32_t ciTid = g_TypeId_CitizenAIComponent_FC ? *g_TypeId_CitizenAIComponent_FC : 0;
+    if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
+    uintptr_t ci = *reinterpret_cast<uintptr_t*>(taskIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
+    uintptr_t container = *reinterpret_cast<uintptr_t*>(ci + 0x278);
+    int count = *reinterpret_cast<int*>(container + 0x60) + 1;
+    uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(container + 0x48);
+
+    uint32_t completeTaskTid = 0;
+    if (uint32_t* pCT = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5e50))) completeTaskTid = *pCT;
+    int wantId = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x20);
+
+    for (int i = 0; i < count; i++) {
+        void* elem = *reinterpret_cast<void**>(arrBase + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&elem);
+        void* ptr = (fn_IsDerivedFrom && completeTaskTid && fn_IsDerivedFrom(elem, completeTaskTid)) ? elem : nullptr;
+        uintptr_t res = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&res, ptr);
+        if (res != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&res);
+            if (*reinterpret_cast<int*>(res + 0x30) == wantId) {
+                if (out) *out = reinterpret_cast<void*>(res);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
