@@ -26,9 +26,10 @@ extern void OrchardComponent_SerializeRefEntries(void* serializer, int count, vo
 extern void OrchardComponent_ValidateRefs(void* selfV);
 
 // ---- zonecomponent.cpp ----
+struct ZoneComponent;  // defined in engine/types/ZoneComponent.h; bodies take ZoneComponent*
 extern void ZoneComponent_ZoneMapAdd(void* zoneMap, void* entityPtr);
-extern void ZoneComponent_Draw(void* self);
-extern void ZoneComponent_OnCreate(void* self);
+extern void ZoneComponent_Draw(ZoneComponent* self);
+extern void ZoneComponent_OnCreate(ZoneComponent* self);
 
 // ---- huntcomponent.cpp ----
 extern int  HuntComponent_ComputeTerrainSpeed(int64_t tileData);

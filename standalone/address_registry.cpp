@@ -341,10 +341,24 @@ void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int categ
 void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                               void* parentPtr, void* toolbarData);
 
+// Component registration wave (2026-06-18) — each batch registrar lives in its
+// own standalone/reg_component_<batch>.cpp and registers that batch's reimplemented
+// exe helper addresses. See notes/COMPONENT_REG_WAVE_BRIEF.md.
+extern void RegisterComponentBatch_people();
+extern void RegisterComponentBatch_economy();
+extern void RegisterComponentBatch_nature();
+extern void RegisterComponentBatch_visuals();
+
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
     // 349 unique code addresses to fill (0x140001xxx - 0x14014Fxxx range).
     // These are exe-internal functions called by code/Game/ via function pointers.
+
+    // Component registration wave — 4 batches of exe helper reimpls (Component module).
+    RegisterComponentBatch_people();
+    RegisterComponentBatch_economy();
+    RegisterComponentBatch_nature();
+    RegisterComponentBatch_visuals();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
