@@ -264,6 +264,33 @@ block; DELETE `REGISTER_NULL_FACTORY(X, "Action")` from the bulk file.
 - **NO concrete NullFactory landmines remain.** Bulk file now holds only ~61 UI dialog stubs
   (deferred to HUD bring-up, task #10) + ~14 already-correct abstract bases.
 
+### PROGRESS 2026-06-18 (cont.) — UI DIALOG FAMILY DONE. CASCADE COMPLETE. 0 NullFactory remain.
+- **UI dialog family — 58 concrete types DONE** (the last family). New centralized file
+  `code/Game/Dialog/ui_dialog_stub_factories.cpp` with a `UI_DIALOG_STUB(Name, Parent, Size)`
+  macro: per-type dormant-safe factory = MemAlloc(true exe size) + zero + minimal per-type
+  vtable (slot0 ScalarDtor sets vtable+optional MemFree, slot2 GetTypeId = GetTypeIdByName,
+  all other slots a variadic nop) + REGISTER_TYPE. Sizes decompiled from each exe
+  `Factory_<Type>`/`<Type>_Factory` (documented in headers for most; Ghidra for the ~12
+  undocumented: AutoSaveDialog 0xD0, HotKeyToolTipUI 0x30, MapParamsDialog 0xF8, all 4
+  *Config 0x28, TutorialGoalDialog 0x40/External, TutorialHighlightDialog 0xF0,
+  TutorialSetupDialog 0x78/External, TutorialUI 0x60). NO exe subclass vtable installed
+  (exe->Runtime thunks don't resolve standalone) → NO address_registry edit (same
+  dormant-safe policy as tornado.cpp/frustumoutlineelement.cpp; REGISTER_TYPE static-init only).
+- **SelectResourceUI -> REGISTER_ABSTRACT_FACTORY** (exe factory == purecall;
+  it is the registered parent of Orchard/Crop/PastureUI, so it stays registered in the bulk file).
+- **MessageDialog/NewGameDialog/OptionsDialog/OptionInputBindDialog bulk stubs removed** —
+  these already had full reimpl factories in their own .cpp; they were DOUBLE-registered
+  before (bulk NullFactory + real), now registered once. Net FactoryReg count dropped by 4.
+- **Validated** (commit 185a4a5): standalone-debug builds+links clean (1 harmless unused-fn
+  warning on the now-dead LogAndReturnNull); smoke (BANISHED_AUTOSTART) = 311 types registered,
+  **0 NullFactory / 0 AbstractFactory / 0 crash**, 300 addrs (unchanged). DrawFailed window/
+  present stall is the pre-existing environmental issue (A/B-baseline), not a regression. Dormant
+  types → registration + 0 NullFactory is the verification bar (same as all prior families).
+- **THE FACTORY CASCADE IS COMPLETE. `grep -r REGISTER_NULL_FACTORY code/` = 0.** Every
+  exe-defined type now has a real (or correct-abstract) standalone factory. To actually drive
+  any UI dialog (real vtables wiring the reimplemented slot methods), promote it out of
+  ui_dialog_stub_factories.cpp into a full per-class block — that is the HUD bring-up work (task #10).
+
 ### Original status (pre-implementation):
 - Build/test: `mingw32-make sa-deploy`; run via `cmd //c start "" reimpl-x64.exe` from
   `C:\GOG Games\Banished` with `BANISHED_AUTOSTART=1` (RTSS/Afterburner must be CLOSED —
