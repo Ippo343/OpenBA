@@ -282,3 +282,46 @@ bool RemoveAnimal_GetTarget_Impl(RemoveAnimal* self, void* param) {
     fn_InternalBasePtr_CheckPtr(s + 0x20);
     return *(void**)param == *(void**)(s + 0x20);
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015ffe0 (10 slots), size 0x28, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t RemoveAnimal_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("RemoveAnimal");
+    return c;
+}
+
+static void* g_RemoveAnimal_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&RemoveAnimal_GetTypeId,           // +0x10 GetTypeId
+    (void*)&RemoveAnimal_Serialize_Impl,      // +0x18 Serialize
+    (void*)&RemoveAnimal_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&RemoveAnimal_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&RemoveAnimal_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterRemoveAnimalVtable() {
+    RegisterExeAddr(0x14015ffe0, (uintptr_t)g_RemoveAnimal_Vtable);
+}
+extern "C" void* RemoveAnimal_CreateInPlace(void* mem) {
+    RemoveAnimal_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x28, g_RemoveAnimal_Vtable);
+}
+extern "C" void* RemoveAnimal_Factory(void) {
+    RemoveAnimal_ResolveFuncs();
+    return Action_Alloc(0x28, g_RemoveAnimal_Vtable);
+}
+REGISTER_TYPE(RemoveAnimal, "Action", &RemoveAnimal_Factory, &RemoveAnimal_CreateInPlace);
+#endif // STANDALONE_EXE

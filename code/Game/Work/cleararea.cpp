@@ -1263,3 +1263,53 @@ int ClearArea_Validate(ClearArea* self, void* citizenIBP) {
     fn_MemFreeStatic(removeArr);
     return 1;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161110 (13 slots), size 0x78, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// NOTE: this file's ctor is named ClearArea_Ctor (not _Ctor_Impl) and
+// self-resolves via the internal ResolveAll(); there is no separate
+// ClearArea_ResolveFuncs(), so the factory does not pre-resolve.
+// Execute is named ClearArea_Execute with signature (self, actionStack, time).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t ClearArea_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ClearArea");
+    return c;
+}
+
+static void* g_ClearArea_Vtable[13] = {
+    (void*)&ClearArea_ScalarDtor,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,            // +0x08 slot1 (null)
+    (void*)&ClearArea_GetTypeId,   // +0x10 GetTypeId
+    (void*)&ClearArea_Serialize,   // +0x18 Serialize
+    (void*)&ClearArea_Execute,     // +0x20 Execute
+    (void*)&Work_Slot5,            // +0x28 slot5 (returns 0)
+    (void*)&ClearArea_OnComplete,  // +0x30 OnComplete
+    (void*)&ClearArea_OnCancel,    // +0x38 OnCancel
+    (void*)&ClearArea_Cleanup,     // +0x40 Cleanup
+    (void*)&ClearArea_Validate,    // +0x48 Validate
+    (void*)&ClearArea_GetTarget,   // +0x50 GetTarget
+    (void*)&ClearArea_GetPriority, // +0x58 GetPriority
+    (void*)&Work_Slot12,           // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterClearAreaVtable() {
+    RegisterExeAddr(0x140161110, (uintptr_t)g_ClearArea_Vtable);
+}
+extern "C" void* ClearArea_CreateInPlace(void* mem) {
+    return ClearArea_Ctor((ClearArea*)mem);
+}
+extern "C" void* ClearArea_Factory(void) {
+    void* p = Work_Alloc(0x78);
+    return p ? ClearArea_Ctor((ClearArea*)p) : nullptr;
+}
+REGISTER_TYPE(ClearArea, "Work", &ClearArea_Factory, &ClearArea_CreateInPlace);
+#endif // STANDALONE_EXE

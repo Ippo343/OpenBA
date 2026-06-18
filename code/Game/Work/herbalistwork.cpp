@@ -1012,3 +1012,64 @@ void* HerbalistWork_ScalarDtor_Impl(HerbalistWork* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — AutoPickupWork family (factory cascade).
+// Vtable @ 0x1401615a0 (13 slots), size 0x60, parent "AutoPickupWork".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// Slot map (this file's actual function names):
+//   slot0  ScalarDtor : HerbalistWork_ScalarDtor_Impl
+//   slot3  Serialize  : HerbalistWork_Serialize_Impl
+//   slot4  Execute    : HerbalistWork_Slot4_Impl
+//   slot6  OnComplete : HerbalistWork_Slot6_Impl
+//   slot7  OnCancel   : HerbalistWork_Slot7_Impl
+//   slot8  Cleanup    : HerbalistWork_Slot8_Impl
+//   slot9  Validate   : HerbalistWork_Slot9_Impl
+//   slot10 GetTarget  : HerbalistWork_Slot10_Impl
+//   slot11 GetPriority: FLAG — NO HerbalistWork_Slot11_Impl in this file
+//   Ctor       : FLAG — NO HerbalistWork_Ctor_Impl in this file -> factory null
+//   ResolveFuncs: HerbalistWork_ResolveFuncs()
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t HerbalistWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("HerbalistWork");
+    return c;
+}
+
+static void* g_HerbalistWork_Vtable[13] = {
+    (void*)&HerbalistWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                     // +0x08 slot1 (null)
+    (void*)&HerbalistWork_GetTypeId,        // +0x10 GetTypeId
+    (void*)&HerbalistWork_Serialize_Impl,   // +0x18 Serialize
+    (void*)&HerbalistWork_Slot4_Impl,       // +0x20 Execute
+    (void*)&Work_Slot5,                     // +0x28 slot5 (returns 0)
+    (void*)&HerbalistWork_Slot6_Impl,       // +0x30 OnComplete
+    (void*)&HerbalistWork_Slot7_Impl,       // +0x38 OnCancel
+    (void*)&HerbalistWork_Slot8_Impl,       // +0x40 Cleanup
+    (void*)&HerbalistWork_Slot9_Impl,       // +0x48 Validate
+    (void*)&HerbalistWork_Slot10_Impl,      // +0x50 GetTarget
+    (void*)&Work_SlotRet0,           // +0x58 GetPriority (NO HerbalistWork_Slot11_Impl)
+    (void*)&Work_Slot12,                    // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterHerbalistWorkVtable() {
+    RegisterExeAddr(0x1401615a0, (uintptr_t)g_HerbalistWork_Vtable);
+}
+extern "C" void* HerbalistWork_CreateInPlace(void* mem) {
+    HerbalistWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x60, g_HerbalistWork_Vtable);
+}
+extern "C" void* HerbalistWork_Factory(void) {
+    HerbalistWork_ResolveFuncs();
+    void* p = Work_Alloc(0x60);
+    return p ? Work_GenericCtor(p, 0x60, g_HerbalistWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(HerbalistWork, "AutoPickupWork", &HerbalistWork_Factory, &HerbalistWork_CreateInPlace);
+#endif // STANDALONE_EXE

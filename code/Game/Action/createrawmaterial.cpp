@@ -540,3 +540,46 @@ int CreateRawMaterial_GetTarget_Impl(CreateRawMaterial* self, void* param) {
 
     return 0;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fd10 (10 slots), size 0x58, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t CreateRawMaterial_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("CreateRawMaterial");
+    return c;
+}
+
+static void* g_CreateRawMaterial_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&CreateRawMaterial_GetTypeId,           // +0x10 GetTypeId
+    (void*)&CreateRawMaterial_Serialize_Impl,      // +0x18 Serialize
+    (void*)&CreateRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
+    (void*)&CreateRawMaterial_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterCreateRawMaterialVtable() {
+    RegisterExeAddr(0x14015fd10, (uintptr_t)g_CreateRawMaterial_Vtable);
+}
+extern "C" void* CreateRawMaterial_CreateInPlace(void* mem) {
+    CreateRawMaterial_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x58, g_CreateRawMaterial_Vtable);
+}
+extern "C" void* CreateRawMaterial_Factory(void) {
+    CreateRawMaterial_ResolveFuncs();
+    return Action_Alloc(0x58, g_CreateRawMaterial_Vtable);
+}
+REGISTER_TYPE(CreateRawMaterial, "Action", &CreateRawMaterial_Factory, &CreateRawMaterial_CreateInPlace);
+#endif // STANDALONE_EXE

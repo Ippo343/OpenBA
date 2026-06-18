@@ -1170,3 +1170,56 @@ void* ForesterWork_Slot10_Impl(ForesterWork* self, void* outPtr) {
 
     return outPtr;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x1401613a0 (13 slots), size 0x60, parent "AutoPickupWork".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+// Slot map ground-truthed from the real exe vtable @ 0x1401613a0:
+//   slot4 (Execute)=ForesterWork_Slot4_Impl (0x1400eaec0).
+//   slot5 = shared Work_Slot5 (0x1400f7540).
+//   slot11 (GetPriority) = 0x140029860 — the SHARED HasWorkers thunk;
+//   ForesterWork has NO own GetPriority fn in foresterwork.cpp -> FLAG.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t ForesterWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ForesterWork");
+    return c;
+}
+
+static void* g_ForesterWork_Vtable[13] = {
+    (void*)&ForesterWork_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002a370)
+    (void*)&Work_Slot1,                    // +0x08 slot1 (null)
+    (void*)&ForesterWork_GetTypeId,        // +0x10 GetTypeId
+    (void*)&ForesterWork_Serialize_Impl,   // +0x18 Serialize (0x1400eb970)
+    (void*)&ForesterWork_Slot4_Impl,       // +0x20 Execute (0x1400eaec0)
+    (void*)&Work_Slot5,                    // +0x28 slot5 (returns 0)
+    (void*)&ForesterWork_Slot6_Impl,       // +0x30 OnComplete (0x1400eaea0)
+    (void*)&ForesterWork_Slot7_Impl,       // +0x38 OnCancel (0x1400eae90)
+    (void*)&ForesterWork_Slot8_Impl,       // +0x40 Cleanup (0x1400eb8a0)
+    (void*)&ForesterWork_Slot9_Impl,       // +0x48 Validate (0x1400eac60)
+    (void*)&ForesterWork_Slot10_Impl,      // +0x50 GetTarget (0x1400eb910)
+    (void*)&Work_SlotRet0,          // +0x58 GetPriority (0x140029860 shared HasWorkers; no own fn)
+    (void*)&Work_Slot12,                   // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterForesterWorkVtable() {
+    RegisterExeAddr(0x1401613a0, (uintptr_t)g_ForesterWork_Vtable);
+}
+extern "C" void* ForesterWork_CreateInPlace(void* mem) {
+    ForesterWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x60, g_ForesterWork_Vtable);
+}
+extern "C" void* ForesterWork_Factory(void) {
+    ForesterWork_ResolveFuncs();
+    void* p = Work_Alloc(0x60);
+    return p ? Work_GenericCtor(p, 0x60, g_ForesterWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(ForesterWork, "AutoPickupWork", &ForesterWork_Factory, &ForesterWork_CreateInPlace);
+#endif // STANDALONE_EXE

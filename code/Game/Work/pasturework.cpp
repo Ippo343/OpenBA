@@ -1035,3 +1035,64 @@ void* PastureWork_ScalarDtor_Impl(PastureWork* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — AutoPickupWork family (factory cascade).
+// Vtable @ 0x1401617a0 (13 slots), size 0x58, parent "AutoPickupWork".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// Slot map (this file's actual function names):
+//   slot0  ScalarDtor : PastureWork_ScalarDtor_Impl
+//   slot3  Serialize  : PastureWork_Serialize_Impl
+//   slot4  Execute    : PastureWork_Slot4_Impl
+//   slot6  OnComplete : PastureWork_Slot6_Impl
+//   slot7  OnCancel   : PastureWork_Slot7_Impl
+//   slot8  Cleanup    : PastureWork_Slot8_Impl
+//   slot9  Validate   : PastureWork_Slot9_Impl
+//   slot10 GetTarget  : PastureWork_Slot10_Impl
+//   slot11 GetPriority: PastureWork_Slot11_Impl
+//   Ctor       : FLAG — NO PastureWork_Ctor_Impl in this file -> factory null
+//   ResolveFuncs: PastureWork_ResolveFuncs()
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t PastureWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PastureWork");
+    return c;
+}
+
+static void* g_PastureWork_Vtable[13] = {
+    (void*)&PastureWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                   // +0x08 slot1 (null)
+    (void*)&PastureWork_GetTypeId,        // +0x10 GetTypeId
+    (void*)&PastureWork_Serialize_Impl,   // +0x18 Serialize
+    (void*)&PastureWork_Slot4_Impl,       // +0x20 Execute
+    (void*)&Work_Slot5,                   // +0x28 slot5 (returns 0)
+    (void*)&PastureWork_Slot6_Impl,       // +0x30 OnComplete
+    (void*)&PastureWork_Slot7_Impl,       // +0x38 OnCancel
+    (void*)&PastureWork_Slot8_Impl,       // +0x40 Cleanup
+    (void*)&PastureWork_Slot9_Impl,       // +0x48 Validate
+    (void*)&PastureWork_Slot10_Impl,      // +0x50 GetTarget
+    (void*)&PastureWork_Slot11_Impl,      // +0x58 GetPriority
+    (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterPastureWorkVtable() {
+    RegisterExeAddr(0x1401617a0, (uintptr_t)g_PastureWork_Vtable);
+}
+extern "C" void* PastureWork_CreateInPlace(void* mem) {
+    PastureWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x58, g_PastureWork_Vtable);
+}
+extern "C" void* PastureWork_Factory(void) {
+    PastureWork_ResolveFuncs();
+    void* p = Work_Alloc(0x58);
+    return p ? Work_GenericCtor(p, 0x58, g_PastureWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(PastureWork, "AutoPickupWork", &PastureWork_Factory, &PastureWork_CreateInPlace);
+#endif // STANDALONE_EXE

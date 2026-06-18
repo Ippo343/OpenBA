@@ -691,3 +691,55 @@ void* TendArea_ScalarDtor_Impl(TendArea* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161990 (13 slots), size 0x60, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+// Slot map ground-truthed from the real exe vtable @ 0x140161990:
+//   slot4 (Execute)=TendArea_Slot4_Impl (0x1400f5490). The orphaned
+//   TendArea_Execute_Impl ("returns false") is NOT in the vtable — slot5
+//   is the shared Work_Slot5 (0x1400f7540). Do NOT use TendArea_Execute_Impl.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TendArea_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TendArea");
+    return c;
+}
+
+static void* g_TendArea_Vtable[13] = {
+    (void*)&TendArea_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002c5d0)
+    (void*)&Work_Slot1,                // +0x08 slot1 (null)
+    (void*)&TendArea_GetTypeId,        // +0x10 GetTypeId
+    (void*)&TendArea_Serialize_Impl,   // +0x18 Serialize (0x1400f5900)
+    (void*)&TendArea_Slot4_Impl,       // +0x20 Execute (0x1400f5490)
+    (void*)&Work_Slot5,                // +0x28 slot5 (returns 0)
+    (void*)&TendArea_Slot6_Impl,       // +0x30 OnComplete (0x1400f5470)
+    (void*)&TendArea_Slot7_Impl,       // +0x38 OnCancel (0x1400f5460)
+    (void*)&TendArea_Slot8_Impl,       // +0x40 Cleanup (0x1400f5830)
+    (void*)&TendArea_Slot9_Impl,       // +0x48 Validate (0x1400f5230)
+    (void*)&TendArea_Slot10_Impl,      // +0x50 GetTarget (0x1400f58a0)
+    (void*)&TendArea_Slot11_Impl,      // +0x58 GetPriority (0x140029860)
+    (void*)&Work_Slot12,               // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterTendAreaVtable() {
+    RegisterExeAddr(0x140161990, (uintptr_t)g_TendArea_Vtable);
+}
+extern "C" void* TendArea_CreateInPlace(void* mem) {
+    TendArea_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x60, g_TendArea_Vtable);
+}
+extern "C" void* TendArea_Factory(void) {
+    TendArea_ResolveFuncs();
+    void* p = Work_Alloc(0x60);
+    return p ? Work_GenericCtor(p, 0x60, g_TendArea_Vtable) : nullptr;
+}
+REGISTER_TYPE(TendArea, "Work", &TendArea_Factory, &TendArea_CreateInPlace);
+#endif // STANDALONE_EXE

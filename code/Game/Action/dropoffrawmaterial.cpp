@@ -376,3 +376,46 @@ bool DropOffRawMaterial_GetTarget_Impl(DropOffRawMaterial* self, void* param) {
     fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fd80 (10 slots), size 0x40, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t DropOffRawMaterial_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("DropOffRawMaterial");
+    return c;
+}
+
+static void* g_DropOffRawMaterial_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&DropOffRawMaterial_GetTypeId,           // +0x10 GetTypeId
+    (void*)&DropOffRawMaterial_Serialize_Impl,      // +0x18 Serialize
+    (void*)&DropOffRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&DropOffRawMaterial_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&DropOffRawMaterial_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterDropOffRawMaterialVtable() {
+    RegisterExeAddr(0x14015fd80, (uintptr_t)g_DropOffRawMaterial_Vtable);
+}
+extern "C" void* DropOffRawMaterial_CreateInPlace(void* mem) {
+    DropOffRawMaterial_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x40, g_DropOffRawMaterial_Vtable);
+}
+extern "C" void* DropOffRawMaterial_Factory(void) {
+    DropOffRawMaterial_ResolveFuncs();
+    return Action_Alloc(0x40, g_DropOffRawMaterial_Vtable);
+}
+REGISTER_TYPE(DropOffRawMaterial, "Action", &DropOffRawMaterial_Factory, &DropOffRawMaterial_CreateInPlace);
+#endif // STANDALONE_EXE

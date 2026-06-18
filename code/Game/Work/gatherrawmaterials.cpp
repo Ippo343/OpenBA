@@ -991,3 +991,65 @@ void* GatherRawMaterials_ScalarDtor_Impl(GatherRawMaterials* self, uint32_t flag
     }
     return self;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161420 (13 slots), size 0x78, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// FLAGS:
+//   - slot0  ScalarDtor : GatherRawMaterials_ScalarDtor_Impl  (present)
+//   - slot3  Serialize  : GatherRawMaterials_Serialize_Impl
+//   - slot4  Execute    : GatherRawMaterials_Execute_Impl (4-arg: self, entityIBP, p3, p4)
+//   - slot6  OnComplete : GatherRawMaterials_OnComplete_Impl
+//   - slot7  OnCancel   : GatherRawMaterials_OnCancel_Impl
+//   - slot8  Cleanup    : GatherRawMaterials_Cleanup_Impl
+//   - slot9  Validate   : GatherRawMaterials_Validate_Impl
+//   - slot10 GetTarget  : GatherRawMaterials_GetTarget_Impl
+//   - slot11 GetPriority: NO GatherRawMaterials_GetPriority_Impl defined -> /*FLAG*/ nullptr
+//   - Ctor              : NO GatherRawMaterials_Ctor_Impl defined (only exe addr
+//                         Ctor 0x1400ec8a0) -> factory cannot construct ->
+//                         /*FLAG*/ returns null until a Ctor_Impl is written.
+//   - ResolveFuncs      : GatherRawMaterials_ResolveFuncs() (does NOT resolve a vtable).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t GatherRawMaterials_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("GatherRawMaterials");
+    return c;
+}
+
+static void* g_GatherRawMaterials_Vtable[13] = {
+    (void*)&GatherRawMaterials_ScalarDtor_Impl, // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                         // +0x08 slot1 (null)
+    (void*)&GatherRawMaterials_GetTypeId,       // +0x10 GetTypeId
+    (void*)&GatherRawMaterials_Serialize_Impl,  // +0x18 Serialize
+    (void*)&GatherRawMaterials_Execute_Impl,    // +0x20 Execute
+    (void*)&Work_Slot5,                         // +0x28 slot5 (returns 0)
+    (void*)&GatherRawMaterials_OnComplete_Impl, // +0x30 OnComplete
+    (void*)&GatherRawMaterials_OnCancel_Impl,   // +0x38 OnCancel
+    (void*)&GatherRawMaterials_Cleanup_Impl,    // +0x40 Cleanup
+    (void*)&GatherRawMaterials_Validate_Impl,   // +0x48 Validate
+    (void*)&GatherRawMaterials_GetTarget_Impl,  // +0x50 GetTarget
+    (void*)&Work_SlotRet0,                           // +0x58 GetPriority (NO _GetPriority_Impl)
+    (void*)&Work_Slot12,                        // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterGatherRawMaterialsVtable() {
+    RegisterExeAddr(0x140161420, (uintptr_t)g_GatherRawMaterials_Vtable);
+}
+extern "C" void* GatherRawMaterials_CreateInPlace(void* mem) {
+    GatherRawMaterials_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x78, g_GatherRawMaterials_Vtable);
+}
+extern "C" void* GatherRawMaterials_Factory(void) {
+    GatherRawMaterials_ResolveFuncs();
+    void* p = Work_Alloc(0x78);
+    return p ? Work_GenericCtor(p, 0x78, g_GatherRawMaterials_Vtable) : nullptr;
+}
+REGISTER_TYPE(GatherRawMaterials, "Work", &GatherRawMaterials_Factory, &GatherRawMaterials_CreateInPlace);
+#endif // STANDALONE_EXE

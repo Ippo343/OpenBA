@@ -56,8 +56,9 @@ namespace {
     namespace { void* NullFactory_##Name() { return LogAndReturnNull(#Name); } } \
     REGISTER_TYPE_FULL(Name, Parent, Abstract, &NullFactory_##Name, &NullInPlace)
 
-REGISTER_NULL_FACTORY(PlayAnimation, "Action");  // 14014a580 PlayAnimation_RegisterType
-REGISTER_NULL_FACTORY(ShowTool, "Action");  // 14014a5c0 ShowTool_RegisterType
+// PlayAnimation — real standalone factory in code/Game/Action/playanimation.cpp
+//   (Action keystone; vtable 0x140158950, size 0x40). // 14014a580 PlayAnimation_RegisterType
+// ShowTool — real standalone factory in code/Game/Action (factory cascade Action family).
 // PopulationComponent: real standalone factory in code/Game/Component/populationcomponent.cpp (hand-removed; see Foundation D)
 REGISTER_NULL_FACTORY(AchievementDialog, "UI::DialogInstance");  // 14014bc80 RegisterType_AchievementDialog
 REGISTER_NULL_FACTORY(AttendanceUI, "UI::DialogController");  // 14014bcc0 RegisterType_AttendanceUI
@@ -140,21 +141,21 @@ REGISTER_NULL_FACTORY(StorageUI, "UI::DialogController");  // 14014cf50 Register
 REGISTER_NULL_FACTORY(ToolbarDialog, "UI::DialogInstance");  // 14014cf90 RegisterType_ToolbarDialog
 REGISTER_NULL_FACTORY(ComponentEntity, "Object::Internal");  // 14014cfd0 ComponentEntity_RegisterType
 REGISTER_NULL_FACTORY(Action, "Object::Internal");  // 14014d010 Action_RegisterType
-REGISTER_NULL_FACTORY(AnimateNaturalResource, "Action");  // 14014d050 AnimateNaturalResource_RegisterType
-REGISTER_NULL_FACTORY(CompleteRoad, "Action");  // 14014d090 CompleteRoad_RegisterType
-REGISTER_NULL_FACTORY(CompleteTask, "Action");  // 14014d0d0 CompleteTask_RegisterType
-REGISTER_NULL_FACTORY(ConsumeRawMaterial, "Action");  // 14014d110 ConsumeRawMaterial_RegisterType
-REGISTER_NULL_FACTORY(CreateNaturalResource, "Action");  // 14014d150 CreateNaturalResource_RegisterType
-REGISTER_NULL_FACTORY(CreateRawMaterial, "Action");  // 14014d190 CreateRawMaterial_RegisterType
-REGISTER_NULL_FACTORY(DropOffRawMaterial, "Action");  // 14014d1d0 DropOffRawMaterial_RegisterType
-REGISTER_NULL_FACTORY(HuntAnimal, "Action");  // 14014d210 HuntAnimal_RegisterType
-REGISTER_NULL_FACTORY(MoveTo, "Action");  // 14014d250 MoveTo_RegisterType
-REGISTER_NULL_FACTORY(PerformWork, "Action");  // 14014d290 PerformWork_RegisterType
-REGISTER_NULL_FACTORY(PickupRawMaterial, "Action");  // 14014d2d0 PickupRawMaterial_RegisterType
-REGISTER_NULL_FACTORY(PickupStoredRawMaterial, "Action");  // 14014d310 PickupStoredRawMaterial_RegisterType
-REGISTER_NULL_FACTORY(RemoveAnimal, "Action");  // 14014d350 RemoveAnimal_RegisterType
-REGISTER_NULL_FACTORY(RemoveNaturalResource, "Action");  // 14014d390 RemoveNaturalResource_RegisterType
-REGISTER_NULL_FACTORY(SendComponentMessage, "Action");  // 14014d3d0 SendComponentMessage_RegisterType
+// AnimateNaturalResource — real standalone factory in code/Game/Action (factory cascade Action family).
+// CompleteRoad — real standalone factory in code/Game/Action (factory cascade Action family).
+// CompleteTask — real standalone factory in code/Game/Action (factory cascade Action family).
+// ConsumeRawMaterial — real standalone factory in code/Game/Action (factory cascade Action family).
+// CreateNaturalResource — real standalone factory in code/Game/Action (factory cascade Action family).
+// CreateRawMaterial — real standalone factory in code/Game/Action (factory cascade Action family).
+// DropOffRawMaterial — real standalone factory in code/Game/Action (factory cascade Action family).
+// HuntAnimal — real standalone factory in code/Game/Action (factory cascade Action family).
+// MoveTo — real standalone factory in code/Game/Action (factory cascade Action family).
+// PerformWork — real standalone factory in code/Game/Action (factory cascade Action family).
+// PickupRawMaterial — real standalone factory in code/Game/Action (factory cascade Action family).
+// PickupStoredRawMaterial — real standalone factory in code/Game/Action (factory cascade Action family).
+// RemoveAnimal — real standalone factory in code/Game/Action (factory cascade Action family).
+// RemoveNaturalResource — real standalone factory in code/Game/Action (factory cascade Action family).
+// SendComponentMessage — real standalone factory in code/Game/Action (factory cascade Action family).
 // Toolbar: real standalone factory in code/Game/Game/toolbar.cpp (hand-removed; factory cascade for BANISHED_GAME_PRELOAD). // 14014d410 Toolbar_RegisterType
 REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
@@ -180,27 +181,27 @@ REGISTER_NULL_FACTORY(TutorialSetupRestrictPlayer, "TutorialSetup");  // 14014db
 REGISTER_NULL_FACTORY(TutorialStep, "Object::External");  // 14014db90 TutorialStep_RegisterType
 REGISTER_NULL_FACTORY(TutorialUI, "UI::DialogController");  // 14014dbd0 RegisterType_TutorialUI
 REGISTER_NULL_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_RegisterType
-REGISTER_NULL_FACTORY(BuildRoad, "Work");  // 14014dc50 BuildRoad_RegisterType
-REGISTER_NULL_FACTORY(BuildStructure, "Work");  // 14014dc90 BuildStructure_RegisterType
-REGISTER_NULL_FACTORY(ClearArea, "Work");  // 14014dcd0 ClearArea_RegisterType
-REGISTER_NULL_FACTORY(ClearStorage, "Work");  // 14014dd10 ClearStorage_RegisterType
-REGISTER_NULL_FACTORY(ConsumeProduce, "Work");  // 14014dd50 ConsumeProduce_RegisterType
-REGISTER_NULL_FACTORY(FireWork, "Work");  // 14014dd90 FireWork_RegisterType
-REGISTER_NULL_FACTORY(FishingWork, "Work");  // 14014ddd0 FishingWork_RegisterType
-REGISTER_NULL_FACTORY(ForesterWork, "AutoPickupWork");  // 14014de10 ForesterWork_RegisterType
-REGISTER_NULL_FACTORY(GatherRawMaterials, "Work");  // 14014de50 GatherRawMaterials_RegisterType
-REGISTER_NULL_FACTORY(HarvestArea, "AutoPickupWork");  // 14014de90 HarvestArea_RegisterType
-REGISTER_NULL_FACTORY(HarvestOrchard, "AutoPickupWork");  // 14014ded0 HarvestOrchard_RegisterType
-REGISTER_NULL_FACTORY(HerbalistWork, "AutoPickupWork");  // 14014df10 HerbalistWork_RegisterType
-REGISTER_NULL_FACTORY(HuntWork, "AutoPickupWork");  // 14014df50 HuntWork_RegisterType
-REGISTER_NULL_FACTORY(LocationWork, "Work");  // 14014df90 LocationWork_RegisterType
-REGISTER_NULL_FACTORY(MarketWork, "Work");  // 14014dfd0 MarketWork_RegisterType
-REGISTER_NULL_FACTORY(PastureWork, "AutoPickupWork");  // 14014e010 PastureWork_RegisterType
-REGISTER_NULL_FACTORY(Pickup, "Work");  // 14014e050 Pickup_RegisterType
-REGISTER_NULL_FACTORY(PlantArea, "Work");  // 14014e090 PlantArea_RegisterType
-REGISTER_NULL_FACTORY(PlantOrchard, "Work");  // 14014e0d0 PlantOrchard_RegisterType
-REGISTER_NULL_FACTORY(TendArea, "Work");  // 14014e110 TendArea_RegisterType
-REGISTER_NULL_FACTORY(TradeWork, "Work");  // 14014e150 TradeWork_RegisterType
+// BuildRoad — real standalone factory in code/Game/Work/buildroad.cpp (Work keystone; vtable 0x140161020, size 0x70).
+// BuildStructure — real standalone factory in code/Game/Work/buildstructure.cpp (factory cascade Work family).
+// ClearArea — real standalone factory in code/Game/Work/cleararea.cpp (factory cascade Work family).
+// ClearStorage — real standalone factory in code/Game/Work/clearstorage.cpp (factory cascade Work family).
+// ConsumeProduce — real standalone factory in code/Game/Work/consumeproduce.cpp (factory cascade Work family).
+// FireWork — real standalone factory in code/Game/Work/firework.cpp (factory cascade Work family).
+// FishingWork — real standalone factory in code/Game/Work/fishingwork.cpp (factory cascade Work family).
+// ForesterWork — real standalone factory in code/Game/Work/foresterwork.cpp (factory cascade, parent AutoPickupWork).
+// GatherRawMaterials — real standalone factory in code/Game/Work/gatherrawmaterials.cpp (factory cascade Work family).
+// HarvestArea — real standalone factory in code/Game/Work/harvestarea.cpp (factory cascade, parent AutoPickupWork).
+// HarvestOrchard — real standalone factory in code/Game/Work/harvestorchard.cpp (factory cascade, parent AutoPickupWork).
+// HerbalistWork — real standalone factory in code/Game/Work/herbalistwork.cpp (factory cascade, parent AutoPickupWork).
+// HuntWork — real standalone factory in code/Game/Work/huntwork.cpp (factory cascade, parent AutoPickupWork).
+// LocationWork — real standalone factory in code/Game/Work/locationwork.cpp (factory cascade Work family).
+// MarketWork — real standalone factory in code/Game/Work/marketwork.cpp (factory cascade Work family).
+// PastureWork — real standalone factory in code/Game/Work/pasturework.cpp (factory cascade, parent AutoPickupWork).
+// Pickup — real standalone factory in code/Game/Work/pickup.cpp (factory cascade Work family).
+// PlantArea — real standalone factory in code/Game/Work/plantarea.cpp (factory cascade Work family).
+// PlantOrchard — real standalone factory in code/Game/Work/plantorchard.cpp (factory cascade Work family).
+// TendArea — real standalone factory in code/Game/Work/tendarea.cpp (factory cascade Work family).
+// TradeWork — real standalone factory in code/Game/Work/tradework.cpp (factory cascade Work family).
 REGISTER_NULL_FACTORY(Work, "Object::Internal");  // 14014e190 Work_RegisterType
 REGISTER_NULL_FACTORY(BridgeTool, "DragTool");  // 14014e1d0 BridgeTool_RegisterType
 REGISTER_NULL_FACTORY(DragPlacementTool, "DragTool");  // 14014e210 DragPlacementTool_RegisterType

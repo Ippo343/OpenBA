@@ -819,3 +819,46 @@ bool MoveTo_GetTarget_Impl(void* self, void* param) {
 
     return entityRef == *(uintptr_t*)param;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fe40 (10 slots), size 0x480, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t MoveTo_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("MoveTo");
+    return c;
+}
+
+static void* g_MoveTo_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&MoveTo_GetTypeId,           // +0x10 GetTypeId
+    (void*)&MoveTo_Serialize_Impl,      // +0x18 Serialize
+    (void*)&MoveTo_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&MoveTo_Execute_Impl,   // +0x28 Execute
+    (void*)&MoveTo_Enter_Impl,  // +0x30 Enter
+    (void*)&MoveTo_Exit_Impl,   // +0x38 Exit
+    (void*)&MoveTo_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&MoveTo_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterMoveToVtable() {
+    RegisterExeAddr(0x14015fe40, (uintptr_t)g_MoveTo_Vtable);
+}
+extern "C" void* MoveTo_CreateInPlace(void* mem) {
+    MoveTo_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x480, g_MoveTo_Vtable);
+}
+extern "C" void* MoveTo_Factory(void) {
+    MoveTo_ResolveFuncs();
+    return Action_Alloc(0x480, g_MoveTo_Vtable);
+}
+REGISTER_TYPE(MoveTo, "Action", &MoveTo_Factory, &MoveTo_CreateInPlace);
+#endif // STANDALONE_EXE

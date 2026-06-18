@@ -603,3 +603,60 @@ void* ClearStorage_GetTarget_Impl(ClearStorage* self, void* retbuf) {
     *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
     return retbuf;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x1401611a0 (13 slots), size 0x68, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// *** FLAGS — this file is INCOMPLETE for a full factory ***
+//   - No ClearStorage_Ctor / _Ctor_Impl exists -> object CANNOT be constructed.
+//     The factory below registers the vtable but returns nullptr (no ctor).
+//   - slot3  Serialize     : NOT IMPLEMENTED (no ClearStorage_Serialize)   -> nullptr
+//   - slot7  OnCancel       : NOT IMPLEMENTED (no ClearStorage_OnCancel)    -> nullptr
+//   - slot11 GetPriority    : NOT IMPLEMENTED (no ClearStorage_GetPriority) -> nullptr
+//   Slot mapping used (per this file's own doc comments):
+//     slot6 OnComplete -> ClearStorage_Slot6_Impl  (doc: "Slot6 +0x30")
+//     slot8 Cleanup    -> ClearStorage_CancelAll_Impl (doc: "Slot8/CancelAll +0x40")
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t ClearStorage_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ClearStorage");
+    return c;
+}
+
+static void* g_ClearStorage_Vtable[13] = {
+    (void*)&ClearStorage_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                    // +0x08 slot1 (null)
+    (void*)&ClearStorage_GetTypeId,        // +0x10 GetTypeId
+    (void*)&Work_SerializeNop,                      // +0x18 Serialize  (NOT IMPLEMENTED)
+    (void*)&ClearStorage_Execute,          // +0x20 Execute
+    (void*)&Work_Slot5,                    // +0x28 slot5 (returns 0)
+    (void*)&ClearStorage_Slot6_Impl,       // +0x30 OnComplete
+    (void*)&Work_SlotRet0,                      // +0x38 OnCancel   (NOT IMPLEMENTED)
+    (void*)&ClearStorage_CancelAll_Impl,   // +0x40 Cleanup
+    (void*)&ClearStorage_Validate,         // +0x48 Validate
+    (void*)&ClearStorage_GetTarget_Impl,   // +0x50 GetTarget
+    (void*)&Work_SlotRet0,                      // +0x58 GetPriority (NOT IMPLEMENTED)
+    (void*)&Work_Slot12,                   // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterClearStorageVtable() {
+    RegisterExeAddr(0x1401611a0, (uintptr_t)g_ClearStorage_Vtable);
+}
+extern "C" void* ClearStorage_CreateInPlace(void* mem) {
+    ClearStorage_InitFuncs();
+    return Work_GenericCtor(mem, 0x68, g_ClearStorage_Vtable);
+}
+extern "C" void* ClearStorage_Factory(void) {
+    ClearStorage_InitFuncs();
+    void* p = Work_Alloc(0x68);
+    return p ? Work_GenericCtor(p, 0x68, g_ClearStorage_Vtable) : nullptr;
+}
+REGISTER_TYPE(ClearStorage, "Work", &ClearStorage_Factory, &ClearStorage_CreateInPlace);
+#endif // STANDALONE_EXE

@@ -878,3 +878,84 @@ void* PlantArea_ScalarDtor_Impl(PlantArea* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161890 (13 slots), size 0x70, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// NOTE: slot4 (+0x20) Execute = PlantArea_Slot4_Impl (the main planting
+// logic). PlantArea_Execute_Impl is the 3-byte returns-false stub documented
+// as "Slot5 (+0x28)", which is the shared Work_Slot5 — it is NOT used here.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// Constructor — port of PlantArea_Ctor (0x1400f4770, factory variant):
+// Object::Internal::Internal -> Work base fields -> PlantArea vtable + zero fields.
+static void* PlantArea_Ctor_Impl(PlantArea* self) {
+    fn_ObjectInternal_Ctor(self);
+
+    uintptr_t a = (uintptr_t)self;
+    // Work base vtable (intermediate, immediately overwritten)
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
+    *(void**)(a + 0x10) = nullptr;
+    *(void**)(a + 0x18) = nullptr;
+    *(int32_t*)(a + 0x20) = -1;
+    *(int32_t*)(a + 0x24) = 0;
+    *(int32_t*)(a + 0x28) = -1;
+    *(int32_t*)(a + 0x2c) = 0;
+    *(void**)(a + 0x30) = nullptr;
+    *(void**)(a + 0x38) = nullptr;
+    *(int32_t*)(a + 0x40) = 0;
+
+    // PlantArea vtable (our registered standalone table)
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161890);
+    *(void**)(a + 0x48) = nullptr;     // BST root
+    *(int32_t*)(a + 0x50) = 0;         // BST count
+    *(void**)(a + 0x58) = nullptr;     // validity array
+    *(void**)(a + 0x60) = nullptr;     // field_60 (cell count + pad)
+    *(void**)(a + 0x68) = nullptr;     // ExternalPtr (crop desc)
+
+    return self;
+}
+
+static uint32_t PlantArea_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PlantArea");
+    return c;
+}
+
+static void* g_PlantArea_Vtable[13] = {
+    (void*)&PlantArea_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
+    (void*)&PlantArea_GetTypeId,        // +0x10 GetTypeId
+    (void*)&PlantArea_Serialize_Impl,   // +0x18 Serialize
+    (void*)&PlantArea_Slot4_Impl,       // +0x20 Execute (main planting logic)
+    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
+    (void*)&PlantArea_OnComplete_Impl,  // +0x30 OnComplete
+    (void*)&PlantArea_OnCancel_Impl,    // +0x38 OnCancel
+    (void*)&PlantArea_Cleanup_Impl,     // +0x40 Cleanup
+    (void*)&PlantArea_Validate_Impl,    // +0x48 Validate
+    (void*)&PlantArea_GetTarget_Impl,   // +0x50 GetTarget
+    (void*)&PlantArea_GetPriority_Impl, // +0x58 GetPriority
+    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterPlantAreaVtable() {
+    RegisterExeAddr(0x140161890, (uintptr_t)g_PlantArea_Vtable);
+}
+extern "C" void* PlantArea_CreateInPlace(void* mem) {
+    PlantArea_ResolveFuncs();
+    return PlantArea_Ctor_Impl((PlantArea*)mem);
+}
+extern "C" void* PlantArea_Factory(void) {
+    PlantArea_ResolveFuncs();
+    void* p = Work_Alloc(0x70);
+    return p ? PlantArea_Ctor_Impl((PlantArea*)p) : nullptr;
+}
+REGISTER_TYPE(PlantArea, "Work", &PlantArea_Factory, &PlantArea_CreateInPlace);
+#endif // STANDALONE_EXE

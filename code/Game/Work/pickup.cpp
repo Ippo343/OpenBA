@@ -434,3 +434,83 @@ void* Pickup_ScalarDtor_Impl(Pickup* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161810 (13 slots), size 0x60, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// NOTE: Pickup's methods are named by slot number (Pickup_SlotN_Impl):
+//   slot6 OnComplete = Slot6, slot7 OnCancel = Slot7, slot8 Cleanup = Slot8,
+//   slot9 Validate = Slot9, slot10 GetTarget = Slot10, slot11 GetPriority = Slot11.
+//   slot4 Execute = Pickup_Execute_Impl (Pickup's unique Execute override).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// Constructor — port of Pickup_Ctor (0x1400f3c00): Object::Internal::Internal
+// -> Work base fields -> Pickup vtable + zero Pickup fields.
+static void* Pickup_Ctor_Impl(Pickup* self) {
+    fn_ObjectInternal_Ctor(self);
+
+    uintptr_t a = (uintptr_t)self;
+    // Work base vtable (intermediate, immediately overwritten)
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
+    *(void**)(a + 0x10) = nullptr;
+    *(void**)(a + 0x18) = nullptr;
+    *(int32_t*)(a + 0x20) = -1;
+    *(int32_t*)(a + 0x24) = 0;
+    *(int32_t*)(a + 0x28) = -1;
+    *(int32_t*)(a + 0x2c) = 0;
+    *(void**)(a + 0x30) = nullptr;
+    *(void**)(a + 0x38) = nullptr;
+    *(int32_t*)(a + 0x40) = 0;
+
+    // Pickup vtable (our registered standalone table)
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161810);
+    self->status = 0;             // +0x48
+    self->citizenIBP = nullptr;   // +0x50
+    self->candidateList = nullptr;// +0x58
+
+    return self;
+}
+
+static uint32_t Pickup_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("Pickup");
+    return c;
+}
+
+static void* g_Pickup_Vtable[13] = {
+    (void*)&Pickup_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,              // +0x08 slot1 (null)
+    (void*)&Pickup_GetTypeId,        // +0x10 GetTypeId
+    (void*)&Pickup_Serialize_Impl,   // +0x18 Serialize
+    (void*)&Pickup_Execute_Impl,     // +0x20 Execute
+    (void*)&Work_Slot5,              // +0x28 slot5 (returns 0)
+    (void*)&Pickup_Slot6_Impl,       // +0x30 OnComplete
+    (void*)&Pickup_Slot7_Impl,       // +0x38 OnCancel
+    (void*)&Pickup_Slot8_Impl,       // +0x40 Cleanup
+    (void*)&Pickup_Slot9_Impl,       // +0x48 Validate
+    (void*)&Pickup_Slot10_Impl,      // +0x50 GetTarget
+    (void*)&Pickup_Slot11_Impl,      // +0x58 GetPriority
+    (void*)&Work_Slot12,             // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterPickupVtable() {
+    RegisterExeAddr(0x140161810, (uintptr_t)g_Pickup_Vtable);
+}
+extern "C" void* Pickup_CreateInPlace(void* mem) {
+    Pickup_ResolveFuncs();
+    return Pickup_Ctor_Impl((Pickup*)mem);
+}
+extern "C" void* Pickup_Factory(void) {
+    Pickup_ResolveFuncs();
+    void* p = Work_Alloc(0x60);
+    return p ? Pickup_Ctor_Impl((Pickup*)p) : nullptr;
+}
+REGISTER_TYPE(Pickup, "Work", &Pickup_Factory, &Pickup_CreateInPlace);
+#endif // STANDALONE_EXE

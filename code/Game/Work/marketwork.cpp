@@ -625,3 +625,83 @@ void* MarketWork_ScalarDtor_Impl(MarketWork* self, uint32_t flags) {
 bool MarketWork_Slot11_Impl(MarketWork* self) {
     return *(int*)((uintptr_t)self + 0x50) > 0;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161710 (13 slots), size 0x58, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// NOTE: MarketWork's methods are named by slot number in this file
+// (MarketWork_SlotN_Impl), so they map directly onto the 13-slot layout:
+//   slot6 OnComplete = Slot6 (BST add), slot7 OnCancel = Slot7 (BST remove),
+//   slot8 Cleanup = Slot8 (CancelAll), slot9 Validate = Slot9 (RemoveInvalid),
+//   slot10 GetTarget = Slot10 (GetWorkEntity), slot11 GetPriority = Slot11.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// Constructor — port of MarketWork_Ctor (0x1400f1f70): Object::Internal::Internal
+// -> Work base fields -> MarketWork vtable + zero MarketWork fields.
+static void* MarketWork_Ctor_Impl(MarketWork* self) {
+    fn_ObjectInternal_Ctor(self);
+
+    uintptr_t a = (uintptr_t)self;
+    // Work base vtable (intermediate, immediately overwritten)
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x1401612e0);
+    *(void**)(a + 0x10) = nullptr;
+    *(void**)(a + 0x18) = nullptr;
+    *(int32_t*)(a + 0x20) = -1;
+    *(int32_t*)(a + 0x24) = 0;
+    *(int32_t*)(a + 0x28) = -1;
+    *(int32_t*)(a + 0x2c) = 0;
+    *(void**)(a + 0x30) = nullptr;
+    *(void**)(a + 0x38) = nullptr;
+    *(int32_t*)(a + 0x40) = 0;
+
+    // MarketWork vtable (our registered standalone table)
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161710);
+    *(void**)(a + 0x48) = nullptr;
+    *(uint32_t*)(a + 0x50) = 0;
+
+    return self;
+}
+
+static uint32_t MarketWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("MarketWork");
+    return c;
+}
+
+static void* g_MarketWork_Vtable[13] = {
+    (void*)&MarketWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                  // +0x08 slot1 (null)
+    (void*)&MarketWork_GetTypeId,        // +0x10 GetTypeId
+    (void*)&MarketWork_Serialize_Impl,   // +0x18 Serialize
+    (void*)&MarketWork_Execute_Impl,     // +0x20 Execute
+    (void*)&Work_Slot5,                  // +0x28 slot5 (returns 0)
+    (void*)&MarketWork_Slot6_Impl,       // +0x30 OnComplete (BST add)
+    (void*)&MarketWork_Slot7_Impl,       // +0x38 OnCancel (BST remove)
+    (void*)&MarketWork_Slot8_Impl,       // +0x40 Cleanup (CancelAll)
+    (void*)&MarketWork_Slot9_Impl,       // +0x48 Validate (RemoveInvalid)
+    (void*)&MarketWork_Slot10_Impl,      // +0x50 GetTarget (GetWorkEntity)
+    (void*)&MarketWork_Slot11_Impl,      // +0x58 GetPriority
+    (void*)&Work_Slot12,                 // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterMarketWorkVtable() {
+    RegisterExeAddr(0x140161710, (uintptr_t)g_MarketWork_Vtable);
+}
+extern "C" void* MarketWork_CreateInPlace(void* mem) {
+    MarketWork_ResolveFuncs();
+    return MarketWork_Ctor_Impl((MarketWork*)mem);
+}
+extern "C" void* MarketWork_Factory(void) {
+    MarketWork_ResolveFuncs();
+    void* p = Work_Alloc(0x58);
+    return p ? MarketWork_Ctor_Impl((MarketWork*)p) : nullptr;
+}
+REGISTER_TYPE(MarketWork, "Work", &MarketWork_Factory, &MarketWork_CreateInPlace);
+#endif // STANDALONE_EXE

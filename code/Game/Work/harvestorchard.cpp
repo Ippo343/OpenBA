@@ -780,3 +780,64 @@ void* HarvestOrchard_ScalarDtor_Impl(HarvestOrchard* self, uint32_t flags) {
 
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — AutoPickupWork family (factory cascade).
+// Vtable @ 0x140161520 (13 slots), size 0x68, parent "AutoPickupWork".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// Slot map (this file's actual function names):
+//   slot0  ScalarDtor : HarvestOrchard_ScalarDtor_Impl
+//   slot3  Serialize  : HarvestOrchard_Serialize_Impl
+//   slot4  Execute    : HarvestOrchard_Slot4_Impl
+//   slot6  OnComplete : HarvestOrchard_Slot6_Impl
+//   slot7  OnCancel   : HarvestOrchard_Slot7_Impl
+//   slot8  Cleanup    : HarvestOrchard_Slot8_Impl
+//   slot9  Validate   : HarvestOrchard_Slot9_Impl
+//   slot10 GetTarget  : HarvestOrchard_Slot10_Impl
+//   slot11 GetPriority: FLAG — NO HarvestOrchard_Slot11_Impl in this file
+//   Ctor       : FLAG — NO HarvestOrchard_Ctor_Impl in this file -> factory null
+//   ResolveFuncs: HarvestOrchard_ResolveFuncs()
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t HarvestOrchard_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("HarvestOrchard");
+    return c;
+}
+
+static void* g_HarvestOrchard_Vtable[13] = {
+    (void*)&HarvestOrchard_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                      // +0x08 slot1 (null)
+    (void*)&HarvestOrchard_GetTypeId,        // +0x10 GetTypeId
+    (void*)&HarvestOrchard_Serialize_Impl,   // +0x18 Serialize
+    (void*)&HarvestOrchard_Slot4_Impl,       // +0x20 Execute
+    (void*)&Work_Slot5,                      // +0x28 slot5 (returns 0)
+    (void*)&HarvestOrchard_Slot6_Impl,       // +0x30 OnComplete
+    (void*)&HarvestOrchard_Slot7_Impl,       // +0x38 OnCancel
+    (void*)&HarvestOrchard_Slot8_Impl,       // +0x40 Cleanup
+    (void*)&HarvestOrchard_Slot9_Impl,       // +0x48 Validate
+    (void*)&HarvestOrchard_Slot10_Impl,      // +0x50 GetTarget
+    (void*)&Work_SlotRet0,            // +0x58 GetPriority (NO HarvestOrchard_Slot11_Impl)
+    (void*)&Work_Slot12,                     // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterHarvestOrchardVtable() {
+    RegisterExeAddr(0x140161520, (uintptr_t)g_HarvestOrchard_Vtable);
+}
+extern "C" void* HarvestOrchard_CreateInPlace(void* mem) {
+    HarvestOrchard_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x68, g_HarvestOrchard_Vtable);
+}
+extern "C" void* HarvestOrchard_Factory(void) {
+    HarvestOrchard_ResolveFuncs();
+    void* p = Work_Alloc(0x68);
+    return p ? Work_GenericCtor(p, 0x68, g_HarvestOrchard_Vtable) : nullptr;
+}
+REGISTER_TYPE(HarvestOrchard, "AutoPickupWork", &HarvestOrchard_Factory, &HarvestOrchard_CreateInPlace);
+#endif // STANDALONE_EXE

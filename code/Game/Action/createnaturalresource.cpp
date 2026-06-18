@@ -315,3 +315,46 @@ int CreateNaturalResource_GetTarget_Impl(CreateNaturalResource* self, void* para
     fn_InternalBasePtr_CheckPtr(s + 0x28);
     return (*(void**)param == *(void**)(s + 0x28)) ? 1 : 0;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fca0 (10 slots), size 0x38, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t CreateNaturalResource_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("CreateNaturalResource");
+    return c;
+}
+
+static void* g_CreateNaturalResource_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&CreateNaturalResource_GetTypeId,           // +0x10 GetTypeId
+    (void*)&CreateNaturalResource_Serialize_Impl,      // +0x18 Serialize
+    (void*)&CreateNaturalResource_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
+    (void*)&CreateNaturalResource_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterCreateNaturalResourceVtable() {
+    RegisterExeAddr(0x14015fca0, (uintptr_t)g_CreateNaturalResource_Vtable);
+}
+extern "C" void* CreateNaturalResource_CreateInPlace(void* mem) {
+    CreateNaturalResource_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x38, g_CreateNaturalResource_Vtable);
+}
+extern "C" void* CreateNaturalResource_Factory(void) {
+    CreateNaturalResource_ResolveFuncs();
+    return Action_Alloc(0x38, g_CreateNaturalResource_Vtable);
+}
+REGISTER_TYPE(CreateNaturalResource, "Action", &CreateNaturalResource_Factory, &CreateNaturalResource_CreateInPlace);
+#endif // STANDALONE_EXE

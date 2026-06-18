@@ -525,3 +525,67 @@ void* LocationWork_ScalarDtor_Impl(LocationWork* self, uint32_t flags) {
 
     return self;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x1401616a0 (13 slots), size 0x50, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// FLAGS:
+//   - slot0  ScalarDtor : LocationWork_ScalarDtor_Impl  (present)
+//   - slot3  Serialize  : LocationWork_Serialize_Impl
+//   - slot4  Execute    : named LocationWork_Slot4_Impl (the vtable +0x20 slot;
+//                         NOTE LocationWork_Execute_Impl is the SEPARATE 3-byte
+//                         exe stub 0x1400f7540, NOT the vtable Execute slot).
+//   - slot6  OnComplete : named LocationWork_Slot6_Impl  (returns bool)
+//   - slot7  OnCancel   : named LocationWork_Slot7_Impl
+//   - slot8  Cleanup    : named LocationWork_Slot8_Impl
+//   - slot9  Validate   : named LocationWork_Slot9_Impl  (returns bool)
+//   - slot10 GetTarget  : named LocationWork_Slot10_Impl
+//   - slot11 GetPriority: named LocationWork_Slot11_Impl  (returns bool)
+//   - Ctor              : NO LocationWork_Ctor_Impl defined (exe ctor not noted
+//                         as a C++ _Impl) -> factory cannot construct ->
+//                         /*FLAG*/ returns null until a Ctor_Impl is written.
+//   - ResolveFuncs      : LocationWork_ResolveFuncs() (does NOT resolve a vtable).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t LocationWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("LocationWork");
+    return c;
+}
+
+static void* g_LocationWork_Vtable[13] = {
+    (void*)&LocationWork_ScalarDtor_Impl, // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                   // +0x08 slot1 (null)
+    (void*)&LocationWork_GetTypeId,       // +0x10 GetTypeId
+    (void*)&LocationWork_Serialize_Impl,  // +0x18 Serialize
+    (void*)&LocationWork_Slot4_Impl,      // +0x20 Execute   (LocationWork_Slot4_Impl)
+    (void*)&Work_Slot5,                   // +0x28 slot5 (returns 0)
+    (void*)&LocationWork_Slot6_Impl,      // +0x30 OnComplete(LocationWork_Slot6_Impl)
+    (void*)&LocationWork_Slot7_Impl,      // +0x38 OnCancel  (LocationWork_Slot7_Impl)
+    (void*)&LocationWork_Slot8_Impl,      // +0x40 Cleanup   (LocationWork_Slot8_Impl)
+    (void*)&LocationWork_Slot9_Impl,      // +0x48 Validate  (LocationWork_Slot9_Impl)
+    (void*)&LocationWork_Slot10_Impl,     // +0x50 GetTarget (LocationWork_Slot10_Impl)
+    (void*)&LocationWork_Slot11_Impl,     // +0x58 GetPriority(LocationWork_Slot11_Impl)
+    (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterLocationWorkVtable() {
+    RegisterExeAddr(0x1401616a0, (uintptr_t)g_LocationWork_Vtable);
+}
+extern "C" void* LocationWork_CreateInPlace(void* mem) {
+    LocationWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x50, g_LocationWork_Vtable);
+}
+extern "C" void* LocationWork_Factory(void) {
+    LocationWork_ResolveFuncs();
+    void* p = Work_Alloc(0x50);
+    return p ? Work_GenericCtor(p, 0x50, g_LocationWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(LocationWork, "Work", &LocationWork_Factory, &LocationWork_CreateInPlace);
+#endif // STANDALONE_EXE

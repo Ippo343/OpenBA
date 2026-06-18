@@ -323,3 +323,46 @@ bool ConsumeRawMaterial_GetTarget_Impl(ConsumeRawMaterial* self, void* param) {
     fn_InternalBasePtr_CheckPtr(s + 0x20);
     return *(uintptr_t*)param == *(uintptr_t*)(s + 0x20);
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fc20 (10 slots), size 0x40, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t ConsumeRawMaterial_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ConsumeRawMaterial");
+    return c;
+}
+
+static void* g_ConsumeRawMaterial_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&ConsumeRawMaterial_GetTypeId,           // +0x10 GetTypeId
+    (void*)&ConsumeRawMaterial_Serialize_Impl,      // +0x18 Serialize
+    (void*)&ConsumeRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&ConsumeRawMaterial_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&ConsumeRawMaterial_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterConsumeRawMaterialVtable() {
+    RegisterExeAddr(0x14015fc20, (uintptr_t)g_ConsumeRawMaterial_Vtable);
+}
+extern "C" void* ConsumeRawMaterial_CreateInPlace(void* mem) {
+    ConsumeRawMaterial_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x40, g_ConsumeRawMaterial_Vtable);
+}
+extern "C" void* ConsumeRawMaterial_Factory(void) {
+    ConsumeRawMaterial_ResolveFuncs();
+    return Action_Alloc(0x40, g_ConsumeRawMaterial_Vtable);
+}
+REGISTER_TYPE(ConsumeRawMaterial, "Action", &ConsumeRawMaterial_Factory, &ConsumeRawMaterial_CreateInPlace);
+#endif // STANDALONE_EXE

@@ -1250,3 +1250,53 @@ void* ConsumeProduce_GetTarget_Impl(ConsumeProduceAction* self, void* retbuf) {
 
     return retbuf;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161220 (13 slots), size 0x78, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// FLAG: slot11 GetPriority (+0x58) is NOT implemented in this file (no
+// ConsumeProduce_GetPriority_Impl exists). Left as a clearly-marked nullptr.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t ConsumeProduce_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ConsumeProduce");
+    return c;
+}
+
+static void* g_ConsumeProduce_Vtable[13] = {
+    (void*)&ConsumeProduce_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                      // +0x08 slot1 (null)
+    (void*)&ConsumeProduce_GetTypeId,        // +0x10 GetTypeId
+    (void*)&ConsumeProduce_Serialize_Impl,   // +0x18 Serialize
+    (void*)&ConsumeProduce_Execute_Impl,     // +0x20 Execute
+    (void*)&Work_Slot5,                      // +0x28 slot5 (returns 0)
+    (void*)&ConsumeProduce_OnComplete_Impl,  // +0x30 OnComplete
+    (void*)&ConsumeProduce_OnCancel_Impl,    // +0x38 OnCancel
+    (void*)&ConsumeProduce_Cleanup_Impl,     // +0x40 Cleanup
+    (void*)&ConsumeProduce_Validate_Impl,    // +0x48 Validate
+    (void*)&ConsumeProduce_GetTarget_Impl,   // +0x50 GetTarget
+    (void*)&Work_SlotRet0,                        // +0x58 GetPriority (NOT IMPLEMENTED)
+    (void*)&Work_Slot12,                     // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterConsumeProduceVtable() {
+    RegisterExeAddr(0x140161220, (uintptr_t)g_ConsumeProduce_Vtable);
+}
+extern "C" void* ConsumeProduce_CreateInPlace(void* mem) {
+    ConsumeProduce_ResolveFuncs();
+    return ConsumeProduce_Ctor_Impl((ConsumeProduceAction*)mem);
+}
+extern "C" void* ConsumeProduce_Factory(void) {
+    ConsumeProduce_ResolveFuncs();
+    void* p = Work_Alloc(0x78);
+    return p ? ConsumeProduce_Ctor_Impl((ConsumeProduceAction*)p) : nullptr;
+}
+REGISTER_TYPE(ConsumeProduce, "Work", &ConsumeProduce_Factory, &ConsumeProduce_CreateInPlace);
+#endif // STANDALONE_EXE

@@ -848,3 +848,52 @@ done_empty:
     fn_MemFreeStatic(removeList);
     return 1;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x1401610a0 (13 slots), size 0x70, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// NOTE: this file's ctor is named BuildStructure_Ctor (not _Ctor_Impl) and
+// self-resolves via internal EnsureHelpers()/EnsureVtables(); there is no
+// separate BuildStructure_ResolveFuncs(), so the factory does not pre-resolve.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t BuildStructure_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("BuildStructure");
+    return c;
+}
+
+static void* g_BuildStructure_Vtable[13] = {
+    (void*)&BuildStructure_ScalarDtor,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
+    (void*)&BuildStructure_GetTypeId,   // +0x10 GetTypeId
+    (void*)&BuildStructure_Serialize,   // +0x18 Serialize
+    (void*)&BuildStructure_Execute,     // +0x20 Execute
+    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
+    (void*)&BuildStructure_OnComplete,  // +0x30 OnComplete
+    (void*)&BuildStructure_OnCancel,    // +0x38 OnCancel
+    (void*)&BuildStructure_Cleanup,     // +0x40 Cleanup
+    (void*)&BuildStructure_Validate,    // +0x48 Validate
+    (void*)&BuildStructure_GetTarget,   // +0x50 GetTarget
+    (void*)&BuildStructure_GetPriority, // +0x58 GetPriority
+    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterBuildStructureVtable() {
+    RegisterExeAddr(0x1401610a0, (uintptr_t)g_BuildStructure_Vtable);
+}
+extern "C" void* BuildStructure_CreateInPlace(void* mem) {
+    return BuildStructure_Ctor((BuildStructure*)mem);
+}
+extern "C" void* BuildStructure_Factory(void) {
+    void* p = Work_Alloc(0x70);
+    return p ? BuildStructure_Ctor((BuildStructure*)p) : nullptr;
+}
+REGISTER_TYPE(BuildStructure, "Work", &BuildStructure_Factory, &BuildStructure_CreateInPlace);
+#endif // STANDALONE_EXE

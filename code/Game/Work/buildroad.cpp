@@ -581,3 +581,50 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         }
     }
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family keystone (factory cascade).
+// Vtable @ 0x140161020 (13 slots), size 0x70, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t BuildRoad_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("BuildRoad");
+    return c;
+}
+
+static void* g_BuildRoad_Vtable[13] = {
+    (void*)&BuildRoad_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
+    (void*)&BuildRoad_GetTypeId,        // +0x10 GetTypeId
+    (void*)&BuildRoad_Serialize_Impl,   // +0x18 Serialize
+    (void*)&BuildRoad_Execute,          // +0x20 Execute
+    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
+    (void*)&BuildRoad_OnComplete_Impl,  // +0x30 OnComplete
+    (void*)&BuildRoad_OnCancel_Impl,    // +0x38 OnCancel
+    (void*)&BuildRoad_Cleanup_Impl,     // +0x40 Cleanup
+    (void*)&BuildRoad_Validate_Impl,    // +0x48 Validate
+    (void*)&BuildRoad_GetTarget_Impl,   // +0x50 GetTarget
+    (void*)&BuildRoad_GetPriority_Impl, // +0x58 GetPriority
+    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterBuildRoadVtable() {
+    RegisterExeAddr(0x140161020, (uintptr_t)g_BuildRoad_Vtable);
+}
+extern "C" void* BuildRoad_CreateInPlace(void* mem) {
+    BuildRoad_ResolveFuncs();
+    return BuildRoad_Ctor_Impl((BuildRoad*)mem);
+}
+extern "C" void* BuildRoad_Factory(void) {
+    BuildRoad_ResolveFuncs();
+    void* p = Work_Alloc(0x70);
+    return p ? BuildRoad_Ctor_Impl((BuildRoad*)p) : nullptr;
+}
+REGISTER_TYPE(BuildRoad, "Work", &BuildRoad_Factory, &BuildRoad_CreateInPlace);
+#endif // STANDALONE_EXE

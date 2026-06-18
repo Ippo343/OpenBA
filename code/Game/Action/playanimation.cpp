@@ -167,3 +167,55 @@ bool PlayAnimation_GetTarget_Impl(void* self, void* param) {
     s_fn_CheckPtr(param);
     return *(void**)(s + 0x20) == *(void**)param;
 }
+
+// ============================================================
+// Standalone factory + vtable (keystone for the Action family).
+// See action_base_standalone.{h,cpp} for the shared slot helpers.
+// Vtable @ 0x140158950 (10 slots), size 0x40, parent "Action".
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static constexpr uintptr_t kPlayAnimation_VtableAddr = 0x140158950;
+static constexpr int       kPlayAnimation_Size       = 0x40;
+
+// slot2 (+0x10) GetTypeId — exe returns TypeInfo_PlayAnimation.
+static uint32_t PlayAnimation_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("PlayAnimation");
+    return cached;
+}
+
+static void* g_PlayAnimation_Vtable[10] = {
+    reinterpret_cast<void*>(&Action_ScalarDtor),               // +0x00 ScalarDtor
+    reinterpret_cast<void*>(&Action_Slot1),                    // +0x08 slot1
+    reinterpret_cast<void*>(&PlayAnimation_GetTypeId),         // +0x10 GetTypeId
+    reinterpret_cast<void*>(&PlayAnimation_Serialize_Impl),    // +0x18 Serialize
+    reinterpret_cast<void*>(&PlayAnimation_AbstractImpl_Impl), // +0x20 AbstractImpl
+    reinterpret_cast<void*>(&PlayAnimation_Execute_Impl),      // +0x28 Execute
+    reinterpret_cast<void*>(&Action_Enter),                    // +0x30 Enter
+    reinterpret_cast<void*>(&Action_Exit),                     // +0x38 Exit
+    reinterpret_cast<void*>(&PlayAnimation_CheckEntity_Impl),  // +0x40 CheckEntity
+    reinterpret_cast<void*>(&PlayAnimation_GetTarget_Impl),    // +0x48 GetTarget
+};
+
+extern "C" void RegisterPlayAnimationVtable() {
+    RegisterExeAddr(kPlayAnimation_VtableAddr,
+                    reinterpret_cast<uintptr_t>(g_PlayAnimation_Vtable));
+}
+
+extern "C" void* PlayAnimation_CreateInPlace(void* mem) {
+    PlayAnimation_ResolveFuncs();
+    return Action_InitInPlace(mem, kPlayAnimation_Size, g_PlayAnimation_Vtable);
+}
+
+extern "C" void* PlayAnimation_Factory(void) {
+    PlayAnimation_ResolveFuncs();
+    return Action_Alloc(kPlayAnimation_Size, g_PlayAnimation_Vtable);
+}
+
+REGISTER_TYPE(PlayAnimation, "Action", &PlayAnimation_Factory, &PlayAnimation_CreateInPlace);
+
+#endif  // STANDALONE_EXE

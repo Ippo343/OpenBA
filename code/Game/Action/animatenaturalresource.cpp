@@ -192,3 +192,46 @@ bool AnimateNaturalResource_GetTarget_Impl(AnimateNaturalResource* self, void* p
 // int AnimateNaturalResource_CheckEntity_Impl(AnimateNaturalResource* self) {
 //     return 0;
 // }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fb10 (10 slots), size 0x30, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t AnimateNaturalResource_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("AnimateNaturalResource");
+    return c;
+}
+
+static void* g_AnimateNaturalResource_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&AnimateNaturalResource_GetTypeId,           // +0x10 GetTypeId
+    (void*)&AnimateNaturalResource_Serialize_Impl,      // +0x18 Serialize
+    (void*)&AnimateNaturalResource_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&AnimateNaturalResource_Execute_Impl,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
+    (void*)&AnimateNaturalResource_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterAnimateNaturalResourceVtable() {
+    RegisterExeAddr(0x14015fb10, (uintptr_t)g_AnimateNaturalResource_Vtable);
+}
+extern "C" void* AnimateNaturalResource_CreateInPlace(void* mem) {
+    AnimateNaturalResource_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x30, g_AnimateNaturalResource_Vtable);
+}
+extern "C" void* AnimateNaturalResource_Factory(void) {
+    AnimateNaturalResource_ResolveFuncs();
+    return Action_Alloc(0x30, g_AnimateNaturalResource_Vtable);
+}
+REGISTER_TYPE(AnimateNaturalResource, "Action", &AnimateNaturalResource_Factory, &AnimateNaturalResource_CreateInPlace);
+#endif // STANDALONE_EXE

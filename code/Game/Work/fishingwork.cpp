@@ -943,3 +943,66 @@ void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
 
     return param2;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161320 (13 slots), size 0x70, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// FLAGS (this file lacks several canonical functions):
+//   - slot0  ScalarDtor : NO FishingWork_ScalarDtor_Impl defined -> /*FLAG*/ nullptr
+//   - slot3  Serialize  : FishingWork_Serialize_Impl
+//   - slot4  Execute    : named FishingWork_Slot4_Impl (3-arg: self, citizenIBP, time)
+//   - slot6  OnComplete : named FishingWork_Slot6_Impl
+//   - slot7  OnCancel   : named FishingWork_Slot7_Impl
+//   - slot8  Cleanup    : named FishingWork_Slot8_Impl
+//   - slot9  Validate   : named FishingWork_Slot9_Impl
+//   - slot10 GetTarget  : named FishingWork_Slot10_Impl
+//   - slot11 GetPriority: NO FishingWork_GetPriority_Impl defined -> /*FLAG*/ nullptr
+//   - Ctor              : NO FishingWork_Ctor_Impl defined (only exe addr
+//                         FishingWork_Ctor 0x1400eabe0) -> factory cannot
+//                         construct -> /*FLAG*/ returns null until a Ctor_Impl
+//                         (or in-place exe-ctor call) is written.
+//   - ResolveFuncs      : FishingWork_ResolveFuncs() (does NOT resolve a vtable).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t FishingWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("FishingWork");
+    return c;
+}
+
+static void* g_FishingWork_Vtable[13] = {
+    (void*)&Work_GenericScalarDtor,                   // +0x00 ScalarDtor (NO FishingWork_ScalarDtor_Impl)
+    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
+    (void*)&FishingWork_GetTypeId,      // +0x10 GetTypeId
+    (void*)&FishingWork_Serialize_Impl, // +0x18 Serialize
+    (void*)&FishingWork_Slot4_Impl,     // +0x20 Execute   (FishingWork_Slot4_Impl)
+    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
+    (void*)&FishingWork_Slot6_Impl,     // +0x30 OnComplete(FishingWork_Slot6_Impl)
+    (void*)&FishingWork_Slot7_Impl,     // +0x38 OnCancel  (FishingWork_Slot7_Impl)
+    (void*)&FishingWork_Slot8_Impl,     // +0x40 Cleanup   (FishingWork_Slot8_Impl)
+    (void*)&FishingWork_Slot9_Impl,     // +0x48 Validate  (FishingWork_Slot9_Impl)
+    (void*)&FishingWork_Slot10_Impl,    // +0x50 GetTarget (FishingWork_Slot10_Impl)
+    (void*)&Work_SlotRet0,                   // +0x58 GetPriority (NO FishingWork_GetPriority_Impl)
+    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterFishingWorkVtable() {
+    RegisterExeAddr(0x140161320, (uintptr_t)g_FishingWork_Vtable);
+}
+extern "C" void* FishingWork_CreateInPlace(void* mem) {
+    FishingWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x70, g_FishingWork_Vtable);
+}
+extern "C" void* FishingWork_Factory(void) {
+    FishingWork_ResolveFuncs();
+    void* p = Work_Alloc(0x70);
+    return p ? Work_GenericCtor(p, 0x70, g_FishingWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(FishingWork, "Work", &FishingWork_Factory, &FishingWork_CreateInPlace);
+#endif // STANDALONE_EXE

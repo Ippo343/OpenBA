@@ -224,3 +224,46 @@ bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
     fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(void**)param;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fbd0 (10 slots), size 0x38, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t CompleteTask_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("CompleteTask");
+    return c;
+}
+
+static void* g_CompleteTask_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&CompleteTask_GetTypeId,           // +0x10 GetTypeId
+    (void*)&CompleteTask_Serialize_Impl,      // +0x18 Serialize
+    (void*)&CompleteTask_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&CompleteTask_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&CompleteTask_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterCompleteTaskVtable() {
+    RegisterExeAddr(0x14015fbd0, (uintptr_t)g_CompleteTask_Vtable);
+}
+extern "C" void* CompleteTask_CreateInPlace(void* mem) {
+    CompleteTask_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x38, g_CompleteTask_Vtable);
+}
+extern "C" void* CompleteTask_Factory(void) {
+    CompleteTask_ResolveFuncs();
+    return Action_Alloc(0x38, g_CompleteTask_Vtable);
+}
+REGISTER_TYPE(CompleteTask, "Action", &CompleteTask_Factory, &CompleteTask_CreateInPlace);
+#endif // STANDALONE_EXE

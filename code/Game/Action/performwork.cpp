@@ -413,3 +413,46 @@ bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
     s_fn_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015fea0 (10 slots), size 0x48, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t PerformWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PerformWork");
+    return c;
+}
+
+static void* g_PerformWork_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&PerformWork_GetTypeId,           // +0x10 GetTypeId
+    (void*)&PerformWork_Serialize_Impl,      // +0x18 Serialize
+    (void*)&PerformWork_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&PerformWork_Execute_Impl,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&PerformWork_Exit_Impl,   // +0x38 Exit
+    (void*)&PerformWork_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&PerformWork_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterPerformWorkVtable() {
+    RegisterExeAddr(0x14015fea0, (uintptr_t)g_PerformWork_Vtable);
+}
+extern "C" void* PerformWork_CreateInPlace(void* mem) {
+    PerformWork_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x48, g_PerformWork_Vtable);
+}
+extern "C" void* PerformWork_Factory(void) {
+    PerformWork_ResolveFuncs();
+    return Action_Alloc(0x48, g_PerformWork_Vtable);
+}
+REGISTER_TYPE(PerformWork, "Action", &PerformWork_Factory, &PerformWork_CreateInPlace);
+#endif // STANDALONE_EXE

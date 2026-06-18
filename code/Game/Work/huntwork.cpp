@@ -841,3 +841,64 @@ void* HuntWork_ScalarDtor_Impl(HuntWork* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — AutoPickupWork family (factory cascade).
+// Vtable @ 0x140161620 (13 slots), size 0x58, parent "AutoPickupWork".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// Slot map (this file's actual function names):
+//   slot0  ScalarDtor : HuntWork_ScalarDtor_Impl
+//   slot3  Serialize  : HuntWork_Serialize_Impl
+//   slot4  Execute    : HuntWork_Slot4_Impl
+//   slot6  OnComplete : HuntWork_Slot6_Impl
+//   slot7  OnCancel   : HuntWork_Slot7_Impl
+//   slot8  Cleanup    : HuntWork_Slot8_Impl
+//   slot9  Validate   : HuntWork_Slot9_Impl
+//   slot10 GetTarget  : HuntWork_Slot10_Impl
+//   slot11 GetPriority: HuntWork_Slot11_Impl
+//   Ctor       : FLAG — NO HuntWork_Ctor_Impl in this file -> factory null
+//   ResolveFuncs: HuntWork_ResolveFuncs()
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t HuntWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("HuntWork");
+    return c;
+}
+
+static void* g_HuntWork_Vtable[13] = {
+    (void*)&HuntWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
+    (void*)&Work_Slot1,                // +0x08 slot1 (null)
+    (void*)&HuntWork_GetTypeId,        // +0x10 GetTypeId
+    (void*)&HuntWork_Serialize_Impl,   // +0x18 Serialize
+    (void*)&HuntWork_Slot4_Impl,       // +0x20 Execute
+    (void*)&Work_Slot5,                // +0x28 slot5 (returns 0)
+    (void*)&HuntWork_Slot6_Impl,       // +0x30 OnComplete
+    (void*)&HuntWork_Slot7_Impl,       // +0x38 OnCancel
+    (void*)&HuntWork_Slot8_Impl,       // +0x40 Cleanup
+    (void*)&HuntWork_Slot9_Impl,       // +0x48 Validate
+    (void*)&HuntWork_Slot10_Impl,      // +0x50 GetTarget
+    (void*)&HuntWork_Slot11_Impl,      // +0x58 GetPriority
+    (void*)&Work_Slot12,               // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterHuntWorkVtable() {
+    RegisterExeAddr(0x140161620, (uintptr_t)g_HuntWork_Vtable);
+}
+extern "C" void* HuntWork_CreateInPlace(void* mem) {
+    HuntWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x58, g_HuntWork_Vtable);
+}
+extern "C" void* HuntWork_Factory(void) {
+    HuntWork_ResolveFuncs();
+    void* p = Work_Alloc(0x58);
+    return p ? Work_GenericCtor(p, 0x58, g_HuntWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(HuntWork, "AutoPickupWork", &HuntWork_Factory, &HuntWork_CreateInPlace);
+#endif // STANDALONE_EXE

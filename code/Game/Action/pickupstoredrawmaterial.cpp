@@ -416,3 +416,46 @@ bool PickupStoredRawMaterial_GetTarget_Impl(PickupStoredRawMaterial* self, void*
     fn_InternalBasePtr_CheckPtr(param);
     return parentEntity == *(uintptr_t*)param;
 }
+
+// ============================================================
+// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
+// Vtable @ 0x14015ff80 (10 slots), size 0x48, parent "Action".
+// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "action_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t PickupStoredRawMaterial_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("PickupStoredRawMaterial");
+    return c;
+}
+
+static void* g_PickupStoredRawMaterial_Vtable[10] = {
+    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
+    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
+    (void*)&PickupStoredRawMaterial_GetTypeId,           // +0x10 GetTypeId
+    (void*)&PickupStoredRawMaterial_Serialize_Impl,      // +0x18 Serialize
+    (void*)&PickupStoredRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
+    (void*)&Action_BaseExecute,   // +0x28 Execute
+    (void*)&Action_Enter,  // +0x30 Enter
+    (void*)&Action_Exit,   // +0x38 Exit
+    (void*)&PickupStoredRawMaterial_CheckEntity_Impl,  // +0x40 CheckEntity
+    (void*)&PickupStoredRawMaterial_GetTarget_Impl, // +0x48 GetTarget
+};
+
+extern "C" void RegisterPickupStoredRawMaterialVtable() {
+    RegisterExeAddr(0x14015ff80, (uintptr_t)g_PickupStoredRawMaterial_Vtable);
+}
+extern "C" void* PickupStoredRawMaterial_CreateInPlace(void* mem) {
+    PickupStoredRawMaterial_ResolveFuncs();
+    return Action_InitInPlace(mem, 0x48, g_PickupStoredRawMaterial_Vtable);
+}
+extern "C" void* PickupStoredRawMaterial_Factory(void) {
+    PickupStoredRawMaterial_ResolveFuncs();
+    return Action_Alloc(0x48, g_PickupStoredRawMaterial_Vtable);
+}
+REGISTER_TYPE(PickupStoredRawMaterial, "Action", &PickupStoredRawMaterial_Factory, &PickupStoredRawMaterial_CreateInPlace);
+#endif // STANDALONE_EXE

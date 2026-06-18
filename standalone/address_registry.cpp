@@ -164,6 +164,48 @@ extern "C" {
     void RegisterNameDatabaseVtable();
     void RegisterDiseaseVtable();
     void RegisterProfessionListVtable();
+
+    // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
+    void RegisterPlayAnimationVtable();
+    void RegisterAnimateNaturalResourceVtable();
+    void RegisterCompleteRoadVtable();
+    void RegisterCompleteTaskVtable();
+    void RegisterConsumeRawMaterialVtable();
+    void RegisterCreateNaturalResourceVtable();
+    void RegisterCreateRawMaterialVtable();
+    void RegisterDropOffRawMaterialVtable();
+    void RegisterHuntAnimalVtable();
+    void RegisterMoveToVtable();
+    void RegisterPerformWorkVtable();
+    void RegisterPickupRawMaterialVtable();
+    void RegisterPickupStoredRawMaterialVtable();
+    void RegisterRemoveAnimalVtable();
+    void RegisterRemoveNaturalResourceVtable();
+    void RegisterSendComponentMessageVtable();
+    void RegisterShowToolVtable();
+
+    // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
+    void RegisterBuildRoadVtable();
+    void RegisterBuildStructureVtable();
+    void RegisterClearAreaVtable();
+    void RegisterClearStorageVtable();
+    void RegisterConsumeProduceVtable();
+    void RegisterFireWorkVtable();
+    void RegisterFishingWorkVtable();
+    void RegisterGatherRawMaterialsVtable();
+    void RegisterLocationWorkVtable();
+    void RegisterMarketWorkVtable();
+    void RegisterPickupVtable();
+    void RegisterPlantAreaVtable();
+    void RegisterPlantOrchardVtable();
+    void RegisterTendAreaVtable();
+    void RegisterTradeWorkVtable();
+    void RegisterForesterWorkVtable();
+    void RegisterHarvestAreaVtable();
+    void RegisterHarvestOrchardVtable();
+    void RegisterHerbalistWorkVtable();
+    void RegisterHuntWorkVtable();
+    void RegisterPastureWorkVtable();
 }
 
 // ============================================================
@@ -1006,6 +1048,51 @@ static void RegisterVtablesAndTypeIds() {
     // during the world build; same IsDerivedFrom(NULL) NullFactory crash. See
     // professionlist.cpp.
     RegisterProfessionListVtable();
+
+    // Factory cascade (notes/FACTORY_CASCADE_145_BRIEF.md) — Action family.
+    // Object::Internal-derived, 10-slot vtables; shared base helpers in
+    // code/Game/Action/action_base_standalone.cpp.
+    RegisterPlayAnimationVtable();
+    RegisterAnimateNaturalResourceVtable();
+    RegisterCompleteRoadVtable();
+    RegisterCompleteTaskVtable();
+    RegisterConsumeRawMaterialVtable();
+    RegisterCreateNaturalResourceVtable();
+    RegisterCreateRawMaterialVtable();
+    RegisterDropOffRawMaterialVtable();
+    RegisterHuntAnimalVtable();
+    RegisterMoveToVtable();
+    RegisterPerformWorkVtable();
+    RegisterPickupRawMaterialVtable();
+    RegisterPickupStoredRawMaterialVtable();
+    RegisterRemoveAnimalVtable();
+    RegisterRemoveNaturalResourceVtable();
+    RegisterSendComponentMessageVtable();
+    RegisterShowToolVtable();
+
+    // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;
+    // shared base helpers in code/Game/Work/work_base_standalone.cpp).
+    RegisterBuildRoadVtable();
+    RegisterBuildStructureVtable();
+    RegisterClearAreaVtable();
+    RegisterClearStorageVtable();
+    RegisterConsumeProduceVtable();
+    RegisterFireWorkVtable();
+    RegisterFishingWorkVtable();
+    RegisterGatherRawMaterialsVtable();
+    RegisterLocationWorkVtable();
+    RegisterMarketWorkVtable();
+    RegisterPickupVtable();
+    RegisterPlantAreaVtable();
+    RegisterPlantOrchardVtable();
+    RegisterTendAreaVtable();
+    RegisterTradeWorkVtable();
+    RegisterForesterWorkVtable();
+    RegisterHarvestAreaVtable();
+    RegisterHarvestOrchardVtable();
+    RegisterHerbalistWorkVtable();
+    RegisterHuntWorkVtable();
+    RegisterPastureWorkVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

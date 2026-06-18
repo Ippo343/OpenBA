@@ -953,3 +953,56 @@ void* HarvestArea_ScalarDtor_Impl(HarvestArea* self, uint32_t flags) {
 
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x1401614a0 (13 slots), size 0x68, parent "AutoPickupWork".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+// Slot map ground-truthed from the real exe vtable @ 0x1401614a0:
+//   slot4 (Execute)=HarvestArea_Slot4_Impl (0x1400eccd0).
+//   slot5 = shared Work_Slot5 (0x1400f7540).
+//   slot11 (GetPriority) = 0x140029860 — the SHARED HasWorkers thunk;
+//   HarvestArea has NO own GetPriority fn in harvestarea.cpp -> FLAG.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t HarvestArea_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("HarvestArea");
+    return c;
+}
+
+static void* g_HarvestArea_Vtable[13] = {
+    (void*)&HarvestArea_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002a4d0)
+    (void*)&Work_Slot1,                   // +0x08 slot1 (null)
+    (void*)&HarvestArea_GetTypeId,        // +0x10 GetTypeId
+    (void*)&HarvestArea_Serialize_Impl,   // +0x18 Serialize (0x1400ed350)
+    (void*)&HarvestArea_Slot4_Impl,       // +0x20 Execute (0x1400eccd0)
+    (void*)&Work_Slot5,                   // +0x28 slot5 (returns 0)
+    (void*)&HarvestArea_Slot6_Impl,       // +0x30 OnComplete (0x1400ecc20)
+    (void*)&HarvestArea_Slot7_Impl,       // +0x38 OnCancel (0x1400ecb60)
+    (void*)&HarvestArea_Slot8_Impl,       // +0x40 Cleanup (0x1400ed270)
+    (void*)&HarvestArea_Slot9_Impl,       // +0x48 Validate (0x1400ec930)
+    (void*)&HarvestArea_Slot10_Impl,      // +0x50 GetTarget (0x1400ed2f0)
+    (void*)&Work_SlotRet0,         // +0x58 GetPriority (0x140029860 shared HasWorkers; no own fn)
+    (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterHarvestAreaVtable() {
+    RegisterExeAddr(0x1401614a0, (uintptr_t)g_HarvestArea_Vtable);
+}
+extern "C" void* HarvestArea_CreateInPlace(void* mem) {
+    HarvestArea_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x68, g_HarvestArea_Vtable);
+}
+extern "C" void* HarvestArea_Factory(void) {
+    HarvestArea_ResolveFuncs();
+    void* p = Work_Alloc(0x68);
+    return p ? Work_GenericCtor(p, 0x68, g_HarvestArea_Vtable) : nullptr;
+}
+REGISTER_TYPE(HarvestArea, "AutoPickupWork", &HarvestArea_Factory, &HarvestArea_CreateInPlace);
+#endif // STANDALONE_EXE

@@ -589,3 +589,67 @@ void* FireWork_Slot10_Impl(FireWork* /*self*/, void* retbuf) {
     *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
     return retbuf;
 }
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x1401612a0 (13 slots), size 0x60, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+//
+// FLAGS (this file lacks several canonical functions):
+//   - slot0  ScalarDtor : NO FireWork_ScalarDtor_Impl defined  -> /*FLAG*/ nullptr
+//   - slot3  Serialize  : NO FireWork_Serialize_Impl defined   -> /*FLAG*/ nullptr
+//   - slot4  Execute    : named FireWork_Slot4_Impl  (3-arg: self, citizenIBP, time)
+//   - slot6  OnComplete : named FireWork_Slot6_Impl
+//   - slot7  OnCancel   : named FireWork_Slot7_Impl
+//   - slot8  Cleanup    : named FireWork_Slot8_Impl
+//   - slot9  Validate   : named FireWork_Slot9_Impl
+//   - slot10 GetTarget  : named FireWork_Slot10_Impl
+//   - slot11 GetPriority: NO FireWork_GetPriority_Impl defined -> /*FLAG*/ nullptr
+//   - Ctor              : NO FireWork_Ctor_Impl defined (only exe addr
+//                         FireWorkAddr::Ctor 0x1400e9b50) -> factory cannot
+//                         construct -> /*FLAG*/ returns null until a Ctor_Impl
+//                         (or in-place exe-ctor call) is written.
+//   - ResolveFuncs      : FireWork_ResolveFuncs() (does NOT resolve a vtable;
+//                         the original vtable install lives in the exe Ctor).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t FireWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("FireWork");
+    return c;
+}
+
+static void* g_FireWork_Vtable[13] = {
+    (void*)&Work_GenericScalarDtor,                // +0x00 ScalarDtor (NO FireWork_ScalarDtor_Impl)
+    (void*)&Work_Slot1,              // +0x08 slot1 (null)
+    (void*)&FireWork_GetTypeId,      // +0x10 GetTypeId
+    (void*)&Work_SerializeNop,                // +0x18 Serialize (NO FireWork_Serialize_Impl in this file)
+    (void*)&FireWork_Slot4_Impl,     // +0x20 Execute   (FireWork_Slot4_Impl)
+    (void*)&Work_Slot5,              // +0x28 slot5 (returns 0)
+    (void*)&FireWork_Slot6_Impl,     // +0x30 OnComplete(FireWork_Slot6_Impl)
+    (void*)&FireWork_Slot7_Impl,     // +0x38 OnCancel  (FireWork_Slot7_Impl)
+    (void*)&FireWork_Slot8_Impl,     // +0x40 Cleanup   (FireWork_Slot8_Impl)
+    (void*)&FireWork_Slot9_Impl,     // +0x48 Validate  (FireWork_Slot9_Impl)
+    (void*)&FireWork_Slot10_Impl,    // +0x50 GetTarget (FireWork_Slot10_Impl)
+    (void*)&Work_SlotRet0,                // +0x58 GetPriority (NO FireWork_GetPriority_Impl)
+    (void*)&Work_Slot12,             // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterFireWorkVtable() {
+    RegisterExeAddr(0x1401612a0, (uintptr_t)g_FireWork_Vtable);
+}
+extern "C" void* FireWork_CreateInPlace(void* mem) {
+    FireWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x60, g_FireWork_Vtable);
+}
+extern "C" void* FireWork_Factory(void) {
+    FireWork_ResolveFuncs();
+    void* p = Work_Alloc(0x60);
+    return p ? Work_GenericCtor(p, 0x60, g_FireWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(FireWork, "Work", &FireWork_Factory, &FireWork_CreateInPlace);
+#endif // STANDALONE_EXE

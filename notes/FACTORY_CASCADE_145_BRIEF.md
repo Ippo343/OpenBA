@@ -108,6 +108,38 @@ block; DELETE `REGISTER_NULL_FACTORY(X, "Action")` from the bulk file.
 ## Status
 - Foundation committed (ac29016): preload validated clean, HUD ctor/typeid wiring.
 - This brief written 2026-06-17. Action recipe VALIDATED (not yet implemented).
+
+### PROGRESS 2026-06-17 (uncommitted) — Action + Work families DONE. 145 → 107 NullFactory.
+- **Action family — 17 concrete types DONE.** Shared base `code/Game/Action/action_base_standalone.{h,cpp}`
+  (Action_ScalarDtor / Action_Slot1(null) / Action_BaseExecute(0) / Action_Enter/Exit nop /
+  Action_BaseCheckEntity nop / Action_BaseGetTarget(0) / Action_Alloc / Action_InitInPlace). Every vtable
+  ground-truthed from Ghidra memory; 10-slot layout (slot0 dtor, slot1 null, slot2 GetTypeId, slot3 Serialize,
+  slot4 AbstractImpl, slot5 Execute, slot6/7 Enter/Exit, slot8 CheckEntity, slot9 GetTarget). Each type's
+  reimpl Impls reused; base addrs recognized: 0x1400c4a90 Execute=0, 0x1400c4b90/c4ba0 Enter/Exit nop,
+  0x1400c4a30 CheckEntity nop, 0x1400c4a40 GetTarget=0.
+- **Work family — 21 concrete types DONE** (BuildRoad keystone + 20 via 5-agent team). Shared base
+  `code/Game/Work/work_base_standalone.{h,cpp}`. 13-slot layout (slot0 dtor, slot1 null, slot2 GetTypeId,
+  slot3 Serialize, slot4 Execute, slot5 0x1400f7540=0, slots 6-11 OnComplete/OnCancel/Cleanup/Validate/
+  GetTarget/GetPriority, slot12 0x140006b10 void nop). The factory `MemAlloc(size)` then the type's own
+  `*_Ctor_Impl` where it exists, ELSE `Work_GenericCtor` (Internal::Internal + zero[0x10,size) + Work base
+  defaults +0x20/+0x28 = -1 + install vtable). KEY GOTCHA: most Work reimpls have NO ctor (DLL mode only
+  hooked slots; the exe ctor ran) — the generic ctor rescues them. Missing slots backed by stubs:
+  Work_GenericScalarDtor / Work_SerializeNop / Work_SlotRet0(=0). Types still missing real ctor/slots are
+  scaffold-level (dormant; FLAG comments left in-file): FireWork, FishingWork, ClearStorage (no Serialize/
+  OnCancel either), GatherRawMaterials, LocationWork, TendArea, TradeWork, ForesterWork, HarvestArea,
+  HarvestOrchard, HerbalistWork, HuntWork, PastureWork.
+- **Validated**: standalone-debug builds + links clean; runtime smoke = 279 addrs registered, factory regs
+  invoked, 0 crashes, 0 NullFactory hits, menu loads. (Slot role-mapping trusted from file docs + ground truth;
+  not all 21×13 slots exhaustively re-verified — dormant so a mis-ordered slot only matters if dispatched.)
+- **Abstract bases NOT done (not landmines — _purecall, never instantiated):** Action, Work, AutoPickupWork,
+  Tool, ToolSetting, DragTool, Component, Description, ControllerComponent, ComponentEntity(?), TutorialInstance.
+  Give these proper abstract registrations at the very end.
+- **NEXT families** (recommended order): External-resource (Tutorial*/TutorialGoal*/TutorialImage*/TutorialSetup*/
+  TutorialStep — External vtable + GetFileVersion, MusicList pattern) → Tool (9: BridgeTool/DragPlacementTool/
+  EditTool/PlacementTool/RemovalTool/RoadTool/FencedTool/PathTool/RotationSetting) → misc (Tornado/
+  FrustumOutlineElement/CaptureBoxElement/Component subtypes/Description) → UI dialogs (57, LAST, with HUD).
+
+### Original status (pre-implementation):
 - Build/test: `mingw32-make sa-deploy`; run via `cmd //c start "" reimpl-x64.exe` from
   `C:\GOG Games\Banished` with `BANISHED_AUTOSTART=1` (RTSS/Afterburner must be CLOSED —
   they hook the present path and stall the window/menu).

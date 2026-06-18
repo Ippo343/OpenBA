@@ -439,3 +439,55 @@ void* TradeWork_ScalarDtor_Impl(TradeWork* self, uint32_t flags) {
     }
     return self;
 }
+
+
+// ============================================================
+// Standalone factory + vtable — Work family (factory cascade).
+// Vtable @ 0x140161a10 (13 slots), size 0x58, parent "Work".
+// Shared slot helpers: work_base_standalone.{h,cpp}.
+// Slot map ground-truthed from the real exe vtable @ 0x140161a10:
+//   slot4 (Execute)=TradeWork_Slot4_Impl (0x1400f5d40, STUB — uses trampoline
+//   in DLL mode). The orphaned TradeWork_Execute_Impl ("returns false") is NOT
+//   in the vtable — slot5 is the shared Work_Slot5. Do NOT use it.
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "work_base_standalone.h"
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TradeWork_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TradeWork");
+    return c;
+}
+
+static void* g_TradeWork_Vtable[13] = {
+    (void*)&TradeWork_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002c660)
+    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
+    (void*)&TradeWork_GetTypeId,        // +0x10 GetTypeId
+    (void*)&TradeWork_Serialize_Impl,   // +0x18 Serialize (0x1400f6cb0)
+    (void*)&TradeWork_Slot4_Impl,       // +0x20 Execute (0x1400f5d40, STUB)
+    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
+    (void*)&TradeWork_Slot6_Impl,       // +0x30 OnComplete (0x1400f5d20)
+    (void*)&TradeWork_Slot7_Impl,       // +0x38 OnCancel (0x1400f5d10)
+    (void*)&TradeWork_Slot8_Impl,       // +0x40 Cleanup (0x1400f6be0)
+    (void*)&TradeWork_Slot9_Impl,       // +0x48 Validate (0x1400f5ae0)
+    (void*)&TradeWork_Slot10_Impl,      // +0x50 GetTarget (0x1400f6c50)
+    (void*)&TradeWork_Slot11_Impl,      // +0x58 GetPriority (0x140029860)
+    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
+};
+
+extern "C" void RegisterTradeWorkVtable() {
+    RegisterExeAddr(0x140161a10, (uintptr_t)g_TradeWork_Vtable);
+}
+extern "C" void* TradeWork_CreateInPlace(void* mem) {
+    TradeWork_ResolveFuncs();
+    return Work_GenericCtor(mem, 0x58, g_TradeWork_Vtable);
+}
+extern "C" void* TradeWork_Factory(void) {
+    TradeWork_ResolveFuncs();
+    void* p = Work_Alloc(0x58);
+    return p ? Work_GenericCtor(p, 0x58, g_TradeWork_Vtable) : nullptr;
+}
+REGISTER_TYPE(TradeWork, "Work", &TradeWork_Factory, &TradeWork_CreateInPlace);
+#endif // STANDALONE_EXE
