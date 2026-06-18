@@ -56,6 +56,7 @@ extern "C" {
     void RegisterTimeGoalVtable();
     void RegisterScenarioVtable();
     void RegisterToolbarVtable();
+    void RegisterMusicListVtable();
     void RegisterBuildingGoalVtable();
     void RegisterPopulationGoalVtable();
     void RegisterTimeGoalInstanceVtable();
@@ -441,6 +442,15 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z"));
     RegisterDispatchSlot(0x140151238,
         (uintptr_t)ResolveExport("?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z"));
+    // Object::Type::Serialize — slot 0x1401516b0. Used by UIDescription (entity
+    // element +0x00), ConsumeProduce, SendComponentMessage, ConsumeProduceDescription.
+    // UNREGISTERED previously → those reimpls' `if (s_fn_Type_Serialize)` guard
+    // silently SKIPPED the per-element Type read → stream drift → bogus String
+    // length → CompressedStream::Read zero-progress spin on Dialog\StandardDialog.rsc
+    // (menu UIDescriptions have count==0 so never hit it). The mangled name is the
+    // exe's own import string at the slot's RVA (0x1401b8d2e).
+    RegisterDispatchSlot(0x1401516b0,
+        (uintptr_t)ResolveExport("?Serialize@Type@Object@@QEAAXAEAVSerializer@IO@@@Z"));
     RegisterDispatchSlot(0x1401518c8,
         (uintptr_t)ResolveExport("?Serialize@ElementDescription@UI@@UEAA_NAEAVStream@IO@@@Z"));
     RegisterDispatchSlot(0x1401518b8,
@@ -847,6 +857,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTimeGoalVtable();
     RegisterScenarioVtable();
     RegisterToolbarVtable();
+    RegisterMusicListVtable();
     RegisterBuildingGoalVtable();
     RegisterPopulationGoalVtable();
     RegisterTimeGoalInstanceVtable();

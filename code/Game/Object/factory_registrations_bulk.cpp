@@ -14,6 +14,20 @@
 #ifdef STANDALONE_EXE
 #include "factory_registration.h"
 #include <cstdio>
+#include <cstdlib>
+
+// Accelerator A (notes/PRELOAD_CASCADES_PLAN.md): when BANISHED_FACTORY_ENUM is
+// set, LogAndReturnNull delegates to FactoryEnumStub (standalone/
+// factory_enum_stub.cpp), which returns a non-crashing skip-deserialize stub so
+// a single run enumerates the WHOLE factory cascade instead of dying on the
+// first missing type. Default OFF -> the original crash behavior below.
+//
+// NOTE: this file is nominally codegen'd by tools/gen_factory_registrations.py,
+// but the generator's CSV is STALE (the committed file was hand-trimmed of all
+// Foundation C/D/E factories without updating the generator's REIMPLEMENTED set,
+// so regenerating re-adds ~160 NullFactory stubs over real factories). Edit this
+// preamble BY HAND; the generator carries a matching edit for documentation only.
+extern "C" void* FactoryEnumStub(const char* typeName);
 
 // Per-type tracing factories. When External::Load calls one of these,
 // we log which type was hit (so we know which real factory to write next)
@@ -25,6 +39,9 @@ namespace {
     // Generic stub that logs the name. Each REGISTER_TYPE entry below
     // points at a unique trampoline that calls this with its typeName.
     void* LogAndReturnNull(const char* typeName) {
+        static int s_enum = -1;
+        if (s_enum < 0) { const char* e = getenv("BANISHED_FACTORY_ENUM"); s_enum = (e && *e && e[0] != '0') ? 1 : 0; }
+        if (s_enum) return FactoryEnumStub(typeName);
         std::fprintf(stderr, "[NullFactory] Hit for type: %s\n", typeName);
         std::fflush(stderr);
         return nullptr;
@@ -101,7 +118,10 @@ REGISTER_NULL_FACTORY(WorkPlaceUI, "UI::DialogController");  // 14014ca40 Regist
 // Disease — real factory now lives in code/Game/Game/disease.cpp (External 0x48,
 //   vtable 0x14015e190, GetVersion=2). Was a NullFactory stub → IsDerivedFrom(NULL)
 //   crash during the in-game worldgen resource load. // 14014cb00 ClimateGenerator_StaticInit
-REGISTER_NULL_FACTORY(MusicList, "Object::External");  // 14014cc00 MenuScene_StaticInit
+// MusicList — real factory now lives in code/Game/Game/musiclist.cpp (External
+//   0x30, vtable 0x14015ee40, GetFileVersion=1). Was a NullFactory stub →
+//   IsDerivedFrom(NULL) crash when External::Load reads Game\MusicTracks.rsc.
+//   (was: REGISTER_NULL_FACTORY(MusicList, "Object::External");) // 14014cc00 MenuScene_StaticInit
 // NameDatabase — real factory now lives in code/Game/Game/namedatabase.cpp
 //   (was: REGISTER_NULL_FACTORY_FULL(NameDatabase, "Object::External", "ndb"); // 14014cc40 MenuScene_Setup)
 // Profession — real factory now lives in code/Game/Game/profession.cpp

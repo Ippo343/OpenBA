@@ -523,9 +523,19 @@ static inline void FolTrace(const char* tag, void* fname) {
     fflush(stderr);
 }
 
+// Last resource path entering FindOrLoad/External::Load — recorded unconditionally
+// (cheap) so Accelerator B's read guard can name the resource that was loading when
+// a serialize drift hung CompressedStream::Read. See InstallReadGuard below.
+static char g_lastFolName[260] = {0};
+static inline void RecordFolName(void* fname) {
+    const char* p = FolFnameText(fname);
+    if (p) { strncpy(g_lastFolName, p, sizeof(g_lastFolName) - 1); g_lastFolName[sizeof(g_lastFolName) - 1] = 0; }
+}
+
 void* FindOrLoadWrapper(void* self, void* fname) {
     EnterCriticalSection(&g_resCS);
     FolTrace("FindOrLoad", fname);
+    RecordFolName(fname);
     void* r = g_origFindOrLoad(self, fname);
     LeaveCriticalSection(&g_resCS);
     return r;
@@ -534,6 +544,7 @@ void* FindOrLoadWrapper(void* self, void* fname) {
 void* ExternalLoadWrapper(void* fname, void* ext) {
     EnterCriticalSection(&g_resCS);
     FolTrace("ExtLoad", fname);
+    RecordFolName(fname);
     void* r = g_origExternalLoad(fname, ext);
     LeaveCriticalSection(&g_resCS);
     return r;
@@ -579,6 +590,86 @@ extern "C" void InstallFindOrLoadWatch() {
 
     fprintf(stderr, "[ResLoad] serialized: FindOrLoad=%p External::Load=%p (recursive CS)\n",
             (void*)g_origFindOrLoad, (void*)g_origExternalLoad);
+    fflush(stderr);
+}
+
+// --- Accelerator B (Phase 0, notes/PRELOAD_CASCADES_PLAN.md): ----------------
+// CompressedStream::Read zero-progress guard. A serialize-misalignment drift
+// makes a String::Serialize read a bogus huge wide-string length; that length
+// flows into IO::CompressedStream::Read (Runtime 0x1800aa780) as `count`. Read's
+// internal while-loop (decompiled): while(count>=1){ SetWindow(this,pos); n =
+// min(count, winEnd-pos); memcpy; pos+=n; count-=n; }. When `count` over-reads
+// past EOF, SetWindow keeps returning true but n becomes 0 (winEnd==pos), so the
+// loop spins FOREVER copying 0 bytes — the documented loader hang. Because the
+// spin is INSIDE one Read call, detouring + calling the original cannot break it;
+// we REIMPLEMENT Read faithfully (same field layout/memcpy) and add an `n<=0`
+// guard that LOGS the active resource (g_lastFolName) + a stack backtrace
+// (names the drifting *_Serialize) and returns false to break the spin. The
+// loader then limps forward to reveal the NEXT drift. Gate BANISHED_READ_GUARD=1
+// (default OFF → not installed, original behavior). DIAGNOSTIC ONLY.
+typedef bool (*SetWindowFn)(void* self, int pos);
+static SetWindowFn   g_setWindow   = nullptr;
+static volatile LONG g_readGuardN  = 0;
+
+// Field offsets within CompressedStream (from the Read decompile):
+//   +0x1c int pos; +0x20 int windowIdx (*0x18 stride); +0x30 ptr winArray.
+//   window entry: +0x04 int winStart; +0x08 int winEnd; +0x10 char* winData.
+bool ReadGuardWrapper(void* self, int count, void* dst) {
+    while (true) {
+        if (count < 1) return true;
+        if (!g_setWindow || !g_setWindow(self, *(int*)((uint8_t*)self + 0x1c)))
+            return false;
+        uint8_t* win = *(uint8_t**)((uint8_t*)self + 0x30)
+                     + (int64_t)(*(int*)((uint8_t*)self + 0x20)) * 0x18;
+        int winEnd = *(int*)(win + 8);
+        int pos    = *(int*)((uint8_t*)self + 0x1c);
+        int n = count;
+        if (winEnd < pos + count) n = winEnd - pos;
+        if (n <= 0) {
+            // THE DRIFT GUARD — over-read past EOF; the original spins here.
+            LONG k = InterlockedIncrement(&g_readGuardN);
+            if (k <= 200) {
+                fprintf(stderr, "[ReadGuard] drift: zero-progress Read (count=%d "
+                        "pos=%d winEnd=%d) loading \"%s\"\n",
+                        count, pos, winEnd, g_lastFolName);
+                void* frames[24] = {0};
+                USHORT got = RtlCaptureStackBackTrace(1, 24, frames, nullptr);
+                for (USHORT i = 0; i < got; ++i) {
+                    char lbl[12]; snprintf(lbl, sizeof(lbl), "  rg[%2u]", i);
+                    LogModOff(lbl, reinterpret_cast<uint64_t>(frames[i]));
+                }
+                fflush(stderr);
+            }
+            return false;  // break the spin; loader treats as read failure
+        }
+        int winStart = *(int*)(win + 4);
+        memcpy(dst, *(char**)(win + 0x10) + (int64_t)(pos - winStart), (size_t)n);
+        *(int*)((uint8_t*)self + 0x1c) = pos + n;
+        count -= n;
+        dst = (uint8_t*)dst + n;
+    }
+}
+
+extern "C" void InstallReadGuard() {
+    const char* e = getenv("BANISHED_READ_GUARD");
+    if (!e || !e[0] || e[0] == '0' || e[0] == 'f' || e[0] == 'F') return;
+
+    g_setWindow = reinterpret_cast<SetWindowFn>(
+        ResolveAddr(Module::Runtime, 0x1800a9aa0));  // IO::CompressedStream::SetWindow
+
+    // Read @0x1800aa780 — 15-byte instruction boundary: mov[rsp+8],rbx;
+    // mov[rsp+0x10],rbp; mov[rsp+0x18],rsi. We REPLACE the body (never call the
+    // original), so the returned trampoline is unused — only checked for non-null.
+    static const uint8_t kReadPrologue[15] = {
+        0x48,0x89,0x5c,0x24,0x08, 0x48,0x89,0x6c,0x24,0x10, 0x48,0x89,0x74,0x24,0x18
+    };
+    void* tramp = DetourRuntimeFunc(
+        ResolveAddr(Module::Runtime, 0x1800aa780),
+        reinterpret_cast<void*>(&ReadGuardWrapper), 15,
+        kReadPrologue, sizeof(kReadPrologue), "CompressedStream::Read");
+
+    fprintf(stderr, "[ReadGuard] installed: Read=%s SetWindow=%p (BANISHED_READ_GUARD)\n",
+            tramp ? "patched" : "FAILED", (void*)g_setWindow);
     fflush(stderr);
 }
 

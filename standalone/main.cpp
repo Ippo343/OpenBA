@@ -43,6 +43,9 @@ extern "C" void InstallFilenameDtorCheck();
 extern "C" void InstallFilenameRuntimeHook();
 // Session-5 diagnostic installer (standalone/filename_runtime_hook.cpp).
 extern "C" void InstallFindOrLoadWatch();
+// Accelerator B (Phase 0): CompressedStream::Read zero-progress guard
+// (standalone/filename_runtime_hook.cpp). Gate BANISHED_READ_GUARD=1.
+extern "C" void InstallReadGuard();
 
 // ============================================================
 // Mirrors Runtime DLL's BaseTypeInfo struct layout (used by both the probe
@@ -1183,6 +1186,13 @@ static bool Init() {
     //     its other callers + the in-game world-build load path. Default ON; opt
     //     out with BANISHED_NO_FOL_LOCK=1. See filename_runtime_hook.cpp.
     InstallFindOrLoadWatch();
+
+    // 4f. Accelerator B (Phase 0): reimplement IO::CompressedStream::Read with an
+    //     n<=0 progress guard so a serialize-misalignment over-read logs the
+    //     drifting resource + stack and returns false instead of spinning the
+    //     loader forever. Gate BANISHED_READ_GUARD=1 (default OFF → no-op). See
+    //     filename_runtime_hook.cpp.
+    InstallReadGuard();
 
     // 5. PROBE: dump _firstTypeInfo state right after Runtime DLL load.
     //    Confirms Runtime self-registered its types via inlined CRT-init stubs
