@@ -46,6 +46,18 @@ namespace {
         std::fflush(stderr);
         return nullptr;
     }
+
+    // Abstract base types. The exe registers these with
+    // AutoPickupWork_Factory_Abstract (a _purecall stub) — they are never
+    // instantiated, they only exist as parents in the type hierarchy. This is
+    // NOT a NullFactory landmine: a missing concrete factory here is correct,
+    // not a stub awaiting a real one. Mirrors the exe purecall (should never run).
+    void* AbstractFactory(const char* typeName) {
+        std::fprintf(stderr,
+            "[AbstractFactory] Unexpected instantiate of abstract type: %s\n", typeName);
+        std::fflush(stderr);
+        return nullptr;
+    }
 }
 
 // Macro: declares a per-type factory + registers it in one line.
@@ -55,6 +67,10 @@ namespace {
 #define REGISTER_NULL_FACTORY_FULL(Name, Parent, Abstract)                   \
     namespace { void* NullFactory_##Name() { return LogAndReturnNull(#Name); } } \
     REGISTER_TYPE_FULL(Name, Parent, Abstract, &NullFactory_##Name, &NullInPlace)
+// Macro: registers an abstract base type (no concrete factory by design).
+#define REGISTER_ABSTRACT_FACTORY(Name, Parent)                              \
+    namespace { void* AbstractFactory_##Name() { return AbstractFactory(#Name); } } \
+    REGISTER_TYPE(Name, Parent, &AbstractFactory_##Name, &NullInPlace)
 
 // PlayAnimation — real standalone factory in code/Game/Action/playanimation.cpp
 //   (Action keystone; vtable 0x140158950, size 0x40). // 14014a580 PlayAnimation_RegisterType
@@ -138,7 +154,7 @@ REGISTER_NULL_FACTORY(SaveLoadDialog, "UI::DialogInstance");  // 14014cf10 Regis
 REGISTER_NULL_FACTORY(StorageUI, "UI::DialogController");  // 14014cf50 RegisterType_StorageUI
 REGISTER_NULL_FACTORY(ToolbarDialog, "UI::DialogInstance");  // 14014cf90 RegisterType_ToolbarDialog
 REGISTER_NULL_FACTORY(ComponentEntity, "Object::Internal");  // 14014cfd0 ComponentEntity_RegisterType
-REGISTER_NULL_FACTORY(Action, "Object::Internal");  // 14014d010 Action_RegisterType
+REGISTER_ABSTRACT_FACTORY(Action, "Object::Internal");  // 14014d010 Action_RegisterType
 // AnimateNaturalResource — real standalone factory in code/Game/Action (factory cascade Action family).
 // CompleteRoad — real standalone factory in code/Game/Action (factory cascade Action family).
 // CompleteTask — real standalone factory in code/Game/Action (factory cascade Action family).
@@ -157,7 +173,7 @@ REGISTER_NULL_FACTORY(Action, "Object::Internal");  // 14014d010 Action_Register
 // Toolbar: real standalone factory in code/Game/Game/toolbar.cpp (hand-removed; factory cascade for BANISHED_GAME_PRELOAD). // 14014d410 Toolbar_RegisterType
 REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
 // Tutorial — real standalone factory in code/Game/Tutorial/tutorial.cpp (factory cascade External family).
-REGISTER_NULL_FACTORY(TutorialGoal, "Object::External");  // 14014d790 TutorialGoal_RegisterType
+REGISTER_ABSTRACT_FACTORY(TutorialGoal, "Object::External");  // 14014d790 TutorialGoal_RegisterType
 // TutorialGoalButton — real standalone factory in code/Game/Tutorial/tutorialgoalbutton.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialGoalDialog, "TutorialGoal");  // 14014d810 RegisterType_TutorialGoalDialog
 // TutorialGoalGameSpeed — real standalone factory in code/Game/Tutorial/tutorialgoalgamespeed.cpp (factory cascade External family).
@@ -168,14 +184,14 @@ REGISTER_NULL_FACTORY(TutorialHighlightDialog, "UI::DialogInstance");  // 14014d
 // TutorialImageInputKey — real standalone factory in code/Game/Tutorial/tutorialimageinputkey.cpp (factory cascade External family).
 // TutorialImageToolbarIcon — real standalone factory in code/Game/Tutorial/tutorialimagetoolbaricon.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialInstance, "Object::Internal");  // 14014da10 TutorialInstance_RegisterType
-REGISTER_NULL_FACTORY(TutorialSetup, "Object::External");  // 14014da50 TutorialSetup_RegisterType
+REGISTER_ABSTRACT_FACTORY(TutorialSetup, "Object::External");  // 14014da50 TutorialSetup_RegisterType
 // TutorialSetupCamera — real standalone factory in code/Game/Tutorial/tutorialsetupcamera.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialSetupDialog, "TutorialSetup");  // 14014dad0 RegisterType_TutorialSetupDialog
 // TutorialSetupGameSpeed — real standalone factory in code/Game/Tutorial/tutorialsetupgamespeed.cpp (factory cascade External family).
 // TutorialSetupRestrictPlayer — real standalone factory in code/Game/Tutorial/tutorialsetuprestrictplayer.cpp (factory cascade External family).
 // TutorialStep — real standalone factory in code/Game/Tutorial/tutorialstep.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialUI, "UI::DialogController");  // 14014dbd0 RegisterType_TutorialUI
-REGISTER_NULL_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_RegisterType
+REGISTER_ABSTRACT_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_RegisterType
 // BuildRoad — real standalone factory in code/Game/Work/buildroad.cpp (Work keystone; vtable 0x140161020, size 0x70).
 // BuildStructure — real standalone factory in code/Game/Work/buildstructure.cpp (factory cascade Work family).
 // ClearArea — real standalone factory in code/Game/Work/cleararea.cpp (factory cascade Work family).
@@ -197,13 +213,13 @@ REGISTER_NULL_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_Regi
 // PlantOrchard — real standalone factory in code/Game/Work/plantorchard.cpp (factory cascade Work family).
 // TendArea — real standalone factory in code/Game/Work/tendarea.cpp (factory cascade Work family).
 // TradeWork — real standalone factory in code/Game/Work/tradework.cpp (factory cascade Work family).
-REGISTER_NULL_FACTORY(Work, "Object::Internal");  // 14014e190 Work_RegisterType
-REGISTER_NULL_FACTORY(DragTool, "Tool");  // 14014e250 DragTool_RegisterType
-REGISTER_NULL_FACTORY(Tool, "Object::Internal");  // 14014e390 Tool_StaticInit
-REGISTER_NULL_FACTORY(ToolSetting, "Object::Internal");  // 14014e3d0 ToolSetting_RegisterType
-REGISTER_NULL_FACTORY(Component, "Object::Internal");  // 14014ea10 Component_Register
-REGISTER_NULL_FACTORY(Description, "Object::External");  // 14014ea50 Description_Register
-REGISTER_NULL_FACTORY(ControllerComponent, "Component");  // 14014eb50 ControllerComponent_RegisterType
-REGISTER_NULL_FACTORY(ResourceProduceComponent, "ControllerComponent");  // 14014f8d0 ResourceProduceComponent_RegisterType
+REGISTER_ABSTRACT_FACTORY(Work, "Object::Internal");  // 14014e190 Work_RegisterType
+REGISTER_ABSTRACT_FACTORY(DragTool, "Tool");  // 14014e250 DragTool_RegisterType
+REGISTER_ABSTRACT_FACTORY(Tool, "Object::Internal");  // 14014e390 Tool_StaticInit
+REGISTER_ABSTRACT_FACTORY(ToolSetting, "Object::Internal");  // 14014e3d0 ToolSetting_RegisterType
+REGISTER_ABSTRACT_FACTORY(Component, "Object::Internal");  // 14014ea10 Component_Register
+REGISTER_ABSTRACT_FACTORY(Description, "Object::External");  // 14014ea50 Description_Register
+REGISTER_ABSTRACT_FACTORY(ControllerComponent, "Component");  // 14014eb50 ControllerComponent_RegisterType
+REGISTER_ABSTRACT_FACTORY(ResourceProduceComponent, "ControllerComponent");  // 14014f8d0 ResourceProduceComponent_RegisterType
 
 #endif  // STANDALONE_EXE

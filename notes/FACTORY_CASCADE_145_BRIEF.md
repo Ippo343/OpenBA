@@ -214,6 +214,24 @@ block; DELETE `REGISTER_NULL_FACTORY(X, "Action")` from the bulk file.
 - **REMAINING (78):** ~61 UI dialogs (do with HUD, task #10) + ~14 abstract bases (cosmetic) +
   Tornado (1 concrete, needs Particle ctor).
 
+### PROGRESS 2026-06-18 (cont.) — abstract bases converted. 78 → 66 NullFactory.
+- **12 abstract bases converted** REGISTER_NULL_FACTORY → new **REGISTER_ABSTRACT_FACTORY**
+  macro (factory_registrations_bulk.cpp): Action, Work, Tool, ToolSetting, Component,
+  Description, TutorialGoal, TutorialSetup, AutoPickupWork, DragTool, ControllerComponent,
+  ResourceProduceComponent. Each verified abstract in Ghidra (exe factory ==
+  AutoPickupWork_Factory_Abstract / _purecall). New macro registers correct name+parent
+  with a shared AbstractFactory() (mirrors the exe purecall — never called; logs if it ever
+  is). Cosmetic/consistency + gets them out of the NullFactory landmine bucket; hierarchy was
+  already complete (REGISTER_NULL_FACTORY already did REGISTER_TYPE). Build+smoke clean,
+  0 NullFactory/AbstractFactory hits, 300 addrs (no vtable regs).
+- **NOT abstract (stay concrete TODO):** ComponentEntity (ComponentEntity_Factory) and
+  TutorialInstance (TutorialInstance_Factory) have REAL exe factories — they are concrete
+  landmines like the tools, NOT abstract. Left as REGISTER_NULL_FACTORY; need real factories.
+- **REMAINING (66 NullFactory):** ~61 UI dialogs (do with HUD, task #10) + ComponentEntity +
+  TutorialInstance + Tornado (3 concrete: Tornado needs Particle ctor; ComponentEntity/
+  TutorialInstance need real factories — both are instantiated via other paths today so lower
+  urgency, but the bulk stub remains a landmine if loaded by name).
+
 ### Original status (pre-implementation):
 - Build/test: `mingw32-make sa-deploy`; run via `cmd //c start "" reimpl-x64.exe` from
   `C:\GOG Games\Banished` with `BANISHED_AUTOSTART=1` (RTSS/Afterburner must be CLOSED —
