@@ -16,6 +16,7 @@
 #include "Tutorial/tutorialinstance_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -171,3 +172,45 @@ void TutorialInstance_Serialize(void* self, void* stream) {
         s_fn_Serializer_Dtor(serializer);
     }
 }
+
+// ============================================================
+// Standalone factory (factory cascade — concrete landmine removal)
+// ============================================================
+// Exe factory TutorialInstance_Factory (0x140028120): MemAlloc(0x38,8) ->
+//   Object::Internal::Internal(p)
+//   *(p)        = &vtable_TutorialInstance (0x140160bf8)
+//   *(int p+0x10) = -1
+//   InternalBasePtr::Ctor(p+0x18, null)
+//   InternalBasePtr::Ctor(p+0x20, null)
+//   *(p+0x30)   = 0
+// Registered as the real factory so CreateObject("TutorialInstance") /
+// External::Load no longer hits the NullFactory -> IsDerivedFrom(NULL) crash.
+// DORMANT-SAFE: installs the exe TutorialInstance vtable only if it resolves in
+// standalone (ResolveAddr != 0); otherwise keeps the Object::Internal base vtable
+// that fn_ObjectInternal_Ctor installs. Nothing currently drives a TutorialInstance.
+#ifdef STANDALONE_EXE
+static void* TutorialInstance_Build(void* p) {
+    if (!p) return nullptr;
+    uint8_t* s = reinterpret_cast<uint8_t*>(p);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(p);
+    uintptr_t vt = ResolveAddr(Module::Exe, TutorialInstanceAddr::Vtable);
+    if (vt) *reinterpret_cast<uintptr_t*>(s) = vt;
+    *reinterpret_cast<int32_t*>(s + 0x10) = -1;
+    if (fn_InternalBasePtr_Ctor) {
+        fn_InternalBasePtr_Ctor(s + 0x18, nullptr);
+        fn_InternalBasePtr_Ctor(s + 0x20, nullptr);
+    }
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    return p;
+}
+extern "C" void* TutorialInstance_CreateInPlace_SA(void* mem) {
+    return TutorialInstance_Build(mem);
+}
+extern "C" void* TutorialInstance_Factory_SA(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+    return TutorialInstance_Build(p);
+}
+REGISTER_TYPE(TutorialInstance, "Object::Internal",
+              &TutorialInstance_Factory_SA, &TutorialInstance_CreateInPlace_SA);
+#endif // STANDALONE_EXE

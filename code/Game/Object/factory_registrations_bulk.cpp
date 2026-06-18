@@ -153,7 +153,10 @@ REGISTER_NULL_FACTORY(ResidenceUI, "UI::DialogController");  // 14014ced0 Regist
 REGISTER_NULL_FACTORY(SaveLoadDialog, "UI::DialogInstance");  // 14014cf10 RegisterType_SaveLoadDialog
 REGISTER_NULL_FACTORY(StorageUI, "UI::DialogController");  // 14014cf50 RegisterType_StorageUI
 REGISTER_NULL_FACTORY(ToolbarDialog, "UI::DialogInstance");  // 14014cf90 RegisterType_ToolbarDialog
-REGISTER_NULL_FACTORY(ComponentEntity, "Object::Internal");  // 14014cfd0 ComponentEntity_RegisterType
+// ComponentEntity — real standalone factory now lives in
+//   code/Game/Entity/componententity.cpp (MemAlloc 0x48 -> ComponentEntity_CtorDefault,
+//   exe factory 0x1400219c0). Was a NullFactory stub.
+//   (was: REGISTER_NULL_FACTORY(ComponentEntity, "Object::Internal");) // 14014cfd0 ComponentEntity_RegisterType
 REGISTER_ABSTRACT_FACTORY(Action, "Object::Internal");  // 14014d010 Action_RegisterType
 // AnimateNaturalResource — real standalone factory in code/Game/Action (factory cascade Action family).
 // CompleteRoad — real standalone factory in code/Game/Action (factory cascade Action family).
@@ -171,7 +174,10 @@ REGISTER_ABSTRACT_FACTORY(Action, "Object::Internal");  // 14014d010 Action_Regi
 // RemoveNaturalResource — real standalone factory in code/Game/Action (factory cascade Action family).
 // SendComponentMessage — real standalone factory in code/Game/Action (factory cascade Action family).
 // Toolbar: real standalone factory in code/Game/Game/toolbar.cpp (hand-removed; factory cascade for BANISHED_GAME_PRELOAD). // 14014d410 Toolbar_RegisterType
-REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
+// Tornado — real standalone factory now lives in code/Game/Game/tornado.cpp
+//   (Graphics::Particle, size 0x90, ctor FUN_1400d23c0, base ctor
+//   fn_Graphics_Particle_Ctor). Was a NullFactory stub.
+//   (was: REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");) // 14014d450 Toolbar_StaticInit
 // Tutorial — real standalone factory in code/Game/Tutorial/tutorial.cpp (factory cascade External family).
 REGISTER_ABSTRACT_FACTORY(TutorialGoal, "Object::External");  // 14014d790 TutorialGoal_RegisterType
 // TutorialGoalButton — real standalone factory in code/Game/Tutorial/tutorialgoalbutton.cpp (factory cascade External family).
@@ -183,7 +189,10 @@ REGISTER_NULL_FACTORY(TutorialHighlightDialog, "UI::DialogInstance");  // 14014d
 // TutorialImageHotKey — real standalone factory in code/Game/Tutorial/tutorialimagehotkey.cpp (factory cascade External family).
 // TutorialImageInputKey — real standalone factory in code/Game/Tutorial/tutorialimageinputkey.cpp (factory cascade External family).
 // TutorialImageToolbarIcon — real standalone factory in code/Game/Tutorial/tutorialimagetoolbaricon.cpp (factory cascade External family).
-REGISTER_NULL_FACTORY(TutorialInstance, "Object::Internal");  // 14014da10 TutorialInstance_RegisterType
+// TutorialInstance — real standalone factory now lives in
+//   code/Game/Tutorial/tutorialinstance.cpp (MemAlloc 0x38 -> Object::Internal +
+//   2 InternalBasePtr ctors, exe factory 0x140028120). Was a NullFactory stub.
+//   (was: REGISTER_NULL_FACTORY(TutorialInstance, "Object::Internal");) // 14014da10 TutorialInstance_RegisterType
 REGISTER_ABSTRACT_FACTORY(TutorialSetup, "Object::External");  // 14014da50 TutorialSetup_RegisterType
 // TutorialSetupCamera — real standalone factory in code/Game/Tutorial/tutorialsetupcamera.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialSetupDialog, "TutorialSetup");  // 14014dad0 RegisterType_TutorialSetupDialog

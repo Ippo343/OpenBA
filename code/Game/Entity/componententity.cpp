@@ -781,3 +781,27 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
     ent = entity();
     ComponentEntity_OnAddedPass((ComponentEntity*)ent);
 }
+
+// ============================================================
+// Standalone factory (factory cascade — concrete landmine removal)
+// ============================================================
+// Exe factory ComponentEntity_Factory (0x1400219c0): MemAlloc(0x48,8) ->
+// ComponentEntity_Ctor (0x1400c3620) == ComponentEntity_CtorDefault above.
+// Registered as the real factory so Object::Factory::CreateObject("ComponentEntity")
+// / External::Load no longer hits the NullFactory -> IsDerivedFrom(NULL) crash.
+// The default ctor sets the same vtable (0x14015fa78) the start-town spawn already
+// uses via CtorFromDescription, so the resulting entity is a valid empty container.
+#ifdef STANDALONE_EXE
+extern "C" void* ComponentEntity_CreateInPlace_SA(void* mem) {
+    if (!mem) return nullptr;
+    return ComponentEntity_CtorDefault(reinterpret_cast<ComponentEntity*>(mem));
+}
+extern "C" void* ComponentEntity_Factory_SA(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    if (!p) return nullptr;
+    return ComponentEntity_CtorDefault(reinterpret_cast<ComponentEntity*>(p));
+}
+REGISTER_TYPE(ComponentEntity, "Object::Internal",
+              &ComponentEntity_Factory_SA, &ComponentEntity_CreateInPlace_SA);
+#endif // STANDALONE_EXE

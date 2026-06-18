@@ -232,6 +232,38 @@ block; DELETE `REGISTER_NULL_FACTORY(X, "Action")` from the bulk file.
   TutorialInstance need real factories — both are instantiated via other paths today so lower
   urgency, but the bulk stub remains a landmine if loaded by name).
 
+### PROGRESS 2026-06-18 (cont.) — Tornado DONE. 66 → 65 NullFactory. 2 concrete landmines left.
+- **Tornado DONE** (Graphics::Particle, size 0x90, ctor FUN_1400d23c0, factory
+  Toolbar_StaticInit_sub_4e90 @ 0x140024e90). New file code/Game/Game/tornado.cpp.
+  Wired NEW engine-func **fn_Graphics_Particle_Ctor** (Runtime ??0Particle@Graphics@@QEAA@XZ
+  @ 0x180103e80, fallback ResolveAddr) — the base ctor the Tornado ctor calls via dispatch
+  slot 0x1401527b0. Factory: MemAlloc(0x90,8) → Particle base ctor → Tornado float block at
+  +0x48..+0x70 (4,20,5,45,1,1,10,0,0.2,3,30) + qword -1 @+0x74 → 2× fn_Time_Ctor_Float(+0x80/
+  +0x88, g_fUVScale). DORMANT-SAFE (same policy as frustumoutlineelement.cpp): keeps the
+  Particle base vtable, does NOT install the exe Tornado vtable 0x140160190 (exe→Runtime
+  thunks that don't resolve standalone). Builds clean. Removed the bulk REGISTER_NULL_FACTORY.
+- **REMAINING (2 concrete + ~61 UI dialogs + abstract bases):** ComponentEntity
+  (ComponentEntity_Factory) + TutorialInstance (TutorialInstance_Factory) — both have REAL
+  exe factories, both already instantiated via other paths so the bulk stub is a latent
+  landmine only if loaded by name. UI dialogs deferred to HUD (task #10).
+
+### PROGRESS 2026-06-18 (cont.) — ComponentEntity + TutorialInstance DONE. ALL concrete landmines cleared.
+- **ComponentEntity DONE** (Object::Internal, size 0x48, exe factory 0x1400219c0 ->
+  ComponentEntity_Ctor 0x1400c3620). Factory added to code/Game/Entity/componententity.cpp
+  (#ifdef STANDALONE_EXE): MemAlloc(0x48,8) -> existing ComponentEntity_CtorDefault (already a
+  faithful port of 0x1400c3620 — base Internal ctor, vtable 0x14015fa78, +0x18=-1, fields
+  zeroed). Vtable resolves (same one the start-town CtorFromDescription spawn already uses).
+- **TutorialInstance DONE** (Object::Internal, size 0x38, exe factory 0x140028120). Factory
+  added to code/Game/Tutorial/tutorialinstance.cpp (#ifdef STANDALONE_EXE): MemAlloc(0x38,8) ->
+  Object::Internal ctor -> vtable 0x140160bf8 (set only if ResolveAddr != 0, else dormant-safe
+  base vtable) -> +0x10=-1, 2x InternalBasePtr ctor(+0x18/+0x20, null), +0x30=0.
+- Both removed from factory_registrations_bulk.cpp. Build clean. Smoke (sa-run, autostart):
+  0 NullFactory / 0 AbstractFactory / 0 crash; DrawFailed loop identical to baseline (9/177
+  — pre-existing environmental device-present stall, NOT a regression). All 3 are dormant in
+  the menu path so no factory fires there; landmine removed for any by-name CreateObject/Load.
+- **NO concrete NullFactory landmines remain.** Bulk file now holds only ~61 UI dialog stubs
+  (deferred to HUD bring-up, task #10) + ~14 already-correct abstract bases.
+
 ### Original status (pre-implementation):
 - Build/test: `mingw32-make sa-deploy`; run via `cmd //c start "" reimpl-x64.exe` from
   `C:\GOG Games\Banished` with `BANISHED_AUTOSTART=1` (RTSS/Afterburner must be CLOSED —

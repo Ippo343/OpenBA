@@ -2822,6 +2822,14 @@ extern fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_S
 typedef void* (*fn_Graphics_ParticleSystemInstance_Ctor_t)(void* self);
 extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor;
 
+// Graphics::Particle::Particle() — default ctor for the Particle base class
+// (Runtime 0x180103e80, export ??0Particle@Graphics@@QEAA@XZ). Initializes the
+// [0x00,0x48) base region + base vtable. Used by the standalone Tornado factory
+// (code/Game/Game/tornado.cpp), which then fills the Tornado-specific float
+// block at +0x48.. — mirrors the exe ctor FUN_1400d23c0's first call.
+typedef void* (*fn_Graphics_Particle_Ctor_t)(void* self);
+extern fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor;
+
 // Graphics::ParticleInstance::IncrementInstanceIndex() — advances the
 // Runtime's static _frameIndex counter. ParticleSystemInstance::Update
 // early-returns if `emit+0x2c == _frameIndex`, so this MUST be called
