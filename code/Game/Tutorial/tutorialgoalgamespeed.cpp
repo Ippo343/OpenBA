@@ -160,3 +160,45 @@ void* TutorialGoalGameSpeed_Init(void* self) {
 
     return self;
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x1401608e0 (9 slots, Object::External base), size 0x28, parent "TutorialGoal".
+// GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialGoalGameSpeed_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialGoalGameSpeed");
+    return c;
+}
+static int TutorialGoalGameSpeed_GetFileVersion(void*) { return 1; }
+
+static void* g_TutorialGoalGameSpeed_Vtable[9] = {
+    (void*)&TutorialGoalGameSpeed_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialGoalGameSpeed_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialGoalGameSpeed_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialGoalGameSpeed_Serialize,       // +0x28 Serialize
+    (void*)&TutorialGoalGameSpeed_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialGoalGameSpeed_Init,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialGoalGameSpeedVtable() {
+    RegisterExeAddr(0x1401608e0, (uintptr_t)g_TutorialGoalGameSpeed_Vtable);
+}
+extern "C" void* TutorialGoalGameSpeed_CreateInPlace(void* mem) {
+    return TutorialGoalGameSpeed_Init(mem);
+}
+extern "C" void* TutorialGoalGameSpeed_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+    return p ? TutorialGoalGameSpeed_Init(p) : nullptr;
+}
+REGISTER_TYPE(TutorialGoalGameSpeed, "TutorialGoal", &TutorialGoalGameSpeed_Factory, &TutorialGoalGameSpeed_CreateInPlace);
+#endif // STANDALONE_EXE

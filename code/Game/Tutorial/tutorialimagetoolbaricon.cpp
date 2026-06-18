@@ -336,3 +336,45 @@ void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     if (fn_ImageElement_SetSprite && imageRef)
         fn_ImageElement_SetSprite(imageRef, spriteBuf);
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160b90 (9 slots, Object::External base), size 0x48, parent "TutorialImage".
+// GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialImageToolbarIcon_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialImageToolbarIcon");
+    return c;
+}
+static int TutorialImageToolbarIcon_GetFileVersion(void*) { return 0x1001; }
+
+static void* g_TutorialImageToolbarIcon_Vtable[9] = {
+    (void*)&TutorialImageToolbarIcon_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialImageToolbarIcon_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialImageToolbarIcon_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialImageToolbarIcon_Serialize,       // +0x28 Serialize
+    (void*)&TutorialImageToolbarIcon_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialImageToolbarIcon_Ctor,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialImageToolbarIconVtable() {
+    RegisterExeAddr(0x140160b90, (uintptr_t)g_TutorialImageToolbarIcon_Vtable);
+}
+extern "C" void* TutorialImageToolbarIcon_CreateInPlace(void* mem) {
+    return TutorialImageToolbarIcon_Ctor(mem);
+}
+extern "C" void* TutorialImageToolbarIcon_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    return p ? TutorialImageToolbarIcon_Ctor(p) : nullptr;
+}
+REGISTER_TYPE(TutorialImageToolbarIcon, "TutorialImage", &TutorialImageToolbarIcon_Factory, &TutorialImageToolbarIcon_CreateInPlace);
+#endif // STANDALONE_EXE

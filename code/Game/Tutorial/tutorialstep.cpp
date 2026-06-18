@@ -322,3 +322,45 @@ void TutorialStep_Serialize(void* self, void* stream) {
         s_fn_Serializer_Dtor(serializer);
     }
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160e90 (9 slots, Object::External base), size 0x70, parent "Object::External".
+// GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialStep_GetTypeId_SA(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialStep");
+    return c;
+}
+static int TutorialStep_GetFileVersion(void*) { return 1; }
+
+static void* g_TutorialStep_Vtable[9] = {
+    (void*)&TutorialStep_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialStep_GetTypeId_SA,       // +0x10 GetTypeId
+    (void*)&TutorialStep_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialStep_Serialize,       // +0x28 Serialize
+    (void*)&TutorialStep_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialStep_Init,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialStepVtable() {
+    RegisterExeAddr(0x140160e90, (uintptr_t)g_TutorialStep_Vtable);
+}
+extern "C" void* TutorialStep_CreateInPlace(void* mem) {
+    return TutorialStep_Init(mem);
+}
+extern "C" void* TutorialStep_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
+    return p ? TutorialStep_Init(p) : nullptr;
+}
+REGISTER_TYPE(TutorialStep, "Object::External", &TutorialStep_Factory, &TutorialStep_CreateInPlace);
+#endif // STANDALONE_EXE

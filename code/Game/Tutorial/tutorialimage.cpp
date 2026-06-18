@@ -192,3 +192,45 @@ void TutorialImage_Slot9(void* self, void* param1, void* param2) {
         s_fn_Dialog_CreateElement(param2, param1, imageRef);
     }
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160a40 (9 slots, Object::External base), size 0x30, parent "Object::External".
+// GetFileVersion (+0x18) = 0x1000. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialImage_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialImage");
+    return c;
+}
+static int TutorialImage_GetFileVersion(void*) { return 0x1000; }
+
+static void* g_TutorialImage_Vtable[9] = {
+    (void*)&TutorialImage_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialImage_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialImage_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialImage_Serialize,       // +0x28 Serialize
+    (void*)&TutorialImage_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialImage_Ctor,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialImageVtable() {
+    RegisterExeAddr(0x140160a40, (uintptr_t)g_TutorialImage_Vtable);
+}
+extern "C" void* TutorialImage_CreateInPlace(void* mem) {
+    return TutorialImage_Ctor(mem);
+}
+extern "C" void* TutorialImage_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+    return p ? TutorialImage_Ctor(p) : nullptr;
+}
+REGISTER_TYPE(TutorialImage, "Object::External", &TutorialImage_Factory, &TutorialImage_CreateInPlace);
+#endif // STANDALONE_EXE

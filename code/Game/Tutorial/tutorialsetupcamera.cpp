@@ -211,3 +211,45 @@ void* TutorialSetupCamera_Ctor(void* self) {
 
     return self;
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160ca0 (9 slots, Object::External base), size 0x30, parent "TutorialSetup".
+// GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialSetupCamera_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialSetupCamera");
+    return c;
+}
+static int TutorialSetupCamera_GetFileVersion(void*) { return 1; }
+
+static void* g_TutorialSetupCamera_Vtable[9] = {
+    (void*)&TutorialSetupCamera_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialSetupCamera_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialSetupCamera_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialSetupCamera_Serialize,       // +0x28 Serialize
+    (void*)&TutorialSetupCamera_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialSetupCamera_Ctor,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialSetupCameraVtable() {
+    RegisterExeAddr(0x140160ca0, (uintptr_t)g_TutorialSetupCamera_Vtable);
+}
+extern "C" void* TutorialSetupCamera_CreateInPlace(void* mem) {
+    return TutorialSetupCamera_Ctor(mem);
+}
+extern "C" void* TutorialSetupCamera_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+    return p ? TutorialSetupCamera_Ctor(p) : nullptr;
+}
+REGISTER_TYPE(TutorialSetupCamera, "TutorialSetup", &TutorialSetupCamera_Factory, &TutorialSetupCamera_CreateInPlace);
+#endif // STANDALONE_EXE

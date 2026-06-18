@@ -206,6 +206,21 @@ extern "C" {
     void RegisterHerbalistWorkVtable();
     void RegisterHuntWorkVtable();
     void RegisterPastureWorkVtable();
+
+    // Factory cascade — External-resource family (Object::External, 9-slot
+    // vtables w/ GetFileVersion @ +0x18; MusicList pattern). Tutorial types.
+    void RegisterTutorialVtable();
+    void RegisterTutorialGoalButtonVtable();
+    void RegisterTutorialGoalGameSpeedVtable();
+    void RegisterTutorialGoalCountVtable();
+    void RegisterTutorialImageVtable();
+    void RegisterTutorialImageHotKeyVtable();
+    void RegisterTutorialImageInputKeyVtable();
+    void RegisterTutorialImageToolbarIconVtable();
+    void RegisterTutorialSetupCameraVtable();
+    void RegisterTutorialSetupGameSpeedVtable();
+    void RegisterTutorialSetupRestrictPlayerVtable();
+    void RegisterTutorialStepVtable();
 }
 
 // ============================================================
@@ -1093,6 +1108,20 @@ static void RegisterVtablesAndTypeIds() {
     RegisterHerbalistWorkVtable();
     RegisterHuntWorkVtable();
     RegisterPastureWorkVtable();
+
+    // Factory cascade — External-resource family (MusicList pattern). Tutorial types.
+    RegisterTutorialVtable();
+    RegisterTutorialGoalButtonVtable();
+    RegisterTutorialGoalGameSpeedVtable();
+    RegisterTutorialGoalCountVtable();
+    RegisterTutorialImageVtable();
+    RegisterTutorialImageHotKeyVtable();
+    RegisterTutorialImageInputKeyVtable();
+    RegisterTutorialImageToolbarIconVtable();
+    RegisterTutorialSetupCameraVtable();
+    RegisterTutorialSetupGameSpeedVtable();
+    RegisterTutorialSetupRestrictPlayerVtable();
+    RegisterTutorialStepVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

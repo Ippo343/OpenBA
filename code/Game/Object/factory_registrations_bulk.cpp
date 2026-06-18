@@ -161,24 +161,24 @@ REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_Stat
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
 REGISTER_NULL_FACTORY(PathTool, "Tool");  // 14014d6d0 PathTool_RegisterType
 REGISTER_NULL_FACTORY(RotationSetting, "ToolSetting");  // 14014d710 RotationSetting_RegisterType
-REGISTER_NULL_FACTORY(Tutorial, "Object::External");  // 14014d750 Tutorial_RegisterType
+// Tutorial — real standalone factory in code/Game/Tutorial/tutorial.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialGoal, "Object::External");  // 14014d790 TutorialGoal_RegisterType
-REGISTER_NULL_FACTORY(TutorialGoalButton, "TutorialGoal");  // 14014d7d0 TutorialGoalButton_RegisterType
+// TutorialGoalButton — real standalone factory in code/Game/Tutorial/tutorialgoalbutton.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialGoalDialog, "TutorialGoal");  // 14014d810 RegisterType_TutorialGoalDialog
-REGISTER_NULL_FACTORY(TutorialGoalGameSpeed, "TutorialGoal");  // 14014d850 TutorialGoalGameSpeed_RegisterType
-REGISTER_NULL_FACTORY(TutorialGoalCount, "TutorialGoal");  // 14014d890 TutorialGoalCount_RegisterType
+// TutorialGoalGameSpeed — real standalone factory in code/Game/Tutorial/tutorialgoalgamespeed.cpp (factory cascade External family).
+// TutorialGoalCount — real standalone factory in code/Game/Tutorial/tutorialgoalcount.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialHighlightDialog, "UI::DialogInstance");  // 14014d8d0 RegisterType_TutorialHighlightDialog
-REGISTER_NULL_FACTORY(TutorialImage, "Object::External");  // 14014d910 TutorialImage_RegisterType
-REGISTER_NULL_FACTORY(TutorialImageHotKey, "TutorialImage");  // 14014d950 TutorialImageHotKey_RegisterType
-REGISTER_NULL_FACTORY(TutorialImageInputKey, "TutorialImage");  // 14014d990 TutorialImageInputKey_RegisterType
-REGISTER_NULL_FACTORY(TutorialImageToolbarIcon, "TutorialImage");  // 14014d9d0 TutorialImageToolbarIcon_RegisterType
+// TutorialImage — real standalone factory in code/Game/Tutorial/tutorialimage.cpp (factory cascade External family).
+// TutorialImageHotKey — real standalone factory in code/Game/Tutorial/tutorialimagehotkey.cpp (factory cascade External family).
+// TutorialImageInputKey — real standalone factory in code/Game/Tutorial/tutorialimageinputkey.cpp (factory cascade External family).
+// TutorialImageToolbarIcon — real standalone factory in code/Game/Tutorial/tutorialimagetoolbaricon.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialInstance, "Object::Internal");  // 14014da10 TutorialInstance_RegisterType
 REGISTER_NULL_FACTORY(TutorialSetup, "Object::External");  // 14014da50 TutorialSetup_RegisterType
-REGISTER_NULL_FACTORY(TutorialSetupCamera, "TutorialSetup");  // 14014da90 TutorialSetupCamera_RegisterType
+// TutorialSetupCamera — real standalone factory in code/Game/Tutorial/tutorialsetupcamera.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialSetupDialog, "TutorialSetup");  // 14014dad0 RegisterType_TutorialSetupDialog
-REGISTER_NULL_FACTORY(TutorialSetupGameSpeed, "TutorialSetup");  // 14014db10 TutorialSetupGameSpeed_RegisterType
-REGISTER_NULL_FACTORY(TutorialSetupRestrictPlayer, "TutorialSetup");  // 14014db50 TutorialSetupRestrictPlayer_RegisterType
-REGISTER_NULL_FACTORY(TutorialStep, "Object::External");  // 14014db90 TutorialStep_RegisterType
+// TutorialSetupGameSpeed — real standalone factory in code/Game/Tutorial/tutorialsetupgamespeed.cpp (factory cascade External family).
+// TutorialSetupRestrictPlayer — real standalone factory in code/Game/Tutorial/tutorialsetuprestrictplayer.cpp (factory cascade External family).
+// TutorialStep — real standalone factory in code/Game/Tutorial/tutorialstep.cpp (factory cascade External family).
 REGISTER_NULL_FACTORY(TutorialUI, "UI::DialogController");  // 14014dbd0 RegisterType_TutorialUI
 REGISTER_NULL_FACTORY(AutoPickupWork, "Work");  // 14014dc10 AutoPickupWork_RegisterType
 // BuildRoad — real standalone factory in code/Game/Work/buildroad.cpp (Work keystone; vtable 0x140161020, size 0x70).

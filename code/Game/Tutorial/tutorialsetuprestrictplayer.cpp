@@ -324,3 +324,45 @@ void* TutorialSetupRestrictPlayer_Ctor(void* self) {
 
     return self;
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160e20 (9 slots, Object::External base), size 0x68, parent "TutorialSetup".
+// GetFileVersion (+0x18) = 4. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialSetupRestrictPlayer_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialSetupRestrictPlayer");
+    return c;
+}
+static int TutorialSetupRestrictPlayer_GetFileVersion(void*) { return 4; }
+
+static void* g_TutorialSetupRestrictPlayer_Vtable[9] = {
+    (void*)&TutorialSetupRestrictPlayer_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialSetupRestrictPlayer_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialSetupRestrictPlayer_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialSetupRestrictPlayer_Serialize,       // +0x28 Serialize
+    (void*)&TutorialSetupRestrictPlayer_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialSetupRestrictPlayer_Ctor,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialSetupRestrictPlayerVtable() {
+    RegisterExeAddr(0x140160e20, (uintptr_t)g_TutorialSetupRestrictPlayer_Vtable);
+}
+extern "C" void* TutorialSetupRestrictPlayer_CreateInPlace(void* mem) {
+    return TutorialSetupRestrictPlayer_Ctor(mem);
+}
+extern "C" void* TutorialSetupRestrictPlayer_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+    return p ? TutorialSetupRestrictPlayer_Ctor(p) : nullptr;
+}
+REGISTER_TYPE(TutorialSetupRestrictPlayer, "TutorialSetup", &TutorialSetupRestrictPlayer_Factory, &TutorialSetupRestrictPlayer_CreateInPlace);
+#endif // STANDALONE_EXE

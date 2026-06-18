@@ -292,3 +292,45 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
 
     return retIBP;
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160ab0 (9 slots, Object::External base), size 0x48, parent "TutorialImage".
+// GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialImageHotKey_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialImageHotKey");
+    return c;
+}
+static int TutorialImageHotKey_GetFileVersion(void*) { return 0x1001; }
+
+static void* g_TutorialImageHotKey_Vtable[9] = {
+    (void*)&TutorialImageHotKey_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialImageHotKey_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialImageHotKey_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialImageHotKey_Serialize,       // +0x28 Serialize
+    (void*)&TutorialImageHotKey_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialImageHotKey_Ctor,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialImageHotKeyVtable() {
+    RegisterExeAddr(0x140160ab0, (uintptr_t)g_TutorialImageHotKey_Vtable);
+}
+extern "C" void* TutorialImageHotKey_CreateInPlace(void* mem) {
+    return TutorialImageHotKey_Ctor(mem);
+}
+extern "C" void* TutorialImageHotKey_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    return p ? TutorialImageHotKey_Ctor(p) : nullptr;
+}
+REGISTER_TYPE(TutorialImageHotKey, "TutorialImage", &TutorialImageHotKey_Factory, &TutorialImageHotKey_CreateInPlace);
+#endif // STANDALONE_EXE

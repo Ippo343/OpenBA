@@ -703,3 +703,45 @@ void* TutorialGoalCount_Init(void* self) {
 
     return self;
 }
+
+// ============================================================
+// Standalone factory + vtable — External-resource family (factory cascade).
+// Vtable @ 0x140160950 (9 slots, Object::External base), size 0x50, parent "TutorialGoal".
+// GetFileVersion (+0x18) = 5. MusicList pattern (musiclist.cpp).
+// ============================================================
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+static uint32_t TutorialGoalCount_GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TutorialGoalCount");
+    return c;
+}
+static int TutorialGoalCount_GetFileVersion(void*) { return 5; }
+
+static void* g_TutorialGoalCount_Vtable[9] = {
+    (void*)&TutorialGoalCount_Dtor,            // +0x00 Dtor
+    nullptr,                      // +0x08 (base thunk)
+    (void*)&TutorialGoalCount_GetTypeId,       // +0x10 GetTypeId
+    (void*)&TutorialGoalCount_GetFileVersion,  // +0x18 GetFileVersion
+    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
+    (void*)&TutorialGoalCount_Serialize,       // +0x28 Serialize
+    (void*)&TutorialGoalCount_Cleanup,         // +0x30 Cleanup
+    nullptr,                      // +0x38 (base 0x140001640)
+    (void*)&TutorialGoalCount_Init,              // +0x40 Ctor/CreateInPlace
+};
+
+extern "C" void RegisterTutorialGoalCountVtable() {
+    RegisterExeAddr(0x140160950, (uintptr_t)g_TutorialGoalCount_Vtable);
+}
+extern "C" void* TutorialGoalCount_CreateInPlace(void* mem) {
+    return TutorialGoalCount_Init(mem);
+}
+extern "C" void* TutorialGoalCount_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
+    return p ? TutorialGoalCount_Init(p) : nullptr;
+}
+REGISTER_TYPE(TutorialGoalCount, "TutorialGoal", &TutorialGoalCount_Factory, &TutorialGoalCount_CreateInPlace);
+#endif // STANDALONE_EXE
