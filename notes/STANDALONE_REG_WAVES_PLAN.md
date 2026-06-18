@@ -12,11 +12,20 @@ split does NOT hold: ~39 of the 89 are heavily-SHARED base/StateMachine/ECS help
 ONE shared keystone file `code/Game/Work/work_base_reimpl.cpp` + `standalone/reg_work_base.cpp`
 (`RegisterWorkBaseBatch`, wired into address_registry.cpp ~line 360).
 
-**DONE — 12/39 shared base helpers (3 commits, all build+A/B-no-regression green):**
+**DONE — 22/39 shared base helpers (8 commits, all build+A/B-no-regression green):**
 - `a23b68b` FindComponent family (5: 0x140002ed0/2f90/3050/52c0/6270 — identical loop, differ
   only by type-ID global) + 2 recursive tree-frees (0x140014c30 ch+0x10/+0x18, 0x14000e320 ch+0x18/+0x20).
 - `b164790` lifecycle trio: 0x1400c5400 TaskListCleanup, 0x1400f7400 Work::Serialize, 0x1400f7100 Work::CanStartWork/ValidateTask.
 - `df05ea9` 0x140008830 Map_CalcDistance, 0x1400a00f0 Map::CanPathTo/ValidateCell.
+- `659f1db` simple-BST AVL family: 0x140021a30 insert, 0x14001a6e0 remove, 0x140025520 find+remove,
+  0x1400296b0 serialize (+ statics retrace 0x14001a8c0, rotations 0x140014c70/da0, alloc 0x140021b40).
+- `4317b30` cell-BST AVL family: 0x140029a40 insert, 0x14001ca60 remove, 0x140029de0 serialize
+  (+ statics retrace 0x140013480, rotations 0x14000e450/e580, alloc 0x140029bb0) + Level-1 caller fix.
+- `fe01e71` grid trio: 0x14009ccf0 FindCell, 0x1400f8620 TryAssignWorkplace, 0x1400e3db0 AutoPickup.
+
+The simple/cell-BST families and grid trio were HAND-PORTED + Ghidra-verified (opus), correcting the
+unfaithful sonnet-agent drafts (param swaps, count clobber, mangled ring traversal, guessed
+compaction). Files: code/Game/Work/work_base_{reimpl,bst,cellbst,grid}.cpp + standalone/reg_work_*.cpp.
 
 **⚠️ LESSON — parallel sonnet agents are UNRELIABLE for complex pointer/tree ports.** Spawned 2
 (BST family, grid/AI). Both compiled clean and CLAIMED done, but Ghidra verification found the
@@ -29,13 +38,14 @@ menu frame-5 stall means NONE of this is in-game-exercised, so a wrong port is S
 strictly worse than the safe no-op of leaving it unregistered.** Agent drafts kept (unbuilt) under
 `notes/wave2_drafts/*.draft` as starting points.
 
-**DEFERRED shared helpers (need careful hand-port + Ghidra verify, NOT yet registered):**
-- AVL/BST family: 0x140025520 BSTFindRemove, 0x14001a6e0 BSTRemove(+retrace 0x14001a8c0, rotations
-  0x140014c70/0x140014da0), 0x1400296b0 BST_Serialize, 0x140029de0 BST_Serialize_Cell,
-  0x140029a40 ClearArea insert, 0x14001ca60 ClearArea remove (+ClearArea rotations 0x14000e450/0x14000e580/0x140013480).
-- grid/assignment: 0x14009ccf0 FindCell, 0x140021a30 RegisterWork, 0x1400e3db0 AutoPickup, 0x1400f8620 TryAssignWorkplace.
-- 0x140115e60 CitizenAI_LongTermPlan (304 lines, ~12 unresolved callees — likely a Level-2 reimpl).
-- plus the ~17 lower-reuse (2–3 caller) shared helpers not yet touched, and the ~49 single-file (W1) leaf addrs.
+**REMAINING (not yet registered):**
+- 0x140115e60 CitizenAI_LongTermPlan (304 lines, ~12 unresolved callees) — a Level-2 reimpl, not a
+  registration; needs the citizen-AI work-finding chain (FUN_14008d590 storage-search, PerformWork
+  ctor, action-executor FUN_1400c4c50, etc.) first.
+- ~17 lower-reuse (2–3 caller) shared helpers not yet touched (e.g. 0x140122b00/be0, 0x1400f6ef0,
+  0x1400c2490, 0x1400c1eb0, 0x140087fb0, 0x140005380/440, 0x140132010 sqrtf, 0x140122e20, 0x1400be6e0,
+  0x1400bb0a0, 0x14009c480, 0x140024f30, 0x14001ca60(done), 0x140006330 — regenerate the list).
+- the ~49 single-file (W1) leaf Work addrs (per-class job logic).
 
 **Level-1 caller bug found (separate from registration):** `0x140029a60` is MID-FUNCTION (true entry
 0x140029a40; clear-area REMOVE is 0x14001ca60). `harvestarea.cpp` already corrected; `plantarea.cpp`,
