@@ -352,6 +352,8 @@ extern void RegisterComponentBatch_visuals();
 // Work registration wave (2026-06-18) — shared base-helper sub-batch.
 // reg file: standalone/reg_work_base.cpp ; bodies: code/Game/Work/work_base_reimpl.cpp.
 extern void RegisterWorkBaseBatch();
+// Work simple-BST (AVL) family — reg_work_bst.cpp ; bodies: code/Game/Work/work_base_bst.cpp.
+extern void RegisterWorkBstBatch();
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -366,6 +368,8 @@ static void RegisterCodeFunctions() {
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
     RegisterWorkBaseBatch();
+    // Work simple-BST (AVL) family — insert/find/remove/serialize.
+    RegisterWorkBstBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
