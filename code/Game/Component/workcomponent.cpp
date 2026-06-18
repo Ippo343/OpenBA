@@ -173,6 +173,104 @@ void WorkComponent_OnCreate(WorkComponent* self) {
 }
 
 // ============================================================
+// Reimpl helpers for the work-slot BST functions
+// ============================================================
+// CitizenAI_impl_8e30(tree, workId) — notify AI of slot change (0x1400f8e30)
+typedef void (*fn_CitizenAI_8e30_t)(void* tree, int workId);
+static fn_CitizenAI_8e30_t s_fn_CitizenAI_8e30 = nullptr;
+// Entity_FindComponent_MeshInstance (0x140002f90)
+typedef void* (*fn_WC_FindComp_t)(uintptr_t entity, void* retbuf);
+static fn_WC_FindComp_t s_fn_WC_FindComp = nullptr;
+// FUN_14012c3f0(comp, idx, char) — set mesh flag (0x14012c3f0)
+typedef void (*fn_WC_SetMeshFlag_t)(void* comp, int idx, char p3);
+static fn_WC_SetMeshFlag_t s_fn_WC_SetMeshFlag = nullptr;
+static bool s_wcHelpersResolved = false;
+static void EnsureWorkSlotHelpers() {
+    if (s_wcHelpersResolved) return;
+    s_fn_CitizenAI_8e30 = reinterpret_cast<fn_CitizenAI_8e30_t>(
+        ResolveAddr(Module::Exe, 0x1400f8e30));
+    s_fn_WC_FindComp = reinterpret_cast<fn_WC_FindComp_t>(
+        ResolveAddr(Module::Exe, 0x140002f90));
+    s_fn_WC_SetMeshFlag = reinterpret_cast<fn_WC_SetMeshFlag_t>(
+        ResolveAddr(Module::Exe, 0x14012c3f0));
+    s_wcHelpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of FUN_14012ead0 (check whether this work slot is occupied:
+//   BST lookup keyed by workId (+0x28) in the world work-slot tree)
+// ============================================================
+// Tree at *(g_pGameWorldSingleton+0x118) + 0x30. Node ints: key @+0, value-ptr @+0x08,
+// greater-child @+0x18, lesser-child @+0x20.
+bool WorkComponent_CheckWorkSlot(void* selfP) {
+    uintptr_t self = (uintptr_t)selfP;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return false;
+    int key = *(int*)(self + 0x28);
+    int* node = *(int**)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x118) + 0x30);
+    while (node != nullptr) {
+        if (*node <= key) {
+            if (key <= *node) {
+                // equal — found; value pointer lives at node+0x08
+                return *(int64_t*)((uintptr_t)node + 0x08) != 0;
+            }
+            node = *(int**)((uintptr_t)node + 0x20);   // lesser child
+        } else {
+            node = *(int**)((uintptr_t)node + 0x18);   // greater child
+        }
+    }
+    // not found: construct an empty IBP and report non-null (matches original)
+    int64_t ibp[1] = {0};
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, nullptr);
+    return ibp[0] != 0;
+}
+
+// ============================================================
+// Reimpl of FUN_14012eb50 (register/refresh this work slot:
+//   when occupied, sync worker id, poke the AI tree, refresh mesh flags 2 & 3)
+// ============================================================
+void WorkComponent_RegisterWorkSlot(void* selfP) {
+    EnsureWorkSlotHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    if (!WorkComponent_CheckWorkSlot(selfP)) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    int key = *(int*)(self + 0x28);
+    int64_t valueIbp[1] = {0};
+    int* node = *(int**)(*(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x118) + 0x30);
+    bool found = false;
+    while (node != nullptr) {
+        if (key < *node) {
+            node = *(int**)((uintptr_t)node + 0x18);
+        } else if (key <= *node) {
+            valueIbp[0] = *(int64_t*)((uintptr_t)node + 0x08);
+            found = true;
+            break;
+        } else {
+            node = *(int**)((uintptr_t)node + 0x20);
+        }
+    }
+    if (!found) {
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(valueIbp, nullptr);
+    }
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(valueIbp);
+    *(uint32_t*)(self + 0x2c) = *(uint32_t*)(valueIbp[0] + 0x24);
+
+    if (s_fn_CitizenAI_8e30)
+        s_fn_CitizenAI_8e30(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x118), key);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    int64_t compIbp[1] = {0};
+    if (s_fn_WC_FindComp) s_fn_WC_FindComp(*(uintptr_t*)(self + 0x10), compIbp);
+    if (compIbp[0] != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compIbp);
+        if (s_fn_WC_SetMeshFlag) s_fn_WC_SetMeshFlag((void*)compIbp[0], 2, '\0');
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compIbp);
+        if (s_fn_WC_SetMeshFlag) s_fn_WC_SetMeshFlag((void*)compIbp[0], 3, '\0');
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void WorkComponent_InitFuncs() {

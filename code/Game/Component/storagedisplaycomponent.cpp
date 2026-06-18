@@ -505,6 +505,160 @@ void StorageDisplayComponent_OnUpdate2(StorageDisplayComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_14000ca10 (StorageDisplayComponent mesh-array resize:
+//   grow/shrink an array of 0x128-byte Graphics::MeshInstance entries)
+// ============================================================
+// Dispatch slots (exe .rdata): copy-ctor 0x1401514a0, default-ctor 0x140151490,
+// dtor 0x1401514a8. New tail entries get default-constructed with sceneId(+0x120)=-1.
+typedef void (*fn_MI_CopyCtor_t)(void* dst, void* src);
+typedef void (*fn_MI_DefCtor_t)(void* dst);
+typedef void (*fn_MI_Dtor_t)(void* self);
+static fn_MI_CopyCtor_t s_fn_MI_CopyCtor = nullptr;
+static fn_MI_DefCtor_t  s_fn_MI_DefCtor  = nullptr;
+static fn_MI_Dtor_t     s_fn_MI_Dtor     = nullptr;
+static bool s_meshArrayHelpersResolved = false;
+static void EnsureMeshArrayHelpers() {
+    if (s_meshArrayHelpersResolved) return;
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x1401514a0);
+    if (slot) s_fn_MI_CopyCtor = *reinterpret_cast<fn_MI_CopyCtor_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151490);
+    if (slot) s_fn_MI_DefCtor = *reinterpret_cast<fn_MI_DefCtor_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x1401514a8);
+    if (slot) s_fn_MI_Dtor = *reinterpret_cast<fn_MI_Dtor_t*>(slot);
+    s_meshArrayHelpersResolved = true;
+}
+
+void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
+    EnsureMeshArrayHelpers();
+    const int64_t STRIDE = 0x128;
+    int64_t* field = (int64_t*)arrayBase;     // [0]=ptr, [1] low=count, high=capacity
+    int oldCount = (int)field[1];
+    if (newCount == oldCount) return;
+
+    int64_t* oldBuf = (int64_t*)field[0];
+    *(int*)((uintptr_t)field + 8) = newCount;
+    if (*(int*)((uintptr_t)field + 0xc) < newCount) {
+        *(int*)((uintptr_t)field + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *(int*)((uintptr_t)field + 0xc) = newCount * 3;
+        }
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) * STRIDE), 8);
+        field[0] = (int64_t)nb;
+    }
+
+    int start = (oldBuf == (int64_t*)field[0]) ? oldCount : 0;
+    if (start < newCount) {
+        int64_t off = (int64_t)start * STRIDE;
+        for (int i = start; i < newCount; i++) {
+            void* dst = (void*)(field[0] + off);
+            if (dst) {
+                if (i < oldCount) {
+                    if (s_fn_MI_CopyCtor) s_fn_MI_CopyCtor(dst, (void*)((uintptr_t)oldBuf + off));
+                    *(uint32_t*)((uintptr_t)dst + 0x120) = *(uint32_t*)((uintptr_t)oldBuf + off + 0x120);
+                } else {
+                    if (s_fn_MI_DefCtor) s_fn_MI_DefCtor(dst);
+                    *(uint32_t*)((uintptr_t)dst + 0x120) = 0xffffffff;
+                }
+            }
+            off += STRIDE;
+        }
+    }
+
+    if (oldBuf == (int64_t*)field[0]) {
+        if (newCount < oldCount) {
+            uintptr_t p = (uintptr_t)oldBuf + (uintptr_t)newCount * STRIDE;
+            for (int i = 0; i < oldCount - newCount; i++) {
+                if (s_fn_MI_Dtor) s_fn_MI_Dtor((void*)p);
+                p += STRIDE;
+            }
+        }
+    } else {
+        uintptr_t p = (uintptr_t)oldBuf;
+        for (int i = 0; i < oldCount; i++) {
+            if (s_fn_MI_Dtor) s_fn_MI_Dtor((void*)p);
+            p += STRIDE;
+        }
+        if (oldBuf) fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
+// Reimpl of FUN_1400562b0 (Entity_impl_63e0_sub_62b0:
+//   set/clear the mesh + scene-object for one display slot)
+// ============================================================
+// self+0x28 = display array (0x128 stride), self+0x30 = count. Scene id at entry+0x120,
+// current mesh at entry+0xc0. param_4==0 => remove the object; otherwise pick the LOD
+// mesh nearest the requested fraction and (re)add it to the scene.
+typedef void (*fn_SDC_SceneRemove_t)(void* scene, uint32_t objId);
+typedef void* (*fn_SDC_EntityHelperCbd0_t)(void* param4, void* retbuf);
+typedef void (*fn_SDC_SetMesh_t)(void* meshInstance, int64_t meshPtr);
+typedef uint32_t (*fn_SDC_SceneAdd_t)(void* scene, void* geometry);
+static fn_SDC_SceneRemove_t      s_fn_SDC_SceneRemove = nullptr;
+static fn_SDC_EntityHelperCbd0_t s_fn_SDC_Cbd0 = nullptr;
+static fn_SDC_SetMesh_t          s_fn_SDC_SetMesh = nullptr;
+static fn_SDC_SceneAdd_t         s_fn_SDC_SceneAdd = nullptr;
+static bool s_sdcSlotHelpersResolved = false;
+static void EnsureSlotHelpers() {
+    if (s_sdcSlotHelpersResolved) return;
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x140151360);
+    if (slot) s_fn_SDC_SceneRemove = *reinterpret_cast<fn_SDC_SceneRemove_t*>(slot);
+    s_fn_SDC_Cbd0 = reinterpret_cast<fn_SDC_EntityHelperCbd0_t>(
+        ResolveAddr(Module::Exe, 0x14000cbd0));
+    slot = ResolveAddr(Module::Exe, 0x140151498);
+    if (slot) s_fn_SDC_SetMesh = *reinterpret_cast<fn_SDC_SetMesh_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151370);
+    if (slot) s_fn_SDC_SceneAdd = *reinterpret_cast<fn_SDC_SceneAdd_t*>(slot);
+    s_sdcSlotHelpersResolved = true;
+}
+
+void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction,
+                                            uintptr_t materialType) {
+    EnsureSlotHelpers();
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+
+    if (index >= *(int*)(self + 0x30)) return;
+    void* scene = *(void**)(gw + 0x60);
+    int64_t off = (int64_t)index * 0x128;
+    uintptr_t arrBase = *(uintptr_t*)(self + 0x28);
+
+    if (materialType == 0) {
+        uint32_t objId = *(uint32_t*)(arrBase + 0x120 + off);
+        if ((int32_t)objId >= 0) {
+            if (s_fn_SDC_SceneRemove) s_fn_SDC_SceneRemove(scene, objId);
+            *(uint32_t*)(arrBase + 0x120 + off) = 0xffffffff;
+        }
+        return;
+    }
+
+    // materialType != 0: select the LOD mesh nearest the requested fraction
+    int64_t cbd0Ret = 0;
+    if (s_fn_SDC_Cbd0) s_fn_SDC_Cbd0((void*)materialType, &cbd0Ret);
+    uintptr_t lodTable = *(uintptr_t*)(cbd0Ret + 0x20);
+    int lodCount = *(int*)(lodTable + 0x28);
+    int lodIdx = lodCount - 1;
+    int scaled = (int)((float)lodCount * fraction);
+    if (scaled < lodIdx) lodIdx = scaled;
+    int64_t meshPtr = *(int64_t*)(*(uintptr_t*)(lodTable + 0x20) + (int64_t)lodIdx * 8);
+
+    arrBase = *(uintptr_t*)(self + 0x28);
+    uint32_t objId = *(uint32_t*)(arrBase + 0x120 + off);
+    if ((int32_t)objId >= 0) {
+        if (*(int64_t*)(arrBase + 0xc0 + off) == meshPtr) {
+            return;   // already showing this mesh
+        }
+        if (s_fn_SDC_SceneRemove) s_fn_SDC_SceneRemove(scene, objId);
+    }
+    if (s_fn_SDC_SetMesh) s_fn_SDC_SetMesh((void*)(arrBase + off), meshPtr);
+    void* geom = (void*)(arrBase + off);
+    uint32_t newId = s_fn_SDC_SceneAdd ? s_fn_SDC_SceneAdd(scene, geom) : 0xffffffff;
+    *(uint32_t*)((uintptr_t)geom + 0x120) = newId;
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void StorageDisplayComponent_InitFuncs() {

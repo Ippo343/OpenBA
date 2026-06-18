@@ -91,6 +91,233 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
+// Reimplemented exe helpers (callee bodies for the guarded call sites)
+// ============================================================
+
+// Sub-helpers used by HerdComponent_AdjustSize (deep spawn path).
+// Random::Rand / RandFloatTol go through exe dispatch slots (not direct Runtime addrs).
+typedef int (*fn_Random_Rand_slot_t)(void* rng, int range);
+static fn_Random_Rand_slot_t s_fn_Rand = nullptr;
+typedef float (*fn_Random_RandFloatTol_t)(void* rng);
+static fn_Random_RandFloatTol_t s_fn_RandFloatTol = nullptr;
+typedef void* (*fn_ComponentEntity_CopyCtor_t)(void* mem, int64_t descr);
+static fn_ComponentEntity_CopyCtor_t s_fn_ComponentEntity_CopyCtor = nullptr;
+typedef void* (*fn_Vec3Ctor_local_t)(void* out, float x, float y, float z);
+static fn_Vec3Ctor_local_t s_fn_Vec3Ctor_local = nullptr;
+typedef void (*fn_CharComp_f3e0_t)(void* mapPtr, void* outVec3, float* inVec3, char flag, void* opt);
+static fn_CharComp_f3e0_t s_fn_CharComp_f3e0 = nullptr;
+typedef void (*fn_Herd_helper7400_t)(int64_t ref, void* pos, float scale, char flag);
+static fn_Herd_helper7400_t s_fn_Herd_helper7400 = nullptr;
+typedef void (*fn_Herd_imple510_t)(void* refA, void* refB);
+static fn_Herd_imple510_t s_fn_Herd_imple510 = nullptr;
+typedef void (*fn_RegisterEntity_t)(void* listPtr, void* entityRef, int id);
+static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
+// HerdComponent_helper_6b10 @0x140106b10 — per-animal "migration done?" test.
+typedef char (*fn_Herd_helper6b10_t)(int64_t ref);
+static fn_Herd_helper6b10_t s_fn_Herd_helper6b10 = nullptr;
+
+// Type-id globals used by the helpers.
+static uint32_t* s_pTypeId_1c8000 = nullptr;  // animal model/family component
+static uint32_t* s_pTypeId_1c6f98 = nullptr;  // pasture/herd sub-component
+static uint32_t* s_pTypeId_1c7078 = nullptr;  // behavior component
+static float* s_fSpread = nullptr;            // DAT_140172220 spawn spread scale
+
+static bool s_herdExtraInit = false;
+static void EnsureHerdExtras() {
+    if (s_herdExtraInit) return;
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x1401512e8);            // System::Random::Rand
+    if (slot) s_fn_Rand = *reinterpret_cast<fn_Random_Rand_slot_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151400);            // System::Random::RandFloatTol
+    if (slot) s_fn_RandFloatTol = *reinterpret_cast<fn_Random_RandFloatTol_t*>(slot);
+    s_fn_ComponentEntity_CopyCtor = reinterpret_cast<fn_ComponentEntity_CopyCtor_t>(
+        ResolveAddr(Module::Exe, 0x1400c3720));
+    slot = ResolveAddr(Module::Exe, 0x140152a30);            // Math::Vector3::Vector3
+    if (slot) s_fn_Vec3Ctor_local = *reinterpret_cast<fn_Vec3Ctor_local_t*>(slot);
+    s_fn_CharComp_f3e0 = reinterpret_cast<fn_CharComp_f3e0_t>(
+        ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_fn_Herd_helper7400 = reinterpret_cast<fn_Herd_helper7400_t>(
+        ResolveAddr(Module::Exe, 0x140107400));
+    s_fn_Herd_imple510 = reinterpret_cast<fn_Herd_imple510_t>(
+        ResolveAddr(Module::Exe, 0x14012e510));
+    s_fn_RegisterEntity = reinterpret_cast<fn_RegisterEntity_t>(
+        ResolveAddr(Module::Exe, 0x1400c48a0));
+    s_fn_Herd_helper6b10 = reinterpret_cast<fn_Herd_helper6b10_t>(
+        ResolveAddr(Module::Exe, 0x140106b10));
+    s_pTypeId_1c8000 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8000));
+    s_pTypeId_1c6f98 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6f98));
+    s_pTypeId_1c7078 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7078));
+    s_fSpread = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172220));
+    s_herdExtraInit = true;
+}
+
+// Find a component of `typeId` on a ComponentEntity (list at +0x30, count at +0x38).
+// Mirrors the inlined search loop used throughout these helpers.
+static void* HerdFindComponent(int64_t entity, uint32_t* pTypeId) {
+    if (!pTypeId) return nullptr;
+    int n = *(int*)(entity + 0x38);
+    uintptr_t list = *(uintptr_t*)(entity + 0x30);
+    for (int i = 0; i < n; i++) {
+        void** slot = (void**)(list + (int64_t)i * 8);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+        void* comp = *slot;
+        uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))(comp);
+        if (t == *pTypeId) {
+            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+            void* c = *slot;
+            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) ? c : nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// Reimpl of FUN_140053f20 (count fertile/food tiles in the herd's grazing cell)
+// Sub-samples the (param_2) macro-cell into a (gridDim x gridDim) block of map tiles
+// (gridDim = mapDim/cellDim), counts tiles whose first int (food value) is > 0, and
+// returns the fraction (countPositive / gridDim^2).
+float HerdComponent_CheckFood(int64_t entityComp, int gridCell) {
+    int cellDim = *(int*)(entityComp + 0x48);
+    int gridDim = *(int*)(entityComp + 0x30) / cellDim;
+    int mapStride = *(int*)(entityComp + 0x30);
+    uintptr_t tiles = *(uintptr_t*)(entityComp + 0x38);
+
+    int positive = 0;
+    for (int64_t row = 0; row < gridDim; row++) {
+        int* pTile = (int*)(tiles +
+            (((gridCell / cellDim) * gridDim + row) * (int64_t)mapStride +
+             (int64_t)((gridCell % cellDim) * gridDim)) * 0xc);
+        for (int64_t col = gridDim; col != 0; col--) {
+            positive += (*pTile > 0) ? 1 : 0;
+            pTile += 3;
+        }
+    }
+    return (float)positive / (float)(gridDim * gridDim);
+}
+
+// Reimpl of FUN_140121980 (is the herd's migration complete?)
+// For each migrating animal entity, finds its herd-member sub-component (type
+// 0x1401c6f98) and asks helper_6b10 whether that animal has reached its target.
+// Returns 0 as soon as any animal is still en route; 1 if all are done.
+char HerdComponent_CheckMigrationDone(int64_t herdComp) {
+    EnsureHerdExtras();
+    uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
+    if (fn_IsDerivedFrom && s_pHerdTypeId)
+        fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId);
+
+    int count = *(int*)(self + 0x40);
+    for (int64_t i = 0; i < count; i++) {
+        uintptr_t arr = *(uintptr_t*)(self + 0x38);
+        if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(arr + i * 8));
+        int64_t entity = *(int64_t*)(*(int64_t*)(arr + i * 8) + 0x10);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&entity);
+
+        void* member = HerdFindComponent(entity, s_pTypeId_1c6f98);
+        uint64_t memberRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&memberRef, member);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&memberRef);
+        char done = s_fn_Herd_helper6b10 ? s_fn_Herd_helper6b10((int64_t)memberRef) : 1;
+        if (done == 0) return 0;
+    }
+    return 1;
+}
+
+// Reimpl of FUN_140121450 (grow the herd toward targetSize by spawning animals)
+// While current population (+0x40) < target: clone the herd's animal template
+// (ComponentEntity_CopyCtor), locate its model/behavior/member sub-components,
+// pick a randomized spawn position around the herd centre tile (+0x4c), place the
+// new animal (helper_7400), link it to the herd (impl_e510), and register the entity
+// with the world entity list (+0xe8). Spawn flag alternates each iteration.
+void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
+    EnsureHerdExtras();
+    uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
+
+    void* cfgObj = (fn_IsDerivedFrom && s_pHerdTypeId &&
+                    fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId))
+                       ? *(void**)(self + 0x18) : nullptr;
+    if (!cfgObj) return;
+    int64_t descr = *(int64_t*)((uintptr_t)cfgObj + 0x20);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    void* rng = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+    int* mapDimPtr = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    char altFlag = (s_fn_Rand && s_fn_Rand(rng, 2) == 0) ? 1 : 0;
+    float spread = s_fSpread ? *s_fSpread : 0.0f;
+    float half = s_fFoodThreshold ? *s_fFoodThreshold : 0.5f;
+
+    while (*(int*)(self + 0x40) < targetSize) {
+        // Clone the animal template into a fresh ComponentEntity.
+        void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+        void* ent = (mem && s_fn_ComponentEntity_CopyCtor)
+                        ? s_fn_ComponentEntity_CopyCtor(mem, descr) : nullptr;
+        uint64_t entRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entRef, ent);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&entRef);
+        int64_t entObj = (int64_t)entRef;
+
+        void* modelComp = HerdFindComponent(entObj, s_pTypeId_1c8000);
+        uint64_t modelRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&modelRef, modelComp);
+
+        void* memberComp = HerdFindComponent(entObj, s_pTypeId_1c6f98);
+        uint64_t memberRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&memberRef, memberComp);
+
+        void* behaviorComp = HerdFindComponent(entObj, s_pTypeId_1c7078);
+        uint64_t behaviorRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&behaviorRef, behaviorComp);
+
+        // Spread radius from the herd config animal count.
+        void* cfg2 = (fn_IsDerivedFrom && s_pHerdTypeId &&
+                      fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId))
+                         ? *(void**)(self + 0x18) : nullptr;
+        int animalArea = *(int*)((uintptr_t)cfg2 + 0x38);
+        int mapDim = *mapDimPtr;
+        float origin = (float)(mapDim >> 1) - half;
+
+        uint8_t centreVec[16] = {0};
+        if (s_fn_Vec3Ctor_local)
+            s_fn_Vec3Ctor_local(centreVec,
+                (float)(*(int*)(self + 0x4c) % mapDim) - origin,
+                (float)(*(int*)(self + 0x4c) / mapDim) - origin, 0.0f);
+
+        uint8_t worldPos[16] = {0};   // local_e8/e4/e0
+        if (s_fn_CharComp_f3e0)
+            s_fn_CharComp_f3e0(mapDimPtr, worldPos, (float*)centreVec, 0, nullptr);
+
+        float rx = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
+        float ry = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
+        uint8_t offVec[16] = {0};
+        if (s_fn_Vec3Ctor_local)
+            s_fn_Vec3Ctor_local(offVec, ry * (float)animalArea, rx * (float)animalArea, 0.0f);
+
+        uint8_t spawnVec[16] = {0};
+        if (s_fn_Vec3Ctor_local)
+            s_fn_Vec3Ctor_local(spawnVec,
+                *(float*)(worldPos + 0) + *(float*)(offVec + 0),
+                *(float*)(worldPos + 4) + *(float*)(offVec + 4),
+                *(float*)(worldPos + 8) + *(float*)(offVec + 8));
+
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&behaviorRef);
+        float rz = s_fn_RandFloatTol ? s_fn_RandFloatTol(rng) : 0.0f;
+        if (s_fn_Herd_helper7400)
+            s_fn_Herd_helper7400((int64_t)behaviorRef, spawnVec, rz * spread, altFlag);
+        altFlag = (altFlag == 0) ? 1 : 0;
+
+        if (fn_IsDerivedFrom && s_pHerdTypeId)
+            fn_IsDerivedFrom(*(void**)(self + 0x18), *s_pHerdTypeId);
+        uint64_t selfRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&modelRef);
+        if (s_fn_Herd_imple510) s_fn_Herd_imple510((void*)modelRef, &selfRef);
+
+        if (s_fn_RegisterEntity) {
+            void* entityList = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xe8);
+            uint64_t regRef = entRef;
+            s_fn_RegisterEntity(entityList, &regRef, *(int*)(descr + 0x20));
+        }
+    }
+}
+
+// ============================================================
 // Helper: check if tile at data4C is valid on the map
 // Returns true if the tile's terrain type value is nonzero
 // ============================================================

@@ -177,6 +177,56 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 }
 
 // ============================================================
+// Reimpl of FUN_14000d030 — resize Vector3 array (stride 0xC, align 4)
+// ============================================================
+// Array struct: { void* data(+0), int count(+8), int capacity(+0xc) }.
+// Grows storage when newCount exceeds capacity (capacity = newCount, or
+// newCount*3 on the exactly-one-more growth case), copies min(old,new)
+// 12-byte (3-float) elements, zero-inits the rest, frees the old block.
+// NON-STATIC so the standalone registrar can take its address.
+void BoatComponent_ResizeVec3Array(void* arrayField, int newCount) {
+    struct Vec3Array { uint8_t* data; int count; int capacity; };
+    Vec3Array* arr = reinterpret_cast<Vec3Array*>(arrayField);
+
+    int oldCount = arr->count;
+    if (newCount == oldCount) return;
+
+    uint8_t* oldData = arr->data;
+    arr->count = newCount;
+
+    if (arr->capacity < newCount) {
+        arr->capacity = newCount;
+        // exactly-one-more growth heuristic from the original
+        if (newCount == oldCount + 1 && oldCount != 0)
+            arr->capacity = newCount * 3;
+        arr->data = reinterpret_cast<uint8_t*>(
+            fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)arr->capacity * 0xC, 4));
+    }
+
+    // Number of elements carried over from the old buffer
+    int keep = (oldData == arr->data) ? oldCount : 0;
+
+    for (int i = keep; i < newCount; ++i) {
+        uint8_t* dst = arr->data + (size_t)i * 0xC;
+        if (i < oldCount) {
+            // copy 12 bytes (3 floats) from the old buffer
+            const uint8_t* src = oldData + (size_t)i * 0xC;
+            *reinterpret_cast<uint32_t*>(dst + 0) = *reinterpret_cast<const uint32_t*>(src + 0);
+            *reinterpret_cast<uint32_t*>(dst + 4) = *reinterpret_cast<const uint32_t*>(src + 4);
+            *reinterpret_cast<uint32_t*>(dst + 8) = *reinterpret_cast<const uint32_t*>(src + 8);
+        } else {
+            // zero-init new elements
+            *reinterpret_cast<uint64_t*>(dst + 0) = 0;
+            *reinterpret_cast<uint32_t*>(dst + 8) = 0;
+        }
+    }
+
+    if (oldData != arr->data && oldData != nullptr) {
+        fn_MemFreeStatic(oldData);
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void BoatComponent_InitFuncs() {

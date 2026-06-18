@@ -212,6 +212,141 @@ void FloorComponent_OnCreate(FloorComponent* self) {
 }
 
 // ============================================================
+// Reimplemented exe helpers (callee bodies for the guarded call sites above)
+// ============================================================
+
+// Type ID globals used by the helpers.
+// DWORD_1401c79e0 -- NaturalResource entity-data component type ID (FindComponentByType).
+static uint32_t* s_pNatResTypeId = nullptr;
+// DAT_1401c7708 -- floor building type ID (already resolved as s_pFloorBuildingTypeId).
+// Picking::Scene::AddMesh (FUN at Runtime/exe) + Entity_ClearPathQueue (FUN_140005200).
+typedef void* (*fn_EntityAccessor_t)(void* entity, void* outIBP);
+static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
+typedef uint32_t (*fn_SceneAddMesh_t)(void* scene, void* mesh, void* xform,
+                                      int a, int b, int c, int d);
+static fn_SceneAddMesh_t s_fn_SceneAddMesh = nullptr;
+typedef void (*fn_SceneRemoveMesh_t)(void* scene, uint32_t meshId);
+static fn_SceneRemoveMesh_t s_fn_SceneRemoveMesh = nullptr;
+
+static bool s_subResolved = false;
+static void EnsureSubHelpers() {
+    if (s_subResolved) return;
+    s_pNatResTypeId   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    s_fn_EntityAccessor = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140005200));
+    // Picking::Scene::AddMesh / RemoveMesh — Runtime exports.
+    s_fn_SceneAddMesh    = reinterpret_cast<fn_SceneAddMesh_t>(ResolveAddr(Module::Runtime, 0x1800f8d80));
+    s_fn_SceneRemoveMesh = reinterpret_cast<fn_SceneRemoveMesh_t>(ResolveAddr(Module::Runtime, 0x1800f8f50));
+    s_subResolved = true;
+}
+
+// Reimpl of FUN_140004680 (FindComponentByType on owner+0x30 array; returns IBP wrapping found component)
+void* FloorComponent_FindResData(void* owner, void* outIBP) {
+    EnsureHelpers(); EnsureSubHelpers();
+    uintptr_t o = reinterpret_cast<uintptr_t>(owner);
+    void* found = nullptr;
+    uint32_t wantTypeId = s_pNatResTypeId ? *s_pNatResTypeId : 0;
+    int count = *reinterpret_cast<int*>(o + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(o + 0x30);
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+        void* comp = *slot;
+        // Virtual GetTypeId at vtable+0x10.
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*fn_GetTypeId_t)(void* self);
+        fn_GetTypeId_t getId = *reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10);
+        uint32_t tid = getId ? getId(comp) : 0;
+        if (tid == wantTypeId) {
+            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+            void* c = *slot;
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, wantTypeId)) found = c;
+            break;
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+    return outIBP;
+}
+
+// Reimpl of FUN_14009cba0 (decrement per-tile floor counter over w*h footprint, then Scene::RemoveMesh)
+void FloorComponent_RemoveFloorMesh(void* scene, uint32_t floorId,
+                                    int x, int y, int w, int h) {
+    EnsureHelpers(); EnsureSubHelpers();
+    int* mapInfo = reinterpret_cast<int*>(scene);
+    int mapW = *mapInfo;
+    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapInfo) + 0x80);
+    for (int j = 0; j < h; ++j) {
+        for (int i = 0; i < w; ++i) {
+            int cell = (j + y) * mapW + i;
+            uint8_t* p = reinterpret_cast<uint8_t*>(grid + 0x2d + (uintptr_t)(cell + x) * 0x30);
+            *p = (uint8_t)(*p - 1);
+        }
+    }
+    // Picking::Scene is at (mapInfo + 2 ints) = scene + 8.
+    if (s_fn_SceneRemoveMesh)
+        s_fn_SceneRemoveMesh(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mapInfo) + 8), floorId);
+}
+
+// Reimpl of FUN_14011f390 (place floor mesh: increment footprint counters, add mesh to Picking::Scene)
+void FloorComponent_SubF390(void* selfV) {
+    EnsureHelpers(); EnsureSubHelpers();
+    uintptr_t* self = reinterpret_cast<uintptr_t*>(selfV);
+    uint8_t* sb = reinterpret_cast<uint8_t*>(selfV);
+
+    // If floorId (+0x2c) >= 0, remove the existing mesh first via vtable slot +0x38.
+    if (*reinterpret_cast<int*>(sb + 0x2c) >= 0) {
+        uintptr_t vt = *self;
+        typedef void (*fn_slot38_t)(void* self);
+        fn_slot38_t slot38 = *reinterpret_cast<fn_slot38_t*>(vt + 0x38);
+        if (slot38) slot38(selfV);
+    }
+
+    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
+    int* mapInfo = *reinterpret_cast<int**>(world + 0xF8);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 2));
+    int64_t resIBP = 0;
+    if (s_fn_GetEntityData) s_fn_GetEntityData(*reinterpret_cast<void**>(self + 2), &resIBP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&resIBP);
+    int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
+    int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
+    int16_t fw    = *reinterpret_cast<int16_t*>(resIBP + 0x2c);
+    int16_t fh    = *reinterpret_cast<int16_t*>(resIBP + 0x2e);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(self + 2));
+    int64_t entAcc = 0;
+    if (s_fn_EntityAccessor) s_fn_EntityAccessor(*reinterpret_cast<void**>(self + 2), &entAcc);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&entAcc);
+    uintptr_t ent = *reinterpret_cast<uintptr_t*>(&entAcc);
+
+    // Copy the 7-uint transform block from ent+0x148..+0x160.
+    uint32_t xform[7];
+    for (int k = 0; k < 7; ++k)
+        xform[k] = *reinterpret_cast<uint32_t*>(ent + 0x148 + (uintptr_t)k * 4);
+
+    void* building = *reinterpret_cast<void**>(self + 3);
+    void* meshOwner = (s_pFloorBuildingTypeId && fn_IsDerivedFrom &&
+                       fn_IsDerivedFrom(building, *s_pFloorBuildingTypeId)) ? building : nullptr;
+    void* mesh = meshOwner ? *reinterpret_cast<void**>((uintptr_t)meshOwner + 0x20) : nullptr;
+
+    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapInfo) + 0x80);
+    int mapW = *mapInfo;
+    for (int j = 0; j < (int)fh; ++j) {
+        for (int i = 0; i < (int)fw; ++i) {
+            int cell = (j + baseY) * mapW + i + (int)baseX;
+            uint8_t* p = reinterpret_cast<uint8_t*>(grid + 0x2d + (uintptr_t)cell * 0x30);
+            *p = (uint8_t)(*p + 1);
+        }
+    }
+
+    uint32_t meshId = 0;
+    if (s_fn_SceneAddMesh)
+        meshId = s_fn_SceneAddMesh(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mapInfo) + 8),
+                                   mesh, xform, 0, 0, 0, 0);
+    *reinterpret_cast<uint8_t*>(self + 5) = 1;
+    *reinterpret_cast<uint32_t*>(sb + 0x2c) = meshId;
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void FloorComponent_InitFuncs() {

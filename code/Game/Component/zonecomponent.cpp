@@ -40,16 +40,39 @@ static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
 typedef void (*fn_ZoneMapAdd_t)(void* zoneMap, void* entityPtr);
 static fn_ZoneMapAdd_t s_fn_ZoneMapAdd = nullptr;
 
-// Original exe functions for complex methods
-typedef void (*fn_Draw_Orig_t)(void* self);
-static fn_Draw_Orig_t s_fn_Draw_Orig = nullptr;
+// ---- sub-helpers used by the reimplemented OnCreate / Draw / ZoneMapAdd ----
 
-typedef void (*fn_OnCreate_Orig_t)(void* self);
-static fn_OnCreate_Orig_t s_fn_OnCreate_Orig = nullptr;
+// FUN_140004680 — find the map/tile component on an entity (returns InternalBasePtr*)
+typedef void* (*fn_FindMapComponent_t)(int64_t owner, void* outIBP);
+static fn_FindMapComponent_t s_fn_FindMapComponent = nullptr;
+
+// ResidenceComponent_impl_7230 (0x140017230) — red-black tree node insert/lookup.
+// Returns ptr-to-(ptr-to-node).
+typedef void** (*fn_TreeInsert_t)(void* treeRoot, void* outNode, void* key, void* scratch);
+static fn_TreeInsert_t s_fn_TreeInsert = nullptr;
+
+// FUN_140003110 — append an entity ref to a tree node's child list.
+typedef void (*fn_NodeListAppend_t)(void* listPtr, int newCount, void* entityPtr);
+static fn_NodeListAppend_t s_fn_NodeListAppend = nullptr;
+
+// ZoneComponent_sub_d360 (0x14009d360) — rasterize zone tiles into the world grid.
+typedef void (*fn_ZoneRaster_t)(int* world, void* entityRef, int x, int y,
+    int w, int h, int64_t* descField28, int kind);
+static fn_ZoneRaster_t s_fn_ZoneRaster = nullptr;
+
+// FUN_140002cc0 — finalize/cleanup tree node during OnCreate.
+typedef void (*fn_NodeFinalize_t)(void* listPtr, void* entityRef);
+static fn_NodeFinalize_t s_fn_NodeFinalize = nullptr;
+
+// FUN_140004680 result consumer in OnCreate/Draw reads map fields via this lookup.
+// DAT_1401c7a18 — type id checked for the zone description (IsDerivedFrom).
+static uint32_t* s_pZoneDescTypeId = nullptr;
 
 static void** s_pGameState = nullptr;
 
 static bool s_initialized = false;
+
+static void EnsureZoneHelpers();
 
 // ============================================================
 // ZoneComponent::Shutdown (0x1401302F0)
@@ -59,6 +82,8 @@ static bool s_initialized = false;
 // registers the owning entity into the zone map at GameState+0xF0.
 
 void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
+    EnsureZoneHelpers();
+
     if (s_fn_Component_Serialize)
         s_fn_Component_Serialize(self, stream);
 
@@ -80,31 +105,173 @@ void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
 }
 
 // ============================================================
+// Reimpl of FUN_140088e20 (ZoneComponent: register an entity into the zone map).
+// ============================================================
+// param_2 is an InternalBasePtr*; key = *(*param_2 + 0x28). Walk the red-black tree
+// at zoneMap+0x160 for that key; if no node matches, insert one via TreeInsert; then
+// append the entity ref to the node's child list (node+8, count = node[2]+1).
+void ZoneComponent_ZoneMapAdd(void* zoneMapV, void* entityPtrV) {
+    EnsureZoneHelpers();
+
+    uintptr_t zoneMap = reinterpret_cast<uintptr_t>(zoneMapV);
+    void* entityPtr = entityPtrV;
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(entityPtr);
+    uint64_t key = *reinterpret_cast<uint64_t*>(
+        *reinterpret_cast<uintptr_t*>(entityPtr) + 0x28);
+
+    uint64_t* node = *reinterpret_cast<uint64_t**>(zoneMap + 0x160);
+    uint64_t* found = nullptr;
+    while (node != nullptr) {
+        found = nullptr;
+        if (key < *node) {
+            node = reinterpret_cast<uint64_t*>(node[4]);
+        } else {
+            found = node;
+            if (key <= *node) break;   // equal key => keep found, stop
+            node = reinterpret_cast<uint64_t*>(node[5]);
+        }
+    }
+
+    if (found == nullptr) {
+        int64_t outNode[2] = {0, 0};
+        int64_t scratch[3] = {0, 0, 0};
+        if (s_fn_TreeInsert) {
+            void** ret = s_fn_TreeInsert(reinterpret_cast<void*>(zoneMap + 0x160),
+                outNode, &key, scratch);
+            if (ret) found = reinterpret_cast<uint64_t*>(*ret);
+        }
+        if (fn_MemFreeStatic) fn_MemFreeStatic(nullptr);
+    }
+
+    if (s_fn_NodeListAppend && found)
+        s_fn_NodeListAppend(found + 1, static_cast<int>(found[2]) + 1, entityPtr);
+}
+
+// ============================================================
 // ZoneComponent::Draw (0x1401301F0)
 // ============================================================
-// Complex zone rendering with IsDerivedFrom checks, coordinate
-// extraction, and calls to zone rendering system.
+// Reimpl of ZoneComponent::Draw (0x1401301F0): find the owner's map component,
+// pull its tile rect (x,y,w,h at +0x28..+0x2e) and kind (+0x30), resolve the zone
+// description via IsDerivedFrom(map+0x18, zoneDescTypeId), rasterize the zone tiles
+// into the world grid, then (re)register the entity in the zone map tree.
 
 void ZoneComponent_Draw(ZoneComponent* self) {
-    if (s_fn_Draw_Orig)
-        s_fn_Draw_Orig(self);
+    EnsureZoneHelpers();
+
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(self);
+    int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(ownerSlot);
+
+    int64_t mapIBP = 0;
+    if (s_fn_FindMapComponent)
+        s_fn_FindMapComponent(*ownerSlot, &mapIBP);
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+
+    int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
+    int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
+    int16_t w = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
+    int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
+    int kind = *reinterpret_cast<int*>(mapIBP + 0x30);
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+    void* obj = *reinterpret_cast<void**>(mapIBP + 0x18);
+    bool isDerived = (s_pZoneDescTypeId && fn_IsDerivedFrom)
+                         ? fn_IsDerivedFrom(obj, *s_pZoneDescTypeId)
+                         : false;
+    void* desc = isDerived ? obj : nullptr;
+
+    if (!s_pGameState || !*s_pGameState) return;
+    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
+
+    int64_t entityRef = *ownerSlot;
+    if (s_fn_ZoneRaster)
+        s_fn_ZoneRaster(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
+            (int)x, (int)y, (int)w, (int)h,
+            reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);
+
+    entityRef = *ownerSlot;
+    if (s_fn_ZoneMapAdd)
+        s_fn_ZoneMapAdd(*reinterpret_cast<void**>(world + 0xf0), &entityRef);
 }
 
 // ============================================================
 // ZoneComponent::OnCreate (0x140130080)
 // ============================================================
-// Complex zone creation with coordinate extraction, IsDerivedFrom check,
-// zone rendering setup, and binary tree walk for insertion.
+// Reimpl of ZoneComponent::OnCreate (0x140130080): like Draw, find the map
+// component and zone description, rasterize the zone tiles, then walk the zone-map
+// red-black tree for the owner's entity id and finalize the matching node.
 
 void ZoneComponent_OnCreate(ZoneComponent* self) {
-    if (s_fn_OnCreate_Orig)
-        s_fn_OnCreate_Orig(self);
+    EnsureZoneHelpers();
+
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(self);
+    int64_t* ownerSlot = reinterpret_cast<int64_t*>(selfAddr + 0x10);
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(ownerSlot);
+
+    int64_t mapIBP = 0;
+    if (s_fn_FindMapComponent)
+        s_fn_FindMapComponent(*ownerSlot, &mapIBP);
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+
+    int16_t x = *reinterpret_cast<int16_t*>(mapIBP + 0x28);
+    int16_t y = *reinterpret_cast<int16_t*>(mapIBP + 0x2a);
+    int16_t w = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
+    int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
+    int kind = *reinterpret_cast<int*>(mapIBP + 0x30);
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+    void* obj = *reinterpret_cast<void**>(mapIBP + 0x18);
+    bool isDerived = (s_pZoneDescTypeId && fn_IsDerivedFrom)
+                         ? fn_IsDerivedFrom(obj, *s_pZoneDescTypeId)
+                         : false;
+    void* desc = isDerived ? obj : nullptr;
+
+    if (!s_pGameState || !*s_pGameState) return;
+    uintptr_t world = reinterpret_cast<uintptr_t>(*s_pGameState);
+
+    int64_t entityRef = 0;
+    if (fn_InternalBasePtr_Ctor)
+        fn_InternalBasePtr_Ctor(&entityRef, nullptr);
+    if (s_fn_ZoneRaster)
+        s_fn_ZoneRaster(*reinterpret_cast<int**>(world + 0xf8), &entityRef,
+            (int)x, (int)y, (int)w, (int)h,
+            reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28), kind);
+
+    // Walk the zone-map tree for the owner's entity id (key at owner_deref+0x28).
+    int64_t ownerRef = *ownerSlot;
+    uintptr_t zoneMap = *reinterpret_cast<uintptr_t*>(world + 0xf0);
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&ownerRef);
+    uint64_t key = *reinterpret_cast<uint64_t*>(ownerRef + 0x28);
+
+    uint64_t* node = *reinterpret_cast<uint64_t**>(zoneMap + 0x160);
+    uint64_t* found = nullptr;
+    while (node != nullptr) {
+        if (key < *node) {
+            node = reinterpret_cast<uint64_t*>(node[4]);
+        } else {
+            if (key <= *node) { found = node; break; }
+            node = reinterpret_cast<uint64_t*>(node[5]);
+        }
+    }
+    if (s_fn_NodeFinalize && found)
+        s_fn_NodeFinalize(found + 1, &ownerRef);
 }
 
 // ============================================================
 // Init: resolve function pointers
 // ============================================================
-void ZoneComponent_InitFuncs() {
+static void EnsureZoneHelpers() {
     if (s_initialized) return;
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
@@ -114,11 +281,19 @@ void ZoneComponent_InitFuncs() {
     s_pGameState = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 
-    // Original exe functions for Draw and OnCreate
-    s_fn_Draw_Orig = reinterpret_cast<fn_Draw_Orig_t>(
-        ResolveAddr(Module::Exe, 0x1401301F0));
-    s_fn_OnCreate_Orig = reinterpret_cast<fn_OnCreate_Orig_t>(
-        ResolveAddr(Module::Exe, 0x140130080));
+    // Sub-helpers for the reimplemented OnCreate / Draw / ZoneMapAdd
+    s_fn_FindMapComponent = reinterpret_cast<fn_FindMapComponent_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_TreeInsert = reinterpret_cast<fn_TreeInsert_t>(
+        ResolveAddr(Module::Exe, 0x140017230));
+    s_fn_NodeListAppend = reinterpret_cast<fn_NodeListAppend_t>(
+        ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_ZoneRaster = reinterpret_cast<fn_ZoneRaster_t>(
+        ResolveAddr(Module::Exe, 0x14009d360));
+    s_fn_NodeFinalize = reinterpret_cast<fn_NodeFinalize_t>(
+        ResolveAddr(Module::Exe, 0x140002cc0));
+    s_pZoneDescTypeId = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7a18));
 
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152ad8);
@@ -129,6 +304,10 @@ void ZoneComponent_InitFuncs() {
     if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     s_initialized = true;
+}
+
+void ZoneComponent_InitFuncs() {
+    EnsureZoneHelpers();
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====

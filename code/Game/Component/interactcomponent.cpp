@@ -187,29 +187,116 @@ void InteractComponent_Shutdown(InteractComponent* self, void* stream) {
 }
 
 // ============================================================
+// Reimpl of FUN_140004740 (find the WorkplaceComponent (type DWORD_1401c7ac0)
+//   on an entity and return it wrapped in an InternalBasePtr via retBuf)
+// ============================================================
+// Shared callee: also used from buildcomponent.cpp (BuildComponent::Draw).
+void InteractComponent_FindWorkplaceComponent(uintptr_t entity, void* retBuf) {
+    EnsureHelpers();
+    static uint32_t* s_pTId_Workplace = nullptr;
+    if (!s_pTId_Workplace)
+        s_pTId_Workplace = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ac0));
+
+    void* found = nullptr;
+    if (s_pTId_Workplace) {
+        int count = *(int*)(entity + 0x38);
+        int64_t arr = *(int64_t*)(entity + 0x30);
+        for (int i = 0; i < count; i++) {
+            int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
+            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+            void* comp = (void*)*slot;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == *s_pTId_Workplace) {
+                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+                void* c = (void*)*slot;
+                if (s_fn_IsDerivedFrom_dispatch && s_fn_IsDerivedFrom_dispatch(c, *s_pTId_Workplace))
+                    found = c;
+                break;
+            }
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retBuf, found);
+}
+
+// ============================================================
 // InteractComponent::Draw (vtable slot [6], 0x140123110)
 // ============================================================
-// Rebuilds the interact entity list from the scene.
-// Complex scene traversal with dynamic array management.
-//
-// Due to extreme complexity (140 instructions, nested iteration with
-// vtable dispatch, dynamic array growth with MemAlloc/MemFree),
-// this delegates to the original function via ResolveAddr.
-
-// Original function pointer
-typedef void (*fn_InteractDraw_Original_t)(void* self);
-static fn_InteractDraw_Original_t s_fn_InteractDraw_Original = nullptr;
-
+// Reimpl of FUN_140123110: rebuild the interact-use-location list from the
+// owner's MultiObject children. For each child's MapComponent (DAT_1401c7900),
+// scan its job hosts for an InteractComponent and append it to the +0x28 list.
+// Faithful port of the Ghidra decompilation.
 void InteractComponent_Draw(InteractComponent* self) {
     EnsureHelpers();
+    uintptr_t selfA = (uintptr_t)self;
 
-    if (!s_fn_InteractDraw_Original) {
-        s_fn_InteractDraw_Original = reinterpret_cast<fn_InteractDraw_Original_t>(
-            ResolveAddr(Module::Exe, 0x140123110));
-    }
+    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(selfA + 0x10));
+    int64_t multiBuf = 0;
+    if (s_fn_FindMultiObjComp) s_fn_FindMultiObjComp(*(uintptr_t*)(selfA + 0x10), &multiBuf);
+    if (multiBuf == 0) return;
 
-    if (s_fn_InteractDraw_Original) {
-        s_fn_InteractDraw_Original(self);
+    // Clear the existing use-location array
+    fn_MemFreeStatic(*(void**)(selfA + 0x28));
+    *(int64_t*)(selfA + 0x28) = 0;
+    *(int64_t*)(selfA + 0x30) = 0;
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
+    int childCount = *(int*)(multiBuf + 0x50);
+    for (int ci = 0; ci < childCount; ci++) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
+        int64_t host = *(int64_t*)((int64_t)ci * 8 + *(int64_t*)(multiBuf + 0x48));
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&host);
+
+        // Find the InteractComponent (DAT_1401c7900) on this host
+        void* interact = nullptr;
+        int hc = *(int*)(host + 0x38);
+        int64_t harr = *(int64_t*)(host + 0x30);
+        for (int k = 0; k < hc; k++) {
+            int64_t* slot = (int64_t*)(harr + (int64_t)k * 8);
+            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+            void* comp = (void*)*slot;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == (s_TypeId_Interact ? *s_TypeId_Interact : 0xffffffff)) {
+                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+                void* c = (void*)*slot;
+                if (s_fn_IsDerivedFrom_dispatch && s_TypeId_Interact &&
+                    s_fn_IsDerivedFrom_dispatch(c, *s_TypeId_Interact))
+                    interact = c;
+                break;
+            }
+        }
+
+        int64_t interactIbp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&interactIbp, interact);
+        if (interactIbp != 0) {
+            // Append interactIbp to the use-location array at +0x28 (count +0x30, cap +0x34)
+            uint32_t oldCount = *(uint32_t*)(selfA + 0x30);
+            uint32_t newCount = oldCount + 1;
+            if (newCount != oldCount) {
+                void* oldBuf = *(void**)(selfA + 0x28);
+                *(uint32_t*)(selfA + 0x30) = newCount;
+                if (*(int*)(selfA + 0x34) < (int)newCount) {
+                    *(uint32_t*)(selfA + 0x34) = newCount;
+                    if (oldCount != 0) *(uint32_t*)(selfA + 0x34) = newCount * 3;
+                    void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                                           (uint64_t)((int64_t)*(int*)(selfA + 0x34) << 3), 8);
+                    *(void**)(selfA + 0x28) = nb;
+                }
+                int start = (oldBuf == *(void**)(selfA + 0x28)) ? (int)oldCount : 0;
+                int64_t* nbArr = *(int64_t**)(selfA + 0x28);
+                int64_t* oldArr = (int64_t*)oldBuf;
+                for (int i = start; i < (int)newCount; i++) {
+                    int64_t* dst = nbArr + i;
+                    if (dst) {
+                        *dst = 0;
+                        *dst = (i < (int)oldCount) ? oldArr[i] : interactIbp;
+                    }
+                }
+                if (oldBuf != *(void**)(selfA + 0x28)) fn_MemFreeStatic(oldBuf);
+            }
+        }
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&multiBuf);
     }
 }
 

@@ -84,6 +84,29 @@ void CharacterComponent_Update(CharacterComponent* self, int64_t deltaTime) {
 }
 
 // ============================================================
+// Reimpl of Character_UpdateAnimation (0x1400c4f80) — Component reg wave "people"
+// Walks the linked list of character objects starting at *param_2; for each node
+// whose enabled-flag (+0x18) is set, invokes vtable slot +0x30 (Draw/UpdateAnimation)
+// with (node, arrayBase, deltaTime); advances via node+0x10. Non-static for registration.
+// ============================================================
+void Character_UpdateAnimation_Reimpl(void* arrayBase, void* ptrRef, int64_t deltaTime) {
+    int64_t node = *reinterpret_cast<int64_t*>(ptrRef);
+    while (node != 0) {
+        fn_InternalBasePtr_CheckPtr(ptrRef);
+        if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x18) != '\0') {
+            fn_InternalBasePtr_CheckPtr(ptrRef);
+            int64_t* obj = *reinterpret_cast<int64_t**>(ptrRef);
+            int64_t vt = *obj;
+            typedef void (*slot30_t)(int64_t*, void*, int64_t);
+            (*reinterpret_cast<slot30_t*>(vt + 0x30))(obj, arrayBase, deltaTime);
+        }
+        fn_InternalBasePtr_CheckPtr(ptrRef);
+        node = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(ptrRef) + 0x10);
+        *reinterpret_cast<int64_t*>(ptrRef) = node;
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void CharacterComponent_InitFuncs() {

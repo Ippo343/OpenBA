@@ -189,6 +189,45 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
 }
 
 // ============================================================
+// Reimpl of FUN_1400032e0 (Component reg wave "people") — shared DynArray<ptr> resize.
+// Grows a {ptr, count, cap} array (param[0]=buffer, param[1] low32=count,
+// param[1] high32 / +0xc=capacity) to `newCount` 8-byte slots, copying existing
+// elements and zeroing new ones (3x growth policy). Used by several controller
+// components' Shutdown serialize paths. Non-static for registration.
+// ============================================================
+void ImmigrationComp_DynArrayResize(int64_t* param_1, int newCount) {
+    int oldCount = static_cast<int>(param_1[1]);
+    if (newCount == oldCount) return;
+
+    void* oldBuf = reinterpret_cast<void*>(*param_1);
+    *reinterpret_cast<int*>(&param_1[1]) = newCount;
+    if (*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) < newCount) {
+        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) = newCount * 3;
+        }
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                               (uint64_t)*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(param_1) + 0xc) << 3, 8);
+        *param_1 = reinterpret_cast<int64_t>(nb);
+    }
+    int start = (oldBuf == reinterpret_cast<void*>(*param_1)) ? oldCount : 0;
+    for (int64_t i = start; i < newCount; i++) {
+        int64_t* slot = reinterpret_cast<int64_t*>(*param_1 + i * 8);
+        if (i < oldCount) {
+            if (slot) {
+                *slot = 0;
+                *slot = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(oldBuf) + i * 8);
+            }
+        } else if (slot) {
+            *slot = 0;
+        }
+    }
+    if (oldBuf != reinterpret_cast<void*>(*param_1)) {
+        if (oldBuf) fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void ImmigrationComponent_InitFuncs() {

@@ -32,6 +32,15 @@ static fn_FindComponent2_t s_fn_FindComponent2 = nullptr;
 typedef int (*fn_ComputeTerrainSpeed_t)(int64_t tileData);
 static fn_ComputeTerrainSpeed_t s_fn_ComputeTerrainSpeed = nullptr;
 
+// FUN_140004680: find the map/tile component on an entity (returns InternalBasePtr*)
+typedef void* (*fn_FindMapComponent_t)(int64_t owner, void* outIBP);
+static fn_FindMapComponent_t s_fn_FindMapComponent = nullptr;
+
+// DWORD_1401c80a8: type id checked by FUN_14012e5c0 (terrain/zone description)
+static uint32_t* s_pTerrainSpeedTypeId = nullptr;
+// g_fUVScale (DAT_140172140): 0.5 rounding constant used in the speed calc
+static float* s_pRoundHalf = nullptr;
+
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
@@ -46,7 +55,60 @@ static void EnsureHelpers() {
     s_fn_ComputeTerrainSpeed = reinterpret_cast<fn_ComputeTerrainSpeed_t>(
         ResolveAddr(Module::Exe, 0x14012e5c0));
 
+    s_fn_FindMapComponent = reinterpret_cast<fn_FindMapComponent_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
+    s_pTerrainSpeedTypeId = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c80a8));
+    s_pRoundHalf = reinterpret_cast<float*>(
+        ResolveAddr(Module::Exe, 0x140172140));
+
     s_initialized = true;
+}
+
+// Reimpl of FUN_14012e5c0 (HuntComponent: compute terrain movement speed for a tile).
+// pvVar3 = IsDerivedFrom(tile->_unk18, terrainSpeedTypeId) ? that : nullptr.
+// If pvVar3+0x34 flag is clear, return the cached speed at pvVar3+0x24.
+// Otherwise recompute from the map component footprint (w*h at +0x2c/+0x2e),
+// scaled by pvVar3+0x24 / pvVar3+0x30, rounded (+0.5), then clamped to [1, base].
+int HuntComponent_ComputeTerrainSpeed(int64_t tileData) {
+    EnsureHelpers();
+
+    void* obj = *reinterpret_cast<void**>(tileData + 0x18);
+    bool isDerived = (s_pTerrainSpeedTypeId && fn_IsDerivedFrom)
+                         ? fn_IsDerivedFrom(obj, *s_pTerrainSpeedTypeId)
+                         : false;
+    void* desc = isDerived ? obj : nullptr;
+
+    if (*reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(desc) + 0x34) == '\0') {
+        return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x24);
+    }
+
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(tileData + 0x10));
+
+    int64_t mapIBP = 0;
+    if (s_fn_FindMapComponent)
+        s_fn_FindMapComponent(*reinterpret_cast<int64_t*>(tileData + 0x10), &mapIBP);
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+
+    int baseSpeed = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x24);
+    int16_t w = *reinterpret_cast<int16_t*>(mapIBP + 0x2c);
+    int16_t h = *reinterpret_cast<int16_t*>(mapIBP + 0x2e);
+    int denom = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x30);
+    float roundHalf = s_pRoundHalf ? *s_pRoundHalf : 0.5f;
+
+    int computed = static_cast<int>(
+        (static_cast<float>(static_cast<int>(h) * static_cast<int>(w)) /
+         static_cast<float>(denom)) * static_cast<float>(baseSpeed) + roundHalf);
+
+    int result = baseSpeed;
+    if (computed <= baseSpeed) {
+        result = computed;
+        if (computed < 1)
+            result = 1;
+    }
+    return result;
 }
 
 // ============================================================

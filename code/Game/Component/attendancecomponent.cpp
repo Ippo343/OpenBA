@@ -75,6 +75,89 @@ void AttendanceComponent_Update(AttendanceComponent* self) {
 }
 
 // ============================================================
+// Reimpl helpers for the attendance functions
+// ============================================================
+// DWORD_1401c80e0 — job-host component type ID
+static uint32_t* s_pTId_JobHost = nullptr;
+// Queue-drain dispatch helpers
+typedef void (*fn_AC_115a50_t)(void* worker, char p2);   // 0x140115a50
+typedef void (*fn_AC_59b0_t)(void* worker);              // 0x1401159b0
+typedef void (*fn_AC_1650_t)(void* worker);              // 0x140111650
+static fn_AC_115a50_t s_fn_AC_115a50 = nullptr;
+static fn_AC_59b0_t   s_fn_AC_59b0 = nullptr;
+static fn_AC_1650_t   s_fn_AC_1650 = nullptr;
+static bool s_acHelpersResolved = false;
+static void EnsureAcHelpers() {
+    if (s_acHelpersResolved) return;
+    s_pTId_JobHost = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
+    s_fn_AC_115a50 = reinterpret_cast<fn_AC_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
+    s_fn_AC_59b0   = reinterpret_cast<fn_AC_59b0_t>(ResolveAddr(Module::Exe, 0x1401159b0));
+    s_fn_AC_1650   = reinterpret_cast<fn_AC_1650_t>(ResolveAddr(Module::Exe, 0x140111650));
+    s_acHelpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of FUN_140002e10 (find the job-host component (type DWORD_1401c80e0)
+//   on an entity and return it wrapped in an InternalBasePtr via retbuf)
+// ============================================================
+void AttendanceComponent_GetJobHostComponent(void* entity, void* outPtr) {
+    EnsureAcHelpers();
+    void* found = nullptr;
+    if (s_pTId_JobHost) {
+        int64_t host = (int64_t)entity;
+        int count = *(int*)(host + 0x38);
+        int64_t arr = *(int64_t*)(host + 0x30);
+        for (int i = 0; i < count; i++) {
+            int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
+            if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+            void* comp = (void*)*slot;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == *s_pTId_JobHost) {
+                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+                void* c = (void*)*slot;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTId_JobHost)) found = c;
+                break;
+            }
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outPtr, found);
+}
+
+// ============================================================
+// Reimpl of FUN_140043f60 (AttendanceComponent_sub_3f60:
+//   drain the attendance queue, dispatching each worker by which list it is on)
+// ============================================================
+// Queue InternalBasePtr array at self+0x28 (count self+0x30). For each worker the
+// helpers below remove it, so the loop re-reads the count each pass. The dispatch
+// compares the queued IBP against three worker fields (+0x208/+0x228/+0x230).
+void AttendanceComponent_ProcessQueue(void* selfP) {
+    EnsureAcHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    while (*(int*)(self + 0x30) > 0) {
+        int64_t queuedIbp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&queuedIbp, selfP);
+        int64_t* slot = *(int64_t**)(self + 0x28);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+        int64_t worker = *slot;
+        if (s_fn_CheckPtr) s_fn_CheckPtr(&queuedIbp);
+        if (*(int64_t*)(worker + 0x208) == queuedIbp) {
+            if (s_fn_AC_115a50) s_fn_AC_115a50((void*)worker, '\x01');
+        } else {
+            if (s_fn_CheckPtr) s_fn_CheckPtr(&queuedIbp);
+            if (*(int64_t*)(worker + 0x228) == queuedIbp) {
+                if (s_fn_AC_59b0) s_fn_AC_59b0((void*)worker);
+            } else {
+                if (s_fn_CheckPtr) s_fn_CheckPtr(&queuedIbp);
+                if (*(int64_t*)(worker + 0x230) == queuedIbp) {
+                    if (s_fn_AC_1650) s_fn_AC_1650((void*)worker);
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void AttendanceComponent_InitFuncs() {

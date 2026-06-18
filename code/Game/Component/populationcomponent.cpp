@@ -100,6 +100,193 @@ void PopulationComponent_Update(PopulationComponent* self, int64_t* pDeltaTime) 
 }
 
 // ============================================================
+// Reimpl of FUN_1400538c0 (PopulationComponent::SmoothDensity)
+// Weighted 5x5 kernel smoothing pass over the population density grid.
+// Self-contained: only MemAlloc/MemFree, pure pointer arithmetic.
+// Registered so populationcomponent.cpp's s_fn_SmoothDensity fires
+// (was silently skipped when unregistered in standalone).
+// ============================================================
+void PopulationComponent_SmoothDensity_Reimpl(void* selfV) {
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+
+    // Phase 1: per-grid-cell, accumulate owner birthrate (+0x40) into smoothedDensity,
+    //          then clamp smoothedDensity down to density.
+    int count40 = *reinterpret_cast<int*>(self + 0x40);
+    {
+        int i = 0;
+        int64_t off = 0;
+        if (0 < count40) {
+            do {
+                uint8_t* grid = *reinterpret_cast<uint8_t**>(self + 0x38);
+                int* pSmoothed = reinterpret_cast<int*>(grid + 4 + off);
+                int owner = *reinterpret_cast<int*>(
+                    *reinterpret_cast<uint8_t**>(self + 0x28) + 0x40);
+                *pSmoothed = *pSmoothed + owner;
+                uint8_t* grid2 = *reinterpret_cast<uint8_t**>(self + 0x38);
+                int density = *reinterpret_cast<int*>(grid2 + off);
+                if (density < *reinterpret_cast<int*>(grid2 + 4 + off)) {
+                    *reinterpret_cast<int*>(grid2 + 4 + off) = density;
+                }
+                i++;
+                off += 0xc;
+            } while (i < *reinterpret_cast<int*>(self + 0x40));
+        }
+    }
+
+    // Allocate temp buffer (one int per grid cell at +0x40 count).
+    int* temp = nullptr;
+    int n40 = *reinterpret_cast<int*>(self + 0x40);
+    if (n40 != 0) {
+        if (0 < n40) {
+            temp = reinterpret_cast<int*>(
+                fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n40 * 4, 4));
+        }
+        // Faithful port of the (quirky) zero-init loop from the original.
+        for (int64_t k = 0; k < (int64_t)n40; k++) {
+            if (temp != nullptr) {
+                int v;
+                if (k < 0) {
+                    v = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(&temp[k]) -
+                                               reinterpret_cast<uint8_t*>(temp))[0];
+                } else {
+                    v = 0;
+                }
+                temp[k] = v;
+            }
+        }
+        // Original frees a null pointer here (no-op); preserved for fidelity.
+        if (temp != nullptr) {
+            fn_MemFreeStatic((void*)0);
+        }
+    }
+
+    // Phase 2: 5x5 distance-weighted kernel over the density grid (dim at +0x30).
+    int dim = *reinterpret_cast<int*>(self + 0x30);
+    if (0 < dim) {
+        int row = 0;
+        int64_t rowL = 0;
+        do {
+            int col = 0;
+            int64_t colL = 0;
+            if (0 < dim) {
+                do {
+                    int acc = 0;
+                    int wsum = 0;
+                    int ky = -2;
+                    int64_t kyL = rowL - 2;
+                    do {
+                        int kx = -2;
+                        int64_t kxL = colL - 2;
+                        do {
+                            if (kxL >= 0 && (kx + col) < dim && kyL >= 0 && (ky + row) < dim) {
+                                int* cell = reinterpret_cast<int*>(
+                                    *reinterpret_cast<uint8_t**>(self + 0x38) +
+                                    (dim * kyL + kxL) * 0xc);
+                                if (*cell != 0) {
+                                    int w = (0x10 - kx * kx) - ky * ky;
+                                    if (-1 < w) {
+                                        acc += cell[1] * w;
+                                        wsum += w;
+                                    }
+                                }
+                            }
+                            kx++;
+                            kxL++;
+                        } while (kx < 3);
+                        ky++;
+                        kyL++;
+                    } while (ky < 3);
+                    if (wsum == 0) {
+                        temp[dim * rowL + colL] = 0;
+                    } else {
+                        temp[dim * rowL + colL] = acc / wsum;
+                    }
+                    col++;
+                    colL++;
+                    dim = *reinterpret_cast<int*>(self + 0x30);
+                } while (col < dim);
+            }
+            row++;
+            rowL++;
+            dim = *reinterpret_cast<int*>(self + 0x30);
+        } while (row < dim);
+    }
+
+    // Phase 3: write smoothed values back into smoothedDensity (+4) and minDensity (+8).
+    int n40b = *reinterpret_cast<int*>(self + 0x40);
+    if (0 < n40b) {
+        int i = 0;
+        int64_t off = 0;
+        int* t = temp;
+        do {
+            uint8_t* grid = *reinterpret_cast<uint8_t**>(self + 0x38);
+            *reinterpret_cast<int*>(grid + off + 4) = *t;
+            *reinterpret_cast<int*>(grid + off + 8) = *t;
+            i++;
+            t++;
+            off += 0xc;
+        } while (i < *reinterpret_cast<int*>(self + 0x40));
+    }
+
+    fn_MemFreeStatic(temp);
+}
+
+// ============================================================
+// Reimpl of FUN_140053b50 (PopulationComponent::ScanHabitability)
+// Scans one round-robin block of terrain cells, OR-ing habitability
+// flags + counting walkable cells; writes the result density into the grid.
+// Pure pointer arithmetic, no sub-deps.
+// ============================================================
+void PopulationComponent_ScanHabitability_Reimpl(void* selfV, void* terrainGridV, int cellIndex) {
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+    int* terrainGrid = reinterpret_cast<int*>(terrainGridV);
+
+    uint8_t* scan = *reinterpret_cast<uint8_t**>(self + 0x28);
+    int walkable = 0;
+    int blockDim = *reinterpret_cast<int*>(scan + 0x28);
+    unsigned int orFlags = 0;
+    int gridDim = *reinterpret_cast<int*>(self + 0x30);
+    int rowStart = (cellIndex / gridDim) * blockDim;
+    int colStart = (cellIndex % gridDim) * blockDim;
+    int rowEnd = blockDim + rowStart;
+
+    if (rowStart < rowEnd) {
+        int r = rowStart;
+        do {
+            if (colStart < blockDim + colStart) {
+                int64_t* tile = reinterpret_cast<int64_t*>(
+                    (int64_t)(terrainGrid[0] * r + colStart) * 0x30 +
+                    *reinterpret_cast<int64_t*>(terrainGrid + 0x20));
+                uint64_t remaining = (uint64_t)(unsigned int)((blockDim + colStart) - colStart);
+                do {
+                    unsigned int bit = 1u << (*reinterpret_cast<uint8_t*>(
+                                                 reinterpret_cast<uint8_t*>(tile) + 0x29) & 0x1f);
+                    if ((bit & *reinterpret_cast<unsigned int*>(scan + 0x30)) != 0) {
+                        walkable++;
+                    }
+                    orFlags |= *reinterpret_cast<unsigned int*>(scan + 0x34) & bit;
+                    if (*reinterpret_cast<char*>(scan + 0x38) != '\0' && *tile != 0) {
+                        orFlags |= 1;
+                    }
+                    tile += 6;  // 0x30 bytes
+                    remaining--;
+                } while (remaining != 0);
+            }
+            r++;
+        } while (r < rowEnd);
+
+        if (orFlags == 0 && 0 < walkable) {
+            *reinterpret_cast<int*>(
+                *reinterpret_cast<uint8_t**>(self + 0x38) + (int64_t)cellIndex * 0xc) =
+                *reinterpret_cast<int*>(scan + 0x3c);
+            return;
+        }
+    }
+    *reinterpret_cast<int*>(
+        *reinterpret_cast<uint8_t**>(self + 0x38) + (int64_t)cellIndex * 0xc) = 0;
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void PopulationComponent_InitFuncs() {

@@ -299,6 +299,252 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
 }
 
 // ============================================================
+// Reimplemented exe helpers (callee bodies for the guarded call sites above)
+// ============================================================
+//
+// These were previously unregistered exe addresses (ResolveAddr -> 0 -> silently
+// skipped). Faithful 1:1 ports of the original FUN_* helpers so that the guarded
+// calls in GrowthComponent_Update / DoHarvestReset actually fire.
+
+// Resolved sub-helpers used by the bodies below.
+// FUN_140004680 -- find NaturalResource entity-data component on owner (returns IBP).
+typedef void* (*fn_FindResData_t)(void* owner, void* outIBP);
+static fn_FindResData_t s_fn_FindResData = nullptr;
+// FUN_140120c30 -- spawn-site validity check (growthComp/config, x, y) -> bool(low byte)
+typedef int64_t (*fn_SpawnSiteValid_t)(void* config, int x, int y);
+static fn_SpawnSiteValid_t s_fn_SpawnSiteValid = nullptr;
+// CharacterComponent_impl_f5d0 (FUN_1400c...f5d0) -- tile placement test.
+typedef bool (*fn_TilePlace_t)(void* mapInfo, int x, int y, int kind,
+                               int d0, int d1, float f, char c0, char c1, int z);
+static fn_TilePlace_t s_fn_TilePlace = nullptr;
+// Entity_ClearPathQueue (FUN_140005200) -- IBP accessor (component fetch).
+typedef void* (*fn_EntityAccessor_t)(void* entity, void* outIBP);
+static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
+// ComponentEntity copy-ctor (FUN_1400...) -- via engine helper if available.
+typedef void* (*fn_CompEntityCopy_t)(void* dst, void* src);
+static fn_CompEntityCopy_t s_fn_CompEntityCopy = nullptr;
+// FUN_1400052c0 / FUN_14000c460 -- IBP component accessors.
+typedef void* (*fn_IBPAccessor_t)(void* ibp, void* outIBP);
+static fn_IBPAccessor_t s_fn_IBPAccessor_52c0 = nullptr;
+static fn_IBPAccessor_t s_fn_IBPAccessor_c460 = nullptr;
+// Entity_impl_6540 (FUN_140...6540) -- set tile index on new entity.
+typedef void (*fn_SetTileIndex_t)(void* entity, int tileIdx);
+static fn_SetTileIndex_t s_fn_SetTileIndex = nullptr;
+// FUN_140120db0 -- set growth value (float) on entity.
+typedef void (*fn_SetGrowthVal_t)(void* entity, float v);
+static fn_SetGrowthVal_t s_fn_SetGrowthVal = nullptr;
+// FUN_140125320 / FUN_1401253d0 -- variant index helpers.
+typedef uint32_t (*fn_VariantRange_t)(int64_t a, int b);
+static fn_VariantRange_t s_fn_VariantRange = nullptr;
+typedef void (*fn_SetVariant_t)(void* a, short b, short c);
+static fn_SetVariant_t s_fn_SetVariant = nullptr;
+// FUN_1400c48a0 -- register new entity into world entity list.
+typedef void (*fn_RegisterEntity_t)(void* entityListPtr, void* ibp, int bucket);
+static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
+// AnimateNaturalResource_helper_6440 (FUN_140126440) -- animation kick.
+typedef void (*fn_AnimateNatRes_t)(void* comp, int kind);
+static fn_AnimateNatRes_t s_fn_AnimateNatRes = nullptr;
+// Random on world singleton (+0xd8); world resource manager (+0xf8); world flags (+0xd0).
+static float* s_fUVScale = nullptr;       // g_fUVScale = DAT_140172140
+static float* s_fInst248 = nullptr;       // DAT_140172248
+
+static bool s_subHelpersResolved = false;
+static void EnsureSubHelpers() {
+    if (s_subHelpersResolved) return;
+    s_fn_FindResData     = reinterpret_cast<fn_FindResData_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_SpawnSiteValid  = reinterpret_cast<fn_SpawnSiteValid_t>(ResolveAddr(Module::Exe, 0x140120c30));
+    s_fn_EntityAccessor  = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140005200));
+    s_fn_IBPAccessor_52c0= reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
+    s_fn_IBPAccessor_c460= reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x14000c460));
+    s_fn_SetTileIndex    = reinterpret_cast<fn_SetTileIndex_t>(ResolveAddr(Module::Exe, 0x140006540));
+    s_fn_SetGrowthVal    = reinterpret_cast<fn_SetGrowthVal_t>(ResolveAddr(Module::Exe, 0x140120db0));
+    s_fn_VariantRange    = reinterpret_cast<fn_VariantRange_t>(ResolveAddr(Module::Exe, 0x140125320));
+    s_fn_SetVariant      = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));
+    s_fn_RegisterEntity  = reinterpret_cast<fn_RegisterEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
+    s_fn_AnimateNatRes   = reinterpret_cast<fn_AnimateNatRes_t>(ResolveAddr(Module::Exe, 0x140126440));
+    s_fn_CompEntityCopy  = reinterpret_cast<fn_CompEntityCopy_t>(ResolveAddr(Module::Exe, 0x1400c3720));
+    s_fUVScale           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172140));
+    s_fInst248           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172248));
+    s_subHelpersResolved = true;
+}
+
+static uintptr_t WorldSingleton() {
+    return s_pWorldSingleton ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton) : 0;
+}
+
+// Reimpl of FUN_140118950 (GrowthComponent flag modify: comp+0x20 = (f|or)&~andNot; notify)
+void GrowthComponent_ModifyFlags(void* comp, uint32_t orMask, uint32_t andNotMask) {
+    EnsureHelpers();
+    uint8_t* c = reinterpret_cast<uint8_t*>(comp);
+    uint32_t oldF = *reinterpret_cast<uint32_t*>(c + 0x20);
+    uint32_t newF = (oldF | orMask) & ~andNotMask;
+    *reinterpret_cast<uint32_t*>(c + 0x20) = newF;
+    if (((newF ^ oldF) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10) != nullptr) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr(c + 0x10);
+        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
+    }
+}
+
+// Reimpl of FUN_140120410 (GrowthComponent get tile index = y*mapW + x from NatResource data)
+int GrowthComponent_GetResourceIndex(void* comp) {
+    EnsureHelpers(); EnsureSubHelpers();
+    uintptr_t world = WorldSingleton();
+    if (!world) return 0;
+    int* mapW = *reinterpret_cast<int**>(world + 0xF8);
+    uint8_t* c = reinterpret_cast<uint8_t*>(comp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(c + 0x10);
+    int64_t resIBP = 0;
+    if (s_fn_FindResData) s_fn_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&resIBP);
+    int16_t x = *reinterpret_cast<int16_t*>(resIBP + 0x28);
+    int16_t y = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
+    return (int)y * (*mapW) + (int)x;
+}
+
+// Reimpl of FUN_140120470 (GrowthComponent set per-tile growth byte at grid +0x2c)
+void GrowthComponent_SetResourceAmount(void* comp, float amount) {
+    EnsureHelpers(); EnsureSubHelpers();
+    uintptr_t world = WorldSingleton();
+    if (!world) return;
+    int* mapW = *reinterpret_cast<int**>(world + 0xF8);
+    uint8_t* c = reinterpret_cast<uint8_t*>(comp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(c + 0x10);
+    int64_t resIBP = 0;
+    if (s_fn_FindResData) s_fn_FindResData(*reinterpret_cast<void**>(c + 0x10), &resIBP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&resIBP);
+    uintptr_t grid = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapW) + 0x80);
+    int16_t x = *reinterpret_cast<int16_t*>(resIBP + 0x28);
+    int16_t y = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
+    int64_t cell = (int64_t)((int)x + (int)y * (*mapW));
+    // DAT_14017222c is the byte<->float scale (255.0)
+    float* pScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017222c));
+    float divisor = pScale ? *pScale : 255.0f;
+    uint8_t* cellByte = reinterpret_cast<uint8_t*>(grid + 0x2c + cell * 0x30);
+    float fv = (float)(*cellByte) / divisor;
+    if (0.0f <= amount) fv = fv * fv * amount;
+    else fv = fv - amount;
+    int iv = (int)(fv * divisor);
+    if (iv < 0) { *cellByte = 0; return; }
+    *cellByte = (iv > 0xFF) ? 0xFF : (uint8_t)iv;
+}
+
+// Reimpl of FUN_140126780 (GrowthComponent reset growth: set bit 0x200000, notify, animate)
+void GrowthComponent_ResetGrowthState(void* entityPtr) {
+    EnsureHelpers(); EnsureSubHelpers();
+    uint8_t* c = reinterpret_cast<uint8_t*>(entityPtr);
+    uint32_t oldF = *reinterpret_cast<uint32_t*>(c + 0x20);
+    uint32_t newF = oldF | 0x200000;
+    *reinterpret_cast<uint32_t*>(c + 0x20) = newF;
+    if (((newF ^ oldF) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10) != nullptr) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr(c + 0x10);
+        if (s_fn_FlagNotify) s_fn_FlagNotify(*reinterpret_cast<void**>(c + 0x10));
+    }
+    if (s_fn_AnimateNatRes) s_fn_AnimateNatRes(c, 2);
+}
+
+// Reimpl of FUN_14011fba0 (GrowthComponent spawn sub-resource onto a nearby tile)
+void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
+    EnsureHelpers(); EnsureSubHelpers();
+    uintptr_t world = WorldSingleton();
+    if (!world) return;
+    uint8_t* cfg = reinterpret_cast<uint8_t*>(config);
+    int* mapW = *reinterpret_cast<int**>(world + 0xF8);
+    void* rng = *reinterpret_cast<void**>(world + 0xD8);
+    // world flag bit 10 must be clear
+    if ((*reinterpret_cast<uint32_t*>(world + 0xD0) >> 10 & 1) != 0) return;
+
+    float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+    float uvScale = s_fUVScale ? *s_fUVScale : 1.0f;
+    int spawnChanceDenom = *reinterpret_cast<int*>(cfg + 0x48);
+    if (spawnChanceDenom == 0) return;
+    if (roll > uvScale / (float)spawnChanceDenom) return;
+
+    uint8_t* gc = reinterpret_cast<uint8_t*>(growthComp);
+    void* self10 = gc + 0x10;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(self10);
+    int64_t resIBP = 0;
+    if (s_fn_FindResData) s_fn_FindResData(*reinterpret_cast<void**>(gc + 0x10), &resIBP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&resIBP);
+    int16_t baseX = *reinterpret_cast<int16_t*>(resIBP + 0x28);
+    int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
+
+    int tol = *reinterpret_cast<int*>(cfg + 0x4c);
+    int x = (int)baseX + (fn_Random_RandTol ? fn_Random_RandTol(rng, tol) : 0);
+    int y = (int)baseY + (fn_Random_RandTol ? fn_Random_RandTol(rng, tol) : 0);
+    if (!(x >= 0 && y >= 0 && x < *mapW && y < *mapW)) return;
+
+    float inst248 = s_fInst248 ? *s_fInst248 : 0.0f;
+    float inst140 = s_fUVScale ? *s_fUVScale : 0.0f;
+    bool placed = s_fn_TilePlace
+        ? s_fn_TilePlace(mapW, x, y, 4, (int)inst140, (int)inst248, 0.0f, '\0', '\0', 0)
+        : false;
+    if (!placed) return;
+
+    if (!s_fn_SpawnSiteValid) return;
+    int64_t valid = s_fn_SpawnSiteValid(config, x, y);
+    if ((char)valid == '\0') return;
+
+    int mapWv = *mapW;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(self10);
+    int64_t parentIBP = 0;
+    if (s_fn_EntityAccessor) s_fn_EntityAccessor(*reinterpret_cast<void**>(gc + 0x10), &parentIBP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&parentIBP);
+    int16_t variantSeed = *reinterpret_cast<int16_t*>(*reinterpret_cast<uintptr_t*>(&parentIBP) + 0x164);
+
+    // Allocate + copy-construct the new ComponentEntity from this entity's description.
+    void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
+                    ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+    void* newEnt = nullptr;
+    if (mem) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr(self10);
+        void* srcDesc = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28);
+        if (s_fn_CompEntityCopy) newEnt = s_fn_CompEntityCopy(mem, srcDesc);
+        else newEnt = mem;
+    }
+    int64_t newIBP = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&newIBP, newEnt);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&newIBP);
+    int64_t acc1 = 0;
+    if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(reinterpret_cast<void*>(newIBP), &acc1);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&acc1);
+    if (s_fn_SetTileIndex) s_fn_SetTileIndex(*reinterpret_cast<void**>(&acc1), mapWv * y + x);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&newIBP);
+    int64_t acc2 = 0;
+    if (s_fn_IBPAccessor_c460) s_fn_IBPAccessor_c460(reinterpret_cast<void*>(newIBP), &acc2);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&acc2);
+    if (s_fn_SetGrowthVal) s_fn_SetGrowthVal(*reinterpret_cast<void**>(&acc2), 0.0f);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&newIBP);
+    int64_t acc3 = 0;
+    if (s_fn_EntityAccessor) s_fn_EntityAccessor(reinterpret_cast<void*>(newIBP), &acc3);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&acc3);
+    int64_t variantTarget = *reinterpret_cast<int64_t*>(&acc3);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&newIBP);
+    int64_t acc4 = 0;
+    if (s_fn_EntityAccessor) s_fn_EntityAccessor(reinterpret_cast<void*>(newIBP), &acc4);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&acc4);
+    void* variantWrite = *reinterpret_cast<void**>(&acc4);
+
+    uint32_t range = s_fn_VariantRange ? s_fn_VariantRange(variantTarget, (int)variantSeed) : 0;
+    uint32_t roll2 = 0;
+    // System::Random::Rand(this, range) — resolve once.
+    typedef uint32_t (*fn_Rand_t)(void* self, uint32_t n);
+    static fn_Rand_t s_fn_Rand = reinterpret_cast<fn_Rand_t>(ResolveAddr(Module::Runtime, 0x1800c7cf0));
+    if (s_fn_Rand) roll2 = s_fn_Rand(rng, range);
+    if (s_fn_SetVariant) s_fn_SetVariant(variantWrite, variantSeed, (short)roll2);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(self10);
+    int64_t regArg = newIBP;
+    if (s_fn_RegisterEntity) {
+        s_fn_RegisterEntity(*reinterpret_cast<void**>(world + 0xE8), &regArg,
+            *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(gc + 0x10) + 0x28 + 0x20));
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void GrowthComponent_InitFuncs() {

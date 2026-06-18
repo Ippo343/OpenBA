@@ -136,6 +136,62 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_140005200 — find component by type, wrap in InternalBasePtr
+// ============================================================
+// Iterates the entity's component IBP array (data at entity+0x30, count at
+// entity+0x38). For each slot, CheckPtr then call the component's GetTypeId
+// (vtable+0x10); on the first slot whose type id == DAT_1401c4720, re-reads
+// that slot, runs IsDerivedFrom against the same id, and wraps the result
+// (or null) into the caller-provided InternalBasePtr (outIBP). Matches the
+// existing fn_ClearPathQueue_t typedef: void(void* entity, void* outIBP).
+// NON-STATIC so the standalone registrar can take its address.
+static uint32_t* s_TypeId_1401c4720 = nullptr;
+
+void NaturalResourceComponent_FindComponentByType(void* entity, void* outIBP) {
+    uintptr_t ent = (uintptr_t)entity;
+    void* found = nullptr;
+
+    if (!s_TypeId_1401c4720) {
+        s_TypeId_1401c4720 = reinterpret_cast<uint32_t*>(
+            ResolveAddr(Module::Exe, 0x1401c4720));
+    }
+    uint32_t wantId = s_TypeId_1401c4720 ? *s_TypeId_1401c4720 : 0;
+
+    int count = *(int*)(ent + 0x38);
+    uintptr_t arrBase = *(uintptr_t*)(ent + 0x30);
+
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arrBase + (uintptr_t)i * 8);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+
+        void* comp = *slot;
+        // virtual GetTypeId at vtable+0x10
+        uint32_t compId = 0;
+        if (comp) {
+            uintptr_t vtbl = *reinterpret_cast<uintptr_t*>(comp);
+            typedef uint32_t (*fn_GetTypeId_t)(void*);
+            fn_GetTypeId_t getId = *reinterpret_cast<fn_GetTypeId_t*>(vtbl + 0x10);
+            if (getId) compId = getId(comp);
+        }
+
+        if (compId == wantId) {
+            // re-read the matching slot (matches original's second CheckPtr)
+            void** matchSlot = reinterpret_cast<void**>(arrBase + (uintptr_t)i * 8);
+            if (s_fn_CheckPtr) s_fn_CheckPtr(matchSlot);
+            void* candidate = *matchSlot;
+            if (candidate && fn_IsDerivedFrom &&
+                fn_IsDerivedFrom(candidate, wantId)) {
+                found = candidate;
+            }
+            break;
+        }
+    }
+
+    if (fn_InternalBasePtr_Ctor)
+        fn_InternalBasePtr_Ctor(outIBP, found);
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void NaturalResourceComponent_InitFuncs() {

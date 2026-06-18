@@ -132,6 +132,189 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
+// Reimplemented exe helpers (callee bodies for the guarded call sites)
+// ============================================================
+
+// FUN_140004680 — FindComponent (map-grid component) on the pasture owner.
+//   RCX=owner, RDX=outIBP -> returns outIBP. Used to read the footprint rect.
+typedef void* (*fn_FindMapComp_t)(int64_t owner, void* outIBP);
+static fn_FindMapComp_t s_fn_FindMapComp = nullptr;
+
+// FUN_140005500 — FindComponent (animal/model component variant), RCX=owner, RDX=outIBP.
+typedef void* (*fn_FindAnimalComp_t)(int64_t owner, void* outIBP);
+static fn_FindAnimalComp_t s_fn_FindAnimalComp = nullptr;
+
+// FUN_1400c3470 — entity flag-change notification.
+typedef void (*fn_FlagNotify_t)(void* entity);
+static fn_FlagNotify_t s_fn_FlagNotify = nullptr;
+
+// Entity_FindComponent_Family @0x1400012d0 — RCX=entity, RDX=outIBP.
+typedef void* (*fn_FindCompFamily_t)(int64_t entity, void* outIBP);
+static fn_FindCompFamily_t s_fn_FindCompFamily = nullptr;
+
+// AnimalComponent_SetBounds @0x140105e20 — clamps/records the animal's tile bounds.
+typedef void (*fn_AnimalSetBounds_t)(void* self, short* a, short* b, short* c, short* d, int e);
+static fn_AnimalSetBounds_t s_fn_AnimalSetBounds = nullptr;
+
+// System::Time::Time(float) dispatch slot 0x140152b00 — RCX=outTime, XMM1=seconds.
+typedef void* (*fn_Time_CtorF_t)(void* out, float seconds);
+static fn_Time_CtorF_t s_fn_Time_CtorF = nullptr;
+
+// Type id consulted by capacity / helper (DWORD_1401c6fd0).
+static uint32_t* s_pTypeId_1c6fd0 = nullptr;
+
+static bool s_pastureExtraInit = false;
+static void EnsurePastureExtras() {
+    if (s_pastureExtraInit) return;
+    s_fn_FindMapComp = reinterpret_cast<fn_FindMapComp_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_FindAnimalComp = reinterpret_cast<fn_FindAnimalComp_t>(
+        ResolveAddr(Module::Exe, 0x140005500));
+    s_fn_FlagNotify = reinterpret_cast<fn_FlagNotify_t>(
+        ResolveAddr(Module::Exe, 0x1400c3470));
+    s_fn_FindCompFamily = reinterpret_cast<fn_FindCompFamily_t>(
+        ResolveAddr(Module::Exe, 0x1400012d0));
+    s_fn_AnimalSetBounds = reinterpret_cast<fn_AnimalSetBounds_t>(
+        ResolveAddr(Module::Exe, 0x140105e20));
+    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
+    if (slot) s_fn_Time_CtorF = *reinterpret_cast<fn_Time_CtorF_t*>(slot);
+    s_pTypeId_1c6fd0 = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c6fd0));
+    s_pastureExtraInit = true;
+}
+
+// Reimpl of FUN_140128570 (compute pasture capacity = footprint area / animal slot size)
+// Reads the owner's map-grid footprint (w*h at +0x2c/+0x2e of the found component),
+// finds the animal-template sub-component (type 0x1401c6fd0) to read its per-animal
+// area cost at +0x24, and returns (w*h)/cost. Returns 0 if no animal ref bound.
+uint64_t PastureComponent_ComputeCapacity(uintptr_t self) {
+    EnsureHelpers();
+    EnsurePastureExtras();
+    if (*(int64_t*)(self + 0x28) == 0) return 0;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+    uint8_t outIBP[8] = {0};
+    if (s_fn_FindMapComp) s_fn_FindMapComp(*(int64_t*)(self + 0x10), outIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(outIBP);
+
+    int64_t animalRef = *(int64_t*)(self + 0x28);
+    void* mapComp = *(void**)outIBP;
+    short w = *(short*)((uintptr_t)mapComp + 0x2c);
+    short h = *(short*)((uintptr_t)mapComp + 0x2e);
+
+    // Scan the animal ref's component list for the per-animal template (type 0x1401c6fd0).
+    void* found = nullptr;
+    int n = *(int*)(animalRef + 0x30);
+    uintptr_t list = *(uintptr_t*)(animalRef + 0x28);
+    int idx = 0;
+    for (int i = 0; i < n; i++) {
+        void* comp = *(void**)(list + (int64_t)i * 8);
+        uint32_t t = (*(uint32_t(**)(void*))(*(uintptr_t*)comp + 0x10))(comp);
+        if (s_pTypeId_1c6fd0 && t == *s_pTypeId_1c6fd0) {
+            void* cand = *(void**)(list + (int64_t)idx * 8);
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(cand, *s_pTypeId_1c6fd0)) found = cand;
+            break;
+        }
+        idx++;
+    }
+    if (found == nullptr) return 0;
+    int cost = *(int*)((uintptr_t)found + 0x24);
+    if (cost == 0) return 0;
+    return (uint64_t)((int)(w * h) / cost) & 0xffffffff;
+}
+
+// Reimpl of FUN_140105ed0 (process an animal entity-ref for the pasture)
+// Sets the "in-pasture" flag bit (0x400000) on the ref, notifies on change, finds
+// the animal's family/model component to read its world position, clamps to the map
+// grid, records the tile index at +0x28, records the animal-template bounds, and
+// kicks an immediate Update (vtable +0x48 with t=0).
+void PastureComponent_Helper5ed0(void* entityRef) {
+    EnsureHelpers();
+    EnsurePastureExtras();
+    uint8_t* p = reinterpret_cast<uint8_t*>(entityRef);
+
+    uint32_t oldFlags = *(uint32_t*)(p + 0x20);
+    uint32_t newFlags = oldFlags | 0x400000;
+    *(uint32_t*)(p + 0x20) = newFlags;
+    if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(p + 0x10) != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
+        if (s_fn_FlagNotify) s_fn_FlagNotify(*(void**)(p + 0x10));
+    }
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
+    uint8_t famIBP[8] = {0};
+    if (s_fn_FindCompFamily) s_fn_FindCompFamily(*(int64_t*)(p + 0x10), famIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(famIBP);
+    uintptr_t fam = *(uintptr_t*)famIBP;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(fam + 0x68));
+    uintptr_t model = *(uintptr_t*)(fam + 0x68);
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    int mapW = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int x = (int)(*(float*)(model + 0x158) + (float)(mapW >> 1));
+    int y = (int)(*(float*)(model + 0x15c) + (float)(mapW >> 1));
+    if (x < 0) x = 0;
+    if (mapW <= x) x = mapW - 1;
+    if (y < 0) y = 0;
+    if (mapW <= y) y = mapW - 1;
+
+    void* tmpl = *(void**)(p + 0x18);
+    *(int*)(p + 0x28) = mapW * y + x;
+    void* animalTmpl = (s_fn_IsDerivedFrom_dispatch && s_pTypeId_1c6fd0 &&
+                        s_fn_IsDerivedFrom_dispatch(tmpl, *s_pTypeId_1c6fd0)) ? tmpl : nullptr;
+    if (s_fn_AnimalSetBounds) {
+        s_fn_AnimalSetBounds(p, (short*)(p + 0x38), (short*)(p + 0x3a),
+                             (short*)(p + 0x3c), (short*)(p + 0x3e),
+                             *(int*)((uintptr_t)animalTmpl + 0x20));
+    }
+
+    uint8_t t[8] = {0};
+    if (s_fn_Time_CtorF) s_fn_Time_CtorF(t, 0.0f);
+    // Immediate Update tick (vtable slot +0x48).
+    (*(void(**)(void*, void*))(*(uintptr_t*)p + 0x48))(p, t);
+}
+
+// Reimpl of FUN_1401240a0 (reassign animal ref's pasture tile after re-parenting)
+// Looks up the new pasture owner's map footprint (via +0x28 link -> FindMapComp),
+// reads its origin/size rect, then on the animal's own model component clears the
+// in-pasture flag bit (0x400000), notifies, and copies the new rect into +0x38..+0x3e.
+void PastureComponent_ReassignEntityRef(uintptr_t entityPtr) {
+    EnsureHelpers();
+    EnsurePastureExtras();
+    if (*(int64_t*)(entityPtr + 0x28) == 0) return;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x28));
+    int64_t link = *(int64_t*)(*(int64_t*)(entityPtr + 0x28) + 0x10);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&link);
+    uint8_t mapIBP[8] = {0};
+    if (s_fn_FindMapComp) s_fn_FindMapComp(link, mapIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mapIBP);
+    uintptr_t mapComp = *(uintptr_t*)mapIBP;
+    uint16_t r0 = *(uint16_t*)(mapComp + 0x28);
+    uint16_t r1 = *(uint16_t*)(mapComp + 0x2a);
+    uint16_t r2 = *(uint16_t*)(mapComp + 0x2c);
+    uint16_t r3 = *(uint16_t*)(mapComp + 0x2e);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(entityPtr + 0x10));
+    uint8_t modelIBP[8] = {0};
+    if (s_fn_FindAnimalComp) s_fn_FindAnimalComp(*(int64_t*)(entityPtr + 0x10), modelIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(modelIBP);
+    uintptr_t model = *(uintptr_t*)modelIBP;
+
+    uint32_t oldFlags = *(uint32_t*)(model + 0x20);
+    uint32_t newFlags = oldFlags & 0xffbfffff;
+    *(uint32_t*)(model + 0x20) = newFlags;
+    if (((newFlags ^ oldFlags) & 0xffff) != 0 && *(int64_t*)(model + 0x10) != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(model + 0x10));
+        if (s_fn_FlagNotify) s_fn_FlagNotify(*(void**)(model + 0x10));
+    }
+    *(uint16_t*)(model + 0x38) = r0;
+    *(uint16_t*)(model + 0x3a) = r1;
+    *(uint16_t*)(model + 0x3c) = r2;
+    *(uint16_t*)(model + 0x3e) = r3;
+}
+
+// ============================================================
 // PastureComponent::Shutdown (vtable slot [3], 0x140127f40)
 // ============================================================
 // Component_Serialize + empty serializer(v0) + main serializer(v0) with:

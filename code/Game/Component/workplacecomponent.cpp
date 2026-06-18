@@ -121,6 +121,90 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
+// Reimpl of FUN_14012ee60 (WorkPlaceComponent_OnCreate_sub_ee60:
+//   drain every worker, detaching its current job host and reattaching it here)
+// ============================================================
+// Worker InternalBasePtr array at +0x58 (count +0x60). For each worker (index 0,
+// repeatedly — the helpers below remove it, shrinking the count): find its current
+// job host (DWORD_1401c80e0 component on worker+0x248), detach via FUN_14012f7e0,
+// then if a replacement was produced, reattach via FUN_14012fa20.
+typedef void (*fn_WPC_Detach_t)(int64_t comp, void* workerIbp);     // 0x14012f7e0
+typedef void (*fn_WPC_Attach_t)(int64_t comp, void* workerIbp);     // 0x14012fa20
+static fn_WPC_Detach_t s_fn_WPC_Detach = nullptr;
+static fn_WPC_Attach_t s_fn_WPC_Attach = nullptr;
+static uint32_t* s_pTId_JobHostComp = nullptr;  // DWORD_1401c80e0
+static bool s_wpcEe60Resolved = false;
+static void EnsureEe60Helpers() {
+    if (s_wpcEe60Resolved) return;
+    s_fn_WPC_Detach = reinterpret_cast<fn_WPC_Detach_t>(ResolveAddr(Module::Exe, 0x14012f7e0));
+    s_fn_WPC_Attach = reinterpret_cast<fn_WPC_Attach_t>(ResolveAddr(Module::Exe, 0x14012fa20));
+    s_pTId_JobHostComp = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
+    s_wpcEe60Resolved = true;
+}
+
+// Find the first component on `host` whose GetTypeId (vtable+0x10) == typeId.
+static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
+    if (!pTypeId) return nullptr;
+    int count = *(int*)(host + 0x38);
+    int64_t arr = *(int64_t*)(host + 0x30);
+    for (int i = 0; i < count; i++) {
+        int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = (void*)*slot;
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (tid == *pTypeId) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* c = (void*)*slot;
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *pTypeId)) return c;
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+void WorkPlaceComponent_OnCreateInit(void* selfP) {
+    EnsureHelpers();
+    EnsureEe60Helpers();
+    uintptr_t self = (uintptr_t)selfP;
+
+    while (*(int*)(self + 0x60) > 0) {
+        int64_t emptyIbp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&emptyIbp, nullptr);
+
+        int64_t* workerSlot = *(int64_t**)(self + 0x58);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(workerSlot);
+        int64_t worker = *workerSlot;
+        int64_t* pJobHost = (int64_t*)(worker + 0x248);
+
+        if (*pJobHost != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pJobHost);
+            int64_t host = *pJobHost;
+            void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
+            int64_t compIbp = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&compIbp, comp);
+            int64_t workerIbp = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workerIbp, (void*)worker);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
+            if (s_fn_WPC_Detach) s_fn_WPC_Detach(compIbp, &workerIbp);
+        }
+
+        *pJobHost = emptyIbp;
+        if (emptyIbp != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pJobHost);
+            int64_t host = *pJobHost;
+            void* comp = WPC_FindJobHostComponent(host, s_pTId_JobHostComp);
+            int64_t compIbp = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&compIbp, comp);
+            int64_t workerIbp = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&workerIbp, (void*)worker);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&compIbp);
+            if (s_fn_WPC_Attach) s_fn_WPC_Attach(compIbp, &workerIbp);
+        }
+    }
+}
+
+// ============================================================
 // WorkPlaceComponent::Shutdown (vtable slot [3], 0x14012f120)
 // ============================================================
 // Component_Serialize + empty serializer(v0) + versioned serializer(v1) with:

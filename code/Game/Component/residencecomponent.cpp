@@ -248,6 +248,188 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
 }
 
 // ============================================================
+// Reimpl helper resolution for the resident-array functions
+// ============================================================
+// ResidenceComponent_helper_5ec0(dst, src) — per-element move on grow (0x140035ec0)
+typedef void (*fn_Resident_MoveElem_t)(void* dst, void* src);
+static fn_Resident_MoveElem_t s_fn_Resident_MoveElem = nullptr;
+// FUN_1400032e0(entry, innerCount) — resize inner IBP array on load (0x1400032e0)
+typedef void (*fn_Resident_ResizeInner_t)(void* entry, int innerCount);
+static fn_Resident_ResizeInner_t s_fn_Resident_ResizeInner = nullptr;
+// Object::InternalBasePtr::Serialize(this, serializer)
+typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
+static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
+// DWORD_1401c7158 — CitizenComponent (resident) type ID
+static uint32_t* s_TypeId_Resident = nullptr;
+// FindComponent(MeshInstance/...) + worker assignment helpers used by ResidenceInit
+typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retbuf);
+static fn_FindComp_t s_fn_Entity_FindComponent_MeshInstance = nullptr;
+typedef void (*fn_SetMeshFlag_t)(void* comp, int idx, char param3);
+static fn_SetMeshFlag_t s_fn_SetMeshFlag = nullptr;   // FUN_14012c3f0
+typedef void (*fn_AssignWorkplace_t)(void* citizen, void* ibp, int slot);
+static fn_AssignWorkplace_t s_fn_AssignWorkplace = nullptr;  // CitizenComponent_AssignWorkplace
+
+static bool s_residentHelpersResolved = false;
+static void EnsureResidentHelpers() {
+    if (s_residentHelpersResolved) return;
+    s_fn_Resident_MoveElem = reinterpret_cast<fn_Resident_MoveElem_t>(
+        ResolveAddr(Module::Exe, 0x140035ec0));
+    s_fn_Resident_ResizeInner = reinterpret_cast<fn_Resident_ResizeInner_t>(
+        ResolveAddr(Module::Exe, 0x1400032e0));
+    s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
+        ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
+    if (!s_fn_IBP_Serialize)
+        s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(ResolveOrdinal(2990));
+    s_TypeId_Resident = reinterpret_cast<uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c7158));
+    s_fn_Entity_FindComponent_MeshInstance = reinterpret_cast<fn_FindComp_t>(
+        ResolveAddr(Module::Exe, 0x140002f90));
+    s_fn_SetMeshFlag = reinterpret_cast<fn_SetMeshFlag_t>(
+        ResolveAddr(Module::Exe, 0x14012c3f0));
+    s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
+        ResolveAddr(Module::Exe, 0x1401163d0));
+    s_residentHelpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of FUN_140037ad0 (ResidenceComponent_Controller_sub_7ad0:
+//   grow/shrink the 16-byte-stride resident-slot array at the field this points to)
+// ============================================================
+// param_1 = address of {void* ptr (+0), int count (+8), int capacity (+0xc)}.
+// On grow, new tail slots are zeroed; existing slots are moved with helper_5ec0
+// when the buffer was reallocated. On shrink (param_2 < count) the dropped slots'
+// inner buffers (slot[0]) are MemFree'd. When realloc happens, every old slot is
+// freed and the old buffer released.
+void ResidenceComponent_ResizeResidentArray(void* arrayFieldPtr, int newCount) {
+    EnsureResidentHelpers();
+    int64_t* field = (int64_t*)arrayFieldPtr;   // field[0]=ptr, [1] low=count, high=capacity
+    int oldCount = (int)field[1];
+    if (newCount == oldCount) return;
+
+    int64_t* oldBuf = (int64_t*)field[0];
+    *(int*)((uintptr_t)field + 8) = newCount;
+    if (*(int*)((uintptr_t)field + 0xc) < newCount) {
+        *(int*)((uintptr_t)field + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *(int*)((uintptr_t)field + 0xc) = newCount * 3;
+        }
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 4), 8);
+        field[0] = (int64_t)nb;
+    }
+
+    int start = (oldBuf == (int64_t*)field[0]) ? oldCount : 0;
+    if (start < newCount) {
+        int64_t* srcSlot = oldBuf + (int64_t)start * 2;
+        for (int i = start; i < newCount; i++) {
+            int64_t* slot = (int64_t*)(field[0] + (int64_t)i * 0x10);
+            if (i < oldCount) {
+                if (slot) {
+                    slot[0] = 0;
+                    slot[1] = 0;
+                    if (s_fn_Resident_MoveElem) s_fn_Resident_MoveElem(slot, srcSlot);
+                }
+            } else {
+                if (slot) { slot[0] = 0; slot[1] = 0; }
+            }
+            srcSlot += 2;
+        }
+    }
+
+    if (oldBuf == (int64_t*)field[0]) {
+        // No realloc: free inner buffers of the shrunk-off tail
+        if (newCount < oldCount) {
+            int64_t* p = oldBuf + (int64_t)newCount * 2;
+            for (int i = 0; i < oldCount - newCount; i++) {
+                fn_MemFreeStatic((void*)p[0]);
+                p[0] = 0; p[1] = 0;
+                p += 2;
+            }
+        }
+    } else {
+        // Reallocated: free every old slot's inner buffer, then the old buffer
+        int64_t* p = oldBuf;
+        for (int i = 0; i < oldCount; i++) {
+            fn_MemFreeStatic((void*)p[0]);
+            p[0] = 0; p[1] = 0;
+            p += 2;
+        }
+        if (oldBuf) fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
+// Reimpl of FUN_140037c50 (ResidenceComponent_helper_7c50:
+//   serialize the nested resident IBP arrays)
+// ============================================================
+// For each of `count` outer entries (16-byte stride at arrayPtr): serialize the
+// inner element count; on load grow the inner array; then serialize each inner
+// InternalBasePtr and clear it if not derived from the resident type.
+void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void* arrayPtr) {
+    EnsureHelpers();
+    EnsureResidentHelpers();
+    if (count <= 0) return;
+    int64_t* entry = (int64_t*)arrayPtr;
+    for (int o = 0; o < count; o++) {
+        int innerCount = (int)entry[1];
+        if (s_fn_Serialize_Int) s_fn_Serialize_Int(serializer, &innerCount, nullptr);
+        // On load (serializer internal +8 == 0): resize the inner array
+        if (*(int*)(*(int64_t*)serializer + 8) == 0) {
+            if (s_fn_Resident_ResizeInner) s_fn_Resident_ResizeInner(entry, innerCount);
+        }
+        uintptr_t inner = (uintptr_t)entry[0];
+        for (int i = 0; i < innerCount; i++) {
+            void* ibp = (void*)(inner + (uintptr_t)i * 8);
+            if (s_fn_IBP_Serialize) s_fn_IBP_Serialize(ibp, serializer);
+            void* val = *(void**)ibp;
+            if (val && s_TypeId_Resident && fn_IsDerivedFrom &&
+                !fn_IsDerivedFrom(val, *s_TypeId_Resident)) {
+                *(uint64_t*)ibp = 0;
+            }
+        }
+        entry += 2;   // 16-byte stride
+    }
+}
+
+// ============================================================
+// Reimpl of FUN_140129ef0 (ResidenceComponent_helper_9ef0:
+//   on create, refresh mesh flags and re-assign resident workplaces)
+// ============================================================
+void ResidenceComponent_ResidenceInit(void* selfP) {
+    EnsureResidentHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+    uint8_t ibpBuf[8];
+
+    // Mesh flags 6 and 7
+    for (int flag = 6; flag <= 7; flag++) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
+        if (!s_fn_Entity_FindComponent_MeshInstance) break;
+        uint8_t compBuf[8] = {0};
+        s_fn_Entity_FindComponent_MeshInstance(*(uintptr_t*)(self + 0x10), compBuf);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compBuf);
+        void* comp = *(void**)compBuf;
+        if (comp && s_fn_SetMeshFlag) s_fn_SetMeshFlag(comp, flag, '\0');
+    }
+
+    // Re-assign workplaces for each resident slot at +0x50 (count +0x58, stride 0x10)
+    int slotCount = *(int*)(self + 0x58);
+    for (int s = 0; s < slotCount; s++) {
+        uintptr_t base = *(uintptr_t*)(self + 0x50);
+        uintptr_t entry = base + (uintptr_t)s * 0x10;
+        int innerCount = *(int*)(entry + 8);
+        while (innerCount > 0) {
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibpBuf, nullptr);
+            uintptr_t cur = *(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10;
+            void* residentSlotPtr = *(void**)cur;
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(residentSlotPtr);
+            void* citizen = *(void**)residentSlotPtr;
+            if (s_fn_AssignWorkplace) s_fn_AssignWorkplace(citizen, ibpBuf, -1);
+            innerCount = *(int*)(*(uintptr_t*)(self + 0x50) + (uintptr_t)s * 0x10 + 8);
+        }
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void ResidenceComponent_InitFuncs() {

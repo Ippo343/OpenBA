@@ -401,6 +401,83 @@ void RawMaterialComponent_Update(RawMaterialComponent* self, int64_t* pDeltaTime
 }
 
 // ============================================================
+// Reimpl of FUN_140091e60 (register raw material with world manager:
+//   grow-array-and-append an 8-byte pointer into the manager's list at +0x110)
+// ============================================================
+// param_1 = list owner (count +0x118, capacity +0x11c, ptr array +0x110, stride 8).
+// Scans the existing array for param_2; if present, returns. Otherwise grows
+// (newCount = oldCount+1, tripled capacity if previously non-empty), copies the
+// old elements, writes param_2 into the new tail slot, and frees the old buffer.
+void RawMaterialComponent_RegisterRawMaterial(void* worldMgr, void* entityChain) {
+    uintptr_t base = (uintptr_t)worldMgr;
+    int64_t value = (int64_t)entityChain;
+
+    // Scan for existing entry
+    int count = *(int*)(base + 0x118);
+    int64_t* arr = *(int64_t**)(base + 0x110);
+    for (int64_t i = 0; i < count; i++) {
+        if (arr[i] == value) {
+            return;
+        }
+    }
+
+    int oldCount = *(int*)(base + 0x118);
+    int newCount = oldCount + 1;
+    if (newCount == oldCount) return; // unreachable, matches original guard
+
+    int64_t* oldBuf = *(int64_t**)(base + 0x110);
+    *(int*)(base + 0x118) = newCount;
+
+    if (*(int*)(base + 0x11c) < newCount) {
+        *(int*)(base + 0x11c) = newCount;
+        if (oldCount != 0) {
+            *(int*)(base + 0x11c) = newCount * 3;
+        }
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                               (uint64_t)((int64_t)*(int*)(base + 0x11c) << 3), 8);
+        *(int64_t**)(base + 0x110) = (int64_t*)nb;
+    }
+
+    int start = 0;
+    if (oldBuf == *(int64_t**)(base + 0x110)) {
+        start = oldCount;
+    }
+    int64_t* dst = *(int64_t**)(base + 0x110);
+    for (int i = start; i < newCount; i++) {
+        int64_t* slot = dst + i;
+        if (slot) {
+            if (i < oldCount) {
+                *slot = oldBuf[i];
+            } else {
+                *slot = value;
+            }
+        }
+    }
+
+    if (oldBuf != *(int64_t**)(base + 0x110)) {
+        fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
+// Reimpl of FUN_140129480 (RawMaterialComponent_helper_9480:
+//   derive pickup visual category bits from the description's flag word at +0x5c)
+// ============================================================
+uint64_t RawMaterialComponent_GetPickupCategory(uintptr_t rawMatDesc) {
+    uint32_t flags = *(uint32_t*)(rawMatDesc + 0x5c);
+    if ((flags >> 5) & 1)   return 2;
+    if ((flags >> 6) & 1)   return 4;
+    if ((flags >> 10) & 1)  return 0x10;
+    if ((flags >> 12) & 1)  return 0x40;
+    if ((flags >> 11) & 1)  return 0x20;
+    if ((flags >> 13) & 1)  return 0x100;
+    if ((flags >> 16) & 1)  return 0x200;
+    if ((flags >> 9) & 1)   return 8;
+    if ((flags >> 14) & 1)  return 0x80;
+    return 1;
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void RawMaterialComponent_InitFuncs() {

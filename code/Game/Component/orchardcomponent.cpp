@@ -106,6 +106,146 @@ void OrchardComponent_Shutdown(OrchardComponent* self, void* stream) {
 }
 
 // ============================================================
+// Reimplemented exe helpers (callee bodies for the guarded call sites above)
+// ============================================================
+
+// IO::Serializer::Serialize(int*) dispatch (reuse s_fn_SerializeInt) and InternalBasePtr::Serialize.
+// Object::Base::IsA(self, typeId) -> bool.
+typedef bool (*fn_BaseIsA_t)(void* self, uint32_t typeId);
+static fn_BaseIsA_t s_fn_BaseIsA = nullptr;
+// FUN_1400052c0 -- IBP component accessor used by ref validation.
+typedef void* (*fn_IBPAccessor_t)(int64_t entity, void* outIBP);
+static fn_IBPAccessor_t s_fn_IBPAccessor52c0 = nullptr;
+// Type-id globals referenced by the serializer (entity-ref kind filters).
+static uint32_t* s_pTypeComponentEntity = nullptr;  // TypeInfo_ComponentEntity
+static uint32_t* s_pType7b30 = nullptr;             // DAT_1401c7b30
+static uint32_t* s_pType4250 = nullptr;             // DAT_1401c4250
+static void**    s_pWorldSingleton2 = nullptr;      // g_pGameWorldSingleton (0x1401c3dd8)
+
+static bool s_subResolved = false;
+static void EnsureSubHelpers() {
+    if (s_subResolved) return;
+    s_fn_BaseIsA          = reinterpret_cast<fn_BaseIsA_t>(ResolveAddr(Module::Exe, 0x140002d40));
+    s_fn_IBPAccessor52c0  = reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
+    s_pTypeComponentEntity= reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    s_pType7b30           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
+    s_pType4250           = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4250));
+    s_pWorldSingleton2    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
+    s_subResolved = true;
+}
+
+// Reimpl of FUN_140009f80 (grow stride-0x28 entity-ref array at +0x50; copy old, zero new, free old)
+void OrchardComponent_ResizeRefArray(void* arrayPtr, int newCount) {
+    int64_t* a = reinterpret_cast<int64_t*>(arrayPtr);
+    int oldCount = (int)a[1];
+    if (newCount == oldCount) return;
+    void* oldBuf = reinterpret_cast<void*>(a[0]);
+    *reinterpret_cast<int*>(&a[1]) = newCount;
+    int* capPtr = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(arrayPtr) + 0xc);
+    if (*capPtr < newCount) {
+        *capPtr = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) *capPtr = newCount * 3;
+        void* newBuf = (fn_MemAlloc && g_pMemAllocSingleton)
+                           ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)(*capPtr) * 0x28, 8) : nullptr;
+        a[0] = reinterpret_cast<int64_t>(newBuf);
+    }
+    int keep = (oldBuf == reinterpret_cast<void*>(a[0])) ? oldCount : 0;
+    uintptr_t newBase = (uintptr_t)a[0];
+    uintptr_t oldBase = (uintptr_t)oldBuf;
+    for (int idx = keep; idx < newCount; ++idx) {
+        uint8_t* dst = reinterpret_cast<uint8_t*>(newBase + (uintptr_t)idx * 0x28);
+        if (idx < oldCount) {
+            uint8_t* src = reinterpret_cast<uint8_t*>(oldBase + (uintptr_t)idx * 0x28);
+            *reinterpret_cast<uint32_t*>(dst + 0)  = *reinterpret_cast<uint32_t*>(src + 0);
+            *reinterpret_cast<uint32_t*>(dst + 4)  = *reinterpret_cast<uint32_t*>(src + 4);
+            *reinterpret_cast<uint64_t*>(dst + 8)  = *reinterpret_cast<uint64_t*>(src + 8);
+            *reinterpret_cast<uint64_t*>(dst + 16) = *reinterpret_cast<uint64_t*>(src + 16);
+            *reinterpret_cast<uint64_t*>(dst + 24) = *reinterpret_cast<uint64_t*>(src + 24);
+            *reinterpret_cast<uint8_t*>(dst + 32)  = *reinterpret_cast<uint8_t*>(src + 32);
+        } else {
+            *reinterpret_cast<uint64_t*>(dst + 8)  = 0;
+            *reinterpret_cast<uint64_t*>(dst + 16) = 0;
+            *reinterpret_cast<uint64_t*>(dst + 24) = 0;
+        }
+    }
+    if (oldBuf != reinterpret_cast<void*>(a[0]) && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+}
+
+// Reimpl of FUN_14000a230 (serialize stride-0x28 entity-ref array entries: 2 ints, 3 IBPs, 1 bool)
+void OrchardComponent_SerializeRefEntries(void* serializer, int count, void* arrayBase) {
+    EnsureSubHelpers();
+    if (count <= 0) return;
+    uint8_t* e = reinterpret_cast<uint8_t*>(arrayBase);
+    for (int i = 0; i < count; ++i) {
+        if (s_fn_SerializeInt) s_fn_SerializeInt(serializer, reinterpret_cast<int*>(e + 0), nullptr);
+        if (s_fn_SerializeInt) s_fn_SerializeInt(serializer, reinterpret_cast<int*>(e + 4), nullptr);
+
+        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 8, serializer);
+        if (*reinterpret_cast<void**>(e + 8) != nullptr && s_pTypeComponentEntity &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 8), *s_pTypeComponentEntity)))
+            *reinterpret_cast<void**>(e + 8) = nullptr;
+
+        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 0x10, serializer);
+        if (*reinterpret_cast<void**>(e + 0x10) != nullptr && s_pType7b30 &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x10), *s_pType7b30)))
+            *reinterpret_cast<void**>(e + 0x10) = nullptr;
+
+        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(e + 0x18, serializer);
+        if (*reinterpret_cast<void**>(e + 0x18) != nullptr && s_pType4250 &&
+            !(fn_IsDerivedFrom && fn_IsDerivedFrom(*reinterpret_cast<void**>(e + 0x18), *s_pType4250)))
+            *reinterpret_cast<void**>(e + 0x18) = nullptr;
+
+        if (s_fn_SerializeBool) s_fn_SerializeBool(serializer, reinterpret_cast<bool*>(e + 0x20), nullptr);
+        e += 0x28;
+    }
+}
+
+// Reimpl of FUN_140051830 (validate orchard entity refs against live world entities; clear stale)
+void OrchardComponent_ValidateRefs(void* selfV) {
+    EnsureSubHelpers();
+    uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
+    uintptr_t world = s_pWorldSingleton2 ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton2) : 0;
+    if (!world) return;
+    uintptr_t resMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
+    int count = *reinterpret_cast<int*>(self + 0x58);
+    for (int i = 0; i < count; ++i) {
+        uintptr_t arr = *reinterpret_cast<uintptr_t*>(self + 0x50);
+        uintptr_t entry = arr + (uintptr_t)i * 0x28;
+        if (*reinterpret_cast<int*>(entry + 4) != 1) continue;
+
+        int32_t tile = *reinterpret_cast<int32_t*>(entry + 0);
+        void* live = *reinterpret_cast<void**>(
+            *reinterpret_cast<uintptr_t*>(resMgr + 0x80) + 8 + (uintptr_t)tile * 0x30);
+        bool ok = false;
+        if (live) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
+            if (s_fn_BaseIsA && s_pTypeComponentEntity &&
+                s_fn_BaseIsA(live, *s_pTypeComponentEntity)) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&live);
+                int64_t accBuf = 0;
+                void* acc = s_fn_IBPAccessor52c0 ? s_fn_IBPAccessor52c0((int64_t)live, &accBuf) : nullptr;
+                if (acc && *reinterpret_cast<int64_t*>(acc) != 0) {
+                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entry + 8));
+                    if (live == *reinterpret_cast<void**>(entry + 8)) ok = true;
+                }
+            }
+        }
+        if (ok) continue;
+        // Stale -> mark removed (kind=2) and null the 3 IBP slots.
+        *reinterpret_cast<int32_t*>(entry + 4) = 2;
+        int64_t z = 0;
+        if (fn_InternalBasePtr_Ctor) { fn_InternalBasePtr_Ctor(&z, nullptr);
+            *reinterpret_cast<int64_t*>(entry + 8) = z; }
+        z = 0;
+        if (fn_InternalBasePtr_Ctor) { fn_InternalBasePtr_Ctor(&z, nullptr);
+            *reinterpret_cast<int64_t*>(entry + 0x10) = z; }
+        z = 0;
+        if (fn_InternalBasePtr_Ctor) { fn_InternalBasePtr_Ctor(&z, nullptr);
+            *reinterpret_cast<int64_t*>(entry + 0x18) = z; }
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void OrchardComponent_InitFuncs() {

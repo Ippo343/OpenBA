@@ -44,7 +44,8 @@ For EACH address in your batch:
    `// Reimpl of FUN_140xxxxx (<one-line purpose>)` comment.
 4. **Use existing engine funcs** for allocator/string/serializer calls. They live in
    `engine/funcs/engine_funcs.h` (already included by these files). Notably:
-   - Allocation: use `fn_MemAllocStatic(size, align)` / `fn_MemFreeStatic(ptr)`.
+   - Allocation: `fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align)` to alloc,
+     `fn_MemFreeStatic(ptr)` to free. **There is NO `fn_MemAllocStatic` — do not use it.**
      **GOTCHA: `fn_MemFree` is never resolved (always NULL) — use `fn_MemFreeStatic`.**
    - Check what's already declared before adding anything.
 5. **Register** the address in YOUR batch reg file (see below). NEVER edit

@@ -314,6 +314,248 @@ void CitizenAIComponent_Update(CitizenAIComponent* self, int64_t* pDeltaTime) {
 }
 
 // ============================================================
+// Callee reimpls (Component reg wave, batch "people")
+// These are the exe helper bodies the call sites above resolve+call.
+// Ported faithfully from Ghidra; sub-deps resolved via guarded ResolveAddr
+// (same pattern as the rest of code/Game). Registered in reg_component_people.cpp.
+// ============================================================
+
+// Shared type-ID globals used by the storage scans / finders.
+static uint32_t* s_TypeId_ResidenceComponent = nullptr; // DAT_1401c7cf0
+static uint32_t* s_TypeId_RawMaterial = nullptr;         // DAT_1401c7cb8
+
+// CheckAge sub-deps (CitizenComponent setup helpers).
+typedef void (*fn_SetupYoung_t)(void* citizen);
+typedef void (*fn_SetupAdult_t)(void* citizen);
+typedef void (*fn_SetupElder_t)(void* citizen);
+static fn_SetupYoung_t s_fn_SetupYoung = nullptr;
+static fn_SetupAdult_t s_fn_SetupAdult = nullptr;
+static fn_SetupElder_t s_fn_SetupElder = nullptr;
+
+// TransitionState sub-deps.
+typedef char (*fn_ValidateEnterState_t)(void* self, int state);
+typedef void (*fn_BuildCandidateList_t)(void* self, int64_t* outList, char param);
+static fn_ValidateEnterState_t s_fn_ValidateEnterState = nullptr;
+static fn_BuildCandidateList_t s_fn_BuildCandidateList = nullptr;
+
+static bool s_calleeResolved = false;
+static void EnsureCallees() {
+    if (s_calleeResolved) return;
+    s_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cf0));
+    s_TypeId_RawMaterial         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
+    s_fn_SetupYoung = reinterpret_cast<fn_SetupYoung_t>(ResolveAddr(Module::Exe, 0x140115110));
+    s_fn_SetupAdult = reinterpret_cast<fn_SetupAdult_t>(ResolveAddr(Module::Exe, 0x1401151a0));
+    s_fn_SetupElder = reinterpret_cast<fn_SetupElder_t>(ResolveAddr(Module::Exe, 0x140115230));
+    s_fn_ValidateEnterState = reinterpret_cast<fn_ValidateEnterState_t>(ResolveAddr(Module::Exe, 0x14010f1f0));
+    s_fn_BuildCandidateList = reinterpret_cast<fn_BuildCandidateList_t>(ResolveAddr(Module::Exe, 0x14010dca0));
+    s_calleeResolved = true;
+}
+
+// Reimpl of Entity_FindComponent_Storage (0x140008090):
+// scan an entity's component list for the ResidenceComponent type (DAT_1401c7cf0)
+// and construct an InternalBasePtr (param_2) to it (or null).
+void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
+    EnsureCallees();
+    uint8_t* e = reinterpret_cast<uint8_t*>(entity);
+    void* found = nullptr;
+    int count = *reinterpret_cast<int*>(e + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
+    for (int i = 0; i < count; i++) {
+        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(ibp);
+        int64_t comp = *reinterpret_cast<int64_t*>(ibp);
+        int64_t vt = *reinterpret_cast<int64_t*>(comp);
+        typedef uint32_t (*getType_t)(void*);
+        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+        if (tid == *s_TypeId_ResidenceComponent) {
+            void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)i * 8);
+            fn_InternalBasePtr_CheckPtr(ibp2);
+            void* resolved = *ibp2;
+            if (fn_IsDerivedFrom(resolved, *s_TypeId_ResidenceComponent)) {
+                found = resolved;
+            }
+            break;
+        }
+    }
+    fn_InternalBasePtr_Ctor(outIBP, found);
+    return outIBP;
+}
+
+// Reimpl of StorageComponent_QueryCount (0x14012cf10):
+// O(n*m) inventory scan — sums (RawMaterialDescription.unitVolume * slotCount)
+// across all inventory rows. Reads type via vtable+0x10, filters by DAT_1401c7cb8.
+int CitizenComp_StorageComponent_QueryCount(int64_t self) {
+    EnsureCallees();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    int total = 0;
+    int rowCount = *reinterpret_cast<int*>(s + 0x30);
+    if (0 < rowCount) {
+        int64_t off = 0;
+        int row = 0;
+        do {
+            int64_t arr = *reinterpret_cast<int64_t*>(s + 0x28);
+            int64_t inv = *reinterpret_cast<int64_t*>(arr + off);
+            void* mat = nullptr;
+            int n = *reinterpret_cast<int*>(inv + 0x30);
+            for (int j = 0; j < n; j++) {
+                int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(inv + 0x28) + (int64_t)j * 8);
+                int64_t vt = **reinterpret_cast<int64_t**>(slot);
+                typedef uint32_t (*getType_t)(void*);
+                uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(*slot));
+                if (tid == *s_TypeId_RawMaterial) {
+                    void* obj = reinterpret_cast<void*>(*slot);
+                    mat = fn_IsDerivedFrom(obj, *s_TypeId_RawMaterial) ? obj : nullptr;
+                    break;
+                }
+            }
+            row++;
+            off += 0x10;
+            int unitVol = mat ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(mat) + 0x48) : 0;
+            int slotCount = *reinterpret_cast<int*>(arr + (off - 8));
+            total += unitVol * slotCount;
+        } while (row < *reinterpret_cast<int*>(s + 0x30));
+    }
+    return total;
+}
+
+// Reimpl of Storage_GetResourceCount (0x14012a9d0):
+// finds the entity's residence/storage component then sums (capacity - reserved)
+// of inventory rows whose material has the "is food/resource" flag (bit 5 at +0x5c).
+int CitizenComp_Storage_GetResourceCount(int64_t self) {
+    EnsureCallees();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    int64_t outIBP = 0;
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
+    CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(s + 0x10), &outIBP);
+    int total = 0;
+    fn_InternalBasePtr_CheckPtr(&outIBP);
+    int rowCount = *reinterpret_cast<int*>(outIBP + 0x30);
+    if (0 < rowCount) {
+        int64_t off = 0;
+        int row = 0;
+        do {
+            fn_InternalBasePtr_CheckPtr(&outIBP);
+            int64_t arr = *reinterpret_cast<int64_t*>(outIBP + 0x28);
+            int64_t inv = *reinterpret_cast<int64_t*>(arr + off);
+            void* mat = nullptr;
+            int n = *reinterpret_cast<int*>(inv + 0x30);
+            for (int j = 0; j < n; j++) {
+                int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(inv + 0x28) + (int64_t)j * 8);
+                int64_t vt = **reinterpret_cast<int64_t**>(slot);
+                typedef uint32_t (*getType_t)(void*);
+                uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(*slot));
+                if (tid == *s_TypeId_RawMaterial) {
+                    void* obj = reinterpret_cast<void*>(*slot);
+                    mat = fn_IsDerivedFrom(obj, *s_TypeId_RawMaterial) ? obj : nullptr;
+                    break;
+                }
+            }
+            if (mat && (*reinterpret_cast<unsigned int*>(reinterpret_cast<uint8_t*>(mat) + 0x5c) >> 5 & 1) != 0) {
+                total += (*reinterpret_cast<int*>(arr + 8 + off) - *reinterpret_cast<int*>(arr + 0xc + off));
+            }
+            row++;
+            off += 0x10;
+            fn_InternalBasePtr_CheckPtr(&outIBP);
+        } while (row < *reinterpret_cast<int*>(outIBP + 0x30));
+    }
+    return total;
+}
+
+// Reimpl of CitizenAIComponent_TransitionState (0x14010db90):
+// state-machine transition. Tries the queued state (+0x2c); if invalid, builds a
+// candidate list and enters the first state whose machine has >0 actions.
+void CitizenComp_CitizenAIComponent_TransitionState(int64_t selfV, char param) {
+    EnsureCallees();
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+    int queued = *reinterpret_cast<int*>(self + 0x2c);
+    char ok = 0;
+    if (queued >= 0 && s_fn_ValidateEnterState) {
+        ok = s_fn_ValidateEnterState(self, queued);
+    }
+    if (queued < 0 || ok == '\0') {
+        int idx = 0;
+        int64_t list[2] = {0, 0};  // {ptr, count(low32)}
+        if (s_fn_BuildCandidateList) s_fn_BuildCandidateList(self, list, param);
+        int* arr = reinterpret_cast<int*>(list[0]);
+        int n = static_cast<int>(list[1]);
+        int* p = arr;
+        if (0 < n) {
+            do {
+                if (s_fn_ValidateEnterState) s_fn_ValidateEnterState(self, *p);
+                fn_InternalBasePtr_CheckPtr(self + 0x38);
+                int64_t cz = *reinterpret_cast<int64_t*>(self + 0x38);
+                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cz + 0x278));
+                if (0 < *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(cz + 0x278) + 0x60) + 1) {
+                    *reinterpret_cast<int*>(self + 0x28) = arr[(int64_t)idx * 3];
+                    break;
+                }
+                idx++;
+                p += 3;
+            } while (idx < n);
+        }
+        fn_MemFreeStatic(arr);
+    } else {
+        *reinterpret_cast<int*>(self + 0x28) = *reinterpret_cast<int*>(self + 0x2c);
+        *reinterpret_cast<int*>(self + 0x2c) = -1;
+    }
+}
+
+// Reimpl of CitizenAIComponent_CheckEducation (0x14010f7a0):
+// raises a citizen's education level toward the residence cap if storage allows.
+void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV) {
+    EnsureCallees();
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+    void* dataPtr = self + 0x38;
+    fn_InternalBasePtr_CheckPtr(dataPtr);
+    int64_t res10 = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x10);
+    fn_InternalBasePtr_CheckPtr(&res10);
+    int64_t res8 = 0;
+    CitizenComp_Entity_FindComponent_Storage(res10, &res8);
+    fn_InternalBasePtr_CheckPtr(dataPtr);
+    int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x1f0) + 0x50);
+    fn_InternalBasePtr_CheckPtr(&res8);
+    if (*reinterpret_cast<int*>(res8 + 0x38) != cap) {
+        fn_InternalBasePtr_CheckPtr(dataPtr);
+        int64_t d = *reinterpret_cast<int64_t*>(dataPtr);
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(d + 0x10));
+        int64_t res10b = 0;
+        CitizenComp_Entity_FindComponent_Storage(*reinterpret_cast<int64_t*>(d + 0x10), &res10b);
+        fn_InternalBasePtr_CheckPtr(&res10b);
+        int cnt = CitizenComp_StorageComponent_QueryCount(res10b);
+        if (cnt < cap) {
+            fn_InternalBasePtr_CheckPtr(&res8);
+            *reinterpret_cast<int*>(res8 + 0x38) = cap;
+        }
+    }
+}
+
+// Reimpl of CitizenAIComponent_CheckAge (0x14010f890):
+// routes the citizen to young/adult/elder setup based on age vs description
+// threshold (+0x44) and whether the adult flag (+0x208) is set.
+void CitizenComp_CitizenAIComponent_CheckAge(int64_t selfV) {
+    EnsureCallees();
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+    void* dataPtr = self + 0x38;
+    fn_InternalBasePtr_CheckPtr(dataPtr);
+    int64_t d = *reinterpret_cast<int64_t*>(dataPtr);
+    float ageThresh = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(d + 0x288) + 0x44);
+    float age = *reinterpret_cast<float*>(d + 0x3c);
+    if (ageThresh <= age && *reinterpret_cast<int64_t*>(d + 0x208) == 0) {
+        fn_InternalBasePtr_CheckPtr(dataPtr);
+        if (s_fn_SetupYoung) s_fn_SetupYoung(*reinterpret_cast<void**>(dataPtr));
+        return;
+    }
+    fn_InternalBasePtr_CheckPtr(dataPtr);
+    if (*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x208) != 0) {
+        fn_InternalBasePtr_CheckPtr(dataPtr);
+        if (s_fn_SetupAdult) s_fn_SetupAdult(*reinterpret_cast<void**>(dataPtr));
+        return;
+    }
+    fn_InternalBasePtr_CheckPtr(dataPtr);
+    if (s_fn_SetupElder) s_fn_SetupElder(*reinterpret_cast<void**>(dataPtr));
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void CitizenAIComponent_InitFuncs() {

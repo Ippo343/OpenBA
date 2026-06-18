@@ -239,6 +239,199 @@ void BuildComponent_Draw(BuildComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_140017550 (BuildComponent_helper_7550:
+//   linear search of an InternalBasePtr array for a matching entity)
+// ============================================================
+// param_1 = {void* ptr (+0), int count (+8)}. param_2 = InternalBasePtr* to match.
+// Returns the index of the slot whose pointer equals *param_2, or -1.
+int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
+    int64_t* arr = (int64_t*)arrayBase;
+    int count = (int)arr[1];
+    for (int i = 0; i < count; i++) {
+        int64_t base = arr[0];
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityPtr);
+        if (*(int64_t*)(base + (int64_t)i * 8) == *(int64_t*)entityPtr) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// ============================================================
+// Reimpl of FUN_140108d40 / body 0x140108720 (BuildComponent::Draw:
+//   rebuild the worker/storage child lists and refresh build progress)
+// ============================================================
+// Faithful port of the Ghidra decompilation. All exe-internal helpers are resolved
+// guarded; if any is unavailable the corresponding step is skipped.
+typedef void* (*fn_BC_FindComp_t)(int64_t entity, void* retbuf);   // returns retbuf
+typedef void (*fn_BC_AddToList_t)(void* arrayField, int newCount, void* ibp);
+typedef void (*fn_BC_Entity8f50_t)(int64_t* ptr);
+static fn_BC_FindComp_t  s_fn_BC_FindMulti = nullptr;   // 0x140003f60 (MultiObject)
+static fn_BC_FindComp_t  s_fn_BC_Find26a30 = nullptr;   // 0x140026a30
+static fn_BC_FindComp_t  s_fn_BC_FindWork  = nullptr;   // 0x140004740 (Workplace)
+static fn_BC_AddToList_t s_fn_BC_AddToList = nullptr;   // 0x140003110
+static fn_BC_Entity8f50_t s_fn_BC_Entity8f50 = nullptr; // 0x140128f50
+static uint32_t* s_pTId_MultiObj = nullptr;   // DAT_1401c7a88
+static uint32_t* s_pTId_Build    = nullptr;   // DWORD_1401c7a50
+static uint32_t* s_pTId_Storage  = nullptr;   // DAT_1401c7c10
+static uint32_t* s_pTId_Workplace = nullptr;  // DWORD_1401c7ac0
+static bool s_bcDrawResolved = false;
+static void EnsureDrawHelpers() {
+    if (s_bcDrawResolved) return;
+    s_fn_BC_FindMulti = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_BC_Find26a30 = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140026a30));
+    s_fn_BC_FindWork  = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
+    s_fn_BC_AddToList = reinterpret_cast<fn_BC_AddToList_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_BC_Entity8f50 = reinterpret_cast<fn_BC_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
+    s_pTId_MultiObj  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
+    s_pTId_Build     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
+    s_pTId_Storage   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c10));
+    s_pTId_Workplace = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ac0));
+    s_bcDrawResolved = true;
+}
+
+// Scan an entity's component list (compHost+0x30 array, +0x38 count) for the
+// first component whose GetTypeId (vtable+0x10) == typeId; verify with IsDerivedFrom.
+static void* BC_FindComponentByType(int64_t compHost, uint32_t* pTypeId) {
+    if (!pTypeId) return nullptr;
+    int count = *(int*)(compHost + 0x38);
+    int64_t arr = *(int64_t*)(compHost + 0x30);
+    for (int i = 0; i < count; i++) {
+        int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = (void*)*slot;
+        if (!comp) continue;
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (tid == *pTypeId) {
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pTypeId)) return comp;
+            return nullptr;
+        }
+    }
+    return nullptr;
+}
+
+void BuildComponent_DrawReimpl(void* selfP) {
+    EnsureHelpers();
+    EnsureDrawHelpers();
+    int64_t* self = (int64_t*)selfP;
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    if (*(uint8_t*)(gw + 0xd0) & 1) return;   // debug-disabled
+
+    // --- Stage 1: if the owner has a MultiObjectComponent with children, append
+    //     its first child's Build/Storage child-host to our work lists.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+    int64_t multiBuf = 0;
+    if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
+    if (multiBuf != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+        if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&multiBuf);
+        void* objBase = *(void**)(multiBuf + 0x18);
+        void* multi = (fn_IsDerivedFrom && s_pTId_MultiObj &&
+                       fn_IsDerivedFrom(objBase, *s_pTId_MultiObj)) ? objBase : nullptr;
+        if (multi && *(int*)((uintptr_t)multi + 0x28) > 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+            int64_t b1 = 0;
+            if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &b1);
+            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xb, (int)self[0xc] + 1, &b1);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+            int64_t b2 = 0;
+            if (s_fn_BC_Find26a30) s_fn_BC_Find26a30(self[2], &b2);
+            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xd, (int)self[0xe] + 1, &b2);
+        }
+    }
+
+    // --- Stage 2: iterate the owner workplace's job hosts, collecting the
+    //     Build component and Storage component of each into +0xb / +0xd lists.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+    int64_t workBuf = 0;
+    if (s_fn_BC_FindWork) s_fn_BC_FindWork(self[2], &workBuf);
+    if (workBuf != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+        if (s_fn_BC_FindWork) s_fn_BC_FindWork(self[2], &workBuf);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
+        int jobCount = *(int*)(workBuf + 0x50);
+        for (int j = 0; j < jobCount; j++) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
+            int64_t host = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host);
+            void* buildComp = BC_FindComponentByType(host, s_pTId_Build);
+            int64_t ib1 = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib1, buildComp);
+            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xb, (int)self[0xc] + 1, &ib1);
+
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
+            int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host2);
+            void* storeComp = BC_FindComponentByType(host2, s_pTId_Storage);
+            int64_t ib2 = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib2, storeComp);
+            if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xd, (int)self[0xe] + 1, &ib2);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
+        }
+    }
+
+    // --- Stage 3: walk our collected Build list (+0xb / count +0xc), driving each
+    //     child's job hosts; finalise Storage list entries via Entity_impl_8f50.
+    int buildCount = (int)self[0xc];
+    for (int i = 0; i < buildCount; i++) {
+        int64_t arrB = self[0xb];
+        int64_t* slot = (int64_t*)(arrB + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        int64_t* node = (int64_t*)*slot;
+        int16_t mark = *(int16_t*)((uintptr_t)node + 0x166);
+        if (mark == -1) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node + 2);
+            int64_t host = node[2];
+            int hc = *(int*)(host + 0x38);
+            for (int k = 0; k < hc; k++) {
+                int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&h);
+                typedef void (*VFn_t)(void*);
+                ((VFn_t)(*(uintptr_t*)(*h + 0x60)))(h);
+            }
+        } else {
+            if (mark >= 0) {
+                typedef void (*VFn38_t)(int64_t*);
+                ((VFn38_t)(*(uintptr_t*)(*node + 0x38)))(node);
+            }
+            *(int16_t*)((uintptr_t)node + 0x166) = (int16_t)0xffff;
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(node + 2);
+            int64_t host = node[2];
+            int hc = *(int*)(host + 0x38);
+            for (int k = 0; k < hc; k++) {
+                int64_t* h = *(int64_t**)(*(int64_t*)(host + 0x30) + (int64_t)k * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&h);
+                typedef void (*VFn_t)(void*, int);
+                ((VFn_t)(*(uintptr_t*)(*h + 0x60)))(h, 0);
+            }
+        }
+        int64_t* sslot = (int64_t*)(self[0xd] + (int64_t)i * 8);
+        if (*sslot != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sslot);
+            if (s_fn_BC_Entity8f50) s_fn_BC_Entity8f50((int64_t*)*sslot);
+        }
+    }
+
+    // --- Stage 4: progress = 1; then read the WorkplaceComponent's progress at +0xb*8.
+    *(int*)((uintptr_t)self + 0x4c) = 1;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+    void* wp = BC_FindComponentByType(self[2], s_pTId_Workplace);
+    int64_t wpIbp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp);
+    if (wpIbp != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
+        void* wp2 = BC_FindComponentByType(self[2], s_pTId_Workplace);
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp2);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
+        *(int*)((uintptr_t)self + 0x4c) = (int)((int64_t*)wpIbp)[0xb];
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void BuildComponent_InitFuncs() {

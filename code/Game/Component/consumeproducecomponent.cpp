@@ -262,6 +262,78 @@ void ConsumeProduceComponent_Serialize(ConsumeProduceComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_140023a00 (ConsumeProduceComponent_sub_3a00:
+//   grow/shrink a 4-byte-element (int/float) array; copies only the overlap,
+//   new tail elements are left for the caller to initialise)
+// ============================================================
+void ConsumeProduceComponent_ResizeArray(void* arrayFieldPtr, int newCount) {
+    int64_t* field = (int64_t*)arrayFieldPtr;   // [0]=ptr, [1] low=count, high=capacity
+    int oldCount = (int)field[1];
+    if (newCount == oldCount) return;
+
+    int32_t* oldBuf = (int32_t*)field[0];
+    *(int*)((uintptr_t)field + 8) = newCount;
+    if (*(int*)((uintptr_t)field + 0xc) < newCount) {
+        *(int*)((uintptr_t)field + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *(int*)((uintptr_t)field + 0xc) = newCount * 3;
+        }
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                               (uint64_t)((int64_t)*(int*)((uintptr_t)field + 0xc) << 2), 4);
+        field[0] = (int64_t)nb;
+    }
+
+    int start = (oldBuf == (int32_t*)field[0]) ? oldCount : 0;
+    int32_t* dst = (int32_t*)field[0];
+    for (int i = start; i < newCount; i++) {
+        if (i < oldCount && (dst + i) != nullptr) {
+            dst[i] = oldBuf[i];
+        }
+    }
+
+    if (oldBuf != (int32_t*)field[0]) {
+        if (oldBuf) fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
+// Reimpl of FUN_14012b4a0 (ResourceProduceComponent_Controller_Slot13:
+//   base Shutdown/serialize — Component base + empty v0 block + bool at +0x48)
+// ============================================================
+void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
+    EnsureHelpers();
+    // Component base serialize
+    typedef void (*fn_CompSer_t)(void*, void*);
+    static fn_CompSer_t s_compSer = nullptr;
+    if (!s_compSer)
+        s_compSer = reinterpret_cast<fn_CompSer_t>(ResolveAddr(Module::Exe, 0x1401189b0));
+    if (s_compSer) s_compSer(self, stream);
+
+    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
+
+    // Empty version-0 block
+    uint8_t ser0[24];
+    s_fn_Serializer_Ctor(ser0, stream, 0);
+    s_fn_Serializer_Dtor(ser0);
+
+    // Version-0 block with a single bool at +0x48
+    uint8_t ser1[24];
+    s_fn_Serializer_Ctor(ser1, stream, 0);
+    // bool serialize: reuse the int-serialize dispatch is wrong; use the serializer
+    // vtable bool path via the dedicated dispatch slot 0x140152a58.
+    {
+        typedef void (*fn_SerBool_t)(void* ser, bool* field, const char* name);
+        static fn_SerBool_t s_serBool = nullptr;
+        if (!s_serBool) {
+            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a58);
+            if (slot) s_serBool = *reinterpret_cast<fn_SerBool_t*>(slot);
+        }
+        if (s_serBool) s_serBool(ser1, (bool*)((uintptr_t)self + 0x48), nullptr);
+    }
+    s_fn_Serializer_Dtor(ser1);
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void ConsumeProduceComponent_InitFuncs() {

@@ -58,6 +58,74 @@ void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* strea
 }
 
 // ============================================================
+// Reimpl of FUN_1401189b0 (Component_Serialize — the shared Component base
+//   serialize used by every Component subclass)
+// ============================================================
+// Persist the Object base, then serialize the owner InternalBasePtr (+0x10) with a
+// ComponentEntity type-check, a uint capability word (+0x20), and the external
+// description reference (+0x18) via Component_helper_1d10.
+// Dispatch slots (exe .rdata): Persist 0x1401515e0, Serializer ctor 0x140152ad8,
+// IBP::Serialize 0x140152aa0, IsDerivedFrom 0x140152a98, Serialize-uint 0x140152a50,
+// Serializer dtor 0x140152ad0. Direct: helper_1d10 0x140031d10.
+typedef void (*fn_CS_Persist_t)(void* self, void* stream);
+typedef void (*fn_CS_Ctor_t)(void* ser, void* stream, int ver);
+typedef void (*fn_CS_IBPSer_t)(void* ibp, void* ser);
+typedef bool (*fn_CS_IsDerived_t)(void* obj, uint32_t tid);
+typedef void (*fn_CS_SerUint_t)(void* ser, uint32_t* field, const char* name);
+typedef void (*fn_CS_Helper1d10_t)(void* extRef, void* ser);
+typedef void (*fn_CS_Dtor_t)(void* ser);
+static fn_CS_Persist_t    s_cs_Persist = nullptr;
+static fn_CS_Ctor_t      s_cs_Ctor = nullptr;
+static fn_CS_IBPSer_t    s_cs_IBPSer = nullptr;
+static fn_CS_IsDerived_t  s_cs_IsDerived = nullptr;
+static fn_CS_SerUint_t   s_cs_SerUint = nullptr;
+static fn_CS_Helper1d10_t s_cs_Helper1d10 = nullptr;
+static fn_CS_Dtor_t      s_cs_Dtor = nullptr;
+static uint32_t*         s_cs_pTId_CompEntity = nullptr;  // DWORD_1401c5d70
+static bool s_csResolved = false;
+static void EnsureComponentSerializeHelpers() {
+    if (s_csResolved) return;
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x1401515e0);
+    if (slot) s_cs_Persist = *reinterpret_cast<fn_CS_Persist_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152ad8);
+    if (slot) s_cs_Ctor = *reinterpret_cast<fn_CS_Ctor_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152aa0);
+    if (slot) s_cs_IBPSer = *reinterpret_cast<fn_CS_IBPSer_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152a98);
+    if (slot) s_cs_IsDerived = *reinterpret_cast<fn_CS_IsDerived_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152a50);
+    if (slot) s_cs_SerUint = *reinterpret_cast<fn_CS_SerUint_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152ad0);
+    if (slot) s_cs_Dtor = *reinterpret_cast<fn_CS_Dtor_t*>(slot);
+    s_cs_Helper1d10 = reinterpret_cast<fn_CS_Helper1d10_t>(ResolveAddr(Module::Exe, 0x140031d10));
+    s_cs_pTId_CompEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
+    s_csResolved = true;
+}
+
+void Component_SerializeReimpl(void* selfP, void* stream) {
+    EnsureComponentSerializeHelpers();
+    uintptr_t self = (uintptr_t)selfP;
+
+    if (s_cs_Persist) s_cs_Persist(selfP, stream);
+
+    uint8_t ser[24];
+    if (s_cs_Ctor) s_cs_Ctor(ser, stream, 0);
+
+    if (s_cs_IBPSer) s_cs_IBPSer((void*)(self + 0x10), ser);
+    void* owner = *(void**)(self + 0x10);
+    if (owner && s_cs_IsDerived && s_cs_pTId_CompEntity &&
+        !s_cs_IsDerived(owner, *s_cs_pTId_CompEntity)) {
+        *(uint64_t*)(self + 0x10) = 0;
+    }
+
+    if (s_cs_SerUint) s_cs_SerUint(ser, (uint32_t*)(self + 0x20), nullptr);
+    if (s_cs_Helper1d10) s_cs_Helper1d10((void*)(self + 0x18), ser);
+
+    if (s_cs_Dtor) s_cs_Dtor(ser);
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void AbsorbResourceComponent_InitFuncs() {
