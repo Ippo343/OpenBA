@@ -116,7 +116,7 @@ static void EnsureHelpers() {
     }
 
     s_fn_TileToWorld = reinterpret_cast<fn_TileToWorld_t>(
-        ResolveAddr(Module::Exe, 0x14000f3e0));
+        ResolveAddr(Module::Exe, 0x14009f3e0));  // CharacterComponent_impl_f3e0 tile->world (CALL @140056869 in StorageDisplayComponent::Draw)
 
     slot = ResolveAddr(Module::Exe, 0x140151288);
     if (slot) s_fn_FromYawPitchOffset = *reinterpret_cast<fn_FromYawPitchOffset_t*>(slot);

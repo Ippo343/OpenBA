@@ -159,13 +159,13 @@ static void EnsureHelpers() {
     // fn_MemAlloc + g_pMemAllocSingleton resolved globally in engine_funcs
 
     s_fn_WorkCtor25 = reinterpret_cast<fn_WorkCtor25_t>(
-        ResolveAddr(Module::Exe, 0x1400d3cc0));
+        ResolveAddr(Module::Exe, 0x1400f72e0));  // Work_Ctor25 (CALL @14012924b in RawMaterialComponent::Draw)
 
     s_vtable_Pickup = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x14015e430));
 
     s_fn_RegisterDrawItem = reinterpret_cast<fn_RegisterDrawItem_t>(
-        ResolveAddr(Module::Exe, 0x14009ec60));
+        ResolveAddr(Module::Exe, 0x14012ec60));  // CitizenAI_impl_ec60 register-draw-item (CALL @14012929e in RawMaterialComponent::Draw)
 
     s_initialized = true;
 }

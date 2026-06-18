@@ -202,25 +202,25 @@ static void EnsureHelpers() {
     s_fn_TryFindPartner = reinterpret_cast<fn_TryFindPartner_t>(
         ResolveAddr(Module::Exe, 0x14010fe40));
     s_fn_AssignState = reinterpret_cast<fn_AssignState_t>(
-        ResolveAddr(Module::Exe, 0x140110420));
+        ResolveAddr(Module::Exe, 0x140113af0));  // CitizenComponent::AssignState (CALL @140112f9e in Update)
     s_fn_HandleLifeEvent = reinterpret_cast<fn_HandleLifeEvent_t>(
-        ResolveAddr(Module::Exe, 0x140112450));
+        ResolveAddr(Module::Exe, 0x140116dd0));  // CitizenComponent::HandleLifeEvent (6 CALLs in Update)
     s_fn_UpdateHealth = reinterpret_cast<fn_UpdateHealth_t>(
         ResolveAddr(Module::Exe, 0x140111b90));
     s_fn_ConsumeFood = reinterpret_cast<fn_ConsumeFood_t>(
-        ResolveAddr(Module::Exe, 0x140111890));
+        ResolveAddr(Module::Exe, 0x140112990));  // CitizenComponent::ConsumeFood (CALL @1401133e7 in Update)
     s_fn_ConsumeFuel = reinterpret_cast<fn_ConsumeFuel_t>(
-        ResolveAddr(Module::Exe, 0x140111a70));
+        ResolveAddr(Module::Exe, 0x140112ae0));  // CitizenComponent::ConsumeFuel (CALL @14011342a in Update)
     s_fn_FindWorkplace = reinterpret_cast<fn_FindWorkplace_t>(
-        ResolveAddr(Module::Exe, 0x140115530));
+        ResolveAddr(Module::Exe, 0x140111590));  // CitizenComponent::FindWorkplace (CALL @140113219 in Update)
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
-        ResolveAddr(Module::Exe, 0x140115770));
+        ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
     s_fn_HealthSetFlag = reinterpret_cast<fn_HealthSetFlag_t>(
         ResolveAddr(Module::Exe, 0x14012c3f0));
     s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
-        ResolveAddr(Module::Exe, 0x140114ca0));
+        ResolveAddr(Module::Exe, 0x1401163d0));  // CitizenComponent::AssignWorkplace (7 CALLs in Update)
     s_fn_AssignHousing = reinterpret_cast<fn_AssignHousing_t>(
-        ResolveAddr(Module::Exe, 0x140114f80));
+        ResolveAddr(Module::Exe, 0x140111ee0));  // CitizenComponent::AssignHousing (CALL @140113621 in Update)
     s_fn_FindHousingUnassigned = reinterpret_cast<fn_FindHousingUnassigned_t>(
         ResolveAddr(Module::Exe, 0x14010ffc0));
     s_fn_FindHousingAssigned = reinterpret_cast<fn_FindHousingAssigned_t>(
