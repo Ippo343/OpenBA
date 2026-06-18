@@ -162,6 +162,26 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
+// Reimpl of FUN_1400c2b70 (notify each child object of a model change)
+// ============================================================
+// Iterates the InternalBasePtr array {ptr@self+0x30, count@self+0x38}. For each
+// entry: CheckPtr the IBP, then dispatch the object's vtable slot +0x60 with `param`.
+// 1:1 port of the exe helper.
+extern "C" void ModelComponentNotify_Reimpl(void* entity, int param) {
+    uint8_t* self = reinterpret_cast<uint8_t*>(entity);
+    int count = *(int*)(self + 0x38);
+    int64_t* arr = *(int64_t**)(self + 0x30);
+    for (int64_t i = 0; i < count; ++i) {
+        // local copy of arr[i] (the child object pointer); CheckPtr resolves it.
+        int64_t* obj = reinterpret_cast<int64_t*>(arr[i]);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&obj);
+        void** vtbl = reinterpret_cast<void**>(*obj);
+        typedef void (*slot60_t)(void* self, int param);
+        reinterpret_cast<slot60_t>(vtbl[0x60 / 8])(obj, param);
+    }
+}
+
+// ============================================================
 // Helper: Get MultiObjectDescription sibling component
 // ============================================================
 static void* GetMultiObjDescription(uintptr_t self) {

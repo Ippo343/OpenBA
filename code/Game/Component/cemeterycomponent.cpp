@@ -129,6 +129,32 @@ void CemeteryComponent_OnCreate(CemeteryComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_140002cc0 (CemeteryComponent list erase-by-pointer)
+// ============================================================
+// Scans the InternalBasePtr array {ptr@list+0, count@list+8} for an entry equal to
+// the resolved value of `ptrValue` and removes it, shifting the trailing entries
+// down by one slot and decrementing the count. Calls CheckPtr on the search key
+// before comparing (resolves lazy/weak pointers, mirroring the original). The exe
+// shifts via a quirky `*p=0; *p=p[1]` (effectively `p[0]=p[1]`). 1:1 port.
+extern "C" void CemeteryListErase_Reimpl(void* listBase, void* ptrValue) {
+    int64_t* list = reinterpret_cast<int64_t*>(listBase);
+    int i = 0;
+    while (i < (int)list[1]) {
+        int64_t arr = list[0];
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ptrValue);
+        if (*(int64_t*)(arr + (int64_t)i * 8) == *(int64_t*)ptrValue) {
+            for (int j = i + 1; j < (int)list[1]; ++j) {
+                int64_t* slot = (int64_t*)(list[0] + (int64_t)(j - 1) * 8);
+                if (slot) slot[0] = slot[1];
+            }
+            *(int*)(list + 1) = (int)list[1] - 1;
+            --i;
+        }
+        ++i;
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void CemeteryComponent_InitFuncs() {

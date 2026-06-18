@@ -78,6 +78,56 @@ static void* GetBuildingData(void* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_140001770 (grow/shrink the 0x10-byte-element emitter array)
+// ============================================================
+// Resizes the array {ptr@arr+0, count@arr+8, cap@arr+0xc} (stride 0x10). On grow
+// past capacity: cap = newCount (or newCount*3 when growing by exactly one from a
+// non-empty array), MemAlloc(cap*0x10, 8), copy existing elements (2 qwords each),
+// zero-init the new tail with element layout [u32 0][f32 1.0][u64 0]. The exe body
+// is hand-unrolled x4; this is the equivalent scalar 1:1 port.
+extern "C" void AmbientEmitterResize_Reimpl(void* arrayBase, int newCount) {
+    uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
+    int oldCount = *(int*)(arr + 8);
+    if (newCount == oldCount) return;
+
+    void* oldPtr = *(void**)(arr + 0);
+    *(int*)(arr + 8) = newCount;
+    if (*(int*)(arr + 0xc) < newCount) {
+        *(int*)(arr + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *(int*)(arr + 0xc) = newCount * 3;
+        }
+        if (fn_MemAlloc && g_pMemAllocSingleton) {
+            void* newPtr = fn_MemAlloc(g_pMemAllocSingleton,
+                                       (uint64_t)(*(int*)(arr + 0xc)) << 4, 8);
+            *(void**)(arr + 0) = newPtr;
+        }
+    }
+
+    int start = 0;
+    if (oldPtr == *(void**)(arr + 0)) start = oldCount;  // grown in place
+
+    uint8_t* base = *(uint8_t**)(arr + 0);
+    for (int i = start; i < newCount; ++i) {
+        uint8_t* dst = base + (intptr_t)i * 0x10;
+        if (!dst) continue;
+        if (i < oldCount) {
+            const uint8_t* src = reinterpret_cast<const uint8_t*>(oldPtr) + (intptr_t)i * 0x10;
+            *(uint64_t*)(dst + 0) = *(const uint64_t*)(src + 0);
+            *(uint64_t*)(dst + 8) = *(const uint64_t*)(src + 8);
+        } else {
+            *(uint32_t*)(dst + 0) = 0;
+            *(uint32_t*)(dst + 4) = 0x3f800000;   // 1.0f
+            *(uint64_t*)(dst + 8) = 0;
+        }
+    }
+
+    if (oldPtr != *(void**)(arr + 0) && oldPtr && fn_MemFreeStatic) {
+        fn_MemFreeStatic(oldPtr);
+    }
+}
+
+// ============================================================
 // AmbientEmitterComponent::Shutdown (vtable slot [3], 0x140042f30)
 // ============================================================
 // Serializes:

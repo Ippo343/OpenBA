@@ -106,6 +106,27 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
+// Reimpl of FUN_1400a4d30 (MapComponent terrain-clear / rect fill)
+// ============================================================
+// Marks the grid dirty (*grid = 1) and writes `value` into the 32-bit cell grid at
+// grid+0x28 over a (w x h) rectangle anchored at (x, y). Row index is flipped:
+//   cell = (((width - y) - row - 1) * width + x + col), width @ grid+4.
+// Pure data write, no external deps. 1:1 port of the exe helper.
+extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y,
+                                       int w, int h) {
+    uint8_t* grid = reinterpret_cast<uint8_t*>(gridPtr);
+    *grid = 1;
+    int width = *(int*)(grid + 4);
+    uint32_t* cells = *(uint32_t**)(grid + 0x28);
+    for (int row = 0; row < h; ++row) {
+        for (int col = 0; col < w; ++col) {
+            int64_t idx = (int64_t)(((int64_t)width - y - row - 1) * width + x + col);
+            cells[idx] = (uint32_t)value;
+        }
+    }
+}
+
+// ============================================================
 // Helper: Get MapDescription sibling component
 // ============================================================
 // Pattern: IsDerivedFrom(self->_unk18, MapDescription typeId)

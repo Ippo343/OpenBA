@@ -59,6 +59,59 @@ static void AmbientEnvironmentDescription_EnsureHelpers() {
     s_ambientHelpersResolved = true;
 }
 
+// ============================================================
+// Reimpl of FUN_140002540 (grow/shrink the 0x28-byte-element entry array)
+// ============================================================
+// Resizes the array {ptr@arr+0, count@arr+8, cap@arr+0xc} (stride 0x28). On grow
+// past capacity: cap = newCount (or newCount*3 when growing by exactly one from a
+// non-empty array), MemAlloc(cap*0x28, 8), copy existing elements, zero-init the new
+// tail with elem+0x20 = 1 default, free the old block. 1:1 port of the exe helper.
+extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
+    uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
+    int oldCount = *(int*)(arr + 8);
+    if (newCount == oldCount) return;
+
+    void* oldPtr = *(void**)(arr + 0);
+    *(int*)(arr + 8) = newCount;
+    if (*(int*)(arr + 0xc) < newCount) {
+        *(int*)(arr + 0xc) = newCount;
+        if (newCount == oldCount + 1 && oldCount != 0) {
+            *(int*)(arr + 0xc) = newCount * 3;
+        }
+        if (fn_MemAlloc && g_pMemAllocSingleton) {
+            void* newPtr = fn_MemAlloc(g_pMemAllocSingleton,
+                                       (uint64_t)(*(int*)(arr + 0xc)) * 0x28, 8);
+            *(void**)(arr + 0) = newPtr;
+        }
+    }
+
+    int start = 0;
+    if (oldPtr == *(void**)(arr + 0)) start = oldCount;  // grown in place: keep existing
+
+    uint8_t* base = *(uint8_t**)(arr + 0);
+    for (int i = start; i < newCount; ++i) {
+        uint8_t* dst = base + (intptr_t)i * 0x28;
+        if (!dst) continue;
+        if (i < oldCount) {
+            // copy old element (5 qwords = 0x28 bytes)
+            const uint8_t* src = reinterpret_cast<const uint8_t*>(oldPtr) + (intptr_t)i * 0x28;
+            for (int q = 0; q < 5; ++q)
+                *(uint64_t*)(dst + q * 8) = *(const uint64_t*)(src + q * 8);
+        } else {
+            // zero-init new element, +0x20 = 1 default
+            *(uint32_t*)(dst + 0x00) = 0;
+            *(uint64_t*)(dst + 0x08) = 0;
+            *(uint64_t*)(dst + 0x10) = 0;
+            *(uint64_t*)(dst + 0x18) = 0;
+            *(uint32_t*)(dst + 0x20) = 1;
+        }
+    }
+
+    if (oldPtr != *(void**)(arr + 0) && oldPtr && fn_MemFreeStatic) {
+        fn_MemFreeStatic(oldPtr);
+    }
+}
+
 static void AmbientEnvironmentDescription_Init(void* self) {
     fn_External_External(self);
     static void* s_vtable = nullptr;
