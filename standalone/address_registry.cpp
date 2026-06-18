@@ -55,6 +55,7 @@ extern "C" {
     void RegisterStatGoalVtable();
     void RegisterTimeGoalVtable();
     void RegisterScenarioVtable();
+    void RegisterToolbarVtable();
     void RegisterBuildingGoalVtable();
     void RegisterPopulationGoalVtable();
     void RegisterTimeGoalInstanceVtable();
@@ -845,6 +846,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterStatGoalVtable();
     RegisterTimeGoalVtable();
     RegisterScenarioVtable();
+    RegisterToolbarVtable();
     RegisterBuildingGoalVtable();
     RegisterPopulationGoalVtable();
     RegisterTimeGoalInstanceVtable();

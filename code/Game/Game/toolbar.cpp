@@ -209,3 +209,82 @@ void* Toolbar_Slot8(Toolbar* self) {
 
     return self;
 }
+
+// ============================================================
+// Standalone factory + type registration
+// ============================================================
+// Required so the in-game resource preload (UpdateLoop::LoadResources, the
+// "Game/Game" group enabled by BANISHED_GAME_PRELOAD) can instantiate a Toolbar
+// when External::Load reads Game\Toolbar.rsc out of the resource tree. Without
+// it the loader hits `[NullFactory] Hit for type: Toolbar` -> IsDerivedFrom(NULL)
+// -> crash. Mirrors the Scenario/NameDatabase factory-cascade pattern.
+//
+// Original registration (Toolbar_RegisterType @0x14014d410):
+//   BaseTypeInfo(&TypeInfo_Toolbar, "Toolbar", "Object::External",
+//                null, Toolbar_Factory(0x140024ba0), Toolbar_Cleanup).
+// Vtable 0x140160120 is a 9-slot Object::External layout (byte-verified):
+//   +0x00 Dtor(0x140024c10) +0x10 GetTypeId(0x140024b80, =TypeInfo_Toolbar)
+//   +0x18 GetFileVersion(0x1400d2120, =4) +0x28 Serialize(0x1400d2010)
+//   +0x30 Cleanup(0x140024bf0) +0x40 Init(0x140024be0).
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// Slot2 (vtable +0x10): GetTypeId — original returns TypeInfo_Toolbar; standalone
+// reads it from REGISTER_TYPE storage.
+static uint32_t Toolbar_GetTypeId(void* /*self*/) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("Toolbar");
+    return cached;
+}
+
+// Slot3 (vtable +0x18): GetFileVersion — original (0x1400d2120) returns 4.
+// External::Load compares this against the version word in the resource data.
+static uint32_t Toolbar_GetFileVersion(void* /*self*/) {
+    return 4;
+}
+
+// Slot8 (vtable +0x40): in-place Init wrapper with the original's null guard,
+// returning self (raw vtable slot signature).
+static void* Toolbar_Slot8_Init(void* self) {
+    if (self) Toolbar_Slot8(reinterpret_cast<Toolbar*>(self));
+    return self;
+}
+
+// 9-slot vtable matching exe 0x140160120 (Object::External base).
+static void* g_Toolbar_Vtable[9] = {
+    reinterpret_cast<void*>(&Toolbar_Dtor),           // +0x00 Dtor
+    nullptr,                                           // +0x08 Slot1
+    reinterpret_cast<void*>(&Toolbar_GetTypeId),       // +0x10 Slot2 GetTypeId
+    reinterpret_cast<void*>(&Toolbar_GetFileVersion),  // +0x18 Slot3 GetFileVersion
+    nullptr,                                           // +0x20 Slot4 (base thunk)
+    reinterpret_cast<void*>(&Toolbar_Serialize),       // +0x28 Slot5 Serialize
+    reinterpret_cast<void*>(&Toolbar_Cleanup),         // +0x30 Slot6 Cleanup
+    nullptr,                                           // +0x38 Slot7
+    reinterpret_cast<void*>(&Toolbar_Slot8_Init),      // +0x40 Slot8 Init
+};
+
+extern "C" void RegisterToolbarVtable() {
+    RegisterExeAddr(ToolbarAddr::Vtable, reinterpret_cast<uintptr_t>(g_Toolbar_Vtable));
+}
+
+extern "C" void* Toolbar_Factory(void) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);  // Toolbar size = 0x68
+    if (!p) return nullptr;
+    Toolbar_Init(reinterpret_cast<Toolbar*>(p));
+    return p;
+}
+
+extern "C" void* Toolbar_CreateInPlace(void* memory) {
+    if (!memory) return nullptr;
+    Toolbar_Init(reinterpret_cast<Toolbar*>(memory));
+    return memory;
+}
+
+// Parent "Object::External" matches the original Toolbar_RegisterType.
+REGISTER_TYPE(Toolbar, "Object::External",
+              &Toolbar_Factory, &Toolbar_CreateInPlace);
+
+#endif // STANDALONE_EXE

@@ -135,7 +135,7 @@ REGISTER_NULL_FACTORY(PickupStoredRawMaterial, "Action");  // 14014d310 PickupSt
 REGISTER_NULL_FACTORY(RemoveAnimal, "Action");  // 14014d350 RemoveAnimal_RegisterType
 REGISTER_NULL_FACTORY(RemoveNaturalResource, "Action");  // 14014d390 RemoveNaturalResource_RegisterType
 REGISTER_NULL_FACTORY(SendComponentMessage, "Action");  // 14014d3d0 SendComponentMessage_RegisterType
-REGISTER_NULL_FACTORY(Toolbar, "Object::External");  // 14014d410 Toolbar_RegisterType
+// Toolbar: real standalone factory in code/Game/Game/toolbar.cpp (hand-removed; factory cascade for BANISHED_GAME_PRELOAD). // 14014d410 Toolbar_RegisterType
 REGISTER_NULL_FACTORY(Tornado, "Graphics::Particle");  // 14014d450 Toolbar_StaticInit
 REGISTER_NULL_FACTORY(FencedTool, "DragTool");  // 14014d690 FencedTool_RegisterType
 REGISTER_NULL_FACTORY(PathTool, "Tool");  // 14014d6d0 PathTool_RegisterType

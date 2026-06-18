@@ -27,6 +27,7 @@
 #include <cstring>
 #include <cmath>
 #include <atomic>
+#include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -527,19 +528,34 @@ static inline void* AllocSub(uint64_t size, int align) {
 // GameUpdateLoop::Load (0x140096b00) — orchestration
 // ============================================================
 extern "C" void GameUpdateLoop_Load(void* loopVoid) {
-    // Idempotency guard: with the engine resource preload skipped
-    // (BANISHED_SKIP_GAME_PRELOAD), the Runtime Engine::Loader thread finishes
-    // LoadResources fast and ALSO dispatches the loop's Load (+0x30), so this runs
-    // CONCURRENTLY with the main-thread AsyncLoader build on the SAME loop —
-    // racily double-spawning into the entity buckets (null entries → crash in
-    // EntityList_Update). Atomically claim each loop so it is built exactly once;
-    // a duplicate/concurrent dispatch for the same loop returns immediately.
+    // Single-owner build guard. The loop's Load (+0x30) is dispatched TWICE,
+    // concurrently, on the SAME GameUpdateLoop (confirmed 2026-06-17, two distinct
+    // tids reach here per game-load):
+    //   (1) our standalone AsyncLoader worker — Stub_Startup step 3 calls
+    //       AsyncLoader::StartAsyncLoad(next) → next->vtable[+0x30](next).
+    //   (2) the Runtime Engine::Loader thread — spawned INSIDE
+    //       fn_DialogLoaderLoopT_Startup's Loader::Load(m_nextLoop); after
+    //       UpdateLoop::LoadResources (fast, since GetResourceFilename returns null
+    //       with the preload off) Loader::Run dispatches m_nextLoop->Load.
+    // Both run identical idempotent build code, so the OUTCOME is correct whichever
+    // wins — but unguarded they double-spawn into the entity buckets (null entries
+    // → crash in EntityList_Update). The ideal fix (stop dispatcher #2 at its
+    // source) is blocked: nulling m_nextLoop across DialogLoaderLoopT::Startup
+    // crashes it (Startup derefs m_nextLoop for dialog creation, not just the
+    // loader) and its internal Loader::Load can't be cleanly intercepted. So we
+    // guard at the single shared dispatch TARGET — this function — which is the
+    // clean, safe equivalent: the first caller atomically claims the loop and
+    // builds it; any later concurrent dispatch for the same loop returns at once.
     static std::atomic<void*> s_loadingLoop{nullptr};
+    unsigned long _tid = (unsigned long)GetCurrentThreadId();
     if (s_loadingLoop.exchange(loopVoid) == loopVoid) {
-        fprintf(stderr, "[GUL::Load] duplicate Load for loop=%p — skipping (already built/building)\n", loopVoid);
+        fprintf(stderr, "[GUL::Load] redundant dispatch for loop=%p tid=%lu — "
+                "rejected (loop already owned/built by the first dispatcher)\n", loopVoid, _tid);
         fflush(stderr);
         return;
     }
+    fprintf(stderr, "[GUL::Load] build owner = tid=%lu for loop=%p\n", _tid, loopVoid);
+    fflush(stderr);
 
     LoadEnsureInit();
     uint8_t* p = (uint8_t*)loopVoid;
