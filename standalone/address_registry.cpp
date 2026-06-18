@@ -356,6 +356,8 @@ extern void RegisterWorkBaseBatch();
 extern void RegisterWorkBstBatch();
 // Work cell-BST (AVL) family — reg_work_cellbst.cpp ; bodies: code/Game/Work/work_base_cellbst.cpp.
 extern void RegisterWorkCellBstBatch();
+// Work grid / assignment helpers — reg_work_grid.cpp ; bodies: code/Game/Work/work_base_grid.cpp.
+extern void RegisterWorkGridBatch();
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -374,6 +376,8 @@ static void RegisterCodeFunctions() {
     RegisterWorkBstBatch();
     // Work cell-BST (AVL) family — ClearArea insert/remove/serialize.
     RegisterWorkCellBstBatch();
+    // Work grid / assignment helpers — FindCell / TryAssignWorkplace / AutoPickup.
+    RegisterWorkGridBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
