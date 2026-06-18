@@ -1,0 +1,49 @@
+// standalone/reg_work_grid.cpp
+// Wave 2 (Work) — grid/AI/assignment sub-batch registration.
+//
+// Registers the exe addresses of World Grid / CitizenAI / assignment helpers
+// (resolved from many code/Game/Work/*.cpp call sites) to their reimplementations
+// in code/Game/Work/work_base_grid.cpp. The integrator wires RegisterWorkGridBatch()
+// into RegisterCodeFunctions() in standalone/address_registry.cpp.
+//
+// Safety: every address below was verified as a real function ENTRY in Ghidra
+// (get_function_by_address Entry == address) and is a faithful 1:1 port.
+// CitizenAI_LongTermPlan (0x140115e60) is SKIPPED — see comment below.
+#ifdef STANDALONE_EXE
+#include "resolve.h"
+#include <cstdint>
+
+// WorldGrid_FindCell (work_base_grid.cpp) — int fn(int* mapGrid, int srcCell, int destCell, uint32_t passFlags)
+extern int  WorkGrid_FindCell_9ccf0(int*, int, int, uint32_t);       // 0x14009ccf0
+
+// WorldGrid_ValidateCell (work_base_grid.cpp) — uint64_t fn(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell)
+extern uint64_t WorkGrid_ValidateCell_a00f0(int*, uint32_t, uint32_t, int);  // 0x1400a00f0
+
+// Map_CalcDistance (work_base_grid.cpp) — int fn(int* mapGrid, uint32_t cellA, uint32_t cellB)
+extern int  WorkGrid_CalcDistance_8830(int*, uint32_t, uint32_t);    // 0x140008830
+
+// RegisterWork / CitizenAI BST insert (work_base_grid.cpp) — void fn(void* bstRoot, void* entityIBP, void* citizenIBP)
+extern void WorkGrid_RegisterWork_1a30(void*, void*, void*);          // 0x140021a30
+
+// AutoPickup_CheckAssignments (work_base_grid.cpp) — int fn(uintptr_t self, void* citizenRef)
+extern int  WorkGrid_AutoPickup_e3db0(uintptr_t, void*);              // 0x1400e3db0
+
+// TryAssignWorkplace (work_base_grid.cpp) — uint64_t fn(uintptr_t mgr, void* citizenRef, int count, char flag)
+extern uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t, void*, int, char);  // 0x1400f8620
+
+// CitizenAI_LongTermPlan (0x140115e60) SKIPPED:
+//   304-line function with ~12 unresolved internal callees: FUN_14008d590
+//   (storage-search), StorageComponent_impl_cd80, PerformWork_Action_Ctor4,
+//   FUN_1400c4c50 (action executor), Math::Vector3::Vector3, plus dynamic
+//   allocator-managed arrays. Cannot be faithfully ported without resolving
+//   those callees first — would silently produce wrong citizen-work assignment.
+
+void RegisterWorkGridBatch() {
+    RegisterExeAddr(0x14009ccf0, reinterpret_cast<uintptr_t>(&WorkGrid_FindCell_9ccf0));
+    RegisterExeAddr(0x1400a00f0, reinterpret_cast<uintptr_t>(&WorkGrid_ValidateCell_a00f0));
+    RegisterExeAddr(0x140008830, reinterpret_cast<uintptr_t>(&WorkGrid_CalcDistance_8830));
+    RegisterExeAddr(0x140021a30, reinterpret_cast<uintptr_t>(&WorkGrid_RegisterWork_1a30));
+    RegisterExeAddr(0x1400e3db0, reinterpret_cast<uintptr_t>(&WorkGrid_AutoPickup_e3db0));
+    RegisterExeAddr(0x1400f8620, reinterpret_cast<uintptr_t>(&WorkGrid_TryAssignWorkplace_f8620));
+}
+#endif

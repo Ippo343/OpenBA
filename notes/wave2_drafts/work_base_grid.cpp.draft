@@ -1,0 +1,555 @@
+// code/Game/Work/work_base_grid.cpp
+// Shared Work grid / citizen-AI / assignment helpers referenced from many Work classes.
+//
+// These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from
+// code/Game/Work/*.cpp. In DLL mode they resolve to the original exe code; in
+// standalone mode they resolve to 0 (silently skipped) unless registered here.
+// This file provides faithful reimplementations and a single registration point
+// (RegisterWorkGridBatch in standalone/reg_work_grid.cpp).
+//
+// Wave 2 (Work) — grid/AI/assignment sub-batch. Each function is a 1:1 port of the
+// decompiled exe helper; do not "improve" behavior.
+//
+// This file must NOT depend on hooks.h — it is portable for the standalone exe.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cmath>
+
+// ============================================================
+// WorldGrid_FindCell (FUN_14009ccf0)
+// ============================================================
+// Scans a 3x3 neighbour ring around srcCell for the cell closest to destCell
+// that has at least one of the requested pass-type bits set.
+// Cell array is at mapGrid[0x20] (offset 0x80 bytes as an int* — ptr at grid+0x80).
+// Each cell record is 0x30 bytes wide; pass-type byte is at record+0x29.
+// Returns nearest matching cell index, or -1 if none found.
+//
+// Caller typedef (huntwork.cpp / cleararea.cpp / foresterwork.cpp / plantarea.cpp):
+//   int fn(int* mapGrid, int srcCell, int destCell, uint32_t passFlags)
+
+// Reimpl of FUN_14009ccf0 (WorldGrid_FindCell / Map_FindNearestPassable)
+int WorkGrid_FindCell_9ccf0(int* mapGrid, int srcCell, int destCell, uint32_t passFlags) {
+    int gridW  = *mapGrid;             // map width (cells per row)
+    int best   = -1;
+    int bestDist = 0;
+
+    // The 3x3 ring around srcCell: col offsets {-1,0,1}, row offsets {-1,0,1}
+    // Ghidra loop: lVar4 iterates -1..1 (row delta), iVar9 = srcCell%gridW + lVar4
+    //              iVar7 iterates -1..1 (col delta), iVar6 = (srcCell/gridW+iVar7)*gridW
+    // Combined cell = iVar9 + iVar6
+
+    // cell array is at mapGrid + 0x20 (int pointer: 0x20*4 = 0x80 bytes offset)
+    uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
+
+    int srcCol = srcCell % gridW;
+    int srcRow = srcCell / gridW;
+
+    // lVar4 starts at -1, runs 3 iterations (local_res8 = 3, counts down)
+    for (int rowD = -1; rowD <= 1; rowD++) {
+        int candRow = srcRow + rowD;
+        // iVar6 = (srcCell/gridW + rowD - 1) * gridW in Ghidra's loop,
+        // but re-expressed cleanly:
+        for (int colD = -1; colD <= 1; colD++) {
+            int candCol = srcCol + colD - 1;  // iVar9 = srcCell%gridW + colD - 1
+            // Ghidra: iVar7 iterates -1..1, iVar6 = (srcRow+rowD-1)*gridW
+            // The effective candidate: iVar9 + iVar6
+            // Reconstructed faithfully:
+            int cand = candCol + candRow * gridW;
+
+            // Guards from original:
+            // lVar4!=0 || iVar7!=-1  (skip the initial (rowD=-1,colD=-1) step due to counter init)
+            // -1 < iVar9 (col in range)
+            // -1 < iVar7+srcRow (row in range)
+            // iVar7+srcRow < gridW (row in range, note Ghidra reuses gridW for both dims)
+            // iVar9 < gridW (col in range, same)
+            if (candRow < 0 || candRow >= gridW) continue;
+            if (candCol < 0 || candCol >= gridW) continue;
+
+            // Check pass flag: byte at cellArr + cand*0x30 + 0x29
+            uint8_t typeB = *reinterpret_cast<const uint8_t*>(
+                cellArr + static_cast<uintptr_t>(cand) * 0x30 + 0x29);
+            if (!(passFlags & (1u << (typeB & 0x1f)))) continue;
+
+            // Distance squared from candidate to destCell
+            int dRow = cand / gridW - destCell / gridW;
+            int dCol = cand % gridW - destCell % gridW;
+            int dist = dRow * dRow + dCol * dCol;
+
+            if (best < 0 || dist < bestDist) {
+                best = cand;
+                bestDist = dist;
+            }
+        }
+    }
+    return best;
+}
+
+// ============================================================
+// WorldGrid_ValidateCell (FUN_1400a00f0)
+// ============================================================
+// Checks whether two cells are mutually reachable: calls Map_Invalidate to
+// refresh connectivity, then tests that both cells share a compatible path
+// type and region.  Returns non-zero (low byte = 1) if a path exists.
+//
+// Caller typedef (huntwork.cpp / cleararea.cpp / foresterwork.cpp / plantarea.cpp
+//   / pasturework.cpp / plantarea.cpp / plantorchard.cpp / tendarea.cpp):
+//   ulonglong fn(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell)
+// Note: fn_Map_CanPathTo in engine_funcs.h uses the same address with a slightly
+// different cast — both are correct.
+
+// Reimpl of FUN_1400a00f0 (WorldGrid_ValidateCell / Map_CanPathTo)
+uint64_t WorkGrid_ValidateCell_a00f0(int* mapGrid, uint32_t pathType,
+                                      uint32_t destCell, int srcCell) {
+    // First: recalculate map connectivity for these two cells
+    if (fn_Map_Invalidate) fn_Map_Invalidate(mapGrid);
+
+    uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
+
+    // Cell record size = 0x30 bytes; pass-type byte at +0x29, region at +0x26 (uint16)
+    uintptr_t recSrc  = cellArr + static_cast<uintptr_t>(srcCell)  * 0x30;
+    uintptr_t recDest = cellArr + static_cast<uintptr_t>(destCell) * 0x30;
+
+    uint32_t typeSrc  = 1u << (*reinterpret_cast<const uint8_t*>(recSrc  + 0x29) & 0x1f);
+    uint32_t typeDest = 1u << (*reinterpret_cast<const uint8_t*>(recDest + 0x29) & 0x1f);
+    uint32_t combined = typeDest | typeSrc;
+
+    uint64_t result = static_cast<uint64_t>(combined);
+
+    uint32_t mask = pathType | combined;
+    if ((mask & typeDest) && (mask & typeSrc)) {
+        // Any road/overlay type bit set in bits [5..8]?
+        if (mask & 0x1e0u) {
+            // Passable
+            return (result & 0xffffffffffffff00ull) | 1u;
+        }
+        // Check region match: uint16 at +0x26
+        uint16_t regionDest = *reinterpret_cast<const uint16_t*>(recDest + 0x26);
+        if (regionDest != 0) {
+            uint16_t regionSrc  = *reinterpret_cast<const uint16_t*>(recSrc  + 0x26);
+            result = static_cast<uint64_t>(regionSrc);
+            if (regionSrc != 0 && regionDest == regionSrc) {
+                return (result & 0xffffffffffffff00ull) | 1u;
+            }
+        }
+    }
+    return result & 0xffffffffffffff00ull;
+}
+
+// ============================================================
+// Map_CalcDistance (FUN_140008830)
+// ============================================================
+// Calculates the pathfinding-aware distance between two cells.
+// Tries the cached path cost first (fn_Map_CalcPathCost); if that returns -1
+// (no path), falls back to Euclidean grid distance + gridWidth as a penalty.
+//
+// Caller typedef (huntwork.cpp / foresterwork.cpp / pasturework.cpp):
+//   int fn(int* mapGrid, uint32_t cellA, uint32_t cellB)
+
+// Reimpl of FUN_140008830 (Map_CalcDistance)
+int WorkGrid_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB) {
+    int cost = -1;
+    if (fn_Map_CalcPathCost)
+        cost = fn_Map_CalcPathCost(mapGrid, cellA, static_cast<int>(cellB), 1);
+    if (cost < 0) {
+        int gridW = *mapGrid;
+        int dRow = static_cast<int>(cellA) / gridW - static_cast<int>(cellB) / gridW;
+        int dCol = static_cast<int>(cellA) % gridW - static_cast<int>(cellB) % gridW;
+        float dist = sqrtf(static_cast<float>(dRow * dRow + dCol * dCol));
+        cost = static_cast<int>(dist) + gridW;
+    }
+    return cost;
+}
+
+// ============================================================
+// RegisterWork (CitizenAI_impl_1a30, 0x140021a30)
+// ============================================================
+// Inserts an entity IBP into a citizen-AI BST (binary search tree keyed by
+// the low uint64 of the IBP value).  On first insert allocates the root node
+// (0x28 bytes).  On subsequent inserts walks left (puVar1[2]) / right (puVar1[3])
+// to find the insert position, creates a new leaf via sub_1b40, then calls
+// CitizenAI_State_Leisure_sub_a8c0 to rebalance the AVL tree.
+//
+// Node layout (0x28 bytes):
+//   +0x00  uint64_t key        (== IBP value)
+//   +0x08  uint64_t parent     (unused in insert — kept as 0 or prev node ptr)
+//   +0x10  uint64_t leftChild
+//   +0x18  uint64_t rightChild
+//   +0x20  int16_t  balance
+//   +0x22  int16_t  height
+//   +0x24  uint32_t pad
+//
+// bstRoot[0] = tree root ptr, bstRoot[1] = node count (int)
+//
+// Caller typedef (firework.cpp / huntwork.cpp / foresterwork.cpp / pasturework.cpp /
+//   tendarea.cpp):
+//   void fn(void* bstRoot, void* entityIBP, void* citizenIBP)
+
+// Helper: allocate + initialise a new BST leaf node
+static void* AllocBstNode_1b40(void* /*unused*/, void* keyIBP, void* parentNode) {
+    // CitizenAI_impl_1a30_sub_1b40 allocates 0x28 bytes, sets key = *keyIBP,
+    // sets puVar1[1] = parentNode (the parent pointer field), zeroes children + balance.
+    void* node = nullptr;
+    if (fn_MemAlloc && g_pMemAllocSingleton)
+        node = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+    else
+        return nullptr;
+
+    if (!node) return nullptr;
+    uintptr_t n = reinterpret_cast<uintptr_t>(node);
+    *reinterpret_cast<uint64_t*>(n + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(n + 0x00) = *reinterpret_cast<const uint64_t*>(keyIBP);
+    *reinterpret_cast<uint64_t*>(n + 0x08) = reinterpret_cast<uintptr_t>(parentNode);
+    *reinterpret_cast<uint64_t*>(n + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(n + 0x18) = 0;
+    *reinterpret_cast<uint32_t*>(n + 0x20) = 0;
+    return node;
+}
+
+// AVL rebalance (CitizenAI_State_Leisure_sub_a8c0 @ 0x14001a8c0):
+// Walks a stack of ancestor nodes (param_2 = walk pointer) updating
+// balance/height and performing AVL rotations.
+// We call the original via ResolveAddr since it's a complex tree-rotation utility.
+typedef void (*fn_AvlRebalance_t)(uintptr_t* bstRootPtr, uintptr_t* walkPtr);
+static fn_AvlRebalance_t s_fn_AvlRebalance = nullptr;
+
+static void EnsureAvlRebalance() {
+    if (!s_fn_AvlRebalance)
+        s_fn_AvlRebalance = reinterpret_cast<fn_AvlRebalance_t>(
+            ResolveAddr(Module::Exe, 0x14001a8c0));
+}
+
+// Reimpl of CitizenAI_impl_1a30 (RegisterWork)
+void WorkGrid_RegisterWork_1a30(void* bstRoot, void* entityIBP, void* /*citizenIBP*/) {
+    EnsureAvlRebalance();
+
+    uintptr_t* root = reinterpret_cast<uintptr_t*>(bstRoot);
+    uintptr_t* outResult = root + 1;  // used as temp return by original; reuse root[1] area
+    // Note: original prototype: undefined8* fn(longlong* root, undefined8* outResult, IBP* entityIBP)
+    // outResult (root[1]) is written with the found/inserted node ptr.
+    // The count increment is: *(int*)(root+1) += 1  (root[1] as int, sharing the same qword)
+
+    uint64_t key = *reinterpret_cast<const uint64_t*>(entityIBP);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
+        reinterpret_cast<void*>(entityIBP));
+
+    uintptr_t* pRoot = root;  // root[0] = tree root node ptr
+
+    if (*pRoot == 0) {
+        // Empty tree: allocate root node
+        void* node = AllocBstNode_1b40(nullptr, entityIBP, nullptr);
+        *pRoot = reinterpret_cast<uintptr_t>(node);
+        *reinterpret_cast<uintptr_t*>(outResult) = reinterpret_cast<uintptr_t>(node);
+    } else {
+        uintptr_t cur = *pRoot;
+        uintptr_t local_res8 = cur;      // mirrors Ghidra's local_res8 walk variable
+
+        while (true) {
+            if (fn_InternalBasePtr_CheckPtr)
+                fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cur));
+            uint64_t nodeKey = *reinterpret_cast<const uint64_t*>(cur);
+
+            if (key < nodeKey) {
+                uintptr_t* leftPtr = reinterpret_cast<uintptr_t*>(cur + 0x10);
+                if (*leftPtr == 0) {
+                    // Insert as left child
+                    void* leaf = AllocBstNode_1b40(
+                        reinterpret_cast<void*>(cur),
+                        entityIBP,
+                        reinterpret_cast<void*>(cur));
+                    *leftPtr = reinterpret_cast<uintptr_t>(leaf);
+                    *reinterpret_cast<uintptr_t*>(outResult) = reinterpret_cast<uintptr_t>(leaf);
+                    // Rebalance from parent
+                    local_res8 = cur;
+                    if (s_fn_AvlRebalance) s_fn_AvlRebalance(pRoot, &local_res8);
+                    goto done;
+                }
+                cur = *leftPtr;
+            } else {
+                if (fn_InternalBasePtr_CheckPtr)
+                    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(entityIBP));
+                if (*reinterpret_cast<const uint64_t*>(entityIBP) <= nodeKey) {
+                    // Key already present — return existing node
+                    *reinterpret_cast<uintptr_t*>(outResult) = cur;
+                    goto done;
+                }
+                uintptr_t* rightPtr = reinterpret_cast<uintptr_t*>(cur + 0x18);
+                if (*rightPtr == 0) {
+                    void* leaf = AllocBstNode_1b40(
+                        reinterpret_cast<void*>(cur),
+                        entityIBP,
+                        reinterpret_cast<void*>(cur));
+                    *rightPtr = reinterpret_cast<uintptr_t>(leaf);
+                    *reinterpret_cast<uintptr_t*>(outResult) = reinterpret_cast<uintptr_t>(leaf);
+                    local_res8 = cur;
+                    if (s_fn_AvlRebalance) s_fn_AvlRebalance(pRoot, &local_res8);
+                    goto done;
+                }
+                cur = *rightPtr;
+            }
+        }
+    }
+done:
+    // Increment count (*(int*)(root+1) += 1 in original — stored as int in the low 32 bits of root[1])
+    *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + sizeof(uintptr_t)) += 1;
+}
+
+// ============================================================
+// AutoPickup_CheckAssignments (FUN_1400e3db0)
+// ============================================================
+// Given a Work-manager object (param_1), checks whether the auto-pickup
+// entity list has any items and, for each, tries to assign a citizen to
+// the pickup via TryAssignWorkplace (0x1400f8620).
+//
+// Layout of the auto-pickup list (InternalBasePtr local_res8 from 0x22520):
+//   +0x28  uint8_t  active flag
+//   +0x30  uintptr_t array base (int array of cell indices)
+//   +0x38  int      count
+//
+// The game-world BST of existing assignments is at g_pGameWorldSingleton+0x118.
+//
+// Returns 2 if an assignment was created, 0 otherwise.
+//
+// Caller typedef (huntwork.cpp / foresterwork.cpp / pasturework.cpp):
+//   int fn(uintptr_t self, void* citizenRef)
+
+// Lazily resolve type ID for AutoPickupComponent (DAT_1401c3fb0)
+static const uint32_t* s_pTid_AutoPickup = nullptr;
+static bool s_autoPickupTidInit = false;
+
+static void EnsureAutoPickupTid() {
+    if (s_autoPickupTidInit) return;
+    s_pTid_AutoPickup = reinterpret_cast<const uint32_t*>(
+        ResolveAddr(Module::Exe, 0x1401c3fb0));
+    s_autoPickupTidInit = true;
+}
+
+// FUN_140022520: FindComponent_AutoPickup — finds AutoPickupComponent on entity.
+// Signature: InternalBasePtr* fn(uintptr_t entity, InternalBasePtr* outIBP)
+typedef void* (*fn_FindAutoPickup_t)(uintptr_t entity, void* outIBP);
+static fn_FindAutoPickup_t s_fn_FindAutoPickup = nullptr;
+
+// fn_TryAssignWorkplace declared in engine_funcs.h:
+//   uint64_t fn(uintptr_t mgr, void* citizenRef, int count, char flag)
+
+static void EnsureAutoPickupFuncs() {
+    if (!s_fn_FindAutoPickup)
+        s_fn_FindAutoPickup = reinterpret_cast<fn_FindAutoPickup_t>(
+            ResolveAddr(Module::Exe, 0x140022520));
+}
+
+// Reimpl of FUN_1400e3db0 (AutoPickup_CheckAssignments)
+int WorkGrid_AutoPickup_e3db0(uintptr_t self, void* citizenRef) {
+    EnsureAutoPickupTid();
+    EnsureAutoPickupFuncs();
+
+    // Get the entity IBP from self+0x10
+    uintptr_t entityIBP = self + 0x10;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
+        reinterpret_cast<void*>(entityIBP));
+
+    // Find AutoPickupComponent on this entity
+    uintptr_t local_res8 = 0;
+    if (s_fn_FindAutoPickup)
+        s_fn_FindAutoPickup(*reinterpret_cast<uintptr_t*>(entityIBP),
+                            reinterpret_cast<void*>(&local_res8));
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
+        reinterpret_cast<void*>(&local_res8));
+
+    // Check active flag at +0x28
+    if (!local_res8) return 0;
+    if (*reinterpret_cast<const uint8_t*>(local_res8 + 0x28) == 0) return 0;
+
+    // Game-world assignment BST is at g_pGameWorldSingleton + 0x118
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    uintptr_t assignBst = *reinterpret_cast<uintptr_t*>(gameWorld + 0x118);
+
+    // Iterate the auto-pickup cell list
+    int count = *reinterpret_cast<const int*>(local_res8 + 0x38);
+    int i = 0;
+    while (i < count) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
+            reinterpret_cast<void*>(&local_res8));
+
+        // Cell index array at +0x30 (array of int)
+        uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(local_res8 + 0x30);
+        int cellId = *reinterpret_cast<const int*>(arrBase + static_cast<uintptr_t>(i) * 4);
+
+        // Walk the assignment BST to find this cell
+        int* node = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(assignBst + 0x30));
+        bool found = false;
+        while (node) {
+            if (cellId < *node) {
+                node = *reinterpret_cast<int**>(node + 6);
+            } else if (cellId <= *node) {
+                // Found — try to assign
+                uintptr_t citizenCopy = *reinterpret_cast<const uintptr_t*>(citizenRef);
+                uint64_t result = 0;
+                if (fn_TryAssignWorkplace)
+                    result = fn_TryAssignWorkplace(assignBst, &citizenCopy, cellId, '\x01');
+                if (static_cast<char>(result) != '\0') return 2;
+                found = true;
+                // Remove cell from list by compacting: shift remaining left
+                goto remove_and_continue;
+            } else {
+                node = *reinterpret_cast<int**>(node + 8);
+            }
+        }
+        // Not found in BST — remove and continue
+        if (!found) {
+remove_and_continue:
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(
+                reinterpret_cast<void*>(&local_res8));
+            // Compact the array: shift elements left starting at i
+            int remaining = count - i - 1;
+            if (remaining > 0) {
+                uintptr_t arrBase2 = *reinterpret_cast<uintptr_t*>(local_res8 + 0x30);
+                int* dst = reinterpret_cast<int*>(arrBase2 + static_cast<uintptr_t>(i) * 4);
+                if (dst) dst[0] = dst[1];  // compact one step (Ghidra pattern)
+                // The original loop shifts one int at a time
+                int j = i;
+                while (j < count - 1) {
+                    j++;
+                    uintptr_t arrBase3 = *reinterpret_cast<uintptr_t*>(local_res8 + 0x30);
+                    if (arrBase3) {
+                        int* src = reinterpret_cast<int*>(arrBase3 + static_cast<uintptr_t>(j) * 4 - 4);
+                        int* dst2 = reinterpret_cast<int*>(arrBase3 + static_cast<uintptr_t>(j) * 4);
+                        if (src && dst2 && j < count) *src = *dst2;  // actually shifting
+                    }
+                }
+            }
+            *reinterpret_cast<int*>(local_res8 + 0x38) = count - 1;
+            count--;
+            i--;
+        }
+        i++;
+    }
+    return 0;
+}
+
+// ============================================================
+// TryAssignWorkplace (FUN_1400f8620)
+// ============================================================
+// Searches the work-assignment BST (keyed on cell/entityId) for an entry
+// matching param_3 (cellId / entity).  If found and the citizen assignment
+// counter (node+0x2c) differs from the BST's own counter (mgr+0x8), fires
+// two vtable calls:
+//   vtable+0x48 — Begin/notify assignment
+//   vtable+0x20 — CanAssign(citizen, citizen_container) → 2=assigned,1=can assign
+// If CanAssign returns 1 and flag is set, fires vtable+0x28 (Assign), then
+// writes the new counter.
+//
+// Returns: low byte 1 if assignment accepted, 0 otherwise; upper bytes = node key.
+//
+// Caller typedef (engine_funcs.h):
+//   uint64_t fn(uintptr_t mgr, void* citizenRef, int count, char flag)
+
+// Reimpl of FUN_1400f8620 (TryAssignWorkplace)
+uint64_t WorkGrid_TryAssignWorkplace_f8620(uintptr_t mgr, void* citizenRef,
+                                            int cellId, char flag) {
+    // Walk BST at mgr+0x30
+    int* node = reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(mgr + 0x30));
+    while (true) {
+        if (!node) return 0;
+        if (*node > cellId) {
+            node = *reinterpret_cast<int**>(node + 6);  // left child
+        } else {
+            break;
+        }
+    }
+    if (cellId > *node) {
+        // Walk right subtree
+        while (true) {
+            if (!node) return 0;
+            if (*node <= cellId) break;
+            node = *reinterpret_cast<int**>(node + 8);  // right child — re-check
+        }
+        while (true) {
+            if (!node) return 0;
+            if (*node > cellId) {
+                node = *reinterpret_cast<int**>(node + 6);
+            } else {
+                break;
+            }
+        }
+        if (cellId > *node) return 0;
+    }
+    if (!node) return 0;
+
+    // node found: IBP is at node+2 (int offset 2 = byte +0x08)
+    uintptr_t* selfIBP = reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(node) + 0x08);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfIBP);
+
+    // Check if already assigned to same generation
+    uint32_t mgrCounter = *reinterpret_cast<const uint32_t*>(mgr + 8);
+    if (*reinterpret_cast<const uint32_t*>(*selfIBP + 0x2c) == mgrCounter) {
+        // Already assigned — return upper bytes of mgrCounter (mask low byte)
+        return static_cast<uint64_t>(mgrCounter) & 0xffffffffffffff00ull;
+    }
+
+    // Vtable call: slot +0x48 (BeginAssign/notify)
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfIBP);
+    uintptr_t obj = *selfIBP;
+    uintptr_t vtable = *reinterpret_cast<uintptr_t*>(obj);
+    typedef void (*slot48_t)(void*);
+    reinterpret_cast<slot48_t>(*reinterpret_cast<uintptr_t*>(vtable + 0x48))(
+        reinterpret_cast<void*>(obj));
+
+    // Vtable call: slot +0x20 (CanAssign — takes citizen IBP + container at mgr+0x130)
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfIBP);
+    obj = *selfIBP;
+    vtable = *reinterpret_cast<uintptr_t*>(obj);
+    typedef uint64_t (*slot20_t)(void*, void*, void*);
+    uintptr_t citizenCopy = *reinterpret_cast<const uintptr_t*>(citizenRef);
+    uint64_t canResult = reinterpret_cast<slot20_t>(
+        *reinterpret_cast<uintptr_t*>(vtable + 0x20))(
+            reinterpret_cast<void*>(obj),
+            &citizenCopy,
+            reinterpret_cast<void*>(mgr + 0x130));
+
+    if (static_cast<int>(canResult) == 2) {
+        // Immediately accepted
+        return (canResult & 0xffffffffffffff00ull) | 1u;
+    }
+
+    if (static_cast<int>(canResult) == 1) {
+        if (flag != '\0') {
+            // Vtable +0x48 again
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfIBP);
+            obj = *selfIBP;
+            vtable = *reinterpret_cast<uintptr_t*>(obj);
+            reinterpret_cast<slot48_t>(*reinterpret_cast<uintptr_t*>(vtable + 0x48))(
+                reinterpret_cast<void*>(obj));
+
+            // Vtable +0x28 (Assign — same args as CanAssign)
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfIBP);
+            obj = *selfIBP;
+            vtable = *reinterpret_cast<uintptr_t*>(obj);
+            citizenCopy = *reinterpret_cast<const uintptr_t*>(citizenRef);
+            typedef uint64_t (*slot28_t)(void*, void*, void*);
+            uint64_t assignResult = reinterpret_cast<slot28_t>(
+                *reinterpret_cast<uintptr_t*>(vtable + 0x28))(
+                    reinterpret_cast<void*>(obj),
+                    &citizenCopy,
+                    reinterpret_cast<void*>(mgr + 0x130));
+            if (static_cast<char>(assignResult) != '\0') {
+                return (canResult & 0xffffffffffffff00ull) | 1u;
+            }
+        }
+        // Write the new generation counter
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(selfIBP);
+        obj = *selfIBP;
+        uint64_t counterVal = static_cast<uint64_t>(mgrCounter);
+        *reinterpret_cast<uint32_t*>(obj + 0x2c) = mgrCounter;
+        return counterVal;
+    }
+
+    return canResult & 0xffffffffffffff00ull;
+}

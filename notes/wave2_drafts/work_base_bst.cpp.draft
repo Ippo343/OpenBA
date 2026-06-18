@@ -1,0 +1,886 @@
+// code/Game/Work/work_base_bst.cpp
+// BST/AVL and ClearArea tree helpers shared by many Work classes.
+//
+// These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from
+// code/Game/Work/*.cpp files. In DLL mode they resolve to the original exe code;
+// in standalone mode they resolve to 0 unless registered here.
+//
+// Wave 2 (Work) — BST/ClearArea-tree sub-batch.  Each function is a 1:1 port of
+// the decompiled exe helper; do not "improve" behavior.
+//
+// This file must NOT depend on hooks.h — it is portable for the standalone exe.
+//
+// Node layouts (both trees use 0x30-byte nodes):
+//   Simple BST (BSTFindRemove / BSTRemove / BST_Serialize):
+//     +0x00  key    (uint64_t)
+//     +0x08  parent (ptr)
+//     +0x10  left   (ptr)
+//     +0x18  right  (ptr)
+//     +0x20  balance (int16_t, right - left)
+//     +0x22  height  (int16_t, max child height + 1)
+//     ... 8 bytes padding to 0x30
+//
+//   ClearArea tree (ClearArea_GroundInsert / TradeDescription_impl_ca60):
+//     +0x00  key[0] (uint64_t, e.g. tileIdx)
+//     +0x08  key[1] (uint64_t, e.g. citizenRef)
+//     +0x10  parent (ptr)
+//     +0x18  left   (ptr)
+//     +0x20  right  (ptr)
+//     +0x28  balance (int16_t, right - left)
+//     +0x2a  height  (int16_t)
+//     ... 4 bytes padding to 0x30
+//
+// BST root header: [0] = root ptr (void*), [+8] = count (int32_t)
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+// ============================================================
+// Simple BST helpers (0x14001a6e0 / 0x140025520 / 0x1400296b0)
+// key at +0x00, parent at +0x08, left at +0x10, right at +0x18,
+// balance at +0x20 (int16), height at +0x22 (int16)
+// ============================================================
+
+// Helper: update balance/height on a simple-BST node given its children.
+// Node layout: left at +0x10, right at +0x18, balance at +0x20, height at +0x22.
+static inline void SimpleBST_UpdateNode(uintptr_t node) {
+    int16_t lh = 0, rh = 0;
+    uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x10);
+    uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+    if (lc) lh = *reinterpret_cast<int16_t*>(lc + 0x22) + 1;
+    if (rc) rh = *reinterpret_cast<int16_t*>(rc + 0x22) + 1;
+    *reinterpret_cast<int16_t*>(node + 0x20) = (int16_t)(rh - lh);
+    *reinterpret_cast<int16_t*>(node + 0x22) = (rh > lh) ? rh : lh;
+}
+
+// Reimpl of FUN_140014c70: AVL rotate-left (simple BST, right child up).
+// Ghidra name: FUN_140014c70.  Signature: longlong fn(longlong* root, longlong node)
+// Both children use offsets +0x10 (left) and +0x18 (right).
+static uintptr_t SimpleBST_RotateLeft(uintptr_t* root, uintptr_t node) {
+    uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x18);  // right child becomes new root
+
+    // Update tree root / parent's child pointer
+    if (node == *root) {
+        *root = rc;
+    } else {
+        uintptr_t par = *reinterpret_cast<uintptr_t*>(node + 0x08);
+        if (par) {
+            if (*reinterpret_cast<uintptr_t*>(par + 0x10) == node)
+                *reinterpret_cast<uintptr_t*>(par + 0x10) = rc;
+            else
+                *reinterpret_cast<uintptr_t*>(par + 0x18) = rc;
+        }
+    }
+    // rc's parent <- node's parent
+    *reinterpret_cast<uintptr_t*>(rc + 0x08) = *reinterpret_cast<uintptr_t*>(node + 0x08);
+    // node's right <- rc's left
+    uintptr_t rcl = *reinterpret_cast<uintptr_t*>(rc + 0x10);
+    *reinterpret_cast<uintptr_t*>(node + 0x18) = rcl;
+    if (rcl) *reinterpret_cast<uintptr_t*>(rcl + 0x08) = node;
+    // rc's left <- node
+    *reinterpret_cast<uintptr_t*>(rc + 0x10) = node;
+    *reinterpret_cast<uintptr_t*>(node + 0x08) = rc;
+    // Recompute balance/height bottom-up
+    SimpleBST_UpdateNode(node);
+    // rc's right child
+    uintptr_t rcr = *reinterpret_cast<uintptr_t*>(rc + 0x18);
+    if (rcr) SimpleBST_UpdateNode(rcr);
+    SimpleBST_UpdateNode(rc);
+    return rc;
+}
+
+// Reimpl of FUN_140014da0: AVL rotate-right (simple BST, left child up).
+static uintptr_t SimpleBST_RotateRight(uintptr_t* root, uintptr_t node) {
+    uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x10);  // left child becomes new root
+
+    if (node == *root) {
+        *root = lc;
+    } else {
+        uintptr_t par = *reinterpret_cast<uintptr_t*>(node + 0x08);
+        if (par) {
+            if (*reinterpret_cast<uintptr_t*>(par + 0x10) == node)
+                *reinterpret_cast<uintptr_t*>(par + 0x10) = lc;
+            else
+                *reinterpret_cast<uintptr_t*>(par + 0x18) = lc;
+        }
+    }
+    *reinterpret_cast<uintptr_t*>(lc + 0x08) = *reinterpret_cast<uintptr_t*>(node + 0x08);
+    uintptr_t lcr = *reinterpret_cast<uintptr_t*>(lc + 0x18);
+    *reinterpret_cast<uintptr_t*>(node + 0x10) = lcr;
+    if (lcr) *reinterpret_cast<uintptr_t*>(lcr + 0x08) = node;
+    *reinterpret_cast<uintptr_t*>(lc + 0x18) = node;
+    *reinterpret_cast<uintptr_t*>(node + 0x08) = lc;
+    // Recompute bottom-up
+    SimpleBST_UpdateNode(node);
+    uintptr_t lcl = *reinterpret_cast<uintptr_t*>(lc + 0x10);
+    if (lcl) SimpleBST_UpdateNode(lcl);
+    SimpleBST_UpdateNode(lc);
+    return lc;
+}
+
+// Reimpl of CitizenAI_State_Leisure_sub_a8c0 (0x14001a8c0): AVL retrace for simple BST.
+// Walks from node (*param_2) upward, rebalancing as needed using the simple BST rotations.
+// param1 = ptr to root ptr; param2 = ptr to "current" node ptr (traversal pointer).
+// Uses left=+0x10, right=+0x18, parent=+0x08, balance=+0x20, height=+0x22.
+static void SimpleBST_Retrace(uintptr_t* root, uintptr_t* cur) {
+    uintptr_t node = *cur;
+    while (node != 0) {
+        uintptr_t next = *reinterpret_cast<uintptr_t*>(node + 0x08);  // parent
+
+        int16_t lh = 0, rh = 0;
+        uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x10);
+        uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+        if (lc) lh = *reinterpret_cast<int16_t*>(lc + 0x22) + 1;
+        if (rc) rh = *reinterpret_cast<int16_t*>(rc + 0x22) + 1;
+        *reinterpret_cast<int16_t*>(node + 0x20) = (int16_t)(rh - lh);
+        *reinterpret_cast<int16_t*>(node + 0x22) = (rh > lh) ? rh : lh;
+
+        // Right-heavy: balance > 1
+        rc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+        if (*reinterpret_cast<int16_t*>(node + 0x20) > 1 && rc != 0) {
+            if (*reinterpret_cast<int16_t*>(rc + 0x20) < 1 && *reinterpret_cast<int16_t*>(rc + 0x20) < 0) {
+                SimpleBST_RotateRight(root, rc);
+                node = *reinterpret_cast<uintptr_t*>(node + 0x18);  // node after right-rotate changed rc
+                // re-read node pointer from decompile: `lVar6 = *param_2` after rotate
+                node = *cur;  // original code re-reads from *param_2 which points to node
+            }
+            SimpleBST_RotateLeft(root, *cur);
+        }
+        // Left-heavy: balance < -1
+        node = *cur;
+        if (*reinterpret_cast<int16_t*>(node + 0x20) < -1) {
+            lc = *reinterpret_cast<uintptr_t*>(node + 0x10);
+            if (lc != 0) {
+                if (*reinterpret_cast<int16_t*>(lc + 0x20) > -1 && *reinterpret_cast<int16_t*>(lc + 0x20) > 0) {
+                    SimpleBST_RotateLeft(root, lc);
+                    node = *cur;
+                }
+                SimpleBST_RotateRight(root, *cur);
+            }
+        }
+
+        *cur = next;
+        node = next;
+    }
+}
+
+// Reimpl of CitizenAI_impl_a6e0 (0x14001a6e0): Remove a node from the simple BST.
+// Full AVL delete with rebalance.
+// Signature: void fn(void* bstRoot, void* node)
+// bstRoot: pointer to BST header (root_ptr at +0x0, count at +0x8)
+// node: pointer to the node to remove
+void WorkBST_BSTRemove_a6e0(void* bstRoot, void* node) {
+    uintptr_t* header = reinterpret_cast<uintptr_t*>(bstRoot);
+    uintptr_t param_2 = reinterpret_cast<uintptr_t>(node);
+
+    // Decrement count
+    int* countPtr = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bstRoot) + 8);
+    (*countPtr)--;
+
+    uintptr_t parent = *reinterpret_cast<uintptr_t*>(param_2 + 0x08);
+    uintptr_t right  = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+
+    uintptr_t retraceFrom = parent;  // local_res8 in decompile
+
+    if (right == 0) {
+        // Node has no right child: splice out directly
+        uintptr_t left = *reinterpret_cast<uintptr_t*>(param_2 + 0x10);
+        if (parent == 0) {
+            header[0] = left;
+        } else if (*reinterpret_cast<void**>(parent + 0x10) == node) {
+            *reinterpret_cast<uintptr_t*>(parent + 0x10) = left;
+        } else {
+            *reinterpret_cast<uintptr_t*>(parent + 0x18) = left;
+        }
+        right = left;  // lVar5 = left (per decompile)
+    } else {
+        // Has right child: find in-order predecessor (rightmost of left subtree)
+        uintptr_t left = *reinterpret_cast<uintptr_t*>(param_2 + 0x10);
+        uintptr_t pred = left;
+        if (left != 0) {
+            // Walk right to find in-order predecessor (rightmost of left subtree)
+            while (*reinterpret_cast<uintptr_t*>(pred + 0x18) != 0) {
+                pred = *reinterpret_cast<uintptr_t*>(pred + 0x18);
+            }
+            retraceFrom = 0;  // local_res8 = 0
+            if (pred != left) {
+                // pred is not immediate left child
+                uintptr_t predLeft = *reinterpret_cast<uintptr_t*>(pred + 0x10);
+                retraceFrom = *reinterpret_cast<uintptr_t*>(pred + 0x08);  // pred's parent
+                *reinterpret_cast<uintptr_t*>(retraceFrom + 0x18) = predLeft;
+                if (predLeft != 0) {
+                    *reinterpret_cast<uintptr_t*>(predLeft + 0x08) = retraceFrom;
+                }
+                // Graft pred in place of removed node (left subtree)
+                *reinterpret_cast<uintptr_t*>(pred + 0x10) = left;
+                if (*reinterpret_cast<uintptr_t*>(retraceFrom + 0x10) == 0) {
+                    int16_t sVar7 = 0, sVar6 = 0, sVar3;
+                    uintptr_t rl = *reinterpret_cast<uintptr_t*>(retraceFrom + 0x10);
+                    uintptr_t rr = *reinterpret_cast<uintptr_t*>(retraceFrom + 0x18);
+                    if (rl) sVar7 = *reinterpret_cast<int16_t*>(rl + 0x22) + 1;
+                    if (rr) sVar6 = *reinterpret_cast<int16_t*>(rr + 0x22) + 1;
+                    sVar3 = (sVar6 > sVar7) ? sVar6 : sVar7;
+                    *reinterpret_cast<int16_t*>(retraceFrom + 0x20) = (int16_t)(sVar6 - sVar7);
+                    *reinterpret_cast<int16_t*>(retraceFrom + 0x22) = sVar3;
+                }
+            }
+            right = retraceFrom;  // lVar5 = local_res8 per decompile flow
+            // Link right subtree into pred
+            *reinterpret_cast<uintptr_t*>(pred + 0x18) = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+            // Update pred's new children's parent pointers
+            if (*reinterpret_cast<uintptr_t*>(pred + 0x10) != 0) {
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(pred + 0x10) + 0x08) = pred;
+            }
+            if (*reinterpret_cast<uintptr_t*>(pred + 0x18) != 0) {
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(pred + 0x18) + 0x08) = pred;
+            }
+            // Link pred to node's parent
+            uintptr_t np = *reinterpret_cast<uintptr_t*>(param_2 + 0x08);
+            *reinterpret_cast<uintptr_t*>(pred + 0x08) = np;
+            if (np == 0) {
+                header[0] = pred;
+                *reinterpret_cast<uintptr_t*>(pred + 0x08) = 0;
+                pred = header[0];  // re-read per decompile
+            } else if (*reinterpret_cast<void**>(np + 0x10) == node) {
+                *reinterpret_cast<uintptr_t*>(np + 0x10) = pred;
+            } else {
+                *reinterpret_cast<uintptr_t*>(np + 0x18) = pred;
+            }
+            // Free removed node
+            if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+            // Retrace from the lower disturbed point or pred
+            uintptr_t retracePtr = (right == 0) ? pred : right;
+            SimpleBST_Retrace(&header[0], &retracePtr);
+            return;
+        }
+        // left == 0: no left child; node's right child replaces it
+        if (parent == 0) {
+            header[0] = right;
+            right = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+        } else if (*reinterpret_cast<void**>(parent + 0x10) == node) {
+            *reinterpret_cast<uintptr_t*>(parent + 0x10) = right;
+            right = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+        } else {
+            *reinterpret_cast<uintptr_t*>(parent + 0x18) = right;
+            right = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+        }
+    }
+
+    if (right != 0) {
+        *reinterpret_cast<uintptr_t*>(right + 0x08) = *reinterpret_cast<uintptr_t*>(param_2 + 0x08);
+    }
+    uintptr_t retraceStart = right;
+    if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+    uintptr_t retracePtr = (retraceStart == 0) ? retraceFrom : retraceStart;
+    SimpleBST_Retrace(&header[0], &retracePtr);
+}
+
+// Reimpl of CitizenAI_impl_5520 (0x140025520): BST find-by-key then remove.
+// Searches the BST for the node whose key == *(uint64_t*)param_2 (IBP key),
+// then calls BSTRemove on it.
+// Signature: void fn(void* bstRoot, void* keyIBP)
+void WorkBST_BSTFindRemove_25520(void* bstRoot, void* keyIBP) {
+    uintptr_t* header = reinterpret_cast<uintptr_t*>(bstRoot);
+    uintptr_t cur = header[0];
+    if (cur == 0) return;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
+    uint64_t key = *reinterpret_cast<uint64_t*>(keyIBP);
+
+    while (cur != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
+        uint64_t nodeKey = *reinterpret_cast<uint64_t*>(cur);
+        if (key < nodeKey) {
+            cur = *reinterpret_cast<uintptr_t*>(cur + 0x10);  // left
+        } else {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(keyIBP);
+            uint64_t key2 = *reinterpret_cast<uint64_t*>(keyIBP);
+            if (key2 <= nodeKey) {
+                // Found: keys are equal
+                WorkBST_BSTRemove_a6e0(bstRoot, reinterpret_cast<void*>(cur));
+                return;
+            }
+            cur = *reinterpret_cast<uintptr_t*>(cur + 0x18);  // right
+        }
+    }
+}
+
+// Reimpl of CitizenAI_impl_96b0 (0x1400296b0): BST serialize (simple IBP-keyed tree).
+// On load (stream.direction==0): reads count, then for each entry reads an IBP,
+//   validates it against type 0x1401c7158, then inserts into the BST.
+// On save (stream.direction!=0): walks tree in-order via parent links and serializes each IBP.
+// Signature: void fn(void* bstRoot, void* serializer)
+void WorkBST_BST_Serialize_296b0(void* bstRoot, void* serializer) {
+    uintptr_t* header = reinterpret_cast<uintptr_t*>(bstRoot);
+    // Local count read/write target (mirrors local_res8 on original's stack)
+    int count = static_cast<int>(header[1]);  // header[1] low-32 = count
+
+    // Read/write count via g_fn_Serialize_Int
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &count, nullptr);
+
+    // Check stream direction: *(int*)(*(longlong*)serializer + 8) == 0 means LOAD
+    uintptr_t ser_vtbl = *reinterpret_cast<uintptr_t*>(serializer);
+    bool isLoad = (*reinterpret_cast<int*>(ser_vtbl + 8) == 0);
+
+    // BST insert function (CitizenAI_impl_1a30 at 0x140021a30)
+    static void (*s_bst_insert)(void* root, void* retout, void* keyIBP) = nullptr;
+    if (!s_bst_insert) {
+        s_bst_insert = reinterpret_cast<void (*)(void*, void*, void*)>(
+            ResolveAddr(Module::Exe, 0x140021a30));
+    }
+
+    // Type-ID pointer for validation (DWORD_1401c7158 = CitizenAI component type)
+    static const uint32_t* s_pTid = nullptr;
+    if (!s_pTid) {
+        s_pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
+    }
+
+    if (isLoad) {
+        // LOAD: read count entries and insert each into the BST
+        for (int i = 0; i < count; i++) {
+            uintptr_t ibpKey = 0;
+            // Serialize the IBP
+            if (fn_InternalBasePtr_Serialize)
+                fn_InternalBasePtr_Serialize(&ibpKey, serializer);
+            // Validate type
+            void* ptr = reinterpret_cast<void*>(ibpKey);
+            if (ptr != nullptr && fn_IsDerivedFrom && s_pTid) {
+                if (!fn_IsDerivedFrom(ptr, *s_pTid))
+                    ibpKey = 0;
+            }
+            // Insert into BST
+            uintptr_t retOut = 0;
+            if (s_bst_insert) s_bst_insert(bstRoot, &retOut, &ibpKey);
+        }
+    } else {
+        // SAVE: walk tree in-order and serialize each node's IBP.
+        // Original walks: go all the way right first (to find rightmost), then
+        // traverses from rightmost back upward to leftmost while writing.
+        // The Ghidra-decompiled walk is a non-recursive in-order traversal using
+        // parent pointers; we replicate the same logic faithfully.
+        uintptr_t cur = header[0];
+        if (cur == 0) return;
+
+        // Walk to rightmost leaf
+        uintptr_t prev = cur;
+        while (cur != 0) {
+            prev = cur;
+            cur = *reinterpret_cast<uintptr_t*>(cur + 0x18);  // right
+        }
+        // prev is now the rightmost node; original decompile's 'pIVar3 = rightmost'
+        // The loop in decompile starts at pIVar6 = 0 with pIVar3 = rightmost, then
+        // navigates upward through parents. To avoid confusion, use standard in-order.
+        // The original writes in an unusual traversal order (decompile does right-to-left);
+        // replicate exactly: traverse right-to-left (reverse in-order) by going right-then-left.
+
+        // Standard faithful port of the decompiler output:
+        // The outer loop: while pIVar6=pIVar3 != 0, serialize pIVar6, then:
+        //   if right child: go right then all the way left (find leftmost of right)
+        //   else: go up via parent until we came from a right child
+        uintptr_t node = prev;
+        while (node != 0) {
+            // Serialize this node's IBP (at node+0x00, an InternalBasePtr)
+            void* ibpPtr = reinterpret_cast<void*>(node);
+            if (fn_InternalBasePtr_Serialize)
+                fn_InternalBasePtr_Serialize(ibpPtr, serializer);
+            // Validate type after serialization
+            void* stored = *reinterpret_cast<void**>(node);
+            if (stored != nullptr && fn_IsDerivedFrom && s_pTid) {
+                if (!fn_IsDerivedFrom(stored, *s_pTid))
+                    *reinterpret_cast<void**>(node) = nullptr;
+            }
+            // Advance: go to right child's leftmost, or go up
+            uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+            if (rc != 0) {
+                uintptr_t next = rc;
+                while (*reinterpret_cast<uintptr_t*>(next + 0x10) != 0)
+                    next = *reinterpret_cast<uintptr_t*>(next + 0x10);
+                node = next;
+            } else {
+                // Go up until we came from a left child
+                uintptr_t par = *reinterpret_cast<uintptr_t*>(node + 0x08);
+                if (par != 0) {
+                    // We need to track: if par's right == node, skip, go higher
+                    // The decompile traversal: go to parent; if we came from RIGHT, keep going up
+                    // until we come from a LEFT side or reach root
+                    uintptr_t child = node;
+                    while (par != 0 && *reinterpret_cast<uintptr_t*>(par + 0x18) == child) {
+                        child = par;
+                        par = *reinterpret_cast<uintptr_t*>(par + 0x08);
+                    }
+                    node = par;
+                } else {
+                    node = 0;
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// ClearArea BST helpers (0x140029a40 / 0x14001ca60 / 0x140029de0)
+// key[0] at +0x00, key[1] at +0x08, parent at +0x10, left at +0x18, right at +0x20,
+// balance at +0x28 (int16), height at +0x2a (int16)
+// ============================================================
+
+// Helper: update balance/height on a ClearArea BST node.
+static inline void ClearBST_UpdateNode(uintptr_t node) {
+    int16_t lh = 0, rh = 0;
+    uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+    uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x20);
+    if (lc) lh = *reinterpret_cast<int16_t*>(lc + 0x2a) + 1;
+    if (rc) rh = *reinterpret_cast<int16_t*>(rc + 0x2a) + 1;
+    *reinterpret_cast<int16_t*>(node + 0x28) = (int16_t)(rh - lh);
+    *reinterpret_cast<int16_t*>(node + 0x2a) = (rh > lh) ? rh : lh;
+}
+
+// Reimpl of TradeDescription_helper_sub_9ad0_sub_e450 (0x14000e450):
+// AVL rotate-left for ClearArea BST (right child up).
+// left=+0x18, right=+0x20, parent=+0x10, balance=+0x28, height=+0x2a.
+static uintptr_t ClearBST_RotateLeft(uintptr_t* root, uintptr_t node) {
+    uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x20);
+
+    if (node == *root) {
+        *root = rc;
+    } else {
+        uintptr_t par = *reinterpret_cast<uintptr_t*>(node + 0x10);
+        if (par) {
+            if (*reinterpret_cast<uintptr_t*>(par + 0x18) == node)
+                *reinterpret_cast<uintptr_t*>(par + 0x18) = rc;
+            else
+                *reinterpret_cast<uintptr_t*>(par + 0x20) = rc;
+        }
+    }
+    *reinterpret_cast<uintptr_t*>(rc + 0x10) = *reinterpret_cast<uintptr_t*>(node + 0x10);
+    uintptr_t rcl = *reinterpret_cast<uintptr_t*>(rc + 0x18);
+    *reinterpret_cast<uintptr_t*>(node + 0x20) = rcl;
+    if (rcl) *reinterpret_cast<uintptr_t*>(rcl + 0x10) = node;
+    *reinterpret_cast<uintptr_t*>(rc + 0x18) = node;
+    *reinterpret_cast<uintptr_t*>(node + 0x10) = rc;
+    // Recompute: rc's left (was node, now updated), rc's right
+    ClearBST_UpdateNode(node);
+    uintptr_t rcr = *reinterpret_cast<uintptr_t*>(rc + 0x20);
+    if (rcr) ClearBST_UpdateNode(rcr);
+    ClearBST_UpdateNode(rc);
+    return rc;
+}
+
+// Reimpl of TradeDescription_helper_sub_9ad0_sub_e580 (0x14000e580):
+// AVL rotate-right for ClearArea BST (left child up).
+static uintptr_t ClearBST_RotateRight(uintptr_t* root, uintptr_t node) {
+    uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+
+    if (node == *root) {
+        *root = lc;
+    } else {
+        uintptr_t par = *reinterpret_cast<uintptr_t*>(node + 0x10);
+        if (par) {
+            if (*reinterpret_cast<uintptr_t*>(par + 0x18) == node)
+                *reinterpret_cast<uintptr_t*>(par + 0x18) = lc;
+            else
+                *reinterpret_cast<uintptr_t*>(par + 0x20) = lc;
+        }
+    }
+    *reinterpret_cast<uintptr_t*>(lc + 0x10) = *reinterpret_cast<uintptr_t*>(node + 0x10);
+    uintptr_t lcr = *reinterpret_cast<uintptr_t*>(lc + 0x20);
+    *reinterpret_cast<uintptr_t*>(node + 0x18) = lcr;
+    if (lcr) *reinterpret_cast<uintptr_t*>(lcr + 0x10) = node;
+    *reinterpret_cast<uintptr_t*>(lc + 0x20) = node;
+    *reinterpret_cast<uintptr_t*>(node + 0x10) = lc;
+    ClearBST_UpdateNode(node);
+    uintptr_t lcl = *reinterpret_cast<uintptr_t*>(lc + 0x18);
+    if (lcl) ClearBST_UpdateNode(lcl);
+    ClearBST_UpdateNode(lc);
+    return lc;
+}
+
+// Reimpl of TradeDescription_impl_3480 (0x140013480): AVL retrace for ClearArea BST.
+// Walks upward from *cur, rebalancing using ClearBST rotations.
+// left=+0x18, right=+0x20, parent=+0x10, balance=+0x28, height=+0x2a.
+static void ClearBST_Retrace(uintptr_t* root, uintptr_t* cur) {
+    uintptr_t node = *cur;
+    while (node != 0) {
+        uintptr_t next = *reinterpret_cast<uintptr_t*>(node + 0x10);  // parent (+0x10)
+
+        int16_t lh = 0, rh = 0;
+        uintptr_t lc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+        uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x20);
+        if (lc) lh = *reinterpret_cast<int16_t*>(lc + 0x2a) + 1;
+        if (rc) rh = *reinterpret_cast<int16_t*>(rc + 0x2a) + 1;
+        *reinterpret_cast<int16_t*>(node + 0x28) = (int16_t)(rh - lh);
+        *reinterpret_cast<int16_t*>(node + 0x2a) = (rh > lh) ? rh : lh;
+
+        // Right-heavy
+        rc = *reinterpret_cast<uintptr_t*>(node + 0x20);
+        if (*reinterpret_cast<int16_t*>(node + 0x28) > 1 && rc != 0) {
+            if (*reinterpret_cast<int16_t*>(rc + 0x28) < 1 && *reinterpret_cast<int16_t*>(rc + 0x28) < 0) {
+                ClearBST_RotateRight(root, rc);
+                // After rotation, re-read node
+            }
+            node = *cur;
+            ClearBST_RotateLeft(root, node);
+        }
+        // Left-heavy
+        node = *cur;
+        if (*reinterpret_cast<int16_t*>(node + 0x28) < -1) {
+            lc = *reinterpret_cast<uintptr_t*>(node + 0x18);
+            if (lc != 0) {
+                if (*reinterpret_cast<int16_t*>(lc + 0x28) > -1 && *reinterpret_cast<int16_t*>(lc + 0x28) > 0) {
+                    ClearBST_RotateLeft(root, lc);
+                    // re-read
+                }
+                node = *cur;
+                ClearBST_RotateRight(root, node);
+            }
+        }
+
+        *cur = next;
+        node = next;
+    }
+}
+
+// Allocation helper: alloc a new 0x30-byte ClearArea BST node and copy key pair from keyData.
+// Reimpl of ClearArea_helper_9920_sub_9b40 (0x140029b40): alloc new node, copy 16-byte key.
+// param_2 = pointer to key struct (key[0] at +0, key[1] at +8), param_3 = parent ptr.
+static void* ClearBST_AllocNode(void* keyData, uintptr_t parent) {
+    void* node = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
+    if (!node) return nullptr;
+    uintptr_t n = reinterpret_cast<uintptr_t>(node);
+    *reinterpret_cast<uint64_t*>(n + 0x00) = 0;
+    *reinterpret_cast<uint64_t*>(n + 0x00) = *reinterpret_cast<uint64_t*>(keyData);  // key[0]
+    *reinterpret_cast<uint64_t*>(n + 0x08) = 0;
+    *reinterpret_cast<uint64_t*>(n + 0x08) = *reinterpret_cast<uint64_t*>(
+        reinterpret_cast<uintptr_t>(keyData) + 8);                                    // key[1]
+    *reinterpret_cast<uintptr_t*>(n + 0x10) = parent;  // parent
+    *reinterpret_cast<uint64_t*>(n + 0x18) = 0;        // left
+    *reinterpret_cast<uint64_t*>(n + 0x20) = 0;        // right
+    *reinterpret_cast<uint32_t*>(n + 0x28) = 0;        // balance + height (padding)
+    return node;
+}
+
+// Reimpl of TradeDescription_impl_9a40 (0x140029a40): ClearArea BST insert.
+// Inserts a 16-byte key pair (key[0] = tileIdx, key[1] = citizenRef at param_3) into
+// the BST at param_1.  Returns pointer to out-pointer in param_2.
+// Signature: void* fn(void* bstRoot, void* retOut, void* keyData)
+void* WorkBST_ClearArea_GroundInsert_9a40(void* bstRoot, void* retOut, void* keyData) {
+    uintptr_t* header = reinterpret_cast<uintptr_t*>(bstRoot);
+    uint64_t key0 = *reinterpret_cast<uint64_t*>(keyData);
+
+    if (header[0] == 0) {
+        // Empty tree: allocate root node
+        void* newNode = ClearBST_AllocNode(keyData, 0);
+        header[0] = reinterpret_cast<uintptr_t>(newNode);
+        *reinterpret_cast<void**>(retOut) = newNode;
+    } else {
+        uintptr_t cur = header[0];
+        uintptr_t local_res8 = cur;  // track insertion parent for retrace
+        void* inserted = nullptr;
+
+        while (true) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
+            uint64_t nodeKey = *reinterpret_cast<uint64_t*>(cur);
+            if (key0 < nodeKey) {
+                uintptr_t lc = *reinterpret_cast<uintptr_t*>(cur + 0x18);
+                if (lc == 0) {
+                    // Insert as left child
+                    void* newNode = ClearBST_AllocNode(keyData, cur);
+                    *reinterpret_cast<uintptr_t*>(cur + 0x18) = reinterpret_cast<uintptr_t>(newNode);
+                    inserted = newNode;
+                    local_res8 = cur;
+                    break;
+                }
+                cur = lc;
+            } else {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&cur);
+                if (key0 <= *reinterpret_cast<uint64_t*>(cur)) {
+                    // Equal: already exists
+                    *reinterpret_cast<void**>(retOut) = reinterpret_cast<void*>(cur);
+                    return retOut;
+                }
+                uintptr_t rc = *reinterpret_cast<uintptr_t*>(cur + 0x20);
+                if (rc == 0) {
+                    // Insert as right child
+                    void* newNode = ClearBST_AllocNode(keyData, cur);
+                    *reinterpret_cast<uintptr_t*>(cur + 0x20) = reinterpret_cast<uintptr_t>(newNode);
+                    inserted = newNode;
+                    local_res8 = cur;
+                    break;
+                }
+                cur = rc;
+            }
+        }
+        ClearBST_Retrace(&header[0], &local_res8);
+        *reinterpret_cast<void**>(retOut) = inserted;
+    }
+    // Increment count
+    int* countPtr = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bstRoot) + 8);
+    (*countPtr)++;
+    return retOut;
+}
+
+// Reimpl of TradeDescription_impl_ca60 (0x14001ca60): ClearArea BST remove node.
+// Removes a specific node from the ClearArea BST with full AVL rebalance.
+// Signature: void fn(void* bstRoot, void* node)
+void WorkBST_ClearArea_Remove_ca60(void* bstRoot, void* node) {
+    uintptr_t* header = reinterpret_cast<uintptr_t*>(bstRoot);
+    uintptr_t param_2 = reinterpret_cast<uintptr_t>(node);
+
+    int* countPtr = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bstRoot) + 8);
+    (*countPtr)--;
+
+    uintptr_t parent = *reinterpret_cast<uintptr_t*>(param_2 + 0x10);  // parent at +0x10
+    uintptr_t right  = *reinterpret_cast<uintptr_t*>(param_2 + 0x20);  // right at +0x20
+    uintptr_t retraceFrom = parent;
+
+    if (right == 0) {
+        uintptr_t left = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+        if (parent == 0) {
+            header[0] = left;
+        } else if (*reinterpret_cast<void**>(parent + 0x18) == node) {
+            *reinterpret_cast<uintptr_t*>(parent + 0x18) = left;
+        } else {
+            *reinterpret_cast<uintptr_t*>(parent + 0x20) = left;
+        }
+        right = left;
+    } else {
+        uintptr_t left = *reinterpret_cast<uintptr_t*>(param_2 + 0x18);
+        uintptr_t pred = left;
+        if (left != 0) {
+            // Find rightmost of left subtree (in-order predecessor)
+            while (*reinterpret_cast<uintptr_t*>(pred + 0x20) != 0) {
+                pred = *reinterpret_cast<uintptr_t*>(pred + 0x20);
+            }
+            retraceFrom = 0;
+            if (pred != left) {
+                uintptr_t predRight = *reinterpret_cast<uintptr_t*>(pred + 0x18);
+                retraceFrom = *reinterpret_cast<uintptr_t*>(pred + 0x10);
+                *reinterpret_cast<uintptr_t*>(retraceFrom + 0x20) = predRight;
+                if (predRight != 0) {
+                    *reinterpret_cast<uintptr_t*>(predRight + 0x10) = retraceFrom;
+                }
+                *reinterpret_cast<uintptr_t*>(pred + 0x18) = left;
+                if (*reinterpret_cast<uintptr_t*>(retraceFrom + 0x18) == 0) {
+                    // Update retraceFrom node balance/height
+                    int16_t sVar7 = 0, sVar6 = 0, sVar3;
+                    uintptr_t rl = *reinterpret_cast<uintptr_t*>(retraceFrom + 0x18);
+                    uintptr_t rr = *reinterpret_cast<uintptr_t*>(retraceFrom + 0x20);
+                    if (rl) sVar7 = *reinterpret_cast<int16_t*>(rl + 0x2a) + 1;
+                    if (rr) sVar6 = *reinterpret_cast<int16_t*>(rr + 0x2a) + 1;
+                    sVar3 = (sVar6 > sVar7) ? sVar6 : sVar7;
+                    *reinterpret_cast<int16_t*>(retraceFrom + 0x28) = (int16_t)(sVar6 - sVar7);
+                    *reinterpret_cast<int16_t*>(retraceFrom + 0x2a) = sVar3;
+                }
+            }
+            right = retraceFrom;
+            *reinterpret_cast<uintptr_t*>(pred + 0x20) = *reinterpret_cast<uintptr_t*>(param_2 + 0x20);
+            if (*reinterpret_cast<uintptr_t*>(pred + 0x18) != 0) {
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(pred + 0x18) + 0x10) = pred;
+            }
+            if (*reinterpret_cast<uintptr_t*>(pred + 0x20) != 0) {
+                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(pred + 0x20) + 0x10) = pred;
+            }
+            uintptr_t np = *reinterpret_cast<uintptr_t*>(param_2 + 0x10);
+            *reinterpret_cast<uintptr_t*>(pred + 0x10) = np;
+            if (np == 0) {
+                header[0] = pred;
+                *reinterpret_cast<uintptr_t*>(pred + 0x10) = 0;
+                pred = header[0];
+            } else if (*reinterpret_cast<void**>(np + 0x18) == node) {
+                *reinterpret_cast<uintptr_t*>(np + 0x18) = pred;
+            } else {
+                *reinterpret_cast<uintptr_t*>(np + 0x20) = pred;
+            }
+            if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+            uintptr_t retracePtr = (right == 0) ? pred : right;
+            ClearBST_Retrace(&header[0], &retracePtr);
+            return;
+        }
+        // left == 0: no left child
+        if (parent == 0) {
+            header[0] = right;
+            right = *reinterpret_cast<uintptr_t*>(param_2 + 0x20);
+        } else if (*reinterpret_cast<void**>(parent + 0x18) == node) {
+            *reinterpret_cast<uintptr_t*>(parent + 0x18) = right;
+            right = *reinterpret_cast<uintptr_t*>(param_2 + 0x20);
+        } else {
+            *reinterpret_cast<uintptr_t*>(parent + 0x20) = right;
+            right = *reinterpret_cast<uintptr_t*>(param_2 + 0x20);
+        }
+    }
+
+    if (right != 0) {
+        *reinterpret_cast<uintptr_t*>(right + 0x10) = *reinterpret_cast<uintptr_t*>(param_2 + 0x10);
+    }
+    uintptr_t retraceStart = right;
+    if (fn_MemFreeStatic) fn_MemFreeStatic(node);
+    uintptr_t retracePtr = (retraceStart == 0) ? retraceFrom : retraceStart;
+    ClearBST_Retrace(&header[0], &retracePtr);
+}
+
+// ============================================================
+// ClearArea cell-BST serialize (TradeDescription_impl_9de0 at 0x140029de0)
+// This tree stores (key:int32, ibp:void*) pairs in 0x30-byte nodes.
+// Node layout: +0x00=key(int32), +0x08=ibp(ptr), +0x10=parent, +0x18=left(ptr via +0x06*4),
+//   actually using int-indexed pointers (piVar style):
+//   node as int*: [0]=key, [2]=[4]=ibpPtr (8-byte at +8), [4]=parent (at +0x10),
+//   [6]=left (at +0x18), [8]=right (at +0x20), [0xa]=height(int32)
+// From Ghidra: all pointer children at int[6] (+0x18) and int[8] (+0x20).
+// balance at int[4] pairs (+0x10? no) — need re-read.
+// Re-examining decompile: `piVar[6]` = int*[6] = at byte offset 24 = 0x18 (left)
+//   `piVar[8]` = at byte offset 32 = 0x20 (right), `piVar[4]` = at byte offset 16 = 0x10 (parent)
+//   `*(int*)(piVar5 + 0x2a)` = height, `*(int*)(piVar5 + 0x28)` = balance
+// So this IS the same ClearArea tree layout (2-word key at 0, parent at +0x10,
+//   left at +0x18, right at +0x20, balance at +0x28, height at +0x2a)
+// BUT node size may differ: Ghidra uses piVar (int*) so piVar[6] = byte 0x18, piVar[8]=0x20.
+// Allocation: MemAlloc(0x30, 8). Same 0x30-byte node.
+// Key differences from 9a40: key is int32 (not uint64 pair), and value is IBP (ptr).
+// ============================================================
+
+// Alloc helper for 9de0 tree (int key + IBP value, node size 0x30)
+// Node: +0x00=key(int32), +0x04=pad(0), +0x08=ibpPtr(ptr), +0x10=parent, +0x18=left, +0x20=right
+// Note: allocation of child node sets parent to piVar (the current node), left child of piVar.
+// From decompile: piVar3 = MemAlloc(0x30, 8); piVar3[0]=local_28[0]; piVar3[2..3]=0;
+//   *(int**)(piVar3+2)=local_20; *(int**)(piVar3+4)=piVar1; piVar3[6..10]=0
+//   piVar3[2] = int[2] = byte offset 8 = ibpPtr; piVar3[4] = int[4] = byte offset 16 = parent
+static void* CellBST_AllocNode(int key, void* ibp, uintptr_t parent) {
+    void* raw = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
+    if (!raw) return nullptr;
+    int* n = reinterpret_cast<int*>(raw);
+    n[0]  = key;    // +0x00 key
+    n[1]  = 0;      // +0x04 pad
+    *reinterpret_cast<void**>(n + 2) = ibp;      // +0x08 ibpPtr
+    *reinterpret_cast<uintptr_t*>(n + 4) = parent; // +0x10 parent
+    n[6]  = 0; n[7]  = 0;  // +0x18 left
+    n[8]  = 0; n[9]  = 0;  // +0x20 right
+    n[10] = 0;              // +0x28 balance+height
+    n[11] = 0;
+    return raw;
+}
+
+// Reimpl of TradeDescription_impl_9de0 (0x140029de0): ClearArea cell-BST serialize.
+// On load: reads count, then for each entry: reads int key + IBP, validates type,
+//   allocates node, inserts into BST (no retrace in decompile on simple insert path).
+//   After each group insert calls TradeDescription_impl_3480 for retrace.
+// On save: walks tree in-order (leftmost first) and writes key+IBP for each node.
+// Signature: void fn(void* bstRoot, void* serializer)
+void WorkBST_BST_Serialize_Cell_9de0(void* bstRoot, void* serializer) {
+    uintptr_t* header = reinterpret_cast<uintptr_t*>(bstRoot);
+    int count = static_cast<int>(
+        *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(bstRoot) + 8));
+
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &count, nullptr);
+
+    uintptr_t ser_vtbl = *reinterpret_cast<uintptr_t*>(serializer);
+    bool isLoad = (*reinterpret_cast<int*>(ser_vtbl + 8) == 0);
+
+    // Type-ID pointer (DWORD_1401c7158 = g_TypeId_CitizenAIComponent_FC)
+    static const uint32_t* s_pTid = nullptr;
+    if (!s_pTid) {
+        s_pTid = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
+    }
+
+    if (isLoad) {
+        for (int i = 0; i < count; i++) {
+            int key = 0;
+            if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &key, nullptr);
+            uintptr_t ibpVal = 0;
+            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&ibpVal, serializer);
+            void* ibp = reinterpret_cast<void*>(ibpVal);
+            if (ibp && fn_IsDerivedFrom && s_pTid) {
+                if (!fn_IsDerivedFrom(ibp, *s_pTid)) ibp = nullptr;
+            }
+            // Insert into BST
+            uintptr_t cur = header[0];
+            if (cur == 0) {
+                void* newNode = CellBST_AllocNode(key, ibp, 0);
+                header[0] = reinterpret_cast<uintptr_t>(newNode);
+            } else {
+                int* node = reinterpret_cast<int*>(cur);
+                int* insertParent = nullptr;
+                bool inserted = false;
+                while (true) {
+                    int* local_res8 = node;
+                    int* piVar1 = local_res8;
+                    if (*local_res8 <= key) {
+                        if (key <= *local_res8) {
+                            // Duplicate: skip (decompile jumps to count-increment)
+                            goto next_cell_entry;
+                        }
+                        // Go right (+0x20 = int[8])
+                        int* rc = *reinterpret_cast<int**>(local_res8 + 8);
+                        if (rc == nullptr) {
+                            void* nn = CellBST_AllocNode(key, ibp, reinterpret_cast<uintptr_t>(piVar1));
+                            *reinterpret_cast<void**>(piVar1 + 8) = nn;
+                            insertParent = local_res8;
+                            inserted = true;
+                            break;
+                        }
+                        node = rc;
+                    } else {
+                        // Go left (+0x18 = int[6])
+                        int* lc = *reinterpret_cast<int**>(local_res8 + 6);
+                        if (lc == nullptr) {
+                            void* nn = CellBST_AllocNode(key, ibp, reinterpret_cast<uintptr_t>(piVar1));
+                            *reinterpret_cast<void**>(piVar1 + 6) = nn;
+                            insertParent = local_res8;
+                            inserted = true;
+                            break;
+                        }
+                        node = lc;
+                    }
+                }
+                if (inserted && insertParent) {
+                    ClearBST_Retrace(&header[0],
+                        reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(insertParent)));
+                }
+            }
+            // Increment count
+            *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bstRoot) + 8) += 1;
+next_cell_entry:;
+        }
+    } else {
+        // SAVE: in-order traversal (leftmost node first via parent-pointer walk)
+        uintptr_t cur = header[0];
+        if (cur == 0) return;
+        // Find leftmost
+        while (*reinterpret_cast<uintptr_t*>(cur + 0x18) != 0)
+            cur = *reinterpret_cast<uintptr_t*>(cur + 0x18);
+
+        uintptr_t prev = cur;
+        // Walk: decompile goes right-then-left for the cell tree too
+        uintptr_t startNode = prev;
+        uintptr_t node = startNode;
+        while (node != 0) {
+            // Write key (int[0]) then IBP (at +0x08)
+            int key = *reinterpret_cast<int*>(node);
+            if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &key, nullptr);
+            void* ibpPtr = reinterpret_cast<void*>(node + 0x08);
+            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(ibpPtr, serializer);
+            // Validate after serialization
+            void* stored = *reinterpret_cast<void**>(node + 0x08);
+            if (stored && fn_IsDerivedFrom && s_pTid) {
+                if (!fn_IsDerivedFrom(stored, *s_pTid)) {
+                    *reinterpret_cast<void**>(node + 0x08) = nullptr;
+                    *reinterpret_cast<int32_t*>(node + 0x0c) = 0;
+                }
+            }
+            // Advance: go to right child's leftmost, or go up
+            uintptr_t rc = *reinterpret_cast<uintptr_t*>(node + 0x20);
+            if (rc != 0) {
+                uintptr_t next = rc;
+                while (*reinterpret_cast<uintptr_t*>(next + 0x18) != 0)
+                    next = *reinterpret_cast<uintptr_t*>(next + 0x18);
+                node = next;
+            } else {
+                uintptr_t par = *reinterpret_cast<uintptr_t*>(node + 0x10);
+                uintptr_t child = node;
+                while (par != 0 && *reinterpret_cast<uintptr_t*>(par + 0x20) == child) {
+                    child = par;
+                    par = *reinterpret_cast<uintptr_t*>(par + 0x10);
+                }
+                node = par;
+            }
+        }
+    }
+}

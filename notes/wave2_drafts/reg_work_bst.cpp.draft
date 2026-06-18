@@ -1,0 +1,39 @@
+// standalone/reg_work_bst.cpp
+// Wave 2 (Work) — BST/ClearArea-tree sub-batch registration.
+//
+// Registers the exe addresses of BST/AVL and ClearArea tree helpers (shared
+// by many code/Game/Work/*.cpp call sites) to their reimplementations in
+// code/Game/Work/work_base_bst.cpp. Wire RegisterWorkBstBatch() into
+// RegisterCodeFunctions() in standalone/address_registry.cpp.
+//
+// Safety: every address below was verified as a real function ENTRY in Ghidra
+// (get_function_by_address Entry == address) and is a faithful 1:1 port.
+//
+// NOTE on 0x140029a60: Ghidra confirms this address is INSIDE the body of
+// TradeDescription_impl_9a40 (entry 0x140029a40, body 140029a40-140029b34).
+// It has zero code xrefs.  The harvestarea.cpp comment already corrects it to
+// 0x14001ca60 (TradeDescription_impl_ca60).  SKIPPED — mid-function address.
+// plantarea.cpp / plantorchard.cpp / harvestorchard.cpp callers should similarly
+// be corrected to 0x14001ca60 before registering.
+// 0x14001ca60 IS registered here as WorkBST_ClearArea_Remove_ca60.
+#ifdef STANDALONE_EXE
+#include "resolve.h"
+#include <cstdint>
+
+// BST helpers (work_base_bst.cpp)
+extern void  WorkBST_BSTRemove_a6e0(void* bstRoot, void* node);            // 0x14001a6e0
+extern void  WorkBST_BSTFindRemove_25520(void* bstRoot, void* keyIBP);     // 0x140025520
+extern void  WorkBST_BST_Serialize_296b0(void* bstRoot, void* serializer); // 0x1400296b0
+extern void  WorkBST_BST_Serialize_Cell_9de0(void* bstRoot, void* ser);    // 0x140029de0
+extern void* WorkBST_ClearArea_GroundInsert_9a40(void* bstRoot, void* retOut, void* keyData); // 0x140029a40
+extern void  WorkBST_ClearArea_Remove_ca60(void* bstRoot, void* node);     // 0x14001ca60
+
+void RegisterWorkBstBatch() {
+    RegisterExeAddr(0x14001a6e0, reinterpret_cast<uintptr_t>(&WorkBST_BSTRemove_a6e0));
+    RegisterExeAddr(0x140025520, reinterpret_cast<uintptr_t>(&WorkBST_BSTFindRemove_25520));
+    RegisterExeAddr(0x1400296b0, reinterpret_cast<uintptr_t>(&WorkBST_BST_Serialize_296b0));
+    RegisterExeAddr(0x140029de0, reinterpret_cast<uintptr_t>(&WorkBST_BST_Serialize_Cell_9de0));
+    RegisterExeAddr(0x140029a40, reinterpret_cast<uintptr_t>(&WorkBST_ClearArea_GroundInsert_9a40));
+    RegisterExeAddr(0x14001ca60, reinterpret_cast<uintptr_t>(&WorkBST_ClearArea_Remove_ca60));
+}
+#endif

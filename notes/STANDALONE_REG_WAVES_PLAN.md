@@ -4,6 +4,43 @@ Written 2026-06-18 after wave 1 (Component). Branch with wave 1: `wave/component
 (commits `ebbc385` wiring + `dda1096`/`6f84661` Level-1 address fixes). See
 [[project_component_reg_wave]] in memory and `notes/COMPONENT_REG_WAVE_BRIEF.md`.
 
+## ⏩ Wave 2 (Work) progress — 2026-06-18 (branch `wave/work`, off `wave/component-people`)
+
+**Recomputed gap = 89 UNIQUE Work addrs (not 70).** The plan's per-leaf-file disjoint
+split does NOT hold: ~39 of the 89 are heavily-SHARED base/StateMachine/ECS helpers
+(`0x1400c5400` in 20 files, `0x1400f7400`/19, `0x1400f7100`/18, etc.). Restructured around
+ONE shared keystone file `code/Game/Work/work_base_reimpl.cpp` + `standalone/reg_work_base.cpp`
+(`RegisterWorkBaseBatch`, wired into address_registry.cpp ~line 360).
+
+**DONE — 12/39 shared base helpers (3 commits, all build+A/B-no-regression green):**
+- `a23b68b` FindComponent family (5: 0x140002ed0/2f90/3050/52c0/6270 — identical loop, differ
+  only by type-ID global) + 2 recursive tree-frees (0x140014c30 ch+0x10/+0x18, 0x14000e320 ch+0x18/+0x20).
+- `b164790` lifecycle trio: 0x1400c5400 TaskListCleanup, 0x1400f7400 Work::Serialize, 0x1400f7100 Work::CanStartWork/ValidateTask.
+- `df05ea9` 0x140008830 Map_CalcDistance, 0x1400a00f0 Map::CanPathTo/ValidateCell.
+
+**⚠️ LESSON — parallel sonnet agents are UNRELIABLE for complex pointer/tree ports.** Spawned 2
+(BST family, grid/AI). Both compiled clean and CLAIMED done, but Ghidra verification found the
+COMPLEX ones NOT faithful: FindCell (wrong transposed-ring traversal), RegisterWork (param2 is an
+out-buffer not the key → swapped + clobbers the count field), AutoPickup (guessed array compaction),
+TryAssignWorkplace (re-expressed BST walk). Only the SIMPLE ones verified clean → I hand-salvaged
+just CalcDistance + ValidateCell. **Mechanical/identical helpers (FindComponent, tree-free) = safe to
+delegate. Intricate tree/assignment logic = must be hand-ported + Ghidra-verified (opus), because the
+menu frame-5 stall means NONE of this is in-game-exercised, so a wrong port is SILENT corruption —
+strictly worse than the safe no-op of leaving it unregistered.** Agent drafts kept (unbuilt) under
+`notes/wave2_drafts/*.draft` as starting points.
+
+**DEFERRED shared helpers (need careful hand-port + Ghidra verify, NOT yet registered):**
+- AVL/BST family: 0x140025520 BSTFindRemove, 0x14001a6e0 BSTRemove(+retrace 0x14001a8c0, rotations
+  0x140014c70/0x140014da0), 0x1400296b0 BST_Serialize, 0x140029de0 BST_Serialize_Cell,
+  0x140029a40 ClearArea insert, 0x14001ca60 ClearArea remove (+ClearArea rotations 0x14000e450/0x14000e580/0x140013480).
+- grid/assignment: 0x14009ccf0 FindCell, 0x140021a30 RegisterWork, 0x1400e3db0 AutoPickup, 0x1400f8620 TryAssignWorkplace.
+- 0x140115e60 CitizenAI_LongTermPlan (304 lines, ~12 unresolved callees — likely a Level-2 reimpl).
+- plus the ~17 lower-reuse (2–3 caller) shared helpers not yet touched, and the ~49 single-file (W1) leaf addrs.
+
+**Level-1 caller bug found (separate from registration):** `0x140029a60` is MID-FUNCTION (true entry
+0x140029a40; clear-area REMOVE is 0x14001ca60). `harvestarea.cpp` already corrected; `plantarea.cpp`,
+`plantorchard.cpp`, `harvestorchard.cpp` still cite the bad addr — fix those ResolveAddr literals.
+
 ## What this is
 
 `code/Game/*` calls exe sub-helpers via guarded `ResolveAddr(Module::Exe, 0xADDR)`. If the
