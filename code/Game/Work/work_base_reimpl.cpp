@@ -16,6 +16,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cmath>
 
 // ============================================================
 // FindComponent family
@@ -250,4 +251,71 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
         }
     }
     return 0;
+}
+
+// ============================================================
+// Map distance / connectivity helpers
+// ============================================================
+
+// Reimpl of FUN_140008830 (Map_CalcDistance) — pathfinding-aware cell distance.
+// Tries the cached path cost (Map_CalcPathCost, 0x14009f810); on no-path (<0) falls
+// back to Euclidean grid distance (sqrtf) + gridWidth penalty. FUN_140132010 in the
+// original is sqrtf (verified). Caller: int fn(int* mapGrid, uint32_t cellA, uint32_t cellB)
+int WorkBase_CalcDistance_8830(int* mapGrid, uint32_t cellA, uint32_t cellB) {
+    int cost = fn_Map_CalcPathCost ? fn_Map_CalcPathCost(mapGrid, cellA, static_cast<int>(cellB), 1) : -1;
+    if (cost < 0) {
+        int gridW = *mapGrid;
+        int dRow = static_cast<int>(cellA) / gridW - static_cast<int>(cellB) / gridW;
+        int dCol = static_cast<int>(cellA) % gridW - static_cast<int>(cellB) % gridW;
+        cost = static_cast<int>(sqrtf(static_cast<float>(dRow * dRow + dCol * dCol))) + gridW;
+    }
+    return cost;
+}
+
+// FUN_14009c480 — connectivity/zone refresh for the (pathType, destCell, srcCell) query.
+// The original passes all four arguments; resolve with the full 4-arg signature so we
+// don't drop the trailing register args.
+typedef void (*fn_MapConnRefresh_9c480_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
+static fn_MapConnRefresh_9c480_t s_fn_MapConnRefresh_9c480 = nullptr;
+static bool s_mapConnInit = false;
+static void EnsureMapConn() {
+    if (s_mapConnInit) return;
+    s_fn_MapConnRefresh_9c480 = reinterpret_cast<fn_MapConnRefresh_9c480_t>(
+        ResolveAddr(Module::Exe, 0x14009c480));
+    s_mapConnInit = true;
+}
+
+// Reimpl of FUN_1400a00f0 (Map::CanPathTo / WorldGrid_ValidateCell) — are two cells
+// mutually reachable? Refreshes connectivity (FUN_14009c480), then ORs the two cells'
+// pass-type bits with pathType; if both cell types survive the mask it returns 1 when a
+// road/overlay bit (0x1e0) is set or when both cells share a non-zero region (uint16 @
+// +0x26). Cell records: array at grid+0x80, stride 0x30, pass byte +0x29.
+// Caller: bool fn(int* grid, uint32_t pathType, uint32_t destCell, int srcCell)
+//   (low byte of the returned uint64 is the bool; the WorldGrid_ValidateCell int-variant
+//    callers read the low 32 bits).
+uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell) {
+    EnsureMapConn();
+    if (s_fn_MapConnRefresh_9c480) s_fn_MapConnRefresh_9c480(mapGrid, pathType, destCell, srcCell);
+
+    uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
+    uintptr_t recSrc  = cellArr + static_cast<uintptr_t>(static_cast<uint32_t>(srcCell)) * 0x30;
+    uintptr_t recDest = cellArr + static_cast<uintptr_t>(destCell) * 0x30;
+
+    uint32_t typeSrc  = 1u << (*reinterpret_cast<const uint8_t*>(recSrc  + 0x29) & 0x1f);
+    uint32_t typeDest = 1u << (*reinterpret_cast<const uint8_t*>(recDest + 0x29) & 0x1f);
+    uint32_t combined = typeDest | typeSrc;
+    uint64_t ret = combined;
+
+    uint32_t mask = pathType | combined;
+    if ((mask & typeDest) && (mask & typeSrc)) {
+        if (mask & 0x1e0u) return (ret & 0xffffffffffffff00ull) | 1u;
+        uint16_t regionDest = *reinterpret_cast<const uint16_t*>(recDest + 0x26);
+        if (regionDest != 0) {
+            uint16_t regionSrc = *reinterpret_cast<const uint16_t*>(recSrc + 0x26);
+            ret = regionSrc;
+            if (regionSrc != 0 && regionDest == regionSrc)
+                return (ret & 0xffffffffffffff00ull) | 1u;
+        }
+    }
+    return ret & 0xffffffffffffff00ull;
 }
