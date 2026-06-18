@@ -35,3 +35,8 @@ ghidbackup.zip
 #misc
 *.lock
 *.log
+
+# Screenshots / capture artifacts (intentional doc images live under images/ — keep those)
+*.png
+!images/**
+standalone/*.png
