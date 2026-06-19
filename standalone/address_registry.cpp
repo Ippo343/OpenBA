@@ -389,6 +389,8 @@ extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescriptio
 extern void RegisterPlayerPlaceBatch();    // Player wave (place): FlipVariant (1) + UpdateHierarchy dispatch slot
 extern void RegisterPlayerEditBatch();     // Player wave (edit): EntityAtCell/AvgTerrainHeight/FencedAnchorCalc (3)
 extern void RegisterPlayerPathBatch();     // Player wave (path): RemovalTool checks (3) + FindComponent/state/f5d0 deps (4)
+extern void RegisterPlayerTileBatch();     // Player wave r2 (tile): 003870 SetTransformFromYaw, d580 TileValidity, fd650 ValidateCreate
+extern void RegisterPlayerRayBatch();      // Player wave r2 (ray): aa530 TerrainMarch, 1005a0 GetMouseRay, 101270 ScreenToCell, fda00 PlacementPos
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -442,6 +444,8 @@ static void RegisterCodeFunctions() {
     RegisterPlayerPlaceBatch();    // fd960 FlipVariant (+ 0x140152888 UpdateHierarchy dispatch slot)
     RegisterPlayerEditBatch();     // a0280 EntityAtCell, 101730 AvgTerrainHeight (leaf), dbf90 FencedAnchorCalc
     RegisterPlayerPathBatch();     // 104670/104770/1048a0 RemovalTool checks + 5780/3ea0/11e710/9f5d0 deps (bottom-up)
+    RegisterPlayerTileBatch();     // r2 tile: 003870 + d580 + fd650 (closure complete via prior waves)
+    RegisterPlayerRayBatch();      // r2 ray: aa530 + 1005a0 + 101270 + fda00 (bottom-up; 1005a0 resolves 4 exports locally)
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));

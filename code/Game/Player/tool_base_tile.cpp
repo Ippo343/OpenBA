@@ -1,0 +1,308 @@
+// code/Game/Player/tool_base_tile.cpp
+// Player wave (round 2) — "tile" sub-batch. Shared PlacementTool tile/footprint
+// helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from code/Game/Player/*.cpp.
+//
+// In DLL mode these resolve to the original exe code; in standalone mode they
+// resolve to 0 (silently skipped) unless registered. This file provides faithful
+// 1:1 reimplementations and a single registration point
+// (RegisterPlayerTileBatch in standalone/reg_player_tile.cpp) so the call sites
+// fire real logic.
+//
+// Each function is a 1:1 port of the decompiled+disassembled exe helper; do not
+// "improve" behavior. This file must NOT depend on hooks.h — bodies are
+// unconditional so it compiles in BOTH dll and standalone builds.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+// ============================================================
+// 0x140003870 — SetTransformFromYaw
+// ============================================================
+// Builds a Math::Transform from (yaw=param_3, pitch=0, offset=param_2) into
+// self+0x148, stores yaw at self+0x168, then Graphics::Geometry::SetTransform on
+// the Geometry sub-object at self+0x28.
+//
+// Disasm-verified ABI (RCX=self, RDX=param_2 (offset Vector3*), XMM2=param_3 (yaw float)):
+//   MOV R9,RDX        ; R9 = param_2 -> the OFFSET (4th) arg of FromYawPitchOffset
+//   yaw local  = param_3 (XMM6)
+//   pitch local = 0.0
+//   CALL FromYawPitchOffset(out=local_38, &yaw, &pitch, offset=param_2)
+//   copy 7 dwords (0x1c bytes, the Transform) result -> self+0x148
+//   MOVSS self+0x168 = yaw
+//   JMP Geometry::SetTransform(self+0x28, self+0x148)
+//
+// NOTE: the Ghidra decompile dropped R9/param_2 and showed a zeroed local as the
+// offset; the disasm passes param_2 through as the offset. Ported per the disasm.
+void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float yaw) {
+    float pitch = 0.0f;
+    float yawLocal = yaw;
+    // FromYawPitchOffset writes a Transform (0x1c bytes here) to outTransform.
+    // Local out buffer sized like the exe stack slot (0x30 bytes / 12 floats).
+    float out[12];
+    if (fn_Transform_FromYawPitchOffset) {
+        fn_Transform_FromYawPitchOffset(out, &yawLocal, &pitch, offset);
+        // Copy 7 dwords (0x148..0x160 inclusive of dword at +0x18 = byte 0x1c).
+        const uint32_t* src = reinterpret_cast<const uint32_t*>(out);
+        uint32_t* dst = reinterpret_cast<uint32_t*>(self + 0x148);
+        for (int i = 0; i < 7; i++) dst[i] = src[i];
+    }
+    *reinterpret_cast<float*>(self + 0x168) = yaw;
+    if (fn_Geometry_SetTransform) {
+        fn_Geometry_SetTransform(reinterpret_cast<void*>(self + 0x28),
+                                 reinterpret_cast<void*>(self + 0x148));
+    }
+}
+
+// ============================================================
+// 0x14009d580 — PlacementTool footprint tile-validity over a rotated rectangle
+// ============================================================
+// Iterates a (param_4 x param_5) rectangle anchored at (param_2,param_3). For each
+// cell it computes, per the rotation code in param_14 (0x5a=90, 0xb4=180,
+// 0x10e=270, else 0=identity), an index into two string buffers:
+//   - param_13[0]  : a char map; '.' at the index sets the "isRoad"(?) flag (R10B)
+//   - param_8[0]   : a char map indexing into param_7 to override param_6 (the
+//                    placement code), when param_7[1] (count) > 0.
+// then calls CharacterComponent_impl_f5d0 (0x14009f5d0, registered round 1) per
+// cell; returns 0 on the first f5d0 == false, else 1.
+//
+// 1:1 port of the Ghidra decompile (disasm-verified faithful). The index math and
+// the rotation switch are reproduced exactly.
+extern "C" {
+// f5d0 is registered (round 1); call via ResolveAddr.
+typedef bool (*ToolTile_f5d0_t)(int* param_1, int col, int row, unsigned int code,
+                                float p5, float p6, float p7, char p8, char p9,
+                                long long p10);
+}
+static ToolTile_f5d0_t s_fn_f5d0 = nullptr;
+static bool s_f5d0Init = false;
+
+unsigned long long ToolTile_FootprintValidity_d580(
+        int* param_1, int param_2, int param_3, int param_4, int param_5,
+        unsigned int param_6, long long* param_7, long long* param_8,
+        float param_9, float param_10, float param_11, char param_12,
+        long long* param_13, int param_14, long long param_15) {
+    if (!s_f5d0Init) {
+        s_fn_f5d0 = reinterpret_cast<ToolTile_f5d0_t>(ResolveAddr(Module::Exe, 0x14009f5d0));
+        s_f5d0Init = true;
+    }
+
+    int iVar1 = param_3 + param_5;        // row end
+    int iVar4 = iVar1;
+    if (param_3 < iVar1) {
+        iVar4 = param_2 + param_4;        // col end
+        int iVar14 = param_3;             // current row
+        int iVar3 = param_5;
+        do {
+            iVar3 = iVar3 + -1;
+            if (param_2 < iVar4) {
+                int iVar10 = param_2;     // current col
+                int iVar11 = param_4;
+                do {
+                    iVar11 = iVar11 + -1;
+                    bool bVar13 = false;
+                    int iVar9 = iVar14 - param_3;
+                    int iVar5 = iVar11;
+                    int iVar7, iVar8, iVar6, iVar12;
+                    if ((param_14 == 0x5a) ||
+                        ((iVar7 = param_5, iVar8 = iVar11, iVar6 = iVar3, iVar12 = param_4,
+                          param_14 != 0xb4 &&
+                          (iVar8 = iVar10 - param_2, iVar9 = iVar3, iVar6 = iVar14 - param_3,
+                           iVar5 = iVar10 - param_2, param_14 == 0x10e)))) {
+                        iVar7 = param_4;
+                        iVar8 = iVar9;
+                        iVar6 = iVar5;
+                        iVar12 = param_5;
+                    }
+                    iVar8 = ((iVar7 - iVar6) + -1) * (iVar12 + 1) + iVar8;
+                    long long lVar2 = *param_13;
+                    if ((lVar2 != 0) && (*reinterpret_cast<int*>(lVar2 + -8) != 0)) {
+                        bVar13 = *reinterpret_cast<char*>(iVar8 + lVar2) == '.';
+                    }
+                    if (((0 < static_cast<int>(param_7[1])) &&
+                         (lVar2 = *param_8, lVar2 != 0)) &&
+                        (*reinterpret_cast<int*>(lVar2 + -8) != 0)) {
+                        param_6 = *reinterpret_cast<unsigned int*>(
+                            *param_7 - 0xc0 +
+                            static_cast<long long>(*reinterpret_cast<char*>(iVar8 + lVar2)) * 4);
+                    }
+                    bool ok = false;
+                    if (s_fn_f5d0) {
+                        ok = s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
+                                       param_11, param_12, bVar13 ? 1 : 0, param_15);
+                    }
+                    if (!ok) {
+                        return 0;
+                    }
+                    iVar10 = iVar10 + 1;
+                } while (iVar10 < iVar4);
+            }
+            iVar14 = iVar14 + 1;
+        } while (iVar14 < iVar1);
+    }
+    return 1;
+}
+
+// ============================================================
+// 0x1400fd650 — PlacementTool validate + create placed entity
+// ============================================================
+// Validates the rectangle via ToolTile_FootprintValidity_d580; on success spawns a
+// placed ComponentEntity (CopyCtor), writes its footprint cell rect (+0x28..+0x30),
+// orientation (+0x30 normalised into [0,0x168)), sets its transform via
+// ToolTile_SetTransformFromYaw_3870, fixes up its model component, registers it in
+// the world entity list, and runs the post-create hook.
+//
+// Whole exe-code closure registered: d580 + 003870 (this batch); 1018d0, c3720
+// (CopyCtor), 003f60 (ClearPathQueue), 004680, c48a0, c2b70 (ModelComponent helper),
+// fd960 (sub_d960) all registered in prior waves. Runtime deps: MemAlloc,
+// fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom.
+//
+// 1:1 port of the Ghidra decompile.
+typedef long long* (*ToolTile_resolveIBP_t)(long long self, void* outIBP); // 003f60 / 004680
+typedef void* (*ToolTile_copyCtor_t)(void* mem, void* src);                 // c3720
+typedef void (*ToolTile_1018d0_t)(long long a, int b, int c, int d, int e, long long f);
+typedef void* (*ToolTile_004680_t)(long long self, void* outIBP);
+typedef void (*ToolTile_c48a0_t)(void* entityList, void* ibp, int idx);
+typedef void (*ToolTile_c2b70_t)(long long modelComp, int flag);
+typedef unsigned long long (*ToolTile_subd960_t)(long long self);
+
+static ToolTile_1018d0_t  s_fn_1018d0  = nullptr;
+static ToolTile_copyCtor_t s_fn_copyCtor = nullptr;
+static ToolTile_004680_t  s_fn_004680  = nullptr;
+static ToolTile_resolveIBP_t s_fn_clearPathQ = nullptr; // 003f60
+static ToolTile_c48a0_t   s_fn_c48a0   = nullptr;
+static ToolTile_c2b70_t   s_fn_c2b70   = nullptr;
+static ToolTile_subd960_t s_fn_subd960 = nullptr;
+static const uint32_t*    s_pTid_c7a88 = nullptr; // DAT_1401c7a88
+static bool s_d650Init = false;
+
+static void EnsureD650Deps() {
+    if (s_d650Init) return;
+    s_fn_1018d0    = reinterpret_cast<ToolTile_1018d0_t>(ResolveAddr(Module::Exe, 0x1401018d0));
+    s_fn_copyCtor  = reinterpret_cast<ToolTile_copyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
+    s_fn_004680    = reinterpret_cast<ToolTile_004680_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_clearPathQ= reinterpret_cast<ToolTile_resolveIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_c48a0     = reinterpret_cast<ToolTile_c48a0_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
+    s_fn_c2b70     = reinterpret_cast<ToolTile_c2b70_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
+    s_fn_subd960   = reinterpret_cast<ToolTile_subd960_t>(ResolveAddr(Module::Exe, 0x1400fd960));
+    s_pTid_c7a88   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
+    s_d650Init = true;
+}
+
+unsigned long long ToolTile_ValidateCreate_fd650(
+        long long param_1, int param_2, int param_3, int param_4, int param_5,
+        const void* param_6, float param_7) {
+    EnsureD650Deps();
+
+    // The exe global g_pGameWorldSingleton holds the gameWorld pointer value; in our
+    // type system that value is *g_pGameWorldSingleton (engine_funcs declares it void**).
+    uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    // DAT_140172248 == 0x447a0000 == 250.0f (read from Ghidra).
+    const float DAT_140172248 = 250.0f;
+
+    int* piVar10 = *reinterpret_cast<int**>(gameWorld + 0xf8);
+    int iVar12 = (param_4 - param_2) + 1;   // width
+    int iVar13 = (param_5 - param_3) + 1;   // height
+    long long lVar3 = *reinterpret_cast<long long*>(param_1 + 0x28);
+    int iVar11 = static_cast<int>(param_7); // orientation
+
+    unsigned long long uVar7 = ToolTile_FootprintValidity_d580(
+        piVar10, param_2, param_3, iVar12, iVar13,
+        *reinterpret_cast<unsigned int*>(lVar3 + 0x20),
+        reinterpret_cast<long long*>(lVar3 + 0x30),
+        reinterpret_cast<long long*>(lVar3 + 0x28),
+        0.0f, DAT_140172248, 0.0f, '\0',
+        reinterpret_cast<long long*>(*reinterpret_cast<long long*>(param_1 + 0x30) + 0x28),
+        iVar11,
+        *reinterpret_cast<long long*>(lVar3 + 0x50));
+
+    if (static_cast<char>(uVar7) == '\0') {
+        return uVar7 & 0xffffffffffffff00ULL;
+    }
+
+    long long lvCfg = *reinterpret_cast<long long*>(param_1 + 0x10);
+    if (*reinterpret_cast<char*>(lvCfg + 0x80) != '\0') {
+        int iVar1 = **reinterpret_cast<int**>(gameWorld + 0xf8);
+        long long c98 = *reinterpret_cast<int*>(lvCfg + 0x98);
+        long long c9c = *reinterpret_cast<int*>(lvCfg + 0x9c);
+        int col0 = static_cast<int>(c98 % iVar1);
+        int row0 = static_cast<int>(c98 / iVar1);
+        int col1 = static_cast<int>(c9c % iVar1);
+        int row1 = static_cast<int>(c9c / iVar1);
+        if ((param_2 != col0) || (param_3 != row0) ||
+            (col1 != param_4) || (row1 != param_5) ||
+            (*reinterpret_cast<int*>(lvCfg + 0xa0) != iVar11)) {
+            return uVar7 & 0xffffffffffffff00ULL;
+        }
+        // piVar10 in the original is reused as (int*)col0 here, but it is only ever
+        // passed as the first arg of 1018d0 (a longlong); pass col0 to mirror it.
+        piVar10 = reinterpret_cast<int*>(static_cast<long long>(col0));
+    }
+
+    if (s_fn_1018d0) {
+        s_fn_1018d0(reinterpret_cast<long long>(piVar10), param_2, param_3, param_4, param_5,
+                    *reinterpret_cast<long long*>(
+                        *reinterpret_cast<long long*>(param_1 + 0x28) + 0x50));
+    }
+
+    // Allocate + copy-construct the placed ComponentEntity.
+    void* mem = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8) : nullptr;
+    void* ptr = nullptr;
+    if (mem != nullptr && s_fn_copyCtor) {
+        ptr = s_fn_copyCtor(mem, *reinterpret_cast<void**>(param_1 + 0x20));
+    }
+
+    long long local_res8 = 0;
+    void* local_48 = mem; // doubles as the out-IBP scratch (matches the exe stack reuse)
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res8, ptr);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
+
+    // Resolve the placed-entity sub-component (004680) and write the footprint rect.
+    void* pIVar8 = s_fn_004680 ? s_fn_004680(local_res8, &local_48) : nullptr;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
+    lVar3 = *reinterpret_cast<long long*>(pIVar8);
+    *reinterpret_cast<short*>(lVar3 + 0x28) = static_cast<short>(param_2);
+    *reinterpret_cast<short*>(lVar3 + 0x2a) = static_cast<short>(param_3);
+    *reinterpret_cast<short*>(lVar3 + 0x2c) = static_cast<short>(iVar12);
+    *reinterpret_cast<short*>(lVar3 + 0x2e) = static_cast<short>(iVar13);
+    *reinterpret_cast<int*>(lVar3 + 0x30) = iVar11;
+    if (iVar11 < 0) {
+        do { iVar11 = iVar11 + 0x168; } while (iVar11 < 0);
+        *reinterpret_cast<int*>(lVar3 + 0x30) = iVar11;
+    }
+
+    // Resolve the model/geometry sub-component (ClearPathQueue == 003f60) and set its transform.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
+    pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, &local_48)) : nullptr;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
+    ToolTile_SetTransformFromYaw_3870(*reinterpret_cast<long long*>(pIVar8), param_6, param_7);
+
+    // Resolve again (different out-IBP) and fix up the model component.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
+    unsigned char local_38[16];
+    pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, local_38)) : nullptr;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
+    long long* plVar4 = *reinterpret_cast<long long**>(pIVar8);
+    int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
+    if (fn_IsDerivedFrom && s_pTid_c7a88) {
+        fn_IsDerivedFrom(reinterpret_cast<void*>(plVar4[3]), *s_pTid_c7a88);
+    }
+    *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
+    if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {
+        // vtable +0x38 call
+        (*reinterpret_cast<void(**)(long long*)>(*plVar4 + 0x38))(plVar4);
+    }
+    *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
+    if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
+
+    // Register the new entity in the world entity list.
+    local_48 = reinterpret_cast<void*>(local_res8);
+    if (s_fn_c48a0) {
+        s_fn_c48a0(*reinterpret_cast<void**>(gameWorld + 0xe8), &local_48,
+                   *reinterpret_cast<int*>(*reinterpret_cast<long long*>(param_1 + 0x20) + 0x20));
+    }
+
+    unsigned long long uVar9 = s_fn_subd960 ? s_fn_subd960(param_1) : 0;
+    return (uVar9 & ~0xffULL) | 1ULL;
+}

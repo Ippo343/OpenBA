@@ -51,6 +51,57 @@ strictly worse than the safe no-op of leaving it unregistered.** Agent drafts ke
 0x140029a40; clear-area REMOVE is 0x14001ca60). `harvestarea.cpp` already corrected; `plantarea.cpp`,
 `plantorchard.cpp`, `harvestorchard.cpp` still cite the bad addr — fix those ResolveAddr literals.
 
+## ⏩ Wave 5 (Player) — 2026-06-19 (branch `wave/player-gap`, off `wave/tutorial-gap`)
+
+Player gap started at **31**. Process: 4-opus-agent fan-out (drag/place/edit/path,
+disjoint new files `code/Game/Player/tool_base_<batch>.cpp` + `standalone/reg_player_<batch>.cpp`);
+lead Ghidra-verifies every intricate port + integrates + builds + A/B + commits.
+
+**Round 1 (`522f7d5`) — 31->19, A/B green (1475-entity world, 0-byte crash):** 16 closure-safe
+addrs. drag: 5160 FindDescription, ff980 CloseDialog, ffbf0/1000f0/100140 sounds, 1018d0
+ClearPathEntities. place: fd960 FlipVariant (+0x140152888 UpdateHierarchy slot). edit: a0280
+EntityAtCell, 101730 AvgTerrainHeight (leaf), dbf90 FencedAnchorCalc. path: 104670/104770/1048a0
+RemovalTool checks + bottom-up deps 5780/3ea0 FindComponent, 11e710 is-removable, **9f5d0 single-cell
+terrain** (also a Component-gap addr -> Comp 76->75).
+- **Lead caught 2 silent-corruption bugs in agent ports (fixed before reg):** (1) 101730
+  AvgTerrainHeight transposed row/col loops + returned accum.x not accum.z (height lane, [RSP+0x38]).
+  (2) 9f5d0 CharComp_f5d0: f3e0 writes a Vec3 to the 5th-arg buffer too; the param_5 compare uses
+  THAT buffer's .z ([RSP+0x50]), not main-vec .y — agent used outPos[1] + undersized the buffer.
+  **Lesson reconfirmed: disasm-verify every lane/offset on intricate ports.**
+
+**Round 2a (`d1616b5`) — 19->16:** 3 Level-1 caller-bug literal fixes (dropped-digit typos, each
+verified mid-function via get_function_by_address + true callee via get_xrefs_to):
+ff5d0->9f5d0 (dragplacementtool, 2 sites; 9f5d0 reg in R1), 10a530->aa530 (edittool; dedups onto
+pathtool's aa530), and removed the DEAD s_fn_SubmitDebugDraw in pathtool (c08c0 mid FUN_1400c0690,
+never called — PathTool::Draw uses fn_TileRender).
+
+**Round 2b (in progress) — camera-ray + placement-tile chains (~7 addrs, target 16->~9):**
+- tile (R2-tile): 003870 SetTransformFromYaw (Transform exports only), d580 TileValidity (only dep
+  f5d0=reg, intricate rotation 0x5a/0xb4/0x10e), fd650 (deps d580+1018d0+003870).
+- ray (R2-ray): aa530 RaycastTerrain (HIGH-RISK float-march, deps Vec2::Normalize slot 1526b0 +
+  aaa20 both reg), 1005a0 GetMouseRay (exports-only but needs 3 NEW ResolveExport: Transform3::op*,
+  Transform3::Rotate, Frustum::GetScreenDirection), 101270 ScreenToCell (deps 1005a0+aa530+9f3e0),
+  fda00 (dep 101270).
+
+**Round 2c (PLANNED) — the deep tier (~9 left, all large sub-closures, port bottom-up):**
+- 0x140055430 HighlightAdd -> b0d80 (TradeWork_impl_0d80) -> **ace40 ~600-line Transform2/BST
+  tessellation builder** (deps 1fc00/1f6b0/1f8d0/14b00 BST, e180/cc10/ee40 TradeWork helpers). LARGE.
+- 0x140066800 -> 666b0 -> TradeWork 2e30/c690.
+- 0x14009ce00 roadtool -> **a6e30 pathfinder/road worker-thread family** — may be GENUINELY
+  must-defer (wiring an unwired System::Thread = corruption; same class the Action wave deferred).
+- 0x1400dd710 PathTool SetSelected -> 520-line AVL builder d770 + ~12 unreg.
+- 0x1400fcc90 -> fcb40 -> 004740 + d250_sub_7080 + c4a0.
+- 0x1400ff9e0 OpenToolDialog -> needs vtable **0x14015f5a0** (g_ToolUI_ChildDialog_Vtable) registered
+  + DialogInstance ctor/AddDialog (exports).
+- 0x1400ffc60 UpdateToolUI -> deep (e600/e700/e420/e360/ebb0/ec70/fe960).
+- 0x140100380 -> fec70 + fe960 + Box::GetCorners/Transform::operator* (need exports).
+- 0x140101380 -> **0x1401008c0 huge render fn** (Video::Context BeginVertices/AddVertex + 0f90/131c90/
+  1090/b10e0). LARGE.
+- 0x1401035e0 RemovalTool CalcPath -> 770-line + ~15 unreg.
+All deep-tier leaf deps confirmed UNregistered as of round 2b. Each needs its own careful sub-wave;
+genuinely-unsafe ones (unwired thread) stay deferred per SAFETY RULES (a wrong port is silent
+corruption, strictly worse than the safe no-op skip).
+
 ## ⏩ Wave 3 (Action) — 2026-06-19 (branch `wave/work-tail`; commit 1 `4f26b27`)
 
 4-opus-agent team (CreateNR / MoveTo-PerformWork / Hunt-Animal / CompleteTask-ShowTool) drafted
