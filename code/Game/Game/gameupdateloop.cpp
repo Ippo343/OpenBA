@@ -602,6 +602,12 @@ static void EnsureInit() {
 // ============================================================
 extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 
+#ifdef STANDALONE_EXE
+// In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
+// BANISHED_TOOL_HARNESS. No-op unless that env var is set.
+extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
+#endif
+
 // fn_MemFreeStatic is already available from engine_funcs.h
 
 // ============================================================
@@ -637,6 +643,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     EnsureInit();
 
     s_frameNum++;
+
+#ifdef STANDALONE_EXE
+    // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
+    // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
+    ToolHarness_Tick(self->m_entityUI, s_frameNum);
+#endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",
           s_frameNum, (void*)self, time, (long long)self->m_gameTime);

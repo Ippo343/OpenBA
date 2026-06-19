@@ -1,0 +1,22 @@
+// standalone/tool_harness.h
+// Env-gated (BANISHED_TOOL_HARNESS) in-game tool-injection harness. Once the
+// world is built, it constructs a Player tool, wires its fields, and invokes
+// its vtable slots directly (autostart-style) so the otherwise-dormant tool
+// code paths fire and can be breakpoint-validated in the debugger.
+//
+// See notes/STANDALONE_REG_WAVES_PLAN.md (Wave 5 / Player last-8) and
+// memory project_player_tool_harness.
+#pragma once
+#ifdef STANDALONE_EXE
+
+extern "C" {
+
+// Called once per in-game frame from GameUpdateLoop_Update (after the world is
+// built). entityUI = GameUpdateLoop::m_entityUI; frameNum = the loop's frame
+// counter (used to settle before firing). No-op unless BANISHED_TOOL_HARNESS
+// is set. Fires its tool sequence exactly once.
+void ToolHarness_Tick(void* entityUI, int frameNum);
+
+}  // extern "C"
+
+#endif  // STANDALONE_EXE
