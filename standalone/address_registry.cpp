@@ -394,6 +394,7 @@ extern void RegisterPlayerRayBatch();      // Player wave r2 (ray): aa530 Terrai
 extern void RegisterPlayerTradeBatch();    // Player wave r2c (trade): EditTool 66800 + EntityUI 666b0 + AVL tree family (102e30/2c690/25740/25920/15000/14ed0)
 extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenToolDialog ff9e0 + child-dialog vtable 0x14015f5a0
 extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100380 entity screen-rect + ec70/098210/fe960 (Math via ResolveExport)
+extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 HighlightAdd -> b0d80 -> ace40 tessellation + BST family (TIER-2 geometry, worker-thread-free)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -453,6 +454,9 @@ static void RegisterCodeFunctions() {
     RegisterPlayerScreenRectBatch();// r2d: 100380 EditTool entity screen-rect + ec70/098210/fe960
     //   (value-return Math ops resolved via ResolveExport; 098210 2-deref display + projMat@+0xc8
     //   disasm-verified; EditTool-private so no startup/shared-vtable risk).
+    RegisterPlayerHighlightBatch();// wave 5: 55430 HighlightAdd closure (b0d80 slot-mgr + ace40
+    //   radius tessellation + BST family 1f6b0/1fc00/4b40/1f850/14b00). Worker-thread-free;
+    //   shares AVL rotations 15000/14ed0 (reg_player_trade) + fa80/1f8d0/ee40/acc10/ae180 (pf waves).
     RegisterPlayerToolUIBatch();   // r2c toolui — NO-OP (DEFERRED): ff9e0 + shared vtable
     //   0x14015f5a0 can't be registered without crashing the menu at startup (the menu's
     //   BuildId child in mainmenudialog.cpp assumes that shared vtable resolves null).
