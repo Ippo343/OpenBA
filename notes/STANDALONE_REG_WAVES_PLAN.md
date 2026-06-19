@@ -148,6 +148,34 @@ debugger session that exercises the actual tool/path, then breakpoint-verify the
 - `0x1400dd710` PathTool SetSelectedEntity -> `d770` ~520-line AVL builder + ~12 unreg sub-callees —
   R5-avl deferred. The trade-family AVL pattern (tool_base_trade.cpp) is the reference; verify in-tool.
 
+### ✅ DEBUGGER PASS STARTED 2026-06-19 (commit 5305681) — harness built; 6 ports re-tiered
+
+User chose: build a tool-injection harness (standalone self-drives) + tackle tractable first.
+- **Harness DONE + debugger-validated** (`standalone/tool_harness.{cpp,h}` + a one-shot
+  `ToolHarness_Tick` call in `GameUpdateLoop_Update`, env `BANISHED_TOOL_HARNESS`, no-op off):
+  constructs a RemovalTool, wires entityUI@+0x10 + cells + dragState, drives Startup/CalcCost/
+  CalcPath via raw vtable slots. Proven live: CalcCost = ret0/w8/h8/valid0/len1 on real data,
+  CalcPath site reached, 0 crash. Reusable for every tool. EntityUI mode-tree@+0x10 is NULL in
+  standalone (SetEditMode dead) -> harness builds tools directly. See [[project_player_tool_harness]].
+- **fc60 is NOT independently tractable** — its real work is gated behind the deferred
+  OpenToolDialog (ToolUI dialog controller must exist). So "UpdateToolUI first" premise was wrong.
+- **Re-tiering of the 6 (from closure analysis):**
+  - TIER 1 (worker-thread/dialog-entangled — defer until the subsystem lands): `1035e0`
+    RemovalTool CalcPath (road branch c700 -> pathfinder worker-thread a6fe0/a8c90/9f2f0, same
+    blocker as roadtool ce00; a guarded non-road port SHIFTS not reduces the gap), `fc60`
+    (OpenToolDialog), + the 2 official MUST-DEFER (`ce00`, `ff9e0`).
+  - TIER 2 (cleanly closure-safe geometry/render = the real next gap-reducers): `55430`
+    HighlightAdd (22-line wrapper -> b0d80 -> ace40 ~600L Transform2/BST tessellation, CONFIRMED
+    worker-thread-free; b0d80's TradeWork sib 1fa80 already reg) — BEST clean target, drive a
+    PlacementTool+radiusComponent. Then `fcc90`/`dd710`/`101380` (geometry; confirm per-target).
+  - 55430 PORT 7/8 LANDED (commit 9838464): tool_base_highlight.cpp = HighlightAdd + b0d80 +
+    AVL family 1f6b0/1fc00/4b40/1f850/14b00 (mechanical, disasm-verified, build-green, dormant).
+    ace40 (~884-line tessellation) HELD as an opus draft (notes/wave5_drafts/ace40.draft.cpp) —
+    reg is a no-op so gap stays honest at 8. NEXT (focused pass → gap 8→7): verify ace40's
+    Transform2 operator* 3-arg ABI vs disasm, fix its .rdata-const link blockers, register the 5
+    Transform2/Vector2 dispatch slots (640/648/650/658/151e58), integrate + flip reg on, then
+    harness-validate via a PlacementTool+radiusComponent. Full recipe in [[project_player_tool_harness]].
+
 ### GAP-METRIC GOTCHA (reconfirmed)
 The gap grep counts `RegisterExeAddr` SOURCE LINES, not wired calls. A deferred batch MUST be a true
 no-op (NO `RegisterExeAddr(0x...)` text) or it falsely reads as registered. reg_player_toolui.cpp /
