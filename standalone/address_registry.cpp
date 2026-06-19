@@ -362,6 +362,10 @@ extern void RegisterWorkGridBatch();
 extern void RegisterWorkAccessorBatch();
 // Work shared-helper tail — sqrtf math helper — reg_work_impl2.cpp ; bodies: work_base_impl2.cpp.
 extern void RegisterWorkImpl2Batch();
+// Wave 3 (Action) — StateMachine action exe-helpers, closure-safe subsets.
+// reg files: reg_action_cnr.cpp / reg_action_hunt.cpp ; bodies: code/Game/Action/action_base_*.cpp.
+extern void RegisterActionCnrBatch();    // CreateNaturalResource cluster (10, file closure-clean)
+extern void RegisterActionHuntBatch();   // Hunt/RemoveAnimal/CompleteRoad (6 closure-safe)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -385,6 +389,10 @@ static void RegisterCodeFunctions() {
     // Work shared-helper tail — FindComponent accessors (5380/5440/22520/6330) + sqrtf (132010).
     RegisterWorkAccessorBatch();
     RegisterWorkImpl2Batch();
+    // Wave 3 (Action) — closure-safe subsets: CreateNaturalResource cluster (10) +
+    // Hunt/RemoveAnimal/CompleteRoad (6). Move/CompleteTask subsets land in a follow-up.
+    RegisterActionCnrBatch();
+    RegisterActionHuntBatch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
