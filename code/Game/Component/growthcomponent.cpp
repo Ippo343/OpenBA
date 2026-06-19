@@ -146,6 +146,17 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
     EnsureHelpers();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
+
+    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
+    // body is zeroed and Startup/Serialize have NOT run, so config(+0x38) and the
+    // resource sub-component(+0x28) are null. Everything below derefs them (and
+    // .rdata float constants) unconditionally and would fault. Bail safely until
+    // step 2 of the bring-up recipe (real Startup/body-init) lands. Harmless in
+    // DLL-hook mode (body is populated there → both non-null). See
+    // notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
+    if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
+        return;
+
     float fOne = *s_fOne;       // 1.0f
     float fSixty = *s_fSixty;  // 60.0f
 
@@ -561,14 +572,78 @@ void GrowthComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid GrowthComponent: size 0x50 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0xcb (from GrowthComponent_Ctor) + zeroed body.
+// ===== Standalone factory =====
+// WORKED EXAMPLE of the inert->live component bring-up (Track C in
+// notes/STANDALONE_REG_WAVES_PLAN.md). By DEFAULT GrowthComponent is inert exactly
+// like every other standalone component (all 48 vtable slots are no-op stubs except
+// +0x00 dtor / +0x10 GetTypeId), so the default run is byte-for-byte unchanged.
+//
+// Set BANISHED_LIVE_GROWTH=1 to graduate it to a REAL per-type vtable whose per-tick
+// Update slot — vtable +0x48 (slot 9), the slot the EntityList bucket round-robin
+// (entitylist.cpp EntityList_Update Step 4) actually calls — routes to the real
+// GrowthComponent_Update. (NOT +0x40/slot 8: that's the empty *_OnRemove, which is
+// the slot the tree-walk Step 3 calls — verified vs Ghidra vtable 0x140163590:
+// +0x40=0x140118a70 empty, +0x48=0x140120050 the growth Update.)
+//
+// STATUS — this implements STEP 1 (vtable routing) of the 4-step recipe only.
+// Steps still TODO for actual growth simulation:
+//   2. Real Startup(+0x10)/Serialize(+0x20) to populate the body from the
+//      Description (config@+0x38, resource sub-component@+0x28, growthScale@+0x4c).
+//      Until then the LIVE-COMPONENT BRING-UP GUARD in GrowthComponent_Update
+//      early-returns (body is zeroed), so flipping the env var is crash-safe.
+//   3. Register the exe helper addrs GrowthComponent_Update/_SpawnSubResource call
+//      (EnsureHelpers/EnsureSubHelpers lists) in standalone/address_registry.cpp.
+//   4. Confirm GrowthComponent entities land in an update bucket with entity flag
+//      bit 3 set (capability flags 0xcb already have component bit 3) + processCount>0.
+// VERIFY (next session): BANISHED_LIVE_GROWTH=1, breakpoint GrowthComponent_Update,
+// confirm it is ENTERED each tick via the +0x48 slot (proves routing); then do step 2.
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include <cstdlib>
+#include <cstring>
 
-COMPONENT_INERT_FACTORY(GrowthComponent, 0x50, 0xcb)
+static uint32_t GrowthComponent_GetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("GrowthComponent");
+    return cached;
+}
+static void* GrowthComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+// vtable slot +0x48 (slot 9) is invoked as (component, const Time* delta).
+static void GrowthComponent_UpdateVSlot(void* self, void* deltaTime) {
+    GrowthComponent_Update(reinterpret_cast<GrowthComponent*>(self),
+                           reinterpret_cast<int64_t*>(deltaTime));
+}
+
+static bool GrowthComponent_LiveEnabled() {
+    const char* e = std::getenv("BANISHED_LIVE_GROWTH");
+    return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
+}
+
+// Called after InitInertTyped has filled the inert stubs + real GetTypeId. When the
+// env opt-in is set, graduate slot 9 (+0x48 Update) to the real reimpl. Idempotent:
+// the shared per-type vtable is filled once, this re-points slot 9 to the same fn.
+static void GrowthComponent_FinishVtable() {
+    if (GrowthComponent_LiveEnabled())
+        GrowthComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&GrowthComponent_UpdateVSlot);
+}
+
+extern "C" void* GrowthComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0xcb,
+        GrowthComponent_LiveVtable,
+        reinterpret_cast<void*>(&GrowthComponent_GetTypeId));
+    GrowthComponent_FinishVtable();
+    return p;
+}
+static void* GrowthComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x50, 0xcb,
+        GrowthComponent_LiveVtable,
+        reinterpret_cast<void*>(&GrowthComponent_GetTypeId));
+    GrowthComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(GrowthComponent, "Component",
               &GrowthComponent_Factory, &GrowthComponent_CreateInPlace);
 #endif // STANDALONE_EXE

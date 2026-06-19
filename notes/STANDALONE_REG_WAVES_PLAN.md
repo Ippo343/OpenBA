@@ -153,23 +153,63 @@ For each gap address, before registering X→&reimpl:
   (`C:/GOG Games/Banished/standalone_debug.log`; crash → `standalone_crash.log`).
 - Poll the log for stall/crash without foreground `sleep` (use `ping -n N 127.0.0.1` to delay).
 
-## ⚠️ The blocker that gates real verification
+## ✅ CORRECTION 2026-06-18 — the "frame-5 stall" blocker was WRONG; the real gate is inert component vtables
 
-In-game runtime validation is **blocked**: autostart deterministically stalls at
-`MenuDLT::UpdateCamera frame=5` (never reaches the 60-frame settle → no New Game → no world
-build) on this base branch. A/B-proven this is **base-branch behavior, not the waves**. So every
-wave is build/static-validated + A/B-no-regression, but the registered reimpls are **not
-exercised in-game**. The "autostart reaches world build / 140fps tick" state was branch
-`fix/ingame-worldgen-factory-cascade` (unmerged) — see [[project_starttown_a3300]].
+**The in-game path is NOT blocked.** Earlier sessions believed autostart stalled at
+`MenuDLT::UpdateCamera frame=5`. That was a RED HERRING: `[MenuDLT::UpdateCamera]` logging is
+CAPPED at frame 5 — the loop keeps ticking to the 60-frame settle. Debugger-verified on
+`wave/work`: autostart → New Game → **full world build (1475 entities: terrain + 15 citizens +
+1200 resources + 257 env + 2 structures)** → `[GUL::Load] EXIT — world built` → the in-game
+`GameUpdateLoop_Update` ticks live at 60Hz (m_gameTime advances 0→16666µs/frame, not paused,
+speed=1). No crash. (The world-build trace is in `standalone_ERROR.log` / stderr, NOT debug.log —
+that's why it looked like a stall.) See [[project_autostart_works_ingame_stall]].
 
-**Decision for next session — pick a track:**
-- **Track A (coverage):** grind waves 2→N. Mechanical, adds real (latent) correctness, but none
-  of it is in-game-verifiable until the stall is fixed.
-- **Track B (unblock first):** fix the menu frame-5 stall / the loader path FIRST (ties to the
-  documented FindOrLoad/loader work, [[project_next_goals_findorload_dedup]] /
-  [[project_menu_cpu_loader_thread]]), or rebase onto a branch that reaches in-game, so waves
-  become verifiable. **Recommended** if the goal is a working standalone, not just coverage.
-- Reasonable hybrid: do wave 2 (Work) to keep momentum, then pivot to the stall.
+So the waves CAN be verified in-game now. BUT registering helpers still won't change observable
+behavior, because of the REAL gate:
+
+### THE REAL GATE — every standalone component has an INERT vtable
+
+In standalone, all **68/68 components** are instantiated via `ComponentFactory::MakeInert`/
+`MakeInertTyped` (`code/Game/Component/component_factory_base.cpp`). That factory wires ONLY
+vtable +0x00 (ScalarDtor) and +0x10 (real GetTypeId); **every other slot — including the per-tick
+Update — points to `Inert_Stub` (a no-op returning null).** Debugger-confirmed: a live 19-component
+citizen-like entity ticks every frame, but each component's update slot == `Inert_Stub`. The world
+is a STATIC SNAPSHOT that ticks but does not simulate. The reg-wave helpers feed the component
+*reimpl bodies* — but those bodies are never reached because the vtable doesn't route to them.
+
+### The per-tick Update slot is +0x48 (slot 9), driven by the bucket round-robin — NOT +0x40
+
+`EntityList_Update` (entitylist.cpp) has TWO walks:
+- **Step 3** in-order tree walk → `EntityList_TreeNodeHandler` → component vtable **+0x40** (slot 8),
+  gated on component flag bit 2. For most components +0x40 is `*_OnRemove` = an EMPTY shared stub
+  (0x140118a70 `AmbientEmitterComponent_OnRemove`, just `return`). This is the walk the debugger
+  first caught — misleading, it's not the sim update.
+- **Step 4** 5-bucket round-robin → component vtable **+0x48** (slot 9 = the real Update), gated on
+  entity flag bit 3 (0x8 @ entity+0x40) AND component flag bit 3 (0x8 @ comp+0x20), processCount>0,
+  delta>0. **THIS is the per-tick sim Update path.**
+  Verified vs Ghidra: GrowthComponent vtable 0x140163590 → +0x40=0x140118a70 (empty OnRemove),
+  **+0x48=0x140120050 (the real growth/temperature/harvest Update)**.
+
+### Recipe to bring a component to life (the actual next frontier)
+
+Per component, all four are required — a vtable swap alone CRASHES (inert factory zeroes the body,
+so config@+0x38 / resourceComp@+0x28 are null → Update null-derefs):
+1. **Real per-type vtable** routing +0x48 → `<Comp>_Update` (keep +0x00 dtor, +0x10 GetTypeId,
+   +0x40 → safe OnRemove no-op). Mirror `MakeInertTyped` but fill the live slots. ModelComponent
+   (Foundation F) is the precedent but only wired +0x20 Startup / +0x30 Draw, NOT +0x48.
+2. **Real Startup/Serialize** (+0x10/+0x20) to populate the component body from its Description
+   (config pointer, resource sub-component, capability flags) — else the body is all zeros.
+3. **Register the helper addrs** `<Comp>_Update` calls (this is what the reg waves provide).
+4. **Bucket/flag eligibility** — entity in an update bucket with flag bit 3; processCount>0.
+   (Verify in the debugger; GrowthComponent's capability flags 0xcb already have bit 3 set.)
+
+**Decision for next session:**
+- **Track A (coverage):** grind reg waves 2→N. Still useful (removes latent silent-skips, supplies
+  step 3 above), but NONE of it changes in-game behavior until components get real vtables.
+- **Track C (bring-up, NEW — recommended):** convert components inert→live one at a time
+  (the 4-step recipe). GrowthComponent is wired as the worked example (see section below) — flip it
+  on, debugger-verify +0x48 entry, then implement step 2 (Startup/body-init) and watch growth tick.
+- Track B (fix the menu stall) is RETIRED — there is no stall.
 
 ## Separate backlog — Level-2 reimpls (NOT a registration wave)
 
