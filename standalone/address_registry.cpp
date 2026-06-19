@@ -368,6 +368,7 @@ extern void RegisterActionCnrBatch();    // CreateNaturalResource cluster (10, f
 extern void RegisterActionHuntBatch();   // Hunt/RemoveAnimal/CompleteRoad (6 closure-safe)
 extern void RegisterActionMoveBatch();   // MoveTo facing/find (4 closure-safe: 12d0/a060/c8d20/a6d50)
 extern void RegisterActionCompleteBatch(); // CompleteTask BST (8760/8800/8e30) + ShowTool (1173b0/1176e0)
+extern void RegisterActionRawMatBatch();   // raw-material batch E leaves (d150/d000/da70/44810/88f90/223c0)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -397,6 +398,7 @@ static void RegisterCodeFunctions() {
     RegisterActionHuntBatch();
     RegisterActionMoveBatch();   // MoveTo facing/find closure-safe 4 (+ 3 Vec dispatch slots above)
     RegisterActionCompleteBatch(); // CompleteTask BST 8760/8800/8e30 + ShowTool 1173b0/1176e0 (closure-safe 5)
+    RegisterActionRawMatBatch();   // raw-material batch E: 6 closure-safe leaves (storage/array/find)
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
