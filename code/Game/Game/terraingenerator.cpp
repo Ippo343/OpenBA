@@ -448,4 +448,14 @@ extern "C" void* TerrainGenerator_CreateInPlace(void* memory) {
 REGISTER_TYPE(TerrainGenerator, "Object::External",
               &TerrainGenerator_Factory, &TerrainGenerator_CreateInPlace);
 
+// Register the two terrain-data-array helpers to our existing faithful reimpls
+// (FUN_1400206b0 resize / FUN_140020870 serialize). These already serve as a
+// runtime fallback in TerrainGenerator_InitFuncs when ResolveAddr returns 0;
+// registering the exe addresses makes the ResolveAddr call sites resolve them
+// directly (and closes the Game-module gap for these two addresses).
+void RegisterGameTerrainReimpls() {
+    RegisterExeAddr(0x1400206b0, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataResize));
+    RegisterExeAddr(0x140020870, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataSerialize));
+}
+
 #endif // STANDALONE_EXE

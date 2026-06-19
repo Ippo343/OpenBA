@@ -385,6 +385,7 @@ extern void RegisterEntityBatch();         // Entity gap: 6 EntityList reimpl bo
 extern void RegisterGoalBatch();           // Goal gap: ExternalPtr resolver + StatValueDispatch
 extern void RegisterDialogBatch();         // Dialog gap: FindComponent variant + autosave handler
 extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
+extern void RegisterGameLeafBatch();       // Game gap: closure-safe leaf dtors/teardown + terrain reimpls
 extern void RegisterPlayerDragBatch();     // Player wave (drag): FindDescription/sounds/CloseDialog/ClearPathEntities (6)
 extern void RegisterPlayerPlaceBatch();    // Player wave (place): FlipVariant (1) + UpdateHierarchy dispatch slot
 extern void RegisterPlayerEditBatch();     // Player wave (edit): EntityAtCell/AvgTerrainHeight/FencedAnchorCalc (3)
@@ -461,6 +462,11 @@ static void RegisterCodeFunctions() {
     //   0x14015f5a0 can't be registered without crashing the menu at startup (the menu's
     //   BuildId child in mainmenudialog.cpp assumes that shared vtable resolves null).
     //   See reg_player_toolui.cpp header. Kept wired as a no-op for when the fix lands.
+
+    // Game registration wave — closure-safe leaf helpers (dtors/teardown + terrain).
+    RegisterGameLeafBatch();       // String-array dtors 1b030/1b0a0/a8a0, MusicPlayer 18220,
+    //   ImageCapture 1024fc0-dtor a4fc0, Weather 93eb0, MenuScene array 1b860, terrain 206b0/20870.
+    //   All shutdown/teardown-path (dormant on autostart) -> additive, no world-build regression.
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
