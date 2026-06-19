@@ -93,9 +93,50 @@ the ~45 Action exe-helpers into disjoint `code/Game/Action/action_base_<batch>.c
 CopyCtors unreg — same closure problem as the deferred Work action-ctors), `0x140122340`
 HerdComponent_StartMigration (no-migration branch infinite-loops single-threaded).
 
-**Raw-material cluster (batch E, ~9, not yet run):** `0x140044810 0x140088ef0 0x14009bd40 0x140129760
-0x14000da70 0x140088f90 0x14012d150 0x14012d000 0x1400223c0` (createrawmaterial/consumerawmaterial/
-pickup/pickupstored/dropoff). Next Action sub-wave.
+**Raw-material cluster (batch E) — DONE (commit 6 `8256c6a`): 6/9 closure-safe leaves landed**
+(`action_base_rawmat.cpp` + `reg_action_rawmat.cpp`): `0x14012d150` SubtractItem (array compaction),
+`0x14012d000` AddItem + `0x14000da70` ArrayResize16 + `0x140044810` DynArrayPush4 (all MemAlloc/MemFree
+only), `0x140088f90` GetResourceCategoryIndex (FindComponent+IsDerivedFrom+bit table), `0x1400223c0`
+FindComponent_7c80 (IBP-array FindComponent). DEFERRED 3: `0x14009bd40` FindPlacementCell (intricate
+spiral — its only exe callee `0x14009f3e0` IS registered, so unblockable next pass), `0x140129760`
+PositionEntity (Geometry::SetTransform render mutation + unreg Entity_ClearPathQueue), `0x140088ef0`
+RegisterRawMaterial (deps `0x140013320` + CreateRawMaterial_helper_8fd0 unreg).
+
+## ⏩ Wave 3 (Action) continuation — 2026-06-18 (branch `wave/work-tail`; commits 4–6)
+
+Picked up the deferred Action subsets from commit 1–3. ALL A/B-green (1478–1480-entity world,
+0-byte crash, 0 NOT IMPLEMENTED). Lead-ported + Ghidra-ABI-verified each.
+
+**Commit 4 (`2e50238`) — complete sub-batch (CompleteTask BST + ShowTool), 5 wired:** refactored
+the deferred `action_base_complete.cpp.draft` → removed the ad-hoc `ResolveIATSlot` for the IBP/
+IsDerived ops (they're already engine_funcs export-resolved `fn_` pointers — that was the documented
+"won't compile" blocker, now moot) and use the project-standard ReadDispatchSlot (ResolveAddr slot +
+deref) for genuine graphics slots, matching action_base_move.cpp. Wired `0x1400f8760/8800/8e30`
+(CompleteTask try/reassign/cleanup; 8e30's BST removes `0x14001ca60`/`0x14001a6e0` were Work-wave-
+registered) + `0x1401173b0/1176e0` (ShowTool show/hide; SetMesh/Scene::AddObject slots registered,
+cosmetic Vector4/Time slots null-safe). DEFERRED DropOff `0x1400c7570/7620` (unreg spawn/MoveTo-ctor closure).
+
+**Commit 5 (`89c4429`) — move closure-safe 2 of 6 wired:** registered the 2 closure-safe move sub-
+callees in NEW `action_base_movedeps.cpp` — `0x1400a9290` TimeCheck (engine_funcs AsSeconds/RandFloat
++ DAT constants only) + `0x1401250f0` AnimHelper (IsDerivedFrom/CheckPtr + Time::Time/MeshInstance::
+PlayAnimation Runtime exports — by-value ExternalPtr + const-Time& ABI verified from disasm + registered
+FUN_1400c3470) — which unblocked wiring `0x14010a1f0` SetAnimation + `0x140116650` CitizenBreakCheck.
+**Caught a faithfulness bug:** the 116650 port copied 1 float before a9290 but the original copies 8
+bytes (a9290 reads pair[0]=value AND pair[1]=weight) → fed stack garbage; fixed to copy both.
+**STILL DEFERRED — the pathfinder background-worker-thread family** `0x14009c480` (→9c170→14001a9b0
+ZoneRefresh region flood-fill) + `0x1400a68b0/a6a30/a6b20/a6c10` (enqueue cmds to a Thread via
+System::Thread::Start, dep FUN_1400a6430→unreg path-builder FUN_14001ce00). Wiring them would start an
+unwired thread / build half-populated path records — strictly worse than the safe skip. So `e550 /
+9cfb0 / c8c10` stay deferred (they depend on this family), and `22970` (External/Filename/String closure) too.
+
+**LESSON reinforced:** decompile EVERY sub-callee's own closure bottom-up before registering — a leaf
+that looks safe by name (a68b0 "RoadFlag") can hide a Thread::Start + a 64KB-stack path-builder. The
+genuinely-safe move/rawmat subsets were leaf array ops / engine_funcs-export-only / already-registered
+deps; everything touching the pathfinder Thread queue or region flood-fill stays deferred.
+
+**REMAINING Action deferred set (next sub-wave):** rawmat `9bd40` (unblockable — f3e0 reg) /`129760`/
+`88ef0`; move pathfinder-thread family (7 addrs) + `22970`; complete DropOff `c7570/7620`; the SKIP
+set `0x1400bbea0`/`0x140122340`/`0x140092260`.
 
 **CLOSURE-SAFETY refinement learned this wave:** closure spans THREE resolution mechanisms —
 `ResolveAddr(Module::Exe, code)`, `ResolveAddr(Module::Exe, dispatch-slot 0x14015xxxx)` /
