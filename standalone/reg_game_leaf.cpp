@@ -26,6 +26,10 @@ extern void Game_MusicPlayerDtor(void* self);               // FUN_140018220 (ga
 extern void Game_ImageCaptureDtor(void* self);              // FUN_1400a4fc0 (gameupdateloop)
 extern void Game_MenuSceneArrayDtor(void* self);            // FUN_14001b860 (menuscene)
 extern void Game_WeatherDtor(void* self);                   // FUN_140093eb0 (gameupdateloop)
+extern void Game_TerrainResolveMaterial(void* refTriple);   // FUN_14001fd10 (terraingenerator)
+
+// ---- serialize_externals.cpp ----
+extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(void* refField, void* serializer); // FUN_140024c70 (toolbar)
 
 // ---- terraingenerator.cpp (terrain-data-array reimpls live there as statics) ----
 extern void RegisterGameTerrainReimpls();
@@ -44,7 +48,11 @@ void RegisterGameLeafBatch() {
     // menuscene.cpp
     RegisterExeAddr(0x14001b860, reinterpret_cast<uintptr_t>(&Game_MenuSceneArrayDtor));
 
-    // terraingenerator.cpp (resize 0x1400206b0 / serialize 0x140020870)
+    // toolbar.cpp — ExternalPtr<Toolbar>::Serialize (canonical generic body).
+    RegisterExeAddr(0x140024c70, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_Toolbar));
+
+    // terraingenerator.cpp — legacy-v0 material resolve + the two data-array reimpls.
+    RegisterExeAddr(0x14001fd10, reinterpret_cast<uintptr_t>(&Game_TerrainResolveMaterial));
     RegisterGameTerrainReimpls();
 }
 #endif // STANDALONE_EXE

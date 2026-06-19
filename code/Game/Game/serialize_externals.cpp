@@ -238,3 +238,23 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
                                 typeIdPtr, "StringTable");
 }
+
+// ============================================================
+// 0x140024c70 — Object::ExternalPtr<Toolbar>::Serialize. Byte-identical to the
+// generic ExternalPtr<T>::Serialize; validation type = Toolbar (DAT_1401c6128,
+// g_TypeId_ToolbarExternal). Used by Toolbar_Serialize for the +0x60 field. In
+// standalone this was NULL (0x140024c70 unregistered) so the +0x60 ExternalPtr
+// was skipped, mis-advancing the stream cursor for the following fields.
+// ============================================================
+extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(
+    void* refField, void* serializer) {
+#ifndef STANDALONE_EXE
+    // In DLL mode call the original (no separate fn_ pointer; resolve inline).
+    typedef void (*orig_t)(void*, void*);
+    static orig_t s_orig = reinterpret_cast<orig_t>(ResolveAddr(Module::Exe, 0x140024c70));
+    if (s_orig) { s_orig(refField, serializer); return; }
+#endif
+    const uint32_t* typeIdPtr = g_TypeId_ToolbarExternal;
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
+                                typeIdPtr, "Toolbar");
+}

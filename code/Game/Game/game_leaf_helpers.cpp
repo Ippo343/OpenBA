@@ -145,3 +145,43 @@ void Game_WeatherDtor(void* self) {
         *reinterpret_cast<void**>(b + 0x58) = nullptr;
     }
 }
+
+// ------------------------------------------------------------------
+// FUN_14001fd10 (terraingenerator.cpp, TerrainGenerator_Slot5_sub_fd10) —
+// cached resolve of a {String filename @+0, int generation @+8, External*
+// resolved @+0x10} reference triple to a Graphics::MaterialInstance. Re-resolves
+// only when the field's cached generation differs from the ExternalFactory's
+// (factory+8). Validates via IsDerivedFrom against the MaterialInstance type
+// (.rdata slot 0x140151350 = g_ppTypeInfo_MaterialInstance). Runs only on the
+// legacy version-0 terrain deserialize path -> dormant on autostart.
+//
+// Disasm-verified offsets (14001fd10): cmp [RCX+8],factoryGen ; [RBX+0x10]=result
+// ; [RBX+8]=factoryGen. Filename built via the String& ctor (slot 0x140151d68 =
+// fn_Filename_CtorString = ??0Filename@System@@QEAA@AEBVString@1@@Z), Find via
+// fn_ExternalFactory_Find. Cascade-safe: if the type slot is unresolved, load
+// without IsDerivedFrom validation rather than dereferencing a null BaseTypeInfo.
+void Game_TerrainResolveMaterial(void* refTriple) {
+    if (!refTriple) return;
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
+    if (!fn_ExternalFactory_Find || !fn_Filename_CtorString || !fn_Filename_Dtor) return;
+    void* factory = *g_pExternalFactorySingleton;
+    uint8_t* b = reinterpret_cast<uint8_t*>(refTriple);
+    int factoryGen = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(factory) + 8);
+    if (*reinterpret_cast<int*>(b + 8) == factoryGen) return;
+
+    uint8_t fnameBuf[8] = {0};
+    fn_Filename_CtorString(fnameBuf, b);                 // Filename(self, String const& @ b+0)
+    void* obj = fn_ExternalFactory_Find(factory, fnameBuf);
+    fn_Filename_Dtor(fnameBuf);
+
+    void* result = nullptr;
+    if (obj) {
+        const uint32_t* tid =
+            (g_ppTypeInfo_MaterialInstance && *g_ppTypeInfo_MaterialInstance)
+                ? *g_ppTypeInfo_MaterialInstance : nullptr;
+        if (!tid || (fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *tid)))
+            result = obj;
+    }
+    *reinterpret_cast<void**>(b + 0x10) = result;
+    *reinterpret_cast<int*>(b + 8) = factoryGen;
+}
