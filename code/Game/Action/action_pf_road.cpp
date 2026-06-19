@@ -2,13 +2,12 @@
 // Wave 3 (Action) — pathfinding / road-mesh-rebuild / geometry-wrapper / entity-resolve
 // closure batch (the "PF-ROAD" family).
 //
-// Faithful 1:1 ports of 10 exe helpers (decompiled + disassembly-verified in Ghidra).
-// The 11th — 0x1400af370 road-mesh rebuild — is DEFERRED (see the note at end of file): its
-// dynamic buffer management is verified but two index-math details (the 3x3 mask -> ae180 arg
-// order, and the vertex-push field aliasing) need a clean re-derivation, and a wrong port on
-// this unexercised path is undetectable silent corruption (strictly worse than unregistered).
+// Faithful 1:1 ports of 11 exe helpers (decompiled + disassembly-verified in Ghidra). The big
+// one (0x1400af370 road-mesh rebuild) had two index-math details pinned against the disassembly:
+// the 3x3 mask -> ae180 arg order and the per-vertex AO-uv overwrite offsets (see its block).
 //   0x1400acaa0  Pf_RoadVtxFill_caa0       — fill one road-mesh vertex (uv/height/blend)
 //   0x1400acc10  Pf_RoadQuad_cc10          — build the 4 verts of one road-tile quad
+//   0x1400af370  Pf_RoadMeshRebuild_f370   — rebuild the whole road mesh (vert/index buffers)
 //   0x1400aaa20  Pf_CellQuadRay_aa20       — terrain-cell quad (2-tri) ray test
 //   0x1400b0f90  Pf_CellQuadRayWrap_0f90   — wrapper: build a query point, call aa20
 //   0x1400ab150  Pf_RegionDirty4_b150      — enqueue up-to-4 coarse cells into the dirty AVL
@@ -717,32 +716,255 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
 
 
 // ============================================================
-// FUN_1400af370 — rebuild the whole road mesh (per-tile verts/indices).  [DEFERRED]
+// FUN_1400af370 — rebuild the whole road mesh (per-tile verts/indices).
 // ============================================================
-// ~600-instruction road-mesh rebuild. The dynamic vert/index buffer management is fully
-// understood and matches the standard grow pattern (per-record at local_108: srcPtr@+0x00,
-// vert short-buffer B at +0x08/+0x10/+0x14, index short-buffer A at +0x18/+0x20/+0x24, header
-// ints at +0x28..+0x34; record stride 0x60; cap rule "cap=newN; if newN==oldN+1 && oldN!=0
-// cap=newN*3"; buffers grown via the inline stride-2 pattern AND via f250/fa80/1f8d0/c890/ee40,
-// all registered). Phases: (1) zero +0x220 counters after 021d0-sync to +0x218; (2) f250-size
-// local_108 to +0x218 batches; per coarse block seed each record header (srcPtr from +0x210,
-// min/extent ints) and reset its two buffers; (3) per fine cell read batchId/blendId@(param_2+
-// 0x20 stride 0x30, +0x2a/+0x2b), build a 3x3 corner-occupancy mask, fold it to a corner-blend
-// (ae180), build the quad (cc10), append 8 corner indices to buffer A (the 8 literal grow-blocks,
-// split by (x+y) parity, writing sVar21+{0,3,1,1,3,2} even / sVar21+{0,2,1,1,0,3,2}... odd) and
-// push the 4 verts into buffer B (1f8d0); (4) per batch with counter>0 flush B into the mesh
-// record (fa80); (5) free both buffers per record + local_108.
+// self (param_1): a road-mesh builder. param_2: the region/tile source.
+//   *(int*)param_2          = gridDim (fine grid dimension).
+//   self+0x200              = the per-batch mesh-record array (longlong[2]: ptr@0/count@1) — owned
+//                             by the f250/fa80 grow helpers (record stride 0x60).
+//   self+0xc0 / +0xc4       = tile span / inset; (span - inset) >> 1 = vtxOff.
+//   self+0xc8 (=200 dec)    = coarse-cell pixel size (block dimension).
+//   self+0x210              = per-batch source-ptr table (qword per batch).
+//   self+0x218              = batch count; +0x220 = per-batch fill-counter array (int); +0x228 = len.
+//   *(param_2+0x20)         = the fine-cell grid (stride 0x30): byte +0x2a = batchId, +0x2b = blendId.
 //
-// DEFERRED (NOT ported / NOT registered) — two index-math details could not be pinned to
-// disassembly with the certainty this unexercised path demands, and a wrong transcription here
-// is undetectable silent corruption (strictly worse than the skipped-call no-op):
-//   (a) the 3x3 occupancy mask is 9 entries (inner col loop iVar17 = -1,0,1; outer row loop x3),
-//       and its 9 cells feed ae180 in a SPECIFIC scrambled order (local_f0[3],[5],[1],[7],[0],
-//       [2],[6],[8]) that needs a clean re-derivation from 0xaf588..0xaf662;
-//   (b) the final vertex push aliases the cc10 quad scratch (local_98 == cc10's outQuad) and
-//       OVERWRITES two shorts per vertex at vert+0x08/+0x0a (the caa0 AO-uv slots) with the
-//       (fineCol,fineRow) tile coords before 1f8d0 — the exact target field offset must be
-//       confirmed against cc10's emitted layout.
-// Everything else (buffer offsets/strides, the 8 grow-blocks, the phase ordering) is verified.
-// Recommend porting af370 in a dedicated pass with in-game (DLL-hook A/B) validation. All of its
-// sub-callees are already registered, so it is unblockable — only the two index details remain.
+// Working array local_108 (longlong[2]: ptr@0/count@1) holds `batchCount` records, each 0x60 bytes:
+//   +0x00 srcPtr;  vert short-buffer B {ptr@+0x08, cnt@+0x10, cap@+0x14};
+//   index short-buffer A {ptr@+0x18, cnt@+0x20, cap@+0x24};  header ints +0x28..+0x34.
+//
+// Phases: (1) sync the +0x220 counter array length to +0x218 (021d0) then zero it; (2) f250-size
+// local_108 to +0x218 records; per coarse block, seed each record header (srcPtr from +0x210,
+// min/extent ints) and reset its two buffers (c890/ee40); (3) per fine cell read batchId/blendId,
+// build the 3x3 corner-occupancy mask, fold it to a corner blend value (ae180), build the quad
+// (cc10), append 8 corner indices to buffer A (the parity-split grow-blocks via AppendShortA),
+// and push the 4 verts into buffer B (1f8d0) after overwriting their AO-uv slots (+0x08/+0x0a)
+// with the per-corner (fineCol,fineRow)+offset tile coords; (4) per batch with counter>0 flush B
+// into the mesh record (fa80); (5) free both buffers per record + local_108.
+//
+// Index details — BOTH pinned against the disassembly (0x1400af588..0xaff6e):
+//   * mask -> ae180 arg order (p2..p9) = mask[3],[5],[1],[7],[0],[2],[6],[8] (slot = rowDelta*3+col,
+//     rowDelta/col in {-1,0,1}; center slot[4] forced 1).  Verified at 0xaf61f..0xaf662.
+//   * the vertex push overwrites quad vert+0x08 (AO-u) with local_c8[8+i*2]+fineCol and vert+0x0a
+//     (AO-v) with local_c8[i*2]+fineRow, i.e. corner (xOff,yOff)+tile.  local_c8 (16 shorts) =
+//     {0,0,0,0,1,0,1,0, 0,0,1,0,1,0,0,0}; the quad's AO slots are at vert+0x08/+0x0a per cc10.
+//
+// AppendShortA: the inline "append one short to buffer A of a record" grow+write block, identical
+// across the 8 grow-blocks (they differ only by the value written to a freshly-grown slot). Reads
+// count fresh each call; new = old+1; cap rule "cap=new; if new==old+1 && old!=0 cap=new*3".
+static void Pf_AppendShortA_f370(uintptr_t recBase, short valueForNew) {
+    int* pCount = reinterpret_cast<int*>(recBase + 0x20);
+    int* pCap   = reinterpret_cast<int*>(recBase + 0x24);
+    void** pPtr = reinterpret_cast<void**>(recBase + 0x18);
+    int oldN = *pCount;
+    int newN = oldN + 1;
+    if (newN == oldN) return;
+    void* oldBuf = *pPtr;
+    *pCount = newN;
+    if (*pCap < newN) {
+        *pCap = newN;
+        if ((newN == oldN + 1) && (oldN != 0)) *pCap = newN * 3;
+        void* nb = fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(*pCap) * 2, 2) : nullptr;
+        *pPtr = nb;
+    }
+    int start = (oldBuf == *pPtr) ? oldN : 0;
+    for (int64_t j = start; j < newN; j++) {
+        short* dst = reinterpret_cast<short*>(reinterpret_cast<uintptr_t>(*pPtr) + j * 2);
+        if (dst) {
+            short v = valueForNew;
+            if (j < oldN) v = reinterpret_cast<short*>(oldBuf)[j];
+            *dst = v;
+        }
+    }
+    if (oldBuf != *pPtr && fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+}
+
+void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2) {
+    EnsureInit();
+
+    int64_t* meshRecArr = reinterpret_cast<int64_t*>(param_1 + 0x200);   // local_a8
+    if (s_fn_GrowElem) s_fn_GrowElem(meshRecArr, 0);                     // f250(local_a8, 0)
+
+    int vtxOff = (*reinterpret_cast<int*>(param_1 + 0xc0) - *reinterpret_cast<int*>(param_1 + 0xc4)) >> 1; // iVar12
+
+    // Phase 1: counter array length sync (+0x228 vs +0x218) then zero every counter.
+    if (*reinterpret_cast<int*>(param_1 + 0x228) != *reinterpret_cast<int*>(param_1 + 0x218)) {
+        if (s_fn_GrowIntDup) s_fn_GrowIntDup(reinterpret_cast<int64_t*>(param_1 + 0x220),
+                                             *reinterpret_cast<int*>(param_1 + 0x218));
+    }
+    {
+        int cnt = *reinterpret_cast<int*>(param_1 + 0x228);
+        for (int i = 0; i < cnt; i++)
+            *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_1 + 0x220) + static_cast<int64_t>(i) * 4) = 0;
+    }
+
+    // Phase 2: local working batch array, sized to the batch count.
+    int64_t local_108[2] = {0, 0};   // {ptr@0, count@1 (int low dword)}
+    if (s_fn_GrowElem) s_fn_GrowElem(local_108, *reinterpret_cast<uint32_t*>(param_1 + 0x218));
+
+    int batchCount = static_cast<int>(local_108[1]);          // (int)local_100
+    int gridDim = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(param_2));  // MOVSXD R13,[RDI]
+    int cellSize = *reinterpret_cast<int*>(param_1 + 0xc8);   // +0xc8 = 200 dec (block dim)
+
+    // local_c8 corner-offset table (16 shorts), used by the per-vertex push.
+    static const short kCornerOff[16] = {0,0,0,0,1,0,1,0, 0,0,1,0,1,0,0,0};
+
+    int local_f8 = 0;
+    if (0 < gridDim) {
+        do {                                   // outer block row (local_f8)
+            int local_f4 = 0;
+            do {                               // outer block col (local_f4)
+                // ---- seed each batch record header for this block ----
+                if (0 < batchCount) {
+                    int seedColMin = local_f4 + vtxOff;   // iVar26 (R15D = local_f4+vtxOff)
+                    int seedRowMin = local_f8 + vtxOff;   // iVar16 (R12D = local_f8+vtxOff)
+                    int64_t lVar13 = 0;
+                    uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
+                    for (int b = 0; b < batchCount; b++) {
+                        *reinterpret_cast<int64_t*>(recBase + 0x00) =
+                            *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x210) + lVar13);
+                        if (s_fn_GrowShort)  s_fn_GrowShort(reinterpret_cast<int64_t*>(recBase + 0x08), 0);   // c890 (buffer B)
+                        if (s_fn_GrowElem14) s_fn_GrowElem14(reinterpret_cast<int64_t*>(recBase + 0x18), 0);  // ee40 (buffer A)
+                        *reinterpret_cast<int*>(recBase + 0x28) = seedColMin;
+                        *reinterpret_cast<int*>(recBase + 0x2c) = seedRowMin;
+                        *reinterpret_cast<int*>(recBase + 0x30) = *reinterpret_cast<int*>(param_1 + 200) + local_f4 + vtxOff;
+                        *reinterpret_cast<int*>(recBase + 0x34) = *reinterpret_cast<int*>(param_1 + 200) + local_f8 + vtxOff;
+                        recBase += 0x60;
+                        lVar13 += 8;
+                    }
+                }
+
+                // ---- per fine cell in this block ----
+                int local_d4 = 0;
+                if (0 < cellSize) {
+                    do {                       // fine row within block (local_d4)
+                        if (0 < cellSize) {
+                            int fineRow = local_f8 + local_d4;     // local_dc (R8)
+                            int rowBase = fineRow * gridDim;       // local_d0
+                            int local_e0 = 0;
+                            do {               // fine col within block (local_e0)
+                                int fineCol = local_e0 + local_f4; // iVar20 (local_cc)
+                                uint64_t cellIdx = static_cast<uint64_t>(rowBase + fineCol);
+                                int64_t fineGrid = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x20); // *(param_2+0x20)
+                                uint8_t batchId = *reinterpret_cast<uint8_t*>(fineGrid + 0x2a + cellIdx * 0x30);
+                                uint8_t blendId = *reinterpret_cast<uint8_t*>(fineGrid + 0x2b + cellIdx * 0x30);
+
+                                if (batchId != 0xff) {
+                                    if (blendId == 0xff) {
+                                        int* ctr = reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_1 + 0x220) + static_cast<uint64_t>(batchId) * 4);
+                                        *ctr += 1;
+                                    }
+
+                                    // ---- 3x3 corner-occupancy mask local_f0[0..8] ----
+                                    char local_f0[9];
+                                    {
+                                        int slot = 0;
+                                        int row = fineRow - 1;          // R9D (iVar26)
+                                        for (int rd = 0; rd < 3; rd++) {   // rowDelta = -1,0,1 (lVar19 / lVar9=3)
+                                            int rowDelta = rd - 1;
+                                            int64_t rowOff = static_cast<int64_t>(row) * gridDim; // lVar18
+                                            for (int cd = -1; cd < 2; cd++) {   // iVar17 = -1,0,1
+                                                if (cd == 0 && rowDelta == 0) {
+                                                    local_f0[slot] = 1;
+                                                } else {
+                                                    int iVar1 = cd + fineCol;
+                                                    if (iVar1 < 0 || iVar1 >= gridDim || row < 0 || row >= gridDim) {
+                                                        local_f0[slot] = 0;
+                                                    } else {
+                                                        int64_t fg = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(param_2) + 0x20);
+                                                        local_f0[slot] = (*reinterpret_cast<uint8_t*>(
+                                                            fg + 0x2a + (static_cast<int64_t>(iVar1) + rowOff) * 0x30) != 0xff) ? 1 : 0;
+                                                    }
+                                                }
+                                                slot++;
+                                            }
+                                            row++;
+                                        }
+                                    }
+
+                                    int blendVal = s_fn_RoadCornerBlend
+                                        ? s_fn_RoadCornerBlend(0,
+                                                               local_f0[3], local_f0[5], local_f0[1], local_f0[7],
+                                                               local_f0[0], local_f0[2], local_f0[6], local_f0[8])
+                                        : 0;
+
+                                    // build the quad (cc10) into the 0x60-byte scratch (local_98 / outQuad).
+                                    uint8_t quad[0x60];
+                                    Pf_RoadQuad_cc10(param_1, fineCol + vtxOff, fineRow + vtxOff,
+                                                     reinterpret_cast<int64_t>(quad), blendVal, blendId);
+
+                                    uint64_t e = batchId;
+                                    uintptr_t recBase = static_cast<uintptr_t>(local_108[0]) + e * 0x60;
+                                    short sVar21 = static_cast<short>(*reinterpret_cast<uint32_t*>(recBase + 0x10)); // *(...+e*0xc+2)
+
+                                    // ---- push the 8 corner indices (parity split on (rowSeed+vtxOff + colSeed+vtxOff)) ----
+                                    if (((fineRow + vtxOff + fineCol + vtxOff) & 1) == 0) {
+                                        Pf_AppendShortA_f370(recBase, sVar21);       // +0
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 3);   // +3
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 1);   // +1
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 1);   // +1
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 3);   // +3
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 2);   // +2
+                                    } else {
+                                        Pf_AppendShortA_f370(recBase, sVar21);       // +0
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 2);   // +2
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 1);   // +1
+                                        Pf_AppendShortA_f370(recBase, sVar21);       // +0
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 3);   // +3
+                                        Pf_AppendShortA_f370(recBase, sVar21 + 2);   // +2
+                                    }
+
+                                    // ---- push the 4 quad verts into buffer B (1f8d0), overwriting the
+                                    //      AO-uv slots (+0x08/+0x0a) with the per-corner tile coords. ----
+                                    {
+                                        int64_t* bufB = reinterpret_cast<int64_t*>(recBase + 0x08);
+                                        for (int vi = 0; vi < 4; vi++) {
+                                            short cX = static_cast<short>(kCornerOff[8 + vi * 2] + static_cast<short>(fineCol)); // local_c8[+0x10 + i*4]
+                                            short cY = static_cast<short>(kCornerOff[vi * 2]     + static_cast<short>(fineRow)); // local_c8[+0 + i*4]
+                                            uint8_t* srcV = quad + static_cast<size_t>(vi) * 0x14;   // puVar14 += 0x14
+                                            *reinterpret_cast<short*>(srcV + 0x08) = cX;   // AO-u slot
+                                            *reinterpret_cast<short*>(srcV + 0x0a) = cY;   // AO-v slot
+                                            int curCount = *reinterpret_cast<int*>(recBase + 0x10);  // (int)plVar15[1]
+                                            if (s_fn_GrowShortDup) s_fn_GrowShortDup(bufB, curCount + 1, srcV);
+                                        }
+                                    }
+                                }
+                                local_e0++;
+                            } while (local_e0 < *reinterpret_cast<int*>(param_1 + 0xc8));
+                        }
+                        local_d4++;
+                    } while (local_d4 < *reinterpret_cast<int*>(param_1 + 0xc8));
+                }
+
+                // ---- flush each batch's buffer B into its mesh record (fa80) when counter>0 ----
+                if (0 < batchCount) {
+                    uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
+                    for (int b = 0; b < batchCount; b++) {
+                        if (0 < *reinterpret_cast<int*>(recBase + 0x10)) {
+                            if (s_fn_GrowElemDup) s_fn_GrowElemDup(meshRecArr, static_cast<int>(meshRecArr[1]) + 1, reinterpret_cast<void*>(recBase));
+                        }
+                        recBase += 0x60;
+                    }
+                }
+
+                local_f4 += *reinterpret_cast<int*>(param_1 + 0xc8);
+            } while (local_f4 < gridDim);
+            local_f8 += *reinterpret_cast<int*>(param_1 + 0xc8);
+        } while (local_f8 < gridDim);
+    }
+
+    // Phase 5: free every record's two buffers, then the array.
+    {
+        int n = static_cast<int>(local_108[1]);
+        uintptr_t recBase = static_cast<uintptr_t>(local_108[0]);
+        for (int b = 0; b < n; b++) {
+            if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(recBase + 0x18));   // buffer A
+            *reinterpret_cast<int64_t*>(recBase + 0x18) = 0;
+            *reinterpret_cast<int64_t*>(recBase + 0x20) = 0;
+            if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(recBase + 0x08));   // buffer B
+            *reinterpret_cast<int64_t*>(recBase + 0x08) = 0;
+            *reinterpret_cast<int64_t*>(recBase + 0x10) = 0;
+            recBase += 0x60;
+        }
+        if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(local_108[0]));
+    }
+}

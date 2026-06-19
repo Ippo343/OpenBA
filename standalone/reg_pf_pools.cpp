@@ -13,11 +13,10 @@
 //   * d940 — calls f9e0 + db40 (both registered here).
 //   * e210 — calls f9e0 + e490 (both registered here).
 //
-// NOT REGISTERED (closure NOT satisfied):
-//   * 0x14001fa80 Pf_VectorResize60_fa80 — needs the 0x60-byte element copy-ctor
-//     (0x14001f5e0, recurses fdb0/fe60) and dtor (0x14001fb80), neither in this batch and
-//     neither registered. Registering it half-null would be strictly worse than the
-//     skipped-call no-op, so it is left unregistered (ported in action_pf_pools.cpp only).
+//   * 0x14001fa80 Pf_VectorResize60_fa80 — its 0x60-byte element copy-ctor (0x14001f5e0,
+//     recurses fdb0/fe60 internally) and dtor (0x14001fb80) ARE registered as
+//     Reimpl_Struct60B_CopyCtor/DtorRange (address_registry.cpp, A/B-proven serialize path),
+//     so its closure IS satisfied — registered below.
 #ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
@@ -34,6 +33,7 @@ extern void  Pf_VectorResize14Fill_f8d0(int64_t*, int, uint64_t*);   // 0x14001f
 extern void  Pf_VectorResize18Dup_d940(int64_t*, int, uint8_t*);     // 0x14001d940
 extern void  Pf_VectorResize30_e210(int64_t*, uint32_t, uint32_t*);  // 0x14001e210
 extern int64_t* Pf_IntArrayClone_f9e0(int64_t*, int64_t*);           // 0x14000f9e0
+extern void  Pf_VectorResize60_fa80(int64_t*, int, uint64_t*);       // 0x14001fa80
 
 void RegisterPfPoolsBatch() {
     RegisterExeAddr(0x14001a9b0, reinterpret_cast<uintptr_t>(&Pf_NodePoolAlloc18_a9b0));
@@ -48,5 +48,9 @@ void RegisterPfPoolsBatch() {
     RegisterExeAddr(0x14001d940, reinterpret_cast<uintptr_t>(&Pf_VectorResize18Dup_d940));
     RegisterExeAddr(0x14001e210, reinterpret_cast<uintptr_t>(&Pf_VectorResize30_e210));
     RegisterExeAddr(0x14000f9e0, reinterpret_cast<uintptr_t>(&Pf_IntArrayClone_f9e0));
+    // 1fa80's 0x60-element copy-ctor (0x14001f5e0) + dtor (0x14001fb80) ARE registered
+    // (Reimpl_Struct60B_CopyCtor/DtorRange in address_registry.cpp, A/B-proven on the
+    // serialize path) — closure satisfied, so register it (the last Action-gap entry).
+    RegisterExeAddr(0x14001fa80, reinterpret_cast<uintptr_t>(&Pf_VectorResize60_fa80));
 }
 #endif

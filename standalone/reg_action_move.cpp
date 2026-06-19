@@ -70,12 +70,15 @@ void RegisterActionMoveBatch() {
     // single-target re-resolve, not the non-terminating preload. Safe to register.
     RegisterExeAddr(0x140022970, reinterpret_cast<uintptr_t>(&ActMv_ExternalPtrSerialize_22970));
 
-    // STILL DEFERRED (unsatisfied closure — pathfinder background-thread family):
-    //  0x14009e550 SetTerrainCosts   — calls 0x1400a68b0/a6a30 (Thread::Start queue cmds ->
-    //                                  FUN_1400a6430 -> unreg path-builder FUN_14001ce00).
-    //  0x14009cfb0 PathfinderQuery   — calls 0x14009c480 (-> 9c170 -> 14001a9b0 ZoneRefresh
-    //                                  region flood-fill) + 0x1400a6b20/a6c10 (thread queue).
-    //  0x1400c8c10 PathSetup         — depends on unsafe siblings e550 + 9cfb0.
-    //  (e550/9cfb0/c8c10 unblock once the a6430 dispatcher + A* closure land — pathfinding wave.)
+    // The three existing pathfinder-caller bodies are NOW closure-safe (the pathfinding wave
+    // registered their enqueuer/A* closure: a6a30/a68b0/a6b20/a6c10 enqueuers + a6430 + A*,
+    // and 9c480 ZoneRefresh -> 9c170 flood-fill). e550 -> {a6a30,a68b0}; 9cfb0 -> {9c480,
+    // a6b20,a6c10}; c8c10 -> {e550,9cfb0}. All registered, so wire the bodies.
+    RegisterExeAddr(0x14009e550, reinterpret_cast<uintptr_t>(&ActMv_SetTerrainCosts_e550));
+    RegisterExeAddr(0x14009cfb0, reinterpret_cast<uintptr_t>(&ActMv_PathfinderQuery_9cfb0));
+    RegisterExeAddr(0x1400c8c10, reinterpret_cast<uintptr_t>(&ActMv_PathSetup_c8c10));
+
+    // (Formerly-deferred e550/9cfb0/c8c10 are now wired above — the pathfinding wave landed
+    //  the a6430 dispatcher + A* core + the enqueuer/flood-fill closure they depend on.)
 }
 #endif

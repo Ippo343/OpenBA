@@ -377,6 +377,10 @@ extern void RegisterPfCtorsBatch();        // Wave 2: Action ctors + entity/stor
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
+extern void RegisterPfRootsRoadBatch();    // Wave 3: road-edit roots (9c480/9f2f0/9e0e0/9c640)
+extern void RegisterPfRootsRouteBatch();   // Wave 3: routing/storage roots (9f810/12cd80/12d5d0/8d590)
+extern void RegisterPfRootsDropBatch();    // Wave 3: dropoff + RemoveAnimal ctor (c78c0/c7570/c7620/bbea0)
+extern void RegisterPfRootsMiscBatch();    // Wave 3: bd40 spiral + 92260 spatial + 122340 migration
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -414,6 +418,10 @@ static void RegisterCodeFunctions() {
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
+    RegisterPfRootsRoadBatch();    // Wave 3 roots — road-edit (9c480/9f2f0/9e0e0/9c640)
+    RegisterPfRootsRouteBatch();   // Wave 3 roots — routing/storage (9f810/12cd80/12d5d0/8d590)
+    RegisterPfRootsDropBatch();    // Wave 3 roots — dropoff + RemoveAnimal ctor
+    RegisterPfRootsMiscBatch();    // Wave 3 roots — bd40 / 92260 / 122340
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));

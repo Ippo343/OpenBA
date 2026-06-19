@@ -170,11 +170,11 @@ void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* pa
 // ============================================================
 // FUN_1400c71a0 — CreateRawMaterial_Action CopyCtor
 // Base Internal ctor, Action -> CreateRawMaterial vtable; copies +0x20=param_2 (raw u64),
-// three IBP fields (+0x28 from param_4, +0x30 from param_5, +0x38 from param_10), four
-// int fields (+0x40=param_7, +0x44=param_8, +0x48=param_11, +0x4c=param_3), and two bytes
-// (+0x50=param_9, +0x51=1).
+// three IBP fields (+0x28 from param_4, +0x30 from param_5, +0x38 from param_10), three
+// int fields (+0x40=param_7, +0x44=param_8, +0x48=param_11), one FLOAT (+0x4c=param_3, the
+// XMM2 arg stored via MOVSS), and two bytes (+0x50=param_9, +0x51=1).
 // ============================================================
-void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, uint32_t param_3,
+void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float param_3,
                                         uint64_t* param_4, uint64_t* param_5, uint64_t /*param_6*/,
                                         uint32_t param_7, uint32_t param_8, uint8_t param_9,
                                         uint64_t* param_10, uint32_t param_11) {
@@ -195,7 +195,7 @@ void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, uint32_
     *reinterpret_cast<uint32_t*>(s + 0x40) = param_7;
     *reinterpret_cast<uint32_t*>(s + 0x44) = param_8;
     *reinterpret_cast<uint32_t*>(s + 0x48) = param_11;
-    *reinterpret_cast<uint32_t*>(s + 0x4c) = param_3;
+    *reinterpret_cast<float*>(s + 0x4c) = param_3;   // MOVSS — +0x4c is a float (XMM2 arg)
     s[0x50] = param_9;
     s[0x51] = 1;
     return param_1;

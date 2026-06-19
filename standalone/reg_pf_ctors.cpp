@@ -15,9 +15,9 @@
 extern void  Pf_ActStackWalkClear_4f10(void*, void*);                       // 0x1400c4f10
 extern void  Pf_ActStackPush_54e0(int64_t*, void*);                         // 0x1400c54e0
 extern void* Pf_CompleteTaskCopyCtor_5da0(void*, uint32_t, uint64_t*, uint64_t*, uint32_t); // 0x1400c5da0
-extern void* Pf_CreateRawMaterialCopyCtor_71a0(void*, uint64_t, uint32_t, uint64_t*, uint64_t*,
+extern void* Pf_CreateRawMaterialCopyCtor_71a0(void*, uint64_t, float, uint64_t*, uint64_t*,
                                                uint64_t, uint32_t, uint32_t, uint8_t,
-                                               uint64_t*, uint32_t);          // 0x1400c71a0
+                                               uint64_t*, uint32_t);          // 0x1400c71a0 (arg3 float/XMM2)
 extern void* Pf_MoveToCtor_9170(void*, void*, uint32_t, int, float*, int, int, float); // 0x1400c9170
 extern void* Pf_PerformWorkCtor7_9720(void*, void*, float, uint32_t, int64_t, uint8_t, int); // 0x1400c9720
 extern void* Pf_SendComponentMessageCopyCtor_b1d0(void*, uint64_t*, uint32_t*, uint32_t,

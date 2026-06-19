@@ -34,8 +34,8 @@ extern int      Pf_SeedFloodFills_7f20(int64_t, int);                        // 
 extern void     Pf_RebuildRegionChunk_80a0(int64_t, uint32_t);               // 0x1400a80a0
 extern void     Pf_FlushDirtyChunks_8a90(int64_t);                           // 0x1400a8a90
 extern void     Pf_RegionPairCacheInsert_5b30(uint64_t*, int, int, uint32_t);// 0x1400a5b30
-// Ported but NOT registered (closure incomplete — needs 0x14001dc00/0x14001dcd0):
-// extern int   Pf_RegionPathLength_8ba0(int*, int, uint32_t, uint64_t);     // 0x1400a8ba0
+extern int      Pf_RegionPathLength_8ba0(int*, int, uint32_t, uint64_t);     // 0x1400a8ba0
+//   (closure now satisfied: 0x14001dc00/0x14001dcd0 registered in reg_pf_astar.cpp)
 
 void RegisterPfRegionBatch() {
     RegisterExeAddr(0x1400a8200, reinterpret_cast<uintptr_t>(&Pf_RegionNodeFree_8200));
@@ -50,5 +50,6 @@ void RegisterPfRegionBatch() {
     RegisterExeAddr(0x1400a80a0, reinterpret_cast<uintptr_t>(&Pf_RebuildRegionChunk_80a0));
     RegisterExeAddr(0x1400a8a90, reinterpret_cast<uintptr_t>(&Pf_FlushDirtyChunks_8a90));
     RegisterExeAddr(0x1400a5b30, reinterpret_cast<uintptr_t>(&Pf_RegionPairCacheInsert_5b30));
+    RegisterExeAddr(0x1400a8ba0, reinterpret_cast<uintptr_t>(&Pf_RegionPathLength_8ba0));  // dep 1dc00 now reg
 }
 #endif
