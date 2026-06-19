@@ -41,16 +41,18 @@ extern void* ActMv_PathfinderQuery_9cfb0(void*, void*, uint64_t, uint32_t, uint3
 extern void* ActMv_PathSetup_c8c10(void*, void*, void*, void*);         // 0x1400c8c10
 
 void RegisterActionMoveBatch() {
-    RegisterExeAddr(0x1400012d0, reinterpret_cast<uintptr_t>(&ActMv_FindComponentFamily_12d0));
-    RegisterExeAddr(0x140022970, reinterpret_cast<uintptr_t>(&ActMv_ExternalPtrSerialize_22970));
-    RegisterExeAddr(0x14010a060, reinterpret_cast<uintptr_t>(&ActMv_SetFacingDirection_a060));
-    RegisterExeAddr(0x1400c8d20, reinterpret_cast<uintptr_t>(&ActMv_UpdateFacing_c8d20));
-    RegisterExeAddr(0x14010a1f0, reinterpret_cast<uintptr_t>(&ActMv_SetAnimation_a1f0));
-    RegisterExeAddr(0x140116650, reinterpret_cast<uintptr_t>(&ActMv_CitizenBreakCheck_116650));
-    RegisterExeAddr(0x14009e550, reinterpret_cast<uintptr_t>(&ActMv_SetTerrainCosts_e550));
-    RegisterExeAddr(0x1400a6d50, reinterpret_cast<uintptr_t>(&ActMv_CopyPathFromFinder_a6d50));
-    RegisterExeAddr(0x14009cfb0, reinterpret_cast<uintptr_t>(&ActMv_PathfinderQuery_9cfb0));
-    RegisterExeAddr(0x1400c8c10, reinterpret_cast<uintptr_t>(&ActMv_PathSetup_c8c10));
-    // 0x140092260 — intentionally NOT registered (see header note).
+    // CLOSURE-SAFE subset (lead Ghidra-verified faithful + full closure satisfied):
+    RegisterExeAddr(0x1400012d0, reinterpret_cast<uintptr_t>(&ActMv_FindComponentFamily_12d0));   // engine funcs only
+    RegisterExeAddr(0x14010a060, reinterpret_cast<uintptr_t>(&ActMv_SetFacingDirection_a060));    // Vec3 Normalize+Heading slots
+    RegisterExeAddr(0x1400c8d20, reinterpret_cast<uintptr_t>(&ActMv_UpdateFacing_c8d20));         // Vec slots + 0x14009f3e0(reg)
+    RegisterExeAddr(0x1400a6d50, reinterpret_cast<uintptr_t>(&ActMv_CopyPathFromFinder_a6d50));   // dep 0x1400021d0(reg)
+    // DEFERRED (bodies present, NOT registered — unsatisfied closure):
+    //  0x14010a1f0 SetAnimation     — calls unreg 0x1401250f0, 0x1400a9290
+    //  0x140116650 CitizenBreakCheck — calls unreg 0x1400a9290 (TimeCheck)
+    //  0x14009e550 SetTerrainCosts   — calls unreg 0x1400a68b0/a6a30
+    //  0x14009cfb0 PathfinderQuery   — calls unreg 0x14009c480/a6b20/a6c10
+    //  0x1400c8c10 PathSetup         — calls unsafe siblings e550+9cfb0
+    //  0x140022970 ExternalPtrSerialize — heavy External/Filename/String runtime closure (drift risk)
+    //  0x140092260 — not registered (see header note: ~9.5KB local node stack, not safely portable).
 }
 #endif

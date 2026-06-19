@@ -366,6 +366,7 @@ extern void RegisterWorkImpl2Batch();
 // reg files: reg_action_cnr.cpp / reg_action_hunt.cpp ; bodies: code/Game/Action/action_base_*.cpp.
 extern void RegisterActionCnrBatch();    // CreateNaturalResource cluster (10, file closure-clean)
 extern void RegisterActionHuntBatch();   // Hunt/RemoveAnimal/CompleteRoad (6 closure-safe)
+extern void RegisterActionMoveBatch();   // MoveTo facing/find (4 closure-safe: 12d0/a060/c8d20/a6d50)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -393,6 +394,7 @@ static void RegisterCodeFunctions() {
     // Hunt/RemoveAnimal/CompleteRoad (6). Move/CompleteTask subsets land in a follow-up.
     RegisterActionCnrBatch();
     RegisterActionHuntBatch();
+    RegisterActionMoveBatch();   // MoveTo facing/find closure-safe 4 (+ 3 Vec dispatch slots above)
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
@@ -636,6 +638,14 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAEPEBD@Z"));
     RegisterDispatchSlot(0x140152a50,   // Serialize(uint&) — array1 field2
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z"));
+    // Wave 3 (Action) — Math::Vector dispatch slots used by the MoveTo facing helpers
+    // (action_base_move.cpp SetFacingDirection 0x14010a060 / UpdateFacing 0x1400c8d20).
+    RegisterDispatchSlot(0x1401512c0,   // Math::Vector3::Normalize(this) -> Vector3
+        (uintptr_t)ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
+    RegisterDispatchSlot(0x1401512d8,   // Math::Vector3::Heading(this) -> float
+        (uintptr_t)ResolveExport("?Heading@Vector3@Math@@QEBAMXZ"));
+    RegisterDispatchSlot(0x1401526b0,   // Math::Vector2::Normalize(this) -> Vector2&
+        (uintptr_t)ResolveExport("?Normalize@Vector2@Math@@QEAAAEAV12@XZ"));
     RegisterDispatchSlot(0x140152490,   // Serialize(count, uchar*, name) — array3 bulk
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
 
