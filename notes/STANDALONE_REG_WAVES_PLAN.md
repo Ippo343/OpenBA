@@ -184,6 +184,43 @@ ctors/geometry compile clean but need lead Ghidra-verify before trust (kept as d
 since they're deferred anyway). **Next: run the Action wave (52) — it unblocks the deferred
 Work action-ctors + impl helpers above.**
 
+## ⏩ Wave 3 (Action) raw-material TAIL — 2026-06-18 (branch `wave/work-tail`, commit `a622a8f`)
+
+Closed the closure-safe remainder of the raw-material cluster (batch E deferred 3). **KEY:
+re-decompiling the deferred trio bottom-up showed the prior "blocked" notes were STALE** —
+two of the three were already unblockable:
+- **0x140129760 PositionEntity LANDED** — instruction-verified port (full disasm). Its
+  getters were ALREADY registered in earlier waves: 0x140004680 (component-nature) +
+  0x140003f60 Entity_ClearPathQueue (CNR). Writes cell col/row to component A and a Transform
+  (FromYawPitchOffset yaw=rot/pitch=0/offset=worldPos, +0x148) + Geometry::SetTransform to
+  component B. Disasm gotcha confirmed: RBX reloads to B after the 003f60 IBP resolve (the
+  transform targets B, not param_1+0x10); FromYawPitchOffset is a 4-arg call (Ghidra drops the
+  pitch arg). worldPos via the registered f3e0 GridToWorld.
+- **0x140088ef0 RegisterRawMaterial LANDED** + its 3 leaf deps ported in the same file:
+  0x140013320 FindComp (identical to the registered 223c0, type 1c4b10), 0x140058fd0
+  ArrayUpsert (generation-aware {key,value} cache; archives to +0x38 via 0x14000d9d0 on
+  gen-change, then upsert/grow-3x), 0x14000d9d0 VectorClone. Classifies via the registered
+  88f90, adds quantity to entityList+0x170 bucket.
+
+A/B green: 1474-entity world build, `[GUL::Load] EXIT — world built`, 0-byte crash, none of
+the new addrs appear as NOT IMPLEMENTED (dormant on autostart — they fire on in-game citizen
+raw-material actions; registration is purely additive ⇒ no world-build regression).
+
+**STILL DEFERRED — 0x14009bd40 FindPlacementCell:** 260-insn expanding-ring spiral, heavy
+decompiler variable-aliasing (iVar7 aliases row-col delta / width / cellIdx / result), on an
+UNEXERCISED citizen-action path. A wrong port = undetectable latent corruption (strictly worse
+than the safe skip), so it gets its own careful pass *with in-game validation*. Only dep f3e0
+is registered, so it is unblockable-but-deferred.
+
+**Action gap now 19 (was 21).** The genuinely-deferred remainder, all for hard closure
+reasons: bd40 (1); pathfinder/road-rebuild THREAD family (12: 9c480 9c640 9e0e0 9f2f0 af370
+a68b0 a6a30 a6b20 a6c10 9cfb0 e550 c8c10 — wiring starts an unwired System::Thread / builds
+half-populated path+road-mesh structures); unreg child-ctor closure (bbea0 RemoveAnimal ctor,
+c7570/c7620 DropOff spawn/MoveTo ctor); SKIP set (92260, 122340 StartMigration infinite-loop);
+22970 ExternalPtrSerialize (External/Filename/String closure). Closing these needs a Level-2
+reimpl (path-builder FUN_14001ce00 + worker-thread queue) or the action-ctor child cascade —
+both bigger than a registration wave.
+
 ## What this is
 
 `code/Game/*` calls exe sub-helpers via guarded `ResolveAddr(Module::Exe, 0xADDR)`. If the
