@@ -58,7 +58,37 @@ static fn_DecalDraw_t s_fn_OriginalDraw = nullptr;
 typedef void (*fn_TerrainDecalRemove_t)(void* terrainDecalSys, int decalId);
 static fn_TerrainDecalRemove_t s_fn_TerrainDecalRemove = nullptr;
 
+// Sub-callees of the terrain-decal-slot release (FUN_1400b0d00):
+//   FUN_14001ee40 — resize the per-slot 0x14-byte-element list (stride 0x14, align 2)
+//   FUN_14001c890 — resize the per-slot 2-byte-element list (stride 2, align 2)
+// Both are already registered exe leaves; we resolve and forward to them.
+typedef void (*fn_ResizeStride14_t)(void* arrayField, int newCount);
+static fn_ResizeStride14_t s_fn_ResizeStride14 = nullptr;
+typedef void (*fn_ResizeStride2_t)(void* arrayField, int newCount);
+static fn_ResizeStride2_t s_fn_ResizeStride2 = nullptr;
+
 static bool s_initialized = false;
+
+// ============================================================
+// Reimpl of FUN_1400b0d00 (TerrainDecalSystem release one decal slot)
+// ============================================================
+// Shared terrain-decal helper (also called from RadiusUI/PlacementTool).
+// The decal system at terrainDecalSys+0x1F0 is an array of 0x60-byte slots.
+// If slot[decalId].id (+0x28) still equals decalId, mark it free (-1), clear
+// the slot's owner ptr (+0), and shrink the two sub-lists embedded at +8 and
+// +0x18 to zero length. 1:1 port of the exe body.
+void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
+    uintptr_t base = *(uintptr_t*)((uintptr_t)terrainDecalSys + 0x1f0);
+    uintptr_t slot = base + (uintptr_t)decalId * 0x60;
+    if (*(int*)(slot + 0x28) == decalId) {
+        *(uint32_t*)(slot + 0x28) = 0xffffffff;
+        *(uint64_t*)(base + (uintptr_t)decalId * 0x60) = 0;
+        if (s_fn_ResizeStride14)
+            s_fn_ResizeStride14((void*)(slot + 8), 0);
+        if (s_fn_ResizeStride2)
+            s_fn_ResizeStride2((void*)(slot + 0x18), 0);
+    }
+}
 
 // ============================================================
 // Helper: Get DecalDescription config component
@@ -179,6 +209,12 @@ void DecalComponent_InitFuncs() {
 
     s_fn_TerrainDecalRemove = reinterpret_cast<fn_TerrainDecalRemove_t>(
         ResolveAddr(Module::Exe, 0x1400b0d00));
+
+    // Sub-callees for our DecalComponent_TerrainDecalRemove reimpl (registered leaves).
+    s_fn_ResizeStride14 = reinterpret_cast<fn_ResizeStride14_t>(
+        ResolveAddr(Module::Exe, 0x14001ee40));
+    s_fn_ResizeStride2 = reinterpret_cast<fn_ResizeStride2_t>(
+        ResolveAddr(Module::Exe, 0x14001c890));
 
     s_initialized = true;
 

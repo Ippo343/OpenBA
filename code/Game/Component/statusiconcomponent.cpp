@@ -37,6 +37,10 @@ typedef void (*fn_StatusIconHelper_a440_t)(void* geometry, float param2, int spr
                                            void* param4, void* spriteSheet);
 static fn_StatusIconHelper_a440_t s_fn_StatusIconHelper_a440 = nullptr;
 
+// Graphics::Geometry::SetBounds(this, Box const&) — Runtime export, IAT slot 0x1401525e8.
+typedef void (*fn_Geometry_SetBounds_t)(void* geometry, const void* box);
+static fn_Geometry_SetBounds_t s_fn_Geometry_SetBounds = nullptr;
+
 // Graphics::Scene::AddObject — dispatch slot at 0x140151370
 typedef uint32_t (*fn_Scene_AddObject_t)(void* scene, void* geometry);
 static fn_Scene_AddObject_t s_fn_Scene_AddObject = nullptr;
@@ -87,6 +91,10 @@ static void EnsureHelpers() {
     s_fn_StatusIconHelper_a440 = reinterpret_cast<fn_StatusIconHelper_a440_t>(
         ResolveAddr(Module::Exe, 0x1400aa440));
 
+    // Graphics::Geometry::SetBounds — Runtime export (the only callee of helper_a440).
+    s_fn_Geometry_SetBounds = reinterpret_cast<fn_Geometry_SetBounds_t>(
+        ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z"));
+
     s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
 
@@ -101,6 +109,41 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1401c7e40));
 
     s_helpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of FUN_1400aa440 (StatusIcon geometry-bounds setup)
+// ============================================================
+// Stores sprite parameters into the embedded Graphics::Geometry sub-object
+// and computes its axis-aligned bounds. half = param2 * 0.5; bounds box is
+// min(-half,-half,0) .. max(half,half, spriteCount*param2). 1:1 port; the
+// only callee is Graphics::Geometry::SetBounds (Runtime export).
+void StatusIconComponent_GeometrySetup(void* geometry, float param2, int spriteCount,
+                                       void* param4, void* spriteSheet) {
+    uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
+    float half = param2 * 0.5f;
+
+    *(float*)(g + 0xC0) = param2;
+    *(uint32_t*)(g + 0x30) = 2;
+    *(int*)(g + 0xC4) = spriteCount;
+    *(void**)(g + 0xD0) = spriteSheet;
+    *(uint32_t*)(g + 0xC8) = 0;
+    g[0xCC] = (uint8_t)(uintptr_t)param4;   // original stores low byte of param4
+
+    // Box = { min.x, min.y, min.z, max.x, max.y, max.z } (6 contiguous floats)
+    float box[6];
+    uint32_t negHalf;
+    { uint32_t bits; __builtin_memcpy(&bits, &half, 4); bits ^= 0x80000000u;
+      __builtin_memcpy(&negHalf, &bits, 4); }
+    __builtin_memcpy(&box[0], &negHalf, 4);   // min.x = -half
+    __builtin_memcpy(&box[1], &negHalf, 4);   // min.y = -half
+    box[2] = 0.0f;                            // min.z
+    box[3] = half;                            // max.x
+    box[4] = half;                            // max.y
+    box[5] = (float)spriteCount * param2;     // max.z
+
+    if (s_fn_Geometry_SetBounds)
+        s_fn_Geometry_SetBounds(geometry, box);
 }
 
 // ============================================================

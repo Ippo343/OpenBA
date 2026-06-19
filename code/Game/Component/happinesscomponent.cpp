@@ -186,6 +186,46 @@ static void EnsureFishingHelpers() {
     s_fcResolved = true;
 }
 
+// ============================================================
+// Reimpl of FishingComponent_helper_f990 (0x14009f990) — Component reg wave B.
+// Stamps a circular brush of radius `r` (param5) onto a population grid: for every
+// cell within the disk it adds `delta` (param6) to a per-cell byte, then bumps a
+// per-state accumulator short. mgr (param1): +0 = grid width (int), +0x80 = grid
+// base ptr; cell stride 0x30, the touched byte sits at cell+0x1c. The state-totals
+// short array starts at mgr+0x90, indexed by `state` (param2). Pure leaf (no callees).
+// Faithful 1:1 port of the Ghidra decompile.
+// ============================================================
+void FishingComponent_BrushTile(int* mgr, int state, int cx, int cy, int r, short delta) {
+    uint8_t* base = reinterpret_cast<uint8_t*>(mgr);
+    int yy = cy - r;
+    if (yy <= cy + r) {
+        int dy = cy - yy;
+        do {
+            int xx = cx - r;
+            if (xx <= r + cx) {
+                int dx = cx - xx;
+                int ix = xx;
+                do {
+                    int width = *mgr;
+                    if (ix >= 0 && yy >= 0 && ix < width && yy < width &&
+                        dy * dy + dx * dx <= r * r) {
+                        int64_t gridBase = *reinterpret_cast<int64_t*>(base + 0x80);
+                        char* cell = reinterpret_cast<char*>(
+                            (int64_t)state + 0x1c + (int64_t)(width * yy + ix) * 0x30 + gridBase);
+                        *cell = (char)(*cell + (char)delta);
+                    }
+                    ix++;
+                    dx--;
+                } while (ix <= r + cx);
+            }
+            yy++;
+            dy--;
+        } while (yy <= cy + r);
+    }
+    short* acc = reinterpret_cast<short*>(base + (int64_t)state * 2 + 0x90);
+    *acc = (short)(*acc + delta);
+}
+
 void FishingComponent_NotifyTile(void* selfP, int16_t param2) {
     EnsureHelpers();
     EnsureFishingHelpers();

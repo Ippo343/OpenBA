@@ -250,7 +250,14 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
 // ============================================================
 // Reimpl helper resolution for the resident-array functions
 // ============================================================
-// ResidenceComponent_helper_5ec0(dst, src) — per-element move on grow (0x140035ec0)
+// Resident per-slot inner-array copy on grow.
+// CALLER-BUG FIX: the literal was 0x140035ec0, which is MID-FUNCTION inside the
+// resize helper FUN_140035d50 (its body is 0x140035d50-0x140035ec8). The actual
+// per-element copy the resize loop CALLs is FUN_140007960 (verified: the only
+// CALL 0x140007960 inside FUN_140035d50 is at 0x140035e17, the inner-move site).
+// FUN_140007960(dst, src) frees dst's 8-byte-stride pointer array and deep-copies
+// src's. Closure-safe (only MemAlloc/MemFree). Reimplemented below as
+// ResidenceComponent_CopyInnerArray and registered for 0x140007960.
 typedef void (*fn_Resident_MoveElem_t)(void* dst, void* src);
 static fn_Resident_MoveElem_t s_fn_Resident_MoveElem = nullptr;
 // FUN_1400032e0(entry, innerCount) — resize inner IBP array on load (0x1400032e0)
@@ -273,7 +280,7 @@ static bool s_residentHelpersResolved = false;
 static void EnsureResidentHelpers() {
     if (s_residentHelpersResolved) return;
     s_fn_Resident_MoveElem = reinterpret_cast<fn_Resident_MoveElem_t>(
-        ResolveAddr(Module::Exe, 0x140035ec0));
+        ResolveAddr(Module::Exe, 0x140007960));
     s_fn_Resident_ResizeInner = reinterpret_cast<fn_Resident_ResizeInner_t>(
         ResolveAddr(Module::Exe, 0x1400032e0));
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
@@ -289,6 +296,40 @@ static void EnsureResidentHelpers() {
     s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
         ResolveAddr(Module::Exe, 0x1401163d0));
     s_residentHelpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of FUN_140007960 (resident per-slot inner pointer-array deep copy).
+// dst/src each describe an array {ptr@+0, int count@+8, int capacity@+0xc}. Frees
+// dst's old buffer, copies src's count, allocates count*8 (8-byte stride, align 8),
+// and copies the pointers element-by-element. No-op when dst==src. Closure-safe:
+// only MemAlloc/MemFree. Faithful 1:1 port of the Ghidra decompile.
+// (Registered for 0x140007960 — see CALLER-BUG FIX note above.)
+// ============================================================
+void ResidenceComponent_CopyInnerArray(void* dstP, void* srcP) {
+    int64_t* dst = reinterpret_cast<int64_t*>(dstP);
+    int64_t* src = reinterpret_cast<int64_t*>(srcP);
+    if (dst == src) return;
+
+    fn_MemFreeStatic(reinterpret_cast<void*>(dst[0]));
+    dst[1] = 0;
+    dst[0] = 0;
+    int count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
+    *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8) =
+        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(src) + 8);
+    count = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
+    if (count > 0) {
+        *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 0xc) = count;
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)((int64_t)count << 3), 8);
+        dst[0] = (int64_t)nb;
+    }
+    int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(dst) + 8);
+    for (int i = 0; i < n; i++) {
+        int64_t* slot = reinterpret_cast<int64_t*>(dst[0] + (int64_t)i * 8);
+        if (slot) {
+            *slot = *reinterpret_cast<int64_t*>(src[0] + (int64_t)i * 8);
+        }
+    }
 }
 
 // ============================================================

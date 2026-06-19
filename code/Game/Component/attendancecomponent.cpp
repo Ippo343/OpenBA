@@ -86,6 +86,15 @@ typedef void (*fn_AC_1650_t)(void* worker);              // 0x140111650
 static fn_AC_115a50_t s_fn_AC_115a50 = nullptr;
 static fn_AC_59b0_t   s_fn_AC_59b0 = nullptr;
 static fn_AC_1650_t   s_fn_AC_1650 = nullptr;
+
+// Callees of the two newly-reimplemented worker-release helpers (Entity_impl_1650/59b0):
+typedef void  (*fn_AC_002cc0_t)(int64_t* listBase, void* ibp);          // 0x140002cc0
+typedef void* (*fn_AC_FindMesh_t)(int64_t entity, void* outIBP);        // 0x140002f90
+typedef void  (*fn_AC_MeshSetFlag_t)(void* mesh, uint8_t flagIdx, char value); // 0x14012c3f0
+static fn_AC_002cc0_t      s_fn_AC_002cc0 = nullptr;
+static fn_AC_FindMesh_t    s_fn_AC_FindMesh = nullptr;
+static fn_AC_MeshSetFlag_t s_fn_AC_MeshSetFlag = nullptr;
+
 static bool s_acHelpersResolved = false;
 static void EnsureAcHelpers() {
     if (s_acHelpersResolved) return;
@@ -93,7 +102,49 @@ static void EnsureAcHelpers() {
     s_fn_AC_115a50 = reinterpret_cast<fn_AC_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
     s_fn_AC_59b0   = reinterpret_cast<fn_AC_59b0_t>(ResolveAddr(Module::Exe, 0x1401159b0));
     s_fn_AC_1650   = reinterpret_cast<fn_AC_1650_t>(ResolveAddr(Module::Exe, 0x140111650));
+    s_fn_AC_002cc0     = reinterpret_cast<fn_AC_002cc0_t>(ResolveAddr(Module::Exe, 0x140002cc0));
+    s_fn_AC_FindMesh   = reinterpret_cast<fn_AC_FindMesh_t>(ResolveAddr(Module::Exe, 0x140002f90));
+    s_fn_AC_MeshSetFlag= reinterpret_cast<fn_AC_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
     s_acHelpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of Entity_impl_1650 (0x140111650) and Entity_impl_59b0 (0x1401159b0):
+// release a queued-worker link slot. Both are identical apart from the slot offset
+// (1650 -> +0x230, 59b0 -> +0x228). When the slot holds a linked entity: detach this
+// worker from the entity's worker list (FUN_140002cc0), reset that entity's
+// MeshInstance state flag 2 to off (FUN_14012c3f0), then null the slot.
+static void AttendanceComponent_ReleaseLinkSlot(void* workerP, int slotOff) {
+    EnsureAcHelpers();
+    uint8_t* self = reinterpret_cast<uint8_t*>(workerP);
+    int64_t* slot = reinterpret_cast<int64_t*>(self + slotOff);
+    if (*slot == 0) return;
+
+    int64_t selfIbp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIbp, workerP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+    int64_t linked = *slot;
+    if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(linked + 0x10));
+    int64_t meshIbp = 0;
+    void* mesh = s_fn_AC_FindMesh
+                     ? s_fn_AC_FindMesh(*reinterpret_cast<int64_t*>(linked + 0x10), &meshIbp)
+                     : nullptr;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(mesh);
+    if (s_fn_AC_MeshSetFlag && mesh)
+        s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
+
+    int64_t nullIbp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+    *slot = nullIbp;
+}
+
+void AttendanceComponent_ReleaseLink1650(void* workerP) {
+    AttendanceComponent_ReleaseLinkSlot(workerP, 0x230);
+}
+void AttendanceComponent_ReleaseLink59b0(void* workerP) {
+    AttendanceComponent_ReleaseLinkSlot(workerP, 0x228);
 }
 
 // ============================================================

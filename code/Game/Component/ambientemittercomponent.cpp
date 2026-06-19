@@ -253,9 +253,11 @@ void AmbientEmitterComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152470);
     if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
 
-    // Vector3::Serialize -- direct address
+    // Math::Vector3::Serialize -- Runtime export.
+    // (Was wrongly pointed at exe 0x14014efd0 = FloorComponent_RegisterType, an
+    //  unrelated type-registration thunk — a dropped/garbled-address caller bug.)
     s_fn_Vector3_Serialize = reinterpret_cast<fn_Vector3_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x14014efd0));
+        ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
 
     // InternalBasePtr::Serialize
     s_fn_IBP_Serialize = reinterpret_cast<fn_IBP_Serialize_t>(
@@ -269,9 +271,11 @@ void AmbientEmitterComponent_InitFuncs() {
     s_fn_AudioSetup = reinterpret_cast<fn_AudioSetup_t>(
         ResolveAddr(Module::Exe, 0x140042e10));
 
-    // Serializer::GetVersion
-    s_fn_Serializer_GetVersion = reinterpret_cast<fn_Serializer_GetVersion_t>(
-        ResolveAddr(Module::Exe, 0x14014ef90));
+    // IO::Serializer::GetVersion -- read from the registered dispatch slot
+    // 0x140152a48 (same slot decalcomponent.cpp uses). Was wrongly pointed at
+    // exe 0x14014ef90 = FishingDescription_Register — a garbled-address caller bug.
+    slot = ResolveAddr(Module::Exe, 0x140152a48);
+    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     // Type ID
     s_TypeId_AmbientEmitterDesc = reinterpret_cast<uint32_t*>(

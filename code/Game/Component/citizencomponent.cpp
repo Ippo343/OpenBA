@@ -1208,6 +1208,10 @@ typedef void   (*fn_Entity_impl_2e20_t)(int64_t a, void* outVec, int b, int c, f
 typedef void   (*fn_FUN_14009c480_t)(int* a, int* b, int c, int d); // FUN_14009c480
 typedef void   (*fn_FUN_140004680_t)(int64_t a, void* outIBP);     // FUN_140004680
 typedef void   (*fn_TimeFromFloat_t)(void* outTime, float v);
+// Callees for the two newly-reimplemented helpers (CheckWorkplaceValid / Entity_impl_ef40):
+typedef int    (*fn_Entity_impl_7fb0_t)(void* ibp, float* p2);                 // 0x140087fb0
+typedef char   (*fn_FUN_140a00f0_t)(int* world, int eventId, uint64_t cellIdx, int param); // 0x1400a00f0
+typedef void*  (*fn_Entity_FindCompStorage6270_t)(int64_t entity, void* outIBP); // 0x140006270
 
 static fn_CalcWorkerSlots_t      s_fn_CalcWorkerSlots = nullptr;
 static fn_CheckWorkplaceValid_t  s_fn_CheckWorkplaceValid = nullptr;
@@ -1228,6 +1232,9 @@ static fn_Entity_impl_2e20_t     s_fn_Entity_impl_2e20 = nullptr;
 static fn_FUN_14009c480_t        s_fn_FUN_14009c480 = nullptr;
 static fn_FUN_140004680_t        s_fn_FUN_140004680 = nullptr;
 static fn_TimeFromFloat_t        s_fn_TimeFromFloat = nullptr;
+static fn_Entity_impl_7fb0_t     s_fn_Entity_impl_7fb0 = nullptr;
+static fn_FUN_140a00f0_t         s_fn_FUN_140a00f0 = nullptr;
+static fn_Entity_FindCompStorage6270_t s_fn_EntityFindCompStorage6270 = nullptr;
 
 static bool s_calleeResolved = false;
 static void EnsureCallees() {
@@ -1261,6 +1268,9 @@ static void EnsureCallees() {
     s_fn_Entity_impl_2e20    = reinterpret_cast<fn_Entity_impl_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
     s_fn_FUN_14009c480       = reinterpret_cast<fn_FUN_14009c480_t>(ResolveAddr(Module::Exe, 0x14009c480));
     s_fn_FUN_140004680       = reinterpret_cast<fn_FUN_140004680_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_Entity_impl_7fb0    = reinterpret_cast<fn_Entity_impl_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
+    s_fn_FUN_140a00f0        = reinterpret_cast<fn_FUN_140a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
+    s_fn_EntityFindCompStorage6270 = reinterpret_cast<fn_Entity_FindCompStorage6270_t>(ResolveAddr(Module::Exe, 0x140006270));
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
     {
         uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a80); // Time::Time(float)
@@ -1919,6 +1929,129 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
     // rather than risk an incorrect site pick, matching the "no work found" branch.
     (void)param_4; (void)bestSlot;
     fn_InternalBasePtr_Ctor(param_2, nullptr);
+    return param_2;
+}
+
+// Reimpl of CitizenComponent_CheckWorkplaceValid (0x1401158d0):
+// validate that the citizen's home tile is within range of the candidate workplace.
+// Reads the world's map-info object (gw+0xf8), clamps a tile coordinate derived from
+// the workplace footprint (+0x68 -> +0x158/+0x15c) against the map width, then defers
+// to the world reachability test FUN_1400a00f0(world, 0xE1F, cellIndex, regionId).
+// Returns nonzero if the candidate is a valid (reachable) workplace for the citizen.
+char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
+
+    // CheckPtr on the citizen's home IBP (+0x278), read its entity (+0x68).
+    fn_InternalBasePtr_CheckPtr(p + 0x278);
+    int64_t homeEntity = *reinterpret_cast<int64_t*>(p + 0x278);
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(homeEntity + 0x68));
+    int64_t homeComp = *reinterpret_cast<int64_t*>(homeEntity + 0x68);
+
+    int mapW = *mapInfo;
+    int halfW = mapW >> 1;
+    int tileY = static_cast<int>(*reinterpret_cast<float*>(homeComp + 0x15c) + static_cast<float>(halfW));
+    int tileX = static_cast<int>(static_cast<float>(halfW) + *reinterpret_cast<float*>(homeComp + 0x158));
+    if (tileX < 0) tileX = 0;
+    if (mapW <= tileX) tileX = mapW - 1;
+    if (tileY < 0) tileY = 0;
+    if (mapW <= tileY) tileY = mapW - 1;
+
+    int64_t ibpVal = *reinterpret_cast<int64_t*>(param_2);
+    int regionId = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&ibpVal, nullptr) : 0;
+    uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
+    return s_fn_FUN_140a00f0 ? s_fn_FUN_140a00f0(mapInfo, 0xe1f, cellIdx, regionId) : 0;
+}
+
+// Reimpl of Entity_impl_ef40 (0x14008ef40):
+// pick a free production "slot" of category param_4 (0..4) from the storage component's
+// task list. Two-pass: pass 1 counts eligible slots (those whose RawMaterialDescription
+// capability bit for the category is set AND that have remaining demand); if any, roll a
+// random index over them; pass 2 walks the list again returning the chosen slot's IBP.
+// The category selects which bit of the material's +0x5c flags word gates a slot:
+//   0->bit5, 1->bit6, 2->bit9, 3->bit13, 4->bit14.
+int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* param_3, int param_4) {
+    EnsureCallees();
+    (void)param_1;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint32_t rawMatTid = s_TypeId_RawMat1c7cb8 ? *s_TypeId_RawMat1c7cb8 : 0;
+
+    // Category -> capability bit-shift of material flags (+0x5c).
+    auto catShift = [&](int cat) -> int {
+        switch (cat) {
+            case 0: return 5; case 1: return 6; case 2: return 9;
+            case 3: return 13; case 4: return 14; default: return -1;
+        }
+    };
+    int shift = catShift(param_4);
+
+    fn_InternalBasePtr_CheckPtr(param_3);
+    int64_t storeIBP = 0;
+    if (s_fn_EntityFindCompStorage6270)
+        s_fn_EntityFindCompStorage6270(*reinterpret_cast<int64_t*>(param_3), &storeIBP);
+
+    fn_InternalBasePtr_CheckPtr(&storeIBP);
+    uint32_t chosen = 0xffffffff;
+    int64_t taskCount = *reinterpret_cast<int*>(storeIBP + 0x30);
+    if (taskCount <= 0) { *param_2 = 0; return param_2; }
+
+    // Find the RawMaterialDescription on a task entity, returning its derived ptr (or null).
+    auto findMat = [&](int64_t taskEntity) -> void* {
+        int rows = *reinterpret_cast<int*>(taskEntity + 0x30);
+        int64_t arr = *reinterpret_cast<int64_t*>(taskEntity + 0x28);
+        for (int i = 0; i < rows; i++) {
+            int64_t comp = *reinterpret_cast<int64_t*>(arr + (int64_t)i * 8);
+            int64_t vt = *reinterpret_cast<int64_t*>(comp);
+            typedef uint32_t (*getType_t)(void*);
+            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            if (tid == rawMatTid) {
+                void* obj = reinterpret_cast<void*>(comp);
+                return fn_IsDerivedFrom(obj, rawMatTid) ? obj : nullptr;
+            }
+        }
+        return nullptr;
+    };
+
+    // Pass 1: count eligible slots; remember the last eligible index in `chosen`.
+    uint32_t eligible = 0;
+    for (int64_t row = 0; row < taskCount; row++) {
+        fn_InternalBasePtr_CheckPtr(&storeIBP);
+        int64_t listBase = *reinterpret_cast<int64_t*>(storeIBP + 0x28);
+        int64_t entry = *reinterpret_cast<int64_t*>(listBase + row * 0x10);
+        void* mat = findMat(entry);
+        bool bitSet = mat && shift >= 0 &&
+            ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(mat) + 0x5c) >> shift) & 1);
+        int demand = *reinterpret_cast<int*>(listBase + 8 + row * 0x10) -
+                     *reinterpret_cast<int*>(listBase + 0xc + row * 0x10);
+        if (bitSet && demand > 0) {
+            if (*reinterpret_cast<char*>(reinterpret_cast<uint8_t*>(mat) + 0x58) != '\0')
+                chosen = eligible;
+            eligible++;
+        }
+    }
+    if (eligible == 0) { *param_2 = 0; return param_2; }
+
+    if (static_cast<int>(chosen) < 0 && fn_Random_Rand)
+        chosen = fn_Random_Rand(*reinterpret_cast<void**>(gw + 0xd8), eligible);
+
+    // Pass 2: walk again, returning the chosen eligible slot's IBP.
+    uint32_t cur = 0;
+    for (int64_t row = 0; row < taskCount; row++) {
+        fn_InternalBasePtr_CheckPtr(&storeIBP);
+        int64_t listBase = *reinterpret_cast<int64_t*>(storeIBP + 0x28);
+        int64_t* entryP = reinterpret_cast<int64_t*>(listBase + row * 0x10);
+        void* mat = findMat(*entryP);
+        bool bitSet = mat && shift >= 0 &&
+            ((*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(mat) + 0x5c) >> shift) & 1);
+        int demand = static_cast<int>(entryP[1]) - *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(entryP) + 0xc);
+        if (bitSet && demand > 0) {
+            if (chosen == cur) { *param_2 = *entryP; return param_2; }
+            cur++;
+        }
+    }
+    *param_2 = 0;
     return param_2;
 }
 

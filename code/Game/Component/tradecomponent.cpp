@@ -198,6 +198,53 @@ void TradeComponent_Setup(void* selfP) {
 }
 
 // ============================================================
+// Reimpl of FUN_14000e8d0 (TradeComponent item-table resize)
+// ============================================================
+// Grow/shrink the (count@+8, capacity@+0xc) item array of 0xc-byte entries.
+// On growth past capacity, allocate cap*0xc (4-aligned), copy old entries (3 ints
+// each), zero-init new entries' third int, free the old buffer. Faithful 1:1 port
+// of TradeComponent_sub_e8d0; closure = MemAlloc/MemFree only.
+void TradeComponent_ResizeItems(int64_t* field, int count) {
+    int oldCount = *(int*)(field + 1);
+    if (count == oldCount) return;
+
+    void* oldBuf = (void*)field[0];
+    *(int*)(field + 1) = count;
+
+    if (*(int*)((int64_t)field + 0xc) < count) {
+        *(int*)((int64_t)field + 0xc) = count;
+        if (count == oldCount + 1 && oldCount != 0) {
+            *(int*)((int64_t)field + 0xc) = count * 3;
+        }
+        void* newBuf = (fn_MemAlloc && g_pMemAllocSingleton)
+            ? fn_MemAlloc(g_pMemAllocSingleton,
+                          (uint64_t)(*(int*)((int64_t)field + 0xc)) * 0xc, 4)
+            : nullptr;
+        field[0] = (int64_t)newBuf;
+    }
+
+    int startIdx = (oldBuf == (void*)field[0]) ? oldCount : 0;
+    for (int64_t i = startIdx; i < count; i++) {
+        int64_t off = i * 0xc;
+        if (i < oldCount) {
+            uint32_t* dst = (uint32_t*)(field[0] + off);
+            if (dst) {
+                dst[0] = *(uint32_t*)(off + (int64_t)oldBuf);
+                dst[1] = *(uint32_t*)(off + 4 + (int64_t)oldBuf);
+                dst[2] = *(uint32_t*)(off + 8 + (int64_t)oldBuf);
+            }
+        } else {
+            int64_t dst = field[0] + off;
+            if (dst) *(uint32_t*)(dst + 8) = 0;
+        }
+    }
+
+    if (oldBuf != (void*)field[0]) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void TradeComponent_InitFuncs() {

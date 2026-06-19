@@ -126,6 +126,199 @@ void NomadComponent_OnCreate(NomadComponent* self) {
 }
 
 // ============================================================
+// Reimpl of FUN_140102b60 (Component reg wave B) — controller rebuild.
+// NOT nomad-specific (Ghidra mislabels it): this rebuilds the controller object at
+// self+0x28 from a setting-keyed std::map of controller descriptors at self+0x10.
+// Called by NomadComp_FUN_140103480 (and other controller-attach paths) whenever the
+// active setting key (self+0x20, taken from self+0x88 when the self+0x80 flag is set)
+// changes. Steps (1:1 with the decompile / disassembly):
+//   1. Resolve the effective key (param2, or self+0x88 if flagged); if unchanged and a
+//      controller already exists, do nothing.
+//   2. Tear down the old controller (vtable+0x28 cleanup, then DeletePtr) at self+0x28.
+//   3. In-order walk the map (root self+0x10) matching descriptor keys against the
+//      component list at self+0x20 (vtable+0x10 GetType), recording the last match key.
+//   4. Lower-bound the map for that key -> node.
+//   5. Factory::CreateObject(node->key2) validated IsDerivedFrom(DWORD_1401c6eb8) ->
+//      IBP -> self+0x28.
+//   6. If node has no cached setting (node+0x10==0), pull it from the controller's
+//      vtable+0x58 accessor, CreateObject(setting type) validated against
+//      TypeInfo_ToolSetting (DAT_1401c6ef0) -> IBP -> node+0x10.
+//   7. Wire ctrl->owner(+0x10)=self, ctrl->key(+0x20)=self+0x20, ctrl->setting(+0x18)=
+//      node+0x10, then vtable+0x20 Startup.
+// Closure-safe: all callees are engine externals (CheckPtr/CreateObject/IsDerivedFrom/
+// IBP ctor+dtor) + virtual slots. Map-node layout (uint* index -> byte off):
+//   *node=+0 key, node[2]=+8 key2, node[4]=+0x10 setting-IBP, node[6]=+0x18 parent,
+//   node[8]=+0x20 right, node[10]=+0x28 left.  INTRICATE — lead must Ghidra-verify.
+// ============================================================
+typedef void* (*fn_b60_CreateObject_t)(void* factory, uint32_t typeId);
+typedef bool  (*fn_b60_IsDerived_t)(void* obj, uint32_t typeId);
+typedef void  (*fn_b60_IBPCtor_t)(void* dst, void* src);
+typedef void  (*fn_b60_DeletePtr_t)(void* ibp);
+static void**            s_b60_pFactoryHolder = nullptr; // [0x140152760] -> &factory
+static fn_b60_CreateObject_t s_b60_CreateObject = nullptr; // slot 0x140152778
+static fn_b60_IsDerived_t    s_b60_IsDerived = nullptr;    // slot 0x140152a98
+static fn_b60_IBPCtor_t      s_b60_IBPCtor = nullptr;      // slot 0x140152a90
+static fn_b60_DeletePtr_t    s_b60_DeletePtr = nullptr;    // slot 0x140151ab8
+static uint32_t*         s_b60_TypeId_Controller = nullptr; // DWORD_1401c6eb8
+static uint32_t*         s_b60_TypeId_ToolSetting = nullptr; // DAT_1401c6ef0
+static bool s_b60Resolved = false;
+static void EnsureB60() {
+    if (s_b60Resolved) return;
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x140152760);
+    if (slot) s_b60_pFactoryHolder = *reinterpret_cast<void***>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152778);
+    if (slot) s_b60_CreateObject = *reinterpret_cast<fn_b60_CreateObject_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152a98);
+    if (slot) s_b60_IsDerived = *reinterpret_cast<fn_b60_IsDerived_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140152a90);
+    if (slot) s_b60_IBPCtor = *reinterpret_cast<fn_b60_IBPCtor_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151ab8);
+    if (slot) s_b60_DeletePtr = *reinterpret_cast<fn_b60_DeletePtr_t*>(slot);
+    s_b60_TypeId_Controller  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6eb8));
+    s_b60_TypeId_ToolSetting = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6ef0));
+    s_b60Resolved = true;
+}
+
+void NomadComp_RebuildController_b60(int64_t param_1, int64_t param_2) {
+    EnsureB60();
+    uint8_t* self = reinterpret_cast<uint8_t*>(param_1);
+
+    int64_t key = param_2;
+    if (*reinterpret_cast<char*>(self + 0x80) != '\0' && param_2 != 0) {
+        key = *reinterpret_cast<int64_t*>(self + 0x88);
+    }
+
+    if (*reinterpret_cast<int64_t*>(self + 0x20) == key &&
+        *reinterpret_cast<int64_t*>(self + 0x28) != 0 && key != 0) {
+        return;  // unchanged and controller present
+    }
+
+    *reinterpret_cast<int64_t*>(self + 0x20) = key;
+
+    // Tear down existing controller IBP
+    if (*reinterpret_cast<int64_t*>(self + 0x28) != 0) {
+        fn_InternalBasePtr_CheckPtr(self + 0x28);
+        int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
+        int64_t vt = *reinterpret_cast<int64_t*>(ctrl);
+        (*reinterpret_cast<void(**)(void*)>(vt + 0x28))(reinterpret_cast<void*>(ctrl));
+        if (s_b60_DeletePtr) s_b60_DeletePtr(self + 0x28);
+    }
+
+    // --- In-order walk the map, matching descriptor keys against the component list ---
+    uint32_t matchKey = 0;
+    uint32_t* node = *reinterpret_cast<uint32_t**>(self + 0x10);  // root
+    if (node != nullptr) {
+        // descend to leftmost
+        uint32_t* cur;
+        do { cur = node; node = *reinterpret_cast<uint32_t**>(cur + 8); } while (node != nullptr);
+        node = cur;
+        while (node != nullptr) {
+            int64_t list = *reinterpret_cast<int64_t*>(self + 0x20);
+            if (list != 0) {
+                uint32_t nodeKey = *node;
+                int cnt = *reinterpret_cast<int*>(list + 0x30);
+                int64_t arr = *reinterpret_cast<int64_t*>(list + 0x28);
+                for (int i = 0; i < cnt; i++) {
+                    void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
+                    int64_t cvt = *reinterpret_cast<int64_t*>(comp);
+                    uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(cvt + 0x10))(comp);
+                    if (tid == nodeKey) {
+                        if (*reinterpret_cast<int64_t*>(arr + (int64_t)i * 8) != 0)
+                            matchKey = *node;
+                        break;
+                    }
+                }
+            }
+            if (node == nullptr) break;
+            // in-order successor
+            uint32_t* right = *reinterpret_cast<uint32_t**>(node + 10);
+            if (right == nullptr) {
+                uint32_t* parent = *reinterpret_cast<uint32_t**>(node + 6);
+                while (parent != nullptr &&
+                       *reinterpret_cast<uint32_t**>(parent + 10) == node) {
+                    node = parent;
+                    parent = *reinterpret_cast<uint32_t**>(node + 6);
+                }
+                node = parent;
+            } else {
+                uint32_t* d = right;
+                while (d != nullptr) { right = d; d = *reinterpret_cast<uint32_t**>(d + 8); }
+                node = right;
+            }
+        }
+    }
+
+    // --- Lower-bound the map for matchKey ---
+    uint32_t* found = nullptr;
+    {
+        uint32_t* n = *reinterpret_cast<uint32_t**>(self + 0x10);
+        while (n != nullptr) {
+            if (matchKey < *n) {
+                n = *reinterpret_cast<uint32_t**>(n + 8);   // go left
+            } else {
+                found = n;
+                if (matchKey <= *n) break;
+                n = *reinterpret_cast<uint32_t**>(n + 10);  // go right
+            }
+        }
+    }
+    if (found == nullptr) return;  // defensive (orig assumes a node)
+
+    void* factory = s_b60_pFactoryHolder ? *s_b60_pFactoryHolder : nullptr;
+
+    // --- CreateObject(node->key2) validated against controller type ---
+    void* obj = (factory && s_b60_CreateObject) ? s_b60_CreateObject(factory, found[2]) : nullptr;
+    void* ctrlObj = nullptr;
+    if (obj && s_b60_IsDerived && s_b60_TypeId_Controller &&
+        s_b60_IsDerived(obj, *s_b60_TypeId_Controller)) {
+        ctrlObj = obj;
+    }
+    int64_t ibpA = 0;
+    if (s_b60_IBPCtor) s_b60_IBPCtor(&ibpA, ctrlObj);
+    *reinterpret_cast<int64_t*>(self + 0x28) = ibpA;
+
+    // --- Build the cached setting (node+0x10) if absent ---
+    if (*reinterpret_cast<int64_t*>(found + 4) == 0) {
+        fn_InternalBasePtr_CheckPtr(self + 0x28);
+        int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
+        int* probe = reinterpret_cast<int*>(
+            (*reinterpret_cast<void*(**)(void*, void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x58))(
+                reinterpret_cast<void*>(ctrl), &ibpA));
+        if (probe && *probe != 0) {
+            fn_InternalBasePtr_CheckPtr(self + 0x28);
+            ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
+            uint32_t* setRef = reinterpret_cast<uint32_t*>(
+                (*reinterpret_cast<void*(**)(void*, void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x58))(
+                    reinterpret_cast<void*>(ctrl), &ibpA));
+            void* setObj = (factory && s_b60_CreateObject)
+                               ? s_b60_CreateObject(factory, *setRef) : nullptr;
+            void* setValidated = nullptr;
+            if (setObj && s_b60_IsDerived && s_b60_TypeId_ToolSetting &&
+                s_b60_IsDerived(setObj, *s_b60_TypeId_ToolSetting)) {
+                setValidated = setObj;
+            }
+            int64_t ibpB = 0;
+            if (s_b60_IBPCtor) s_b60_IBPCtor(&ibpB, setValidated);
+            *reinterpret_cast<int64_t*>(found + 4) = ibpB;
+        }
+    }
+
+    // --- Wire the controller and start it ---
+    int64_t setting = *reinterpret_cast<int64_t*>(found + 4);
+    fn_InternalBasePtr_CheckPtr(self + 0x28);
+    int64_t ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
+    int64_t keyVal = *reinterpret_cast<int64_t*>(self + 0x20);
+    *reinterpret_cast<int64_t*>(ctrl + 0x10) = param_1;
+    *reinterpret_cast<int64_t*>(ctrl + 0x20) = keyVal;
+    *reinterpret_cast<int64_t*>(ctrl + 0x18) = setting;
+    fn_InternalBasePtr_CheckPtr(self + 0x28);
+    ctrl = *reinterpret_cast<int64_t*>(self + 0x28);
+    (*reinterpret_cast<void(**)(void*)>(*reinterpret_cast<int64_t*>(ctrl) + 0x20))(
+        reinterpret_cast<void*>(ctrl));
+}
+
+// ============================================================
 // Reimpl of FUN_140103480 (Component reg wave "people")
 // Ghidra mislabels this "TradeWork_impl_3480"; its real callers are entity-removal
 // paths (CitizenComponent_OnRemove, DestroyDescription helpers, NomadComponent_OnCreate):

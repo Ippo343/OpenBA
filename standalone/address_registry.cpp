@@ -348,6 +348,15 @@ extern void RegisterComponentBatch_people();
 extern void RegisterComponentBatch_economy();
 extern void RegisterComponentBatch_nature();
 extern void RegisterComponentBatch_visuals();
+// Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
+// helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
+// A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
+// residence caller-bug 35ec0->07960 (6+1). C: decal/statusicon (2). D: herd/trade/build +
+// terraform caller-bug a4b50->ab150 (3+1). nomad b60 deferred (Factory+vtable-Startup).
+extern void RegisterComponentGap_A();
+extern void RegisterComponentGap_B();
+extern void RegisterComponentGap_C();
+extern void RegisterComponentGap_D();
 
 // Work registration wave (2026-06-18) — shared base-helper sub-batch.
 // reg file: standalone/reg_work_base.cpp ; bodies: code/Game/Work/work_base_reimpl.cpp.
@@ -413,6 +422,11 @@ static void RegisterCodeFunctions() {
     RegisterComponentBatch_economy();
     RegisterComponentBatch_nature();
     RegisterComponentBatch_visuals();
+    // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
+    RegisterComponentGap_A();
+    RegisterComponentGap_B();
+    RegisterComponentGap_C();
+    RegisterComponentGap_D();
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
     RegisterWorkBaseBatch();

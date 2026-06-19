@@ -338,7 +338,12 @@ static fn_CompEntityCopy_t s_fn_CompEntityCopy = nullptr;
 typedef void* (*fn_IBPAccessor_t)(void* ibp, void* outIBP);
 static fn_IBPAccessor_t s_fn_IBPAccessor_52c0 = nullptr;
 static fn_IBPAccessor_t s_fn_IBPAccessor_c460 = nullptr;
-// Entity_impl_6540 (FUN_140...6540) -- set tile index on new entity.
+// Entity_impl_6540 (0x140126540) -- place a freshly-spawned sub-resource entity:
+// records its tile (+0x28/+0x2a), builds a yaw transform via FromYawPitchOffset and
+// writes it to the entity transform (+0x148..+0x168), then Geometry::SetTransform.
+// NOTE: the literal was previously the dropped-digit typo 0x140006540 (which lands
+// mid-HealerDescription_Factory at 0x1400064f0 — an unrelated tiny factory). The true
+// callee in GrowthComponent_helper_fba0 is Entity_impl_6540 @ 0x140126540.
 typedef void (*fn_SetTileIndex_t)(void* entity, int tileIdx);
 static fn_SetTileIndex_t s_fn_SetTileIndex = nullptr;
 // FUN_140120db0 -- set growth value (float) on entity.
@@ -367,7 +372,7 @@ static void EnsureSubHelpers() {
     s_fn_EntityAccessor  = reinterpret_cast<fn_EntityAccessor_t>(ResolveAddr(Module::Exe, 0x140005200));
     s_fn_IBPAccessor_52c0= reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x1400052c0));
     s_fn_IBPAccessor_c460= reinterpret_cast<fn_IBPAccessor_t>(ResolveAddr(Module::Exe, 0x14000c460));
-    s_fn_SetTileIndex    = reinterpret_cast<fn_SetTileIndex_t>(ResolveAddr(Module::Exe, 0x140006540));
+    s_fn_SetTileIndex    = reinterpret_cast<fn_SetTileIndex_t>(ResolveAddr(Module::Exe, 0x140126540));
     s_fn_SetGrowthVal    = reinterpret_cast<fn_SetGrowthVal_t>(ResolveAddr(Module::Exe, 0x140120db0));
     s_fn_VariantRange    = reinterpret_cast<fn_VariantRange_t>(ResolveAddr(Module::Exe, 0x140125320));
     s_fn_SetVariant      = reinterpret_cast<fn_SetVariant_t>(ResolveAddr(Module::Exe, 0x1401253d0));

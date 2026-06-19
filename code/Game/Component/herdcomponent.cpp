@@ -171,6 +171,61 @@ static void* HerdFindComponent(int64_t entity, uint32_t* pTypeId) {
     return nullptr;
 }
 
+// Entity_FindComponent_Family (0x1400012d0) — find the herd-member sub-component
+// (returns an IBP). Resolved lazily here for the 6b10 body.
+typedef void* (*fn_FindFamily_t)(int64_t entity, void* outIBP);
+static fn_FindFamily_t s_fn_FindFamily = nullptr;
+
+// Reimpl of FUN_140106b10 (HerdComponent_helper_6b10): per-animal "has this animal
+// reached its migration target tile?" test. Finds the animal's herd-member component
+// off its owning entity (+0x10 -> Entity_FindComponent_Family), reads the herd centre
+// world position (+0x158/+0x15c), converts it to a clamped tile index, then returns
+// true iff that tile falls inside the animal's recorded bounds rect (+0x38..+0x3e).
+// Closure: Entity_FindComponent_Family (0x1400012d0, registered) + CheckPtr (engine).
+char HerdComponent_Helper6b10(int64_t param_1) {
+    EnsureHelpers();
+    EnsureHerdExtras();
+    if (!s_fn_FindFamily)
+        s_fn_FindFamily = reinterpret_cast<fn_FindFamily_t>(
+            ResolveAddr(Module::Exe, 0x1400012d0));
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+    int* piMapDim = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(param_1 + 0x10));
+    uint64_t ibp = 0;
+    if (s_fn_FindFamily) s_fn_FindFamily(*(int64_t*)(param_1 + 0x10), &ibp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&ibp);
+    int64_t comp = *(int64_t*)&ibp;
+    if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(comp + 0x68));
+    int64_t pos = *(int64_t*)(comp + 0x68);
+
+    int mapDim = *piMapDim;
+    int x = (int)(*(float*)(pos + 0x158) + (float)(mapDim >> 1));
+    int y = (int)(*(float*)(pos + 0x15c) + (float)(mapDim >> 1));
+    if (x < 0) x = 0;
+    if (mapDim <= x) x = mapDim - 1;
+    if (y < 0) y = 0;
+    if (mapDim <= y) y = mapDim - 1;
+
+    // Original folds (x,y) into mapDim*y+x then re-splits it; net effect recovers
+    // the same clamped x,y. Keep that for byte-faithfulness.
+    int idx = mapDim * y + x;
+    int ry = idx / mapDim;
+    int rx = idx % mapDim;
+
+    short bx = *(short*)(param_1 + 0x38);
+    short by = *(short*)(param_1 + 0x3a);
+    short bw = *(short*)(param_1 + 0x3c);
+    short bh = *(short*)(param_1 + 0x3e);
+    if (rx < bx || ry < by ||
+        (int)bw + (int)bx <= rx ||
+        (int)bh + (int)by <= ry) {
+        return 0;
+    }
+    return 1;
+}
+
 // Reimpl of FUN_140053f20 (count fertile/food tiles in the herd's grazing cell)
 // Sub-samples the (param_2) macro-cell into a (gridDim x gridDim) block of map tiles
 // (gridDim = mapDim/cellDim), counts tiles whose first int (food value) is > 0, and

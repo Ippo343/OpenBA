@@ -351,6 +351,54 @@ static void EnsureCallees() {
     s_calleeResolved = true;
 }
 
+// ============================================================
+// CitizenComponent age-mesh setup helpers (Component reg wave, batch B).
+// 0x140115110 SetupYoung / 0x1401151a0 SetupAdult / 0x140115230 SetupElder.
+// Each writes a uniform RGB scale (a .rdata float constant) into the citizen's
+// MeshInstance colour-tint fields (+0x134/+0x138/+0x13c) and the citizen's index
+// (self+0x34, as float) into +0x140. The MeshInstance is reached through the
+// InternalBasePtr at citizen+0x278 (deref +0x68). CheckPtr both the IBP and the
+// resolved local copy, exactly like the original. Closure: only CheckPtr (engine).
+// Faithful ports; the only difference vs the exe is the scale constant address.
+// ============================================================
+static float* s_pSetupYoungScale = nullptr; // DAT_14017214c
+static float* s_pSetupAdultScale = nullptr; // DAT_14017212c
+static float* s_pSetupElderScale = nullptr; // DAT_140172118
+static bool   s_setupScalesResolved = false;
+static void EnsureSetupScales() {
+    if (s_setupScalesResolved) return;
+    s_pSetupYoungScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
+    s_pSetupAdultScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017212c));
+    s_pSetupElderScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172118));
+    s_setupScalesResolved = true;
+}
+
+static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
+    uint8_t* citizen = reinterpret_cast<uint8_t*>(citizenP);
+    int idx = *reinterpret_cast<int*>(citizen + 0x34);
+    fn_InternalBasePtr_CheckPtr(citizen + 0x278);
+    int64_t meshIBP = *reinterpret_cast<int64_t*>(citizen + 0x278);
+    int64_t mesh = *reinterpret_cast<int64_t*>(meshIBP + 0x68);
+    fn_InternalBasePtr_CheckPtr(&mesh);
+    *reinterpret_cast<float*>(mesh + 0x134) = scale;
+    *reinterpret_cast<float*>(mesh + 0x138) = scale;
+    *reinterpret_cast<float*>(mesh + 0x13c) = scale;
+    *reinterpret_cast<float*>(mesh + 0x140) = (float)idx;
+}
+
+void CitizenComponent_SetupYoung_Reimpl(void* citizen) {
+    EnsureSetupScales();
+    CitizenComp_SetupAgeMesh(citizen, s_pSetupYoungScale ? *s_pSetupYoungScale : 1.0f);
+}
+void CitizenComponent_SetupAdult_Reimpl(void* citizen) {
+    EnsureSetupScales();
+    CitizenComp_SetupAgeMesh(citizen, s_pSetupAdultScale ? *s_pSetupAdultScale : 1.0f);
+}
+void CitizenComponent_SetupElder_Reimpl(void* citizen) {
+    EnsureSetupScales();
+    CitizenComp_SetupAgeMesh(citizen, s_pSetupElderScale ? *s_pSetupElderScale : 1.0f);
+}
+
 // Reimpl of Entity_FindComponent_Storage (0x140008090):
 // scan an entity's component list for the ResidenceComponent type (DAT_1401c7cf0)
 // and construct an InternalBasePtr (param_2) to it (or null).

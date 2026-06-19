@@ -614,6 +614,40 @@ static void EnsureSlotHelpers() {
     s_sdcSlotHelpersResolved = true;
 }
 
+// ============================================================
+// Reimpl of Entity_helper_cbd0 (0x14000cbd0) — Component reg wave B.
+// Scans a host entity's component list (count@+0x30, IBP array@+0x28) for the first
+// component whose runtime type id (vtable+0x10) equals DAT_1401c7a88, then resolves
+// that IBP and, if it IsDerivedFrom that type, writes it to *retbuf (else null).
+// Returns retbuf. Closure-safe: only IsDerivedFrom (engine). The type-id is a .rdata
+// global resolved at call time. Faithful 1:1 port of the Ghidra decompile.
+// ============================================================
+static uint32_t* s_cbd0_TypeId = nullptr; // DAT_1401c7a88
+static bool s_cbd0Resolved = false;
+void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
+    if (!s_cbd0Resolved) {
+        s_cbd0_TypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
+        s_cbd0Resolved = true;
+    }
+    uint8_t* host = reinterpret_cast<uint8_t*>(hostP);
+    void* found = nullptr;
+    int count = *reinterpret_cast<int*>(host + 0x30);
+    int64_t arr = *reinterpret_cast<int64_t*>(host + 0x28);
+    for (int i = 0; i < count; i++) {
+        void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        int64_t vt = *reinterpret_cast<int64_t*>(comp);
+        typedef uint32_t (*getType_t)(void*);
+        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        if (s_cbd0_TypeId && tid == *s_cbd0_TypeId) {
+            void* resolved = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
+            if (fn_IsDerivedFrom(resolved, *s_cbd0_TypeId)) found = resolved;
+            break;
+        }
+    }
+    *reinterpret_cast<void**>(retbuf) = found;
+    return retbuf;
+}
+
 void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fraction,
                                             uintptr_t materialType) {
     EnsureSlotHelpers();

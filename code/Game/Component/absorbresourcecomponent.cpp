@@ -11,6 +11,7 @@
 #include "Component/absorbresourcecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Game/serialize_externals.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -101,6 +102,27 @@ static void EnsureComponentSerializeHelpers() {
     s_cs_Helper1d10 = reinterpret_cast<fn_CS_Helper1d10_t>(ResolveAddr(Module::Exe, 0x140031d10));
     s_cs_pTId_CompEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
     s_csResolved = true;
+}
+
+// ============================================================
+// Reimpl of Component_helper_1d10 (0x140031d10) — Component reg wave B.
+// This is the canonical Object::ExternalPtr<T>::Serialize body specialised for the
+// Description-family External validated against DAT_1401c72e0 (a Description type id,
+// xref'd from Description_Register). It is byte-identical to the other ExternalPtr<T>
+// serialize bodies, so we delegate to the shared ExternalPtrSerializeGeneric rather
+// than re-port the read/write/FindOrLoad/IsDerivedFrom logic. Closure-safe: only the
+// engine serialize/factory externals. The typeId is resolved at call time; a null
+// typeId makes the generic body load without validation (cascade-safe).
+// ============================================================
+void Component_Helper1d10_Reimpl(void* extRefField, void* serializer) {
+    static const uint32_t* s_typeId = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_typeId = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c72e0));
+        s_resolved = true;
+    }
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(extRefField), serializer,
+                                s_typeId, "Description");
 }
 
 void Component_SerializeReimpl(void* selfP, void* stream) {

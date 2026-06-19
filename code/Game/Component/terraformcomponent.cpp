@@ -40,9 +40,17 @@ typedef void (*fn_ResizeVec3Array_t)(void* arrayPtr, uint32_t newCount);
 static fn_ResizeVec3Array_t s_fn_ResizeVec3Array = nullptr;
 
 // Terrain helpers for OnCreate
-// FUN_1400a4b50 — CitizenAI_impl_b150 (terrain recalc)
+// CitizenAI_impl_b150 (0x1400ab150) — terrain region-dirty recalc around (x,y).
+// NOTE: the literal was previously 0x1400a4b50 (a dropped/transposed digit) which
+// lands mid-FUN_1400a4b30, an unrelated merchant-name binary search. The true callee
+// in TerraformComponent::OnCreate is CitizenAI_impl_b150 @ 0x1400ab150.
 typedef void (*fn_TerrainRecalc_t)(void* terrainGrid, int x, int y);
 static fn_TerrainRecalc_t s_fn_TerrainRecalc = nullptr;
+
+// CitizenAI_impl_a4f0 (0x14001a4f0) — mark one region cell dirty. Sole callee of
+// CitizenAI_impl_b150; already registered, so b150 is closure-safe.
+typedef void (*fn_RegionDirty_t)(int64_t* regionMgr, void* scratch, uint32_t* cellIdx);
+static fn_RegionDirty_t s_fn_RegionDirty = nullptr;
 
 // FUN_1400a8c90 — terrain tile visual update
 typedef void (*fn_TerrainVisualUpdate_t)(void* ptr, int x, int y);
@@ -188,7 +196,9 @@ void TerraformComponent_InitFuncs() {
     s_fn_ResizeVec3Array = reinterpret_cast<fn_ResizeVec3Array_t>(
         ResolveAddr(Module::Exe, 0x14000d030));
     s_fn_TerrainRecalc = reinterpret_cast<fn_TerrainRecalc_t>(
-        ResolveAddr(Module::Exe, 0x1400a4b50));
+        ResolveAddr(Module::Exe, 0x1400ab150));
+    s_fn_RegionDirty = reinterpret_cast<fn_RegionDirty_t>(
+        ResolveAddr(Module::Exe, 0x14001a4f0));
     s_fn_TerrainVisualUpdate = reinterpret_cast<fn_TerrainVisualUpdate_t>(
         ResolveAddr(Module::Exe, 0x1400a8c90));
     s_fn_TerrainTypeSet = reinterpret_cast<fn_TerrainTypeSet_t>(
@@ -208,6 +218,41 @@ void TerraformComponent_InitFuncs() {
         ResolveExport("?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z"));
 
     s_initialized = true;
+}
+
+// ============================================================
+// Reimpl of FUN_1400ab150 (CitizenAI_impl_b150): mark the region cell(s) that
+// contain world tile (x,y) dirty so the region/pathing graph is rebuilt there.
+// Region cell size is at terrainGrid+0xc8; grid dimension = (terrainGrid+0xc0)/cell.
+// When (x,y) sits on a cell boundary the adjacent cells are flagged too. The region
+// manager is at terrainGrid+0xe8. Faithful 1:1 port; closure = CitizenAI_impl_a4f0
+// (0x14001a4f0, registered).
+void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
+    int64_t grid = (int64_t)terrainGridV;
+    int cell = *(int*)(grid + 0xc8);
+    if (cell == 0) return;
+    int gx = x / cell;
+    int gy = y / cell;
+    int dim = *(int*)(grid + 0xc0) / cell;
+
+    int64_t* regionMgr = (int64_t*)(grid + 0xe8);
+    uint64_t scratch = 0;
+    uint32_t cellIdx;
+
+    if ((x % cell == 0) && (-1 < gx - 1)) {
+        cellIdx = (uint32_t)(dim * gy - 1 + gx);
+        if (s_fn_RegionDirty) s_fn_RegionDirty(regionMgr, &scratch, &cellIdx);
+    }
+    if ((y % cell == 0) && (-1 < gy - 1)) {
+        cellIdx = (uint32_t)((gy - 1) * dim + gx);
+        if (s_fn_RegionDirty) s_fn_RegionDirty(regionMgr, &scratch, &cellIdx);
+    }
+    if ((x % cell == 0) && (y % cell == 0) && (-1 < gx - 1) && (-1 < gy - 1)) {
+        cellIdx = (uint32_t)((gy - 1) * dim - 1 + gx);
+        if (s_fn_RegionDirty) s_fn_RegionDirty(regionMgr, &scratch, &cellIdx);
+    }
+    cellIdx = (uint32_t)(dim * gy + gx);
+    if (s_fn_RegionDirty) s_fn_RegionDirty(regionMgr, &scratch, &cellIdx);
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====

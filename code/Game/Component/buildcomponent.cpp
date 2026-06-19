@@ -432,6 +432,38 @@ void BuildComponent_DrawReimpl(void* selfP) {
 }
 
 // ============================================================
+// Reimpl of FUN_140026a30 (BuildComponent find first StorageComponent child)
+// ============================================================
+// Scan the compHost's component list (+0x30 array of IBP, +0x38 count) for the
+// first component whose GetTypeId (vtable+0x10) == StorageComponent type id
+// (DAT_1401c7c10); verify with IsDerivedFrom; construct an IBP into retbuf.
+// Closure: CheckPtr / IsDerivedFrom / InternalBasePtr_Ctor (all engine).
+// Returns retbuf (caller passes &out).
+void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
+    void* found = nullptr;
+    if (s_TypeId_StorageComp) {
+        int count = *(int*)(compHost + 0x38);
+        int64_t arr = *(int64_t*)(compHost + 0x30);
+        for (int i = 0; i < count; i++) {
+            int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* comp = (void*)*slot;
+            typedef uint32_t (*GetTypeId_t)(void*);
+            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            if (tid == *s_TypeId_StorageComp) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+                void* c = (void*)*slot;
+                if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_TypeId_StorageComp))
+                    found = c;
+                break;
+            }
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retbuf, found);
+    return retbuf;
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void BuildComponent_InitFuncs() {
