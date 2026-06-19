@@ -358,6 +358,10 @@ extern void RegisterWorkBstBatch();
 extern void RegisterWorkCellBstBatch();
 // Work grid / assignment helpers — reg_work_grid.cpp ; bodies: code/Game/Work/work_base_grid.cpp.
 extern void RegisterWorkGridBatch();
+// Work shared-helper tail — FindComponent accessors — reg_work_accessor.cpp ; bodies: work_base_accessor.cpp.
+extern void RegisterWorkAccessorBatch();
+// Work shared-helper tail — sqrtf math helper — reg_work_impl2.cpp ; bodies: work_base_impl2.cpp.
+extern void RegisterWorkImpl2Batch();
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -378,6 +382,9 @@ static void RegisterCodeFunctions() {
     RegisterWorkCellBstBatch();
     // Work grid / assignment helpers — FindCell / TryAssignWorkplace / AutoPickup.
     RegisterWorkGridBatch();
+    // Work shared-helper tail — FindComponent accessors (5380/5440/22520/6330) + sqrtf (132010).
+    RegisterWorkAccessorBatch();
+    RegisterWorkImpl2Batch();
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));

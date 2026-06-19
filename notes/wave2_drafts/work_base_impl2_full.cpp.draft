@@ -1,0 +1,442 @@
+// code/Game/Work/work_base_impl2.cpp
+// Wave 2 (Work) — impl/geometry/math sub-batch.
+//
+// Faithful 1:1 ports of 6 Work-referenced exe helpers (decompiled in Ghidra):
+//   0x140087fb0  Entity_impl_7fb0          — entity -> grid cell + optional world pos
+//   0x1400f6ef0  BuildStructure_impl_6ef0  — build-progress / time-budget update
+//   0x140122b00  FUN_140122b00             — recursive walkable-position search (children)
+//   0x140122be0  FUN_140122be0             — walkable-position search (single build record)
+//   0x140122e20  Entity_impl_2e20          — get world position for a build-point index
+//   0x140132010  FUN_140132010             — sqrtf (NaN/Inf-aware)
+//
+// These are resolved via ResolveAddr(Module::Exe, 0xADDR) from many code/Game/Work/*.cpp.
+// In DLL mode they resolve to the original exe code; in standalone mode they resolve to 0
+// (silently skipped) unless registered. This file provides the callee bodies; the single
+// registration point is RegisterWorkImpl2Batch() in standalone/reg_work_impl2.cpp.
+//
+// Every exe sub-call is mirrored through a guarded ResolveAddr lazy pointer (same style as
+// work_base_reimpl.cpp) so an unresolved sub-dep degrades gracefully instead of crashing.
+//
+// This file must NOT depend on hooks.h — it is portable for the standalone exe.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cmath>
+
+// ============================================================
+// Lazily-resolved exe sub-helpers (shared across the ports below)
+// ============================================================
+// Direct exe-code helpers (E8-relative CALLs in the original).
+typedef void* (*fn_FindComp_t)(uintptr_t entity, void* retIBP);
+typedef void* (*fn_ClearPathQueue_t)(uintptr_t entity, void* retIBP);
+typedef int   (*fn_PosCount_t)(uintptr_t posComp, int mode);
+typedef float* (*fn_GetPosForIndex_t)(void* self, float* retVec3, int mode, int index, float* heading);
+typedef int   (*fn_MapPathCost_t)(int* mapGrid, uint32_t cellA, int cellB, uint8_t cache);
+typedef float*(*fn_TerrainPos_t)(void* mapGrid, float* outPos3, float* inXY2, char flag, void* outTri);
+typedef uint64_t (*fn_ValidateCell_t)(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell);
+
+// Dispatch-slot helpers (CALL qword ptr [0x140152xxx] in the original) — read the runtime
+// function pointer out of the slot, matching the moveto.cpp / autosavedialog.cpp idiom.
+typedef void  (*fn_RandomRand_t)(void* rng, uint32_t range);
+typedef void  (*fn_TransformMul_t)(void* transform7f, float* outVec3);
+typedef void  (*fn_QuatRotate_t)(void* quat, float* inoutVec3);
+typedef float (*fn_Vec3Heading_t)(void* vec3);
+typedef void* (*fn_Vec3CtorScalar_t)(void* self, void* scalar);
+
+static fn_FindComp_t        s_fn_FindComp_Position = nullptr;   // 0x140002ed0
+static fn_FindComp_t        s_fn_FindComp_4680     = nullptr;   // 0x140004680
+static fn_ClearPathQueue_t  s_fn_ClearPathQueue    = nullptr;   // 0x140003f60
+static fn_PosCount_t        s_fn_PosCount          = nullptr;   // 0x140123070
+static fn_GetPosForIndex_t  s_fn_GetPosForIndex    = nullptr;   // 0x140122e20 (self-recursion)
+static fn_MapPathCost_t     s_fn_MapPathCost       = nullptr;   // 0x14009f810 (BuildStructure_impl_f810)
+static fn_TerrainPos_t      s_fn_TerrainPos        = nullptr;   // 0x14009f3e0 (CharacterComponent_impl_f3e0)
+static fn_ValidateCell_t    s_fn_ValidateCell      = nullptr;   // 0x1400a00f0
+
+static fn_RandomRand_t      s_fn_RandomRand        = nullptr;   // [0x1401512e8]
+static fn_TransformMul_t    s_fn_TransformMul      = nullptr;   // [0x140151470]
+static fn_QuatRotate_t      s_fn_QuatRotate        = nullptr;   // [0x1401525f0]
+static fn_Vec3Heading_t     s_fn_Vec3Heading       = nullptr;   // [0x1401512d8]
+static fn_Vec3CtorScalar_t  s_fn_Vec3CtorScalar    = nullptr;   // [0x140151320]
+
+static bool s_impl2Init = false;
+static void EnsureImpl2() {
+    if (s_impl2Init) return;
+    s_fn_FindComp_Position = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
+    s_fn_FindComp_4680     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_ClearPathQueue    = reinterpret_cast<fn_ClearPathQueue_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_PosCount          = reinterpret_cast<fn_PosCount_t>(ResolveAddr(Module::Exe, 0x140123070));
+    s_fn_GetPosForIndex    = reinterpret_cast<fn_GetPosForIndex_t>(ResolveAddr(Module::Exe, 0x140122e20));
+    s_fn_MapPathCost       = reinterpret_cast<fn_MapPathCost_t>(ResolveAddr(Module::Exe, 0x14009f810));
+    s_fn_TerrainPos        = reinterpret_cast<fn_TerrainPos_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_fn_ValidateCell      = reinterpret_cast<fn_ValidateCell_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
+
+    uintptr_t slot;
+    slot = ResolveAddr(Module::Exe, 0x1401512e8);
+    if (slot) s_fn_RandomRand     = *reinterpret_cast<fn_RandomRand_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151470);
+    if (slot) s_fn_TransformMul   = *reinterpret_cast<fn_TransformMul_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x1401525f0);
+    if (slot) s_fn_QuatRotate     = *reinterpret_cast<fn_QuatRotate_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x1401512d8);
+    if (slot) s_fn_Vec3Heading    = *reinterpret_cast<fn_Vec3Heading_t*>(slot);
+    slot = ResolveAddr(Module::Exe, 0x140151320);
+    if (slot) s_fn_Vec3CtorScalar = *reinterpret_cast<fn_Vec3CtorScalar_t*>(slot);
+    s_impl2Init = true;
+}
+
+// GameWorld object = *g_pGameWorldSingleton (the Ghidra symbol g_pGameWorldSingleton is the
+// already-dereferenced object; in this codebase g_pGameWorldSingleton is the pointer slot).
+static inline uintptr_t GameWorld() { return (uintptr_t)*g_pGameWorldSingleton; }
+
+// Clamp helper mirroring the inline (x<0 -> 0; x>=w -> w-1) the decompiler emits everywhere.
+static inline int ClampCell(int v, int w) {
+    if (v < 0) v = 0;
+    if (v >= w) v = w - 1;
+    return v;
+}
+
+// ============================================================
+// 0x140132010 — sqrtf with NaN/Inf handling
+// ============================================================
+// The original routes Inf/NaN/negative through the CRT sqrtf error path
+// (CharacterComponent_helper_3e1c) and SQRT()s finite non-negative inputs. A faithful,
+// clean reimpl is simply sqrtf, which already produces NaN for negative and +Inf for +Inf.
+float WorkImpl_Sqrtf_132010(float param_1) {
+    return sqrtf(param_1);
+}
+
+// ============================================================
+// 0x140122e20 — Entity_impl_2e20: world position for a build-point index
+// ============================================================
+// Member-style hidden-return ABI (verified in disassembly): RCX=self, RDX=retVec3,
+// R8=mode, R9=index, [stack]=heading. Returns the retVec3 buffer.
+//
+// self layout: +0x10 = entity IBP, +0x18 = BuildComponent(?) ptr (validated IsDerivedFrom
+// DAT_1401c7938), +0x28 = child IBP array base, +0x30 = child count.
+// The build component holds per-index counts at +((index+3)*0x10). If the running offset
+// (sum of child position counts) hasn't reached the requested index, recurse into the
+// owning child; otherwise return the transformed entity origin (or its rotated heading).
+// Returns retVec3 (member-style hidden-return ABI: RCX=self, RDX=retVec3, R8=mode,
+// R9=index, [stack]=heading). The exposed type is float* (a Vector3 is 3 floats); all
+// known callers treat the output as float[3].
+float* WorkImpl_GetPosForIndex_2e20(void* self, float* retVec3, int mode, int index, float* heading) {
+    EnsureImpl2();
+    uintptr_t s = (uintptr_t)self;
+    void* buildRaw = *reinterpret_cast<void**>(s + 0x18);
+
+    uint32_t* pTid7938 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
+    void* build = nullptr;
+    if (pTid7938 && fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, *pTid7938))
+        build = buildRaw;
+
+    // Base count for this index from the build component.
+    int baseCount = *reinterpret_cast<int*>(
+        reinterpret_cast<uintptr_t>(build) + (static_cast<int64_t>(index) + 3) * 0x10);
+
+    if (baseCount <= index) {
+        // Walk children, accumulating their counts; recurse into the child that owns `index`.
+        uintptr_t childArr = *reinterpret_cast<uintptr_t*>(s + 0x28);
+        int childCount = *reinterpret_cast<int*>(s + 0x30);
+        int acc = baseCount;
+        for (int i = 0; i < childCount; i++) {
+            void** slot = reinterpret_cast<void**>(childArr + static_cast<int64_t>(i) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            int n = s_fn_PosCount ? s_fn_PosCount(reinterpret_cast<uintptr_t>(*slot), index) : 0;
+            if (acc <= index && index < acc + n) {
+                void** slot2 = reinterpret_cast<void**>(childArr + static_cast<int64_t>(i) * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot2);
+                if (s_fn_GetPosForIndex)
+                    s_fn_GetPosForIndex(*slot2, retVec3, mode, index - acc, heading);
+                return retVec3;
+            }
+            acc += n;
+        }
+        // No owning child: return zero vector.
+        int zero = 0;
+        if (s_fn_Vec3CtorScalar) s_fn_Vec3CtorScalar(retVec3, &zero);
+        return retVec3;
+    }
+
+    // index within this entity's own range: take the entity origin transform.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
+    uintptr_t pathIBP = 0;
+    if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<uintptr_t*>(s + 0x10), &pathIBP);
+
+    // Transform/quaternion are the 7 floats at obj+0x148 .. obj+0x160.
+    float xform[7];
+    if (heading) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pathIBP);
+        for (int i = 0; i < 7; i++)
+            xform[i] = *reinterpret_cast<float*>(pathIBP + 0x148 + i * 4);
+        float dir[3] = {0.0f, 0.0f, 0.0f};
+        // Quaternion::Rotate(quat=&xform, dir) then Vector3::Heading(dir).
+        if (s_fn_QuatRotate) s_fn_QuatRotate(xform, dir);
+        if (s_fn_Vec3Heading) *heading = s_fn_Vec3Heading(dir);
+    }
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pathIBP);
+    for (int i = 0; i < 7; i++)
+        xform[i] = *reinterpret_cast<float*>(pathIBP + 0x148 + i * 4);
+    if (s_fn_TransformMul) s_fn_TransformMul(xform, retVec3);
+    return retVec3;
+}
+
+// ============================================================
+// 0x140087fb0 — Entity_impl_7fb0: entity -> grid cell index (+ optional world pos)
+// ============================================================
+// param_1 = entity IBP, param_2 = optional float[3] world-pos out. Returns the grid cell
+// index (or -1 if none).
+//   - If the entity has a PositionComponent (FindComponent_Position) with >0 sub-positions,
+//     optionally roll a random sub-index, fetch its position (Entity_impl_2e20), convert the
+//     world XY to a grid cell.
+//   - Else fall back to FUN_140004680's component and read its packed short tile coords.
+int WorkImpl_EntityGridCell_7fb0(void* param_1IBP, float* param_2) {
+    EnsureImpl2();
+    int cell = -1;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1IBP);
+    uintptr_t posIBP = 0;
+    if (s_fn_FindComp_Position)
+        s_fn_FindComp_Position(*reinterpret_cast<uintptr_t*>(param_1IBP), &posIBP);
+
+    bool handled = false;
+    if (posIBP != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
+        int n = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
+        if (n > 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
+            int n2 = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
+            if (n2 > 1) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
+                uint32_t r = (uint32_t)(s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0);
+                void* rng = *reinterpret_cast<void**>(GameWorld() + 0xd8);
+                if (s_fn_RandomRand) s_fn_RandomRand(rng, r);
+            }
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posIBP);
+            float vec[3] = {0.0f, 0.0f, 0.0f};
+            if (s_fn_GetPosForIndex)
+                s_fn_GetPosForIndex(reinterpret_cast<void*>(posIBP), vec, 0, 0, nullptr);
+            int w = **reinterpret_cast<int**>(GameWorld() + 0xf8);
+            int col = ClampCell((int)(vec[0] + (float)(w >> 1)), w);
+            int row = ClampCell((int)(vec[1] + (float)(w >> 1)), w);
+            cell = w * row + col;
+            handled = true;
+        }
+    }
+
+    if (!handled) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1IBP);
+        uintptr_t altIBP = 0;
+        if (s_fn_FindComp_4680)
+            s_fn_FindComp_4680(*reinterpret_cast<uintptr_t*>(param_1IBP), &altIBP);
+        if (altIBP != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&altIBP);
+            int w = **reinterpret_cast<int**>(GameWorld() + 0xf8);
+            int row = ((int)(*reinterpret_cast<int16_t*>(altIBP + 0x2e) >> 1))
+                    + (int)*reinterpret_cast<int16_t*>(altIBP + 0x2a);
+            int col = ((int)(*reinterpret_cast<int16_t*>(altIBP + 0x2c) >> 1))
+                    + (int)*reinterpret_cast<int16_t*>(altIBP + 0x28);
+            cell = row * w + col;
+        }
+    }
+
+    if (param_2 != nullptr && cell >= 0) {
+        int* pW = *reinterpret_cast<int**>(GameWorld() + 0xf8);
+        int w = *pW;
+        float half = (float)(w >> 1) - 0.5f;     // DAT_140172114 = 0.5f
+        float inXY[3];
+        inXY[0] = (float)(cell % w) - half;
+        inXY[1] = (float)(cell / w) - half;
+        inXY[2] = 0.0f;
+        float outPos[3] = {0.0f, 0.0f, 0.0f};
+        if (s_fn_TerrainPos) s_fn_TerrainPos(pW, outPos, inXY, '\0', nullptr);
+        param_2[0] = outPos[0];
+        param_2[1] = outPos[1];
+        param_2[2] = outPos[2];
+    }
+    return cell;
+}
+
+// ============================================================
+// 0x140122be0 — FUN_140122be0: walkable-position search over one build record array
+// ============================================================
+// param_1 = PositionComponent (entity IBP at +0x10). param_2 = pointer to a build record
+// whose count is at +8 (the records' transforms come from the entity's cleared-path obj at
+// +0x148..). param_3 = source world pos (float[2]+), param_4 = best-pos out (float[3]),
+// param_5 = best-distance out (int). Returns true if *param_5 < 0xffff.
+bool WorkImpl_WalkablePos_122be0(uintptr_t param_1, uintptr_t param_2,
+                                 float* param_3, float* param_4, int* param_5) {
+    EnsureImpl2();
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
+    uintptr_t pathIBP = 0;
+    if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<uintptr_t*>(param_1 + 0x10), &pathIBP);
+
+    int* mapGrid = *reinterpret_cast<int**>(GameWorld() + 0xf8);
+    int w = *mapGrid;
+    int srcCol = ClampCell((int)(param_3[0] + (float)(w >> 1)), w);
+    int srcRow = ClampCell((int)(param_3[1] + (float)(w >> 1)), w);
+    uint32_t srcCell = (uint32_t)(w * srcRow + srcCol);
+
+    int recCount = *reinterpret_cast<int*>(param_2 + 8);
+    for (int i = 0; i < recCount; i++) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&pathIBP);
+        float xform[7];
+        for (int k = 0; k < 7; k++)
+            xform[k] = *reinterpret_cast<float*>(pathIBP + 0x148 + k * 4);
+        float pos[3] = {0.0f, 0.0f, 0.0f};
+        if (s_fn_TransformMul) s_fn_TransformMul(xform, pos);
+
+        int w2 = *mapGrid;
+        int col = ClampCell((int)(pos[0] + (float)(w2 >> 1)), w2);
+        int row = ClampCell((int)(pos[1] + (float)(w2 >> 1)), w2);
+        uint32_t destCell = (uint32_t)(w2 * row + col);
+
+        uint64_t reach = s_fn_ValidateCell ? s_fn_ValidateCell(mapGrid, 0xe1f, srcCell, (int)destCell) : 0;
+        if ((char)reach != '\0') {
+            int dist = s_fn_MapPathCost ? s_fn_MapPathCost(mapGrid, srcCell, (int)destCell, '\x01') : -1;
+            if (dist < 0) {
+                int gw = *mapGrid;
+                int dRow = (int)srcCell / gw - (int)destCell / gw;
+                int dCol = (int)srcCell % gw - (int)destCell % gw;
+                dist = (int)WorkImpl_Sqrtf_132010((float)(dRow * dRow + dCol * dCol)) + gw;
+            }
+            if (dist < *param_5) {
+                *param_5 = dist;
+                param_4[0] = pos[0];
+                param_4[1] = pos[1];
+                param_4[2] = pos[2];
+            }
+        }
+    }
+    return (uint32_t)*param_5 < 0xffff;
+}
+
+// ============================================================
+// 0x140122b00 — FUN_140122b00: recursive walkable-position search across children
+// ============================================================
+// param_1 = PositionComponent. Resolves its BuildComponent (param_1+0x18, IsDerivedFrom
+// DAT_1401c7938), runs WalkablePos_122be0 on this entity's record array slot
+// (build + param_2*0x10 + 0x28), then recurses into each child (array base +0x28, count +0x30).
+// Returns the OR of all sub-results (a position was found anywhere).
+uint8_t WorkImpl_WalkablePosRecursive_122b00(uintptr_t param_1, int param_2,
+                                             float* param_3, float* param_4, int* param_5) {
+    EnsureImpl2();
+    void* buildRaw = *reinterpret_cast<void**>(param_1 + 0x18);
+    uint32_t* pTid7938 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
+    void* build = nullptr;
+    if (pTid7938 && fn_IsDerivedFrom && fn_IsDerivedFrom(buildRaw, *pTid7938))
+        build = buildRaw;
+
+    uint8_t result = WorkImpl_WalkablePos_122be0(
+        param_1,
+        reinterpret_cast<uintptr_t>(build) + static_cast<int64_t>(param_2) * 0x10 + 0x28,
+        param_3, param_4, param_5) ? 1 : 0;
+
+    int childCount = *reinterpret_cast<int*>(param_1 + 0x30);
+    uintptr_t childArr = *reinterpret_cast<uintptr_t*>(param_1 + 0x28);
+    for (int i = 0; i < childCount; i++) {
+        uintptr_t* slot = reinterpret_cast<uintptr_t*>(childArr + static_cast<int64_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        uint8_t sub = WorkImpl_WalkablePosRecursive_122b00(*slot, param_2, param_3, param_4, param_5);
+        result = (uint8_t)(result | sub);
+    }
+    return result;
+}
+
+// ============================================================
+// 0x1400f6ef0 — BuildStructure_impl_6ef0: build-progress / time-budget step
+// ============================================================
+// param_1 = work/progress record, param_2 = target entity IBP, param_3/param_4 = grid cells,
+// param_5 = current Time. Returns a ulonglong whose low byte is a bool "should continue".
+//
+// Faithful port of the decompiled control flow:
+//  - advance accumulated time at +0x30 by (now - +0x38)
+//  - if the target's +0x1f0 != gameWorld[+0xb0][+0x30] AND target+0x248 != 0:
+//      compute a path/budget figure from the target's build-stage component (+0x18,
+//      IsDerivedFrom DAT_1401c7190) and produce a progress count; otherwise just continue.
+uint64_t WorkImpl_BuildStructureStep_6ef0(uintptr_t param_1, void* param_2IBP,
+                                          uint32_t param_3, uint32_t param_4, void* param_5Time) {
+    EnsureImpl2();
+
+    // +0x30 += (*param_5 - +0x38)  (Time deltas are 64-bit tick counts)
+    *reinterpret_cast<int64_t*>(param_1 + 0x30) +=
+        (*reinterpret_cast<int64_t*>(param_5Time) - *reinterpret_cast<int64_t*>(param_1 + 0x38));
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2IBP);
+    int64_t gateA = *reinterpret_cast<int64_t*>(
+        *reinterpret_cast<uintptr_t*>(GameWorld() + 0xb0) + 0x30);
+
+    uintptr_t target = *reinterpret_cast<uintptr_t*>(param_2IBP);
+    if (*reinterpret_cast<int64_t*>(target + 0x1f0) != gateA) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2IBP);
+        target = *reinterpret_cast<uintptr_t*>(param_2IBP);
+        if (*reinterpret_cast<int64_t*>(target + 0x248) != 0) {
+            uint64_t resDefault = *reinterpret_cast<uint64_t*>(GameWorld() + 0x130);
+            uintptr_t mapInfo   = *reinterpret_cast<uintptr_t*>(GameWorld() + 0xf0);
+            int budget = s_fn_MapPathCost
+                ? s_fn_MapPathCost(*reinterpret_cast<int**>(GameWorld() + 0xf8),
+                                   param_3, (int)param_4, '\x01')
+                : -1;
+
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2IBP);
+            void* obj = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(param_2IBP) + 0x18);
+            uint32_t* pTid7190 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7190));
+            void* stage = (pTid7190 && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *pTid7190)) ? obj : nullptr;
+            uintptr_t st = reinterpret_cast<uintptr_t>(stage);
+
+            int   field108 = *reinterpret_cast<int*>(st + 0x108);
+            int   field0fc = *reinterpret_cast<int*>(st + 0xfc);
+            int   field100 = *reinterpret_cast<int*>(st + 0x100);
+            float field10c = *reinterpret_cast<float*>(st + 0x10c);
+            int   field104 = *reinterpret_cast<int*>(st + 0x104);
+
+            // Time cap = field104 * 300.0f seconds.  (DAT_140172234 = 300.0f)
+            int64_t cap = 0;
+            if (fn_Time_Ctor_Float) {
+                fn_Time_Ctor_Float(&cap, (float)field104 * 300.0f);
+            }
+
+            // Adaptive doubling: if past the mid-point worker count, ramp the accumulator.
+            if ((*reinterpret_cast<int*>(mapInfo + 0xa8) / 2 < *reinterpret_cast<int*>(param_1 + 0x40)) &&
+                (*reinterpret_cast<int64_t*>(param_1 + 0x30) < cap)) {
+                *reinterpret_cast<int64_t*>(param_1 + 0x30) *= 2;
+            }
+            if ((*reinterpret_cast<int64_t*>(param_1 + 0x30) < 0) ||
+                (cap < *reinterpret_cast<int64_t*>(param_1 + 0x30))) {
+                *reinterpret_cast<int64_t*>(param_1 + 0x30) = cap;
+            }
+
+            float accSec = fn_Time_AsSeconds ? fn_Time_AsSeconds(reinterpret_cast<void*>(param_1 + 0x30)) : 0.0f;
+            float nowSec = fn_Time_AsSeconds ? fn_Time_AsSeconds(param_5Time) : 1.0f;
+            uint32_t progress = (uint32_t)(((accSec / nowSec) / (float)(field104 * 300))
+                                * (float)(field100 - field0fc)) + (uint32_t)field0fc;
+
+            // Mirrors the decompiled return shaping exactly (local_res10 starts as resDefault):
+            //   if (progress < budget): bump worker count, local_res10 = progress; fall through
+            //     to the low-byte-0 return of local_res10 (== progress).
+            //   else:
+            //     uVar8 = progress; if (budget <= field108) return progress | low-byte 1.
+            //     else uVar8 = resDefault; if (field10c <= resDefault[+0x18]) return resDefault | 1.
+            //     fall through to low-byte-0 return of local_res10 (still == resDefault).
+            uint64_t local_res10_v = resDefault;
+            if ((int)progress < budget) {
+                *reinterpret_cast<int*>(param_1 + 0x40) += 1;
+                local_res10_v = (uint64_t)progress;
+            } else {
+                uint64_t uVar8 = (uint64_t)progress;
+                if (budget <= field108) {
+                    return (uVar8 & 0xffffffffffffff00ull) | 1u;
+                }
+                uVar8 = resDefault;
+                float cmp = *reinterpret_cast<float*>(resDefault + 0x18);
+                if (field10c < cmp || field10c == cmp) {
+                    return (uVar8 & 0xffffffffffffff00ull) | 1u;
+                }
+            }
+            return local_res10_v & 0xffffffffffffff00ull;
+        }
+    }
+    return (uint64_t)1;
+}
