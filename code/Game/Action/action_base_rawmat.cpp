@@ -9,14 +9,18 @@
 // whose entire sub-callee closure is already satisfiable. The registration point is
 // RegisterActionRawMatBatch() in standalone/reg_action_rawmat.cpp.
 //
-// DEFERRED (NOT in this file — deeper/unregistered closure):
-//   0x14009bd40 CreateRawMaterial FindPlacementCell — intricate spiral cell search
-//     (closure-safe: its only exe callee 0x14009f3e0 is registered, but the signed
-//     index math + nested cell-validity warrants its own careful pass).
-//   0x140129760 CreateRawMaterial PositionEntity — Geometry::SetTransform render-state
-//     mutation; depends on Entity_ClearPathQueue (unregistered getter).
-//   0x140088ef0 RegisterRawMaterial — depends on unregistered FUN_140013320 +
-//     CreateRawMaterial_helper_8fd0.
+// TAIL LANDED (this file): 0x140129760 PositionEntity and 0x140088ef0 RegisterRawMaterial
+// — the prior "deferred" note for both was STALE. PositionEntity's getters (0x140004680,
+// 0x140003f60 = Entity_ClearPathQueue) were already registered (component-nature / CNR
+// waves), so its closure was already satisfied; it just needed the port. RegisterRawMaterial's
+// deps are now provided here: 0x140013320 (FindComp), 0x140058fd0 (ArrayUpsert), 0x14000d9d0
+// (VectorClone), plus the already-registered 0x140088f90 (GetResourceCategory).
+//
+// DEFERRED (still NOT registered):
+//   0x14009bd40 CreateRawMaterial FindPlacementCell — 260-instruction expanding-ring spiral
+//     with heavy decompiler variable-aliasing, on an UNEXERCISED citizen-action path (a wrong
+//     port would be undetectable latent corruption). Only dep 0x14009f3e0 is registered, so it
+//     is unblockable-but-deferred to its own careful pass with in-game validation.
 //
 // Each function is a 1:1 port of the decompiled exe helper (Ghidra). Do NOT "improve".
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
@@ -29,12 +33,38 @@ namespace {
 // Type-ID globals (resolved lazily from the exe .rdata).
 static const uint32_t* s_pTid_RawMatDesc = nullptr;  // DAT_1401c7cb8 (RawMaterialDescription)
 static const uint32_t* s_pTid_1c7c80     = nullptr;  // DAT_1401c7c80 (FindComponent_7c80 target)
+static const uint32_t* s_pTid_c4b10      = nullptr;  // DWORD_1401c4b10 (FindComp_013320 target)
 static bool s_tidInit = false;
 static void EnsureTids() {
     if (s_tidInit) return;
     s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pTid_1c7c80     = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c80));
+    s_pTid_c4b10      = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b10));
     s_tidInit = true;
+}
+
+// Exe sub-helpers / engine constants used by the PositionEntity / FindPlacementCell
+// ports below. Resolved lazily (all already registered or Runtime exports).
+//   0x140004680 / 0x140003f60 — member-ABI FindComponent (self, outIBP) -> outIBP.
+//   0x14009f3e0 — GridToWorld (mapGrid, outVec3, inVec2, char flag, void* ptr).
+typedef void* (*fn_FindCompMember_t)(uintptr_t self, void* outIBP);
+typedef void  (*fn_GridToWorld_t)(void* mapGrid, float* out3, float* in2, char flag, void* ptr);
+static fn_FindCompMember_t s_fn_FindComp_4680 = nullptr;  // 0x140004680
+static fn_FindCompMember_t s_fn_FindComp_3f60 = nullptr;  // 0x140003f60
+static fn_GridToWorld_t    s_fn_GridToWorld   = nullptr;  // 0x14009f3e0
+static const float* s_pHalfCell_172114 = nullptr;  // 0.5f cell-centre offset
+static const float* s_pDAT_17213c      = nullptr;  // slope threshold (bd40)
+static const float* s_pDAT_172248      = nullptr;  // height-diff tolerance (bd40)
+static bool s_fnInit = false;
+static void EnsureFns() {
+    if (s_fnInit) return;
+    s_fn_FindComp_4680 = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_FindComp_3f60 = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_GridToWorld   = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_pHalfCell_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
+    s_pDAT_17213c      = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017213c));
+    s_pDAT_172248      = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172248));
+    s_fnInit = true;
 }
 } // namespace
 
@@ -276,4 +306,219 @@ void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
     }
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
     return retIBP;
+}
+
+// ============================================================
+// FUN_140013320 — FindComponent (member-style) over an IBP array, type 0x1401c4b10.
+// ============================================================
+// Identical to FUN_1400223c0 (above) and the other registered FindComponent accessors,
+// differing only by the type-ID global (DWORD_1401c4b10). void* fn(self, retIBP): scan
+// the InternalBasePtr array at self+0x30 (count +0x38), CheckPtr each slot, GetTypeId
+// (vtable+0x10) vs the target, on first match re-CheckPtr + IsDerivedFrom, construct
+// retIBP from the found object (or null). Returns retIBP. Leaf (engine_funcs only).
+void* ActRm_FindComp_013320(uintptr_t self, void* retIBP) {
+    EnsureTids();
+    uint32_t typeId = s_pTid_c4b10 ? *s_pTid_c4b10 : 0;
+    void* found = nullptr;
+    int n = *reinterpret_cast<int*>(self + 0x38);
+    uintptr_t base = *reinterpret_cast<uintptr_t*>(self + 0x30);
+    for (int idx = 0; idx < n; idx++) {
+        void** ibp = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+        void* obj = *ibp;
+        uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(obj) + 0x10))(obj);
+        if (t == typeId) {
+            void** ibp2 = reinterpret_cast<void**>(base + static_cast<uintptr_t>(idx) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp2);
+            void* o = *ibp2;
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(o, typeId)) found = o;
+            break;
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(retIBP, found);
+    return retIBP;
+}
+
+// ============================================================
+// FUN_14000d9d0 — deep-copy a 16-byte-element dynamic array (dst <- src).
+// ============================================================
+// arr = {ptr@+0, count@+8(int), cap@+0xc(int)}. Frees dst's buffer, resets count/cap to
+// 0, sets count=cap=src.count, allocs a fresh src.count*0x10 buffer, copies each 16-byte
+// element from src. No-op if dst==src. Leaf (alloc only).
+void ActRm_VectorClone_d9d0(int64_t* dst, int64_t* src) {
+    if (dst == src) return;
+    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dst[0]));
+    dst[1] = 0;          // clears count(+8) and cap(+0xc) together (8-byte write)
+    dst[0] = 0;
+    int srcN = static_cast<int>(src[1]);
+    *reinterpret_cast<int*>(&dst[1]) = srcN;
+    if (srcN > 0) {
+        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dst) + 0xc) = srcN;
+        void* nb = fn_MemAlloc
+            ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(srcN) << 4, 8)
+            : nullptr;
+        dst[0] = reinterpret_cast<int64_t>(nb);
+    }
+    int n = *reinterpret_cast<int*>(&dst[1]);
+    for (int i = 0; i < n; i++) {
+        uint64_t* d = reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(dst[0]) + static_cast<uintptr_t>(i) * 0x10);
+        if (!d) continue;
+        uintptr_t s = static_cast<uintptr_t>(src[0]) + static_cast<uintptr_t>(i) * 0x10;
+        d[0] = *reinterpret_cast<uint64_t*>(s);
+        d[1] = *reinterpret_cast<uint64_t*>(s + 8);
+    }
+}
+
+// ============================================================
+// FUN_140058fd0 (CreateRawMaterial_helper_8fd0) — generation-aware {key,value} upsert.
+// ============================================================
+// self holds a per-generation resource-count cache:
+//   +0x28 array ptr (stride 0x10: [+0]=key(8), [+8]=value(int)), +0x30 count, +0x34 cap,
+//   +0x38 archive array (snapshot target), +0x48 generation epoch.
+// If the world generation (**(int**)(g_pGameWorldSingleton+0x128)) changed, archive the
+// current array into +0x38 (d9d0) and reset the live array. Then upsert {key, value}:
+// if key present add value, else append (grow 3x on a non-first append). Leaf.
+void ActRm_ArrayUpsert_58fd0(uintptr_t self, int64_t key, int value) {
+    int gen = **reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
+    if (gen != *reinterpret_cast<int*>(self + 0x48)) {
+        ActRm_VectorClone_d9d0(reinterpret_cast<int64_t*>(self + 0x38),
+                               reinterpret_cast<int64_t*>(self + 0x28));
+        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>(self + 0x28));
+        *reinterpret_cast<void**>(self + 0x28) = nullptr;
+        *reinterpret_cast<int*>(self + 0x30) = 0;
+        *reinterpret_cast<int*>(self + 0x48) = gen;
+    }
+
+    int n = *reinterpret_cast<int*>(self + 0x30);
+    if (n > 0) {
+        int64_t* p = *reinterpret_cast<int64_t**>(self + 0x28);
+        int idx = 0;
+        do {
+            if (*p == key) {
+                int64_t* slot = *reinterpret_cast<int64_t**>(self + 0x28) + static_cast<int64_t>(idx) * 2 + 1;
+                *reinterpret_cast<int*>(slot) = *reinterpret_cast<int*>(slot) + value;
+                return;
+            }
+            idx++;
+            p += 2;
+        } while (idx < *reinterpret_cast<int*>(self + 0x30));
+    }
+
+    int oldN = *reinterpret_cast<int*>(self + 0x30);
+    int newN = oldN + 1;
+    void* oldBuf = *reinterpret_cast<void**>(self + 0x28);
+    *reinterpret_cast<int*>(self + 0x30) = newN;
+    if (*reinterpret_cast<int*>(self + 0x34) < newN) {
+        *reinterpret_cast<int*>(self + 0x34) = newN;
+        if (oldN != 0) *reinterpret_cast<int*>(self + 0x34) = newN * 3;
+        void* nb = fn_MemAlloc
+            ? fn_MemAlloc(g_pMemAllocSingleton,
+                          static_cast<uint64_t>(*reinterpret_cast<int*>(self + 0x34)) << 4, 8)
+            : nullptr;
+        *reinterpret_cast<void**>(self + 0x28) = nb;
+    }
+    int srcIdx = (oldBuf == *reinterpret_cast<void**>(self + 0x28)) ? oldN : 0;
+    for (int i = srcIdx; i < newN; i++) {
+        uint64_t* d = reinterpret_cast<uint64_t*>(*reinterpret_cast<uintptr_t*>(self + 0x28) + static_cast<uintptr_t>(i) * 0x10);
+        if (!d) continue;
+        if (i < oldN) {
+            uint64_t* s = reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(oldBuf) + static_cast<uintptr_t>(i) * 0x10);
+            d[0] = s[0];
+            d[1] = s[1];
+        } else {
+            d[0] = static_cast<uint64_t>(key);
+            d[1] = static_cast<uint64_t>(static_cast<uint32_t>(value));
+        }
+    }
+    if (oldBuf != *reinterpret_cast<void**>(self + 0x28) && fn_MemFreeStatic)
+        fn_MemFreeStatic(oldBuf);
+}
+
+// ============================================================
+// FUN_140088ef0 (CreateRawMaterial_helper_8ef0) — RegisterRawMaterial.
+// ============================================================
+// If sourceIBP resolves non-null and placeNear set: find its resource-cache component
+// (013320), and if present upsert {descEntity, quantity} into it (58fd0). Then classify
+// the resource category (88f90) and add `quantity` to entityList's per-category bucket
+// (entityList+0x170, stride 0x20, int field +0x10). Closure satisfied (013320/58fd0 here,
+// 88f90 registered).
+void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
+                                     char placeNear, int64_t descEntity, int quantity) {
+    int64_t target = entityList;  // lVar3
+    if (sourceIBP && *reinterpret_cast<int64_t*>(sourceIBP) != 0 && placeNear != '\0') {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(sourceIBP);
+        int64_t srcObj = *reinterpret_cast<int64_t*>(sourceIBP);
+        uintptr_t foundIBP[2] = {0, 0};
+        ActRm_FindComp_013320(static_cast<uintptr_t>(srcObj), &foundIBP);
+        if (foundIBP[0] != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&foundIBP);
+            ActRm_ArrayUpsert_58fd0(static_cast<uintptr_t>(foundIBP[0]), descEntity, quantity);
+            target = static_cast<int64_t>(foundIBP[0]);
+        }
+    }
+    int cat = ActRm_GetResourceCategory_88f90(reinterpret_cast<void*>(target),
+                                              static_cast<uintptr_t>(descEntity));
+    if (cat >= 0) {
+        int* bucket = reinterpret_cast<int*>(static_cast<int64_t>(cat) * 0x20 + 0x10 +
+                                             *reinterpret_cast<int64_t*>(entityList + 0x170));
+        *bucket += quantity;
+    }
+}
+
+// ============================================================
+// FUN_140129760 (CreateRawMaterial_helper_9760) — PositionEntity.
+// ============================================================
+// Place the raw-material entity (param_1) at cell `cellIndex` with `rotation`. self =
+// param_1+0x10 (an IBP field). Two components are found on *self:
+//   A (004680): receives cell col/row (+0x28/+0x2a), 0x10001 (+0x2c), normalized rotation
+//       in [0,360) (+0x30).
+//   B (003f60): receives a Transform built from (yaw=rotation, pitch=0, offset=worldPos)
+//       at +0x148, the raw rotation at +0x168, then Geometry::SetTransform(B+0x28,B+0x148).
+// worldPos comes from GridToWorld (f3e0). Instruction-verified against the disassembly
+// (RBX reloads to B after the 003f60 IBP resolve). All callees registered/exported.
+void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
+    EnsureFns();
+    void** self = reinterpret_cast<void**>(param_1 + 0x10);
+    int* mapGrid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    int mapWidth = *mapGrid;
+    int col = cellIndex % mapWidth;   // EDI (remainder)
+    int row = cellIndex / mapWidth;   // ESI (quotient)
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
+    uintptr_t ibpA[2] = {0, 0};
+    if (s_fn_FindComp_4680) s_fn_FindComp_4680(reinterpret_cast<uintptr_t>(*self), &ibpA);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
+    uintptr_t ibpB[2] = {0, 0};
+    if (s_fn_FindComp_3f60) s_fn_FindComp_3f60(reinterpret_cast<uintptr_t>(*self), &ibpB);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpA);
+    uint8_t* objA = reinterpret_cast<uint8_t*>(ibpA[0]);
+    int rot = static_cast<int>(rotation);   // CVTTSS2SI = truncate toward zero
+    *reinterpret_cast<int16_t*>(objA + 0x28) = static_cast<int16_t>(col);
+    *reinterpret_cast<int16_t*>(objA + 0x2a) = static_cast<int16_t>(row);
+    *reinterpret_cast<int32_t*>(objA + 0x2c) = 0x10001;
+    if (rot < 0) { do { rot += 0x168; } while (rot < 0); }
+    *reinterpret_cast<int32_t*>(objA + 0x30) = rot;
+
+    // GridToWorld: localPos = ((cellIndex%w) - half, (cellIndex/w) - half, 0).
+    float half = static_cast<float>(mapWidth >> 1) - (s_pHalfCell_172114 ? *s_pHalfCell_172114 : 0.5f);
+    float localPos[3];
+    localPos[0] = static_cast<float>(cellIndex % mapWidth) - half;
+    localPos[1] = static_cast<float>(cellIndex / mapWidth) - half;
+    localPos[2] = 0.0f;
+    float worldPos[3] = {0, 0, 0};
+    if (s_fn_GridToWorld) s_fn_GridToWorld(mapGrid, worldPos, localPos, '\0', nullptr);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpB);
+    uint8_t* objB = reinterpret_cast<uint8_t*>(ibpB[0]);
+    float yaw = rotation, pitch = 0.0f;
+    uint32_t xform[8] = {0};  // FromYawPitchOffset out (7 dwords copied)
+    if (fn_Transform_FromYawPitchOffset)
+        fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, worldPos);
+    uint32_t* dstT = reinterpret_cast<uint32_t*>(objB + 0x148);
+    for (int i = 0; i < 7; i++) dstT[i] = xform[i];   // +0x148..+0x160
+    *reinterpret_cast<float*>(objB + 0x168) = rotation;
+    if (fn_Geometry_SetTransform)
+        fn_Geometry_SetTransform(objB + 0x28, objB + 0x148);
 }

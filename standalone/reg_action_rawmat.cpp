@@ -12,10 +12,11 @@
 // (d000/da70/44810), or engine_funcs export-resolved pointers (88f90 IsDerivedFrom;
 // 223c0 CheckPtr/IsDerivedFrom/IBP_Ctor).
 //
-// DEFERRED (NOT registered — deeper/unregistered closure, see action_base_rawmat.cpp):
-//   0x14009bd40 FindPlacementCell (intricate spiral; own pass),
-//   0x140129760 PositionEntity (Geometry render-state mutation + Entity_ClearPathQueue dep),
-//   0x140088ef0 RegisterRawMaterial (deps FUN_140013320 + CreateRawMaterial_helper_8fd0 unreg).
+// TAIL LANDED: 0x140129760 PositionEntity + 0x140088ef0 RegisterRawMaterial (+ its leaf deps
+//   0x140013320 / 0x140058fd0 / 0x14000d9d0). The earlier "deferred" note was stale —
+//   PositionEntity's getters were already registered in the CNR / component-nature waves.
+// DEFERRED (NOT registered — see action_base_rawmat.cpp):
+//   0x14009bd40 FindPlacementCell (260-insn spiral, unexercised citizen-action path; own pass).
 #ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
@@ -26,6 +27,12 @@ extern void  ActRm_ArrayResize16_da70(int64_t*, int);                    // 0x14
 extern void  ActRm_DynArrayPush4_44810(uintptr_t, uint32_t);             // 0x140044810
 extern int   ActRm_GetResourceCategory_88f90(void*, uintptr_t);          // 0x140088f90
 extern void* ActRm_FindComponent_223c0(uintptr_t, void*);                // 0x1400223c0
+// Tail (closure now satisfied — deps registered above + in CNR/component-nature waves):
+extern void* ActRm_FindComp_013320(uintptr_t, void*);                    // 0x140013320
+extern void  ActRm_VectorClone_d9d0(int64_t*, int64_t*);                 // 0x14000d9d0
+extern void  ActRm_ArrayUpsert_58fd0(uintptr_t, int64_t, int);           // 0x140058fd0
+extern void  ActRm_RegisterRawMaterial_88ef0(int64_t, void*, char, int64_t, int); // 0x140088ef0
+extern void  ActRm_PositionEntity_9760(int64_t, int, float);             // 0x140129760
 
 void RegisterActionRawMatBatch() {
     RegisterExeAddr(0x14012d150, reinterpret_cast<uintptr_t>(&ActRm_StorageSubtract_d150));
@@ -34,5 +41,10 @@ void RegisterActionRawMatBatch() {
     RegisterExeAddr(0x140044810, reinterpret_cast<uintptr_t>(&ActRm_DynArrayPush4_44810));
     RegisterExeAddr(0x140088f90, reinterpret_cast<uintptr_t>(&ActRm_GetResourceCategory_88f90));
     RegisterExeAddr(0x1400223c0, reinterpret_cast<uintptr_t>(&ActRm_FindComponent_223c0));
+    RegisterExeAddr(0x140013320, reinterpret_cast<uintptr_t>(&ActRm_FindComp_013320));
+    RegisterExeAddr(0x14000d9d0, reinterpret_cast<uintptr_t>(&ActRm_VectorClone_d9d0));
+    RegisterExeAddr(0x140058fd0, reinterpret_cast<uintptr_t>(&ActRm_ArrayUpsert_58fd0));
+    RegisterExeAddr(0x140088ef0, reinterpret_cast<uintptr_t>(&ActRm_RegisterRawMaterial_88ef0));
+    RegisterExeAddr(0x140129760, reinterpret_cast<uintptr_t>(&ActRm_PositionEntity_9760));
 }
 #endif
