@@ -110,7 +110,56 @@ counts RegisterExeAddr SOURCE LINES, not wired calls — a deferred batch must b
 value-return Math slots (Vector2/3/4/Matrix/Transform3/Box/Rectangle ops, all currently
 UNregistered) via local RegisterDispatchSlot->ResolveExport, then port ec70/098210/fe960/0380.
 
-**Round 2c (earlier PLAN) — the deep tier (~9 left, all large sub-closures, port bottom-up):**
+## ✅ Player wave SAFE FLOOR reached: gap 31 -> 8 (2026-06-19, branch `wave/player-gap`)
+
+5 commits: `522f7d5` (31->19) / `d1616b5` (19->16) / `277cdcc` (16->10) / `f40fc26` (10->9) /
+`82c3399` (9->8). All A/B-green (1475-entity world, 0-byte crash, 0 NOT-IMPLEMENTED). Lead
+disasm-verified every intricate port; ~7 silent-corruption bugs caught pre-merge. EVERY
+closure-safe target is registered — the remaining 8 are the deep-reimpl tier and need
+**debugger-MCP-validated passes** (user-approved approach), NOT blind registration.
+
+### Remaining 8 — DEBUGGER-VALIDATED BACKLOG (do these with vscode-debugger MCP, in-game)
+
+The autostart A/B path is DORMANT for all 8 (tool interactions / worker thread), so the A/B
+test CANNOT validate a port — that's why blind registration is unsafe here. Each needs a live
+debugger session that exercises the actual tool/path, then breakpoint-verify the reimpl.
+
+**2 MUST-DEFER (registration alone = crash/hang; need a Level-2 subsystem reimpl first):**
+- `0x14009ce00` roadtool -> `0x1400a6e30` = pathfinder worker-thread spin-loop (`System::Thread::
+  Start` inside `do{}while(true)` + CriticalSection + YieldToThreads). Single-threaded standalone
+  hangs. PRECONDITION: reimplement the pathfinder worker-thread queue (shared with the Action-wave
+  deferred thread family), THEN port ce00.
+- `0x1400ff9e0` OpenToolDialog -> shared child-dialog vtable `0x14015f5a0` (installed at STARTUP by
+  MainMenuDialog_Serialize/EntityUI/PlacementTool; the standalone menu's BuildId child assumes it
+  resolves null). A/B-PROVEN crash (RIP==Runtime+0x1BA468 OnOpened on an unbuilt child). PRECONDITION:
+  make the menu BuildId child fully constructible with the real vtable (mainmenudialog.cpp work),
+  THEN register 0x14015f5a0 + ff9e0. Bodies already drafted in tool_base_toolui.cpp (no-op batch).
+
+**6 large dormant subsystem ports (agents judged NOT confidently 1:1-portable; debugger-verify each):**
+- `0x1400fcc90` -> EdgeMesh chain: `b930` (~250-line tessellation: CONCAT44 count/cap packing aliased
+  as ushort* views, divergent growth strides, ~28-arg EdgeMesh::Set w/ unreliable Ghidra args) ->
+  c4a0 render-mutation -> cb40 -> cc90. Land order in tool_base_render.cpp (doc-only).
+- `0x140101380` -> `0x1401008c0` = a huge Video::Context vertex-buffer render fn (same class as b930).
+- `0x140055430` HighlightAdd -> `b0d80` -> `ace40` ~600-line Transform2/BST radius tessellation.
+- `0x1401035e0` RemovalTool CalcPath = ~770 lines + ~15 unreg sub-fns.
+- `0x1400ffc60` UpdateToolUI: ec70/fe960 now DONE (screenrect); remaining unreg = e600/5e700/e420/
+  5e360/ebb0 (String::Format + dialog-controller UI-layout helpers) — R5-ffc60 deferred (verify the
+  layout math + shared-controller safety in a debugger session). Closest to tractable of the 6.
+- `0x1400dd710` PathTool SetSelectedEntity -> `d770` ~520-line AVL builder + ~12 unreg sub-callees —
+  R5-avl deferred. The trade-family AVL pattern (tool_base_trade.cpp) is the reference; verify in-tool.
+
+### GAP-METRIC GOTCHA (reconfirmed)
+The gap grep counts `RegisterExeAddr` SOURCE LINES, not wired calls. A deferred batch MUST be a true
+no-op (NO `RegisterExeAddr(0x...)` text) or it falsely reads as registered. reg_player_toolui.cpp /
+reg_player_edit2.cpp / reg_player_render.cpp are correct no-ops.
+
+### SEPARATE BUG FOUND (out of Player scope — flag for Work wave)
+`code/Game/Work/harvestarea.cpp` + `plantarea.cpp` resolve `0x140152780` as "iatMemAlloc" — it is
+verifiably `Math::Vector2::Max` (decoded from the exe slot name table). Today 0x140152780 is
+unregistered so that ResolveAddr returns 0 (safe no-op). Do NOT register 0x140152780 as MemAlloc;
+fix those two Work files to use the correct static-MemAlloc slot.
+
+## Round 2c (earlier PLAN) — the deep tier (~9 left, all large sub-closures, port bottom-up):
 - 0x140055430 HighlightAdd -> b0d80 (TradeWork_impl_0d80) -> **ace40 ~600-line Transform2/BST
   tessellation builder** (deps 1fc00/1f6b0/1f8d0/14b00 BST, e180/cc10/ee40 TradeWork helpers). LARGE.
 - 0x140066800 -> 666b0 -> TradeWork 2e30/c690.
