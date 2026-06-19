@@ -34,6 +34,9 @@
 struct CitizenComponent;
 extern char     CitizenComp_CheckWorkplaceValid(CitizenComponent* self, void* ibp);
 extern int64_t* CitizenComp_Entity_impl_ef40(void* a, int64_t* outRes, void* ibp, int cat);
+// Re-verify pass (snapshot2): these two were KNOWN-defers but are actually closure-safe.
+extern void     CitizenComp_ConsumeFood(CitizenComponent* self);   // 0x140112990 (true leaf)
+extern void     CitizenComp_ConsumeFuel(CitizenComponent* self);   // 0x140112ae0 (callees 7fb0/8090 reg)
 
 // Reimpl bodies live in code/Game/Component/attendancecomponent.cpp (non-static).
 extern void AttendanceComponent_ReleaseLink1650(void* workerP);
@@ -43,6 +46,8 @@ void RegisterComponentGap_A() {
     // citizencomponent.cpp
     RegisterExeAddr(0x1401158d0, reinterpret_cast<uintptr_t>(&CitizenComp_CheckWorkplaceValid));
     RegisterExeAddr(0x14008ef40, reinterpret_cast<uintptr_t>(&CitizenComp_Entity_impl_ef40));
+    RegisterExeAddr(0x140112990, reinterpret_cast<uintptr_t>(&CitizenComp_ConsumeFood));   // re-verify: leaf
+    RegisterExeAddr(0x140112ae0, reinterpret_cast<uintptr_t>(&CitizenComp_ConsumeFuel));   // re-verify: 7fb0/8090 reg
 
     // attendancecomponent.cpp
     RegisterExeAddr(0x140111650, reinterpret_cast<uintptr_t>(&AttendanceComponent_ReleaseLink1650));

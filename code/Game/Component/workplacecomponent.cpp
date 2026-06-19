@@ -163,6 +163,171 @@ static void* WPC_FindJobHostComponent(int64_t host, uint32_t* pTypeId) {
     return nullptr;
 }
 
+// ============================================================
+// Reimpl bodies for the detach/attach helpers (0x14012f7e0 / 0x14012fa20).
+// Their full exe FUN_ closure became registered in the gap wave, so they are now
+// closure-safe to port. Sub-helpers used:
+//   FUN_140002cc0 (worker-list remove)         -> s_fn_AddToList (already resolved)
+//   ModelComponent_helper_2b70 (0x1400c2b70)   -> mesh visibility/state kick
+//   Entity_FindComponent_MeshInstance (0x140002f90)
+//   FUN_14012c3f0 (mesh-instance flag setter)
+//   FUN_140005780 (IBP accessor)               + FUN_14011e710 (bool getter)
+//   FUN_140003110 (worker-list append)         + FUN_1400c3470 (entity flag notify)
+typedef void  (*fn_WPC_RemoveFromList_t)(int64_t* listField, void* ibp);   // 0x140002cc0
+typedef void  (*fn_WPC_AppendToList_t)(int64_t* listField, int newCount, void* ibp); // 0x140003110
+typedef void  (*fn_WPC_ModelKick_t)(int64_t entity, int mode);             // 0x1400c2b70
+typedef void* (*fn_WPC_FindMesh_t)(int64_t entity, void* outIbp);          // 0x140002f90
+typedef void  (*fn_WPC_MeshFlag_t)(int64_t* mesh, int mode, char flag);    // 0x14012c3f0
+typedef void* (*fn_WPC_Accessor5780_t)(int64_t entity, void* outIbp);      // 0x140005780
+typedef char  (*fn_WPC_Getter_e710_t)(int64_t obj);                        // 0x14011e710
+typedef void  (*fn_WPC_FlagNotify_t)(void* entity);                        // 0x1400c3470
+static fn_WPC_RemoveFromList_t s_fn_WPC_RemoveFromList = nullptr;
+static fn_WPC_AppendToList_t   s_fn_WPC_AppendToList = nullptr;
+static fn_WPC_ModelKick_t      s_fn_WPC_ModelKick = nullptr;
+static fn_WPC_FindMesh_t       s_fn_WPC_FindMesh = nullptr;
+static fn_WPC_MeshFlag_t       s_fn_WPC_MeshFlag = nullptr;
+static fn_WPC_Accessor5780_t   s_fn_WPC_Accessor5780 = nullptr;
+static fn_WPC_Getter_e710_t    s_fn_WPC_Getter_e710 = nullptr;
+static fn_WPC_FlagNotify_t     s_fn_WPC_FlagNotify = nullptr;
+static bool s_wpcBodyResolved = false;
+static void EnsureWpcBodyHelpers() {
+    if (s_wpcBodyResolved) return;
+    s_fn_WPC_RemoveFromList = reinterpret_cast<fn_WPC_RemoveFromList_t>(ResolveAddr(Module::Exe, 0x140002cc0));
+    s_fn_WPC_AppendToList   = reinterpret_cast<fn_WPC_AppendToList_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_WPC_ModelKick      = reinterpret_cast<fn_WPC_ModelKick_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
+    s_fn_WPC_FindMesh       = reinterpret_cast<fn_WPC_FindMesh_t>(ResolveAddr(Module::Exe, 0x140002f90));
+    s_fn_WPC_MeshFlag       = reinterpret_cast<fn_WPC_MeshFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
+    s_fn_WPC_Accessor5780   = reinterpret_cast<fn_WPC_Accessor5780_t>(ResolveAddr(Module::Exe, 0x140005780));
+    s_fn_WPC_Getter_e710    = reinterpret_cast<fn_WPC_Getter_e710_t>(ResolveAddr(Module::Exe, 0x14011e710));
+    s_fn_WPC_FlagNotify     = reinterpret_cast<fn_WPC_FlagNotify_t>(ResolveAddr(Module::Exe, 0x1400c3470));
+    s_wpcBodyResolved = true;
+}
+
+// Reimpl of FUN_14012f7e0 (WorkplaceComponent worker DETACH): remove the worker IBP
+// from the comp's worker list (+0x58), then if the comp is in its initial state
+// (+0x60==0): kick the model (mode 3), set the mesh flags 2 and 3, and — when the
+// worker's job slot matches the comp's description job (desc+0x20) and the entity is
+// not already culled — hide the entity's mesh (clear AddObject / set update flag).
+// Faithful 1:1 port; closure fully registered.
+void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
+    EnsureHelpers();
+    EnsureWpcBodyHelpers();
+
+    if (s_fn_WPC_RemoveFromList) s_fn_WPC_RemoveFromList((int64_t*)(comp + 0x58), workerIbp);
+    if (*(int*)(comp + 0x60) != 0) return;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 3);
+
+    uint64_t meshIbp = 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+    if (s_fn_WPC_MeshFlag) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 2, '\0');
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+    if (s_fn_WPC_MeshFlag) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 3, '\0');
+
+    if (*(char*)(comp + 0x50) == '\0') return;
+
+    uint64_t accIbp = 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_Accessor5780) s_fn_WPC_Accessor5780(*(int64_t*)(comp + 0x10), &accIbp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&accIbp);
+    char g = s_fn_WPC_Getter_e710 ? s_fn_WPC_Getter_e710(*(int64_t*)&accIbp) : 1;
+    if (g != '\0') return;
+
+    int64_t jobSlot = *(int64_t*)(comp + 0x48);
+    if (jobSlot == 0) return;
+
+    void* descObj = *(void**)(comp + 0x18);
+    void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+                  fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+    if (jobSlot != *(int64_t*)((uintptr_t)desc + 0x20)) return;
+
+    uint64_t meshIbp2 = 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp2);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp2);
+    int64_t* mesh = *(int64_t**)&meshIbp2;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mesh + 2);
+    if ((*(uint32_t*)(mesh[2] + 0x40) >> 10 & 1) != 0) return;
+
+    uint32_t* pFlagsE = (uint32_t*)(mesh + 0x1e);
+    *pFlagsE |= 0x10;
+    // Each branch reads mesh+0x20 FRESH right before the OR/AND (the original reads
+    // *(uint*)(plVar2+4) at the assignment, NOT a value captured before the branch —
+    // the add-branch's MeshInstance::Update (vtable +0x40) can mutate this flags word).
+    uint32_t changed;
+    if ((int)mesh[0x1e] == 0) {
+        if ((int)*(uint32_t*)(mesh + 0x20) >= 0) {
+            if (fn_SceneRemoveObject && g_pGameWorldSingleton)
+                fn_SceneRemoveObject(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60),
+                                     *(uint32_t*)(mesh + 0x20));
+            *(uint32_t*)(mesh + 0x20) = 0xffffffff;
+        }
+        uint32_t old4 = *(uint32_t*)(mesh + 4);
+        uint32_t new4 = old4 & 0xfffffffb;
+        *(uint32_t*)(mesh + 4) = new4;
+        changed = new4 ^ old4;
+    } else {
+        if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
+            ((uint8_t*)*g_pGameSettingsPtr)[0xc] != '\0' && (int)mesh[0x20] < 0) {
+            if (fn_SceneAddObject && g_pGameWorldSingleton) {
+                uint32_t id = fn_SceneAddObject(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60),
+                                                (void*)(mesh + 5));
+                *(uint32_t*)(mesh + 0x20) = id;
+            }
+        }
+        uint64_t t = 0;
+        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&t, 0.0f);
+        // (**(code**)(*mesh + 0x40))(mesh, &time) — MeshInstance::Update vtable slot +0x40.
+        typedef void (*VFnUpdate_t)(int64_t* self, void* time);
+        VFnUpdate_t vfn = (VFnUpdate_t)(*(uintptr_t*)(*(uintptr_t*)mesh + 0x40));
+        if (vfn) vfn(mesh, &t);
+        uint32_t old4 = *(uint32_t*)(mesh + 4);   // FRESH after Update
+        uint32_t new4 = old4 | 4;
+        *(uint32_t*)(mesh + 4) = new4;
+        changed = new4 ^ old4;
+    }
+    if ((changed & 0xffff) != 0 && mesh[2] != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mesh + 2);
+        if (s_fn_WPC_FlagNotify) s_fn_WPC_FlagNotify((void*)mesh[2]);
+    }
+}
+
+// Reimpl of FUN_14012fa20 (WorkplaceComponent worker ATTACH): if the comp is in its
+// initial state (+0x60==0) and the worker's job slot matches the comp's description
+// job (desc+0x20), kick the model (mode 2); always set the mesh flag (mode 4) and
+// append the worker IBP to the worker list (+0x58, new count = +0x60+1).
+// Faithful 1:1 port; closure fully registered.
+void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
+    EnsureHelpers();
+    EnsureWpcBodyHelpers();
+
+    if (*(int*)(comp + 0x60) == 0) {
+        void* descObj = *(void**)(comp + 0x18);
+        int64_t jobSlot = *(int64_t*)(comp + 0x48);
+        void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+                      fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+        if (jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+            if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
+        }
+    }
+
+    uint64_t meshIbp = 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+    if (s_fn_WPC_MeshFlag) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 4, '\0');
+
+    if (s_fn_WPC_AppendToList)
+        s_fn_WPC_AppendToList((int64_t*)(comp + 0x58), *(int*)(comp + 0x60) + 1, workerIbp);
+}
+
 void WorkPlaceComponent_OnCreateInit(void* selfP) {
     EnsureHelpers();
     EnsureEe60Helpers();

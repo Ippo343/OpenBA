@@ -1235,6 +1235,13 @@ static fn_TimeFromFloat_t        s_fn_TimeFromFloat = nullptr;
 static fn_Entity_impl_7fb0_t     s_fn_Entity_impl_7fb0 = nullptr;
 static fn_FUN_140a00f0_t         s_fn_FUN_140a00f0 = nullptr;
 static fn_Entity_FindCompStorage6270_t s_fn_EntityFindCompStorage6270 = nullptr;
+// .rdata float/double constants used by ConsumeFood / ConsumeFuel.
+static float*  s_DAT_140172180 = nullptr;
+static float*  s_DAT_1401721a8 = nullptr;
+static float*  s_DAT_140172174 = nullptr;
+static float*  s_DAT_140172194 = nullptr;
+static double* s_DAT_140172168 = nullptr;
+static float*  s_DAT_1401720ec = nullptr;
 
 static bool s_calleeResolved = false;
 static void EnsureCallees() {
@@ -1271,6 +1278,12 @@ static void EnsureCallees() {
     s_fn_Entity_impl_7fb0    = reinterpret_cast<fn_Entity_impl_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
     s_fn_FUN_140a00f0        = reinterpret_cast<fn_FUN_140a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
     s_fn_EntityFindCompStorage6270 = reinterpret_cast<fn_Entity_FindCompStorage6270_t>(ResolveAddr(Module::Exe, 0x140006270));
+    s_DAT_140172180 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172180));
+    s_DAT_1401721a8 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721a8));
+    s_DAT_140172174 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172174));
+    s_DAT_140172194 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172194));
+    s_DAT_140172168 = reinterpret_cast<double*>(ResolveAddr(Module::Exe, 0x140172168));
+    s_DAT_1401720ec = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720ec));
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
     {
         uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a80); // Time::Time(float)
@@ -2053,6 +2066,135 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     }
     *param_2 = 0;
     return param_2;
+}
+
+// Reimpl of CitizenComponent_ConsumeFood (0x140112990):
+// recompute the citizen's food/happiness accumulator (+0x50) from this tick's state
+// flags (+0x54). True leaf: only reads globals + self fields. The +0x54 flag bits gate
+// per-source happiness deltas (scaled by g_fUVScale), then the result is clamped to
+// [0, description+0x70] and the flag word is reset. Disabled (flag-cleared) when the
+// world's no-hunger debug bit (gameFlags>>3) is set.
+void CitizenComp_ConsumeFood(CitizenComponent* param_1) {
+    EnsureHelpers();
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    float uv   = s_pUVScale ? *s_pUVScale : 1.0f;
+    float c114 = s_DAT_140172114 ? *s_DAT_140172114 : 0.0f;
+    float c100 = s_DAT_140172100 ? *s_DAT_140172100 : 0.0f;
+    float c180 = s_DAT_140172180 ? *s_DAT_140172180 : 1.0f;
+
+    if ((*reinterpret_cast<uint32_t*>(gw + 0xd0) >> 3 & 1) != 0) {
+        *reinterpret_cast<uint32_t*>(p + 0x50) = *reinterpret_cast<uint32_t*>(desc + 0x70);
+        return;
+    }
+    uint32_t f = *reinterpret_cast<uint32_t*>(p + 0x54);
+    uint32_t cnt = (f >> 8 & 1) + (f >> 6 & 1) + (f >> 5 & 1) + (f >> 4 & 1);
+    if ((f & 0x200) != 0) cnt++;
+    float* acc = reinterpret_cast<float*>(p + 0x50);
+    if ((f & 8) != 0 && (f & 4) != 0 && cnt > 3) *acc += c114;
+    if ((f & 8) != 0 && (f & 0x200) == 0 && cnt < 3) *acc -= (uv - (float)cnt / c180);
+    if ((f & 1) != 0) *acc -= uv;
+    if ((f & 2) != 0) *acc -= uv;
+    if ((f & 4) == 0 &&
+        *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(p + 0x3c) &&
+        *reinterpret_cast<int64_t*>(p + 0x208) == 0) {
+        *acc -= c100;
+    }
+    if (*acc <= 0.0f && *acc != 0.0f) *reinterpret_cast<uint32_t*>(p + 0x50) = 0;
+    float cap = *reinterpret_cast<float*>(desc + 0x70);
+    if (cap < *acc) *acc = cap;
+    *reinterpret_cast<uint32_t*>(p + 0x54) = 0;
+}
+
+// Reimpl of CitizenComponent_ConsumeFuel (0x140112ae0):
+// recompute the citizen's warmth/fuel accumulator (+0x80) from this tick's +0x88 flag
+// bits, then drive it toward a target derived from the citizen's home tile climate
+// (world map-info gw+0xf8 -> tile +0x80, via Entity_impl_7fb0 region index) and the
+// workplace storage demand. Closure-safe: callees 0x140087fb0/0x140008090 registered.
+void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
+    EnsureHelpers();
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    float uv   = s_pUVScale ? *s_pUVScale : 1.0f;
+    float c114 = s_DAT_140172114 ? *s_DAT_140172114 : 0.0f;
+    float c1a8 = s_DAT_1401721a8 ? *s_DAT_1401721a8 : 0.0f;
+    float c174 = s_DAT_140172174 ? *s_DAT_140172174 : 0.0f;
+    float c194 = s_DAT_140172194 ? *s_DAT_140172194 : 0.0f;
+    float c0ec = s_DAT_1401720ec ? *s_DAT_1401720ec : 0.0f;
+    double c168 = s_DAT_140172168 ? *s_DAT_140172168 : 0.0;
+
+    uint32_t f = *reinterpret_cast<uint32_t*>(p + 0x88);
+    float* acc = reinterpret_cast<float*>(p + 0x80);
+    if ((f & 2) != 0)    *acc -= c1a8;
+    if ((f & 0x40) != 0) *acc -= c174;
+    if ((char)f < 0)     *acc -= c194;   // bit 7 of low byte
+    if ((f & 8) != 0)    *acc -= uv;
+    if ((f & 0x10) != 0) *acc -= uv;
+    if ((f >> 8 & 1) != 0)  *acc += uv;
+    if ((f >> 9 & 1) != 0)  *acc += uv;
+    if ((f >> 10 & 1) != 0) *acc += uv;
+    if ((f >> 11 & 1) != 0) *acc += uv;
+    if ((f >> 12 & 1) != 0) *acc += uv;
+    if ((f >> 13 & 1) != 0) *acc += uv;
+    if ((f >> 0x12 & 1) != 0) *acc += c114;
+    if (*acc <= 0.0f && *acc != 0.0f) *reinterpret_cast<uint32_t*>(p + 0x80) = 0;
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    if (*reinterpret_cast<float*>(desc + 0xa4) < *acc) *acc = *reinterpret_cast<float*>(desc + 0xa4);
+
+    float fVar5 = 0.0f;
+    if ((f & 4) == 0)    fVar5 = uv;
+    if ((f & 0x20) == 0) fVar5 += uv;
+    if ((f & 1) == 0)    fVar5 += uv;
+    if ((f >> 0x11 & 1) != 0) {
+        if (*reinterpret_cast<int*>(p + 0x84) < *reinterpret_cast<int*>(desc + 0xb0)) fVar5 += c114;
+        else fVar5 += uv;
+    }
+    if ((f >> 0x10 & 1) != 0) {
+        if (*reinterpret_cast<int*>(desc + 0xa8) < *reinterpret_cast<int*>(p + 0xa0)) {
+            if (*reinterpret_cast<int*>(desc + 0xac) <= *reinterpret_cast<int*>(p + 0xa0)) fVar5 += uv;
+        } else {
+            fVar5 -= uv;
+        }
+    }
+
+    int64_t wpIBP = *reinterpret_cast<int64_t*>(p + 0x238);
+    if (wpIBP != 0) {
+        int64_t mapInfo = *reinterpret_cast<int64_t*>(gw + 0xf8);
+        int region = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&wpIBP, nullptr) : 0;
+        int64_t tile = (int64_t)region * 0x30 + *reinterpret_cast<int64_t*>(mapInfo + 0x80);
+        int climate = ((*reinterpret_cast<char*>(tile + 0x20) != 0) +
+                       (*reinterpret_cast<char*>(tile + 0x1f) != 0) +
+                       (*reinterpret_cast<char*>(tile + 0x1e) != 0) +
+                       (*reinterpret_cast<char*>(tile + 0x1d) != 0) +
+                       (*reinterpret_cast<char*>(tile + 0x1c) != 0)) -
+                      (int)*reinterpret_cast<uint8_t*>(tile + 0x21);
+        if (climate < 0) climate = 0;
+        fn_InternalBasePtr_CheckPtr(p + 0x238);
+        int64_t storeIBP = 0;
+        void* st = s_fn_EntityFindCompStorage
+                       ? s_fn_EntityFindCompStorage(*reinterpret_cast<int64_t*>(p + 0x238), &storeIBP)
+                       : nullptr;
+        fn_InternalBasePtr_CheckPtr(st);
+        if (st && *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(st) + 0x58) > 1) climate >>= 2;
+        fVar5 += (float)climate;
+    }
+    if (*reinterpret_cast<int64_t*>(p + 0x230) != 0) fVar5 += uv;
+
+    float cur = *acc;
+    fVar5 = fVar5 * c0ec * *reinterpret_cast<float*>(desc + 0xa4);
+    if (fVar5 <= cur) {
+        if (!(cur <= fVar5)) {
+            *acc = (float)((double)cur - c168);
+        }
+    } else {
+        *acc = cur + c114;
+    }
+    if (*acc <= 0.0f && *acc != 0.0f) *reinterpret_cast<uint32_t*>(p + 0x80) = 0;
+    float capA4 = *reinterpret_cast<float*>(desc + 0xa4);
+    if (capA4 < *acc) *acc = capA4;
 }
 
 // ============================================================

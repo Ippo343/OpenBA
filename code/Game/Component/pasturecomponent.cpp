@@ -183,6 +183,28 @@ static void EnsurePastureExtras() {
     s_pastureExtraInit = true;
 }
 
+// Reimpl of AnimalComponent_SetBounds (0x140105e20): record the animal's footprint
+// tile-rect (origin-half .. clamped to the map). self+0x28 = packed cell index, map
+// dimension at g_world+0xf8. Pure leaf (no exe sub-callees) -> closure-safe.
+void PastureComponent_AnimalSetBounds(void* selfP, short* outX, short* outY,
+                                      short* outW, short* outH, int size) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    int* mapInfo = *reinterpret_cast<int**>((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    int cell = *reinterpret_cast<int*>((uintptr_t)selfP + 0x28);
+    int mapDim = *mapInfo;
+    short half = static_cast<short>(size / 2);
+    *outX = static_cast<short>(cell % mapDim) - half;
+    *outY = static_cast<short>(cell / mapDim) - half;
+    *outW = static_cast<short>(size);
+    *outH = static_cast<short>(size);
+    if (*outX < 0) *outX = 0;
+    if (*outY < 0) *outY = 0;
+    if (mapDim <= (int)*outW + (int)*outX)
+        *outW = static_cast<short>((short)mapDim - *outX) - 1;
+    if (mapDim <= (int)*outH + (int)*outY)
+        *outH = static_cast<short>((short)mapDim - *outY) - 1;
+}
+
 // Reimpl of FUN_140128570 (compute pasture capacity = footprint area / animal slot size)
 // Reads the owner's map-grid footprint (w*h at +0x2c/+0x2e of the found component),
 // finds the animal-template sub-component (type 0x1401c6fd0) to read its per-animal
