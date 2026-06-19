@@ -66,17 +66,28 @@ the ~45 Action exe-helpers into disjoint `code/Game/Action/action_base_<batch>.c
   reconstruction matches asm), `0x1400c3470`, plus A-mv `0x1400a6d50` ring-copy (the trap the Work
   agents botched — A-mv got it right) and A-ct `0x1401173b0` ShowTool. **The 4 agents are reliable.**
 
-**DEFERRED to a follow-up (drafts in `notes/wave3_drafts/`, faithfulness-sampled, NOT wired):**
-- `action_base_move.cpp.draft` (MoveTo/PerformWork/PlayAnim, 10): code-closure-safe subset = 6
-  (`0x1400012d0 0x140022970 0x14010a060 0x1400c8d20 0x1400a6d50 0x140116650`); unsafe = `0x14009cfb0`
-  `0x14009e550` `0x14010a1f0` `0x1400c8c10` (call unreg deps / unreg dispatch slots 0x1401512c0
-  Vec3::Normalize / 0x1401512d8 Heading / 0x1401526b0). **Dispatch-slot closure for the facing/anim
-  helpers still needs checking before wiring the 6.**
-- `action_base_complete.cpp.draft` (CompleteTask/ShowTool/DropOff, 7): code-closure-safe subset = 5
-  (`0x1400f8760 0x1400f8800 0x1400f8e30 0x1401176e0 0x1401173b0`); unsafe = `0x1400c7570` `0x1400c7620`
-  (DropAllInventory/DropOffTransfer — 8 unreg deps). **NOTE: complete resolves graphics via
-  `ResolveIATSlot()` + `ResolveExport()`, NOT `ResolveAddr(Module::Exe)` — its closure spans 3
-  mechanisms and must be analyzed across all of them before wiring.**
+**LANDED commit 3 (`ff34fa9`) — MoveTo closure-safe 4 + 3 Vec dispatch slots, A/B green:**
+- Spun out the dispatch-slot sub-callees: registered `0x1401512c0` Vec3::Normalize, `0x1401512d8`
+  Vec3::Heading (mangled from exe import-string @0x1401b72dc), `0x1401526b0` Vec2::Normalize via
+  `RegisterDispatchSlot`.
+- Wired move 4 (action_base_move.cpp): `0x1400012d0` FindComponentFamily, `0x14010a060`
+  SetFacingDirection, `0x1400c8d20` UpdateFacing, `0x1400a6d50` CopyPathFromFinder — all asm-verified.
+- **Verification caught 2 mis-bucketed as safe (the static-usage grep was unreliable):** `0x140116650`
+  CitizenBreakCheck actually calls UNREG `0x1400a9290`; `0x140022970` ExternalPtrSerialize has heavy
+  External/Filename/String runtime closure → both DEFERRED. (Lesson: confirm closure from the DECOMPILE,
+  not a static-pointer grep.)
+
+**STILL DEFERRED (drafts/bodies present, NOT wired):**
+- move unsafe 6: `0x14009cfb0 0x14009e550 0x14010a1f0 0x1400c8c10 0x140116650 0x140022970` — need
+  their code sub-callees (`0x14009c480 0x1400a68b0 0x1400a6a30 0x1400a6b20 0x1400a6c10 0x1400a9290
+  0x1401250f0`) registered first, then re-verify + wire.
+- `action_base_complete.cpp.draft` (CompleteTask/ShowTool/DropOff): code-closure-safe subset = 5
+  (`0x1400f8760 0x1400f8800 0x1400f8e30 0x1401176e0 0x1401173b0`); unsafe = `0x1400c7570 0x1400c7620`.
+  **BLOCKER: complete resolves graphics via `ResolveIATSlot()` — which is NOT defined anywhere in the
+  project, so the draft won't even compile. It needs a refactor to `ResolveAddr`-based slot reads (or
+  engine_funcs fn_ pointers) before it can be wired.** Closure also spans `ResolveExport` (those resolve
+  fine at runtime, no registration needed: Geometry::Attach/Detach, GraphicsMesh::GetNodeIndexFromName,
+  Scene::RemoveObject).
 
 **SKIPPED (not registerable):** `0x1400bbea0` RemoveAnimal_Action_Ctor (609-insn builder; all child
 CopyCtors unreg — same closure problem as the deferred Work action-ctors), `0x140122340`
