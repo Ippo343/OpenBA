@@ -1,0 +1,206 @@
+// code/Game/Work/work_leaf_gather.cpp
+// Wave (Game-gap / Work-leaf) — gather/forester/storage leaf helpers.
+//
+// Faithful 1:1 ports of exe sub-helpers referenced via ResolveAddr(Module::Exe,
+// 0xADDR) from code/Game/Work/{gatherrawmaterials,foresterwork}.cpp. In DLL mode
+// these resolve to original exe code; in standalone mode they resolve to 0 (silently
+// skipped) unless registered. This file provides the closure-safe subset only.
+//
+// CLOSURE-SAFETY: each function below was confirmed (snapshot notes/_reg_snapshot.txt)
+// to call ONLY already-registered exe sub-callees, sibling ports, or engine/runtime
+// dispatch slots that resolve at runtime (CheckPtr 0x140152ab0, IsDerivedFrom
+// 0x140152a98). The intricate pathfinding/copy-ctor helpers in the same batch
+// (0x1400bf790, 0x1400ba9f0, 0x1400881d0, 0x1400beae0, 0x1400f2f00) were DEFERRED —
+// their exe sub-callee closures (0x1400c29a0, 0x140042890, 0x1400c7cd0, 0x1400ca520,
+// 0x140088730, 0x14008d3c0, 0x14002c070, 0x1400c0ad0, 0x140115e60, 0x1400f6ef0 ...)
+// remain unregistered. Registering a half-null helper is silent corruption, strictly
+// worse than the safe no-op of leaving it unregistered.
+//
+// This file must NOT depend on hooks.h — it is portable for the standalone exe.
+// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+// ============================================================
+// 0x140116540 — gatherrawmaterials.cpp helper
+//   Free-storage-capacity query: returns (storage capacity field +0x38) minus the
+//   current queried count. ABI: int fn(longlong self).
+//   self+0x10 = an InternalBasePtr to the owning entity.
+// Sub-callees (all registered / engine):
+//   0x140006270 Entity_FindComponent_Storage      [reg]
+//   0x14012cf10 StorageComponent_QueryCount        [reg]
+//   slot 0x140152ab0 InternalBasePtr::CheckPtr      [engine dispatch]
+// ============================================================
+namespace {
+typedef void* (*FindCompStorage_t)(intptr_t entity, void* retIBP);
+typedef int   (*StorageQueryCount_t)(void* storageComp);
+typedef void  (*CheckPtr_t)(void* ibp);
+
+FindCompStorage_t   s_FindCompStorage_6270 = nullptr;
+StorageQueryCount_t s_StorageQueryCount_cf10 = nullptr;
+CheckPtr_t          s_CheckPtr_slot = nullptr;
+bool                s_init_116540 = false;
+
+void Ensure_116540() {
+    if (s_init_116540) return;
+    s_FindCompStorage_6270   = reinterpret_cast<FindCompStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
+    s_StorageQueryCount_cf10 = reinterpret_cast<StorageQueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
+    uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0);
+    if (s) s_CheckPtr_slot = *reinterpret_cast<CheckPtr_t*>(s);
+    s_init_116540 = true;
+}
+} // namespace
+
+int WorkLeaf_FreeStorageCapacity_116540(intptr_t self) {
+    Ensure_116540();
+    void* ibpStorage[4] = { nullptr, nullptr, nullptr, nullptr };
+
+    // CheckPtr(self+0x10); FindComponent_Storage(*(self+0x10), &ibpStorage)
+    if (s_CheckPtr_slot) s_CheckPtr_slot(reinterpret_cast<void*>(self + 0x10));
+    if (!s_FindCompStorage_6270) return 0;
+    s_FindCompStorage_6270(*reinterpret_cast<intptr_t*>(self + 0x10), ibpStorage);
+
+    // CheckPtr(&ibpStorage); iVar1 = *(int*)(storage + 0x38)
+    if (s_CheckPtr_slot) s_CheckPtr_slot(ibpStorage);
+    void* storage = ibpStorage[0];
+    if (!storage) return 0;
+    int capacity = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(storage) + 0x38);
+
+    // CheckPtr(&ibpStorage); iVar2 = StorageComponent_QueryCount(storage)
+    if (s_CheckPtr_slot) s_CheckPtr_slot(ibpStorage);
+    int count = s_StorageQueryCount_cf10 ? s_StorageQueryCount_cf10(storage) : 0;
+
+    return capacity - count;
+}
+
+// ============================================================
+// 0x14000c3c0 — foresterwork.cpp helper (ForesterWork_helper_c3c0)
+//   FindComponent by type-ID DAT_1401c77e8 (GrowthDescription / NatResDesc2) over a
+//   component list. Container layout: count at entity+0x30, ptr-array base at
+//   entity+0x28 (NO CheckPtr calls — same shape as WorkAcc_FindComponent_6330).
+//   ABI: void* fn(longlong entity, void* retOut). Writes match (or null) to *retOut.
+// Sub-callees:
+//   GetTypeId via component vtable +0x10                [engine indirect]
+//   slot 0x140152a98 IsDerivedFrom                      [engine dispatch]
+//   DAT_1401c77e8 type-ID global                        [runtime-filled by RegisterType]
+// ============================================================
+namespace {
+const uint32_t* s_pTid_c3c0 = nullptr;  // 0x1401c77e8
+bool            s_init_c3c0 = false;
+void Ensure_c3c0() {
+    if (s_init_c3c0) return;
+    s_pTid_c3c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c77e8));
+    s_init_c3c0 = true;
+}
+} // namespace
+
+void* WorkLeaf_FindGrowthDescription_c3c0(intptr_t entity, void* retOut) {
+    Ensure_c3c0();
+    void* found = nullptr;
+    if (s_pTid_c3c0) {
+        int n = *reinterpret_cast<int*>(entity + 0x30);
+        uintptr_t arrBase = *reinterpret_cast<uintptr_t*>(entity + 0x28);
+        for (int i = 0; i < n; i++) {
+            void* comp = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
+            // GetTypeId is component vtable slot +0x10.
+            uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+            if (t == *s_pTid_c3c0) {
+                void* c = *reinterpret_cast<void**>(arrBase + static_cast<int64_t>(i) * 8);
+                found = (fn_IsDerivedFrom && fn_IsDerivedFrom(c, *s_pTid_c3c0)) ? c : nullptr;
+                break;
+            }
+        }
+    }
+    *reinterpret_cast<void**>(retOut) = found;
+    return retOut;
+}
+
+// ============================================================
+// 0x140120c30 — foresterwork.cpp helper (FUN_140120c30)
+//   Footprint occupancy/ownership test over a 2x2 cell window of the map cell grid.
+//   For each cell (col-1..col, row-1..row, excluding the (0,row==base) corner case
+//   matching the original guard) it counts:
+//     iVar11 = total non-null cells touched
+//     iVar8  = cells whose resolved owner (FUN_14000c460 -> +0x18, IsDerivedFrom
+//              DAT_1401c77e8 filter) equals param_1 (the queried work base)
+//   Returns false (0) if iVar8 > *(int*)(self+0x5c) OR iVar11 > *(int*)(self+0x58),
+//   else true (1).
+//   ABI: longlong fn(Base* self, int col, int row).
+//   Cell grid: grid = *(int**)((*g_pGameWorldSingleton) + 0xf8); mapW = *grid;
+//     cellArrBase = *(void**)((uintptr_t)grid + 0x80);
+//     cell = *(void**)(cellArrBase + (mapW*row + col)*0x30 + 0x8)
+// Sub-callees:
+//   0x14000c460 FUN_14000c460 (owner-resolve)          [reg]
+//   slot 0x140152ab0 CheckPtr                          [engine dispatch]
+//   slot 0x140152a98 IsDerivedFrom                     [engine dispatch]
+//   g_pGameWorldSingleton (DAT_1401c3dd8)              [runtime global]
+//   DAT_1401c77e8 type-ID global                        [runtime-filled]
+// ============================================================
+namespace {
+typedef void* (*OwnerResolve_t)(intptr_t cell, void* retIBP);
+OwnerResolve_t  s_OwnerResolve_c460 = nullptr;
+CheckPtr_t      s_CheckPtr_slot_120c30 = nullptr;
+const uint32_t* s_pTid_120c30 = nullptr; // 0x1401c77e8
+bool            s_init_120c30 = false;
+void Ensure_120c30() {
+    if (s_init_120c30) return;
+    s_OwnerResolve_c460 = reinterpret_cast<OwnerResolve_t>(ResolveAddr(Module::Exe, 0x14000c460));
+    uintptr_t s = ResolveAddr(Module::Exe, 0x140152ab0);
+    if (s) s_CheckPtr_slot_120c30 = *reinterpret_cast<CheckPtr_t*>(s);
+    s_pTid_120c30 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c77e8));
+    s_init_120c30 = true;
+}
+} // namespace
+
+long long WorkLeaf_FootprintOwnerCheck_120c30(intptr_t self, int col, int row) {
+    Ensure_120c30();
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
+
+    // grid = *(int**)((*g_pGameWorldSingleton) + 0xf8); mapW = *grid
+    int* grid = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    if (!grid) return 1;
+    int mapW = *grid;
+
+    int touched = 0;   // iVar11
+    int owned   = 0;   // iVar8
+
+    // Original loop window: rowIdx from (row-1) .. (row), colIdx from (col-1) .. (col),
+    // skipping the cell where (colDelta==0 && rowIdx==row) — i.e. the (col, row) corner
+    // when colDelta is 0. Faithful port of the nested do/while with bound guards.
+    for (long long rowIdx = static_cast<long long>(row) - 1;
+         rowIdx - row < 2; rowIdx++) {
+        for (long long colDelta = -1; colDelta < 2; colDelta++) {
+            // ((colDelta != 0) || (rowIdx != row)) && bounds-check
+            if ((colDelta != 0) || (rowIdx != row)) {
+                long long c = static_cast<long long>(col) + colDelta;
+                if (c >= 0 && c < mapW && rowIdx >= 0 && rowIdx < mapW) {
+                    void* cell = *reinterpret_cast<void**>(
+                        *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80)
+                        + (static_cast<long long>(mapW) * rowIdx + c) * 0x30 + 0x8);
+                    if (cell != nullptr) {
+                        touched++;
+                        if (s_CheckPtr_slot_120c30) s_CheckPtr_slot_120c30(&cell);
+                        void* outIBP = nullptr;
+                        if (s_OwnerResolve_c460) s_OwnerResolve_c460(reinterpret_cast<intptr_t>(cell), &outIBP);
+                        if (outIBP != nullptr) {
+                            if (s_CheckPtr_slot_120c30) s_CheckPtr_slot_120c30(&outIBP);
+                            void* obj = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(outIBP) + 0x18);
+                            void* owner = nullptr;
+                            if (s_pTid_120c30 && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, *s_pTid_120c30))
+                                owner = obj;
+                            if (owner == reinterpret_cast<void*>(self))
+                                owned++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (owned   > *reinterpret_cast<int*>(self + 0x5c) ||
+        touched > *reinterpret_cast<int*>(self + 0x58))
+        return 0;
+    return 1;
+}

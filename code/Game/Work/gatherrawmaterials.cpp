@@ -168,11 +168,18 @@ bool GatherRawMaterials_ResolveFuncs() {
     s_fn_ResizeIntArray = reinterpret_cast<GRM_ResizeIntArray_t>(
         ResolveAddr(Module::Exe, 0x1400021d0));
     s_fn_TreeSerialize = reinterpret_cast<GRM_TreeSerialize_t>(
-        ResolveAddr(Module::Exe, 0x140025630));
+        // Level-1 caller-bug fix: 0x140025630 is MID-FUNCTION (inside TradeUI_impl_55a0
+        // 0x1400255a0). The real simple-BST serialize is 0x1400296b0 — confirmed by
+        // xref: GatherRawMaterials_Shutdown@0x1400ec62a CALLs 0x1400296b0 (already registered),
+        // the same BST-serialize ForesterWork_Shutdown uses.
+        ResolveAddr(Module::Exe, 0x1400296b0));
     s_fn_TreeRemoveByKey = reinterpret_cast<GRM_TreeRemoveByKey_t>(
         ResolveAddr(Module::Exe, 0x140025520));
     s_fn_TreeRemoveNode = reinterpret_cast<GRM_TreeRemoveNode_t>(
-        ResolveAddr(Module::Exe, 0x140024f30));
+        // Level-1 caller-bug fix: 0x140024f30 is MID-FUNCTION (inside Toolbar_vslot14
+        // 0x140024f00). The real BST single-node remove is 0x14001a6e0 — confirmed by
+        // xref: GatherRawMaterials_Update@0x1400ebd24 CALLs 0x14001a6e0 (already registered).
+        ResolveAddr(Module::Exe, 0x14001a6e0));
     s_fn_StateMachineRelease = reinterpret_cast<GRM_StateMachineRelease_t>(
         ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_CanStartWork = reinterpret_cast<GRM_CanStartWork_t>(

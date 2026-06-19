@@ -216,7 +216,10 @@ bool ForesterWork_ResolveFuncs() {
     s_fn_ValidateEntity = reinterpret_cast<FW_ValidateEntity_t>(
         ResolveAddr(Module::Exe, 0x1400f7100));
     s_fn_BSTRemove = reinterpret_cast<FW_BSTRemove_t>(
-        ResolveAddr(Module::Exe, 0x140024f30));
+        // Level-1 caller-bug fix: 0x140024f30 is MID-FUNCTION (inside Toolbar_vslot14
+        // 0x140024f00). The real BST single-node remove is 0x14001a6e0 — confirmed by
+        // xref: ForesterWork_Update@0x1400eae3f CALLs 0x14001a6e0 (already registered).
+        ResolveAddr(Module::Exe, 0x14001a6e0));
     s_fn_BSTFindRemove = reinterpret_cast<FW_BSTFindRemove_t>(
         ResolveAddr(Module::Exe, 0x140025520));
     s_fn_CancelAllWork = reinterpret_cast<FW_CancelAllWork_t>(

@@ -362,6 +362,12 @@ extern void RegisterWorkGridBatch();
 extern void RegisterWorkAccessorBatch();
 // Work shared-helper tail — sqrtf math helper — reg_work_impl2.cpp ; bodies: work_base_impl2.cpp.
 extern void RegisterWorkImpl2Batch();
+// Work shared-helper cluster — walkable-position search + build step — reg_work_walkpos.cpp ;
+// bodies: work_base_walkpos.cpp (122be0/122b00/f6ef0; needs Transform::operator* slot 0x140151470).
+extern void RegisterWorkWalkposBatch();
+// Work-gap LEAF wave — 17 closure-safe per-class job helpers — reg_work_leaf.cpp ;
+// bodies: work_leaf_{clear,market,gather,hunt}.cpp (4-batch opus fan-out, lead-verified).
+extern void RegisterWorkLeafBatch();
 // Wave 3 (Action) — StateMachine action exe-helpers, closure-safe subsets.
 // reg files: reg_action_cnr.cpp / reg_action_hunt.cpp ; bodies: code/Game/Action/action_base_*.cpp.
 extern void RegisterActionCnrBatch();    // CreateNaturalResource cluster (10, file closure-clean)
@@ -419,6 +425,8 @@ static void RegisterCodeFunctions() {
     // Work shared-helper tail — FindComponent accessors (5380/5440/22520/6330) + sqrtf (132010).
     RegisterWorkAccessorBatch();
     RegisterWorkImpl2Batch();
+    RegisterWorkWalkposBatch();   // walkable-position search cluster (122be0/122b00/f6ef0)
+    RegisterWorkLeafBatch();      // 17 closure-safe per-class job leaves (clear/market/gather/hunt)
     // Wave 3 (Action) — closure-safe subsets: CreateNaturalResource cluster (10) +
     // Hunt/RemoveAnimal/CompleteRoad (6). Move/CompleteTask subsets land in a follow-up.
     RegisterActionCnrBatch();
@@ -718,6 +726,12 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Heading@Vector3@Math@@QEBAMXZ"));
     RegisterDispatchSlot(0x1401526b0,   // Math::Vector2::Normalize(this) -> Vector2&
         (uintptr_t)ResolveExport("?Normalize@Vector2@Math@@QEAAAEAV12@XZ"));
+    // Math::Transform::operator*(Vector3 const&) const -> Vector3 (member value-return ABI:
+    // RCX=this, RDX=retVec3, R8=inVec3). Used by the Work walkable-position search
+    // (work_base_walkpos.cpp 0x140122be0) and the PF-ROAD cell-quad helpers. Mangled name
+    // is the exe's import string at the slot RVA 0x1401b72xx (see tool_base_screenrect.cpp).
+    RegisterDispatchSlot(0x140151470,
+        (uintptr_t)ResolveExport("??DTransform@Math@@QEBA?AVVector3@1@AEBV21@@Z"));
     RegisterDispatchSlot(0x140152490,   // Serialize(count, uchar*, name) — array3 bulk
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
 
