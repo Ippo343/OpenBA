@@ -369,6 +369,10 @@ extern void RegisterActionHuntBatch();   // Hunt/RemoveAnimal/CompleteRoad (6 cl
 extern void RegisterActionMoveBatch();   // MoveTo facing/find (4 closure-safe: 12d0/a060/c8d20/a6d50)
 extern void RegisterActionCompleteBatch(); // CompleteTask BST (8760/8800/8e30) + ShowTool (1173b0/1176e0)
 extern void RegisterActionRawMatBatch();   // raw-material batch E leaves (d150/d000/da70/44810/88f90/223c0)
+// Pathfinding/region/road closure (drive Action gap -> 0), bottom-up tiers:
+extern void RegisterPfAvlBatch();          // Tier 0: AVL/BST node-pool + rotations (10)
+extern void RegisterPfPoolsBatch();        // Tier 0: A* node-pools + array resizes (13)
+extern void RegisterPfGeomBatch();         // Tier 0: region/geometry/heuristic leaves (9)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -399,6 +403,9 @@ static void RegisterCodeFunctions() {
     RegisterActionMoveBatch();   // MoveTo facing/find closure-safe 4 (+ 3 Vec dispatch slots above)
     RegisterActionCompleteBatch(); // CompleteTask BST 8760/8800/8e30 + ShowTool 1173b0/1176e0 (closure-safe 5)
     RegisterActionRawMatBatch();   // raw-material batch E: 6 closure-safe leaves (storage/array/find)
+    RegisterPfAvlBatch();          // pathfinding closure Tier 0 — AVL/BST pool+rotations
+    RegisterPfPoolsBatch();        // pathfinding closure Tier 0 — A* node-pools + array resizes
+    RegisterPfGeomBatch();         // pathfinding closure Tier 0 — region/geometry/heuristic leaves
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));

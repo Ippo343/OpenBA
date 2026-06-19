@@ -64,13 +64,18 @@ void RegisterActionMoveBatch() {
     RegisterExeAddr(0x14010a1f0, reinterpret_cast<uintptr_t>(&ActMv_SetAnimation_a1f0));          // -> 1250f0 + a9290
     RegisterExeAddr(0x140116650, reinterpret_cast<uintptr_t>(&ActMv_CitizenBreakCheck_116650));   // -> a9290 (8-byte pair fix)
 
+    // ExternalPtrSerialize: faithful body exists; its closure is engine_funcs fn_* + dispatch
+    // slots ONLY (no unregistered exe-code child — map confirms 22970 -> {}). Only hit on
+    // action save/load (not the build/sim path), so the FindOrLoad concern is the terminating
+    // single-target re-resolve, not the non-terminating preload. Safe to register.
+    RegisterExeAddr(0x140022970, reinterpret_cast<uintptr_t>(&ActMv_ExternalPtrSerialize_22970));
+
     // STILL DEFERRED (unsatisfied closure — pathfinder background-thread family):
     //  0x14009e550 SetTerrainCosts   — calls 0x1400a68b0/a6a30 (Thread::Start queue cmds ->
     //                                  FUN_1400a6430 -> unreg path-builder FUN_14001ce00).
     //  0x14009cfb0 PathfinderQuery   — calls 0x14009c480 (-> 9c170 -> 14001a9b0 ZoneRefresh
     //                                  region flood-fill) + 0x1400a6b20/a6c10 (thread queue).
     //  0x1400c8c10 PathSetup         — depends on unsafe siblings e550 + 9cfb0.
-    //  0x140022970 ExternalPtrSerialize — heavy External/Filename/String runtime closure (drift risk).
-    //  0x140092260 — not registered (see header note: ~9.5KB local node stack, not safely portable).
+    //  (e550/9cfb0/c8c10 unblock once the a6430 dispatcher + A* closure land — pathfinding wave.)
 }
 #endif
