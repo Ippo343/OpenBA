@@ -1,5 +1,63 @@
 # Standalone Registration Waves — Plan (waves 2+)
 
+## ✅ Wave 1.5 (Component) GAP CLOSED to complex-defers-only: 73 -> 40 (2026-06-19, branch `wave/component-gap` off `wave/work-gap`)
+
+Drove the residual Component gap (73) down to 40, where **all 40 are now genuine complex
+defers**. 3 commits (`4b8f0a4` + `cb6b121` + `2476aae`), all A/B green (1475-1478-entity
+world, 0-byte crash, 0 NOT IMPLEMENTED).
+
+**Process:** 4-opus-agent fan-out over disjoint Component files (A citizen/attendance, B
+citizenAI+misc, C visuals, D nature+economy) → classify each addr {closure-safe-leaf →
+port+register | caller-bug → Level-1 fix | complex-defer → document}. Then **lead
+Ghidra-verified EVERY intricate port offset-by-offset** + drove a **bottom-up cascade to
+fixpoint** (register leaf sub-callees first so a parent's closure bottoms out, re-verify
+the deferred set against the updated snapshot, repeat). The cascade unwound 3 tiers.
+
+**LANDED 22 closure-safe regs + caller-bug fixes (33 gap addrs closed):**
+- R1 (`4b8f0a4`, 73->53): 15 direct closure-safe (CheckWorkplaceValid 1158d0, Entity_impl_ef40
+  8ef40, attendance ReleaseLink 111650/1159b0, citizenAI Setup young/adult/elder 115110/1a0/230
+  w/ distinct scale consts, fishing brush 9f990, find-by-type cbd0, ExternalPtr serialize 31d10,
+  decal remove b0d00, statusicon geom aa440, herd migrate 106b10, trade resize e8d0, build
+  find-storage 26a30) + caller-bug fixes (residence 35ec0->07960, terraform a4b50->ab150,
+  growth 06540->126540, ambientemitter ef90/efd0->slots, all xref-verified).
+- R2 (`cb6b121`, 53->48): 5 cascade — ConsumeFood 112990 (pure leaf) + ConsumeFuel 112ae0
+  (7fb0/8090 reg), workplace Detach 12f7e0 / Attach 12fa20 (unblocked by attendance's 12c3f0
+  reg; lead fixed the add-branch fresh-read of mesh+0x20), pasture SetBounds 105e20 (leaf).
+- R3 (`2476aae`, 48->40): bottom-up clusters — trade String e6b0/ef10->e760, herd 121ad0->12e510,
+  well 889e0->91ba0, **citizen-lifecycle cascade** (workplace reg unblocked it): reachability
+  440f0 + building-scan 111930 (leaf-verified offset-by-offset) -> AssignHousing 111ee0 +
+  FindWorkplace 111590 + FindStorage 1116f0 + TryFindPartner 111840 + attendance ReleasePartner 115a50.
+
+**RESIDUAL 40 = ALL COMPLEX DEFERS** (cascade verified terminated at these):
+- *Citizen-AI deep tier (10)* — AssignWorkplace 1163d0 + dependents 112040/1168a0 blocked on
+  `Audio::Scene::RemoveEmitter/StopEffect3D` (helper 12a550, [GUARD-M5] uninit audio scene);
+  117080 -> a4c60 -> a4b30 name-DB multi-level; UpdateHealth 1127d0 / AssignState 113af0 /
+  HandleLifeEvent 116dd0 / 302a0 multi-unreg-callee; citizenAI 10dca0 (happiness)/10f1f0 (15 states).
+- *Worker-thread region family (4)* — zone 17230/9d360 (a6f00 = Thread::Start+CritSec spin),
+  map 1241b0/124750 (9dc20/9dee0 -> 9f2f0 -> a6fe0/a8c90 worker thread).
+- *Disease (2)* 48610/48840 (Infect/Cure/CheckCure chain). *Trade name-DB (1)* a4c60.
+- *Build (1)* 128f50 (Picking::Scene::AddMesh slot, no export). *Rawmat L2 (2)* f72e0 (dangling
+  &vtable_Work), 12ec60 (88a0 unreg).
+- *Self-resolving passthroughs (~8)* animal 106420, cemetery 47200, particle 52b30, tornado
+  57cd0/585a0, decal 11b560, statusicon 12bbd0, ambientenv 43310, nomad 102b60 (Factory+vtable
+  Startup), herd 107400 (UpdateBehavior), orchard 2d40 (caller-bug, no clean true callee).
+- *[GUARD-M5] uninit audio/scene visuals (~6)* particle 52990/52a50/53660, fire 49130/494c0,
+  ambientemitter 42e10. *Deep-unreg (2)* particle 52480, fire 49610. *Save/load serialize (1)* 19a0.
+
+**KEY LESSONS:**
+- **Bottom-up cascade to fixpoint is the engine of progress.** Registering workplace
+  Detach/Attach (R2) cascaded to unblock AssignHousing -> FindWorkplace/Storage/TryFindPartner
+  (R3). Re-verify the DEFERRED set against the updated snapshot after every round — agents'
+  original closure verdicts go stale the moment new regs land.
+- **Dormant intricate ports need static offset-by-offset Ghidra verification** (A/B can't reach
+  them). Lead caught the workplace add-branch clobbering MeshInstance::Update's mesh+0x20 write.
+- **"No FUN_ callees" is necessary-but-not-sufficient.** nomad 102b60 has zero exe callees but
+  drives a Factory-created controller's vtable (+0x20 Startup) = tool-dialog crash class; deferred.
+- The Component gap is structurally ~half citizen-AI lifecycle (audio/name-DB-gated) + visual
+  GUARD-M5 (audio/scene) + worker-thread region — the same subsystem-bring-up backlog as Game.
+
+
+
 ## ✅ Wave 2 (Work) GAP CLOSED to complex-defers-only: 46 -> 23 (2026-06-19, branch `wave/work-gap` off `wave/game-gap`)
 
 Drove the residual Work gap (46) down to 23, where **all 23 are now genuine complex
