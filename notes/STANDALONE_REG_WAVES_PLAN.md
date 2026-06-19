@@ -110,6 +110,53 @@ counts RegisterExeAddr SOURCE LINES, not wired calls — a deferred batch must b
 value-return Math slots (Vector2/3/4/Matrix/Transform3/Box/Rectangle ops, all currently
 UNregistered) via local RegisterDispatchSlot->ResolveExport, then port ec70/098210/fe960/0380.
 
+## ✅ Wave 4 (Game) SAFE FLOOR reached: gap 35 -> 23 (2026-06-19, branch `wave/game-gap` off `wave/player-gap`)
+
+Lead-only (no agent fan-out): every Game addr decompiled + closure-checked + ported. 3 commits,
+all A/B green (1478-1481-entity world, 0-byte crash, 0 debug NOT-IMPLEMENTED). **12 closure-safe
+registered; the remaining 23 are ALL genuine complex defers** (the goal — "down to only complex
+defers" — is met).
+
+**LANDED (12 closure-safe, faithful 1:1 disasm-verified ports):**
+- `f249d18` — 9 leaf dtors/teardown + terrain. String-array dtors 1b030/1b0a0 (mapgenerator),
+  a8a0 EventNotifier_Cleanup, MusicPlayer 18220, ImageCapture-dtor a4fc0, Weather 93eb0, MenuScene
+  array 1b860 (via registered tree-free e320) — `code/Game/Game/game_leaf_helpers.cpp` +
+  `standalone/reg_game_leaf.cpp`. Terrain resize 206b0 / serialize 20870 registered to the existing
+  `Reimpl_TerrainData*` statics (RegisterGameTerrainReimpls in terraingenerator.cpp).
+- `93d641c` — fd10 TerrainGenerator legacy-v0 material resolve (Find-by-filename + IsDerivedFrom vs
+  MaterialInstance type slot 0x140151350; cascade-safe) + 24c70 ExternalPtr<Toolbar>::Serialize (thin
+  wrapper over the existing canonical `ExternalPtrSerializeGeneric`, type g_TypeId_ToolbarExternal).
+- `984f871` — 98800 MenuScene camera-init registered to the existing `MenuScene_TransformInit_Standalone`
+  (the 0x140098800 literal is in the DLL-only #else; standalone already runs the reimpl — metric hygiene).
+
+**KEY: all 12 are dormant on the autostart path** (shutdown/dtor/teardown/legacy-v0/resource-load) so
+registration is purely additive — no world-build regression.
+
+**REMAINING 23 = ALL COMPLEX DEFERS (NOT registration — each needs a Level-2 reimpl / subsystem bring-up):**
+- *Core sim Updates* (deep closures): c4090 EntityList_Update, 8c2b0 CitizenList_Update, 1026a0 EntityUI_Update.
+- *[GUARD-M5] live audio/event subsystems UNINITIALIZED in standalone* (registering = null-deref —
+  m_ambientSoundData never set, m_audioScene unwired, timed-event queue): 1027c0 CalcWindFactor,
+  a40e0 AmbientSound_Update, a5d10 UpdateTimedEvents, 938d0 Weather_DrawUpdate. These are closure-CLEAN
+  but blocked on the in-game audio/event bring-up, NOT a registration.
+- *Live UI/startup*: 99260 SetupUIRefs (writes into a half-built UserInterface), a90a0 ProfessionList_Startup
+  (unreg sub-callee 1e7c0), 101ee0 EntityUI_Startup (builds the tool dialogs via the MUST-DEFER shared
+  vtable g_ToolUI_ChildDialog_Vtable 0x14015f5a0 — same blocker as Player's OpenToolDialog).
+- *Dialog ctors*: 5e230 AutoSaveDialog_CopyCtor, 68ab0 EventNotifyDialog_Ctor (DialogInstance + vtable closure).
+- *Deep / thread / unreg-subcallee dtors*: 907b0 CitizenList_Dtor (171b0/173d0/175d0 unreg), 9ed60 Game_Dtor
+  (System::Thread teardown — same worker-thread family the Action wave deferred), c3e60 EntityList_Dtor +
+  c3d30 EntityList_Shutdown (CitizenAI teardown via unreg 38e0), 1024d0 EntityUI_Dtor (14b00/de90 unreg),
+  f8ff0 AVL teardown (ce60/cf30/dcb0 unreg).
+- *Deep serialize*: 95da0 QuickSave, a3630 MenuScene_Slot5 (many unreg FUN_14001bxxx array serializers).
+- *Huge render*: a5140 ImageCapture_DrawCheck (ImageBuffer/RenderBuffer/Scene/Renderer + g_NoiseUI vtable + a4e80).
+- *UI-format event fire*: 95580 EventNotifier_Fire, 95750 EventNotifier_FireWithName (951d0/95230/950d0/95030/19b70 unreg).
+
+**LESSON (Game wave):** the Game gap is structurally different from Work/Action/Player — it's the
+GameUpdateLoop's own top-level fn-pointer table (Updates/dtors/ctors/startups), not reusable leaf helpers.
+So the closure-safe fraction is small (the leaf dtors + canonical serialize/resolve); the bulk is the
+Level-2 in-game-subsystem backlog (audio/event/UI bring-up, core-sim Updates, thread-teardown). The
+[GUARD-M5] markers in gameupdateloop.cpp are the tell: those call sites are deliberately null-guarded
+because their subsystem isn't wired in standalone — registering the fn alone null-derefs.
+
 ## ✅ Player wave SAFE FLOOR reached: gap 31 -> 8 (2026-06-19, branch `wave/player-gap`)
 
 5 commits: `522f7d5` (31->19) / `d1616b5` (19->16) / `277cdcc` (16->10) / `f40fc26` (10->9) /
@@ -394,8 +441,11 @@ wc -l /tmp/gap.txt
 for a in $(cat /tmp/gap.txt); do grep -rilE "Module::Exe,\s*${a}" code/Game|head -1; done | sed -E 's#code/Game/([^/]+)/.*#\1#' | sort | uniq -c | sort -rn
 ```
 
-As of 2026-06-19: **189 remaining code-gap addrs.** By module:
-Component 76, Work 47, Game 35, Player 31. (Action/Entity/Goal/Dialog/Tutorial all = 0.)
+As of 2026-06-19 (after Game wave): **152 remaining code-gap addrs.** By module:
+Component 74, Work 46, Game 23, Player 9. (Action/Entity/Goal/Dialog/Tutorial all = 0.)
+Game's residual 23 are ALL complex defers (Level-2 reimpl / in-game subsystem bring-up) — see the
+Wave 4 (Game) section above. Player 9 = the debugger-validated backlog. Component 74 / Work 46 are
+the next registration frontiers.
 
 ✅ Tutorial gap closed 2026-06-19 (branch `wave/tutorial-gap`, commit e263b4a) — 11
 closure-safe helpers; the 6 serialize ones reuse the existing canonical
