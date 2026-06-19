@@ -82,10 +82,9 @@ static fn_PickingGetUserData_t s_fn_PickingGetUserData = nullptr;
 typedef void (*fn_PathToolSetSelected_t)(uint64_t self, void* entityIBP);
 static fn_PathToolSetSelected_t s_fn_PathToolSetSelected = nullptr;
 
-// CharacterComponent_impl_08c0: SubmitDebugDraw — submits render entries for debug overlay.
-// Args: (unused, context, pointArray, lineArray)
-typedef void (*fn_SubmitDebugDraw_t)(void* unused, void* context, void* pointArray, void* lineArray);
-static fn_SubmitDebugDraw_t s_fn_SubmitDebugDraw = nullptr;
+// NOTE: the former s_fn_SubmitDebugDraw helper was removed — it resolved a
+// dropped-digit-typo address (0x1400c08c0, mid-function in FUN_1400c0690) and was
+// never called (PathTool::Draw uses fn_TileRender for the debug overlay). Dead code.
 
 // fn_KeyMap_Pressed dispatch slot at 0x140151758
 static void** s_dispatchSlot_KeyMapPressed = nullptr;
@@ -107,8 +106,6 @@ static void ResolvePathToolFuncs() {
         ResolveAddr(Module::Exe, 0x1400a0280));
     s_fn_PathToolSetSelected = reinterpret_cast<fn_PathToolSetSelected_t>(
         ResolveAddr(Module::Exe, 0x1400dd710));
-    s_fn_SubmitDebugDraw = reinterpret_cast<fn_SubmitDebugDraw_t>(
-        ResolveAddr(Module::Exe, 0x1400c08c0));
 
     // Dispatch-table resolved function pointers
     {

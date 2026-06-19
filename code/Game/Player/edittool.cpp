@@ -118,7 +118,9 @@ static fn_EditTool_helper_6800_t s_fn_EditTool_helper_6800 = nullptr;
 typedef void (*fn_CameraRay_t)(uintptr_t keyMap, void* rayOrigin, void* rayDir);
 static fn_CameraRay_t s_fn_CameraRay = nullptr;
 
-// Helper: QuarryComponent_impl_a530 (0x14010a530) — map hit test
+// Helper: QuarryComponent_impl_a530 (0x1400aa530) — map hit test (was a dropped-page
+// typo 0x14010a530, mid-function in CitizenAI_State_Wander — Level-1 caller-bug fix,
+// confirmed by the CALL at 0x1400fd12a in EditTool_Draw; pathtool.cpp uses it correctly)
 // RCX=mapComponent, RDX=rayOrigin, R8=rayDir, R9=hitDist, [RSP+0x20]=hitPosOut, [RSP+0x28]=distOut
 typedef bool (*fn_MapHitTest_t)(uintptr_t mapComponent, float* rayOrigin, void* rayDir,
                                  float* hitDist, float* hitPosOut, float* distOut);
@@ -213,7 +215,7 @@ static void EnsureEditFuncs() {
     s_fn_Entity_impl_cc90     = (fn_Entity_impl_cc90_t)ResolveAddr(Module::Exe, 0x1400fcc90);
     s_fn_EditTool_helper_6800 = (fn_EditTool_helper_6800_t)ResolveAddr(Module::Exe, 0x140066800);
     s_fn_CameraRay            = (fn_CameraRay_t)ResolveAddr(Module::Exe, 0x1401005a0);
-    s_fn_MapHitTest           = (fn_MapHitTest_t)ResolveAddr(Module::Exe, 0x14010a530);
+    s_fn_MapHitTest           = (fn_MapHitTest_t)ResolveAddr(Module::Exe, 0x1400aa530);
     s_fn_EntityAtCell         = (fn_EntityAtCell_t)ResolveAddr(Module::Exe, 0x1400a0280);
 
     // Type IDs

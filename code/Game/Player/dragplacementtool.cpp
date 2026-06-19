@@ -142,7 +142,9 @@ void DragPlacementTool_Startup(DragPlacementTool* self) {
 // Checks terrain mask, height constraints, overlap flags.
 // Params: (mapPtr, col, row, terrainMask, 0.0f, heightTol, 0.0f,
 //          allowOverlap, hasExisting, entityTemplate)
-// Original: 0x1400ff5d0
+// Original: 0x14009f5d0 (CharacterComponent_impl_f5d0; was a dropped-page typo
+// 0x1400ff5d0 which is mid-function inside MainMenuDialog_helper_eec0 — Level-1
+// caller-bug fix, confirmed by the CALL at 0x1400fbcac in DragPlacementTool_Slot14)
 typedef bool (*fn_TerrainValidate_t)(void* mapPtr, uint32_t col, uint32_t row,
     uint32_t terrainMask, float param5, float heightTol, float param7,
     char allowOverlap, bool hasExisting, int64_t entityTemplate);
@@ -156,7 +158,7 @@ static bool s_helpersResolved = false;
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
     s_fn_TerrainValidate = reinterpret_cast<fn_TerrainValidate_t>(
-        ResolveAddr(Module::Exe, 0x1400ff5d0));
+        ResolveAddr(Module::Exe, 0x14009f5d0));
     s_pHeightTolerance = reinterpret_cast<float*>(
         ResolveAddr(Module::Exe, 0x140172208));
     s_helpersResolved = true;
@@ -290,7 +292,7 @@ static void EnsureDrawFuncs() {
         s_pHeightTolerance = (float*)ResolveAddr(Module::Exe, 0x140172208);
     }
     if (!s_fn_TerrainValidate) {
-        s_fn_TerrainValidate = (fn_TerrainValidate_t)ResolveAddr(Module::Exe, 0x1400ff5d0);
+        s_fn_TerrainValidate = (fn_TerrainValidate_t)ResolveAddr(Module::Exe, 0x14009f5d0);
     }
     s_drawFuncsResolved = true;
 }
@@ -366,7 +368,7 @@ struct TileArray {
 // Disassembly reference: 0x1400fbe40
 // Key sub-calls:
 //   0x1401008c0 = CharacterComponent_impl_08c0 (tile renderer)
-//   0x1400ff5d0 = CharacterComponent_impl_f5d0 (terrain validate)
+//   0x14009f5d0 = CharacterComponent_impl_f5d0 (terrain validate)
 //   0x140101270 = FUN_140101270 (ScreenToCell)
 // Uses: g_pGameWorldSingleton+0xf8 (map grid size pointer)
 //       placementDesc (+0x38) for terrain constraints
