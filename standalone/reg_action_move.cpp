@@ -10,12 +10,10 @@
 // Safety: every address below was verified as a real function ENTRY in Ghidra
 // (get_function_by_address Entry == address) and is a faithful 1:1 port.
 //
-// DELIBERATELY NOT registered:
-//   0x140092260 — FUN_140092260 spatial/bridge octree query. Frame-exact stack layout
-//                 (~9.5KB local node stack from FUN_140018dd0) is not safely portable;
-//                 a half-faithful body would mis-select the nearest entity. Leaving it
-//                 unregistered preserves current behavior (silently skipped) — no
-//                 regression. See note in action_base_move.cpp.
+// (0x140092260 spatial/octree query — formerly "deliberately not registered" — IS now
+//  ported + registered in the pathfinding wave: action_pf_roots_misc.cpp via a same-size
+//  local quadtree-walker buffer (alignas(16) uint8_t[0x2438]) calling the registered
+//  18dd0/18880, with disasm-verified record offsets. Registered in RegisterPfRootsMiscBatch.)
 #ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>

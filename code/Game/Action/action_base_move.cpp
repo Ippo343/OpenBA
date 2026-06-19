@@ -703,20 +703,12 @@ void* ActMv_PathSetup_c8c10(void* selfp, void* worldPosp, void* /*param3*/, void
 }
 
 // ============================================================
-// FUN_140092260 — Bridge/spatial entity query near a position (octree walk)
-//   *** NOT REIMPLEMENTED — SEE NOTE, addr deliberately UNREGISTERED ***
+// FUN_140092260 — Bridge/spatial entity query near a position (quadtree walk)
+//   *** NOW REIMPLEMENTED — code/Game/Action/action_pf_roots_misc.cpp ***
 // ============================================================
-// This is a large float-heavy spatial-index traversal whose body depends on a
-// frame-exact ~9568-byte local stack layout produced by FUN_140018dd0 (0x140018dd0)
-// and advanced by FUN_140018880 (0x140018880). The per-node fields the loop reads
-// (afStack_24cc[9*node], the node cursor local_2500, the entity-table base local_e0)
-// are decompiler-derived stack offsets that are NOT safe to re-derive into a portable
-// C++ frame — getting any offset wrong silently returns the wrong "nearest entity",
-// which the MoveTo/HuntAnimal callers then act on (mis-pathing, wrong kill target).
-//
-// Per the brief's "faithful 1:1 or SKIP" rule, a half-faithful body is worse than no
-// registration: leaving 0x140092260 unregistered preserves the existing behavior (the
-// guarded call site is silently skipped — same as today, no regression). It is
-// therefore intentionally NOT registered. Re-port requires verifying the exact stack
-// frame of FUN_140092260 in the disassembler (the afStack_24cc node stride and the
-// local_e0 table base) before any registration.
+// Formerly skipped because of its frame-exact ~9.5KB local quadtree-walker. The
+// pathfinding wave ported the walker's builder (18dd0) and subdivider (18880) as
+// proper registered functions operating on a passed walker pointer, so 92260 was
+// reimplemented (Pf_SpatialProximityQuery_92260) with a same-size local buffer
+// `alignas(16) uint8_t walker[0x2438]` and disasm-verified record offsets, calling
+// the registered 18dd0/18880. Registered via RegisterPfRootsMiscBatch.
