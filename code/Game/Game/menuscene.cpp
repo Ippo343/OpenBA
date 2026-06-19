@@ -776,6 +776,11 @@ static void* g_MenuScene_Vtable_Standalone[11] = {
 extern "C" void RegisterMenuSceneVtable() {
     RegisterExeAddr(MenuSceneAddr::Vtable,
                     reinterpret_cast<uintptr_t>(g_MenuScene_Vtable_Standalone));
+    // FUN_140098800 Transform/Camera init — standalone already routes EnsureResolved()
+    // to MenuScene_TransformInit_Standalone directly (the 0x140098800 ResolveAddr
+    // literal lives in the DLL-only #else branch). Register it so the exe address
+    // resolves to our reimpl too, keeping the Game-gap metric honest.
+    RegisterExeAddr(0x140098800, reinterpret_cast<uintptr_t>(&MenuScene_TransformInit_Standalone));
 }
 
 extern "C" void* MenuScene_Factory(void) {
