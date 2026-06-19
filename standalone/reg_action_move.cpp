@@ -40,19 +40,37 @@ extern int   ActMv_CopyPathFromFinder_a6d50(void*, void*, void*, int);  // 0x140
 extern void* ActMv_PathfinderQuery_9cfb0(void*, void*, uint64_t, uint32_t, uint32_t); // 0x14009cfb0
 extern void* ActMv_PathSetup_c8c10(void*, void*, void*, void*);         // 0x1400c8c10
 
+// Closure-safe code sub-callees (action_base_movedeps.cpp) — registering these unblocks
+// the two closure-safe members of the move-unsafe-6 set.
+extern bool ActMvDep_TimeCheck_a9290(void*, float*, void*);             // 0x1400a9290
+extern void ActMvDep_AnimHelper_50f0(uintptr_t, uint32_t, float, float, float); // 0x1401250f0
+
 void RegisterActionMoveBatch() {
     // CLOSURE-SAFE subset (lead Ghidra-verified faithful + full closure satisfied):
     RegisterExeAddr(0x1400012d0, reinterpret_cast<uintptr_t>(&ActMv_FindComponentFamily_12d0));   // engine funcs only
     RegisterExeAddr(0x14010a060, reinterpret_cast<uintptr_t>(&ActMv_SetFacingDirection_a060));    // Vec3 Normalize+Heading slots
     RegisterExeAddr(0x1400c8d20, reinterpret_cast<uintptr_t>(&ActMv_UpdateFacing_c8d20));         // Vec slots + 0x14009f3e0(reg)
     RegisterExeAddr(0x1400a6d50, reinterpret_cast<uintptr_t>(&ActMv_CopyPathFromFinder_a6d50));   // dep 0x1400021d0(reg)
-    // DEFERRED (bodies present, NOT registered — unsatisfied closure):
-    //  0x14010a1f0 SetAnimation     — calls unreg 0x1401250f0, 0x1400a9290
-    //  0x140116650 CitizenBreakCheck — calls unreg 0x1400a9290 (TimeCheck)
-    //  0x14009e550 SetTerrainCosts   — calls unreg 0x1400a68b0/a6a30
-    //  0x14009cfb0 PathfinderQuery   — calls unreg 0x14009c480/a6b20/a6c10
-    //  0x1400c8c10 PathSetup         — calls unsafe siblings e550+9cfb0
-    //  0x140022970 ExternalPtrSerialize — heavy External/Filename/String runtime closure (drift risk)
+
+    // Sub-callee closure (action_base_movedeps.cpp) — register BEFORE the helpers below
+    // so they resolve at first call:
+    //  - 0x1400a9290 TimeCheck: engine_funcs AsSeconds/RandFloat exports + DAT constants only.
+    //  - 0x1401250f0 AnimHelper: IsDerivedFrom/CheckPtr (engine_funcs) + Time::Time/PlayAnimation
+    //    (Runtime exports) + FUN_1400c3470 (registered in reg_action_hunt). All satisfied.
+    RegisterExeAddr(0x1400a9290, reinterpret_cast<uintptr_t>(&ActMvDep_TimeCheck_a9290));
+    RegisterExeAddr(0x1401250f0, reinterpret_cast<uintptr_t>(&ActMvDep_AnimHelper_50f0));
+
+    // NOW closure-safe (their sub-callees registered above):
+    RegisterExeAddr(0x14010a1f0, reinterpret_cast<uintptr_t>(&ActMv_SetAnimation_a1f0));          // -> 1250f0 + a9290
+    RegisterExeAddr(0x140116650, reinterpret_cast<uintptr_t>(&ActMv_CitizenBreakCheck_116650));   // -> a9290 (8-byte pair fix)
+
+    // STILL DEFERRED (unsatisfied closure — pathfinder background-thread family):
+    //  0x14009e550 SetTerrainCosts   — calls 0x1400a68b0/a6a30 (Thread::Start queue cmds ->
+    //                                  FUN_1400a6430 -> unreg path-builder FUN_14001ce00).
+    //  0x14009cfb0 PathfinderQuery   — calls 0x14009c480 (-> 9c170 -> 14001a9b0 ZoneRefresh
+    //                                  region flood-fill) + 0x1400a6b20/a6c10 (thread queue).
+    //  0x1400c8c10 PathSetup         — depends on unsafe siblings e550 + 9cfb0.
+    //  0x140022970 ExternalPtrSerialize — heavy External/Filename/String runtime closure (drift risk).
     //  0x140092260 — not registered (see header note: ~9.5KB local node stack, not safely portable).
 }
 #endif

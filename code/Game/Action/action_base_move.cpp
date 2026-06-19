@@ -443,11 +443,16 @@ uint8_t ActMv_CitizenBreakCheck_116650(void* entityp) {
     (*reinterpret_cast<void(**)(void*, void*)>(*reinterpret_cast<uintptr_t*>(v) + 0x50))(
         reinterpret_cast<void*>(v), &outRec);
 
-    float dueVal = *reinterpret_cast<float*>(outRec + 0x54);
+    // Original copies 8 bytes (*(undefined8*)(rec+0x54)) — a9290 reads BOTH floats
+    // (pair[0] = value, pair[1] = weight). Passing a single float would feed it stack
+    // garbage for pair[1]. Copy the full pair.
+    float duePair[2];
+    duePair[0] = *reinterpret_cast<float*>(outRec + 0x54);
+    duePair[1] = *reinterpret_cast<float*>(outRec + 0x58);
     void* rng = *reinterpret_cast<void**>(gw + 0xd8);
     bool ok = false;
     if (s_fn_TimeCheck_a9290)
-        ok = s_fn_TimeCheck_a9290(reinterpret_cast<void*>(self + 0x200), &dueVal, rng);
+        ok = s_fn_TimeCheck_a9290(reinterpret_cast<void*>(self + 0x200), duePair, rng);
     if (ok) {
         *reinterpret_cast<uintptr_t*>(self + 0x1f8) = outRec;
         return 1;
