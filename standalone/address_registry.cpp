@@ -373,6 +373,10 @@ extern void RegisterActionRawMatBatch();   // raw-material batch E leaves (d150/
 extern void RegisterPfAvlBatch();          // Tier 0: AVL/BST node-pool + rotations (10)
 extern void RegisterPfPoolsBatch();        // Tier 0: A* node-pools + array resizes (13)
 extern void RegisterPfGeomBatch();         // Tier 0: region/geometry/heuristic leaves (9)
+extern void RegisterPfCtorsBatch();        // Wave 2: Action ctors + entity/storage leaves (12)
+extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
+extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
+extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -406,6 +410,10 @@ static void RegisterCodeFunctions() {
     RegisterPfAvlBatch();          // pathfinding closure Tier 0 — AVL/BST pool+rotations
     RegisterPfPoolsBatch();        // pathfinding closure Tier 0 — A* node-pools + array resizes
     RegisterPfGeomBatch();         // pathfinding closure Tier 0 — region/geometry/heuristic leaves
+    RegisterPfCtorsBatch();        // pathfinding closure Wave 2 — Action ctors + entity/storage
+    RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
+    RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
+    RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
