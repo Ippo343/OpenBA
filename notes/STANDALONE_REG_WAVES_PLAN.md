@@ -239,9 +239,14 @@ wc -l /tmp/gap.txt
 for a in $(cat /tmp/gap.txt); do grep -rilE "Module::Exe,\s*${a}" code/Game|head -1; done | sed -E 's#code/Game/([^/]+)/.*#\1#' | sort | uniq -c | sort -rn
 ```
 
-As of 2026-06-18: **291 remaining code-gap addrs.** By module:
-Component 82 (mostly Level-2 backlog + sub-deps), **Work 70**, **Action 52**, Game 35,
-Player 31, Tutorial 10, Entity 6, Dialog 3, Goal 2.
+As of 2026-06-19: **189 remaining code-gap addrs.** By module:
+Component 76, Work 47, Game 35, Player 31. (Action/Entity/Goal/Dialog/Tutorial all = 0.)
+
+✅ Tutorial gap closed 2026-06-19 (branch `wave/tutorial-gap`, commit e263b4a) — 11
+closure-safe helpers; the 6 serialize ones reuse the existing canonical
+ExternalPtrSerializeGeneric (now exposed via code/Game/Game/serialize_externals.h),
+array variants just loop it; closure is all Runtime-export/engine_funcs. See
+[[project_tutorial_gap_zero]].
 
 NOTE: the static gap (`Module::Exe` refs across all of code/Game) is wider than what's hit on
 the autostart path (currently 0 NOT IMPLEMENTED). Registering is still correct — it removes
