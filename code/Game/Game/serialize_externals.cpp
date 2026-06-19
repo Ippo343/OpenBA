@@ -18,12 +18,13 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Game/serialize_externals.h"
 #include <cstdint>
 #include <cstdio>
 
-namespace {
-
 // Shared body — mirrors FUN_14001b8e0 / FUN_1400196a0 line by line.
+// Exposed (external linkage) via serialize_externals.h so the Tutorial
+// ExternalPtr-array serialize helpers can reuse this exact body.
 //
 // Cascade safety: if typeIdPtr is null OR *typeIdPtr is 0 (Runtime DLL hasn't
 // registered the underlying type yet), we still call FindOrLoad but skip the
@@ -171,8 +172,6 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
 
     fn_Filename_Dtor(fnameBuf);
 }
-
-} // namespace
 
 // ============================================================
 // Helper #9 — ExternalPtr serialize for GraphicsMesh (FUN_14001b8e0)

@@ -384,6 +384,7 @@ extern void RegisterPfRootsMiscBatch();    // Wave 3: bd40 spiral + 92260 spatia
 extern void RegisterEntityBatch();         // Entity gap: 6 EntityList reimpl bodies (entitylist.cpp)
 extern void RegisterGoalBatch();           // Goal gap: ExternalPtr resolver + StatValueDispatch
 extern void RegisterDialogBatch();         // Dialog gap: FindComponent variant + autosave handler
+extern void RegisterTutorialBaseBatch();   // Tutorial gap: ExternalPtr-array serialize (5) + Toolbar resolve + Check data helpers (5)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -430,6 +431,7 @@ static void RegisterCodeFunctions() {
     RegisterEntityBatch();         // EntityList PreUpdate/PostUpdate/RemoveEntity/Serialize/etc.
     RegisterGoalBatch();           // StatGoal ExternalPtr resolver (265b0) + StatValueDispatch (da4e0)
     RegisterDialogBatch();         // WorkplaceUI FindComponent (d6c0) + AutoSaveDialog handler (5dec0)
+    RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
