@@ -391,6 +391,8 @@ extern void RegisterPlayerEditBatch();     // Player wave (edit): EntityAtCell/A
 extern void RegisterPlayerPathBatch();     // Player wave (path): RemovalTool checks (3) + FindComponent/state/f5d0 deps (4)
 extern void RegisterPlayerTileBatch();     // Player wave r2 (tile): 003870 SetTransformFromYaw, d580 TileValidity, fd650 ValidateCreate
 extern void RegisterPlayerRayBatch();      // Player wave r2 (ray): aa530 TerrainMarch, 1005a0 GetMouseRay, 101270 ScreenToCell, fda00 PlacementPos
+extern void RegisterPlayerTradeBatch();    // Player wave r2c (trade): EditTool 66800 + EntityUI 666b0 + AVL tree family (102e30/2c690/25740/25920/15000/14ed0)
+extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenToolDialog ff9e0 + child-dialog vtable 0x14015f5a0
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -446,6 +448,11 @@ static void RegisterCodeFunctions() {
     RegisterPlayerPathBatch();     // 104670/104770/1048a0 RemovalTool checks + 5780/3ea0/11e710/9f5d0 deps (bottom-up)
     RegisterPlayerTileBatch();     // r2 tile: 003870 + d580 + fd650 (closure complete via prior waves)
     RegisterPlayerRayBatch();      // r2 ray: aa530 + 1005a0 + 101270 + fda00 (bottom-up; 1005a0 resolves 4 exports locally)
+    RegisterPlayerTradeBatch();    // r2c trade: 66800 EditTool + 666b0 EntityUI + AVL family (retrace disasm-verified, typo 2e30/c690->102e30/2c690 caught)
+    RegisterPlayerToolUIBatch();   // r2c toolui — NO-OP (DEFERRED): ff9e0 + shared vtable
+    //   0x14015f5a0 can't be registered without crashing the menu at startup (the menu's
+    //   BuildId child in mainmenudialog.cpp assumes that shared vtable resolves null).
+    //   See reg_player_toolui.cpp header. Kept wired as a no-op for when the fix lands.
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));
