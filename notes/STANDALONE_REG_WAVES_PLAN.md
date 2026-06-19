@@ -51,6 +51,87 @@ strictly worse than the safe no-op of leaving it unregistered.** Agent drafts ke
 0x140029a40; clear-area REMOVE is 0x14001ca60). `harvestarea.cpp` already corrected; `plantarea.cpp`,
 `plantorchard.cpp`, `harvestorchard.cpp` still cite the bad addr — fix those ResolveAddr literals.
 
+## ⏩ Wave 3 (Action) — 2026-06-19 (branch `wave/work-tail`; commit 1 `4f26b27`)
+
+4-opus-agent team (CreateNR / MoveTo-PerformWork / Hunt-Animal / CompleteTask-ShowTool) drafted
+the ~45 Action exe-helpers into disjoint `code/Game/Action/action_base_<batch>.cpp` +
+`standalone/reg_action_<batch>.cpp`. Lead applied closure-safety + Ghidra-verified intricate ports.
+
+**LANDED commit 1 (`4f26b27`) — 16 closure-safe, A/B green (1475-entity world, 0-byte crash):**
+- CreateNR cluster (10, file closure-clean): `0x140003f60 0x14000c460 0x14009cb00 0x140120db0
+  0x1401252f0 0x140125320 0x1401253d0 0x140126540 0x140126440 0x1401260f0` (action_base_cnr.cpp).
+- Hunt/RemoveAnimal (6): `0x140005500 0x1400227e0` FindComponent, `0x140122a80` IsAnimalReady,
+  `0x140003110` DynArraySetCount, `0x1400c2ea0` MarkEntityRemoval, `0x1400c3470` NotifyEntityChanged.
+- Lead-verified faithful (asm-level): `0x1401253d0` (SetMesh RDX mesh-arg DROPPED by Ghidra,
+  reconstruction matches asm), `0x1400c3470`, plus A-mv `0x1400a6d50` ring-copy (the trap the Work
+  agents botched — A-mv got it right) and A-ct `0x1401173b0` ShowTool. **The 4 agents are reliable.**
+
+**DEFERRED to a follow-up (drafts in `notes/wave3_drafts/`, faithfulness-sampled, NOT wired):**
+- `action_base_move.cpp.draft` (MoveTo/PerformWork/PlayAnim, 10): code-closure-safe subset = 6
+  (`0x1400012d0 0x140022970 0x14010a060 0x1400c8d20 0x1400a6d50 0x140116650`); unsafe = `0x14009cfb0`
+  `0x14009e550` `0x14010a1f0` `0x1400c8c10` (call unreg deps / unreg dispatch slots 0x1401512c0
+  Vec3::Normalize / 0x1401512d8 Heading / 0x1401526b0). **Dispatch-slot closure for the facing/anim
+  helpers still needs checking before wiring the 6.**
+- `action_base_complete.cpp.draft` (CompleteTask/ShowTool/DropOff, 7): code-closure-safe subset = 5
+  (`0x1400f8760 0x1400f8800 0x1400f8e30 0x1401176e0 0x1401173b0`); unsafe = `0x1400c7570` `0x1400c7620`
+  (DropAllInventory/DropOffTransfer — 8 unreg deps). **NOTE: complete resolves graphics via
+  `ResolveIATSlot()` + `ResolveExport()`, NOT `ResolveAddr(Module::Exe)` — its closure spans 3
+  mechanisms and must be analyzed across all of them before wiring.**
+
+**SKIPPED (not registerable):** `0x1400bbea0` RemoveAnimal_Action_Ctor (609-insn builder; all child
+CopyCtors unreg — same closure problem as the deferred Work action-ctors), `0x140122340`
+HerdComponent_StartMigration (no-migration branch infinite-loops single-threaded).
+
+**Raw-material cluster (batch E, ~9, not yet run):** `0x140044810 0x140088ef0 0x14009bd40 0x140129760
+0x14000da70 0x140088f90 0x14012d150 0x14012d000 0x1400223c0` (createrawmaterial/consumerawmaterial/
+pickup/pickupstored/dropoff). Next Action sub-wave.
+
+**CLOSURE-SAFETY refinement learned this wave:** closure spans THREE resolution mechanisms —
+`ResolveAddr(Module::Exe, code)`, `ResolveAddr(Module::Exe, dispatch-slot 0x14015xxxx)` /
+`ResolveIATSlot`, and `ResolveExport`. A per-addr safety check must cover all three + transitive
+intra-file sibling calls. (Commit 1's cnr/hunt were clean on all axes; move/complete were not, hence deferred.)
+
+## ⏩ Wave 2 (Work) shared-helper TAIL — 2026-06-19 (branch `wave/work-tail`, off main; commit `1b9a921`)
+
+Closed the 15-addr shared-helper tail with a 3-opus-agent team (W-acc accessors,
+W-act action-ctors, W-impl impl/geometry/math) + lead Ghidra-verify + integrate.
+
+**KEY INSIGHT — closure-safety gates registration.** A shared helper can only be
+SAFELY registered once its *entire exe sub-callee closure* is also registered. If a
+top-level helper calls sub-callees that resolve to 0 (unregistered), running it builds
+a HALF-NULL / drifted structure — **strictly worse** than the safe no-op of leaving the
+call site skipped. So registration must proceed bottom-up (leaves/closure first).
+
+**LANDED (5, closure-safe, all Ghidra-verified faithful):**
+- 4 FindComponent accessors `0x140005380`(t 1c7510) `/5440`(1c46b0) `/22520`(1c3fb0)
+  `/6330`(1c7cb8,+0x28/+0x30) → `code/Game/Work/work_base_accessor.cpp` (engine-func deps only).
+- `0x140132010` sqrtf → `work_base_impl2.cpp` (no deps).
+- A/B green: 1475-entity world build, 0-byte crash log, 0 debug NOT-IMPLEMENTED.
+
+**DEFERRED to the Action wave (drafted, NOT registered — `notes/wave2_drafts/`):** every
+one calls an unregistered sub-callee closure. Verify offset-by-offset + co-register the
+closure when the Action wave lands:
+- `work_base_actionctor.cpp.draft`: `0x1400c1eb0` PerformWork_Action_Ctor3, `0x1400c2490`
+  PlayAnimation_Action_Ctor, `0x1400bb0a0` grazing/tend, `0x1400be6e0` plant/orchard — **ALL
+  12 action sub-ctors unregistered** (SendComponentMessage/CompleteTask/ShowTool/PerformWork/
+  MoveTo/*NaturalResource @ 0x1400c5da0/cb1d0/42890/c9720/c9170/cadf0/c57d0/c6a20/c29a0/c54e0/c3470/012d0).
+- `work_base_impl2_full.cpp.draft`: `0x140087fb0` Entity_impl_7fb0, `0x1400f6ef0`
+  BuildStructure_impl_6ef0, `0x140122b00`/`be0` walkable-pos search, `0x140122e20`
+  Entity_impl_2e20 — deps `0x140003f60`/`0x140123070`/`0x14009f810` unreg.
+- `0x14009c480` ZoneRefresh (body in work_base_accessor.cpp, unregistered): dep `0x14009c170`
+  unreg + it mutates region words → defer until 0x14009c170 lands.
+
+**SKIPPED:** `0x140024f30` = MID-FUNCTION (in Toolbar_vslot14 140024f00-f48) — Level-1 caller
+bug in foresterwork/gatherrawmaterials (mislabeled "BSTRemove"; real remove = registered
+0x14001a6e0). `0x140115e60` = CitizenAI_LongTermPlan (Level-2).
+
+**PROCESS that worked:** agents wrote DISJOINT new files (work_base_<batch>.cpp +
+reg_work_<batch>.cpp), no commit/build/sub-fork; lead verified + trimmed to the closure-safe
+subset + wired registrars + built + A/B + committed. Confirmed again: agent ports of intricate
+ctors/geometry compile clean but need lead Ghidra-verify before trust (kept as drafts here
+since they're deferred anyway). **Next: run the Action wave (52) — it unblocks the deferred
+Work action-ctors + impl helpers above.**
+
 ## What this is
 
 `code/Game/*` calls exe sub-helpers via guarded `ResolveAddr(Module::Exe, 0xADDR)`. If the

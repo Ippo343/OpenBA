@@ -1,0 +1,38 @@
+// standalone/reg_action_complete.cpp
+// Wave 3 (Action) — CompleteTask / ShowTool / DropOffRawMaterial exe sub-helper registration.
+//
+// Registers the exe addresses of the action sub-helpers referenced from
+// code/Game/Action/{completetask,showtool,dropoffrawmaterial}.cpp to their
+// reimplementations in code/Game/Action/action_base_complete.cpp. The integrator wires
+// RegisterActionCompleteBatch() into RegisterCodeFunctions() in
+// standalone/address_registry.cpp.
+//
+// Safety: every address below was verified as a real function ENTRY in Ghidra
+// (get_function_by_address Entry == address) and is a faithful 1:1 port.
+#ifdef STANDALONE_EXE
+#include "resolve.h"
+#include <cstdint>
+
+// CompleteTask task-manager BST helpers (action_base_complete.cpp)
+extern bool ActCt_TryCompleteTask_8760(void*, void*, int, void*, uint32_t);   // 0x1400f8760
+extern void ActCt_TaskReassign_8800(void*, void*, int, void*, uint32_t);      // 0x1400f8800
+extern void ActCt_TaskCleanup_8e30(void*, int);                               // 0x1400f8e30
+
+// ShowTool tool-mesh helpers (action_base_complete.cpp)
+extern void ActCt_ShowToolOnEntity_1173b0(void*, int);                        // 0x1401173b0
+extern void ActCt_HideTool_1176e0(void*);                                     // 0x1401176e0
+
+// DropOffRawMaterial transfer helpers (action_base_complete.cpp)
+extern void     ActCt_DropAllInventory_7570(void*);                                  // 0x1400c7570
+extern uint64_t ActCt_DropOffTransfer_7620(void*, void*, void*, uint64_t);           // 0x1400c7620
+
+void RegisterActionCompleteBatch() {
+    RegisterExeAddr(0x1400f8760, reinterpret_cast<uintptr_t>(&ActCt_TryCompleteTask_8760));
+    RegisterExeAddr(0x1400f8800, reinterpret_cast<uintptr_t>(&ActCt_TaskReassign_8800));
+    RegisterExeAddr(0x1400f8e30, reinterpret_cast<uintptr_t>(&ActCt_TaskCleanup_8e30));
+    RegisterExeAddr(0x1401173b0, reinterpret_cast<uintptr_t>(&ActCt_ShowToolOnEntity_1173b0));
+    RegisterExeAddr(0x1401176e0, reinterpret_cast<uintptr_t>(&ActCt_HideTool_1176e0));
+    RegisterExeAddr(0x1400c7570, reinterpret_cast<uintptr_t>(&ActCt_DropAllInventory_7570));
+    RegisterExeAddr(0x1400c7620, reinterpret_cast<uintptr_t>(&ActCt_DropOffTransfer_7620));
+}
+#endif
