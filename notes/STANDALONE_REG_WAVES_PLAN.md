@@ -1,5 +1,62 @@
 # Standalone Registration Waves — Plan (waves 2+)
 
+## ✅ Wave 2 (Work) GAP CLOSED to complex-defers-only: 46 -> 23 (2026-06-19, branch `wave/work-gap` off `wave/game-gap`)
+
+Drove the residual Work gap (46) down to 23, where **all 23 are now genuine complex
+defers — zero caller-bugs remain**. 2 commits (`1d0c399` + `f8677ce`), both A/B green
+(1480-entity world, 0-byte crash, 0 NOT IMPLEMENTED).
+
+**Process:** 4-opus-agent fan-out over disjoint `code/Game/Work/work_leaf_{clear,market,
+gather,hunt}.cpp` (37 leaf addrs); each decompiled + closure-checked vs a registered-addr
+snapshot + drafted faithful ports; **lead Ghidra-verified EVERY intricate port offset-by-
+offset before registering** (BST insert/serialize in-order traversal, GetTilesInArea
+array-grow + WorldGrid-BST emit, Pasture float-argmax, the b310 dual-`this` SM-query). All
+agent ports verified faithful — opus agents reliable, consistent with prior waves.
+
+**LANDED 21 closure-safe (commit `1d0c399`) + 1 (commit `f8677ce`):**
+- Shared cluster (lead, now unblocked — Action wave registered all its exe sub-callees):
+  `work_base_walkpos.cpp` 0x140122be0 / 0x140122b00 walkable-position search + 0x1400f6ef0
+  build-step. **CORRECTED the wave2 draft**: 0x140122be0 dropped the Transform::operator*
+  INPUT vector (R8 = &record[i], stride 0x18); disasm @0x140122d08 confirms the member
+  value-return ABI RCX=transform/RDX=ret/R8=inVec. Registered the Transform::operator*
+  dispatch slot 0x140151470 (the only missing dep).
+- 18 leaves (`reg_work_leaf.cpp`): clear 298a0/29920/29c10/9d7c0/9fc00 + plantarea b390;
+  market 2af40/14b00 tree-cleanups; gather 116540/c3c0/120c30; hunt a730/a0b0/4fe0/63d0
+  FindComponent + 8350 Pasture + 1193a0 ConsumeProduce + 12b310 SM-query.
+
+**Level-1 caller-bug fixes (all typos, xref/name-verified — NONE left in the gap):**
+- 0x140024f30 (mid Toolbar_vslot14) -> 0x14001a6e0 BST-remove in foresterwork + gather
+  (ForesterWork_Update/GatherRawMaterials_Update both CALL 1a6e0).
+- 0x140025630 (mid TradeUI_impl_55a0) -> 0x1400296b0 BST-serialize in gather
+  (GatherRawMaterials_Shutdown CALLs it).
+- marketwork 4 MarketBST_* literals = dropped-digit typos (5th nibble f->2):
+  0x1400fa9f0/faaa0/fac40/fb290 -> 0x14002a9f0/2aaa0/2ac40/2b290 (the real MarketWork AVL
+  family; MarketWork_Shutdown CALLs 2b290). DEFERRED — deep unreg AVL sub-closure
+  (ab60/aee0/b5f0/5920/da70/d9d0/002340) + reimpl typedefs under-count args.
+- harvestorchard ObjectInternal_Dtor 0x14014e3a4 (mid Tool_StaticInit) -> dispatch slot
+  0x140152770 (Object::Internal::~Internal, tail-called by the dtor body 0x1400edf60),
+  matching the sibling HarvestArea. Removes the bad code addr from the gap entirely.
+
+**RESIDUAL 23 = ALL COMPLEX DEFERS** (key blockers 0x140042890 ShowTool ctor / 0x1400c29a0
+Entity-impl / action copy-ctors c59d0/c63b0/ca520/c8400 / 88730 / 2c710 / 8d3c0 ALL still
+unregistered — registering any dependent now = half-null/drift = silent corruption):
+- *Action-ctor / copy-ctor family (15)* — blocked on the unregistered action child-ctor
+  cascade (same blocker the Action wave deferred): ba9f0 881d0 (firework) bb0a0 f2370
+  (pasture) bb7b0 (harvestorchard 11-arg CreateRawMaterial) bbbc0 (hunt) bdd20 (plantarea)
+  be6e0 (forester) beae0 c2490 (fishing) bef70 (consumeproduce) bf790 (gather PathFind)
+  bffd0 c1eb0 (cleararea) c1530 (harvestarea) c8a0 (tradework).
+- *MarketWork AVL family (4)* 2a9f0/2aaa0/2ac40/2b290 — need a full AVL-family port
+  (node key@0/data@+8/parent@+0x18/left@+0x20/right@+0x28/balance@+0x32) + arg-count fix.
+- *Large Serialize/Slot4 (3)* eff80 (MarketWork Slot4, 1408 lines, calls 115e60 + unreg),
+  f2f00 (Pickup_Serialize, unreg 8d3c0/2c070/c0ad0).
+- *Level-2* 0x140115e60 CitizenAI_LongTermPlan.
+
+**Next move to shrink further:** the Action child-ctor cascade (0x140042890 ShowTool ctor +
+0x1400c29a0 + the action copy-ctors) — landing those unblocks ~15 of the 23 at once. Then
+the MarketWork AVL family port (4). Component (73) is the other open frontier.
+
+
+
 Written 2026-06-18 after wave 1 (Component). Branch with wave 1: `wave/component-people`
 (commits `ebbc385` wiring + `dda1096`/`6f84661` Level-1 address fixes). See
 [[project_component_reg_wave]] in memory and `notes/COMPONENT_REG_WAVE_BRIEF.md`.
