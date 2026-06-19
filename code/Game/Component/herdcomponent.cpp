@@ -373,6 +373,98 @@ void HerdComponent_AdjustSize(void* herdComp, int targetSize) {
 }
 
 // ============================================================
+// HERD cluster (bottom-up land): helper_1ad0 (0x140121ad0) + impl_e510 (0x14012e510)
+// ============================================================
+// Their full exe FUN_ closure is registered (FUN_140003110, FUN_140002cc0,
+// FUN_140005500), so both are now closure-safe to port.
+typedef void (*fn_Herd_AddToList_t)(int64_t* listField, int newCount, void* ibp); // 0x140003110
+typedef void (*fn_Herd_RemoveFromList_t)(int64_t* listField, void* ibp);          // 0x140002cc0
+typedef void* (*fn_Herd_FindMember_t)(int64_t entity, void* outIbp);              // 0x140005500
+static fn_Herd_AddToList_t      s_fn_Herd_AddToList = nullptr;
+static fn_Herd_RemoveFromList_t s_fn_Herd_RemoveFromList = nullptr;
+static fn_Herd_FindMember_t     s_fn_Herd_FindMember = nullptr;
+static bool s_herdClusterInit = false;
+static void EnsureHerdCluster() {
+    if (s_herdClusterInit) return;
+    EnsureHelpers();
+    s_fn_Herd_AddToList      = reinterpret_cast<fn_Herd_AddToList_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_Herd_RemoveFromList = reinterpret_cast<fn_Herd_RemoveFromList_t>(ResolveAddr(Module::Exe, 0x140002cc0));
+    s_fn_Herd_FindMember     = reinterpret_cast<fn_Herd_FindMember_t>(ResolveAddr(Module::Exe, 0x140005500));
+    s_herdClusterInit = true;
+}
+
+// Reimpl of FUN_140121ad0 (HerdComponent_helper_1ad0): register a new animal into the
+// herd. Append its IBP to the member list (+0x38, count +0x40), then compute a clamped
+// bounds rect (from the herd centre tile +0x4c and the config animal-spread +0x38) and
+// write it into the animal's herd-member sub-component (+0x38..+0x3e via FUN_140005500).
+// Faithful 1:1 port; closure: FUN_140003110 + FUN_140005500 (both registered).
+void HerdComponent_Helper1ad0(int64_t herdComp, void* animalIbp) {
+    EnsureHerdCluster();
+    uint8_t* self = reinterpret_cast<uint8_t*>(herdComp);
+
+    if (s_fn_Herd_AddToList)
+        s_fn_Herd_AddToList((int64_t*)(self + 0x38), *(int*)(self + 0x40) + 1, animalIbp);
+
+    void* cfgObj = *(void**)(self + 0x18);
+    void* cfg = (fn_IsDerivedFrom && s_pHerdTypeId &&
+                 fn_IsDerivedFrom(cfgObj, *s_pHerdTypeId)) ? cfgObj : nullptr;
+    int spread = *(int*)((uintptr_t)cfg + 0x38);
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    int mapDim = **(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+
+    int bx = *(int*)(self + 0x4c) % mapDim - (spread >> 1);
+    int by = *(int*)(self + 0x4c) / mapDim - (spread >> 1);
+    if (bx < 1) bx = 1;
+    if (by < 1) by = 1;
+    int bw = spread;
+    int bh = spread;
+    if (mapDim - 1 <= bx + spread) bw = (mapDim - bx) - 2;
+    if (mapDim - 1 <= by + bw)     bh = (mapDim - by) - 2;
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(animalIbp);
+    uint64_t entity = *(uint64_t*)(*(int64_t*)animalIbp + 0x10);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&entity);
+    uint64_t memberIbp = 0;
+    if (s_fn_Herd_FindMember) s_fn_Herd_FindMember((int64_t)entity, &memberIbp);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(&memberIbp);
+    int64_t member = *(int64_t*)&memberIbp;
+    *(int16_t*)(member + 0x38) = (int16_t)bx;
+    *(int16_t*)(member + 0x3a) = (int16_t)by;
+    *(int16_t*)(member + 0x3c) = (int16_t)bw;
+    *(int16_t*)(member + 0x3e) = (int16_t)bh;
+}
+
+// Reimpl of FUN_14012e510 (HerdComponent_impl_e510): assign the herd's owning-herd
+// reference (+0x28). If it changes: detach the animal from the old herd's member list
+// (FUN_140002cc0 on oldHerd+0x38), store the new herd ptr, and if non-null attach it
+// (HerdComponent_helper_1ad0). param_1 = animal's herd-member component, param_2 = new
+// herd IBP. Faithful 1:1 port; closure: FUN_140002cc0 + helper_1ad0 (registered).
+void HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp) {
+    EnsureHerdCluster();
+    uint8_t* self = reinterpret_cast<uint8_t*>(memberComp);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(newHerdIbp);
+    if (*(int64_t*)(self + 0x28) == *(int64_t*)newHerdIbp) return;
+
+    if (*(int64_t*)(self + 0x28) != 0) {
+        uint64_t selfRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(self + 0x28);
+        if (s_fn_Herd_RemoveFromList)
+            s_fn_Herd_RemoveFromList((int64_t*)(*(int64_t*)(self + 0x28) + 0x38), &selfRef);
+    }
+
+    int64_t newHerd = *(int64_t*)newHerdIbp;
+    *(int64_t*)(self + 0x28) = newHerd;
+    if (newHerd != 0) {
+        uint64_t selfRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfRef, self);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(self + 0x28);
+        HerdComponent_Helper1ad0(*(int64_t*)(self + 0x28), &selfRef);
+    }
+}
+
+// ============================================================
 // Helper: check if tile at data4C is valid on the map
 // Returns true if the tile's terrain type value is nonzero
 // ============================================================

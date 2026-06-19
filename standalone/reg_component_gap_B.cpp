@@ -12,12 +12,16 @@
 //                  copy callee is 0x140007960 (closure-safe). Literal fixed in
 //                  residencecomponent.cpp; we register 0x140007960. 0x140035ec0 is NOT
 //                  registered.
-//   DEFER (NOT registered):
-//                  0x14010dca0 BuildCandidateStateList (calls unregistered GetHappiness/
-//                      HasSufficientResources/HasSufficientResources2/SortByPriority),
-//                  0x14010f1f0 ValidateAndEnterState (15 unregistered CitizenAI_State_*),
-//                  0x140047200 CemeteryComponent::Draw (self-resolving passthrough -> recursion),
-//                  0x140091ba0 WellComponent helper (calls unregistered FUN_1400889e0).
+//   WELL cluster (landed in the final bottom-up pass): 0x140091ba0 (remove-by-IBP) +
+//                  its only unregistered callee 0x1400889e0 (pure leaf, grid-cell int-array
+//                  compaction). Closure now bottoms out (FUN_140004680 reg, CheckPtr/IBP-ctor
+//                  engine). Both ported in wellcomponent.cpp.
+//   DEFER (NOT registered — re-confirmed against notes/_reg_snapshot3.txt):
+//                  0x14010dca0 BuildCandidateStateList (calls unregistered GetHappiness 0x140115de0/
+//                      HasSufficientResources 0x1401156e0/HasSufficientResources2 0x1401157f0/
+//                      SortByPriority 0x14002fe10),
+//                  0x14010f1f0 ValidateAndEnterState (all 15 CitizenAI_State_* still unregistered),
+//                  0x140047200 CemeteryComponent::Draw (self-resolving passthrough -> recursion).
 #ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
@@ -39,6 +43,10 @@ extern void Component_Helper1d10_Reimpl(void* extRefField, void* serializer);
 // ---- residencecomponent.cpp (per-slot inner pointer-array deep copy; true callee
 //      of the corrected 0x140035ec0 -> 0x140007960 literal) ----
 extern void ResidenceComponent_CopyInnerArray(void* dst, void* src);
+
+// ---- wellcomponent.cpp (WELL cluster: remove-by-IBP + grid-cell compaction leaf) ----
+extern void WellComp_UnregisterEntity_91ba0(int64_t manager, void* ibp);
+extern void WellComp_RemoveCellEntry_889e0(int64_t manager, int x, int y, int value);
 
 // ---- nomadcomponent.cpp (controller rebuild) ----
 // DEFERRED by lead (NOT registered): 0x140102b60 has no unregistered FUN_ callees, but it
@@ -66,6 +74,10 @@ void RegisterComponentGap_B() {
 
     // residencecomponent.cpp  (CALLER-BUG FIX: 0x140035ec0 -> 0x140007960)
     RegisterExeAddr(0x140007960, reinterpret_cast<uintptr_t>(&ResidenceComponent_CopyInnerArray));
+
+    // wellcomponent.cpp  (WELL cluster — bottom-up closure landed)
+    RegisterExeAddr(0x1400889e0, reinterpret_cast<uintptr_t>(&WellComp_RemoveCellEntry_889e0));
+    RegisterExeAddr(0x140091ba0, reinterpret_cast<uintptr_t>(&WellComp_UnregisterEntity_91ba0));
     // nomadcomponent.cpp 0x140102b60 DEFERRED (see note above) — not registered.
 }
 #endif // STANDALONE_EXE

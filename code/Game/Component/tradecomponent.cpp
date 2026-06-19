@@ -198,6 +198,116 @@ void TradeComponent_Setup(void* selfP) {
 }
 
 // ============================================================
+// Reimpl of FUN_14000e6b0 (TradeComponent inner ptr-array copy/clone)
+// ============================================================
+// Each trade-name element (0x20 bytes) holds, at +0x10, an inner 8-byte-stride
+// pointer array (ptr@+0, count@+8, capacity@+0xc). This frees the destination's
+// existing buffer, allocates a fresh count*8 (8-aligned) buffer, and copies the
+// source pointers in. Faithful 1:1 port of TradeComponent_helper_e6b0; closure =
+// MemAlloc/MemFree only.
+int64_t* TradeComponent_CopyPtrArray(int64_t* dst, int64_t* src) {
+    if (fn_MemFreeStatic) fn_MemFreeStatic((void*)dst[0]);
+    dst[1] = 0;
+    dst[0] = 0;
+    int count = (int)src[1];
+    *(int*)(dst + 1) = count;
+    if (count > 0) {
+        *(int*)((int64_t)dst + 0xc) = count;
+        void* buf = (fn_MemAlloc && g_pMemAllocSingleton)
+            ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 8, 8) : nullptr;
+        dst[0] = (int64_t)buf;
+    }
+    int n = (int)dst[1];
+    for (int64_t i = 0, off = 0; i < n; i++, off += 8) {
+        if ((void*)(dst[0] + off) != nullptr)
+            *(int64_t*)(dst[0] + off) = *(int64_t*)(off + src[0]);
+    }
+    return dst;
+}
+
+// ============================================================
+// Reimpl of FUN_14000ef10 (TradeComponent name-element array destructor)
+// ============================================================
+// Destroy `count` trailing trade-name elements (0x20 stride). For each: free the
+// inner ptr-array buffer at +0x10, zero its ptr/count, then run String::~String on
+// the element's String at +0x00. Faithful 1:1 port of TradeComponent_sub_ef10;
+// closure = MemFree + System::String::~String (runtime export).
+void TradeComponent_DtorNameArray(void* /*unused*/, int64_t arrayBase, int count) {
+    if (count <= 0) return;
+    // puVar1 starts at arrayBase + 0x10 (the inner ptr-array of element 0).
+    int64_t* p = (int64_t*)(arrayBase + 0x10);
+    for (int64_t k = count; k != 0; k--) {
+        if (fn_MemFreeStatic) fn_MemFreeStatic((void*)p[0]);
+        p[0] = 0;
+        p[1] = 0;
+        // String::~String on (p - 2) == element start (+0x00).
+        if (fn_String_Dtor) fn_String_Dtor((void*)(p - 2));
+        p += 4;   // advance 0x20 bytes (4 * 8)
+    }
+}
+
+// ============================================================
+// Reimpl of FUN_14000e760 (TradeComponent name-element array resize, 0x20 stride)
+// ============================================================
+// Grow/shrink the (count@+8, capacity@+0xc) name array of 0x20-byte elements. On
+// growth past capacity, allocate cap*0x20 (8-aligned; cap = 3*newCount on a +1 grow
+// from non-empty), then for each retained element copy its String (+0x00) + int
+// (+0x08) and clone its inner ptr-array (+0x10) via CopyPtrArray; new elements are
+// zeroed. Shrink path destroys the dropped elements (DtorNameArray). Faithful 1:1
+// port of TradeComponent_impl_e760; closure = e6b0 + ef10 + String::String/Mem*.
+void TradeComponent_ResizeNames(int64_t* field, int count) {
+    int oldCount = (int)field[1];
+    if (count == oldCount) return;
+
+    int8_t* oldBuf = (int8_t*)field[0];
+    *(int*)(field + 1) = count;
+
+    if (*(int*)((int64_t)field + 0xc) < count) {
+        *(int*)((int64_t)field + 0xc) = count;
+        if (count == oldCount + 1 && oldCount != 0)
+            *(int*)((int64_t)field + 0xc) = count * 3;
+        void* buf = (fn_MemAlloc && g_pMemAllocSingleton)
+            ? fn_MemAlloc(g_pMemAllocSingleton,
+                          (uint64_t)(*(int*)((int64_t)field + 0xc)) * 0x20, 8) : nullptr;
+        field[0] = (int64_t)buf;
+    }
+
+    int8_t* newBuf = (int8_t*)field[0];
+    int startIdx = (oldBuf == newBuf) ? oldCount : 0;
+    for (int64_t i = startIdx; i < count; i++) {
+        int8_t* dstElem = newBuf + i * 0x20;
+        if (i < oldCount) {
+            int8_t* srcElem = oldBuf + i * 0x20;
+            if (dstElem) {
+                if (fn_String_Ctor_Copy) fn_String_Ctor_Copy(dstElem, srcElem);   // String at +0x00
+                *(int*)(dstElem + 8) = *(int*)(srcElem + 8);                       // int at +0x08
+                *(int64_t*)(dstElem + 0x10) = 0;
+                *(int64_t*)(dstElem + 0x18) = 0;
+                if ((dstElem + 0x10) != (srcElem + 0x10))
+                    TradeComponent_CopyPtrArray((int64_t*)(dstElem + 0x10),
+                                                (int64_t*)(srcElem + 0x10));
+            }
+        } else {
+            if (dstElem) {
+                *(int64_t*)(dstElem + 0x00) = 0;
+                *(int64_t*)(dstElem + 0x08) = 0;
+                *(int64_t*)(dstElem + 0x10) = 0;
+                *(int64_t*)(dstElem + 0x18) = 0;
+            }
+        }
+    }
+
+    if (oldBuf == newBuf) {
+        if (count < oldCount)
+            TradeComponent_DtorNameArray(nullptr, (int64_t)(oldBuf + (int64_t)count * 0x20),
+                                         oldCount - count);
+    } else {
+        TradeComponent_DtorNameArray(nullptr, (int64_t)oldBuf, oldCount);
+        if (fn_MemFreeStatic) fn_MemFreeStatic(oldBuf);
+    }
+}
+
+// ============================================================
 // Reimpl of FUN_14000e8d0 (TradeComponent item-table resize)
 // ============================================================
 // Grow/shrink the (count@+8, capacity@+0xc) item array of 0xc-byte entries.

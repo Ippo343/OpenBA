@@ -37,10 +37,22 @@ extern int64_t* CitizenComp_Entity_impl_ef40(void* a, int64_t* outRes, void* ibp
 // Re-verify pass (snapshot2): these two were KNOWN-defers but are actually closure-safe.
 extern void     CitizenComp_ConsumeFood(CitizenComponent* self);   // 0x140112990 (true leaf)
 extern void     CitizenComp_ConsumeFuel(CitizenComponent* self);   // 0x140112ae0 (callees 7fb0/8090 reg)
+// Cascade round (snapshot3): workplace 12f7e0/12fa20 + 002e10 registration unblocked
+// the housing/workplace/storage/partner finder chain. Landed bottom-up:
+//   sub_40f0 (002ed0/122e20/002e10/0a00f0) -> sub_1930 (sub_40f0/087fb0/008830) ->
+//   FindWorkplace/FindStorage/TryFindPartner (sub_1930/sub_40f0/003110) + AssignHousing.
+extern void     CitizenComp_AssignHousing(CitizenComponent* self, int64_t* param2); // 0x140111ee0
+extern bool     CitizenComp_sub_40f0(int64_t building, void* citizenIBP);           // 0x1400440f0
+extern int64_t* CitizenComp_sub_1930(int64_t self, int64_t* outBest, void* exclIBP, int64_t key); // 0x140111930
+extern char     CitizenComp_FindWorkplace(CitizenComponent* self);                 // 0x140111590
+extern void     CitizenComp_FindStorage(CitizenComponent* self);                   // 0x1401116f0
+extern char     CitizenComp_TryFindPartner(CitizenComponent* self, int64_t* param2); // 0x140111840
 
 // Reimpl bodies live in code/Game/Component/attendancecomponent.cpp (non-static).
 extern void AttendanceComponent_ReleaseLink1650(void* workerP);
 extern void AttendanceComponent_ReleaseLink59b0(void* workerP);
+// Cascade round: now closure-safe (TryFindPartner 0x140111840 landed this round).
+extern void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll); // 0x140115a50
 
 void RegisterComponentGap_A() {
     // citizencomponent.cpp
@@ -49,8 +61,17 @@ void RegisterComponentGap_A() {
     RegisterExeAddr(0x140112990, reinterpret_cast<uintptr_t>(&CitizenComp_ConsumeFood));   // re-verify: leaf
     RegisterExeAddr(0x140112ae0, reinterpret_cast<uintptr_t>(&CitizenComp_ConsumeFuel));   // re-verify: 7fb0/8090 reg
 
+    // cascade round (snapshot3): citizen-lifecycle finder chain (bottom-up)
+    RegisterExeAddr(0x1400440f0, reinterpret_cast<uintptr_t>(&CitizenComp_sub_40f0));       // reachability test
+    RegisterExeAddr(0x140111930, reinterpret_cast<uintptr_t>(&CitizenComp_sub_1930));       // closest-building scan
+    RegisterExeAddr(0x140111590, reinterpret_cast<uintptr_t>(&CitizenComp_FindWorkplace));
+    RegisterExeAddr(0x1401116f0, reinterpret_cast<uintptr_t>(&CitizenComp_FindStorage));
+    RegisterExeAddr(0x140111840, reinterpret_cast<uintptr_t>(&CitizenComp_TryFindPartner));
+    RegisterExeAddr(0x140111ee0, reinterpret_cast<uintptr_t>(&CitizenComp_AssignHousing));
+
     // attendancecomponent.cpp
     RegisterExeAddr(0x140111650, reinterpret_cast<uintptr_t>(&AttendanceComponent_ReleaseLink1650));
     RegisterExeAddr(0x1401159b0, reinterpret_cast<uintptr_t>(&AttendanceComponent_ReleaseLink59b0));
+    RegisterExeAddr(0x140115a50, reinterpret_cast<uintptr_t>(&AttendanceComponent_ReleasePartnerSlot)); // cascade: TryFindPartner landed
 }
 #endif // STANDALONE_EXE

@@ -27,8 +27,10 @@ static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
 typedef void (*fn_Serializer_Dtor_t)(void* self);
 static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
 
-// FUN_140091ba0 — adds entity to dynamic array (water source registration)
-typedef void (*fn_ArrayPushEntity_t)(void* arrayBase, void* internalBasePtr);
+// FUN_140091ba0 — on entity (un)register, scan the manager's entity array for the
+// matching IBP and, if found, clear its natural-resource grid mark + null the slot.
+// (Despite the legacy "ArrayPushEntity" name, it is a remove-by-IBP, not a push.)
+typedef void (*fn_ArrayPushEntity_t)(void* manager, void* internalBasePtr);
 static fn_ArrayPushEntity_t s_fn_ArrayPushEntity = nullptr;
 
 // Game world/population manager singleton
@@ -80,6 +82,95 @@ void WellComponent_OnCreate(WellComponent* self) {
     }
 }
 
+// FUN_140004680 — MapComponent/resData finder used by the remove scan (registered).
+typedef void* (*fn_FindMapResData_t)(int64_t resData, void* outIBP);
+static fn_FindMapResData_t s_fn_FindMapResData = nullptr;
+
+// ============================================================
+// Reimpl of FUN_1400889e0 (Component reg wave B — WELL cluster).
+// Pure leaf (no exe callees). Compacts the 4-byte-stride int array of one terrain
+// grid cell, deleting every entry equal to `value`. The cell is located from the
+// world map width (*(int*)(*(int**)(world+0xf8)) >> 3 = cells-per-row) and the
+// 8-px-quantised (x,y): cellIndex = (width>>3 ... already shifted)*(y>>3)+(x>>3);
+// cell record stride 0x10 lives at manager+0x140; record = {int* data@+0, int count@+8}.
+// Faithful 1:1 port of the Ghidra decompile (same quirky shift-and-overwrite compaction).
+// ============================================================
+void WellComp_RemoveCellEntry_889e0(int64_t manager, int x, int y, int value) {
+    void* world = (g_pGameWorldSingleton && *g_pGameWorldSingleton) ? *g_pGameWorldSingleton : nullptr;
+    if (!world) return;
+    int width = *reinterpret_cast<int*>(*reinterpret_cast<int**>(
+                    reinterpret_cast<uint8_t*>(world) + 0xf8)) >> 3;
+    int64_t* cell = reinterpret_cast<int64_t*>(
+        (int64_t)((width * (y >> 3)) + (x >> 3)) * 0x10 +
+        *reinterpret_cast<int64_t*>(manager + 0x140));
+    int count = (int)cell[1];
+    if (count <= 0) return;
+
+    int i = 0;
+    int64_t byteOff = 0;
+    do {
+        if (*reinterpret_cast<int*>(byteOff + cell[0]) == value) {
+            int64_t shiftOff = byteOff;
+            int j = i;
+            if (i < count) {
+                do {
+                    j++;
+                    if (j < (int)cell[1]) {
+                        int* p = reinterpret_cast<int*>(cell[0] + shiftOff);
+                        if (p) *p = p[1];
+                    }
+                    shiftOff += 4;
+                } while (j < (int)cell[1]);
+            }
+            *reinterpret_cast<int*>(&cell[1]) = (int)cell[1] - 1;
+            i--;
+            byteOff -= 4;
+        }
+        count = (int)cell[1];
+        i++;
+        byteOff += 4;
+    } while (i < count);
+}
+
+// ============================================================
+// Reimpl of FUN_140091ba0 (Component reg wave B — WELL cluster).
+// On (un)register, scan the manager's IBP array {ptr@+0xe0, count@+0xe8} for the entry
+// whose resolved value equals *param2 (the owner IBP). When found: resolve the entry's
+// MapComponent/resData (FUN_140004680, registered) for its tile (short x@+0x28, y@+0x2a),
+// clear the natural-resource grid mark via WellComp_RemoveCellEntry_889e0(manager, x, y,
+// -1-index), then null the slot with a fresh InternalBasePtr. Closure-safe: FUN_140004680
+// (reg) + FUN_1400889e0 (reg below) + CheckPtr/IBP-ctor (engine). 1:1 port.
+// ============================================================
+void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
+    if (*reinterpret_cast<int*>(manager + 0xe8) <= 0) return;
+    int64_t off = 0;
+    int idx = 0;
+    do {
+        int64_t arr = *reinterpret_cast<int64_t*>(manager + 0xe0);
+        fn_InternalBasePtr_CheckPtr(param2);
+        if (*reinterpret_cast<int64_t*>(arr + off) == *reinterpret_cast<int64_t*>(param2)) {
+            if (idx < 0) return;
+            int64_t* slot = reinterpret_cast<int64_t*>(
+                *reinterpret_cast<int64_t*>(manager + 0xe0) + (int64_t)idx * 8);
+            fn_InternalBasePtr_CheckPtr(slot);
+            int64_t entry = *reinterpret_cast<int64_t*>(*slot + 0x10);
+            fn_InternalBasePtr_CheckPtr(&entry);
+            int64_t resData = 0;
+            if (s_fn_FindMapResData) s_fn_FindMapResData(entry, &resData);
+            fn_InternalBasePtr_CheckPtr(&resData);
+            int rx = (int)*reinterpret_cast<int16_t*>(resData + 0x28);
+            int ry = (int)*reinterpret_cast<int16_t*>(resData + 0x2a);
+            WellComp_RemoveCellEntry_889e0(manager, rx, ry, -1 - idx);
+            int64_t cleared = 0;
+            fn_InternalBasePtr_Ctor(&cleared, nullptr);
+            *reinterpret_cast<int64_t*>((int64_t)idx * 8 + *reinterpret_cast<int64_t*>(manager + 0xe0)) = cleared;
+            return;
+        }
+        idx++;
+        off += 8;
+    } while (idx < *reinterpret_cast<int*>(manager + 0xe8));
+}
+
 // ============================================================
 // Init: resolve function pointers
 // ============================================================
@@ -98,6 +189,8 @@ void WellComponent_InitFuncs() {
 
     s_fn_ArrayPushEntity = reinterpret_cast<fn_ArrayPushEntity_t>(
         ResolveAddr(Module::Exe, 0x140091ba0));
+    s_fn_FindMapResData = reinterpret_cast<fn_FindMapResData_t>(
+        ResolveAddr(Module::Exe, 0x140004680));
     s_pWorldManager = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3dd8));
 

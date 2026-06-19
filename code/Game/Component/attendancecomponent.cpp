@@ -94,6 +94,9 @@ typedef void  (*fn_AC_MeshSetFlag_t)(void* mesh, uint8_t flagIdx, char value); /
 static fn_AC_002cc0_t      s_fn_AC_002cc0 = nullptr;
 static fn_AC_FindMesh_t    s_fn_AC_FindMesh = nullptr;
 static fn_AC_MeshSetFlag_t s_fn_AC_MeshSetFlag = nullptr;
+// CitizenComponent::TryFindPartner (0x140111840) — registered by Batch A cascade round.
+typedef char (*fn_AC_TryFindPartner_t)(void* citizen, int64_t* exclIBP);
+static fn_AC_TryFindPartner_t s_fn_AC_TryFindPartner = nullptr;
 
 static bool s_acHelpersResolved = false;
 static void EnsureAcHelpers() {
@@ -105,7 +108,51 @@ static void EnsureAcHelpers() {
     s_fn_AC_002cc0     = reinterpret_cast<fn_AC_002cc0_t>(ResolveAddr(Module::Exe, 0x140002cc0));
     s_fn_AC_FindMesh   = reinterpret_cast<fn_AC_FindMesh_t>(ResolveAddr(Module::Exe, 0x140002f90));
     s_fn_AC_MeshSetFlag= reinterpret_cast<fn_AC_MeshSetFlag_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
+    s_fn_AC_TryFindPartner = reinterpret_cast<fn_AC_TryFindPartner_t>(ResolveAddr(Module::Exe, 0x140111840));
     s_acHelpersResolved = true;
+}
+
+// ============================================================
+// Reimpl of FUN_140115a50 (0x140115a50):
+// release the citizen's partner-link slot (+0x208): detach from the partner entity's
+// worker list (002cc0), reset its MeshInstance flag 2 off (12c3f0), null the slot; then
+// if param_2 set, immediately re-roll for a new partner (TryFindPartner) and clear the
+// slot again on failure. Closure-safe after the cascade registered TryFindPartner.
+void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll) {
+    EnsureAcHelpers();
+    uint8_t* self = reinterpret_cast<uint8_t*>(workerP);
+    int64_t* slot = reinterpret_cast<int64_t*>(self + 0x208);
+    if (*slot == 0) return;
+
+    int64_t selfIbp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIbp, workerP);
+    if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+    int64_t linked = *slot;
+    if (s_fn_AC_002cc0) s_fn_AC_002cc0(reinterpret_cast<int64_t*>(linked + 0x28), &selfIbp);
+
+    if (s_fn_CheckPtr) s_fn_CheckPtr(reinterpret_cast<void*>(linked + 0x10));
+    int64_t meshIbp = 0;
+    void* mesh = s_fn_AC_FindMesh
+                     ? s_fn_AC_FindMesh(*reinterpret_cast<int64_t*>(linked + 0x10), &meshIbp)
+                     : nullptr;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(mesh);
+    if (s_fn_AC_MeshSetFlag && mesh)
+        s_fn_AC_MeshSetFlag(*reinterpret_cast<void**>(mesh), 2, '\0');
+
+    int64_t nullIbp = 0;
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIbp, nullptr);
+    *slot = nullIbp;
+
+    if (reroll != '\0') {
+        int64_t exclIbp = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&exclIbp, nullptr);
+        char found = s_fn_AC_TryFindPartner ? s_fn_AC_TryFindPartner(workerP, &exclIbp) : 0;
+        if (found == '\0') {
+            int64_t z = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&z, nullptr);
+            *slot = z;
+        }
+    }
 }
 
 // ============================================================

@@ -1212,6 +1212,13 @@ typedef void   (*fn_TimeFromFloat_t)(void* outTime, float v);
 typedef int    (*fn_Entity_impl_7fb0_t)(void* ibp, float* p2);                 // 0x140087fb0
 typedef char   (*fn_FUN_140a00f0_t)(int* world, int eventId, uint64_t cellIdx, int param); // 0x1400a00f0
 typedef void*  (*fn_Entity_FindCompStorage6270_t)(int64_t entity, void* outIBP); // 0x140006270
+// Callees for the citizen-lifecycle cascade (AssignHousing / sub_1930 / sub_40f0 / Find*):
+typedef void*  (*fn_Entity_FindBuilding2e10_t)(int64_t entity, void* outIBP);   // 0x140002e10
+typedef void   (*fn_DetachWorkplace7e0_t)(int64_t buildingComp, void* citizenIBP);  // 0x14012f7e0
+typedef void   (*fn_AttachWorkplacea20_t)(int64_t buildingComp, void* citizenIBP);  // 0x14012fa20
+typedef int    (*fn_PathCost8830_t)(int* mapInfo, uint32_t fromRegion, uint32_t toRegion); // 0x140008830
+typedef void   (*fn_GrowArray3110_t)(int64_t* arrayBase, int newCount, void* elem);  // 0x140003110
+typedef void*  (*fn_Entity_FindPos_ed0_t)(int64_t entity, void* outIBP);        // 0x140002ed0
 
 static fn_CalcWorkerSlots_t      s_fn_CalcWorkerSlots = nullptr;
 static fn_CheckWorkplaceValid_t  s_fn_CheckWorkplaceValid = nullptr;
@@ -1235,6 +1242,13 @@ static fn_TimeFromFloat_t        s_fn_TimeFromFloat = nullptr;
 static fn_Entity_impl_7fb0_t     s_fn_Entity_impl_7fb0 = nullptr;
 static fn_FUN_140a00f0_t         s_fn_FUN_140a00f0 = nullptr;
 static fn_Entity_FindCompStorage6270_t s_fn_EntityFindCompStorage6270 = nullptr;
+static fn_Entity_FindBuilding2e10_t s_fn_Entity_FindBuilding2e10 = nullptr;
+static fn_DetachWorkplace7e0_t   s_fn_DetachWorkplace7e0 = nullptr;
+static fn_AttachWorkplacea20_t   s_fn_AttachWorkplacea20 = nullptr;
+static fn_PathCost8830_t         s_fn_PathCost8830 = nullptr;
+static fn_GrowArray3110_t        s_fn_GrowArray3110 = nullptr;
+static fn_Entity_FindPos_ed0_t   s_fn_Entity_FindPos_ed0 = nullptr;
+static uint32_t*                 s_TypeId_Residence3f78 = nullptr; // DWORD_1401c3f78 (sub_40f0)
 // .rdata float/double constants used by ConsumeFood / ConsumeFuel.
 static float*  s_DAT_140172180 = nullptr;
 static float*  s_DAT_1401721a8 = nullptr;
@@ -1284,6 +1298,13 @@ static void EnsureCallees() {
     s_DAT_140172194 = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172194));
     s_DAT_140172168 = reinterpret_cast<double*>(ResolveAddr(Module::Exe, 0x140172168));
     s_DAT_1401720ec = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720ec));
+    s_fn_Entity_FindBuilding2e10 = reinterpret_cast<fn_Entity_FindBuilding2e10_t>(ResolveAddr(Module::Exe, 0x140002e10));
+    s_fn_DetachWorkplace7e0  = reinterpret_cast<fn_DetachWorkplace7e0_t>(ResolveAddr(Module::Exe, 0x14012f7e0));
+    s_fn_AttachWorkplacea20  = reinterpret_cast<fn_AttachWorkplacea20_t>(ResolveAddr(Module::Exe, 0x14012fa20));
+    s_fn_PathCost8830        = reinterpret_cast<fn_PathCost8830_t>(ResolveAddr(Module::Exe, 0x140008830));
+    s_fn_GrowArray3110       = reinterpret_cast<fn_GrowArray3110_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_fn_Entity_FindPos_ed0  = reinterpret_cast<fn_Entity_FindPos_ed0_t>(ResolveAddr(Module::Exe, 0x140002ed0));
+    s_TypeId_Residence3f78   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78));
     // Time::Time(float) from its .rdata dispatch slot (used by FUN_14012c3f0).
     {
         uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a80); // Time::Time(float)
@@ -2195,6 +2216,247 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
     if (*acc <= 0.0f && *acc != 0.0f) *reinterpret_cast<uint32_t*>(p + 0x80) = 0;
     float capA4 = *reinterpret_cast<float*>(desc + 0xa4);
     if (capA4 < *acc) *acc = capA4;
+}
+
+// ============================================================
+// Citizen-lifecycle cascade (cascade round, snapshot3)
+// ============================================================
+
+// Reimpl of CitizenComponent_AssignHousing (0x140111ee0):
+// detach the citizen from its current residence (+0x248) then attach to *param2.
+// On detach: find the residence's building component (002e10) and call DetachWorkplace
+// (12f7e0) with a back-IBP to this citizen. Symmetric on attach via AttachWorkplace (12fa20).
+void CitizenComp_AssignHousing(CitizenComponent* param_1, int64_t* param_2) {
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    int64_t* slot = reinterpret_cast<int64_t*>(p + 0x248);
+    if (*slot != 0) {
+        fn_InternalBasePtr_CheckPtr(slot);
+        int64_t buildingIBP = 0;
+        if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*slot, &buildingIBP);
+        int64_t selfIBP = 0;
+        fn_InternalBasePtr_Ctor(&selfIBP, param_1);
+        fn_InternalBasePtr_CheckPtr(&buildingIBP);
+        if (s_fn_DetachWorkplace7e0) s_fn_DetachWorkplace7e0(buildingIBP, &selfIBP);
+    }
+    int64_t newHousing = *param_2;
+    *slot = newHousing;
+    if (newHousing != 0) {
+        fn_InternalBasePtr_CheckPtr(slot);
+        int64_t buildingIBP = 0;
+        if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*slot, &buildingIBP);
+        int64_t selfIBP = 0;
+        fn_InternalBasePtr_Ctor(&selfIBP, param_1);
+        fn_InternalBasePtr_CheckPtr(&buildingIBP);
+        if (s_fn_AttachWorkplacea20) s_fn_AttachWorkplacea20(buildingIBP, &selfIBP);
+    }
+}
+
+// Reimpl of CitizenComponent_sub_40f0 (0x1400440f0):
+// test whether a candidate building (param_1) has a free worker slot AND is reachable
+// from the citizen's (param_2) home tile. Returns true iff reachable. Closure-safe:
+// callees 002ed0/122e20/002e10/0a00f0 all registered.
+bool CitizenComp_sub_40f0(int64_t param_1, void* param_2) {
+    EnsureCallees();
+    uint8_t* cp = reinterpret_cast<uint8_t*>(param_1);
+    void* obj = *reinterpret_cast<void**>(cp + 0x18);
+    uint32_t resTid = s_TypeId_Residence3f78 ? *s_TypeId_Residence3f78 : 0;
+    void* res = (obj && fn_IsDerivedFrom(obj, resTid)) ? obj : nullptr;
+    int cap = res ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(res) + 0x20) : 0;
+    if (*reinterpret_cast<int*>(cp + 0x30) >= cap) return false;
+
+    fn_InternalBasePtr_CheckPtr(cp + 0x10);
+    int64_t bldgIBP = 0;
+    if (s_fn_Entity_FindBuilding2e10) s_fn_Entity_FindBuilding2e10(*reinterpret_cast<int64_t*>(cp + 0x10), &bldgIBP);
+    fn_InternalBasePtr_CheckPtr(&bldgIBP);
+    if (*reinterpret_cast<int*>(bldgIBP + 0x60) == 0) return false;
+
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
+    fn_InternalBasePtr_CheckPtr(cp + 0x10);
+    int64_t posIBP = 0;
+    if (s_fn_Entity_FindPos_ed0) s_fn_Entity_FindPos_ed0(*reinterpret_cast<int64_t*>(cp + 0x10), &posIBP);
+    fn_InternalBasePtr_CheckPtr(&posIBP);
+    float pos[3] = {0,0,0};
+    if (s_fn_Entity_impl_2e20) s_fn_Entity_impl_2e20(posIBP, pos, 0, 0, nullptr);
+
+    fn_InternalBasePtr_CheckPtr(param_2);
+    int64_t citizen = *reinterpret_cast<int64_t*>(param_2);
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
+    int64_t home = *reinterpret_cast<int64_t*>(citizen + 0x278);
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(home + 0x68));
+    int64_t homeComp = *reinterpret_cast<int64_t*>(home + 0x68);
+
+    int mapW = *mapInfo;
+    float half = (float)(mapW >> 1);
+    auto clampTile = [&](float v) -> int {
+        int t = (int)(v + half);
+        if (t < 0) t = 0;
+        if (mapW <= t) t = mapW - 1;
+        return t;
+    };
+    int homeX = clampTile(*reinterpret_cast<float*>(homeComp + 0x158));
+    int homeY = clampTile(*reinterpret_cast<float*>(homeComp + 0x15c));
+    int posX  = clampTile(pos[0]);
+    int posY  = clampTile(pos[1]);
+    uint32_t fromCell = (uint32_t)(mapW * posY + posX);
+    uint32_t toCell   = (uint32_t)(mapW * homeY + homeX);
+    char ok = s_fn_FUN_140a00f0 ? s_fn_FUN_140a00f0(mapInfo, 0xe1f, fromCell, toCell) : 0;
+    return ok != 0;
+}
+
+// Reimpl of CitizenComponent_sub_1930 (0x140111930):
+// scan the world building list (gameWorld+0xf0 -> +0x60/+0x68) for the closest building
+// whose WorkplaceComponent's job key (+0x48) matches param_4 and that is reachable
+// (sub_40f0). Returns the best building's IBP via param_2. Closure-safe: sub_40f0 +
+// 0x140087fb0 + 0x140008830 all registered.
+int64_t* CitizenComp_sub_1930(int64_t param_1, int64_t* param_2, void* param_3, int64_t param_4) {
+    EnsureCallees();
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int64_t list = *reinterpret_cast<int64_t*>(gw + 0xf0);
+    int64_t srcWp = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(param_1) + 0x238);
+    int bestCost = -1;
+    int count = *reinterpret_cast<int*>(list + 0x68);
+    *param_2 = 0;
+    uint32_t srcRegion = 0xffffffff;
+    if (srcWp != 0) {
+        int64_t srcIBP = srcWp;
+        srcRegion = (uint32_t)(s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&srcIBP, nullptr) : 0);
+    }
+    uint32_t wpTid = s_TypeId_Workplace ? *s_TypeId_Workplace : 0;
+
+    for (int i = 0; i < count; i++) {
+        int64_t cand = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(list + 0x60) + (int64_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(param_3);
+        if (cand == *reinterpret_cast<int64_t*>(param_3)) continue;
+        fn_InternalBasePtr_CheckPtr(&cand);
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cand + 0x10));
+        int64_t sub = *reinterpret_cast<int64_t*>(cand + 0x10);
+
+        // find WorkplaceComponent (DAT_1401c80e0) on the candidate's sub-entity
+        void* wp = nullptr;
+        int rows = *reinterpret_cast<int*>(sub + 0x38);
+        int64_t arr = *reinterpret_cast<int64_t*>(sub + 0x30);
+        for (int j = 0; j < rows; j++) {
+            void** ibp = reinterpret_cast<void**>(arr + (int64_t)j * 8);
+            fn_InternalBasePtr_CheckPtr(ibp);
+            int64_t comp = *reinterpret_cast<int64_t*>(ibp);
+            typedef uint32_t (*getType_t)(void*);
+            uint32_t tid = (*reinterpret_cast<getType_t*>(*reinterpret_cast<int64_t*>(comp) + 0x10))(reinterpret_cast<void*>(comp));
+            if (tid == wpTid) {
+                void** ibp2 = reinterpret_cast<void**>(arr + (int64_t)j * 8);
+                fn_InternalBasePtr_CheckPtr(ibp2);
+                void* o = *ibp2;
+                wp = fn_IsDerivedFrom(o, wpTid) ? o : nullptr;
+                break;
+            }
+        }
+        int64_t wpIBP = 0;
+        fn_InternalBasePtr_Ctor(&wpIBP, wp);
+        fn_InternalBasePtr_CheckPtr(&wpIBP);
+        if (*reinterpret_cast<int64_t*>(wpIBP + 0x48) != param_4) continue;
+
+        int64_t selfIBP = 0;
+        fn_InternalBasePtr_Ctor(&selfIBP, reinterpret_cast<void*>(param_1));
+        fn_InternalBasePtr_CheckPtr(&cand);
+        if (!CitizenComp_sub_40f0(cand, &selfIBP)) continue;
+
+        fn_InternalBasePtr_CheckPtr(&cand);
+        int64_t candSubIBP = *reinterpret_cast<int64_t*>(cand + 0x10);
+        uint32_t dstRegion = (uint32_t)(s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&candSubIBP, nullptr) : 0);
+        int cost = 1;
+        if ((int)srcRegion >= 0 && s_fn_PathCost8830) {
+            int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
+            cost = s_fn_PathCost8830(mapInfo, dstRegion, srcRegion);
+        }
+        if (bestCost < 0 || cost < bestCost) {
+            *param_2 = cand;
+            bestCost = cost;
+        }
+    }
+    return param_2;
+}
+
+// Reimpl of CitizenComponent_FindWorkplace (0x140111590):
+// pick the best reachable workplace (sub_1930 keyed by description+0x30), validate it
+// (sub_40f0), register the citizen into the workplace's worker array (3110), and store
+// the assignment at +0x228. Returns true on success.
+char CitizenComp_FindWorkplace(CitizenComponent* param_1) {
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    int64_t found = 0;
+    int64_t keyIBP = 0;
+    fn_InternalBasePtr_Ctor(&keyIBP, nullptr);
+    CitizenComp_sub_1930(reinterpret_cast<int64_t>(param_1), &found, &keyIBP,
+                         *reinterpret_cast<int64_t*>(desc + 0x30));
+    if (found != 0) {
+        fn_InternalBasePtr_Ctor(&keyIBP, param_1);
+        fn_InternalBasePtr_CheckPtr(&found);
+        int64_t wp = found;
+        int64_t selfIBP = keyIBP;
+        if (CitizenComp_sub_40f0(found, &selfIBP)) {
+            if (s_fn_GrowArray3110)
+                s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
+                                   *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
+            *reinterpret_cast<int64_t*>(p + 0x228) = found;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Reimpl of CitizenComponent_FindStorage (0x1401116f0):
+// same as FindWorkplace but keyed by description+0x28 and stores at +0x230.
+void CitizenComp_FindStorage(CitizenComponent* param_1) {
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    int64_t found = 0;
+    int64_t keyIBP = 0;
+    fn_InternalBasePtr_Ctor(&keyIBP, nullptr);
+    CitizenComp_sub_1930(reinterpret_cast<int64_t>(param_1), &found, &keyIBP,
+                         *reinterpret_cast<int64_t*>(desc + 0x28));
+    if (found != 0) {
+        fn_InternalBasePtr_Ctor(&keyIBP, param_1);
+        fn_InternalBasePtr_CheckPtr(&found);
+        int64_t wp = found;
+        int64_t selfIBP = keyIBP;
+        if (CitizenComp_sub_40f0(found, &selfIBP)) {
+            if (s_fn_GrowArray3110)
+                s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
+                                   *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
+            *reinterpret_cast<int64_t*>(p + 0x230) = found;
+        }
+    }
+}
+
+// Reimpl of CitizenComponent_TryFindPartner (0x140111840):
+// like FindWorkplace but keyed by description+0x20; on success stores the partner at
+// +0x208 and sets the had-partner flag (+0x220). param_2 seeds the exclusion IBP.
+char CitizenComp_TryFindPartner(CitizenComponent* param_1, int64_t* param_2) {
+    EnsureCallees();
+    uint8_t* p = reinterpret_cast<uint8_t*>(param_1);
+    int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
+    int64_t found = 0;
+    int64_t keyIBP = *param_2;
+    CitizenComp_sub_1930(reinterpret_cast<int64_t>(param_1), &found, &keyIBP,
+                         *reinterpret_cast<int64_t*>(desc + 0x20));
+    if (found != 0) {
+        fn_InternalBasePtr_Ctor(&keyIBP, param_1);
+        fn_InternalBasePtr_CheckPtr(&found);
+        int64_t wp = found;
+        int64_t selfIBP = keyIBP;
+        if (CitizenComp_sub_40f0(found, &selfIBP)) {
+            if (s_fn_GrowArray3110)
+                s_fn_GrowArray3110(reinterpret_cast<int64_t*>(wp + 0x28),
+                                   *reinterpret_cast<int*>(wp + 0x30) + 1, &keyIBP);
+            *reinterpret_cast<int64_t*>(p + 0x208) = found;
+            p[0x220] = 1;
+            return 1;
+        }
+    }
+    return 0;
 }
 
 // ============================================================

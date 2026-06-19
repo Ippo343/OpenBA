@@ -16,9 +16,18 @@
 
 // ---- herdcomponent.cpp ----
 extern char HerdComponent_Helper6b10(int64_t ref);          // 0x140106b10
+// HERD cluster (final bottom-up land): impl_e510 + its only unregistered callee
+// helper_1ad0 (whose callees FUN_140003110/FUN_140005500 are registered).
+extern void  HerdComponent_Impl_e510(void* memberComp, void* newHerdIbp);    // 0x14012e510
+extern void  HerdComponent_Helper1ad0(int64_t herdComp, void* animalIbp);    // 0x140121ad0
 
 // ---- tradecomponent.cpp ----
 extern void TradeComponent_ResizeItems(int64_t* field, int count);  // 0x14000e8d0
+// TRADE String-array cluster (final bottom-up land): name-array resize (0x20 stride)
+// + its two leaf sub-callees. All bottom out in MemAlloc/MemFree/String exports.
+extern void TradeComponent_ResizeNames(int64_t* field, int count);             // 0x14000e760
+extern int64_t* TradeComponent_CopyPtrArray(int64_t* dst, int64_t* src);       // 0x14000e6b0
+extern void TradeComponent_DtorNameArray(void* unused, int64_t base, int count);// 0x14000ef10
 
 // ---- buildcomponent.cpp ----
 extern void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf);  // 0x140026a30
@@ -61,5 +70,14 @@ void RegisterComponentGap_D() {
 
     // pasturecomponent.cpp — animal footprint-bounds clamp (pure leaf).
     RegisterExeAddr(0x140105e20, reinterpret_cast<uintptr_t>(&PastureComponent_AnimalSetBounds));
+
+    // tradecomponent.cpp — String name-array resize cluster (bottom-up: parent + 2 leaves).
+    RegisterExeAddr(0x14000e6b0, reinterpret_cast<uintptr_t>(&TradeComponent_CopyPtrArray));
+    RegisterExeAddr(0x14000ef10, reinterpret_cast<uintptr_t>(&TradeComponent_DtorNameArray));
+    RegisterExeAddr(0x14000e760, reinterpret_cast<uintptr_t>(&TradeComponent_ResizeNames));
+
+    // herdcomponent.cpp — herd member assign cluster (bottom-up: impl_e510 + helper_1ad0).
+    RegisterExeAddr(0x140121ad0, reinterpret_cast<uintptr_t>(&HerdComponent_Helper1ad0));
+    RegisterExeAddr(0x14012e510, reinterpret_cast<uintptr_t>(&HerdComponent_Impl_e510));
 }
 #endif // STANDALONE_EXE
