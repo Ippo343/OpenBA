@@ -381,6 +381,9 @@ extern void RegisterPfRootsRoadBatch();    // Wave 3: road-edit roots (9c480/9f2
 extern void RegisterPfRootsRouteBatch();   // Wave 3: routing/storage roots (9f810/12cd80/12d5d0/8d590)
 extern void RegisterPfRootsDropBatch();    // Wave 3: dropoff + RemoveAnimal ctor (c78c0/c7570/c7620/bbea0)
 extern void RegisterPfRootsMiscBatch();    // Wave 3: bd40 spiral + 92260 spatial + 122340 migration
+extern void RegisterEntityBatch();         // Entity gap: 6 EntityList reimpl bodies (entitylist.cpp)
+extern void RegisterGoalBatch();           // Goal gap: ExternalPtr resolver + StatValueDispatch
+extern void RegisterDialogBatch();         // Dialog gap: FindComponent variant + autosave handler
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -422,6 +425,11 @@ static void RegisterCodeFunctions() {
     RegisterPfRootsRouteBatch();   // Wave 3 roots — routing/storage (9f810/12cd80/12d5d0/8d590)
     RegisterPfRootsDropBatch();    // Wave 3 roots — dropoff + RemoveAnimal ctor
     RegisterPfRootsMiscBatch();    // Wave 3 roots — bd40 / 92260 / 122340
+
+    // Entity / Goal / Dialog gap-closure waves (6 + 2 + 2 addrs).
+    RegisterEntityBatch();         // EntityList PreUpdate/PostUpdate/RemoveEntity/Serialize/etc.
+    RegisterGoalBatch();           // StatGoal ExternalPtr resolver (265b0) + StatValueDispatch (da4e0)
+    RegisterDialogBatch();         // WorkplaceUI FindComponent (d6c0) + AutoSaveDialog handler (5dec0)
 
     // Game/KeyMap container ctor — FUN_140001050 (0xe0 bytes, sets g_pKeyMapSingleton)
     RegisterExeAddr(0x140001050, reinterpret_cast<uintptr_t>(&Game_Ctor));

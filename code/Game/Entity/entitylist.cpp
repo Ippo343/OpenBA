@@ -63,8 +63,8 @@ static fn_PostUpdateNodeHandler_t s_fn_PostUpdateNodeHandler = nullptr;
 
 static bool s_initialized = false;
 
-// Forward declaration for static helper
-static void EntityList_PostUpdateStaging(EntityList* self);
+// Forward declaration (non-static: address registered for standalone exe resolution)
+void EntityList_PostUpdateStaging(EntityList* self);
 
 // ============================================================
 // EntityList_InitFuncs — resolve all function pointers
@@ -556,7 +556,7 @@ void EntityList_PreUpdate(EntityList* self) {
 // and staging array (+0x98/+0xa0), checking flag bit 4 (0x10).
 //
 // Decompiled from 0x1400c3ab0.
-static void EntityList_PostUpdateStaging(EntityList* self) {
+void EntityList_PostUpdateStaging(EntityList* self) {
     int32_t stagingCount = self->stagingPostUpdate.count;
     if (stagingCount <= 0) {
         fn_ExeArrayResize(&self->stagingPostUpdate, 0);

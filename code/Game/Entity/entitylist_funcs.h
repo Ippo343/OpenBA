@@ -67,6 +67,14 @@ void EntityList_TreeNodeHandler(int64_t entity, void* time);
 void EntityList_PostUpdateNodeHandler(int64_t entity);
 
 // ============================================================
+// EntityList::PostUpdateStaging (0x1400c3ab0) — static helper
+// ============================================================
+// Processes the post-update staging array (mirrors PreUpdate for the
+// post-update tree). Exposed (non-static) so the standalone address
+// registry can map 0x1400c3ab0 → this reimpl body.
+void EntityList_PostUpdateStaging(EntityList* self);
+
+// ============================================================
 // EntityList::RemoveEntity (0x1400c38e0)
 // ============================================================
 // Removes an entity from its bucket, the master array, and both trees.
