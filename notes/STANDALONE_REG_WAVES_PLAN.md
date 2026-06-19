@@ -83,7 +83,34 @@ never called — PathTool::Draw uses fn_TileRender).
   Transform3::Rotate, Frustum::GetScreenDirection), 101270 ScreenToCell (deps 1005a0+aa530+9f3e0),
   fda00 (dep 101270).
 
-**Round 2c (PLANNED) — the deep tier (~9 left, all large sub-closures, port bottom-up):**
+**Round 2b (`277cdcc`) — 16->10:** ray chain (aa530 DDA TerrainMarch / 1005a0 GetMouseRay /
+101270 ScreenToCell / fda00) + tile chain (003870 / d580 / fd650). All disasm-verified;
+1005a0's GetScreenDirection args followed disasm over a buggy decompile; 003870's offset
+arg (R9=param_2) was Ghidra-dropped.
+
+**Round 2c (`f40fc26`) — 10->9:** LANDED trade AVL family (66800/666b0 + insert 102e30 /
+findremove 2c690 / remove 25740 / retrace 25920 / rot 15000/14ed0). Agent caught a brief
+typo (2e30/c690 -> 102e30/2c690, CALL-verified). DEFERRED toolui + edit2 (below).
+
+**Round 2c crash lesson (toolui):** registering 0x14015f5a0 crashed startup. It is a SHARED
+child-dialog vtable installed at startup by MainMenuDialog_Serialize (also EntityUI/Placement
+Tool); the standalone menu (mainmenudialog.cpp BuildId child) assumes it resolves null.
+Registering it (even slots eagerly filled to base DialogInstance virtuals) makes the menu
+dispatch OnOpened on an unbuilt child -> ACCESS_VIOLATION. **GAP-METRIC GOTCHA: the gap grep
+counts RegisterExeAddr SOURCE LINES, not wired calls — a deferred batch must be a true no-op
+(no RegisterExeAddr text) or it falsely reads as registered.**
+
+**MUST-DEFER (confirmed, registering = crash/hang — Level-2 reimpl needed, NOT a registration):**
+- `0x14009ce00` roadtool -> `0x1400a6e30` RoadTool_helper_6e30 = a pathfinder WORKER-THREAD
+  spin-loop (`System::Thread::Start` inside `do{}while(true)` + CriticalSection + YieldToThreads).
+  Single-threaded standalone would hang. Needs the worker-thread queue reimpl.
+- `0x1400ff9e0` OpenToolDialog -> shared vtable `0x14015f5a0` (menu BuildId-child conflict above).
+
+**Round 2d (IN PROGRESS) — Math dispatch-slot sub-wave + 100380** (R4-math): register the ~14
+value-return Math slots (Vector2/3/4/Matrix/Transform3/Box/Rectangle ops, all currently
+UNregistered) via local RegisterDispatchSlot->ResolveExport, then port ec70/098210/fe960/0380.
+
+**Round 2c (earlier PLAN) — the deep tier (~9 left, all large sub-closures, port bottom-up):**
 - 0x140055430 HighlightAdd -> b0d80 (TradeWork_impl_0d80) -> **ace40 ~600-line Transform2/BST
   tessellation builder** (deps 1fc00/1f6b0/1f8d0/14b00 BST, e180/cc10/ee40 TradeWork helpers). LARGE.
 - 0x140066800 -> 666b0 -> TradeWork 2e30/c690.
