@@ -114,15 +114,26 @@ bool MarketWork_ResolveFuncs() {
     s_fn_FindSubEntity = reinterpret_cast<MW_FindSubEntity_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
 
-    // MarketWork-specific BST helpers (DIFFERENT from HerbalistWork!)
+    // MarketWork-specific BST/AVL helpers (DIFFERENT from HerbalistWork!)
+    // Level-1 caller-bug fix: the four literals below were dropped-digit typos — the 5th
+    // nibble 'f' should be '2' (0x1400f.... -> 0x14002....). The bad addresses landed
+    // MID-FUNCTION inside BridgeTool (0x1400f9cd0 / 0x1400fadc0); the real MarketWork AVL
+    // helpers are the named MarketWork_sub_* functions. Confirmed by name + xref
+    // (MarketWork_Shutdown@0x1400f1ed2 CALLs 0x14002b290 serialize). These remain a
+    // DEFERRED complex port: the MarketWork AVL family (node key@0/data@+8/parent@+0x18/
+    // left@+0x20/right@+0x28/balance@+0x32) has a deep unregistered sub-closure
+    // (0x14002ab60 insert-impl, 0x14002aee0, 0x14002b5f0, 0x14002b290's 5920 rebalance,
+    // 0x14000da70, 0x14000d9d0, 0x140002340) AND the typedefs here under-count the real
+    // args (sub_a9f0 takes 4) — both must be corrected together before registration. In
+    // standalone they resolve to 0 (skipped) until that port lands.
     s_fn_MarketBST_Serialize = reinterpret_cast<MW_MarketBST_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400fb290));
+        ResolveAddr(Module::Exe, 0x14002b290));
     s_fn_MarketBST_InsertData = reinterpret_cast<MW_MarketBST_InsertData_t>(
-        ResolveAddr(Module::Exe, 0x1400fa9f0));
+        ResolveAddr(Module::Exe, 0x14002a9f0));
     s_fn_MarketBST_Insert = reinterpret_cast<MW_MarketBST_Insert_t>(
-        ResolveAddr(Module::Exe, 0x1400faaa0));
+        ResolveAddr(Module::Exe, 0x14002aaa0));
     s_fn_MarketBST_Remove = reinterpret_cast<MW_MarketBST_Remove_t>(
-        ResolveAddr(Module::Exe, 0x1400fac40));
+        ResolveAddr(Module::Exe, 0x14002ac40));
 
     // Market tree cleanup (recursive, frees node+data, different from simple BST)
     s_fn_TreeCleanup = reinterpret_cast<MW_TreeCleanup_t>(

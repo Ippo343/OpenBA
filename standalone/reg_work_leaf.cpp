@@ -22,6 +22,7 @@ void* WorkLeaf_BstInsertByIBP_29920(void* treeRootSlot, void* outNode, void* ins
 void  WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser);
 void  WorkLeaf_SortTilesByDistance_9d7c0(int* mapGrid, void* tileArray, int refCell);
 void  WorkLeaf_GetTilesInArea_9fc00(int* grid, int x, int y, int w, int h, void* outArr, char collectEmpty);
+void  WorkLeaf_PlantArea_b390(uintptr_t self);
 
 // ---- work_leaf_market.cpp (marketwork / tradework) ----
 void  WorkLeaf_MarketTreeCleanup_2af40(void* ctx, void* node);
@@ -48,6 +49,7 @@ void RegisterWorkLeafBatch() {
     RegisterExeAddr(0x140029c10, reinterpret_cast<uintptr_t>(&WorkLeaf_BstSerializeIBPpair_29c10));
     RegisterExeAddr(0x14009d7c0, reinterpret_cast<uintptr_t>(&WorkLeaf_SortTilesByDistance_9d7c0));
     RegisterExeAddr(0x14009fc00, reinterpret_cast<uintptr_t>(&WorkLeaf_GetTilesInArea_9fc00));
+    RegisterExeAddr(0x14011b390, reinterpret_cast<uintptr_t>(&WorkLeaf_PlantArea_b390));
     // market
     RegisterExeAddr(0x14002af40, reinterpret_cast<uintptr_t>(&WorkLeaf_MarketTreeCleanup_2af40));
     RegisterExeAddr(0x140014b00, reinterpret_cast<uintptr_t>(&WorkLeaf_TradeTreeCleanup_14b00));

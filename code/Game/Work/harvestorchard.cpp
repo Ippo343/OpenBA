@@ -162,8 +162,15 @@ bool HarvestOrchard_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x14000a590));
     s_fn_BST_RecursiveFree = reinterpret_cast<HO_BST_RecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x14000e320));
-    s_fn_ObjectInternal_Dtor = reinterpret_cast<HO_ObjectInternal_Dtor_t>(
-        ResolveAddr(Module::Exe, 0x14014e3a4));
+    // Level-1 caller-bug fix: 0x14014e3a4 is MID-FUNCTION (inside Tool_StaticInit
+    // 0x14014e390) — a bad code address. The "ObjectInternal_Dtor" is the base
+    // Object::Internal::~Internal tail-called at the end of the HarvestOrchard dtor body
+    // (0x1400edf60). It is reached via the dispatch slot 0x140152770, exactly as the
+    // sibling HarvestArea resolves it (harvestarea.cpp). Resolve through the slot, not a
+    // code address.
+    uintptr_t iatInternalDtor = ResolveAddr(Module::Exe, 0x140152770);
+    if (iatInternalDtor)
+        s_fn_ObjectInternal_Dtor = *reinterpret_cast<HO_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
     // Dispatch slot IATs
     uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);

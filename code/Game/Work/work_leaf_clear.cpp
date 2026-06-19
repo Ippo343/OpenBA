@@ -31,6 +31,10 @@
 #include <cstdint>
 #include <cstdlib>   // qsort
 
+// 0x140003ea0 — entity-resolve behind an action IBP (registered).
+typedef void* (*fn_FindEntity_3ea0_t)(uintptr_t actionIBP, void* retIBP);
+static fn_FindEntity_3ea0_t s_fn_FindEntity_3ea0 = nullptr;
+
 // ============================================================
 // Shared lazily-resolved exe sub-callees (registered, snapshot-verified)
 // ============================================================
@@ -49,7 +53,41 @@ static void EnsureLeafFuncs() {
         ResolveAddr(Module::Exe, 0x14001ca60));
     s_fn_BST_Rebalance_3480 = reinterpret_cast<fn_BST_Rebalance_3480_t>(
         ResolveAddr(Module::Exe, 0x140013480));
+    s_fn_FindEntity_3ea0 = reinterpret_cast<fn_FindEntity_3ea0_t>(
+        ResolveAddr(Module::Exe, 0x140003ea0));
     s_leafResolved = true;
+}
+
+// ============================================================
+// 0x14011b390 — PlantArea_helper_b390
+// ============================================================
+// Resolves the entity behind the action IBP at self+0x10 (FUN_140003ea0), reads its
+// "consume" state byte (+0x52, or +0x50 if +0x52 has its high bit set). If state == 0x09
+// AND the work-list count at self+0x60 > 0, walk the 0x20-stride array at self+0x58 and,
+// for any entry whose +0x04 int == 0, set it to 2 (mark the plant slot pending).
+// ABI: void fn(longlong self).
+// Closure: 0x140003ea0 (reg) + InternalBasePtr CheckPtr (engine). SAFE.
+void WorkLeaf_PlantArea_b390(uintptr_t self) {
+    EnsureLeafFuncs();
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+    uintptr_t ent = 0;
+    if (s_fn_FindEntity_3ea0)
+        s_fn_FindEntity_3ea0(*reinterpret_cast<uintptr_t*>(self + 0x10), &ent);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ent);
+
+    char state = *reinterpret_cast<char*>(ent + 0x52);
+    if (state < 0) state = *reinterpret_cast<char*>(ent + 0x50);
+
+    int count = *reinterpret_cast<int*>(self + 0x60);
+    if (state == '\t' && count > 0) {
+        uintptr_t arr = *reinterpret_cast<uintptr_t*>(self + 0x58);
+        int64_t off = 0;
+        for (int i = 0; i < count; i++, off += 0x20) {
+            int* field = reinterpret_cast<int*>(arr + 4 + off);
+            if (*field == 0) *field = 2;
+        }
+    }
 }
 
 // ============================================================
