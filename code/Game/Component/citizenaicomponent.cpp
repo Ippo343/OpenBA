@@ -626,8 +626,148 @@ void CitizenAIComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include <cstdlib>
+#include <cstring>
 
-COMPONENT_INERT_FACTORY(CitizenAIComponent, 0xd0, 0x89)
+// ------------------------------------------------------------------
+// Phase 3 / Keystone D — CitizenAIComponent live-wiring (Brick 1, plumbing).
+//
+// CitizenAIComponent is the per-citizen decision loop (the SEPARATE, self-contained
+// action-state subsystem — NOT the building-controller SM). Its Update sits at
+// primary vtable +0x48 (slot 9), driven by the normal EntityList per-tick
+// round-robin (same slot as GrowthComponent), and the body-init/Startup is at
+// slot +0x20 (= the Ghidra-named "Serialize" 0x14010f920), dispatched at spawn by
+// ComponentEntity_StartupComponents.
+//
+// This brick brings BOTH slots live but CRASH-SAFE + env-gated, exactly like the
+// StateMachineComponent plumbing brick:
+//   * slot +0x20 -> CitizenAIComponent_BodyInit: ctor field-init (0x14010fb70)
+//     + the Startup find (0x14010f920) of the sibling CitizenComponent -> +0x38.
+//   * slot +0x48 -> CitizenAIComponent_UpdateAdapter: lazy body-init + GUARD +
+//     trace, then the real CitizenAIComponent_Update.
+//
+// The GUARD is the key safety: CitizenAIComponent_Update derefs the sibling
+// CitizenComponent at +0x38, its entity(+0x10), and its CitizenDescription(+0x288)
+// unconditionally. In standalone the sibling CitizenComponent is still INERT
+// (zeroed body => +0x288==0), so the adapter bails until CitizenComponent goes
+// live (Brick 2). What this proves: +0x48 routing + +0x20 body-init +
+// citizen-find on the citizen tier, crash-safe under the autostart sim. Default
+// (env off) => fully inert => byte-for-byte unchanged run.
+// ------------------------------------------------------------------
+
+// DAT_1401c7158 = CitizenComponent type id (RegisterType @0x14014e790; filled at
+// runtime post-Engine::Startup). The Ghidra-named "Entity_FindComponent_CitizenAI"
+// (0x1400097a0) actually finds the sibling *CitizenComponent* via this id.
+static uint32_t* s_pCitizenTypeId = nullptr;
+
+// Find the sibling CitizenComponent on the owner entity; return the raw component
+// pointer (the value the original Startup stores at +0x38), or null.
+static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
+    if (!s_pCitizenTypeId)
+        s_pCitizenTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
+    if (!ownerEntity || !s_pCitizenTypeId) return nullptr;
+    uint32_t want = *s_pCitizenTypeId;
+    if (want == 0 || want == 0xFFFFFFFF) return nullptr;  // type id not yet assigned
+    uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
+    int count = *reinterpret_cast<int*>(e + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
+    for (int i = 0; i < count; i++) {
+        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(ibp);
+        void* comp = *ibp;
+        if (!comp) continue;
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*getType_t)(void*);
+        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        if (tid == want) {
+            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
+// Faithful field init from the ctor 0x14010fb70 (the inert factory zeroes the
+// body, so the ctor-set scalars must be re-applied) + the Startup find from
+// 0x14010f920 (sibling CitizenComponent -> +0x38). Idempotent.
+static void CitizenAIComponent_BodyInit(CitizenAIComponent* self) {
+    if (!self) return;
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+
+    // ctor (0x14010fb70) scalar field init. Flags(0x89) + the 16 Time timers
+    // (+0x40..+0xBF) + +0xC0/+0xC8 are already zeroed/flagged by the inert factory.
+    *reinterpret_cast<uint32_t*>(base + 0x28) = 0xc;   // aiState = Leisure (initial)
+    *reinterpret_cast<int32_t*>(base + 0x2c) = -1;     // pending state = none
+    *reinterpret_cast<uint16_t*>(base + 0x30) = 0;
+
+    // Startup (0x14010f920): find sibling CitizenComponent -> +0x38.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
+    void* owner = *reinterpret_cast<void**>(base + 0x10);
+    void* citizen = owner ? CitizenAI_FindSiblingCitizen(owner) : nullptr;
+    *reinterpret_cast<void**>(base + 0x38) = citizen;
+}
+
+// Recipe step 1 (Update), routed to slot +0x48. Signature matches the macro's
+// UpdateVSlot adapter: (self, int64_t* time).
+static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* time) {
+    if (!self) return;
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+
+    EnsureHelpers();
+    EnsureCallees();
+
+    // Lazy body-init: until the sibling CitizenComponent is found at +0x38, retry
+    // the find each tick (it may not have been constructed yet at Startup time).
+    // Re-running ctor-init while inert is harmless (the guard below bails before
+    // Update); once +0x38 != 0 this never runs again.
+    if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
+        CitizenAIComponent_BodyInit(self);
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x38);
+    void* citizen = *reinterpret_cast<void**>(base + 0x38);
+    void* czEntity = nullptr;
+    void* czDesc = nullptr;
+    if (citizen) {
+        uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
+        czEntity = *reinterpret_cast<void**>(cz + 0x10);
+        czDesc   = *reinterpret_cast<void**>(cz + 0x288);
+    }
+
+    // Bring-up trace (env BANISHED_CITIZENAI_TRACE, default off => byte-unchanged):
+    // follows ONE component across ticks, reporting the +0x48 entry and whether the
+    // sibling citizen + description are populated (i.e. whether Brick 2 has landed).
+    {
+        static int s_traceState = -1;
+        static int s_traceCount = 0;
+        static void* s_lockComp = nullptr;
+        if (s_traceState < 0) {
+            const char* e = std::getenv("BANISHED_CITIZENAI_TRACE");
+            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = self;
+        if (s_traceState == 1 && self == s_lockComp && s_traceCount < 20) {
+            fprintf(stderr,
+                "[CitizenAITrace] comp=%p citizen=%p entity=%p desc=%p aiState=%u %s\n",
+                (void*)self, citizen, czEntity, czDesc,
+                *reinterpret_cast<uint32_t*>(base + 0x28),
+                (citizen && czEntity && czDesc) ? "RUN"
+                    : "noop(citizen inert / not found)");
+            fflush(stderr);
+            s_traceCount++;
+        }
+    }
+
+    // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
+    // CitizenDescription(+0x288) unconditionally. Bail until all three are live.
+    if (!citizen || !czEntity || !czDesc) return;
+
+    CitizenAIComponent_Update(self, time);
+}
+
+COMPONENT_LIVE_FACTORY_S(CitizenAIComponent, 0xd0, 0x89,
+                         "BANISHED_LIVE_CITIZENAI",
+                         CitizenAIComponent_UpdateAdapter,
+                         CitizenAIComponent_BodyInit)
 REGISTER_TYPE(CitizenAIComponent, "Component",
               &CitizenAIComponent_Factory, &CitizenAIComponent_CreateInPlace);
 #endif // STANDALONE_EXE
