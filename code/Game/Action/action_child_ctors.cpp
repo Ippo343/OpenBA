@@ -1,0 +1,233 @@
+// code/Game/Action/action_child_ctors.cpp
+// Keystone B (Phase 2) — the 5 missing Action child-constructors that the Work
+// action-ctor cascade (work_base_actionctor.cpp) depends on. Faithful 1:1 ports of
+// the decompiled exe helpers, cross-checked against the disassembly. These are the
+// last unregistered leaves of the action child-ctor closure; the rest
+// (CompleteTask/MoveTo/PerformWork/SendComponentMessage/etc.) already live in
+// action_pf_ctors.cpp and are registered via reg_pf_ctors.cpp.
+//
+//   0x140042890  ShowTool_Action_Ctor                 (trivial field-copy ctor)
+//   0x1400cadf0  RemoveNaturalResource_Action_CopyCtor (trivial field-copy ctor)
+//   0x1400c57d0  AnimateNaturalResource_Action_CopyCtor(trivial field-copy ctor)
+//   0x1400c6a20  CreateNaturalResource_Action_CopyCtor (trivial field-copy ctor)
+//   0x1400c29a0  Entity_impl_29a0  (heading-toward-path-target; returns float XMM0)
+//
+// Closure (all already registered elsewhere — bodies NOT duplicated):
+//   vtable_Action               0x14015faa0  (base, immediately overwritten — null-safe)
+//   vtable_ShowTool             0x1401589b0  (showtool.cpp)
+//   vtable_RemoveNaturalResource 0x140160050 (removenaturalresource.cpp)
+//   vtable_AnimateNaturalResource 0x14015fb10(animatenaturalresource.cpp)
+//   vtable_CreateNaturalResource 0x14015fca0 (createnaturalresource.cpp)
+//   Object::Internal::Internal   IAT 0x140152768 (fn_ObjectInternal_Ctor)
+//   InternalBasePtr::CheckPtr    (fn_InternalBasePtr_CheckPtr)
+//   Entity_ClearPathQueue        0x140003f60 (reg_action_cnr)
+//   FUN_140004680                0x140004680 (reg_component_nature)
+//   CharacterComponent_impl_f3e0 0x14009f3e0 (mapquery.cpp / cell->world)
+//   Math::Vector3::Normalize     slot 0x1401512c0 / ?Normalize@Vector3@Math@@QEBA?AV12@XZ
+//   Math::Vector3::Heading       slot 0x1401512d8 / ?Heading@Vector3@Math@@QEBAMXZ
+//
+// Registration: RegisterActionChildCtorsBatch() in standalone/reg_action_child_ctors.cpp.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+namespace {
+
+// --- Vtable addresses (exe .rdata), resolved lazily once. ---
+static uintptr_t s_vt_Action     = 0;  // 0x14015faa0
+static uintptr_t s_vt_ShowTool   = 0;  // 0x1401589b0
+static uintptr_t s_vt_RemoveNR   = 0;  // 0x140160050
+static uintptr_t s_vt_AnimateNR  = 0;  // 0x14015fb10
+static uintptr_t s_vt_CreateNR   = 0;  // 0x14015fca0
+
+// --- Registered exe sub-callees for Entity_impl_29a0. ---
+// Entity_ClearPathQueue / FUN_140004680: member-style (RCX=inner, RDX=retIBP) -> retIBP.
+typedef void* (*fn_entityGetIBP_t)(int64_t inner, void* retIBP);
+// CharacterComponent_impl_f3e0: cell-coord -> world pos. RCX=mapPtr, RDX=outVec3,
+// R8=inVec3, R9B=flag(0), [stack]=ptr(0).
+typedef void  (*fn_cellToWorld_t)(void* mapPtr, float* outVec3, float* inVec3, char flag, void* p5);
+// Math::Vector3::Normalize(this, retbuf) -> retbuf ; Heading(this) -> float.
+typedef void* (*fn_v3Normalize_t)(const void* self, void* retbuf);
+typedef float (*fn_v3Heading_t)(const void* self);
+
+static fn_entityGetIBP_t s_fn_ClearPathQueue = nullptr;  // 0x140003f60
+static fn_entityGetIBP_t s_fn_GetCellNode    = nullptr;  // 0x140004680
+static fn_cellToWorld_t  s_fn_CellToWorld     = nullptr;  // 0x14009f3e0
+static fn_v3Normalize_t  s_fn_Normalize       = nullptr;  // 0x1401512c0
+static fn_v3Heading_t    s_fn_Heading         = nullptr;  // 0x1401512d8
+
+static bool s_init = false;
+static void EnsureInit() {
+    if (s_init) return;
+    s_vt_Action    = ResolveAddr(Module::Exe, 0x14015faa0);
+    s_vt_ShowTool  = ResolveAddr(Module::Exe, 0x1401589b0);
+    s_vt_RemoveNR  = ResolveAddr(Module::Exe, 0x140160050);
+    s_vt_AnimateNR = ResolveAddr(Module::Exe, 0x14015fb10);
+    s_vt_CreateNR  = ResolveAddr(Module::Exe, 0x14015fca0);
+    s_fn_ClearPathQueue = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_GetCellNode    = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_CellToWorld    = reinterpret_cast<fn_cellToWorld_t >(ResolveAddr(Module::Exe, 0x14009f3e0));
+    // Vector3 ops via the registered dispatch slot (deref once), ResolveExport fallback.
+    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512c0)) s_fn_Normalize = *reinterpret_cast<fn_v3Normalize_t*>(s);
+    if (!s_fn_Normalize) s_fn_Normalize = reinterpret_cast<fn_v3Normalize_t>(
+        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
+    if (uintptr_t s = ResolveAddr(Module::Exe, 0x1401512d8)) s_fn_Heading = *reinterpret_cast<fn_v3Heading_t*>(s);
+    if (!s_fn_Heading) s_fn_Heading = reinterpret_cast<fn_v3Heading_t>(
+        ResolveExport("?Heading@Vector3@Math@@QEBAMXZ"));
+    s_init = true;
+}
+
+} // namespace
+
+// ============================================================
+// FUN_140042890 — ShowTool_Action_Ctor
+//   RCX=self, RDX=param_2 ({inner ptr}), R8D=toolType (int @ +0x28).
+//   Base Internal ctor; Action vtable -> ShowTool vtable; +0x20 = *param_2; +0x28 = toolType.
+// ============================================================
+void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
+    EnsureInit();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
+    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
+    s[0x18]                                 = 0;
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_ShowTool;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = *reinterpret_cast<uint64_t*>(param_2);
+    *reinterpret_cast<int32_t*>(s + 0x28)   = toolType;
+    return self;
+}
+
+// ============================================================
+// FUN_1400cadf0 — RemoveNaturalResource_Action_CopyCtor
+//   RCX=self, RDX=param_2, R8=param_3, R9B=param_4 (byte @ +0x30).
+//   +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
+// ============================================================
+void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4) {
+    EnsureInit();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
+    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
+    s[0x18]                                 = 0;
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_RemoveNR;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = *param_3;
+    *reinterpret_cast<uint64_t*>(s + 0x28)  = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x28)  = *param_2;
+    s[0x30]                                 = param_4;
+    return self;
+}
+
+// ============================================================
+// FUN_1400c57d0 — AnimateNaturalResource_Action_CopyCtor
+//   RCX=self, RDX=param_2, R8D=param_3 (int @ +0x28), R9B=param_4 (byte @ +0x2c).
+//   +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
+// ============================================================
+void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4) {
+    EnsureInit();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
+    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
+    s[0x18]                                 = 0;
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_AnimateNR;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = *param_2;
+    *reinterpret_cast<uint32_t*>(s + 0x28)  = param_3;
+    s[0x2c]                                 = param_4;
+    return self;
+}
+
+// ============================================================
+// FUN_1400c6a20 — CreateNaturalResource_Action_CopyCtor
+//   RCX=self, RDX=param_2 (raw u64 @ +0x20), R8=param_3, R9D=param_4 (int @ +0x30).
+//   +0x20 = param_2 ; +0x28 = *param_3 ; +0x30 = param_4.
+// ============================================================
+void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4) {
+    EnsureInit();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
+    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
+    s[0x18]                                 = 0;
+    *reinterpret_cast<uintptr_t*>(s)        = s_vt_CreateNR;
+    *reinterpret_cast<uint64_t*>(s + 0x20)  = param_2;
+    *reinterpret_cast<uint64_t*>(s + 0x28)  = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x28)  = *param_3;
+    *reinterpret_cast<uint32_t*>(s + 0x30)  = param_4;
+    return self;
+}
+
+// ============================================================
+// FUN_1400c29a0 — Entity_impl_29a0
+// Compute the heading (radians, XMM0) from a citizen toward a world target.
+//   param_1 = float* worldPos (the target);  param_2 = InternalBasePtr* ({inner ptr}).
+// If the entity has a live path node (Entity_ClearPathQueue(*p2) -> node, *node != 0),
+// use the node's stored world pos (node+0x158..+0x160). Otherwise derive a world pos
+// from its cell node (FUN_140004680 -> node) via the grid math + CharacterComponent
+// cell->world sampler. Then v = pos - worldPos; Normalize(v); return Heading(v).
+// ============================================================
+float ActChild_Entity29a0_c29a0(float* worldPos, void* param_2) {
+    EnsureInit();
+    float pos[3] = {0.0f, 0.0f, 0.0f};
+
+    uint8_t retbuf[8] = {0};  // local_res8 — IBP retval for the getters
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
+    int64_t inner = *reinterpret_cast<int64_t*>(param_2);
+    void* pathIbp = s_fn_ClearPathQueue ? s_fn_ClearPathQueue(inner, retbuf) : nullptr;
+
+    if (pathIbp && *reinterpret_cast<int64_t*>(pathIbp) != 0) {
+        // --- path node present: read its world pos directly ---
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
+        int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
+        void* ibp2 = s_fn_ClearPathQueue ? s_fn_ClearPathQueue(inner2, retbuf) : nullptr;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp2);
+        int64_t node = ibp2 ? *reinterpret_cast<int64_t*>(ibp2) : 0;
+        pos[0] = *reinterpret_cast<float*>(node + 0x158);
+        pos[1] = *reinterpret_cast<float*>(node + 0x15c);
+        pos[2] = *reinterpret_cast<float*>(node + 0x160);
+    } else {
+        // --- no path node: derive a world pos from the entity's cell node ---
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
+        int64_t inner2 = *reinterpret_cast<int64_t*>(param_2);
+        void* cellIbp = s_fn_GetCellNode ? s_fn_GetCellNode(inner2, retbuf) : nullptr;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(cellIbp);
+        int64_t node = cellIbp ? *reinterpret_cast<int64_t*>(cellIbp) : 0;
+
+        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        int32_t* mapPtr = gw ? *reinterpret_cast<int32_t**>(reinterpret_cast<uintptr_t>(gw) + 0xf8) : nullptr;
+        int32_t width = mapPtr ? *mapPtr : 1;
+
+        int32_t s28 = *reinterpret_cast<int16_t*>(node + 0x28);
+        int32_t s2a = *reinterpret_cast<int16_t*>(node + 0x2a);
+        int32_t s2c = *reinterpret_cast<int16_t*>(node + 0x2c);
+        int32_t s2e = *reinterpret_cast<int16_t*>(node + 0x2e);
+
+        int32_t cellIdx = (s2a + (s2e >> 1)) * width + (s2c >> 1) + s28;
+        int32_t quot = (width != 0) ? cellIdx / width : 0;   // EAX after IDIV
+        int32_t rem  = (width != 0) ? cellIdx % width : 0;    // EDX after IDIV
+        float   center = static_cast<float>(width >> 1) - 0.5f;  // (width>>1) - DAT_140172114
+
+        float inVec[3];
+        inVec[0] = static_cast<float>(rem)  - center;  // local_28
+        inVec[1] = static_cast<float>(quot) - center;  // local_24
+        inVec[2] = 0.0f;                               // local_20
+
+        float outVec[3] = {0.0f, 0.0f, 0.0f};
+        if (s_fn_CellToWorld) s_fn_CellToWorld(mapPtr, outVec, inVec, 0, nullptr);
+        pos[0] = outVec[0];
+        pos[1] = outVec[1];
+        pos[2] = outVec[2];
+    }
+
+    // --- v = pos - worldPos ; Normalize(v) ; return Heading(v) ---
+    float v[3];
+    v[0] = pos[0] - worldPos[0];
+    v[1] = pos[1] - worldPos[1];
+    v[2] = pos[2] - worldPos[2];
+    float normbuf[3];
+    void* n = s_fn_Normalize ? s_fn_Normalize(v, normbuf) : nullptr;
+    return (s_fn_Heading && n) ? s_fn_Heading(n) : 0.0f;
+}
