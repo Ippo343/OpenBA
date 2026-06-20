@@ -163,15 +163,16 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
     if (!self) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
 
-    // NB: the ctor (0x140109d20) sets +0x40 grid-index = -1 and +0x60 char-index
-    // = -1, but we DELIBERATELY leave both at the inert-factory 0. The citizen
-    // alive-check (CitizenAI/CitizenComponent: CharacterComponent+0x60 + 1 > 0)
-    // treats char-index>=0 as "alive"; the real >=0 assignment happens when the
-    // character/animation system registers this citizen (not live until Brick 4b),
-    // so the ctor's -1 would make a just-spawned citizen read as DEAD and drive
-    // the (un-brought-up) education/age path -> crash. 0 reads "alive", which is
-    // correct for a freshly spawned citizen. (Move-tick is inert here, so +0x60=0
-    // never triggers the executor.)
+    // ctor (0x140109d20) sentinels: +0x40 grid-index = -1, +0x60 action-stack top
+    // = -1 (EMPTY stack — a freshly spawned citizen has no queued actions). This is
+    // faithful AND required for Brick 3: the CitizenAI Phase-8 check reads
+    // CharacterComponent+0x60 + 1 > 0 as "has actions => busy this tick"; with the
+    // empty -1 it is 0 (not >0), so Phase 8 runs the state-selection path
+    // (CheckEducation/CheckAge/TransitionState) to assign a state. (Brick 3 ports
+    // that path + guards it crash-safe; the move-tick/executor is still inert, so
+    // -1 never drives the executor on an empty stack.)
+    *reinterpret_cast<int32_t*>(p + 0x40) = -1;
+    *reinterpret_cast<int32_t*>(p + 0x60) = -1;
 
     // Startup (0x140109a30): find sibling components + adopt the description.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);

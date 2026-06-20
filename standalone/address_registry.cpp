@@ -398,6 +398,7 @@ extern void RegisterPfCtorsBatch();        // Wave 2: Action ctors + entity/stor
 extern void RegisterActionChildCtorsBatch(); // Phase 2 Keystone B: 5 missing action child-ctors
 extern void RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2: 4 Work action-ctors
 extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-ctors + consume-list
+extern void RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3: CitizenAI candidate-selection
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
@@ -478,6 +479,7 @@ static void RegisterCodeFunctions() {
     RegisterActionChildCtorsBatch(); // Phase 2 Keystone B — 5 missing action child-ctors
     RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2 — 4 Work action-ctors
     RegisterActionChildCtors2Batch();// Phase 2 Keystone B3 — leaf copy-ctors + consume-list
+    RegisterCitizenAICandidateList();// Phase 3 Keystone D Brick 3 — CitizenAI candidate-selection
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)

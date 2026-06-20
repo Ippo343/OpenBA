@@ -378,7 +378,9 @@ static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
     int idx = *reinterpret_cast<int*>(citizen + 0x34);
     fn_InternalBasePtr_CheckPtr(citizen + 0x278);
     int64_t meshIBP = *reinterpret_cast<int64_t*>(citizen + 0x278);
+    if (meshIBP == 0) return;                                  // no CharacterComponent
     int64_t mesh = *reinterpret_cast<int64_t*>(meshIBP + 0x68);
+    if (mesh == 0) return;                                     // ModelComponent not live yet
     fn_InternalBasePtr_CheckPtr(&mesh);
     *reinterpret_cast<float*>(mesh + 0x134) = scale;
     *reinterpret_cast<float*>(mesh + 0x138) = scale;
@@ -560,7 +562,13 @@ void CitizenComp_CitizenAIComponent_CheckEducation(int64_t selfV) {
     int64_t res8 = 0;
     CitizenComp_Entity_FindComponent_Storage(res10, &res8);
     fn_InternalBasePtr_CheckPtr(dataPtr);
-    int cap = *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x1f0) + 0x50);
+    // [STANDALONE BRING-UP GUARDS] +0x1f0 = profession-list (assigned at gameplay,
+    // not in Startup) and res8 = the residence storage IBP (null if the citizen has
+    // no home yet). Both are null for a freshly-spawned standalone citizen; the
+    // original derefs them unconditionally. Bail (no education update) until live.
+    int64_t profList = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(dataPtr) + 0x1f0);
+    if (profList == 0 || res8 == 0) return;
+    int cap = *reinterpret_cast<int*>(profList + 0x50);
     fn_InternalBasePtr_CheckPtr(&res8);
     if (*reinterpret_cast<int*>(res8 + 0x38) != cap) {
         fn_InternalBasePtr_CheckPtr(dataPtr);
