@@ -17,6 +17,8 @@ extern void WorkAct_FishWorkCtor_beae0(void*, uint32_t, int64_t*, float*, float,
 extern void WorkAct_HuntWorkCtor_bbbc0(void*, uint32_t, int64_t*, float*, float, char); // 0x1400bbbc0
 extern void WorkAct_ShowToolCtor3_bdd20(void*, uint32_t, uint32_t*, uint32_t, float*, int, uint32_t*, uint32_t, int64_t*, uint32_t*, uint64_t, int64_t); // 0x1400bdd20
 extern void WorkAct_PerformWorkCtor_bffd0(void*, uint32_t, uint32_t*, int, uint32_t, uint8_t, uint32_t, int64_t, int, float*, int64_t*); // 0x1400bffd0
+extern void WorkAct_HarvestAreaCtor_c1530(void*, uint32_t, int, void**, float*, uint32_t, uint32_t); // 0x1400c1530
+extern "C" void* WorkAct_GatherRawMatCtor_bf790(void*, void*, uint32_t, uint64_t*, float*, void**, float*, int64_t, int, int, uint8_t, char, int, uint8_t); // 0x1400bf790
 
 void RegisterWorkActBatch() {
     RegisterExeAddr(0x1400ba9f0, reinterpret_cast<uintptr_t>(&WorkAct_PerformWorkCopyCtor_ba9f0));
@@ -25,5 +27,7 @@ void RegisterWorkActBatch() {
     RegisterExeAddr(0x1400bbbc0, reinterpret_cast<uintptr_t>(&WorkAct_HuntWorkCtor_bbbc0));
     RegisterExeAddr(0x1400bdd20, reinterpret_cast<uintptr_t>(&WorkAct_ShowToolCtor3_bdd20));
     RegisterExeAddr(0x1400bffd0, reinterpret_cast<uintptr_t>(&WorkAct_PerformWorkCtor_bffd0));
+    RegisterExeAddr(0x1400c1530, reinterpret_cast<uintptr_t>(&WorkAct_HarvestAreaCtor_c1530));
+    RegisterExeAddr(0x1400bf790, reinterpret_cast<uintptr_t>(&WorkAct_GatherRawMatCtor_bf790));
 }
 #endif // STANDALONE_EXE
