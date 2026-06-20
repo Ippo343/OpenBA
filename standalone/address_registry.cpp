@@ -405,6 +405,7 @@ extern void RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail: Pasture
 extern void RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A: zone+road enqueue (a6f00/9d360/9ce00/a6e30)
 extern void RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A: residence RB-tree (17230/15ec0/172f0/17460/14b40)
 extern void RegisterKeystoneAMapBatch();     // Phase 2 Keystone A: map overlay/init (1241b0/9dc20/124750/9dee0/e2c0)
+extern void RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A: Game::Dtor + worker-thread teardown (9ed60 + 8 subs)
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
@@ -484,6 +485,7 @@ static void RegisterCodeFunctions() {
     RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A — zone+road enqueue cluster
     RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A — residence RB-tree cluster
     RegisterKeystoneAMapBatch();     // Phase 2 Keystone A — map overlay/init cluster
+    RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A — Game::Dtor + worker-thread teardown
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
