@@ -397,6 +397,8 @@ extern void RegisterPfGeomBatch();         // Tier 0: region/geometry/heuristic 
 extern void RegisterPfCtorsBatch();        // Wave 2: Action ctors + entity/storage leaves (12)
 extern void RegisterActionChildCtorsBatch(); // Phase 2 Keystone B: 5 missing action child-ctors
 extern void RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2: 4 Work action-ctors
+extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-ctors + consume-list
+extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
@@ -468,6 +470,8 @@ static void RegisterCodeFunctions() {
     RegisterPfCtorsBatch();        // pathfinding closure Wave 2 — Action ctors + entity/storage
     RegisterActionChildCtorsBatch(); // Phase 2 Keystone B — 5 missing action child-ctors
     RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2 — 4 Work action-ctors
+    RegisterActionChildCtors2Batch();// Phase 2 Keystone B3 — leaf copy-ctors + consume-list
+    RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher
