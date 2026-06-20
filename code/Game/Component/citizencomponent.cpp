@@ -1714,8 +1714,13 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
     }
     fn_InternalBasePtr_CheckPtr(self + 0x278);
     int64_t mc = *reinterpret_cast<int64_t*>(self + 0x278);
+    if (mc == 0) return 0;
     fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(mc + 0x68));
     int64_t geom = *reinterpret_cast<int64_t*>(mc + 0x68);
+    // [STANDALONE BRING-UP GUARD] mc+0x68 is the citizen's geometry/transform IBP,
+    // populated only once the CharacterComponent position pipeline is live (Brick 4).
+    // Until then it is null; bail "can't find housing" rather than deref geom+0x158.
+    if (geom == 0) return 0;
     int dim = grid[0];
     int x = (int)(*reinterpret_cast<float*>(geom + 0x158) + (float)(dim >> 1));
     int y = (int)(*reinterpret_cast<float*>(geom + 0x15c) + (float)(dim >> 1));
@@ -2480,7 +2485,114 @@ void CitizenComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(CitizenComponent, 0x290, 0xCB)
+#include <cstdlib>
+#include <cstring>
+
+// ------------------------------------------------------------------
+// Phase 3 / Keystone D — CitizenComponent Startup-only live-wiring (Brick 2).
+//
+// CitizenComponent's per-tick Update is the 711-instruction lifecycle monster
+// (hunger/thirst/aging/workplace/housing/partner) with ~25 sub-calls — NOT yet
+// safe to run live in standalone. But the sibling CitizenAIComponent (Brick 1)
+// bails until this component's BODY is populated (its CitizenDescription at +0x288
+// + the Family/Health component at +0x278). That population happens in
+// CitizenComponent::Startup (slot +0x20, 0x140114050), NOT its Update.
+//
+// So this brick brings ONLY the Startup slot live (COMPONENT_LIVE_FACTORY_STARTUP)
+// to populate the body at spawn, leaving the heavy Update an inert no-op. That
+// lets the CitizenAIComponent decision loop actually RUN (read citizen needs)
+// instead of guard-bailing — without the risk of the full citizen lifecycle tick.
+// Default (env off) => inert => byte-unchanged.
+// ------------------------------------------------------------------
+
+// Self-contained sibling-component find by registered type name (the real-CRC
+// source the inert/live factories use for vtable+0x10). Avoids the exe finders
+// (Family 0x1400012d0 / MeshInstance 0x140002f90), which key off the .rdata
+// type-id globals (DAT_1401c7078 CharacterComponent / DWORD_1401c7e08
+// StatusIconComponent) — those are 0xFFFFFFFF in standalone and filling them
+// would un-dormant ~30 unrelated readers (same reasoning as CitizenAI's find).
+static void* CitizenComp_FindSiblingByName(int64_t ownerEntity, const char* typeName) {
+    if (!ownerEntity) return nullptr;
+    uint32_t want = ::Object::GetTypeIdByName(typeName);
+    if (want == 0 || want == 0xFFFFFFFF) return nullptr;
+    uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
+    int count = *reinterpret_cast<int*>(e + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
+    for (int i = 0; i < count; i++) {
+        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+        void* comp = *ibp;
+        if (!comp) continue;
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*getType_t)(void*);
+        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        if (tid == want)
+            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+    }
+    return nullptr;
+}
+
+// Faithful port of CitizenComponent::Startup (0x140114050) + the ctor scalar init
+// (0x140114770) the inert factory zeroed. The two sibling finds are done
+// self-contained (see above) instead of via the global-keyed exe finders.
+static void CitizenComponent_BodyInit(CitizenComponent* self) {
+    if (!self) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+
+    // ctor (0x140114770) scalar -1/4 sentinels the inert factory zeroed. The 0xCB
+    // flags + the MeshInstance sub-object (+0xB8) are already set/zeroed by the
+    // factory; CitizenAI never reads the mesh, so a zeroed mesh is safe here.
+    *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
+    *reinterpret_cast<int32_t*>(p + 0xA8)  = -1;
+    *reinterpret_cast<int64_t*>(p + 0x1D8) = -1;
+    *reinterpret_cast<int64_t*>(p + 0x1E0) = 4;
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
+    int64_t owner = *reinterpret_cast<int64_t*>(p + 0x10);
+    if (!owner) return;   // not yet wired into an entity
+
+    // +0x278 = CharacterComponent IBP ("Family" finder; CitizenAI reads its +0x60
+    // char-index as the alive flag: index>=0 alive, -1 dead).
+    *reinterpret_cast<void**>(p + 0x278) =
+        CitizenComp_FindSiblingByName(owner, "CharacterComponent");
+    // +0x280 = StatusIconComponent IBP ("MeshInstance" finder; used by the heavy
+    // Update only — not by CitizenAI — so a null here is harmless for Brick 2).
+    *reinterpret_cast<void**>(p + 0x280) =
+        CitizenComp_FindSiblingByName(owner, "StatusIconComponent");
+
+    // +0x288 = CitizenDescription: trust comp+0x18 (the copy-ctor stored it).
+    // The original validates IsDerivedFrom(obj, CitizenDescription 0x1401c7190),
+    // but that is unreliable in standalone's partial factory tree (GrowthComponent
+    // precedent), so trust the +0x18 pointer directly.
+    void* desc = *reinterpret_cast<void**>(p + 0x18);
+    *reinterpret_cast<void**>(p + 0x288) = desc;
+    if (desc) {
+        uint8_t* d = reinterpret_cast<uint8_t*>(desc);
+        *reinterpret_cast<uint32_t*>(p + 0x50) = *reinterpret_cast<uint32_t*>(d + 0x6c);
+        *reinterpret_cast<uint32_t*>(p + 0x80) = *reinterpret_cast<uint32_t*>(d + 0xa4);
+    }
+
+    // Bring-up trace (shared env with Brick 1).
+    {
+        static int s_traceState = -1;
+        static int s_traceCount = 0;
+        if (s_traceState < 0) {
+            const char* e = std::getenv("BANISHED_CITIZENAI_TRACE");
+            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_traceState == 1 && s_traceCount < 8) {
+            fprintf(stderr, "[CitizenBodyInit] comp=%p owner=%p desc=%p family=%p mesh=%p\n",
+                    (void*)self, (void*)owner, desc,
+                    *reinterpret_cast<void**>(p + 0x278),
+                    *reinterpret_cast<void**>(p + 0x280));
+            fflush(stderr);
+            s_traceCount++;
+        }
+    }
+}
+
+COMPONENT_LIVE_FACTORY_STARTUP(CitizenComponent, 0x290, 0xCB,
+                               "BANISHED_LIVE_CITIZEN", CitizenComponent_BodyInit)
 REGISTER_TYPE(CitizenComponent, "Component",
               &CitizenComponent_Factory, &CitizenComponent_CreateInPlace);
 #endif // STANDALONE_EXE

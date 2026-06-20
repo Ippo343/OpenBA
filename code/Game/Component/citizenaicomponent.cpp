@@ -655,18 +655,19 @@ void CitizenAIComponent_InitFuncs() {
 // (env off) => fully inert => byte-for-byte unchanged run.
 // ------------------------------------------------------------------
 
-// DAT_1401c7158 = CitizenComponent type id (RegisterType @0x14014e790; filled at
-// runtime post-Engine::Startup). The Ghidra-named "Entity_FindComponent_CitizenAI"
-// (0x1400097a0) actually finds the sibling *CitizenComponent* via this id.
-static uint32_t* s_pCitizenTypeId = nullptr;
-
-// Find the sibling CitizenComponent on the owner entity; return the raw component
-// pointer (the value the original Startup stores at +0x38), or null.
+// The original Startup (0x14010f920) finds the sibling CitizenComponent via the
+// .rdata type-id global DAT_1401c7158. In standalone that global is 0xFFFFFFFF
+// (RegisterType assigns it too early; the Phase-1 fill set only covers a few
+// globals) AND filling it would un-dormant ~30 other CitizenComponent-find
+// readers into still-inert components ([[project_phase2_keystone_b]] note). So we
+// find SELF-CONTAINED via Object::GetTypeIdByName — the same real-CRC source the
+// inert/live component factories use for their vtable+0x10 GetTypeId — which is
+// guaranteed to match the spawned component's id without touching any global.
 static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
-    if (!s_pCitizenTypeId)
-        s_pCitizenTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
-    if (!ownerEntity || !s_pCitizenTypeId) return nullptr;
-    uint32_t want = *s_pCitizenTypeId;
+    if (!ownerEntity) return nullptr;
+    static uint32_t s_want = 0;
+    if (s_want == 0) s_want = ::Object::GetTypeIdByName("CitizenComponent");
+    uint32_t want = s_want;
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;  // type id not yet assigned
     uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
     int count = *reinterpret_cast<int*>(e + 0x38);
@@ -716,6 +717,21 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     EnsureHelpers();
     EnsureCallees();
 
+    // Repoint the type-id globals the Update path derefs to PRIVATE filled copies.
+    // The shared .rdata globals StorageComponent(0x1401c7e78) and
+    // ResidenceComponent(0x1401c7cf0) are unregistered in standalone => their
+    // ResolveAddr returns null => Update's home-storage scan derefs null
+    // (crash at line ~149). Filling the shared globals would un-dormant their many
+    // readers, so keep them self-contained via GetTypeIdByName (same real-CRC the
+    // component factories use). (RawMaterial 0x1401c7cb8 IS already filled.)
+    {
+        static uint32_t s_tidStorage = 0, s_tidResidence = 0;
+        if (s_tidStorage == 0)   s_tidStorage   = ::Object::GetTypeIdByName("StorageComponent");
+        if (s_tidResidence == 0) s_tidResidence = ::Object::GetTypeIdByName("ResidenceComponent");
+        s_pStorageTypeId            = &s_tidStorage;
+        s_TypeId_ResidenceComponent = &s_tidResidence;
+    }
+
     // Lazy body-init: until the sibling CitizenComponent is found at +0x38, retry
     // the find each tick (it may not have been constructed yet at Startup time).
     // Re-running ctor-init while inert is harmless (the guard below bails before
@@ -727,10 +743,12 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     void* citizen = *reinterpret_cast<void**>(base + 0x38);
     void* czEntity = nullptr;
     void* czDesc = nullptr;
+    void* czChar = nullptr;
     if (citizen) {
         uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
         czEntity = *reinterpret_cast<void**>(cz + 0x10);
         czDesc   = *reinterpret_cast<void**>(cz + 0x288);
+        czChar   = *reinterpret_cast<void**>(cz + 0x278);  // CharacterComponent (alive flag)
     }
 
     // Bring-up trace (env BANISHED_CITIZENAI_TRACE, default off => byte-unchanged):
@@ -750,7 +768,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
                 "[CitizenAITrace] comp=%p citizen=%p entity=%p desc=%p aiState=%u %s\n",
                 (void*)self, citizen, czEntity, czDesc,
                 *reinterpret_cast<uint32_t*>(base + 0x28),
-                (citizen && czEntity && czDesc) ? "RUN"
+                (citizen && czEntity && czDesc && czChar) ? "RUN"
                     : "noop(citizen inert / not found)");
             fflush(stderr);
             s_traceCount++;
@@ -758,8 +776,9 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     }
 
     // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
-    // CitizenDescription(+0x288) unconditionally. Bail until all three are live.
-    if (!citizen || !czEntity || !czDesc) return;
+    // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive
+    // check) unconditionally. Bail until all are live (Brick 2 populates them).
+    if (!citizen || !czEntity || !czDesc || !czChar) return;
 
     CitizenAIComponent_Update(self, time);
 }

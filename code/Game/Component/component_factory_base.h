@@ -136,6 +136,42 @@ bool LiveEnabled(const char* envVar);
         return mem;                                                           \
     }
 
+// As COMPONENT_LIVE_FACTORY_S, but routes ONLY the Startup slot (vtable +0x20 /
+// index 4), leaving the per-tick Update slot (index 9) an inert no-op stub. Use
+// to populate a component's body at spawn — so sibling components can read it —
+// WITHOUT running its own (heavy / not-yet-ported) Update. The body-init fn is
+// `void StartupFn(Name* self)`. Default (env off) => identical to
+// COMPONENT_INERT_FACTORY (byte-for-byte unchanged run).
+#define COMPONENT_LIVE_FACTORY_STARTUP(Name, Size, Flags, EnvVar, StartupFn)   \
+    static uint32_t Name##_LiveGetTypeId(void*) {                              \
+        static uint32_t cached = 0;                                            \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
+        return cached;                                                         \
+    }                                                                          \
+    static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];     \
+    static void Name##_StartupVSlot(void* s) {                                 \
+        StartupFn(reinterpret_cast<Name*>(s));                                 \
+    }                                                                          \
+    static void Name##_FinishLiveVtable() {                                    \
+        if (::ComponentFactory::LiveEnabled(EnvVar))                           \
+            Name##_LiveVtable[4] =                                             \
+                reinterpret_cast<void*>(&Name##_StartupVSlot);                 \
+    }                                                                          \
+    extern "C" void* Name##_Factory(void) {                                    \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),         \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return p;                                                             \
+    }                                                                          \
+    static void* Name##_CreateInPlace(void* mem) {                            \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),     \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return mem;                                                           \
+    }
+
 // As COMPONENT_LIVE_FACTORY, but also routes the Startup slot (vtable +0x20 /
 // index 4 — dispatched by ComponentEntity_StartupComponents at spawn) to a
 // body-init fn `void StartupFn(Name* self)`. Use when the live Update needs the
