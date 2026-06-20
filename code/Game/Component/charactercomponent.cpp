@@ -187,8 +187,36 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
     *reinterpret_cast<void**>(p + 0x78) = *reinterpret_cast<void**>(p + 0x18);
 }
 
-COMPONENT_LIVE_FACTORY_STARTUP(CharacterComponent, 0x80, 0x8f,
-                               "BANISHED_LIVE_CHARACTER", CharacterComponent_BodyInit)
+// ------------------------------------------------------------------
+// Brick 4b — per-tick move/anim tick + action executor (0x1401094c0).
+// The Update slot (+0x48 / vtable slot 9) routes to the move-tick, which runs the
+// action executor over the stack at CharacterComponent+0x48 when it is non-empty
+// (+0x60 >= 0), then early-returns when the char render-index (+0x40) is < 0 —
+// which it always is in standalone (BodyInit sets -1), so the inert-ModelComponent
+// transform tail is skipped (crash-safe). With no actions pushed yet the move-tick
+// is a per-frame no-op; it begins executing actions once the CitizenAI state
+// handlers push them.
+//
+// Gated on its OWN env var (separate from BANISHED_LIVE_CHARACTER) so the existing
+// Startup-only behaviour is byte-identical by default: the Update vslot is installed
+// whenever BANISHED_LIVE_CHARACTER is on, but the body no-ops unless
+// BANISHED_LIVE_CHARACTER_MOVETICK is also set.
+// ------------------------------------------------------------------
+extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time);
+
+static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* time) {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (!en || !self) return;
+    CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(self), time);
+}
+
+COMPONENT_LIVE_FACTORY_S(CharacterComponent, 0x80, 0x8f,
+                         "BANISHED_LIVE_CHARACTER",
+                         CharacterComponent_UpdateAdapter, CharacterComponent_BodyInit)
 REGISTER_TYPE(CharacterComponent, "Component",
               &CharacterComponent_Factory, &CharacterComponent_CreateInPlace);
 #endif // STANDALONE_EXE

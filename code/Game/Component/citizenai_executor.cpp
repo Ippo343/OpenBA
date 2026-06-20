@@ -1,0 +1,461 @@
+// code/Game/Component/citizenai_executor.cpp
+//
+// Brick 4b — the ACTION-STACK EXECUTOR that runs the Action/Work objects the
+// CitizenAI handlers push onto the citizen action stack (CharacterComponent+0x48),
+// plus the CharacterComponent per-tick "move-tick" that drives it.
+//
+// Faithful 1:1 ports of three exe functions (lead-verified addresses this session):
+//   0x1400c4c50  CitizenAI_ActionExecutor_c4c50   — the action-stack executor
+//   0x1400c4bb0  CitizenAI_ActionFlush_c4bb0      — the executor's flush/cleanup tail
+//   0x1401094c0  CharacterComponent_MoveTick_1094c0 — runs the executor IF the stack is
+//                non-empty, then (only when char-index>=0) updates the ModelComponent
+//                transform/animation. Ghidra MISLABELS this "CharacterComponent_OnAttach".
+//
+// CRITICAL ABI (transcribed from disassembly at 0x1400c4c50):
+//   * Stack object layout (param_1 = CharacterComponent+0x48):
+//       [param_1+0x00] = backing array base (slots of InternalBasePtr, 8 bytes each)
+//       [param_1+0x18] = top index (int)   (== CharacterComponent+0x60)
+//       [param_1+0x10] = the "flush" list head (used by c4bb0)
+//   * Each stack entry is an InternalBasePtr; the wrapped node:
+//       node+0x18 = 1-byte "entered/in-use" flag
+//       node+0x10 = next-node link (the do/while advances via this, NOT node+0x18)
+//       node->vtable+0x20 = precheck slot, +0x28 = main slot, +0x38 = exit slot
+//   * vcall ABI (bug #6 — explicit forwarding):
+//       precheck:  CALL [vt+0x20] with RCX=node, RDX=stack            (asm 0x1400c4ced)
+//       main:      CALL [vt+0x28] with RCX=node, RDX=stack, R8=time   (asm 0x1400c4d57)
+//       exit:      CALL [vt+0x38] with RCX=node, RDX=stack            (asm 0x1400c4ddc)
+//   * RETURN WIDTH (bug #7): each slot return is read as INT (EAX), compared ==1 / ==0 / ==2.
+//     Keep `int` returns through the function pointer typedefs — never bool.
+//
+// Crash-safety for the move-tick (0x1401094c0): in standalone the citizen's
+// ModelComponent (CharacterComponent+0x68), its MeshInstance(+0x28)/Geometry/Picking,
+// and the char render-index (self+0x40) are INERT (zeroed/negative). The disasm shape is:
+//     RCX = self+0x48
+//     if (*(int*)(RCX+0x18) /* self+0x60 top index */ >= 0) FUN_1400c4c50(RCX, time);
+//     if (*(int*)(self+0x40) < 0) return;        // <-- early-return SKIPS the whole tail
+//     ...big transform/animation/rendering block...
+// Because self+0x40 < 0 in standalone, the early-return is the intended crash-safety: the
+// transform tail (which touches the inert ModelComponent/MeshInstance/Geometry/Picking
+// rendering layer) is NEVER reached. It is ported faithfully below but all its engine
+// dispatch-slots / exe sub-callees are null-guarded; it stays dormant until ModelComponent
+// is brought live. See the report for the rendering-coupled sub-callee table.
+//
+// This file must NOT depend on hooks.h — it is portable for the standalone exe.
+
+#ifdef STANDALONE_EXE
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+
+namespace {
+
+// ---------------------------------------------------------------------------
+// Action vtable slot signatures (return INT — bug #7).
+//   precheck (+0x20): (node, stack)
+//   main     (+0x28): (node, stack, time)
+//   exit     (+0x38): (node, stack)
+// ---------------------------------------------------------------------------
+typedef int (*ActSlotPre_t)(void* node, void* stack);
+typedef int (*ActSlotMain_t)(void* node, void* stack, void* time);
+typedef int (*ActSlotExit_t)(void* node, void* stack);
+
+static inline int CallPre(int64_t* node, void* stack) {
+    void* vt = *reinterpret_cast<void**>(node);
+    return reinterpret_cast<ActSlotPre_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x20))(node, stack);
+}
+static inline int CallMain(int64_t* node, void* stack, void* time) {
+    void* vt = *reinterpret_cast<void**>(node);
+    return reinterpret_cast<ActSlotMain_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x28))(node, stack, time);
+}
+static inline void CallExit(int64_t* node, void* stack) {
+    void* vt = *reinterpret_cast<void**>(node);
+    reinterpret_cast<ActSlotExit_t>(*reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x38))(node, stack);
+}
+
+static inline void CheckPtr(void* ibp) {
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+}
+
+// FUN_1400c5400 — TaskListCleanup, called when a main-slot returns 2 (push-more / requeue).
+typedef void (*fn_taskCleanup_t)(void* stack);   // 0x1400c5400 (registered: WorkBase_TaskListCleanup_c5400)
+static fn_taskCleanup_t s_fn_taskCleanup = nullptr;
+static bool s_init = false;
+static void EnsureInit() {
+    if (s_init) return;
+    s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
+    s_init = true;
+}
+
+} // namespace
+
+// ===========================================================================
+// FUN_1400c4bb0 — flush/cleanup tail. Walk the flush list at (stack+0x10):
+//   for each node: CheckPtr, set node+0x18 = 1, call precheck(+0x20)(node) — break if
+//   ret != 1; CheckPtr; advance via node+0x10. After the walk: DeletePtr(stack+0x10) +
+//   re-Ctor the slot (InternalBasePtr default ctor, null internal).
+// param_1 = stack object (== CharacterComponent+0x48).
+// NOTE: in the disasm the precheck here is CALL [vt+0x20] with only RCX=node set (no
+// stack/time forwarded), so this precheck takes a single arg. Match exactly.
+// ===========================================================================
+extern "C" void CitizenAI_ActionFlush_c4bb0(int64_t param_1) {
+    EnsureInit();
+    int64_t* node = *reinterpret_cast<int64_t**>(param_1 + 0x10);
+    if (node != nullptr) {
+        do {
+            CheckPtr(&node);
+            *reinterpret_cast<uint8_t*>(node + 3) = 1;          // node+0x18 = 1
+            // precheck +0x20 with RCX=node only (single-arg form, per disasm)
+            void* vt = *reinterpret_cast<void**>(node);
+            int iVar1 = reinterpret_cast<int(*)(void*)>(
+                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vt) + 0x20))(node);
+            if (iVar1 != 1) break;
+            CheckPtr(&node);
+            node = reinterpret_cast<int64_t*>(node[2]);          // advance via node+0x10
+        } while (node != nullptr);
+        if (fn_InternalBasePtr_DeletePtr)
+            fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(param_1 + 0x10));
+        // re-Ctor a default InternalBasePtr (null internal) and store into [stack+0x10]
+        node = nullptr;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&node, nullptr);
+        *reinterpret_cast<int64_t*>(param_1 + 0x10) = reinterpret_cast<int64_t>(node);
+    }
+}
+
+// ===========================================================================
+// FUN_1400c4c50 — the action-stack executor. do/while over the stack top index.
+// param_1 = stack object (== CharacterComponent+0x48); param_2 = Time* (forwarded to main).
+// ===========================================================================
+extern "C" void CitizenAI_ActionExecutor_c4c50(int64_t* param_1, void* param_2) {
+    EnsureInit();
+    bool bVar2 = false;            // R14: "stay" sticky flag → break the outer loop
+    do {
+        int iVar1 = static_cast<int>(param_1[3]);                       // top index (stack+0x18)
+        int64_t* self = reinterpret_cast<int64_t*>(*param_1 + static_cast<int64_t>(iVar1) * 8);
+        if (*reinterpret_cast<int64_t*>(*param_1 + static_cast<int64_t>(iVar1) * 8) == 0) {
+            *reinterpret_cast<int*>(param_1 + 3) = iVar1 - 1;           // empty slot → pop
+        } else {
+            int iVar3 = 1;
+            if (-1 < iVar1) {
+                CheckPtr(self);
+                int64_t* local_res8;
+                if (*reinterpret_cast<char*>(*self + 0x18) == '\0') {
+                    // PRECHECK phase: walk the node list, set +0x18=1, call precheck(node,stack).
+                    for (local_res8 = *reinterpret_cast<int64_t**>(
+                             *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
+                         local_res8 != nullptr;
+                         local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
+                        CheckPtr(&local_res8);
+                        *reinterpret_cast<uint8_t*>(local_res8 + 3) = 1;   // node+0x18 = 1
+                        iVar3 = CallPre(local_res8, param_1);
+                        if (iVar3 != 1) goto LAB_d17;
+                        CheckPtr(&local_res8);
+                    }
+                    iVar3 = 1;
+                }
+LAB_d17:
+                if (-1 < static_cast<int>(param_1[3])) {
+                    if (iVar3 == 1) {
+                        // MAIN phase: walk the node list, call main(node,stack,time).
+                        for (local_res8 = *reinterpret_cast<int64_t**>(
+                                 *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
+                             local_res8 != nullptr;
+                             local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
+                            CheckPtr(&local_res8);
+                            iVar3 = CallMain(local_res8, param_1, param_2);
+                            if (iVar3 != 1) goto LAB_d85;
+                            CheckPtr(&local_res8);
+                        }
+                        iVar3 = 1;
+                        bVar2 = true;
+                    }
+LAB_d85:
+                    if ((-1 < static_cast<int>(param_1[3])) && (iVar3 == 0)) {
+                        // POP phase: walk the node list, for entered nodes clear +0x18 and
+                        // call exit(node,stack); then DeletePtr the slot, re-Ctor, dec top.
+                        for (local_res8 = *reinterpret_cast<int64_t**>(
+                                 *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8);
+                             local_res8 != nullptr;
+                             local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
+                            CheckPtr(&local_res8);
+                            if (*reinterpret_cast<char*>(local_res8 + 3) != '\0') {  // node+0x18
+                                CheckPtr(&local_res8);
+                                *reinterpret_cast<uint8_t*>(local_res8 + 3) = 0;
+                                CallExit(local_res8, param_1);
+                            }
+                            CheckPtr(&local_res8);
+                        }
+                        if (fn_InternalBasePtr_DeletePtr)
+                            fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(
+                                *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8));
+                        int64_t local_res18 = 0;
+                        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&local_res18, nullptr);
+                        *reinterpret_cast<int64_t*>(
+                            *param_1 + static_cast<int64_t>(static_cast<int>(param_1[3])) * 8) = local_res18;
+                        *reinterpret_cast<int*>(param_1 + 3) = static_cast<int>(param_1[3]) - 1;
+                        goto LAB_e38;
+                    }
+                }
+                if (iVar3 == 2) {
+                    if (s_fn_taskCleanup) s_fn_taskCleanup(param_1);
+                }
+            }
+LAB_e38:
+            if (bVar2) break;
+        }
+    } while (-1 < static_cast<int>(param_1[3]));
+    if (static_cast<int>(param_1[3]) < 0) {
+        CitizenAI_ActionFlush_c4bb0(reinterpret_cast<int64_t>(param_1));
+    }
+}
+
+// ===========================================================================
+// 0x1401094c0  CharacterComponent move-tick (Ghidra: "CharacterComponent_OnAttach").
+// HEAD (exercised in standalone): run the executor if the stack is non-empty, then
+// early-return when the char render-index (self+0x40) is < 0 — the crash-safety gate.
+// TAIL (DORMANT in standalone, char-index < 0): the ModelComponent transform/animation
+// update. Ported faithfully but every engine dispatch-slot / exe sub-callee is resolved
+// lazily + null-guarded. The tail touches the inert rendering layer and must NOT run
+// until ModelComponent is brought live. See report for the full sub-callee table.
+// ===========================================================================
+namespace {
+
+// --- exe .rdata read by the tail ---
+static const uint8_t* s_pRootOnlyUpdates = nullptr;   // _rootOnlyUpdates_exref @ 0x1401bc2e8 (single byte)
+static const float* s_pDAT_172220 = nullptr;
+static const float* s_pDAT_172238 = nullptr;
+static const float* s_pDAT_1720e4 = nullptr;
+static const float* s_pDAT_1720cc = nullptr;
+static const float* s_pDAT_172114 = nullptr;
+static const float* s_pDAT_17214c = nullptr;
+static const float* s_pDAT_1722a0 = nullptr;
+static const uint64_t* s_pDAT_1722b0 = nullptr;   // double abs mask
+static const uint32_t* s_pDAT_1722c0 = nullptr;   // float sign-flip mask (XOR)
+static const float* s_pUVScale = nullptr;         // g_fUVScale (0x140172148 region — read via 0x14017214c sibling)
+
+// --- exe sub-callees used by the tail (some registered, some NOT) ---
+typedef float  (*fn_f1_t)(float);                          // 131090 / 131c90 / 132010
+typedef float* (*fn_gridToWorld_t)(void* game, float* out3, float* inXY2, char flag, void* outTri); // 9f3e0 (REG)
+typedef void   (*fn_sub8660_t)(float* arr, int idx);       // 018660
+static fn_f1_t          s_fn_131090 = nullptr;   // CharacterComponent_helper_1090 (NOT REG)
+static fn_f1_t          s_fn_131c90 = nullptr;   // FUN_140131c90 sin-ish           (NOT REG)
+static fn_f1_t          s_fn_132010 = nullptr;   // WorkImpl_Sqrtf_132010           (REG)
+static fn_gridToWorld_t s_fn_9f3e0  = nullptr;   // GridToWorld / impl_f3e0         (REG)
+static fn_sub8660_t     s_fn_18660  = nullptr;   // CharacterComponent_sub_8660     (NOT REG)
+
+// --- engine dispatch slots used by the tail (all rendering-layer) ---
+typedef void* (*fn_rootAnimOff_t)(void* meshInstance);                 // [0x140152960]
+typedef void  (*fn_vec3Dot_t)(void* v, void* out);                     // [0x140151298]
+typedef void* (*fn_vec3Ctor_t)(void* self, float x, float y, float z); // [0x140152a30]
+typedef void  (*fn_transformAssign_t)(void* dst, void* src);          // [0x140151280]
+typedef void  (*fn_geomSetXform_t)(void* geom, void* xform);          // [0x1401512e0]
+typedef void  (*fn_transformCtor_t)(void* self, void* src);          // [0x140151418]
+typedef void  (*fn_pickSetXform_t)(void* scene, uint32_t id, void* xform); // [0x1401529a8]
+typedef float* (*fn_scalarMax_t)(void* a, void* b);                   // [0x140151e78]
+static fn_rootAnimOff_t     s_slot_rootAnim = nullptr;
+static fn_vec3Dot_t         s_slot_dot      = nullptr;
+static fn_vec3Ctor_t        s_slot_vec3     = nullptr;
+static fn_transformAssign_t s_slot_xfAssign = nullptr;
+static fn_geomSetXform_t    s_slot_geomXf   = nullptr;
+static fn_transformCtor_t   s_slot_xfCtor   = nullptr;
+static fn_pickSetXform_t    s_slot_pickXf   = nullptr;
+static fn_scalarMax_t       s_slot_max      = nullptr;
+
+static void* ResolveSlot(uintptr_t slotAddr) {
+    uintptr_t s = ResolveAddr(Module::Exe, slotAddr);
+    return s ? *reinterpret_cast<void**>(s) : nullptr;
+}
+
+static bool s_tailInit = false;
+static void EnsureTailInit() {
+    if (s_tailInit) return;
+    s_pRootOnlyUpdates = reinterpret_cast<const uint8_t*>(ResolveAddr(Module::Exe, 0x1401bc2e8));
+    s_pDAT_172220 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172220));
+    s_pDAT_172238 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172238));
+    s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
+    s_pDAT_1720cc = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720cc));
+    s_pDAT_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
+    s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
+    s_pDAT_1722a0 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401722a0));
+    s_pDAT_1722b0 = reinterpret_cast<const uint64_t*>(ResolveAddr(Module::Exe, 0x1401722b0));
+    s_pDAT_1722c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401722c0));
+    s_pUVScale    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172148));
+    s_fn_131090 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140131090));
+    s_fn_131c90 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140131c90));
+    s_fn_132010 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140132010));
+    s_fn_9f3e0  = reinterpret_cast<fn_gridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_fn_18660  = reinterpret_cast<fn_sub8660_t>(ResolveAddr(Module::Exe, 0x140018660));
+    s_slot_rootAnim = reinterpret_cast<fn_rootAnimOff_t>(ResolveSlot(0x140152960));
+    s_slot_dot      = reinterpret_cast<fn_vec3Dot_t>(ResolveSlot(0x140151298));
+    s_slot_vec3     = reinterpret_cast<fn_vec3Ctor_t>(ResolveSlot(0x140152a30));
+    s_slot_xfAssign = reinterpret_cast<fn_transformAssign_t>(ResolveSlot(0x140151280));
+    s_slot_geomXf   = reinterpret_cast<fn_geomSetXform_t>(ResolveSlot(0x1401512e0));
+    s_slot_xfCtor   = reinterpret_cast<fn_transformCtor_t>(ResolveSlot(0x140151418));
+    s_slot_pickXf   = reinterpret_cast<fn_pickSetXform_t>(ResolveSlot(0x1401529a8));
+    s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
+    s_tailInit = true;
+}
+
+static inline float fabs_f(float v) {
+    // matches the disasm's CVTPS2PD; ANDPD abs-mask; CVTPD2PS — plain magnitude.
+    return v < 0.0f ? -v : v;
+}
+
+} // namespace
+
+extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
+    EnsureInit();
+    // ---- HEAD (exercised) -------------------------------------------------
+    // if (-1 < *(int*)(self+0x60)) run the executor on the stack at self+0x48.
+    if (-1 < *reinterpret_cast<int*>(self + 0x60)) {
+        CitizenAI_ActionExecutor_c4c50(reinterpret_cast<int64_t*>(self + 0x48), time);
+    }
+    // Crash-safety gate: char render-index < 0 (always in standalone) → skip the tail.
+    if (*reinterpret_cast<int*>(self + 0x40) < 0) {
+        return;
+    }
+
+    // ---- TAIL (DORMANT in standalone: only reached when char-index >= 0) --
+    // Faithful transcription of the ModelComponent transform/animation update. Every
+    // engine slot / exe sub-callee below is null-guarded; the block touches the inert
+    // ModelComponent(+0x68)/MeshInstance/Geometry/Picking rendering layer.
+    EnsureTailInit();
+
+    uint8_t rootOnly = s_pRootOnlyUpdates ? *s_pRootOnlyUpdates : 0;
+
+    CheckPtr(self + 0x68);
+    int64_t model = *reinterpret_cast<int64_t*>(self + 0x68);
+    float fx = *reinterpret_cast<float*>(model + 0x158);
+    float fy = *reinterpret_cast<float*>(model + 0x15c);
+    float fz = *reinterpret_cast<float*>(model + 0x160);
+    float pos[3] = { fx, fy, fz };
+
+    CheckPtr(self + 0x68);
+    float fVar14 = *reinterpret_cast<float*>(self + 0x3c);
+    float fVar10 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x168) -
+                   *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
+    float fVar13 = fVar14 - fVar10;
+    float c172220 = s_pDAT_172220 ? *s_pDAT_172220 : 0.0f;
+    float c172238 = s_pDAT_172238 ? *s_pDAT_172238 : 0.0f;
+    float c1720e4 = s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.0f;
+    float c1722a0 = s_pDAT_1722a0 ? *s_pDAT_1722a0 : 0.0f;
+    float uvScale = s_pUVScale ? *s_pUVScale : 0.0f;
+
+    if (c172220 <= fabs_f(fVar13)) {
+        if (fVar13 <= 0.0f) {
+            fVar13 = fVar13 + c172238;
+        } else {
+            fVar13 = -(c172238 - fVar13);   // XOR sign-flip
+        }
+    }
+    if (c1720e4 < fabs_f(fVar13)) {
+        float t = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x28);
+        fVar14 = (fVar13 + fVar10) * (uvScale - t) + t * fVar10;
+        if (fVar14 <= c172220) {
+            if (fVar14 < c1722a0) fVar14 = fVar14 + c172238;
+        } else {
+            fVar14 = fVar14 - c172238;
+        }
+    }
+
+    CheckPtr(self + 0x68);
+    void* rootAnim = (s_slot_rootAnim && model)
+                         ? s_slot_rootAnim(reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x28))
+                         : nullptr;
+    float dotOut[2] = { 0.0f, 0.0f };
+    if (s_slot_dot && rootAnim) s_slot_dot(rootAnim, dotOut);
+    float speed = s_fn_132010 ? s_fn_132010(dotOut[0]) : 0.0f;
+    speed = speed * *reinterpret_cast<float*>(self + 0x38);
+    if (0.0f < speed) {
+        float ax = speed * *reinterpret_cast<float*>(self + 0x2c);
+        float ay = speed * *reinterpret_cast<float*>(self + 0x30);
+        float az = speed * *reinterpret_cast<float*>(self + 0x34);
+        // two Vector3 ctors in the original (locals), result folded into pos.
+        pos[0] = fx + ax; pos[1] = fy + ay; pos[2] = fz + az;
+        fx = pos[0]; fy = pos[1];
+    }
+
+    int* gameWorld = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    bool blockedHandled = false;
+    if (rootOnly == 0) {
+        int dim = *gameWorld;
+        int ix = static_cast<int>(fx + static_cast<float>(dim >> 1));
+        int iy = static_cast<int>(fy + static_cast<float>(dim >> 1));
+        if (ix < 0) ix = 0;
+        if (dim <= ix) ix = dim - 1;
+        if (iy < 0) iy = 0;
+        if (dim <= iy) iy = dim - 1;
+        int64_t cellBase = *reinterpret_cast<int64_t*>(gameWorld + 0x20);
+        if (*reinterpret_cast<char*>(cellBase + 0x29 +
+                (static_cast<int64_t>(dim) * iy + ix) * 0x30) == '\x0b') {
+            pos[2] = 0.0f; pos[0] = fx; pos[1] = fy;
+            blockedHandled = true;     // goto LAB_14010981e
+        }
+    }
+
+    if (!blockedHandled) {
+        if (*reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x3c) == '\0') {
+            if (rootOnly == 0) {
+                float triOut[4] = { 0, 0, 0, 0 };
+                float* pf = nullptr;
+                if (s_fn_9f3e0) pf = s_fn_9f3e0(gameWorld, triOut, pos, '\0', nullptr);
+                float maxIn[2] = { pf ? pf[2] : 0.0f, 0.0f };
+                float maxArg = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x44);
+                (void)maxArg;
+                if (pf) { fx = pf[0]; fy = pf[1]; }
+                float* mx = (s_slot_max) ? s_slot_max(maxIn, &maxArg) : nullptr;
+                pos[2] = mx ? *mx : (pf ? pf[2] : 0.0f);
+                pos[0] = fx; pos[1] = fy;
+            }
+        } else {
+            pos[2] = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x40);
+            pos[0] = fx; pos[1] = fy;
+        }
+    }
+
+    // LAB_14010981e:
+    fVar14 = fVar14 + *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
+    float c1720cc = s_pDAT_1720cc ? *s_pDAT_1720cc : 0.0f;
+    float c172114 = s_pDAT_172114 ? *s_pDAT_172114 : 0.0f;
+    float ang = fVar14 * c1720cc * c172114;
+    float s_ang = s_fn_131c90 ? s_fn_131c90(ang) : 0.0f;
+    float negSin = -s_ang;
+    float c_ang = s_fn_131090 ? s_fn_131090(ang) : 0.0f;
+
+    // build a Transform (local_d0..) = { 0, 0, pos.xy | pos.z, quaternion(negSin,c_ang) }
+    struct { float a, b, c, d, e, f, g, h; } xform;
+    xform.a = 0; xform.b = 0;
+    xform.c = pos[0]; xform.d = pos[1];
+    xform.e = negSin; xform.f = c_ang;
+    xform.g = pos[2]; xform.h = 0;
+    (void)xform;
+
+    CheckPtr(self + 0x68);
+    model = *reinterpret_cast<int64_t*>(self + 0x68);
+    if (s_slot_xfAssign) s_slot_xfAssign(reinterpret_cast<void*>(model + 0x148), &xform);
+    *reinterpret_cast<float*>(model + 0x168) = fVar14;
+    if (s_fn_132010) { /* unused result guard symmetry */ }
+    if (s_slot_geomXf)
+        s_slot_geomXf(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(model + 0x148));
+
+    if ((*reinterpret_cast<int64_t*>(self + 0x70) != 0) && (rootOnly == 0)) {
+        CheckPtr(self + 0x68);
+        uint8_t localXform[136];
+        if (s_slot_xfCtor)
+            s_slot_xfCtor(localXform, reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x148));
+        CheckPtr(self + 0x70);
+        uint32_t pickId = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x70) + 0x28);
+        if (-1 < static_cast<int>(pickId)) {
+            void* pickScene = *reinterpret_cast<void**>(
+                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
+            if (s_slot_pickXf) s_slot_pickXf(pickScene, pickId, localXform);
+        }
+    }
+
+    if (s_fn_18660) {
+        s_fn_18660(*reinterpret_cast<float**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x88),
+                   *reinterpret_cast<int*>(self + 0x40));
+    }
+}
+
+#endif // STANDALONE_EXE
