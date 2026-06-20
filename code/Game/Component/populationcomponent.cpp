@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -44,6 +46,24 @@ void PopulationComponent_Update(PopulationComponent* self, int64_t* pDeltaTime) 
     // Accumulate delta time into +0x60
     int64_t* pAccum = reinterpret_cast<int64_t*>(&self->field60);
     *pAccum += *pDeltaTime;
+
+    // Phase-1 bring-up verification trace (env BANISHED_POP_TRACE, default off →
+    // byte-unchanged): follows ONE PopulationComponent and prints its accumulating
+    // +0x60 timer to confirm the live recipe routes a second component through +0x48.
+    {
+        static int s_st = -1, s_n = 0;
+        static void* s_lock = nullptr;
+        if (s_st < 0) {
+            const char* e = std::getenv("BANISHED_POP_TRACE");
+            s_st = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_st == 1 && s_lock == nullptr) s_lock = self;
+        if (s_st == 1 && self == s_lock && s_n < 12) {
+            fprintf(stderr, "[PopTrace] self=%p accum(+60)=%lld owner(+28)=%p\n",
+                    (void*)self, (long long)*pAccum, (void*)self->field28);
+            fflush(stderr); s_n++;
+        }
+    }
 
     // Convert smoothing interval (300.0f seconds) to engine ticks
     int64_t smoothInterval;
@@ -321,7 +341,13 @@ void PopulationComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(PopulationComponent, 0x70, 0xCB)
+// Live bring-up (Phase 1, env BANISHED_LIVE_POPULATION or global BANISHED_LIVE_COMPONENTS).
+// PopulationComponent_Update is crash-safe on an inert body: +0x60 accumulates
+// unconditionally (observable), SmoothDensity is a no-op while the cell count
+// (+0x40) is 0, and the habitability scan early-returns on the null owner (+0x28).
+// Full density simulation needs the +0x28 owner / +0x38 grid / +0x40 count body-init.
+COMPONENT_LIVE_FACTORY(PopulationComponent, 0x70, 0xCB,
+                       "BANISHED_LIVE_POPULATION", PopulationComponent_Update)
 REGISTER_TYPE(PopulationComponent, "Component",
               &PopulationComponent_Factory, &PopulationComponent_CreateInPlace);
 #endif // STANDALONE_EXE
