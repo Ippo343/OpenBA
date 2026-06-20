@@ -35,6 +35,11 @@ static fn_calc116540_t  s_fn_calc116540  = nullptr;
 // RawMaterialDescription type-id global (0x1401c7cb8). Registered+filled (via
 // GetTypeIdByName after Engine::Startup) in reg_action_child_ctors2.cpp; read here.
 static const uint32_t* s_pTid_RawMatDesc = nullptr;
+// StateMachineComponent type-id global (0x1401c7350) — for the bef70 component-find leaf.
+static const uint32_t* s_pTid_StateMachine = nullptr;
+// System::Random::RandFloat (Runtime export) — for the bef70 weighted-random leaf.
+typedef float (*fn_randFloat_t)(void* random);
+static fn_randFloat_t s_fn_randFloat = nullptr;
 
 static bool s_init = false;
 static void EnsureInit() {
@@ -48,6 +53,8 @@ static void EnsureInit() {
     s_fn_findStorage  = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_fn_calc116540   = reinterpret_cast<fn_calc116540_t >(ResolveAddr(Module::Exe, 0x140116540));
     s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
+    s_pTid_StateMachine = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
+    s_fn_randFloat = reinterpret_cast<fn_randFloat_t>(ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
     s_init = true;
 }
 } // namespace
@@ -414,4 +421,96 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
 
     ActChild_TransferToCarrier_ca230(reinterpret_cast<int64_t>(self), param_4, requested);
     return self;
+}
+
+// ============================================================
+// FUN_1400c6440 — ConsumeRawMaterial_Action_Ctor3 (2-arg variant)
+//   RCX=self, RDX=param_2.  vtable ConsumeRawMaterial; +0x20=*param_2, +0x28=0, +0x30=0.
+// ============================================================
+void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
+    EnsureInit();
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
+    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
+    s[0x18]                                = 0;
+    *reinterpret_cast<uintptr_t*>(s)       = s_vt_ConsumeRaw;
+    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x20) = *param_2;
+    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    return self;
+}
+
+// ============================================================
+// FUN_14000b6f0 — find the StateMachineComponent on an entity's component list.
+// Walks param_1's list (ptr +0x30, count +0x38, stride 8): child whose GetTypeId
+// (vtable+0x10) == *0x1401c7350, IsDerivedFrom-confirmed → found; writes the IBP into
+// param_2 via InternalBasePtr_Ctor and returns param_2.
+// ============================================================
+void* Entity_FindStateMachine_b6f0(int64_t param_1, void* param_2) {
+    EnsureInit();
+    void* found = nullptr;
+    uint32_t wantTid = s_pTid_StateMachine ? *s_pTid_StateMachine : 0;
+    int count = *reinterpret_cast<int*>(param_1 + 0x38);
+    if (0 < count) {
+        int idx = 0;
+        int64_t byteOff = 0;
+        while (true) {
+            int64_t* slot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + byteOff);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* child = reinterpret_cast<void*>(*slot);
+            uint32_t tid = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<int64_t*>(child) + 0x10))(child);
+            if (tid == wantTid) {
+                int64_t* mslot = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x30) + (int64_t)idx * 8);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mslot);
+                void* match = reinterpret_cast<void*>(*mslot);
+                if (s_pTid_StateMachine && fn_IsDerivedFrom && fn_IsDerivedFrom(match, *s_pTid_StateMachine))
+                    found = match;
+                break;
+            }
+            idx++; byteOff += 8;
+            if (idx >= count) break;
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, found);
+    return param_2;
+}
+
+// ============================================================
+// FUN_140119470 — weighted-random index over a float-weight array.
+// If *(int*)(param_1+0x50) == -1: sum the weights[ +0x58 ] (count +0x60), draw
+// r = RandFloat(world.random), walk the weights again returning the first index where
+// the running sum exceeds r*total. Otherwise (or no weights) returns 0.
+// (Returns ulonglong index; non-negative *(int*)(+0x50) returns that value.)
+// ============================================================
+uint64_t WeightedRandomIndex_119470(int64_t param_1) {
+    EnsureInit();
+    uint32_t sel = *reinterpret_cast<uint32_t*>(param_1 + 0x50);
+    uint64_t result = sel;
+    if ((int)sel < 0) {
+        if (sel == 0xffffffff) {
+            int n = *reinterpret_cast<int*>(param_1 + 0x60);
+            float total = 0.0f;
+            if (0 < n) {
+                float* w = *reinterpret_cast<float**>(param_1 + 0x58);
+                for (int k = 0; k < n; ++k) total += w[k];
+            }
+            void* random = g_pGameWorldSingleton
+                ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8)
+                : nullptr;
+            float r = (s_fn_randFloat && random) ? s_fn_randFloat(random) : 0.0f;
+            result = 0;
+            if (0 < n) {
+                float* w = *reinterpret_cast<float**>(param_1 + 0x58);
+                float running = 0.0f;
+                for (int k = 0; k < n; ++k) {
+                    running += w[k];
+                    if (r * total < running) return (uint64_t)k;
+                }
+            }
+        }
+        result = 0;
+    }
+    return result;
 }
