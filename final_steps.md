@@ -103,11 +103,14 @@ The 4-step recipe (per `project_component_bringup_frontier`): (1) real per-type 
   - [ ] Reimplement the thread queue: `0x1400a68b0/a6a30/a6b20/a6c10` enqueue, `FUN_1400a6430`, the `System::Thread::Start` spin (`a6fe0/a8c90/9f2f0/a6e30`). Decide single-thread-synchronous vs. real worker thread (single-threaded standalone hangs on the spin-loop — likely run the queue synchronously).
   - [ ] Runtime mangled names for the queue primitives are in `reference_runtime_worker_mangled_names` memory (CritSec Lock/Unlock, Thread::Start, static MemAlloc behind IAT slots 0x140152540/550/558/b60).
   - [ ] Register the now-closure-safe addrs: Action move family (`9cfb0/9e550/10a1f0/c8c10/116650/22970` + deps), Component map/zone (`17230/9d360/1241b0/124750`), roadtool `0x14009ce00`, RemovalTool CalcPath `0x1401035e0`.
-- [ ] **Keystone B — Action child-ctor cascade.**
-  - [ ] Reimplement + register the action child-ctors: ShowTool ctor `0x140042890`, `0x1400c29a0`, SendComponentMessage/CompleteTask/PerformWork/MoveTo/*NaturalResource ctors (`c5da0/cb1d0/c9720/c9170/cadf0/c57d0/c6a20/c54e0`), and the copy-ctors (`c59d0/c63b0/ca520/c8400`).
-  - [ ] This unblocks ~15 Work action-ctors (`ba9f0/881d0/bb0a0/f2370/bb7b0/bbbc0/bdd20/be6e0/beae0/c2490/bef70/bf790/bffd0/c1eb0/c1530/c8a0`) — register them after the cascade lands.
+- [~] **Keystone B — Action child-ctor cascade.** CORE DONE (branch `wave/phase2-keystone-b`, commits 246fd0f/b89ec11/bb89766). Gap 95→87, Work 23→15. All ports Ghidra-verified offset-by-offset (B2 verify caught+fixed 7 const bugs; B3 6-builder verify = 0 discrepancies).
+  - [x] **B1** — child-ctors: ShowTool `0x140042890`, `Entity_impl_29a0 0x1400c29a0` (heading), RemoveNR `cadf0`, AnimateNR `c57d0`, CreateNR `c6a20`. (`code/Game/Action/action_child_ctors.cpp`)
+  - [x] **B1 leaves 2** — copy-ctors CompleteRoad `c59d0`, HuntAnimal `c8400`, DropOff `c7cd0`, ConsumeRawMaterial `c63b0` + consume-list `Entity_impl_64b0 c64b0`. (`action_child_ctors2.cpp`) (`cb1d0/c5da0/c9720/c9170/c54e0` were already registered in `reg_pf_ctors`.)
+  - [x] **B2** — 4 Work ctors `c1eb0/c2490/bb0a0/be6e0` (`work_base_actionctor.cpp`).
+  - [x] **B3 wave 1** — 5 Work builders `ba9f0/bb7b0/beae0/bbbc0/bdd20` (`work_act_{perform,rawmat,hunt}.cpp`).
+  - [ ] **B3 tail (complex defers, remaining Work gap 15):** the `ca520` cascade — PickupStoredRawMaterial `ca520` + Resource_TransferToCarrier `ca230` + **fill the RawMaterial type-id global `0x1401c7cb8`** (needs the exact class name; null→divide-by-`*(null+0x48)` crash in the count path; also fixes latent risk in existing `action_base_rawmat`/`action_pf_*`/`StorageComponent_QueryCount`) → unblocks `bffd0` (cleararea), `c1530` (harvestarea), `bf790` (Pathfinding_FindPath). Then `bef70` (needs `c6440/0b6f0/119470`), helpers `c8a0`/`881d0` (own leaf cascades), serialize `f2370`/`f2f00`/`eff80` (large), `115e60` L2, 4 MarketWork AVL `2a9f0/2aaa0/2ac40/2b290`.
   - [ ] Also: `RemoveAnimal_Action_Ctor 0x1400bbea0` (deferred SKIP) becomes registerable once child copy-ctors land.
-- [ ] **Exit criteria:** Work gap 23 → ~4 (MarketWork AVL only); Action deferred set → 0; pathfinding exercised + verified (Ghidra + debugger, since autostart doesn't hit it).
+- [ ] **Exit criteria:** Work gap 23 → ~4 (MarketWork AVL only) [at 15]; Action deferred set → 0; pathfinding exercised + verified (Ghidra + debugger, since autostart doesn't hit it).
 
 ### Phase 3 — Keystone D (citizen): the heart of gameplay
 *Goal: citizens actually live — AI plans, state machine drives actions, characters animate.*
