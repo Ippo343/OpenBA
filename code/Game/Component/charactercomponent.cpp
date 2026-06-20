@@ -118,13 +118,76 @@ void CharacterComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid CharacterComponent: size 0x80 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x8f (from CharacterComponent_Ctor) + zeroed body.
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(CharacterComponent, 0x80, 0x8f)
+// ------------------------------------------------------------------
+// Phase 3 / Keystone D — CharacterComponent Startup-only live-wiring (Brick 4a).
+//
+// The citizen position/geometry pipeline: CharacterComponent::Startup
+// (0x140109a30, slot +0x20) finds the sibling ModelComponent (+0x68, whose
+// transform at +0x158 IS the citizen world position) + PickingComponent (+0x70)
+// + adopts the CharacterDescription (+0x78). The Brick-2 CanFindHousing guard
+// bails while CharacterComponent+0x68 is null; this brick populates it so the
+// CitizenAI loop can actually evaluate spatial decisions (housing).
+//
+// Startup-ONLY (the heavy move/anim tick + action executor at 0x1401094c0 stays
+// inert — that is Brick 4b): we set +0x60 = -1 (no actions) so even a future
+// move-tick would skip the executor on the empty stack. Default (env off) =>
+// inert => byte-unchanged. Finds are self-contained via GetTypeIdByName (the
+// .rdata type-id globals c7a50/c7c10 are 0xFFFFFFFF in standalone).
+// ------------------------------------------------------------------
+static void* CharComp_FindSiblingByName(int64_t ownerEntity, const char* typeName) {
+    if (!ownerEntity) return nullptr;
+    uint32_t want = ::Object::GetTypeIdByName(typeName);
+    if (want == 0 || want == 0xFFFFFFFF) return nullptr;
+    uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
+    int count = *reinterpret_cast<int*>(e + 0x38);
+    int64_t arr = *reinterpret_cast<int64_t*>(e + 0x30);
+    for (int i = 0; i < count; i++) {
+        void** ibp = reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(ibp);
+        void* comp = *ibp;
+        if (!comp) continue;
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*getType_t)(void*);
+        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        if (tid == want)
+            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+    }
+    return nullptr;
+}
+
+static void CharacterComponent_BodyInit(CharacterComponent* self) {
+    if (!self) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+
+    // NB: the ctor (0x140109d20) sets +0x40 grid-index = -1 and +0x60 char-index
+    // = -1, but we DELIBERATELY leave both at the inert-factory 0. The citizen
+    // alive-check (CitizenAI/CitizenComponent: CharacterComponent+0x60 + 1 > 0)
+    // treats char-index>=0 as "alive"; the real >=0 assignment happens when the
+    // character/animation system registers this citizen (not live until Brick 4b),
+    // so the ctor's -1 would make a just-spawned citizen read as DEAD and drive
+    // the (un-brought-up) education/age path -> crash. 0 reads "alive", which is
+    // correct for a freshly spawned citizen. (Move-tick is inert here, so +0x60=0
+    // never triggers the executor.)
+
+    // Startup (0x140109a30): find sibling components + adopt the description.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
+    int64_t owner = *reinterpret_cast<int64_t*>(p + 0x10);
+    if (!owner) return;
+
+    // +0x68 = ModelComponent (geometry; +0x158 = world position).
+    *reinterpret_cast<void**>(p + 0x68) = CharComp_FindSiblingByName(owner, "ModelComponent");
+    // +0x70 = PickingComponent.
+    *reinterpret_cast<void**>(p + 0x70) = CharComp_FindSiblingByName(owner, "PickingComponent");
+    // +0x78 = CharacterDescription (trust comp+0x18).
+    *reinterpret_cast<void**>(p + 0x78) = *reinterpret_cast<void**>(p + 0x18);
+}
+
+COMPONENT_LIVE_FACTORY_STARTUP(CharacterComponent, 0x80, 0x8f,
+                               "BANISHED_LIVE_CHARACTER", CharacterComponent_BodyInit)
 REGISTER_TYPE(CharacterComponent, "Component",
               &CharacterComponent_Factory, &CharacterComponent_CreateInPlace);
 #endif // STANDALONE_EXE
