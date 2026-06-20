@@ -5,10 +5,8 @@
 // offset-by-offset against the disassembly. Closure: every action child-ctor they call
 // is registered (B1 child-ctors + B3 leaf copy-ctors + the pre-existing pf ctors).
 //
-// NOTE: bffd0 (PerformWork_Action_Ctor) is INTENTIONALLY NOT registered here — its
-// closure includes PickupStoredRawMaterial_Action_CopyCtor 0x1400ca520, which needs
-// Resource_TransferToCarrier 0x1400ca230 + the RawMaterial type-id global 0x1401c7cb8
-// filled. Deferred to the ca520 cascade.
+// bffd0 (PerformWork_Action_Ctor, cleararea) is now closure-safe after the ca520
+// cascade landed (ca520/ca230 + RawMaterialDescription type-id global 0x1401c7cb8).
 #ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
@@ -18,6 +16,7 @@ extern void WorkAct_GatherWorkCtor_bb7b0(void*, uint32_t, int64_t*, float*, uint
 extern void WorkAct_FishWorkCtor_beae0(void*, uint32_t, int64_t*, float*, float, uint64_t, float, uint32_t, uint32_t); // 0x1400beae0
 extern void WorkAct_HuntWorkCtor_bbbc0(void*, uint32_t, int64_t*, float*, float, char); // 0x1400bbbc0
 extern void WorkAct_ShowToolCtor3_bdd20(void*, uint32_t, uint32_t*, uint32_t, float*, int, uint32_t*, uint32_t, int64_t*, uint32_t*, uint64_t, int64_t); // 0x1400bdd20
+extern void WorkAct_PerformWorkCtor_bffd0(void*, uint32_t, uint32_t*, int, uint32_t, uint8_t, uint32_t, int64_t, int, float*, int64_t*); // 0x1400bffd0
 
 void RegisterWorkActBatch() {
     RegisterExeAddr(0x1400ba9f0, reinterpret_cast<uintptr_t>(&WorkAct_PerformWorkCopyCtor_ba9f0));
@@ -25,5 +24,6 @@ void RegisterWorkActBatch() {
     RegisterExeAddr(0x1400beae0, reinterpret_cast<uintptr_t>(&WorkAct_FishWorkCtor_beae0));
     RegisterExeAddr(0x1400bbbc0, reinterpret_cast<uintptr_t>(&WorkAct_HuntWorkCtor_bbbc0));
     RegisterExeAddr(0x1400bdd20, reinterpret_cast<uintptr_t>(&WorkAct_ShowToolCtor3_bdd20));
+    RegisterExeAddr(0x1400bffd0, reinterpret_cast<uintptr_t>(&WorkAct_PerformWorkCtor_bffd0));
 }
 #endif // STANDALONE_EXE

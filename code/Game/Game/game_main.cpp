@@ -65,6 +65,8 @@ extern "C" void FillComponentTypeIdGlobals_nature();
 extern "C" void FillComponentTypeIdGlobals_fruit();
 extern "C" void FillComponentTypeIdGlobals_spawn();
 extern "C" void FillComponentTypeIdGlobals_tombstone();
+// Phase 2 Keystone B3 — RawMaterialDescription type-id global (0x1401c7cb8) for ca520.
+extern "C" void FillTypeIdGlobals_actionchild();
 #endif
 
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
@@ -393,6 +395,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillComponentTypeIdGlobals_fruit();
     FillComponentTypeIdGlobals_spawn();
     FillComponentTypeIdGlobals_tombstone();
+    FillTypeIdGlobals_actionchild();   // RawMaterialDescription tid 0x1401c7cb8 (ca520 + latent fix)
 #endif
 
     if (ok != 0) {
