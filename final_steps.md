@@ -3,6 +3,10 @@
 > Living checklist. Check items off session-by-session. Recompute the gap and re-read the
 > blocker graph each session — registrations and bring-ups shift what's unblocked.
 > Last ground-truthed: 2026-06-19 on branch `wave/component-gap` (cumulative tip; `main` is an ancestor).
+> **Phase 1 EXIT CRITERIA MET (2026-06-19, branch `wave/phase1-component-bringup`):** GrowthComponent is
+> fully live + in-game-verified (monotonic per-tick growth); `COMPONENT_LIVE_FACTORY` macro templated;
+> default run byte-unchanged. The remaining per-component bring-ups (Fruit/Tombstone/Population/…) are
+> scoped under Phase 1 below — each needs its own Startup body-init. See §3 Phase 1.
 
 ---
 
@@ -74,20 +78,21 @@ The registration waves have hit diminishing returns: **the 95 remaining gap addr
 *Goal: get a visible, observable simulation on components that need neither pathing nor actions.*
 The 4-step recipe (per `project_component_bringup_frontier`): (1) real per-type vtable routing **+0x48 → `<Comp>_Update`** (keep +0x00 dtor, +0x10 GetTypeId, +0x40 safe no-op); (2) real **Startup/Serialize** to populate the body from its Description; (3) register the exe helpers `<Comp>_Update` calls; (4) bucket/flag eligibility (entity bit 3 + comp bit 3 + processCount>0).
 
-- [ ] **Finish GrowthComponent** (worked example — step 1 routing already done, env `BANISHED_LIVE_GROWTH`).
-  - [ ] Debugger-confirm `GrowthComponent_Update` is entered each tick via +0x48 (proves routing).
-  - [ ] Implement step 2 (Startup/body-init: config@+0x38, resource@+0x28 from Description).
-  - [ ] Register the helpers it calls (step 3); confirm growth/temperature/harvest actually advances.
-  - [ ] Promote a worked component-factory **macro/template** (`COMPONENT_LIVE_FACTORY`) generalizing the GrowthComponent pattern so the next components are mechanical.
-- [ ] Bring up the other **self-contained sim components** (Update body already exists, no actions/pathing):
-  - [ ] **FruitComponent** (`FruitComponent_Update`)
-  - [ ] **TombstoneComponent** (`TombstoneComponent_Update`)
-  - [ ] **DiseaseComponent** (`DiseaseComponent_Update`) — note: registration deps 48610/48840 still complex.
-  - [ ] **FireComponent** (`FireComponent_Update`) — note: GUARD-M5 audio/scene; may need Keystone C.
-  - [ ] **SpawnComponent** (`SpawnComponent_Update`)
-  - [ ] **PopulationComponent** (`PopulationComponent_Update`)
-  - [ ] **AmbientEnvironmentComponent** (`AmbientEnvironmentComponent_Update`)
-- [ ] **Exit criteria:** at least one component class observably changes state per tick in-game (debugger-verified), recipe documented & templated, default run byte-unchanged with env off.
+- [x] **Finish GrowthComponent** ✅ DONE (2026-06-19, commit 1c0fc18) — fully live, all 4 recipe steps verified in-game (env `BANISHED_LIVE_GROWTH`).
+  - [x] Confirm `GrowthComponent_Update` entered each tick via +0x48 (in-game `BANISHED_GROWTH_TRACE`, proves routing).
+  - [x] Step 2 (Startup/body-init): real `GrowthComponent_Startup` (port of 0x1401206f0) routed to vtable slot 4 (+0x20), populates config@+0x38 (trusts desc@+0x18), resource@+0x28 (sibling via FUN_1400052c0), +0x30, growthScale@+0x4c. Dispatched by `ComponentEntity_StartupComponents` at spawn; lazy-init fallback in the Update guard.
+  - [x] Step 3 (helpers/constants): registered the .rdata float/double consts (300/32/255/-10/1000/0.98/abs-mask, exact bit patterns); growth helper fns were already registered. **Plus a broad latent fix:** the type-id `.rdata` globals (e.g. `0x1401c7b30` NaturalResourceComponent) that ALL `FindComponent` accessors compare against were unregistered (→null → every type-id-keyed find silently returned null in standalone). Now registered + filled via `GetTypeIdByName` **after** `Engine::Startup` (`Object::Factory::Startup` assigns the real CRC ids only then — `InvokeAllRegistrations` is too early). `FillComponentTypeIdGlobals_nature` in game_main.cpp.
+  - [x] Confirmed growth value at resource+0x28 **accumulates monotonically per tick** (0 → 2.79e-4 → 8.35e-4 → 1.39e-3 → …) with no crash.
+  - [x] Promote `COMPONENT_LIVE_FACTORY` / `COMPONENT_LIVE_FACTORY_S` macro ✅ DONE (commit f392a64, component_factory_base.h) — generalizes the pattern (env-gated +0x48 / +0x20 routing, `ComponentFactory::LiveEnabled` honoring per-comp env + global `BANISHED_LIVE_COMPONENTS`). GrowthComponent refactored onto the `_S` variant (re-verified). SpawnComponent wired onto `COMPONENT_LIVE_FACTORY` (crash-safe, env `BANISHED_LIVE_SPAWN`).
+- [ ] Bring up the other **self-contained sim components** (Update body already exists, no actions/pathing). **NOTE:** each needs its own Startup/body-init (GrowthComponent-level work) to be live-safe — the inert factory zeroes the body, and most of these Updates null-deref or misbehave without it (Fruit null-derefs `resourceData`; Tombstone's timer starts 0 → immediate removal; Population's `SmoothDensity` null-derefs after ~45 ticks). The macro makes the *factory* mechanical; the per-component Startup + helper-closure + type-id-global registration is the remaining work.
+  - [ ] **SpawnComponent** — ✅ wired (`COMPONENT_LIVE_FACTORY`, crash-safe early-return); real spawning needs the `DAT_1401c4918` type-id global + DoSpawn closure.
+  - [ ] **FruitComponent** (`FruitComponent_Update`) — needs fruit-resource type-id global + body-init for the +0x28 sibling (else null-deref).
+  - [ ] **PopulationComponent** (`PopulationComponent_Update`) — needs +0x28 owner / +0x38 grid / +0x40 count body-init (SmoothDensity crashes otherwise).
+  - [ ] **TombstoneComponent** (`TombstoneComponent_Update`) — needs the +0x28 duration timer body-init (else timer=0 → instant removal).
+  - [ ] **DiseaseComponent** (`DiseaseComponent_Update`) — registration deps 48610/48840 still complex.
+  - [ ] **FireComponent** (`FireComponent_Update`) — GUARD-M5 audio/scene; may need Keystone C.
+  - [ ] **AmbientEnvironmentComponent** (`AmbientEnvironmentComponent_Update`).
+- [x] **Exit criteria MET** ✅ (2026-06-19): GrowthComponent observably changes state per tick in-game (verified via in-game `BANISHED_GROWTH_TRACE` — monotonic accumulation across consecutive ticks on a single entity), recipe documented & templated (`COMPONENT_LIVE_FACTORY` macro + worked example), default run byte-unchanged with env off (world builds ~1479 entities, 0-byte crash log, 0 traces).
 
 ### Phase 2 — Keystone A (pathfinder worker-thread queue) + Keystone B (action child-ctors)
 *Goal: the two big reimpls that the citizen chain (and most of the remaining reg gap) depend on.*
