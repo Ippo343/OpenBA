@@ -480,7 +480,13 @@ void BuildComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(BuildComponent, 0x78, 0x83)
+#include "Component/controller_live_base.h"
+// Phase 3 / Keystone D step 2 — live ControllerComponent. Embedded state node at
+// +0x28 (CreateState 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState
+// (0x14002f2f0) returns 1. When BANISHED_LIVE_BUILDCTRL is set the entity's
+// StateMachineComponent links this node and ticks it (crash-safe stub virtuals).
+CONTROLLER_LIVE_FACTORY(BuildComponent, 0x78, 0x83, 0x28, 1,
+                        "BANISHED_LIVE_BUILDCTRL")
 REGISTER_TYPE(BuildComponent, "ControllerComponent",
               &BuildComponent_Factory, &BuildComponent_CreateInPlace);
 #endif // STANDALONE_EXE

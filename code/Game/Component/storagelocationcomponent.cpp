@@ -137,7 +137,13 @@ void StorageLocationComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(StorageLocationComponent, 0x48, 0x82)
+#include "Component/controller_live_base.h"
+// Phase 3 / Keystone D step 2 — live ControllerComponent. Embedded state node at
+// +0x28 (CreateState 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState
+// (0x1400026c0) returns 2. When BANISHED_LIVE_STORAGECTRL is set the entity's
+// StateMachineComponent links this node and ticks it (crash-safe stub virtuals).
+CONTROLLER_LIVE_FACTORY(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
+                        "BANISHED_LIVE_STORAGECTRL")
 REGISTER_TYPE(StorageLocationComponent, "ControllerComponent",
               &StorageLocationComponent_Factory, &StorageLocationComponent_CreateInPlace);
 #endif // STANDALONE_EXE

@@ -571,6 +571,71 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
     *reinterpret_cast<uint32_t*>(base + 0x50) = 0xff00ffff;
 }
 
+// Standalone variant of the controller-linker (real linker =
+// StateMachineComponent_Startup 0x14012b6a0). Walks the owner entity's components
+// and links each *live* ControllerComponent's embedded state node into the SM
+// chain. Detection differs from the original: instead of
+// IsDerivedFrom(comp, ControllerComponent) — which is unreliable in standalone's
+// partial factory tree — it calls the component's CreateState (vtable +0x88) and
+// treats a non-null, non-self return as "this is a controller, here is its node".
+// Inert components' slot +0x88 is a stub returning null, so they are skipped.
+// Mirrors the original's effect: GetDefaultState -> SM+0x52, node+0x08 = parent,
+// prev+0x10 = node.
+static void StateMachineComponent_LinkControllers_Standalone(StateMachineComponent* self) {
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
+    void* owner = *reinterpret_cast<void**>(base + 0x10);
+    if (!owner) return;
+    int cnt = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
+    if (cnt <= 0) return;
+
+    uint8_t* controllerNode = base + 0x28;  // SM root node (controllerSelf target)
+    bool gotDefault = false;
+    int linked = 0;
+    for (int i = 0; i < cnt; ++i) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
+        owner = *reinterpret_cast<void**>(base + 0x10);
+        if (!owner) break;
+        uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
+        void** ibp = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+        void* comp = *ibp;
+        if (!comp) continue;
+
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef void* (*CreateState_t)(void*);
+        auto cs = *reinterpret_cast<CreateState_t*>(vt + 0x88);
+        void* node = cs ? cs(comp) : nullptr;
+        if (node == nullptr || node == comp) continue;  // not a live controller
+
+        if (!gotDefault) {
+            typedef int (*GetDefaultState_t)(void*);
+            auto gd = *reinterpret_cast<GetDefaultState_t*>(vt + 0x80);
+            *(base + 0x52) = static_cast<uint8_t>(gd ? gd(comp) : 0);
+            gotDefault = true;
+        }
+        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x08) = controllerNode;  // node parent
+        *reinterpret_cast<void**>(controllerNode + 0x10) = node;                              // prev child
+        controllerNode = reinterpret_cast<uint8_t*>(node);
+        ++linked;
+    }
+
+    if (linked > 0) {
+        static int s_traceState = -1;
+        if (s_traceState < 0) {
+            const char* e = std::getenv("BANISHED_SM_TRACE");
+            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_traceState == 1) {
+            fprintf(stderr, "[SMTrace] LINKED %d controller state node(s) into SM %p "
+                            "(firstChild=%p defaultState=%u)\n",
+                    linked, (void*)self, *reinterpret_cast<void**>(base + 0x38),
+                    *(base + 0x52));
+            fflush(stderr);
+        }
+    }
+}
+
 // Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
 // bucket round-robin calls). Signature matches COMPONENT_LIVE_FACTORY's
 // UpdateVSlot adapter: (self, int64_t* time). The Time pointer is forwarded
@@ -581,9 +646,20 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
     if (!self) return;
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
 
+    // Resolve s_fn_Tick (StateMachine::Tick @0x1400a9660 -> our reimpl). In DLL
+    // mode the hook wrappers call this; standalone has no wrapper, so do it here
+    // (idempotent). Without it s_fn_Tick stays null and Update is a silent no-op.
+    StateMachineComponent_ResolveHelpers();
+
     // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
     if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
         StateMachineComponent_BodyInit(self);
+
+    // Lazy controller-link: until a state node is linked, try to link live
+    // ControllerComponents on this entity (runs after all components are
+    // constructed; idempotent once linked since firstChild then != 0).
+    if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
+        StateMachineComponent_LinkControllers_Standalone(self);
 
     void* firstChild = *reinterpret_cast<void**>(base + 0x38);
 
@@ -598,7 +674,51 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
             const char* e = std::getenv("BANISHED_SM_TRACE");
             s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
         }
-        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = self;
+        if (s_traceState == 1 && s_lockComp == nullptr) {
+            s_lockComp = self;
+            // One-time owner-entity component dump: identify which components
+            // sit alongside this StateMachineComponent (esp. ControllerComponents
+            // the SM links via CreateState). Match each component's runtime
+            // type-id against candidate names via Object::GetTypeIdByName.
+            static const char* kCandidates[] = {
+                "StateMachineComponent", "StorageLocationComponent",
+                "WorkPlaceComponent", "ResidenceComponent", "AttendanceComponent",
+                "HappinessComponent", "HealerComponent", "CemeteryComponent",
+                "ImmigrationComponent", "MarketLocationComponent", "NomadComponent",
+                "OrchardComponent", "TradeComponent", "WellComponent",
+                "AbsorbResourceComponent", "BuildComponent", "ClearAreaComponent",
+                "ClearResourceComponent", "CropFieldComponent", "DestroyComponent",
+                "MultiObjectComponent", "PastureComponent", "ResourceProduceComponent",
+                "CitizenComponent", "CitizenAIComponent", "CharacterComponent",
+                "StorageDisplayComponent", "RawMaterialComponent", "ModelComponent",
+                "GrowthComponent", "FlammableComponent",
+            };
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x10);
+            void* owner = *reinterpret_cast<void**>(base + 0x10);
+            if (owner) {
+                int cnt = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
+                uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
+                fprintf(stderr, "[SMTrace] === owner=%p compCount=%d ===\n", owner, cnt);
+                for (int ci = 0; ci < cnt && ci < 32; ++ci) {
+                    void** ibp = reinterpret_cast<void**>(arr + (uintptr_t)ci * 8);
+                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+                    void* comp = *ibp;
+                    uint32_t tid = 0;
+                    if (comp) {
+                        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+                        typedef uint32_t (*getType_t)(void*);
+                        auto gt = *reinterpret_cast<getType_t*>(vt + 0x10);
+                        if (gt) tid = gt(comp);
+                    }
+                    const char* nm = "?";
+                    for (const char* cand : kCandidates) {
+                        if (tid != 0 && ::Object::GetTypeIdByName(cand) == tid) { nm = cand; break; }
+                    }
+                    fprintf(stderr, "[SMTrace]   [%d] comp=%p tid=0x%08x %s\n", ci, comp, tid, nm);
+                }
+                fflush(stderr);
+            }
+        }
         if (s_traceState == 1 && self == s_lockComp && s_traceCount < 20) {
             fprintf(stderr,
                 "[SMTrace] comp=%p ctrlSelf=%p firstChild=%p stateFlags=%08x "
