@@ -399,6 +399,9 @@ extern void RegisterActionChildCtorsBatch(); // Phase 2 Keystone B: 5 missing ac
 extern void RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2: 4 Work action-ctors
 extern void RegisterActionChildCtors2Batch();// Phase 2 Keystone B3: leaf copy-ctors + consume-list
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
+extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
+extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
+extern void RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail: PastureWork Slot4 (f2370) registration
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
@@ -472,6 +475,9 @@ static void RegisterCodeFunctions() {
     RegisterWorkActionCtorBatch();   // Phase 2 Keystone B2 — 4 Work action-ctors
     RegisterActionChildCtors2Batch();// Phase 2 Keystone B3 — leaf copy-ctors + consume-list
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
+    RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
+    RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)
+    RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail — PastureWork Slot4 (f2370) registration
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher

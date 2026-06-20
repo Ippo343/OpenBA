@@ -67,6 +67,11 @@ extern "C" void FillComponentTypeIdGlobals_spawn();
 extern "C" void FillComponentTypeIdGlobals_tombstone();
 // Phase 2 Keystone B3 — RawMaterialDescription type-id global (0x1401c7cb8) for ca520.
 extern "C" void FillTypeIdGlobals_actionchild();
+// Phase 2 Keystone B tail — Work-tail type-id globals (trade=private CitizenAIComponent;
+// fire=InteractComponent c7900; serialize=Pasture/Animal ids).
+extern "C" void FillTypeIdGlobals_worktail_trade();
+extern "C" void FillTypeIdGlobals_worktail_fire();
+extern "C" void FillTypeIdGlobals_worktail_serialize();
 #endif
 
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
@@ -396,6 +401,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillComponentTypeIdGlobals_spawn();
     FillComponentTypeIdGlobals_tombstone();
     FillTypeIdGlobals_actionchild();   // RawMaterialDescription tid 0x1401c7cb8 (ca520 + latent fix)
+    FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id
+    FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
+    FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
 #endif
 
     if (ok != 0) {
