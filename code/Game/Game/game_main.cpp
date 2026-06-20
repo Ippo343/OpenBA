@@ -61,6 +61,10 @@ extern "C" void RunStartupSelfTests();
 // Defined in standalone/reg_component_nature.cpp — fills the component type-ID
 // .rdata globals once Object::Factory::Startup has assigned the real CRC ids.
 extern "C" void FillComponentTypeIdGlobals_nature();
+// Phase-1 self-contained-sim live bring-ups — fill each component's type-id global.
+extern "C" void FillComponentTypeIdGlobals_fruit();
+extern "C" void FillComponentTypeIdGlobals_spawn();
+extern "C" void FillComponentTypeIdGlobals_tombstone();
 #endif
 
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
@@ -386,6 +390,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // the shared FindComponent accessors compare against. Filling earlier stored
     // the sentinel. See reg_component_nature.cpp / standalone/main.cpp.
     FillComponentTypeIdGlobals_nature();
+    FillComponentTypeIdGlobals_fruit();
+    FillComponentTypeIdGlobals_spawn();
+    FillComponentTypeIdGlobals_tombstone();
 #endif
 
     if (ok != 0) {

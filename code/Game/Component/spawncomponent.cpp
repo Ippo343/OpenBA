@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -32,15 +34,44 @@ typedef void (*fn_DoSpawn_t)(void* self, void* resourceData, int entryIndex, cha
 static fn_DoSpawn_t s_fn_DoSpawn = nullptr;
 
 // Type IDs
-static uint32_t* s_pSpawnResourceTypeId = nullptr;   // DAT_1401c4918
-static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8
+static uint32_t* s_pSpawnResourceTypeId = nullptr;   // DAT_1401c4918 = SpawnDescription
+static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthDescription
+
+// FUN_140001bb0 — dynamic Time-array resize (stride 8). Sizes the per-entry timer
+// array at self+0x28 in the OnCreate/Startup body-init. Already registered in
+// standalone (address_registry.cpp -> Reimpl_Array_Resize_Stride08); we just resolve it.
+typedef void (*fn_ArrayResize8_t)(void* arrayDesc, int newCount);
+static fn_ArrayResize8_t s_fn_ArrayResize8 = nullptr;
 
 static bool s_initialized = false;
+
+// Step-2 body-init (vtable slot [4], +0x20, original SpawnComponent_Serialize/OnCreate
+// 0x140055e90). Forward-declared so the Update guard can lazily invoke it if
+// ComponentEntity_StartupComponents did not run it at spawn.
+void SpawnComponent_Startup(SpawnComponent* self);
 
 // ============================================================
 // SpawnComponent::Update (0x140055ad0)
 // ============================================================
 void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
+    SpawnComponent_InitFuncs();
+
+    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
+
+    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
+    // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array at
+    // +0x28 (data ptr) / +0x30 (count) is allocated by SpawnComponent_Startup (step
+    // 2 of the recipe), which the spawn pipeline invokes via vtable+0x20 in
+    // ComponentEntity_StartupComponents. As belt-and-suspenders, if +0x28 is still
+    // null but the description(+0x18) is present, run the body-init now (idempotent).
+    // The loop below indexes *(self+0x28) unconditionally, so bail if still unset.
+    if (*(uintptr_t*)(comp + 0x28) == 0) {
+        if (*(uintptr_t*)(comp + 0x18) != 0)
+            SpawnComponent_Startup(self);
+        if (*(uintptr_t*)(comp + 0x28) == 0)
+            return;
+    }
+
     // CheckPtr on owner IBP, then get linked object
     uintptr_t ownerIBP = (uintptr_t)self + 0x10;
     if (fn_InternalBasePtr_CheckPtr)
@@ -51,15 +82,35 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
 
     // Get resource data via IsDerivedFrom check on _unk18
     void* baseObj = self->_unk18;
-    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId) return;
+    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) return;
     bool isDerived = fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId);
     void* resourceData = isDerived ? baseObj : nullptr;
+    // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
+    // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
+    // _unk18 is the SpawnDescription the copy-ctor stored at +0x18 — trust it.
+    if (!resourceData && baseObj) resourceData = baseObj;
     if (!resourceData) return;
 
     // CheckPtr on linked object IBP before reading growth
     if (fn_InternalBasePtr_CheckPtr)
         fn_InternalBasePtr_CheckPtr(&linkedObjPtr);
+    // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent (found by
+    // GetLinkedObject 0x1400052c0) for the growth read; bail rather than null-deref
+    // if a spawner lacks one in standalone.
+    if (linkedObjPtr == 0) return;
     float currentGrowth = *(float*)(linkedObjPtr + 0x28);
+
+    // Phase-1 bring-up verification trace (env BANISHED_SPAWN_TRACE, default off →
+    // byte-unchanged): follow ONE component, printing its first per-entry timer
+    // accumulating and whether a spawn fired this tick. Confirms the live recipe
+    // routes through +0x48 and the body-init populated the +0x28 timer array.
+    static int s_traceState = -1;
+    static int s_traceCount = 0;
+    static void* s_lockComp = nullptr;
+    if (s_traceState < 0) {
+        const char* e = std::getenv("BANISHED_SPAWN_TRACE");
+        s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
 
     // Get spawn entry count from resourceData+0x28
     int entryCount = *(int*)((uintptr_t)resourceData + 0x28);
@@ -80,6 +131,15 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
         int64_t byteOffset = (int64_t)i * 8;
         int64_t* pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
         *pTimer += *pDeltaTime;
+
+        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = self;
+        if (s_traceState == 1 && self == s_lockComp && i == 0 && s_traceCount < 20) {
+            fprintf(stderr,
+                "[SpawnTrace] self=%p res=%p entries=%d timer[0]=%lld growth=%.5f\n",
+                (void*)self, resourceData, entryCount, (long long)*pTimer, currentGrowth);
+            fflush(stderr);
+            s_traceCount++;
+        }
 
         // Get spawn template data from the entry
         uintptr_t templateData = *(uintptr_t*)entry;
@@ -108,11 +168,26 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
         int64_t intervalTicks = (int64_t)((double)intervalSecs / *g_Timer_secondsPerTick);
 
         // Re-read timer pointer (DoSpawn may realloc)
+        // [CONSERVATIVE GATE] The full DoSpawn closure (0x140055780 +
+        // CanPlace/TileFree/CopyCtor/Register/…) is registered, so this path WILL
+        // instantiate real child entities into the world list. That spawn path is
+        // unexercised by autostart, so default-LIVE keeps it OFF (timers accumulate,
+        // observable + crash-safe); set BANISHED_SPAWN_DOSPAWN=1 to enable real
+        // spawning for controlled verification.
+        static int s_doSpawn = -1;
+        if (s_doSpawn < 0) {
+            const char* e = std::getenv("BANISHED_SPAWN_DOSPAWN");
+            s_doSpawn = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
         pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
         while (intervalTicks > 0 && *pTimer >= intervalTicks) {
             *pTimer -= intervalTicks;
-            if (s_fn_DoSpawn)
+            if (s_doSpawn == 1 && s_fn_DoSpawn)
                 s_fn_DoSpawn(self, resourceData, i, 0);
+            if (s_traceState == 1 && self == s_lockComp && i == 0 && s_traceCount < 20) {
+                fprintf(stderr, "[SpawnTrace]   entry %d FIRE (doSpawn=%d)\n", i, s_doSpawn);
+                fflush(stderr);
+            }
             pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
         }
     }
@@ -132,8 +207,38 @@ void SpawnComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401c4918));
     s_pSpawnTemplateTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c77e8));
+    s_fn_ArrayResize8 = reinterpret_cast<fn_ArrayResize8_t>(
+        ResolveAddr(Module::Exe, 0x140001bb0));
 
     s_initialized = true;
+}
+
+// ============================================================
+// SpawnComponent::Startup (vtable slot [4], +0x20, original SpawnComponent_Serialize
+// / OnCreate 0x140055e90)
+// ============================================================
+// Body-init: size the per-entry timer array at self+0x28 to the SpawnDescription's
+// entry count (desc+0x28), via the registered stride-8 Time-array resizer
+// (FUN_140001bb0). The array descriptor occupies self+0x28 (data ptr) / +0x30
+// (count) / +0x34 (capacity) — the two pointers the Ctor zeroes. Called at spawn
+// by ComponentEntity_StartupComponents (SpawnComponent flags 0x88 have bit 7).
+//
+// The original gates the count on IsDerivedFrom(_unk18, SpawnDescription); in
+// standalone that can be unreliable, so we trust comp+0x18 (the description the
+// copy-ctor stored), matching growthcomponent.cpp's documented precedent.
+void SpawnComponent_Startup(SpawnComponent* self) {
+    SpawnComponent_InitFuncs();
+    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
+
+    void* desc = *reinterpret_cast<void**>(comp + 0x18);   // _unk18 = SpawnDescription
+    if (!desc) return;                                     // not yet wired to a description
+
+    int entryCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
+    if (entryCount <= 0) return;
+
+    // Resize the timer array (descriptor at comp+0x28). Zero-initialised entries.
+    if (s_fn_ArrayResize8)
+        s_fn_ArrayResize8(reinterpret_cast<void*>(comp + 0x28), entryCount);
 }
 
 // ============================================================
@@ -175,11 +280,19 @@ static float* s_sc_pConstB = nullptr;    // 0x140172248
 static bool s_scSpawnResolved = false;
 static void EnsureSpawnHelpers() {
     if (s_scSpawnResolved) return;
+    // RandFloat (0x1401512f8) / RandTol (0x1401512f0) are .rdata dispatch slots that
+    // the original CALLs indirectly. Those slots are NOT registered in standalone, so
+    // prefer the slot if present, else fall back to the backing Runtime exports via
+    // engine_funcs (System::Random::RandFloat / RandTol — the same path
+    // growthcomponent.cpp's SpawnSubResource uses). Without this the density roll would
+    // default to 1.0 and DoSpawn would never fire even when BANISHED_SPAWN_DOSPAWN=1.
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x1401512f8);
     if (slot) s_sc_RandFloat = *reinterpret_cast<fn_SC_RandFloat_t*>(slot);
+    if (!s_sc_RandFloat) s_sc_RandFloat = reinterpret_cast<fn_SC_RandFloat_t>(fn_Random_RandFloat);
     slot = ResolveAddr(Module::Exe, 0x1401512f0);
     if (slot) s_sc_RandTol = *reinterpret_cast<fn_SC_RandTol_t*>(slot);
+    if (!s_sc_RandTol) s_sc_RandTol = reinterpret_cast<fn_SC_RandTol_t>(fn_Random_RandTol);
     s_sc_FindMap   = reinterpret_cast<fn_SC_FindMap_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_sc_CanPlace  = reinterpret_cast<fn_SC_CanPlace_t>(ResolveAddr(Module::Exe, 0x14009f5d0));
     s_sc_TileFree  = reinterpret_cast<fn_SC_TileFree_t>(ResolveAddr(Module::Exe, 0x140120c30));
@@ -310,12 +423,17 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 #include "Component/component_factory_base.h"
 
 // Live bring-up (Phase 1, env BANISHED_LIVE_SPAWN or global BANISHED_LIVE_COMPONENTS).
-// SpawnComponent_Update is crash-safe on an inert body: it early-returns at the
-// `!s_pSpawnResourceTypeId` guard (the spawn resource type-id .rdata global is not
-// yet registered) before any body deref. Real spawning needs that type-id global
-// filled + the description/sibling body-init (the remaining mechanical steps).
-COMPONENT_LIVE_FACTORY(SpawnComponent, 0x38, 0x88,
-                       "BANISHED_LIVE_SPAWN", SpawnComponent_Update)
+// All four recipe steps wired:
+//   * slot 4 (+0x20 Startup) -> SpawnComponent_Startup — sizes the +0x28 per-entry
+//     timer array from the SpawnDescription at spawn (ComponentEntity_StartupComponents).
+//   * slot 9 (+0x48 Update)  -> SpawnComponent_Update — the per-tick growth-gated
+//     timer accumulation (the slot the EntityList bucket round-robin calls).
+// The two type-id globals it reads (DAT_1401c4918 SpawnDescription, DAT_1401c77e8
+// GrowthDescription) are registered + filled by reg_component_spawn.cpp. The full
+// DoSpawn closure is already registered, so real spawning is available behind
+// BANISHED_SPAWN_DOSPAWN=1 (default OFF — see the CONSERVATIVE GATE in Update).
+COMPONENT_LIVE_FACTORY_S(SpawnComponent, 0x38, 0x88,
+                         "BANISHED_LIVE_SPAWN", SpawnComponent_Update, SpawnComponent_Startup)
 REGISTER_TYPE(SpawnComponent, "Component",
               &SpawnComponent_Factory, &SpawnComponent_CreateInPlace);
 #endif // STANDALONE_EXE

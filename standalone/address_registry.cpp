@@ -348,6 +348,12 @@ extern void RegisterComponentBatch_people();
 extern void RegisterComponentBatch_economy();
 extern void RegisterComponentBatch_nature();
 extern void RegisterComponentBatch_visuals();
+// Phase-1 self-contained-sim live bring-ups (2026-06-20) — each registers only the
+// type-id .rdata global its component's live Update/Startup needs (all other helpers
+// already registered by earlier waves). See final_steps.md §3 Phase 1.
+extern void RegisterComponentBatch_fruit();
+extern void RegisterComponentBatch_spawn();
+extern void RegisterComponentBatch_tombstone();
 // Component GAP wave (2026-06-19, branch wave/component-gap) — residual-73 closure-safe
 // helpers + 2 caller-bug literal fixes. reg files: reg_component_gap_{A,B,C,D}.cpp.
 // A: citizencomponent/attendance (4). B: citizenAI setup/fishing/find/serialize +
@@ -422,6 +428,12 @@ static void RegisterCodeFunctions() {
     RegisterComponentBatch_economy();
     RegisterComponentBatch_nature();
     RegisterComponentBatch_visuals();
+    // Phase-1 self-contained-sim live bring-ups (fruit/spawn/tombstone). The spawn
+    // batch self-gates on BANISHED_LIVE_SPAWN (its type-id globals are also read by
+    // other null-guarded consumers, so env-off must publish nothing).
+    RegisterComponentBatch_fruit();
+    RegisterComponentBatch_spawn();
+    RegisterComponentBatch_tombstone();
     // Component GAP wave — residual-73 closure-safe helpers + caller-bug fixes.
     RegisterComponentGap_A();
     RegisterComponentGap_B();

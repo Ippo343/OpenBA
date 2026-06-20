@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -126,11 +128,86 @@ void TombstoneComponent_Serialize(TombstoneComponent* self) {
 }
 
 // ============================================================
+// TombstoneComponent::Startup (vtable slot [4], +0x20, original OnCreate 0x140057860)
+// ============================================================
+// Body-init dispatched at spawn by ComponentEntity_StartupComponents (vtable +0x20).
+// Populates the +0x28 countdown timer from the TombstoneDescription's [min,max]
+// lifetime * secondsPerTick. _unk18 (+0x18) is already the TombstoneDescription
+// (ComponentEntity_CtorFromDescription's copy-ctor stores it there) — we TRUST it
+// directly rather than going through IsDerivedFrom, which is unreliable in standalone
+// (the factory tree is incomplete — see growthcomponent.cpp's note). Without this the
+// inert factory leaves +0x28 == 0, so Update's `timer < 1` test fires on the FIRST
+// tick and marks the tombstone for instant removal. Idempotent (only inits a 0 timer).
+//
+// This is the standalone-robust form of the OnCreate (TombstoneComponent_Serialize
+// above): identical arithmetic, but it trusts _unk18 instead of gating on
+// IsDerivedFrom so the timer is reliably populated.
+void TombstoneComponent_Startup(TombstoneComponent* self) {
+    TombstoneComponent_InitFuncs();
+
+    // Already initialized (a live tombstone carries a positive lifetime) — leave it.
+    if (*(int64_t*)&self->field28 != 0) return;
+
+    void* buildingData = self->_unk18;  // +0x18 = the TombstoneDescription
+    if (!buildingData) return;
+    if (!s_pGameState || !*s_pGameState) return;
+
+    // Random float in [0,1) from the world RNG (world+0xD8). Prefer the project-wide
+    // engine func (always resolved); fall back to the dispatch-slot pointer.
+    void* rng = *(void**)((uintptr_t)*s_pGameState + 0xD8);
+    float randVal = 0.0f;
+    if (fn_Random_RandFloat) randVal = fn_Random_RandFloat(rng);
+    else if (s_fn_RandFloat)  randVal = s_fn_RandFloat(rng);
+
+    // lifetime seconds = (rand * maxTime + minTime) * secondsPerTickMul  (DAT_140172234).
+    float minTime = *(float*)((uintptr_t)buildingData + 0x20);
+    float maxTime = *(float*)((uintptr_t)buildingData + 0x24);
+    float tickMul = s_pSecondsPerTickMul ? *s_pSecondsPerTickMul : 1.0f;
+    float seconds = (randVal * maxTime + minTime) * tickMul;
+
+    int64_t timeVal = 0;
+    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeVal, seconds);
+    *(int64_t*)&self->field28 = timeVal;
+}
+
+// ============================================================
 // TombstoneComponent::Update (0x1400577D0)
 // ============================================================
 void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
+    TombstoneComponent_InitFuncs();
+
+    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
+    // +0x28 countdown timer is zero unless Startup (slot +0x20) ran. If it is still
+    // zero but the description (+0x18) is present, run the body-init now so the
+    // countdown starts from the real random lifetime — otherwise the `timer < 1`
+    // test below fires on tick 1 and marks the tombstone for instant removal.
+    // Harmless in DLL-hook mode (the engine's OnCreate already set +0x28 non-zero).
+    if (*(int64_t*)&self->field28 == 0 && self->_unk18 != nullptr) {
+        TombstoneComponent_Startup(self);
+    }
+
     int64_t* pTimer = (int64_t*)&self->field28;
     *pTimer -= *pDeltaTime;
+
+    // Phase-1 bring-up verification trace (env BANISHED_TOMB_TRACE, default off →
+    // byte-unchanged): follows ONE component and prints its +0x28 countdown timer
+    // decreasing per tick. Confirms the live recipe end-to-end — Update entered via
+    // vtable +0x48, Startup populated +0x28, and the value advances monotonically.
+    {
+        static int s_st = -1, s_n = 0;
+        static void* s_lock = nullptr;
+        if (s_st < 0) {
+            const char* e = std::getenv("BANISHED_TOMB_TRACE");
+            s_st = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_st == 1 && s_lock == nullptr) s_lock = self;
+        if (s_st == 1 && self == s_lock && s_n < 20) {
+            fprintf(stderr, "[TombTrace] self=%p timer(+28)=%lld dt=%lld unk18=%p\n",
+                    (void*)self, (long long)*pTimer, (long long)*pDeltaTime,
+                    (void*)self->_unk18);
+            fflush(stderr); s_n++;
+        }
+    }
 
     if (*pTimer < 1) {
         void* entityPtr = self->owner;
@@ -205,10 +282,21 @@ void TombstoneComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
+// Live bring-up (Phase 1, env BANISHED_LIVE_TOMBSTONE or global BANISHED_LIVE_COMPONENTS).
+// Routes vtable slot 4 (+0x20) -> TombstoneComponent_Startup (populates the +0x28
+// random-lifetime timer at spawn, dispatched by ComponentEntity_StartupComponents) and
+// slot 9 (+0x48) -> TombstoneComponent_Update (per-tick countdown, the slot the
+// EntityList bucket round-robin calls — NOT +0x40/slot 8 = empty OnRemove 0x140118a70,
+// verified vs Ghidra vtable 0x14015a980). With the env OFF the factory is byte-identical
+// to the prior COMPONENT_INERT_FACTORY (default run unchanged). The only new exe-helper
+// registration is the TombstoneDescription type-id global 0x1401c4a68
+// (reg_component_tombstone.cpp); every other helper was already registered.
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(TombstoneComponent, 0x30, 0x88)
+COMPONENT_LIVE_FACTORY_S(TombstoneComponent, 0x30, 0x88,
+                         "BANISHED_LIVE_TOMBSTONE",
+                         TombstoneComponent_Update, TombstoneComponent_Startup)
 REGISTER_TYPE(TombstoneComponent, "Component",
               &TombstoneComponent_Factory, &TombstoneComponent_CreateInPlace);
 #endif // STANDALONE_EXE
