@@ -138,12 +138,43 @@ void StorageLocationComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "Component/controller_live_base.h"
-// Phase 3 / Keystone D step 2 — live ControllerComponent. Embedded state node at
-// +0x28 (CreateState 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState
-// (0x1400026c0) returns 2. When BANISHED_LIVE_STORAGECTRL is set the entity's
-// StateMachineComponent links this node and ticks it (crash-safe stub virtuals).
-CONTROLLER_LIVE_FACTORY(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
-                        "BANISHED_LIVE_STORAGECTRL")
+#include "Component/controller_state_table.h"
+// Phase 3 / Keystone D step 3 — live ControllerComponent with the REAL state-type
+// table + dispatcher node virtuals. Embedded state node at +0x28 (CreateState
+// 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState (0x1400026c0) returns 2. When
+// BANISHED_LIVE_STORAGECTRL is set the entity's StateMachineComponent links this
+// node and ticks it through the dispatcher vtable below.
+//
+// Storage state graph (recovered from StorageLocationDescription_SetupCrossRefs ->
+// sub_9040/sub_9150, 0x14014fc70): two states 2 (default), 3.
+//   state 2: enter=helper_d230  ; transitions -> {3}
+//   state 3: enter=helper_d1f0  ; transitions -> {6, 4, 5}
+// (state-ids 6/4/5 are transition targets only — not registered states here.)
+// Handlers are exe code unmapped in standalone -> populated null (graceful no-op);
+// the ids + transitions are real. Because the StorageBarn seeds the SM with
+// BuildComponent's default state (1, the first-linked controller), this node — the
+// SM chain TAIL — gets Step(1) which is not in its table (returns -1), so Tick walks
+// up to BuildComponent's node (Step(1)->0): the real multi-controller parent-walk.
+namespace { struct StorageCtrlTag {}; }
+using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
+
+static void StorageLocationComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = StorageCtrlDispatch::table;
+    if (t.count != 0) return;  // idempotent
+    TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 3, nullptr, nullptr, nullptr, nullptr);
+    TableAddTransition(t, 6, nullptr);
+    TableAddTransition(t, 4, nullptr);
+    TableAddTransition(t, 5, nullptr);
+}
+static void** StorageLocationComponent_NodeVtable() { return StorageCtrlDispatch::Vtable(); }
+
+CONTROLLER_LIVE_FACTORY_STATES(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
+                               "BANISHED_LIVE_STORAGECTRL",
+                               StorageLocationComponent_NodeVtable,
+                               StorageLocationComponent_PopulateStateTable)
 REGISTER_TYPE(StorageLocationComponent, "ControllerComponent",
               &StorageLocationComponent_Factory, &StorageLocationComponent_CreateInPlace);
 #endif // STANDALONE_EXE

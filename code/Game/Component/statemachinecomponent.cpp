@@ -435,10 +435,13 @@ state_walk:
 // +0x28 OnState, +0x30/+0x38 Transition; node+0x08 parent, node+0x10 first child.
 void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) {
     int64_t* sm = (int64_t*)smP;
-    typedef char (*VFn_self_sm_t)(int64_t* node, int64_t* sm);
+    // Node-interface ABI (verified from StateMachine::Tick 0x1400a9660 disasm): the
+    // state index is carried in R8D for Enter/Update and R9D for Transition (time in
+    // R8). Ghidra DROPS these in the decompile; the real dispatchers read them.
+    typedef char (*VFn_enterupd_t)(int64_t* node, int64_t* sm, int idx);
     typedef int  (*VFn_step_t)(int64_t* node, int input);
     typedef void (*VFn_onstate_t)(int64_t* node, int64_t* sm, int a, int b);
-    typedef char (*VFn_trans_t)(int64_t* node, int64_t* sm, int64_t time);
+    typedef char (*VFn_trans_t)(int64_t* node, int64_t* sm, int64_t time, int idx);
 
     if (*(char*)((uintptr_t)sm + 10) < 0) goto LAB_transition;
     do {
@@ -447,7 +450,7 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
                 int iVar5 = (int)*(char*)((uintptr_t)sm + 9);
                 int64_t* node = (int64_t*)sm[0];
                 while (((iVar5 < 0 ||
-                        (((VFn_self_sm_t)(*(uintptr_t*)(*node + 0x20)))(node, sm) == '\0')) &&
+                        (((VFn_enterupd_t)(*(uintptr_t*)(*node + 0x20)))(node, sm, iVar5) == '\0')) &&
                        ((node = (int64_t*)node[1]) != nullptr))) {
                     iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
                 }
@@ -477,7 +480,7 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
             int64_t* node = (int64_t*)sm[0];
             *(int16_t*)((uintptr_t)sm + 10) = (int16_t)0xffff;
             while (((iVar5 < 0 ||
-                    (((VFn_self_sm_t)(*(uintptr_t*)(*node + 0x18)))(node, sm) == '\0')) &&
+                    (((VFn_enterupd_t)(*(uintptr_t*)(*node + 0x18)))(node, sm, iVar5) == '\0')) &&
                    ((node = (int64_t*)node[1]) != nullptr))) {
                 iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
             }
@@ -488,13 +491,13 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
             int64_t* node = (int64_t*)sm[0];
             if (param3 == '\0') {
                 while (((iVar5 < 0 ||
-                        (((VFn_trans_t)(*(uintptr_t*)(*node + 0x30)))(node, sm, time) == '\0')) &&
+                        (((VFn_trans_t)(*(uintptr_t*)(*node + 0x30)))(node, sm, time, iVar5) == '\0')) &&
                        ((node = (int64_t*)node[1]) != nullptr))) {
                     iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
                 }
             } else {
                 while (((iVar5 < 0 ||
-                        (((VFn_trans_t)(*(uintptr_t*)(*node + 0x38)))(node, sm, time) == '\0')) &&
+                        (((VFn_trans_t)(*(uintptr_t*)(*node + 0x38)))(node, sm, time, iVar5) == '\0')) &&
                        ((node = (int64_t*)node[1]) != nullptr))) {
                     iVar5 = ((VFn_step_t)(*(uintptr_t*)*node))(node, (int)(char)sm[1]);
                 }

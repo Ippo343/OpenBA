@@ -96,3 +96,49 @@ void** NodeVtable();
         Name##_InstallLive(mem);                                               \
         return mem;                                                           \
     }
+
+// CONTROLLER_LIVE_FACTORY_STATES — as CONTROLLER_LIVE_FACTORY, but installs the
+// REAL per-controller state-type-table dispatcher node vtable instead of the shared
+// crash-safe stub, and populates that controller's state table (Phase 3 step 3).
+//   NodeVtableFn : `void**(void)` returning the controller's dispatcher vtable
+//                  (e.g. ControllerLive::Dispatcher<Tag>::Vtable()).
+//   PopulateFn   : `void(void)` that fills the controller's StateTable once
+//                  (idempotent — replicates <X>Description_Setup's sub_f500/f620).
+// Both run only when the env opt-in is set; default (off) => byte-unchanged inert.
+// Requires "Object/factory_registration.h", "Component/component_factory_base.h"
+// and "Component/controller_state_table.h".
+#define CONTROLLER_LIVE_FACTORY_STATES(Name, Size, Flags, NodeOff, DefState,     \
+                                       EnvVar, NodeVtableFn, PopulateFn)         \
+    static uint32_t Name##_LiveGetTypeId(void*) {                               \
+        static uint32_t cached = 0;                                             \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);             \
+        return cached;                                                          \
+    }                                                                           \
+    static int Name##_GetDefaultState(void*) { return (DefState); }            \
+    static void* Name##_CreateState(void* self) {                              \
+        return reinterpret_cast<uint8_t*>(self) + (NodeOff);                    \
+    }                                                                           \
+    static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];      \
+    static void Name##_InstallLive(void* mem) {                                \
+        if (!::ComponentFactory::LiveEnabled(EnvVar)) return;                  \
+        Name##_LiveVtable[16] = reinterpret_cast<void*>(&Name##_GetDefaultState); \
+        Name##_LiveVtable[17] = reinterpret_cast<void*>(&Name##_CreateState);  \
+        (PopulateFn)();                                                        \
+        if (mem)                                                               \
+            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + (NodeOff)) \
+                = reinterpret_cast<void*>((NodeVtableFn)());                    \
+    }                                                                           \
+    extern "C" void* Name##_Factory(void) {                                    \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),         \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_InstallLive(p);                                                 \
+        return p;                                                             \
+    }                                                                           \
+    static void* Name##_CreateInPlace(void* mem) {                            \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),     \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_InstallLive(mem);                                               \
+        return mem;                                                           \
+    }

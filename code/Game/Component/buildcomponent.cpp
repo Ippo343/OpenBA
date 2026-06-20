@@ -481,12 +481,47 @@ void BuildComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "Component/controller_live_base.h"
-// Phase 3 / Keystone D step 2 — live ControllerComponent. Embedded state node at
-// +0x28 (CreateState 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState
-// (0x14002f2f0) returns 1. When BANISHED_LIVE_BUILDCTRL is set the entity's
-// StateMachineComponent links this node and ticks it (crash-safe stub virtuals).
-CONTROLLER_LIVE_FACTORY(BuildComponent, 0x78, 0x83, 0x28, 1,
-                        "BANISHED_LIVE_BUILDCTRL")
+#include "Component/controller_state_table.h"
+// Phase 3 / Keystone D step 3 — live ControllerComponent with the REAL state-type
+// table + dispatcher node virtuals. Embedded state node at +0x28 (CreateState
+// 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState (0x14002f2f0) returns 1. When
+// BANISHED_LIVE_BUILDCTRL is set the entity's StateMachineComponent links this node
+// and ticks it through the dispatcher vtable below.
+//
+// Build state graph (recovered from BuildDescription_Setup -> helper_9090 ->
+// sub_f500/sub_f620, 0x140109090): three states 1 (default), 8, 2.
+//   state 1: enter=helper_8290, setup=sub_81e0   ; transitions -> {8, 3}
+//   state 8: enter=helper_7ae0, update=helper_7600, setup=sub_76e0
+//                                                 ; transitions -> {2 (helper_75e0), 3}
+//   state 2: (no handlers)                        ; transitions -> {3}
+// (state-id 3 is a transition target only — not a registered state of this table;
+//  it is resolved up the SM node chain.) Handler addresses are exe code unmapped in
+// standalone, so they are populated as null (graceful no-op); the table structure
+// (ids + transitions) is real, so Step returns real indices and the SM advances
+// through the real state graph. Porting the real handlers is the next layer.
+namespace { struct BuildCtrlTag {}; }
+using BuildCtrlDispatch = ::ControllerLive::Dispatcher<BuildCtrlTag>;
+
+static void BuildComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = BuildCtrlDispatch::table;
+    if (t.count != 0) return;  // idempotent
+    // sub_f500(1, enter, trans30, trans38=setup, update)
+    TableRegisterState(t, 1, nullptr, nullptr, nullptr, nullptr);
+    TableAddTransition(t, 8, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 8, nullptr, nullptr, nullptr, nullptr);
+    TableAddTransition(t, 2, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
+}
+static void** BuildComponent_NodeVtable() { return BuildCtrlDispatch::Vtable(); }
+
+CONTROLLER_LIVE_FACTORY_STATES(BuildComponent, 0x78, 0x83, 0x28, 1,
+                               "BANISHED_LIVE_BUILDCTRL",
+                               BuildComponent_NodeVtable,
+                               BuildComponent_PopulateStateTable)
 REGISTER_TYPE(BuildComponent, "ControllerComponent",
               &BuildComponent_Factory, &BuildComponent_CreateInPlace);
 #endif // STANDALONE_EXE
