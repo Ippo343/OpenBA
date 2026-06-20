@@ -5,6 +5,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstring>
+#include <cstdlib>
 
 #ifdef STANDALONE_EXE
 
@@ -103,6 +104,18 @@ void* MakeInertTyped(size_t size, uint32_t flags,
     if (!p) return nullptr;
     InitInertTyped(p, size, flags, vtable, getTypeIdFn);
     return p;
+}
+
+// Live opt-in check for COMPONENT_LIVE_FACTORY. Returns true when either the
+// component's specific env var OR the global BANISHED_LIVE_COMPONENTS is set to a
+// non-empty value other than "0"/"false". Default (neither set) => inert => the
+// default run is byte-for-byte unchanged.
+static bool EnvOn(const char* v) {
+    return v && v[0] && std::strcmp(v, "0") != 0 && std::strcmp(v, "false") != 0;
+}
+bool LiveEnabled(const char* envVar) {
+    if (envVar && EnvOn(std::getenv(envVar))) return true;
+    return EnvOn(std::getenv("BANISHED_LIVE_COMPONENTS"));
 }
 
 }  // namespace ComponentFactory

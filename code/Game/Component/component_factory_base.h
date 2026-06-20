@@ -63,6 +63,11 @@ void  InitInertTyped(void* self, size_t size, uint32_t flags,
 void* MakeInertTyped(size_t size, uint32_t flags,
                      void** vtable, void* getTypeIdFn);
 
+// Live opt-in for COMPONENT_LIVE_FACTORY: true when the component's own env var
+// or the global BANISHED_LIVE_COMPONENTS is set (non-empty, not "0"/"false").
+// Default (neither set) => false => component stays inert (default run unchanged).
+bool LiveEnabled(const char* envVar);
+
 }  // namespace ComponentFactory
 
 // Emits XxxComponent_Factory()/XxxComponent_CreateInPlace() for REGISTER_TYPE.
@@ -86,5 +91,87 @@ void* MakeInertTyped(size_t size, uint32_t flags,
         if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),     \
             Name##_InertVtable,                                                \
             reinterpret_cast<void*>(&Name##_InertGetTypeId));                  \
+        return mem;                                                           \
+    }
+
+// COMPONENT_LIVE_FACTORY — the GrowthComponent bring-up pattern, generalized
+// (Track C / Phase 1). Identical to COMPONENT_INERT_FACTORY when the env opt-in
+// is OFF (default → byte-for-byte unchanged run), but when EnvVar (or the global
+// BANISHED_LIVE_COMPONENTS) is set it graduates the per-type vtable's per-tick
+// Update slot — vtable +0x48 / index 9, the slot the EntityList bucket
+// round-robin actually calls — to the component's real Update. The Update fn must
+// have signature `void UpdateFn(Name* self, int64_t* deltaTime)`.
+//
+// IMPORTANT: a live Update on an inert-spawned component crashes unless the body
+// is initialized (the inert factory zeroes it). Either the Update must early-out
+// on null body fields (GUARD), or use COMPONENT_LIVE_FACTORY_S to also route the
+// Startup slot to a body-init fn. See growthcomponent.cpp for the worked example.
+#define COMPONENT_LIVE_FACTORY(Name, Size, Flags, EnvVar, UpdateFn)             \
+    static uint32_t Name##_LiveGetTypeId(void*) {                              \
+        static uint32_t cached = 0;                                            \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
+        return cached;                                                         \
+    }                                                                          \
+    static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];     \
+    static void Name##_UpdateVSlot(void* s, void* t) {                         \
+        UpdateFn(reinterpret_cast<Name*>(s), reinterpret_cast<int64_t*>(t));   \
+    }                                                                          \
+    static void Name##_FinishLiveVtable() {                                    \
+        if (::ComponentFactory::LiveEnabled(EnvVar))                           \
+            Name##_LiveVtable[9] =                                             \
+                reinterpret_cast<void*>(&Name##_UpdateVSlot);                  \
+    }                                                                          \
+    extern "C" void* Name##_Factory(void) {                                    \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),         \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return p;                                                             \
+    }                                                                          \
+    static void* Name##_CreateInPlace(void* mem) {                            \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),     \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return mem;                                                           \
+    }
+
+// As COMPONENT_LIVE_FACTORY, but also routes the Startup slot (vtable +0x20 /
+// index 4 — dispatched by ComponentEntity_StartupComponents at spawn) to a
+// body-init fn `void StartupFn(Name* self)`. Use when the live Update needs the
+// body populated from the entity/description before the first tick.
+#define COMPONENT_LIVE_FACTORY_S(Name, Size, Flags, EnvVar, UpdateFn, StartupFn)\
+    static uint32_t Name##_LiveGetTypeId(void*) {                              \
+        static uint32_t cached = 0;                                            \
+        if (cached == 0) cached = ::Object::GetTypeIdByName(#Name);            \
+        return cached;                                                         \
+    }                                                                          \
+    static void* Name##_LiveVtable[::ComponentFactory::kInertVtableSlots];     \
+    static void Name##_UpdateVSlot(void* s, void* t) {                         \
+        UpdateFn(reinterpret_cast<Name*>(s), reinterpret_cast<int64_t*>(t));   \
+    }                                                                          \
+    static void Name##_StartupVSlot(void* s) {                                 \
+        StartupFn(reinterpret_cast<Name*>(s));                                 \
+    }                                                                          \
+    static void Name##_FinishLiveVtable() {                                    \
+        if (::ComponentFactory::LiveEnabled(EnvVar)) {                         \
+            Name##_LiveVtable[4] =                                             \
+                reinterpret_cast<void*>(&Name##_StartupVSlot);                 \
+            Name##_LiveVtable[9] =                                             \
+                reinterpret_cast<void*>(&Name##_UpdateVSlot);                  \
+        }                                                                      \
+    }                                                                          \
+    extern "C" void* Name##_Factory(void) {                                    \
+        void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),         \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
+        return p;                                                             \
+    }                                                                          \
+    static void* Name##_CreateInPlace(void* mem) {                            \
+        if (mem) ::ComponentFactory::InitInertTyped(mem, (Size), (Flags),     \
+            Name##_LiveVtable,                                                 \
+            reinterpret_cast<void*>(&Name##_LiveGetTypeId));                   \
+        Name##_FinishLiveVtable();                                             \
         return mem;                                                           \
     }

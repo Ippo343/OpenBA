@@ -309,7 +309,13 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(SpawnComponent, 0x38, 0x88)
+// Live bring-up (Phase 1, env BANISHED_LIVE_SPAWN or global BANISHED_LIVE_COMPONENTS).
+// SpawnComponent_Update is crash-safe on an inert body: it early-returns at the
+// `!s_pSpawnResourceTypeId` guard (the spawn resource type-id .rdata global is not
+// yet registered) before any body deref. Real spawning needs that type-id global
+// filled + the description/sibling body-init (the remaining mechanical steps).
+COMPONENT_LIVE_FACTORY(SpawnComponent, 0x38, 0x88,
+                       "BANISHED_LIVE_SPAWN", SpawnComponent_Update)
 REGISTER_TYPE(SpawnComponent, "Component",
               &SpawnComponent_Factory, &SpawnComponent_CreateInPlace);
 #endif // STANDALONE_EXE
