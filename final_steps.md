@@ -120,7 +120,7 @@ The 4-step recipe (per `project_component_bringup_frontier`): (1) real per-type 
 *Goal: citizens actually live — AI plans, state machine drives actions, characters animate.*
 Depends on Phase 2 (A + B). Module priority #1 per CLAUDE.md.
 
-- [ ] **StateMachineComponent** live (`StateMachineComponent_Update`) — drives every citizen's action stack.
+- [~] **StateMachineComponent** live — PLUMBING BRICK LANDED (2026-06-20, branch `wave/phase3-keystone-d`). `COMPONENT_LIVE_FACTORY_S`, env `BANISHED_LIVE_STATEMACHINE` (default-off → byte-unchanged). +0x48 Update routed live + +0x20 body-init (faithful ctor `0x14012ba30` field-init: ctrlSelf=self+0x28, stateFlags=0xff00ffff, stub secondary vtable@+0x28). **KEY FINDING:** SM is a pure *dispatcher* — Tick no-ops until a ControllerComponent links a state node (chain root child @+0x38). The bare-root `Step` (`0x140038630`) reads an empty global state-type table (`0x1401e2830`) → returns -1 → would null-deref Tick's parent-walk; so the Update is **GUARDED** (`if (*(void**)(self+0x38)==0) return;`). A/B-verified: world builds 1477 entities, 0-byte crash, +0x48 entered per-tick (`BANISHED_SM_TRACE`: ctrlSelf/stateFlags correct, guarded no-op), env-off run trace-free. **Observable behavior awaits a live ControllerComponent** (next: CitizenAI/Citizen links states → SM ticks them).
 - [ ] **CitizenAIComponent** live (`CitizenAIComponent_Update`) — note the deep tier: `AssignWorkplace 1163d0`, `LongTermPlan 0x140115e60` (Level-2), happiness `10dca0`, 15-state `10f1f0`; the name-DB tier (`117080→a4c60→a4b30`).
 - [ ] **CitizenComponent** live (`CitizenComponent_Update`) — lifecycle: `UpdateHealth 1127d0`, `AssignState 113af0`, `HandleLifeEvent 116dd0`. (The AssignHousing→FindWorkplace/Storage/Partner cascade is already registered.)
 - [ ] **CharacterComponent** live (`CharacterComponent_Update`) — movement/facing/animation.
@@ -157,9 +157,9 @@ Depends on Phase 2 (A + B). Module priority #1 per CLAUDE.md.
 - [ ] **Image capture / screenshot** path (`ImageCapture_DrawCheck a5140`) — low priority.
 
 ### Phase 7 — Ship the replacement exe
-- [ ] **Registration gap = 0** (should fall out of Phases 2–6; recompute and mop up stragglers).
+- [ ] **Registration gap = 0** (includes defers, should fall out of Phases 2–6; recompute and mop up stragglers).
 - [ ] **Consolidate branches:** merge the stacked `wave/*` chain forward to `main`; prune the ~20 `worktree-agent-*` and dead `wave/*` branches.
-- [ ] Full playthrough smoke test: New Game → play several minutes → save → load → quit cleanly.
+- [ ] Full playthrough smoke test by user: New Game → play several minutes → save → load → quit cleanly.
 - [ ] Update CLAUDE.md (Goal #2 done; Goal #3 — Runtime DLL — becomes next phase).
 
 ---

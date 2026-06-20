@@ -510,8 +510,122 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include <cstdlib>
+#include <cstring>
 
-COMPONENT_INERT_FACTORY(StateMachineComponent, 0x58, 0xcd)
+// ------------------------------------------------------------------
+// Phase 3 / Keystone D — StateMachineComponent live-wiring brick.
+//
+// SM is a *pure dispatcher*: its Update (+0x48) just runs StateMachine::Tick
+// over the state-node chain rooted at the controller sub-object (+0x28). On a
+// freshly-spawned standalone citizen that chain is EMPTY — the root's child
+// pointer (+0x38) is 0 — because the chain is only populated by the +0x20 slot
+// (StateMachineComponent_Serialize) calling each ControllerComponent's
+// CreateState(+0x88), and the ControllerComponents (CitizenAI/Citizen) are
+// still inert in standalone (their CreateState is a no-op stub). Moreover the
+// bare root's Step virtual (orig 0x140038630) searches a global state-type
+// table (0x1401e2830) that is empty in standalone and returns -1, which would
+// drive Tick's parent-walk into a null deref.
+//
+// So this brick brings the Update slot LIVE but CRASH-SAFE: it body-inits the
+// SM fields exactly as the ctor (0x14012ba30) does, then GUARDS Tick to a
+// no-op until a real child state node is linked (base+0x38 != 0). It produces
+// no observable behavior yet — that arrives when the ControllerComponents go
+// live and link states (the next Phase-3 step). What it proves: +0x48 routing,
+// +0x20 body-init, and flag-eligibility on the citizen tier, crash-safe under
+// the autostart sim. Default (env off) => fully inert => byte-unchanged run.
+// ------------------------------------------------------------------
+
+// Safe-stub secondary controller-node vtable. The real one (0x1401644d0) points
+// at exe code that is unmapped in standalone; the guard means Tick never derefs
+// this in the current build, but a stub whose Step (slot 0) returns 0 (>=0, so
+// Tick's `while (c<0)` parent-walk is skipped) keeps a future empty-chain tick
+// safe too (vs. the real Step's crashing -1 on an empty state-type table).
+static int64_t SM_StubSecondaryVirtual(void*) { return 0; }
+static void* s_smStubSecondaryVtable[16];
+
+// Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
+// Faithful field init from the ctor 0x14012ba30 (idempotent). Component base +
+// flags(0xcd) are already set by the inert factory; this adds the SM-specific
+// controller sub-object + back-pointers + state word.
+static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
+    if (!self) return;
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+
+    // Fill the stub secondary vtable once.
+    if (s_smStubSecondaryVtable[0] == nullptr) {
+        for (int i = 0; i < 16; ++i)
+            s_smStubSecondaryVtable[i] =
+                reinterpret_cast<void*>(&SM_StubSecondaryVirtual);
+    }
+
+    // +0x28 controller sub-object vtable, +0x30/+0x38 zeroed children,
+    // +0x40 ownerComponent = self, +0x48 controllerSelf = self+0x28,
+    // +0x50 stateFlags = 0xFF00FFFF.
+    *reinterpret_cast<void**>(base + 0x28) =
+        reinterpret_cast<void*>(s_smStubSecondaryVtable);
+    *reinterpret_cast<uint64_t*>(base + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(base + 0x38) = 0;
+    *reinterpret_cast<void**>(base + 0x40) = self;
+    *reinterpret_cast<void**>(base + 0x48) = base + 0x28;
+    *reinterpret_cast<uint32_t*>(base + 0x50) = 0xff00ffff;
+}
+
+// Recipe step 1 (Update), routed to slot +0x48 (the per-tick slot the EntityList
+// bucket round-robin calls). Signature matches COMPONENT_LIVE_FACTORY's
+// UpdateVSlot adapter: (self, int64_t* time). The Time pointer is forwarded
+// opaquely to Tick (which never derefs it — it only passes it on to the
+// Transition virtuals), matching the original StateMachineComponent::Update.
+static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
+                                                int64_t* time) {
+    if (!self) return;
+    uint8_t* base = reinterpret_cast<uint8_t*>(self);
+
+    // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
+    if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
+        StateMachineComponent_BodyInit(self);
+
+    void* firstChild = *reinterpret_cast<void**>(base + 0x38);
+
+    // Bring-up trace (env BANISHED_SM_TRACE, default off => byte-unchanged):
+    // confirms the +0x48 slot is entered live and reports whether a state node
+    // is linked yet (firstChild). Follows ONE component across ticks.
+    {
+        static int s_traceState = -1;
+        static int s_traceCount = 0;
+        static void* s_lockComp = nullptr;
+        if (s_traceState < 0) {
+            const char* e = std::getenv("BANISHED_SM_TRACE");
+            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = self;
+        if (s_traceState == 1 && self == s_lockComp && s_traceCount < 20) {
+            fprintf(stderr,
+                "[SMTrace] comp=%p ctrlSelf=%p firstChild=%p stateFlags=%08x "
+                "%s\n",
+                (void*)self, *reinterpret_cast<void**>(base + 0x48),
+                firstChild, *reinterpret_cast<uint32_t*>(base + 0x50),
+                firstChild ? "TICK" : "noop(no state linked)");
+            fflush(stderr);
+            s_traceCount++;
+        }
+    }
+
+    // GUARD: no child state node linked yet -> nothing to tick. Skipping is
+    // correct (the engine's SM does nothing until a ControllerComponent links a
+    // state) and avoids the bare-root Step(-1) parent-walk null deref.
+    if (firstChild == nullptr) return;
+
+    // Forward the Time pointer opaquely as the int64 param (Tick passes it
+    // straight through to the Transition virtuals; nothing in this path derefs
+    // it as a value).
+    StateMachineComponent_Update(self, reinterpret_cast<int64_t>(time));
+}
+
+COMPONENT_LIVE_FACTORY_S(StateMachineComponent, 0x58, 0xcd,
+                         "BANISHED_LIVE_STATEMACHINE",
+                         StateMachineComponent_UpdateAdapter,
+                         StateMachineComponent_BodyInit)
 REGISTER_TYPE(StateMachineComponent, "Component",
               &StateMachineComponent_Factory, &StateMachineComponent_CreateInPlace);
 #endif // STANDALONE_EXE
