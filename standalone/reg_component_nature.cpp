@@ -5,6 +5,7 @@
 // The integrator wires RegisterComponentBatch_nature() into address_registry.cpp.
 #ifdef STANDALONE_EXE
 #include "resolve.h"
+#include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 
 // ---- growthcomponent.cpp ----
@@ -66,6 +67,33 @@ extern void  HerdComponent_AdjustSize(void* herdComp, int targetSize);
 // cropfieldcomponent.cpp were corrected to those, and we register the corrected
 // addresses below. 0x1400035b0 / 0x1400036c0 are NOT registered.
 
+// ------------------------------------------------------------------
+// Component type-ID .rdata globals (e.g. DAT_1401c7b30 = NaturalResourceComponent).
+// The shared FindComponent accessors (FUN_1400052c0 et al.) compare a sibling
+// component's GetTypeId against *pTypeId where pTypeId = ResolveAddr(Exe, addr);
+// in the original these globals are .data filled by RegisterType. In standalone
+// WE provide the storage (registered below at AddressRegistryInit) and FILL it
+// after InvokeAllRegistrations — see FillComponentTypeIdGlobals_nature(), called
+// from standalone/main.cpp once the type tree is populated (GetTypeIdByName is a
+// registration-list lookup, so it returns 0 until then). Without this every
+// type-id-keyed FindComponent silently returns null in standalone.
+static uint32_t g_tid_NaturalResourceComponent = 0;  // 0x1401c7b30
+
+extern "C" void FillComponentTypeIdGlobals_nature() {
+    g_tid_NaturalResourceComponent =
+        ::Object::GetTypeIdByName("NaturalResourceComponent");
+}
+
+// Backing storage for the growthcomponent .rdata constant-pool entries (exact
+// bit patterns from Application-x64.exe .rdata, verified in Ghidra).
+static const uint32_t k_rdata_172140 = 0x3f7ae148u;          // 0.98f
+static const uint32_t k_rdata_1721d0 = 0x42000000u;          // 32.0f
+static const uint32_t k_rdata_17222c = 0x437f0000u;          // 255.0f
+static const uint32_t k_rdata_172234 = 0x43960000u;          // 300.0f
+static const uint32_t k_rdata_172248 = 0x447a0000u;          // 1000.0f
+static const uint32_t k_rdata_172288 = 0xc1200000u;          // -10.0f
+static const uint64_t k_rdata_1722b0 = 0x7fffffffffffffffull; // double fabs mask
+
 void RegisterComponentBatch_nature() {
     // growthcomponent.cpp
     RegisterExeAddr(0x140118950, reinterpret_cast<uintptr_t>(&GrowthComponent_ModifyFlags));
@@ -112,5 +140,22 @@ void RegisterComponentBatch_nature() {
     RegisterExeAddr(0x140053f20, reinterpret_cast<uintptr_t>(&HerdComponent_CheckFood));
     RegisterExeAddr(0x140121980, reinterpret_cast<uintptr_t>(&HerdComponent_CheckMigrationDone));
     RegisterExeAddr(0x140121450, reinterpret_cast<uintptr_t>(&HerdComponent_AdjustSize));
+
+    // .rdata float/double constant-pool entries read by growthcomponent.cpp
+    // (GrowthComponent_Update / _Startup / _SpawnSubResource) via
+    // ResolveAddr(Module::Exe, addr). The original exe stores these as image
+    // .rdata; in standalone WE provide backing storage holding the EXACT bit
+    // patterns verified in Ghidra. (0x14017214c = 1.0f is already registered in
+    // gameupdateloop_load.cpp.) See growthcomponent.cpp EnsureHelpers/EnsureSubHelpers.
+    RegisterExeAddr(0x140172140, reinterpret_cast<uintptr_t>(&k_rdata_172140));  // 0.98   UV/spawn scale
+    RegisterExeAddr(0x1401721d0, reinterpret_cast<uintptr_t>(&k_rdata_1721d0));  // 32.0   freeze temperature
+    RegisterExeAddr(0x14017222c, reinterpret_cast<uintptr_t>(&k_rdata_17222c));  // 255.0  byte<->float scale
+    RegisterExeAddr(0x140172234, reinterpret_cast<uintptr_t>(&k_rdata_172234));  // 300.0  growth-time scale
+    RegisterExeAddr(0x140172248, reinterpret_cast<uintptr_t>(&k_rdata_172248));  // 1000.0 spawn-distance scale
+    RegisterExeAddr(0x140172288, reinterpret_cast<uintptr_t>(&k_rdata_172288));  // -10.0  growth rate at freeze
+    RegisterExeAddr(0x1401722b0, reinterpret_cast<uintptr_t>(&k_rdata_1722b0));  // double fabs bitmask
+
+    // Component type-ID global (filled after InvokeAllRegistrations — see above).
+    RegisterExeAddr(0x1401c7b30, reinterpret_cast<uintptr_t>(&g_tid_NaturalResourceComponent));
 }
 #endif // STANDALONE_EXE

@@ -24,6 +24,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -142,20 +144,31 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
 // GrowthComponent::Update (vtable slot [9], 0x140120050)
 // ============================================================
 
+// Step-2 body-init (vtable slot [4], +0x20, original 0x1401206f0). Forward-declared
+// here so the Update guard can lazily invoke it if StartupComponents did not run.
+void GrowthComponent_Startup(GrowthComponent* self);
+
 void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
     EnsureHelpers();
 
     uint8_t* comp = reinterpret_cast<uint8_t*>(self);
 
     // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
-    // body is zeroed and Startup/Serialize have NOT run, so config(+0x38) and the
-    // resource sub-component(+0x28) are null. Everything below derefs them (and
-    // .rdata float constants) unconditionally and would fault. Bail safely until
-    // step 2 of the bring-up recipe (real Startup/body-init) lands. Harmless in
-    // DLL-hook mode (body is populated there → both non-null). See
+    // body is zeroed unless Startup ran. config(+0x38) and the resource
+    // sub-component(+0x28) are populated by GrowthComponent_Startup (step 2 of the
+    // recipe), which the entity-spawn pipeline invokes via vtable+0x20 in
+    // ComponentEntity_StartupComponents. As a belt-and-suspenders, if the body is
+    // still zero but the description(+0x18) is present, run the body-init now
+    // (idempotent). If it is still incomplete afterward, bail safely — everything
+    // below derefs config/resource (and .rdata float constants) unconditionally.
+    // Harmless in DLL-hook mode (body populated there → both non-null). See
     // notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
-    if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
-        return;
+    if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0) {
+        if (*(uintptr_t*)(comp + 0x18) != 0)
+            GrowthComponent_Startup(self);
+        if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0)
+            return;
+    }
 
     float fOne = *s_fOne;       // 1.0f
     float fSixty = *s_fSixty;  // 60.0f
@@ -214,6 +227,32 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
 
     // Accumulate growth
     float newGrowth = currentGrowth + dtSeconds * growthRate * tempModifier;
+
+    // Phase-1 bring-up verification trace (env BANISHED_GROWTH_TRACE, default off
+    // → byte-unchanged): follows ONE GrowthComponent across ticks and prints its
+    // accumulating growth value (resource+0x28). Confirms the live recipe
+    // end-to-end — Update entered via vtable +0x48, body-init populated
+    // config@+0x38/resource@+0x28, and the value advances monotonically per tick.
+    {
+        static int s_traceState = -1;  // -1=unchecked, 0=off, 1=on
+        static int s_traceCount = 0;
+        static void* s_lockComp = nullptr;  // follow ONE component across ticks
+        if (s_traceState < 0) {
+            const char* e = std::getenv("BANISHED_GROWTH_TRACE");
+            s_traceState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_traceState == 1 && s_lockComp == nullptr) s_lockComp = comp;
+        if (s_traceState == 1 && comp == s_lockComp && s_traceCount < 40) {
+            fprintf(stderr,
+                "[GrowthTrace] comp=%p config=%p res=%p dt=%.5f rate=%.6f temp=%.3f "
+                "cur=%.6f -> new=%.6f scale=%.3f\n",
+                (void*)comp, (void*)config, (void*)resourceComp, dtSeconds,
+                growthRate, tempModifier, currentGrowth, newGrowth,
+                *reinterpret_cast<float*>(comp + 0x4c));
+            fflush(stderr);
+            s_traceCount++;
+        }
+    }
 
     if (newGrowth >= 0.0f ||
         (s_fn_CheckPtr(comp + 0x28),
@@ -357,6 +396,14 @@ static fn_SetVariant_t s_fn_SetVariant = nullptr;
 // FUN_1400c48a0 -- register new entity into world entity list.
 typedef void (*fn_RegisterEntity_t)(void* entityListPtr, void* ibp, int bucket);
 static fn_RegisterEntity_t s_fn_RegisterEntity = nullptr;
+// FUN_140003f60 -- find sibling component of type DAT_1401c7a50 on the owner
+// entity (the GrowthComponent::Startup +0x30 accessor). Returns IBP via out-param.
+typedef void* (*fn_FindSibling_3f60_t)(uintptr_t owner, void* outIBP);
+static fn_FindSibling_3f60_t s_fn_FindSibling_3f60 = nullptr;
+// System::Random::RandFloatTol (.rdata dispatch slot 0x140151400) -- used only by
+// GrowthComponent::Startup for the growthScale randomization (config+0x20 > 0 path).
+typedef float (*fn_RandFloatTol_t)(void* random);
+static fn_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 // AnimateNaturalResource_helper_6440 (FUN_140126440) -- animation kick.
 typedef void (*fn_AnimateNatRes_t)(void* comp, int kind);
 static fn_AnimateNatRes_t s_fn_AnimateNatRes = nullptr;
@@ -379,6 +426,11 @@ static void EnsureSubHelpers() {
     s_fn_RegisterEntity  = reinterpret_cast<fn_RegisterEntity_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
     s_fn_AnimateNatRes   = reinterpret_cast<fn_AnimateNatRes_t>(ResolveAddr(Module::Exe, 0x140126440));
     s_fn_CompEntityCopy  = reinterpret_cast<fn_CompEntityCopy_t>(ResolveAddr(Module::Exe, 0x1400c3720));
+    s_fn_FindSibling_3f60= reinterpret_cast<fn_FindSibling_3f60_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    // RandFloatTol lives behind a .rdata dispatch slot (slot storage holds the
+    // resolved Runtime fn ptr); deref the slot, matching herdcomponent.cpp.
+    uintptr_t randSlot = ResolveAddr(Module::Exe, 0x140151400);
+    if (randSlot) s_fn_RandFloatTol = *reinterpret_cast<fn_RandFloatTol_t*>(randSlot);
     s_fUVScale           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172140));
     s_fInst248           = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172248));
     s_subHelpersResolved = true;
@@ -386,6 +438,68 @@ static void EnsureSubHelpers() {
 
 static uintptr_t WorldSingleton() {
     return s_pWorldSingleton ? reinterpret_cast<uintptr_t>(*s_pWorldSingleton) : 0;
+}
+
+// ============================================================
+// GrowthComponent::Startup (vtable slot [4], +0x20, original 0x1401206f0)
+// ============================================================
+// Body-init: populate the component fields from the owning entity (+0x10) and
+// the GrowthDescription template (+0x18). Called at spawn time by
+// ComponentEntity_StartupComponents (which dispatches vtable+0x20 on every
+// component whose capability flags have bit 7 — GrowthComponent's 0xcb does).
+//
+//   resource@+0x28 = first sibling component of the natural-resource type
+//                    (FUN_1400052c0, by type id DAT_1401c7b30).
+//   +0x30          = sibling of type DAT_1401c7a50 (FUN_140003f60).
+//   config@+0x38   = the GrowthDescription (comp+0x18). The original validates
+//                    IsDerivedFrom(desc, GrowthDescription typeId 0x1401c77e8);
+//                    in standalone the factory tree is incomplete so IsDerivedFrom
+//                    is unreliable (see ComponentEntity_CtorFromDescription's
+//                    IsDerivedFromOrTrust note) — trust comp+0x18, which the
+//                    copy-ctor set to this component's own GrowthDescription.
+//   growthScale@+0x4c = config+0x20 <= 0 ? -1.0 (never harvest)
+//                       : RandFloatTol(rng) * config+0x24 + config+0x20.
+void GrowthComponent_Startup(GrowthComponent* self) {
+    EnsureHelpers();
+    EnsureSubHelpers();
+    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
+
+    void* owner = *reinterpret_cast<void**>(comp + 0x10);
+    if (!owner) return;   // not yet wired into an entity
+
+    // resource@+0x28 — sibling natural-resource component.
+    if (s_fn_CheckPtr) s_fn_CheckPtr(comp + 0x10);
+    int64_t resIBP = 0;
+    if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(owner, &resIBP);
+    *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(resIBP);
+
+    // +0x30 — sibling of type DAT_1401c7a50.
+    if (s_fn_CheckPtr) s_fn_CheckPtr(comp + 0x10);
+    int64_t res30IBP = 0;
+    if (s_fn_FindSibling_3f60)
+        s_fn_FindSibling_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);
+    *reinterpret_cast<void**>(comp + 0x30) = reinterpret_cast<void*>(res30IBP);
+
+    // config@+0x38 — trust the description the copy-ctor stored at +0x18.
+    void* config = *reinterpret_cast<void**>(comp + 0x18);
+    *reinterpret_cast<void**>(comp + 0x38) = config;
+
+    // growthScale@+0x4c.
+    float minScale = config
+        ? *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x20)
+        : -1.0f;
+    if (minScale <= 0.0f) {
+        *reinterpret_cast<float*>(comp + 0x4c) = -1.0f;   // 0xbf800000
+    } else {
+        float range = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(config) + 0x24);
+        float r = 0.0f;
+        uintptr_t world = WorldSingleton();
+        if (s_fn_RandFloatTol && world) {
+            void* rng = *reinterpret_cast<void**>(world + 0xd8);
+            r = s_fn_RandFloatTol(rng);
+        }
+        *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
+    }
 }
 
 // Reimpl of FUN_140118950 (GrowthComponent flag modify: comp+0x20 = (f|or)&~andNot; notify)
@@ -621,6 +735,12 @@ static void GrowthComponent_UpdateVSlot(void* self, void* deltaTime) {
                            reinterpret_cast<int64_t*>(deltaTime));
 }
 
+// vtable slot +0x20 (slot 4 = Startup) is invoked as (component). Called by
+// ComponentEntity_StartupComponents at spawn to populate the body (step 2).
+static void GrowthComponent_StartupVSlot(void* self) {
+    GrowthComponent_Startup(reinterpret_cast<GrowthComponent*>(self));
+}
+
 static bool GrowthComponent_LiveEnabled() {
     const char* e = std::getenv("BANISHED_LIVE_GROWTH");
     return e && e[0] && std::strcmp(e, "0") != 0 && std::strcmp(e, "false") != 0;
@@ -630,9 +750,13 @@ static bool GrowthComponent_LiveEnabled() {
 // env opt-in is set, graduate slot 9 (+0x48 Update) to the real reimpl. Idempotent:
 // the shared per-type vtable is filled once, this re-points slot 9 to the same fn.
 static void GrowthComponent_FinishVtable() {
-    if (GrowthComponent_LiveEnabled())
+    if (GrowthComponent_LiveEnabled()) {
+        // slot 4 (+0x20) = Startup (step-2 body-init), slot 9 (+0x48) = Update.
+        GrowthComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&GrowthComponent_StartupVSlot);
         GrowthComponent_LiveVtable[9] =
             reinterpret_cast<void*>(&GrowthComponent_UpdateVSlot);
+    }
 }
 
 extern "C" void* GrowthComponent_Factory(void) {

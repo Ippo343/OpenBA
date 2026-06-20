@@ -1210,6 +1210,11 @@ static bool Init() {
 
     DumpFirstTypeInfo("AFTER InvokeAllRegistrations");
 
+    // NOTE: component type-ID .rdata globals (FillComponentTypeIdGlobals_nature)
+    // are filled later, in RunGameMain right after Engine::Startup —
+    // Object::Factory::Startup assigns the real CRC type ids only then (here they
+    // are still the 0xFFFFFFFF ctor sentinel). See code/Game/Game/game_main.cpp.
+
     // 7. Skip the launcher dialog — see SkipPlatformConfigure note above.
     SkipPlatformConfigure();
 

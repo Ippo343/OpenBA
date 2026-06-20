@@ -57,6 +57,12 @@ namespace Game { extern "C" void FileSystem_PinDataDir(); }
 // type, invokes its factory, validates vtable + ctor-set field defaults.
 extern "C" void RunStartupSelfTests();
 
+#ifdef STANDALONE_EXE
+// Defined in standalone/reg_component_nature.cpp — fills the component type-ID
+// .rdata globals once Object::Factory::Startup has assigned the real CRC ids.
+extern "C" void FillComponentTypeIdGlobals_nature();
+#endif
+
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
 // MenuDialogLoopT_LoadSceneA1 (~10ms — small allocs + one .rsc load) inline
 // and captures the chunked PhaseB iteration state. We invoke this during
@@ -372,6 +378,15 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                    p->name ? p->name : "?");
         }
     }
+
+#ifdef STANDALONE_EXE
+    // Now that Object::Factory::Startup has assigned the real CRC type ids (the
+    // 0xFFFFFFFF ctor sentinel is overwritten only here, NOT at
+    // InvokeAllRegistrations), populate the component type-ID .rdata globals that
+    // the shared FindComponent accessors compare against. Filling earlier stored
+    // the sentinel. See reg_component_nature.cpp / standalone/main.cpp.
+    FillComponentTypeIdGlobals_nature();
+#endif
 
     if (ok != 0) {
 #ifdef STANDALONE_EXE
