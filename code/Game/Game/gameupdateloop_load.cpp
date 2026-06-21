@@ -37,6 +37,7 @@ extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 extern "C" void  Pathfinder_Seed(void* game, int dim);    // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
+extern "C" void  CharManager_Seed();                      // charmanager_seed.cpp (move-tick tail — char spatial-hash mgr @ GW+0x88)
 extern "C" void  StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
 extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);                    // starttown.cpp (M5 5c — ECS spawn)
 
@@ -828,6 +829,13 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             // behind BANISHED_LIVE_CHARACTER_MOVETICK (the only consumer); default no-op.
             if (game && dim > 0)
                 Pathfinder_Seed(game, (int)dim);
+
+            // move-tick tail — seed the CHARACTER SPATIAL-HASH MANAGER at GameWorld+0x88.
+            // CharacterComponent::OnAdd allocates each citizen's char-index out of this; that
+            // index (CharacterComponent+0x40 >= 0) is what un-gates the move-tick transform
+            // tail. Reads GW/map itself, so no args. Runs before the citizen ECS spawn below,
+            // so each citizen's Startup-time OnAdd finds a live manager. Same env gate.
+            CharManager_Seed();
 
             // M5 5c — camera: spiral-search the buildable tile grid for the
             // start-town spawn tile and frame it. Writes the look-at target to

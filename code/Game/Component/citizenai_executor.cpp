@@ -244,14 +244,19 @@ static fn_gridToWorld_t s_fn_9f3e0  = nullptr;   // GridToWorld / impl_f3e0     
 static fn_sub8660_t     s_fn_18660  = nullptr;   // CharacterComponent_sub_8660     (NOT REG)
 
 // --- engine dispatch slots used by the tail (all rendering-layer) ---
-typedef void* (*fn_rootAnimOff_t)(void* meshInstance);                 // [0x140152960]
-typedef void  (*fn_vec3Dot_t)(void* v, void* out);                     // [0x140151298]
+// Value-return ABIs (CLAUDE.md gotcha): MeshInstance::RootAnimationOffset returns
+// Vector3 by value (RCX=this, RDX=hidden retbuf); Vector3::Dot returns Scalar by value
+// (RCX=this, RDX=retbuf, R8=other); Scalar::Max is a const member returning Scalar by
+// value (RCX=this, RDX=retbuf, R8=other). Verified vs disasm at 0x14010967b/0x14010968b/
+// 0x140109802.
+typedef void* (*fn_rootAnimOff_t)(void* meshInstance, void* retVec3);   // [0x140152960]
+typedef void  (*fn_vec3Dot_t)(void* thisVec, void* retScalar, void* other); // [0x140151298]
 typedef void* (*fn_vec3Ctor_t)(void* self, float x, float y, float z); // [0x140152a30]
 typedef void  (*fn_transformAssign_t)(void* dst, void* src);          // [0x140151280]
 typedef void  (*fn_geomSetXform_t)(void* geom, void* xform);          // [0x1401512e0]
 typedef void  (*fn_transformCtor_t)(void* self, void* src);          // [0x140151418]
 typedef void  (*fn_pickSetXform_t)(void* scene, uint32_t id, void* xform); // [0x1401529a8]
-typedef float* (*fn_scalarMax_t)(void* a, void* b);                   // [0x140151e78]
+typedef void* (*fn_scalarMax_t)(void* thisScalar, void* retScalar, void* other); // [0x140151e78]
 static fn_rootAnimOff_t     s_slot_rootAnim = nullptr;
 static fn_vec3Dot_t         s_slot_dot      = nullptr;
 static fn_vec3Ctor_t        s_slot_vec3     = nullptr;
@@ -359,12 +364,15 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     }
 
     CheckPtr(self + 0x68);
-    void* rootAnim = (s_slot_rootAnim && model)
-                         ? s_slot_rootAnim(reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x28))
-                         : nullptr;
-    float dotOut[2] = { 0.0f, 0.0f };
-    if (s_slot_dot && rootAnim) s_slot_dot(rootAnim, dotOut);
-    float speed = s_fn_132010 ? s_fn_132010(dotOut[0]) : 0.0f;
+    // this = MeshInstance::RootAnimationOffset(model+0x28) (Vector3 by-value into retbuf);
+    // speed = sqrt(this.Dot(this)) * self+0x38 — magnitude of the root-motion offset.
+    float rootAnimVec[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (s_slot_rootAnim && model)
+        s_slot_rootAnim(reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x28),
+                        rootAnimVec);
+    float dotOut = 0.0f;
+    if (s_slot_dot) s_slot_dot(rootAnimVec, &dotOut, rootAnimVec);
+    float speed = s_fn_132010 ? s_fn_132010(dotOut) : 0.0f;
     speed = speed * *reinterpret_cast<float*>(self + 0x38);
     if (0.0f < speed) {
         float ax = speed * *reinterpret_cast<float*>(self + 0x2c);
@@ -399,12 +407,14 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
                 float triOut[4] = { 0, 0, 0, 0 };
                 float* pf = nullptr;
                 if (s_fn_9f3e0) pf = s_fn_9f3e0(gameWorld, triOut, pos, '\0', nullptr);
-                float maxIn[2] = { pf ? pf[2] : 0.0f, 0.0f };
-                float maxArg = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x44);
-                (void)maxArg;
+                // pos.z = Scalar(gridZ).Max(desc+0x44)  — clamp terrain height to the
+                // description's min. Const-member by-value ABI: (this=gridZ, retbuf, other).
+                float maxThis  = pf ? pf[2] : 0.0f;
+                float maxOther = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x44);
+                float maxRet   = maxThis;
                 if (pf) { fx = pf[0]; fy = pf[1]; }
-                float* mx = (s_slot_max) ? s_slot_max(maxIn, &maxArg) : nullptr;
-                pos[2] = mx ? *mx : (pf ? pf[2] : 0.0f);
+                if (s_slot_max) s_slot_max(&maxThis, &maxRet, &maxOther);
+                pos[2] = maxRet;
                 pos[0] = fx; pos[1] = fy;
             }
         } else {
@@ -422,17 +432,23 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     float negSin = -s_ang;
     float c_ang = s_fn_131090 ? s_fn_131090(ang) : 0.0f;
 
-    // build a Transform (local_d0..) = { 0, 0, pos.xy | pos.z, quaternion(negSin,c_ang) }
-    struct { float a, b, c, d, e, f, g, h; } xform;
-    xform.a = 0; xform.b = 0;
-    xform.c = pos[0]; xform.d = pos[1];
-    xform.e = negSin; xform.f = c_ang;
-    xform.g = pos[2]; xform.h = 0;
-    (void)xform;
+    // Build the source Transform (0x1C bytes). Layout VERIFIED vs disasm at
+    // 0x140109856-0x14010987c (source built at RSP+0x68, copied into model+0x148):
+    //   +0x00=0  +0x04=0  +0x08=negSin  +0x0c=cos  +0x10=pos.x  +0x14=pos.y  +0x18=pos.z
+    // The first 8 bytes are a zeroed 2D translation; +0x08/+0x0c are the heading
+    // (-sin, cos) pair; +0x10.. is the 3D world position. (Earlier port had pos.xy
+    // and the sin/cos pair SWAPPED — corrupts the citizen render transform. The
+    // original locals are, in ascending address: local_d0=0, local_cc=0,
+    // local_c8=negSin, local_c4=cos, local_c0=CONCAT44(pos.y,pos.x), local_b8=pos.z.)
+    float xform[8];
+    xform[0] = 0.0f;   xform[1] = 0.0f;
+    xform[2] = negSin; xform[3] = c_ang;
+    xform[4] = pos[0]; xform[5] = pos[1];
+    xform[6] = pos[2]; xform[7] = 0.0f;
 
     CheckPtr(self + 0x68);
     model = *reinterpret_cast<int64_t*>(self + 0x68);
-    if (s_slot_xfAssign) s_slot_xfAssign(reinterpret_cast<void*>(model + 0x148), &xform);
+    if (s_slot_xfAssign) s_slot_xfAssign(reinterpret_cast<void*>(model + 0x148), xform);
     *reinterpret_cast<float*>(model + 0x168) = fVar14;
     if (s_fn_132010) { /* unused result guard symmetry */ }
     if (s_slot_geomXf)

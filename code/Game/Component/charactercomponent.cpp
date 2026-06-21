@@ -159,6 +159,9 @@ static void* CharComp_FindSiblingByName(int64_t ownerEntity, const char* typeNam
     return nullptr;
 }
 
+// Char spatial-hash manager registrar (charmanager.cpp) — allocates the char render-index.
+extern "C" int64_t CharMgr_sub_83f0(float* mgr, int64_t* ibp);
+
 static void CharacterComponent_BodyInit(CharacterComponent* self) {
     if (!self) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(self);
@@ -185,6 +188,49 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
     *reinterpret_cast<void**>(p + 0x70) = CharComp_FindSiblingByName(owner, "PickingComponent");
     // +0x78 = CharacterDescription (trust comp+0x18).
     *reinterpret_cast<void**>(p + 0x78) = *reinterpret_cast<void**>(p + 0x18);
+
+    // --- OnAdd (0x1401099c0): char render-index allocation — GATES the move-tick TAIL ---
+    // The real engine runs OnAdd as a later lifecycle phase; we fold it into Startup-time
+    // body-init because it only depends on +0x68 (the ModelComponent, just resolved) and the
+    // char spatial-hash manager (GameWorld+0x88, seeded earlier in Load), and the effect — a
+    // one-time slot allocation returning the render-index — is order-identical. Gated on
+    // BANISHED_LIVE_CHARACTER_MOVETICK so default builds keep +0x40 = -1 and the transform
+    // tail stays dormant (byte-unchanged). Without this, +0x40 stays -1 and the move-tick
+    // early-returns before ever writing the ModelComponent transform.
+    static int mtEn = -1;
+    if (mtEn < 0) {
+        const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
+        mtEn = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (mtEn) {
+        // PickingComponent (+0x70) is COMPONENT_INERT_FACTORY in standalone: its memory is
+        // zeroed, so its pick-id (+0x28) is 0, not the real ctor's -1 "unregistered" sentinel.
+        // The citizen is NOT registered in the Picking::Scene here (that scene's object array
+        // is never populated until the picking subsystem is brought live), so the move-tick's
+        // `pickId >= 0` guard would WRONGLY pass and call Picking::Scene::SetTransform on an
+        // empty scene -> null object-array deref. Force the honest "unregistered" -1 so the
+        // tail skips the picking update (the render-transform write via Geometry::SetTransform
+        // is unaffected). When the picking subsystem registers citizens via AddMesh, +0x28
+        // will hold a real id and this becomes a no-op.
+        void* pickComp = *reinterpret_cast<void**>(p + 0x70);
+        if (pickComp)
+            *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(pickComp) + 0x28) = -1;
+
+        int64_t model = *reinterpret_cast<int64_t*>(p + 0x68);
+        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* charMgr = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x88)
+                           : nullptr;
+        if (model && charMgr && fn_InternalBasePtr_Ctor) {
+            // facing init: CharacterComponent+0x3c = ModelComponent+0x168.
+            *reinterpret_cast<int32_t*>(p + 0x3c) = *reinterpret_cast<int32_t*>(model + 0x168);
+            // wrap self as an InternalBasePtr, register with the manager -> char-index.
+            int64_t selfIbp = 0;
+            fn_InternalBasePtr_Ctor(&selfIbp, self);
+            int64_t ibpArg = selfIbp;
+            *reinterpret_cast<int32_t*>(p + 0x40) =
+                static_cast<int32_t>(CharMgr_sub_83f0(reinterpret_cast<float*>(charMgr), &ibpArg));
+        }
+    }
 }
 
 // ------------------------------------------------------------------

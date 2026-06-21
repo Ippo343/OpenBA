@@ -410,6 +410,9 @@ extern void RegisterCitizenAIGather();       // Phase 3 Keystone D Brick 3b-W4: 
 extern void RegisterCitizenAIGrowUp();       // Phase 3 Keystone D Brick 3b-W4: GrowUp + LongTermPlan (+f230)
 extern void RegisterCitizenAILeisure();      // Phase 3 Keystone D Brick 3b-W4: Leisure (+99d0/fd50/a720)
 extern void RegisterCitizenAIHousingIdle();  // Phase 3 Keystone D Brick 3b-W4: FindHousing/Idle + AVL subtree
+extern "C" float CharacterComponent_Sinf_131c90(float); // Phase 3 Keystone D: move-tick heading sinf (0x140131c90)
+extern "C" float CharacterComponent_Cosf_131090(float); // Phase 3 Keystone D: move-tick heading cosf (0x140131090)
+extern void RegisterCharManager();           // Phase 3 Keystone D: char spatial-hash manager (sub_83f0/8660/8c40/8d00/28c0/8560)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
@@ -495,6 +498,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b — CitizenAI find-best-target (dd30+78c0)
     RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b — CitizenAI action-ctor family (9 ctors)
     RegisterCitizenAIExecutor();     // Phase 3 Keystone D Brick 4b — action executor + move-tick
+    RegisterCharManager();           // Phase 3 Keystone D — char spatial-hash manager (move-tick tail char-index)
     RegisterCitizenAIHandlers2();    // Phase 3 Keystone D Brick 3b — handler wave 2 (Education/SeekHappiness/FindWork)
     RegisterCitizenAIFindHelpers();  // Phase 3 Keystone D Brick 3b — deep find-helpers (2ac30/db20/70b0/ec70/e370)
     RegisterCitizenAIHandlers3();     // Phase 3 Keystone D Brick 3b — handler wave 3 (Work/Adult/Elder)
@@ -962,6 +966,29 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??1Internal@Object@@UEAA@XZ"));
     RegisterDispatchSlot(0x140152a30,
         (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@MMM@Z"));
+
+    // Phase 3 Keystone D — CharacterComponent move-tick TAIL render slots.
+    // The tail (CharacterComponent_MoveTick_1094c0, citizenai_executor.cpp) writes the
+    // citizen's per-frame world transform into ModelComponent+0x148, pushes it to
+    // Graphics::Geometry::SetTransform (already registered at 0x1401512e0) and
+    // Picking::Scene::SetTransform, and derives heading from the mesh root-animation
+    // offset. It only runs when the char-index (CharacterComponent+0x40) >= 0, i.e. once
+    // CharacterComponent::OnAdd + the char spatial-hash manager are live. Names = the
+    // exe's own import strings at each slot RVA. All five are value-return / member ABIs:
+    //   RootAnimationOffset / Vector3::Dot / Scalar::Max return by hidden retbuf.
+    RegisterDispatchSlot(0x140152960,   // Graphics::MeshInstance::RootAnimationOffset() const -> Vector3
+        (uintptr_t)ResolveExport("?RootAnimationOffset@MeshInstance@Graphics@@QEBA?AVVector3@Math@@XZ"));
+    RegisterDispatchSlot(0x140151280,   // Math::Transform::operator=(const Transform&) -> Transform&
+        (uintptr_t)ResolveExport("??4Transform@Math@@QEAAAEAV01@AEBV01@@Z"));
+    RegisterDispatchSlot(0x140151418,   // Math::Transform::Transform(const Transform&) [copy ctor]
+        (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@AEBV01@@Z"));
+    RegisterDispatchSlot(0x1401529a8,   // Picking::Scene::SetTransform(uint id, const Transform&)
+        (uintptr_t)ResolveExport("?SetTransform@Scene@Picking@@QEAAXIAEBVTransform@Math@@@Z"));
+    RegisterDispatchSlot(0x140151e78,   // Math::Scalar::Max(const Scalar&) const -> Scalar
+        (uintptr_t)ResolveExport("?Max@Scalar@Math@@QEBA?AV12@AEBV12@@Z"));
+    // sinf / cosf used by the heading quaternion (clean CRT-wrapper reimpls, sqrtf precedent).
+    RegisterExeAddr(0x140131c90, reinterpret_cast<uintptr_t>(&CharacterComponent_Sinf_131c90));
+    RegisterExeAddr(0x140131090, reinterpret_cast<uintptr_t>(&CharacterComponent_Cosf_131090));
 
     // Application::Application::_singleton — Runtime data variable holding the
     // Application*. The exe normally has a .rdata exref at 0x140152368 that

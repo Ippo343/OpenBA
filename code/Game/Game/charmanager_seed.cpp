@@ -1,0 +1,101 @@
+// code/Game/Game/charmanager_seed.cpp
+// Phase 3 Keystone D / move-tick tail — seed the CHARACTER SPATIAL-HASH MANAGER.
+//
+// The manager lives at *(GameWorld+0x88) (GameWorld = *g_pGameWorldSingleton). The real
+// game builds it during world setup; the Game ctor (FUN_14009ee70) only ZEROES +0x88, so
+// in standalone it is null and CharacterComponent_OnAdd's sub_83f0 call would crash. We
+// replicate the ctor here: allocate the manager + its implicit-quadtree arrays, store at
+// GameWorld+0x88. Once seeded, OnAdd assigns each character a non-negative char-index
+// (CharacterComponent+0x40), which un-gates the move-tick TAIL (transform write).
+//
+// CTOR UNCONFIRMED: the real constructor was not located in Ghidra (the manager methods
+// are split across the 0x140018xxx / 0x140092xxx clusters and the ctor wasn't isolated).
+// The struct semantics are fully determined by sub_83f0/sub_8660/8c40/8d00, so this seed
+// is built from first principles and is internally consistent + crash-safe:
+//   * worldSize (+0x00) = (float)mapDim, center (+0x04/+0x08) = mapDim/2 — so a world X in
+//     [-dim/2, dim/2] maps to cell coords [0, dim) exactly as the move-tick's own
+//     (fx + dim>>1) mapping does.
+//   * levels (+0x0c) chosen so the finest level resolves ~1 cell per map tile (capped).
+//   * levelOffsetTable (+0x40)[L] = (4^L - 1)/3 — the implicit-quadtree base index per
+//     level (PROVEN consistent with the parent = (g-1)>>2 walk in 8c40/8d00).
+//   * cellHead (+0x30) all -1 (empty), cellOccupancy (+0x50) all 0.
+//   * slot array / free-list empty (count=cap=0) — the first sub_83f0 append grows them.
+// The spatial bucketing does NOT affect the transform write; it only governs proximity
+// queries + culling. If the real ctor is later found, replace levels/worldSize here.
+//
+// Gated behind BANISHED_LIVE_CHARACTER_MOVETICK (the env that enables the move-tick tail).
+// Default builds stay byte-unchanged.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstdlib>
+#include <cstdio>
+#include <cstring>
+
+namespace {
+static bool MoveTickEnabled() {
+    const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
+    return e && e[0] && e[0] != '0';
+}
+constexpr int kMaxLevels = 10;   // cap (4^10 -> ~350K cells per array); maps are <= 1024 tiles
+} // namespace
+
+extern "C" void CharManager_Seed() {
+    if (!MoveTickEnabled()) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_MemAlloc) return;
+
+    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    if (*reinterpret_cast<void**>(gw + 0x88) != nullptr) return;   // already seeded
+
+    void* mapV = *reinterpret_cast<void**>(gw + 0xf8);
+    if (!mapV) { fprintf(stderr, "[CharMgr] no map @ GW+0xf8 — skip\n"); fflush(stderr); return; }
+    int dim = *reinterpret_cast<int*>(mapV);
+    if (dim <= 0) { fprintf(stderr, "[CharMgr] bad map dim=%d — skip\n", dim); fflush(stderr); return; }
+
+    // levels: smallest L with (1<<(L-1)) >= dim, i.e. finest cell ~= 1 tile; capped.
+    int levels = 1;
+    while ((1 << (levels - 1)) < dim && levels < kMaxLevels) ++levels;
+
+    // implicit-quadtree level base-offset table: offset[L] = (4^L - 1)/3
+    int* offTbl = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton,
+                      static_cast<uint64_t>(levels) * sizeof(int), 4));
+    if (!offTbl) return;
+    int64_t acc = 0;
+    for (int L = 0; L < levels; ++L) {
+        offTbl[L] = static_cast<int>(acc);
+        acc += static_cast<int64_t>(1) << (2 * L);          // += 4^L
+    }
+    int totalCells = static_cast<int>(acc);                 // = (4^levels - 1)/3
+
+    int* cellHead = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton,
+                        static_cast<uint64_t>(totalCells) * sizeof(int), 4));
+    int* cellOcc  = reinterpret_cast<int*>(fn_MemAlloc(g_pMemAllocSingleton,
+                        static_cast<uint64_t>(totalCells) * sizeof(int), 4));
+    if (!cellHead || !cellOcc) return;
+    for (int i = 0; i < totalCells; ++i) { cellHead[i] = -1; cellOcc[i] = 0; }
+
+    // allocate + zero the manager struct (0x60 covers all known fields up to +0x58)
+    uint8_t* m = reinterpret_cast<uint8_t*>(fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8));
+    if (!m) return;
+    std::memset(m, 0, 0x60);
+    *reinterpret_cast<float*>(m + 0x00) = static_cast<float>(dim);            // worldSize
+    *reinterpret_cast<float*>(m + 0x04) = static_cast<float>(dim) * 0.5f;     // center.x
+    *reinterpret_cast<float*>(m + 0x08) = static_cast<float>(dim) * 0.5f;     // center.y
+    *reinterpret_cast<int*>  (m + 0x0c) = levels;
+    *reinterpret_cast<void**>(m + 0x10) = nullptr;   // slot array (grown on first append)
+    *reinterpret_cast<int*>  (m + 0x18) = 0;         // slot count
+    *reinterpret_cast<int*>  (m + 0x1c) = 0;         // slot capacity
+    *reinterpret_cast<void**>(m + 0x20) = nullptr;   // free-list
+    *reinterpret_cast<int*>  (m + 0x28) = 0;         // free count
+    *reinterpret_cast<int*>  (m + 0x2c) = 0;         // free capacity
+    *reinterpret_cast<int**> (m + 0x30) = cellHead;
+    *reinterpret_cast<int**> (m + 0x40) = offTbl;
+    *reinterpret_cast<int**> (m + 0x50) = cellOcc;
+
+    *reinterpret_cast<void**>(gw + 0x88) = m;
+
+    fprintf(stderr, "[CharMgr] seeded @ GW+0x88 = %p (dim=%d, levels=%d, cells=%d)\n",
+            static_cast<void*>(m), dim, levels, totalCells);
+    fflush(stderr);
+}
