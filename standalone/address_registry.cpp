@@ -498,22 +498,21 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAIHandlers2();    // Phase 3 Keystone D Brick 3b — handler wave 2 (Education/SeekHappiness/FindWork)
     RegisterCitizenAIFindHelpers();  // Phase 3 Keystone D Brick 3b — deep find-helpers (2ac30/db20/70b0/ec70/e370)
     RegisterCitizenAIHandlers3();     // Phase 3 Keystone D Brick 3b — handler wave 3 (Work/Adult/Elder)
-    // Brick 3b-W4 (remaining 7 handlers) is GATED default-OFF: these handlers (Leisure/Gather/
-    // Gather2 are in the fresh-citizen candidate set) drive the dd30/d5d0/f810 A* pathfinder for
-    // the FIRST time at runtime, surfacing a PRE-EXISTING latent null-deref in the A* open-list
-    // AVL (Pf_AvlRotateR_14da0 via Pf_FindBestAdjacentCell_d5d0 / Pf_IsDstReachable_f810 — earlier
-    // pathfinding wave, "Ghidra-verified, not runtime-exercised"). The W4 handler ports themselves
-    // are faithful + lead-verified; they're registered only when BANISHED_LIVE_CITIZENAI_W4 is set,
-    // so the default build stays green while the A* AVL crash is fixed in its own focused pass.
-    {
-        const char* w4 = getenv("BANISHED_LIVE_CITIZENAI_W4");
-        if (w4 && w4[0] && w4[0] != '0') {
-            RegisterCitizenAIGather();        // Gather/Gather2 (+12ab00)
-            RegisterCitizenAIGrowUp();        // GrowUp + LongTermPlan (+f230)
-            RegisterCitizenAILeisure();       // Leisure (+99d0/fd50/a720)
-            RegisterCitizenAIHousingIdle();   // FindHousing/Idle + AVL subtree
-        }
-    }
+    // Brick 3b-W4 (remaining 7 handlers) — UN-GATED 2026-06-20 (task #33 landed).
+    // These handlers (Leisure/Gather/Gather2 are in the fresh-citizen candidate set) drive the
+    // map flood-fill pathfinder (Pf_ZoneRefresh_9c480 -> Pf_FloodFillRegion_9c170) and a MoveTo
+    // action-build for the FIRST time at runtime. That earlier surfaced TWO standalone bugs, now
+    // FIXED (NOT the originally-suspected A* open-list AVL — that diagnosis was an addr2line
+    // image-base error): (1) Pf_FloodFillRegion_9c170 never called its own EnsureFns(), so the
+    // node-pool alloc s_fn_FloodAlloc(0x14001a9b0) stayed null and the BFS enqueued a null queue
+    // node -> head-deref fault; (2) Entity_FindComponent_Family read the unfilled CharacterComponent
+    // type-id global (DAT_1401c7078==0xFFFFFFFF) -> null entity IBP -> MoveTo ctor null-deref. Both
+    // fixed in code/Game/Action/action_pf_astar.cpp + action_base_move.cpp. A/B GREEN: citizens now
+    // select + ENTER Leisure and push a MoveTo crash-free; default (citizen-live OFF) byte-unchanged.
+    RegisterCitizenAIGather();        // Gather/Gather2 (+12ab00)
+    RegisterCitizenAIGrowUp();        // GrowUp + LongTermPlan (+f230)
+    RegisterCitizenAILeisure();       // Leisure (+99d0/fd50/a720)
+    RegisterCitizenAIHousingIdle();   // FindHousing/Idle + AVL subtree
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)

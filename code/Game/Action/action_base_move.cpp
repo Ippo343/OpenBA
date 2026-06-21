@@ -16,6 +16,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cmath>
 
@@ -74,8 +75,17 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 
     void* found = nullptr;
     uint32_t wantId = s_pTid_1c7078 ? *s_pTid_1c7078 : 0;
+    // Standalone: the shared CharacterComponent type-id global (DAT_1401c7078, written by
+    // CharacterComponent_RegisterType) is left at the 0xFFFFFFFF sentinel because RegisterType
+    // runs before the real CRC ids are assigned. Filling the global would un-dormant ~30 other
+    // readers, so resolve the family type-id self-contained via Object::GetTypeIdByName (the
+    // same real-CRC source the live factories' vtable+0x10 GetTypeId uses) — matches the brick
+    // pattern. Without this the family scan never matches → null entity IBP → MoveTo ctor
+    // null-deref when a citizen state (Leisure/Wander/...) builds a MoveTo action.
+    if (wantId == 0 || wantId == 0xFFFFFFFFu)
+        wantId = ::Object::GetTypeIdByName("CharacterComponent");
     int n = *reinterpret_cast<int*>(entity + 0x38);
-    if (n > 0 && s_pTid_1c7078) {
+    if (n > 0 && wantId != 0 && wantId != 0xFFFFFFFFu) {
         uintptr_t list = *reinterpret_cast<uintptr_t*>(entity + 0x30);
         for (int i = 0; i < n; i++) {
             void** slot = reinterpret_cast<void**>(list + static_cast<int64_t>(i) * 8);

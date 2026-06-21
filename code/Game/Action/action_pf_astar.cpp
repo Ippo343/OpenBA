@@ -1012,6 +1012,12 @@ void Pf_FloodFillRegion_9c170(int* param_1, uint32_t param_2, uint16_t param_3, 
     uint32_t local_res10[4];
     int local_res20[2];
 
+    // Standalone fix: this is a cross-TU entry point (reached from Pf_ZoneRefresh_9c480
+    // in action_pf_roots_road.cpp, which has its OWN EnsureFns). Without resolving our
+    // own s_fn_FloodAlloc (the 0x14001a9b0 node-pool alloc) first, it stays null, the
+    // BFS enqueues a null queue node, and the head-deref below faults (READ of 0x0).
+    EnsureFns();
+
     plVar1 = reinterpret_cast<int64_t*>(param_1 + 0x2a);
     local_res10[0] = param_2;
     local_res20[0] = param_4;
