@@ -25,6 +25,12 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+// Force-work harness target: the first start-town structure (StorageBarn), captured
+// in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
+extern void* g_pForceWorkBuilding;
 
 // ============================================================
 // Resolved helpers
@@ -781,6 +787,41 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
                     : "noop(citizen inert / not found)");
             fflush(stderr);
             s_traceCount++;
+        }
+    }
+
+    // --- FORCE-WORK HARNESS (env BANISHED_FORCE_WORK, default off) -------------
+    // The town-manager building registry is empty in standalone, so AssignHousing/
+    // FindWorkplace never find a residence/job -> the citizen stays unhoused +
+    // unemployed -> Work (id 5) is never a CitizenAI candidate (see the housed-gate
+    // in citizenai_candidatelist.cpp:374). To exercise the Work execution path
+    // (State_Work -> db20 -> NavigateTo -> executor -> PerformWork) BEFORE that
+    // registry is brought up, directly point ONE citizen at a real workplace
+    // building (the first start-town StorageBarn, captured in starttown.cpp):
+    //   +0x238 = workplace entity (inline InternalBasePtr)   -> State_Work target
+    //   +0x68  = housed flag (non-null)                      -> makes Work a candidate
+    // One-shot per citizen (only seeds while +0x238 is still empty).
+    if (citizen) {
+        static int s_force = -1;
+        if (s_force < 0) {
+            const char* e = std::getenv("BANISHED_FORCE_WORK");
+            s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_force == 1 && g_pForceWorkBuilding) {
+            uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
+            if (*reinterpret_cast<int64_t*>(cz + 0x238) == 0) {
+                if (fn_InternalBasePtr_Ctor)
+                    fn_InternalBasePtr_Ctor(cz + 0x238, g_pForceWorkBuilding);
+                else
+                    *reinterpret_cast<void**>(cz + 0x238) = g_pForceWorkBuilding;
+                *reinterpret_cast<void**>(cz + 0x68) = g_pForceWorkBuilding;  // housed flag
+                static int s_fn = 0;
+                if (s_fn < 6) { ++s_fn;
+                    fprintf(stderr, "[ForceWork] citizen=%p workplace+0x238=%p housed+0x68=%p\n",
+                            (void*)citizen, g_pForceWorkBuilding, g_pForceWorkBuilding);
+                    fflush(stderr);
+                }
+            }
         }
     }
 

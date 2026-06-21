@@ -44,12 +44,19 @@
 void CitizenAI_SortByPriority(void* base, int count) {
     if (!base || count < 2) return;
     int32_t* a = reinterpret_cast<int32_t*>(base);  // triples: a[3*k+0]=id, +1=prio, +2=unused
+    // DESCENDING by priority (highest at index 0). The original (0x14002fe10) is an
+    // introsort whose small-array pass selection-sorts the MINIMUM to the END, i.e.
+    // it sorts descending. TransitionState (0x14010db90) iterates the result
+    // front-to-back and enters the first state whose handler pushes an action, so
+    // the HIGHEST-priority satisfiable state must come first. (A prior port had this
+    // ascending, which made citizens always pick the lowest-priority state — e.g.
+    // Leisure/Wander over Work/needs.) Stable insertion sort, descending.
     for (int i = 1; i < count; i++) {
         int32_t id   = a[3 * i + 0];
         int32_t prio = a[3 * i + 1];
         int32_t unu  = a[3 * i + 2];
         int j = i - 1;
-        while (j >= 0 && a[3 * j + 1] > prio) {
+        while (j >= 0 && a[3 * j + 1] < prio) {
             a[3 * (j + 1) + 0] = a[3 * j + 0];
             a[3 * (j + 1) + 1] = a[3 * j + 1];
             a[3 * (j + 1) + 2] = a[3 * j + 2];
@@ -145,12 +152,18 @@ int CitizenComp_HasSufficientResources(int64_t self) {
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self2);
     // iVar2 = *(int*)( *(int64*)(*self2 + 0x50) + 8 + citizen[+0x240]*0x10 )
+    // [STANDALONE GUARD] FindComponentStorage returns a non-null IBP wrapper but a
+    // null resolved component when the StorageComponent type-id global is unfilled
+    // (the recurring standalone limitation). Guard storageObj/local_res8 so the
+    // workplace-storage scans can't deref null+0x50/+0x58.
     int iVar2 = 0;
     if (self2) {
         int64_t storageObj = *reinterpret_cast<int64_t*>(self2);
-        int64_t rows = *reinterpret_cast<int64_t*>(storageObj + 0x50);
-        int idx240 = *reinterpret_cast<int*>(p + 0x240);
-        iVar2 = *reinterpret_cast<int*>(rows + 8 + (int64_t)idx240 * 0x10);
+        if (storageObj) {
+            int64_t rows = *reinterpret_cast<int64_t*>(storageObj + 0x50);
+            int idx240 = *reinterpret_cast<int*>(p + 0x240);
+            iVar2 = *reinterpret_cast<int*>(rows + 8 + (int64_t)idx240 * 0x10);
+        }
     }
     float fVar1 = *reinterpret_cast<float*>(lVar3desc + 0xc4);   // CVTTSS2SI = trunc
     int factor = (int)fVar1;
@@ -159,6 +172,7 @@ int CitizenComp_HasSufficientResources(int64_t self) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     int64_t lVar3 = local_res8;  // storage obj (for GetResourceCount)
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
+    if (local_res8 == 0) return 0;   // no storage resolved -> "insufficient"
     int rowCount = *reinterpret_cast<int*>(local_res8 + 0x58);
     int iVar7 = 0;
     if (0 < rowCount) {
@@ -199,6 +213,7 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
     int64_t lVar1desc = *reinterpret_cast<int64_t*>(p + 0x288);   // CitizenDescription
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
+    if (local_res8 == 0) return 0;   // [STANDALONE GUARD] no storage resolved
     int rowCount = *reinterpret_cast<int*>(local_res8 + 0x58);
     int iVar6 = 0;
     if (0 < rowCount) {

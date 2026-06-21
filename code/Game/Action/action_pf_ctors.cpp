@@ -368,8 +368,13 @@ int Pf_RecursiveChildSum_123070(int64_t param_1, int param_2) {
     bool derived = s_pTid_123070_7938 && fn_IsDerivedFrom &&
                    fn_IsDerivedFrom(obj, *s_pTid_123070_7938);
     void* base = derived ? obj : nullptr;
-    int iVar3 = *reinterpret_cast<int*>(
-        reinterpret_cast<uintptr_t>(base) + (static_cast<int64_t>(param_2) + 3) * 0x10);
+    // [STANDALONE GUARD] base is null when obj is not an InteractDescription OR the
+    // type-id global (0x1401c7938) is unfilled/unregistered in standalone. The real
+    // game always resolves it; guard so the seed read can't deref null+0x30 (the
+    // counter simply contributes 0). Surfaced via the BANISHED_FORCE_WORK harness
+    // (Leisure/Work anchor a citizen on an inert workplace building's position comp).
+    int iVar3 = base ? *reinterpret_cast<int*>(
+        reinterpret_cast<uintptr_t>(base) + (static_cast<int64_t>(param_2) + 3) * 0x10) : 0;
     int iVar5 = 0;
     if (0 < *reinterpret_cast<int*>(param_1 + 0x30)) {
         int64_t lVar4 = 0;

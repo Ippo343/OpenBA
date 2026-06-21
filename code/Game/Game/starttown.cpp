@@ -32,6 +32,13 @@ static constexpr int   TILE_BUILDABLE = 2;
 static constexpr float kCenterBias = 0.5f;     // DAT_140172114
 static constexpr float kDeg2Rad    = 3.14159265358979323846f / 180.0f;
 
+// Force-work harness (env BANISHED_FORCE_WORK): the first spawned start-town
+// structure (a StorageBarn = a real workplace building entity) is captured here so
+// the CitizenAI force-assign harness can point a citizen's workplace(+0x238) /
+// housed-flag(+0x68) at it, exercising the Work loop before the town-manager
+// building registry is brought up. Set in StartTown_SpawnStructures.
+void* g_pForceWorkBuilding = nullptr;
+
 // FUN_1400a2880 — is the townSize-radius disk around (tileX, tileY) fully
 // buildable (in-bounds + type 2)?
 static bool StartTown_DiskBuildable(void* gameVoid, int tileX, int tileY, int size, int sizeSq) {
@@ -402,7 +409,11 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
                 i, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
         fflush(stderr);
-        if (ent) ++spawned;
+        if (ent) {
+            ++spawned;
+            // Capture the first structure entity for the BANISHED_FORCE_WORK harness.
+            if (!g_pForceWorkBuilding) g_pForceWorkBuilding = entity;
+        }
     }
     return spawned;
 }

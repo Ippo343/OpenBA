@@ -658,8 +658,15 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
             static int s_hn = 0;
             if (s_hn < 8) { ++s_hn;
-                fprintf(stderr, "[HousingAssign] comp=%p findResult=%p (0=no house found)\n",
-                        (void*)self, (void*)housingResult);
+                int64_t mgr = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                    ? *reinterpret_cast<int64_t*>(
+                          reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0)
+                    : 0;
+                int bcount = (mgr) ? *reinterpret_cast<int*>(mgr + 0x68) : -1;
+                int64_t btree = (mgr) ? *reinterpret_cast<int64_t*>(mgr + 0x100) : 0;
+                fprintf(stderr, "[HousingAssign] comp=%p findResult=%p (0=no house found)"
+                                " townMgr=%p bldgCount=%d profTreeRoot=%p\n",
+                        (void*)self, (void*)housingResult, (void*)mgr, bcount, (void*)btree);
                 fflush(stderr);
             }
         }
@@ -1718,6 +1725,12 @@ char CitizenComp_CanFindHousing(int64_t selfV) {
     int* grid = *reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
 
     auto tileBuildable = [&](int64_t res8) -> bool {
+        // [STANDALONE GUARD] FUN_140004680 (position-component find on the workplace/
+        // residence entity) returns null in standalone when the component is inert /
+        // its type-id global is unfilled. The real game always resolves it. Bail
+        // "not buildable" rather than deref res8+0x2e (p[0x17]). Surfaced by the
+        // BANISHED_FORCE_WORK harness setting +0x238 to a real building entity.
+        if (res8 == 0) return false;
         int64_t base = *reinterpret_cast<int64_t*>(grid + 0x20);
         int dim = **reinterpret_cast<int**>(reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf8);
         int16_t* p = reinterpret_cast<int16_t*>(res8);

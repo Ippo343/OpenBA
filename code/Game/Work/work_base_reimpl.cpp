@@ -295,6 +295,18 @@ static void EnsureMapConn() {
 //    callers read the low 32 bits).
 uint64_t WorkBase_ValidateCell_a00f0(int* mapGrid, uint32_t pathType, uint32_t destCell, int srcCell) {
     EnsureMapConn();
+    // [STANDALONE GUARD] srcCell == -1 when an entity's cell can't be resolved
+    // (Entity_impl_7fb0 returns -1 because the building's MapComponent isn't found
+    // via FUN_140004680 in standalone — unfilled type-id). (uint32_t)(-1)*0x30 then
+    // wild-reads the cell array. The real game always passes in-range cells. Bail
+    // "not reachable" on any out-of-range cell. Surfaced by BANISHED_FORCE_WORK
+    // (CheckWorkplaceValid anchors the inert workplace building).
+    int dim = mapGrid ? *mapGrid : 0;
+    int64_t cellCount = static_cast<int64_t>(dim) * dim;
+    if (srcCell < 0 || static_cast<int64_t>(srcCell) >= cellCount ||
+        static_cast<int64_t>(destCell) >= cellCount)
+        return 0;
+
     if (s_fn_MapConnRefresh_9c480) s_fn_MapConnRefresh_9c480(mapGrid, pathType, destCell, srcCell);
 
     uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mapGrid) + 0x80);
