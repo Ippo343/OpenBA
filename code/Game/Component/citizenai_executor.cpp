@@ -46,9 +46,11 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 namespace {
 
@@ -283,6 +285,20 @@ static fn_transformCtor_t   s_slot_xfCtor   = nullptr;
 static fn_pickSetXform_t    s_slot_pickXf   = nullptr;
 static fn_scalarMax_t       s_slot_max      = nullptr;
 
+// Picking::Scene::AddMesh — registers a pick mesh, returns its id (stored at
+// PickingComponent+0x28). Runtime 0x1801252e0 (verified signature:
+// uint AddMesh(Scene* this, ExternalPtr<Picking::PickingMesh> mesh, Transform* xform,
+//              void* owner, int, int, callback*)). ABI from Entity_impl_8f50
+// (exe 0x140128f50): (scene, meshHandle, &transform, ownerIBP, 0, 0, 0).
+// NOTE: FloorComponent's 0x1800f8d80 is the WRONG address (not a function entry) —
+// it just never crashed because floors are never placed on the autostart path.
+typedef uint32_t (*fn_pickAddMesh_t)(void* scene, void* mesh, void* xform,
+                                     void* owner, int a, int b, void* callback);
+typedef bool     (*fn_isDerived_t)(void* obj, uint32_t typeId);   // [0x140152a98]
+static fn_pickAddMesh_t s_fn_pickAddMesh = nullptr;
+static fn_isDerived_t   s_slot_isDerived = nullptr;
+static uint32_t         s_tidPickingDesc = 0;
+
 static void* ResolveSlot(uintptr_t slotAddr) {
     uintptr_t s = ResolveAddr(Module::Exe, slotAddr);
     return s ? *reinterpret_cast<void**>(s) : nullptr;
@@ -315,7 +331,53 @@ static void EnsureTailInit() {
     s_slot_xfCtor   = reinterpret_cast<fn_transformCtor_t>(ResolveSlot(0x140151418));
     s_slot_pickXf   = reinterpret_cast<fn_pickSetXform_t>(ResolveSlot(0x1401529a8));
     s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
+    // Picking-registration closure (port of Entity_impl_8f50 = PickingComponent OnAdded).
+    s_fn_pickAddMesh = reinterpret_cast<fn_pickAddMesh_t>(ResolveAddr(Module::Runtime, 0x1801252e0));
+    s_slot_isDerived = reinterpret_cast<fn_isDerived_t>(ResolveSlot(0x140152a98));
+    s_tidPickingDesc = ::Object::GetTypeIdByName("PickingDescription");
     s_tailInit = true;
+}
+
+// Register the citizen's mesh in the Picking::Scene so it becomes clickable.
+// Faithful port of Entity_impl_8f50 (PickingComponent::OnAdded, exe 0x140128f50),
+// specialised to the move-tick (we already hold the sibling ModelComponent at
+// self+0x68 and the PickingComponent at self+0x70 — no Entity::FindComponent walk
+// needed). Runs once per citizen when its pick-id (PickingComponent+0x28) is still
+// unregistered (<0). Returns the new pick-id, or -1 if it could not register
+// (description not a PickingDescription / no pick-mesh table — standalone-safe).
+static int RegisterCitizenPickMesh(uint8_t* self) {
+    int64_t model    = *reinterpret_cast<int64_t*>(self + 0x68);   // ModelComponent
+    int64_t pickComp = *reinterpret_cast<int64_t*>(self + 0x70);   // PickingComponent
+    if (model == 0 || pickComp == 0) return -1;
+
+    int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);  // sVar1
+    int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);  // sVar2
+    if (modelVariant < 0) return -1;                                    // (-1 < sVar2) gate
+
+    // The pick mesh comes from the PickingComponent's description (+0x18), which must
+    // be a PickingDescription. Its pick-mesh table is at desc+0x20, indexed exactly
+    // like the render mesh: *(*(desc+0x20) + variantIdx*0x10) + modelVariant*8.
+    void* desc = *reinterpret_cast<void**>(pickComp + 0x18);
+    if (desc == nullptr || s_slot_isDerived == nullptr || s_tidPickingDesc == 0) return -1;
+    if (!s_slot_isDerived(desc, s_tidPickingDesc)) return -1;
+    int64_t meshTable = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
+    if (meshTable == 0) return -1;
+    int64_t group = *reinterpret_cast<int64_t*>(meshTable + static_cast<int64_t>(variantIdx) * 0x10);
+    if (group == 0) return -1;
+    void* meshHandle = *reinterpret_cast<void**>(group + static_cast<int64_t>(modelVariant) * 8);
+    if (meshHandle == nullptr || s_fn_pickAddMesh == nullptr) return -1;
+
+    // Transform snapshot (0x1C bytes, model+0x148..+0x163) — the move-tick wrote it
+    // this frame; the original copies it into a stack Transform passed by pointer.
+    uint8_t xform[0x1C];
+    std::memcpy(xform, reinterpret_cast<void*>(model + 0x148), sizeof(xform));
+
+    void* scene = *reinterpret_cast<void**>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
+    void* owner = *reinterpret_cast<void**>(pickComp + 0x30);   // entity IBP value
+    uint32_t id = s_fn_pickAddMesh(scene, meshHandle, xform, owner, 0, 0, nullptr);
+    *reinterpret_cast<uint32_t*>(pickComp + 0x28) = id;
+    return static_cast<int>(id);
 }
 
 static inline float fabs_f(float v) {
@@ -506,6 +568,27 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             s_slot_xfCtor(localXform, reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x148));
         CheckPtr(self + 0x70);
         uint32_t pickId = *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(self + 0x70) + 0x28);
+        // First time through (pick-id still unregistered) register the citizen mesh in
+        // the Picking::Scene so it becomes clickable — env-gated default-off so the
+        // default build / non-picking flows stay byte-identical.
+        if (static_cast<int>(pickId) < 0) {
+            static int s_pickOn = -1;
+            if (s_pickOn < 0) {
+                const char* e = std::getenv("BANISHED_LIVE_PICKING");
+                s_pickOn = (e && e[0] && e[0] != '0') ? 1 : 0;
+            }
+            if (s_pickOn == 1) {
+                int newId = RegisterCitizenPickMesh(self);
+                pickId = static_cast<uint32_t>(newId);
+                if (MoveTickTraceOn()) {
+                    static int s_pickLog = 0;
+                    if (s_pickLog < 8) { ++s_pickLog;
+                        fprintf(stderr, "[PickReg] self=%p pickId=%d\n", (void*)self, newId);
+                        fflush(stderr);
+                    }
+                }
+            }
+        }
         if (-1 < static_cast<int>(pickId)) {
             void* pickScene = *reinterpret_cast<void**>(
                 reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
