@@ -1,0 +1,41 @@
+// standalone/reg_economy_typeids.cpp
+//
+// Type-id .rdata globals needed to make BUILDING component-finds resolve in the
+// standalone exe, so the citizen work/economy loop can validate + path to a workplace.
+//
+// In standalone the .rdata type-id globals are 0xFFFFFFFF (unfilled) unless we both
+// (a) register the global's address -> a storage uint32_t and (b) fill that storage
+// from GetTypeIdByName AFTER Engine::Startup (Object::Factory::Startup assigns the real
+// CRC ids only then; InvokeAllRegistrations is too early). Exe reimpls that read these
+// globals via ResolveAddr(Module::Exe, 0x1401cXXXX) then get the real CRC and their
+// IsDerivedFrom / GetTypeId-keyed FindComponent scans match.
+//
+// These are SHARED globals — filling them un-dormants every reader (not just the citizen
+// path). Add ids here only as the economy path needs them, and A/B the DEFAULT build
+// (envs off) after each addition to catch world-build/render regressions.
+//
+//   0x1401c7938  InteractDescription  -- read by FUN_140123070 (Pf_RecursiveChildSum,
+//                position-count of a building's InteractComponent) via Entity_impl_7fb0;
+//                with it null, 7fb0 can't resolve a workplace's cell -> CheckWorkplaceValid
+//                fails -> State_Work can't proceed. (InteractComponent 0x1401c7900 is
+//                already registered+filled by RegisterWorkTailFireBatch.)
+
+#ifdef STANDALONE_EXE
+
+#include "resolve.h"
+#include "Object/factory_registration.h"
+#include <cstdint>
+
+static uint32_t g_tid_InteractDescription = 0;   // 0x1401c7938
+
+// Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
+void RegisterEconomyTypeIds() {
+    RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
+}
+
+// Fill from the real-CRC type tree — call AFTER Engine::Startup.
+extern "C" void FillEconomyTypeIdGlobals() {
+    g_tid_InteractDescription = ::Object::GetTypeIdByName("InteractDescription");
+}
+
+#endif // STANDALONE_EXE

@@ -71,6 +71,7 @@ extern "C" void FillTypeIdGlobals_actionchild();
 // fire=InteractComponent c7900; serialize=Pasture/Animal ids).
 extern "C" void FillTypeIdGlobals_worktail_trade();
 extern "C" void FillTypeIdGlobals_worktail_fire();
+extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
 #endif
 
@@ -404,6 +405,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_worktail_trade();    // Phase 2 B tail — TradeWork c8a0 private CitizenAIComponent id
     FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
+    FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
 #endif
 
     if (ok != 0) {

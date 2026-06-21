@@ -2042,7 +2042,16 @@ char CitizenComp_CheckWorkplaceValid(CitizenComponent* param_1, void* param_2) {
     int64_t ibpVal = *reinterpret_cast<int64_t*>(param_2);
     int regionId = s_fn_Entity_impl_7fb0 ? s_fn_Entity_impl_7fb0(&ibpVal, nullptr) : 0;
     uint32_t cellIdx = static_cast<uint32_t>(mapW * tileY + tileX);
-    return s_fn_FUN_140a00f0 ? s_fn_FUN_140a00f0(mapInfo, 0xe1f, cellIdx, regionId) : 0;
+    char res = s_fn_FUN_140a00f0 ? (char)s_fn_FUN_140a00f0(mapInfo, 0xe1f, cellIdx, regionId) : 0;
+    if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
+        static int s_cwn = 0;
+        if (s_cwn < 8) { ++s_cwn;
+            fprintf(stderr, "[CheckWP] citizenCell=%u workplaceCell=%d mapW=%d res=%d\n",
+                    cellIdx, regionId, mapW, (int)res);
+            fflush(stderr);
+        }
+    }
+    return res;
 }
 
 // Reimpl of Entity_impl_ef40 (0x14008ef40):

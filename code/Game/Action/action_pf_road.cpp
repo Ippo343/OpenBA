@@ -33,6 +33,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
 
