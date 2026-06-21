@@ -3,6 +3,10 @@
 > Living checklist. Check items off session-by-session. Recompute the gap and re-read the
 > blocker graph each session — registrations and bring-ups shift what's unblocked.
 > Last ground-truthed: 2026-06-19 on branch `wave/component-gap` (cumulative tip; `main` is an ancestor).
+> **Phase 3 (Keystone D — citizens) has advanced well past §1/§2's "world is dead" snapshot:** the gated
+> citizen decision → action → MoveTo → move-tick **transform write** pipeline is now live (2026-06-21, branch
+> `wave/phase3-keystone-d`, tip `514a6c5`). See §3 Phase 3 for the current citizen-chain status. (§1/§2 still
+> describe the *default* build, which remains byte-unchanged — all citizen wiring is env-gated.)
 > **Phase 1 EXIT CRITERIA MET (2026-06-19, branch `wave/phase1-component-bringup`):** GrowthComponent is
 > fully live + in-game-verified (monotonic per-tick growth); `COMPONENT_LIVE_FACTORY` macro templated;
 > default run byte-unchanged. The remaining per-component bring-ups (Fruit/Tombstone/Population/…) are
@@ -120,10 +124,29 @@ The 4-step recipe (per `project_component_bringup_frontier`): (1) real per-type 
 *Goal: citizens actually live — AI plans, state machine drives actions, characters animate.*
 Depends on Phase 2 (A + B). Module priority #1 per CLAUDE.md.
 
+> **STATUS (2026-06-21, branch `wave/phase3-keystone-d`):** the citizen **decision → action → movement** pipeline is
+> substantially live (all gated; default byte-unchanged). Sequence landed over the prior sessions + this one
+> (full detail in memory `project_phase3_keystone_d`):
+> 1. **CitizenAIComponent decision loop LIVE** — Update/Startup, needs-based candidate-state selection
+>    (BuildCandidateStateList + Fisher-Yates + priority sort), and **all 14 state handlers ported** (Wander,
+>    Leisure, Education, Gather/Gather2, Work, Adult/Elder transitions, GrowUp, FindHousing, Idle, LongTermPlan,
+>    SeekHappiness, FindWork). Citizens SELECT + ENTER states (e.g. Leisure ×6 per run).
+> 2. **CitizenComponent + CharacterComponent Startup LIVE** — siblings resolved (ModelComponent/Picking/desc),
+>    char-index pipeline.
+> 3. **Action executor + MoveTo execution LIVE** — the action stack (CharacterComponent+0x48) runs through the
+>    executor (c4c50/c5400/c4bb0); citizens push + EXECUTE MoveTo through the (seeded) pathfinder, crash-free.
+> 4. **Move-tick TAIL LIVE (this session, commit 514a6c5)** — the citizen ModelComponent transform write
+>    (see CharacterComponent below).
+>
+> Envs: `BANISHED_LIVE_CITIZEN` + `BANISHED_LIVE_CITIZENAI` + `BANISHED_LIVE_CHARACTER` (+ `_MOVETICK` for the
+> move/transform tick). **Remaining for "citizens visibly live":** world-state preconditions (homes/jobs/families
+> so age/work states become candidates), full economy feedback, and **visual** confirmation (Phase 4 — the
+> transform write is correct but citizen meshes must be in the render Scene to SEE them move).
+
 - [~] **StateMachineComponent** live — PLUMBING BRICK LANDED (2026-06-20, branch `wave/phase3-keystone-d`). `COMPONENT_LIVE_FACTORY_S`, env `BANISHED_LIVE_STATEMACHINE` (default-off → byte-unchanged). +0x48 Update routed live + +0x20 body-init (faithful ctor `0x14012ba30` field-init: ctrlSelf=self+0x28, stateFlags=0xff00ffff, stub secondary vtable@+0x28). **KEY FINDING:** SM is a pure *dispatcher* — Tick no-ops until a ControllerComponent links a state node (chain root child @+0x38). The bare-root `Step` (`0x140038630`) reads an empty global state-type table (`0x1401e2830`) → returns -1 → would null-deref Tick's parent-walk; so the Update is **GUARDED** (`if (*(void**)(self+0x38)==0) return;`). A/B-verified: world builds 1477 entities, 0-byte crash, +0x48 entered per-tick (`BANISHED_SM_TRACE`: ctrlSelf/stateFlags correct, guarded no-op), env-off run trace-free. **Observable behavior awaits a live ControllerComponent** (next: CitizenAI/Citizen links states → SM ticks them).
 - [ ] **CitizenAIComponent** live (`CitizenAIComponent_Update`) — note the deep tier: `AssignWorkplace 1163d0`, `LongTermPlan 0x140115e60` (Level-2), happiness `10dca0`, 15-state `10f1f0`; the name-DB tier (`117080→a4c60→a4b30`).
 - [ ] **CitizenComponent** live (`CitizenComponent_Update`) — lifecycle: `UpdateHealth 1127d0`, `AssignState 113af0`, `HandleLifeEvent 116dd0`. (The AssignHousing→FindWorkplace/Storage/Partner cascade is already registered.)
-- [ ] **CharacterComponent** live (`CharacterComponent_Update`) — movement/facing/animation.
+- [~] **CharacterComponent** live (`CharacterComponent_Update`) — movement/facing/animation. **MOVE-TICK TAIL LIVE (2026-06-21, commit 514a6c5, env `BANISHED_LIVE_CHARACTER_MOVETICK`).** The move-tick (0x1401094c0) now writes the per-frame world transform into `ModelComponent+0x148` and pushes it to `Graphics::Geometry::SetTransform`, crash-free. Brought up: (a) the **char-index gate** — `OnAdd` (0x1401099c0) folded into Startup BodyInit (facing `+0x3c` + `sub_83f0`→`+0x40`); (b) the **char spatial-hash manager** (GameWorld+0x88: `sub_83f0/8660/8c40/8d00/28c0/8560` ported in `charmanager.cpp` + a no-op seed fallback — the real manager already exists in standalone); (c) fixed 4 dormant tail bugs (Transform field order + 3 value-return hidden-retbuf ABIs); (d) registered the closure (5 dispatch slots + sinf/cosf). A/B green: default 1476-entity world unchanged, live run = transform tail executes ~49s no crash. **Remaining sub-items:** (i) full `Picking::Scene` registration via `AddMesh` for clickable citizens (currently the pick-id is forced to -1 so the tail safely skips the picking update — the unbuilt picking scene would null-deref); (ii) **visual** verification the transform actually moves citizen meshes (needs the citizen mesh in the render Scene — Phase 4 / Foundation F).
 - [ ] **AttendanceComponent** live (`AttendanceComponent_Update`).
 - [ ] **RawMaterialComponent / StorageDisplayComponent** live (economy feedback).
 - [ ] Resolve the **name-DB tier** (Keystone C-adjacent): citizen naming via `a4c60/a4b30`.
