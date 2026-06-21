@@ -404,6 +404,7 @@ extern void RegisterCitizenAIFindTarget();   // Phase 3 Keystone D Brick 3b: Cit
 extern void RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b: CitizenAI action-ctor family
 extern void RegisterCitizenAIExecutor();     // Phase 3 Keystone D Brick 4b: action executor + move-tick
 extern void RegisterCitizenAIHandlers2();    // Phase 3 Keystone D Brick 3b: handler wave 2 (Education/SeekHappiness/FindWork)
+extern void RegisterCitizenAIFindHelpers();  // Phase 3 Keystone D Brick 3b: deep find-helpers (2ac30/db20/70b0/ec70/e370)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
@@ -490,6 +491,7 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAIActionCtors();  // Phase 3 Keystone D Brick 3b — CitizenAI action-ctor family (9 ctors)
     RegisterCitizenAIExecutor();     // Phase 3 Keystone D Brick 4b — action executor + move-tick
     RegisterCitizenAIHandlers2();    // Phase 3 Keystone D Brick 3b — handler wave 2 (Education/SeekHappiness/FindWork)
+    RegisterCitizenAIFindHelpers();  // Phase 3 Keystone D Brick 3b — deep find-helpers (2ac30/db20/70b0/ec70/e370)
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)
