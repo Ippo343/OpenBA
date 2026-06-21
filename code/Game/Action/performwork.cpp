@@ -193,6 +193,7 @@ bool PerformWork_ResolveFuncs() {
 // Set vtables, cleanup entity ref, call ~Internal, optionally free.
 // ============================================================
 void* PerformWork_ScalarDtor_Impl(PerformWork* self, uint32_t flags) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     uint8_t* s = (uint8_t*)self;
 
     // Set PerformWork vtable (for correct virtual dispatch during destruction)
@@ -228,6 +229,7 @@ uint32_t PerformWork_BaseDtor_Impl() {
 //   float(+0x28), int(+0x2C), Time(+0x30), Time(+0x38), bool(+0x40), int(+0x44)
 // ============================================================
 void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];
@@ -274,6 +276,7 @@ void PerformWork_Serialize_Impl(PerformWork* self, void* stream) {
 // Always returns 1 (action stays active, Execute checks completion).
 // ============================================================
 int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -338,6 +341,7 @@ int PerformWork_AbstractImpl_Impl(PerformWork* self, void* actionStack) {
 // Returns: 0 = done, 1 = still working, 2 = needs break
 // ============================================================
 int PerformWork_Execute_Impl(PerformWork* self, void* actionStack, void* deltaTime) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -364,6 +368,7 @@ int PerformWork_Execute_Impl(PerformWork* self, void* actionStack, void* deltaTi
 // Resets character animation to idle (animation 0, rate 1.0, 1.0).
 // ============================================================
 void PerformWork_Exit_Impl(PerformWork* self, void* actionStack) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -383,6 +388,7 @@ void PerformWork_Exit_Impl(PerformWork* self, void* actionStack) {
 // Identical to Exit: resets character animation to idle.
 // ============================================================
 void PerformWork_CheckEntity_Impl(PerformWork* self) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     uint8_t* s = (uint8_t*)self;
 
     // Get work target entity
@@ -401,6 +407,7 @@ void PerformWork_CheckEntity_Impl(PerformWork* self) {
 // Returns true if param matches the work target entity's parent (+0x10).
 // ============================================================
 bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
+    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
     uint8_t* s = (uint8_t*)self;
 
     // CheckPtr on work target
