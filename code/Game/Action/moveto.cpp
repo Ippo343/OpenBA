@@ -80,7 +80,9 @@ static bool (*s_fn_IsDerivedFrom)(void* obj, uint32_t typeId) = nullptr;
 static void (*s_fn_Vector2_Dot)(void* vec2, void* outScalar) = nullptr;
 
 // Math::Vector2::Normalize(this) via IAT at 0x1401526b0
-static void (*s_fn_Vector2_Normalize)(void* vec2) = nullptr;
+// Value-return member ABI (verified from exe callers 0x1400cc70c): RCX=this, RDX=retbuf,
+// returns RAX=retbuf. NOT in-place — must pass a separate retbuf and read from it.
+static void* (*s_fn_Vector2_Normalize)(void* thisVec, void* retbuf) = nullptr;
 
 // Math::Vector3::Vector3(this, x, y, z) via IAT at 0x140152a30
 static float* (*s_fn_Vector3_Ctor_Floats)(float* self, float x, float y, float z) = nullptr;
@@ -201,7 +203,7 @@ bool MoveTo_ResolveFuncs() {
 
     // Vector2::Normalize via IAT at 0x1401526b0
     iat = ResolveAddr(Module::Exe, 0x1401526b0);
-    if (iat) s_fn_Vector2_Normalize = *reinterpret_cast<void(**)(void*)>(iat);
+    if (iat) s_fn_Vector2_Normalize = *reinterpret_cast<void*(**)(void*, void*)>(iat);
 
     // Vector3 constructors/methods via IAT
     iat = ResolveAddr(Module::Exe, 0x140152a30);
@@ -614,12 +616,13 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float revVec[3];
         s_fn_Vector3_Ctor_Floats(revVec, revDx, revDy, revDz);
 
-        // Normalize 2D direction
+        // Normalize 2D direction (value-return ABI: result written to retbuf, not in place)
         float dir2d[2] = { revVec[0], revVec[1] };
-        s_fn_Vector2_Normalize(dir2d);
+        float dir2dN[4] = { dir2d[0], dir2d[1], 0.0f, 0.0f };
+        if (s_fn_Vector2_Normalize) s_fn_Vector2_Normalize(dir2d, dir2dN);
 
         // Build 3D facing vector and set on character
-        float facing3d[3] = { dir2d[0], dir2d[1], 0.0f };
+        float facing3d[3] = { dir2dN[0], dir2dN[1], 0.0f };
         s_fn_CheckPtr(s + 0x28);
         targetEntity = *(uintptr_t*)(s + 0x28);
         *(uint8_t*)(targetEntity + 0x28) = 0;  // Clear animation lock flag

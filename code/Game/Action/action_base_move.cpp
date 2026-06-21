@@ -29,7 +29,8 @@
 // pointer, so we deref one level after ResolveAddr.
 
 // Math::Vector2::Normalize(this) — dispatch slot 0x1401526b0
-static void  (*s_fn_Vector2_Normalize)(void* vec2) = nullptr;
+// Value-return member ABI (RCX=this, RDX=retbuf, returns retbuf) — not in-place.
+static void* (*s_fn_Vector2_Normalize)(void* thisVec, void* retbuf) = nullptr;
 // Math::Vector3::Normalize(this) const -> Vector3 BY VALUE (12 bytes > 8) — member
 // value-return ABI: RCX=this(input vec3), RDX=hidden retptr, returns retptr in RAX.
 // dispatch slot 0x1401512c0. Caller MUST pass a >=12-byte result buffer.
@@ -52,7 +53,7 @@ static void EnsureMoveFuncs() {
     if (s_mvFuncsResolved) return;
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x1401526b0);
-    if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<void(**)(void*)>(slot);
+    if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<void*(**)(void*, void*)>(slot);
     slot = ResolveAddr(Module::Exe, 0x1401512c0);
     if (slot) s_fn_Vector3_Normalize = *reinterpret_cast<float*(**)(void*, void*)>(slot);
     slot = ResolveAddr(Module::Exe, 0x1401512d8);
@@ -328,11 +329,12 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     if (s_fn_GridToWorld_f3e0)
         s_fn_GridToWorld_f3e0(grid, outWorld, inGrid, 0, nullptr);
 
-    // dir2 = (worldX - curX, worldY - curY); Vector2::Normalize.
-    float dir2[2];
-    dir2[0] = outWorld[0] - curX;
-    dir2[1] = outWorld[1] - curY;
-    if (s_fn_Vector2_Normalize) s_fn_Vector2_Normalize(dir2);
+    // dir2 = (worldX - curX, worldY - curY); Vector2::Normalize (value-return -> retbuf).
+    float dir2in[2];
+    dir2in[0] = outWorld[0] - curX;
+    dir2in[1] = outWorld[1] - curY;
+    float dir2[4] = { dir2in[0], dir2in[1], 0.0f, 0.0f };
+    if (s_fn_Vector2_Normalize) s_fn_Vector2_Normalize(dir2in, dir2);
 
     // Re-check the IBP, store normalized 3D facing into the movement sub-object.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x28));

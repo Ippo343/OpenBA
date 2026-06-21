@@ -807,8 +807,11 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
     RegisterDispatchSlot(0x1401512d8,   // Math::Vector3::Heading(this) -> float
         (uintptr_t)ResolveExport("?Heading@Vector3@Math@@QEBAMXZ"));
-    RegisterDispatchSlot(0x1401526b0,   // Math::Vector2::Normalize(this) -> Vector2&
-        (uintptr_t)ResolveExport("?Normalize@Vector2@Math@@QEAAAEAV12@XZ"));
+    RegisterDispatchSlot(0x1401526b0,   // Math::Vector2::Normalize(this) const -> Vector2 (by value)
+        // Value-return member ABI: RCX=this, RDX=hidden retbuf. The exe only exports the
+        // CONST value-return form; the prior "QEAAAEAV12" (non-const ref-return) name does
+        // NOT exist -> ResolveExport returned null -> slot null -> null-call crash in MoveTo.
+        (uintptr_t)ResolveExport("?Normalize@Vector2@Math@@QEBA?AV12@XZ"));
     // Math::Transform::operator*(Vector3 const&) const -> Vector3 (member value-return ABI:
     // RCX=this, RDX=retVec3, R8=inVec3). Used by the Work walkable-position search
     // (work_base_walkpos.cpp 0x140122be0) and the PF-ROAD cell-quad helpers. Mangled name
@@ -944,6 +947,17 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z"));
     RegisterDispatchSlot(0x140152b48,
         (uintptr_t)ResolveExport("??0Sprite@UI@@QEAA@XZ"));
+    // Object::Internal::Internal — the CTOR slot. MUST be registered alongside the
+    // ~Internal dtor slot below: without it, fn_ObjectInternal_Ctor stays NULL, so every
+    // dynamically-built object (citizen action stack: MoveTo/PlayAnimation/
+    // SendComponentMessage) skips Object::Internal registration and its registry index
+    // (+0x08) is left as uninitialized heap garbage. ~Internal (the dtor, which IS
+    // resolved) then does a swap-remove using that garbage index -> OOB write into the
+    // InternalFactory registry array -> crash when c5400 tears the action stack down.
+    // (World-build entities are unaffected: they're built by the real exe factories that
+    //  call the real Object::Internal::Internal directly at load.)
+    RegisterDispatchSlot(0x140152768,
+        (uintptr_t)ResolveExport("??0Internal@Object@@QEAA@XZ"));
     RegisterDispatchSlot(0x140152770,
         (uintptr_t)ResolveExport("??1Internal@Object@@UEAA@XZ"));
     RegisterDispatchSlot(0x140152a30,
