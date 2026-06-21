@@ -498,8 +498,11 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // Unemployed flag
     char isUnemployed;
     int64_t profData1F0 = *reinterpret_cast<int64_t*>(p + 0x1F0);
-    if (*reinterpret_cast<char*>(profData1F0 + 0x4C) == 0 &&
-        *reinterpret_cast<int64_t*>(p + 0x248) == 0) {
+    // [STANDALONE GUARD] +0x1F0 = profession-list, null until assigned at gameplay
+    // (same field CitizenAI CheckEducation null-guards). A null list == no profession
+    // == unemployed-eligible (treat the +0x4C "has-profession" byte as 0).
+    char profByte = (profData1F0 != 0) ? *reinterpret_cast<char*>(profData1F0 + 0x4C) : 0;
+    if (profByte == 0 && *reinterpret_cast<int64_t*>(p + 0x248) == 0) {
         isUnemployed = 1;
     } else {
         isUnemployed = 0;
@@ -628,7 +631,10 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     if (*reinterpret_cast<int64_t*>(p + 0x248) == 0) {
         int64_t housingResult = 0;
         profData1F0 = *reinterpret_cast<int64_t*>(p + 0x1F0);
-        if (*reinterpret_cast<char*>(profData1F0 + 0x4C) == 0) {
+        // [STANDALONE GUARD] +0x1F0 profession-list null until assigned → treat the
+        // +0x4C byte as 0 (unassigned profession) — same guard as the unemployed flag.
+        char profByte634 = (profData1F0 != 0) ? *reinterpret_cast<char*>(profData1F0 + 0x4C) : 0;
+        if (profByte634 == 0) {
             // Unassigned profession type
             if (s_fn_FindHousingUnassigned)
                 s_fn_FindHousingUnassigned(reinterpret_cast<int64_t>(self), &housingResult);
@@ -990,6 +996,8 @@ bool CitizenComponent_ShouldSwitchWorkplace(CitizenComponent* self) {
 
     // Read citizen's workplace reference (profession group key)
     uint64_t profKey = *(uint64_t*)(selfAddr + 0x1F0);
+    // [STANDALONE GUARD] profession-list null until assigned → no workplace to switch.
+    if (profKey == 0) return false;
 
     // Lookup job count from profession registry
     uintptr_t registry = *(uintptr_t*)(gwAddr + 0xF0);
@@ -2591,8 +2599,52 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
     }
 }
 
-COMPONENT_LIVE_FACTORY_STARTUP(CitizenComponent, 0x290, 0xCB,
-                               "BANISHED_LIVE_CITIZEN", CitizenComponent_BodyInit)
+// ------------------------------------------------------------------
+// Phase 3 / Keystone D — CitizenComponent UPDATE live-wiring (work/economy loop).
+//
+// The per-tick lifecycle Update (the 711-instruction monster: aging / hunger /
+// fuel / education / HOUSING (AssignHousing) / WORKPLACE (FindWorkplace) / partner /
+// health / life-events) drives the world-state that gates the citizen Work state:
+// a citizen only gets Work (id 5) as a candidate once it is HOUSED (+0x68 != 0)
+// and/or EMPLOYED (+0x238 != 0) — both assigned here. Inert until now.
+//
+// Promoted STARTUP -> _S: Startup stays on BANISHED_LIVE_CITIZEN (unchanged); the
+// heavy Update runs only when the SEPARATE env BANISHED_LIVE_CITIZEN_UPDATE is set
+// (default-off => byte-identical to the Startup-only brick). Crash-safe guards bail
+// until the body is populated + the world singleton is live. ~25 sub-calls — expect
+// to chase dominoes; bring up incrementally.
+static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time) {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_CITIZEN_UPDATE");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (!en || !self) return;
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+    // GUARD: Update derefs the CitizenDescription (+0x288, set by BodyInit), the
+    // owner entity (+0x10), and the GameWorld weather (+0x130). Bail until ready.
+    if (*reinterpret_cast<void**>(p + 0x288) == nullptr) return;
+    if (*reinterpret_cast<void**>(p + 0x10)  == nullptr) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+
+    static int s_trace = -1, s_tn = 0;
+    if (s_trace < 0) {
+        const char* e = std::getenv("BANISHED_CITIZENAI_TRACE");
+        s_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    if (s_trace == 1 && s_tn < 6) { ++s_tn;
+        fprintf(stderr, "[CitizenUpdate] comp=%p house+0x68=%p workplace+0x238=%p\n",
+                (void*)self, *reinterpret_cast<void**>(p + 0x68),
+                *reinterpret_cast<void**>(p + 0x238));
+        fflush(stderr);
+    }
+
+    CitizenComponent_Update(self, reinterpret_cast<void*>(time));
+}
+
+COMPONENT_LIVE_FACTORY_S(CitizenComponent, 0x290, 0xCB,
+                         "BANISHED_LIVE_CITIZEN",
+                         CitizenComponent_UpdateAdapter, CitizenComponent_BodyInit)
 REGISTER_TYPE(CitizenComponent, "Component",
               &CitizenComponent_Factory, &CitizenComponent_CreateInPlace);
 #endif // STANDALONE_EXE
