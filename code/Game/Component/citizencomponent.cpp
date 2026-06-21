@@ -2598,6 +2598,54 @@ static void CitizenComponent_BodyInit(CitizenComponent* self) {
         uint8_t* d = reinterpret_cast<uint8_t*>(desc);
         *reinterpret_cast<uint32_t*>(p + 0x50) = *reinterpret_cast<uint32_t*>(d + 0x6c);
         *reinterpret_cast<uint32_t*>(p + 0x80) = *reinterpret_cast<uint32_t*>(d + 0xa4);
+
+        // --- ADULT-AGE SPAWN FIX (env BANISHED_SPAWN_ADULTS) -------------------
+        // Our simplified start-town spawn (StartTown_SpawnCitizens) only CopyCtors
+        // + registers colonist entities; it skips the real per-citizen init
+        // (FUN_140117080) that assigns age/maxAge. So every citizen keeps age=0
+        // (< adultAge desc+0x44 = 2.0) -> perpetual child -> the CitizenComponent
+        // lifecycle never runs the adult housing/workplace assignment section
+        // (citizencomponent.cpp:633) -> never housed/employed -> the Work state is
+        // never a CitizenAI candidate (project_economy_loop). Mirror the founder
+        // adult age the real spawn pool (0x1400a0dd0) gives:
+        //     age = RandFloat*(reproMax*0.5 - adultMin) + adultMin
+        // (desc+0x50 adultMin=2.0, desc+0x54 reproMax=8.0  -> age in [2.0, 4.0]),
+        // and the randomized lifespan (FUN_140117080): maxAge = RandFloatTol*desc+0x3c
+        // + desc+0x38 (base 15.0, tol +/-2.0). maxAge MUST be set: the inert factory
+        // zeroes it, and the Update old-age death check (maxAge <= age) would fire
+        // immediately once a non-zero adult age is present. Default-off so a plain
+        // BANISHED_LIVE_CITIZEN run stays byte-identical.
+        static int s_adults = -1;
+        if (s_adults < 0) {
+            const char* e = std::getenv("BANISHED_SPAWN_ADULTS");
+            s_adults = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_adults == 1) {
+            void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                ? *reinterpret_cast<void**>(
+                      reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xd8)
+                : nullptr;
+            float adultAge = *reinterpret_cast<float*>(d + 0x44);
+            float adultMin = *reinterpret_cast<float*>(d + 0x50);
+            float reproMax = *reinterpret_cast<float*>(d + 0x54);
+            float maxBase  = *reinterpret_cast<float*>(d + 0x38);
+            float maxTol   = *reinterpret_cast<float*>(d + 0x3c);
+            float r1 = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.5f;
+            float r2 = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.5f;
+            float age = r1 * (reproMax * 0.5f - adultMin) + adultMin;
+            if (age < adultAge) age = adultAge;                  // guarantee adult
+            float maxAge = r2 * maxTol + maxBase;
+            if (maxAge <= age) maxAge = age + maxTol + 1.0f;     // never born old
+            *reinterpret_cast<float*>(p + 0x3C) = age;
+            *reinterpret_cast<float*>(p + 0x40) = maxAge;
+
+            static int s_an = 0;
+            if (s_an < 6) { ++s_an;
+                fprintf(stderr, "[SpawnAdults] comp=%p age=%.2f adultAge=%.2f maxAge=%.2f\n",
+                        (void*)self, age, adultAge, maxAge);
+                fflush(stderr);
+            }
+        }
     }
 
     // Bring-up trace (shared env with Brick 1).

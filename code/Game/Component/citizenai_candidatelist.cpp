@@ -235,6 +235,11 @@ int CitizenComp_GetHappiness(int64_t self) {
                                   reinterpret_cast<void*>(local_res8));
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(local_res8);
     if (!s_fn_StorageQueryCount) return 0;
+    // Standalone: the citizen's own-entity StorageComponent find returns null when
+    // its type-id global is unfilled (the recurring keystone-B pattern). The real
+    // game always has a carry-inventory storage here; guard so QueryCount(null) -
+    // which derefs +0x30 - can't fault. No storage found => no happiness.
+    if (!local_res8[0]) return 0;
     return s_fn_StorageQueryCount(reinterpret_cast<int64_t>(local_res8[0]));
 }
 

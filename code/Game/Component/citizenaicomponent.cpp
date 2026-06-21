@@ -436,6 +436,7 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
 // across all inventory rows. Reads type via vtable+0x10, filters by DAT_1401c7cb8.
 int CitizenComp_StorageComponent_QueryCount(int64_t self) {
     EnsureCallees();
+    if (!self) return 0;   // defensive: callers may pass a null/unfound storage
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     int total = 0;
     int rowCount = *reinterpret_cast<int*>(s + 0x30);
