@@ -91,6 +91,7 @@ bool PlayAnimation_ResolveFuncs() {
 //   Time(+0x30), Time(+0x38)
 // ============================================================
 void PlayAnimation_Serialize_Impl(void* self, void* stream) {
+    PlayAnimation_ResolveFuncs();   // lazy-resolve: action may be built inline by ba6b0, not our ctor
     uint8_t* s = (uint8_t*)self;
     uint8_t ser1[24];
     uint8_t ser2[24];
@@ -118,6 +119,7 @@ void PlayAnimation_Serialize_Impl(void* self, void* stream) {
 // Returns 1 (action stays active, Execute checks completion).
 // ============================================================
 int PlayAnimation_AbstractImpl_Impl(void* self, void* actionStack) {
+    PlayAnimation_ResolveFuncs();
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     void* localIBP;
@@ -142,6 +144,7 @@ int PlayAnimation_AbstractImpl_Impl(void* self, void* actionStack) {
 //   return (self->_field38 < self->_field30);
 // ============================================================
 int PlayAnimation_Execute_Impl(void* self, void* actionStack, void* time_ptr) {
+    PlayAnimation_ResolveFuncs();
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     int64_t elapsed = *(int64_t*)time_ptr;
@@ -163,6 +166,7 @@ int PlayAnimation_CheckEntity_Impl(void* /*self*/) {
 // Returns true if param matches entity at +0x20.
 // ============================================================
 bool PlayAnimation_GetTarget_Impl(void* self, void* param) {
+    PlayAnimation_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     s_fn_CheckPtr(param);
     return *(void**)(s + 0x20) == *(void**)param;

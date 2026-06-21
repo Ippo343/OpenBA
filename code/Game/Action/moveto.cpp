@@ -330,6 +330,7 @@ static inline int WorldToCell(int mapSize, float worldX, float worldY) {
 //   +0x478 speedMultiplier
 // ============================================================
 void MoveTo_Serialize_Impl(void* self, void* stream) {
+    MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
     uint8_t ser0[24];
     uint8_t ser1[24];
@@ -405,6 +406,7 @@ void MoveTo_Serialize_Impl(void* self, void* stream) {
 // Otherwise sets up A* path and returns 1 (moving) or 2 (no path).
 // ============================================================
 int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
+    MoveTo_ResolveFuncs();   // lazy-resolve: action may be built by Pf_MoveToCtor_9170 (pf_ctors), which never calls our ctor's ResolveFuncs
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -492,6 +494,7 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
 // Returns: 0=arrived, 1=moving, 2=no path
 // ============================================================
 int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
+    MoveTo_ResolveFuncs();
     (void)time;
     uint8_t* s = (uint8_t*)self;
 
@@ -714,6 +717,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
 // is found facing the same direction, sets the road flag (+0x474).
 // ============================================================
 void MoveTo_Enter_Impl(void* self) {
+    MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
 
     // Get target entity's character component position
@@ -777,6 +781,7 @@ void MoveTo_Enter_Impl(void* self) {
 // Reset character animation to idle (walk anim at +0x46c).
 // ============================================================
 void MoveTo_Exit_Impl(void* self, void* actionStack) {
+    MoveTo_ResolveFuncs();
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -791,6 +796,7 @@ void MoveTo_Exit_Impl(void* self, void* actionStack) {
 // Same body as Exit -- reset character animation to idle.
 // ============================================================
 void MoveTo_CheckEntity_Impl(void* self) {
+    MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
 
     s_fn_CheckPtr(s + 0x28);
@@ -805,6 +811,7 @@ void MoveTo_CheckEntity_Impl(void* self) {
 // the entity at target->+0x10.
 // ============================================================
 bool MoveTo_GetTarget_Impl(void* self, void* param) {
+    MoveTo_ResolveFuncs();
     uint8_t* s = (uint8_t*)self;
 
     // CheckPtr on target entity

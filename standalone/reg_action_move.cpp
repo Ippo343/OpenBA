@@ -43,7 +43,12 @@ extern void* ActMv_PathSetup_c8c10(void*, void*, void*, void*);         // 0x140
 extern bool ActMvDep_TimeCheck_a9290(void*, float*, void*);             // 0x1400a9290
 extern void ActMvDep_AnimHelper_50f0(uintptr_t, uint32_t, float, float, float); // 0x1401250f0
 
+// MoveTo execution .rdata float constant: minimum arrival distance (squared), 0.05f.
+// Read MoveTo_AbstractImpl_Impl @0x1401720d4 — `if (dist < *s_fMinDistSq) return 0;`.
+static const float k_rdata_1720d4_MinDist = 0.05f;
+
 void RegisterActionMoveBatch() {
+    RegisterExeAddr(0x1401720d4, reinterpret_cast<uintptr_t>(&k_rdata_1720d4_MinDist));   // MoveTo arrival dist
     // CLOSURE-SAFE subset (lead Ghidra-verified faithful + full closure satisfied):
     RegisterExeAddr(0x1400012d0, reinterpret_cast<uintptr_t>(&ActMv_FindComponentFamily_12d0));   // engine funcs only
     RegisterExeAddr(0x14010a060, reinterpret_cast<uintptr_t>(&ActMv_SetFacingDirection_a060));    // Vec3 Normalize+Heading slots

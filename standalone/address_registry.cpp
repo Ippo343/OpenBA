@@ -818,6 +818,24 @@ static void RegisterDispatchSlots() {
     RegisterDispatchSlot(0x140152490,   // Serialize(count, uchar*, name) — array3 bulk
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
 
+    // Phase 3 Keystone D Brick 4b-exec — MoveTo / PlayAnimation ACTION-METHOD dispatch slots.
+    // moveto.cpp / playanimation.cpp were written for DLL mode where these exe .rdata IAT slots
+    // are pre-filled by the loader. In standalone they must be registered or MoveTo_ResolveFuncs
+    // leaves s_fn_* null and the action vtable methods (precheck/execute, run by the move-tick
+    // executor c4c50) call through null. Names = the exe's own import strings at each slot RVA.
+    RegisterDispatchSlot(0x140152ab0,   // Object::InternalBasePtr::CheckPtr(this) const [protected, IEBA]
+        (uintptr_t)ResolveExport("?CheckPtr@InternalBasePtr@Object@@IEBAXXZ"));
+    RegisterDispatchSlot(0x140152aa0,   // Object::InternalBasePtr::Serialize(this, Serializer&)
+        (uintptr_t)ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
+    RegisterDispatchSlot(0x140152458,   // Math::Vector2::Dot(this, other) const -> Scalar
+        (uintptr_t)ResolveExport("?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
+    RegisterDispatchSlot(0x140152a98,   // Object::Base::IsDerivedFrom(this, typeId) const -> bool
+        (uintptr_t)ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
+    RegisterDispatchSlot(0x140151268,   // Math::Vector3::Vector3(this, Scalar&, Scalar&, Scalar&)
+        (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@00@Z"));
+    RegisterDispatchSlot(0x140151298,   // Math::Vector3::Dot(this, other) const -> Scalar
+        (uintptr_t)ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
+
     // Achievement::Goal::Serialize — base serialize for StatGoal/TimeGoal/etc.
     // (virtual, Runtime export `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z`,
     //  Runtime addr 0x18009ee20). StatGoal_Slot5/TimeGoal read this slot via
