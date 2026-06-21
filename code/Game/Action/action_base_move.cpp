@@ -30,8 +30,10 @@
 
 // Math::Vector2::Normalize(this) — dispatch slot 0x1401526b0
 static void  (*s_fn_Vector2_Normalize)(void* vec2) = nullptr;
-// Math::Vector3::Normalize(this) — returns float[3]* — dispatch slot 0x1401512c0
-static float* (*s_fn_Vector3_Normalize)(void* vec3) = nullptr;
+// Math::Vector3::Normalize(this) const -> Vector3 BY VALUE (12 bytes > 8) — member
+// value-return ABI: RCX=this(input vec3), RDX=hidden retptr, returns retptr in RAX.
+// dispatch slot 0x1401512c0. Caller MUST pass a >=12-byte result buffer.
+static float* (*s_fn_Vector3_Normalize)(void* vec3, void* retbuf) = nullptr;
 // Math::Vector3::Heading(this) — dispatch slot 0x1401512d8
 static float (*s_fn_Vector3_Heading)(void* vec3) = nullptr;
 
@@ -52,7 +54,7 @@ static void EnsureMoveFuncs() {
     slot = ResolveAddr(Module::Exe, 0x1401526b0);
     if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<void(**)(void*)>(slot);
     slot = ResolveAddr(Module::Exe, 0x1401512c0);
-    if (slot) s_fn_Vector3_Normalize = *reinterpret_cast<float*(**)(void*)>(slot);
+    if (slot) s_fn_Vector3_Normalize = *reinterpret_cast<float*(**)(void*, void*)>(slot);
     slot = ResolveAddr(Module::Exe, 0x1401512d8);
     if (slot) s_fn_Vector3_Heading = *reinterpret_cast<float(**)(void*)>(slot);
     s_mvFuncsResolved = true;
@@ -261,7 +263,8 @@ void ActMv_SetFacingDirection_a060(void* comp, void* vector3) {
     tmp[1] = v[1];
     tmp[2] = 0.0f;
     if (s_fn_Vector3_Normalize) {
-        float* n = s_fn_Vector3_Normalize(tmp);
+        float n[4] = {0,0,0,0};
+        s_fn_Vector3_Normalize(tmp, n);
         *reinterpret_cast<float*>(self + 0x2c) = n[0];
         *reinterpret_cast<float*>(self + 0x30) = n[1];
         *reinterpret_cast<float*>(self + 0x34) = n[2];
@@ -341,7 +344,8 @@ void ActMv_UpdateFacing_c8d20(void* selfp) {
     dir3[1] = dir2[1];   // local_54 = local_64
     dir3[2] = 0.0f;      // local_50 = 0
     if (s_fn_Vector3_Normalize) {
-        float* n = s_fn_Vector3_Normalize(dir3);
+        float n[4] = {0,0,0,0};
+        s_fn_Vector3_Normalize(dir3, n);
         *reinterpret_cast<float*>(citizen2 + 0x2c) = n[0];
         *reinterpret_cast<float*>(citizen2 + 0x30) = n[1];
         *reinterpret_cast<float*>(citizen2 + 0x34) = n[2];

@@ -36,6 +36,7 @@ extern "C" void* Reimpl_Geometry_Init(void* self);            // FUN_1400b00e0 (
 extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (serialize_resize_helpers.cpp)
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
+extern "C" void  Pathfinder_Seed(void* game, int dim);    // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
 extern "C" void  StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
 extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);                    // starttown.cpp (M5 5c — ECS spawn)
 
@@ -820,6 +821,13 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             void* game = *(void**)(p + 0xf8);
             if (game && dim > 0)
                 MapTileGrid_Build(game, (int)dim);
+
+            // task #34 — seed the map PATHFINDER worker object at game+0x68 (the real
+            // game builds it in CreateNaturalResource_impl_sub_e8c0). Reads the cell
+            // grid built just above, so it must run AFTER MapTileGrid_Build. Gated
+            // behind BANISHED_LIVE_CHARACTER_MOVETICK (the only consumer); default no-op.
+            if (game && dim > 0)
+                Pathfinder_Seed(game, (int)dim);
 
             // M5 5c — camera: spiral-search the buildable tile grid for the
             // start-town spawn tile and frame it. Writes the look-at target to

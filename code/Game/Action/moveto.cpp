@@ -89,7 +89,9 @@ static float* (*s_fn_Vector3_Ctor_Floats)(float* self, float x, float y, float z
 static void* (*s_fn_Vector3_Ctor_Scalars)(void* self, void* sx, void* sy, void* sz) = nullptr;
 
 // Math::Vector3::Normalize(this) via IAT at 0x1401512c0
-static void* (*s_fn_Vector3_Normalize)(void* vec3) = nullptr;
+// Vector3::Normalize() const returns Vector3 BY VALUE (12 bytes > 8): member value-return
+// ABI RCX=this, RDX=hidden retptr. Caller passes a >=12-byte result buffer.
+static void* (*s_fn_Vector3_Normalize)(void* vec3, void* retbuf) = nullptr;
 
 // Math::Vector3::Heading(this) via IAT at 0x1401512d8
 static float (*s_fn_Vector3_Heading)(void* vec3) = nullptr;
@@ -207,7 +209,7 @@ bool MoveTo_ResolveFuncs() {
     iat = ResolveAddr(Module::Exe, 0x140151268);
     if (iat) s_fn_Vector3_Ctor_Scalars = *reinterpret_cast<void*(**)(void*, void*, void*, void*)>(iat);
     iat = ResolveAddr(Module::Exe, 0x1401512c0);
-    if (iat) s_fn_Vector3_Normalize = *reinterpret_cast<void*(**)(void*)>(iat);
+    if (iat) s_fn_Vector3_Normalize = *reinterpret_cast<void*(**)(void*, void*)>(iat);
     iat = ResolveAddr(Module::Exe, 0x1401512d8);
     if (iat) s_fn_Vector3_Heading = *reinterpret_cast<float(**)(void*)>(iat);
     iat = ResolveAddr(Module::Exe, 0x140151298);
@@ -628,12 +630,13 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         float scalarZ = 0.0f;
         float tempVec[3];
         void* normResult = s_fn_Vector3_Ctor_Scalars(tempVec, &scalarX, &scalarY, &scalarZ);
-        void* normalized = s_fn_Vector3_Normalize(normResult);
+        float normalized[4] = {0,0,0,0};
+        s_fn_Vector3_Normalize(normResult, normalized);
 
         // Write facing direction to character (+0x2c, +0x30, +0x34)
-        *(uint32_t*)(targetEntity + 0x2c) = *(uint32_t*)normalized;
-        *(uint32_t*)(targetEntity + 0x30) = *((uint32_t*)normalized + 1);
-        *(uint32_t*)(targetEntity + 0x34) = *((uint32_t*)normalized + 2);
+        *(uint32_t*)(targetEntity + 0x2c) = *(uint32_t*)&normalized[0];
+        *(uint32_t*)(targetEntity + 0x30) = *(uint32_t*)&normalized[1];
+        *(uint32_t*)(targetEntity + 0x34) = *(uint32_t*)&normalized[2];
 
         // Compute heading angle from facing direction
         float heading = s_fn_Vector3_Heading(facing3d);
