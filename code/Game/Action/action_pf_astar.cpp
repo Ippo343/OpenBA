@@ -934,10 +934,13 @@ int* Pf_AllocTradeSlot_a6240(int64_t param_1, int* param_2) {
     int* piVar4;
     int iVar5;
     int64_t* plVar6;
-    uint8_t local_30[4];
-    uint32_t local_2c;
-    void* local_28;
-    uint64_t local_20;
+    // The original MSVC stack lays out {local_30[4], local_2c, local_28, local_20}
+    // as ONE contiguous 0x18-byte slot-element template at rbp-0x30:
+    //   +0x00 activeFlag, +0x04 token, +0x08 vec.ptr, +0x10 vec.count, +0x14 vec.cap.
+    // d940 reads it as a single struct (vec at template+8). Separate C++ locals are
+    // NOT guaranteed contiguous by GCC -> d940 then reads garbage at +8/+0x10 and
+    // f9e0 deep-copies a wild {ptr,count} -> crash. Keep it a single buffer.
+    uint8_t local_30[0x18];
 
     iVar5 = 0;
     iVar2 = *reinterpret_cast<int*>(param_1 + 0x168);
@@ -953,16 +956,15 @@ int* Pf_AllocTradeSlot_a6240(int64_t param_1, int* param_2) {
         } while (iVar5 < iVar2);
     }
     if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
-    local_30[0] = 0;
-    local_2c = 0;
-    local_28 = nullptr;
-    local_20 = 0;
+    for (int i = 0; i < 0x18; ++i) local_30[i] = 0;   // {flag,token,vec.ptr,vec.count,vec.cap} = 0
     if (s_fn_TradeResize)
         s_fn_TradeResize(reinterpret_cast<int64_t*>(param_1 + 0x160),
                          *reinterpret_cast<int*>(param_1 + 0x168) + 1, local_30);
-    fn_MemFreeStatic(local_28);
-    local_28 = nullptr;
-    local_20 = 0;
+    // MemFree the template's own vec.ptr (template+8) after the resize cloned it (faithful
+    // to the original's MemFree(local_28)). It is null here, so this is a harmless no-op.
+    fn_MemFreeStatic(*reinterpret_cast<void**>(local_30 + 8));
+    *reinterpret_cast<void**>(local_30 + 8) = nullptr;
+    *reinterpret_cast<uint64_t*>(local_30 + 0x10) = 0;
     if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(param_1 + 0x30));
     iVar5 = iVar2;
 LAB_1400a62f5:
@@ -979,7 +981,6 @@ LAB_1400a62f5:
     *reinterpret_cast<uint8_t*>(lVar1 + *plVar6) = 0;
     *param_2 = iVar5;
     param_2[1] = *reinterpret_cast<int*>(lVar1 + 4 + *plVar6);
-    (void)local_2c;
     return param_2;
 }
 
