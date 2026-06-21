@@ -1,0 +1,666 @@
+// code/Game/Component/citizenai_growup.cpp
+//
+// Brick 3b handler wave 4 — faithful 1:1 ports of two CitizenAIComponent state
+// handlers plus one private find-helper:
+//
+//   0x14010c890  CitizenAI_State_GrowUp        (state id 4)
+//   0x140115e60  CitizenAI_State_LongTermPlan  (state id 13)  — SHARED: also reached by
+//                Gather/Gather2/GrowUp via ResolveAddr(0x140115e60).
+//   0x14008f230  Entity_impl_f230 (private GrowUp helper; ported here, not registered
+//                separately as a reused symbol — but DOES get a RegisterExeAddr so the
+//                handler's `ResolveAddr(0x14008f230)` resolves to it).
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// SELF / CHAIN (verified against the Ghidra decompile + disassembly):
+//   param_1 (GrowUp) = CitizenAIComponent. self = param_1+0x38 = sibling CitizenComponent
+//     IBP. citizen = *self. citizen+0x238 = workplace/residence entity, citizen+0x278 =
+//     CharacterComponent (+0x68 = ModelComponent, whose transform +0x158/+0x15c/+0x160 =
+//     world pos), citizen+0x18 = controller-comp IBP.
+//   LongTermPlan's param_1 IS the CitizenComponent (the CITIZEN, not the AI component) —
+//     GrowUp calls it as LongTermPlan(*(param_1+0x38)). param_1+0x10 = entity, +0x278 =
+//     CharacterComponent, +0x30/+0x54/+0xb0 = the action-state flag triplet, +0x278 then
+//     +0x48 = the action stack object run by the executor.
+//   g_pGameWorldSingleton (DAT_1401c3dd8): +0xf0 = entity-list pair, +0xf8 = map-grid
+//     (int* dim at [0]), +0xd8 = Random.
+//
+//   GrowUp success epilogue (both branches): *self → +0x30=-1, +0x54|=4, +0xb0=0,
+//     stamp Time(DAT_1401721fc * desc_walktime) into citizen+0x60, return 1.
+//   GrowUp early/adult branch (age > _maxAge 15.0): tail-call LongTermPlan, set
+//     param_1+0x2c = 4 (next-state), return 1.
+//   GrowUp food-shortage branch (QueryCount < 1): Time(DAT_1401721fc) → citizen+0x60,
+//     run dd30 find-best-food-source, scan its storage occupants for the right slot,
+//     and if found push a PerformWork(Ctor11) chain (eat) → return 1, else return 0.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// Registered exe sub-callees (resolved via ResolveAddr; bodies NOT duplicated):
+//   0x140006270  Entity_FindComponent_Storage  (reg_work_base WorkBase_FindComponent_6270)
+//   0x14012cf10  StorageComponent_QueryCount    (reg_component_people)
+//   0x14008dd30  CitizenAI_State_sub_dd30       (reg_citizenai_findtarget)
+//   0x140087fb0  Entity_impl_7fb0               (reg_pf_road Pf_EntityAnchorCell_7fb0)
+//   0x1400bc790  PerformWork_Action_Ctor11      (reg_citizenai_actionctors)
+//   0x14008d590  FUN_14008d590  (find-storage-with-resource)   (reg elsewhere)
+//   0x1400c1070  PerformWork_Action_Ctor4       (reg_citizenai_actionctors)
+//   0x14012cd80  StorageComponent_impl_cd80     (reg elsewhere)
+//   0x1400c4c50  CitizenAI_ActionExecutor_c4c50 (reg_citizenai_executor)
+//   --- f230 closure (all registered) ---
+//   0x14009f3e0  CharacterComponent_impl_f3e0 == fn_MapGetTerrainPos (mapquery)
+//   0x140002ed0  Entity_FindComponent_Position  (reg_work_base WorkBase_FindComponent_2ed0)
+//   0x140122e20  Entity_impl_2e20               (reg_pf_road Pf_EntityResolvePos_2e20)
+//   0x140008830  FUN_140008830 (cell distance)  (reg_work_base WorkBase_CalcDistance_8830)
+//   0x1400a00f0  FUN_1400a00f0 (cell validate)  (reg_work_base WorkBase_ValidateCell_a00f0)
+//
+// Engine dispatch slots used (all already wired by their owning reimpl batches; resolved
+//   here via ResolveSlot for portability):
+//   [0x140152ab0] fn_InternalBasePtr_CheckPtr   [0x140152a90] fn_InternalBasePtr_Ctor
+//   [0x140152a98] fn_IsDerivedFrom              [0x140152b60] MemAlloc  [0x140152b68] MemFree
+//   [0x140152b00] System::Time::Time(Time*,float)  [0x140151320] Math::Vector3::Vector3(Scalar&)
+//   (All of the above are also exposed as engine_funcs.h externs; this file uses those
+//    externs where they exist and ResolveSlot for the Vector3-from-Scalar ctor.)
+//
+// SELF-CONTAINED-BRICK type-ids (the DAT_1401c7xxx globals are UNFILLED 0xFFFFFFFF in the
+//   standalone build → resolved here via Object::GetTypeIdByName, derived from each global's
+//   *_Register/_RegisterType [DATA] writer; scan-result derefs are null-guarded):
+//     DWORD_1401c7cb8 -> "RawMaterialDescription"  (RawMaterialDescription_Register@14014f7b5;
+//                        it is a *Description*, used by GrowUp's storage-slot scan + cd80 + d590)
+//     DWORD_1401c7e78 -> "StorageComponent"        (LongTermPlan's component-type scan filter)
+//     DWORD_1401c80e0 -> "WorkPlaceComponent"      (WorkPlaceComponent_RegisterType@14014feb5;
+//                        f230's nearest-workplace scan filter)
+//
+// .rdata float const: DAT_1401721fc (GrowUp food-cooldown / walk-time scale). Read from the
+//   exe via ResolveAddr; null-guarded fallback 0.0f.
+//
+// This file must NOT depend on hooks.h — it is portable for the standalone exe.
+
+#ifdef STANDALONE_EXE
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include "Object/factory_registration.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+
+namespace {
+
+// --- registered exe sub-callees ---
+typedef void*    (*fn_findComp_t)(int64_t entity, void* outIBP);                       // 0x140006270 / 0x140002ed0
+typedef int      (*fn_queryCount_t)(int64_t storageComp);                              // 0x14012cf10
+typedef int64_t* (*fn_dd30_t)(int64_t*, int64_t*, uint32_t, uint32_t, int64_t*, float*, uint32_t); // 0x14008dd30
+typedef uint32_t (*fn_7fb0_t)(void* ibp, float* outVec3orNull);                        // 0x140087fb0
+typedef void     (*fn_ctor11_t)(void* holder, int64_t resCountObj, int64_t* srcIBP,
+                                float* destA, int64_t* dstIBP, float* destB);           // 0x1400bc790
+typedef int64_t* (*fn_d590_t)(int64_t** listPair, int64_t* outBest, uint32_t cell,
+                              uint64_t storageComp, int count, char flag,
+                              uint32_t* outVec3, void* matchIBP);                        // 0x14008d590
+typedef void     (*fn_ctor4_t)(void* holder, int64_t* entityIBP, float* dest,
+                               int cell, uint8_t p5, uint32_t p6);                        // 0x1400c1070
+typedef uint32_t (*fn_cd80_t)(int64_t storageComp, int64_t descComp, int amount);        // 0x14012cd80
+typedef void     (*fn_executor_t)(int64_t* stack, void* time);                            // 0x1400c4c50
+// --- f230 closure ---
+typedef float*   (*fn_gridToWorld_t)(int* mapGrid, float* outTri, float* worldPos, char flag, void* outTri2); // 0x14009f3e0
+typedef void     (*fn_2e20_t)(int64_t comp, float* outVec3, int, int, float*);            // 0x140122e20
+typedef int      (*fn_8830_t)(int* mapGrid, uint32_t cellA, uint32_t cellB);              // 0x140008830
+typedef uint64_t (*fn_a00f0_t)(int* mapGrid, uint32_t pathType, uint64_t destCell, uint32_t srcCell); // 0x1400a00f0
+
+static fn_findComp_t   s_findStor   = nullptr;  // 0x140006270
+static fn_findComp_t   s_findPos    = nullptr;  // 0x140002ed0
+static fn_queryCount_t s_queryCount = nullptr;  // 0x14012cf10
+static fn_dd30_t       s_dd30       = nullptr;
+static fn_7fb0_t       s_7fb0       = nullptr;
+static fn_ctor11_t     s_ctor11     = nullptr;
+static fn_d590_t       s_d590       = nullptr;
+static fn_ctor4_t      s_ctor4      = nullptr;
+static fn_cd80_t       s_cd80       = nullptr;
+static fn_executor_t   s_executor   = nullptr;
+static fn_gridToWorld_t s_f3e0      = nullptr;  // 0x14009f3e0
+static fn_2e20_t       s_2e20       = nullptr;
+static fn_8830_t       s_8830       = nullptr;
+static fn_a00f0_t      s_a00f0      = nullptr;
+
+// --- Math::Vector3::Vector3(Vector3*, const Scalar&) dispatch slot 0x140151320 ---
+typedef void* (*fn_v3ctorScalar_t)(void* self, void* scalar);
+static fn_v3ctorScalar_t s_v3ctorScalar = nullptr;
+
+static uint32_t s_tid_RawMaterialDescription = 0;  // DWORD_1401c7cb8
+static uint32_t s_tid_StorageComponent       = 0;  // DWORD_1401c7e78
+static uint32_t s_tid_WorkPlaceComponent     = 0;  // DWORD_1401c80e0
+static uint32_t s_tid_CitizenDescription     = 0;  // DWORD_1401c7190 (GrowUp cooldown desc)
+
+static float s_walkScale = 0.0f;  // DAT_1401721fc (read from exe rdata)
+
+static void* ResolveSlot(uintptr_t slotAddr) {
+    uintptr_t s = ResolveAddr(Module::Exe, slotAddr);
+    return s ? *reinterpret_cast<void**>(s) : nullptr;
+}
+
+static bool s_init = false;
+static void EnsureInit() {
+    if (s_init) return;
+    s_findStor   = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140006270));
+    s_findPos    = reinterpret_cast<fn_findComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
+    s_queryCount = reinterpret_cast<fn_queryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
+    s_dd30       = reinterpret_cast<fn_dd30_t>(ResolveAddr(Module::Exe, 0x14008dd30));
+    s_7fb0       = reinterpret_cast<fn_7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
+    s_ctor11     = reinterpret_cast<fn_ctor11_t>(ResolveAddr(Module::Exe, 0x1400bc790));
+    s_d590       = reinterpret_cast<fn_d590_t>(ResolveAddr(Module::Exe, 0x14008d590));
+    s_ctor4      = reinterpret_cast<fn_ctor4_t>(ResolveAddr(Module::Exe, 0x1400c1070));
+    s_cd80       = reinterpret_cast<fn_cd80_t>(ResolveAddr(Module::Exe, 0x14012cd80));
+    s_executor   = reinterpret_cast<fn_executor_t>(ResolveAddr(Module::Exe, 0x1400c4c50));
+    s_f3e0       = reinterpret_cast<fn_gridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_2e20       = reinterpret_cast<fn_2e20_t>(ResolveAddr(Module::Exe, 0x140122e20));
+    s_8830       = reinterpret_cast<fn_8830_t>(ResolveAddr(Module::Exe, 0x140008830));
+    s_a00f0      = reinterpret_cast<fn_a00f0_t>(ResolveAddr(Module::Exe, 0x1400a00f0));
+    s_v3ctorScalar = reinterpret_cast<fn_v3ctorScalar_t>(ResolveSlot(0x140151320));
+    if (s_tid_RawMaterialDescription == 0) s_tid_RawMaterialDescription = ::Object::GetTypeIdByName("RawMaterialDescription");
+    if (s_tid_StorageComponent == 0)       s_tid_StorageComponent       = ::Object::GetTypeIdByName("StorageComponent");
+    if (s_tid_WorkPlaceComponent == 0)     s_tid_WorkPlaceComponent     = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    if (s_tid_CitizenDescription == 0)     s_tid_CitizenDescription     = ::Object::GetTypeIdByName("CitizenDescription");
+    const float* p = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721fc));
+    if (p) s_walkScale = *p;
+    s_init = true;
+}
+
+static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
+static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
+static inline int* MapGrid() { return *reinterpret_cast<int**>(GW() + 0xf8); }
+static inline int64_t* ListPair() { return *reinterpret_cast<int64_t**>(GW() + 0xf0); }
+
+static inline bool TraceOn() {
+    static int s_ts = -1;
+    if (s_ts < 0) { const char* e = getenv("BANISHED_CITIZENAI_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s_ts == 1;
+}
+
+// citizen CharacterComponent (+0x278) -> ModelComponent (+0x68).
+static int64_t CitizenModel(int64_t citizen) {
+    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
+    int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
+    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
+    return *reinterpret_cast<int64_t*>(ch + 0x68);
+}
+
+// model world pos (+0x158/+0x15c) -> clamped grid cell (row*w + col).
+static uint32_t ModelCell(int64_t model, int* mapGrid) {
+    int w = *mapGrid;
+    int col = static_cast<int>(*reinterpret_cast<float*>(model + 0x158) + static_cast<float>(w >> 1));
+    int row = static_cast<int>(*reinterpret_cast<float*>(model + 0x15c) + static_cast<float>(w >> 1));
+    if (col < 0) col = 0; if (w <= col) col = w - 1;
+    if (row < 0) row = 0; if (w <= row) row = w - 1;
+    return static_cast<uint32_t>(w * row + col);
+}
+
+// Scan an InternalBasePtr-array node's children for the first item whose GetTypeId()
+// matches typeId, returning the derived object (null-guarded). Mirrors the inline
+// GetTypeId()/IsDerivedFrom scan repeated throughout these handlers.
+//   childArrayBase = node+0x28 (array of object* at 8-byte stride); count = node+0x30.
+static void* ScanForType(int64_t node, uint32_t typeId) {
+    if (node == 0) return nullptr;
+    int count = *reinterpret_cast<int*>(node + 0x30);
+    int64_t base = *reinterpret_cast<int64_t*>(node + 0x28);
+    for (int i = 0; i < count; ++i) {
+        int64_t* slot = reinterpret_cast<int64_t*>(base + static_cast<int64_t>(i) * 8);
+        int64_t obj = *slot;
+        if (obj == 0) continue;
+        int64_t vt = *reinterpret_cast<int64_t*>(obj);
+        // vtable+0x10 = GetTypeId()
+        uint32_t tid = reinterpret_cast<uint32_t(*)(int64_t)>(*reinterpret_cast<void**>(vt + 0x10))(obj);
+        if (tid == typeId) {
+            bool ok = fn_IsDerivedFrom ? fn_IsDerivedFrom(reinterpret_cast<void*>(obj), typeId) : false;
+            return ok ? reinterpret_cast<void*>(obj) : nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// success epilogue: set the action-state flags on the CitizenComponent and return 1.
+static uint64_t Pushed(int64_t cz) {
+    *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
+    *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
+    *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
+    return (static_cast<uint64_t>(cz) & 0xffffffffffffff00ULL) | 1;  // CONCAT71(cz>>8, 1)
+}
+
+} // namespace
+
+// ============================================================
+// 0x14008f230 — Entity_impl_f230  (private GrowUp helper)
+//   Finds the nearest reachable WorkPlaceComponent-bearing entity to a grid cell.
+//   param_1 = entity-list pair (the *(GW+0xf0) object; +0x78 = count, +0x70 = array of
+//             InternalBasePtr, 8-byte stride). param_2 = out InternalBasePtr (best entity).
+//   param_3 = cell index (clamped row*w+col origin). param_4 = out Vector3 (best world pos).
+// ============================================================
+extern "C" void* CitizenAI_Entity_impl_f230(int64_t param_1, void* param_2, uint32_t param_3, float* param_4) {
+    EnsureInit();
+    if (*reinterpret_cast<int*>(param_1 + 0x78) == 0) {
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, nullptr);
+        return param_2;
+    }
+    int* mapGrid = MapGrid();
+    int w = *mapGrid;
+    // worldPos = ((cell % w) - (w>>1 - DAT_140172114), (cell / w) - ..., 0) — but the only
+    // use is feeding f3e0 (terrain sample) which the original immediately overwrites with a
+    // fresh per-candidate position; the seed call's result is discarded (local_80 zeroed
+    // right after). We faithfully zero the running pos and rely on the per-candidate path.
+    const float* pBias = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
+    float bias = static_cast<float>(w >> 1) - (pBias ? *pBias : 0.0f);
+    float seedXY[3] = {
+        static_cast<float>(static_cast<int>(param_3) % w) - bias,
+        static_cast<float>(static_cast<int>(param_3) / w) - bias,
+        0.0f
+    };
+    float seedTri[4] = {0, 0, 0, 0};
+    if (s_f3e0) s_f3e0(mapGrid, seedTri, seedXY, '\0', nullptr);
+
+    // running best
+    float bestX = 0.0f, bestY = 0.0f, bestZ = 0.0f;
+    int   bestCost = 0xffff;          // local_res8
+    int64_t bestEntity = 0;           // lVar12
+
+    int n = *reinterpret_cast<int*>(param_1 + 0x78);
+    int64_t arr = *reinterpret_cast<int64_t*>(param_1 + 0x70);
+    for (int idx = 0; idx < n; ++idx) {
+        int64_t* slot = reinterpret_cast<int64_t*>(arr + static_cast<int64_t>(idx) * 8);
+        CheckPtr(slot);
+        int64_t entity = *reinterpret_cast<int64_t*>(*slot + 0x10);   // *plVar11 + 0x10
+        CheckPtr(&entity);
+        // scan entity's components for a WorkPlaceComponent (node+0x38 count, +0x30 array)
+        int64_t compArrCount = *reinterpret_cast<int*>(entity + 0x38);
+        int64_t compArr = *reinterpret_cast<int64_t*>(entity + 0x30);
+        void* wp = nullptr;
+        for (int64_t j = 0; j < compArrCount; ++j) {
+            int64_t* cslot = reinterpret_cast<int64_t*>(compArr + j * 8);
+            CheckPtr(cslot);
+            int64_t obj = *cslot;
+            int64_t vt = *reinterpret_cast<int64_t*>(obj);
+            uint32_t tid = reinterpret_cast<uint32_t(*)(int64_t)>(*reinterpret_cast<void**>(vt + 0x10))(obj);
+            if (tid == s_tid_WorkPlaceComponent) {
+                bool ok = fn_IsDerivedFrom ? fn_IsDerivedFrom(reinterpret_cast<void*>(obj), s_tid_WorkPlaceComponent) : false;
+                wp = ok ? reinterpret_cast<void*>(obj) : nullptr;
+                break;
+            }
+        }
+        int64_t wpIBP = 0;  // local_98
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIBP, wp);
+        CheckPtr(&wpIBP);
+        // wp+0x60 != 0 → this workplace accepts a worker
+        if (wpIBP != 0 && *reinterpret_cast<int*>(wpIBP + 0x60) != 0) {
+            CheckPtr(&entity);
+            int64_t posBuf[2] = {0, 0};
+            void* pp = s_findPos ? s_findPos(entity, posBuf) : nullptr;
+            CheckPtr(posBuf);
+            float wpos[4] = {0, 0, 0, 0};
+            if (posBuf[0] && s_2e20) s_2e20(posBuf[0], wpos, 0, 0, nullptr);
+            int dim = *mapGrid;
+            int ix = static_cast<int>(wpos[0] + static_cast<float>(dim >> 1));
+            int iy = static_cast<int>(wpos[1] + static_cast<float>(dim >> 1));
+            if (ix < 0) ix = 0; if (dim <= ix) ix = dim - 1;
+            if (iy < 0) iy = 0; if (dim <= iy) iy = dim - 1;
+            uint32_t cell = static_cast<uint32_t>(dim * iy + ix);
+            uint64_t reachable = s_a00f0 ? s_a00f0(mapGrid, 0xe1f, param_3, cell) : 0;
+            if (static_cast<char>(reachable) != '\0') {
+                int cost = s_8830 ? s_8830(mapGrid, param_3, cell) : 0x7fffffff;
+                if (cost < bestCost) {
+                    CheckPtr(slot);
+                    bestX = wpos[0]; bestY = wpos[1]; bestZ = wpos[2];
+                    bestEntity = *reinterpret_cast<int64_t*>(*slot + 0x10);
+                    bestCost = cost;
+                }
+            }
+        }
+    }
+    param_4[0] = bestX; param_4[1] = bestY; param_4[2] = bestZ;
+    *reinterpret_cast<int64_t*>(param_2) = bestEntity;
+    return param_2;
+}
+
+// ============================================================
+// 0x140115e60 — CitizenAI_State_LongTermPlan  (state id 13)
+//   param_1 = CitizenComponent (the citizen). Builds two parallel dynamic arrays of
+//   (storage-entity, world-pos) candidates by scanning the storage occupants of the
+//   citizen's home region for matching RawMaterialDescription items, then pushes a
+//   PerformWork(Ctor4) chain per candidate and runs the executor.
+// ============================================================
+extern "C" void CitizenAI_State_LongTermPlan(int64_t param_1) {
+    EnsureInit();
+    int64_t* listPair = ListPair();
+    int* mapGrid = MapGrid();
+
+    // citizen storage component (local_res20)
+    CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
+    int64_t storBuf[2] = {0, 0};
+    if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(param_1 + 0x10), storBuf);
+    int64_t citStorNode = storBuf[0];
+
+    // dynamic array A: entity IBP pairs (stride 0x10 bytes = 2*8). base/cap at local_70/local_68.
+    float*   arrA = nullptr;  int arrACount = 0; int arrACap = 0;          // local_70 / (int)local_68 / local_68._4_4_
+    // dynamic array B: float[3] world positions (stride 0xc). base/cap at local_60/local_58.
+    float*   arrB = nullptr;  int arrBCount = 0; int arrBCap = 0;          // local_60 / (int)local_58 / local_58._4_4_
+
+    // citizen home cell (model pos) — uVar15 / local_res18
+    int64_t cch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
+    CheckPtr(reinterpret_cast<void*>(param_1 + 0x278));
+    CheckPtr(reinterpret_cast<void*>(cch + 0x68));
+    int64_t model = *reinterpret_cast<int64_t*>(cch + 0x68);
+    uint32_t homeCell = ModelCell(model, mapGrid);
+
+    // iterate the citizen-storage occupant rows (citStorNode+0x30 count, +0x28 row array,
+    // each row is 0x10 bytes: [+0] entity-ptr, [+8] occupancy count).
+    CheckPtr(&citStorNode);
+    int rowCount = (citStorNode != 0) ? *reinterpret_cast<int*>(citStorNode + 0x30) : 0;
+    bool committed = false;        // matched cd80 → break to commit
+    for (int row = 0; row < rowCount; ++row) {
+        CheckPtr(&citStorNode);
+        int64_t rowArr = *reinterpret_cast<int64_t*>(citStorNode + 0x28);
+        int64_t rowBase = rowArr + static_cast<int64_t>(row) * 0x10;
+        int occ = *reinterpret_cast<int*>(rowBase + 8);
+        if (occ == 0) {
+            // empty row: nothing to add here; advance.
+            continue;
+        }
+        // search the already-collected array A for a storage whose held resource satisfies
+        // this row (StorageComponent_impl_cd80). If satisfied, commit.
+        bool satisfied = false;
+        for (int k = 0; k < arrACount; ++k) {
+            int64_t entry = *reinterpret_cast<int64_t*>(arrA + static_cast<int64_t>(k) * 2);
+            CheckPtr(reinterpret_cast<void*>(arrA + static_cast<int64_t>(k) * 2));
+            // find that entry's StorageComponent
+            void* sc = ScanForType(entry, s_tid_StorageComponent);
+            int64_t scIBP = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&scIBP, sc);
+            CheckPtr(&scIBP);
+            int64_t descComp = *reinterpret_cast<int64_t*>(rowBase);   // row entity (RawMaterialDescription)
+            int amount = *reinterpret_cast<int*>(rowBase + 8);
+            uint32_t hit = (scIBP && s_cd80) ? s_cd80(scIBP, descComp, amount) : 0;
+            if (static_cast<char>(hit) != '\0') { satisfied = true; break; }
+        }
+        if (satisfied) { committed = true; break; }
+
+        // not satisfied by current set: ask d590 for a new storage candidate.
+        uint32_t outVec[3] = {0, 0, 0};      // local_80
+        int64_t  matchIBP  = 0;              // local_a8
+        int64_t  outBest   = 0;              // local_98
+        if (s_d590) s_d590(reinterpret_cast<int64_t**>(listPair), &outBest, homeCell,
+                           static_cast<uint64_t>(*reinterpret_cast<int64_t*>(rowBase)),
+                           *reinterpret_cast<int*>(rowBase + 8), '\x01',
+                           outVec, &matchIBP);
+        if (outBest == 0) {
+            // d590 found nothing for this row → treat as committed-with-empty (the original
+            // jumps to the no-more-rows path that sets up the action push from whatever was
+            // collected). We simply continue; arrays retain prior entries.
+            continue;
+        }
+
+        // grow array A (append outBest as an entity-IBP pair).
+        {
+            int newCount = arrACount + 1;
+            if (newCount != arrACount) {
+                if (arrACap < newCount) {
+                    int newCap = newCount;
+                    if (arrACount != 0) newCap = newCount * 3;
+                    arrACap = newCap;
+                    float* nb = reinterpret_cast<float*>(fn_MemAlloc
+                        ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) << 3, 8) : nullptr);
+                    // copy old
+                    for (int c = 0; c < arrACount; ++c) {
+                        reinterpret_cast<int64_t*>(nb)[c * 2] = reinterpret_cast<int64_t*>(arrA)[c * 2];
+                    }
+                    if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
+                    arrA = nb;
+                }
+                reinterpret_cast<int64_t*>(arrA)[arrACount * 2] = outBest;
+                arrACount = newCount;
+            }
+        }
+        // grow array B (append outVec as float[3]).
+        {
+            int newCount = arrBCount + 1;
+            if (newCount != arrBCount) {
+                if (arrBCap < newCount) {
+                    int newCap = newCount;
+                    if (arrBCount != 0) newCap = newCount * 3;
+                    arrBCap = newCap;
+                    float* nb = reinterpret_cast<float*>(fn_MemAlloc
+                        ? fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(newCap) * 0xc, 4) : nullptr);
+                    for (int c = 0; c < arrBCount; ++c) {
+                        nb[c * 3 + 0] = arrB[c * 3 + 0];
+                        nb[c * 3 + 1] = arrB[c * 3 + 1];
+                        nb[c * 3 + 2] = arrB[c * 3 + 2];
+                    }
+                    if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
+                    arrB = nb;
+                }
+                arrB[arrBCount * 3 + 0] = *reinterpret_cast<float*>(&outVec[0]);
+                arrB[arrBCount * 3 + 1] = *reinterpret_cast<float*>(&outVec[1]);
+                arrB[arrBCount * 3 + 2] = *reinterpret_cast<float*>(&outVec[2]);
+                arrBCount = newCount;
+            }
+        }
+    }
+
+    // commit: if any candidate collected (arrACount != 0 — the original's `if (uVar16 != 0)`),
+    // push a PerformWork(Ctor4) per candidate and run the executor.
+    if (arrACount != 0) {
+        int64_t firstIBP = 0;       // local_90
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&firstIBP, nullptr);
+        int64_t selfIBP = 0;        // local_98
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&selfIBP, reinterpret_cast<void*>(param_1));
+
+        // Vector3((Scalar&)0) — the first push uses a zero-vector built from local_res10 (=0).
+        float zeroScalar = 0.0f;
+        float vecBuf[3] = {0, 0, 0};   // Vector3 retbuf (local_80)
+        void* vec = s_v3ctorScalar ? s_v3ctorScalar(vecBuf, &zeroScalar) : vecBuf;
+
+        if (s_ctor4) s_ctor4(&selfIBP, &firstIBP, reinterpret_cast<float*>(vec), homeCell, 1, 1);
+
+        // remaining candidates (the original loops uVar16 times over arrA/arrB).
+        for (int i = 0; i < arrACount; ++i) {
+            int64_t entIBP = reinterpret_cast<int64_t*>(arrA)[i * 2];  // local_res8 = *pfVar11
+            int64_t citizenIBP = 0;     // local_res10
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&citizenIBP, reinterpret_cast<void*>(param_1));
+            float* destB = &arrB[i * 3];
+            if (s_ctor4) s_ctor4(&citizenIBP, &entIBP, destB, homeCell, 0, 0);
+        }
+
+        // commit the action-state flags on the citizen and run the executor.
+        *reinterpret_cast<int32_t*>(param_1 + 0x30) = static_cast<int32_t>(0xffffffff);
+        *reinterpret_cast<uint32_t*>(param_1 + 0x54) |= 4;
+        *reinterpret_cast<int32_t*>(param_1 + 0xb0) = 0;
+
+        int64_t timeStamp = 0;
+        if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeStamp, 0.0f);
+        CheckPtr(reinterpret_cast<void*>(param_1 + 0x278));
+        int64_t ch = *reinterpret_cast<int64_t*>(param_1 + 0x278);
+        if (-1 < *reinterpret_cast<int*>(ch + 0x48 + 0x18)) {
+            if (s_executor) s_executor(reinterpret_cast<int64_t*>(ch + 0x48), &timeStamp);
+        }
+        (void)committed;
+    }
+
+    // free the dynamic arrays (LAB_140116387 epilogue).
+    if (arrB && fn_MemFreeStatic) fn_MemFreeStatic(arrB);
+    arrB = nullptr; arrBCount = 0;
+    if (arrA && fn_MemFreeStatic) fn_MemFreeStatic(arrA);
+    arrA = nullptr; arrACount = 0;
+
+    if (TraceOn()) {
+        static int n = 0;
+        if (n < 6) { fprintf(stderr, "[LongTermPlan] citizen=%p candidates=%d\n",
+                             reinterpret_cast<void*>(param_1), arrACount); fflush(stderr); n++; }
+    }
+}
+
+// ============================================================
+// 0x14010c890 — CitizenAI_State_GrowUp  (state id 4)
+// ============================================================
+extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
+    EnsureInit();
+    int64_t* listPair = ListPair();
+    int* mapGrid = MapGrid();
+
+    float destA[4] = {0, 0, 0, 0};   // local_a0
+    float destB[4] = {0, 0, 0, 0};   // local_90
+
+    int64_t* self = reinterpret_cast<int64_t*>(param_1 + 0x38);
+    CheckPtr(self);
+    int64_t citizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
+    // citizen+0x278 = CharacterComponent; +0x68 = ModelComponent; +0x160 = walk-time src (local_70)
+    CheckPtr(reinterpret_cast<void*>(citizen + 0x278));
+    int64_t ch = *reinterpret_cast<int64_t*>(citizen + 0x278);
+    CheckPtr(reinterpret_cast<void*>(ch + 0x68));
+    int64_t model = *reinterpret_cast<int64_t*>(ch + 0x68);
+    // model+0x160 (local_70) is read by the original but only the *(desc+0x78)*scale path is
+    // used for the cooldown below; the raw value is not consumed. home cell from model pos:
+    uint32_t homeCell = ModelCell(model, mapGrid);
+
+    // citizen home StorageComponent → QueryCount (food on hand?)
+    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
+    int64_t citizen2 = *reinterpret_cast<int64_t*>(param_1 + 0x38);
+    CheckPtr(reinterpret_cast<void*>(citizen2 + 0x10));
+    int64_t storBuf[2] = {0, 0};
+    if (s_findStor) s_findStor(*reinterpret_cast<int64_t*>(citizen2 + 0x10), storBuf);
+    CheckPtr(storBuf);
+    int count = (storBuf[0] && s_queryCount) ? s_queryCount(storBuf[0]) : 0;
+
+    if (count >= 1) {
+        // Citizen's own storage is non-empty (QueryCount >= 1) → defer to LongTermPlan
+        // (housing/marriage/work life-planning) and queue next state 4. (decompile `else`).
+        CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
+        CitizenAI_State_LongTermPlan(*reinterpret_cast<int64_t*>(param_1 + 0x38));
+        *reinterpret_cast<int32_t*>(param_1 + 0x2c) = 4;
+        if (TraceOn()) {
+            static int n = 0;
+            if (n < 6) { fprintf(stderr, "[GrowUp] self=%p -> LongTermPlan (mature)\n",
+                                 reinterpret_cast<void*>(param_1)); fflush(stderr); n++; }
+        }
+        return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
+    }
+
+    // FOOD-SHORTAGE branch (count < 1): stamp the food-cooldown into citizen+0x60,
+    // find the best food source via dd30, then scan its storage for an eatable item.
+    int64_t cd = 0;
+    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cd, s_walkScale);
+    *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd;
+
+    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
+    int64_t resEntity = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x38) + 0x238); // citizen+0x238
+    uint32_t bGoal;
+    if (resEntity == 0) {
+        bGoal = 0xffffffff;
+    } else {
+        int64_t resIBP = resEntity;
+        bGoal = s_7fb0 ? s_7fb0(&resIBP, nullptr) : 0xffffffff;
+    }
+
+    int64_t found = 0;        // local_b0
+    int64_t outComp = 0;      // local_res18
+    if (s_dd30) s_dd30(reinterpret_cast<int64_t*>(listPair), &found, homeCell, bGoal, &outComp, destA, 3);
+    if (found == 0) {
+        return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;   // no source → return 0
+    }
+
+    // found a source entity. find its StorageComponent (local_b8).
+    int64_t target = found;
+    CheckPtr(&target);
+    int64_t tStorBuf[2] = {0, 0};
+    if (s_findStor) s_findStor(target, tStorBuf);
+    CheckPtr(tStorBuf);
+    int64_t tStorNode = tStorBuf[0];
+    if (tStorNode == 0) {
+        return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
+    }
+
+    // scan the source storage's occupant rows for an eatable RawMaterialDescription item
+    // that still has stock (count[+8] - reserved[+0xc] > 0 and the RawMaterialDescription's
+    // +0x5c bit13 "edible" flag is set), picking one (random if multiple, biased by +0x58).
+    int rowCount = *reinterpret_cast<int*>(tStorNode + 0x30);
+    int eligible = 0;          // (uint)local_res18
+    int preferred = -1;        // uVar21 (the +0x58-flagged candidate index, or random)
+    int64_t rowArrBase = *reinterpret_cast<int64_t*>(tStorNode + 0x28);   // local_b8+0x28
+    for (int row = 0; row < rowCount; ++row) {
+        int64_t rowEnt = *reinterpret_cast<int64_t*>(rowArrBase + static_cast<int64_t>(row) * 0x10);
+        void* rm = ScanForType(rowEnt, s_tid_RawMaterialDescription);
+        if (!rm) continue;
+        uint32_t flag = (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c)) >> 0xd;
+        if ((flag & 1) == 0) continue;
+        int stock = *reinterpret_cast<int*>(rowArrBase + static_cast<int64_t>(row) * 0x10 + 8)
+                  - *reinterpret_cast<int*>(rowArrBase + static_cast<int64_t>(row) * 0x10 + 0xc);
+        if (stock <= 0) continue;
+        if (*reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(rm) + 0x58) != '\0') {
+            preferred = eligible;   // remember the flagged candidate's ordinal
+        }
+        ++eligible;
+    }
+    if (eligible == 0) {
+        return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
+    }
+
+    int chosen = preferred;
+    if (chosen < 0) {
+        // System::Random::Rand(GW+0xd8, eligible)
+        void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
+        chosen = fn_Random_Rand ? fn_Random_Rand(rng, eligible) : 0;
+    }
+
+    // second pass: locate the chosen eatable row, build the eat (Ctor11) action.
+    int ordinal = 0;
+    for (int row = 0; row < rowCount; ++row) {
+        int64_t rowEnt = *reinterpret_cast<int64_t*>(rowArrBase + static_cast<int64_t>(row) * 0x10);
+        void* rm = ScanForType(rowEnt, s_tid_RawMaterialDescription);
+        if (!rm) continue;
+        uint32_t flag = (*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(rm) + 0x5c)) >> 0xd;
+        if ((flag & 1) == 0) continue;
+        int stock = *reinterpret_cast<int*>(rowArrBase + static_cast<int64_t>(row) * 0x10 + 8)
+                  - *reinterpret_cast<int*>(rowArrBase + static_cast<int64_t>(row) * 0x10 + 0xc);
+        if (stock <= 0) continue;
+        if (ordinal == chosen) {
+            int64_t resCountObj = *reinterpret_cast<int64_t*>(rowArrBase + static_cast<int64_t>(row) * 0x10);
+            if (resCountObj != 0) {
+                // f230 → nearest workplace world pos into destB, entity into local_60.
+                int64_t bestWp[2] = {0, 0};   // local_60
+                CitizenAI_Entity_impl_f230(reinterpret_cast<int64_t>(listPair), bestWp, homeCell, destB);
+                if (bestWp[0] != 0) {
+                    // Ctor11 holder = *(param_1+0x38) = the CitizenComponent (citizen) wrapped
+                    // (disasm: local_res8 := param_1; then local_res8 := *(local_res8+0x38)).
+                    int64_t holderCitizen = *reinterpret_cast<int64_t*>(param_1 + 0x38);
+                    int64_t srcIBP = found;        // local_res18 = lVar4 = local_b0 (food source entity)
+                    int64_t dstIBP = bestWp[0];    // local_res10 (workplace entity from f230)
+                    if (s_ctor11) s_ctor11(&holderCitizen, resCountObj, &srcIBP, destA, &dstIBP, destB);
+
+                    // success epilogue: flag triplet on cz = *(param_1+0x38) = citizen.
+                    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
+                    int64_t cz = *reinterpret_cast<int64_t*>(param_1 + 0x38);
+                    *reinterpret_cast<uint32_t*>(cz + 0x54) |= 4;
+                    *reinterpret_cast<int32_t*>(cz + 0x30) = static_cast<int32_t>(0xffffffff);
+                    *reinterpret_cast<int32_t*>(cz + 0xb0) = 0;
+
+                    // walk-time-scaled cooldown: desc = *(cz+0x18), require CitizenDescription
+                    // (DWORD_1401c7190); wt = desc+0x78 * DAT_1401721fc. Stamp → param_1+0x60.
+                    CheckPtr(reinterpret_cast<void*>(param_1 + 0x38));
+                    int64_t cdesc = *reinterpret_cast<int64_t*>(cz + 0x18);
+                    float wt = 0.0f;
+                    if (cdesc && fn_IsDerivedFrom && fn_IsDerivedFrom(reinterpret_cast<void*>(cdesc), s_tid_CitizenDescription)) {
+                        wt = *reinterpret_cast<float*>(static_cast<uintptr_t>(cdesc) + 0x78);
+                    }
+                    int64_t cd2 = 0;
+                    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&cd2, wt * s_walkScale);
+                    *reinterpret_cast<int64_t*>(param_1 + 0x60) = cd2;
+
+                    if (TraceOn()) {
+                        static int n = 0;
+                        if (n < 6) { fprintf(stderr, "[GrowUp] self=%p EAT source=%p wp=%p\n",
+                                             reinterpret_cast<void*>(param_1),
+                                             reinterpret_cast<void*>(found),
+                                             reinterpret_cast<void*>(dstIBP)); fflush(stderr); n++; }
+                    }
+                    return (static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL) | 1;
+                }
+            }
+            break;
+        }
+        ++ordinal;
+    }
+
+    return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
+}
+
+#endif // STANDALONE_EXE

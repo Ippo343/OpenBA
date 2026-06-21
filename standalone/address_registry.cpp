@@ -406,6 +406,10 @@ extern void RegisterCitizenAIExecutor();     // Phase 3 Keystone D Brick 4b: act
 extern void RegisterCitizenAIHandlers2();    // Phase 3 Keystone D Brick 3b: handler wave 2 (Education/SeekHappiness/FindWork)
 extern void RegisterCitizenAIFindHelpers();  // Phase 3 Keystone D Brick 3b: deep find-helpers (2ac30/db20/70b0/ec70/e370)
 extern void RegisterCitizenAIHandlers3();    // Phase 3 Keystone D Brick 3b: handler wave 3 (Work/Adult/Elder)
+extern void RegisterCitizenAIGather();       // Phase 3 Keystone D Brick 3b-W4: Gather/Gather2 (+12ab00)
+extern void RegisterCitizenAIGrowUp();       // Phase 3 Keystone D Brick 3b-W4: GrowUp + LongTermPlan (+f230)
+extern void RegisterCitizenAILeisure();      // Phase 3 Keystone D Brick 3b-W4: Leisure (+99d0/fd50/a720)
+extern void RegisterCitizenAIHousingIdle();  // Phase 3 Keystone D Brick 3b-W4: FindHousing/Idle + AVL subtree
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
@@ -494,6 +498,22 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAIHandlers2();    // Phase 3 Keystone D Brick 3b — handler wave 2 (Education/SeekHappiness/FindWork)
     RegisterCitizenAIFindHelpers();  // Phase 3 Keystone D Brick 3b — deep find-helpers (2ac30/db20/70b0/ec70/e370)
     RegisterCitizenAIHandlers3();     // Phase 3 Keystone D Brick 3b — handler wave 3 (Work/Adult/Elder)
+    // Brick 3b-W4 (remaining 7 handlers) is GATED default-OFF: these handlers (Leisure/Gather/
+    // Gather2 are in the fresh-citizen candidate set) drive the dd30/d5d0/f810 A* pathfinder for
+    // the FIRST time at runtime, surfacing a PRE-EXISTING latent null-deref in the A* open-list
+    // AVL (Pf_AvlRotateR_14da0 via Pf_FindBestAdjacentCell_d5d0 / Pf_IsDstReachable_f810 — earlier
+    // pathfinding wave, "Ghidra-verified, not runtime-exercised"). The W4 handler ports themselves
+    // are faithful + lead-verified; they're registered only when BANISHED_LIVE_CITIZENAI_W4 is set,
+    // so the default build stays green while the A* AVL crash is fixed in its own focused pass.
+    {
+        const char* w4 = getenv("BANISHED_LIVE_CITIZENAI_W4");
+        if (w4 && w4[0] && w4[0] != '0') {
+            RegisterCitizenAIGather();        // Gather/Gather2 (+12ab00)
+            RegisterCitizenAIGrowUp();        // GrowUp + LongTermPlan (+f230)
+            RegisterCitizenAILeisure();       // Leisure (+99d0/fd50/a720)
+            RegisterCitizenAIHousingIdle();   // FindHousing/Idle + AVL subtree
+        }
+    }
     RegisterWorkActBatch();          // Phase 2 Keystone B3 — 5 Work action-queue builders
     RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail — TradeWork AVL serialize (c8a0/c710/c830)
     RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail — FireWork spiral search (881d0/88730)
