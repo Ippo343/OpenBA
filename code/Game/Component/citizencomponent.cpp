@@ -574,6 +574,15 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         if (storageIBP) localRes10 = *reinterpret_cast<int64_t*>(storageIBP);
     }
 
+    // [PORT FIX] The original reassigns pCVar1 = param_1 + 0x278 (CharacterComponent)
+    // here — the prior pCVar1 (+0x280, StatusIcon/health) was only for the HealthSetFlag
+    // calls above. The workplace/housing-assignment gates below test the citizen's
+    // CharacterComponent ACTION-STACK top (+0x60): `+0x60 + 1 < 1` ⇔ stack empty (idle)
+    // ⇔ eligible to be (re)assigned. The reimpl had kept pCVar1 = +0x280, so every gate
+    // read the inert StatusIcon's +0x60 (== 0 in standalone) and ALWAYS skipped assignment
+    // → citizens never got housed/employed. Restore the original component.
+    pCVar1 = p + 0x278;  // CharacterComponent IBP (action-stack owner)
+
     // --- Validate workplace ---
     if (s_fn_CheckPtr_slot) s_fn_CheckPtr_slot(pCVar1);
     int64_t healthCompVal = *reinterpret_cast<int64_t*>(pCVar1);
@@ -622,6 +631,9 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     }
 
     // --- Adult section: housing, workplace, partner ---
+    // NOTE: skipped for children — start-town citizens currently spawn with age=0
+    // (< adultAge), so this whole assignment section no-ops until they age up or are
+    // spawned as adults. See project_economy_loop memory.
     if (isChildOrStudent ||
         (s_fn_CheckPtr_slot && (s_fn_CheckPtr_slot(pCVar1),
          *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(pCVar1) + 0x60) + 1 >= 1)))
@@ -643,6 +655,14 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
                 s_fn_FindHousingAssigned(reinterpret_cast<int64_t>(self), &housingResult);
         }
         int64_t localRes8 = housingResult;
+        if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
+            static int s_hn = 0;
+            if (s_hn < 8) { ++s_hn;
+                fprintf(stderr, "[HousingAssign] comp=%p findResult=%p (0=no house found)\n",
+                        (void*)self, (void*)housingResult);
+                fflush(stderr);
+            }
+        }
         if (s_fn_AssignHousing) s_fn_AssignHousing(self, &localRes8);
     } else {
         // Check if should switch workplace (already reimplemented)
