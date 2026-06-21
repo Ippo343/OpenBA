@@ -990,6 +990,17 @@ static void RegisterDispatchSlots() {
     RegisterExeAddr(0x140131c90, reinterpret_cast<uintptr_t>(&CharacterComponent_Sinf_131c90));
     RegisterExeAddr(0x140131090, reinterpret_cast<uintptr_t>(&CharacterComponent_Cosf_131090));
 
+    // Graphics::AnimationManager::Update(Time const&, bool rootOnly) — the per-frame
+    // animation tick. GameUpdateLoop::Update (exe FUN_140096380) calls this through
+    // slot 0x140152050 every sim-iteration with (mgr@GameWorld+0x68, time, rootOnly).
+    // UNREGISTERED until now ([GUARD-M5]) → the tick was silently skipped → skinned
+    // citizen bone palettes stayed frozen at bind-pose (RenderDoc-verified static).
+    // Runtime ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z @ 0x1800fc240.
+    // It iterates the manager's animation-group array (this+0x00, count this+0x08) and
+    // advances each AnimationState; no-ops when no MeshInstance has registered a group.
+    RegisterDispatchSlot(0x140152050,
+        (uintptr_t)ResolveExport("?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z"));
+
     // Application::Application::_singleton — Runtime data variable holding the
     // Application*. The exe normally has a .rdata exref at 0x140152368 that
     // points to this Runtime variable. engine_funcs.cpp reads:

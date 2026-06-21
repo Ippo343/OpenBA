@@ -47,8 +47,25 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
+
+// ---------------------------------------------------------------------------
+// Move-tick movement diagnostic (BANISHED_MOVETICK_TRACE). Default-off; proves
+// the move-tick TAIL runs (char-index>=0) and that the per-frame transform write
+// actually changes the citizen's world position at ModelComponent+0x158.
+// Tracks the first few citizens whose tail executes and logs position deltas.
+// ---------------------------------------------------------------------------
+static int  s_mtTrace = -1;            // -1 = unread, 0 = off, 1 = on
+static inline bool MoveTickTraceOn() {
+    if (s_mtTrace < 0) {
+        const char* e = std::getenv("BANISHED_MOVETICK_TRACE");
+        s_mtTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_mtTrace == 1;
+}
 
 // ---------------------------------------------------------------------------
 // Action vtable slot signatures (return INT — bug #7).
@@ -334,6 +351,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     float fy = *reinterpret_cast<float*>(model + 0x15c);
     float fz = *reinterpret_cast<float*>(model + 0x160);
     float pos[3] = { fx, fy, fz };
+    const float mtEntryX = fx, mtEntryY = fy, mtEntryZ = fz;  // for movement trace
 
     CheckPtr(self + 0x68);
     float fVar14 = *reinterpret_cast<float*>(self + 0x3c);
@@ -453,6 +471,33 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     if (s_fn_132010) { /* unused result guard symmetry */ }
     if (s_slot_geomXf)
         s_slot_geomXf(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(model + 0x148));
+
+    // ---- movement trace (proves the transform write moves the mesh) --------
+    if (MoveTickTraceOn()) {
+        static void* s_tracked[4] = { nullptr, nullptr, nullptr, nullptr };
+        static int   s_nTracked = 0;
+        static long  s_calls = 0;
+        int slot = -1;
+        for (int i = 0; i < s_nTracked; ++i)
+            if (s_tracked[i] == self) { slot = i; break; }
+        if (slot < 0 && s_nTracked < 4) { slot = s_nTracked; s_tracked[s_nTracked++] = self; }
+        if (slot >= 0) {
+            float dx = pos[0] - mtEntryX, dy = pos[1] - mtEntryY, dz = pos[2] - mtEntryZ;
+            bool moved = (dx*dx + dy*dy + dz*dz) > 1e-10f;
+            // Log every move, plus a heartbeat every 240 calls even when static.
+            if (moved || (s_calls % 240) == 0) {
+                fprintf(stderr,
+                    "[MoveTick] cit#%d self=%p chIdx=%d pos=(%.4f,%.4f,%.4f) "
+                    "delta=(%.5f,%.5f,%.5f) speed=%.4f vel38=%.4f stackTop=%d\n",
+                    slot, (void*)self, *reinterpret_cast<int*>(self + 0x40),
+                    pos[0], pos[1], pos[2], dx, dy, dz, speed,
+                    *reinterpret_cast<float*>(self + 0x38),
+                    *reinterpret_cast<int*>(self + 0x60));
+                fflush(stderr);
+            }
+        }
+        ++s_calls;
+    }
 
     if ((*reinterpret_cast<int64_t*>(self + 0x70) != 0) && (rootOnly == 0)) {
         CheckPtr(self + 0x68);

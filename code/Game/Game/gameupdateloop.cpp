@@ -1022,6 +1022,21 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
 
+    // TEMP diagnostic: confirm the in-game render present runs per-frame + how many
+    // animation groups the AnimationManager holds (this+0x08) — i.e. whether any
+    // MeshInstance registered an animation (0 ⇒ AnimationManager::Update no-ops).
+    if (std::getenv("BANISHED_DRAW_TRACE")) {
+        static long s_drawN = 0;
+        if ((s_drawN % 120) == 0) {
+            int animGroups = self->m_animationManager
+                ? *reinterpret_cast<int*>((uint8_t*)self->m_animationManager + 0x08) : -1;
+            fprintf(stderr, "[DrawTick] frame=%ld alpha=%.3f paused=%d animGroups=%d\n",
+                    s_drawN, alpha, (int)fn_UI_PausesGame(self->m_userInterface), animGroups);
+            fflush(stderr);
+        }
+        ++s_drawN;
+    }
+
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = fn_UI_PausesGame(self->m_userInterface);
     bool entityUIPaused = (*(char*)((uintptr_t)self->m_entityUI + 0x30) != 0);

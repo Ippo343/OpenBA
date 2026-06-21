@@ -25,6 +25,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 
 // ============================================================
@@ -105,8 +106,17 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     Ensure_50f0();
 
     void* obj = *reinterpret_cast<void**>(self + 0x18);
-    uint32_t typeId = g_TypeId_FenceDescription ? *g_TypeId_FenceDescription : 0;
-    bool derived = (fn_IsDerivedFrom && typeId) ? fn_IsDerivedFrom(obj, typeId) : false;
+    // The type-gate validates the ModelComponent's description (self+0x18) is a
+    // ModelDescription (DAT_1401c7a88 — mislabeled "FenceDescription" in the global;
+    // its DATA writer is ModelDescription_Register @ 0x14014f435). That shared type-id
+    // global is the unfilled 0xFFFFFFFF sentinel in standalone, so resolve it
+    // self-contained via Object::GetTypeIdByName (the same real-CRC source the live
+    // factories use). Without this the gate fails → animHolder null → PlayAnimation
+    // skipped → the citizen never registers an animation group → AnimationManager::Update
+    // no-ops → the skinned bone palette stays frozen (RenderDoc-verified).
+    static uint32_t s_tidModelDesc = 0;
+    if (s_tidModelDesc == 0) s_tidModelDesc = ::Object::GetTypeIdByName("ModelDescription");
+    bool derived = (fn_IsDerivedFrom && s_tidModelDesc) ? fn_IsDerivedFrom(obj, s_tidModelDesc) : false;
     void* animHolder = derived ? obj : nullptr;
 
     uint8_t timeA[8] = {0};  // p4
