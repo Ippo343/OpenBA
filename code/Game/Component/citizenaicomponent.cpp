@@ -344,11 +344,31 @@ typedef void (*fn_BuildCandidateList_t)(void* self, int64_t* outList, char param
 static fn_ValidateEnterState_t s_fn_ValidateEnterState = nullptr;
 static fn_BuildCandidateList_t s_fn_BuildCandidateList = nullptr;
 
+#ifdef STANDALONE_EXE
+namespace Object { uint32_t GetTypeIdByName(const char*); }
+#endif
+
 static bool s_calleeResolved = false;
 static void EnsureCallees() {
     if (s_calleeResolved) return;
     s_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cf0));
     s_TypeId_RawMaterial         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
+#ifdef STANDALONE_EXE
+    // The .rdata type-id globals (c7cf0 ResidenceComponent / c7cb8 RawMaterialDescription)
+    // are 0xFFFFFFFF (unfilled) in standalone, and filling the SHARED globals would
+    // un-dormant ~30 unrelated readers. Repoint to private storage filled from the
+    // real-CRC type tree, exactly like CitizenComp_FindSiblingByName / the citizen bricks.
+    static uint32_t s_tidResidence_local = 0;
+    static uint32_t s_tidRawMaterial_local = 0;
+    if (!s_TypeId_ResidenceComponent || *s_TypeId_ResidenceComponent == 0xFFFFFFFF) {
+        if (s_tidResidence_local == 0) s_tidResidence_local = ::Object::GetTypeIdByName("ResidenceComponent");
+        s_TypeId_ResidenceComponent = &s_tidResidence_local;
+    }
+    if (!s_TypeId_RawMaterial || *s_TypeId_RawMaterial == 0xFFFFFFFF) {
+        if (s_tidRawMaterial_local == 0) s_tidRawMaterial_local = ::Object::GetTypeIdByName("RawMaterialDescription");
+        s_TypeId_RawMaterial = &s_tidRawMaterial_local;
+    }
+#endif
     s_fn_SetupYoung = reinterpret_cast<fn_SetupYoung_t>(ResolveAddr(Module::Exe, 0x140115110));
     s_fn_SetupAdult = reinterpret_cast<fn_SetupAdult_t>(ResolveAddr(Module::Exe, 0x1401151a0));
     s_fn_SetupElder = reinterpret_cast<fn_SetupElder_t>(ResolveAddr(Module::Exe, 0x140115230));
@@ -431,6 +451,15 @@ void* CitizenComp_Entity_FindComponent_Storage(int64_t entity, void* outIBP) {
                 found = resolved;
             }
             break;
+        }
+    }
+    if (std::getenv("BANISHED_CITIZENAI_TRACE")) {
+        static int s_fs = 0;
+        if (s_fs < 6) { ++s_fs;
+            fprintf(stderr, "[FindStorage] entity=%p compCount=%d want(Residence)=%u found=%p\n",
+                    (void*)entity, count,
+                    s_TypeId_ResidenceComponent ? *s_TypeId_ResidenceComponent : 0, found);
+            fflush(stderr);
         }
     }
     fn_InternalBasePtr_Ctor(outIBP, found);
