@@ -270,28 +270,9 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
     return nullptr;
 }
 
-// Foundation F — give an entity's ModelComponent a world transform so its OnAdded
-// (ModelComponent_Draw, fired by RegisterEntity -> OnAddedPass) places the mesh at
-// `worldPos` with `yawDeg` yaw. MUST be called after the entity is instantiated and
-// BEFORE it is registered (OnAdded runs during registration). `entity` is the raw
-// ComponentEntity pointer. Without this the mesh renders at the world origin.
-static void SetEntityModelTransform(void* entity, uint32_t tidModel,
-                                    const float worldPos[3], float yawDeg) {
-    if (!entity || tidModel == 0 || !fn_Transform_FromYawPitchOffset ||
-        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
-        return;
-    void* mc = FindComponentOnEntity(entity, tidModel);
-    if (!mc) return;
-    uintptr_t mcIBP = 0;
-    fn_InternalBasePtr_Ctor(&mcIBP, mc);
-    fn_InternalBasePtr_CheckPtr(&mcIBP);
-    uint8_t* m = (uint8_t*)mcIBP;
-    if (!m) return;
-    float yaw = yawDeg, pitch = 0.0f;
-    float off[3] = { worldPos[0], worldPos[1], worldPos[2] };
-    fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, off);
-    *(float*)(m + 0x168) = yaw;
-}
+// NOTE: the resource path now uses StartTown_PlaceResourceCell (the Entity_impl_6540
+// port: MapComponent grid cell + jittered ModelComponent transform). The structures
+// path sets its ModelComponent transform inline (see StartTown_SpawnStructures).
 
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
@@ -619,6 +600,131 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
     }
 }
 
+// ---- Natural-resource grid placement + growth setup ------------------------
+// Faithful, standalone-safe port of the FUN_1400a12b0 per-cell setup tail:
+//   Entity_impl_6540(NRComp, cellIdx)  — grid placement + jittered model transform
+//   FUN_140120db0(GrowthComp, RandFloat) — growth/age + mesh scale init
+// (ComponentEntity_impl_5cc0/SpawnComponent — the initial sub-resource spawner —
+//  is DEFERRED: it recursively spawns more entities via ComponentEntity_impl_5780
+//  and reads GrowthComponent+0x28 which is only linked when GrowthComponent is LIVE.
+//  Not needed for grid placement / economy; left guarded off.)
+//
+// Standalone deviations from the disassembly (all documented project policies):
+//   * No IsDerivedFrom gate on the linked descriptions — IsDerivedFrom is
+//     unreliable in the partial standalone factory tree (returns false → null d →
+//     crash). We trust comp+0x18 (the copy-ctor stored the resource's own desc)
+//     and null-guard every deref (IsDerivedFromOrTrust policy).
+//   * Position jitter / random yaw use Random::RandFloat (wired) rather than
+//     RandFloatTol (its dispatch slot 0x140151400 is unfilled in standalone →
+//     would no-op to 0 anyway). RandFloat∈[0,1] → remap to [-1,1] for jitter.
+//   * The 120db0 growth/scale block only runs when the GrowthComponent's sibling
+//     links (+0x28 MeshInstance host, +0x30 ModelComponent, +0x38 GrowthDescription)
+//     are populated — i.e. when GrowthComponent is LIVE (BANISHED_LIVE_GROWTH) and
+//     its Startup has run. Default-inert build → those are zero → growth is a
+//     no-op (never a null deref), exactly as the rest of the inert spawn path.
+static float* s_pYaw180 = nullptr;     // DAT_140172220 = 180.0
+static bool   s_pYaw180Init = false;
+static float ResYawScale() {
+    if (!s_pYaw180Init) {
+        s_pYaw180Init = true;
+        s_pYaw180 = (float*)ResolveAddr(Module::Exe, 0x140172220);
+    }
+    return s_pYaw180 ? *s_pYaw180 : 180.0f;
+}
+
+// Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY, w=1,h=1) and
+// the jittered ModelComponent world transform. `cellIdx` = dim*y + x.
+static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, void* rng,
+                                        uint32_t tidNR, uint32_t tidMap, uint32_t tidModel) {
+    if (!entity || !game) return;
+    const int dim = *(int32_t*)game;
+    if (dim <= 0) return;
+    const int tileX = cellIdx % dim;
+    const int tileY = cellIdx / dim;
+
+    // --- MapComponent grid placement (priority #1: lets lookups find the resource,
+    //     stops overlap once OnCreate writes occupancy). Plain data writes — always
+    //     safe on the inert MapComponent (size 0x38; fields +0x28..+0x2f). ---
+    void* mapComp = FindComponentOnEntity(entity, tidMap);
+    if (mapComp && fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr) {
+        uintptr_t mapIBP = 0;
+        fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+        uint8_t* mc = (uint8_t*)mapIBP;
+        if (mc) {
+            *(int16_t*)(mc + 0x28) = (int16_t)tileX;
+            *(int16_t*)(mc + 0x2a) = (int16_t)tileY;
+            *(uint64_t*)(mc + 0x2c) = 0x10001;   // w=1, h=1 (and +0x30 extra=0)
+        }
+    }
+
+    // --- jittered ModelComponent transform (the rest of 6540). Mirrors the
+    //     committed SetEntityModelTransform but with the per-resource position jitter
+    //     (desc+0x60) + random yaw the original applies. ---
+    if (!fn_MapGetTerrainPos || !fn_Transform_FromYawPitchOffset) return;
+
+    // jitter radius from the NaturalResourceDescription (NRComp+0x18, +0x60).
+    float jitter = 0.0f;
+    void* nrComp = FindComponentOnEntity(entity, tidNR);
+    if (nrComp) {
+        void* desc = *(void**)((uint8_t*)nrComp + 0x18);
+        if (desc) jitter = *(float*)((uint8_t*)desc + 0x60);
+    }
+
+    // terrain position for the cell centre (matches StartTown_TileToWorld).
+    const float center = (float)(dim >> 1) - kCenterBias;
+    float in[3]  = { (float)(cellIdx % dim) - center, (float)(cellIdx / dim) - center, 0.0f };
+    float pos[3] = {0,0,0};
+    fn_MapGetTerrainPos(game, pos, in, 0, nullptr);
+
+    // RandFloat∈[0,1] → [-1,1] tolerance (= RandFloatTol) for x/y jitter AND yaw.
+    auto rtol = [&]() -> float { return rng && fn_Random_RandFloat ? fn_Random_RandFloat(rng) * 2.0f - 1.0f : 0.0f; };
+    float worldX = rtol() * jitter + pos[0];
+    float worldY = rtol() * jitter + pos[1];
+    float worldZ = pos[2];
+    float yaw = rtol() * ResYawScale();   // RandFloatTol * 180 -> full [-180,180] rotation
+
+    void* modelComp = FindComponentOnEntity(entity, tidModel);
+    if (!modelComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
+    uintptr_t mIBP = 0;
+    fn_InternalBasePtr_Ctor(&mIBP, modelComp);
+    fn_InternalBasePtr_CheckPtr(&mIBP);
+    uint8_t* m = (uint8_t*)mIBP;
+    if (!m) return;
+    float pitch = 0.0f;
+    float off[3] = { worldX, worldY, worldZ };
+    fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, off);
+    *(float*)(m + 0x168) = yaw;
+    if (fn_Geometry_SetTransform)
+        fn_Geometry_SetTransform((void*)(m + 0x28), (void*)(m + 0x148));
+}
+
+// FUN_140120db0 — growth/age + mesh-scale init on the GrowthComponent. Delegates to
+// the verified ActCNR_SetGrowthProgress_120db0 reimpl (code/Game/Action/
+// action_base_cnr.cpp), which is a 1:1 port using the real Math::Vector4 / Time
+// ctors. We pre-check that the component's sibling links are populated (+0x28
+// MeshInstance host, +0x30 ModelComponent, +0x38 GrowthDescription) so it is a
+// faithful no-op on a default-inert GrowthComponent (those are zero until
+// GrowthComponent::Startup runs, i.e. the LIVE build) rather than a null deref.
+// The original passes Random::RandFloat(rng) as the growth progress (staged trees).
+void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // action_base_cnr.cpp
+
+static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void* rng) {
+    if (!entity) return;
+    void* gComp = FindComponentOnEntity(entity, tidGrowth);
+    if (!gComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
+    uintptr_t gIBP = 0;
+    fn_InternalBasePtr_Ctor(&gIBP, gComp);
+    fn_InternalBasePtr_CheckPtr(&gIBP);
+    uint8_t* s = (uint8_t*)gIBP;
+    if (!s) return;
+    // Sibling links populated only when GrowthComponent::Startup ran (LIVE build).
+    if (!*(void**)(s + 0x28) || !*(void**)(s + 0x30) || !*(void**)(s + 0x38))
+        return;   // inert → faithful no-op (matches the rest of the inert spawn path)
+    const float progress = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.0f;
+    ActCNR_SetGrowthProgress_120db0((int64_t)gIBP, progress);
+}
+
 static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                                     int spawnX, int spawnY, int sizeSq) {
     const int count = *(int32_t*)(startConfig + RES_CNT);
@@ -643,6 +749,10 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     const float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     const uint32_t tidNatRes = TypeId("NaturalResourceDescription");
     const uint32_t tidModel  = TypeId("ModelComponent");
+    // Type-ids for the per-cell setup (Entity_impl_6540 + FUN_140120db0).
+    const uint32_t tidNRComp = TypeId("NaturalResourceComponent");  // DAT_1401c7b30
+    const uint32_t tidMapComp = TypeId("MapComponent");             // DWORD_1401c79e0
+    const uint32_t tidGrowth = TypeId("GrowthComponent");           // DAT_1401c77b0
 
     // DIAG harness: BANISHED_RES_ONLY=<poolIndex> spawns only that pool (isolate trees).
     static const char* s_onlyEnv = std::getenv("BANISHED_RES_ONLY");
@@ -740,11 +850,14 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
                 uintptr_t entIBP = 0;
                 fn_InternalBasePtr_Ctor(&entIBP, ent);
-                // Single-tile resource: place the mesh at its terrain position with a
-                // random yaw (natural foliage/rock orientation). pos = the terrain
-                // sample already computed above for the height/slope test.
-                float yawDeg = fn_Random_RandFloat ? fn_Random_RandFloat(rng) * 360.0f : 0.0f;
-                SetEntityModelTransform(ent, tidModel, pos, yawDeg);
+                // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY,
+                // w=1,h=1) AND the jittered ModelComponent world transform. This is the
+                // canonical FUN_1400a12b0 per-cell placement: the grid fields let
+                // economy/lookup code find the resource (priority #1), and the transform
+                // (jitter from desc+0x60, random yaw*180) replaces the prior ad-hoc
+                // SetEntityModelTransform. All writes are null-guarded → safe on inert
+                // components. `idx` = the flat cell index passed to 6540.
+                StartTown_PlaceResourceCell(ent, idx, game, rng, tidNRComp, tidMapComp, tidModel);
 
                 // Growth-variant override (FUN_1400a12b0 tail). Pick the variant group
                 // via per-variant Perlin (first to exceed threshold, else 0), with a
@@ -766,6 +879,11 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                     int modelVariant = (subCount > 0) ? (int)fn_Random_Rand(rng, (uint32_t)subCount) : 0;
                     ApplyResourceModelVariant(ent, tidModel, (int16_t)variantIdx, (int16_t)modelVariant);
                 }
+
+                // FUN_140120db0 — growth/age + mesh-scale init on the GrowthComponent.
+                // No-op on the default-inert GrowthComponent (siblings unlinked); when
+                // BANISHED_LIVE_GROWTH is on it stages the tree at a random growth value.
+                StartTown_GrowthInitResource(ent, tidGrowth, rng);
 
                 fn_EntityList_RegisterEntity(entityList, &entIBP, category);
                 if (ent) { ++spawned; ++poolSpawned; }
