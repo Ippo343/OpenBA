@@ -23,6 +23,7 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 
 static constexpr int   CELL_STRIDE = 0x30;
@@ -554,11 +555,69 @@ static constexpr int RES_ARR      = 0x70;     // startConfig+0x70 resource pool 
 static constexpr int RES_CNT      = 0x78;     // startConfig+0x78 resource pool count
 static constexpr int RES_STRIDE   = 0x18;     // pool entry stride (ExternalRef)
 static constexpr int CELL_OCCUPANT = 0x08;    // cell +0x08 = occupant ptr (0 = free)
-// Safety cap: map-wide scatter over dim^2 cells x N pools can produce tens of
-// thousands of entities; until the inert-instantiation path is proven fast we
-// bound each pool and log if the cap is hit (no silent truncation). Per-pool
-// (not total) so every resource type gets exercised.
-static constexpr int RES_POOL_CAP = 400;
+// Safety cap (per pool). The original has NO cap — it scatters the full perlin
+// distribution across the whole map (~9k trees on a medium map). A LOW cap is
+// actively harmful: the scatter scans y=0..dim, so a small cap fills up in the
+// map's top strip and never reaches the camera (this is why trees were invisible).
+// Set well above the natural per-pool count so it never clips in practice but
+// still bounds a runaway. Override at runtime with BANISHED_RES_CAP=<n>.
+static constexpr int RES_POOL_CAP = 16384;
+
+// ---- Natural-resource model-variant selection (FUN_1401253d0 + the
+// FUN_1400a12b0 NaturalResourceDescription+0x48 tail) -----------------------
+// Trees/crops carry growth-stage model variants; ModelComponent::Startup only
+// sets the default variant (0,0) which for a tree is the invisible "seed" mesh,
+// so worldgen runs this override to pick a real growth-stage mesh. Rocks/ore
+// have the +0x48 flag clear and render correctly with the default variant.
+
+// Graphics::MeshInstance::SetMesh — dispatch slot 0x140151498.
+static void (*s_fn_ResSetMesh)(void*, void*) = nullptr;
+static bool s_resSetMeshInit = false;
+static void EnsureResSetMesh() {
+    if (s_resSetMeshInit) return;
+    s_resSetMeshInit = true;
+    uintptr_t sl = ResolveAddr(Module::Exe, 0x140151498);
+    if (sl) s_fn_ResSetMesh = *reinterpret_cast<void (**)(void*, void*)>(sl);
+}
+
+// Mesh lookup mirroring ModelComponent::GetMeshFromDescription and the inline
+// formula in FUN_1401253d0: groupArray[variantIdx].subArray[modelVariant].
+static void* ResMeshFromModelDesc(void* modelDesc, int variantIdx, int modelVariant) {
+    if (!modelDesc || variantIdx < 0 || modelVariant < 0) return nullptr;
+    void* groupArray = *(void**)((uint8_t*)modelDesc + 0x20);
+    if (!groupArray) return nullptr;
+    void* sub = *(void**)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 8);
+    if (!sub) return nullptr;
+    return *(void**)((uint8_t*)sub + (int64_t)modelVariant * 8);
+}
+
+// Standalone-safe port of FUN_1401253d0: set the ModelComponent's growth-stage
+// variant indices (+0x164/+0x166) and re-point the MeshInstance mesh so the
+// register-time OnAdded/Draw adds the correct mesh to Graphics::Scene. (The
+// original gates the mesh lookup behind IsDerivedFrom(desc, ModelDescription),
+// which returns false in standalone's partial factory tree — so we trust the
+// linked +0x18 description, the IsDerivedFromOrTrust policy used throughout the
+// spawn path. Called BEFORE registration, so we just set fields + mesh; OnAdded
+// then does the single scene-add, rather than the original's remove/re-add.)
+static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
+                                      int16_t variantIdx, int16_t modelVariant) {
+    EnsureResSetMesh();
+    if (!s_fn_ResSetMesh || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
+    void* mc = FindComponentOnEntity(entity, tidModel);
+    if (!mc) return;
+    uintptr_t mcIBP = 0;
+    fn_InternalBasePtr_Ctor(&mcIBP, mc);
+    fn_InternalBasePtr_CheckPtr(&mcIBP);
+    uint8_t* m = (uint8_t*)mcIBP;
+    if (!m) return;
+    void* modelDesc = *(void**)(m + 0x18);
+    *(int16_t*)(m + 0x164) = variantIdx;
+    *(int16_t*)(m + 0x166) = modelVariant;
+    if (modelVariant >= 0) {
+        void* mesh = ResMeshFromModelDesc(modelDesc, variantIdx, modelVariant);
+        if (mesh) s_fn_ResSetMesh((void*)(m + 0x28), mesh);
+    }
+}
 
 static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                                     int spawnX, int spawnY, int sizeSq) {
@@ -585,8 +644,15 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     const uint32_t tidNatRes = TypeId("NaturalResourceDescription");
     const uint32_t tidModel  = TypeId("ModelComponent");
 
+    // DIAG harness: BANISHED_RES_ONLY=<poolIndex> spawns only that pool (isolate trees).
+    static const char* s_onlyEnv = std::getenv("BANISHED_RES_ONLY");
+    const int onlyPool = s_onlyEnv ? atoi(s_onlyEnv) : -1;
+    static const char* s_capEnv = std::getenv("BANISHED_RES_CAP");
+    const int poolCap = s_capEnv ? atoi(s_capEnv) : RES_POOL_CAP;
+
     int spawned = 0;
     for (int e = 0; e < count; ++e) {
+        if (onlyPool >= 0 && e != onlyPool) continue;
         uint8_t* entry = pool + (size_t)e * RES_STRIDE;
         const char* ename = *(char**)entry ? *(char**)entry : "(null)";
         fprintf(stderr, "[startTown::res] begin [%d] name=\"%.48s\"\n", e, ename);
@@ -613,6 +679,36 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         uint8_t perlin[0x100] = {};
         fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
 
+        // Per-pool growth-variant setup (FUN_1400a12b0's NaturalResourceDescription
+        // +0x48 block). When set (trees/crops), build one Perlin field per growth
+        // variant group so each cell can pick a biome-clustered variant; rocks/ore
+        // have +0x48 clear and keep the default variant.
+        static const bool s_noVariant = std::getenv("BANISHED_NO_RES_VARIANT") != nullptr;
+        const bool hasVariants = !s_noVariant && desc[0x48] != 0;
+        void* modelDesc = hasVariants ? FindDescriptionOnTemplate(tmpl, TypeId("ModelDescription")) : nullptr;
+        int   variantCount = modelDesc ? *(int32_t*)((uint8_t*)modelDesc + 0x28) : 0;
+        const float vFreqX = *(float*)(desc + 0x4c);
+        const float vFreqY = *(float*)(desc + 0x50);
+        float vDiv         = *(float*)(desc + 0x54);
+        if (vDiv == 0.0f) vDiv = 1.0f;
+        const float vScale  = uvScale / vDiv;
+        const float vThresh = *(float*)(desc + 0x58);
+        int vOverrideDenom  = *(int32_t*)(desc + 0x5c);
+        if (vOverrideDenom <= 0) vOverrideDenom = 1;
+        static constexpr int MAX_VARIANTS = 8;
+        if (variantCount > MAX_VARIANTS) variantCount = MAX_VARIANTS;
+        uint8_t vPerlin[MAX_VARIANTS][0x100];
+        for (int vi = 0; vi < variantCount; ++vi) {
+            int vs1 = fn_Random_RandTol(rng, 0x7ffffff);
+            int vs2 = fn_Random_RandTol(rng, 0x7ffffff);
+            fn_PerlinNoise_Ctor(vPerlin[vi], vFreqX, vFreqY, vs2, vs1);
+        }
+        const bool doVariant = hasVariants && modelDesc && variantCount > 0 && fn_Random_Rand;
+        fprintf(stderr, "[startTown::res] [%d] variants:has=%d count=%d thr=%.3f denom=%d "
+                "(scatter div=%.2f thr=%.3f dens=%.3f)\n",
+                e, (int)hasVariants, variantCount, vThresh, vOverrideDenom, div, threshold, density);
+        fflush(stderr);
+
         int poolSpawned = 0;
         bool capped = false;
         for (int y = 0; y < dim && !capped; ++y) {
@@ -624,7 +720,12 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 const int idx = dim * y + x;
                 if (*(void**)(cells + (size_t)idx * CELL_STRIDE + CELL_OCCUPANT)) continue;  // occupied
                 const int dy = y - spawnY, dx = x - spawnX;
-                if (dy * dy + dx * dx < sizeSq) continue;                                     // town exclusion
+                // Verification harness (env BANISHED_RES_IN_TOWN): allow resources to
+                // scatter into the town site so trees land in front of the start camera
+                // (normally they're excluded from the town disk → only visible at the
+                // map periphery, out of the initial view). Default off = vanilla.
+                static const bool s_noExclude = std::getenv("BANISHED_RES_IN_TOWN") != nullptr;
+                if (!s_noExclude && dy * dy + dx * dx < sizeSq) continue;                      // town exclusion
 
                 // Terrain height + slope from the heightmap sampler.
                 const float center = (float)(dim >> 1) - kCenterBias;
@@ -644,9 +745,31 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                 // sample already computed above for the height/slope test.
                 float yawDeg = fn_Random_RandFloat ? fn_Random_RandFloat(rng) * 360.0f : 0.0f;
                 SetEntityModelTransform(ent, tidModel, pos, yawDeg);
+
+                // Growth-variant override (FUN_1400a12b0 tail). Pick the variant group
+                // via per-variant Perlin (first to exceed threshold, else 0), with a
+                // 1/denom random override, then a random model sub-variant in that
+                // group. Without this trees stay at the invisible default (0,0) seed.
+                if (doVariant && ent) {
+                    int variantIdx = 0;
+                    for (int vi = 0; vi < variantCount; ++vi) {
+                        float v = fn_PerlinNoise_Generate(vPerlin[vi], (float)x * vScale, (float)y * vScale);
+                        variantIdx = vi;
+                        if (vThresh <= v * 0.5f + 0.5f) break;
+                        variantIdx = 0;
+                    }
+                    if (fn_Random_Rand(rng, (uint32_t)vOverrideDenom) == 0)
+                        variantIdx = (int)fn_Random_Rand(rng, (uint32_t)variantCount);
+                    void* groupArray = *(void**)((uint8_t*)modelDesc + 0x20);
+                    int subCount = groupArray
+                        ? *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10) : 0;
+                    int modelVariant = (subCount > 0) ? (int)fn_Random_Rand(rng, (uint32_t)subCount) : 0;
+                    ApplyResourceModelVariant(ent, tidModel, (int16_t)variantIdx, (int16_t)modelVariant);
+                }
+
                 fn_EntityList_RegisterEntity(entityList, &entIBP, category);
                 if (ent) { ++spawned; ++poolSpawned; }
-                if (poolSpawned >= RES_POOL_CAP) { capped = true; break; }
+                if (poolSpawned >= poolCap) { capped = true; break; }
             }
         }
         fprintf(stderr, "[startTown::res] [%d] tmpl=%p desc=%p thr=%.3f dens=%.3f h[%.2f,%.2f) slope>=%.2f -> %d%s\n",
