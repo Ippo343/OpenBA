@@ -632,6 +632,135 @@ static float ResYawScale() {
     return s_pYaw180 ? *s_pYaw180 : 180.0f;
 }
 
+// ---- CreateNaturalResource grid marking (impl_dee0 chain) ------------------
+// Faithful, standalone-safe port of CreateNaturalResource_impl_dee0 (0x14009dee0),
+// the cell-grid TERRAIN-TYPE writer that the real game runs from
+// MapComponent::OnCreate -> CreateNaturalResource_impl_4750 -> impl_dee0. In
+// standalone MapComponent is COMPONENT_INERT_FACTORY (OnCreate is a stub) and
+// impl_4750 is unregistered (ResolveAddr -> 0), so that chain never fires — we
+// invoke this directly from the resource spawn path instead.
+//
+// What it does, per the disassembly:
+//   for (iy=0..h) for (ix=0..w):
+//     cellIdx = (iy+tileY)*dim + ix+tileX
+//     occupied = shape==0 || *(int*)(shape-8)==0 ? true : (rot-aware shape char is '#'|'_')
+//     cell = Game_cells + cellIdx*0x30
+//     if (occupied):
+//       t = helper_e2c0(game, cellIdx)            // current natural terrain type
+//       if ((1<<(t&0x1f) & 0x1e0) && cell[+0x00]!=0 && cell[+0x00]!=*ownerIBP) t = 2
+//       FUN_14009f2f0(game, cellIdx, t)           // WRITE the type byte (+0x29) + dirty flag
+//     cell[+0x08] = null-IBP                       // CLEAR the cell entity-link
+//
+// helper_e2c0 (0x14009e2c0) == MapTileGrid_Classify (maptilegrid.cpp): classify a
+// cell into a terrain type from its terrain height + slope. Replicated inline here
+// (identical exe .rdata thresholds) so starttown stays self-contained.
+//
+// FUN_14009f2f0 (0x14009f2f0): writes cell+0x29 = the new type byte, ORs a
+// "type-class changed" bit into Game+0xa2 (dirty flag), and — when the type's
+// walkable-class flips — fires two notify side effects: FUN_1400a8c90 (region/
+// minimap dirty-rect, via Game+0x70) and FUN_1400a6fe0 (a worker-thread message
+// queue, via Game+0x68). Both touch live subsystems that are inert/unbuilt in
+// standalone (Game+0x68/0x70 are zero); we port the core type-byte write + the
+// +0xa2 flag and GUARD OFF the two notify calls (null-guarded — a no-op).
+//
+// dee0 sets the cell TERRAIN-TYPE/walkability (the real "a tree-type cell exists
+// here" marking that pathfinding + harvest-search read) and CLEARS cell+0x08; it
+// does NOT store the entity in cell+0x08 (that is the building path, FUN_14009dc20).
+// A natural resource is non-blocking — citizens walk to it to harvest.
+
+// e2c0 classifier thresholds (exe .rdata, identical to maptilegrid.cpp).
+static constexpr float kClassBuildableMax = 0.75f;   // DAT_140172124
+static constexpr float kClassSlopeMin     = 0.9f;     // _DAT_140172134
+static constexpr float kClassMountainMax  = 2.0f;     // DAT_140172174
+static constexpr float kClassShoreMax     = -0.25f;   // DAT_140172274
+static constexpr float kClassDeepWaterMax = -1.4f;    // DAT_140172284
+
+// helper_e2c0 — classify cell `idx` into a terrain type byte.
+static int StartTown_ClassifyCell(void* game, int dim, int idx) {
+    const float center = (float)(dim >> 1) - kCenterBias;
+    float in[3]  = { (float)(idx % dim) - center, (float)(idx / dim) - center, 0.0f };
+    float out[3] = { 0, 0, 0 };
+    float tri[4] = { 0, 0, 0, 0 };
+    fn_MapGetTerrainPos(game, out, in, 1, tri);   // flag=1 => height-only (matches e2c0)
+    const float h = out[2], slope = tri[2];
+    if (h < kClassDeepWaterMax) return 8;
+    if (h < kClassShoreMax)     return 7;
+    if (h >= kClassShoreMax && h <= kClassBuildableMax && slope >= kClassSlopeMin) return 2;
+    return (h < kClassMountainMax) ? 10 : 6;
+}
+
+// FUN_14009f2f0 — write cell+0x29 = `type` and set the Game+0xa2 dirty flag. The
+// type-class-flip notify calls (a8c90 region-dirty, a6fe0 worker-queue) require
+// Game+0x68/+0x70 live subsystems (zero in standalone) and are guarded off here.
+static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint8_t newType) {
+    uint8_t* cell = cells + (size_t)idx * CELL_STRIDE;
+    const uint8_t oldType = cell[0x29];
+    const uint32_t oldMask = 1u << (oldType & 0x1f);
+    const uint32_t newMask = 1u << (newType & 0x1f);
+    // dirty bit: set when the cell crosses the buildable<->water/mountain boundary
+    // (matches f2f0's "((old&0xe1f && new&0x1e0) || (old&0x1e0 && new&0xe1f))").
+    uint8_t dirty = 0;
+    if (((oldMask & 0xe1f) && (newMask & 0x1e0)) || ((oldMask & 0x1e0) && (newMask & 0xe1f)))
+        dirty = 1;
+    game[0xa2] |= dirty;
+    cell[0x29] = newType;
+    // (region/minimap + worker-thread notifies deliberately omitted — inert subsystems)
+}
+
+// CreateNaturalResource_impl_dee0 — mark the (w x h) footprint at (tileX,tileY) on
+// the Game cell grid for this natural resource. `ownerEntity` = the spawned
+// resource entity (compared against cell+0x00 for the type-2 override). `shape` =
+// the MapDescription+0x28 char-grid String buffer (null/empty for a 1x1 resource).
+static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, int tileX,
+                                           int tileY, int w, int h, const char* shape, int rot) {
+    if (!gameVoid || w <= 0 || h <= 0 || !fn_MapGetTerrainPos) return;
+    uint8_t* game = (uint8_t*)gameVoid;
+    const int dim = *(int32_t*)game;
+    uint8_t* cells = *(uint8_t**)(game + GAME_CELLS);
+    if (dim <= 0 || !cells) return;
+    // shape length header sits at shape-8 (length-prefixed buffer); 0 => no shape.
+    const int shapeLen = shape ? *(const int*)(shape - 8) : 0;
+
+    for (int iy = 0; iy < h; ++iy) {
+        for (int ix = 0; ix < w; ++ix) {
+            const int cx = ix + tileX, cy = iy + tileY;
+            if (cx < 0 || cy < 0 || cx >= dim || cy >= dim) continue;  // OOB guard (std-safe)
+            const int cellIdx = cy * dim + cx;
+
+            // Occupancy from the rot-aware shape grid (dee0). No shape => all cells.
+            bool occupied;
+            if (!shape || shapeLen == 0) {
+                occupied = true;
+            } else {
+                // rot-aware index into the shape grid (matches dee0's index math).
+                int gx, gy, gw;
+                if (rot == 0x5a)          { gw = h; gx = iy;            gy = (w - ix) - 1; }
+                else if (rot == 0xb4)     { gw = w; gx = (w - ix) - 1;  gy = (h - iy) - 1; }
+                else if (rot == 0x10e)    { gw = h; gx = (h - iy) - 1;  gy = ix; }
+                else                      { gw = w; gx = ix;            gy = iy; }
+                const long sidx = (long)gy * (gw + 1) + gx;
+                const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
+                occupied = (c == '#' || c == '_');
+            }
+
+            uint8_t* cell = cells + (size_t)cellIdx * CELL_STRIDE;
+            if (occupied) {
+                uint8_t t = (uint8_t)StartTown_ClassifyCell(gameVoid, dim, cellIdx);
+                // override to buildable(2) only if the natural type is water/mountain
+                // AND the cell already holds a *different* owner (cell+0x00).
+                void* cellOwner = *(void**)cell;   // cell+0x00
+                if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
+                    t = 2;
+                StartTown_WriteCellType(game, cells, cellIdx, t);
+            }
+            // Clear the cell entity-link (cell+0x08) — dee0 always does this.
+            uintptr_t nullIBP = 0;
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+            *(uintptr_t*)(cell + 0x08) = nullIBP;
+        }
+    }
+}
+
 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY, w=1,h=1) and
 // the jittered ModelComponent world transform. `cellIdx` = dim*y + x.
 static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, void* rng,
@@ -655,6 +784,18 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
             *(int16_t*)(mc + 0x28) = (int16_t)tileX;
             *(int16_t*)(mc + 0x2a) = (int16_t)tileY;
             *(uint64_t*)(mc + 0x2c) = 0x10001;   // w=1, h=1 (and +0x30 extra=0)
+
+            // CreateNaturalResource_impl_dee0 — mark this cell's terrain TYPE on the
+            // Game grid so pathfinding + harvest-search know a resource sits here.
+            // The real game runs this from MapComponent::OnCreate (inert/unregistered
+            // in standalone); we invoke it here, right after the tile fields are set.
+            // shape = MapDescription(mc+0x18)+0x28 String buffer (null for a 1x1
+            // resource -> dee0 treats the single cell as occupied). rot=0 (1x1).
+            const char* shape = nullptr;
+            void* mapDesc = *(void**)(mc + 0x18);
+            if (mapDesc) shape = *(const char**)((uint8_t*)mapDesc + 0x28);  // String char*
+            StartTown_MarkResourceCellGrid(game, entity, tileX, tileY, /*w*/1, /*h*/1,
+                                           shape, /*rot*/0);
         }
     }
 
