@@ -79,7 +79,12 @@ static bool ProfListEnvOn() {
     static int en = -1;
     if (en < 0) {
         const char* e = std::getenv("BANISHED_LIVE_PROFESSIONLIST");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+        // DEFAULT ON: the ProfessionList keystone now loads crash-free (the real blocker
+        // was a missing fn-pointer null-check in GameUpdateLoop_Startup, not the object —
+        // see professionlist.cpp / gameupdateloop.cpp:1296). gw+0xb0 carries the default
+        // profession (+0x30) + profRef2 (+0x38) the citizen-economy finders key on. Opt OUT
+        // with BANISHED_LIVE_PROFESSIONLIST=0.
+        en = (e && e[0] == '0') ? 0 : 1;
     }
     return en == 1;
 }

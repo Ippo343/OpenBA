@@ -1289,11 +1289,17 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Startup] enabling cursor...\n");
     fn_UI_EnableCursor(self->m_userInterface, true);
 
-    // ProfessionList startup — m_professionList is DEFERRED (null) in the M5 first
-    // slice (the Profession.rsc Find is a factory-cascade landmine, not yet wired).
-    // Guard until ProfessionList's standalone REGISTER_TYPE lands.
+    // ProfessionList startup — builds the sorted profession ARRAY at profList+0x20/+0x28
+    // (FUN_1400a90a0) for the profession UI panel. m_professionList (gw+0xb0) is normally
+    // DEFERRED (null) in the standalone slice; it goes live under BANISHED_LIVE_PROFESSIONLIST.
+    // MUST guard the function pointer too: fn_ProfessionList_Startup (exe 0x1400a90a0) is
+    // unregistered in standalone (resolves NULL), so once m_professionList is non-null an
+    // unguarded call faulted EXEC-of-0 in GameUpdateLoop_Startup. The array is only read by
+    // the profession UI (count at +0x28); leaving it empty is safe — the per-tick housing/
+    // workplace finders key on the default profession (+0x30) / profRef2 (+0x38) from Serialize.
     TRACE("[GameUpdateLoop::Startup] calling ProfessionList::Startup...\n");
-    if (self->m_professionList) fn_ProfessionList_Startup(self->m_professionList);
+    if (self->m_professionList && fn_ProfessionList_Startup)
+        fn_ProfessionList_Startup(self->m_professionList);
     TRACE("[GameUpdateLoop::Startup] ProfessionList::Startup done\n");
 
     // Game HUD dialogs (Toolbar/EventNotify/AutoSave) are DEFERRED in the M5 first
