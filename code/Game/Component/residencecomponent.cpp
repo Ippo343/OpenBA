@@ -441,7 +441,13 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
     uintptr_t self = (uintptr_t)selfP;
     uint8_t ibpBuf[8];
 
-    // Mesh flags 6 and 7
+    // Mesh flags 6 and 7 — clear two MeshInstance status/skin flags on the house.
+    // STANDALONE: skipped. In standalone the house's ModelComponent mesh was force-set
+    // to the completed-build variant (starttown.cpp StartTown_SpawnStructures); this
+    // SetMeshFlag op manipulates the same MeshInstance and, with our partial/inert mesh
+    // state, hides the building (it assumes the real game's fully-live mesh pipeline).
+    // The registration below (push into townMgr+0x20) is the part standalone needs.
+#ifndef STANDALONE_EXE
     for (int flag = 6; flag <= 7; flag++) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
         if (!s_fn_Entity_FindComponent_MeshInstance) break;
@@ -451,6 +457,7 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
         void* comp = *(void**)compBuf;
         if (comp && s_fn_SetMeshFlag) s_fn_SetMeshFlag(comp, flag, '\0');
     }
+#endif
 
     // Re-assign workplaces for each resident slot at +0x50 (count +0x58, stride 0x10)
     int slotCount = *(int*)(self + 0x58);
@@ -487,11 +494,75 @@ void ResidenceComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // Inert-but-valid ResidenceComponent: size 0x60 + Object::Internal base + shared stub
 // vtable + capability flags +0x20=0x82 (from ResidenceComponent_Ctor) + zeroed body.
+//
+// LIVE bring-up (env BANISHED_LIVE_RESIDENCE, default OFF): graduate the per-type
+// inert vtable's Serialize/Startup slot (+0x20, index 4) to ResidenceComponent_Serialize
+// and the OnCreate slot (+0x38, index 7) to ResidenceComponent_OnCreate. With the env
+// unset the build is byte-for-byte identical to the inert factory.
+//
+// Why these two slots (verified against the disassembly):
+//   * vtable +0x20 (0x14012a120, Serialize/Startup) resizes the resident array at +0x50
+//     from the description capacity (desc+0x20). It is dispatched at spawn by the
+//     ComponentEntity StartupComponents pass (FUN_1400c30a0 → CALL [vtable+0x20]),
+//     gated on entity flag 0x80 + comp flag bit 7. ResidenceComponent flags = 0x82
+//     (bit 7 set) → it runs automatically in the CopyCtor spawn flow, leaving +0x50/+0x58
+//     valid before OnCreate's helper_9ef0 reads them.
+//   * vtable +0x38 (0x14012a0e0, OnCreate) calls helper_9ef0 then pushes the owner entity
+//     into townMgr+0x20 (the residence list) — the registration. It is dispatched by the
+//     OnCreate pass FUN_1400c2ea0 (CALL [vtable+0x38], gated on entity flag bit 1 +
+//     comp flag bit 1; ResidenceComponent flags 0x82 has bit 1 set). That pass is NOT in
+//     the standalone CopyCtor/RegisterEntity spawn flow, so the start-town structures
+//     spawn explicitly runs a faithful port of FUN_1400c2ea0 after RegisterEntity (see
+//     StartTown_RunOnCreatePass in code/Game/Game/starttown.cpp).
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(ResidenceComponent, 0x60, 0x82)
+// Per-type GetTypeId (vtable +0x10) — required by the spawn-pool component find-loops.
+static uint32_t ResidenceComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ResidenceComponent");
+    return cached;
+}
+
+// Per-type vtable (filled from the shared stub table on first use, then patched).
+static void* ResidenceComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+// Slot adapters: the inert vtable stores raw void* slots; these forward to the typed
+// reimpls with the correct signatures.
+static void ResidenceComponent_SerializeVSlot(void* s) {   // vtable +0x20 (index 4)
+    ResidenceComponent_Serialize(reinterpret_cast<ResidenceComponent*>(s));
+}
+static void ResidenceComponent_OnCreateVSlot(void* s) {    // vtable +0x38 (index 7)
+    ResidenceComponent_OnCreate(reinterpret_cast<ResidenceComponent*>(s));
+}
+
+// Graduate the two slots when the env opt-in is on. Idempotent (called from every
+// Factory/CreateInPlace, like the COMPONENT_LIVE_FACTORY_* macros).
+static void ResidenceComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE")) {
+        ResidenceComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&ResidenceComponent_SerializeVSlot);
+        ResidenceComponent_LiveVtable[7] =
+            reinterpret_cast<void*>(&ResidenceComponent_OnCreateVSlot);
+    }
+}
+
+extern "C" void* ResidenceComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x60, 0x82,
+        ResidenceComponent_LiveVtable,
+        reinterpret_cast<void*>(&ResidenceComponent_LiveGetTypeId));
+    ResidenceComponent_FinishLiveVtable();
+    return p;
+}
+static void* ResidenceComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x60, 0x82,
+        ResidenceComponent_LiveVtable,
+        reinterpret_cast<void*>(&ResidenceComponent_LiveGetTypeId));
+    ResidenceComponent_FinishLiveVtable();
+    return mem;
+}
+
 REGISTER_TYPE(ResidenceComponent, "ControllerComponent",
               &ResidenceComponent_Factory, &ResidenceComponent_CreateInPlace);
 #endif // STANDALONE_EXE

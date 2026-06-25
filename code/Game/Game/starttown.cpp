@@ -21,6 +21,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#ifdef STANDALONE_EXE
+#include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
+#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -270,6 +273,70 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
     return nullptr;
 }
 
+// Faithful 1:1 port of FUN_1400c2ea0 — the ComponentEntity OnCreate pass. The
+// original game runs this on each entity during a deferred world-activation phase
+// (NOT in the CopyCtor / EntityList::RegisterEntity spawn flow, and NOT in the
+// structures spawn pass ComponentEntity_impl_1fc0). In standalone that activation
+// phase is not wired, so the start-town structures spawn invokes this directly,
+// right after RegisterEntity — at which point the entity is fully registered, the
+// exact precondition OnCreate expects.
+//
+// Disassembly (0x1400c2ea0):
+//   if (entity+0x40 & 2):                       // entity has OnCreate-capable components
+//     for each component IBP (count @ entity+0x38, array @ entity+0x30):
+//       CheckPtr; if (comp+0x20 >> 1 & 1):      // component flag bit 1
+//         CheckPtr; CALL [comp_vtable + 0x38]   // OnCreate
+//   entity+0x40 |= 0x400                         // "OnCreate done" sentinel (always set)
+//
+// For a WoodHouse this calls ResidenceComponent::OnCreate (+0x38), which (once the
+// BANISHED_LIVE_RESIDENCE factory routes that slot) pushes the house into
+// townMgr+0x20. Gated on the env so the default build never runs it.
+#ifdef STANDALONE_EXE
+// SURGICAL standalone variant: the faithful FUN_1400c2ea0 fires OnCreate(+0x38) on
+// EVERY bit-1 component, but several of those are only partially live in standalone
+// (notably the renderable ModelComponent, whose OnCreate re-initialises the mesh and
+// wipes the completed-build variant we hand-set in StartTown_SpawnStructures → the
+// building goes invisible). So we run OnCreate ONLY on the ResidenceComponent — the
+// one component brought up for the townMgr+0x20 residence registration. The full
+// faithful pass is restored once the other components' OnCreate are verified
+// standalone-safe. Still sets the 0x400 "OnCreate done" sentinel.
+static void StartTown_RunOnCreatePass(void* entityV) {
+    if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
+    if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE")) return;
+
+    static uint32_t s_tidResidence = 0;
+    if (s_tidResidence == 0) s_tidResidence = TypeId("ResidenceComponent");
+
+    uint8_t* ent = (uint8_t*)entityV;
+    uint32_t* entFlags = (uint32_t*)(ent + 0x40);
+    if ((*entFlags & 2) != 0 && s_tidResidence != 0) {
+        int count = *(int32_t*)(ent + ENT_COMP_CNT);
+        uintptr_t arr = *(uintptr_t*)(ent + ENT_COMP_ARR);
+        for (int i = 0; i < count; ++i) {
+            void** slot = (void**)(arr + (uintptr_t)i * 8);
+            fn_InternalBasePtr_CheckPtr(slot);
+            void* comp = *slot;
+            if (!comp) continue;
+            if (((*(uint32_t*)((uint8_t*)comp + 0x20)) >> 1 & 1) == 0) continue;  // flag bit 1
+            uintptr_t vt = *(uintptr_t*)comp;
+            typedef uint32_t (*fn_GetTypeId_t)(void*);
+            uint32_t tid = (*(fn_GetTypeId_t*)(vt + 0x10))(comp);
+            if (tid != s_tidResidence) continue;                 // ONLY ResidenceComponent
+            fn_InternalBasePtr_CheckPtr(slot);
+            comp = *slot;
+            if (!comp) continue;
+            vt = *(uintptr_t*)comp;
+            typedef void (*fn_OnCreate_t)(void*);
+            (*(fn_OnCreate_t*)(vt + 0x38))(comp);                // ResidenceComponent::OnCreate
+            fprintf(stderr, "[startTown::residence] ResidenceComponent::OnCreate fired "
+                            "(house registered into townMgr+0x20)\n");
+            fflush(stderr);
+        }
+    }
+    *entFlags |= 0x400;                                // OnCreate-done sentinel
+}
+#endif // STANDALONE_EXE
+
 // NOTE: the resource path now uses StartTown_PlaceResourceCell (the Entity_impl_6540
 // port: MapComponent grid cell + jittered ModelComponent transform). The structures
 // path sets its ModelComponent transform inline (see StartTown_SpawnStructures).
@@ -428,6 +495,16 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // Register with the world entity list (category = template+0x20).
         int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
         fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+
+#ifdef STANDALONE_EXE
+        // Run the OnCreate pass on the freshly-registered entity (deferred-activation
+        // equivalent — see StartTown_RunOnCreatePass). For a WoodHouse this fires
+        // ResidenceComponent::OnCreate → registers the house into townMgr+0x20.
+        // The entity IBP was re-resolved above (entity = (void*)entIBP); re-resolve
+        // once more in case any intervening CheckPtr moved it.
+        fn_InternalBasePtr_CheckPtr(&entIBP);
+        StartTown_RunOnCreatePass((void*)entIBP);
+#endif
 
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
                 i, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
