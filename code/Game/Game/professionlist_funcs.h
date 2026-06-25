@@ -19,7 +19,8 @@ void ProfessionList_Cleanup(ProfessionList* self);
 void* ProfessionList_Slot8(ProfessionList* self);
 
 // Serialize (vtable +0x28, Slot5): Serializes ExternalPtr refs via FUN_140018020.
-void ProfessionList_Serialize(ProfessionList* self, void* stream);
+// Returns 1 (matches original Slot5's `undefined1` return; avoids garbage-EAX bug #7).
+int ProfessionList_Serialize(ProfessionList* self, void* stream);
 
 // One-time init: resolve local function pointers needed by ProfessionList reimpl.
 void ProfessionList_InitFuncs();

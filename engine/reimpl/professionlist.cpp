@@ -50,9 +50,11 @@ static void* Reimpl_Dtor(void* self, uint32_t flags) {
 }
 
 // Slot5/Serialize (0x1400a8e30) — REIMPLEMENTED
-static void Reimpl_Slot5(void* self, void* stream) {
+// Original returns `undefined1` (1); return int so EAX is fully defined for
+// External::Load to read (trampoline bug class #7).
+static int Reimpl_Slot5(void* self, void* stream) {
     g_lastHook = "ProfessionList::Slot5";
-    ProfessionList_Serialize((ProfessionList*)self, stream);
+    return ProfessionList_Serialize((ProfessionList*)self, stream);
 }
 
 // Slot6/Cleanup (0x14001e690) — REIMPLEMENTED

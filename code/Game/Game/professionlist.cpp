@@ -148,10 +148,15 @@ void* ProfessionList_Slot8(ProfessionList* self) {
 // Creates a Serializer(stream, version=0), then serializes four
 // ExternalPtr<Profession> refs at +0x30, +0x38, +0x40, +0x48
 // using FUN_140018020 (typed ExternalPtr serialize).
-void ProfessionList_Serialize(ProfessionList* self, void* stream) {
+// Returns 1 — matching the original Slot5 (0x1400a8e30) which returns `undefined1`
+// (1). The vtable slot is invoked by the engine's External::Load; a `void` return
+// here leaves garbage in the upper bytes of EAX (trampoline bug class #7), which
+// External::Load may read as the Serialize result. Return a full int so EAX is
+// fully defined.
+int ProfessionList_Serialize(ProfessionList* self, void* stream) {
     ProfessionList_InitFuncs();   // idempotent; ensures serializer fns resolved (standalone)
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) {
-        return;
+        return 1;
     }
 
     // Stack-allocated serializer (24 bytes)
@@ -167,6 +172,7 @@ void ProfessionList_Serialize(ProfessionList* self, void* stream) {
     }
 
     s_fn_Serializer_Dtor(serializer);
+    return 1;
 }
 
 // ============================================================

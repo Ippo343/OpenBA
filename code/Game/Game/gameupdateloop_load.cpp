@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>     // getenv (BANISHED_LIVE_PROFESSIONLIST / BANISHED_PROFLIST_MODE)
 #include <cmath>
 #include <atomic>
 #include <windows.h>  // GetCurrentThreadId (double-dispatch diagnostic)
@@ -56,6 +57,101 @@ typedef void* (*fn_SaveLoad_Ctor_t)(void* self);
 static fn_SaveLoad_Ctor_t s_fn_SaveLoad_Ctor = nullptr;             // ??0SaveLoad@Save@@QEAA@XZ
 typedef uint32_t (*fn_Random_RandFull_t)(void* self);
 static fn_Random_RandFull_t s_fn_Random_RandFull = nullptr;         // ?Rand@Random@System@@QEAAIXZ (no-arg)
+
+// ============================================================
+// Step 2 — ProfessionList load (WaveH2; env BANISHED_LIVE_PROFESSIONLIST)
+// ============================================================
+// The original GameUpdateLoop::Load (step 2, @0x140096baa) loads the ProfessionList
+// from "Game/Profession/Profession.rsc" via Object::ExternalList::Find and stores it
+// at +0xB0 (param_1[0x16]). This single object is the CONVERGENT KEYSTONE for the
+// whole citizen economy: it carries the DEFAULT PROFESSION at +0x30 (→ citizen+0x1f0
+// at spawn, FUN_140117080) and profRef2 at +0x38 (the workplace-registration gate key
+// in WorkPlaceComponent_impl_f670). Every economy path (housing/workplace finders,
+// citizen spawn) derefs gw+0xb0; with it null in standalone they all bail/crash.
+//
+// The ProfessionList External (vtable 0x14015ef50, factory 0x14001e5c0) + its Serialize
+// (loads the 4 ExternalPtr<Profession> refs) are already ported (professionlist.cpp);
+// they were just never DRIVEN. We load it with ExternalFactory::FindOrLoad — the same
+// primitive StartTown_ResolveTemplate / LoadDialogResource use successfully — rather
+// than ExternalList::Find(param_1[1]); the global-factory load works in standalone and
+// Profession resource resolution is already proven (CropField/Orchard/Pasture).
+static bool ProfListEnvOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_PROFESSIONLIST");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
+
+// Standalone ProfessionList factory (professionlist.cpp) — allocates the 0x50
+// External object + Init (vtable + zeroed fields), NO FindOrLoad/Serialize.
+extern "C" void* ProfessionList_Factory(void);
+
+// BISECTION of the [REDZONE-DUMP] heap corruption (BANISHED_PROFLIST_MODE):
+//   unset/1 = full FindOrLoad("Game/Profession/Profession.rsc") — faithful; the
+//             Runtime External::Load deserializes + runs the factory cascade.
+//   2       = ProfessionList_Factory() ONLY (empty 0x50 object) — stored at +0xB0.
+//             Isolates "object construction + storage" from the load cascade.
+//   3       = ProfessionList_Factory() ONLY but stored as NULL at +0xB0.
+//             Isolates pure CONSTRUCTION (alloc + base ctor) from any gw+0xb0 CONSUMER.
+//             MODE 2 redzone but MODE 3 clean ⇒ a world-build consumer of gw+0xb0
+//             corrupts on our bare object (the slot to fix). MODE 3 also corrupt ⇒
+//             construction itself (MemAlloc/base ctor) is the corruptor.
+static int ProfListMode() {
+    static int m = -2;
+    if (m == -2) {
+        const char* e = std::getenv("BANISHED_PROFLIST_MODE");
+        m = (e && e[0]) ? atoi(e) : 1;
+    }
+    return m;
+}
+
+static void LoadProfessionList_Step2(uint8_t* p) {
+    // Default (env off): leave +0xB0 null — byte-identical to prior behavior.
+    if (!ProfListEnvOn()) { *(void**)(p + 0xB0) = nullptr; return; }
+
+    const int mode = ProfListMode();
+
+#ifdef STANDALONE_EXE
+    // Mode 2/3 — factory-only bisection: construct without any load.
+    // (ProfessionList_Factory is standalone-only; DLL mode always uses FindOrLoad.)
+    if (mode == 2 || mode == 3) {
+        void* profList = ProfessionList_Factory();
+        // Mode 3 stores null (isolate construction from gw+0xb0 consumers).
+        *(void**)(p + 0xB0) = (mode == 2) ? profList : nullptr;
+        fprintf(stderr, "[GUL::ProfList] MODE%d factory-only built=%p stored=%p (no FindOrLoad)\n",
+                mode, profList, *(void**)(p + 0xB0));
+        fflush(stderr);
+        return;
+    }
+#endif
+
+    if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+        *(void**)(p + 0xB0) = nullptr;
+        fprintf(stderr, "[GUL::ProfList] SKIP — loader fns/factory unavailable "
+                "(CtorCStr=%p FindOrLoad=%p Dtor=%p factory=%p)\n",
+                (void*)fn_Filename_CtorCStr, (void*)fn_ExternalFactory_FindOrLoad,
+                (void*)fn_Filename_Dtor,
+                g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
+        fflush(stderr);
+        return;
+    }
+
+    void* factory = *g_pExternalFactorySingleton;
+    uint8_t fname[16] = {0};
+    fn_Filename_CtorCStr(fname, "Game/Profession/Profession.rsc");
+    void* profList = fn_ExternalFactory_FindOrLoad(factory, fname);
+    fn_Filename_Dtor(fname);
+    *(void**)(p + 0xB0) = profList;
+
+    void* defProf  = profList ? *(void**)((uint8_t*)profList + 0x30) : nullptr;
+    void* profRef2 = profList ? *(void**)((uint8_t*)profList + 0x38) : nullptr;
+    fprintf(stderr, "[GUL::ProfList] gw+0xb0=%p defaultProf(+0x30)=%p profRef2(+0x38)=%p\n",
+            profList, defProf, profRef2);
+    fflush(stderr);
+}
 
 static bool s_loadResolved = false;
 static void LoadEnsureInit() {
@@ -570,9 +666,10 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // g_pGameWorldSingleton = this loop (read by AddGlobalObject / Audio::Pause at the tail).
     if (g_pGameWorldSingleton) *g_pGameWorldSingleton = loopVoid;
 
-    // Steps 1-4: resource Finds (Diseases/Profession/Material/Help) — DEFERRED (leave null).
+    // Steps 1-4: resource Finds (Diseases/Profession/Material/Help) — DEFERRED (leave null),
+    // EXCEPT step 2 ProfessionList (the citizen-economy keystone) under BANISHED_LIVE_PROFESSIONLIST.
     *(void**)(p + 0xA8) = nullptr;  // diseases
-    *(void**)(p + 0xB0) = nullptr;  // professions
+    LoadProfessionList_Step2(p);    // step 2 → +0xB0 (professions); env-gated, else null
     *(void**)(p + 0xB8) = nullptr;  // ui material
     *(void**)(p + 0xA0) = nullptr;  // help topics
 
