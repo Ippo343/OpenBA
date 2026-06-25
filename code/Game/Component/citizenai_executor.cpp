@@ -420,11 +420,20 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     float fVar10 = *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x168) -
                    *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
     float fVar13 = fVar14 - fVar10;
-    float c172220 = s_pDAT_172220 ? *s_pDAT_172220 : 0.0f;
-    float c172238 = s_pDAT_172238 ? *s_pDAT_172238 : 0.0f;
-    float c1720e4 = s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.0f;
-    float c1722a0 = s_pDAT_1722a0 ? *s_pDAT_1722a0 : 0.0f;
-    float uvScale = s_pUVScale ? *s_pUVScale : 0.0f;
+    // Exe .rdata math constants. In STANDALONE mode ResolveAddr(Module::Exe, dataAddr)
+    // returns null for these (the registry only maps reimplemented functions/vtables, not
+    // raw .rdata floats), so the ternaries MUST fall back to the real values — a 0.0f
+    // fallback collapses the angle normalization (180<=|d| becomes 0<=|d|, always true)
+    // and the lerp (uvScale 1.0 -> 0.0), making the applied yaw diverge unboundedly.
+    // Values read from the exe .rdata (verified): 0x140172220=180, 0x140172238=360,
+    // 0x1401720e4=0.1 (turn epsilon), 0x1401722a0=-180, 0x14017214c=1.0 (g_fUVScale).
+    float c172220 = s_pDAT_172220 ? *s_pDAT_172220 : 180.0f;
+    float c172238 = s_pDAT_172238 ? *s_pDAT_172238 : 360.0f;
+    float c1720e4 = s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.1f;
+    float c1722a0 = s_pDAT_1722a0 ? *s_pDAT_1722a0 : -180.0f;
+    // g_fUVScale is loaded from 0x14017214c (=1.0) per disasm at 0x14010961f — NOT the
+    // 0x140172148 sibling (=0.99897) the old s_pUVScale pointed at.
+    float uvScale = s_pDAT_17214c ? *s_pDAT_17214c : 1.0f;
 
     if (c172220 <= fabs_f(fVar13)) {
         if (fVar13 <= 0.0f) {
@@ -505,8 +514,10 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
 
     // LAB_14010981e:
     fVar14 = fVar14 + *reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(self + 0x78) + 0x24);
-    float c1720cc = s_pDAT_1720cc ? *s_pDAT_1720cc : 0.0f;
-    float c172114 = s_pDAT_172114 ? *s_pDAT_172114 : 0.0f;
+    // deg->half-angle: 0x1401720cc=0.0174533 (pi/180) * 0x140172114=0.5 (half angle for
+    // the (-sin,cos) heading pair). Real-value fallbacks for standalone (see above).
+    float c1720cc = s_pDAT_1720cc ? *s_pDAT_1720cc : 0.017453292f;
+    float c172114 = s_pDAT_172114 ? *s_pDAT_172114 : 0.5f;
     float ang = fVar14 * c1720cc * c172114;
     float s_ang = s_fn_131c90 ? s_fn_131c90(ang) : 0.0f;
     float negSin = -s_ang;
