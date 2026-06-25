@@ -27,6 +27,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // Generic single-ExternalPtr serialize (exported from serialize_externals.cpp).
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
@@ -54,6 +56,34 @@ void WorkPlaceDescription_Serialize(void* self, void* stream) {
     g_fn_Serializer_Ctor(serializer, stream, 0);
     Reimpl_ExternalPtr_Serialize_StringTable(s + 0x20, serializer);  // Profession ref
     Reimpl_ExternalPtr_Serialize_StringTable(s + 0x28, serializer);  // Profession ref
+
+#if defined(_DEBUG)
+    // WAVE 1 diagnostic (env BANISHED_PROBE_WORKPLACE_KEY, same env as the parent's
+    // [probe::workplace] probe). Pins the exact failure branch for the null Profession
+    // key: if NO [probe::wpdesc-serialize] line appears, Serialize is never called
+    // during template load (gap = description-Serialize not dispatched). If a line
+    // appears with +0x20=NULL, Serialize ran but FindOrLoad(Profession) failed
+    // (innerMode!=0 = not load mode / no path; innerMode==0 = load mode but resource
+    // missing). If +0x20 is NON-null here but the parent probe later reads NULL, the
+    // live component sees a different/cleared description (copy/clobber). Read-only.
+    {
+        const char* e = std::getenv("BANISHED_PROBE_WORKPLACE_KEY");
+        static int n = 0;
+        if (e && e[0] && e[0] != '0' && n < 16) {
+            ++n;
+            void* p0 = *reinterpret_cast<void**>(s + 0x20);
+            void* p1 = *reinterpret_cast<void**>(s + 0x28);
+            int innerMode = -999;                        // load mode == 0 (canonical idiom)
+            void* enc = *reinterpret_cast<void**>(serializer);
+            if (enc) innerMode = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(enc) + 8);
+            fprintf(stderr, "[probe::wpdesc-serialize] self=%p afterSerialize "
+                            "+0x20=%p +0x28=%p innerMode=%d (0=load)\n",
+                    self, p0, p1, innerMode);
+            fflush(stderr);
+        }
+    }
+#endif
+
     g_fn_Serializer_Dtor(serializer);
 #else
     (void)self; (void)stream;
