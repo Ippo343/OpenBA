@@ -16,6 +16,8 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Helper: find element by name, returns raw element pointer
@@ -556,6 +558,44 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
     void* mapGen = nullptr;
     if (ResourceIsType(mapGenResource, g_TypeId_MapGenerator)) mapGen = mapGenResource;
+
+    // --- Difficulty / StartCondition override (standalone autostart + testing) ---
+    // The autostart harness auto-clicks "OK" without choosing a difficulty, and the
+    // saved-settings combo restore is skipped when g_pNewGameSettings is null, so we
+    // would otherwise get whatever the combo defaults to (Hard/Medium). Resolve the
+    // MapGenerator directly from the StartCondition list by index instead.
+    //   StartConditions.rsc list order: 0 = Hard, 1 = Medium, 2 = Easy.
+    //   BANISHED_DIFFICULTY = easy|medium|hard (or 2|1|0) forces a level.
+    //   Under autostart with no override, default to Easy so the full starting town
+    //   (StorageBarn + StorageYard + 6 WoodHouses, 6 families) spawns.
+    {
+        int wantIdx = -1;
+        const char* envDiff = getenv("BANISHED_DIFFICULTY");
+        if (envDiff) {
+            if (!strcmp(envDiff, "2") || !strcmp(envDiff, "easy") || !strcmp(envDiff, "Easy"))
+                wantIdx = 2;
+            else if (!strcmp(envDiff, "1") || !strcmp(envDiff, "medium") || !strcmp(envDiff, "Medium"))
+                wantIdx = 1;
+            else if (!strcmp(envDiff, "0") || !strcmp(envDiff, "hard") || !strcmp(envDiff, "Hard"))
+                wantIdx = 0;
+        } else {
+            const char* envAuto = getenv("BANISHED_AUTOSTART");
+            if (envAuto && strcmp(envAuto, "0") != 0 && strcmp(envAuto, "false") != 0)
+                wantIdx = 2;  // Easy default for the autostart demo town
+        }
+        if (wantIdx >= 0 && self->mapGeneratorList && mapPtrArray) {
+            int listCount = fn_ExternalList_GetResourceCount(self->mapGeneratorList);
+            if (wantIdx < listCount) {
+                void* r = mapPtrArray[wantIdx];
+                if (ResourceIsType(r, g_TypeId_MapGenerator)) {
+                    mapGen = r;
+                    fprintf(stderr, "[NewGameDialog] difficulty override -> listIdx=%d (0=Hard 1=Medium 2=Easy) mapGen=%p\n",
+                            wantIdx, mapGen);
+                    fflush(stderr);
+                }
+            }
+        }
+    }
 
     fn_InternalBasePtr_CheckPtr(&self->comboClimate);
     void* climateItem = fn_ComboElement_GetItemData(self->comboClimate, climateIdx);

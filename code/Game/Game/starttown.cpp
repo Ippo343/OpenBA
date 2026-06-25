@@ -274,6 +274,11 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 // port: MapComponent grid cell + jittered ModelComponent transform). The structures
 // path sets its ModelComponent transform inline (see StartTown_SpawnStructures).
 
+// Defined further down (resource model-variant section); used by the structures path
+// to swap a building from its foundation mesh to the completed-build mesh.
+static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
+                                      int16_t variantIdx, int16_t modelVariant);
+
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -380,6 +385,42 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // Writes the Transform straight into ModelComponent+0x148.
                     fn_Transform_FromYawPitchOffset((void*)(mc + 0x148), &yaw, &pitch, center);
                     *(float*)(mc + 0x168) = yaw;
+                }
+            }
+        }
+
+        // --- Show the COMPLETED building, not its foundation. -----------------
+        // A building MeshGroup encodes its construction stages as the sub-mesh list
+        // [Build01, Build02, ..., complete]; ModelComponent::Startup leaves it at the
+        // foundation (modelVariant 0) and the real game advances it to the last
+        // sub-mesh when its BuildComponent finishes — but that component is inert in
+        // standalone, so InitialStructure buildings would sit at the foundation mesh.
+        // Mirror ComponentEntity_impl_1fc0: pick a random visual style (variantIdx via
+        // the world RNG, like 1fc0) but force the LAST sub-mesh = the finished build.
+        {
+            void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
+            if (modelComp) {
+                uintptr_t mIBP = 0;
+                fn_InternalBasePtr_Ctor(&mIBP, modelComp);
+                fn_InternalBasePtr_CheckPtr(&mIBP);
+                uint8_t* m = (uint8_t*)mIBP;
+                void* modelDesc = m ? *(void**)(m + 0x18) : nullptr;
+                void* groupArray = modelDesc ? *(void**)((uint8_t*)modelDesc + 0x20) : nullptr;
+                uint32_t groupCount = modelDesc ? *(uint32_t*)((uint8_t*)modelDesc + 0x28) : 0;
+                if (groupArray && groupCount > 0) {
+                    int variantIdx = 0;
+                    void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                              ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
+                    if (rng && fn_Random_Rand && groupCount > 1)
+                        variantIdx = (int)fn_Random_Rand(rng, groupCount);
+                    int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
+                    int modelVariant = (subCount > 0) ? subCount - 1 : 0;  // last sub-mesh = complete
+                    ApplyResourceModelVariant(entity, tidModelComponent,
+                                              (int16_t)variantIdx, (int16_t)modelVariant);
+                    fprintf(stderr, "[startTown::struct] [%d] complete-model variantIdx=%d "
+                            "modelVariant=%d (subCount=%d groups=%u)\n",
+                            i, variantIdx, modelVariant, subCount, groupCount);
+                    fflush(stderr);
                 }
             }
         }
