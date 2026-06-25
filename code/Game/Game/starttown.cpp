@@ -335,6 +335,47 @@ static void StartTown_RunOnCreatePass(void* entityV) {
     }
     *entFlags |= 0x400;                                // OnCreate-done sentinel
 }
+
+// TODO #2 gating diagnostic — does the workplace profession key resolve LIVE in
+// standalone? For each spawned building's WorkPlaceComponent: desc = comp+0x18
+// (WorkPlaceDescription), profKey = desc+0x20 (Profession*, the key the registry
+// node is keyed by). Also logs the world profession list (gameWorld+0xb0) and the
+// component's own +0x48 key (populated only by the inert OnCreate, so expected 0
+// here). If profKey is NULL, the registry port (TODO #2) would seed nodes with
+// garbage keys → ProfessionList/Profession.rsc must be wired first. Read-only,
+// never mutates. Gated on BANISHED_PROBE_WORKPLACE_KEY.
+static void StartTown_ProbeWorkplaceKey(void* entityV) {
+    if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
+    if (!::ComponentFactory::LiveEnabled("BANISHED_PROBE_WORKPLACE_KEY")) return;
+
+    static uint32_t s_tidWork = 0;
+    if (s_tidWork == 0) s_tidWork = TypeId("WorkPlaceComponent");
+    if (s_tidWork == 0) return;
+
+    void* profList = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                   ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xb0) : nullptr;
+
+    uint8_t* ent = (uint8_t*)entityV;
+    int count = *(int32_t*)(ent + ENT_COMP_CNT);
+    uintptr_t arr = *(uintptr_t*)(ent + ENT_COMP_ARR);
+    for (int i = 0; i < count; ++i) {
+        void** slot = (void**)(arr + (uintptr_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        uintptr_t vt = *(uintptr_t*)comp;
+        typedef uint32_t (*fn_GetTypeId_t)(void*);
+        uint32_t tid = (*(fn_GetTypeId_t*)(vt + 0x10))(comp);
+        if (tid != s_tidWork) continue;
+        void* desc    = *(void**)((uint8_t*)comp + 0x18);
+        void* profKey = desc ? *(void**)((uint8_t*)desc + 0x20) : nullptr;
+        uint64_t curKey = *(uint64_t*)((uint8_t*)comp + 0x48);
+        fprintf(stderr, "[probe::workplace] comp=%p desc=%p profKey(desc+0x20)=%p "
+                        "compKey(+0x48)=0x%llx professionList(gw+0xb0)=%p\n",
+                comp, desc, profKey, (unsigned long long)curKey, profList);
+        fflush(stderr);
+    }
+}
 #endif // STANDALONE_EXE
 
 // NOTE: the resource path now uses StartTown_PlaceResourceCell (the Entity_impl_6540
@@ -504,6 +545,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // once more in case any intervening CheckPtr moved it.
         fn_InternalBasePtr_CheckPtr(&entIBP);
         StartTown_RunOnCreatePass((void*)entIBP);
+        StartTown_ProbeWorkplaceKey((void*)entIBP);   // TODO #2 gating diagnostic
 #endif
 
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
@@ -556,6 +598,53 @@ static constexpr int FAMILY_ARR     = 0x60;    // startConfig+0x60 = family arra
 static constexpr int FAMILY_CNT     = 0x68;    // startConfig+0x68 = family count
 static constexpr int FAMILY_STRIDE  = 8;       // {bool _educated@+0, int _maxChildCount@+4}
 
+// Per-citizen model-variant pick (modelcomponent.cpp). Faithful core of the
+// FUN_1401253d0 call inside the deferred citizen init (FUN_140117080): chooses a
+// random variant group within the citizen description's range and re-SetMesh'es.
+// Returns the chosen index or -1 (no change). Must run after Serialize, before
+// RegisterEntity.
+extern "C" int ModelComponent_RandomizeVariant(void* modelComp);
+
+// Gate: BANISHED_CITIZEN_VARIANT. Default off => citizens render byte-identical
+// to before (all share the description's fixed variant).
+static bool CitizenVariantOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_CITIZEN_VARIANT");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
+
+// Give a freshly-instantiated citizen entity a per-citizen model variant so the
+// colonists are not all visually identical. The original picks this in the
+// deferred CitizenComponent init (guarded off in standalone); here we reproduce
+// only the safe mesh-swap, before the entity is registered so its OnAdded adds
+// the chosen mesh. No-op unless BANISHED_CITIZEN_VARIANT is set.
+static void SetCitizenModelVariant(void* entity, uint32_t tidModel) {
+    if (!CitizenVariantOn() || !entity || tidModel == 0 ||
+        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
+        return;
+    void* mc = FindComponentOnEntity(entity, tidModel);
+    if (!mc) return;
+    uintptr_t mcIBP = 0;
+    fn_InternalBasePtr_Ctor(&mcIBP, mc);
+    fn_InternalBasePtr_CheckPtr(&mcIBP);
+    if (!mcIBP) return;
+    int chosen = ModelComponent_RandomizeVariant((void*)mcIBP);
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    static int s_varLog = 0;
+    if (s_varLog < 12) {
+        ++s_varLog;
+        fprintf(stderr, "[startTown::citizen] variant model=%p variantIdx=%d\n",
+                (void*)mcIBP, chosen);
+        fflush(stderr);
+    }
+#else
+    (void)chosen;
+#endif
+}
+
 // Instantiate one colonist entity from the resolved citizen template and register
 // it with the world. Returns the raw entity pointer (for optional later linking)
 // or nullptr. CitizenComponent initialisation (FUN_140117080) is deferred — see
@@ -566,6 +655,14 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList) {
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, citizenTemplate) : nullptr;
     uintptr_t entIBP = 0;
     fn_InternalBasePtr_Ctor(&entIBP, ent);
+
+    // Per-citizen model variant — after instantiation (Serialize ran, +0x166 set)
+    // and BEFORE registration (so OnAdded adds the chosen mesh to the scene).
+    if (ent) {
+        fn_InternalBasePtr_CheckPtr(&entIBP);
+        SetCitizenModelVariant((void*)entIBP, TypeId("ModelComponent"));
+    }
+
     int category = *(int32_t*)((uint8_t*)citizenTemplate + TEMPLATE_CATEGORY);
     fn_EntityList_RegisterEntity(entityList, &entIBP, category);
     return ent;

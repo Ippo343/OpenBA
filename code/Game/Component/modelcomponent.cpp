@@ -224,6 +224,54 @@ static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t mode
 }
 
 // ============================================================
+// Per-entity model-variant pick (faithful core of FUN_1401253d0)
+// ============================================================
+// Citizens all render identically because ModelComponent::Serialize sets the
+// variant index from a FIXED description field (+0x30) and the per-citizen pick
+// that the original performs in the deferred citizen init (FUN_140117080 ->
+// FUN_1401253d0) is guarded off in standalone. This helper reproduces the safe
+// core of FUN_1401253d0: choose a random variant group within the description's
+// valid range, then SetMesh the matching mesh into the MeshInstance (+0x28). It
+// touches ONLY the same fields/SetMesh path ModelComponent::Serialize already
+// uses for buildings — no risky vtable Draw/Remove calls.
+//
+// MUST be called AFTER the component's Serialize (so +0x166 is populated) and
+// BEFORE the entity is registered (so the entity's OnAdded adds the new mesh to
+// the scene). desc+0x28 is the variant-group count (the same field the building
+// randomize path uses as its Rand range), so the pick is always in-bounds.
+//
+// Returns the chosen variant index, or -1 if no change was made.
+extern "C" int ModelComponent_RandomizeVariant(void* modelComp) {
+    EnsureHelpers();
+    if (!modelComp || !s_fn_MeshInstance_SetMesh || !s_fn_Random_Rand) return -1;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
+    uintptr_t s = (uintptr_t)modelComp;
+
+    void* desc = GetMultiObjDescription(s);
+    if (!desc) return -1;
+    uintptr_t d = (uintptr_t)desc;
+
+    // Variant-group count (desc+0x28). Nothing to randomize over <= 1 group.
+    uint32_t count = *(uint32_t*)(d + 0x28);
+    if (count <= 1) return -1;
+
+    void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+    if (!randomPtr) return -1;
+    int16_t variantIdx = (int16_t)s_fn_Random_Rand(randomPtr, count);
+    *(int16_t*)(s + 0x164) = variantIdx;
+
+    // Keep the model variant Serialize already chose (+0x166); skip if it has no
+    // renderable mesh ( < 0 ).
+    int16_t modelVariant = *(int16_t*)(s + 0x166);
+    if (modelVariant < 0) return -1;
+
+    void* meshResource = GetMeshFromDescription(desc, variantIdx, modelVariant);
+    if (!meshResource) return -1;
+    s_fn_MeshInstance_SetMesh((void*)(s + 0x28), meshResource);
+    return variantIdx;
+}
+
+// ============================================================
 // ModelComponent::Shutdown (vtable slot [3], 0x140124b70)
 // ============================================================
 // Serializes mesh state: variant indices, transform, scale, mesh instance data,

@@ -546,15 +546,25 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         if (slot >= 0) {
             float dx = pos[0] - mtEntryX, dy = pos[1] - mtEntryY, dz = pos[2] - mtEntryZ;
             bool moved = (dx*dx + dy*dy + dz*dz) > 1e-10f;
+            // Facing diagnostic (TODO #3-B): desiredFacing = self+0x3c (set by the
+            // MoveTo action's UpdateFacing toward the next waypoint); appliedYaw =
+            // model+0x168 + heading pair just written into model+0x148. If the
+            // citizen moves but appliedYaw never changes, the facing pipeline is
+            // not turning the mesh; if desiredFacing changes but appliedYaw lags,
+            // it is the smoothing (desc+0x28). model is the ModelComponent (self+0x68).
+            float desiredFacing = *reinterpret_cast<float*>(self + 0x3c);
+            float appliedYaw    = model ? *reinterpret_cast<float*>(model + 0x168) : 0.0f;
             // Log every move, plus a heartbeat every 240 calls even when static.
             if (moved || (s_calls % 240) == 0) {
                 fprintf(stderr,
                     "[MoveTick] cit#%d self=%p chIdx=%d pos=(%.4f,%.4f,%.4f) "
-                    "delta=(%.5f,%.5f,%.5f) speed=%.4f vel38=%.4f stackTop=%d\n",
+                    "delta=(%.5f,%.5f,%.5f) speed=%.4f vel38=%.4f stackTop=%d "
+                    "facing(want=%.3f applied=%.3f)\n",
                     slot, (void*)self, *reinterpret_cast<int*>(self + 0x40),
                     pos[0], pos[1], pos[2], dx, dy, dz, speed,
                     *reinterpret_cast<float*>(self + 0x38),
-                    *reinterpret_cast<int*>(self + 0x60));
+                    *reinterpret_cast<int*>(self + 0x60),
+                    desiredFacing, appliedYaw);
                 fflush(stderr);
             }
         }
