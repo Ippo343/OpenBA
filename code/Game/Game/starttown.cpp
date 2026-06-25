@@ -344,6 +344,21 @@ static void StartTown_RunOnCreatePass(void* entityV) {
 // here). If profKey is NULL, the registry port (TODO #2) would seed nodes with
 // garbage keys → ProfessionList/Profession.rsc must be wired first. Read-only,
 // never mutates. Gated on BANISHED_PROBE_WORKPLACE_KEY.
+// WAVE 2 helper: read an Object::External's resource filename (base+8 = Filename
+// String*; engine String = char data with int length at ptr-8). Bounded/safe.
+static void ProbeExtFilename(void* ext, char* out, int outcap) {
+    if (outcap <= 0) return;
+    out[0] = '\0';
+    if (!ext) { snprintf(out, outcap, "(null-ext)"); return; }
+    char* str = *reinterpret_cast<char**>(reinterpret_cast<uint8_t*>(ext) + 8);
+    if (!str) { snprintf(out, outcap, "(none)"); return; }
+    int len = *reinterpret_cast<int*>(str - 8);
+    if (len <= 0 || len > 4096) { snprintf(out, outcap, "(badlen=%d)", len); return; }
+    int n = len < outcap - 1 ? len : outcap - 1;
+    for (int i = 0; i < n; ++i) { char c = str[i]; out[i] = (c >= 32 && c < 127) ? c : '?'; }
+    out[n] = '\0';
+}
+
 static void StartTown_ProbeWorkplaceKey(void* entityV) {
     if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
     if (!::ComponentFactory::LiveEnabled("BANISHED_PROBE_WORKPLACE_KEY")) return;
@@ -370,9 +385,14 @@ static void StartTown_ProbeWorkplaceKey(void* entityV) {
         void* desc    = *(void**)((uint8_t*)comp + 0x18);
         void* profKey = desc ? *(void**)((uint8_t*)desc + 0x20) : nullptr;
         uint64_t curKey = *(uint64_t*)((uint8_t*)comp + 0x48);
+        // WAVE 2: the live desc's External filename. Compare to [probe::wpdesc-serialize]
+        // extFile: SAME path => same resource loaded twice (FindOrLoad dedup-key mismatch);
+        // "(none)" => this live desc was factory-created and NEVER loaded (no External
+        // filename) => the duplication is inline/copy, not a second External::Load.
+        char descFile[96]; ProbeExtFilename(desc, descFile, sizeof descFile);
         fprintf(stderr, "[probe::workplace] comp=%p desc=%p profKey(desc+0x20)=%p "
-                        "compKey(+0x48)=0x%llx professionList(gw+0xb0)=%p\n",
-                comp, desc, profKey, (unsigned long long)curKey, profList);
+                        "compKey(+0x48)=0x%llx professionList(gw+0xb0)=%p descFile='%s'\n",
+                comp, desc, profKey, (unsigned long long)curKey, profList, descFile);
         fflush(stderr);
     }
 }

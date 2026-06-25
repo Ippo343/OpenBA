@@ -45,6 +45,25 @@ static void WorkPlaceDescription_Init(void* self) {
     *(uint64_t*)(s + 0x28) = 0;  // ExternalPtr<Profession>
 }
 
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+// WAVE 2 helper: read an Object::External's resource filename (base+8 = Filename
+// String*; engine String = char data at ptr, int length at ptr-8). Bounded, safe
+// for a null/blank instance (returns "(none)") — used to correlate the Serialized
+// vs the live workplace-description instances.
+static void WPDesc_ExtFilename(void* ext, char* out, int outcap) {
+    if (outcap <= 0) return;
+    out[0] = '\0';
+    if (!ext) { snprintf(out, outcap, "(null-ext)"); return; }
+    char* str = *reinterpret_cast<char**>(reinterpret_cast<uint8_t*>(ext) + 8);
+    if (!str) { snprintf(out, outcap, "(none)"); return; }
+    int len = *reinterpret_cast<int*>(str - 8);          // String length prefix
+    if (len <= 0 || len > 4096) { snprintf(out, outcap, "(badlen=%d)", len); return; }
+    int n = len < outcap - 1 ? len : outcap - 1;
+    for (int i = 0; i < n; ++i) { char c = str[i]; out[i] = (c >= 32 && c < 127) ? c : '?'; }
+    out[n] = '\0';
+}
+#endif
+
 // ============================================================
 // WorkPlaceDescription_Serialize (vtable +0x28, 0x14012f420)
 // ============================================================
@@ -69,16 +88,22 @@ void WorkPlaceDescription_Serialize(void* self, void* stream) {
     {
         const char* e = std::getenv("BANISHED_PROBE_WORKPLACE_KEY");
         static int n = 0;
-        if (e && e[0] && e[0] != '0' && n < 16) {
+        if (e && e[0] && e[0] != '0' && n < 512) {
             ++n;
             void* p0 = *reinterpret_cast<void**>(s + 0x20);
             void* p1 = *reinterpret_cast<void**>(s + 0x28);
             int innerMode = -999;                        // load mode == 0 (canonical idiom)
             void* enc = *reinterpret_cast<void**>(serializer);
             if (enc) innerMode = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(enc) + 8);
+            // WAVE 2: also log the External resource filename (Object::External base,
+            // self+8 = Filename String*; engine String stores length at ptr-8). This is
+            // the decisive correlator vs the live [probe::workplace] desc filename: SAME
+            // path => same resource loaded twice (FindOrLoad dedup-key mismatch); the live
+            // desc having NO filename => it's a never-loaded factory blank (inline/copy).
+            char fnbuf[96]; WPDesc_ExtFilename(self, fnbuf, sizeof fnbuf);
             fprintf(stderr, "[probe::wpdesc-serialize] self=%p afterSerialize "
-                            "+0x20=%p +0x28=%p innerMode=%d (0=load)\n",
-                    self, p0, p1, innerMode);
+                            "+0x20=%p +0x28=%p innerMode=%d (0=load) extFile='%s'\n",
+                    self, p0, p1, innerMode, fnbuf);
             fflush(stderr);
         }
     }
