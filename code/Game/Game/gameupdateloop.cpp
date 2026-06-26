@@ -648,6 +648,12 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
     ToolHarness_Tick(self->m_entityUI, s_frameNum);
+
+    // Apply the deferred founding-house "occupied" visuals now that the scene is live
+    // (the Scene mesh-visual can't run during the build-time founding pass — it
+    // deadlocks; see g_wpcRosterOnly). One-shot, drains its queue on an early frame.
+    extern void StartTown_ApplyPendingOccupiedVisuals(int frameNum);  // C linkage (file is extern "C")
+    StartTown_ApplyPendingOccupiedVisuals(s_frameNum);
 #endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",

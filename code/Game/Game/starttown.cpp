@@ -62,6 +62,15 @@ extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* housingPt
 // Scene mesh-visual toggle (which deadlocks mid-build). See the flag's definition.
 extern bool g_wpcRosterOnly;
 
+// Apply the occupied end-state visual for a rostered house (ModelKick mode 2 + StatusIcon
+// toggle). MUST run at gameplay time (live scene). See its definition in workplacecomponent.cpp.
+extern void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp);
+
+// WorkPlaceComponent pointers of the founding houses rostered in roster-only mode, whose
+// occupied visual was deferred to gameplay time. Drained once by
+// StartTown_ApplyPendingOccupiedVisuals on an early GameUpdateLoop tick (scene live).
+static std::vector<int64_t> g_pendingOccupiedVisuals;
+
 // FUN_1400a2880 — is the townSize-radius disk around (tileX, tileY) fully
 // buildable (in-bounds + type 2)?
 static bool StartTown_DiskBuildable(void* gameVoid, int tileX, int tileY, int size, int sizeSq) {
@@ -783,13 +792,40 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
         int roster = -1;
         uint32_t tidWP = TypeId("WorkPlaceComponent");                  // 0x1401c80e0
         void* wp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidWP);
-        if (wp) roster = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wp) + 0x60);
+        if (wp) {
+            roster = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wp) + 0x60);
+            // Queue this house's occupied visual for the deferred gameplay-time pass (the
+            // Scene mesh-visual can't run now without deadlocking — see g_wpcRosterOnly).
+            if (roster > 0) g_pendingOccupiedVisuals.push_back(reinterpret_cast<int64_t>(wp));
+        }
         fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu members "
                 "(citizen+0x248); house WorkPlaceComponent roster(+0x60)=%d\n",
                 f, f, (unsigned long long)houseIBP, housed, families[f].size(), roster);
         fflush(stderr);
     }
     g_wpcRosterOnly = false;   // restore: gameplay-time AssignHousing keeps the full visual
+}
+
+// Drive the deferred occupied-house visuals once the scene is live. Called every
+// GameUpdateLoop tick; runs the visual pass exactly once, on the first tick at/after
+// frame `kDeferFrame` (a couple of frames in so the scene has drawn and is in a
+// removable state — the visual touches Graphics::Scene::Add/RemoveObject). After it
+// runs, the pending list is cleared so it never repeats. No-op when nothing is queued.
+extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
+    static bool s_applied = false;
+    if (s_applied || g_pendingOccupiedVisuals.empty()) return;
+    const int kDeferFrame = 3;
+    if (frameNum < kDeferFrame) return;
+    fprintf(stderr, "[startTown::housing] applying %zu deferred occupied visuals at frame %d\n",
+            g_pendingOccupiedVisuals.size(), frameNum);
+    fflush(stderr);
+    for (int64_t wp : g_pendingOccupiedVisuals) {
+        if (wp) WorkplaceComponent_ApplyOccupiedVisual(wp);
+    }
+    g_pendingOccupiedVisuals.clear();
+    s_applied = true;
+    fprintf(stderr, "[startTown::housing] deferred occupied visuals applied (crash-free)\n");
+    fflush(stderr);
 }
 
 // CitizenComponent_impl_0dd0 — spawn the founding families.

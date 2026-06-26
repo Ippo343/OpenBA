@@ -355,6 +355,48 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
         s_fn_WPC_AppendToList((int64_t*)(comp + 0x58), *(int*)(comp + 0x60) + 1, workerIbp);
 }
 
+// Apply the OCCUPIED end-state visual for a house whose roster was filled in roster-only
+// mode (g_wpcRosterOnly suppressed the Scene mesh-visual during the build-time founding
+// pass — see StartTown_AssignFoundingHousing). This reproduces the visual the attach would
+// have driven for the FIRST occupant: ModelKick(mode 2) — notify the building's components
+// to switch to their occupied appearance (e.g. smoke/lit windows via ModelComponent
+// vtable +0x60) — plus the StatusIconComponent mesh-flag toggle. It is roster-INDEPENDENT
+// (forces the kick once for the now-occupied house) because by call time the roster is
+// already full (+0x60 != 0), so the original's "first occupant" gate no longer holds.
+// MUST be called at GAMEPLAY time (live scene), never during world-build, or Scene::Remove
+// Object deadlocks. All visual calls are null-guarded for partial-world entities.
+void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp) {
+    EnsureHelpers();
+    EnsureWpcBodyHelpers();
+
+    // ModelKick(mode 2) — notify the building's components of the occupied state, gated (as
+    // the original attach is) on this WorkPlaceComponent being the residence/job the
+    // description designates (jobSlot == desc+0x20). This is the faithful notify; it is
+    // crash-free. NOTE on visibility: ModelComponent's notify slot (vtable +0x60 =
+    // 0x140118ab0) is an EMPTY no-op even in the original exe, and the houses' other
+    // visual-bearing components (AmbientEmitterComponent smoke, StatusIconComponent icon)
+    // are INERT in standalone (spawned but never scene-registered), so this notify produces
+    // no visible change yet — it's correct scaffolding awaiting those components' bring-up.
+    void* descObj = *(void**)(comp + 0x18);
+    int64_t jobSlot = *(int64_t*)(comp + 0x48);
+    void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+                  fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+    if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+        if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
+    }
+
+    // The StatusIconComponent mesh-flag toggle (FUN_14012c3f0) is DELIBERATELY NOT driven
+    // here. It clears the icon flag → flags==0 → Graphics::Scene::RemoveObject(sceneObjId).
+    // In standalone the inert StatusIconComponent was never scene-registered, so its mesh
+    // sceneObjId (+0x20) holds an uninitialised non-negative value; RemoveObject then SPINS
+    // forever on a scene-object id that isn't in the scene (verified by gdb stack-sampling a
+    // hung run, even at gameplay frame 3). The original is safe only because the icon is a
+    // real registered scene object. Re-enable once StatusIconComponent::OnAdded scene-
+    // registers the icon (a rendering follow-up) — the icon is already invisible while inert,
+    // so skipping its "hide" toggle changes nothing observable.
+}
+
 void WorkPlaceComponent_OnCreateInit(void* selfP) {
     EnsureHelpers();
     EnsureEe60Helpers();
