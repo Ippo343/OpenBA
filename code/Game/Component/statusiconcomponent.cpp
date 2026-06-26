@@ -77,6 +77,12 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x1401529b0);
     if (slot) s_fn_SpriteSheet_GetSpriteCount = *reinterpret_cast<fn_SpriteSheet_GetSpriteCount_t*>(slot);
+    // Standalone: the dispatch slot is unregistered → resolve the Runtime export
+    // directly. UI::SpriteSheet::GetSpriteCount (const) — without it, Serialize
+    // early-returns and the icon geometry is never set up.
+    if (!s_fn_SpriteSheet_GetSpriteCount)
+        s_fn_SpriteSheet_GetSpriteCount = reinterpret_cast<fn_SpriteSheet_GetSpriteCount_t>(
+            ResolveExport("?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ"));
 
     slot = ResolveAddr(Module::Exe, 0x140151370);
     if (slot) s_fn_Scene_AddObject = *reinterpret_cast<fn_Scene_AddObject_t*>(slot);
@@ -333,11 +339,80 @@ void StatusIconComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================
+// Standalone bring-up (Phase A): faithful construction + diagnostics
+// ============================================================
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(StatusIconComponent, 0x108, 0xC2)
+#include <cstdlib>
+
+// The StatusIcon's embedded Graphics::Geometry sub-object (+0x28) normally uses the
+// exe-resident billboard vtable PTR_FUN_14015f0c0, whose draw slots (AddDrawItems
+// 0x1400a9b90 / Draw 0x1400a9c10) live in the unmapped exe. Until those are ported
+// (Phase B), give the sub-object a SAFE standalone vtable: every slot is a no-op so
+// that even when the occupancy toggle AddObject's the geometry, the scene's
+// AddDrawItems call (vtable slot +0x18 here) is a no-op → nothing is drawn and the
+// Draw slot is never reached → crash-free. Slot 0 (dtor) is also a no-op (the
+// embedded sub-object is freed with the component; leaking its internals for a
+// session is acceptable). 16 slots = comfortable headroom over the 12-slot original.
+static void SIGeom_Noop() {}
+static void* g_StatusIconGeometryVtable[16];
+static bool  g_siGeomVtableInit = false;
+static void EnsureGeometryVtable() {
+    if (g_siGeomVtableInit) return;
+    for (int i = 0; i < 16; ++i)
+        g_StatusIconGeometryVtable[i] = reinterpret_cast<void*>(&SIGeom_Noop);
+    g_siGeomVtableInit = true;
+}
+
+// StatusIconComponent_StartupInit — the spawn-time body init the inert factory skips.
+// Routed to the component's Startup/Serialize slot (vtable +0x20 / index 4) so it runs
+// during ComponentEntity::StartupComponents, exactly where the original dispatches the
+// real Serialize (geometry setup). Replicates the parts of the real ctor (0x14012c0c0)
+// the inert factory zero-fills instead of setting — critically sceneObjId(+0x100) = -1
+// (the inert factory leaves it 0 → the occupancy toggle's RemoveObject spins on scene
+// id 0). Then runs the real geometry-sprite Serialize. Env-gated: default-off keeps the
+// run byte-identical.
+void StatusIconComponent_StartupInit(StatusIconComponent* self) {
+    EnsureHelpers();
+    EnsureGeometryVtable();
+    uintptr_t s = (uintptr_t)self;
+
+    // Faithful ctor field-init delta (inert factory already did Object::Internal base
+    // + flags +0x20|=0xC2 + zeroed body):
+    //   geometry sub-object (+0x28) vtable → safe standalone billboard vtable
+    //   sceneObjId (+0x100) = -1 (NOT scene-registered)
+    *(void**)(s + 0x28) = g_StatusIconGeometryVtable;
+    *(uint32_t*)(s + 0x100) = 0xFFFFFFFFu;
+
+    // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
+    // — no-ops if desc/spriteSheet absent).
+    StatusIconComponent_Serialize(self);
+
+    // Diagnostic: settle whether the sprite-sheet RESOURCE is present in standalone
+    // (the gating unknown for Phase B rendering). desc+0x20 = SpriteSheet,
+    // spriteSheet+0x30 = MaterialInstance.
+    static bool trace = [](){ const char* e = getenv("BANISHED_STATUSICON_TRACE");
+                              return e && e[0] && e[0] != '0'; }();
+    if (trace) {
+        void* desc = GetStatusIconDescription(s);
+        void* sheet = desc ? *(void**)((uintptr_t)desc + 0x20) : nullptr;
+        void* mat   = sheet ? *(void**)((uintptr_t)sheet + 0x30) : nullptr;
+        int   cnt   = (sheet && s_fn_SpriteSheet_GetSpriteCount)
+                          ? s_fn_SpriteSheet_GetSpriteCount(sheet) : -1;
+        printf("[StatusIcon::Startup] self=%p desc=%p sheet=%p material=%p spriteCount=%d "
+               "geomBits(+0xc4)=%d\n",
+               (void*)self, desc, sheet, mat, cnt, *(int*)(s + 0x28 + 0xC4));
+        fflush(stdout);
+    }
+}
+
+// COMPONENT_LIVE_FACTORY_STARTUP routes ONLY the Startup slot (index 4 / +0x20) to
+// StatusIconComponent_StartupInit when BANISHED_LIVE_STATUSICON (or the global
+// BANISHED_LIVE_COMPONENTS) is set; default-off => identical to the inert factory.
+COMPONENT_LIVE_FACTORY_STARTUP(StatusIconComponent, 0x108, 0xC2,
+                               "BANISHED_LIVE_STATUSICON", StatusIconComponent_StartupInit)
 REGISTER_TYPE(StatusIconComponent, "Component",
               &StatusIconComponent_Factory, &StatusIconComponent_CreateInPlace);
 #endif // STANDALONE_EXE

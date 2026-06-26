@@ -67,6 +67,7 @@ static uint32_t g_tid_MapComponent        = 0;   // 0x1401c79e0
 static uint32_t g_tid_WorkPlaceComponent  = 0;   // 0x1401c80e0
 static uint32_t g_tid_WorkPlaceDescription = 0;  // 0x1401c8118
 static uint32_t g_tid_StatusIconComponent = 0;   // 0x1401c7e08
+static uint32_t g_tid_StatusIconDescription = 0;  // 0x1401c7e40
 
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
@@ -75,6 +76,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c80e0, reinterpret_cast<uintptr_t>(&g_tid_WorkPlaceComponent));
     RegisterExeAddr(0x1401c8118, reinterpret_cast<uintptr_t>(&g_tid_WorkPlaceDescription));
     RegisterExeAddr(0x1401c7e08, reinterpret_cast<uintptr_t>(&g_tid_StatusIconComponent));
+    RegisterExeAddr(0x1401c7e40, reinterpret_cast<uintptr_t>(&g_tid_StatusIconDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -84,6 +86,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_WorkPlaceComponent   = ::Object::GetTypeIdByName("WorkPlaceComponent");
     g_tid_WorkPlaceDescription = ::Object::GetTypeIdByName("WorkPlaceDescription");
     g_tid_StatusIconComponent  = ::Object::GetTypeIdByName("StatusIconComponent");
+    g_tid_StatusIconDescription = ::Object::GetTypeIdByName("StatusIconDescription");
 }
 
 #endif // STANDALONE_EXE
