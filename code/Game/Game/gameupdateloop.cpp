@@ -654,6 +654,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // deadlocks; see g_wpcRosterOnly). One-shot, drains its queue on an early frame.
     extern void StartTown_ApplyPendingOccupiedVisuals(int frameNum);  // C linkage (file is extern "C")
     StartTown_ApplyPendingOccupiedVisuals(s_frameNum);
+
+    // Phase B: drain the deferred StatusIcon FORCESHOW queue once the scene is live
+    // (env BANISHED_STATUSICON_FORCESHOW; one-shot). No-op unless the env is set.
+    extern void StatusIcon_DrainForceShow(int frameNum);
+    StatusIcon_DrainForceShow(s_frameNum);
 #endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",

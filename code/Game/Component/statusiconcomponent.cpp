@@ -366,6 +366,71 @@ static void EnsureGeometryVtable() {
     g_siGeomVtableInit = true;
 }
 
+// ============================================================
+// Phase B — real billboard draw + positioning (standalone)
+// ============================================================
+// The real billboard Draw/AddDrawItems vtable lives in statusicon_geometry.cpp.
+void  StatusIconGeometry_BuildVtable(void** baseVtbl);
+void** StatusIconGeometry_Vtable();
+bool  StatusIconGeometry_VtableBuilt();
+
+// Runtime base Graphics::Geometry ctor (??0Geometry@Graphics@@QEAA@XZ) — sets the base
+// vtable + initializes InterpolatedState<Transform> / bounds fields the draw path needs.
+typedef void* (*fn_Geometry_BaseCtor_t)(void* geometry);
+static fn_Geometry_BaseCtor_t s_fn_Geometry_BaseCtor = nullptr;
+
+// Graphics::Geometry::SetTransform (Runtime export) — used by OnRemove positioning.
+typedef void (*fn_SI_GeomSetTransform_t)(void* geometry, const void* transform);
+static fn_SI_GeomSetTransform_t s_fn_Geometry_SetTransform = nullptr;
+
+// Entity component finders (registered exe ports; member ABI RCX=entity, RDX=retIBP).
+typedef void* (*fn_Finder_t)(uintptr_t entity, void* outIBP);
+static fn_Finder_t s_fn_FindModel = nullptr;   // 0x140003f60 -> ModelComponent (type 0x1401c7a50)
+static fn_Finder_t s_fn_FindMulti = nullptr;   // 0x140004740 -> MultiObjectComponent (type 0x1401c7ac0)
+static fn_Finder_t s_fn_FindMap   = nullptr;   // 0x140004680 -> MapComponent (type 0x1401c79e0)
+
+// CharacterComponent_impl_f3e0 (0x14009f3e0) — grid cell -> world position.
+typedef float* (*fn_GridToWorld_t)(int* grid, float* outWorld, float* inGrid, char flag, void* extra);
+static fn_GridToWorld_t s_fn_GridToWorld = nullptr;
+
+static bool s_drawHelpersResolved = false;
+static void EnsureDrawHelpers() {
+    if (s_drawHelpersResolved) return;
+    s_fn_Geometry_BaseCtor = reinterpret_cast<fn_Geometry_BaseCtor_t>(
+        ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
+    s_fn_Geometry_SetTransform = reinterpret_cast<fn_SI_GeomSetTransform_t>(
+        ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
+    s_fn_FindModel = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_fn_FindMulti = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004740));
+    s_fn_FindMap   = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_GridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_drawHelpersResolved = true;
+}
+
+// Faithful standalone port of StatusIconComponent::OnRemove (0x14012bbd0): Scene
+// add/remove on the icon-visibility setting, then position the icon over the entity's
+// model bounding box (buildings) or map cell. Forward-declared; defined below.
+void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self);
+
+// FORCESHOW deferred queue (one-shot, drained on an early gameplay frame).
+static StatusIconComponent* s_forceShowList[1024];
+static int  s_forceShowCount   = 0;
+static bool s_forceShowDrained = false;
+static bool s_forceShowEnabled = false;
+static bool s_forceShowChecked = false;
+static bool ForceShowEnabled() {
+    if (!s_forceShowChecked) {
+        const char* e = getenv("BANISHED_STATUSICON_FORCESHOW");
+        s_forceShowEnabled = e && e[0] && e[0] != '0';
+        s_forceShowChecked = true;
+    }
+    return s_forceShowEnabled;
+}
+static void StatusIcon_RegisterForceShow(StatusIconComponent* self) {
+    if (!ForceShowEnabled()) return;
+    if (s_forceShowCount < 1024) s_forceShowList[s_forceShowCount++] = self;
+}
+
 // StatusIconComponent_StartupInit — the spawn-time body init the inert factory skips.
 // Routed to the component's Startup/Serialize slot (vtable +0x20 / index 4) so it runs
 // during ComponentEntity::StartupComponents, exactly where the original dispatches the
@@ -379,16 +444,37 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     EnsureGeometryVtable();
     uintptr_t s = (uintptr_t)self;
 
-    // Faithful ctor field-init delta (inert factory already did Object::Internal base
-    // + flags +0x20|=0xC2 + zeroed body):
-    //   geometry sub-object (+0x28) vtable → safe standalone billboard vtable
-    //   sceneObjId (+0x100) = -1 (NOT scene-registered)
-    *(void**)(s + 0x28) = g_StatusIconGeometryVtable;
-    *(uint32_t*)(s + 0x100) = 0xFFFFFFFFu;
+    // Phase B: when BANISHED_LIVE_STATUSICON_DRAW is set, build the REAL embedded
+    // Graphics::Geometry (Runtime base ctor → base vtable + InterpolatedState/bounds
+    // fields) and install a standalone billboard vtable that overrides only the two
+    // draw slots (Draw=2, AddDrawItems=3). Otherwise keep the Phase A no-op vtable.
+    static bool drawMode = [](){ const char* e = getenv("BANISHED_LIVE_STATUSICON_DRAW");
+                                 return e && e[0] && e[0] != '0'; }();
+    if (drawMode) {
+        EnsureDrawHelpers();
+        if (s_fn_Geometry_BaseCtor) {
+            s_fn_Geometry_BaseCtor((void*)(s + 0x28));        // base vtable + base fields
+            void** baseV = *(void***)(s + 0x28);
+            StatusIconGeometry_BuildVtable(baseV);            // copy base, override 2,3
+        }
+        *(void**)(s + 0x28) = StatusIconGeometry_VtableBuilt()
+                                  ? StatusIconGeometry_Vtable()
+                                  : g_StatusIconGeometryVtable;
+    } else {
+        // Faithful ctor field-init delta (inert factory already did Object::Internal
+        // base + flags +0x20|=0xC2 + zeroed body): geometry sub-object (+0x28) vtable
+        // → safe standalone no-op billboard vtable.
+        *(void**)(s + 0x28) = g_StatusIconGeometryVtable;
+    }
+    *(uint32_t*)(s + 0x100) = 0xFFFFFFFFu;   // sceneObjId = -1 (NOT scene-registered)
 
     // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
     // — no-ops if desc/spriteSheet absent).
     StatusIconComponent_Serialize(self);
+
+    // Phase B: FORCESHOW — queue this icon for a deferred one-shot show on an early
+    // gameplay frame (the scene must be live; doing it at build-time deadlocks).
+    if (drawMode) StatusIcon_RegisterForceShow(self);
 
     // Diagnostic: settle whether the sprite-sheet RESOURCE is present in standalone
     // (the gating unknown for Phase B rendering). desc+0x20 = SpriteSheet,
@@ -404,6 +490,132 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
         printf("[StatusIcon::Startup] self=%p desc=%p sheet=%p material=%p spriteCount=%d "
                "geomBits(+0xc4)=%d\n",
                (void*)self, desc, sheet, mat, cnt, *(int*)(s + 0x28 + 0xC4));
+        fflush(stdout);
+    }
+}
+
+// ============================================================
+// Standalone faithful port of StatusIconComponent::OnRemove (0x14012bbd0)
+// ============================================================
+// Manages Scene add/remove on the game-settings icon-visibility byte (settings+0xc),
+// then positions the icon. Buildings take the MODEL-BOUNDS path (icon centred above
+// the model's bounding box); the map-cell fallback mirrors the original for entities
+// without a model. Verified line-by-line against the disassembly.
+void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
+    EnsureHelpers();
+    EnsureDrawHelpers();
+    uintptr_t c = (uintptr_t)self;
+
+    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    if (!settings || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    void* scene = *(void**)(gw + 0x60);
+    uint8_t iconVisible = reinterpret_cast<uint8_t*>(settings)[0xc];
+
+    int32_t sceneId = *(int32_t*)(c + 0x100);
+    if (iconVisible == 0) {
+        if (sceneId >= 0 && s_fn_Scene_RemoveObject && scene) {
+            s_fn_Scene_RemoveObject(scene, (uint32_t)sceneId);
+            *(int32_t*)(c + 0x100) = -1;
+        }
+    } else if (sceneId < 0) {
+        if (s_fn_Scene_AddObject && scene) {
+            uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
+            *(int32_t*)(c + 0x100) = (int32_t)id;
+        }
+    }
+    if (*(int32_t*)(c + 0x100) < 0) return;
+
+    // Icon scale (settings+8 / 100) cached at +0xa4/+0xa8; flag bit 2 on change.
+    float scaleVal = (float)(*(int32_t*)((uint8_t*)settings + 8)) / 100.0f;
+    if (scaleVal != *(float*)(c + 0xa4)) {
+        *(uint32_t*)(c + 0x54) |= 4u;
+        *(float*)(c + 0xa4) = scaleVal;
+        *(float*)(c + 0xa8) = scaleVal;
+    }
+
+    void* descObj = *(void**)(c + 0x18);
+    void* desc = (fn_IsDerivedFrom && s_TypeId_StatusIconDesc &&
+                  fn_IsDerivedFrom(descObj, *s_TypeId_StatusIconDesc)) ? descObj : nullptr;
+
+    float pos[3];
+    pos[0] = 0.0f;
+    pos[1] = 0.0f;
+    pos[2] = desc ? *(float*)((uintptr_t)desc + 0x2c) : 0.0f;   // base height offset
+
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
+    uintptr_t entity = *(uintptr_t*)(c + 0x10);
+
+    void* modelIBP[2] = { nullptr, nullptr };
+    void* multiIBP[2] = { nullptr, nullptr };
+    if (s_fn_FindModel) s_fn_FindModel(entity, modelIBP);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
+    if (s_fn_FindMulti) s_fn_FindMulti(entity, multiIBP);
+
+    if (multiIBP[0] == nullptr && modelIBP[0] != nullptr) {
+        // MODEL-BOUNDS path: Box at model+0x5c = {min(3), max(3)}; size.z = max.z-min.z.
+        uintptr_t model = (uintptr_t)modelIBP[0];
+        float sizeZ = *(float*)(model + 0x5c + 0x14) - *(float*)(model + 0x5c + 0x08);
+        pos[0] = *(float*)(model + 0x158);
+        pos[1] = *(float*)(model + 0x15c);
+        pos[2] = *(float*)(model + 0x160) + sizeZ;
+    } else {
+        // MAP-CELL fallback.
+        void* mapIBP[2] = { nullptr, nullptr };
+        if (s_fn_FindMap) s_fn_FindMap(entity, mapIBP);
+        if (mapIBP[0] && s_fn_GridToWorld) {
+            uintptr_t mc = (uintptr_t)mapIBP[0];
+            int* widthPtr = *(int**)(gw + 0xf8);
+            int w = *widthPtr;
+            int idx = ((int)*(int16_t*)(mc + 0x2a) + ((int)*(int16_t*)(mc + 0x2e) >> 1)) * w
+                      + ((int)*(int16_t*)(mc + 0x2c) >> 1) + (int)*(int16_t*)(mc + 0x28);
+            float f = (float)(w >> 1) - 0.5f;
+            float in[3]  = { (float)(idx % w) - f, (float)(idx / w) - f, 0.0f };
+            float out[3] = { 0.0f, 0.0f, 0.0f };
+            s_fn_GridToWorld(widthPtr, out, in, 0, nullptr);
+            pos[0] += out[0];
+            pos[1] += out[1];
+            pos[2] += out[2];
+        }
+    }
+
+    // Transform (0x1C bytes): {0,0,0, 1.0(cos), pos.x, pos.y, pos.z} — pure translation.
+    float xf[7] = { 0.0f, 0.0f, 0.0f, 1.0f, pos[0], pos[1], pos[2] };
+    if (s_fn_Geometry_SetTransform) s_fn_Geometry_SetTransform((void*)(c + 0x28), xf);
+}
+
+// ============================================================
+// FORCESHOW deferred drain — called per-tick from GameUpdateLoop::Update.
+// ============================================================
+// One-shot: once the scene (gameWorld+0x60) is live, force every queued icon's active
+// bit (comp+0xF0 |= 1) and the global icon-visibility setting, then run the faithful
+// OnRemove (AddObject + position). Frame-gated so the build pass has finished.
+extern "C" void StatusIcon_DrainForceShow(int frameNum) {
+    if (s_forceShowDrained || !ForceShowEnabled() || s_forceShowCount == 0) return;
+    if (frameNum < 3) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    void* scene = *(void**)(gw + 0x60);
+    if (!scene) return;   // scene not live yet — retry next frame
+
+    void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+    if (settings) reinterpret_cast<uint8_t*>(settings)[0xc] = 1;  // force icon visibility ON
+
+    int shown = 0;
+    for (int i = 0; i < s_forceShowCount; ++i) {
+        StatusIconComponent* c = s_forceShowList[i];
+        if (!c) continue;
+        *(uint32_t*)((uintptr_t)c + 0xF0) |= 1u;   // active sprite bit 0 (= geom+0xc8)
+        StatusIconComponent_OnRemove_Standalone(c);
+        if (*(int32_t*)((uintptr_t)c + 0x100) >= 0) ++shown;
+    }
+    s_forceShowDrained = true;
+
+    static bool trace = [](){ const char* e = getenv("BANISHED_STATUSICON_TRACE");
+                              return e && e[0] && e[0] != '0'; }();
+    if (trace) {
+        printf("[StatusIcon::ForceShow] frame=%d queued=%d added-to-scene=%d scene=%p settings=%p\n",
+               frameNum, s_forceShowCount, shown, scene, settings);
         fflush(stdout);
     }
 }
