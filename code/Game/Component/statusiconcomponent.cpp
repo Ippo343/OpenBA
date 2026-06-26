@@ -393,6 +393,10 @@ static fn_Finder_t s_fn_FindMap   = nullptr;   // 0x140004680 -> MapComponent (t
 typedef float* (*fn_GridToWorld_t)(int* grid, float* outWorld, float* inGrid, char flag, void* extra);
 static fn_GridToWorld_t s_fn_GridToWorld = nullptr;
 
+// WorkPlaceComponent type id (0x1401c80e0) — used by the REAL occupancy driver to read
+// the owner building's occupant roster (WorkPlaceComponent+0x60).
+static uint32_t* s_TypeId_WorkPlace = nullptr;
+
 static bool s_drawHelpersResolved = false;
 static void EnsureDrawHelpers() {
     if (s_drawHelpersResolved) return;
@@ -404,18 +408,28 @@ static void EnsureDrawHelpers() {
     s_fn_FindMulti = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004740));
     s_fn_FindMap   = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fn_GridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
+    s_TypeId_WorkPlace = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
     s_drawHelpersResolved = true;
 }
 
-// Faithful standalone port of StatusIconComponent::OnRemove (0x14012bbd0): Scene
-// add/remove on the icon-visibility setting, then position the icon over the entity's
-// model bounding box (buildings) or map cell. Forward-declared; defined below.
+// Component-vtable +0x40 (idx 8, OnRemove = positioning) routed for standalone. The
+// occupancy toggle FUN_14012c3f0 (ported below as StatusIcon_Toggle) calls this slot
+// directly to position the icon after AddObject. Original signature is (self, Time*);
+// the Time arg is ignored by the body (0x14012bbd0). Forward-decl; defined further down.
 void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self);
+static void StatusIcon_OnRemove_VSlot(void* self, void* /*time*/) {
+    StatusIconComponent_OnRemove_Standalone(reinterpret_cast<StatusIconComponent*>(self));
+}
 
-// FORCESHOW deferred queue (one-shot, drained on an early gameplay frame).
-static StatusIconComponent* s_forceShowList[1024];
-static int  s_forceShowCount   = 0;
-static bool s_forceShowDrained = false;
+
+// Deferred icon-driver queue (one-shot, drained on an early gameplay frame). Populated
+// for EVERY StatusIcon spawned under BANISHED_LIVE_STATUSICON_DRAW (the caller gates).
+// The drain (StatusIcon_DrainForceShow) then drives each icon: by REAL occupancy by
+// default, or — only when BANISHED_STATUSICON_FORCESHOW is set — by the legacy debug
+// force-show. Default build (DRAW off) never populates the queue → byte-identical.
+static StatusIconComponent* s_iconDriveList[1024];
+static int  s_iconDriveCount   = 0;
+static bool s_iconDriveDrained = false;
 static bool s_forceShowEnabled = false;
 static bool s_forceShowChecked = false;
 static bool ForceShowEnabled() {
@@ -426,9 +440,10 @@ static bool ForceShowEnabled() {
     }
     return s_forceShowEnabled;
 }
-static void StatusIcon_RegisterForceShow(StatusIconComponent* self) {
-    if (!ForceShowEnabled()) return;
-    if (s_forceShowCount < 1024) s_forceShowList[s_forceShowCount++] = self;
+// Queue an icon for the deferred gameplay-time driver. The caller already gates on
+// BANISHED_LIVE_STATUSICON_DRAW (the scene must be live before the icon can be shown).
+static void StatusIcon_RegisterDriven(StatusIconComponent* self) {
+    if (s_iconDriveCount < 1024) s_iconDriveList[s_iconDriveCount++] = self;
 }
 
 // StatusIconComponent_StartupInit — the spawn-time body init the inert factory skips.
@@ -460,6 +475,19 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
         *(void**)(s + 0x28) = StatusIconGeometry_VtableBuilt()
                                   ? StatusIconGeometry_Vtable()
                                   : g_StatusIconGeometryVtable;
+
+        // Route the COMPONENT-vtable +0x40 (idx 8 = OnRemove = positioning) to the
+        // standalone port. The inert factory leaves this an all-stub no-op; the occupancy
+        // toggle FUN_14012c3f0 (StatusIcon_Toggle) calls component vtable+0x40 to position
+        // the icon after AddObject, so it MUST point at OnRemove_Standalone or the icon
+        // is added at the origin (un-positioned). The component vtable ptr at offset 0 is
+        // the shared per-type LiveVtable (installed by InitInertTyped); writing slot 8 once
+        // is idempotent across instances. (+0x38 OnCreate / +0x58 Slot11 are intentionally
+        // left inert: +0x48 Update is a bare `ret` so there is no per-tick path, and +0x58's
+        // only dispatcher is the event-driven entity-notify FUN_1400c2bf0 which never sets
+        // the occupancy flag — the warning bit is owned solely by the +0x40-driving toggle.)
+        void** vt = *(void***)s;
+        if (vt) vt[8] = reinterpret_cast<void*>(&StatusIcon_OnRemove_VSlot);
     } else {
         // Faithful ctor field-init delta (inert factory already did Object::Internal
         // base + flags +0x20|=0xC2 + zeroed body): geometry sub-object (+0x28) vtable
@@ -472,9 +500,10 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     // — no-ops if desc/spriteSheet absent).
     StatusIconComponent_Serialize(self);
 
-    // Phase B: FORCESHOW — queue this icon for a deferred one-shot show on an early
-    // gameplay frame (the scene must be live; doing it at build-time deadlocks).
-    if (drawMode) StatusIcon_RegisterForceShow(self);
+    // Queue this icon for the deferred gameplay-time driver (the scene must be live; the
+    // toggle's Scene Add/RemoveObject deadlocks at build-time). The drain decides REAL
+    // occupancy vs the legacy FORCESHOW debug path.
+    if (drawMode) StatusIcon_RegisterDriven(self);
 
     // Diagnostic: settle whether the sprite-sheet RESOURCE is present in standalone
     // (the gating unknown for Phase B rendering). desc+0x20 = SpriteSheet,
@@ -585,37 +614,165 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
 }
 
 // ============================================================
-// FORCESHOW deferred drain — called per-tick from GameUpdateLoop::Update.
+// StatusIcon_Toggle — faithful standalone port of FUN_14012c3f0 (0x14012c3f0)
 // ============================================================
-// One-shot: once the scene (gameWorld+0x60) is live, force every queued icon's active
-// bit (comp+0xF0 |= 1) and the global icon-visibility setting, then run the faithful
-// OnRemove (AddObject + position). Frame-gated so the build pass has finished.
+// The authentic status-icon flag SETTER: OR/AND (1<<bit) into the icon active-bits word
+// (+0xF0). If the word becomes 0 → RemoveObject (hide). Otherwise, if the global icon-
+// visibility setting (settings+0xc) is on and the icon is not yet in the scene, AddObject
+// the embedded geometry (+0x28), then call component vtable+0x40 (OnRemove = positioning),
+// and OR the +0x20 dirty bit; on a low-16 change, notify the owner entity (FUN_1400c3470).
+// Verified line-by-line against the disassembly. This is the function WorkPlace attach/
+// detach (0x14012fa20 / 0x14012f7e0) and SetAccepting (0x14012fc00) drive to show/clear the
+// "no occupants / no workers" warning (bit 4 = 0x10). The real exe fn is unmapped in
+// standalone, so the occupancy driver below calls this port instead.
+void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
+    EnsureHelpers();
+    uintptr_t c = (uintptr_t)selfC;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    void* scene = *(void**)(gw + 0x60);
+
+    // Culled-entity guard: if the owner entity is culled (entity+0x40 bit 10) the original
+    // skips the SET path (only clears are honoured while culled).
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
+    uintptr_t entity = *(uintptr_t*)(c + 0x10);
+    if (entity && ((*(uint32_t*)(entity + 0x40) >> 10) & 1) != 0 && setFlag) return;
+
+    uint32_t mask = 1u << (bit & 0x1f);
+    uint32_t* pFlags = (uint32_t*)(c + 0xF0);
+    if (!setFlag) *pFlags &= ~mask; else *pFlags |= mask;
+
+    uint32_t old20 = *(uint32_t*)(c + 0x20);
+    uint32_t new20;
+    if ((int32_t)*pFlags == 0) {
+        // All status bits cleared → remove the icon from the scene.
+        int32_t sid = *(int32_t*)(c + 0x100);
+        if (sid >= 0 && s_fn_Scene_RemoveObject && scene) {
+            s_fn_Scene_RemoveObject(scene, (uint32_t)sid);
+            *(int32_t*)(c + 0x100) = -1;
+        }
+        new20 = old20 & 0xfffffffbu;
+    } else {
+        // At least one status bit set → ensure the icon is in the scene (visibility on)
+        // and position it via component vtable+0x40 (OnRemove).
+        void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
+        uint8_t vis = settings ? reinterpret_cast<uint8_t*>(settings)[0xc] : 0;
+        if (vis != 0 && *(int32_t*)(c + 0x100) < 0 && s_fn_Scene_AddObject && scene) {
+            uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
+            *(int32_t*)(c + 0x100) = (int32_t)id;
+        }
+        if (s_fn_Time_Ctor) {
+            uint8_t timeObj[8];
+            s_fn_Time_Ctor(timeObj, 0.0f);
+            typedef void (*fn_V40_t)(void*, void*);
+            fn_V40_t v40 = *(fn_V40_t*)(*(uintptr_t*)c + 0x40);
+            if (v40) v40(selfC, timeObj);
+        }
+        new20 = old20 | 4u;
+    }
+    *(uint32_t*)(c + 0x20) = new20;
+    if (((new20 ^ old20) & 0xffff) != 0 && *(uintptr_t*)(c + 0x10) != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
+        if (s_fn_EntityNotify) s_fn_EntityNotify(*(void**)(c + 0x10));
+    }
+}
+
+// Find the owner entity's WorkPlaceComponent (occupant-roster controller, type 0x1401c80e0).
+// Entity component array at entity+0x30, count +0x38; each slot an InternalBasePtr.
+// Mirrors Entity_FindComponent_MeshInstance (0x140002f90). Returns null if absent (e.g. a
+// non-workplace building, or a partial-world entity) → such icons get no occupancy driver.
+static void* StatusIcon_FindWorkPlace(uintptr_t entity) {
+    if (!entity || !s_TypeId_WorkPlace || !fn_IsDerivedFrom) return nullptr;
+    int count = *(int*)(entity + 0x38);
+    int64_t arr = *(int64_t*)(entity + 0x30);
+    for (int i = 0; i < count; i++) {
+        int64_t* slot = (int64_t*)(arr + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = (void*)*slot;
+        if (!comp) continue;
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (tid == *s_TypeId_WorkPlace) {
+            return fn_IsDerivedFrom(comp, *s_TypeId_WorkPlace) ? comp : nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================
+// Deferred icon driver — called per-tick from GameUpdateLoop::Update (one-shot).
+// ============================================================
+// Once the scene (gameWorld+0x60) is live, enable the global status-icon user setting
+// (settings+0xc) and drive every queued icon:
+//   * DEFAULT (REAL occupancy): find the owner building's WorkPlaceComponent and toggle the
+//     "no occupants / no workers" warning bit 4 (0x10) — SET when the occupant roster
+//     (WorkPlaceComponent+0x60) is empty, CLEAR when occupied. This is byte-faithful to the
+//     warning bit driven by WorkPlace SetAccepting (Entity_impl_fc00 `| 0x10`) and cleared
+//     by WorkPlace Attach (FUN_14012fa20 mode 4). Icons whose owner has no WorkPlaceComponent
+//     are left untouched.
+//   * DEBUG (BANISHED_STATUSICON_FORCESHOW): legacy force-show — set bit 0 on every icon
+//     regardless of occupancy. Retained for visual testing only.
+// Frame-gated so the build pass has finished; the function name is kept for the single
+// call site in GameUpdateLoop::Update. NOT one-shot: occupancy is re-evaluated every tick
+// (cheap — only the ~handful of workplace icons act), which (a) tracks occupancy as it
+// changes during gameplay and (b) re-applies the faithful cull-guarded toggle once a
+// transiently-culled building becomes visible (standalone has no +0x58 re-sync broadcast).
+// The toggle is idempotent: a SET on an already-shown icon (sceneObjId>=0) skips AddObject
+// and only re-positions; a CLEAR on an already-hidden icon is a no-op.
 extern "C" void StatusIcon_DrainForceShow(int frameNum) {
-    if (s_forceShowDrained || !ForceShowEnabled() || s_forceShowCount == 0) return;
+    (void)s_iconDriveDrained;
+    if (s_iconDriveCount == 0) return;
     if (frameNum < 3) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
     void* scene = *(void**)(gw + 0x60);
     if (!scene) return;   // scene not live yet — retry next frame
+    EnsureDrawHelpers();
 
     void* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
-    if (settings) reinterpret_cast<uint8_t*>(settings)[0xc] = 1;  // force icon visibility ON
+    // Enable the status-icon user setting (a legitimate user toggle, not a per-icon hack);
+    // REAL occupancy below decides WHICH icons are actually shown.
+    if (settings) reinterpret_cast<uint8_t*>(settings)[0xc] = 1;
 
-    int shown = 0;
-    for (int i = 0; i < s_forceShowCount; ++i) {
-        StatusIconComponent* c = s_forceShowList[i];
-        if (!c) continue;
-        *(uint32_t*)((uintptr_t)c + 0xF0) |= 1u;   // active sprite bit 0 (= geom+0xc8)
-        StatusIconComponent_OnRemove_Standalone(c);
-        if (*(int32_t*)((uintptr_t)c + 0x100) >= 0) ++shown;
+    const bool forceShow = ForceShowEnabled();
+    int shown = 0, warned = 0, cleared = 0, noWp = 0, culledWarn = 0;
+    for (int i = 0; i < s_iconDriveCount; ++i) {
+        StatusIconComponent* cc = s_iconDriveList[i];
+        if (!cc) continue;
+        uintptr_t c = (uintptr_t)cc;
+
+        if (forceShow) {
+            // Legacy debug: force-show every icon (active bit 0), then position.
+            StatusIcon_Toggle(cc, 0, true);
+        } else {
+            // REAL occupancy: warning bit 4 by the owner workplace's roster count.
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
+            uintptr_t entity = *(uintptr_t*)(c + 0x10);
+            void* wp = StatusIcon_FindWorkPlace(entity);
+            if (!wp) { ++noWp; continue; }
+            bool occupied = *(int*)((uintptr_t)wp + 0x60) > 0;
+            StatusIcon_Toggle(cc, 4, occupied ? false : true);
+            if (occupied) ++cleared;
+            else {
+                ++warned;
+                // Diagnostic: was the SET suppressed by the faithful cull guard?
+                if (entity && ((*(uint32_t*)(entity + 0x40) >> 10) & 1) != 0) ++culledWarn;
+            }
+        }
+        if (*(int32_t*)(c + 0x100) >= 0) ++shown;
     }
-    s_forceShowDrained = true;
 
     static bool trace = [](){ const char* e = getenv("BANISHED_STATUSICON_TRACE");
                               return e && e[0] && e[0] != '0'; }();
-    if (trace) {
-        printf("[StatusIcon::ForceShow] frame=%d queued=%d added-to-scene=%d scene=%p settings=%p\n",
-               frameNum, s_forceShowCount, shown, scene, settings);
+    // Log on the first run and whenever the shown-in-scene count changes (so the moment a
+    // warning icon actually enters the scene is captured) — not every frame.
+    static int s_lastShown = -1;
+    if (trace && shown != s_lastShown) {
+        s_lastShown = shown;
+        printf("[StatusIcon::Drive] frame=%d queued=%d mode=%s warned=%d (culled=%d) cleared=%d "
+               "noWorkplace=%d shown-in-scene=%d scene=%p settings=%p\n",
+               frameNum, s_iconDriveCount, forceShow ? "FORCESHOW" : "OCCUPANCY",
+               warned, culledWarn, cleared, noWp, shown, scene, settings);
         fflush(stdout);
     }
 }
