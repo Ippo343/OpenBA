@@ -28,6 +28,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <vector>
 
 static constexpr int   CELL_STRIDE = 0x30;
 static constexpr int   CELL_TYPE   = 0x29;     // tile type byte
@@ -42,6 +43,12 @@ static constexpr float kDeg2Rad    = 3.14159265358979323846f / 180.0f;
 // housed-flag(+0x68) at it, exercising the Work loop before the town-manager
 // building registry is brought up. Set in StartTown_SpawnStructures.
 void* g_pForceWorkBuilding = nullptr;
+
+// Owner-entity IBP values of the spawned residence (WoodHouse) buildings, captured by
+// StartTown_RunOnCreatePass when each house's ResidenceComponent::OnCreate fires. Used by
+// StartTown_AssignFoundingHousing to pair families to houses (townMgr+0x20 is never
+// populated in standalone — see the capture site). Cleared at the start of each spawn.
+static std::vector<int64_t> g_foundingHouseIBPs;
 
 // FUN_1400a2880 — is the townSize-radius disk around (tileX, tileY) fully
 // buildable (in-bounds + type 2)?
@@ -328,8 +335,17 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             vt = *(uintptr_t*)comp;
             typedef void (*fn_OnCreate_t)(void*);
             (*(fn_OnCreate_t*)(vt + 0x38))(comp);                // ResidenceComponent::OnCreate
+            // Capture the house's owner-entity IBP (ResidenceComponent+0x10 — the exact
+            // value the original registration uses) for the founding-housing pass. NB the
+            // original OnCreate's "registration" (FUN_140002cc0 on townMgr+0x20) is actually
+            // a remove-by-value → townMgr+0x20 is never populated in standalone (residences
+            // are listed at building-PLACEMENT time, which we don't run). So we keep the
+            // house IBPs here and pair them to families directly.
+            g_foundingHouseIBPs.push_back(*reinterpret_cast<int64_t*>((uint8_t*)comp + 0x10));
             fprintf(stderr, "[startTown::residence] ResidenceComponent::OnCreate fired "
-                            "(house registered into townMgr+0x20)\n");
+                            "(house #%zu captured, ownerIBP=%llx)\n",
+                            g_foundingHouseIBPs.size() - 1,
+                            (unsigned long long)g_foundingHouseIBPs.back());
             fflush(stderr);
         }
     }
@@ -688,6 +704,73 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList) {
     return ent;
 }
 
+// ---- Founding-family housing (BANISHED_LIVE_HOUSING) ------------------------
+// Vanilla has NO dedicated founding-family→house placement: the founding spawner
+// (CitizenComponent_impl_0dd0) only spawns + spouse/child-links citizens, and houses
+// are assigned per-tick by CitizenComponent::Update via the townMgr+0x100
+// profession/category BST (a house registers there through its WorkPlaceComponent's
+// residence-category key). That +0x100 registry — BST node-seed + WorkPlaceComponent::
+// OnCreate + the WorkPlaceDescription Serialize that fills the key — is the larger
+// economy frontier and is empty in the standalone Easy town, so the per-tick finders
+// correctly return 0.
+//
+// As a self-contained founding placement we pair each founding family with one spawned
+// WoodHouse (captured at ResidenceComponent::OnCreate, see g_foundingHouseIBPs — townMgr+0x20
+// itself is never populated in standalone) and set each member's residence reference
+// (CitizenComponent+0x248 = house). That is the citizen-side half of AssignHousing
+// (0x140111ee0) — the field the per-tick Update reads as "housed". The faithful roster-ATTACH
+// half (the house tracking its occupants + "occupied" mesh visuals) is a separate type-id/
+// visual domino chain, documented at the assignment site. Requires BANISHED_LIVE_RESIDENCE
+// (else no houses are captured). Gated on BANISHED_LIVE_HOUSING; default build is a no-op.
+static bool HousingEnvOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_HOUSING");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
+
+static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>>& families) {
+    if (!HousingEnvOn()) return;
+    uint32_t tidCitizen = TypeId("CitizenComponent");                  // 0x1401c7158
+    fprintf(stderr, "[startTown::housing] families=%zu capturedHouses=%zu tidCitizen=%u\n",
+            families.size(), g_foundingHouseIBPs.size(), tidCitizen);
+    fflush(stderr);
+    if (g_foundingHouseIBPs.empty() || tidCitizen == 0) {
+        fprintf(stderr, "[startTown::housing] no captured residences "
+                "(need BANISHED_LIVE_RESIDENCE) — skip\n"); fflush(stderr); return;
+    }
+
+    for (size_t f = 0; f < families.size() && f < g_foundingHouseIBPs.size(); ++f) {
+        int64_t houseIBP = g_foundingHouseIBPs[f];
+        if (houseIBP == 0) continue;
+        int housed = 0;
+        for (void* ent : families[f]) {
+            void* citComp = FindComponentOnEntity(ent, tidCitizen);
+            if (!citComp) continue;
+            // CITIZEN-SIDE assignment: set the residence reference (CitizenComponent+0x248),
+            // the field the per-tick CitizenComponent::Update reads as "housed" (skips its
+            // housing-find branch when +0x248 != 0). This is the half of AssignHousing
+            // (0x140111ee0) that needs no further world-state.
+            //
+            // NOT the full AssignHousing: its roster-ATTACH half (FUN_14012fa20) rosters the
+            // citizen into the building's WorkPlaceComponent (+0x58/+0x60) AND drives the
+            // "house occupied" mesh-skin visuals. That pulls in a type-id/visual domino chain
+            // (WorkPlaceComponent c80e0, WorkPlaceDescription c8118, MeshInstance find,
+            // ModelComponent_helper_2b70, FUN_14012c3f0) — a focused follow-up. Until then
+            // the house itself does not track its occupants (its roster stays empty), but
+            // each founding citizen has a valid home reference.
+            *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248) = houseIBP;
+            int64_t assigned = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248);
+            if (assigned != 0) ++housed;
+        }
+        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu members (citizen+0x248)\n",
+                f, f, (unsigned long long)houseIBP, housed, families[f].size());
+        fflush(stderr);
+    }
+}
+
 // CitizenComponent_impl_0dd0 — spawn the founding families.
 static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList) {
     const int famCount  = *(int32_t*)(startConfig + FAMILY_CNT);
@@ -713,27 +796,39 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList) {
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
         rng = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8);
 
+    // Collect each family's spawned citizen entities so the founding-housing pass
+    // (below) can pair family f with one registered WoodHouse. Only used when
+    // BANISHED_LIVE_HOUSING is set; otherwise the vector is simply discarded.
+    std::vector<std::vector<void*>> famEntities;
+
     int spawned = 0;
     for (int f = 0; f < famCount; ++f) {
         uint8_t* fam = families + (size_t)f * FAMILY_STRIDE;
         const int educated    = *(int8_t*)fam;
         const int maxChildren = *(int32_t*)(fam + 4);
+        famEntities.emplace_back();
+        std::vector<void*>& fe = famEntities.back();
 
         // Two adults (male + female).
-        if (SpawnOneCitizen(citizenTemplate, entityList)) ++spawned;
-        if (SpawnOneCitizen(citizenTemplate, entityList)) ++spawned;
+        if (void* a = SpawnOneCitizen(citizenTemplate, entityList)) { ++spawned; fe.push_back(a); }
+        if (void* b = SpawnOneCitizen(citizenTemplate, entityList)) { ++spawned; fe.push_back(b); }
 
         // Children: Rand(0.._maxChildCount).
         int kids = 0;
         if (rng && fn_Random_Rand && maxChildren >= 0)
             kids = (int)fn_Random_Rand(rng, maxChildren + 1);
         for (int c = 0; c < kids; ++c)
-            if (SpawnOneCitizen(citizenTemplate, entityList)) ++spawned;
+            if (void* k = SpawnOneCitizen(citizenTemplate, entityList)) { ++spawned; fe.push_back(k); }
 
         fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d\n",
                 f, educated, maxChildren, kids);
         fflush(stderr);
     }
+
+    // Founding-family housing: roster each family into a registered WoodHouse via the
+    // faithful AssignHousing primitive (env BANISHED_LIVE_HOUSING; default no-op).
+    StartTown_AssignFoundingHousing(famEntities);
+
     return spawned;
 }
 
