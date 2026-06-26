@@ -30,6 +30,31 @@
 //                center cell. With c79e0 unfilled, FloorComponent_FindResData scans for
 //                type-id 0, matches nothing, returns null -> PATH 2 fails too -> 7fb0 = -1
 //                -> CheckWorkplaceValid invalid -> State_Work can't path to the workplace.
+//
+//   0x1401c80e0  WorkPlaceComponent  -- the occupant-ROSTER controller. AssignHousing
+//                (FUN_140111ee0) finds the house's WorkPlaceComponent via FUN_140002e10
+//                (a GetTypeId==c80e0 scan over the residence entity's component array) and
+//                rosters the citizen into its +0x58/+0x60 worker list. With c80e0 unfilled
+//                the scan matches nothing -> a null building IBP is handed to the attach
+//                (FUN_14012fa20) -> read of comp+0x60 faults. Needed so the founding-housing
+//                pass can drive the FULL faithful AssignHousing (houses track occupants).
+//
+//   0x1401c8118  WorkPlaceDescription  -- read by the attach/detach (FUN_14012fa20 /
+//                FUN_14012f7e0) to validate the WorkPlaceComponent's description before the
+//                "occupied" mesh visual: `IsDerivedFrom(comp+0x18, c8118) ? desc : null` then
+//                `jobSlot == desc+0x20`. With c8118 unfilled the IsDerivedFrom returns false,
+//                desc collapses to null, and `*(desc+0x20)` faults (read of 0x20). Needed so
+//                the attach's ModelKick(mode 2)/MeshFlag(mode 4) "occupied" visual runs.
+//
+//   0x1401c7e08  StatusIconComponent  -- the building's renderable status-icon mesh that
+//                the attach's "occupied" toggle acts on. The attach finds it via FUN_140002f90
+//                (Entity_FindComponent_MeshInstance, a c7e08 scan over the house entity) and
+//                passes it to FUN_14012c3f0, which toggles the mesh visibility (Scene
+//                Add/RemoveObject + MeshInstance::Update). With c7e08 unfilled the find
+//                returns a null component and FUN_14012c3f0 faults reading mesh+0x10 (READ of
+//                0x10). The same global is the SHARED MeshInstance/StatusIcon finder used by
+//                the Work classes (FUN_140002f90) — those paths need an employed citizen, not
+//                reached in the default Easy town, so A/B the default build after filling.
 
 #ifdef STANDALONE_EXE
 
@@ -39,17 +64,26 @@
 
 static uint32_t g_tid_InteractDescription = 0;   // 0x1401c7938
 static uint32_t g_tid_MapComponent        = 0;   // 0x1401c79e0
+static uint32_t g_tid_WorkPlaceComponent  = 0;   // 0x1401c80e0
+static uint32_t g_tid_WorkPlaceDescription = 0;  // 0x1401c8118
+static uint32_t g_tid_StatusIconComponent = 0;   // 0x1401c7e08
 
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
     RegisterExeAddr(0x1401c79e0, reinterpret_cast<uintptr_t>(&g_tid_MapComponent));
+    RegisterExeAddr(0x1401c80e0, reinterpret_cast<uintptr_t>(&g_tid_WorkPlaceComponent));
+    RegisterExeAddr(0x1401c8118, reinterpret_cast<uintptr_t>(&g_tid_WorkPlaceDescription));
+    RegisterExeAddr(0x1401c7e08, reinterpret_cast<uintptr_t>(&g_tid_StatusIconComponent));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
 extern "C" void FillEconomyTypeIdGlobals() {
-    g_tid_InteractDescription = ::Object::GetTypeIdByName("InteractDescription");
-    g_tid_MapComponent        = ::Object::GetTypeIdByName("MapComponent");
+    g_tid_InteractDescription  = ::Object::GetTypeIdByName("InteractDescription");
+    g_tid_MapComponent         = ::Object::GetTypeIdByName("MapComponent");
+    g_tid_WorkPlaceComponent   = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    g_tid_WorkPlaceDescription = ::Object::GetTypeIdByName("WorkPlaceDescription");
+    g_tid_StatusIconComponent  = ::Object::GetTypeIdByName("StatusIconComponent");
 }
 
 #endif // STANDALONE_EXE

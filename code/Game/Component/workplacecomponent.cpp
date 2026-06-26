@@ -203,6 +203,18 @@ static void EnsureWpcBodyHelpers() {
     s_wpcBodyResolved = true;
 }
 
+// Build-time roster-only mode (set by StartTown_AssignFoundingHousing). When true,
+// Attach/Detach do ONLY the occupant-roster list mutation (+0x58/+0x60) and skip the
+// gameplay-time Scene mesh-visual toggle (ModelKick + FUN_14012c3f0). The founding-housing
+// shim runs during the StartTown world-BUILD, but the mesh toggle calls Graphics::Scene::
+// RemoveObject/AddObject — a live-gameplay operation that DEADLOCKS when driven mid-build
+// (the renderer scene isn't in a removable state and the inert StatusIconComponent's
+// sceneObjId is stale). Vanilla houses founders per-TICK during gameplay (scene live), so
+// suppressing the visual here is faithful to *when* the toggle is meant to run; the roster
+// still tracks occupants. Default false → the per-tick gameplay AssignHousing path is
+// unchanged (full faithful visual).
+bool g_wpcRosterOnly = false;
+
 // Reimpl of FUN_14012f7e0 (WorkplaceComponent worker DETACH): remove the worker IBP
 // from the comp's worker list (+0x58), then if the comp is in its initial state
 // (+0x60==0): kick the model (mode 3), set the mesh flags 2 and 3, and — when the
@@ -214,21 +226,26 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     EnsureWpcBodyHelpers();
 
     if (s_fn_WPC_RemoveFromList) s_fn_WPC_RemoveFromList((int64_t*)(comp + 0x58), workerIbp);
+    // Build-time roster-only mode (see g_wpcRosterOnly): stop after the roster removal,
+    // skipping the gameplay-time Scene mesh-visual toggle that deadlocks mid-build.
+    if (g_wpcRosterOnly) return;
     if (*(int*)(comp + 0x60) != 0) return;
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 3);
 
+    // Partial-world guard (see WorkplaceComponent_Attach): skip the status-icon visual
+    // toggles when the standalone entity lacks the renderable StatusIconComponent (c7e08).
     uint64_t meshIbp = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
-    if (s_fn_WPC_MeshFlag) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 2, '\0');
+    if (s_fn_WPC_MeshFlag && *(int64_t**)&meshIbp) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 2, '\0');
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
-    if (s_fn_WPC_MeshFlag) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 3, '\0');
+    if (s_fn_WPC_MeshFlag && *(int64_t**)&meshIbp) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 3, '\0');
 
     if (*(char*)(comp + 0x50) == '\0') return;
 
@@ -252,6 +269,7 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp2);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp2);
     int64_t* mesh = *(int64_t**)&meshIbp2;
+    if (!mesh) return;   // partial-world guard: no StatusIconComponent renderable
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(mesh + 2);
     if ((*(uint32_t*)(mesh[2] + 0x40) >> 10 & 1) != 0) return;
 
@@ -307,22 +325,31 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
     EnsureHelpers();
     EnsureWpcBodyHelpers();
 
-    if (*(int*)(comp + 0x60) == 0) {
-        void* descObj = *(void**)(comp + 0x18);
-        int64_t jobSlot = *(int64_t*)(comp + 0x48);
-        void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
-                      fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
-        if (jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
-            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
-            if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
+    if (!g_wpcRosterOnly) {
+        if (*(int*)(comp + 0x60) == 0) {
+            void* descObj = *(void**)(comp + 0x18);
+            int64_t jobSlot = *(int64_t*)(comp + 0x48);
+            void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+                          fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+            if (jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+                if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
+            }
         }
-    }
 
-    uint64_t meshIbp = 0;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
-    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
-    if (s_fn_WPC_MeshFlag) s_fn_WPC_MeshFlag(*(int64_t**)&meshIbp, 4, '\0');
+        uint64_t meshIbp = 0;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+        if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+        // Faithful-equivalent partial-world guard: the original always toggles the building's
+        // status-icon mesh (FUN_14012c3f0) because every real building carries the renderable
+        // StatusIconComponent (c7e08). A standalone-spawned entity may lack it (inert factory /
+        // template not fully materialised) → the finder returns a null component and
+        // FUN_14012c3f0 faults reading mesh+0x10. Skip only the visual toggle when absent; the
+        // occupant roster append below still runs, so the house tracks its occupants regardless.
+        int64_t* mesh = *(int64_t**)&meshIbp;
+        if (s_fn_WPC_MeshFlag && mesh) s_fn_WPC_MeshFlag(mesh, 4, '\0');
+    }
 
     if (s_fn_WPC_AppendToList)
         s_fn_WPC_AppendToList((int64_t*)(comp + 0x58), *(int*)(comp + 0x60) + 1, workerIbp);

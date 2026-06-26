@@ -50,6 +50,18 @@ void* g_pForceWorkBuilding = nullptr;
 // populated in standalone — see the capture site). Cleared at the start of each spawn.
 static std::vector<int64_t> g_foundingHouseIBPs;
 
+// Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp). Sets the
+// citizen's residence ref (+0x248) AND rosters the citizen into the house's
+// WorkPlaceComponent occupant list (+0x58/+0x60) via the attach helper (FUN_14012fa20).
+// Used by StartTown_AssignFoundingHousing.
+struct CitizenComponent;
+extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* housingPtr);
+
+// WorkPlaceComponent attach/detach roster-only mode (workplacecomponent.cpp). Set true for
+// the build-time founding-housing pass so the roster is populated WITHOUT the gameplay-time
+// Scene mesh-visual toggle (which deadlocks mid-build). See the flag's definition.
+extern bool g_wpcRosterOnly;
+
 // FUN_1400a2880 — is the townSize-radius disk around (tileX, tileY) fully
 // buildable (in-bounds + type 2)?
 static bool StartTown_DiskBuildable(void* gameVoid, int tileX, int tileY, int size, int sizeSq) {
@@ -742,6 +754,11 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
                 "(need BANISHED_LIVE_RESIDENCE) — skip\n"); fflush(stderr); return;
     }
 
+    // Drive the FULL faithful AssignHousing in roster-only mode: it sets each citizen's
+    // residence ref (+0x248) AND appends the citizen to the house's WorkPlaceComponent
+    // occupant roster (+0x58/+0x60), but skips the gameplay-time Scene mesh-visual toggle
+    // (which deadlocks when driven during this build-time pass — see g_wpcRosterOnly).
+    g_wpcRosterOnly = true;
     for (size_t f = 0; f < families.size() && f < g_foundingHouseIBPs.size(); ++f) {
         int64_t houseIBP = g_foundingHouseIBPs[f];
         if (houseIBP == 0) continue;
@@ -749,26 +766,30 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
         for (void* ent : families[f]) {
             void* citComp = FindComponentOnEntity(ent, tidCitizen);
             if (!citComp) continue;
-            // CITIZEN-SIDE assignment: set the residence reference (CitizenComponent+0x248),
-            // the field the per-tick CitizenComponent::Update reads as "housed" (skips its
-            // housing-find branch when +0x248 != 0). This is the half of AssignHousing
-            // (0x140111ee0) that needs no further world-state.
-            //
-            // NOT the full AssignHousing: its roster-ATTACH half (FUN_14012fa20) rosters the
-            // citizen into the building's WorkPlaceComponent (+0x58/+0x60) AND drives the
-            // "house occupied" mesh-skin visuals. That pulls in a type-id/visual domino chain
-            // (WorkPlaceComponent c80e0, WorkPlaceDescription c8118, MeshInstance find,
-            // ModelComponent_helper_2b70, FUN_14012c3f0) — a focused follow-up. Until then
-            // the house itself does not track its occupants (its roster stays empty), but
-            // each founding citizen has a valid home reference.
-            *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248) = houseIBP;
+            // FULL faithful AssignHousing (0x140111ee0): detaches the citizen from any prior
+            // residence then (a) sets the residence reference CitizenComponent+0x248 — the
+            // field the per-tick Update reads as "housed" — AND (b) rosters the citizen into
+            // the house's WorkPlaceComponent occupant list (+0x58/+0x60) via the attach helper
+            // (FUN_14012fa20). The gates were the c80e0 (WorkPlaceComponent) + c8118
+            // (WorkPlaceDescription) type-id globals, now filled in reg_economy_typeids.cpp.
+            // So the house now TRACKS its occupants, not just the citizen pointing at it.
+            int64_t houseIBPLocal = houseIBP;
+            CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(citComp), &houseIBPLocal);
             int64_t assigned = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248);
             if (assigned != 0) ++housed;
         }
-        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu members (citizen+0x248)\n",
-                f, f, (unsigned long long)houseIBP, housed, families[f].size());
+        // Read back the house's WorkPlaceComponent occupant roster count (+0x60) to
+        // verify the FULL AssignHousing attach rostered the family (not just set +0x248).
+        int roster = -1;
+        uint32_t tidWP = TypeId("WorkPlaceComponent");                  // 0x1401c80e0
+        void* wp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidWP);
+        if (wp) roster = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wp) + 0x60);
+        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu members "
+                "(citizen+0x248); house WorkPlaceComponent roster(+0x60)=%d\n",
+                f, f, (unsigned long long)houseIBP, housed, families[f].size(), roster);
         fflush(stderr);
     }
+    g_wpcRosterOnly = false;   // restore: gameplay-time AssignHousing keeps the full visual
 }
 
 // CitizenComponent_impl_0dd0 — spawn the founding families.
