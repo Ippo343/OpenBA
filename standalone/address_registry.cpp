@@ -422,6 +422,8 @@ extern void RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A: zone+road en
 extern void RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A: residence RB-tree (17230/15ec0/172f0/17460/14b40)
 extern void RegisterKeystoneAMapBatch();     // Phase 2 Keystone A: map overlay/init (1241b0/9dc20/124750/9dee0/e2c0)
 extern void RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A: Game::Dtor + worker-thread teardown (9ed60 + 8 subs)
+extern void RegisterRegionGraphBuildBatch(); // Keystone A: region graph ctor + coarse array (a8670/1e060/1e420/f9e0)
+extern void RegisterRegionPairCacheBatch();  // Keystone A: region-pair ring-buffer init (1cca0)
 extern void RegisterPfRegionBatch();       // Wave 2: region-graph build/merge/flood-fill (13)
 extern void RegisterPfRoadBatch();         // Wave 2: road-mesh + geometry wrappers (10)
 extern void RegisterPfAstarBatch();        // Wave 2: A* core + thread dispatcher/enqueuers (15)
@@ -526,6 +528,8 @@ static void RegisterCodeFunctions() {
     RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A — residence RB-tree cluster
     RegisterKeystoneAMapBatch();     // Phase 2 Keystone A — map overlay/init cluster
     RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A — Game::Dtor + worker-thread teardown
+    RegisterRegionGraphBuildBatch(); // Keystone A — region graph ctor + coarse-cell array (8670/e060/e420/f9e0)
+    RegisterRegionPairCacheBatch();  // Keystone A — region-pair ring-buffer init (cca0)
     RegisterPfRegionBatch();       // pathfinding closure Wave 2 — region-graph build/merge/flood-fill
     RegisterPfRoadBatch();         // pathfinding closure Wave 2 — road-mesh + geometry wrappers
     RegisterPfAstarBatch();        // pathfinding closure Wave 2 — A* core + thread dispatcher

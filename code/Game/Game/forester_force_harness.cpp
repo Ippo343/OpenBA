@@ -215,6 +215,18 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
         // missing sub-fns in _DEBUG, so a FAIL here pinpoints the next domino.
         bool depsOk = ForesterWork_ExecuteReady();
         s_verified = (fc && depsOk) ? 1 : 0;
+        // The ForesterComponent's cut/plant toggles (+0x50 plant-enabled, +0x51 cut-enabled)
+        // are configured from the lodge UI / ForesterDescription defaults in the real game; on
+        // our INERT lodge both default to 0, so ForesterWork::Execute would neither cut nor
+        // plant (idle forever). Force CUT-only here (the force harness stands in for that
+        // configuration): +0x51 = 1 (cut trees), +0x50 = 0 (no planting). This drives the
+        // CUT path -> PerformWork -> CreateRawMaterial -> RegisterRawMaterial production chain.
+        if (s_verified == 1 && fc && Readable(fc, 0x52)) {
+            *reinterpret_cast<uint8_t*>((uintptr_t)fc + 0x51) = 1;   // cut-trees enabled
+            *reinterpret_cast<uint8_t*>((uintptr_t)fc + 0x50) = 0;   // plant-trees disabled
+            fprintf(stderr, "[ForceForester] set ForesterComponent cut-flag (+0x51)=1, plant(+0x50)=0\n");
+            fflush(stderr);
+        }
         if (!fc) {
             fprintf(stderr, "[ForceForester] lodge carries no usable ForesterComponent "
                     "(ForesterDescription) — NOT pushing ForesterWork (report-only). The work-area "

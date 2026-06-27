@@ -38,6 +38,7 @@ extern "C" void  Reimpl_Array_Resize_Stride04(void*, int);    // FUN_1400021d0 (
 extern "C" void  WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t seed); // worldgen.cpp (M5 5b)
 extern "C" void  MapTileGrid_Build(void* game, int dim);  // maptilegrid.cpp (M5 5c — tile grid Game+0x80)
 extern "C" void  Pathfinder_Seed(void* game, int dim);    // pathfinder_seed.cpp (task #34 — pathfinder @ game+0x68)
+extern "C" void  Region_Seed(void* game, int dim);        // region_seed.cpp (keystone A — region map @ game+0x70)
 extern "C" void  CharManager_Seed();                      // charmanager_seed.cpp (move-tick tail — char spatial-hash mgr @ GW+0x88)
 extern "C" void  StartTown_ComputeCamera(void* startConfig, void* game, float camPosOut[3]); // starttown.cpp (M5 5c — camera)
 extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);                    // starttown.cpp (M5 5c — ECS spawn)
@@ -931,6 +932,15 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             // behind BANISHED_LIVE_CHARACTER_MOVETICK (the only consumer); default no-op.
             if (game && dim > 0)
                 Pathfinder_Seed(game, (int)dim);
+
+            // keystone A — build the coarse REGION-CONNECTIVITY MAP (Map+0x70 graph +
+            // per-cell regionId at cell+0x18 + Map+0x78 pair cache). Reads the terrain
+            // cell grid built by MapTileGrid_Build above, so it must run AFTER it. Lets
+            // Map_CalcDistance/Pf_IsDstReachable return realistic distances instead of
+            // the euclidean+gridW fallback (which always exceeds work radii). Gated
+            // behind BANISHED_LIVE_REGIONMAP (default no-op). See region_seed.cpp.
+            if (game && dim > 0)
+                Region_Seed(game, (int)dim);
 
             // move-tick tail — seed the CHARACTER SPATIAL-HASH MANAGER at GameWorld+0x88.
             // CharacterComponent::OnAdd allocates each citizen's char-index out of this; that

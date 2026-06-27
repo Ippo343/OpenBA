@@ -294,7 +294,8 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
 // ============================================================
 // 0x14009d0a0 — expanding-ring spiral search for nearest valid region cell
 // ============================================================
-// param_1[0] = grid width (square). param_1+0x20 = cell-record array base
+// param_1[0] = grid width (square). param_1+0x20 (int* arithmetic, = BYTE 0x80) =
+// cell-record array base — the SAME array Pf_IsDstReachable_f810 reads at (int*)param_1+0x20.
 // (stride 0x30; +0x18 = regionId int). Starting from cell param_2, if that cell's
 // regionId < 0, spiral outward in rings of growing radius (1..3) testing the four
 // "side" walks of each ring; the first neighbour with regionId >= 0 returns that
@@ -304,7 +305,10 @@ int Pf_TileShapeLut_ae180(void* /*self*/, char p2, char p3, char p4, char p5,
 int Pf_RegionSpiral_9d0a0(int* param_1, int param_2) {
     int iVar5 = *param_1;
     int64_t lVar16 = (int64_t)iVar5;
-    int64_t lVar6 = *reinterpret_cast<int64_t*>(param_1 + 0x20 / 4);
+    // FIX (was `param_1 + 0x20/4` = byte 0x20, a NULL field → the documented "null
+    // Game+0x20 region-cell array" crash). Ghidra `param_1 + 0x20` on int* = byte 0x80;
+    // this is the populated cell array. Matches Pf_IsDstReachable_f810's read exactly.
+    int64_t lVar6 = *reinterpret_cast<int64_t*>(param_1 + 0x20);
     uint32_t uVar8 = (uint32_t)(param_2 / iVar5);
     int iVar11 = param_2 % iVar5;
     uint64_t uVar18 = (uint64_t)(int)uVar8;

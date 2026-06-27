@@ -1388,6 +1388,14 @@ static void StartTown_WriteCellType(uint8_t* game, uint8_t* cells, int idx, uint
     // (region/minimap + worker-thread notifies deliberately omitted — inert subsystems)
 }
 
+// G3 — write the resource entity into its map cell (cell+0x08) so the ForesterWork
+// harvest scan can find it. Default ON; opt out with BANISHED_RES_OCCUPANCY=0. See
+// the long note at the cell+0x08 write below for the dee0/dc20 two-pass rationale.
+static bool g_resOccupancy = []() {
+    const char* e = std::getenv("BANISHED_RES_OCCUPANCY");
+    return !(e && e[0] == '0');   // default ON; only "0" disables
+}();
+
 // CreateNaturalResource_impl_dee0 — mark the (w x h) footprint at (tileX,tileY) on
 // the Game cell grid for this natural resource. `ownerEntity` = the spawned
 // resource entity (compared against cell+0x00 for the type-2 override). `shape` =
@@ -1434,10 +1442,33 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
                     t = 2;
                 StartTown_WriteCellType(game, cells, cellIdx, t);
             }
-            // Clear the cell entity-link (cell+0x08) — dee0 always does this.
-            uintptr_t nullIBP = 0;
-            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
-            *(uintptr_t*)(cell + 0x08) = nullIBP;
+            // Cell entity-link (cell+0x08).
+            //
+            // The real game writes occupancy in TWO passes: MapComponent::OnCreate runs
+            // dee0 (which CLEARS cell+0x08), then MapComponent::Draw lazily runs
+            // sub_41b0 -> dc20 (FUN_14009dc20), which writes cell+0x08 = the owner entity
+            // (for an occupied/shape-'#' cell). The NET end-state is cell+0x08 = entity.
+            // In standalone MapComponent is inert, so Draw never fires and the occupancy
+            // is never written -> the ForesterWork harvest scan finds no tree at cell+0x08
+            // (foresterwork.cpp:745) and idles. We collapse the two passes into this one:
+            // when occupancy is enabled, write the entity (dc20's net effect) instead of
+            // clearing. We deliberately KEEP dee0's classified buildable(2) terrain type
+            // (set above) rather than dc20's MapDescription+0x20 stamp — both are non-0x1e0
+            // and passable, so the forester pre-check + zone gate behave identically, and
+            // dee0's classification is the value already proven safe in standalone. We
+            // cannot call the ported sub_41b0/dc20 directly: their IsDerivedFrom(MapDesc)
+            // returns FALSE in standalone's partial factory tree -> null-deref (the same
+            // landmine documented for FUN_1401253d0); here we trust the linked entity.
+            if (occupied && g_resOccupancy && ownerEntity) {
+                uintptr_t entIBP = 0;
+                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&entIBP, ownerEntity);
+                *(uintptr_t*)(cell + 0x08) = entIBP;   // dc20: *(cell+8) = owner entity
+            } else {
+                // dee0's clear (occupancy disabled, or non-occupied footprint cell).
+                uintptr_t nullIBP = 0;
+                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&nullIBP, nullptr);
+                *(uintptr_t*)(cell + 0x08) = nullIBP;
+            }
         }
     }
 }

@@ -678,8 +678,17 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
     int entityCellSigned = (int)entityGridCell;
 
+    // [G3 DIAG] count scan-loop bail points (gated to first few ticks via static below)
+    static int s_dbgTick = 0;
+    bool dbg = (std::getenv("BANISHED_FORESTER_SCAN_TRACE") != nullptr) && (s_dbgTick < 6);
+    int d_attempts = 0, d_precheck1e0 = 0, d_passable = 0, d_zone = 0, d_occ0 = 0,
+        d_resFound = 0, d_dist = 0, d_cut = 0, d_plant = 0;
+    int d_cutCap = 0, d_cutGrowth = 0, d_cutFlags20 = 0, d_cutPath = 0, d_cutDone = 0;
+    float d_maxGrowth = -1.0f;
+
     if (maxAttempts > 0) {
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            d_attempts++;
             int randX, randY;
             int testCellX, testCellY;
 
@@ -706,6 +715,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                 // Terrain already has resources (trees), skip
                 goto next_attempt;
             }
+            d_precheck1e0++;
 
             {
                 // Map invalidation for connectivity
@@ -724,6 +734,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                 // Both cells must be passable
                 if ((fullMask & testTerrainBit) == 0) goto next_attempt;
                 if ((fullMask & entityTerrainBit) == 0) goto next_attempt;
+                d_passable++;
 
                 // Either both are "forest terrain" (0x1e0), or they share the same zone
                 if ((combinedBits & 0x1e0) == 0) {
@@ -733,25 +744,38 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                     if (zone2 == 0) goto next_attempt;
                     if (zone1 != zone2) goto next_attempt;
                 }
+                d_zone++;
 
                 // Cell must be unoccupied (no entity at cell)
                 if (*(uintptr_t*)(testCellData2) != 0) goto next_attempt;
+                d_occ0++;
 
                 // Check distance is within 2x workplace radius
                 int dist = s_fn_Map_CalcDistance(mapGrid, entityGridCell, testCell);
                 if (dist > workplaceRadius * 2) goto next_attempt;
+                d_dist++;
 
                 // Get resource entity at this cell
                 uintptr_t resourceEntity = *(uintptr_t*)(gridData2 + (uintptr_t)(int)testCell * 0x30 + 8);
+                if (resourceEntity != 0) d_resFound++;
 
                 // -------------------------------------------------------
                 // Branch: Check workplace flags for cut vs plant
                 // -------------------------------------------------------
                 fn_InternalBasePtr_CheckPtr(&workplaceIBP);
-                bool plantEnabled = (*(uint8_t*)(workplaceIBP + 0x50) == 0);  // "cut trees" flag
-                bool cutEnabled = (*(uint8_t*)(workplaceIBP + 0x51) != 0);    // "plant trees" flag
+                // PORT-BUG FIX: the original (0x1400eaec0) enters PLANT only when the
+                // ForesterComponent's plant-enabled flag (+0x50) is NON-zero and the cell
+                // is empty:  else-branch of `if (cmp[0x50]==0 || resource!=0)` ==
+                // `(+0x50 != 0 && resource==0)`. The prior port had `+0x50 == 0`, which
+                // (with the inert lodge's flag defaulting to 0) ALWAYS entered the plant
+                // path -> CheckResourceDensity(natResDesc=null)+0x5c null-deref. CUT is
+                // unchanged: `+0x51 != 0 && resource!=0`. After this fix the if/else
+                // matches the original's nested branches exactly for all four cases.
+                bool plantEnabled = (*(uint8_t*)(workplaceIBP + 0x50) != 0);  // plant-trees enabled
+                bool cutEnabled = (*(uint8_t*)(workplaceIBP + 0x51) != 0);    // cut-trees enabled
 
                 if (plantEnabled && resourceEntity == 0) {
+                    d_plant++;
                     // PLANT PATH: empty cell, check if we can plant here
                     bool canPath = s_fn_Map_CanPathTo(mapGrid, 0xe1f, testCell, citizenGridCell);
                     if (canPath) {
@@ -808,6 +832,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                     }
                 }
                 else if (cutEnabled && resourceEntity != 0) {
+                    d_cut++;
                     // CUT PATH: cell has a resource, check if we can cut it
 
                     // Find NaturalResourceComponent on the resource entity
@@ -820,6 +845,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                         int matIdx2 = *(int*)((uintptr_t)radiusComp + 0x28);
                         uintptr_t resEntry2 = resourceTable + (uintptr_t)matIdx2 * 0x20;
                         if (*(int*)(resEntry2) < *(int*)(resEntry2 + 8)) {
+                            d_cutCap++;
                             // Find NaturalResourceDescription on the resource
                             fn_InternalBasePtr_CheckPtr(&resourceEntity);
                             uintptr_t natResCompIBP2[4] = {0};
@@ -847,12 +873,15 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                             // Check growth is sufficient (>= g_fUVScale threshold)
                             fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                             float growth = *(float*)(*(uintptr_t*)natResCompIBP2 + 0x28);
+                            if (growth > d_maxGrowth) d_maxGrowth = growth;
                             if (growth < fGrowthThreshold) goto next_attempt;
+                            d_cutGrowth++;
 
                             // Check bit 20 of +0x20 = "flagged for removal"
                             fn_InternalBasePtr_CheckPtr(natResCompIBP2);
                             uint32_t flags20 = *(uint32_t*)(*(uintptr_t*)natResCompIBP2 + 0x20);
                             if ((flags20 >> 20) & 1) goto next_attempt;
+                            d_cutFlags20++;
 
                             // Find nearest passable cell for pathfinding
                             int nearestCell = s_fn_Map_FindNearestPassable(
@@ -863,6 +892,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                             bool canPath2 = s_fn_Map_CanPathTo(
                                 mapGrid, 0xe1f, nearestCell, citizenGridCell);
                             if (!canPath2) goto next_attempt;
+                            d_cutPath++; d_cutDone++;
 
                             // Reset fail counter
                             *(uint32_t*)(selfAddr + 0x58) = 0;
@@ -904,6 +934,18 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
         next_attempt:
             ;  // Continue to next random attempt
         }
+    }
+
+    if (dbg) {
+        s_dbgTick++;
+        fprintf(stderr, "[ForesterScan] tick attempts=%d radius=%d wpCell=%d "
+                "pass_dist=%d resFound=%d cutBranch=%d | cut: cap=%d growth>=thr=%d flags20=%d "
+                "path=%d DONE(PerformWork)=%d maxGrowthSeen=%.3f thr=%.3f\n",
+                d_attempts, workplaceRadius, workplaceCell,
+                d_dist, d_resFound, d_cut,
+                d_cutCap, d_cutGrowth, d_cutFlags20, d_cutPath, d_cutDone,
+                d_maxGrowth, fGrowthThreshold);
+        fflush(stderr);
     }
 
     // -------------------------------------------------------
