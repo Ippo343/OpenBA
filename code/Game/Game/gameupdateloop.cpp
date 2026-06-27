@@ -618,6 +618,10 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
 //
 // HEAVILY INSTRUMENTED for debugging tutorial hang.
 
+#ifdef STANDALONE_EXE
+extern "C" unsigned long long __stdcall GetTickCount64(void);   // kernel32 (fps trace)
+#endif
+
 extern "C"
 bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Stage C entry guard (TEMPORARY): GameUpdateLoop::Load (0x140096b00, the
@@ -643,6 +647,32 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     EnsureInit();
 
     s_frameNum++;
+
+#ifdef STANDALONE_EXE
+    // [FPS TRACE] env BANISHED_FPS_TRACE: wall-clock fps over 120-frame windows (entry-to-
+    // entry period). Also reports the entity count so we can correlate fps with world size.
+    {
+        static int s_fpsOn = -1;
+        if (s_fpsOn < 0) { const char* e = std::getenv("BANISHED_FPS_TRACE"); s_fpsOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_fpsOn == 1) {
+            static unsigned long long s_lastMs = 0;
+            static int s_winFrames = 0;
+            if (s_lastMs == 0) s_lastMs = GetTickCount64();
+            if (++s_winFrames >= 120) {
+                unsigned long long now = GetTickCount64();
+                double secs = (double)(now - s_lastMs) / 1000.0;
+                double fps = secs > 0 ? s_winFrames / secs : 0.0;
+                long entCount = -1;
+                void* el = self->m_entityList;
+                if (el) entCount = *reinterpret_cast<int*>((uint8_t*)el + 0x30);  // EntityList count (approx)
+                fprintf(stderr, "[FPS] %.1f fps (%d frames / %.2fs) entityListCount~=%ld\n",
+                        fps, s_winFrames, secs, entCount);
+                fflush(stderr);
+                s_lastMs = now; s_winFrames = 0;
+            }
+        }
+    }
+#endif
 
 #ifdef STANDALONE_EXE
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
@@ -1047,6 +1077,25 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         }
         ++s_drawN;
     }
+#ifdef STANDALONE_EXE
+    // [DRAW FPS] env BANISHED_FPS_TRACE: the RENDER framerate (Draw calls/sec). The sim Update
+    // runs fixed-timestep 60Hz (multiple steps per rendered frame to catch up), so the Update
+    // counter always reads ~60; THIS measures the visible frame rate. Compare to the [FPS]
+    // (Update) line: if Draw << Update, rendering is the bottleneck.
+    if (std::getenv("BANISHED_FPS_TRACE")) {
+        static unsigned long long s_dLastMs = 0;
+        static int s_dFrames = 0;
+        if (s_dLastMs == 0) s_dLastMs = GetTickCount64();
+        if (++s_dFrames >= 120) {
+            unsigned long long now = GetTickCount64();
+            double secs = (double)(now - s_dLastMs) / 1000.0;
+            fprintf(stderr, "[DRAW-FPS] %.1f fps (%d draws / %.2fs)\n",
+                    secs > 0 ? s_dFrames / secs : 0.0, s_dFrames, secs);
+            fflush(stderr);
+            s_dLastMs = now; s_dFrames = 0;
+        }
+    }
+#endif
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = fn_UI_PausesGame(self->m_userInterface);
