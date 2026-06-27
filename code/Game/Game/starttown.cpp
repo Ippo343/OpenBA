@@ -1473,6 +1473,8 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
     }
 }
 
+static void StartTown_MatureResource(void* nrComp);   // defined below (BANISHED_MATURE_TREES)
+
 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY, w=1,h=1) and
 // the jittered ModelComponent world transform. `cellIdx` = dim*y + x.
 static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, void* rng,
@@ -1522,6 +1524,7 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     if (nrComp) {
         void* desc = *(void**)((uint8_t*)nrComp + 0x18);
         if (desc) jitter = *(float*)((uint8_t*)desc + 0x60);
+        StartTown_MatureResource(nrComp);   // BANISHED_MATURE_TREES: old-growth (harvestable) forest
     }
 
     // terrain position for the cell centre (matches StartTown_TileToWorld).
@@ -1576,6 +1579,28 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
     const float progress = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.0f;
     ActCNR_SetGrowthProgress_120db0((int64_t)gIBP, progress);
+}
+
+// Mature the start-town forest so the forester can harvest it. Trees carry NO
+// GrowthComponent in standalone (the factory doesn't materialise it — confirmed:
+// FindComponent(GrowthComponent) returns null on every tree), so the normal growth
+// driver (GrowthComponent::Update -> 120db0 -> natResComp+0x28) never runs and every
+// tree stays at growth=0 (immature). The forester's harvest gate reads the
+// NaturalResourceComponent's growth field directly (natResComp+0x28 >= threshold 1.0,
+// foresterwork.cpp), so we set that field to a mature value at spawn — the faithful
+// END-STATE of a fully-grown tree (what 120db0 would write at progress=1.0), giving an
+// old-growth starting forest. Gated BANISHED_MATURE_TREES (default OFF). `nrComp` is the
+// NaturalResourceComponent already located by the caller (PlaceResourceCell, for jitter).
+static void StartTown_MatureResource(void* nrComp) {
+    static int s_mature = -1;
+    if (s_mature < 0) {
+        const char* e = std::getenv("BANISHED_MATURE_TREES");
+        s_mature = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (s_mature != 1 || !nrComp) return;
+    // natResComp+0x28 = growth. 1.0 == the forester's maturity threshold (g_fUVScale);
+    // the gate is `growth < threshold -> skip`, so 1.0 is harvestable.
+    *(float*)((uint8_t*)nrComp + 0x28) = 1.0f;
 }
 
 static int StartTown_SpawnResources(uint8_t* startConfig, void* world,

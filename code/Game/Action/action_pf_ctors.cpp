@@ -287,18 +287,23 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
         if (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(entity) + 0xac) < 1) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x20);
             void* obj = *reinterpret_cast<void**>(*reinterpret_cast<int64_t*>(s + 0x20) + 0x18);
-            bool derived = s_pTid_PerfWk_7190 && fn_IsDerivedFrom &&
-                           fn_IsDerivedFrom(obj, *s_pTid_PerfWk_7190);
-            void* comp = derived ? obj : nullptr;
-            // Time scaleTime(comp.f114); self.time = AsSeconds(self.time) * AsSeconds(scaleTime)
-            float compSecs = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(comp) + 0x114);
-            uint64_t scaleTimeStore = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&scaleTimeStore, compSecs);
-            float selfSecs  = *reinterpret_cast<float*>(s + 0x30);
-            float scaleSecs = *reinterpret_cast<float*>(&scaleTimeStore);
-            uint64_t prod = 0;
-            if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&prod, selfSecs * scaleSecs);
-            *reinterpret_cast<uint64_t*>(s + 0x30) = prod;
+            // IsDerivedFromOrTrust: the original gates `comp = IsDerivedFrom(obj,c7190) ? obj
+            // : null` then UNCONDITIONALLY reads comp+0x114 — i.e. it ASSUMES obj is the type
+            // (it would crash too if not). In standalone IsDerivedFrom returns false on the
+            // partial factory tree, so we TRUST obj (it IS the linked +0x18 desc) and only
+            // guard the genuinely-null case (skip the work-duration scaling -> base time).
+            void* comp = obj;
+            if (comp) {
+                // Time scaleTime(comp.f114); self.time = AsSeconds(self.time) * AsSeconds(scaleTime)
+                float compSecs = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(comp) + 0x114);
+                uint64_t scaleTimeStore = 0;
+                if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&scaleTimeStore, compSecs);
+                float selfSecs  = *reinterpret_cast<float*>(s + 0x30);
+                float scaleSecs = *reinterpret_cast<float*>(&scaleTimeStore);
+                uint64_t prod = 0;
+                if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&prod, selfSecs * scaleSecs);
+                *reinterpret_cast<uint64_t*>(s + 0x30) = prod;
+            }
         }
     }
     return self;

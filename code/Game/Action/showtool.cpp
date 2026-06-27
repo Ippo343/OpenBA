@@ -104,6 +104,11 @@ void ShowTool_Serialize_Impl(void* self, void* stream) {
 // ============================================================
 int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     (void)actionStack;
+    // Lazy resolve: when this action is built via the exe action-ctor path (not our
+    // factory) ShowTool_ResolveFuncs never ran, so s_fn_* are null -> EXEC-of-null when
+    // the executor runs it (e.g. a forester's PerformWork cut sequence shows the axe).
+    // Same fix as the PerformWork vtable methods. Bail "done" if deps still missing.
+    if (!ShowTool_ResolveFuncs()) return 1;
     uint8_t* s = (uint8_t*)self;
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
@@ -144,6 +149,7 @@ int ShowTool_Exit_Impl(void* /*self*/) {
 // Hides tool on the entity at +0x20.
 // ============================================================
 void ShowTool_CheckEntity_Impl(void* self) {
+    if (!ShowTool_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
@@ -156,6 +162,7 @@ void ShowTool_CheckEntity_Impl(void* self) {
 // Returns true if entity at +0x20's parent (+0x10) matches the param.
 // ============================================================
 bool ShowTool_GetTarget_Impl(void* self, void* param) {
+    if (!ShowTool_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     s_fn_CheckPtr(s + 0x20);
     void* entity = *(void**)(s + 0x20);
