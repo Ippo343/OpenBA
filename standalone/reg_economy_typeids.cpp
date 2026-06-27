@@ -77,6 +77,44 @@ static uint32_t g_tid_StatusIconDescription = 0;  // 0x1401c7e40
 // UIs and the CitizenAI find helpers, which already keep their own self-contained copy.)
 static uint32_t g_tid_ResidenceComponent  = 0;   // 0x1401c7cf0
 
+// 0x1401c7740 ForesterComponent (extends ResourceProduceComponent) and
+// 0x1401c7778 ForesterDescription (extends Description) — read by ForesterWork
+// (exe 0x1400eaec0, the forester work-state decision tick). ForesterWork scans the
+// workplace entity's component array for the ForesterComponent (c7740 GetTypeId match
+// + IsDerivedFrom), then reads that component's description (+0x18) and checks it
+// IsDerivedFrom ForesterDescription (c7778) to recover the produced-resource category
+// at desc+0x28 (used to index the town stock-limit records at townMgr+0x170). With
+// these unfilled the type-id compares are against 0 -> the scans never match -> the
+// component/description collapse to null -> ForesterWork bails (or faults reading
+// desc+0x28). Only un-dormants the Forester producer path (no ForesterLodge / employed
+// forester exists on the default Easy town), so default-safe; A/B the default build.
+static uint32_t g_tid_ForesterComponent   = 0;   // 0x1401c7740
+static uint32_t g_tid_ForesterDescription = 0;   // 0x1401c7778
+
+// Three more type-id globals ForesterWork::Execute (0x1400eaec0) derefs to find the work
+// inputs; all UNREGISTERED in standalone (their ResolveAddr -> 0), so foresterwork.cpp's
+// cached pointers were null and `*ptr` faulted (the RadiusDescription one was the line-519
+// crash). Filling them lets ForesterWork resolve the workplace radius, the harvestable
+// resource description, and the worker-capacity description:
+//   0x1401c4870  RadiusDescription  -- the workplace work-radius (scanned on the work-area
+//                sub-object; ForesterWork reads its radius/category at +0x28).
+//   0x1401c7b68  NaturalResourceDescription  -- the harvestable resource (tree) description;
+//                ForesterWork checks its harvest flags (+0x5c bits) before pushing a cut.
+//   0x1401c80a8  WorkDescription  -- the worker-capacity description read by CalcMaxWorkers
+//                (FUN_14012e5c0) to bound the number of simultaneous foresters.
+// Only on the Forester producer path (no employed forester on the default Easy town), so
+// default-safe; A/B the default build after filling.
+static uint32_t g_tid_RadiusDescription   = 0;   // 0x1401c4870
+static uint32_t g_tid_NaturalResourceDescription = 0;  // 0x1401c7b68
+static uint32_t g_tid_WorkDescription      = 0;   // 0x1401c80a8
+
+// 0x1401c8070 WorkComponent — the work-area's worker-capacity component. ForesterWork::Execute
+// finds it via FUN_140003050 (reimplemented in work_base_reimpl.cpp, which reads this id) and
+// reads its capacity at +0x30 (CalcMaxWorkers). UNREGISTERED in standalone -> the find scanned
+// for id 0 -> returned a null IBP -> the original's unguarded `matDesc+0x30` read faulted. The
+// lodge carries a WorkComponent (the Phase A dump's comp[9]); filling this lets the find match.
+static uint32_t g_tid_WorkComponent        = 0;   // 0x1401c8070
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -86,6 +124,12 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7e08, reinterpret_cast<uintptr_t>(&g_tid_StatusIconComponent));
     RegisterExeAddr(0x1401c7e40, reinterpret_cast<uintptr_t>(&g_tid_StatusIconDescription));
     RegisterExeAddr(0x1401c7cf0, reinterpret_cast<uintptr_t>(&g_tid_ResidenceComponent));
+    RegisterExeAddr(0x1401c7740, reinterpret_cast<uintptr_t>(&g_tid_ForesterComponent));
+    RegisterExeAddr(0x1401c7778, reinterpret_cast<uintptr_t>(&g_tid_ForesterDescription));
+    RegisterExeAddr(0x1401c4870, reinterpret_cast<uintptr_t>(&g_tid_RadiusDescription));
+    RegisterExeAddr(0x1401c7b68, reinterpret_cast<uintptr_t>(&g_tid_NaturalResourceDescription));
+    RegisterExeAddr(0x1401c80a8, reinterpret_cast<uintptr_t>(&g_tid_WorkDescription));
+    RegisterExeAddr(0x1401c8070, reinterpret_cast<uintptr_t>(&g_tid_WorkComponent));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -97,6 +141,12 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_StatusIconComponent  = ::Object::GetTypeIdByName("StatusIconComponent");
     g_tid_StatusIconDescription = ::Object::GetTypeIdByName("StatusIconDescription");
     g_tid_ResidenceComponent   = ::Object::GetTypeIdByName("ResidenceComponent");
+    g_tid_ForesterComponent    = ::Object::GetTypeIdByName("ForesterComponent");
+    g_tid_ForesterDescription  = ::Object::GetTypeIdByName("ForesterDescription");
+    g_tid_RadiusDescription    = ::Object::GetTypeIdByName("RadiusDescription");
+    g_tid_NaturalResourceDescription = ::Object::GetTypeIdByName("NaturalResourceDescription");
+    g_tid_WorkDescription      = ::Object::GetTypeIdByName("WorkDescription");
+    g_tid_WorkComponent        = ::Object::GetTypeIdByName("WorkComponent");
 }
 
 #endif // STANDALONE_EXE

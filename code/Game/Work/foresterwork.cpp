@@ -151,6 +151,7 @@ static float* s_fHalfCellOffset = nullptr; // DAT_140172114 = 0.5f
 // Game world singleton (from engine_funcs.h: g_pGameWorldSingleton)
 
 static bool s_forester_funcs_resolved = false;
+static bool s_forester_exec_ready = false;
 
 // ============================================================
 // Resolution — called once during hook installation
@@ -250,17 +251,24 @@ bool ForesterWork_ResolveFuncs() {
     if (iatSerInt)
         s_fn_SerializeInt = *reinterpret_cast<FW_SerializeInt_t*>(iatSerInt);
 
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x1401527e8);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<FW_MemAlloc_t*>(iatMemAlloc);
-
-    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x1401527f0);
-    if (iatMemFree)
-        s_fn_MemFreeFunc = *reinterpret_cast<FW_MemFreeFunc_t*>(iatMemFree);
-
-    uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
-    if (iatRandTol)
-        s_fn_Random_RandTol = *reinterpret_cast<FW_Random_RandTol_t*>(iatRandTol);
+    // MemAlloc / MemFree / RandTol — resolve via the canonical Runtime exports. The exe IAT
+    // dispatch slots these used (0x1401527e8/0x1401527f0/0x1401512f0) are UNREGISTERED in the
+    // standalone exe (ResolveAddr -> 0, so *slot never ran and these stayed null, failing
+    // ResolveFuncs); the MemAlloc/MemFree slot addresses were also wrong (they index the
+    // _rng/Lerp imports, not MemoryAllocator). ResolveExport reads the Runtime DLL exports
+    // directly and is correct in BOTH build modes.
+    s_fn_MemAlloc = reinterpret_cast<FW_MemAlloc_t>(
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));     // static (size,align)
+    s_fn_MemFreeFunc = reinterpret_cast<FW_MemFreeFunc_t>(
+        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));        // static (ptr)
+    s_fn_Random_RandTol = reinterpret_cast<FW_Random_RandTol_t>(
+        ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));                  // member (this,range)
+    // Keep the IAT-slot read as a fallback for the (faithful) DLL build, in case its slot is
+    // populated and the export lookup is ever unavailable.
+    if (!s_fn_Random_RandTol) {
+        uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
+        if (iatRandTol) s_fn_Random_RandTol = *reinterpret_cast<FW_Random_RandTol_t*>(iatRandTol);
+    }
     uintptr_t iatVec3Ctor = ResolveAddr(Module::Exe, 0x140152a30);
     if (iatVec3Ctor)
         s_fn_Vector3_Ctor = *reinterpret_cast<FW_Vector3_Ctor_t*>(iatVec3Ctor);
@@ -283,14 +291,25 @@ bool ForesterWork_ResolveFuncs() {
     s_typeId_MatDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c80a8));
 
-    // Float constants from .rdata
+    // Float constants from .rdata. In the standalone exe ResolveAddr(Module::Exe,...) on a
+    // raw .rdata constant returns NULL (the exe's .rdata isn't mapped at the ghidra VA), so
+    // fall back to a static holding the real value (reference_standalone_rdata_null_fallback).
+    // In DLL mode ResolveAddr returns the real .rdata address and the fallback never triggers.
+    static float s_fb_PI = 3.14159265f;        // 0x140172184
+    static float s_fb_MaxHeight = 1000.0f;     // 0x140172248
+    static float s_fb_MinGrowth = 0.97f;       // 0x14017213c
+    static float s_fb_HalfCell = 0.5f;         // 0x140172114
     s_fPI = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172184));
+    if (!s_fPI) s_fPI = &s_fb_PI;
     s_fMaxHeight = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172248));
+    if (!s_fMaxHeight) s_fMaxHeight = &s_fb_MaxHeight;
     s_fMinGrowth = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017213c));
+    if (!s_fMinGrowth) s_fMinGrowth = &s_fb_MinGrowth;
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
+    if (!s_fHalfCellOffset) s_fHalfCellOffset = &s_fb_HalfCell;
 
     // Verify critical pointers
-    bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
+    bool execReady = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_MeshInstance && s_fn_MeshInstance_SetVisible &&
               s_fn_CalcMaxWorkers && s_fn_Sqrtf &&
               s_fn_FindComp_NatResDesc && s_fn_Entity_GetGridCell &&
@@ -308,15 +327,23 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFreeFunc &&
               s_fn_BSTRemove && s_fn_BSTFindRemove &&
               s_fn_CancelAllWork && s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
-              s_vtable_ForesterWork && s_vtable_AutoPickupWork && s_vtable_Work &&
+              s_vtable_ForesterWork &&
               fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
               s_typeId_MaterialComponent && s_typeId_NatResComponent &&
               s_typeId_NatResDescription && s_typeId_RawMaterialComp &&
-              s_typeId_NatResDesc2 && s_typeId_MatDesc &&
+              s_typeId_MatDesc &&
               s_fPI && s_fMaxHeight && s_fMinGrowth && s_fHalfCellOffset;
 
+    // The parent vtables (AutoPickupWork/Work) are only WRITTEN by the Dtor (never called
+    // through) and NatResDesc2 (c77e8) is a serialize-only id — Execute derefs none of them,
+    // and all three are unregistered across the whole standalone build. Gate the force-driver
+    // on execReady (Execute-critical only); keep `ok`/`s_forester_funcs_resolved` strict so
+    // the faithful DLL build still verifies the complete set.
+    bool ok = execReady && s_vtable_AutoPickupWork && s_vtable_Work && s_typeId_NatResDesc2;
+
+    s_forester_exec_ready = execReady;
     s_forester_funcs_resolved = ok;
 
 #ifdef _DEBUG
@@ -361,10 +388,39 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_CancelAllWork) printf("  MISSING: s_fn_CancelAllWork\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: s_fn_FindSubEntity\n");
         if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
+        if (!s_vtable_ForesterWork) printf("  MISSING: s_vtable_ForesterWork (0x1401613a0)\n");
+        if (!s_vtable_AutoPickupWork) printf("  MISSING: s_vtable_AutoPickupWork (0x140161340)\n");
+        if (!s_vtable_Work) printf("  MISSING: s_vtable_Work (0x1401612e0)\n");
+        if (!s_typeId_WorkplaceComponent) printf("  MISSING: s_typeId_WorkplaceComponent (c7740)\n");
+        if (!s_typeId_RadiusComponent) printf("  MISSING: s_typeId_RadiusComponent (c7778)\n");
+        if (!s_typeId_MaterialComponent) printf("  MISSING: s_typeId_MaterialComponent (c4870)\n");
+        if (!s_typeId_NatResComponent) printf("  MISSING: s_typeId_NatResComponent (c7b30)\n");
+        if (!s_typeId_NatResDescription) printf("  MISSING: s_typeId_NatResDescription (c7b68)\n");
+        if (!s_typeId_RawMaterialComp) printf("  MISSING: s_typeId_RawMaterialComp (c7cb8)\n");
+        if (!s_typeId_NatResDesc2) printf("  MISSING: s_typeId_NatResDesc2 (c77e8)\n");
+        if (!s_typeId_MatDesc) printf("  MISSING: s_typeId_MatDesc (c80a8)\n");
+        if (!s_fPI) printf("  MISSING: s_fPI\n");
+        if (!s_fMaxHeight) printf("  MISSING: s_fMaxHeight\n");
+        if (!s_fMinGrowth) printf("  MISSING: s_fMinGrowth\n");
+        if (!s_fHalfCellOffset) printf("  MISSING: s_fHalfCellOffset\n");
     }
 #endif
 
     return ok;
+}
+
+// True once every pointer ForesterWork::Execute (Slot4) actually derefs is resolved. Excludes
+// the Dtor-only parent vtables + the serialize-only NatResDesc2 id, which Execute never
+// touches and which are unregistered in the standalone build. The force-driver gates on this.
+bool ForesterWork_ExecuteReady() {
+    ForesterWork_ResolveFuncs();
+    return s_forester_exec_ready;
+}
+
+// extern "C" wrapper so the force harness can drive ForesterWork::Execute directly (the Work
+// driver ABI: self + the worker citizen's IBP) without needing the ForesterWork type/mangling.
+extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP) {
+    return ForesterWork_Slot4_Impl(reinterpret_cast<ForesterWork*>(self), citizenIBP, 0, 0);
 }
 
 
@@ -474,6 +530,16 @@ static void AssignWorkToEntity(ForesterWork* self, void* citizenIBP, int priorit
 int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;  // for qword-aligned field access
+
+#ifdef STANDALONE_EXE
+    // Bring-up trace (first few ticks): confirms ForesterWork::Execute is actually being
+    // ticked by the executor and reports the work-area entity + workplace cell it operates on.
+    { static int s_tc = 0;
+      if (s_tc < 6) { ++s_tc;
+        fprintf(stderr, "[ForesterWork::Execute] tick#%d self=%p workArea+0x10=%p cell+0x28=%d\n",
+                s_tc, (void*)self, (void*)selfQ[2], (int)selfQ[5]);
+        fflush(stderr); } }
+#endif
 
     // Save citizen ref for later use
     uintptr_t citizenRef = *(uintptr_t*)entityIBP;
@@ -604,8 +670,11 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     // -------------------------------------------------------
     float fMaxHeight = *s_fMaxHeight;
     float fMinGrowthVal = *s_fMinGrowth;
-    // Note: XMM7 = g_fUVScale (DAT_14017214c = 1.0f) used for growth comparison
-    float fGrowthThreshold = *reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
+    // Note: XMM7 = g_fUVScale (DAT_14017214c = 1.0f) used for growth comparison.
+    // .rdata constant -> NULL in standalone; fall back to the real value (see ResolveFuncs).
+    float* pGrowthThreshold = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
+    static float s_fb_UVScale = 1.0f;
+    float fGrowthThreshold = pGrowthThreshold ? *pGrowthThreshold : s_fb_UVScale;
 
     int entityCellSigned = (int)entityGridCell;
 

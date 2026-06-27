@@ -37,6 +37,14 @@ extern void* g_pForceWorkBuilding;
 // proves the town stock count increments. Self-gated; no-op when the env is unset.
 extern "C" void StartTown_DriveProduction();
 
+// Phase B-real force-ForesterWork driver (forester_force_harness.cpp, env
+// BANISHED_FORCE_FORESTERWORK). Constructs + pushes a ForesterWork action onto ONE
+// force-worked citizen's CharacterComponent action stack (replacing the inert building
+// ResourceProduceComponent controller) so the executor ticks ForesterWork::Execute ->
+// real tree harvest -> production. Returns true if it owns the citizen this tick (the
+// caller then skips the competing AI state machine). Self-gated; no-op when env unset.
+extern "C" bool StartTown_ForcePushForesterWork(void* citizen);
+
 // ============================================================
 // Resolved helpers
 // ============================================================
@@ -869,6 +877,13 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive
     // check) unconditionally. Bail until all are live (Brick 2 populates them).
     if (!citizen || !czEntity || !czDesc || !czChar) return;
+
+    // --- FORCE-FORESTERWORK DRIVER (env BANISHED_FORCE_FORESTERWORK, default off) ----
+    // Drive ONE force-worked citizen as a forester via its action stack, replacing the
+    // inert building ResourceProduceComponent controller. When it owns the citizen, skip
+    // the competing AI state machine (Leisure/Wander would otherwise claim the idle stack
+    // first) so ForesterWork::Execute keeps driving the real harvest/production chain.
+    if (StartTown_ForcePushForesterWork(citizen)) return;
 
     CitizenAIComponent_Update(self, time);
 }
