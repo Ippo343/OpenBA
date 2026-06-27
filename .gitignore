@@ -44,3 +44,4 @@ standalone/*.png
 # Standalone run-capture diagnostics (transient crash/trace dumps, not source)
 notes/wp_runs/*.txt
 notes/wp_runs/*.err
+Banished_RE.lock
