@@ -150,6 +150,7 @@ void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionStack) {
+    PickupRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -220,6 +221,7 @@ int PickupRawMaterial_AbstractImpl_Impl(PickupRawMaterial* self, void* actionSta
 // matches the parent entity (+0x10) of the building at +0x20.
 // ============================================================
 bool PickupRawMaterial_GetTarget_Impl(PickupRawMaterial* self, void* param) {
+    PickupRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // Check direct match with +0x28

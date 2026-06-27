@@ -158,6 +158,7 @@ int PlayAnimation_Execute_Impl(void* self, void* actionStack, void* time_ptr) {
 // Implemented for standalone exe completeness.
 // ============================================================
 int PlayAnimation_CheckEntity_Impl(void* /*self*/) {
+    PlayAnimation_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     return 0;
 }
 

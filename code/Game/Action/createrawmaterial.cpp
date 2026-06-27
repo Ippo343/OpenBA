@@ -25,6 +25,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 
 // ============================================================
@@ -348,6 +349,11 @@ void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream) {
 // ============================================================
 int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionStack) {
     (void)actionStack;
+    if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
+        fprintf(stderr, "[ORGANIC-PRODUCE] CreateRawMaterial::Main running (self=%p)\n", (void*)self);
+        fflush(stderr);
+    }
+    CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
 
@@ -511,6 +517,7 @@ int CreateRawMaterial_AbstractImpl_Impl(CreateRawMaterial* self, void* actionSta
 // Returns true if param matches entity at +0x28->+0x10, or +0x30, or +0x38.
 // ============================================================
 int CreateRawMaterial_GetTarget_Impl(CreateRawMaterial* self, void* param) {
+    CreateRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // Check +0x28 -> building entity -> +0x10 (the actual target entity)

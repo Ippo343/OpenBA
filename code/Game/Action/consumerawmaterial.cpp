@@ -175,6 +175,7 @@ void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream) {
 // Returns 0 on success, 2 on failure.
 // ============================================================
 int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionStack) {
+    ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -272,6 +273,7 @@ int ConsumeRawMaterial_AbstractImpl_Impl(ConsumeRawMaterial* self, void* actionS
 // Iterates material list, subtracts reserved amounts from storage.
 // ============================================================
 void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
+    ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // Only undo if consume mode is active
@@ -318,6 +320,7 @@ void ConsumeRawMaterial_CheckEntity_Impl(ConsumeRawMaterial* self) {
 // Simple compare: returns true if param matches entity at +0x20.
 // ============================================================
 bool ConsumeRawMaterial_GetTarget_Impl(ConsumeRawMaterial* self, void* param) {
+    ConsumeRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     fn_InternalBasePtr_CheckPtr(s + 0x20);

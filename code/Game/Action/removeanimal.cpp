@@ -209,6 +209,7 @@ void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
+    RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     void* entityRef = *(void**)(s + 0x20);
@@ -245,6 +246,7 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
 // If the low 16 bits of flags changed, notifies parent entity.
 // ============================================================
 void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
+    RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
@@ -278,6 +280,7 @@ void RemoveAnimal_CheckEntity_Impl(RemoveAnimal* self) {
 // Returns true if *param matches the entity at +0x20.
 // ============================================================
 bool RemoveAnimal_GetTarget_Impl(RemoveAnimal* self, void* param) {
+    RemoveAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     fn_InternalBasePtr_CheckPtr(s + 0x20);
     return *(void**)param == *(void**)(s + 0x20);

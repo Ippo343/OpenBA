@@ -154,6 +154,7 @@ void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* strea
 // Returns 0 on success, 2 if component not found.
 // ============================================================
 int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* actionStack) {
+    SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
     uint32_t componentTypeId = self->_field30;
@@ -214,6 +215,7 @@ int SendComponentMessage_AbstractImpl_Impl(SendComponentMessage* self, void* act
 // Returns true if param matches entity at +0x20 or +0x28.
 // ============================================================
 bool SendComponentMessage_GetTarget_Impl(SendComponentMessage* self, void* param) {
+    SendComponentMessage_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     // CheckPtr on +0x20, then compare [param] directly (no CheckPtr on param)
     fn_InternalBasePtr_CheckPtr(&self->_field20);
     if (*(void**)param == self->_field20) {

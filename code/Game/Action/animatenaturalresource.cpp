@@ -147,6 +147,7 @@ void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* s
 // Returns waitForAnim flag.
 // ============================================================
 int AnimateNaturalResource_AbstractImpl_Impl(AnimateNaturalResource* self, void* actionStack) {
+    AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
 
     void* localIBP;
@@ -180,6 +181,7 @@ int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* acti
 // Returns true if param matches entity at +0x20.
 // ============================================================
 bool AnimateNaturalResource_GetTarget_Impl(AnimateNaturalResource* self, void* param) {
+    AnimateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     fn_InternalBasePtr_CheckPtr(param);
     return self->_field20 == *(void**)param;
 }

@@ -88,6 +88,7 @@ void CompleteRoad_Serialize_Impl(void* self, void* stream) {
 // Returns 0 (action complete).
 // ============================================================
 int CompleteRoad_AbstractImpl_Impl(void* self, void* actionStack) {
+    CompleteRoad_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     void* gameState = *s_pGameState;

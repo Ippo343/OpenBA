@@ -162,6 +162,12 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
 // ============================================================
 int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
     (void)actionStack;
+    // Lazy resolve (action built via exe ctor path -> ResolveFuncs never ran -> s_fn_* null).
+    if (!CompleteTask_ResolveFuncs()) return 0;
+    // Task machinery (gameState+0x118) is inert in standalone; guard so this is a safe
+    // no-op (the actual log production is in the PerformWork chop, not this bookkeeping).
+    if (!s_pGameState || !*s_pGameState ||
+        !*(void**)((uint8_t*)*s_pGameState + 0x118)) return 0;
 
     // Lazy-resolve task index from work entity
     if (self->taskIndex == 0x7FFFFFFF) {
@@ -190,6 +196,9 @@ int CompleteTask_AbstractImpl_Impl(CompleteTask* self, void* actionStack) {
 // Resolves task index, calls task reassignment.
 // ============================================================
 void CompleteTask_CheckEntity_Impl(CompleteTask* self) {
+    if (!CompleteTask_ResolveFuncs()) return;   // lazy resolve (exe-ctor-built action)
+    if (!s_pGameState || !*s_pGameState ||
+        !*(void**)((uint8_t*)*s_pGameState + 0x118)) return;   // inert task mgr -> no-op
     // Lazy-resolve task index
     if (self->taskIndex == 0x7FFFFFFF) {
         fn_InternalBasePtr_CheckPtr(&self->workEntity);
@@ -210,6 +219,7 @@ void CompleteTask_CheckEntity_Impl(CompleteTask* self) {
 // Returns true if param matches entity at +0x28 or parent entity at +0x20.
 // ============================================================
 bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
+    if (!CompleteTask_ResolveFuncs()) return false;   // lazy resolve (exe-ctor-built action)
     fn_InternalBasePtr_CheckPtr(param);
     void* paramVal = *(void**)param;
 

@@ -217,6 +217,7 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
 // Returns 0 (action complete).
 // ============================================================
 int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* actionStack) {
+    RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     void* nrCompIBP = nullptr;
@@ -283,6 +284,7 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
 // Clears "in use" bit (bit 20) on entity's model component at +0x28.
 // ============================================================
 void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
+    RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     void* localIBP[4];
 
@@ -291,6 +293,7 @@ void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
 
     fn_InternalBasePtr_CheckPtr(localIBP);
     uint8_t* modelComp = (uint8_t*)(localIBP[0]);
+    if (!modelComp) return;   // [standalone] NR component not found -> nothing to clear
     uint32_t flagsOld = *(uint32_t*)(modelComp + 0x20);
     uint32_t flagsNew = flagsOld & 0xFFEFFFFF;  // clear bit 20
     *(uint32_t*)(modelComp + 0x20) = flagsNew;
@@ -309,6 +312,7 @@ void RemoveNaturalResource_CheckEntity_Impl(RemoveNaturalResource* self) {
 // Returns true if param matches entity at +0x28 or entity at +0x20's parent.
 // ============================================================
 bool RemoveNaturalResource_GetTarget_Impl(RemoveNaturalResource* self, void* param) {
+    RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     fn_InternalBasePtr_CheckPtr(s + 0x28);

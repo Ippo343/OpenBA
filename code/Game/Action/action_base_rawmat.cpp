@@ -28,6 +28,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
 // Type-ID globals (resolved lazily from the exe .rdata).
@@ -461,7 +463,13 @@ void ActRm_RegisterRawMaterial_88ef0(int64_t entityList, void* sourceIBP,
     if (cat >= 0) {
         int* bucket = reinterpret_cast<int*>(static_cast<int64_t>(cat) * 0x20 + 0x10 +
                                              *reinterpret_cast<int64_t*>(entityList + 0x170));
+        int before = *bucket;
         *bucket += quantity;
+        if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
+            fprintf(stderr, "[ORGANIC-PRODUCE] RegisterRawMaterial cat=%d qty=%d stock %d->%d\n",
+                    cat, quantity, before, *bucket);
+            fflush(stderr);
+        }
     }
 }
 

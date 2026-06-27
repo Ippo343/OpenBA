@@ -213,6 +213,7 @@ void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* str
 // Returns 0 on success, 2 on failure (cell occupied or invalid).
 // ============================================================
 int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* actionStack) {
+    CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -311,6 +312,7 @@ int CreateNaturalResource_AbstractImpl_Impl(CreateNaturalResource* self, void* a
 // Returns true if param matches entity at +0x28.
 // ============================================================
 int CreateNaturalResource_GetTarget_Impl(CreateNaturalResource* self, void* param) {
+    CreateNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
     fn_InternalBasePtr_CheckPtr(s + 0x28);
     return (*(void**)param == *(void**)(s + 0x28)) ? 1 : 0;

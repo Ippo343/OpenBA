@@ -269,6 +269,7 @@ void HuntAnimal_Serialize_Impl(HuntAnimal* self, void* stream) {
 // Returns 1 if hunt not started (keep running), 0 if hunt completed.
 // ============================================================
 int HuntAnimal_AbstractImpl_Impl(HuntAnimal* self, void* actionStack) {
+    HuntAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
     return (*(uint8_t*)(s + 0x38) == 0) ? 1 : 0;
@@ -513,6 +514,7 @@ void HuntAnimal_Enter_Impl(HuntAnimal* self) {
 // or the animal entity's parent (+0x20->+0x10).
 // ============================================================
 bool HuntAnimal_GetTarget_Impl(HuntAnimal* self, void* param) {
+    HuntAnimal_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // Check herd entity's parent at +0x28 -> +0x10

@@ -223,6 +223,7 @@ void PickupStoredRawMaterial_Serialize_Impl(PickupStoredRawMaterial* self, void*
 // Returns 0 on success, 2 on insufficient materials.
 // ============================================================
 int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, void* actionStack) {
+    PickupStoredRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
     uint8_t* s = (uint8_t*)self;
 
@@ -357,6 +358,7 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 // Iterates material list, subtracts reserved amounts from citizen's storage.
 // ============================================================
 void PickupStoredRawMaterial_CheckEntity_Impl(PickupStoredRawMaterial* self) {
+    PickupStoredRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // Find storage component on pickup entity (+0x28)
@@ -400,6 +402,7 @@ void PickupStoredRawMaterial_CheckEntity_Impl(PickupStoredRawMaterial* self) {
 // matches the parent entity (+0x10) of the building at +0x20.
 // ============================================================
 bool PickupStoredRawMaterial_GetTarget_Impl(PickupStoredRawMaterial* self, void* param) {
+    PickupStoredRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // Check match with pickup entity at +0x28

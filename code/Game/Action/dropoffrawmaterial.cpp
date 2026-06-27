@@ -221,6 +221,7 @@ void DropOffRawMaterial_Serialize_Impl(DropOffRawMaterial* self, void* stream) {
 // Returns 1 (needs more work) or 2 (action pushed, e.g. MoveTo for full storage).
 // ============================================================
 int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionStack) {
+    DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     // If source entity is null, drop all inventory items
@@ -352,6 +353,7 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
 // Only 5 bytes (JMP rel32), not hookable.
 // ============================================================
 void DropOffRawMaterial_CheckEntity_Impl(DropOffRawMaterial* self) {
+    DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     s_fn_DropAllInventory(self);
 }
 
@@ -361,6 +363,7 @@ void DropOffRawMaterial_CheckEntity_Impl(DropOffRawMaterial* self) {
 // the target storage entity at +0x30's parent entity (+0x10).
 // ============================================================
 bool DropOffRawMaterial_GetTarget_Impl(DropOffRawMaterial* self, void* param) {
+    DropOffRawMaterial_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     uint8_t* s = (uint8_t*)self;
 
     fn_InternalBasePtr_CheckPtr(s + 0x38);
