@@ -32,6 +32,11 @@
 // in starttown.cpp. Used only when env BANISHED_FORCE_WORK is set. See UpdateAdapter.
 extern void* g_pForceWorkBuilding;
 
+// Phase B production harness (production_harness.cpp, env BANISHED_LIVE_PRODUCTION).
+// One-shot: drives a faithful log-production accounting event at the ForesterLodge and
+// proves the town stock count increments. Self-gated; no-op when the env is unset.
+extern "C" void StartTown_DriveProduction();
+
 // ============================================================
 // Resolved helpers
 // ============================================================
@@ -853,6 +858,12 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
             }
         }
     }
+
+    // --- PRODUCTION HARNESS (env BANISHED_LIVE_PRODUCTION, default off) --------
+    // Phase B of the economy WORK-half: drive ONE faithful log-production accounting
+    // event at the force-worked ForesterLodge and prove the town stock count
+    // increments. One-shot (self-gated inside). See production_harness.cpp.
+    StartTown_DriveProduction();
 
     // GUARD (crash-safe): Update derefs citizen / its entity(+0x10) / its
     // CitizenDescription(+0x288) / its CharacterComponent(+0x278, Phase-8 alive

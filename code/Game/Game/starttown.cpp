@@ -44,6 +44,14 @@ static constexpr float kDeg2Rad    = 3.14159265358979323846f / 180.0f;
 // building registry is brought up. Set in StartTown_SpawnStructures.
 void* g_pForceWorkBuilding = nullptr;
 
+// First resolved natural-resource (tree) TEMPLATE, captured in the resource-scatter spawn
+// loop (StartTown_SpawnResources). A resource template is a description container
+// ({sub-desc array @+0x28, count @+0x30}) carrying the produced material's
+// RawMaterialDescription — i.e. exactly the descEntity a CreateRawMaterial action clones.
+// The Phase B production harness (production_harness.cpp, BANISHED_LIVE_PRODUCTION) uses it
+// as a real produced-material description to drive the ported RegisterRawMaterial count.
+void* g_pSampleResourceTemplate = nullptr;
+
 // Owner-entity IBP values of the spawned residence (WoodHouse) buildings, captured by
 // StartTown_RunOnCreatePass when each house's ResidenceComponent::OnCreate fires. Used by
 // StartTown_AssignFoundingHousing to pair families to houses (townMgr+0x20 is never
@@ -1583,6 +1591,9 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         fflush(stderr);
         void* tmpl = StartTown_ResolveTemplate(entry);
         if (!tmpl) continue;
+        // Capture the first resource template as a produced-material description for the
+        // Phase B production harness (BANISHED_LIVE_PRODUCTION). Diagnostic-only.
+        if (!g_pSampleResourceTemplate) g_pSampleResourceTemplate = tmpl;
         uint8_t* desc = (uint8_t*)FindDescriptionOnTemplate(tmpl, tidNatRes);
         if (!desc) { fprintf(stderr, "[startTown::res] [%d] no NaturalResourceDescription\n", e); fflush(stderr); continue; }
 
