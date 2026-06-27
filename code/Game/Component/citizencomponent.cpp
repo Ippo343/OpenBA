@@ -83,6 +83,42 @@ static fn_FindStorage_t s_fn_FindStorage = nullptr;
 typedef void (*fn_HealthSetFlag_t)(void* healthComp, int flagIndex, char value);
 static fn_HealthSetFlag_t s_fn_HealthSetFlag = nullptr;
 
+#ifdef STANDALONE_EXE
+// --- Citizen status-icon driver (standalone wiring) ---
+// The 5 health-flag call sites in Update (bit 0 no-workplace, 1 hungry, 2 cold,
+// 3 unemployed/homeless, 5 has-profession) call s_fn_HealthSetFlag, which in the
+// original is FUN_14012c3f0 (the StatusIcon flag setter). That exe fn is unmapped/
+// unregistered in standalone, so ResolveAddr returns NULL and the calls no-op. We
+// instead route them to StatusIcon_Toggle — the faithful port of FUN_14012c3f0 in
+// statusiconcomponent.cpp — so the citizen's own StatusIconComponent (cached at
+// CitizenComponent+0x280) actually shows hunger/cold/unemployed/homeless icons.
+// Gated default-off (BANISHED_LIVE_CITIZEN_STATUSICON) so existing LIVE_CITIZEN(_UPDATE)
+// runs stay byte-identical when unset. Depends on BANISHED_LIVE_STATUSICON + _DRAW for
+// the citizen StatusIconComponent to be live + renderable (same infra as the building
+// occupancy warning), and on LIVE_CITIZEN(_UPDATE) for the driving fields to tick.
+struct StatusIconComponent;
+void StatusIcon_Toggle(StatusIconComponent* self, int bit, bool setFlag);
+
+// Adapter matching fn_HealthSetFlag_t. Null-guards the cached StatusIconComponent IBP
+// (CitizenComponent+0x280): a partial-world citizen lacking a live status-icon component
+// has it null, and StatusIcon_Toggle dereferences self+0x10 immediately. The original
+// never sees a null here (every citizen carries the component) — this guard is a
+// standalone-only safety, not a behavior change.
+static void CitizenStatusIcon_SetFlag(void* icon, int flagIndex, char value) {
+    if (icon)
+        StatusIcon_Toggle(reinterpret_cast<StatusIconComponent*>(icon), flagIndex, value != 0);
+}
+
+static bool CitizenStatusIconEnabled() {
+    static int cached = -1;
+    if (cached < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_CITIZEN_STATUSICON");
+        cached = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return cached != 0;
+}
+#endif // STANDALONE_EXE
+
 // CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex)
 // At 0x140114ca0
 typedef void (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotIndex);
@@ -215,8 +251,16 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140111590));  // CitizenComponent::FindWorkplace (CALL @140113219 in Update)
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
         ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
+#ifdef STANDALONE_EXE
+    // 0x14012c3f0 is unmapped in standalone → route the citizen health-flag calls to the
+    // StatusIcon_Toggle port instead (default-off; see CitizenStatusIcon_SetFlag above).
+    s_fn_HealthSetFlag = CitizenStatusIconEnabled()
+                             ? reinterpret_cast<fn_HealthSetFlag_t>(&CitizenStatusIcon_SetFlag)
+                             : nullptr;
+#else
     s_fn_HealthSetFlag = reinterpret_cast<fn_HealthSetFlag_t>(
         ResolveAddr(Module::Exe, 0x14012c3f0));
+#endif
     s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
         ResolveAddr(Module::Exe, 0x1401163d0));  // CitizenComponent::AssignWorkplace (7 CALLs in Update)
     s_fn_AssignHousing = reinterpret_cast<fn_AssignHousing_t>(

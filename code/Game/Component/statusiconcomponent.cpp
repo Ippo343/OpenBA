@@ -523,6 +523,31 @@ void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     }
 }
 
+// Resolve a component on the owner entity BY NAME (Object::GetTypeIdByName), mirroring
+// CharacterComponent's CharComp_FindSiblingByName. This is the standalone-safe equivalent
+// of the exe finders 0x140003f60 (ModelComponent) / 0x140004740 (MultiObjectComponent):
+// those compare the .rdata type-id globals DWORD_1401c7a50 / c7ac0, which are 0xFFFFFFFF
+// (UNFILLED) in standalone, so they return null for EVERY entity. Resolving the type id by
+// name at runtime matches the established brick pattern and has no shared-global dependency.
+static void* StatusIcon_FindCompByName(uintptr_t entity, const char* typeName) {
+    if (!entity || !fn_IsDerivedFrom) return nullptr;
+    uint32_t want = ::Object::GetTypeIdByName(typeName);
+    if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
+    int count = *(int*)(entity + 0x38);
+    int64_t arr = *(int64_t*)(entity + 0x30);
+    for (int i = 0; i < count; i++) {
+        void** ibp = (void**)(arr + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+        void* comp = *ibp;
+        if (!comp) continue;
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (tid == want)
+            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+    }
+    return nullptr;
+}
+
 // ============================================================
 // Standalone faithful port of StatusIconComponent::OnRemove (0x14012bbd0)
 // ============================================================
@@ -575,11 +600,17 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
     uintptr_t entity = *(uintptr_t*)(c + 0x10);
 
+    // Resolve Model + MultiObject by NAME (the exe finders key off unfilled .rdata globals
+    // c7a50/c7ac0 → null for every entity in standalone; see StatusIcon_FindCompByName).
+    // The MODEL-BOUNDS path then resolves for citizens (model = CharacterComponent's sibling
+    // ModelComponent, +0x158 = live move-tick position) AND faithfully preserves the original's
+    // branch for buildings that carry a MultiObjectComponent (→ map-cell). Map fallback below
+    // still uses the exe finder (its c79e0 global IS filled, so it works).
     void* modelIBP[2] = { nullptr, nullptr };
     void* multiIBP[2] = { nullptr, nullptr };
-    if (s_fn_FindModel) s_fn_FindModel(entity, modelIBP);
+    modelIBP[0] = StatusIcon_FindCompByName(entity, "ModelComponent");
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
-    if (s_fn_FindMulti) s_fn_FindMulti(entity, multiIBP);
+    multiIBP[0] = StatusIcon_FindCompByName(entity, "MultiObjectComponent");
 
     if (multiIBP[0] == nullptr && modelIBP[0] != nullptr) {
         // MODEL-BOUNDS path: Box at model+0x5c = {min(3), max(3)}; size.z = max.z-min.z.
