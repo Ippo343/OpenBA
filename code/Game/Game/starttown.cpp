@@ -618,6 +618,200 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
 }
 
 // ============================================================================
+// PHASE A — real PRODUCTION workplace (env BANISHED_LIVE_WORKPLACE, default off).
+//
+// The economy WORK-half stalled because the force-work harness pointed a citizen's
+// workplace (+0x238) at a StorageBarn, but `Entity_FindComponent_Storage` wants a
+// ResidenceComponent worker-ROSTER (c7cf0) on the workplace — which a storage-only
+// building lacks. A producer template (ForesterLodge, the simplest) carries the full
+// set: ResidenceComponent (roster) + WorkPlaceComponent (c80e0) + a RawMaterial/Forester
+// producer + Attendance. KEY LEVER: inert factories still produce VALID instances
+// (correct type-id, valid memory), so spawning the template should let FindStorage
+// resolve the (inert) ResidenceComponent with ZERO component graduation.
+//
+// Phase A: spawn it, place it like an InitialStructure (so its cell + mesh resolve),
+// DUMP its component type-ids to confirm the set, and re-point g_pForceWorkBuilding at
+// it (so BANISHED_FORCE_WORK assigns a citizen here instead of the StorageBarn).
+// Phase B then graduates the producer components → real production.
+// ============================================================================
+static bool WorkplaceEnvOn() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_WORKPLACE");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
+
+// Resolve a template by its full "Template\Name.rsc" path (FindOrLoad-by-cstring),
+// mirroring StartTown_ResolveTemplate but without a pool-entry String.
+static void* ResolveTemplateByPath(const char* path) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor)
+        return nullptr;
+    void* factory = *g_pExternalFactorySingleton;
+    uint8_t fname[8] = {0};
+    fn_Filename_CtorCStr(fname, path);
+    void* tmpl = fn_ExternalFactory_FindOrLoad(factory, fname);
+    fn_Filename_Dtor(fname);
+    return tmpl;
+}
+
+static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
+                                     void* game, int spawnX, int spawnY) {
+    (void)startConfig;
+    if (!WorkplaceEnvOn()) return;
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
+        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr || !fn_MemAlloc) return;
+
+    const char* path = "Template\\ForesterLodge.rsc";
+    void* tmpl = ResolveTemplateByPath(path);
+    fprintf(stderr, "[startTown::workplace] resolve \"%s\" -> tmpl=%p\n", path, tmpl);
+    fflush(stderr);
+    if (!tmpl) return;
+
+    const uint32_t tidCreatePlaced   = TypeId("CreatePlacedDescription");
+    const uint32_t tidMapComponent   = TypeId("MapComponent");
+    const uint32_t tidModelComponent = TypeId("ModelComponent");
+
+    // Instantiate + wrap.
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+    if (!ent) { fprintf(stderr, "[startTown::workplace] instantiate failed\n"); fflush(stderr); return; }
+    uintptr_t entIBP = 0;
+    fn_InternalBasePtr_Ctor(&entIBP, ent);
+
+    // Footprint from CreatePlacedDescription (else 4x4).
+    int w0 = 4, h0 = 4;
+    void* placed = FindDescriptionOnTemplate(tmpl, tidCreatePlaced);
+    if (placed) { w0 = *(int32_t*)((uint8_t*)placed + 0x44); h0 = *(int32_t*)((uint8_t*)placed + 0x48); }
+
+    // Place a few tiles to the side of the town centre so it doesn't overlap the
+    // InitialStructure footprints. (Diagnostic placement; exact tile is unimportant.)
+    const int tileX = spawnX + 8, tileY = spawnY;
+    const int fpW = w0, fpH = h0, rot = 0;
+
+    fn_InternalBasePtr_CheckPtr(&entIBP);
+    void* entity = (void*)entIBP;
+
+    // MapComponent grid placement (the cell resolver Entity_impl_7fb0 PATH 2 reads
+    // these packed tile coords to give the workplace a navigable anchor cell).
+    void* mapComp = FindComponentOnEntity(entity, tidMapComponent);
+    if (mapComp) {
+        uintptr_t mapIBP = 0;
+        fn_InternalBasePtr_Ctor(&mapIBP, mapComp);
+        fn_InternalBasePtr_CheckPtr(&mapIBP);
+        uint8_t* mc = (uint8_t*)mapIBP;
+        if (mc) {
+            *(int16_t*)(mc + 0x28) = (int16_t)tileX;
+            *(int16_t*)(mc + 0x2a) = (int16_t)tileY;
+            *(int16_t*)(mc + 0x2c) = (int16_t)fpW;
+            *(int16_t*)(mc + 0x2e) = (int16_t)fpH;
+            *(int32_t*)(mc + 0x30) = rot;
+        }
+    }
+
+    // Foundation-F world transform (footprint-centre terrain position) so the
+    // building's OnAdded places its mesh, not at the world origin.
+    if (game && fn_MapGetTerrainPos && fn_Transform_FromYawPitchOffset) {
+        void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
+        if (modelComp) {
+            uintptr_t mcIBP = 0;
+            fn_InternalBasePtr_Ctor(&mcIBP, modelComp);
+            fn_InternalBasePtr_CheckPtr(&mcIBP);
+            uint8_t* m = (uint8_t*)mcIBP;
+            int dim = *(int32_t*)game;
+            if (m && dim > 0) {
+                const float half = (float)(dim >> 1);
+                int idx1 = dim * tileY + tileX;
+                float in1[3] = { (float)(idx1 % dim) - half, (float)(idx1 / dim) - half, 0.0f };
+                float p1[3] = {0,0,0};
+                fn_MapGetTerrainPos(game, p1, in1, 0, nullptr);
+                int idx2 = (tileY + fpH) * dim + tileX + fpW;
+                float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
+                float p2[3] = {0,0,0};
+                fn_MapGetTerrainPos(game, p2, in2, 0, nullptr);
+                float center[3] = { (p1[0]+p2[0])*0.5f, (p1[1]+p2[1])*0.5f, (p1[2]+p2[2])*0.5f };
+                float yaw = (float)rot, pitch = 0.0f;
+                fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, center);
+                *(float*)(m + 0x168) = yaw;
+            }
+        }
+    }
+
+    // Show the COMPLETED building mesh (last sub-mesh), same as the InitialStructures.
+    {
+        void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
+        if (modelComp) {
+            uintptr_t mIBP = 0;
+            fn_InternalBasePtr_Ctor(&mIBP, modelComp);
+            fn_InternalBasePtr_CheckPtr(&mIBP);
+            uint8_t* m = (uint8_t*)mIBP;
+            void* modelDesc = m ? *(void**)(m + 0x18) : nullptr;
+            void* groupArray = modelDesc ? *(void**)((uint8_t*)modelDesc + 0x20) : nullptr;
+            uint32_t groupCount = modelDesc ? *(uint32_t*)((uint8_t*)modelDesc + 0x28) : 0;
+            if (groupArray && groupCount > 0) {
+                int variantIdx = 0;
+                void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                          ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
+                if (rng && fn_Random_Rand && groupCount > 1)
+                    variantIdx = (int)fn_Random_Rand(rng, groupCount);
+                int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
+                int modelVariant = (subCount > 0) ? subCount - 1 : 0;
+                ApplyResourceModelVariant(entity, tidModelComponent,
+                                          (int16_t)variantIdx, (int16_t)modelVariant);
+            }
+        }
+    }
+
+    // Register with the world entity list (category = template+0x20).
+    int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
+    fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+
+#ifdef STANDALONE_EXE
+    fn_InternalBasePtr_CheckPtr(&entIBP);
+    StartTown_RunOnCreatePass((void*)entIBP);   // fires ResidenceComponent::OnCreate (LIVE_RESIDENCE)
+#endif
+
+    // ---- THE PHASE A DIAGNOSTIC: dump the component set. --------------------
+    fn_InternalBasePtr_CheckPtr(&entIBP);
+    entity = (void*)entIBP;
+    {
+        uint8_t* e = (uint8_t*)entity;
+        int count = *(int32_t*)(e + ENT_COMP_CNT);
+        uintptr_t arr = *(uintptr_t*)(e + ENT_COMP_ARR);
+        uint32_t tidRes = TypeId("ResidenceComponent");
+        uint32_t tidWP  = TypeId("WorkPlaceComponent");
+        uint32_t tidRaw = TypeId("RawMaterialComponent");
+        uint32_t tidAtt = TypeId("AttendanceComponent");
+        uint32_t tidWork = TypeId("WorkComponent");
+        fprintf(stderr, "[startTown::workplace] component dump (count=%d) want "
+                "Residence=%u WorkPlace=%u RawMat=%u Attend=%u Work=%u\n",
+                count, tidRes, tidWP, tidRaw, tidAtt, tidWork);
+        for (int i = 0; i < count; ++i) {
+            void** slot = (void**)(arr + (uintptr_t)i * 8);
+            fn_InternalBasePtr_CheckPtr(slot);
+            void* comp = *slot;
+            if (!comp) { fprintf(stderr, "[startTown::workplace]   comp[%d] (null)\n", i); continue; }
+            uintptr_t vt = *(uintptr_t*)comp;
+            typedef uint32_t (*gt_t)(void*);
+            uint32_t id = (*(gt_t*)(vt + 0x10))(comp);
+            const char* tag = id==tidRes?" RESIDENCE(roster)":id==tidWP?" WORKPLACE":
+                              id==tidRaw?" RAWMATERIAL":id==tidAtt?" ATTENDANCE":
+                              id==tidWork?" WORK":"";
+            fprintf(stderr, "[startTown::workplace]   comp[%d] tid=%u%s\n", i, id, tag);
+        }
+        fflush(stderr);
+    }
+
+    // Re-point the force-work harness at this REAL production workplace.
+    g_pForceWorkBuilding = entity;
+    fprintf(stderr, "[startTown::workplace] ForesterLodge spawned tile(%d,%d) fp=%dx%d "
+            "-> g_pForceWorkBuilding=%p\n", tileX, tileY, fpW, fpH, entity);
+    fflush(stderr);
+}
+
+// ============================================================================
 // CITIZENS pool — CitizenComponent_impl_0dd0 (0x1400a0dd0) + sub_1040 (0x1400a1040).
 // Spawns the initial colonists. For each family entry (startConfig+0x60, count
 // +0x68, stride 8: {bool _educated@+0, int _maxChildCount@+4}) the original:
@@ -1664,6 +1858,11 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] structures: spawned %d; entityList count %d -> %d\n",
             ns, before, afterStruct);
     fflush(stderr);
+
+    // PHASE A — real production workplace (ForesterLodge), env BANISHED_LIVE_WORKPLACE.
+    // Spawn it before citizens so g_pForceWorkBuilding points at a real producer (not
+    // the StorageBarn) when the BANISHED_FORCE_WORK harness assigns a citizen.
+    StartTown_SpawnWorkplace(sc, entityList, game, spawnX, spawnY);
 
     // CITIZENS (impl_0dd0) — the founding families.
     int nc = StartTown_SpawnCitizens(sc, entityList, game, spawnX, spawnY);

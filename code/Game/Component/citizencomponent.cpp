@@ -780,7 +780,12 @@ FindWorkLabel:
     if (workplaceRef != 0) {
         if (s_fn_CheckPtr_slot) s_fn_CheckPtr_slot(&localRes10);
         int64_t storageVal = localRes10;
-        if (*reinterpret_cast<int*>(storageVal + 0x58) > 1) {
+        // Faithful-equivalent guard: the original reads storage+0x58 (the workplace's
+        // ResidenceComponent worker-roster count) UNGUARDED, relying on the invariant
+        // that an assigned workplace (+0x238) always carries a ResidenceComponent (c7cf0).
+        // In standalone a force-assigned / partially-built workplace can lack it
+        // (Entity_FindComponent_Storage -> null), so guard the null before the roster read.
+        if (storageVal != 0 && *reinterpret_cast<int*>(storageVal + 0x58) > 1) {
             int64_t localRes8_extra = 0;
             int64_t localC8_entity = 0;
             *reinterpret_cast<int*>(&localRes8_extra) = -1;

@@ -68,6 +68,14 @@ static uint32_t g_tid_WorkPlaceComponent  = 0;   // 0x1401c80e0
 static uint32_t g_tid_WorkPlaceDescription = 0;  // 0x1401c8118
 static uint32_t g_tid_StatusIconComponent = 0;   // 0x1401c7e08
 static uint32_t g_tid_StatusIconDescription = 0;  // 0x1401c7e40
+// 0x1401c7cf0 ResidenceComponent — the worker-ROSTER controller (extends
+// ControllerComponent, roster count @+0x58). Read by Entity_FindComponent_Storage
+// (exe 0x140008090, called from CitizenComponent::Update's multi-worker section to
+// read the workplace's roster capacity). With c7cf0 unfilled the finder compares
+// every component's GetTypeId() against 0 -> never matches -> returns null -> the
+// Update's unguarded `storage+0x58` read faults. (Also read by the residence/townhall
+// UIs and the CitizenAI find helpers, which already keep their own self-contained copy.)
+static uint32_t g_tid_ResidenceComponent  = 0;   // 0x1401c7cf0
 
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
@@ -77,6 +85,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c8118, reinterpret_cast<uintptr_t>(&g_tid_WorkPlaceDescription));
     RegisterExeAddr(0x1401c7e08, reinterpret_cast<uintptr_t>(&g_tid_StatusIconComponent));
     RegisterExeAddr(0x1401c7e40, reinterpret_cast<uintptr_t>(&g_tid_StatusIconDescription));
+    RegisterExeAddr(0x1401c7cf0, reinterpret_cast<uintptr_t>(&g_tid_ResidenceComponent));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -87,6 +96,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_WorkPlaceDescription = ::Object::GetTypeIdByName("WorkPlaceDescription");
     g_tid_StatusIconComponent  = ::Object::GetTypeIdByName("StatusIconComponent");
     g_tid_StatusIconDescription = ::Object::GetTypeIdByName("StatusIconDescription");
+    g_tid_ResidenceComponent   = ::Object::GetTypeIdByName("ResidenceComponent");
 }
 
 #endif // STANDALONE_EXE
