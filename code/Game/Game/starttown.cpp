@@ -702,22 +702,103 @@ static void SetCitizenModelVariant(void* entity, uint32_t tidModel) {
 #endif
 }
 
+// ---- Citizen Foundation-F — spawn-cell world transform (FUN_140003870) ------
+// The deferred citizen init (FUN_140117080) calls FUN_140003870 to set each
+// colonist's ModelComponent world transform; with the init guarded off the
+// transform stays zeroed, so a colonist whose mesh is added to the scene (and
+// which never subsequently moves) renders at the world ORIGIN. This reproduces
+// just that one position-setter so founding colonists stand on their spawn cell.
+//
+// FUN_140003870(ModelComponent* model, Vector3* offset, float yaw):
+//   Transform::FromYawPitchOffset(out, &yaw, &pitch=0, offset)   // RDX=yaw,
+//        R8=pitch, R9=offset — Ghidra drops the R9 dispatch-slot arg, so the
+//        decompile shows a zero local instead of `offset`; verified in disasm.
+//   write the 7-float Transform to model+0x148 (pos = +0x158/15c/160),
+//   model+0x168 = yaw, then Geometry::SetTransform(model+0x28, model+0x148).
+// FUN_140117080 always passes yaw=0, so colonists spawn facing +X. We run this
+// BEFORE RegisterEntity (like the structure Foundation-F at SpawnStructures), so
+// ModelComponent::Draw fired by OnAdded performs the Geometry::SetTransform —
+// no separate SetTransform call needed.
+//
+// The spawn cell is the founding-family jitter from sub_1040 (0x1400a1040):
+//   pos = { base.x + RandFloatTol*r, base.y + RandFloatTol*r, base.z }
+// where base = the town-centre world position and r = the spawn jitter radius
+// at startConfig+0x40 (the float just before the citizen ExternalRef at +0x48).
+static bool CitizenSpawnPosOn() {
+    // Faithful core behaviour (the structure Foundation-F is likewise
+    // unconditional); default ON, opt out with BANISHED_CITIZEN_SPAWNPOS=0.
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_CITIZEN_SPAWNPOS");
+        en = (e && (e[0] == '0' || e[0] == '\0')) ? 0 : 1;
+    }
+    return en == 1;
+}
+
+static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
+                                     const float base[3], float jitter, void* rng) {
+    if (!CitizenSpawnPosOn() || !entity || tidModel == 0 ||
+        !fn_Transform_FromYawPitchOffset ||
+        !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
+        return;
+    // Guard a garbage jitter radius (the field is read raw from the start config).
+    if (!(jitter == jitter) || jitter < 0.0f || jitter > 1.0e4f) jitter = 0.0f;
+
+    void* mc = FindComponentOnEntity(entity, tidModel);
+    if (!mc) return;
+    uintptr_t mcIBP = 0;
+    fn_InternalBasePtr_Ctor(&mcIBP, mc);
+    fn_InternalBasePtr_CheckPtr(&mcIBP);
+    uint8_t* m = (uint8_t*)mcIBP;
+    if (!m) return;
+
+    // sub_1040 jitter: RandFloatTol() == RandFloat()*2-1 (same approximation the
+    // resource scatter uses). Draw order matches vanilla: first draw -> y, second -> x.
+    auto rtol = [&]() -> float {
+        return (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) * 2.0f - 1.0f : 0.0f;
+    };
+    float jy = rtol() * jitter;
+    float jx = rtol() * jitter;
+    float pos[3] = { base[0] + jx, base[1] + jy, base[2] };
+
+    float yaw = 0.0f, pitch = 0.0f;
+    fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, pos);
+    *(float*)(m + 0x168) = yaw;
+
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    static int s_posLog = 0;
+    if (s_posLog < 8) {
+        ++s_posLog;
+        const float* wt = (const float*)(m + 0x158);   // written transform pos
+        fprintf(stderr, "[startTown::citizen] spawnpos model=%p base=(%.1f,%.1f,%.1f) "
+                "jitter=%.2f -> pos=(%.1f,%.1f,%.1f) transform.pos=(%.1f,%.1f,%.1f)\n",
+                (void*)m, base[0], base[1], base[2], jitter, pos[0], pos[1], pos[2],
+                wt[0], wt[1], wt[2]);
+        fflush(stderr);
+    }
+#endif
+}
+
 // Instantiate one colonist entity from the resolved citizen template and register
 // it with the world. Returns the raw entity pointer (for optional later linking)
 // or nullptr. CitizenComponent initialisation (FUN_140117080) is deferred — see
-// the section header.
-static void* SpawnOneCitizen(void* citizenTemplate, void* entityList) {
+// the section header; only the spawn-cell transform (Foundation-F) is reproduced.
+static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
+                             const float base[3], float jitter, void* rng) {
     if (!citizenTemplate) return nullptr;
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, citizenTemplate) : nullptr;
     uintptr_t entIBP = 0;
     fn_InternalBasePtr_Ctor(&entIBP, ent);
 
-    // Per-citizen model variant — after instantiation (Serialize ran, +0x166 set)
-    // and BEFORE registration (so OnAdded adds the chosen mesh to the scene).
+    // Per-citizen model variant + spawn-cell transform — after instantiation
+    // (Serialize ran, +0x166 set) and BEFORE registration (so OnAdded adds the
+    // chosen mesh to the scene at the spawn-cell transform).
     if (ent) {
         fn_InternalBasePtr_CheckPtr(&entIBP);
-        SetCitizenModelVariant((void*)entIBP, TypeId("ModelComponent"));
+        uint32_t tidModel = TypeId("ModelComponent");
+        SetCitizenModelVariant((void*)entIBP, tidModel);
+        SetCitizenSpawnTransform((void*)entIBP, tidModel, base, jitter, rng);
     }
 
     int category = *(int32_t*)((uint8_t*)citizenTemplate + TEMPLATE_CATEGORY);
@@ -828,13 +909,24 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
     fflush(stderr);
 }
 
-// CitizenComponent_impl_0dd0 — spawn the founding families.
-static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList) {
+// CitizenComponent_impl_0dd0 — spawn the founding families. `game` (Game+0x0 =
+// map dim) and the start-town spawn tile (spawnX, spawnY) give the town-centre
+// world position the colonists are jittered around (citizen Foundation-F).
+static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
+                                   void* game, int spawnX, int spawnY) {
     const int famCount  = *(int32_t*)(startConfig + FAMILY_CNT);
     uint8_t*  families  = *(uint8_t**)(startConfig + FAMILY_ARR);
     if (famCount <= 0 || !families) return 0;
     if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
         !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return 0;
+
+    // Town-centre world position (same tile->world mapping as the camera) +
+    // founding-family spawn jitter radius (startConfig+0x40). FUN_1400a3300 found
+    // this tile once and reused it for both camera and the spawn passes.
+    float base[3] = { 0.0f, 0.0f, 0.0f };
+    if (game && fn_MapGetTerrainPos)
+        StartTown_TileToWorld(game, spawnX, spawnY, base);
+    const float jitter = *(float*)(startConfig + 0x40);
 
     // Resolve the shared citizen template once (ExternalRef at startConfig+0x48,
     // same {name,gen,template} layout the pool entries use).
@@ -867,15 +959,15 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList) {
         std::vector<void*>& fe = famEntities.back();
 
         // Two adults (male + female).
-        if (void* a = SpawnOneCitizen(citizenTemplate, entityList)) { ++spawned; fe.push_back(a); }
-        if (void* b = SpawnOneCitizen(citizenTemplate, entityList)) { ++spawned; fe.push_back(b); }
+        if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng)) { ++spawned; fe.push_back(a); }
+        if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng)) { ++spawned; fe.push_back(b); }
 
         // Children: Rand(0.._maxChildCount).
         int kids = 0;
         if (rng && fn_Random_Rand && maxChildren >= 0)
             kids = (int)fn_Random_Rand(rng, maxChildren + 1);
         for (int c = 0; c < kids; ++c)
-            if (void* k = SpawnOneCitizen(citizenTemplate, entityList)) { ++spawned; fe.push_back(k); }
+            if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng)) { ++spawned; fe.push_back(k); }
 
         fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d\n",
                 f, educated, maxChildren, kids);
@@ -1574,7 +1666,7 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fflush(stderr);
 
     // CITIZENS (impl_0dd0) — the founding families.
-    int nc = StartTown_SpawnCitizens(sc, entityList);
+    int nc = StartTown_SpawnCitizens(sc, entityList, game, spawnX, spawnY);
     int afterCitizens = *(int32_t*)((uint8_t*)entityList + 0x10);
     fprintf(stderr, "[startTown::spawn] citizens: spawned %d; entityList count %d -> %d\n",
             nc, afterStruct, afterCitizens);
