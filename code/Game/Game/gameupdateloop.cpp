@@ -24,6 +24,14 @@
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
+#include <cstdlib>
+
+#ifdef STANDALONE_EXE
+// Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
+// builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
+// from the BANISHED_LIVE_TOOLBAR-gated HUD path in Startup below.
+extern "C" void ToolbarStandalone_Init();
+#endif
 
 #ifdef STANDALONE_EXE
 // Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
@@ -1400,28 +1408,51 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     }
 
     const bool kCreateGameDialogs = false;
-    // HUD bring-up (incremental): the Toolbar ctor + Dialog type-id are now wired
-    // (address_registry 0x1400b9910 -> ToolbarDialog_Ctor_Impl; g_pDialogTypeId
-    // falls back to ResolveTypeIdByNameLazy("Dialog")), and the preload populates
-    // m_resourceList so Find resolves Dialog/Toolbar.rsc with a valid dialogRes.
-    // STILL GATED OFF: ToolbarDialog_Ctor_Impl then derefs more unwired exe
-    // data-slots in standalone — g_TypeId_ToolbarItem (0x1401c6128 -> null) and
-    // g_ToolbarDialog_Vtable (0x14015fa00 -> 0, no standalone ToolbarDialog UI
-    // vtable exists yet). Flip true once those are wired (next: toolbar vtable).
-    const bool kCreateToolbar = false;
+    // HUD bring-up — the in-game Toolbar (Keystone F). Gated behind the env var
+    // BANISHED_LIVE_TOOLBAR (default OFF → the default build stays byte-identical).
+    // When set, ToolbarStandalone_Init() (toolbar_vtable_standalone.cpp) builds the
+    // standalone ToolbarDialog vtable (exe 0x14015fa00 has no standalone counterpart)
+    // and fills the toolbar type-id globals (g_TypeId_ToolbarItem 0x1401c6128 etc.),
+    // and the resource is resolved via ExternalFactory::FindOrLoad (m_resourceList is
+    // empty in standalone — the preload that populates it is off by default).
+    // The Toolbar ctor (0x1400b9910 -> ToolbarDialog_Ctor_Impl) is already registered.
+    //
+    // NOTE: the toolbar dialog constructs + ticks crash-free with BANISHED_LIVE_TOOLBAR
+    // alone, but its BUTTONS come from the "Toolbar" item externals, which are loaded by
+    // the resource preload. So a fully POPULATED, visibly-rendered toolbar (10 buttons)
+    // needs BANISHED_LIVE_TOOLBAR=1 *and* BANISHED_GAME_PRELOAD=1 — verified rendering
+    // the real bottom-right toolbar bar on screen, crash-free. With LIVE_TOOLBAR alone
+    // the dialog is present but empty (itemCount=0).
+    static int s_toolbarGate = -1;
+    if (s_toolbarGate < 0) {
+        const char* e = getenv("BANISHED_LIVE_TOOLBAR");
+        s_toolbarGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
+    }
+    const bool kCreateToolbar = (s_toolbarGate != 0);
 
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
     if (kCreateToolbar) {
+#ifdef STANDALONE_EXE
+        // Synthesize the standalone ToolbarDialog vtable + fill the toolbar type-id
+        // globals before any toolbar object is constructed. Idempotent.
+        ToolbarStandalone_Init();
+#endif
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
 
-        // Find the Dialog resource in the ExternalList
+        // Find the Dialog resource. First try the loop's resource list (populated in
+        // DLL mode / when preload is on); if that is empty or misses, fall back to
+        // ExternalFactory::FindOrLoad (the path OpenToolDialog/ToggleAll use — loads
+        // the .rsc directly, robust in standalone where m_resourceList is empty).
         void* foundBase = nullptr;
         uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
-        int64_t findResult[2]; // Filename + typeInfo pair
-        findResult[0] = 0;
-        fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+        if (self->m_resourceList && fn_ExternalList_Find)
+            fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+        if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
+            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+        }
 
         void* dialogRes = nullptr;
         if (foundBase != nullptr && g_pDialogTypeId) {
@@ -1452,7 +1483,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             int64_t dialogPtr[1];
             fn_InternalBasePtr_Ctor(dialogPtr, toolbar);
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
-            fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p\n", toolbar);
+            fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
+                    "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", toolbar,
+                    *(int32_t*)((uintptr_t)toolbar + 0xD8), *(int32_t*)((uintptr_t)toolbar + 0xC8),
+                    *(int32_t*)((uintptr_t)toolbar + 0x100));
         } else {
             fprintf(stderr, "[HUD] Toolbar NOT constructed (mem=%p Ctor=%p) — freeing\n",
                     mem, (void*)fn_ToolbarDialog_Ctor);

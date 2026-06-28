@@ -938,8 +938,11 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         ext = fn_ExternalFactory_FindNext(factory, toolbarTypeId, ext);
     }
 
-    // Sort by priority field at +0x50
-    if (itemListCount > 1) {
+    // Sort by priority field at +0x50.
+    // fn_ToolbarSort is an exe-only helper (0x140021790) — unregistered in standalone
+    // (resolves null). Guard the call: skipping it only leaves the buttons in load
+    // order (cosmetic) rather than crashing the ctor on a null call.
+    if (itemListCount > 1 && fn_ToolbarSort) {
         fn_ToolbarSort(itemList, itemListCount);
     }
 
