@@ -56,18 +56,31 @@
 
 namespace {
 
-// Runtime RVAs (base 0x180000000) of the 10 base DialogInstance virtuals,
-// taken from the exe dispatch slots the original thunks JMP to.
-constexpr uintptr_t kRVA_Dtor          = 0x1b800e; // slot 0 inner dtor (== fn_DialogInstance_Dtor)
-constexpr uintptr_t kRVA_TypeName      = 0x1bf5c2;
-constexpr uintptr_t kRVA_Type          = 0x1bf5ec;
-constexpr uintptr_t kRVA_Serialize1    = 0x1b8444;
-constexpr uintptr_t kRVA_OnOpened      = 0x1ba468;
-constexpr uintptr_t kRVA_OnClosed      = 0x1b847a;
-constexpr uintptr_t kRVA_OnUpdateLayout= 0x1b940e;
-constexpr uintptr_t kRVA_OnUpdate      = 0x1b943c;
-constexpr uintptr_t kRVA_OnElementEvent= 0x1ba490;
-constexpr uintptr_t kRVA_Serialize2    = 0x1b84a2;
+// Slot 0 inner dtor RVA (== fn_DialogInstance_Dtor; used only as a fallback when the
+// canonical export ptr is null). The dtor slot is exercised safely; see ToolUI_Dtor.
+constexpr uintptr_t kRVA_Dtor          = 0x1b800e;
+
+// ⚠️ The base DialogInstance virtuals (slots 1..9) are resolved by EXPORT NAME, NOT by
+// a hardcoded Runtime RVA. The original version of this file derived RVAs (0x1bf5c2,
+// 0x1b943c, …) from the exe .rdata dispatch-slot VALUES — but in the static exe those
+// slots hold the exe-offset of the mangled-name STRING (the engine fills them by name
+// resolution at startup; see CLAUDE.md "custom runtime dispatch mechanism"), NOT the
+// Runtime function RVA. So those RVAs point at string data → calling slot +0x38
+// (OnUpdate, dispatched every frame on an AddDialog'd dialog) EXEC-faults. This is the
+// SAME bug the toolbar (toolbar_vtable_standalone.cpp) hit + fixed empirically. Names
+// taken from engine_funcs.cpp's own DialogInstance resolutions + the Runtime DLL export
+// table (verified). Slot map: +0x08 TypeName / +0x10 Type / +0x18 Persist / +0x20
+// OnOpened / +0x28 OnClosed / +0x30 OnUpdateLayout / +0x38 OnUpdate / +0x40
+// OnElementEvent / +0x48 OnSerializeSettings.
+constexpr const char* kSym_TypeName       = "?TypeName@DialogInstance@UI@@UEBAPEBDXZ";              // vt[1] +0x08
+constexpr const char* kSym_Type           = "?Type@DialogInstance@UI@@UEBAIXZ";                     // vt[2] +0x10
+constexpr const char* kSym_Persist        = "?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z";   // vt[3] +0x18
+constexpr const char* kSym_OnOpened       = "?OnOpened@DialogInstance@UI@@UEAAXXZ";                 // vt[4] +0x20
+constexpr const char* kSym_OnClosed       = "?OnClosed@DialogInstance@UI@@UEAAXXZ";                 // vt[5] +0x28
+constexpr const char* kSym_OnUpdateLayout = "?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ";           // vt[6] +0x30
+constexpr const char* kSym_OnUpdate       = "?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z"; // vt[7] +0x38
+constexpr const char* kSym_OnElementEvent = "?OnElementEvent@DialogInstance@UI@@UEAAXAEBVElementEvent@2@@Z"; // vt[8] +0x40
+constexpr const char* kSym_OnSerSettings  = "?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z"; // vt[9] +0x48
 
 // --- Slot 0: scalar-deleting destructor (self, flags) ---
 // The ONLY slot that needs a wrapper: the exe slot-0 (0x140020cb0) is a scalar-
@@ -116,15 +129,15 @@ extern "C" void ToolUI_InitChildDialogVtable() {
     static bool s_ready = false;
     if (s_ready) return;
     auto* vt = g_ToolUI_ChildDialog_Vtable_Standalone;
-    vt[1] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_TypeName));
-    vt[2] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_Type));
-    vt[3] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_Serialize1));
-    vt[4] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_OnOpened));
-    vt[5] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_OnClosed));
-    vt[6] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_OnUpdateLayout));
-    vt[7] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_OnUpdate));
-    vt[8] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_OnElementEvent));
-    vt[9] = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180000000 + kRVA_Serialize2));
+    vt[1] = reinterpret_cast<void*>(ResolveExport(kSym_TypeName));        // +0x08
+    vt[2] = reinterpret_cast<void*>(ResolveExport(kSym_Type));            // +0x10
+    vt[3] = reinterpret_cast<void*>(ResolveExport(kSym_Persist));         // +0x18
+    vt[4] = reinterpret_cast<void*>(ResolveExport(kSym_OnOpened));        // +0x20
+    vt[5] = reinterpret_cast<void*>(ResolveExport(kSym_OnClosed));        // +0x28
+    vt[6] = reinterpret_cast<void*>(ResolveExport(kSym_OnUpdateLayout));  // +0x30
+    vt[7] = reinterpret_cast<void*>(ResolveExport(kSym_OnUpdate));        // +0x38
+    vt[8] = reinterpret_cast<void*>(ResolveExport(kSym_OnElementEvent));  // +0x40
+    vt[9] = reinterpret_cast<void*>(ResolveExport(kSym_OnSerSettings));   // +0x48
     // If any slot failed to resolve (Runtime not ready), leave s_ready false so a
     // later call retries — a partially-null shared vtable must never go live.
     for (int i = 1; i < 10; i++) if (!vt[i]) return;
