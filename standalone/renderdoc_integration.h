@@ -36,6 +36,13 @@ bool IsAttached();
 // Captures begin on the next D3D Present and end on the one after.
 void TriggerCapture();
 
+// Request a one-frame capture N frames from now. Decremented each OnFrame();
+// when it reaches zero TriggerCapture() fires. Used to capture a steady-state
+// frame a few frames AFTER a video-settings rebuild (the rebuild frame itself
+// is skipped by BeginFrame), so the capture reflects the new render targets.
+// No-op if not attached.
+void RequestCaptureInFrames(int n);
+
 // Periodic call from the main loop to manage capture state.
 // Captures the very first frame after a TriggerCapture() request.
 // No-op if not attached.

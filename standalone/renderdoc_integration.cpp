@@ -106,6 +106,7 @@ RENDERDOC_API_1_4_0* g_api = nullptr;
 unsigned int g_frameCount = 0;
 bool g_capturePending = false;
 bool g_captureInFlight = false;
+int g_captureCountdown = -1;  // <0 = inactive; counts down each OnFrame to 0
 
 }  // anonymous namespace
 
@@ -180,10 +181,33 @@ void TriggerCapture() {
     fflush(stdout);
 }
 
+void RequestCaptureInFrames(int n) {
+    if (!g_api) return;
+    if (n < 0) n = 0;
+    // Only (re)arm if not already armed/capturing, so repeated Apply clicks
+    // don't keep pushing the capture out.
+    if (g_captureCountdown < 0 && !g_capturePending && !g_captureInFlight) {
+        g_captureCountdown = n;
+        printf("[RenderDoc] capture armed for %d frames from now (frame=%u)\n",
+               n, g_frameCount);
+        fflush(stdout);
+    }
+}
+
 void OnFrame() {
     if (!g_api) {
         ++g_frameCount;
         return;
+    }
+
+    // Frame-delayed capture arm: fire TriggerCapture when the countdown hits 0.
+    if (g_captureCountdown >= 0) {
+        if (g_captureCountdown == 0) {
+            g_captureCountdown = -1;
+            TriggerCapture();
+        } else {
+            --g_captureCountdown;
+        }
     }
 
     if (g_captureInFlight) {

@@ -931,6 +931,20 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         printf("[MainMenuDialog::OnCommand] -> OpenNewGame\n");
         MainMenuDialog_OpenNewGame(reinterpret_cast<MainMenuDialog*>(self));
         break;
+    case kButton_Resume: {
+        // Resume = close this in-game menu, which removes it from the UI's
+        // dialog list. UI::UserInterface::PausesGame then returns false and
+        // GameUpdateLoop::Update resumes ticking the simulation. This is the
+        // same close path the full DLL-mode MainMenuDialog_Slot8 uses, and it
+        // relies only on fn_UI_CloseDialog / fn_InternalBasePtr_Ctor, both of
+        // which the standalone toolbar already exercises (so they're resolved).
+        printf("[MainMenuDialog::OnCommand] -> Resume (CloseDialog)\n");
+        uint8_t selfPtr[16];
+        fn_InternalBasePtr_Ctor(selfPtr, self);
+        fn_UI_CloseDialog(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10),
+                          selfPtr);
+        break;
+    }
     case kButton_Quit:
         printf("[MainMenuDialog::OnCommand] Quit: fn_App_Quit=%p g_pAppSingleton=%p *g=%p\n",
                (void*)fn_App_Quit, (void*)g_pAppSingleton,

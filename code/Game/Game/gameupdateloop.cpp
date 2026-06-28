@@ -31,6 +31,11 @@
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
 // from the BANISHED_LIVE_TOOLBAR-gated HUD path in Startup below.
 extern "C" void ToolbarStandalone_Init();
+
+// In-app RenderDoc capture driver — ticked once per in-game rendered frame so a
+// delayed capture armed by OptionsDialog::ApplyVideoSettings (after an MSAA/res
+// apply) actually fires. No-op unless the exe was launched via RenderDoc's UI.
+#include "renderdoc_integration.h"
 #endif
 
 #ifdef STANDALONE_EXE
@@ -1068,6 +1073,13 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     }
 
     EnsureInit();
+
+#ifdef STANDALONE_EXE
+    // Tick the RenderDoc capture state machine once per rendered frame. The
+    // engine's Present happens after this Draw returns (MainLoop::Draw EndFrame),
+    // so a StartFrameCapture here brackets a full frame of GPU work.
+    RenderDocIntegration::OnFrame();
+#endif
 
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
 
