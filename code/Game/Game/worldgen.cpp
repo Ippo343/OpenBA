@@ -53,6 +53,7 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* hdr, int n);        // sub_3a
 extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* hdr, int n);   // sub_f0a0  (detail-group-C @wg+0x1e0)
 extern "C" void Reimpl_TradeWork_sub_c780(void* self);                 // height-texture upload (+0x148)
 extern "C" void Reimpl_TradeWork_sub_c1e0(void* self);                 // base grid mesh (VB+0x100/IB+0x120)
+extern "C" void WorldGen_BuildWaterMesh(void* self);                   // water overlay mesh (VB+0x160/IB+0x180)
 
 // ============================================================
 // Heightfield scratch-struct field offsets (verified, blueprint §1.1)
@@ -542,8 +543,15 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     Reimpl_TradeWork_sub_c780(wg);
     Reimpl_TradeWork_sub_c1e0(wg);
 
-    // 7. b260 (detail mesh) — SKIPPED for first-light (detail draws are
-    //    count-guarded; counts stay 0 -> no detail draw items issued).
+    // 7. b260 (detail/cliff/water mesh) — SKIPPED (686-line contour builder).
+    //    Instead build a minimal flat WATER overlay mesh at sea level into the
+    //    same VB+0x160/IB+0x180 the real water uses (RenderDoc-verified). The
+    //    water materials (+0x150/+0x158) already load; geometry_draw.cpp emits +
+    //    draws it (mode 0xA000). BANISHED_NO_WATER=1 to disable.
+    {
+        const char* nw = getenv("BANISHED_NO_WATER");
+        if (!(nw && nw[0] && nw[0] != '0')) WorldGen_BuildWaterMesh(wg);
+    }
 
     // 8. Detail-group-C resize (no-op for first-light: hf detailCountA == 0) +
     //    the feature-record append loop (empty -> skipped).

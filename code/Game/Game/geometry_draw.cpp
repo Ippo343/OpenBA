@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 // ============================================================
 // Exe-resident constants (read once and embedded — these are float
@@ -195,6 +196,36 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     //    the auxiliary draw items for the SoA arrays.
     int shader = fn_Renderer_GetShader(renderer);
     if (shader == 1) return;
+
+    // --- WATER overlay (standalone): emit the flat sea-level water mesh (built
+    //     into VB+0x160/IB+0x180 by WorldGen_BuildWaterMesh). Main pass only
+    //     (we already returned on the shadow pass), so water casts no shadow —
+    //     matching the original (GetShader()!=1 guards the water draws). Mode
+    //     0xA000 routes to the water branch in ItemDraw. Material from +0x150
+    //     (or +0x158 via BANISHED_WATER_MAT=1). No-op if the mesh/material
+    //     wasn't built (VB data ptr null / material null).
+    {
+        void* waterVBData = *reinterpret_cast<void**>(selfBytes + 0x160 + 8);
+        static int s_waterMatSel = -2;
+        if (s_waterMatSel == -2) {
+            const char* e = std::getenv("BANISHED_WATER_MAT");
+            s_waterMatSel = (e && e[0] == '1') ? 1 : 0;
+        }
+        void* waterMat = *reinterpret_cast<void**>(selfBytes + (s_waterMatSel ? 0x158 : 0x150));
+        if (waterVBData && waterMat) {
+            for (int i = 0; i < chunkCount; ++i) {
+                for (int j = 0; j < chunkCount; ++j) {
+                    float xmin = static_cast<float>(j) * chunkSizeF - fHalfGrid;
+                    float ymin = static_cast<float>(i) * chunkSizeF - fHalfGrid;
+                    float box[6] = { xmin, ymin, zMin, xmin + chunkSizeF, ymin + chunkSizeF, zMax };
+                    if (fn_Frustum_Contains(localFrustumBuf, box, 0x3F) == 0x40) continue;
+                    uint16_t key2 = static_cast<uint16_t>(((i << 6) | j) | 0xA000);
+                    fn_Renderer_AddDrawItem(renderer, self, waterMat, materialKey,
+                                            key2, 0.0f, uvScale, 1, nullptr, 0);
+                }
+            }
+        }
+    }
 
     int count1C8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1C8);
     void* matInst1 = *reinterpret_cast<void**>(selfBytes + 0x150);
@@ -416,6 +447,35 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         if (!indexedArr) return;
         SetVB_BindIB_DrawIndexedFromArray(selfBytes + 0x160, selfBytes + 0x180,
                                           indexedArr);
+        return;
+    }
+
+    if (mode == 0xA000) {
+        // Water overlay chunk — same chunk draw as terrain but from the water
+        // VB/IB (+0x160/+0x180) and WITHOUT the height-image bind (the water
+        // material binds its own _water_/_reflection_/_frame_ textures).
+        if (!fn_Context_SetVertexBuffer || !fn_Context_DrawIndexed) return;
+        fn_Context_SetVertexBuffer(context, selfBytes + 0x160, 0, 0, 0x10);
+
+        void**    pCtxIB       = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
+        int32_t*  pCtxIBOffset = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x1C0);
+        uint32_t* pCtxFlags    = reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(context) + 0x10);
+        void*     ourIB        = selfBytes + 0x180;
+        if (*pCtxIB != ourIB || *pCtxIBOffset != 0) {
+            *pCtxFlags |= 0x10;
+            *pCtxIB = ourIB;
+            *pCtxIBOffset = 0;
+        }
+
+        int32_t chunkSize = *reinterpret_cast<int32_t*>(selfBytes + 0xC8);
+        int32_t scale     = *reinterpret_cast<int32_t*>(selfBytes + 0xD4);
+        int32_t gridSize  = *reinterpret_cast<int32_t*>(selfBytes + 0xC0);
+        int32_t primCount = chunkSize * chunkSize * 6;
+        int32_t chunksPerSide = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
+        int32_t row = static_cast<int32_t>((key >> 6) & 0x3F);
+        int32_t col = static_cast<int32_t>(key & 0x3F);
+        int32_t start = (chunksPerSide * row + col) * scale;
+        fn_Context_DrawIndexed(context, 0, start, scale, 0, primCount, 1);
         return;
     }
 

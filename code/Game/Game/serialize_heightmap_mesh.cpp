@@ -42,6 +42,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 namespace {
 
@@ -563,6 +564,145 @@ extern "C" void TradeWork_impl_sub_c1e0_Body(void* self) {
     if (scratch.data) {
         fn_MemFreeStatic(scratch.data);
     }
+}
+
+// ============================================================
+// Water surface overlay mesh — standalone addition (not in the original c4b0,
+// which builds it inside the 686-line b260). RenderDoc on the real game proved
+// water = a flat overlay mesh in WorldGeometry VB+0x160 / IB+0x180 at a constant
+// sea-level z, drawn with the water material (+0x150/+0x158) that samples the
+// animated `_water_` normal map + `_reflection_`/`_frame_` buffers.
+//
+// We build the SAME 16-byte vertex format + per-chunk index buffer as the
+// terrain mesh (sub_c1e0 above), but with z forced to the water level and a flat
+// up-normal. A full-map flat plane is visually equivalent to the real contour-
+// fitted mesh: terrain above water depth-occludes it, so water shows only in the
+// carved channels/lakes. geometry_draw.cpp emits + draws it (mode 0xA000).
+//
+// Water level: the real game's water verts use int16 z = -192 = -0.75 * 256
+// (the b260 -0.75 "below-water" constant; VS scales z by 1/256). Overridable via
+// BANISHED_WATER_LEVEL=<float world height>.
+extern "C" void WorldGen_BuildWaterMesh(void* self) {
+    if (!self) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) return;
+    ResolveRuntimePtrs();
+    if (!s_VertexBufferCreate || !s_VertexBufferSet ||
+        !s_IndexBufferCreate  || !s_IndexBufferSet) {
+        fprintf(stderr, "[water] VB/IB Runtime exports unresolved — no water mesh\n");
+        fflush(stderr);
+        return;
+    }
+
+    uint8_t* sb = reinterpret_cast<uint8_t*>(self);
+    int gridSize      = *reinterpret_cast<int*>(sb + 0xC0);
+    int chunkSize     = *reinterpret_cast<int*>(sb + 0xC8);
+    int vertsPerSide  = *reinterpret_cast<int*>(sb + 0xCC);
+    int vertsPerChunk = *reinterpret_cast<int*>(sb + 0xD4);
+    int chunksPerSide = (chunkSize > 0) ? (gridSize / chunkSize) : 0;
+    if (chunksPerSide <= 0 || chunkSize <= 0 || vertsPerSide <= 0 || vertsPerChunk <= 0) {
+        fprintf(stderr, "[water] bad grid params (gridSize=%d chunkSize=%d vps=%d vpc=%d)\n",
+                gridSize, chunkSize, vertsPerSide, vertsPerChunk);
+        fflush(stderr);
+        return;
+    }
+
+    // Water level (int16, x256 fixed-point). Default -192 = -0.75 world.
+    int waterQ = -192;
+    {
+        const char* e = std::getenv("BANISHED_WATER_LEVEL");
+        if (e && e[0]) waterQ = static_cast<int>(static_cast<float>(atof(e)) * 256.0f);
+    }
+    const int16_t kWaterLevelQ = static_cast<int16_t>(waterQ);
+    const int16_t halfGrid = static_cast<int16_t>(gridSize >> 1);
+
+    // Normal-map tiling: the VS scales uv by 1/1024, so 256 uv-units/cell ->
+    // 0.25 tiles/cell -> the wave texture repeats every 4 cells (matches the
+    // real game's wave density; the old terrain-style uv was ~8x too stretched
+    // and looked flat). int16 wraps seamlessly (256*N stays tile-aligned).
+    int uvStep = 256;
+    {
+        const char* e = std::getenv("BANISHED_WATER_UV");
+        if (e && e[0]) uvStep = atoi(e);
+    }
+
+    // Flat up-normal (0,0,1) packed to bytes like the terrain builder.
+    const uint8_t nB0 = static_cast<uint8_t>(static_cast<int>((0.0f + kUVScale) * kByteScale)); // 127
+    const uint8_t nB2 = static_cast<uint8_t>(static_cast<int>((1.0f + kUVScale) * kByteScale)); // 255
+
+    int16_t* vertScratch = reinterpret_cast<int16_t*>(
+        fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(vertsPerChunk) * 0x10, 2));
+    if (!vertScratch) return;
+
+    // (1) VertexBuffer at +0x160 (same total size as terrain VB).
+    int totalVerts  = vertsPerChunk * chunksPerSide * chunksPerSide;
+    int totalVbSize = totalVerts * 0x10;
+    bool vbOk = s_VertexBufferCreate(sb + 0x160, totalVbSize, false, nullptr);
+
+    for (int chunkRow = 0; chunkRow < chunksPerSide; ++chunkRow) {
+        for (int chunkCol = 0; chunkCol < chunksPerSide; ++chunkCol) {
+            int colStart = chunkSize * chunkCol;
+            int rowStart = chunkSize * chunkRow;
+            int16_t* p = vertScratch;
+            for (int row = rowStart; row < rowStart + vertsPerSide; ++row) {
+                for (int col = colStart; col < colStart + vertsPerSide; ++col) {
+                    p[0] = static_cast<int16_t>(col) - halfGrid;
+                    p[1] = static_cast<int16_t>(row) - halfGrid;
+                    p[2] = kWaterLevelQ;                       // flat sea level
+                    p[3] = static_cast<int16_t>(0x00ff);
+                    p[4] = static_cast<int16_t>(col * uvStep);
+                    p[5] = static_cast<int16_t>(row * uvStep);
+                    uint8_t* b = reinterpret_cast<uint8_t*>(p);
+                    b[0xc] = nB0;  // nx
+                    b[0xd] = nB0;  // ny
+                    b[0xe] = nB2;  // nz
+                    b[0xf] = 0;
+                    p += 8;
+                }
+            }
+            int byteOffset = (chunkRow * chunksPerSide + chunkCol) * vertsPerChunk * 0x10;
+            s_VertexBufferSet(sb + 0x160, vertsPerChunk * 0x10, byteOffset, vertScratch);
+        }
+    }
+
+    // (2) IndexBuffer at +0x180 — identical per-chunk triangle list as terrain.
+    int quadsPerChunk = chunkSize * chunkSize;
+    int idxCount      = quadsPerChunk * 6;
+    int idxBytes      = quadsPerChunk * 12;
+    int16_t* idxBuf = reinterpret_cast<int16_t*>(
+        fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(idxCount) * 2, 2));
+    s_IndexBufferCreate(sb + 0x180, idxBytes, false, nullptr);
+    if (idxBuf) {
+        int idx = 0;
+        for (int row = 0; row < chunkSize; ++row) {
+            for (int col = 0; col < chunkSize; ++col) {
+                int16_t v_tl = static_cast<int16_t>(
+                    static_cast<int16_t>(row) * static_cast<int16_t>(vertsPerSide) +
+                    static_cast<int16_t>(col));
+                int16_t v_tr = static_cast<int16_t>(v_tl + 1);
+                int16_t v_bl = static_cast<int16_t>(
+                    (static_cast<int16_t>(row) + 1) * static_cast<int16_t>(vertsPerSide) +
+                    static_cast<int16_t>(col));
+                int16_t v_br = static_cast<int16_t>(v_bl + 1);
+                idxBuf[idx + 0] = v_tl;
+                if (((col + row) & 1) == 0) {
+                    idxBuf[idx + 1] = v_bl; idxBuf[idx + 2] = v_tr; idxBuf[idx + 3] = v_tr;
+                } else {
+                    idxBuf[idx + 1] = v_br; idxBuf[idx + 2] = v_tr; idxBuf[idx + 3] = v_tl;
+                }
+                idxBuf[idx + 4] = v_bl; idxBuf[idx + 5] = v_br;
+                idx += 6;
+            }
+        }
+        s_IndexBufferSet(sb + 0x180, idxBytes, 0, idxBuf);
+        fn_MemFreeStatic(idxBuf);
+    }
+    fn_MemFreeStatic(vertScratch);
+
+    fprintf(stderr, "[water] mesh built: VB+0x160 q1=%p IB+0x180 q1=%p totalVerts=%d "
+            "chunksPerSide=%d levelQ=%d vbOk=%d\n",
+            *reinterpret_cast<void**>(sb + 0x160 + 8), *reinterpret_cast<void**>(sb + 0x180 + 8),
+            totalVerts, chunksPerSide, (int)kWaterLevelQ, vbOk);
+    fflush(stderr);
 }
 
 // ============================================================
