@@ -284,11 +284,12 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     }
 
     // --- Find ResourceComponent (the build-cost "BuildDescription") in the desc ---
-    // NOTE: for per-unit/area buildings (Pasture/CropField/Orchard, flag@+0x34==1)
-    // our standalone desc divergence yields a BuildDescription whose single entry has
-    // a null sub-entity, so the resource icon can't resolve (the resType/sprite is
-    // skipped below — no crash, just no icon). Retail reads this from the datasource
-    // BuildComponent, which standalone doesn't expose cleanly here. Deferred.
+    // Each entry's sub-entity (the resource-type ComponentEntity) is resolved during
+    // BuildDescription_Serialize. The CreateFenced Pasture used to land here with an
+    // empty entry (null sub-entity) because its `:build` sub-resource is FindOrLoad'd
+    // multiple times and the empty reference-mode re-loads clobbered the good first
+    // pass — fixed in code/Game/Component/builddescription.cpp (keep-populated guard).
+    // The null-resType guard below stays as defensive belt-and-suspenders.
     void* resourceComp = FindCompInDesc(desc, *g_TypeId_ResourceComponent);
     if (!resourceComp) return;
 

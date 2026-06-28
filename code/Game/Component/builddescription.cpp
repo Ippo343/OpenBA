@@ -66,21 +66,34 @@ void BuildDescription_Serialize(void* self, void* stream) {
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
 
-    // count @ +0x28
-    int count = *(int32_t*)(s + 0x28);
-    g_fn_Serialize_Int(serializer, s + 0x28, nullptr);
-    count = *(int32_t*)(s + 0x28);
+    // Preserve any already-populated requirement array across re-loads. The engine
+    // re-invokes this Serialize on EVERY FindOrLoad of an already-loaded resource.
+    // The first (path-mode) load resolves each _rawMaterial correctly; later
+    // (reference-mode) re-loads read the ref through the standalone's incomplete
+    // reference table and yield an empty element {material=0, count=0}. Without a
+    // guard the last (empty) write wins. Verified for the CreateFenced Pasture,
+    // whose `:build` sub-resource is FindOrLoad'd 6×: the first pass populated
+    // {RawMaterialWood,1}; the 5 re-passes clobbered it to {0,0}. Building
+    // descriptions are immutable templates, so a re-read can only legitimately
+    // reproduce identical data — therefore an empty re-load must never overwrite a
+    // populated array. (Non-fenced buildings are loaded once and were unaffected,
+    // which is why only the Pasture lost its icon.)
+    void*   oldArr   = *(void**)(s + 0x20);
+    int32_t oldCount = *(int32_t*)(s + 0x28);
+    bool oldPopulated = (oldArr && oldCount > 0 && *(uint64_t*)oldArr != 0);
 
-    // Fresh-load: alloc count * 0x10 element buffer; set header {ptr@0x20,
-    // count@0x28, cap@0x2c}. Each element = {External* @0, int @8}.
+    // count @ +0x28 (read from stream)
+    g_fn_Serialize_Int(serializer, s + 0x28, nullptr);
+    int count = *(int32_t*)(s + 0x28);
+
+    // Fresh-load: alloc count * 0x10 element buffer. Each element = {External* @0,
+    // int @8}. Populate a fresh buffer; commit to +0x20 only after confirming it
+    // isn't an empty reference-mode re-load (below).
     uint8_t* arr = nullptr;
     if (count > 0) {
         arr = reinterpret_cast<uint8_t*>(
             fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 0x10, 8));
     }
-    *(void**)(s + 0x20)   = arr;
-    *(int32_t*)(s + 0x28) = count;
-    *(int32_t*)(s + 0x2c) = count;
 
     uint8_t* e = arr;
     for (int i = 0; i < count; ++i, e += 0x10) {
@@ -94,6 +107,19 @@ void BuildDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Bool(serializer, s + 0x34, nullptr);  // bool +0x34
 
     g_fn_Serializer_Dtor(serializer);
+
+    // Commit, keeping a populated array over an empty re-load.
+    bool newPopulated = (count > 0 && arr && *(uint64_t*)arr != 0);
+    if (oldPopulated && !newPopulated) {
+        if (arr && fn_MemFreeStatic) fn_MemFreeStatic(arr);  // discard empty re-load
+        arr = reinterpret_cast<uint8_t*>(oldArr);
+        count = oldCount;
+    } else if (oldArr && oldArr != arr && fn_MemFreeStatic) {
+        fn_MemFreeStatic(oldArr);                            // replaced -> free prior
+    }
+    *(void**)(s + 0x20)   = arr;
+    *(int32_t*)(s + 0x28) = count;
+    *(int32_t*)(s + 0x2c) = count;
 #else
     (void)self; (void)stream;
 #endif
