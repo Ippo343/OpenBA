@@ -292,6 +292,9 @@ static fn_PlayerController_UpdateCamera_t fn_PlayerController_UpdateCamera = nul
 typedef void (*fn_Weather_DrawUpdate_t)(void* weather, void* ctx);
 static fn_Weather_DrawUpdate_t fn_Weather_DrawUpdate = nullptr;
 
+// Native time-of-day sun/lighting driver (code/Game/Game/weather_sun.cpp).
+extern "C" void Weather_SunUpdate(void* self, void* ctx);
+
 // OnScenarioComplete sub-functions
 // FUN_140095580 — EventNotifier::FireNotification(notifier, eventType, priority, entityPtr)
 typedef void (*fn_EventNotifier_Fire_t)(void* notifier, int eventType, int priority, void* entityPtr);
@@ -1079,6 +1082,24 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // engine's Present happens after this Draw returns (MainLoop::Draw EndFrame),
     // so a StartFrameCapture here brackets a full frame of GPU work.
     RenderDocIntegration::OnFrame();
+    // One-shot in-game capture: BANISHED_CAPTURE_INGAME=N arms a RenderDoc
+    // frame capture N in-game frames after the first drawn frame (default 120,
+    // ~enough for the camera to settle on the start town). Requires the exe to
+    // be launched under RenderDoc (renderdoc.dll injected). Used to inspect the
+    // terrain draw's PS bindings + shadow cbuffer with shadows ON.
+    {
+        static int s_capArm = -2;      // -2=unread, -1=disabled, >=0 = countdown to arm
+        if (s_capArm == -2) {
+            const char* e = std::getenv("BANISHED_CAPTURE_INGAME");
+            s_capArm = (e && e[0]) ? (atoi(e) > 0 ? atoi(e) : 120) : -1;
+        }
+        if (s_capArm >= 0) {
+            if (s_capArm == 0) {
+                RenderDocIntegration::RequestCaptureInFrames(0);
+            }
+            --s_capArm;
+        }
+    }
 #endif
 
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
@@ -1173,6 +1194,14 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(self->m_weather, videoCtx); // [GUARD-M5]
+#ifdef STANDALONE_EXE
+        // Native time-of-day sun/lighting. The original Weather::DrawUpdate
+        // (above) no-ops in standalone (not reimplemented + Environment.rsc not
+        // loaded), so drive the day cycle directly from the real base-game
+        // keyframes. Animates sun elevation + light/ambient/fog colors so
+        // shadows track the in-game day (see weather_sun.cpp).
+        Weather_SunUpdate(self, videoCtx);
+#endif
     }
     TRACE("[GameUpdateLoop::Draw] Weather::DrawUpdate done\n");
 
@@ -1190,19 +1219,16 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         // The shadow-mode source field. The ORIGINAL GameUpdateLoop::Draw (exe 0x140096010)
         // sets renderer+0x3c from *(*g_pVideoConfigSingleton + 0x30) — the shadow-QUALITY
         // setting (index, 0=off, >0=on), NOT engine+0x30 (in standalone g_pEngineSingleton ==
-        // MainLoop, so engine+0x30 is garbage). The MENU loop already reads the correct field
-        // (menudialogloopt.cpp). Default standalone = force 0 ("Shadows: Off"), keeping the
-        // build byte-identical, because the shadow render pass / shader permutation is still
-        // being brought up (see project_shadow_pipeline). Under BANISHED_ENABLE_SHADOWS,
-        // mirror the original: read VideoConfig+0x30 so SunLight::DrawShadowMap engages.
-        // EXPERIMENT (step 2): determines whether the shadow-receive shader permutation is
-        // selected per-draw (shadows appear) or at material load (map fills but unsampled).
-        static int s_enableShadows = -1;
-        if (s_enableShadows < 0) {
-            const char* e = std::getenv("BANISHED_ENABLE_SHADOWS");
-            s_enableShadows = (e && e[0] && e[0] != '0') ? 1 : 0;
+        // MainLoop, so engine+0x30 is garbage). Shadows are now DEFAULT-ON: mirror the
+        // original and read VideoConfig+0x30 so SunLight::DrawShadowMap engages (verified
+        // crash-free; terrain + buildings cast/receive). The day cycle is driven by
+        // Weather_SunUpdate above. BANISHED_DISABLE_SHADOWS=1 forces it off for A/B.
+        static int s_disableShadows = -1;
+        if (s_disableShadows < 0) {
+            const char* e = std::getenv("BANISHED_DISABLE_SHADOWS");
+            s_disableShadows = (e && e[0] && e[0] != '0') ? 1 : 0;
         }
-        if (s_enableShadows && g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
+        if (!s_disableShadows && g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
             shadowMode = *(uint32_t*)((uintptr_t)*g_pVideoConfigSingleton + 0x30);
         } else {
             shadowMode = 0;

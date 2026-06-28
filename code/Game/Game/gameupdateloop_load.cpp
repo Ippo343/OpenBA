@@ -839,7 +839,11 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         void* mem = AllocSub(0x108, 8);
         if (mem && fn_Graphics_SunLight_Ctor) {
             fn_Graphics_SunLight_Ctor(mem);
-            // dir = normalize(0.5, 0.33, 1.33) then negate
+            // Initial sun dir = normalize(0.5, 0.33, 1.33) then negate (faithful to
+            // the original Load, exe .rdata DAT_140172114/_10c/_15c). This is just a
+            // bootstrap: in standalone Weather_SunUpdate (gameupdateloop.cpp Draw
+            // step 5) overrides the SunLight every frame with the native time-of-day
+            // day cycle, so this value only matters for the first pre-Draw frame.
             float dir[3] = { 0.5f, 0.33f, 1.33f };
             float len = sqrtf(dir[0]*dir[0] + dir[1]*dir[1] + dir[2]*dir[2]);
             if (len > 0.0f) { dir[0] = -dir[0]/len; dir[1] = -dir[1]/len; dir[2] = -dir[2]/len; }
