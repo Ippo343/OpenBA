@@ -30,16 +30,31 @@ extern void Debug_LabelElement_SetSprite(void* self, void* spriteData);
 
 // Helper: find component by type ID in a description's component list.
 // Description has component array at +0x28 and count at +0x30.
+static inline bool SaneHeapPtr(const void* p) {
+    uintptr_t v = (uintptr_t)p;
+    // Non-null, 8-byte aligned, in user address space. Filters garbage/sentinel
+    // values so a malformed component array can't fault the scan.
+    return v != 0 && (v & 7) == 0 && v < 0x7FFFFFFFFFFFull;
+}
 static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
+    if (!SaneHeapPtr((void*)desc)) return nullptr;
     int count = *(int*)(desc + 0x30);
     uintptr_t array = *(uintptr_t*)(desc + 0x28);
+    // Guard against a count/array mismatch (our standalone desc divergence can hand
+    // a description whose +0x28 array is null while +0x30 is non-zero — the retail
+    // BuildComponent never is). Bound the count so a garbage value can't run wild.
+    if (!SaneHeapPtr((void*)array) || count <= 0 || count > 4096) return nullptr;
 
     for (int i = 0; i < count; i++) {
         void* comp = *(void**)(array + (uintptr_t)i * 8);
-        if (!comp) continue;
+        if (!SaneHeapPtr(comp)) continue;
 
-        // vtable[2] returns the component's type ID
+        // vtable[2] returns the component's type ID. NB: vtable is a data pointer
+        // (8-aligned), but vtable[2] is a *function* pointer (code address) and is
+        // NOT necessarily 8-aligned — only require it be non-null, not SaneHeapPtr,
+        // or every component gets skipped.
         void** vtable = *(void***)comp;
+        if (!SaneHeapPtr(vtable) || vtable[2] == nullptr) continue;
         typedef int (*fn_GetTypeId_t)(void*);
         int compTypeId = ((fn_GetTypeId_t)vtable[2])(comp);
 
@@ -129,7 +144,24 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
                 fn_InternalBasePtr_CheckPtr(bpBuf);
                 void* userData = fn_Element_GetUserData(elemPtr);
                 isBuild = fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent);
-                *(void**)(s + 0x30) = isBuild ? userData : nullptr;
+                void* descResolved = isBuild ? userData : nullptr;
+                // Standalone divergence: the in-game Toolbar sub-item buttons store
+                // their building DESCRIPTION entity as userData (toolbardialog.cpp
+                // SetUserData(button, item+0x58)), not a BuildComponent. The retail
+                // build path passes a BuildComponent here, but downstream only uses
+                // `desc` as the object whose component array (+0x28 list / +0x30
+                // count) is scanned for the BuildRequirementComponent — which the
+                // description entity also carries (verified: the toolbar override's
+                // FindCompInDesc on the same object resolves the ToolbarDescription).
+                // So accept a non-BuildComponent userData when it presents a sane
+                // component array, rather than bailing and leaving the title/cost
+                // unset (which rendered as "???????" / "x x x").
+                if (!descResolved && userData) {
+                    int32_t compCount = *(int32_t*)((uintptr_t)userData + 0x30);
+                    void*   compArr   = *(void**)((uintptr_t)userData + 0x28);
+                    if (compCount > 0 && compCount < 256 && compArr) descResolved = userData;
+                }
+                *(void**)(s + 0x30) = descResolved;
             }
             // else: +0x30 stays as-is (from previous init or nullptr)
         }
@@ -251,7 +283,12 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         }
     }
 
-    // --- Find ResourceComponent in description ---
+    // --- Find ResourceComponent (the build-cost "BuildDescription") in the desc ---
+    // NOTE: for per-unit/area buildings (Pasture/CropField/Orchard, flag@+0x34==1)
+    // our standalone desc divergence yields a BuildDescription whose single entry has
+    // a null sub-entity, so the resource icon can't resolve (the resType/sprite is
+    // skipped below — no crash, just no icon). Retail reads this from the datasource
+    // BuildComponent, which standalone doesn't expose cleanly here. Deferred.
     void* resourceComp = FindCompInDesc(desc, *g_TypeId_ResourceComponent);
     if (!resourceComp) return;
 
@@ -285,24 +322,30 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             // Find RawMaterialDescription component in sub-entity's component list
             void* resType = FindCompInDesc(subEntity, *g_TypeId_RawMaterialDescription);
 
-            // Create sprite from RawMaterialDescription: SpriteSheet at +0x20, name at +0x38
-            uint8_t sprite[24];
-#ifdef _DEBUG
-            Debug_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
-                           (void*)((uintptr_t)resType + 0x38));
-#else
-            fn_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
-                           (void*)((uintptr_t)resType + 0x38));
-#endif
-
-            // Set sprite on label element
+            // Set sprite on label element — but only if the resource type resolved.
+            // With our standalone desc divergence (description used as desc), some
+            // resource entries can lack a RawMaterialDescription (resType==null);
+            // the retail BuildComponent path always has one. Dereferencing a null
+            // resType at +0x20 was the "last food icon" (Pasture) crash. Guard it:
+            // skip the sprite but still set the count text below.
             void* label = *(void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
-            fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
+            if (SaneHeapPtr(resType)) {
+                // Create sprite from RawMaterialDescription: SpriteSheet at +0x20, name at +0x38
+                uint8_t sprite[24];
 #ifdef _DEBUG
-            Debug_LabelElement_SetSprite(label, sprite);
+                Debug_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
+                               (void*)((uintptr_t)resType + 0x38));
 #else
-            fn_LabelElement_SetSprite(label, sprite);
+                fn_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
+                               (void*)((uintptr_t)resType + 0x38));
 #endif
+                fn_InternalBasePtr_CheckPtr((void*)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8));
+#ifdef _DEBUG
+                Debug_LabelElement_SetSprite(label, sprite);
+#else
+                fn_LabelElement_SetSprite(label, sprite);
+#endif
+            }
 
             // Format count as "%i" and set as text parameter 0
             uint8_t countStr[8];

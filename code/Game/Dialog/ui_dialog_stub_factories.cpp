@@ -103,9 +103,58 @@ struct StubVtableInit {
     }                                                                            \
     REGISTER_TYPE(Name, Parent, &uistub_##Name::Factory, &uistub_##Name::InPlace)
 
+// ---- BuildRequirementUI: PROMOTED to the real reimpl (2026-06-28) ------------
+// This dialog is constructed + its Slot4(Update +0x20) dispatched on hover of a
+// build-tool button (verified live: valid dlgInst@+0x18 / datasource@+0x28). The
+// generic stub left Slot4 a no-op, so the build tooltip showed "????????" for the
+// name and "x x x" for the cost. Wiring Slot4 to the real BuildRequirementUI_Slot4
+// composes the title (BuildRequirementComponent+0x38 name key), the icon, and the
+// cost labels. Construction stays the stub alloc+zero+vtable; the engine fills the
+// base fields afterward.
+struct BuildRequirementUI;  // opaque; the reimpl casts internally
+extern void BuildRequirementUI_Slot4(BuildRequirementUI* self);
+namespace uistub_BuildRequirementUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("BuildRequirementUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // Lazy-fill the exe-.rdata type-id globals BuildRequirementUI_Slot4 dereferences.
+    // In standalone these resolve from raw exe .rdata addresses → null, so the real
+    // reimpl's first `*g_TypeId_BuildComponent` would fault. Fill them from the live
+    // Factory tree (post-Engine::Startup), like ToolbarStandalone_Init. Idempotent.
+    // NB: g_TypeId_ResourceComponent's engine_funcs label is misleading — the id at
+    // .rdata 0x1401c7040 is actually "BuildDescription"; and Object::Internal is
+    // registered under the simple name "Internal".
+    void EnsureTypeIds() {
+        static uint32_t s_build=0, s_entity=0, s_internal=0, s_buildDesc=0, s_rawMat=0;
+        if (!g_TypeId_BuildComponent)        { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");        if(s_build) g_TypeId_BuildComponent=&s_build; }
+        if (!g_TypeId_ComponentEntity)       { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ResourceComponent)     { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
+        if (!g_TypeId_RawMaterialDescription){ s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
+        if (!g_TypeId_ObjectInternal)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_ObjectInternal=&s_internal; }
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        // The real reimpl unconditionally dereferences these globals; if any failed
+        // to resolve, skip rather than fault.
+        if (!self || !g_TypeId_BuildComponent || !g_TypeId_ComponentEntity
+            || !g_TypeId_ObjectInternal || !g_TypeId_BuildRequirementComponent
+            || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
+        BuildRequirementUI_Slot4(reinterpret_cast<BuildRequirementUI*>(self));
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x60;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x60,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(BuildRequirementUI, "UI::DialogController",
+              &uistub_BuildRequirementUI::Factory, &uistub_BuildRequirementUI::InPlace);
+
 // ---- DialogController family ------------------------------------------------
 UI_DIALOG_STUB(AttendanceUI,        "UI::DialogController", 0x38);
-UI_DIALOG_STUB(BuildRequirementUI,  "UI::DialogController", 0x60);
 UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
 UI_DIALOG_STUB(ControlUI,           "UI::DialogController", 0x40);
