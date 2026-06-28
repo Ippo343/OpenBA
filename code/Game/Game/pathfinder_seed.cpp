@@ -33,22 +33,77 @@ extern void Pf_EnqueueCmd1_a6a30(int64_t self, int idx, void* cost, void* ctx); 
 extern void Pf_ArrayResize18_d830(int64_t* arr, int count);                                 // 0x14001d830
 
 namespace {
-// Runtime-DLL ctors (resolved by mangled name; import strings verified in the exe .rdata).
+// Runtime-DLL functions (resolved by mangled name; import strings verified in the exe .rdata).
 typedef void* (*fn_ThreadCtor_t)(void* self, unsigned int stackSize);   // ??0Thread@System@@QEAA@I@Z
 typedef void* (*fn_CSCtor_t)(void* self);                               // ??0CriticalSection@System@@QEAA@XZ
+typedef void  (*fn_CS_t)(void* cs);                                     // ?Lock/Unlock@CriticalSection@System@@QEAAXXZ
+typedef void  (*pf_fn_MemFree_t)(void* ptr);                            // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
 static fn_ThreadCtor_t s_fn_ThreadCtor = nullptr;
 static fn_CSCtor_t     s_fn_CSCtor     = nullptr;
+static fn_CS_t         s_fn_CSLock     = nullptr;
+static fn_CS_t         s_fn_CSUnlock   = nullptr;
+static pf_fn_MemFree_t s_fn_MemFree    = nullptr;
 
-// A never-invoked stub vtable for the pathfinder (size 2: worker-loop slot 0, dtor slot 1).
-// In synchronous mode Thread::Start is never called, so slot 0 (the worker loop) never runs;
-// the object is never freed, so slot 1 never runs. Present only so *pf is a valid pointer.
-static void  PfVtbl_Stub0(void*) {}
-static void* PfVtbl_Stub1(void*, unsigned) { return nullptr; }
-static void* g_pf_stub_vtable[2] = { reinterpret_cast<void*>(&PfVtbl_Stub0),
-                                     reinterpret_cast<void*>(&PfVtbl_Stub1) };
+// --- Pathfinder System::Thread vtable (2 slots) ------------------------------------------
+// The pathfinder is a System::Thread subclass; its real vtable (0x14015ef18) is
+//   slot 0 = the worker run-loop (FUN_1400a6360),
+//   slot 1 = System::Thread::OnCompleted (Runtime 0x18000c590 — a bare RET, no-op).
+// System::Thread::Thread(...) already created the OS worker thread (suspended→resumed) inside
+// the ctor we call below; System::Thread::ThreadFunc parks it on the "start" event. The
+// enqueue helpers (a6a30/a6b20/a6c10) call Thread::Start when +0x5c==0 and the run-flag
+// (+0x8 & 1) is clear; Start signals the event, ThreadFunc wakes and invokes slot 0 (drain
+// the queue) then slot 1, then clears the run-flag and re-parks. (Verified vs Ghidra: ctor
+// 0x1800ca4e0, Start 0x1800ca610, ThreadFunc 0x1800ca440.)
+//
+// Worker run-loop — faithful 1:1 port of FUN_1400a6360. Pop the head command node under the
+// pathfinder CS (+0x30), unlink + free it, then apply via a6430 (runs the A* for cmd type 5
+// and publishes the result slot). a6430's param_3/param_4 are dead for the queued path
+// (Pf_AstarRun_ce00 `(void)param_4`s the only consumer), so pass null — matching ThreadFunc,
+// which invokes slot 0 with `this` only. The command-node MemAlloc (a6c10/a6240) and this
+// MemFree, plus the result-array resize, all run under the now-thread-safe global allocator
+// lock (standalone/allocator_lock.cpp), so the worker can't race the main thread on the
+// engine free-list. Queue: tail@+0x60, head@+0x68, count@+0x70; node qwords [0]=cmd{type,arg1}
+// [1]=cmd{arg2,arg3} [2]=next(+0x10) [3]=prev(+0x18).
+static void Pf_WorkerLoop_a6360(void* selfV) {
+    uint8_t* p   = reinterpret_cast<uint8_t*>(selfV);
+    int64_t  self = reinterpret_cast<int64_t>(selfV);
+    int count = *reinterpret_cast<int*>(p + 0x70);
+    while (count > 0) {
+        if (s_fn_CSLock) s_fn_CSLock(p + 0x30);
+        uint64_t* node  = *reinterpret_cast<uint64_t**>(p + 0x68);    // head
+        uint64_t  cmdLo = node[0];                                    // cmd {type, arg1}
+        uint64_t  cmdHi = node[1];                                    // cmd {arg2, arg3}
+        if (node == *reinterpret_cast<uint64_t**>(p + 0x60))          // head == tail?
+            *reinterpret_cast<uint64_t*>(p + 0x60) = node[3];         // tail = node->prev
+        *reinterpret_cast<uint64_t*>(p + 0x68) = node[2];            // head = node->next
+        if (node[2] != 0) *reinterpret_cast<uint64_t*>(node[2] + 0x18) = node[3];  // next->prev
+        if (node[3] != 0) *reinterpret_cast<uint64_t*>(node[3] + 0x10) = node[2];  // prev->next
+        node[2] = 0;
+        node[3] = 0;
+        *reinterpret_cast<int*>(p + 0x70) = *reinterpret_cast<int*>(p + 0x70) - 1;
+        if (s_fn_MemFree) s_fn_MemFree(node);
+        uint64_t cmd[2] = { cmdLo, cmdHi };
+        if (s_fn_CSUnlock) s_fn_CSUnlock(p + 0x30);
+        Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd), nullptr, nullptr);
+        count = *reinterpret_cast<int*>(p + 0x70);
+    }
+}
+
+// slot 1 — System::Thread::OnCompleted base (Runtime 0x18000c590 is a bare RET).
+static void Pf_OnCompleted_noop(void*) {}
+
+static void* g_pf_vtable[2] = { reinterpret_cast<void*>(&Pf_WorkerLoop_a6360),
+                                reinterpret_cast<void*>(&Pf_OnCompleted_noop) };
 
 static bool MoveTickEnabled() {
     const char* e = getenv("BANISHED_LIVE_CHARACTER_MOVETICK");
+    return e && e[0] && e[0] != '0';
+}
+
+// Async is the real (shipping) pathfinder mode. Default ON when seeded; BANISHED_PF_SYNC=1
+// forces the old main-thread synchronous mode for A/B perf comparison.
+static bool PfSyncForced() {
+    const char* e = getenv("BANISHED_PF_SYNC");
     return e && e[0] && e[0] != '0';
 }
 
@@ -87,6 +142,9 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     if (!s_fn_ThreadCtor) {
         s_fn_ThreadCtor = reinterpret_cast<fn_ThreadCtor_t>(ResolveExport("??0Thread@System@@QEAA@I@Z"));
         s_fn_CSCtor     = reinterpret_cast<fn_CSCtor_t>(ResolveExport("??0CriticalSection@System@@QEAA@XZ"));
+        s_fn_CSLock     = reinterpret_cast<fn_CS_t>(ResolveExport("?Lock@CriticalSection@System@@QEAAXXZ"));
+        s_fn_CSUnlock   = reinterpret_cast<fn_CS_t>(ResolveExport("?Unlock@CriticalSection@System@@QEAAXXZ"));
+        s_fn_MemFree    = reinterpret_cast<pf_fn_MemFree_t>(ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     }
     if (!s_fn_ThreadCtor || !s_fn_CSCtor) {
         fprintf(stderr, "[PfSeed] missing Thread/CS ctor export — skip\n"); fflush(stderr);
@@ -98,11 +156,11 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
     uint8_t* p = reinterpret_cast<uint8_t*>(pfV);
 
     // --- FUN_1400a67f0 ctor (inline) ---
-    s_fn_ThreadCtor(pfV, 0x10000);                       // System::Thread::Thread(self, 0x10000)
-    *reinterpret_cast<void**>(p)            = g_pf_stub_vtable;   // real = 0x14015ef18 (worker loop); stub never called in sync mode
+    s_fn_ThreadCtor(pfV, 0x10000);                       // System::Thread::Thread(self, 0x10000) — creates+parks the worker thread
+    *reinterpret_cast<void**>(p)            = g_pf_vtable;       // slot0 = worker run-loop, slot1 = OnCompleted (real = 0x14015ef18)
     s_fn_CSCtor(p + 0x30);                               // System::CriticalSection::CriticalSection(self+0x30)
     *reinterpret_cast<int*>(p + 0x58)       = 1;         // next result-slot generation id
-    p[0x5c]                                 = 1;         // SYNCHRONOUS MODE (real ctor sets 0)
+    p[0x5c]                                 = 1;         // priming runs SYNC (a6a30/a6430 apply inline); flipped to 0 (async) after priming
     *reinterpret_cast<uint64_t*>(p + 0x60)  = 0;         // queue tail
     *reinterpret_cast<uint64_t*>(p + 0x68)  = 0;         // queue head
     *reinterpret_cast<int*>(p + 0x70)       = 0;         // queue count
@@ -143,7 +201,13 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
         }
     }
 
-    fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, sync mode)\n",
-            pfV, dim, cellN);
+    // Priming is complete. Flip to ASYNC so runtime path queries (cmd 5 via a6c10) queue and
+    // wake the worker thread instead of running the A* inline on the main thread. Requires the
+    // worker's CS Lock/Unlock + MemFree to be resolved; otherwise stay sync (safe fallback).
+    bool async = !PfSyncForced() && s_fn_CSLock && s_fn_CSUnlock && s_fn_MemFree;
+    if (async) p[0x5c] = 0;
+
+    fprintf(stderr, "[PfSeed] pathfinder seeded @ game+0x68 = %p (dim=%d, cells=%d, %s mode)\n",
+            pfV, dim, cellN, async ? "ASYNC worker-thread" : "sync");
     fflush(stderr);
 }
