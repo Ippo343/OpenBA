@@ -1187,14 +1187,26 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         void* engine = *g_pEngineSingleton;
         uint32_t shadowMode = *(uint32_t*)((uintptr_t)engine + 0x30);
 #ifdef STANDALONE_EXE
-        // Standalone has not wired the sun-shadow render pass: with shadow mode != 0,
-        // SunLight::DrawShadowMap draws the terrain into a shadow map using a shadow
-        // shader / render-target that standalone never set up, crashing in VideoDX11
-        // Context::BindResources. Force 0 ("Shadows: Off"): the shadow pass early-returns
-        // while the main lit pass still renders the terrain. (Also: g_pEngineSingleton ==
-        // MainLoop in standalone, so engine+0x30 is not the real shadow-quality field.)
-        // Re-enable once the shadow pass is wired. See gameupdateloop_load.cpp step 33.
-        shadowMode = 0;
+        // The shadow-mode source field. The ORIGINAL GameUpdateLoop::Draw (exe 0x140096010)
+        // sets renderer+0x3c from *(*g_pVideoConfigSingleton + 0x30) — the shadow-QUALITY
+        // setting (index, 0=off, >0=on), NOT engine+0x30 (in standalone g_pEngineSingleton ==
+        // MainLoop, so engine+0x30 is garbage). The MENU loop already reads the correct field
+        // (menudialogloopt.cpp). Default standalone = force 0 ("Shadows: Off"), keeping the
+        // build byte-identical, because the shadow render pass / shader permutation is still
+        // being brought up (see project_shadow_pipeline). Under BANISHED_ENABLE_SHADOWS,
+        // mirror the original: read VideoConfig+0x30 so SunLight::DrawShadowMap engages.
+        // EXPERIMENT (step 2): determines whether the shadow-receive shader permutation is
+        // selected per-draw (shadows appear) or at material load (map fills but unsampled).
+        static int s_enableShadows = -1;
+        if (s_enableShadows < 0) {
+            const char* e = std::getenv("BANISHED_ENABLE_SHADOWS");
+            s_enableShadows = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_enableShadows && g_pVideoConfigSingleton && *g_pVideoConfigSingleton) {
+            shadowMode = *(uint32_t*)((uintptr_t)*g_pVideoConfigSingleton + 0x30);
+        } else {
+            shadowMode = 0;
+        }
 #endif
         *(uint32_t*)((uintptr_t)self->m_renderer + 0x3c) = shadowMode;
     }
