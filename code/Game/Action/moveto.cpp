@@ -147,12 +147,23 @@ static float* s_fMinDistSq = nullptr;   // 0x1401720d4 = 0.05f
 static float* s_fHalfCell = nullptr;    // 0x140172114 = 0.5f
 
 static bool s_moveto_funcs_resolved = false;
+static bool s_moveto_funcs_attempted = false;
 
 // ============================================================
 // Resolution -- called once from Install
 // ============================================================
 bool MoveTo_ResolveFuncs() {
-    if (s_moveto_funcs_resolved) return true;
+    // PERF (critical): cache after the FIRST attempt, not only on full success.
+    // MoveTo_Execute lazy-calls this every frame (the action is built by the exe
+    // action-ctor path, not our ctor). In standalone two pointers in the `ok` set —
+    // the type-id globals 0x1401c7078 / 0x1401c4790, used ONLY by Serialize, never by
+    // the per-frame Execute/AbstractImpl path — are "NOT IMPLEMENTED" and never
+    // resolve, so `ok` stayed false and `s_moveto_funcs_resolved` never latched. That
+    // made this whole ~30-lookup (ResolveAddr + ResolveExport) resolver re-run on EVERY
+    // MoveTo_Execute call → ~2.8 ms per citizen per frame, which alone dragged the live
+    // citizen sim to ~15 fps. Latching on "attempted" makes it run exactly once.
+    if (s_moveto_funcs_attempted) return s_moveto_funcs_resolved;
+    s_moveto_funcs_attempted = true;
 
     // CheckPtr via IAT at [0x140152ab0]
     uintptr_t iat;
