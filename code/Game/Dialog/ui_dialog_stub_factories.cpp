@@ -153,6 +153,49 @@ namespace uistub_BuildRequirementUI {
 REGISTER_TYPE(BuildRequirementUI, "UI::DialogController",
               &uistub_BuildRequirementUI::Factory, &uistub_BuildRequirementUI::InPlace);
 
+// ---- HotKeyToolTipUI: PROMOTED to the real reimpl (2026-06-28) ---------------
+// This controller is bound to the "textHotKey"/"textToolTip" TextElements of
+// every toolbar button. Its Slot4 (Serialize, +0x20) reads the button's
+// auto-assigned shortcut id (element+0xC0), resolves it through Input::KeyMap +
+// the keyNames StringTable, and fills the hotkey text. The generic stub left
+// Slot4 a no-op, so the buttons showed the .rsc placeholder "[]" (empty
+// brackets). Wiring Slot4 to the real HotKeyToolTipUI_Slot4 restores the key
+// display. Construction stays the stub alloc+zero+vtable; the engine fills the
+// base fields (dialog +0x18, datasource +0x28) afterward. Same shape as the
+// BuildRequirementUI promotion above.
+namespace Game { void HotKeyToolTipUI_Slot4(void* self); }
+namespace uistub_HotKeyToolTipUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("HotKeyToolTipUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // The reimpl unconditionally dereferences g_TypeId_ObjectInternal; in
+    // standalone it resolves from a raw exe .rdata addr -> null. Lazy-fill it
+    // from the live Factory tree (post-Engine::Startup). NB: Object::Internal is
+    // registered under the simple name "Internal". Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_internal=0;
+        if (!g_TypeId_ObjectInternal) {
+            s_internal=::Object::ResolveTypeIdByNameLazy("Internal");
+            if (s_internal) g_TypeId_ObjectInternal=&s_internal;
+        }
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        if (!self || !g_TypeId_ObjectInternal) return;
+        Game::HotKeyToolTipUI_Slot4(self);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x30;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x30,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
+              &uistub_HotKeyToolTipUI::Factory, &uistub_HotKeyToolTipUI::InPlace);
+
 // ---- DialogController family ------------------------------------------------
 UI_DIALOG_STUB(AttendanceUI,        "UI::DialogController", 0x38);
 UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
@@ -164,7 +207,7 @@ UI_DIALOG_STUB(DestroyUI,           "UI::DialogController", 0x78);
 UI_DIALOG_STUB(EntityUI,            "UI::DialogController", 0x48);
 UI_DIALOG_STUB(EventLogUI,          "UI::DialogController", 0x80);
 UI_DIALOG_STUB(HelpUI,              "UI::DialogController", 0x78);
-UI_DIALOG_STUB(HotKeyToolTipUI,     "UI::DialogController", 0x30);
+// HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).
 UI_DIALOG_STUB(ImmigrationUI,       "UI::DialogController", 0x50);
 UI_DIALOG_STUB(MapUI,               "UI::DialogController", 0x50);
 UI_DIALOG_STUB(ModBrowseUI,         "UI::DialogController", 0x30);
