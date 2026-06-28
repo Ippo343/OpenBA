@@ -45,3 +45,6 @@ standalone/*.png
 notes/wp_runs/*.txt
 notes/wp_runs/*.err
 Banished_RE.lock
+
+# RenderDoc captures (large binary .rdc artifacts)
+captures/

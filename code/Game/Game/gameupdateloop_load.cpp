@@ -903,6 +903,17 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         void* terrainGen = *(void**)(p + 0x48);
         int   sizeIdx    = *(int32_t*)(p + 0x34);
         uint32_t seed    = *(uint32_t*)(p + 0x30);
+        // BANISHED_MAP_SEED=<uint> forces a deterministic map seed (testing —
+        // lock onto a known map, e.g. one with a river). Default: the random
+        // seed the NewGameDialog wrote to GUL+0x30.
+        {
+            const char* e = std::getenv("BANISHED_MAP_SEED");
+            if (e && e[0]) {
+                seed = (uint32_t)strtoul(e, nullptr, 0);
+                fprintf(stderr, "[worldgen] BANISHED_MAP_SEED override: seed=%u\n", seed);
+                fflush(stderr);
+            }
+        }
         if (worldGeom && terrainGen) {
             WorldGen_BuildTerrain(worldGeom, terrainGen, sizeIdx, seed);
 

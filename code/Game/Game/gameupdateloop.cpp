@@ -1201,6 +1201,50 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         // keyframes. Animates sun elevation + light/ambient/fog colors so
         // shadows track the in-game day (see weather_sun.cpp).
         Weather_SunUpdate(self, videoCtx);
+
+        // The original Weather::DrawUpdate (exe 0x1400938d0) ALSO pushes four
+        // terrain weather params from the Weather struct into the Context
+        // cbuffer (mirrored at ctx+0x288 and ctx+0x3b8, dirty bit 0x10800):
+        //   weather+0x1c = SNOW COVERAGE   (FUN_140093420: saturate((snowAccum -
+        //                  thresh) * scale))
+        //   weather+0x20 = seasonal fade A
+        //   weather+0x24 = seasonal fade B
+        //   weather+0x28 = max active weather (rain/snow) intensity
+        // In standalone DrawUpdate no-ops AND the weather sim (Weather::ResetTime
+        // 0x1400944e0 -> FUN_140093420) never runs, so these were never written
+        // and the terrain shader read stale/garbage from those cbuffer slots —
+        // showing snow on ~half the ground. The Weather ctor (FUN_140093f60)
+        // zero-inits all four, which is exactly the spring/clear/no-snow state,
+        // so push them faithfully (they animate for free once the snow sim is
+        // wired). Set BANISHED_FORCE_SNOW=<float> to override the coverage for
+        // testing.
+        {
+            uint8_t* weather = reinterpret_cast<uint8_t*>(self->m_weather);
+            if (weather && videoCtx) {
+                uint8_t* ctx = reinterpret_cast<uint8_t*>(videoCtx);
+                uint32_t s0 = *reinterpret_cast<uint32_t*>(weather + 0x1c);  // snow coverage
+                uint32_t s1 = *reinterpret_cast<uint32_t*>(weather + 0x20);
+                uint32_t s2 = *reinterpret_cast<uint32_t*>(weather + 0x24);
+                uint32_t s3 = *reinterpret_cast<uint32_t*>(weather + 0x28);
+                static int s_forceSnow = -1;
+                static float s_snowVal = 0.0f;
+                if (s_forceSnow < 0) {
+                    const char* e = std::getenv("BANISHED_FORCE_SNOW");
+                    s_forceSnow = (e && e[0]) ? 1 : 0;
+                    if (s_forceSnow) s_snowVal = (float)atof(e);
+                }
+                if (s_forceSnow) s0 = *reinterpret_cast<uint32_t*>(&s_snowVal);
+                *reinterpret_cast<uint32_t*>(ctx + 0x3b8) = s0;
+                *reinterpret_cast<uint32_t*>(ctx + 0x3bc) = s1;
+                *reinterpret_cast<uint32_t*>(ctx + 0x3c0) = s2;
+                *reinterpret_cast<uint32_t*>(ctx + 0x3c4) = s3;
+                *reinterpret_cast<uint32_t*>(ctx + 0x288) = s0;
+                *reinterpret_cast<uint32_t*>(ctx + 0x28c) = s1;
+                *reinterpret_cast<uint32_t*>(ctx + 0x290) = s2;
+                *reinterpret_cast<uint32_t*>(ctx + 0x294) = s3;
+                *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x10800;
+            }
+        }
 #endif
     }
     TRACE("[GameUpdateLoop::Draw] Weather::DrawUpdate done\n");

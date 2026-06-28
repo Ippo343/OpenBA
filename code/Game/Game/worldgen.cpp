@@ -42,6 +42,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <cmath>
 
 // ============================================================
@@ -261,6 +262,198 @@ static void* wg_BlendTexture_cf440_stub(int32_t* hf) {
 }
 
 // ============================================================
+// cf150 — PER-CELL NORMAL via heightmap central differences.
+// Verified from FUN_1400cf150 @0x1400cf150.
+//
+//   normal = normalize( -(h[r][c+1] - h[r][c-1]),     // -dh/dx
+//                        -(h[r+1][c] - h[r-1][c]),     // -dh/dy
+//                         2.0 )                         // DAT_140172174
+//   All neighbour indices are clamped to [0, dim] (heightmap stride = dim+1).
+//   The XOR-with-0x80000000 in the decomp is a float negate.
+// Writes {nx,ny,nz} into out[0..2].
+// ============================================================
+static inline void wg_CellNormal_cf150(const float* hm, int dim, int col, int row,
+                                        float out[3]) {
+    int edge = dim + 1;
+    auto clamp = [dim](int v) { return v < 0 ? 0 : (v > dim ? dim : v); };
+    int cR   = clamp(row);
+    int cC   = clamp(col);
+    int colP = clamp(col + 1);
+    int colM = clamp(col - 1);
+    int rowP = clamp(row + 1);
+    int rowM = clamp(row - 1);
+
+    float nx = -(hm[edge * cR + colP] - hm[edge * cR + colM]);   // -dh/dx
+    float ny = -(hm[edge * rowP + cC] - hm[edge * rowM + cC]);   // -dh/dy
+    float nz = 2.0f;                                             // DAT_140172174
+    float len = sqrtf(nx * nx + ny * ny + nz * nz);
+    if (len > 0.0f) { nx /= len; ny /= len; nz /= len; }
+    out[0] = nx; out[1] = ny; out[2] = nz;
+}
+
+// ============================================================
+// cf440 — GENERATE BLEND/SPLAT TEXTURE (the real one).
+// Verified from FUN_1400cf440 @0x1400cf440. Returns an RGBA (dim×dim) buffer:
+//   R (byte0) = ROCK weight   — perlin² scatter (height ≥ -0.5), forced 0xff
+//               below -0.5, and ramped up where height > 8.0 (high rock/snow).
+//   G (byte1) = GRASS weight  — slope band on the cell normal.z: full (0xff) on
+//               slopes (nz ≤ 0.85), feathering to 0 toward flat (nz → 0.999),
+//               plus a height ramp where height > 7.0.
+//   B (byte2) = AMBIENT-OCCLUSION — 21×21 circular normal kernel: 1 − mean of
+//               max(dot(centerNormal, dirToNeighbour), 0), scaled by a 3×3
+//               smoothed normal.z.
+//   A (byte3) = 0 (matches the original — it never writes byte3).
+//
+// Per-cell scratch (dim×dim, 6 floats each): {x=col, y=row, h=height, nx,ny,nz}.
+// Heights are sampled from the (dim+1)² float heightmap; normals via cf150.
+// All thresholds are the verified .rdata constants (read_memory 0x1401720f0..).
+// ============================================================
+static void* wg_BlendTexture_cf440(int32_t* hf) {
+    int dim = *(int32_t*)((uint8_t*)hf + HF_GRIDSIZE);
+    const float* hm = *(const float**)((uint8_t*)hf + HF_HEIGHTMAP);
+    void* rng = (uint8_t*)hf + HF_RANDOM;
+    if (dim <= 0 || !hm || !fn_MemAlloc || !g_pMemAllocSingleton ||
+        !fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate || !fn_Random_RandTol) {
+        fprintf(stderr, "[worldgen] cf440: deps unresolved (hm=%p PerlinCtor=%p Gen=%p "
+                "RandTol=%p) — falling back to flat splat\n", (void*)hm,
+                (void*)fn_PerlinNoise_Ctor, (void*)fn_PerlinNoise_Generate,
+                (void*)fn_Random_RandTol);
+        fflush(stderr);
+        return wg_BlendTexture_cf440_stub(hf);
+    }
+
+    // .rdata constants (verified bytes at the listed addresses).
+    const float kCoord     = 0.25f;        // 0x140172100  perlin coord scale / persistence
+    const float kCfOctaves = 4.0f;         // 0x140172194
+    const float kRRemap    = 0.5f;         // 0x140172114  (pn+1)*0.5
+    const float k255       = 255.0f;       // 0x14017222c
+    const float kRockHMin  = -0.5f;        // 0x140172278  below => full rock
+    const float kHi8       = 8.0f;         // 0x1401721a8  rock high-band start
+    const float kHi7       = 7.0f;         // 0x1401721a0  grass high-band start
+    const float kBandDiv   = 3.0f;         // 0x140172180  height-band divisor
+    const float kGUpper    = 0.998969f;    // 0x140172148  grass slope upper clamp
+    const float kGLower    = 0.85f;        // 0x140172130  grass slope lower band
+    const float kGBandDiv  = 0.149047f;    // 0x1401720f0  grass slope band divisor
+
+    // Perlin for the rock scatter: persist 0.25, octaves 4.0, two RandTol seeds.
+    // (ctor arg order mirrors e5d0: seeds passed (second, first).)
+    int s1 = fn_Random_RandTol(rng, 0xffffff);
+    int s2 = fn_Random_RandTol(rng, 0xffffff);
+    uint8_t pn[0x100] = {};
+    fn_PerlinNoise_Ctor(pn, kCoord, kCfOctaves, s2, s1);
+
+    // Per-cell scratch: dim*dim * {x,y,h,nx,ny,nz} (6 floats / 0x18 bytes).
+    float* scratch = (float*)fn_MemAlloc(g_pMemAllocSingleton,
+                                         (uint64_t)dim * dim * 0x18, 4);
+    if (!scratch) return wg_BlendTexture_cf440_stub(hf);
+    int edge = dim + 1;
+    for (int row = 0; row < dim; ++row) {
+        for (int col = 0; col < dim; ++col) {
+            float* e = scratch + (size_t)(dim * row + col) * 6;
+            e[0] = (float)col;
+            e[1] = (float)row;
+            e[2] = hm[edge * row + col];
+            wg_CellNormal_cf150(hm, dim, col, row, &e[3]);
+        }
+    }
+
+    uint32_t* out = (uint32_t*)fn_MemAlloc(g_pMemAllocSingleton,
+                                           (uint64_t)dim * dim * 4, 4);
+    if (!out) { fn_MemFreeStatic(scratch); return wg_BlendTexture_cf440_stub(hf); }
+
+    // --- R (rock) + G (grass) channels ---
+    for (int row = 0; row < dim; ++row) {
+        for (int col = 0; col < dim; ++col) {
+            const float* e = scratch + (size_t)(dim * row + col) * 6;
+            float height = e[2];
+            float nz     = e[5];
+
+            // R: rock scatter.
+            uint32_t rock;
+            if (height >= kRockHMin) {
+                float pnv = fn_PerlinNoise_Generate(pn, (float)col * kCoord,
+                                                    (float)row * kCoord);
+                pnv = pnv * kRRemap + kRRemap;                  // (pn+1)*0.5 -> [0,1]
+                rock = (uint32_t)(long long)(pnv * pnv * k255);
+            } else {
+                rock = 0xff;
+            }
+
+            // G: grass slope band on normal.z.
+            uint32_t grass;
+            if (nz >= kGUpper || nz <= kGLower) {
+                grass = (nz <= kGLower) ? 0xff : 0;
+            } else {
+                grass = (uint32_t)(long long)((1.0f - (nz - kGLower) / kGBandDiv) * k255);
+            }
+
+            // Height ramp: rock above 8.0 (max-blend).
+            if (height > kHi8) {
+                float t = (height - kHi8) / kBandDiv;
+                t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+                uint8_t v = (uint8_t)(long long)(t * k255);
+                uint8_t rb = (uint8_t)rock;
+                rock = (rb <= v) ? v : rb;
+            }
+            // Height ramp: grass above 7.0 (max-blend).
+            if (height > kHi7) {
+                float t = (height - kHi7) / kBandDiv;
+                t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+                uint8_t v = (uint8_t)(long long)(t * k255);
+                uint8_t gb = (uint8_t)grass;
+                if (gb < v) grass = v;
+            }
+
+            out[dim * row + col] = ((grass & 0xff) << 8) | (rock & 0xff);
+        }
+    }
+
+    // --- B (ambient occlusion) channel: 21×21 circular normal kernel ---
+    for (int row = 0; row < dim; ++row) {
+        for (int col = 0; col < dim; ++col) {
+            const float* ce = scratch + (size_t)(dim * row + col) * 6;
+            float cx = ce[0], cy = ce[1], ch = ce[2];
+            float cnx = ce[3], cny = ce[4], cnz = ce[5];
+            float accumDot = 0.0f, count = 0.0f;
+            float sumNx = 0.0f, sumNy = 0.0f, sumNz = 0.0f;
+
+            for (int dz = -10; dz < 10; ++dz) {
+                int nrow = row + dz;
+                if (nrow < 0 || nrow >= dim) continue;
+                for (int dx = -10; dx < 11; ++dx) {
+                    int ncol = col + dx;
+                    if (ncol < 0 || ncol >= dim) continue;
+                    if (dx * dx + dz * dz >= 0x65) continue;     // r^2 < 101 circle clip
+
+                    const float* ne = scratch + (size_t)(dim * nrow + ncol) * 6;
+                    float dirx = ne[0] - cx, diry = ne[1] - cy, dirz = ne[2] - ch;
+                    float len = sqrtf(dirx * dirx + diry * diry + dirz * dirz);
+                    if (len > 0.0f) { dirx /= len; diry /= len; dirz /= len; }
+                    float dot = cnx * dirx + cny * diry + cnz * dirz;
+                    if (dot < 0.0f) dot = 0.0f;                  // Scalar::Max(dot, 0)
+                    accumDot += dot;
+                    count += 1.0f;
+
+                    if (dx > -2 && dx < 2 && dz > -2 && dz < 2) { // 3x3 smoothed normal
+                        sumNx += ne[3]; sumNy += ne[4]; sumNz += ne[5];
+                    }
+                }
+            }
+
+            float sl  = sqrtf(sumNx * sumNx + sumNy * sumNy + sumNz * sumNz);
+            float snz = (sl > 0.0f) ? sumNz / sl : 0.0f;
+            float avg = (count > 0.0f) ? accumDot / count : 0.0f;
+            float ao  = (1.0f - avg) * snz * k255;
+            uint32_t aoByte = (uint32_t)(long long)ao & 0xff;
+            out[dim * row + col] |= aoByte << 16;
+        }
+    }
+
+    fn_MemFreeStatic(scratch);
+    return out;
+}
+
+// ============================================================
 // fd10 — lazy material resolve (blueprint §5). NULL-safe; trusts Find's return
 // and skips the post-Find IsDerivedFrom check (cascade strategy — the standalone
 // factory tree is incomplete and IsDerivedFrom NULL-derefs).
@@ -337,8 +530,13 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
         }
     }
 
-    // 4. Blend/splat texture (stubbed) -> WorldGeom+0x140.
-    *(void**)(w + WG_BLENDTEX) = wg_BlendTexture_cf440_stub(hf);
+    // 4. Blend/splat texture -> WorldGeom+0x140. Real cf440 produces the
+    //    rock/grass/AO splat (green grass, rock on slopes/peaks). Set
+    //    BANISHED_FLAT_SPLAT=1 to fall back to the old flat-grey stub for A/B.
+    const char* flat = getenv("BANISHED_FLAT_SPLAT");
+    bool useFlat = flat && flat[0] && flat[0] != '0';
+    *(void**)(w + WG_BLENDTEX) = useFlat ? wg_BlendTexture_cf440_stub(hf)
+                                         : wg_BlendTexture_cf440(hf);
 
     // 5. Height-texture upload (+0x148) and 6. base grid mesh (VB+0x100/IB+0x120).
     Reimpl_TradeWork_sub_c780(wg);
@@ -427,5 +625,13 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     fprintf(stderr, "[worldgen] BuildTerrain EXIT — wg=%p dimX2=%d edge=%d hm16=%p mat1=%p blendTex=%p\n",
             wg, *(int32_t*)(w + WG_DIMX2), *(int32_t*)(w + WG_HEIGHTEDGE),
             *(void**)(w + WG_HM16), *(void**)(w + WG_MATERIAL1), *(void**)(w + WG_BLENDTEX));
+    // Water diagnostics: the two water materials (+0x150/+0x158) and the overlay
+    // mesh draw-item counts (+0x1c8/+0x1d8). If matWater* are null the water
+    // material resource didn't load; if the counts are 0 the b260 overlay mesh
+    // wasn't built (b260 is skipped in our worldgen).
+    fprintf(stderr, "[worldgen]   waterMatA(+0x150)=%p waterMatB(+0x158)=%p "
+            "overlayVB(+0x160)=%p overlayCntA(+0x1c8)=%d overlayCntB(+0x1d8)=%d\n",
+            *(void**)(w + 0x150), *(void**)(w + 0x158), *(void**)(w + 0x160),
+            *(int32_t*)(w + 0x1c8), *(int32_t*)(w + 0x1d8));
     fflush(stderr);
 }
