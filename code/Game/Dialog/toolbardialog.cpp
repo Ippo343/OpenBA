@@ -938,12 +938,27 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         ext = fn_ExternalFactory_FindNext(factory, toolbarTypeId, ext);
     }
 
-    // Sort by priority field at +0x50.
-    // fn_ToolbarSort is an exe-only helper (0x140021790) — unregistered in standalone
-    // (resolves null). Guard the call: skipping it only leaves the buttons in load
-    // order (cosmetic) rather than crashing the ctor on a null call.
-    if (itemListCount > 1 && fn_ToolbarSort) {
-        fn_ToolbarSort(itemList, itemListCount);
+    // Sort the collected items by their priority field at +0x50, ascending.
+    // The original calls fn_ToolbarSort (exe-only introsort @0x140021790, keyed on
+    // *(int*)(*item + 0x50)); that address is unregistered in standalone, so the
+    // call resolved null and was skipped — leaving the buttons in raw load order.
+    // That is exactly the visible "wrong icon order" (main bar AND every sub-menu,
+    // e.g. Pasture landing last instead of 3rd in the food group). Port the sort
+    // directly so both modes order identically. itemListCount is small (~10) and
+    // a stable insertion sort matches the ascending-by-priority result; equal
+    // priorities keep their load order.
+    if (itemListCount > 1) {
+        uint64_t* items = (uint64_t*)itemList;
+        for (int i = 1; i < itemListCount; i++) {
+            uint64_t key = items[i];
+            int32_t keyPri = *(int32_t*)(key + 0x50);
+            int j = i - 1;
+            while (j >= 0 && *(int32_t*)(items[j] + 0x50) > keyPri) {
+                items[j + 1] = items[j];
+                j--;
+            }
+            items[j + 1] = key;
+        }
     }
 
     // --- Step 6: Determine icon sizes based on nesting depth ---
