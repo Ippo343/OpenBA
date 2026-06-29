@@ -629,6 +629,89 @@ static inline void* AllocSub(uint64_t size, int align) {
 }
 
 // ============================================================
+// Step 28 helper — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome.
+// ============================================================
+//
+// Faithful port of the exe Load's sky-build (0x140097356..0x140097420):
+// MemAlloc a Graphics::MeshInstance (0x120 bytes), run its Runtime ctor (which
+// installs the Runtime default vtable — the exe vtable 0x14015e240 is only 9
+// slots: slot0 = exe scalar-deleting dtor, slots 1-8 are FF25 IAT thunks
+// straight to the Runtime MeshInstance methods, so the Runtime default the ctor
+// installs is render-identical), FindOrLoad "Models/Sky/SkyMesh.rsc", SetMesh
+// it, run Startup via vtable[+8](skyMesh, Time(0)), zero +0x28. The resource
+// loads in standalone with no factory cascade (SkyMesh GraphicsMesh is
+// Runtime-self-registered). GameUpdateLoop::Shutdown already tears m_skyMesh
+// down via vtable[0].
+//
+// This is the fix for "dark/flat water": without the sky as a Scene global
+// object, the engine's reflection pass has only terrain to mirror (reflection
+// RT blue mean ~0.18 vs retail ~0.68), so the water — whose shader is
+// sky-reflection-dominated on the tilted camera — renders dark navy. Adding the
+// sky as a Scene global object (step-33 tail) feeds the reflection pass for
+// free, exactly like retail. Opt out for A/B with BANISHED_NO_SKYMESH=1.
+typedef void (*fn_MeshInstance_Ctor_t)(void* self);
+typedef void (*fn_MeshInstance_SetMesh_t)(void* self, void* meshExtPtr);
+typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
+
+static void BuildSkyMesh_Step28(uint8_t* p) {
+    static int s_off = -1;
+    if (s_off < 0) {
+        const char* e = std::getenv("BANISHED_NO_SKYMESH");
+        s_off = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (s_off) { *(void**)(p + 0x108) = nullptr; return; }
+
+    static bool s_res = false;
+    static fn_MeshInstance_Ctor_t    s_Ctor     = nullptr;
+    static fn_MeshInstance_SetMesh_t s_SetMesh  = nullptr;
+    static fn_Time_Ctor_t            s_TimeCtor = nullptr;
+    if (!s_res) {
+        s_res = true;
+        s_Ctor    = (fn_MeshInstance_Ctor_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ");
+        s_SetMesh = (fn_MeshInstance_SetMesh_t)ResolveExport(
+            "?SetMesh@MeshInstance@Graphics@@QEAAXV?$ExternalPtr@VGraphicsMesh@Graphics@@@Object@@@Z");
+        s_TimeCtor = (fn_Time_Ctor_t)ResolveExport("??0Time@System@@QEAA@M@Z");
+    }
+
+    void* mem = AllocSub(0x120, 8);
+    *(void**)(p + 0x108) = mem;
+    if (!mem || !s_Ctor) {
+        fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p ctor=%p\n", mem, (void*)s_Ctor);
+        fflush(stderr);
+        return;
+    }
+    s_Ctor(mem);
+
+    // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
+    void* meshRes = nullptr;
+    if (fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad && fn_Filename_Dtor &&
+        g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+        void* factory = *g_pExternalFactorySingleton;
+        uint8_t fname[16] = {0};
+        fn_Filename_CtorCStr(fname, "Models/Sky/SkyMesh.rsc");
+        meshRes = fn_ExternalFactory_FindOrLoad(factory, fname);
+        fn_Filename_Dtor(fname);
+    }
+
+    if (meshRes && s_SetMesh) s_SetMesh(mem, meshRes);
+
+    // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
+    // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
+    if (s_TimeCtor) {
+        uint64_t timeObj = 0;
+        s_TimeCtor(&timeObj, 0.0f);
+        void* vt = *(void**)mem;
+        if (vt && *(void**)((uint8_t*)vt + 8))
+            (*(void(**)(void*, void*))((uint8_t*)vt + 8))(mem, &timeObj);
+    }
+    *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
+
+    fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p (SetMesh=%p TimeCtor=%p)\n",
+            mem, meshRes, (void*)s_SetMesh, (void*)s_TimeCtor);
+    fflush(stderr);
+}
+
+// ============================================================
 // GameUpdateLoop::Load (0x140096b00) — orchestration
 // ============================================================
 extern "C" void GameUpdateLoop_Load(void* loopVoid) {
@@ -882,8 +965,8 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         *(void**)(p + 0x80) = mem;
     }
 
-    // Step 28 — SkyMesh MeshInstance (+0x108) — DEFERRED (needs vtable 0x14015e240).
-    *(void**)(p + 0x108) = nullptr;
+    // Step 28 — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome (helper above).
+    BuildSkyMesh_Step28(p);
 
     // Step 29 — Seasons/Events StringTable Finds — DEFERRED (leave +0x138 struct slots null).
 
@@ -1073,7 +1156,11 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             static const bool kAddSunLight = true;
             if (kAddSunLight && *(void**)(p + 0x100))
                 fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x100)); // SunLight
-            // SkyMesh deferred → not added
+            // SkyMesh: add as a Scene global object so the reflection + main passes
+            // both draw the `_clear_` sky dome (the dark-water fix; see BuildSkyMesh_Step28).
+            static const bool kAddSkyMesh = true;
+            if (kAddSkyMesh && *(void**)(p + 0x108))
+                fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x108)); // SkyMesh
         }
         void* aScene = *(void**)(p + 0x78);   // g_pGameWorld+0x78
         if (aScene && fn_Audio_Scene_Pause) {
