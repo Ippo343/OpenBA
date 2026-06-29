@@ -43,6 +43,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 
 namespace {
 
@@ -190,22 +191,32 @@ extern "C" void* TradeWork_helper_e270_Body(void* self, void* retbuf, int col, i
     float nz = kNormalDefaultZ;
 
     float* out = reinterpret_cast<float*>(retbuf);
-    out[0] = nx;
-    out[1] = ny;
-    out[2] = nz;
 
-    ResolveRuntimePtrs();
-    if (s_Vector3Normalize) {
-        // Hidden-retval ABI: RCX=this (retbuf), RDX=retbuf2 (junk; original
-        // discards return value). The slot at 0x1401512c0 is the by-value
-        // Normalize variant, but we just want the in-place side-effect.
-        // Pass a small stack buffer for the discarded return.
-        uint8_t junk[16] = {0};
-        s_Vector3Normalize(retbuf, junk);
+    // Normalize IN PLACE (the original e270 ends with Math::Vector3::Normalize on
+    // the local vector, mutating it). We must do the same: the vertex writer ac880
+    // byte-encodes each component as (n + 1.0) * 127.5 into a UNORM8. With nz left
+    // at the raw 2.0, that yields (2.0+1.0)*127.5 = 382.5 -> (char)382 = 126, which
+    // the terrain VS decodes as nz = 126/255*2-1 ≈ 0 — i.e. EVERY terrain normal
+    // ends up flat/sideways with random XY, wrecking diffuse lighting + the PS
+    // triplanar rock blend (faceted/blocky terrain). RenderDoc A/B vs retail:
+    // retail nz byte ~200-249 (unit normals tilting on slopes), ours was 126 flat.
+    //
+    // Do it in plain C++ rather than via the runtime Vector3::Normalize: the slot
+    // at 0x1401512c0 / ?Normalize@Vector3@Math@@QEBA?AV12@XZ is the *by-value*
+    // (const) overload — it returns a normalized COPY and leaves `this` unchanged,
+    // so it never mutated our vector (that's why nz stayed 2.0).
+    float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+    if (len > 1e-8f) {
+        float inv = 1.0f / len;
+        out[0] = nx * inv;
+        out[1] = ny * inv;
+        out[2] = nz * inv;
+    } else {
+        // Degenerate (perfectly flat): straight up.
+        out[0] = 0.0f;
+        out[1] = 0.0f;
+        out[2] = 1.0f;
     }
-    // If unresolved, leave (nx, ny, nz) un-normalized — slightly wrong shading
-    // but mesh still renders. One-shot warning emitted by ResolveRuntimePtrs's
-    // chain (the helper-A path will already have logged a Create failure).
 
     return retbuf;
 }

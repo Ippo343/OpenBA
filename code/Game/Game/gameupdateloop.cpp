@@ -1250,6 +1250,28 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
                     if (s_forceSnow) s_snowVal = (float)atof(e);
                 }
                 if (s_forceSnow) s0 = *reinterpret_cast<uint32_t*>(&s_snowVal);
+                // Optional verification trace: BANISHED_SUN_TRACE=1 dumps the four
+                // weather/terrain params (as floats) we push to the Context cbuffer
+                // every ~120 frames. s0 = snow coverage -> _pc_.userPosition.x.
+                {
+                    static int s_snowTrace = -1;
+                    if (s_snowTrace < 0) {
+                        const char* e = std::getenv("BANISHED_SUN_TRACE");
+                        s_snowTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
+                    }
+                    if (s_snowTrace) {
+                        static int s_k = 0;
+                        if ((s_k++ % 120) == 0) {
+                            fprintf(stderr, "[snow] coverage=%.3f fadeA=%.3f fadeB=%.3f "
+                                    "wxIntensity=%.3f (forceSnow=%d)\n",
+                                    *reinterpret_cast<float*>(&s0),
+                                    *reinterpret_cast<float*>(&s1),
+                                    *reinterpret_cast<float*>(&s2),
+                                    *reinterpret_cast<float*>(&s3), s_forceSnow);
+                            fflush(stderr);
+                        }
+                    }
+                }
                 *reinterpret_cast<uint32_t*>(ctx + 0x3b8) = s0;
                 *reinterpret_cast<uint32_t*>(ctx + 0x3bc) = s1;
                 *reinterpret_cast<uint32_t*>(ctx + 0x3c0) = s2;

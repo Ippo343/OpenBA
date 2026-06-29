@@ -181,6 +181,27 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     LerpColor(a.lightColor,   b.lightColor,   frac, lightCol);    // diffuse (col1)
     LerpColor(a.ambientColor, b.ambientColor, frac, ambientCol);  // ambient (col2)
 
+    // Optional verification trace (continuation): with the colors + final sun dir
+    // computed, log them alongside the keyframe info above (same env gate, throttle).
+    {
+        static int s_trace2 = -1;
+        if (s_trace2 < 0) {
+            const char* e = std::getenv("BANISHED_SUN_TRACE");
+            s_trace2 = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_trace2) {
+            static int s_m = 0;
+            if ((s_m++ % 120) == 0) {
+                fprintf(stderr, "[sun] dir=(%.3f,%.3f,%.3f) light=(%.3f,%.3f,%.3f) "
+                        "ambient=(%.3f,%.3f,%.3f)\n",
+                        dir[0], dir[1], dir[2],
+                        lightCol[0], lightCol[1], lightCol[2],
+                        ambientCol[0], ambientCol[1], ambientCol[2]);
+                fflush(stderr);
+            }
+        }
+    }
+
     fn_Graphics_SunLight_Set(sun, dir, lightCol, ambientCol);
 
     // Fog (matches the base game's per-time fog distances + color).
