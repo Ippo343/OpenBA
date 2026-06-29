@@ -295,6 +295,14 @@ static fn_Weather_DrawUpdate_t fn_Weather_DrawUpdate = nullptr;
 // Native time-of-day sun/lighting driver (code/Game/Game/weather_sun.cpp).
 extern "C" void Weather_SunUpdate(void* self, void* ctx);
 
+// In-game camera controller input (code/Game/Game/camera_input.cpp). Drives the
+// PlayerController camera from the KeyMap (WASD pan, Q/E rotate, wheel zoom, presets).
+// Only called in standalone, where EntityUI::Update (0x1401026a0) isn't registered.
+namespace Game {
+    void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks);
+    void Camera_UpdateHotkeys(void* entityUI, int inputFlag, int64_t timeTicks);
+}
+
 // OnScenarioComplete sub-functions
 // FUN_140095580 — EventNotifier::FireNotification(notifier, eventType, priority, entityPtr)
 typedef void (*fn_EventNotifier_Fire_t)(void* notifier, int eventType, int priority, void* entityPtr);
@@ -908,6 +916,14 @@ post_simulation:
         if (!pausedNow) {
             // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
             bool noInputFocus = (*(uint8_t*)((uintptr_t)self->m_userInterface + 0xd9) == 0);
+#ifdef STANDALONE_EXE
+            // Standalone: EntityUI::Update (the camera/tool controller) is not
+            // registered, so fn_EntityUI_Update is null and the camera never moved.
+            // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
+            // first, then per-frame movement, matching the original helper order.
+            Game::Camera_UpdateHotkeys(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
+            Game::Camera_UpdateMovement(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
+#endif
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
             int64_t result = fn_EntityUI_Update ? fn_EntityUI_Update(self->m_entityUI, *(int64_t*)time, noInputFocus) : 1; // [GUARD-M5]
             cursorIndex = (int)result;
