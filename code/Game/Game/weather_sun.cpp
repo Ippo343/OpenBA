@@ -31,6 +31,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 
 // ============================================================
@@ -145,9 +146,17 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     float heading = Lerp(a.sunHeading, b.sunHeading, frac);
     float pitch   = Lerp(a.sunPitch,   b.sunPitch,   frac);
 
-    // Direction from yaw/pitch (degrees) — ready for SunLight::Set (no negate).
+    // Direction from yaw/pitch (degrees). FromYawPitch returns z=+sin(pitch)
+    // (pointing UP toward the sun), but the engine's sun/shadow system expects the
+    // light-travel direction with z=-sin(pitch) (pointing DOWN). Verified by reading
+    // the retail in-game _LightConstants_ light dir = (-0.554,-0.320,-0.769) vs our
+    // unnegated (-0.557,-0.321,+0.766): only Z is flipped. Without this, GetSunCamera
+    // builds the sun shadow camera from the wrong side -> shadowProjection[0].z sign
+    // inverts -> the shadow depth comparison always passes -> NO cast shadows (and the
+    // ground receives ambient-only instead of sun diffuse). Negate Z to match retail.
     float dir[3] = {0.0f, 0.0f, 1.0f};
     s_fn_FromYawPitch(dir, &heading, &pitch);
+    dir[2] = -dir[2];
 
     // Optional verification trace: BANISHED_SUN_TRACE=1 logs the advancing
     // day-time / keyframe / sun pitch every ~120 frames.
