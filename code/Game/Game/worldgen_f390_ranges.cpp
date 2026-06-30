@@ -49,6 +49,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 
 // ============================================================
@@ -110,6 +111,11 @@ static fn_Random_Rand2_t        s_fn_Rand2        = nullptr;
 static fn_Random_RandFloatTol_t s_fn_RandFloatTol = nullptr;
 static fn_Vec2_Normalize_t      s_fn_Vec2Norm     = nullptr;
 static bool s_rangesResolved = false;
+
+// [WATER-DIAG] TryPlacePath reject-reason counters (BANISHED_WATER_DIAG dump in
+// wg_f390_paths). Disambiguate which validation gate rejects candidates.
+static long s_rejSelf  = 0;   // self-intersection reject
+static long s_rejCross = 0;   // cross-path reject
 
 static void rg_EnsureInit() {
     if (s_rangesResolved) return;
@@ -464,12 +470,18 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
             float* b0 = (float*)(P + (size_t)j * 0x1c);
             float* b1 = (float*)(P + (size_t)(j + 1) * 0x1c);
             float dBx = b1[0] - b0[0], dBy = b1[1] - b0[1];
-            float denom = dAy * dBx - dBy * dAx;       // fVar18
+            // denom/t/u transcribed byte-faithfully from FUN_1400cc850's self-
+            // intersection block (the puVar12 loop): denom = dAx*dBy - dBx*dAy,
+            // t = (dBx*wy - wx*dBy)/denom, u = (dAx*wy - wx*dAy)/denom. The prior
+            // port flipped denom's sign AND used a garbage u numerator
+            // (dAy*wy - wx*dBy), which landed u in (0,1) for most segment pairs and
+            // rejected nearly every candidate -> ccf60 placed 0 of numSecondary.
+            float denom = dAx * dBy - dBx * dAy;       // fVar18
             if (denom != 0.0f) {
                 float wx = ax - b0[0], wy = ay - b0[1];
                 float t = (dBx * wy - wx * dBy) / denom;   // fVar20
-                float u = (dAy * wy - wx * dBy) / denom;   // fVar18
-                if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) reject = true;
+                float u = (dAx * wy - wx * dAy) / denom;   // fVar18
+                if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; ++s_rejSelf; }
             }
         }
         if (reject) break;
@@ -486,12 +498,15 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
                     float* q0 = (float*)(pdat + (size_t)k * 0x1c);
                     float* q1 = (float*)(pdat + (size_t)(k + 1) * 0x1c);
                     float dBx = q1[0] - q0[0], dBy = q1[1] - q0[1];
-                    float denom = dAy * dBx - dAx * dBy;   // fVar20
+                    // Same canonical crossing test as FUN_1400cc850's puVar13 loop
+                    // (cross-path): denom = dAx*dBy - dBx*dAy, t = (dBx*wy - wx*dBy)/denom,
+                    // u = (dAx*wy - wx*dAy)/denom. (Was sign-flipped denom + wrong u.)
+                    float denom = dAx * dBy - dBx * dAy;   // fVar20
                     if (denom != 0.0f) {
                         float wx = ax - q0[0], wy = ay - q0[1];
                         float t = (dBx * wy - wx * dBy) / denom;   // fVar21
-                        float u = (dAy * wy - wx * dBy) / denom;   // fVar20
-                        if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) reject = true;
+                        float u = (dAx * wy - wx * dAy) / denom;   // fVar20
+                        if (t > 0.0f && t < kOne && u > 0.0f && u < kOne) { reject = true; ++s_rejCross; }
                     }
                 }
             }
@@ -639,6 +654,8 @@ extern "C" void wg_f390_paths(void* hf) {
     __builtin_memcpy(&u6, &P6, 4); __builtin_memcpy(&u7, &P7, 4);
     __builtin_memcpy(&u8, &P8, 4);
 
+    int placed = 0;                        // [WATER-DIAG]
+    int startCount = *(int*)((uint8_t*)hf + HF_PATHCOUNT);
     for (int i = 0; i < numSecondary; ++i) {
         for (int attempt = 0; attempt < 1000; ++attempt) {
             int pathCount = *(int*)((uint8_t*)hf + HF_PATHCOUNT);
@@ -648,9 +665,18 @@ extern "C" void wg_f390_paths(void* hf) {
             if (pathCount <= 0) break;
             float branchSel = (float)(fn_Random_Rand ? fn_Random_Rand(rng, (uint32_t)pathCount) : 0u);
             int ok = TryPlacePath(p, dim + 1, (float)dim, u4, u5, u6, u7, u8, branchSel);
-            if (ok) break;
+            if (ok) { ++placed; break; }
         }
         // re-read the loop bound each outer iteration (matches the original).
         numSecondary = *(int*)((uint8_t*)sizeRow + 0x20);
+    }
+
+    if (getenv("BANISHED_WATER_DIAG")) {
+        fprintf(stderr,
+            "[WATER-DIAG] ccf60 secondary paths: requested=%d placed=%d "
+            "patchList %d->%d  rejects(self=%ld cross=%ld)\n",
+            numSecondary, placed, startCount,
+            *(int*)((uint8_t*)hf + HF_PATHCOUNT), s_rejSelf, s_rejCross);
+        fflush(stderr);
     }
 }

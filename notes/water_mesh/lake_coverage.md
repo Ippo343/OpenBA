@@ -4,6 +4,50 @@ READ-ONLY Ghidra RE of Application-x64.exe (base 0x140000000). Goal: explain why
 standalone water surface only renders a thin coastline band and leaves open lake/ocean
 interiors empty, while retail clearly meshes the open water.
 
+## ⚑ RESOLVED (2026-06-30, agent-team pass — supersedes the Q1–Q4 lake-disk theory below)
+
+Two Ghidra-verified corrections to the original investigation:
+
+1. **`hf+0x48` is NOT a "lake disk {x,y,radius}" list.** It is the **mountain-range
+   record list** (sole writer = `cd150` @0x1400cd150; record `{dy, dx, bandX}`, stride
+   0xc). `b260` Phase 2 *reuses* those records as water disks (center `{dy,dx}`, radius
+   `bandX + 2.0`) but emits cells **only where a corner is genuinely underwater**
+   (`corner.z <= -0.75`, `DAT_14017227c`). So Phase 2 is a **deep-spot / mountain-tarn
+   filler, NOT an area flood-fill.** Banished has no large ocean interior to mesh-fill;
+   retail water is structurally **linear**: Phase-1 ribbons (1 coastline ring halfWidth
+   4.0 + `numSecondary` branch ribbons halfWidth 1.5 via `fb00`) + Phase-2 tarn patches.
+   The big reflective lake/ocean sheet is the **separate flat water plane**
+   (`WorldGen_BuildWaterMesh`, committed 56a9f84), not the contour mesh. Our
+   `water_contour_mesh.cpp` Phase-2 port already consumes `+0x48/+0x50` correctly.
+
+2. **The "only 1 patch" symptom WAS the `ccf60` 0-placement bug — now FIXED.** Root
+   cause was a transcription error in the `cc850` port at `worldgen_f390_ranges.cpp`:
+   BOTH intersection tests (self + cross-path) had a **sign-flipped `denom`** and a
+   **garbage `u` numerator** (`dAy*wy - wx*dBy` instead of `dAx*wy - wx*dAy`), so `u`
+   landed in (0,1) for most segment pairs → near-universal reject → 0/3000 placements.
+   Canonical math (verified @0x1400cc850, both `puVar12`/`puVar13` loops):
+   `denom = dAx*dBy - dBx*dAy ; t = (dBx*wy - wx*dBy)/denom ; u = (dAx*wy - wx*dAy)/denom`
+   ; reject iff `0<t<1 && 0<u<1` (strict). After the fix, runtime
+   `BANISHED_WATER_DIAG` shows `ccf60 secondary paths: requested=3 placed=3
+   patchList 1->4` — the 3 river/stream ribbons are restored.
+
+   NOTE: the coastline port (`worldgen_f390_coastline.cpp`) carries the SAME flipped
+   `denom` but with *correct* numerators, so its test degenerates to `(-t,-u)` and
+   only fires for the backward region — currently harmless (first path, nothing to
+   cross) but geometrically wrong. Optional faithful fix: `denom = dx*cy - dy*cx`
+   (numerators already canonical). Left as-is to avoid touching the working,
+   user-verified coastline path.
+
+   REMAINING open-water question: whether standalone terrain ever drops `<= -0.75`
+   inside the Phase-2 tarn disks (else Phase 2 emits nothing). Needs a runtime count
+   of heightmap cells `< -0.75` — `e5d0` clamps `h>=2.0`, so only `e910`/`ec50`
+   carving can push cells under. Unverified.
+
+---
+
+(Original investigation below — kept for the cc850/b260 mechanics, but its "lake disk"
+framing of `hf+0x48` in Q2–Q4 is superseded by point 1 above.)
+
 ## TL;DR
 
 The water mesh builder **`TradeWork_impl_b260` (0x1400ab260)** has **TWO independent
