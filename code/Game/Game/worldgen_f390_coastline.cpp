@@ -551,7 +551,11 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
                 float cy = t1[1] - t0[1];
                 float ex = ax - t0[0];   // (seg-i start) - (seg-j start)
                 float ey = ay - t0[1];
-                float denom = dy * cx - dx * cy;
+                // denom must be dA x dB = dx*cy - dy*cx to match FUN_1400cc850. The
+                // numerators below are already canonical (u->t, v->u); the prior
+                // sign-flipped denom negated both params, degenerating the crossing
+                // test to the backward region (harmless for the first ring, but wrong).
+                float denom = dx * cy - dy * cx;
                 if (denom != 0.0f) {
                     float u = (cx * ey - cy * ex) / denom;
                     float v = (dx * ey - dy * ex) / denom;
@@ -577,7 +581,8 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
                         float cy = q1[1] - q0[1];
                         float ex = ax - q0[0];
                         float ey = ay - q0[1];
-                        float denom = dy * cx - dx * cy;
+                        // canonical dA x dB (was sign-flipped); see self-intersection note above.
+                        float denom = dx * cy - dy * cx;
                         if (denom != 0.0f) {
                             float u = (cx * ey - cy * ex) / denom;
                             float v = (dx * ey - dy * ex) / denom;
