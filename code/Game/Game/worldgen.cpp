@@ -53,7 +53,8 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* hdr, int n);        // sub_3a
 extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* hdr, int n);   // sub_f0a0  (detail-group-C @wg+0x1e0)
 extern "C" void Reimpl_TradeWork_sub_c780(void* self);                 // height-texture upload (+0x148)
 extern "C" void Reimpl_TradeWork_sub_c1e0(void* self);                 // base grid mesh (VB+0x100/IB+0x120)
-extern "C" void WorldGen_BuildWaterMesh(void* self);                   // water overlay mesh (VB+0x160/IB+0x180)
+extern "C" void WorldGen_BuildWaterMesh(void* self);                   // flat water overlay mesh (VB+0x160/IB+0x180)
+extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf);  // b260 contour water mesh (water_contour_mesh.cpp)
 
 // ============================================================
 // Heightfield scratch-struct field offsets (verified, blueprint §1.1)
@@ -543,14 +544,23 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     Reimpl_TradeWork_sub_c780(wg);
     Reimpl_TradeWork_sub_c1e0(wg);
 
-    // 7. b260 (detail/cliff/water mesh) — SKIPPED (686-line contour builder).
-    //    Instead build a minimal flat WATER overlay mesh at sea level into the
-    //    same VB+0x160/IB+0x180 the real water uses (RenderDoc-verified). The
-    //    water materials (+0x150/+0x158) already load; geometry_draw.cpp emits +
-    //    draws it (mode 0xA000). BANISHED_NO_WATER=1 to disable.
+    // 7. b260 water mesh. Two modes:
+    //    * BANISHED_WATER_CONTOUR=1 -> the faithful b260 CONTOUR mesh (rivers
+    //      flow / lake shore rings; UV follows each water body's centerline).
+    //      Builds into VB+0x160/IB+0x180 with per-body ranges at +0x1c0/+0x1d0,
+    //      drawn by geometry_draw.cpp modes 0x6000/0x8000. param_2 = hf
+    //      (centerlines at hf+0x18, features at hf+0x48).
+    //    * default -> the minimal flat WATER overlay mesh at sea level into the
+    //      same VB+0x160/IB+0x180 (mode 0xA000). BANISHED_NO_WATER=1 disables.
     {
+        const char* contour = getenv("BANISHED_WATER_CONTOUR");
         const char* nw = getenv("BANISHED_NO_WATER");
-        if (!(nw && nw[0] && nw[0] != '0')) WorldGen_BuildWaterMesh(wg);
+        bool noWater = (nw && nw[0] && nw[0] != '0');
+        if (contour && contour[0] && contour[0] != '0') {
+            WorldGen_BuildContourWaterMesh(wg, hf);
+        } else if (!noWater) {
+            WorldGen_BuildWaterMesh(wg);
+        }
     }
 
     // 8. Detail-group-C resize (no-op for first-light: hf detailCountA == 0) +

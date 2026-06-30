@@ -205,6 +205,15 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     //     (or +0x158 via BANISHED_WATER_MAT=1). No-op if the mesh/material
     //     wasn't built (VB data ptr null / material null).
     {
+        // When BANISHED_WATER_CONTOUR is on, the real b260 contour mesh occupies
+        // VB+0x160/IB+0x180 and is drawn via the +0x1c8/+0x1d8 range tables
+        // (modes 0x6000/0x8000 below). The flat 0xA000 chunk emit must NOT run
+        // then — it would re-draw the contour VB as a flat 16x16 grid (garbage).
+        static int s_contour = -2;
+        if (s_contour == -2) {
+            const char* c = std::getenv("BANISHED_WATER_CONTOUR");
+            s_contour = (c && c[0] && c[0] != '0') ? 1 : 0;
+        }
         void* waterVBData = *reinterpret_cast<void**>(selfBytes + 0x160 + 8);
         static int s_waterMatSel = -2;
         if (s_waterMatSel == -2) {
@@ -212,7 +221,7 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
             s_waterMatSel = (e && e[0] == '1') ? 1 : 0;
         }
         void* waterMat = *reinterpret_cast<void**>(selfBytes + (s_waterMatSel ? 0x158 : 0x150));
-        if (waterVBData && waterMat) {
+        if (!s_contour && waterVBData && waterMat) {
             for (int i = 0; i < chunkCount; ++i) {
                 for (int j = 0; j < chunkCount; ++j) {
                     float xmin = static_cast<float>(j) * chunkSizeF - fHalfGrid;
