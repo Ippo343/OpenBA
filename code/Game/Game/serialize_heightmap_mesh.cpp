@@ -626,11 +626,26 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
     const int16_t kWaterLevelQ = static_cast<int16_t>(waterQ);
     const int16_t halfGrid = static_cast<int16_t>(gridSize >> 1);
 
-    // Normal-map tiling: the VS scales uv by 1/1024, so 256 uv-units/cell ->
-    // 0.25 tiles/cell -> the wave texture repeats every 4 cells (matches the
-    // real game's wave density; the old terrain-style uv was ~8x too stretched
-    // and looked flat). int16 wraps seamlessly (256*N stays tile-aligned).
-    int uvStep = 256;
+    // Normal-map tiling (wave size). The water VS (hash a73d5785) scales the
+    // vertex uv by 1/1024, so the wave wavelength in WORLD space is
+    // (uvStep/1024) tiles per world-unit (our grid has 1 cell = 1 world unit).
+    //
+    // RenderDoc A/B vs retail (captures/banished_water_frame19675.rdc, water VB
+    // 3205): retail's contour mesh uses 256 uv per COLUMN but its columns span
+    // ~3.6 world units, giving ~0.068-0.086 tiles/world-unit (~0.075 avg, i.e.
+    // ONE wave tile every ~13 world units). Our old uvStep=256 over a uniform
+    // 1-unit grid gave 0.25 tiles/world (a tile every 4 units) — ~3.3x too
+    // small/dense, so the waves read as fine ripples that don't convey motion.
+    // (The shipped scroll speed is in tile-space: time*(0.01,0.02) uv/sec, so
+    // bigger tiles also travel farther per second -> waves look bigger AND
+    // faster, matching retail.)
+    //
+    // Default 80 -> 80/1024 = 0.078 tiles/world (~1 tile per 12.8 world units),
+    // squarely in the measured retail range. int16 wraps every 64 tiles
+    // (65536/1024) so tiling stays seamless; the lower step also pushes the
+    // int16-overflow seam from col 128 out to col ~410 (fewer/no seams on a
+    // 512 grid). Tune live with BANISHED_WATER_UV.
+    int uvStep = 80;
     {
         const char* e = std::getenv("BANISHED_WATER_UV");
         if (e && e[0]) uvStep = atoi(e);
