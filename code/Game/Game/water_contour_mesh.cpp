@@ -33,16 +33,36 @@
 //     vertex/index accumulators, all .rdata constants, and the final
 //     VertexBuffer/IndexBuffer::Create calls are byte/offset-faithful to the
 //     b260 disassembly.
-//   * fb00 STAGE-A DEVIATION (documented, sanctioned by
-//     notes/water_mesh/fb00_contour_uv.md §7): the retail Stage A builds the two
-//     offset bank contours through a 2D spatial-hash grid with rounded corner
-//     fans (sub_40a0 / sub_3450 / sub_3680 / sub_ba30 / helper_31d0 — a ~1400
-//     line cascade). We use the documented cheaper approximation: offset the
-//     centerline by +/-radius along the per-node normal to get the two banks,
-//     then feed them through the FAITHFUL Stage B (arc-length V) + Stage C
-//     (4-column strip, U marches 0->1 in 0.25 steps, bilinear position,
-//     arc-length V). This already yields the flow-following UV; it omits only
-//     the rounded junctions/corner fans. Flagged for the lead's RenderDoc check.
+//   * fb00 STAGE A is now a FAITHFUL geometric port (fb00_BuildBody_Faithful),
+//     replacing the old per-node offset approximation (kept as fb00_BuildBody
+//     for A/B via env BANISHED_WATER_OLD_STAGEA, and as an auto-fallback for
+//     degenerate <3-point bodies). The faithful path reproduces retail's actual
+//     Stage-A geometry, verified against the 0x1400cfb00 disassembly:
+//       - edge records: endpoints shifted (+0.5 x, -0.5 y) = DAT_140172114, unit
+//         dir, unit perp = (-dir.y, dir.x), length;
+//       - straight-run subdivision = max(1, int(len * 4.0))  (DAT_140172194);
+//       - convex corner fans = max(1, int(acos(dot(d_i,d_{i+1})) * (57.29578/90)
+//         * 20)) segments (DAT_1401721ec/204/1c4), interpolating this-perp ->
+//         next-perp around the node on the convex side (sign -1/+1, DAT_140172280);
+//       - validity prune (sub_ba30): a bank sample is kept only if it is >= radius
+//         from EVERY centerline edge (point-to-segment), radius = cl[0].halfWidth
+//         + 2.0 (DAT_140172174);
+//       - bank matching (sub_bdf0): nearest bank point to each raw centerline node
+//         (the tangent param is UNUSED in retail -> pure nearest-point);
+//       - matched-range arc-length resample (sub_b360/b750) to a common count =
+//         max(1, int(max(arcL,arcR))) with the retail gates (skip if both bank
+//         arcs < 2.0; skip if avg edge < 0.001, DAT_1401720b8);
+//       - Stage C 4-column strip (U 0->1 by 0.25, winding (V0,V2,V1),(V0,V3,V2));
+//       - streamwise V = cumulativeMidlineArc / 32.0 - 16.0 (DAT_1401721d0 / -16).
+//     FAITHFUL SIMPLIFICATIONS (flagged): the spatial-hash grids (sub_40a0 cell
+//     init, helper_31d0 edge insert, sub_3450/3680 cell buckets, sub_38d0/37a0
+//     cell iterators) are pure acceleration structures; we use brute-force edge
+//     scans / nearest searches that return the IDENTICAL geometric result. The
+//     vestigial 4x driver inner loop and the unused interp-tangent are omitted.
+//     The driver perpendicularity gate (Abs(dot(crossDir, local_2b0)) < 0.02) is
+//     OMITTED: local_2b0's source is ambiguous (looks stale in the decomp) and
+//     omitting it only avoids rejecting skewed cross-sections, which clean
+//     nearest-point matching does not produce. Flagged for the lead's A/B check.
 //
 // Constants (.rdata, verified via read_memory):
 //   DAT_1401721e4 = 48.0     pos pack scale (pos.xy * 48 -> int16)
@@ -82,7 +102,24 @@ constexpr float kUStep      = 0.25f;     // DAT_140172100
 constexpr float kHeightStep = 1.0f / 256.0f; // DAT_1401720bc
 constexpr float kUnderwater = -0.75f;    // DAT_14017227c
 constexpr float kAOScale    = 255.0f;    // DAT_14017222c
-constexpr float kVOffset    = -16.0f;    // DAT_14017228c
+constexpr float kVOffset    = -16.0f;    // DAT_14017228c (streamwise V start)
+constexpr float kVDenom     = 32.0f;     // DAT_1401721d0 (V flow-arc denom / arc gate)
+constexpr float kMinArcGate = 0.001f;    // DAT_1401720b8 (avg-edge degenerate gate)
+
+// Optional band-width tuning (BANISHED_WATER_BAND_MULT, default 1.0 = byte-faithful).
+// The faithful band half-width = centerline.halfWidth + 2.0. Retail's river CARVE is
+// ~3-4x wider than this band (decoupled in retail too), so the carved banks read as
+// bare underwater-tinted terrain. This multiplier optionally widens the rendered water
+// band to cover more of the carve. Any value >1.0 is a DELIBERATE deviation from the
+// b260 geometry; the default keeps the mesh exactly faithful.
+static float WaterBandMult() {
+    static float m = []{
+        const char* e = std::getenv("BANISHED_WATER_BAND_MULT");
+        float v = (e && e[0]) ? (float)std::atof(e) : 1.0f;
+        return (v > 0.0f) ? v : 1.0f;
+    }();
+    return m;
+}
 
 // ============================================================
 // VertexBuffer / IndexBuffer::Create (Runtime DX wiring) — same lazy resolve
@@ -245,7 +282,7 @@ void fb00_BuildBody(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
         return { f[0], f[1] };
     };
     // radius = centerline[0].halfWidth + 2.0   (fb00: *(*plVar38+0x14) + DAT_140172174)
-    float radius = ((const float*)cl)[5] + kRadMargin;   // +0x14 == float index 5
+    float radius = (((const float*)cl)[5] + kRadMargin) * WaterBandMult();   // +0x14 == float index 5
     float channelWidth = 2.0f * radius;
     if (channelWidth < 1.0f) channelWidth = 1.0f;
 
@@ -332,6 +369,233 @@ void fb00_BuildBody(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
 }
 
 // ============================================================
+// FAITHFUL Stage A — dense rounded offset-bank contours (port of fb00 0x1400cfb00).
+//   See the file header for the full per-stage verification map. Stages B/C reuse
+//   the same arc-length-V + 4-column strip as fb00_BuildBody, fed from the faithful
+//   dense banks via retail's nearest-point matching + matched-range resample.
+// ============================================================
+struct Edge { V2 p0, p1, dir, perp; float len; };
+struct V2List { V2* d; int n; int cap; };
+
+inline float V2Len(V2 a) { return std::sqrt(a.x * a.x + a.y * a.y); }
+inline V2    V2Sub(V2 a, V2 b) { return { a.x - b.x, a.y - b.y }; }
+inline V2    V2Norm(V2 a) { float l = V2Len(a); return (l < 1e-8f) ? V2{ 0.0f, 0.0f } : V2{ a.x / l, a.y / l }; }
+
+void V2Push(V2List* L, V2 v) {
+    if (L->n >= L->cap) {
+        int nc = L->cap ? L->cap * 2 : 128;
+        L->d = (V2*)std::realloc(L->d, (size_t)nc * sizeof(V2));
+        L->cap = nc;
+    }
+    L->d[L->n++] = v;
+}
+
+// Distance from point p to segment [a,b]  (sub_ba30 endpoint + perpendicular test).
+float DistToSeg(V2 p, V2 a, V2 b) {
+    V2 ab = V2Sub(b, a);
+    float L2 = ab.x * ab.x + ab.y * ab.y;
+    if (L2 < 1e-12f) return V2Len(V2Sub(p, a));
+    float t = ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / L2;
+    if (t <= 0.0f) return V2Len(V2Sub(p, a));
+    if (t >= 1.0f) return V2Len(V2Sub(p, b));
+    V2 f = { a.x + ab.x * t, a.y + ab.y * t };
+    return V2Len(V2Sub(p, f));
+}
+
+// sub_ba30: keep a bank sample only if it is >= radius from EVERY centerline edge.
+// (Brute-force over all edges == the spatial-hash result; far edges can't be closer.)
+bool BankValid(const Edge* edges, int ne, V2 p, float radius) {
+    for (int i = 0; i < ne; ++i)
+        if (DistToSeg(p, edges[i].p0, edges[i].p1) < radius) return false;
+    return true;
+}
+
+// sub_b360/b750 position resample: bank polyline range [s,e] -> `count` points,
+// equally spaced by arc length (stepLen = totalArc / count).
+void ResampleRange(const V2* bank, int s, int e, int count, V2* out) {
+    if (count <= 0) return;
+    float total = 0.0f;
+    for (int k = s; k < e; ++k) total += V2Len(V2Sub(bank[k + 1], bank[k]));
+    if (total <= 1e-6f) { for (int j = 0; j < count; ++j) out[j] = bank[s]; return; }
+    float step = total / (float)count, target = 0.0f, arc = 0.0f;
+    int seg = s;
+    for (int j = 0; j < count; ++j) {
+        float sl = V2Len(V2Sub(bank[seg + 1], bank[seg]));
+        while (seg < e - 1 && arc + sl <= target) { arc += sl; ++seg; sl = V2Len(V2Sub(bank[seg + 1], bank[seg])); }
+        float f = (sl > 1e-8f) ? (target - arc) / sl : 0.0f;
+        if (f < 0.0f) f = 0.0f;
+        if (f > 1.0f) f = 1.0f;
+        out[j] = Lerp(bank[seg], bank[seg + 1], f);
+        target += step;
+    }
+}
+
+void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
+    uint8_t* h = (uint8_t*)hf;
+    uint8_t* recBase = *(uint8_t**)(h + 0x18);
+    if (!recBase) return;
+    uint8_t* rec = recBase + (size_t)bodyIdx * 0x10;
+    const uint8_t* cl = *(const uint8_t**)(rec + 0x00);
+    int ptCount = *(const int32_t*)(rec + 0x08);
+    if (!cl || ptCount < 3) return;   // need >=3 pts for an edge pair (fan); <3 -> caller falls back
+
+    auto CLx = [&](int i) { return ((const float*)(cl + (size_t)i * 0x1c))[0]; };
+    auto CLy = [&](int i) { return ((const float*)(cl + (size_t)i * 0x1c))[1]; };
+    // radius = centerline[0].halfWidth(+0x14) + 2.0   (fb00: cl[0].halfWidth + DAT_140172174)
+    float radius = (((const float*)cl)[5] + kRadMargin) * WaterBandMult();
+
+    // --- Build edge records (shifted endpoints +0.5x / -0.5y, DAT_140172114=0.5). ---
+    int ne = ptCount - 1;
+    Edge* edges = (Edge*)std::malloc((size_t)ne * sizeof(Edge));
+    if (!edges) return;
+    for (int i = 0; i < ne; ++i) {
+        V2 p0 = { CLx(i) + 0.5f,     CLy(i) - 0.5f };
+        V2 p1 = { CLx(i + 1) + 0.5f, CLy(i + 1) - 0.5f };
+        V2 d = V2Sub(p1, p0);
+        float l = V2Len(d);
+        V2 dir = (l > 1e-8f) ? V2{ d.x / l, d.y / l } : V2{ 1.0f, 0.0f };
+        edges[i] = Edge{ p0, p1, dir, V2{ -dir.y, dir.x }, l };
+    }
+
+    // --- Stage A: dense left/right banks (straight runs + convex corner fans). ---
+    // fb00 main loop runs over edges [0, ptCount-3]; the fan reads edge[idx+1].
+    V2List leftBank = { nullptr, 0, 0 }, rightBank = { nullptr, 0, 0 };
+    const float kStraight = 4.0f;   // DAT_140172194
+    const float kFanPer90 = 20.0f;  // DAT_1401721c4
+    const float kRadDeg   = 57.29578f; // DAT_1401721ec (180/PI)
+    const float k90       = 90.0f;  // DAT_140172204
+    for (int idx = 0; idx <= ne - 2; ++idx) {
+        const Edge& e = edges[idx];
+        // Straight-run subdivision: max(1, int(len*4)) samples, marching p0 -> p1.
+        int sub = (int)(e.len * kStraight);
+        if (sub < 1) sub = 1;
+        for (int j = 0; j <= sub; ++j) {
+            float f = (float)j / (float)sub;
+            V2 spine = { e.p0.x + (e.p1.x - e.p0.x) * f, e.p0.y + (e.p1.y - e.p0.y) * f };
+            V2 Lp = { spine.x - e.perp.x * radius, spine.y - e.perp.y * radius };  // LEFT  = spine - perp*r
+            V2 Rp = { spine.x + e.perp.x * radius, spine.y + e.perp.y * radius };  // RIGHT = spine + perp*r
+            if (BankValid(edges, ne, Lp, radius)) V2Push(&leftBank, Lp);
+            if (BankValid(edges, ne, Rp, radius)) V2Push(&rightBank, Rp);
+        }
+        // Convex corner fan at node e.p1, rotating this-perp -> next-perp.
+        const Edge& nx = edges[idx + 1];
+        float cross = e.dir.x * nx.dir.y - e.dir.y * nx.dir.x;  // cross(thisDir, nextDir)
+        bool  side  = cross > 0.0f;                             // cVar17
+        float sign  = side ? -1.0f : 1.0f;                      // DAT_140172280 = -1.0
+        float dot   = e.dir.x * nx.dir.x + e.dir.y * nx.dir.y;
+        if (dot < -1.0f) dot = -1.0f;
+        if (dot > 1.0f) dot = 1.0f;
+        float ang = std::acos(dot);
+        int fan = (int)((ang * kRadDeg / k90) * kFanPer90);
+        if (fan < 1) fan = 1;
+        for (int j = 0; j < fan; ++j) {
+            float t = (float)j / (float)fan;
+            V2 ip = V2Norm(V2{ (1.0f - t) * e.perp.x + t * nx.perp.x,
+                               (1.0f - t) * e.perp.y + t * nx.perp.y });
+            V2 pt = { e.p1.x + sign * radius * ip.x, e.p1.y + sign * radius * ip.y };
+            if (BankValid(edges, ne, pt, radius)) {
+                if (side) V2Push(&leftBank, pt); else V2Push(&rightBank, pt);
+            }
+        }
+    }
+
+    int nL = leftBank.n, nR = rightBank.n;
+    if (nL < 2 || nR < 2) {
+        std::free(edges); std::free(leftBank.d); std::free(rightBank.d);
+        return;
+    }
+
+    // --- Matching (sub_bdf0): nearest bank point to each RAW centerline node. ---
+    int* lm = (int*)std::malloc((size_t)ptCount * sizeof(int));
+    int* rm = (int*)std::malloc((size_t)ptCount * sizeof(int));
+    if (!lm || !rm) {
+        std::free(edges); std::free(leftBank.d); std::free(rightBank.d);
+        std::free(lm); std::free(rm);
+        return;
+    }
+    for (int i = 0; i < ptCount; ++i) {
+        V2 c = { CLx(i), CLy(i) };
+        int bi = 0; float bd = 1e30f;
+        for (int k = 0; k < nL; ++k) { float dd = V2Len(V2Sub(leftBank.d[k], c)); if (dd < bd) { bd = dd; bi = k; } }
+        lm[i] = bi;
+        bi = 0; bd = 1e30f;
+        for (int k = 0; k < nR; ++k) { float dd = V2Len(V2Sub(rightBank.d[k], c)); if (dd < bd) { bd = dd; bi = k; } }
+        rm[i] = bi;
+    }
+
+    // --- Matched-range resample -> global cross-section lists (gL, gR, gV). ---
+    V2List gL = { nullptr, 0, 0 }, gR = { nullptr, 0, 0 };
+    float* gV = nullptr; int gN = 0, gCap = 0;
+    float gMidArc = 0.0f; V2 prevMid = { 0.0f, 0.0f }; bool haveMid = false;
+    int prevL = 0, prevR = 0;
+    for (int i = 0; i < ptCount; ++i) {
+        int cL = lm[i], cR = rm[i];
+        if (!(cL > prevL && cR > prevR)) continue;   // both matched indices must advance
+        if (cL == 0 && cR == 0) continue;
+        float sumL = 0.0f; for (int k = prevL; k < cL; ++k) sumL += V2Len(V2Sub(leftBank.d[k + 1], leftBank.d[k]));
+        float sumR = 0.0f; for (int k = prevR; k < cR; ++k) sumR += V2Len(V2Sub(rightBank.d[k + 1], rightBank.d[k]));
+        if (sumL < 2.0f && sumR < 2.0f) continue;    // both-banks-short gate (DAT_140172174=2.0)
+        int cnt = (int)(sumL > sumR ? sumL : sumR);
+        if (cnt < 1) cnt = 1;
+        if (sumL / (float)cnt < kMinArcGate || sumR / (float)cnt < kMinArcGate) continue;  // degenerate gate
+
+        V2* Lr = (V2*)std::malloc((size_t)cnt * sizeof(V2));
+        V2* Rr = (V2*)std::malloc((size_t)cnt * sizeof(V2));
+        if (!Lr || !Rr) { std::free(Lr); std::free(Rr); break; }
+        ResampleRange(leftBank.d, prevL, cL, cnt, Lr);
+        ResampleRange(rightBank.d, prevR, cR, cnt, Rr);
+        for (int j = 0; j < cnt; ++j) {
+            V2 mid = { (Lr[j].x + Rr[j].x) * 0.5f, (Lr[j].y + Rr[j].y) * 0.5f };
+            if (haveMid) gMidArc += V2Len(V2Sub(mid, prevMid));
+            prevMid = mid; haveMid = true;
+            float v = gMidArc / kVDenom + kVOffset;   // V = cumulative flow arc / 32 - 16
+            V2Push(&gL, Lr[j]); V2Push(&gR, Rr[j]);
+            if (gN >= gCap) { gCap = gCap ? gCap * 2 : 256; gV = (float*)std::realloc(gV, (size_t)gCap * sizeof(float)); }
+            gV[gN++] = v;
+        }
+        std::free(Lr); std::free(Rr);
+        prevL = cL; prevR = cR;
+    }
+
+    // --- Stage C (faithful): 4-column strip between gL/gR, shared streamwise V. ---
+    int estimate = gN * 4 * 2; if (estimate < 16) estimate = 16;
+    WeldSet weld; WeldInit(&weld, (int)sizeof(OutVtx), estimate);
+    auto emitIdx = [&](uint16_t v) { VecPush(idxOut, &v, 2, 2); };
+    for (int i = 0; i + 1 < gN; ++i) {
+        V2 p0 = gL.d[i], p1 = gL.d[i + 1];
+        float v0 = gV[i], v1 = gV[i + 1];
+        float uLo = 0.0f, uHi = kUStep;
+        for (int col = 0; col < 4; ++col) {
+            float t = uHi;
+            V2 pLo = Lerp(gL.d[i],     gR.d[i],     t);
+            V2 pHi = Lerp(gL.d[i + 1], gR.d[i + 1], t);
+            OutVtx V0 = { p0.x,  p0.y,  uLo, v0 };
+            OutVtx V1 = { pLo.x, pLo.y, uHi, v0 };
+            OutVtx V2v= { pHi.x, pHi.y, uHi, v1 };
+            OutVtx V3 = { p1.x,  p1.y,  uLo, v1 };
+            uint16_t i0 = WeldAdd(&weld, &V0);
+            uint16_t i1 = WeldAdd(&weld, &V1);
+            uint16_t i2 = WeldAdd(&weld, &V2v);
+            uint16_t i3 = WeldAdd(&weld, &V3);
+            emitIdx(i0); emitIdx(i2); emitIdx(i1);   // (V0,V2,V1),(V0,V3,V2)
+            emitIdx(i0); emitIdx(i3); emitIdx(i2);
+            uLo = uHi; uHi += kUStep; p0 = pLo; p1 = pHi;
+        }
+    }
+
+    vtxOut->data  = weld.verts.data;
+    vtxOut->count = weld.verts.count;
+    vtxOut->cap   = weld.verts.cap;
+    weld.verts.data = nullptr;
+    WeldFree(&weld);
+
+    std::free(edges);
+    std::free(leftBank.d); std::free(rightBank.d);
+    std::free(lm); std::free(rm);
+    std::free(gL.d); std::free(gR.d); std::free(gV);
+}
+
+// ============================================================
 // b260 PHASE 1 — contour water bodies.
 // ============================================================
 void b260_Phase1(uint8_t* geom, uint8_t* hf) {
@@ -342,10 +606,29 @@ void b260_Phase1(uint8_t* geom, uint8_t* hf) {
     int bodyCount = *(int32_t*)(hf + 0x20);
     RangeResize(rangeA, bodyCount);       // sub_efd0; sets rangeA.count (geom+0x1c8)
 
+    // Stage A: faithful dense rounded-bank builder by default; env forces the old
+    // approximation. The faithful path also falls back to the approximation for
+    // degenerate (<3-point) bodies that produce no geometry.
+    static const bool useOldStageA = []{
+        const char* e = std::getenv("BANISHED_WATER_OLD_STAGEA");
+        return e && e[0] && e[0] != '0';
+    }();
+
     for (int body = 0; body < bodyCount; ++body) {
         Vec vtxOut{ nullptr, 0, 0 };
         Vec idxOut{ nullptr, 0, 0 };
-        fb00_BuildBody(hf, body, &vtxOut, &idxOut);
+        if (useOldStageA) {
+            fb00_BuildBody(hf, body, &vtxOut, &idxOut);
+        } else {
+            fb00_BuildBody_Faithful(hf, body, &vtxOut, &idxOut);
+            if (vtxOut.count == 0) {   // degenerate body -> approximation fallback
+                if (vtxOut.data) fn_MemFreeStatic(vtxOut.data);
+                if (idxOut.data) fn_MemFreeStatic(idxOut.data);
+                vtxOut = Vec{ nullptr, 0, 0 };
+                idxOut = Vec{ nullptr, 0, 0 };
+                fb00_BuildBody(hf, body, &vtxOut, &idxOut);
+            }
+        }
 
         // Range entry: {idxStart, vtxStart, vtxCount, idxCount}.
         int32_t* re = (int32_t*)((uint8_t*)rangeA->data + (size_t)body * 0x10);
