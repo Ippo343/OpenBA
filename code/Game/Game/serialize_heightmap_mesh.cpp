@@ -656,17 +656,31 @@ extern "C" void WorldGen_BuildWaterMesh(void* self) {
             int16_t* p = vertScratch;
             for (int row = rowStart; row < rowStart + vertsPerSide; ++row) {
                 for (int col = colStart; col < colStart + vertsPerSide; ++col) {
-                    p[0] = static_cast<int16_t>(col) - halfGrid;
-                    p[1] = static_cast<int16_t>(row) - halfGrid;
-                    p[2] = kWaterLevelQ;                       // flat sea level
-                    p[3] = static_cast<int16_t>(0x00ff);
+                    // The WATER vertex shader (hash a73d5785) scales X,Y by 1/48
+                    // (0.020833) — UNLIKE the terrain VS which scales X,Y by 1.0.
+                    // So water vertex X,Y must be 48x the world grid coord to land in
+                    // the same world space as the terrain. We previously wrote raw grid
+                    // coords (±halfGrid) like the terrain builder, which after the VS's
+                    // /48 collapsed the whole water sheet to a ~±5-unit patch at the map
+                    // center → it never covered the lakes, so only the terrain's
+                    // underwater tint showed (no reflective surface). RenderDoc-confirmed
+                    // vs retail (water VB y≈-12495 → /48 ≈ -260 world). Z still /256.
+                    p[0] = static_cast<int16_t>((col - static_cast<int>(halfGrid)) * 48);
+                    p[1] = static_cast<int16_t>((row - static_cast<int>(halfGrid)) * 48);
+                    p[2] = kWaterLevelQ;                       // flat sea level (z /256 in VS)
+                    p[3] = 0;                                  // pos.w = 0 (retail; was 0xff)
                     p[4] = static_cast<int16_t>(col * uvStep);
                     p[5] = static_cast<int16_t>(row * uvStep);
                     uint8_t* b = reinterpret_cast<uint8_t*>(p);
                     b[0xc] = nB0;  // nx
                     b[0xd] = nB0;  // ny
                     b[0xe] = nB2;  // nz
-                    b[0xf] = 0;
+                    // Vertex-color alpha = 0x80 (0.5). This is the water shader's
+                    // reflection/effect strength — retail water VBs encode 0x80 here.
+                    // We had 0, which zeroed the reflection contribution → the water
+                    // showed only dark refraction (no sky/scene mirror). RenderDoc A/B
+                    // vs retail (TEXCOORD2 = 7f 7f ff 80) confirmed this is the lever.
+                    b[0xf] = 0x80;
                     p += 8;
                 }
             }
