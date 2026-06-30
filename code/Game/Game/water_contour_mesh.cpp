@@ -397,9 +397,20 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
     int   N        = *(int32_t*)(geom + 0xd0);   // heightmap edge
     int16_t* hmap  = *(int16_t**)(geom + 0xd8);  // int16 heightmap
     int   halfGrid = *(int32_t*)(geom + 0xc0) >> 1;
-    if (!hmap || N <= 0) return;
-
     uint8_t* featBase = *(uint8_t**)(hf + 0x48);
+
+    // [WATER-DIAG] Phase-2 tarn instrumentation. Entry state first so we can see
+    // which early-return gate (if any) fires when nothing emits.
+    const bool diag = std::getenv("BANISHED_WATER_DIAG") != nullptr;
+    long dCells = 0, dUnder = 0, dInterior = 0, dEmitCells = 0;
+    if (diag) {
+        fprintf(stderr, "[WATER-DIAG] b260 Phase2 ENTER: features=%d N(+0xd0)=%d "
+                "hmap(+0xd8)=%p halfGrid=%d featBase(+0x48)=%p\n",
+                featureCount, N, (void*)hmap, halfGrid, (void*)featBase);
+        fflush(stderr);
+    }
+
+    if (!hmap || N <= 0) return;
     if (!featBase) return;
 
     auto sampleH = [&](int worldCol, int worldRow) -> float {
@@ -458,7 +469,9 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
                     weight[k] = w;
                 }
 
+                if (diag) { ++dCells; if (someUnderwater) ++dUnder; if (someInterior) ++dInterior; }
                 if (!(someInterior && someUnderwater)) continue;
+                if (diag) ++dEmitCells;
 
                 // Weld the 4 corners, then emit two triangles (i0,i1,i2),(i0,i2,i3).
                 uint16_t ci[4];
@@ -490,6 +503,22 @@ void b260_Phase2(uint8_t* geom, uint8_t* hf) {
         re[2] = weld.verts.count;
         re[3] = idxAdded;
         WeldFree(&weld);
+    }
+
+    if (diag) {
+        // Global heightmap min + count of underwater cells across the whole map.
+        long globalUnder = 0; float hmin = 1e9f;
+        for (size_t i = 0; i < (size_t)N * N; ++i) {
+            float z = (float)(int)hmap[i] * kHeightStep;
+            if (z < hmin) hmin = z;
+            if (z <= kUnderwater) ++globalUnder;
+        }
+        fprintf(stderr,
+            "[WATER-DIAG] b260 Phase2: features=%d  cellsTested=%ld under(<=%.2f)=%ld "
+            "interior=%ld emit=%ld | map hmin=%.3f globalUnderCells=%ld/%d\n",
+            featureCount, dCells, (double)kUnderwater, dUnder, dInterior, dEmitCells,
+            (double)hmin, globalUnder, N * N);
+        fflush(stderr);
     }
 }
 

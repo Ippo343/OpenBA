@@ -530,6 +530,21 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
             "features(+0x50)=%d numSecondary(sizeRow[8])=%d\n",
             *(int*)(h + 0x20), *(int*)(h + 0x30), *(int*)(h + 0x40),
             *(int*)(h + 0x50), sr ? sr[8] : -1);
+        // Always-runs underwater check (post-carve float heightmap). If hmin > -0.75
+        // then NO Phase-2 tarn disk can ever emit, regardless of feature count —
+        // i.e. there is no deep open water to fill, confirming linear-water model.
+        float* fmap = *(float**)(h + HF_HEIGHTMAP);
+        if (fmap) {
+            long under = 0; float hmin = 1e9f, hmax = -1e9f;
+            for (int i = 0; i < N * N; ++i) {
+                float z = fmap[i];
+                if (z < hmin) hmin = z;
+                if (z > hmax) hmax = z;
+                if (z <= -0.75f) ++under;
+            }
+            fprintf(stderr, "[WATER-DIAG] heightmap %dx%d: hmin=%.3f hmax=%.3f "
+                    "underCells(<=-0.75)=%ld/%d\n", N, N, hmin, hmax, under, N * N);
+        }
         fflush(stderr);
     }
 
@@ -606,6 +621,12 @@ extern "C" void WorldGen_BuildTerrain(void* wg, void* gen, int sizeIdx, uint32_t
     int32_t* sizeTable = *(int32_t**)(g + GEN_SIZETABLE);
     int32_t* sizeRow   = sizeTable ? (int32_t*)((uint8_t*)sizeTable + (size_t)sizeIdx * 0x44) : nullptr;
     int dim = sizeRow ? sizeRow[0] : 0;
+
+    // Optional reproducible seed (BANISHED_WORLDGEN_SEED=N) — pins the worldgen RNG
+    // so water/feature diagnostics are repeatable across runs.
+    if (const char* se = getenv("BANISHED_WORLDGEN_SEED")) {
+        seed = (uint32_t)strtoul(se, nullptr, 10);
+    }
 
     fprintf(stderr, "[worldgen] BuildTerrain ENTER wg=%p gen=%p sizeIdx=%d seed=%u sizeTable=%p dim=%d\n",
             wg, gen, sizeIdx, seed, (void*)sizeTable, dim);
