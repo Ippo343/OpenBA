@@ -518,6 +518,21 @@ static void wg_TradeCore_c4b0(void* wg, int32_t* hf) {
     // 2. Generate the float heightmap.
     wg_HeightmapPipeline_f390(hf);
 
+    // [WATER-DIAG] one-shot dump of the f390 list counts that feed the water
+    // mesh (BANISHED_WATER_DIAG=1). patches(+0x20) -> b260 phase1 fb00 strips;
+    // features(+0x50) -> b260 phase2 disk-fill; rivers(+0x30) + satellites(+0x40)
+    // are not band-meshed. numSecondary = sizeRow[8] (drives ccf60 path count).
+    if (getenv("BANISHED_WATER_DIAG")) {
+        uint8_t* h = (uint8_t*)hf;
+        int32_t* sr = *(int32_t**)(h + HF_SIZEROW);
+        fprintf(stderr,
+            "[WATER-DIAG] patches(+0x20)=%d rivers(+0x30)=%d satellites(+0x40)=%d "
+            "features(+0x50)=%d numSecondary(sizeRow[8])=%d\n",
+            *(int*)(h + 0x20), *(int*)(h + 0x30), *(int*)(h + 0x40),
+            *(int*)(h + 0x50), sr ? sr[8] : -1);
+        fflush(stderr);
+    }
+
     // 3. Quantize float -> int16 (x256 fixed-point) into WorldGeom+0xd8.
     {
         float* fmap = *(float**)((uint8_t*)hf + HF_HEIGHTMAP);
