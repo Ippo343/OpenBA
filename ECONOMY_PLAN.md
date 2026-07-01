@@ -385,6 +385,23 @@ un-nulls the `ResidenceComponent::OnCreate`→helper_9ef0 eviction path (verifie
 aiState=12 leisure-wander. Lodge spawns (BANISHED_LIVE_WORKPLACE) but has no c7cf0; all
 profession keys=0.
 
+**✅ townMgr+0x20 ADD site PINNED (recon, disasm-verified): `ResidenceDescription_helper_9de0`
+(0x140129de0)** — `FUN_140003110(townMgr+0x20, *(townMgr+0x28)+1, &(*(comp+0x10)))` grow+append.
+Registered as ResidenceComponent lifecycle-event-2 handler via `ResidenceDescription_helper_a350`
+(0x14012a350) → dispatched through the ResidenceComponent controller jumptable (0x140037a00 →
+DAT_1401da9a8), which is why it's not a plain vtable slot. Fires automatically when a c7cf0-bearing
+entity reaches lifecycle-state 2 if instantiated through the normal component-create path. sub_0e70
+verified to iterate townMgr+0x20 (array) / +0x28 (count). So brick 4-3 ADD = call 9de0 on the roster
+sub-entity's c7cf0 (do NOT call 0x14012a0e0 — that REMOVEs).
+
+**⚠️ Even a cheap +0x68 Work-candidate unlock is NOT sufficient for VISIBLE work:** State_Work reads
+`+0x228` (active work-task, set by the ported FindWorkplace/sub_1930 scanning **townMgr+0x60**, empty)
+and Gather reads `+0x238` (needs c7cf0). Both visible-work paths need a registry populated with a
+component the start-town lodge LACKS (c7cf0 for +0x20/Gather, or AttendanceComponent for +0x60/Work-
+task). ⇒ the visible organic-employment outcome requires the **MultiObject job-host sub-entity
+materialization** (a distinct substantial subsystem) regardless of +0x68. That is the Phase-4 keystone
+for a dedicated next session.
+
 **REMAINING PATH (two options, pending the +0x68 resolution):**
 - **If +0x68 is a settable settled/home flag** (not disease): set it on housed adults ⇒
   Work(5) candidate fires ⇒ cheap unlock (no c7cf0 needed for Work, though Gather still needs
