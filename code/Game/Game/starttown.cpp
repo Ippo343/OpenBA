@@ -1738,9 +1738,22 @@ static void StartTown_MatureResource(void* nrComp) {
         s_mature = (e && e[0] && e[0] != '0') ? 1 : 0;
     }
     if (s_mature != 1 || !nrComp) return;
-    // natResComp+0x28 = growth. 1.0 == the forester's maturity threshold (g_fUVScale);
-    // the gate is `growth < threshold -> skip`, so 1.0 is harvestable.
-    *(float*)((uint8_t*)nrComp + 0x28) = 1.0f;
+    // Represent an OLD-GROWTH, HARVESTABLE tree — the faithful end-state a live GrowthComponent
+    // would reach (its Update->120db0 only writes +0x28 growth; the mature/harvestable state
+    // flags are set by the growth/harvest-marking layer, which is inert in standalone). Three
+    // fields, mirroring what the FORCE_HARVEST harness sets on the found tree:
+    //   +0x28 growth (float) = 1.0  — the forester's maturity threshold (g_fUVScale); the scan
+    //          gate is `growth < threshold -> skip`, so 1.0 passes.
+    //   +0x2c  mature (bool)     = 1 — RemoveNaturalResource::Main derives this from growth, and
+    //          FUN_1401260f0 uses it to pick the MATURE yield field (desc+0x44, not +0x40).
+    //   +0x2d  harvestable (bool)= 1 — FUN_1401260f0's produce gate (`+0x2d==0 -> return`); set
+    //          organically by the (standalone-inert) AnimateNaturalResource cut-sequence step.
+    // Together these let the ORGANIC forester cut sequence run the produce accounting end-to-end
+    // (RegisterRawMaterial -> town stock++). Neither flag affects the forester scan (it gates on
+    // +0x28 growth only), so an all-harvestable starting forest is behaviourally correct.
+    *(float*)((uint8_t*)nrComp + 0x28)   = 1.0f;
+    *(uint8_t*)((uint8_t*)nrComp + 0x2c) = 1;
+    *(uint8_t*)((uint8_t*)nrComp + 0x2d) = 1;
 }
 
 static int StartTown_SpawnResources(uint8_t* startConfig, void* world,

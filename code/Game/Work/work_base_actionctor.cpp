@@ -245,12 +245,19 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
     WA_Append(list, &ibpA);
 
     // --- RemoveNaturalResource action ---
+    // ABI (Ghidra-verified vs RemoveNaturalResource_Action_CopyCtor @0x1400cadf0 and its
+    // caller c1eb0): the ctor stores *param_2 → self+0x28 (resourceEntity/TREE) and
+    // *param_3 → self+0x20 (citizenEntity). c1eb0 calls it as
+    //   RemoveNaturalResource_Action_CopyCtor(self, &tree(lVar2), &citizen(*param_1), flag)
+    // i.e. param_2 = &TREE, param_3 = &CITIZEN. A prior port swapped these (passed citizen
+    // as param_2 → +0x28), which made RemoveNaturalResource::Main FindNRComp(citizen) return
+    // null (citizen has no NR component) and the organic produce got skipped. Pass tree first.
     obj = WA_Alloc(0x38, 8);
     void* rnr = nullptr;
     if (obj) {
         uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
         uintptr_t targetInnerSlot = static_cast<uintptr_t>(targetInner);
-        if (s_fn_RemoveNR) rnr = s_fn_RemoveNR(obj, &entityInner, &targetInnerSlot, zeroByte);
+        if (s_fn_RemoveNR) rnr = s_fn_RemoveNR(obj, &targetInnerSlot, &entityInner, zeroByte);
     }
     WA_IbpCtor(&ibpB, rnr);
     WA_Append(list, &ibpB);
