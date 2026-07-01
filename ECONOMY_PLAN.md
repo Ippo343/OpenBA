@@ -95,8 +95,11 @@ Phase 5  ✅ Production execution end-to-end (RemoveNaturalResource → FUN_1401
 Phase 6  ✅ DONE — citizen MoveTo/arrival steering FIXED (curCell fix) → citizens NAVIGATE + arrive;
              │  organic forester cut sequence drains to RemoveNaturalResource crash-free
              ▼
-Phase 7  Population response + close the organic produce loop (cut-sequence target wiring: RemoveNaturalResource
-             │  +0x28 → tree not citizen) → hunger relief; births/deaths; depletion  [was Phase 6]  ★ NEXT
+Phase 7  ✅ ORGANIC PRODUCE LOOP CLOSED (cut-sequence target +0x28 → tree, committed bc755c5).
+             │  Population response (hunger relief / births / deaths / depletion) = already-ported
+             │  CitizenComponent::Update code, runs crash-free by default; full food-relief + birth/
+             │  death end-to-end gated on live stocked FOOD storage (Phase-1 remainder) + entity
+             │  lifecycle (BANISHED_PRODUCE_SPAWN_ENTITY).  [was Phase 6]
 ```
 
 Phases 1→2→4 are the critical path for "citizens do purposeful things." Phase 3 can
@@ -637,7 +640,45 @@ multi-brick (path-compute correctness → per-frame steering → arrival detecti
 
 ---
 
-## Phase 7 — Population response (was Phase 6)
+## Phase 7 — ✅ ORGANIC PRODUCE LOOP CLOSED (2026-07-01, committed bc755c5); population response scoped
+
+**✅✅ ORGANIC PRODUCE LOOP CLOSED + VERIFIED END-TO-END (no BANISHED_FORCE_HARVEST).** The
+Phase-6 handoff item — "the organic RemoveNaturalResource action's target +0x28 is wired to the
+CITIZEN, not the tree, so NR-find resolves null and produce is skipped" — is fixed.
+- **Root cause (Ghidra-verified):** the forester cut-sequence builder
+  `WorkAct_PerformWorkCtor_c1eb0` (0x1400c1eb0) passed the RemoveNaturalResource copy-ctor
+  (`RemoveNaturalResource_Action_CopyCtor` 0x1400cadf0) its two IBP args SWAPPED. The ctor stores
+  `*param_2 → self+0x28` (resourceEntity/TREE) and `*param_3 → self+0x20` (citizenEntity); the real
+  c1eb0 calls `(self, &tree, &citizen, flag)` but the port called `(self, &citizen, &tree, flag)`.
+  ⇒ +0x28 held the citizen → `RemoveNaturalResource::Main`'s `FindNRComp(citizen)` returned null →
+  produce skipped (crash-safe). Fix = swap the two args back (1 line, `work_base_actionctor.cpp`).
+- **VERIFIED LIVE** (`BANISHED_LIVE_WORKPLACE + MATURE_TREES + FORCE_FORESTERWORK`, **NO
+  FORCE_HARVEST**): forester organically walks to a mature tree → cuts → the cut sequence now carries
+  the correct TREE target → `[ORGANIC-PRODUCE] RemoveNaturalResource::Main REACHED` → `RemoveNatRes
+  harvest: amount=1` → `RegisterRawMaterial cat=2 qty=1 stock 0->1`, crash-free. The old "target
+  +0x28=citizen — skipping produce" message is GONE. A/B default (envs off) byte-clean + crash-free.
+- **Verification-harness note:** organic verification also needed mature trees. Standalone trees carry
+  no live GrowthComponent (growth stays 0.0, failing the forester's maturity gate). `BANISHED_MATURE_TREES`
+  (default OFF, `starttown.cpp`) now sets the tree NR component's growth (+0x28=1.0), mature (+0x2c=1)
+  and harvestable (+0x2d=1) — the old-growth end-state a live GrowthComponent + harvest-marking layer
+  would produce — so the cut sequence reaches the produce accounting.
+
+**Population response (the broader Phase-7 objective):** consumed food relieves hunger; starvation →
+death; food/housing → births; resources deplete/replenish. STATUS:
+- The mortality/aging/needs/food-consume/partner-birth logic is **already ported in
+  `CitizenComponent::Update`** and runs crash-free by default (`BANISHED_LIVE_CITIZEN_UPDATE` in
+  SA_LIVE_ENV). Needs accumulate (Phase 3 verified). Aging, hunger/thirst death caps
+  (`HandleLifeEvent`), old-age/health death, `TryFindPartner`, `ConsumeFood`/`ConsumeFuel`,
+  workplace/housing (re)assignment are all present + guarded.
+- **What remains gated (NOT this slice):** (1) "consumed food relieves hunger" needs a live stocked
+  **FOOD** StorageComponent + a food producer (gatherer/farmer/hunter/fisher) — the forester produces
+  LOG, not food; `ConsumeFood` no-ops until storage is live (Phase-1 storage remainder, as flagged in
+  Phase 3). (2) resource **depletion** (tree removal on harvest) is gated behind
+  `BANISHED_PRODUCE_SPAWN_ENTITY` (entity-lifecycle materialization). (3) births/deaths need long/
+  accelerated time horizons to observe. These are Phase-1-storage / entity-materialization dependencies,
+  not produce-loop work.
+
+### Phase 7 — original spec (superseded by the block above)
 
 **Objective:** consumed food relieves hunger; sustained starvation → death; adequate
 food/housing → births; resources deplete/replenish. Closes the loop so the town is a
