@@ -857,9 +857,37 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         *(void**)(p + 0x130) = mem;
     }
 
-    // Step 16 — env config: bind (null env, climateGen) into the weather sim.
-    if (*(void**)(p + 0x130))
-        Reimpl_FUN_140093e30(*(void**)(p + 0x130), /*envRes*/nullptr, /*climateGen*/*(void**)(p + 0x50));
+    // Step 16 — env config: bind (envRes, climateGen) into the weather sim.
+    //
+    // envRes = EnvironmentDescription loaded from Environment/Environment.rsc —
+    // it holds the 12 lighting keyframes AND the rain/snow Weather descriptor
+    // array (envRes+0x28) that the particle engine builds effects from. Retail's
+    // GameUpdateLoop::Load FindOrLoads it and passes it to FUN_140093e30; we do
+    // the same. Gated by BANISHED_WEATHER_PARTICLES (default ON): the particle
+    // path is inert without a real envRes, and a partial/failed load degrades
+    // gracefully to null (weather sim still runs its temperature/snow half).
+    if (*(void**)(p + 0x130)) {
+        void* envRes = nullptr;
+#ifdef STANDALONE_EXE
+        static int s_wxParticles = -1;
+        if (s_wxParticles < 0) {
+            const char* e = std::getenv("BANISHED_WEATHER_PARTICLES");
+            s_wxParticles = (e && (e[0] == '0' || e[0] == 'f' || e[0] == 'F')) ? 0 : 1;
+        }
+        if (s_wxParticles && fn_Filename_CtorCStr && fn_ExternalFactory_FindOrLoad &&
+            fn_Filename_Dtor && g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            uint8_t fname[16] = {0};
+            fn_Filename_CtorCStr(fname, "Environment/Environment.rsc");
+            envRes = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fname);
+            fn_Filename_Dtor(fname);
+            int wxCount = envRes ? *(int*)((uint8_t*)envRes + 0x30) : 0;
+            fprintf(stderr, "[GUL::Weather] Environment.rsc envRes=%p weatherDescCount=%d\n",
+                    envRes, wxCount);
+            fflush(stderr);
+        }
+#endif
+        Reimpl_FUN_140093e30(*(void**)(p + 0x130), envRes, /*climateGen*/*(void**)(p + 0x50));
+    }
 
     // Step 17 — StringTable-pair struct (+0x138, 0x28) zero + flag bytes.
     {

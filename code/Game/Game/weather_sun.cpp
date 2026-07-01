@@ -143,17 +143,65 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     const EnvKeyframe& a = kKeyframes[kf];
     const EnvKeyframe& b = kKeyframes[kfNext];
 
+    // Base day-cycle look (interpolated keyframe): sun angle + light/ambient/fog.
     float heading = Lerp(a.sunHeading, b.sunHeading, frac);
     float pitch   = Lerp(a.sunPitch,   b.sunPitch,   frac);
+    float lightCol[4], ambientCol[4], fogCol[4];
+    LerpColor(a.lightColor,   b.lightColor,   frac, lightCol);    // diffuse (col1)
+    LerpColor(a.ambientColor, b.ambientColor, frac, ambientCol);  // ambient (col2)
+    LerpColor(a.fogColor,     b.fogColor,     frac, fogCol);
+    float fogNear = Lerp(a.fogNear, b.fogNear, frac);
+    float fogFar  = Lerp(a.fogFar,  b.fogFar,  frac);
 
-    // Direction from yaw/pitch (degrees). FromYawPitch returns z=+sin(pitch)
-    // (pointing UP toward the sun), but the engine's sun/shadow system expects the
-    // light-travel direction with z=-sin(pitch) (pointing DOWN). Verified by reading
-    // the retail in-game _LightConstants_ light dir = (-0.554,-0.320,-0.769) vs our
-    // unnegated (-0.557,-0.321,+0.766): only Z is flipped. Without this, GetSunCamera
-    // builds the sun shadow camera from the wrong side -> shadowProjection[0].z sign
-    // inverts -> the shadow depth comparison always passes -> NO cast shadows (and the
-    // ground receives ambient-only instead of sun diffuse). Negate Z to match retail.
+    // Active weather-effect color blend — faithful port of Weather::DrawUpdate's
+    // helper_3ac0 second loop (exe 0x140093ac0). Each live rain/snow effect lerps
+    // the day-cycle look toward its Weather descriptor colors/fog/sun angle
+    // (desc+0x60 ambient, +0x64 light, +0x68 fog, +0x6c/+0x70 fog dist, +0x78/+0x7c
+    // sun heading/pitch), weighted by the effect's fade intensity (geo+0xc0). This
+    // tints the scene grey during rain / bright during snow. No-op when no effects
+    // are active (envRes not loaded / no precipitation), so the base look is intact.
+    {
+        uint8_t weatherSetting = (g_pGameSettingsPtr && *g_pGameSettingsPtr)
+            ? reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x16] : 0;
+        void* wsim = *reinterpret_cast<void**>(p + 0x130);
+        if (weatherSetting != 0 && wsim) {
+            uint8_t* ws = reinterpret_cast<uint8_t*>(wsim);
+            int cnt = *reinterpret_cast<int*>(ws + 0x58);
+            void** arr = *reinterpret_cast<void***>(ws + 0x50);
+            if (cnt > 0 && arr) {
+                for (int i = 0; i < cnt; ++i) {
+                    void* geo = arr[i];
+                    if (!geo) continue;
+                    float t = *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(geo) + 0xc0);
+                    void* desc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(geo) + 0xc8);
+                    if (!desc) continue;
+                    uint8_t* dd = reinterpret_cast<uint8_t*>(desc);
+                    float dAmb[4], dLight[4], dFog[4];
+                    UnpackColor(*reinterpret_cast<uint32_t*>(dd + 0x60), dAmb);
+                    UnpackColor(*reinterpret_cast<uint32_t*>(dd + 0x64), dLight);
+                    UnpackColor(*reinterpret_cast<uint32_t*>(dd + 0x68), dFog);
+                    for (int k = 0; k < 4; ++k) {
+                        ambientCol[k] = Lerp(ambientCol[k], dAmb[k],   t);
+                        lightCol[k]   = Lerp(lightCol[k],   dLight[k], t);
+                        fogCol[k]     = Lerp(fogCol[k],     dFog[k],   t);
+                    }
+                    fogNear = Lerp(fogNear, *reinterpret_cast<float*>(dd + 0x6c), t);
+                    fogFar  = Lerp(fogFar,  *reinterpret_cast<float*>(dd + 0x70), t);
+                    heading = Lerp(heading, *reinterpret_cast<float*>(dd + 0x78), t);
+                    pitch   = Lerp(pitch,   *reinterpret_cast<float*>(dd + 0x7c), t);
+                }
+            }
+        }
+    }
+
+    // Direction from the (possibly effect-blended) yaw/pitch (degrees). FromYawPitch
+    // returns z=+sin(pitch) (pointing UP toward the sun), but the engine's sun/shadow
+    // system expects the light-travel direction with z=-sin(pitch) (pointing DOWN).
+    // Verified by reading the retail in-game _LightConstants_ light dir
+    // (-0.554,-0.320,-0.769) vs our unnegated (-0.557,-0.321,+0.766): only Z flips.
+    // Without this, GetSunCamera builds the sun shadow camera from the wrong side ->
+    // shadowProjection[0].z sign inverts -> the shadow depth comparison always passes
+    // -> NO cast shadows (ground gets ambient-only). Negate Z to match retail.
     float dir[3] = {0.0f, 0.0f, 1.0f};
     s_fn_FromYawPitch(dir, &heading, &pitch);
     dir[2] = -dir[2];
@@ -176,10 +224,6 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
             }
         }
     }
-
-    float lightCol[4], ambientCol[4];
-    LerpColor(a.lightColor,   b.lightColor,   frac, lightCol);    // diffuse (col1)
-    LerpColor(a.ambientColor, b.ambientColor, frac, ambientCol);  // ambient (col2)
 
     // Optional verification trace (continuation): with the colors + final sun dir
     // computed, log them alongside the keyframe info above (same env gate, throttle).
@@ -204,12 +248,8 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
 
     fn_Graphics_SunLight_Set(sun, dir, lightCol, ambientCol);
 
-    // Fog (matches the base game's per-time fog distances + color).
+    // Fog (day-cycle distances + color, effect-blended above).
     if (ctx && s_fn_Context_SetFog) {
-        float fogCol[4];
-        LerpColor(a.fogColor, b.fogColor, frac, fogCol);
-        float fogNear = Lerp(a.fogNear, b.fogNear, frac);
-        float fogFar  = Lerp(a.fogFar,  b.fogFar,  frac);
         s_fn_Context_SetFog(ctx, fogNear, fogFar, fogCol);
     }
 }

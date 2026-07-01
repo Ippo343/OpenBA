@@ -54,6 +54,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <cmath>
 
 namespace {
@@ -78,7 +79,100 @@ const float kFadeB2    = 2.0f;             // DAT_140172174
 
 inline float saturate(float x) { return x < 0.0f ? 0.0f : (x > 1.0f ? 1.0f : x); }
 
+// Part 5/6 constants.
+const float kColdThresh    = f32(0x42080000);  // DAT_1401721d8 = 34.0 (temp<=34 -> snow slot)
+const float kPerlinPersist = 0.25f;            // DAT_140172100
+const float kPerlinOctaves = 4.0f;             // DAT_140172194
+const float k1_12          = f32(0x3daaaaab);  // DAT_1401720e0 = 1/12
+const float kKfCount       = 48.0f;            // DAT_1401721e4
+
+// RandFloatTol (float in [-1,1]) + Scene::RemoveGlobalObject — not in
+// engine_funcs; resolve lazily.
+typedef float (*fn_RandFloatTol_t)(void* rng);   // ?RandFloatTol@Random@System@@QEAAMXZ
+typedef void  (*fn_RemoveGlobalObject_t)(void* scene, void* geo);
+fn_RandFloatTol_t       s_fnRandFloatTol       = nullptr;
+fn_RemoveGlobalObject_t s_fnRemoveGlobalObject = nullptr;
+bool s_simResolved = false;
+void EnsureSimResolved() {
+    if (s_simResolved) return;
+    s_simResolved = true;
+    s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
+        ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
+    if (!s_fnRandFloatTol)
+        s_fnRandFloatTol = reinterpret_cast<fn_RandFloatTol_t>(
+            ResolveAddr(Module::Runtime, 0x1800c8000));
+    s_fnRemoveGlobalObject = reinterpret_cast<fn_RemoveGlobalObject_t>(
+        ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+}
+
+// Part 5 — FUN_1400935f0 weather-type state machine. Regenerates the temperature
+// perlin + per-month type params at day boundaries, then picks the weather type
+// (w+0x10) from the climate probability table (climate+0x44, float[48] = 12
+// months x 4 types) and steps the intensity level (w+0x14, clamped 0..5).
+void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
+    void* climate = *reinterpret_cast<void**>(w + 0x08);
+    void* rng = *reinterpret_cast<void**>(gw + 0xd8);
+    if (!climate || !rng) return;
+    uint8_t* c = reinterpret_cast<uint8_t*>(climate);
+    EnsureSimResolved();
+
+    int kf = (int)((sec / kDayLen) * kKfCount);
+    if (kf > 47) kf = 0;
+
+    if (kf == 0 || kf == 0x18) {
+        if (fn_Random_Rand && fn_PerlinNoise_Ctor) {
+            uint32_t s1 = fn_Random_Rand(rng, 0xffffffffu);
+            uint32_t s2 = fn_Random_Rand(rng, 0xffffffffu);
+            uint8_t pn[0x10];
+            fn_PerlinNoise_Ctor(pn, kPerlinPersist, kPerlinOctaves, (int)s2, (int)s1);
+            std::memcpy(w + 0x34, pn, 0x10);
+        }
+        float accInt = 0.0f, accType = 0.0f;
+        if (s_fnRandFloatTol) {
+            for (int k = 0; k < 12; ++k) {
+                accInt  += s_fnRandFloatTol(rng) * k1_12;   // -> w+0x48
+                accType += s_fnRandFloatTol(rng) * k1_12;   // -> w+0x30
+            }
+        }
+        *reinterpret_cast<float*>(w + 0x30) =
+            accType * *reinterpret_cast<float*>(c + 0x40) + *reinterpret_cast<float*>(c + 0x34);
+        *reinterpret_cast<float*>(w + 0x48) = accInt * *reinterpret_cast<float*>(c + 0x104);
+    }
+
+    float randf = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+    *reinterpret_cast<int*>(w + 0x10) = 0;
+    do {
+        int type = *reinterpret_cast<int*>(w + 0x10);
+        int month = (kf + ((kf >> 31) & 3)) >> 2;
+        float thresh = *reinterpret_cast<float*>(w + 0x44) +
+                       *reinterpret_cast<float*>(c + 0x44 + (size_t)(month * 4 + type) * 4);
+        if (randf < thresh) break;
+        *reinterpret_cast<int*>(w + 0x10) = type + 1;
+    } while (*reinterpret_cast<int*>(w + 0x10) < 3);
+
+    int idx = *reinterpret_cast<int*>(w + 0x10);
+    if (idx == 0) *reinterpret_cast<int*>(w + 0x14) += 1;
+    else if (idx == 3) *reinterpret_cast<int*>(w + 0x14) -= 1;
+    if (*reinterpret_cast<int*>(w + 0x14) > 5) *reinterpret_cast<int*>(w + 0x14) = 5;
+    else if (*reinterpret_cast<int*>(w + 0x14) < 0) *reinterpret_cast<int*>(w + 0x14) = 0;
+}
+
+// Part 6 chance — FUN_1400a9290(timer=w+0x70, p=climate+0x108, rng). Consumes and
+// zeros the elapsed-time accumulator; returns whether to spawn this tick.
+bool SpawnChance(uint8_t* timer, const float* p, void* rng) {
+    float p1 = p[1];
+    if (p1 <= 0.0f) { *reinterpret_cast<int64_t*>(timer) = 0; return false; }
+    float scale = p[0] * 12.0f * 300.0f;   // DAT_1401721b8 * DAT_140172234
+    float elapsed = fn_Time_AsSeconds ? fn_Time_AsSeconds(timer) : 0.0f;
+    *reinterpret_cast<int64_t*>(timer) = 0;
+    float r = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+    return r < elapsed / (scale * p1);
+}
+
 }  // namespace
+
+// Effect enable/disable (weather_particles.cpp) — builds/fades particle geometry.
+extern "C" void WeatherEffect_SetEnabled(void* sim, int slot, int enable);
 
 // ============================================================
 // Weather::ResetTime (exe 0x1400944e0) — snow/temperature sub-sim
@@ -106,6 +200,41 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     void* timeObj = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x128);
     if (!timeObj) return;
     float sec = fn_Time_AsSeconds(reinterpret_cast<uint8_t*>(timeObj) + 8);
+
+    EnsureSimResolved();
+
+    // Weather-effects enabled setting (game settings byte 0x16).
+    uint8_t weatherSetting = (g_pGameSettingsPtr && *g_pGameSettingsPtr)
+        ? reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x16] : 0;
+
+    // --- Part 1: tick + cull the active weather effects. For each live effect,
+    //     run its particle Update (vtable +0x08); if it has faded out (intensity
+    //     0) or weather is disabled, remove it from the Graphics scene and
+    //     destroy it. (Per-effect audio emitter volume is out of scope.) ---
+    {
+        int cnt = *reinterpret_cast<int*>(w + 0x58);
+        void** activeArray = *reinterpret_cast<void***>(w + 0x50);
+        if (cnt > 0 && activeArray) {
+            for (int i = 0; i < cnt; ++i) {
+                void* geo = activeArray[i];
+                if (!geo) continue;
+                void** vt = *reinterpret_cast<void***>(geo);
+                if (vt && vt[1])   // +0x08 particle Update(geo, time)
+                    reinterpret_cast<void(*)(void*, void*)>(vt[1])(geo, time);
+                float intensity = *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(geo) + 0xc0);
+                if (intensity == 0.0f || weatherSetting == 0) {
+                    if (s_fnRemoveGlobalObject) {
+                        void* scene = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x60);
+                        if (scene) s_fnRemoveGlobalObject(scene, geo);
+                    }
+                    if (vt && vt[0])   // +0x00 scalar-deleting dtor(geo, free=1)
+                        reinterpret_cast<void*(*)(void*, uint32_t)>(vt[0])(geo, 1);
+                    activeArray[i] = nullptr;
+                    // (audio IBP slot w+0x60[i] stays null — no audio spawned)
+                }
+            }
+        }
+    }
 
     // --- Part 2: exponential smoothing of the mean-temp and precip targets. ---
     *reinterpret_cast<float*>(w + 0x2c) =
@@ -176,10 +305,79 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
         *reinterpret_cast<float*>(w + 0x28) = maxIntensity;
     }
 
-    // --- Elapsed-time accumulator (+0x70) — faithful groundwork for the deferred
-    //     precipitation-spawn path (FUN_1400a9290 consumes+zeros it). Inert here. ---
+    // --- Part 5: at each keyframe boundary, run the weather-type state machine
+    //     (FUN_1400935f0) — picks the weather type (w+0x10) + intensity (w+0x14). ---
+    {
+        int kf = (int)((sec / kDayLen) * kKfCount);
+        if (kf > 47) kf = 0;
+        if (kf != *reinterpret_cast<int*>(w + 0x4c)) {
+            *reinterpret_cast<int*>(w + 0x4c) = kf;
+            WeatherTypeStateMachine(w, reinterpret_cast<uint8_t*>(gw), sec);
+        }
+    }
+
+    // --- Effect enable/disable (impl_42c0 loop). Two slots: 0 = warm precip
+    //     (rain), 1 = cold precip (snow). Enable the slot whose temperature
+    //     condition matches when weather is on and the sim is idle (state 0).
+    //     State (w+0x10) is re-read each iteration since SetEnabled mutates it. ---
+    {
+        // Debug: BANISHED_WEATHER_FORCE=1 ignores the weather-type gate (w+0x10)
+        // so the temperature-matched precip effect always spawns — lets you see
+        // rain/snow on demand instead of waiting for the type roll to hit 0.
+        static int s_force = -1;
+        if (s_force < 0) {
+            const char* e = std::getenv("BANISHED_WEATHER_FORCE");
+            s_force = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        bool cold = *reinterpret_cast<float*>(w + 0x18) <= kColdThresh;   // temp <= 34
+        for (int slot = 0; slot < 2; ++slot) {
+            int state = *reinterpret_cast<int*>(w + 0x10);
+            int enable = (weatherSetting != 0 && (s_force || state == 0) &&
+                          ((cold ? 1 : 0) == slot)) ? 1 : 0;
+            WeatherEffect_SetEnabled(weatherSelf, slot, enable);
+        }
+        static int s_wxDiag = -1;
+        if (s_wxDiag < 0) {
+            const char* e = std::getenv("BANISHED_WEATHER_TRACE");
+            s_wxDiag = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_wxDiag) {
+            static int s_dn = 0;
+            if ((s_dn++ % 120) == 0) {
+                void* envRes = *reinterpret_cast<void**>(w + 0x00);
+                int arrCnt = *reinterpret_cast<int*>(w + 0x58);
+                void** arr = *reinterpret_cast<void***>(w + 0x50);
+                fprintf(stderr, "[wxfx] setting=%d state=%d cold=%d envRes=%p arrCnt=%d "
+                        "slot0=%p slot1=%p\n",
+                        weatherSetting, *reinterpret_cast<int*>(w + 0x10), cold ? 1 : 0,
+                        envRes, arrCnt, arr ? arr[0] : nullptr,
+                        (arr && arrCnt > 1) ? arr[1] : nullptr);
+                fflush(stderr);
+            }
+        }
+    }
+
+    // --- Elapsed-time accumulator (+0x70) — consumed by the Part-6 spawn chance. ---
     if (time)
         *reinterpret_cast<int64_t*>(w + 0x70) += *reinterpret_cast<int64_t*>(time);
+
+    // --- Part 6: ambient-spawn chance (FUN_1400a9290). The gated entity is the
+    //     ambient-audio environment entity (envRes+0x20 template) — EXCLUDED per
+    //     scope (audio). We still run the faithful timer/chance so the +0x70
+    //     accumulator is consumed exactly as retail, then skip the audio spawn. ---
+    {
+        void* climate = *reinterpret_cast<void**>(w + 0x08);
+        uint32_t disasterBits = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(gw) + 0xd0);
+        void* rng = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0xd8);
+        if (*reinterpret_cast<float*>(w + 0x18) > kColdThresh &&
+            *reinterpret_cast<int*>(w + 0x10) == 0 &&
+            ((disasterBits >> 7) & 1) == 0 && climate && rng) {
+            const float* p = reinterpret_cast<const float*>(reinterpret_cast<uint8_t*>(climate) + 0x108);
+            if (SpawnChance(w + 0x70, p, rng)) {
+                // Ambient environment entity spawn (audio) — intentionally skipped.
+            }
+        }
+    }
 
     // Optional verification trace: BANISHED_WEATHER_TRACE=1 logs the evolving
     // temperature + terrain params every ~120 ticks.

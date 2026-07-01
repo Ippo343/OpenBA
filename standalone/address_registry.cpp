@@ -126,6 +126,8 @@ extern "C" {
     void RegisterCropFieldDescriptionVtable();
     void RegisterDiseaseDescriptionVtable();
     void RegisterEnvironmentDescriptionVtable();
+    void RegisterWeatherParticleVtable();
+    void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFireDescriptionVtable();
     void RegisterFishingDescriptionVtable();
     void RegisterFloorDescriptionVtable();
@@ -597,6 +599,11 @@ static void RegisterCodeFunctions() {
     // the temperature/snow-coverage sub-sim runs. EngineFuncsInit (after this)
     // then resolves fn_Weather_ResetTime to Weather_ResetTime_Reimpl.
     RegisterExeAddr(0x1400944e0, reinterpret_cast<uintptr_t>(&Weather_ResetTime_Reimpl));
+
+    // Weather-descriptor array resize (stride 0x10) — EnvironmentDescription::
+    // Serialize needs this to populate envRes+0x28 on load (else the rain/snow
+    // descriptor array stays empty and no weather effect can spawn).
+    RegisterExeAddr(0x1400198a0, reinterpret_cast<uintptr_t>(&Reimpl_WeatherArray_Resize));
 
     // In-game HUD bring-up — route the exe ToolbarDialog ctor (FUN_1400b9910) to
     // our reimpl so GameUpdateLoop::Startup can build the toolbar from the
@@ -1335,6 +1342,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterCropFieldDescriptionVtable();
     RegisterDiseaseDescriptionVtable();
     RegisterEnvironmentDescriptionVtable();
+    RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireDescriptionVtable();
     RegisterFishingDescriptionVtable();
     RegisterFloorDescriptionVtable();

@@ -1,0 +1,383 @@
+// code/Game/Game/weather_particle_draw.cpp
+//
+// Faithful port of the weather-particle Geometry Draw vtable slot (+0x10),
+// exe FUN_1400d3120 (Application-x64.exe @ 0x1400d3120).
+//
+// This is the renderer for the falling precipitation (rain / snow) particle
+// field. The particle simulation stores a compact array of particles that
+// live in a single box-sized cell (edge = desc.boxSize). To make the weather
+// blanket the whole area around the camera without simulating millions of
+// particles, Draw *tiles* that one cell over a 5x5x5 grid (offsets -2..+2 on
+// each axis, snapped to the box grid around the camera position) and draws the
+// same particle field once per visible tile via hardware instancing, one
+// Context::SetTransform translation matrix per tile.
+//
+// ALGORITHM (line-for-line with FUN_1400d3120):
+//   1. Copy the camera Transform3 (camera+0x64). Its columns are the billboard
+//      basis vectors and its translation (col at +0x24) is the camera position.
+//         col0 = T[+0x00..+0x08]   col1 = T[+0x0c..+0x14]
+//         col2 = T[+0x18..+0x20]   camPos = T[+0x24..+0x2c]
+//   2. Snap the camera position to the box grid:
+//         snapped = floor(camPos / boxSize) * boxSize   (per component)
+//   3. Frustum-cull the 5x5x5 tile grid. For tile (i,j,k) in [-2..2]^3:
+//         center = snapped + boxSize*(i,j,k)
+//         aabb   = [center, center + (boxSize,boxSize,boxSize)]
+//      Transform the camera frustum by the camera transform and test it against
+//      each aabb; if Contains(...) != 0x40 (0x40 == fully outside sentinel) the
+//      tile is kept and its cell-center (center + boxSize/2) is appended to the
+//      visible-tile list.
+//   4. Context::SetColor(1,1,1, geo.intensity) and Context::SetInverseScale from
+//      the descriptor near/far fade bounds (desc+0x4c/0x50 and +0x54/0x58).
+//   5. Build the per-particle billboard quads into a dynamic staging buffer
+//      (4 verts/particle, 0x14 bytes/vert). Billboard axes:
+//         - default (desc.velocityStretch == 0): camera-facing, axisU = col2*size/2,
+//           axisV = col0*size/2, constant for all particles.
+//         - velocityStretch: per-particle, axisV = normalize(vel x col1)*size/2,
+//           axisU = normalize(axisV x col1)*size/2, and the trailing edge uses the
+//           particle's prevPos so the quad streaks along the velocity.
+//      Quad corners:
+//         v0 = pos   + axisU - axisV      v1 = pos   + axisU + axisV
+//         v2 = altpos- axisU + axisV      v3 = altpos- axisU - axisV
+//      Each vertex = { x,y,z, 0.0f, uvColor } with the four corner uv/color
+//      dwords 0x00000000, 0x000000ff, 0x0000ffff, 0x0000ff00.
+//   6. Instanced submit: batch = min(GetMaxDynamicInstances, visibleTiles).
+//      For each batch, SetTransform a translation matrix per tile, then
+//      BeginInstancedIndexedVertices, memcpy the vertex block into the context
+//      dynamic-vertex cursor (ctx+0x20e0, stride ctx+0x20e8) and the index block
+//      into the dynamic-index cursor (ctx+0x20f0), then EndInstancedIndexedVertices.
+//
+// Struct layout (verified against the 0x1400d3120 disassembly):
+//   Geometry `geo`:
+//     +0xc0 float intensity   +0xc8 Weather* descriptor
+//     +0xd0 index buffer ptr  +0xd8 int indexCount
+//     +0xe0 particle array    +0xe8 int particleCount
+//   Particle (stride 0x24): +0x00 pos[3]  +0x0c prevPos[3]  +0x18 velocity[3]
+//   Weather descriptor (geo+0xc8):
+//     +0x40 bool velocityStretch  +0x44 float particleSize  +0x48 float boxSize
+//     +0x4c/+0x50 near fade lo/hi  +0x54/+0x58 far fade lo/hi
+//   Video::Context cursors: +0x20e0 vtx write ptr, +0x20e8 int vtx stride,
+//     +0x20f0 idx write ptr.
+//   Camera+0x64 = Transform3 (0x70 bytes).
+//
+// Constants (bit-exact): g_fUVScale = 1.0f, DAT_140172114 = 0.5f,
+//   DAT_1401722c0 = 0x80000000 (float negate via XOR), FUN_140131390 = floorf.
+//
+// The pure vector math (Vector3 ctor / Cross / Normalize / operator*= / scalar
+// broadcast) is inlined in plain C++ — it is bit-identical to the Runtime
+// Math::Vector3 helpers the exe calls (Cross computes this x other; the by-value
+// Normalize returns this/|this|). Only the operations that touch opaque engine
+// state (Transform3 copy, Camera::GetFrustum, Frustum::operator*/Contains,
+// Matrix::Matrix, and the six Video::Context methods) are resolved from
+// Runtime-x64.dll.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cmath>
+#include <cstring>
+
+namespace {
+
+// ------------------------------------------------------------------
+// Runtime function pointers (lazy, resolved once on first Draw call).
+// ------------------------------------------------------------------
+typedef void  (*Transform3Copy_t)(void* dst, const void* src);                       // ??0Transform3@Math@@QEAA@AEBV01@@Z
+typedef void* (*CameraGetFrustum_t)(void* camera, void* retbuf);                      // ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ
+typedef void* (*FrustumMul_t)(void* frustum, void* retbuf, const void* transform);    // ??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z
+typedef uint32_t (*FrustumContains_t)(void* frustum, const void* box, uint32_t mask); // ?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z
+typedef void* (*MatrixCtor_t)(void* self, const void* c0, const void* c1,
+                              const void* c2, const void* pos);                       // ??0Matrix@Math@@QEAA@AEBVVector4@1@000@Z @ Runtime 0x18001e540
+typedef void  (*CtxSetColor_t)(void* ctx, const void* vec4);                          // ?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z
+typedef void  (*CtxSetInverseScale_t)(void* ctx, float, float, float, float);         // Runtime 0x18001a880
+typedef int   (*CtxGetMaxDynInst_t)(void* ctx, int vtxCount, int stride, int idxCount);// Runtime 0x1800f21d0
+typedef void  (*CtxSetTransform_t)(void* ctx, int slot, const void* matrix);          // ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z
+typedef bool  (*CtxBeginInst_t)(void* ctx, int vtxCount, int stride, int idxCount, int inst);// Runtime 0x1800f2130
+typedef void  (*CtxEndInst_t)(void* ctx, int primType);                              // Runtime 0x1800f2110
+
+Transform3Copy_t     s_Transform3Copy    = nullptr;
+CameraGetFrustum_t   s_CameraGetFrustum  = nullptr;
+FrustumMul_t         s_FrustumMul        = nullptr;
+FrustumContains_t    s_FrustumContains   = nullptr;
+MatrixCtor_t         s_MatrixCtor        = nullptr;
+CtxSetColor_t        s_SetColor          = nullptr;
+CtxSetInverseScale_t s_SetInverseScale   = nullptr;
+CtxGetMaxDynInst_t   s_GetMaxDynInst     = nullptr;
+CtxSetTransform_t    s_SetTransform      = nullptr;
+CtxBeginInst_t       s_BeginInst         = nullptr;
+CtxEndInst_t         s_EndInst           = nullptr;
+bool s_resolved = false;
+
+void ResolvePtrs() {
+    if (s_resolved) return;
+
+    // Functions with verified mangled names: ResolveExport primary.
+    s_Transform3Copy   = reinterpret_cast<Transform3Copy_t>(
+        ResolveExport("??0Transform3@Math@@QEAA@AEBV01@@Z"));
+    s_CameraGetFrustum = reinterpret_cast<CameraGetFrustum_t>(
+        ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
+    s_FrustumMul       = reinterpret_cast<FrustumMul_t>(
+        ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
+    s_FrustumContains  = reinterpret_cast<FrustumContains_t>(
+        ResolveExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z"));
+    s_SetColor         = reinterpret_cast<CtxSetColor_t>(
+        ResolveExport("?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z"));
+    s_SetTransform     = reinterpret_cast<CtxSetTransform_t>(
+        ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
+
+    // Functions resolved by pinned Runtime-x64.dll address (no verified mangled
+    // name to hand); ResolveAddr(Module::Runtime, ...) applies ASLR delta.
+    s_MatrixCtor      = reinterpret_cast<MatrixCtor_t>(
+        ResolveAddr(Module::Runtime, 0x18001e540));
+    s_SetInverseScale = reinterpret_cast<CtxSetInverseScale_t>(
+        ResolveAddr(Module::Runtime, 0x18001a880));
+    s_GetMaxDynInst   = reinterpret_cast<CtxGetMaxDynInst_t>(
+        ResolveAddr(Module::Runtime, 0x1800f21d0));
+    s_BeginInst       = reinterpret_cast<CtxBeginInst_t>(
+        ResolveAddr(Module::Runtime, 0x1800f2130));
+    s_EndInst         = reinterpret_cast<CtxEndInst_t>(
+        ResolveAddr(Module::Runtime, 0x1800f2110));
+
+    s_resolved = true;
+}
+
+// ------------------------------------------------------------------
+// Inlined Vector3 math (bit-identical to the Math::Vector3 Runtime helpers).
+// ------------------------------------------------------------------
+inline void v3_cross(float out[3], const float a[3], const float b[3]) {
+    // this (a) x other (b)
+    out[0] = a[1] * b[2] - a[2] * b[1];
+    out[1] = a[2] * b[0] - a[0] * b[2];
+    out[2] = a[0] * b[1] - a[1] * b[0];
+}
+inline void v3_normalize(float out[3], const float a[3]) {
+    float len = std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+    if (len > 1e-20f) {
+        float inv = 1.0f / len;
+        out[0] = a[0] * inv; out[1] = a[1] * inv; out[2] = a[2] * inv;
+    } else {
+        out[0] = 0.0f; out[1] = 0.0f; out[2] = 0.0f;
+    }
+}
+
+inline float rd_f(const void* base, int off) {
+    return *reinterpret_cast<const float*>(reinterpret_cast<const uint8_t*>(base) + off);
+}
+
+} // namespace
+
+// ============================================================
+// WeatherParticle_Draw — exe FUN_1400d3120 (Geometry Draw vtable +0x10)
+//   geo     : particle Geometry (0xf0 bytes)
+//   context : Video::Context*
+//   camera  : Graphics::Camera*
+// ============================================================
+extern "C" void WeatherParticle_Draw(void* geo, void* context, void* camera) {
+    if (!geo || !context || !camera) return;
+
+    ResolvePtrs();
+    if (!s_Transform3Copy || !s_CameraGetFrustum || !s_FrustumMul || !s_FrustumContains ||
+        !s_MatrixCtor || !s_SetColor || !s_SetInverseScale || !s_GetMaxDynInst ||
+        !s_SetTransform || !s_BeginInst || !s_EndInst ||
+        !fn_MemAlloc || !g_pMemAllocSingleton || !fn_MemFreeStatic) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            // Cascade-safe: skip the weather draw rather than crash on a null fn ptr.
+            s_warned = true;
+        }
+        return;
+    }
+
+    uint8_t* g   = reinterpret_cast<uint8_t*>(geo);
+    void*    ctx = context;
+    void*    desc = *reinterpret_cast<void**>(g + 0xc8);   // Weather descriptor
+    if (!desc) return;
+
+    const float boxSize      = rd_f(desc, 0x48);
+    const float particleSize = rd_f(desc, 0x44);
+    const bool  velStretch   = (*reinterpret_cast<const uint8_t*>(
+                                    reinterpret_cast<uint8_t*>(desc) + 0x40) != 0);
+    const int   particleCount = *reinterpret_cast<int*>(g + 0xe8);
+    const int   indexCount    = *reinterpret_cast<int*>(g + 0xd8);
+    const float intensity     = rd_f(g, 0xc0);
+
+    // (1) Copy the camera Transform3 (camera+0x64) and pull its basis columns.
+    uint8_t camXform[0x70];
+    s_Transform3Copy(camXform, reinterpret_cast<uint8_t*>(camera) + 0x64);
+
+    const float col0[3] = { rd_f(camXform, 0x00), rd_f(camXform, 0x04), rd_f(camXform, 0x08) };
+    const float col1[3] = { rd_f(camXform, 0x0c), rd_f(camXform, 0x10), rd_f(camXform, 0x14) };
+    const float col2[3] = { rd_f(camXform, 0x18), rd_f(camXform, 0x1c), rd_f(camXform, 0x20) };
+    const float camPos[3] = { rd_f(camXform, 0x24), rd_f(camXform, 0x28), rd_f(camXform, 0x2c) };
+
+    const float boxHalf = boxSize * 0.5f;   // DAT_140172114 = 0.5f
+
+    // (2) Snap camera position to the box grid (floor(camPos/box)*box).
+    float snapped[3];
+    for (int c = 0; c < 3; ++c)
+        snapped[c] = std::floor(camPos[c] / boxSize) * boxSize;
+
+    // (3) Frustum-cull the 5x5x5 tile grid. Visible cell-centers collected here.
+    //     Sized generously and zero-initialised: the instanced submit loop can
+    //     over-read past the visible count (faithful to the original, which reads
+    //     into a large zero-inited stack buffer), and Matrix::Matrix reads a 4th
+    //     float one Vector3 past the position pointer.
+    const int kTileCap = 384;                 // >= 125 visible + batch over-read + 1
+    float tiles[kTileCap * 3];
+    std::memset(tiles, 0, sizeof(tiles));
+    int visibleTiles = 0;
+
+    // worldFrustum = GetFrustum(camera) * camXform
+    uint8_t frBuf[0x100];
+    uint8_t worldFrustum[0x100];
+    void* fr = s_CameraGetFrustum(camera, frBuf);
+    s_FrustumMul(fr, worldFrustum, camXform);
+
+    for (int i = -2; i < 3; ++i) {            // z (outer)
+        for (int j = -2; j < 3; ++j) {        // y (middle)
+            for (int k = -2; k < 3; ++k) {    // x (inner)
+                float center[3] = {
+                    boxSize * (float)k + snapped[0],
+                    boxSize * (float)j + snapped[1],
+                    boxSize * (float)i + snapped[2],
+                };
+                // AABB = { center (min), center + box (max) } — 6 floats.
+                float aabb[6] = {
+                    center[0], center[1], center[2],
+                    center[0] + boxSize, center[1] + boxSize, center[2] + boxSize,
+                };
+                uint32_t r = s_FrustumContains(worldFrustum, aabb, 0x3f);
+                if (r != 0x40) {
+                    if (visibleTiles < kTileCap) {
+                        tiles[visibleTiles * 3 + 0] = center[0] + boxHalf;
+                        tiles[visibleTiles * 3 + 1] = center[1] + boxHalf;
+                        tiles[visibleTiles * 3 + 2] = center[2] + boxHalf;
+                    }
+                    ++visibleTiles;
+                }
+            }
+        }
+    }
+
+    // (4) Per-draw context state.
+    float color[4] = { 1.0f, 1.0f, 1.0f, intensity };
+    s_SetColor(ctx, color);
+
+    const float g_fUVScale = 1.0f;            // 0x14017214c
+    s_SetInverseScale(
+        ctx,
+        -rd_f(desc, 0x50),                                        // -near_hi (XOR sign flip)
+        g_fUVScale / (rd_f(desc, 0x4c) - rd_f(desc, 0x50)),       // 1 / (near_lo - near_hi)
+        -rd_f(desc, 0x58),                                        // -far_hi
+        g_fUVScale / (rd_f(desc, 0x54) - rd_f(desc, 0x58)));      // 1 / (far_lo - far_hi)
+
+    // (5) Build the per-particle billboard quads (4 verts * 0x14 bytes each).
+    const int   kVtxStride = 0x14;
+    const int   vtxCount   = particleCount * 4;
+    uint8_t*    staging    = nullptr;
+    if (vtxCount > 0) {
+        staging = reinterpret_cast<uint8_t*>(
+            fn_MemAlloc(g_pMemAllocSingleton,
+                        static_cast<uint64_t>(vtxCount) * kVtxStride, 4));
+    }
+
+    // Camera-facing billboard axes (default; overwritten per-particle if stretch).
+    float axisU[3] = { col2[0] * (particleSize * 0.5f),
+                       col2[1] * (particleSize * 0.5f),
+                       col2[2] * (particleSize * 0.5f) };
+    float axisV[3] = { col0[0] * (particleSize * 0.5f),
+                       col0[1] * (particleSize * 0.5f),
+                       col0[2] * (particleSize * 0.5f) };
+
+    // Corner uv/color dwords (packed shorts baked per corner).
+    static const uint32_t kCornerUV[4] = { 0x00000000u, 0x000000ffu, 0x0000ffffu, 0x0000ff00u };
+
+    if (staging && particleCount > 0) {
+        uint8_t* particles = *reinterpret_cast<uint8_t**>(g + 0xe0);
+        uint8_t* out = staging;
+        for (int p = 0; p < particleCount; ++p) {
+            const float* pbase = reinterpret_cast<const float*>(particles + (size_t)p * 0x24);
+            const float* pos   = pbase;                    // +0x00 pos
+            const float* alt   = velStretch ? (pbase + 3)  // +0x0c prevPos
+                                            : pbase;        // else pos
+
+            if (velStretch) {
+                // Velocity-oriented axes: velocity x col1, then that x col1.
+                const float* vel = pbase + 6;              // +0x18 velocity
+                float perpA[3], perpAn[3], perpB[3], perpBn[3];
+                v3_cross(perpA, vel, col1);
+                v3_normalize(perpAn, perpA);
+                v3_cross(perpB, perpAn, col1);
+                v3_normalize(perpBn, perpB);
+                for (int c = 0; c < 3; ++c) {
+                    axisU[c] = perpBn[c] * (particleSize * 0.5f);   // local_918
+                    axisV[c] = perpAn[c] * (particleSize * 0.5f);   // local_928
+                }
+            }
+
+            float v0[3], v1[3], v2[3], v3[3];
+            for (int c = 0; c < 3; ++c) {
+                v0[c] = pos[c] + axisU[c] - axisV[c];
+                v1[c] = pos[c] + axisU[c] + axisV[c];
+                v2[c] = alt[c] - axisU[c] + axisV[c];
+                v3[c] = alt[c] - axisU[c] - axisV[c];
+            }
+
+            const float* verts[4] = { v0, v1, v2, v3 };
+            for (int q = 0; q < 4; ++q) {
+                float*    fout = reinterpret_cast<float*>(out);
+                uint32_t* uout = reinterpret_cast<uint32_t*>(out);
+                fout[0] = verts[q][0];
+                fout[1] = verts[q][1];
+                fout[2] = verts[q][2];
+                fout[3] = 0.0f;
+                uout[4] = kCornerUV[q];
+                out += kVtxStride;
+            }
+        }
+    }
+
+    // (6) Instanced submit, batched by the max dynamic-instance count.
+    int batch = s_GetMaxDynInst(ctx, vtxCount, kVtxStride, indexCount);
+    if (visibleTiles < batch) batch = visibleTiles;
+
+    if (visibleTiles > 0) {
+        const float mcol0[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+        const float mcol1[4] = { 0.0f, 1.0f, 0.0f, 0.0f };
+        const float mcol2[4] = { 0.0f, 0.0f, 1.0f, 0.0f };
+
+        int tileBase = 0;
+        do {
+            if (batch > 0) {
+                for (int t = 0; t < batch; ++t) {
+                    float matrix[16];
+                    // Translation matrix: identity basis + tile cell-center.
+                    // Matrix::Matrix reads a 4th float from `pos`; the tiles[]
+                    // buffer is padded/zeroed so that read is well-defined.
+                    s_MatrixCtor(matrix, mcol0, mcol1, mcol2, &tiles[(tileBase + t) * 3]);
+                    s_SetTransform(ctx, t, matrix);
+                }
+            }
+            if (s_BeginInst(ctx, vtxCount, kVtxStride, indexCount, batch)) {
+                int    stride = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(ctx) + 0x20e8);
+                void*& vtxCur = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ctx) + 0x20e0);
+                void*& idxCur = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(ctx) + 0x20f0);
+
+                // Copy the whole particle vertex block into the dynamic vertex cursor.
+                size_t vtxBytes = static_cast<size_t>(vtxCount) * stride;
+                std::memcpy(vtxCur, staging, vtxBytes);
+                vtxCur = reinterpret_cast<uint8_t*>(vtxCur) + vtxBytes;
+
+                // Copy the shared particle index buffer into the dynamic index cursor.
+                size_t idxBytes = static_cast<size_t>(indexCount) * 2;
+                std::memcpy(idxCur, *reinterpret_cast<void**>(g + 0xd0), idxBytes);
+                idxCur = reinterpret_cast<uint8_t*>(idxCur) + idxBytes;
+
+                s_EndInst(ctx, 0);
+            }
+            tileBase += batch;
+        } while (tileBase < visibleTiles);
+    }
+
+    if (staging)
+        fn_MemFreeStatic(staging);
+}
