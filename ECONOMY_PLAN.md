@@ -342,7 +342,59 @@ Phase 1's Storage agent (needs live storage).
 
 ---
 
-## Phase 4 — Job / workplace assignment + laborer default
+## Phase 4 — PROGRESS (2026-07-01) — brick 4-2 landed; keystone re-mapped (Ghidra + live verified)
+
+**✅ BRICK 4-2 DONE + COMMITTED (adf0d94): `CitizenComponent::AssignWorkplace` (0x1401163d0)
++ roster helpers ported.** `code/Game/Component/citizen_assignworkplace.cpp` +
+`standalone/reg_citizen_assignworkplace.cpp`. Faithful 1:1: AssignWorkplace (set
++0x238/+0x240; remove-from-old-roster helper_a550 0x14012a550 / add-to-new-roster
+helper_a710 0x14012a710 via `Entity_FindComponent_Storage`; recurse family list
++0x260/+0x268), CountWorkers 0x140129ff0, RosterCompare 0x140129e20 (all Ghidra-verified,
+lead + agent). Roster bookkeeping (storage+0x50 `{data,count,cap}[]` stride 0x10, +0x58
+profession count) is the faithful core, unconditional; every mesh/status-icon/3D-audio
+side effect is inert in standalone and guarded to no-op (`AudioScene()=*(gw+0x78)` null;
+null-wrapped MeshInstance/model IBP skipped). Registered → the organic
+`sub_0e70`→AssignWorkplace path now sets +0x238 for real (was NULL/skipped). A/B GREEN:
+default economy combo crash-free, candidate sets byte-identical, housing intact; also
+un-nulls the `ResidenceComponent::OnCreate`→helper_9ef0 eviction path (verified safe live).
+
+**🔑 KEYSTONE RE-MAP (corrects prior notes; all lead-Ghidra-verified this session):**
+- `FUN_140002cc0` = **REMOVE** (search/compact/decrement), `FUN_140003110` = ADD. So
+  `ResidenceComponent::OnCreate` (0x14012a0e0 = helper_9ef0 evict + `002cc0` on townMgr+0x20)
+  **UN-registers** from townMgr+0x20 — it is teardown, NOT the registrar. (An earlier recon
+  claim that OnCreate registers into +0x20 was WRONG.) The real +0x20 ADD site is still
+  UNPINNED (not any Residence/WorkPlace/Work OnCreate).
+- `Entity_FindComponent_Storage` (0x140008090) matches **c7cf0 EXACTLY** (GetTypeId==c7cf0).
+  So whatever sits in `citizen+0x238` MUST carry a literal `c7cf0` ResidenceComponent
+  (worker-roster). `c7cf0` is instantiated **only** by `ResidenceComponent_Factory`
+  (0x140037440) from a **description's component list** — NOTHING bolts a c7cf0 onto an
+  already-built entity. ⇒ the ForesterLodge top entity (21 comps, no c7cf0) can NEVER be the
+  workplace; the roster lives on a **separate MultiObject job-host SUB-ENTITY** (its own
+  description lists residence-roster + InteractComponent c7900), and `citizen+0x238` points
+  at THAT sub-entity. `FUN_14012f520` (WorkPlaceComponent activation) seats `WPC+0x48`
+  profession from `*(gw+0xb0)+0x38` and registers into townMgr+0x100 / gw+0x118 — but does
+  NOT create a c7cf0 and does NOT touch townMgr+0x20.
+- **Candidate gates (citizenai_candidatelist.cpp / 0x14010dca0, verified):** Gather (id6/7)
+  needs `citizen+0x238`; **Work (id5) needs `citizen+0x68`** — main branch: `+0x68==0` →
+  FindHousing/Education (this is the LIVE state → why no Work), `+0x68!=0` → Work. Early
+  branch: `+0x68!=0 && +0x228!=0` → Work. AssignHousing sets +0x248 NOT +0x68. **What sets
+  +0x68 (and whether it's a cheap unlock vs the disease field) is the open decision point.**
+
+**Live baseline (full economy combo, crash-free):** `sub_0e70` runs per adult citizen but
+`townMgr+0x20` regCount=0; candidate set `{SeekHappiness8, Education3, Leisure12, Idle9}`,
+aiState=12 leisure-wander. Lodge spawns (BANISHED_LIVE_WORKPLACE) but has no c7cf0; all
+profession keys=0.
+
+**REMAINING PATH (two options, pending the +0x68 resolution):**
+- **If +0x68 is a settable settled/home flag** (not disease): set it on housed adults ⇒
+  Work(5) candidate fires ⇒ cheap unlock (no c7cf0 needed for Work, though Gather still needs
+  +0x238). Verify what State_Work then does without a real +0x238 workplace.
+- **Else (deep path):** materialize the MultiObject job-host sub-entity (c7cf0 roster sized
+  from ResidenceDescription + c7900 work-positions) → append to townMgr+0x20 via FUN_140003110
+  → sub_0e70 finds it → AssignWorkplace (now ported) seats +0x238. This is a distinct
+  substantial subsystem (MultiObjectComponent host materialization).
+
+### Phase 4 — original spec (superseded by the PROGRESS block above)
 
 **Objective:** `FindWorkplace` (called from CitizenComponent::Update when housed,
 citizencomponent.cpp:457) assigns citizens to a workplace, or a laborer default when
