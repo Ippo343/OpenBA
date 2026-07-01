@@ -1747,12 +1747,17 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
 // link and StartTown_GrowthInitResource stages growth at random progress, exactly like
 // retail (Random::RandFloat → FUN_140120db0). So growth STAGING + per-tick ticking work.
 //
-// Why MATURE_TREES is STILL needed as a stand-in: with live growth enabled the sim
-// eventually reaches GrowthComponent::Update → DoHarvestReset, which writes into the
-// natural-resource manager's per-tile grid (resourceMgr+0x80) — that grid is NOT built in
-// standalone, so the write faults (the entity/manager-materialization keystone, shared
-// with BANISHED_PRODUCE_SPAWN_ENTITY / storage). Until that manager grid is live,
-// full live tree growth is unsafe; this poke sets the harvest end-state directly instead.
+// M-A UPDATE (2026-07-01): the "DoHarvestReset faults because resourceMgr+0x80 is
+// not built" claim was a MISDIAGNOSIS. `*(gameWorld+0xF8)` is the `Game` object and
+// its +0x80 per-tile grid IS built in standalone (MapTileGrid_Build = the faithful
+// front-half of CreateNaturalResource_impl_ef20 0x14009ef20: dim*dim records, stride
+// 0x30). The real fault was a stray extra deref in the DoHarvestReset reimpl (it read
+// `*(uintptr_t*)gridBase` and wrote near-null). That is FIXED (growthcomponent.cpp),
+// and BANISHED_LIVE_GROWTH now runs the growth sim through DoHarvestReset crash-free
+// (verified: 8 harvest-resets, valid gridBase + in-bounds resIdx, 0-byte crash log).
+// ⇒ MATURE_TREES is no longer needed to AVOID A CRASH — live growth is safe. It
+// remains a default-OFF CONVENIENCE that makes trees instantly forester-harvestable
+// (naturally reaching the growth threshold takes a long sim horizon).
 //
 // The forester's harvest gate reads the NaturalResourceComponent's growth field directly
 // (natResComp+0x28 >= threshold 1.0, foresterwork.cpp), so we set that field to a mature

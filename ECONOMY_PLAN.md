@@ -734,12 +734,14 @@ Each remaining bypass exists *because* of that gap and cannot be removed without
    `GetTypeIdByName("ModelComponent")` fallback in `GrowthComponent_Startup`
    (`growthcomponent.cpp`) — scoped there so the verified shared produce/animation callers of
    3f60 stay byte-identical. With the fix + `BANISHED_LIVE_GROWTH`, all three siblings link and
-   `StartTown_GrowthInitResource` stages trees at random growth (retail-faithful). **Still
-   blocked from deleting MATURE_TREES:** live growth eventually reaches `GrowthComponent::Update
-   → DoHarvestReset`, which writes into the natural-resource manager's per-tile grid
-   (`resourceMgr+0x80`) — **unbuilt in standalone** → fault (crash symbolized to
-   `DoHarvestReset ← GrowthComponent_Update ← EntityList_Update`). That grid is the same
-   Defer-1/manager-materialization keystone. So MATURE_TREES remains a stand-in until it's live.
+   `StartTown_GrowthInitResource` stages trees at random growth (retail-faithful). **✅ FULLY CLOSED
+   by Brick M-A (2026-07-01):** the follow-on "DoHarvestReset faults on the unbuilt `resourceMgr+0x80`
+   grid" claim was itself a MISDIAGNOSIS. `*(gameWorld+0xF8)` is the `Game` object and its `+0x80`
+   grid IS built in standalone (`MapTileGrid_Build`, the front-half of `CreateNaturalResource_impl_ef20`).
+   The fault was a stray extra deref in the `DoHarvestReset` reimpl (wrote near-null); removing it makes
+   live growth reach harvest-reset crash-free (verified: 8 harvest-resets, 0-byte crash log). So this is
+   NOT the Defer-1/materialization keystone. `MATURE_TREES` is no longer needed to avoid a crash —
+   it's now only a default-OFF convenience (instant forester-harvestable trees). See Brick M-A above.
 
 **Net:** the genuinely-closeable items were closed (stale-claim correction; the c7a50/+0x30
 sibling-link bug). The rest are one keystone — **standalone entity/component/manager
@@ -752,16 +754,22 @@ default-OFF so the default build stays faithful + byte-clean.
 Prefer opus subagents + lead Ghidra-verify; A/B the default build after every brick; do NOT
 close any of these by adding null-guards (that re-introduces the very bypasses being removed).
 
-- **Brick M-A — Natural-resource manager tile grid (`resourceMgr+0x80`).** Unblocks **Defer 4**
-  (delete `MATURE_TREES`). `GrowthComponent::Update → DoHarvestReset` (growthcomponent.cpp:110)
-  writes `*(*(resourceMgr+0x80)) + 0x10 + resIdx*0x30` (resIdx = y*mapW+x; per-tile stride 0x30)
-  — that grid is unbuilt (zeroed) in standalone → WRITE fault. TASK: identify what object
-  `resourceMgr` is (the arg threaded into DoHarvestReset from `GrowthComponent_Update`) and where
-  retail allocates/builds its `+0x80` per-tile array at world-build (candidates: GameUpdateLoop::
-  Load, TownManager ctor 0x140090a30, a ResourceManager init); build it in standalone at
-  world-build. VERIFY: `BANISHED_LIVE_GROWTH` runs to a tree-maturity harvest-reset crash-free;
-  then the growth sim replaces `MATURE_TREES` (already staged via the committed +0x30 fix). NOTE
-  the +0x30 fix (this pass) is the prerequisite and is already done.
+- **Brick M-A — ✅ DONE (2026-07-01). Natural-resource manager tile grid (`resourceMgr+0x80`).**
+  Unblocks **Defer 4** (`MATURE_TREES` no longer needed to avoid a crash). **The premise was a
+  MISDIAGNOSIS — the grid is NOT unbuilt.** RE (Ghidra-verified): `*(gameWorld+0xF8)` is the `Game`
+  object, and its `+0x80` per-tile grid (`{data, size@+0x88, cap@+0x8c}`, stride 0x30, `dim*dim`
+  records, per-tile `+0x10`=8-byte ownerPos / `+0x2c`=growth byte / `+0x29`=type) IS built in
+  standalone by `MapTileGrid_Build` — the faithful front-half of `CreateNaturalResource_impl_ef20`
+  (0x14009ef20 → grid alloc `MemAlloc(dim*dim*0x30,8)`), run unconditionally at world-build
+  (gameupdateloop_load.cpp:1053). The real fault: the `DoHarvestReset` reimpl had a **stray extra
+  deref** — it computed `*( *(uintptr_t*)gridBase ) + 0x10 + resIdx*0x30` (reading the zeroed first
+  qword of tile-record 0 → wrote near-null). The original writes `*( gridBase + 0x10 + resIdx*0x30 )`
+  directly. **FIX = remove the extra deref** (`growthcomponent.cpp` DoHarvestReset, 1 line).
+  **VERIFIED** (`BANISHED_LIVE_GROWTH=1 GROWTH_TRACE=1 GROWTH_FORCE_HARVEST=1`): 8 `[GrowthHarvest]`
+  harvest-resets ran with valid `gridBase` + in-bounds `resIdx` (105…1127), **0-byte crash log**;
+  default combo (no LIVE_GROWTH) crash-free + byte-clean. Harnesses (default OFF): `BANISHED_GROWTH_TRACE`
+  (adds a per-harvest trace), `BANISHED_GROWTH_FORCE_HARVEST` (forces a tiny growthScale so the next
+  live tick exercises DoHarvestReset deterministically). No new grid-build code was needed.
 
 - **Brick M-B — Dirty-list Serialize fault (`BANISHED_PRODUCE_SPAWN_ENTITY`).** Unblocks **Defer 1**
   (resource depletion + physical ground-pile item). The produce item is built by
@@ -794,9 +802,10 @@ close any of these by adding null-guards (that re-introduces the very bypasses b
   (0x140112990, citizencomponent.cpp:582) pulls + decrements the barn count and hunger drops. Needs
   a FOOD producer too (forester makes LOG, not food) — a gatherer/farmer, or seed starting food.
 
-Suggested order: **M-A → M-B → M-D → M-C** (M-A extends the already-started Defer 4; M-C is the most
-entangled + carries the player-driven design decision). Each brick lands crash-safe + env-gated; the
-`FORCE_*`/`MATURE_TREES` harnesses retire one at a time as their brick lands.
+Suggested order: **M-A ✅ → M-B → M-D → M-C** (M-A DONE — was a 1-line extra-deref fix, not a
+grid build; the grid was already materialized. M-C is the most entangled + carries the player-driven
+design decision). Each brick lands crash-safe + env-gated; the `FORCE_*`/`MATURE_TREES` harnesses
+retire one at a time as their brick lands.
 
 ## Recommended agent sequence (the "do 1 then 2 then 3")
 

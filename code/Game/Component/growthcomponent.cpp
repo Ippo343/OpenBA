@@ -122,9 +122,40 @@ static void DoHarvestReset(uint8_t* comp, uintptr_t resourceMgr, float harvestAm
     if (s_fn_GetResourceIndex) {
         resIdx = s_fn_GetResourceIndex(comp);
     }
-    uintptr_t resMgrArray = *reinterpret_cast<uintptr_t*>(resourceMgr + 0x80);
+    // grid base = *(resourceMgr+0x80) = the Map cell grid (game+0x80, built in
+    // standalone by MapTileGrid_Build: dim*dim records, stride 0x30). Write the
+    // owner position 8-byte handle into this tile's record at +0x10. The original
+    // (GrowthComponent::Update 0x140120050) is:
+    //   *(*(resourceMgr+0x80) + 0x10 + resIdx*0x30) = ownerPos
+    // i.e. ONE deref of resourceMgr+0x80, then index by resIdx*0x30. A prior port
+    // had an extra deref (*(uintptr_t*)gridBase), which read the zeroed first qword
+    // of tile-record 0 and wrote to ~0x10 → access violation (misattributed to a
+    // "missing resourceMgr grid"; the grid exists — see maptilegrid.cpp).
+    uintptr_t gridBase = *reinterpret_cast<uintptr_t*>(resourceMgr + 0x80);
+    // M-A verification (env BANISHED_GROWTH_TRACE, default off → byte-unchanged):
+    // confirm the harvest-reset grid write is reached with a valid grid + in-bounds
+    // index. If gridBase were null / resIdx out of bounds this is where the old
+    // extra-deref faulted; printing once proves the fix runs crash-free.
+    {
+        static int s_hrState = -1;
+        static int s_hrCount = 0;
+        if (s_hrState < 0) {
+            const char* e = std::getenv("BANISHED_GROWTH_TRACE");
+            s_hrState = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_hrState == 1 && s_hrCount < 8) {
+            fprintf(stderr,
+                "[GrowthHarvest] DoHarvestReset resMgr=%p gridBase=%p resIdx=%d "
+                "-> &cell=%p ownerPos=%llx\n",
+                (void*)resourceMgr, (void*)gridBase, resIdx,
+                (void*)(gridBase + 0x10 + (int64_t)resIdx * 0x30),
+                (unsigned long long)ownerPos);
+            fflush(stderr);
+            s_hrCount++;
+        }
+    }
     *reinterpret_cast<uint64_t*>(
-        *reinterpret_cast<uintptr_t*>(resMgrArray) + 0x10 + (int64_t)resIdx * 0x30) = ownerPos;
+        gridBase + 0x10 + (int64_t)resIdx * 0x30) = ownerPos;
 
     // Reset growth to 0
     s_fn_CheckPtr(comp + 0x28);
@@ -523,6 +554,21 @@ void GrowthComponent_Startup(GrowthComponent* self) {
             r = s_fn_RandFloatTol(rng);
         }
         *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
+    }
+
+    // M-A verification harness (env BANISHED_GROWTH_FORCE_HARVEST, default off →
+    // byte-unchanged): force a tiny positive growthScale so the very next live tick
+    // crosses the harvest threshold and deterministically exercises the
+    // DoHarvestReset grid write (resourceMgr+0x80 = Game+0x80 cell grid), without
+    // waiting for slow natural growth to reach the ~5.0 threshold. Proves the
+    // extra-deref fix runs crash-free against the (already-built) tile grid.
+    {
+        static int s_force = -1;
+        if (s_force < 0) {
+            const char* e = std::getenv("BANISHED_GROWTH_FORCE_HARVEST");
+            s_force = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+        }
+        if (s_force == 1) *reinterpret_cast<float*>(comp + 0x4c) = 0.001f;
     }
 }
 
