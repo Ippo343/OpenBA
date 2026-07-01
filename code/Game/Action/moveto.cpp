@@ -76,8 +76,14 @@ static void (*s_fn_ExternalPtr_Serialize)(void* extPtr, void* serializer) = null
 // fn_IsDerivedFrom via IAT at 0x140152a98
 static bool (*s_fn_IsDerivedFrom)(void* obj, uint32_t typeId) = nullptr;
 
-// Math::Vector2::Dot(this, out) via IAT at 0x140152458
-static void (*s_fn_Vector2_Dot)(void* vec2, void* outScalar) = nullptr;
+// Math::Scalar Math::Vector2::Dot(Vector2 const& other) const via IAT at 0x140152458
+// Verified in Ghidra (mangled ?Dot@Vector2@Math@@QEBA?AVScalar@2@AEBV12@@Z, callers
+// 0x1400c8b21 / 0x1400c8776): returns Math::Scalar BY VALUE, so this is the member
+// struct-return ABI — RCX=this, RDX=hidden retptr (the out scalar), R8=other. The
+// result IS written to the RDX out-param (the caller reads it back, not XMM0). The
+// bug was calling it 2-arg, leaving R8 (the "other" operand) uninitialized → the dot
+// read garbage floats → NaN distances. Pass the 3rd operand explicitly (self-dot here).
+static void (*s_fn_Vector2_Dot)(void* thisVec, void* outScalar, void* otherVec) = nullptr;
 
 // Math::Vector2::Normalize(this) via IAT at 0x1401526b0
 // Value-return member ABI (verified from exe callers 0x1400cc70c): RCX=this, RDX=retbuf,
@@ -210,7 +216,7 @@ bool MoveTo_ResolveFuncs() {
 
     // Vector2::Dot via IAT at 0x140152458
     iat = ResolveAddr(Module::Exe, 0x140152458);
-    if (iat) s_fn_Vector2_Dot = *reinterpret_cast<void(**)(void*, void*)>(iat);
+    if (iat) s_fn_Vector2_Dot = *reinterpret_cast<void(**)(void*, void*, void*)>(iat);
 
     // Vector2::Normalize via IAT at 0x1401526b0
     iat = ResolveAddr(Module::Exe, 0x1401526b0);
@@ -444,8 +450,8 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     float dx = curX - destX;
     float dy = curY - destY;
     float vec2[2] = { dx, dy };
-    float dotResult;
-    s_fn_Vector2_Dot(vec2, &dotResult);
+    float dotResult = 0.0f;
+    s_fn_Vector2_Dot(vec2, &dotResult, vec2);  // R8=other=self → dx²+dy²
     float dist = s_fn_Sqrtf(dotResult);
 
     // If already close enough, return 0 (arrived)
@@ -638,8 +644,8 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         s_fn_Vector3_Ctor_Floats(diffVec, dx2, dy2, dz);
 
         float dotVec[2] = { diffVec[0], diffVec[1] };
-        float dotOut;
-        s_fn_Vector2_Dot(dotVec, &dotOut);
+        float dotOut = 0.0f;
+        s_fn_Vector2_Dot(dotVec, &dotOut, dotVec);  // R8=other=self → dx²+dy²
         float distToGoal = s_fn_Sqrtf(dotOut);
 
         if (distToGoal < *s_fMinDistSq) {

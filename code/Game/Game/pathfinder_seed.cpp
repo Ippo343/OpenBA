@@ -199,6 +199,25 @@ extern "C" void Pathfinder_Seed(void* gameObjV, int dim) {
             flags[i] = static_cast<uint8_t>((flags[i] & 0x80) | type);
             flags[i] = static_cast<uint8_t>((blocked ? 0x80 : 0) | (flags[i] & 0x7f));
         }
+        // Bug-A diagnostic (BANISHED_PF_TRACE): confirm the primed flags array mirrors
+        // the live cell grid (flags&0x7f == cell+0x29), and tally walkable cells under
+        // the 0xe1f mask. If flags==cellgrid, A* and the region flood-fill see the same
+        // grid; any A* failure on a region-connected pair then points at the region map.
+        const char* e = getenv("BANISHED_PF_TRACE");
+        if (e && e[0] && e[0] != '0') {
+            int mismatch = 0, walkFlags = 0, walkCells = 0, blockedN = 0;
+            for (int i = 0; i < cellN; ++i) {
+                uint8_t cty = cellGrid[i * 0x30 + 0x29];
+                uint8_t fty = flags[i] & 0x7f;
+                if (fty != cty) ++mismatch;
+                if ((0xe1fu >> (cty & 0x1f)) & 1u) ++walkCells;
+                if ((0xe1fu >> (fty & 0x1f)) & 1u) ++walkFlags;
+                if (flags[i] & 0x80) ++blockedN;
+            }
+            fprintf(stderr, "[PfSeedScan] cells=%d flags/cell-mismatch=%d walkable(flags)=%d walkable(cells)=%d blockedBit=%d\n",
+                    cellN, mismatch, walkFlags, walkCells, blockedN);
+            fflush(stderr);
+        }
     }
 
     // Priming is complete. Flip to ASYNC so runtime path queries (cmd 5 via a6c10) queue and

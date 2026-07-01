@@ -323,9 +323,14 @@ void Pf_AstarRelax_d320(int* param_1, int param_2, uint32_t param_3, uint32_t pa
     int64_t lVar4;
     int64_t* plVar5;
     int64_t local_res8;
-    int local_28;
     int local_24;
-    uint32_t local_20;
+    // AVL key is a CONTIGUOUS 3-int buffer {cell(+0x00), seq(+0x04), fcost(+0x08)}:
+    // d450 reads key[2]=fcost / key[1]=seq and d730 stores all three into the node.
+    // The exe uses three consecutive stack slots (local_28/local_24/local_20); porting
+    // those as separate C++ locals is the recurring "contiguous-locals gotcha" — GCC is
+    // free to reorder/pad them, so &local_28[1]/[2] would read garbage → corrupted key
+    // → spurious d450 match → two cells share one AVL node → free-list double-free.
+    uint32_t keybuf[3];
 
     plVar1 = reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 2) +
                                         static_cast<int64_t>(param_2) * 0x18);
@@ -357,10 +362,10 @@ void Pf_AstarRelax_d320(int* param_1, int param_2, uint32_t param_3, uint32_t pa
     *reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(plVar1) + 0x14) = param_4; // node+0x14 = g
     local_24 = param_1[1];
     param_1[1] = local_24 + 1;
-    local_20 = param_5;
-    local_28 = param_2;
-    plVar5 = Pf_AvlInsert_d450(reinterpret_cast<int64_t*>(param_1 + 6), &local_res8,
-                               reinterpret_cast<uint32_t*>(&local_28));
+    keybuf[0] = static_cast<uint32_t>(param_2);       // cell   (node+0x00)
+    keybuf[1] = static_cast<uint32_t>(local_24);      // seq    (node+0x04)
+    keybuf[2] = param_5;                              // fcost  (node+0x08)
+    plVar5 = Pf_AvlInsert_d450(reinterpret_cast<int64_t*>(param_1 + 6), &local_res8, keybuf);
     *plVar1 = *plVar5;  // store AVL node back-pointer into node+0x00
     (void)local_24;
 }

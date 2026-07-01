@@ -19,6 +19,8 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Locally-resolved dispatch-slot / math helpers
@@ -641,11 +643,29 @@ void* ActMv_PathfinderQuery_9cfb0(void* gridp, void* outResultp, uint64_t flags,
     uint32_t mask = static_cast<uint32_t>(flags) | typeDest | typeSrc;
 
     bool reachable = (mask & typeDest) && (mask & typeSrc);
+    int16_t rd = *reinterpret_cast<const int16_t*>(recDest + 0x26);
+    int16_t rs = *reinterpret_cast<const int16_t*>(recSrc + 0x26);
     if (reachable && (mask & 0x1e0u) == 0) {
-        int16_t rd = *reinterpret_cast<const int16_t*>(recDest + 0x26);
-        int16_t rs = *reinterpret_cast<const int16_t*>(recSrc + 0x26);
         if (rd == 0 || rs == 0 || rd != rs)
             reachable = false;
+    }
+
+    // Bug-A diagnostic (BANISHED_PF_TRACE, default off): the decisive per-query
+    // evidence — raw src/dest terrain TYPE bytes (cell+0x29), region labels
+    // (cell+0x26), the final walk-mask, and the reachable verdict. An empty A*
+    // for a "reachable" pair means the walk-mask/region flood-fill disagree.
+    {
+        static int s_q = -1, s_qN = 0;
+        if (s_q < 0) { const char* e = std::getenv("BANISHED_PF_TRACE"); s_q = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_q == 1 && s_qN < 80) { ++s_qN;
+            uint8_t tSrc  = *reinterpret_cast<const uint8_t*>(recSrc  + 0x29);
+            uint8_t tDest = *reinterpret_cast<const uint8_t*>(recDest + 0x29);
+            std::fprintf(stderr,
+                "[PFQuery9cfb0] src=%u(type=%u,rgn=%d) dest=%u(type=%u,rgn=%d) flags=0x%llx mask=0x%x -> %s\n",
+                srcCell, tSrc, (int)rs, destCell, tDest, (int)rd,
+                (unsigned long long)flags, mask, reachable ? "A*-RUN" : "NO-PATH(gate)");
+            std::fflush(stderr);
+        }
     }
 
     if (!reachable) {
