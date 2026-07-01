@@ -45,6 +45,13 @@ static constexpr float kDeg2Rad    = 3.14159265358979323846f / 180.0f;
 // building registry is brought up. Set in StartTown_SpawnStructures.
 void* g_pForceWorkBuilding = nullptr;
 
+// Phase 4 ASSIGN half: the forester Profession key (= the lodge's WorkPlaceDescription
+// desc+0x20 Profession*) captured in StartTown_SpawnWorkplace, consumed by the deferred
+// StartTown_EmployForesters pass (which seats laborers at the lodge -> citizen+0x238).
+static uint64_t g_foresterProfKey = 0;
+// AssignWorkplace port (brick 4-2) — sets citizen+0x238/+0x240 + rosters. 0x1401163d0.
+extern "C" void CitizenComponent_AssignWorkplace(void* self, void* workplaceIBP, int slotIndex);
+
 // First resolved natural-resource (tree) TEMPLATE, captured in the resource-scatter spawn
 // loop (StartTown_SpawnResources). A resource template is a description container
 // ({sub-desc array @+0x28, count @+0x30}) carrying the produced material's
@@ -58,6 +65,9 @@ void* g_pSampleResourceTemplate = nullptr;
 // StartTown_AssignFoundingHousing to pair families to houses (townMgr+0x20 is never
 // populated in standalone — see the capture site). Cleared at the start of each spawn.
 static std::vector<int64_t> g_foundingHouseIBPs;
+// Phase 4: founding-family CitizenComponents captured during AssignFoundingHousing;
+// the deferred employ pass seats idle adults from this list at the lodge.
+static std::vector<void*> g_foundingCitizens;
 
 // Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp). Sets the
 // citizen's residence ref (+0x248) AND rosters the citizen into the house's
@@ -843,6 +853,7 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
             void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
             uint64_t profKey = wpDesc ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(wpDesc) + 0x20) : 0;
             if (profKey != 0) *reinterpret_cast<uint64_t*>(w + 0x48) = profKey;
+            g_foresterProfKey = profKey;   // for the deferred employ pass
 
             // Enable the workplace: WPC+0x50 = 1. Retail sets this via the activation tail
             // Entity_impl_fc00(WPC, 1) (0x14012fc00, first line `*(WPC+0x50)=param_2`); the
@@ -880,6 +891,66 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
     g_pForceWorkBuilding = entity;
     fprintf(stderr, "[startTown::workplace] ForesterLodge spawned tile(%d,%d) fp=%dx%d "
             "-> g_pForceWorkBuilding=%p\n", tileX, tileY, fpW, fpH, entity);
+    fflush(stderr);
+}
+
+// ============================================================================
+// Phase 4 ASSIGN half (env BANISHED_LIVE_WORKPLACE) — seat laborers at the lodge.
+//
+// The faithful producer-employment flow is player-driven (ProfessionUI worker count
+// -> FindAvailableBuilding -> the cbf0/ca20/c5f0/c4b0 seat cascade). Here we drive the
+// same OUTCOME programmatically (as if the player set the forester worker count to the
+// lodge capacity): pick idle adult laborers and employ them via the ported
+// CitizenComponent::AssignWorkplace (0x1401163d0), which sets citizen+0x238 (workplace)
+// + citizen+0x240 (slot) and rosters the worker. We also set citizen+0x1f0 (profession)
+// to the forester Profession* exactly as the cbf0 cascade does. Once +0x238 is set, a
+// healthy adult's CitizenAI candidate set gains Gather(6/7)/Work(5) and the citizen
+// paths to the lodge. Runs after citizens + founding housing exist. Env-gated + null-
+// guarded; a no-op when no lodge/citizens/key.
+static void StartTown_EmployForesters() {
+    if (!WorkplaceEnvOn()) return;
+    if (g_foresterProfKey == 0 || !g_pForceWorkBuilding) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !fn_InternalBasePtr_CheckPtr) return;
+    int64_t townMgr = *reinterpret_cast<int64_t*>(
+        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
+    if (!townMgr) return;
+
+    // Lodge worker capacity (WorkComponent+0x30; FindAvailableBuilding already cached it
+    // via CalcMaxWorkers). Default to the ForesterLodge template _maxWorkerCount=4.
+    void* wc = FindComponentOnEntity(g_pForceWorkBuilding, TypeId("WorkComponent"));
+    int capacity = (wc && *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(wc) + 0x30) > 0)
+                 ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(wc) + 0x30) : 4;
+
+    // Citizen source = the founding-family CitizenComponents captured during housing
+    // (townMgr+0xa0's own citizen list is not populated in standalone).
+    int citCount = (int)g_foundingCitizens.size();
+    int64_t lodgeIBP = reinterpret_cast<int64_t>(g_pForceWorkBuilding);
+    int employed = 0;
+    for (int i = 0; i < citCount && employed < capacity; ++i) {
+        int64_t citizen = reinterpret_cast<int64_t>(g_foundingCitizens[i]);
+        if (citizen == 0) continue;
+        int64_t desc = *reinterpret_cast<int64_t*>(citizen + 0x288);
+        if (desc == 0) continue;
+        // Adult (age >= adultAge desc+0x44), idle (no active task +0x208), unemployed (+0x238==0).
+        bool adult = *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(citizen + 0x3c);
+        bool idle  = *reinterpret_cast<int64_t*>(citizen + 0x208) == 0;
+        bool free  = *reinterpret_cast<int64_t*>(citizen + 0x238) == 0;
+        if (!(adult && idle && free)) continue;
+
+        *reinterpret_cast<uint64_t*>(citizen + 0x1f0) = g_foresterProfKey;   // profession = forester
+        int64_t wpIBP = lodgeIBP;
+        CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(citizen), &wpIBP, employed);
+
+        int64_t assigned = *reinterpret_cast<int64_t*>(citizen + 0x238);
+        fprintf(stderr, "[Phase4Employ] seat #%d citizen=%p prof(+0x1f0)=0x%llx workplace(+0x238)=%p %s\n",
+                employed, reinterpret_cast<void*>(citizen),
+                (unsigned long long)*reinterpret_cast<uint64_t*>(citizen + 0x1f0),
+                reinterpret_cast<void*>(assigned),
+                (assigned == lodgeIBP) ? "OK" : "FAIL");
+        ++employed;
+    }
+    fprintf(stderr, "[Phase4Employ] employed %d/%d forester(s) at the lodge (citizenList count=%d)\n",
+            employed, capacity, citCount);
     fflush(stderr);
 }
 
@@ -1122,6 +1193,7 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
         for (void* ent : families[f]) {
             void* citComp = FindComponentOnEntity(ent, tidCitizen);
             if (!citComp) continue;
+            g_foundingCitizens.push_back(citComp);   // Phase 4: source for the employ pass
             // FULL faithful AssignHousing (0x140111ee0): detaches the citizen from any prior
             // residence then (a) sets the residence reference CitizenComponent+0x248 — the
             // field the per-tick Update reads as "housed" — AND (b) rosters the citizen into
@@ -2079,6 +2151,10 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] citizens: spawned %d; entityList count %d -> %d\n",
             nc, afterStruct, afterCitizens);
     fflush(stderr);
+
+    // PHASE 4 ASSIGN half — seat laborers at the lodge (env BANISHED_LIVE_WORKPLACE) now
+    // that citizens + founding housing exist. Sets citizen+0x238 -> Gather/Work candidates.
+    StartTown_EmployForesters();
 
     // RESOURCES (impl_a12b0) — perlin scatter of trees/stone/iron across the map,
     // excluding the town site (radius = townSize, sizeSq = size*size).
