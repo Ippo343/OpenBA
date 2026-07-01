@@ -309,15 +309,28 @@ sa-deploy: standalone-debug
 	rm -f "$(BANISHED_DIR)/standalone_debug.log"
 	@echo "Deployed to $(BANISHED_DIR)/reimpl-x64.exe"
 
+# Live-feature defaults for the standalone test driver. These three feature
+# groups are user-verified working and enabled by default on every sa-run so the
+# game launches with the GUI, citizen status-icon sprites, and the full live
+# citizen-AI stack without having to set envs by hand. To A/B against a bare run,
+# override on the command line (e.g. `BANISHED_LIVE_CITIZENAI=0 mingw32-make sa-run`)
+# or launch reimpl-x64.exe directly — the code gates keep their byte-faithful
+# default-off semantics; this only sets them at launch.
+SA_LIVE_ENV = \
+	BANISHED_LIVE_TOOLBAR=1 BANISHED_GAME_PRELOAD=1 \
+	BANISHED_LIVE_STATUSICON=1 BANISHED_LIVE_STATUSICON_DRAW=1 BANISHED_LIVE_CITIZEN_STATUSICON=1 \
+	BANISHED_LIVE_CITIZEN=1 BANISHED_LIVE_CITIZEN_UPDATE=1 BANISHED_LIVE_CITIZENAI=1 \
+	BANISHED_LIVE_CHARACTER=1 BANISHED_LIVE_CHARACTER_MOVETICK=1 BANISHED_LIVE_STATEMACHINE=1
+
 sa-run: sa-deploy
-	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 start reimpl-x64.exe
-	@echo "Launched standalone reimpl (BANISHED_AUTOSTART=1 -> auto New Game)"
+	cd "$(BANISHED_DIR)" && BANISHED_AUTOSTART=1 $(SA_LIVE_ENV) start reimpl-x64.exe
+	@echo "Launched standalone reimpl (autostart + GUI/sprites/citizen-AI live)"
 
 # Same as sa-run but stops at the main menu (no auto-new-game). Use when you
-# want to exercise the menu itself.
+# want to exercise the menu itself. Still enables the live-feature defaults.
 sa-run-menu: sa-deploy
-	cd "$(BANISHED_DIR)" && start reimpl-x64.exe
-	@echo "Launched standalone reimpl (menu only, no autostart)"
+	cd "$(BANISHED_DIR)" && $(SA_LIVE_ENV) start reimpl-x64.exe
+	@echo "Launched standalone reimpl (menu only; GUI/sprites/citizen-AI live)"
 
 # Include auto-generated header dependency files
 -include $(OBJECTS:.o=.d)
