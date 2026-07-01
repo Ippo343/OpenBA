@@ -402,14 +402,53 @@ task). ⇒ the visible organic-employment outcome requires the **MultiObject job
 materialization** (a distinct substantial subsystem) regardless of +0x68. That is the Phase-4 keystone
 for a dedicated next session.
 
-**REMAINING PATH (two options, pending the +0x68 resolution):**
-- **If +0x68 is a settable settled/home flag** (not disease): set it on housed adults ⇒
-  Work(5) candidate fires ⇒ cheap unlock (no c7cf0 needed for Work, though Gather still needs
-  +0x238). Verify what State_Work then does without a real +0x238 workplace.
-- **Else (deep path):** materialize the MultiObject job-host sub-entity (c7cf0 roster sized
-  from ResidenceDescription + c7900 work-positions) → append to townMgr+0x20 via FUN_140003110
-  → sub_0e70 finds it → AssignWorkplace (now ported) seats +0x238. This is a distinct
-  substantial subsystem (MultiObjectComponent host materialization).
+**✅ +0x68 RESOLVED = strictly the DISEASE field (recon, exhaustive writer analysis).** Single
+writer `CitizenComponent_impl_6b90` (0x140116b90) `*(cz+0x68)=diseaseDescriptor` (+ duration
++0x70/+0x78, town notification gw+0x138, contagion). Callers = random outbreak (helper_2620
+0x140112620), contagion spread (helper_2470 0x140112470), debug (0x14005ff30). Type c5948 =
+disaster/affliction descriptor. Update (0x140112e70) only READS +0x68. The cc:568 "has profession"
+read is a MISREAD — it's the SICK status icon. **NO cheap unlock: setting +0x68 marks the citizen
+diseased (death timer + contagion) and still yields no Work candidate.** CORRECTION to my earlier
+read: a HEALTHY adult (+0x68==0) IS the normal path and DOES reach Work/Gather (states 6/7) — gated
+purely on **+0x238 (workplace) != 0** (+ age>=adult + no active-task +0x208). State 5 (the +0x68!=0
+branch) is the sick-handling state, not general Work.
+
+**⇒ THE SINGLE PHASE-4 BLOCKER = +0x238 (empty workplace).** How it's reached is now settled by the
+GAME TEMPLATES (ToolKit/resource/Template, the ground truth):
+
+**🔑🔑 TEMPLATE-VERIFIED CORRECTION (2026-07-01) — the "c7cf0 job-host sub-entity" theory is REFUTED;
+producers use the WorkPlaceComponent path, and it is PLAYER-DRIVEN.**
+- `residence` (⇒ ResidenceComponent c7cf0) is declared ONLY by housing: WoodHouse/StoneHouse/Hostel.
+  `multiobject` (⇒ MultiObjectComponent sub-entities) ONLY by Cemetery/Pasture/Tunnel/WoodBridge.
+  **The ForesterLodge (and every gather/hunt/fish producer) declares NEITHER** — it has `work`
+  [retail data elided]
+  profession=forester) + `storage`/`interact`/`radius`/`forester`. So there is NO c7cf0 and NO
+  MultiObject sub-entity for producers — the roster lives on **WorkComponent(c8070, capacity) +
+  WorkPlaceComponent(c80e0, +0x58/+0x60 worker roster)**.
+- ⇒ `sub_0e70`/townMgr+0x20/c7cf0 is the **HOUSING/occupant finder** (houses only), NOT the producer
+  path. `Entity_FindComponent_Storage`(c7cf0) returns null on a producer → AssignWorkplace's a710
+  roster-add is (correctly) the guarded no-op path for producers; the producer's roster is managed by
+  the WorkPlaceComponent path instead.
+- ⇒ **Forester employment = WorkPlaceComponent activation (FUN_14012f520: seat WPC+0x48 profession +
+  register into townMgr+0x100 profession BST + gw+0x118) → `FindAvailableBuilding` (0x14008d100, reads
+  townMgr+0x100, returns the lodge when its c80e0 roster < c8070 capacity) → the ProfessionUI
+  worker-count assign cascade (`CitizenComponent_impl_dd10` 0x14007dd10 → 0x14008cbf0/ca20/c5f0/c4b0)
+  → AssignWorkplace (brick 4-2) sets +0x238.** This is **PLAYER-DRIVEN** (the player sets the worker
+  count via ProfessionUI); there is NO organic auto-assigner for producers (the optimizer FUN_1400d62a0
+  only rebalances existing workers). This re-confirms the ORIGINAL [[reference_citizen_employment_path]]
+  framing; this session's earlier c7cf0-sub-entity detour was wrong (game data settles it).
+
+**REMAINING FAITHFUL PHASE-4 WORK (next session, well-scoped, brick 4-2 already in place):**
+1. Bring WorkPlaceComponent live enough to run FUN_14012f520 on the spawned lodge (seat WPC+0x48 from
+   `*(gw+0xb0)+0x38` = the forester Profession + register into townMgr+0x100). Precondition: the
+   forester Profession must be seated in the ProfessionList (gw+0xb0) — verify it loads from
+   `Game/Profession/Profession.rsc:forester`.
+2. Port `FindAvailableBuilding` (0x14008d100) + the assign cascade (impl_dd10 0x14007dd10 / 0x14008cbf0
+   / ca20 / c5f0 / c4b0).
+3. Drive it programmatically (mirror the ProfessionUI worker-count increment) to seat one forester →
+   AssignWorkplace sets +0x238 → the healthy adult's Gather(6/7)/Work candidates fire → citizen paths
+   to the lodge and works. (Or, for the HOUSING/occupant sub_0e70 path: populate townMgr+0x20 with the
+   founding houses' c7cf0 via 9de0 — but that is the residence finder, a separate concern.)
 
 ### Phase 4 — original spec (superseded by the PROGRESS block above)
 
