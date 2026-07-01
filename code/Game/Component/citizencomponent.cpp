@@ -18,6 +18,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers for Update
@@ -2051,12 +2052,196 @@ void* CitizenComp_Update_sub_0e70(int64_t param_1, void* param_2, int* param_3, 
         }
     }
 
-    // Fallback: full template scan is deeply coupled to the world grid + pathing.
-    // Port the early-out structure; when the citizen has no own workplace (+0x238==0)
-    // or no candidate is found, return a null IBP (the original's LAB_140111497 path).
-    // The exhaustive site search is intentionally conservative here: it returns null
-    // rather than risk an incorrect site pick, matching the "no work found" branch.
-    (void)param_4; (void)bestSlot;
+    // ---- Faithful 1:1 port of the townMgr scan (0x140110e70) ----
+    // townMgr = *(gameWorld+0xf0); registry array *(townMgr+0x20), count *(townMgr+0x28).
+    // Citizen fairness pre-scan uses the citizen list *(townMgr+0xa0)/*(townMgr+0xa8).
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    int64_t townMgr = *reinterpret_cast<int64_t*>(gw + 0xf0);
+
+    static int s_phase1Diag = -1;
+    if (s_phase1Diag < 0) {
+        const char* e = getenv("BANISHED_PHASE1_EMPLOY");
+        s_phase1Diag = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+
+    // Component finder on an entry entity (comp list +0x30 array / +0x38 count,
+    // GetTypeId via vtable+0x10, then IsDerivedFrom). Matches Entity_FindComponent_*.
+    auto FindEntityComp = [](int64_t entity, uint32_t* typeIdPtr) -> void* {
+        if (!typeIdPtr || *typeIdPtr == 0) return nullptr;
+        uint32_t tid = *typeIdPtr;
+        int cnt = *reinterpret_cast<int*>(entity + 0x38);
+        int64_t arr = *reinterpret_cast<int64_t*>(entity + 0x30);
+        for (int i = 0; i < cnt; i++) {
+            void** ibp = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+            fn_InternalBasePtr_CheckPtr(ibp);
+            int64_t comp = *reinterpret_cast<int64_t*>(ibp);
+            if (comp == 0) continue;
+            int64_t vt = *reinterpret_cast<int64_t*>(comp);
+            typedef uint32_t (*getType_t)(void*);
+            uint32_t ctid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
+            if (ctid == tid) {
+                void** ibp2 = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+                fn_InternalBasePtr_CheckPtr(ibp2);
+                void* resolved = *ibp2;
+                return fn_IsDerivedFrom(resolved, tid) ? resolved : nullptr;
+            }
+        }
+        return nullptr;
+    };
+
+    int64_t bestPartial = 0;  // lVar19 (reused below as partial-best accumulator)
+
+    // Pre-scan (only when the citizen already holds a workplace): fairness gate for
+    // the "extra work" second call. Bail (return null) if any adult coworker is idle
+    // or if our workplace is nearly full while a coworker's still has room.
+    if (*reinterpret_cast<int64_t*>(sp + 0x238) != 0) {
+        fn_InternalBasePtr_CheckPtr(sp + 0x238);
+        int64_t ownStoreIBP = 0;
+        if (s_fn_EntityFindCompStorage)
+            s_fn_EntityFindCompStorage(*reinterpret_cast<int64_t*>(sp + 0x238), &ownStoreIBP);
+        int citCount = *reinterpret_cast<int*>(townMgr + 0xa8);
+        for (int64_t i = 0; i < citCount; i++) {
+            int64_t other = *reinterpret_cast<int64_t*>(
+                *reinterpret_cast<int64_t*>(townMgr + 0xa0) + i * 8);
+            if (other == param_1) continue;
+            fn_InternalBasePtr_CheckPtr(&other);
+            if (*reinterpret_cast<float*>(*reinterpret_cast<int64_t*>(other + 0x288) + 0x44)
+                    <= *reinterpret_cast<float*>(other + 0x3c)
+                && *reinterpret_cast<int64_t*>(other + 0x208) == 0) {
+                fn_InternalBasePtr_CheckPtr(&other);
+                if (*reinterpret_cast<int64_t*>(other + 0x238) == 0) {
+                    fn_InternalBasePtr_Ctor(param_2, nullptr);  // LAB_140111497
+                    return param_2;
+                }
+                fn_InternalBasePtr_CheckPtr(&other);
+                int64_t otherWp = *reinterpret_cast<int64_t*>(other + 0x238);
+                fn_InternalBasePtr_CheckPtr(&otherWp);
+                int64_t otherStoreIBP = 0;
+                if (s_fn_EntityFindCompStorage)
+                    s_fn_EntityFindCompStorage(otherWp, &otherStoreIBP);
+                fn_InternalBasePtr_CheckPtr(&ownStoreIBP);
+                if (*reinterpret_cast<int*>(ownStoreIBP + 0x58) == 1) {
+                    fn_InternalBasePtr_CheckPtr(&otherStoreIBP);
+                    if (1 < *reinterpret_cast<int*>(otherStoreIBP + 0x58)) {
+                        fn_InternalBasePtr_Ctor(param_2, nullptr);  // LAB_140111497
+                        return param_2;
+                    }
+                }
+            }
+        }
+    }
+
+    int count = *reinterpret_cast<int*>(townMgr + 0x28);
+    int* mapInfo = *reinterpret_cast<int**>(gw + 0xf8);
+    if (s_phase1Diag)
+        fprintf(stderr, "[Phase1Employ] sub_0e70 self=%p townMgr=%p regCount=%d param4=%d\n",
+                reinterpret_cast<void*>(param_1), reinterpret_cast<void*>(townMgr),
+                count, (int)param_4);
+
+    // The original computes the home cell then loops the registry; when the registry
+    // is empty the home block is dead (its result is only read inside the loop), so we
+    // gate it behind count>0 — a byte-faithful no-op when townMgr+0x20 is empty.
+    if (count > 0) {
+        fn_InternalBasePtr_CheckPtr(sp + 0x278);
+        int64_t homeEntity = *reinterpret_cast<int64_t*>(sp + 0x278);
+        if (homeEntity == 0) { fn_InternalBasePtr_Ctor(param_2, nullptr); return param_2; }
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(homeEntity + 0x68));
+        int64_t homeComp = *reinterpret_cast<int64_t*>(homeEntity + 0x68);
+        if (homeComp == 0) { fn_InternalBasePtr_Ctor(param_2, nullptr); return param_2; }
+        int mapW = *mapInfo;
+        int homeX = static_cast<int>(*reinterpret_cast<float*>(homeComp + 0x158) + static_cast<float>(mapW >> 1));
+        int homeY = static_cast<int>(*reinterpret_cast<float*>(homeComp + 0x15c) + static_cast<float>(mapW >> 1));
+        if (homeX < 0) homeX = 0;
+        if (mapW <= homeX) homeX = mapW - 1;
+        if (homeY < 0) homeY = 0;
+        if (mapW <= homeY) homeY = mapW - 1;
+        int64_t homeCellIdx = static_cast<int64_t>(homeY * mapW + homeX);
+
+        for (int64_t entryIdx = 0; entryIdx < count; entryIdx++) {
+            int64_t entry = *reinterpret_cast<int64_t*>(
+                *reinterpret_cast<int64_t*>(townMgr + 0x20) + entryIdx * 8);  // local_98
+            fn_InternalBasePtr_CheckPtr(&entry);
+
+            void* resComp = FindEntityComp(entry, s_TypeId_Residence);   // DWORD_1401c7cf0
+            if (!resComp) continue;   // registered entries always carry one; guard.
+            int64_t resIBP = 0;
+            fn_InternalBasePtr_Ctor(&resIBP, resComp);
+
+            bool consider;
+            if (param_4 != '\0') {
+                consider = true;
+            } else {
+                fn_InternalBasePtr_CheckPtr(&resIBP);
+                consider = (*reinterpret_cast<int*>(resIBP + 0x58) < 2);
+            }
+            if (!consider) continue;
+
+            void* interactComp = FindEntityComp(entry, s_TypeId_Position);  // DAT_1401c7900
+            int64_t interactIBP = 0;
+            fn_InternalBasePtr_Ctor(&interactIBP, interactComp);
+            if (!interactComp) continue;   // no work-positions -> can't seat a worker.
+
+            fn_InternalBasePtr_CheckPtr(&resIBP);
+            int rosterCount = *reinterpret_cast<int*>(resIBP + 0x58);
+            int64_t rosterOff = 0;
+            for (int slot = 0; slot < rosterCount; slot++) {
+                fn_InternalBasePtr_CheckPtr(&resIBP);
+                int64_t rosterBase = *reinterpret_cast<int64_t*>(resIBP + 0x50);
+                if (*reinterpret_cast<int*>(rosterBase + 8 + rosterOff) < 1) {  // free slot
+                    fn_InternalBasePtr_CheckPtr(&interactIBP);
+                    float pos[3] = {0.0f, 0.0f, 0.0f};
+                    if (s_fn_Entity_impl_2e20)
+                        s_fn_Entity_impl_2e20(interactIBP, pos, 0, 0, nullptr);
+                    int mw = *mapInfo;
+                    int wpX = static_cast<int>(pos[0] + static_cast<float>(mw >> 1));
+                    int wpY = static_cast<int>(pos[1] + static_cast<float>(mw >> 1));
+                    if (wpX < 0) wpX = 0;
+                    if (mw <= wpX) wpX = mw - 1;
+                    if (wpY < 0) wpY = 0;
+                    if (mw <= wpY) wpY = mw - 1;
+                    if (s_fn_FUN_14009c480) s_fn_FUN_14009c480(mapInfo, mapInfo, 0, 0);
+                    int64_t cellBase = *reinterpret_cast<int64_t*>(
+                        reinterpret_cast<uint8_t*>(mapInfo) + 0x80);
+                    int64_t homeCellPtr = homeCellIdx * 0x30 + cellBase;
+                    int64_t wpCellPtr = static_cast<int64_t>(wpY * mw + wpX) * 0x30 + cellBase;
+                    uint32_t wpBit   = 1u << (*reinterpret_cast<uint8_t*>(wpCellPtr + 0x29) & 0x1f);
+                    uint32_t homeBit = 1u << (*reinterpret_cast<uint8_t*>(homeCellPtr + 0x29) & 0x1f);
+                    uint32_t both = homeBit | wpBit;
+                    uint32_t mask = both | 0xe1f;
+                    short hr = *reinterpret_cast<short*>(homeCellPtr + 0x26);
+                    short wr = *reinterpret_cast<short*>(wpCellPtr + 0x26);
+                    if ((homeBit & mask) != 0 && (wpBit & mask) != 0 &&
+                        ((both & 0x1e0) != 0 || (hr != 0 && wr != 0 && hr == wr))) {
+                        fn_InternalBasePtr_CheckPtr(&resIBP);
+                        if (*reinterpret_cast<int*>(resIBP + 0x58) == 1) {
+                            *param_3 = slot;
+                            *reinterpret_cast<int64_t*>(param_2) = entry;
+                            if (s_phase1Diag)
+                                fprintf(stderr, "[Phase1Employ] FULL-FREE entry=%p slot=%d\n",
+                                        reinterpret_cast<void*>(entry), slot);
+                            return param_2;
+                        }
+                        fn_InternalBasePtr_CheckPtr(&resIBP);
+                        if (bestPartial == 0 && 1 < *reinterpret_cast<int*>(resIBP + 0x58)) {
+                            bestPartial = entry;
+                            bestSlot = slot;
+                        }
+                    }
+                }
+                rosterOff += 0x10;
+            }
+        }
+        if (bestPartial != 0) {
+            *param_3 = bestSlot;
+            *reinterpret_cast<int64_t*>(param_2) = bestPartial;
+            if (s_phase1Diag)
+                fprintf(stderr, "[Phase1Employ] PARTIAL entry=%p slot=%d\n",
+                        reinterpret_cast<void*>(bestPartial), bestSlot);
+            return param_2;
+        }
+    }
+
+    // LAB_140111497 — no work found.
     fn_InternalBasePtr_Ctor(param_2, nullptr);
     return param_2;
 }

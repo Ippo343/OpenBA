@@ -1,0 +1,107 @@
+// code/Game/Game/town_workplace_registry.cpp
+//
+// Phase-1 economy foundation: the TownManager per-profession workplace registry
+// (townMgr+0x100 AVL BST). Faithful 1:1 port of the exe's lazy find-or-create
+// node insert. This is the piece that makes spawned workplaces FINDABLE by the
+// citizen employment finders (FindAvailableBuilding 0x14008d100 / FindWorkplace
+// core sub_1930 0x140111930), which is the gate for citizens to get jobs and stop
+// random-wandering. See ECONOMY_PLAN.md + reference_town_registry_node_create.
+//
+// The AVL insert cluster it depends on is ALREADY ported+registered (Keystone A):
+//   0x140017230  wrapper (ResidenceComponent_impl_7230, keystone_a_restree.cpp)
+//   0x1400172f0  find-or-create   0x140017460 node-alloc   0x140014b40 rebalance
+//   0x140003110  growable-array 8-byte value append (ActHunt_DynArraySetCount_3110)
+// TownManager (= Ghidra-mislabeled TradeComponent) = *(gameWorld+0xf0); ctor
+// 0x140090a30 (already Load step 10). Node = 0x38 bytes: +0x00 key(profession id) /
+// +0x08 array.data / +0x10 count / +0x14 cap / +0x18 parent / +0x20 left /
+// +0x28 right / +0x30 balance.
+//
+// This file must NOT depend on hooks.h — portable for standalone.
+
+#include "resolve.h"
+#include "engine_funcs.h"
+#include <cstdint>
+
+// Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
+// *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.
+extern "C" void* ResidenceComponent_impl_7230(int64_t* p1, void** p2, uint64_t* p3, int64_t* p4);
+
+namespace {
+// 0x140003110 — growable 8-byte-element array: set-count-to newCount + append *elem.
+typedef void (*fn_ArrayAdd3110_t)(int64_t* arrayStruct, int newCount, void* elemIBP);
+fn_ArrayAdd3110_t s_arrayAdd3110 = nullptr;
+bool s_init = false;
+
+void EnsureFns() {
+    if (s_init) return;
+    s_arrayAdd3110 = reinterpret_cast<fn_ArrayAdd3110_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_init = true;
+}
+} // namespace
+
+// ============================================================
+// 0x1400895a0 — ResidenceComponent_impl_95a0 = AddWorkplaceToProfessionTree.
+//   param_1 = townMgr (*(gameWorld+0xf0))
+//   param_2 = InternalBasePtr* holding the workplace entity value (mirrors
+//             WorkPlaceComponent_OnCreate's local copy of *(WPC+0x10))
+//   param_3 = professionKey (= WorkPlaceComponent+0x48 = Profession+0x48 id)
+// Walk the +0x100 BST by key; find-or-create the profession node; dedup the
+// workplace against the node's entity array; append if absent. Faithful 1:1.
+// ============================================================
+extern "C" void ResidenceComponent_impl_95a0(int64_t param_1, void* param_2, uint64_t param_3) {
+    EnsureFns();
+
+    // BST search for the key (key<node -> left[+0x20]; key>node -> right[+0x28]; == -> found).
+    uint64_t* node = *reinterpret_cast<uint64_t**>(param_1 + 0x100);   // root
+    uint64_t* found = nullptr;                                         // puVar3
+    while (node != nullptr) {
+        if (param_3 < node[0]) {                       // *node = key at +0x00
+            node = reinterpret_cast<uint64_t*>(node[4]);               // left (+0x20)
+        } else if (param_3 <= node[0]) {
+            found = node;                                              // exact match
+            break;
+        } else {
+            node = reinterpret_cast<uint64_t*>(node[5]);               // right (+0x28)
+        }
+    }
+
+    // Key absent -> create the profession node (empty entity array).
+    if (found == nullptr) {
+        void* out = nullptr;
+        int64_t emptyRec[2] = { 0, 0 };   // array record: +0x00 data / +0x08 count+cap
+        uint64_t key = param_3;
+        ResidenceComponent_impl_7230(reinterpret_cast<int64_t*>(param_1 + 0x100),
+                                     &out, &key, emptyRec);
+        found = reinterpret_cast<uint64_t*>(out);     // *out = the new node
+        if (found == nullptr) return;
+    }
+
+    // Dedup the workplace ref against the node's entity array (base +0x08, count +0x10).
+    int count = static_cast<int>(found[2]);           // +0x10 count (low dword)
+    int64_t arrBase = static_cast<int64_t>(found[1]); // +0x08 array data
+    for (int i = 0; i < count; ++i) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_2);
+        if (*reinterpret_cast<int64_t*>(arrBase + static_cast<int64_t>(i) * 8) ==
+            *reinterpret_cast<int64_t*>(param_2)) {
+            return;   // already registered — no duplicate
+        }
+    }
+
+    // Append: 003110(&node.array (node+0x08), count+1, workplaceRef).
+    if (s_arrayAdd3110)
+        s_arrayAdd3110(reinterpret_cast<int64_t*>(found + 1), count + 1, param_2);
+}
+
+// ------------------------------------------------------------
+// Convenience for the standalone spawn-time registration wiring: given a live
+// WorkPlaceComponent, register its owner building into the profession BST. Mirrors
+// WorkPlaceComponent_OnCreate's copy of *(WPC+0x10) into a stack local before insert.
+// Skips key==0 (residence-roster WorkPlaceComponents, e.g. houses — not employers).
+// ------------------------------------------------------------
+extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp) {
+    if (townMgr == 0 || workplaceComp == nullptr) return;
+    uint64_t key = *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(workplaceComp) + 0x48);
+    if (key == 0) return;   // no profession -> not an employer workplace
+    int64_t refLocal = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(workplaceComp) + 0x10);
+    ResidenceComponent_impl_95a0(townMgr, &refLocal, key);
+}

@@ -813,6 +813,28 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
         fflush(stderr);
     }
 
+    // ---- Phase 1: register the workplace into townMgr+0x20 (the flat list scanned by
+    // CitizenComponent::Update -> sub_0e70, the organic job-finder). An idle adult
+    // citizen with no workplace then finds this lodge and AssignWorkplace seats them
+    // (+0x238), unlocking the Gather/Work states so they path to the job instead of
+    // wandering. ADD via FUN_140003110 (8-byte array append; NOT 002cc0 which removes).
+    // The array holds entity IBP values (sub_0e70 CheckPtr-resolves each to an entity).
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        int64_t townMgr = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
+        typedef void (*fn_ArrayAdd3110_t)(int64_t*, int, void*);
+        static fn_ArrayAdd3110_t s_add3110 = nullptr;
+        if (!s_add3110)
+            s_add3110 = (fn_ArrayAdd3110_t)ResolveAddr(Module::Exe, 0x140003110);
+        if (townMgr && s_add3110) {
+            int cnt = *(int*)(townMgr + 0x28);
+            fn_InternalBasePtr_CheckPtr(&entIBP);
+            s_add3110((int64_t*)(townMgr + 0x20), cnt + 1, &entIBP);
+            fprintf(stderr, "[Phase1Employ] registered lodge into townMgr+0x20: %d -> %d\n",
+                    cnt, *(int*)(townMgr + 0x28));
+            fflush(stderr);
+        }
+    }
+
     // Re-point the force-work harness at this REAL production workplace.
     g_pForceWorkBuilding = entity;
     fprintf(stderr, "[startTown::workplace] ForesterLodge spawned tile(%d,%d) fp=%dx%d "
