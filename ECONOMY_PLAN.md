@@ -342,7 +342,23 @@ Phase 1's Storage agent (needs live storage).
 
 ---
 
-## Phase 4 — PROGRESS (2026-07-01) — brick 4-2 landed; keystone re-mapped (Ghidra + live verified)
+## Phase 4 — PROGRESS (2026-07-01) — FIND half working; brick 4-2 landed; keystone re-mapped
+
+**✅ FIND HALF DONE + COMMITTED (05197b0): `FindAvailableBuilding` (0x14008d100) ported + the
+spawned ForesterLodge is now FINDABLE.** It registers into the townMgr+0x100 profession BST and
+`FindAvailableBuilding(profKey)` returns the lodge — live-verified `[Phase4Employ] ... MATCH`,
+crash-free; default combo byte-clean. Three fixes: (1) **keystone_a_restree MemAlloc bug** — the AVL
+node alloc resolved NULL in standalone (slot 0x140152b60 unregistered + `SAPEAXII` export absent) so
+the BST insert silently failed (count++ but root null); added the proven `SAPEAX_KH` fallback →
+un-breaks the whole keystone-A restree family. (2) seat WPC+0x48 profession key from the lodge's
+WorkPlaceDescription (desc+0x20 = forester `Profession*`). (3) set WPC+0x50 = 1 (workplace-enable flag;
+retail sets it via the activation tail `Entity_impl_fc00(WPC,1)` 0x14012fc00 — FindAvailableBuilding's
+reachability gate is `FUN_140002e10`→WPC+0x50). Capacity recovered via CalcMaxWorkers (0x14012e5c0 → 4).
+**REMAINING = the ASSIGN half:** the ProfessionUI worker-count seat cascade `impl_dd10` (0x14007dd10,
+UI-bound) → cbf0/ca20/c5f0/c4b0 → AssignWorkplace (done) → citizen+0x238 → Work/Gather. cbf0 is a
+~200-line distance-optimizer setting +0x1f0/AssignHousing — needs careful RE of the +0x1f0→+0x238 chain.
+
+
 
 **✅ BRICK 4-2 DONE + COMMITTED (adf0d94): `CitizenComponent::AssignWorkplace` (0x1401163d0)
 + roster helpers ported.** `code/Game/Component/citizen_assignworkplace.cpp` +
