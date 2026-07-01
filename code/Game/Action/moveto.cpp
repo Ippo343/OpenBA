@@ -473,6 +473,22 @@ int MoveTo_AbstractImpl_Impl(void* self, void* actionStack) {
     int32_t pathSlotId = *(int32_t*)(s + 0x20);
     int32_t pathIndex = *(int32_t*)(s + 0x60);
 
+    // Path-query diagnostic (BANISHED_PF_TRACE, default off): after PathSetup, log
+    // whether the A* produced a path slot. return-2 here = "no path possible" — the
+    // pathfinder found no route from cur->dest (the star/terrain-ignore symptom).
+    {
+        static int s_pf = -1, s_pfN = 0;
+        if (s_pf < 0) { const char* e = std::getenv("BANISHED_PF_TRACE"); s_pf = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_pf == 1 && s_pfN < 60) { ++s_pfN;
+            fprintf(stderr,
+                "[PFQuery] self=%p cur=(%.2f,%.2f) dest=(%.2f,%.2f) dist=%.2f -> ver=%d slot=%d idx=%d %s\n",
+                self, curX, curY, destX, destY, dist, pathVersion, pathSlotId, pathIndex,
+                ((pathVersion == 0 || pathSlotId < 0) && pathIndex < 0) ? "NO-PATH(ret2)"
+                    : (pathIndex < 0 ? "WAIT(ret1)" : "READY"));
+            fflush(stderr);
+        }
+    }
+
     if (pathVersion == 0 || pathSlotId < 0) {
         // No valid path cached
         if (pathIndex < 0) {
@@ -538,8 +554,16 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
                 // Access pathfinder data structure
                 uintptr_t pathfinder = *(uintptr_t*)((uintptr_t)mapGrid + 0x68);
 
+                // Execute slot-resolution diagnostic (BANISHED_PF_TRACE).
+                static int s_ex = -1, s_exN = 0;
+                if (s_ex < 0) { const char* e = std::getenv("BANISHED_PF_TRACE"); s_ex = (e && e[0] && e[0] != '0') ? 1 : 0; }
+                #define PF_EXLOG(msg) do { if (s_ex == 1 && s_exN < 80) { ++s_exN; \
+                    fprintf(stderr, "[PFExec] self=%p slot=%d ver=%d slotCnt=%d %s\n", self, slotId, pathVersion, \
+                            *(int32_t*)(pathfinder + 0x168), msg); fflush(stderr); } } while(0)
+
                 // Check if slot is still valid
                 if (slotId >= *(int32_t*)(pathfinder + 0x168)) {
+                    PF_EXLOG("slot-out-of-range->WAIT");
                     return 1;  // Slot out of range, wait
                 }
 
@@ -547,11 +571,13 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
                 uintptr_t slotBase = *(uintptr_t*)(pathfinder + 0x160);
                 int32_t storedVersion = *(int32_t*)(slotBase + (int64_t)slotId * 0x18 + 4);
                 if (storedVersion != pathVersion) {
+                    PF_EXLOG("version-mismatch->WAIT");
                     return 1;  // Version mismatch, wait for re-query
                 }
 
                 // Check if path is ready (slot active flag)
                 if (*(char*)(slotBase + (int64_t)slotId * 0x18) == '\0') {
+                    PF_EXLOG("slot-inactive->WAIT");
                     return 1;  // Path not yet computed
                 }
 
@@ -560,6 +586,7 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
                     (void*)pathfinder, s + 0x20, s + 0x68, 0x100);
                 *(int32_t*)(s + 0x64) = nodeCount;
 
+                PF_EXLOG(nodeCount == 0 ? "READY-but-EMPTY(0 nodes)->ret2" : "READY-with-PATH");
                 if (nodeCount == 0) {
                     return 2;  // Path found but empty -- no valid route
                 }

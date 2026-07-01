@@ -69,6 +69,22 @@ static inline bool MoveTickTraceOn() {
     return s_mtTrace == 1;
 }
 
+// Per-action executor diagnostic (BANISHED_EXEC_TRACE). Default-off. Logs each
+// action-stack transition (a main-slot return != 1 = the action popped/pushed
+// rather than "stay") with the acting stack, the surviving top index, the action's
+// vtable address, and the return code. Lets us follow a citizen's pushed sequence
+// (e.g. the forester cut gauntlet MoveTo→PerformWork→…→CreateRawMaterial) and see
+// exactly which action completes vs aborts without producing.
+static int s_execTrace = -1;
+static inline bool ExecTraceOn() {
+    if (s_execTrace < 0) {
+        const char* e = std::getenv("BANISHED_EXEC_TRACE");
+        s_execTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_execTrace == 1;
+}
+static int s_execTraceCount = 0;
+
 // ---------------------------------------------------------------------------
 // Action vtable slot signatures (return INT — bug #7).
 //   precheck (+0x20): (node, stack)
@@ -182,6 +198,14 @@ LAB_d17:
                              local_res8 = reinterpret_cast<int64_t*>(local_res8[2])) {
                             CheckPtr(&local_res8);
                             iVar3 = CallMain(local_res8, param_1, param_2);
+                            if (ExecTraceOn() && iVar3 != 1 && s_execTraceCount < 400) {
+                                ++s_execTraceCount;
+                                fprintf(stderr,
+                                    "[Exec] stack=%p top=%d action_vt=%p ret=%d\n",
+                                    (void*)param_1, static_cast<int>(param_1[3]),
+                                    *reinterpret_cast<void**>(local_res8), iVar3);
+                                fflush(stderr);
+                            }
                             if (iVar3 != 1) goto LAB_d85;
                             CheckPtr(&local_res8);
                         }
