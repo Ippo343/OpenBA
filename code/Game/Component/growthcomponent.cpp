@@ -21,6 +21,7 @@
 #include "Component/growthcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone sibling-id fallback)
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -473,11 +474,34 @@ void GrowthComponent_Startup(GrowthComponent* self) {
     if (s_fn_IBPAccessor_52c0) s_fn_IBPAccessor_52c0(owner, &resIBP);
     *reinterpret_cast<void**>(comp + 0x28) = reinterpret_cast<void*>(resIBP);
 
-    // +0x30 — sibling of type DAT_1401c7a50.
+    // +0x30 — sibling ModelComponent (type DAT_1401c7a50), used by FUN_140120db0 to
+    // write the growth-staged mesh scale. The shared FUN_140003f60 reimpl finds it via
+    // the raw .rdata ModelComponent type-id (0x1401c7a50), which resolves NULL in
+    // standalone → it returned null, so +0x30 never linked and tree growth-staging was a
+    // no-op (BANISHED_MATURE_TREES stood in). Prefer the shared finder (correct in DLL
+    // mode, where the global is filled); if it yields null (standalone), fall back to a
+    // SELF-CONTAINED ModelComponent scan via GetTypeIdByName. Scoped here so it cannot
+    // change the shared produce/animation callers of 3f60 (verified paths).
     if (s_fn_CheckPtr) s_fn_CheckPtr(comp + 0x10);
     int64_t res30IBP = 0;
     if (s_fn_FindSibling_3f60)
         s_fn_FindSibling_3f60(reinterpret_cast<uintptr_t>(owner), &res30IBP);
+    if (res30IBP == 0 && fn_InternalBasePtr_Ctor) {
+        static uint32_t s_tidModel = 0;
+        if (!s_tidModel) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        if (s_tidModel) {
+            int n = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(owner) + 0x38);
+            uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uint8_t*>(owner) + 0x30);
+            for (int i = 0; i < n && arr; ++i) {
+                void** slot = reinterpret_cast<void**>(arr + static_cast<int64_t>(i) * 8);
+                if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+                void* c = *slot;
+                if (!c) continue;
+                uint32_t t = (*reinterpret_cast<uint32_t(**)(void*)>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+                if (t == s_tidModel) { fn_InternalBasePtr_Ctor(&res30IBP, c); break; }
+            }
+        }
+    }
     *reinterpret_cast<void**>(comp + 0x30) = reinterpret_cast<void*>(res30IBP);
 
     // config@+0x38 — trust the description the copy-ctor stored at +0x18.

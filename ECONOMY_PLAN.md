@@ -554,10 +554,13 @@ RemoveNaturalResource never executes organically. This affects EVERY citizen (no
 is the `project_citizen_pathfinding_zero_dest` keystone — a SEPARATE subsystem from the economy produce
 chain. Fixing it (Phase 6 below) removes the need for `BANISHED_FORCE_*` harnesses.
 
-**Remaining faithfulness polish (low priority, non-blocking):** two produce sub-helpers are still
-null-guarded rather than ported — `FUN_1400f8d50` (tree work-node BST search, reads the empty gw+0x118
-tree; cosmetic surface-material routing) and `FUN_140022480` (place-near WorkPlaceDescription find). Both
-only matter inside the gated entity-spawn block. See [[project_economy_loop]].
+**Remaining faithfulness polish (CORRECTED 2026-07-01 — the prior "null-guarded rather than ported"
+claim was STALE):** the two produce sub-helpers `FUN_1400f8d50` (tree work-node BST search @ gw+0x118)
+and `FUN_140022480` (place-near WorkPlaceDescription find) ARE ported/resolved (`s_fn_8d50 =
+R(0x1400f8d50)`, `s_fn_022480 = R(0x140022480)` in `action_base_cnr.cpp`) and are CALLED inside
+`ActCNR_RemoveNatRes_1260f0` — they are simply gated behind `BANISHED_PRODUCE_SPAWN_ENTITY` (the
+entity-lifecycle block), not stubbed. So there is no per-helper porting work left here; the only gate is
+the shared entity-materialization one (Defer 1 below). See [[project_economy_loop]].
 
 ---
 
@@ -691,6 +694,109 @@ food-stock decrement, birth logic (CitizenAI LongTermPlan / partner). Mostly bri
 verification of already-ported code.
 
 ---
+
+## Remaining defers — AUDIT (2026-07-01) — all share ONE root cause
+
+A pass over the 7 completed phases to close open defers / unfaithful quick wins found that
+the four remaining items are **not independent quick wins** — they all bottleneck on the same
+keystone: **standalone entity/component/manager materialization** (inert component factories +
+manager-side grids/registries that the Runtime builds but the standalone world-build does not).
+Each remaining bypass exists *because* of that gap and cannot be removed without it. Findings:
+
+1. **✅ Audit correction — Phase-5 sub-helpers were NOT stubbed.** `FUN_1400f8d50` /
+   `FUN_140022480` are ported + called in `ActCNR_RemoveNatRes_1260f0`, gated behind
+   `BANISHED_PRODUCE_SPAWN_ENTITY`. No porting work remained; the plan text was stale (fixed).
+
+2. **`BANISHED_PRODUCE_SPAWN_ENTITY` (Defer 1, ROOT).** Tree-removal (entityList+0xd0 dirty
+   append) + item-spawn feed the engine entity lifecycle → next-frame `EntityList_PreUpdate →
+   Serialize` faults in Runtime-x64.dll on the partially-materialized standalone entity. This
+   is the shared keystone; closing it unlocks the others. Not a quick win.
+
+3. **Phase-1 storage live + stocked food (Defer 2).** StorageComponent inert → no stocked FOOD
+   → `ConsumeFood` no-ops (hunger relief never happens). Same materialization class.
+
+4. **Phase-4 assign cascade (Defer 3).** `StartTown_EmployForesters` pokes citizen+0x1f0/+0x238
+   directly instead of the faithful ProfessionUI seat cascade `impl_dd10 →
+   cbf0/ca20/c5f0/c4b0 → AssignWorkplace`. Ghidra scope (this pass): `FUN_14008cbf0` is a
+   ~200-line distance-optimizer that iterates **townMgr+0xa0** (the town citizen list) — which
+   is *unpopulated* in standalone (the reason EmployForesters uses the captured founding list).
+   So even a faithful cbf0 port needs townMgr+0xa0 populated = registry materialization. Also
+   note: producer employment is **player-driven** in retail (0 default workers), so the
+   auto-seat is itself a demo harness, not a retail behavior.
+
+5. **`BANISHED_MATURE_TREES` (Defer 4) — PARTIALLY CLOSED THIS PASS.** The prior root-cause
+   claim ("trees carry NO GrowthComponent; factory doesn't materialise it") was **DISPROVEN
+   live**: the tree template declares `growth`, the factory DOES create a GrowthComponent, and
+   `FindComponent(GrowthComponent)` returns non-null. The real bug: `GrowthComponent::Startup`
+   linked +0x28/+0x38 but **+0x30 (the ModelComponent sibling) was NULL**, because the shared
+   finder `FUN_140003f60` looks up the ModelComponent by the raw .rdata type-id `0x1401c7a50`,
+   which **resolves NULL in standalone**. **FIXED (verified):** a self-contained
+   `GetTypeIdByName("ModelComponent")` fallback in `GrowthComponent_Startup`
+   (`growthcomponent.cpp`) — scoped there so the verified shared produce/animation callers of
+   3f60 stay byte-identical. With the fix + `BANISHED_LIVE_GROWTH`, all three siblings link and
+   `StartTown_GrowthInitResource` stages trees at random growth (retail-faithful). **Still
+   blocked from deleting MATURE_TREES:** live growth eventually reaches `GrowthComponent::Update
+   → DoHarvestReset`, which writes into the natural-resource manager's per-tile grid
+   (`resourceMgr+0x80`) — **unbuilt in standalone** → fault (crash symbolized to
+   `DoHarvestReset ← GrowthComponent_Update ← EntityList_Update`). That grid is the same
+   Defer-1/manager-materialization keystone. So MATURE_TREES remains a stand-in until it's live.
+
+**Net:** the genuinely-closeable items were closed (stale-claim correction; the c7a50/+0x30
+sibling-link bug). The rest are one keystone — **standalone entity/component/manager
+materialization** (Defer 1) — which is a dedicated multi-brick effort, not a quick win. The
+`BANISHED_FORCE_*` / `MATURE_TREES` harnesses cannot be retired until it lands; they remain
+default-OFF so the default build stays faithful + byte-clean.
+
+### NEXT-SESSION PLAN — the materialization keystone (4 bricks, do in this order)
+
+Prefer opus subagents + lead Ghidra-verify; A/B the default build after every brick; do NOT
+close any of these by adding null-guards (that re-introduces the very bypasses being removed).
+
+- **Brick M-A — Natural-resource manager tile grid (`resourceMgr+0x80`).** Unblocks **Defer 4**
+  (delete `MATURE_TREES`). `GrowthComponent::Update → DoHarvestReset` (growthcomponent.cpp:110)
+  writes `*(*(resourceMgr+0x80)) + 0x10 + resIdx*0x30` (resIdx = y*mapW+x; per-tile stride 0x30)
+  — that grid is unbuilt (zeroed) in standalone → WRITE fault. TASK: identify what object
+  `resourceMgr` is (the arg threaded into DoHarvestReset from `GrowthComponent_Update`) and where
+  retail allocates/builds its `+0x80` per-tile array at world-build (candidates: GameUpdateLoop::
+  Load, TownManager ctor 0x140090a30, a ResourceManager init); build it in standalone at
+  world-build. VERIFY: `BANISHED_LIVE_GROWTH` runs to a tree-maturity harvest-reset crash-free;
+  then the growth sim replaces `MATURE_TREES` (already staged via the committed +0x30 fix). NOTE
+  the +0x30 fix (this pass) is the prerequisite and is already done.
+
+- **Brick M-B — Dirty-list Serialize fault (`BANISHED_PRODUCE_SPAWN_ENTITY`).** Unblocks **Defer 1**
+  (resource depletion + physical ground-pile item). The produce item is built by
+  `ComponentEntity_CopyCtor` (FUN_1400c3720): it creates each component via
+  `Object::Factory::CreateObject(factory, typeId)` from the template desc list (RawMaterialFig =
+  value/map/model/work/rawmaterial). It then joins `entityList+0xd0` (the DIRTY list, via
+  FUN_140003110), and the next frame's `EntityList_PreUpdate → Serialize` faults in Runtime-x64.dll.
+  TASK: fast-repro via `BANISHED_FORCE_HARVEST + PRODUCE_SPAWN_ENTITY` (no forester walk needed —
+  verify the harness actually reaches the spawn; it invokes produce when the scan validates a tree,
+  so pair with `MATURE_TREES`), symbolize the Serialize fault, and find the specific stub factory /
+  faulting component Serialize. Contrast: start-town trees created by the SAME factory path join the
+  world via `fn_EntityList_RegisterEntity` (normal list) crash-free — so the fault is specific to the
+  DIRTY-list PreUpdate→Serialize path or a raw-material-only component. Fix the materialization, not
+  the symptom.
+
+- **Brick M-C — Town citizen list (`townMgr+0xa0`) + real employ cascade.** Unblocks **Defer 3**
+  (retire `StartTown_EmployForesters` field-poke). `FUN_14008cbf0` (the distance-optimizer seat)
+  iterates `townMgr+0xa0` (town citizen list), which is unpopulated in standalone. TASK: find the
+  retail ADD site for `townMgr+0xa0` and populate it at spawn (mirror the `g_foundingCitizens`
+  capture into the real registry); then port `impl_dd10 (0x14007dd10) → cbf0/ca20/c5f0/c4b0` and drive
+  it. ⚠️ DESIGN DECISION FIRST: retail producer employment is PLAYER-DRIVEN (0 default workers) — the
+  faithful start-town has NO employed foresters until the player assigns them. So "faithful" here may
+  mean wiring the ProfessionUI worker-count widget (real click path) rather than any auto-seat. Decide
+  whether the goal is (a) faithful player-driven employment via UI, or (b) keep a minimal programmatic
+  drive of the REAL cascade as an explicit demo harness. Either way the field-poke goes away.
+
+- **Brick M-D — Live StorageComponent + stocked food.** Unblocks **Defer 2** (`ConsumeFood`
+  relieves hunger). Graduate StorageComponent live (`COMPONENT_LIVE_FACTORY_S`, c7e78) so the barn
+  holds real stock; seed the StorageBarn with FOOD at world-build; verify `ConsumeFood`
+  (0x140112990, citizencomponent.cpp:582) pulls + decrements the barn count and hunger drops. Needs
+  a FOOD producer too (forester makes LOG, not food) — a gatherer/farmer, or seed starting food.
+
+Suggested order: **M-A → M-B → M-D → M-C** (M-A extends the already-started Defer 4; M-C is the most
+entangled + carries the player-driven design decision). Each brick lands crash-safe + env-gated; the
+`FORCE_*`/`MATURE_TREES` harnesses retire one at a time as their brick lands.
 
 ## Recommended agent sequence (the "do 1 then 2 then 3")
 

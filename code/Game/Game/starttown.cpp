@@ -1707,13 +1707,25 @@ void ActCNR_SetGrowthProgress_120db0(int64_t self, float progress);  // action_b
 
 static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void* rng) {
     if (!entity) return;
+    static const bool s_trace = std::getenv("BANISHED_GROWTH_TRACE") != nullptr;
+    static int s_traced = 0;
     void* gComp = FindComponentOnEntity(entity, tidGrowth);
+    if (s_trace && s_traced < 6) { ++s_traced;
+        fprintf(stderr, "[GrowthInit] ent=%p tid(Growth)=%u FindComponent=%p\n",
+                entity, tidGrowth, gComp);
+        fflush(stderr);
+    }
     if (!gComp || !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr) return;
     uintptr_t gIBP = 0;
     fn_InternalBasePtr_Ctor(&gIBP, gComp);
     fn_InternalBasePtr_CheckPtr(&gIBP);
     uint8_t* s = (uint8_t*)gIBP;
     if (!s) return;
+    if (s_trace && s_traced <= 6) {
+        fprintf(stderr, "[GrowthInit]   siblings +0x28=%p +0x30=%p +0x38=%p\n",
+                *(void**)(s + 0x28), *(void**)(s + 0x30), *(void**)(s + 0x38));
+        fflush(stderr);
+    }
     // Sibling links populated only when GrowthComponent::Startup ran (LIVE build).
     if (!*(void**)(s + 0x28) || !*(void**)(s + 0x30) || !*(void**)(s + 0x38))
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
@@ -1721,15 +1733,31 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
     ActCNR_SetGrowthProgress_120db0((int64_t)gIBP, progress);
 }
 
-// Mature the start-town forest so the forester can harvest it. Trees carry NO
-// GrowthComponent in standalone (the factory doesn't materialise it — confirmed:
-// FindComponent(GrowthComponent) returns null on every tree), so the normal growth
-// driver (GrowthComponent::Update -> 120db0 -> natResComp+0x28) never runs and every
-// tree stays at growth=0 (immature). The forester's harvest gate reads the
-// NaturalResourceComponent's growth field directly (natResComp+0x28 >= threshold 1.0,
-// foresterwork.cpp), so we set that field to a mature value at spawn — the faithful
-// END-STATE of a fully-grown tree (what 120db0 would write at progress=1.0), giving an
-// old-growth starting forest. Gated BANISHED_MATURE_TREES (default OFF). `nrComp` is the
+// Mature the start-town forest so the forester can harvest it.
+//
+// ⚠️ CORRECTED 2026-07-01 (live-verified): the prior claim that "trees carry NO
+// GrowthComponent" is FALSE. The tree template (NaturalResourceFigTree.rsc etc.)
+// declares a `growth` component and the standalone entity factory DOES materialise it —
+// FindComponent(GrowthComponent) returns non-null on every tree, and with
+// BANISHED_LIVE_GROWTH its Startup links +0x28 (NaturalResourceComponent) and +0x38
+// (GrowthDescription). The one thing that was broken: +0x30 (the ModelComponent sibling)
+// never linked, because GrowthComponent::Startup finds it via ActCNR_FindComponent_3f60,
+// whose ModelComponent type-id (raw .rdata 0x1401c7a50) resolved NULL in standalone.
+// That is now FIXED (action_base_cnr.cpp GetTypeIdByName fallback) → all three siblings
+// link and StartTown_GrowthInitResource stages growth at random progress, exactly like
+// retail (Random::RandFloat → FUN_140120db0). So growth STAGING + per-tick ticking work.
+//
+// Why MATURE_TREES is STILL needed as a stand-in: with live growth enabled the sim
+// eventually reaches GrowthComponent::Update → DoHarvestReset, which writes into the
+// natural-resource manager's per-tile grid (resourceMgr+0x80) — that grid is NOT built in
+// standalone, so the write faults (the entity/manager-materialization keystone, shared
+// with BANISHED_PRODUCE_SPAWN_ENTITY / storage). Until that manager grid is live,
+// full live tree growth is unsafe; this poke sets the harvest end-state directly instead.
+//
+// The forester's harvest gate reads the NaturalResourceComponent's growth field directly
+// (natResComp+0x28 >= threshold 1.0, foresterwork.cpp), so we set that field to a mature
+// value at spawn — the faithful END-STATE of a fully-grown tree (what 120db0 writes at
+// progress=1.0). Gated BANISHED_MATURE_TREES (default OFF). `nrComp` is the
 // NaturalResourceComponent already located by the caller (PlaceResourceCell, for jitter).
 static void StartTown_MatureResource(void* nrComp) {
     static int s_mature = -1;
