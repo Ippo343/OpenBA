@@ -59,10 +59,12 @@
 //     cell iterators) are pure acceleration structures; we use brute-force edge
 //     scans / nearest searches that return the IDENTICAL geometric result. The
 //     vestigial 4x driver inner loop and the unused interp-tangent are omitted.
-//     The driver perpendicularity gate (Abs(dot(crossDir, local_2b0)) < 0.02) is
-//     OMITTED: local_2b0's source is ambiguous (looks stale in the decomp) and
-//     omitting it only avoids rejecting skewed cross-sections, which clean
-//     nearest-point matching does not produce. Flagged for the lead's A/B check.
+//     The perpendicularity gate IS now restored (was previously omitted). Re-derived
+//     from the fb00 disassembly (@0x1400d1068/0x1400d1101): the decompiler's `local_2b0`
+//     is NOT stale — it is [RBP+0x308] = Normalize(interpolated centerline tangent),
+//     built at the top of the resample loop. The gate is
+//       Abs(Dot(Normalize(matchedLeft - matchedRight), tangent)) < 0.02 (DAT_1401720d0)
+//     and rejects skewed cross-sections. See PerpGate() / BANISHED_WATER_NO_PERP_GATE.
 //
 // Constants (.rdata, verified via read_memory):
 //   DAT_1401721e4 = 48.0     pos pack scale (pos.xy * 48 -> int16)
@@ -103,7 +105,9 @@ constexpr float kHeightStep = 1.0f / 256.0f; // DAT_1401720bc
 constexpr float kUnderwater = -0.75f;    // DAT_14017227c
 constexpr float kAOScale    = 255.0f;    // DAT_14017222c
 constexpr float kVOffset    = -16.0f;    // DAT_14017228c (streamwise V start)
-constexpr float kVDenom     = 32.0f;     // DAT_1401721d0 (V flow-arc denom / arc gate)
+constexpr float kVDenom     = 32.0f;     // DAT_1401721d0 (streamwise-V denominator:
+                                         //   fb00 emits V = midlineArc/32 + Voffset, Voffset
+                                         //   carried across chunks -> cumulativeMidlineArc/32 - 16)
 constexpr float kMinArcGate = 0.001f;    // DAT_1401720b8 (avg-edge degenerate gate)
 
 // Optional band-width tuning (BANISHED_WATER_BAND_MULT, default 1.0 = byte-faithful).
@@ -119,6 +123,18 @@ static float WaterBandMult() {
         return (v > 0.0f) ? v : 1.0f;
     }();
     return m;
+}
+
+// Perpendicularity gate toggle. fb00 only emits a cross-section when the matched
+// bank-to-bank vector is ~perpendicular to the local flow tangent (|dot| < 0.02,
+// DAT_1401720d0), dropping skewed matches at sharp bends. Faithful and ON by
+// default; opt out (old over-emitting behaviour) via BANISHED_WATER_NO_PERP_GATE.
+static bool PerpGate() {
+    static bool on = []{
+        const char* e = std::getenv("BANISHED_WATER_NO_PERP_GATE");
+        return !(e && e[0] && e[0] != '0');
+    }();
+    return on;
 }
 
 // ============================================================
@@ -532,6 +548,22 @@ void fb00_BuildBody_Faithful(void* hf, int bodyIdx, Vec* vtxOut, Vec* idxOut) {
         int cL = lm[i], cR = rm[i];
         if (!(cL > prevL && cR > prevR)) continue;   // both matched indices must advance
         if (cL == 0 && cR == 0) continue;
+
+        // Perpendicularity gate (fb00 @0x1400d1101: crossVec = matchedLeft - matchedRight,
+        // tangent = Normalize(interpolated centerline tangent); reject unless
+        // Abs(Dot(Normalize(crossVec), tangent)) < DAT_1401720d0 = 0.02). Sign of
+        // crossVec is irrelevant (Abs), so left/right bank labelling doesn't matter.
+        // Skips skewed cross-sections without advancing prevL/prevR (faithful to the
+        // retail goto-skip). Over-emit avoidance only; toggle with BANISHED_WATER_NO_PERP_GATE.
+        if (PerpGate()) {
+            V2 cross = V2Norm(V2Sub(leftBank.d[cL], rightBank.d[cR]));
+            V2 ta = { CLx(i > 0 ? i - 1 : i),            CLy(i > 0 ? i - 1 : i) };
+            V2 tb = { CLx(i < ptCount - 1 ? i + 1 : i),  CLy(i < ptCount - 1 ? i + 1 : i) };
+            V2 tang = V2Norm(V2Sub(tb, ta));
+            float d = cross.x * tang.x + cross.y * tang.y;
+            if (std::fabs(d) >= 0.02f) continue;   // not perpendicular -> skip this cross-section
+        }
+
         float sumL = 0.0f; for (int k = prevL; k < cL; ++k) sumL += V2Len(V2Sub(leftBank.d[k + 1], leftBank.d[k]));
         float sumR = 0.0f; for (int k = prevR; k < cR; ++k) sumR += V2Len(V2Sub(rightBank.d[k + 1], rightBank.d[k]));
         if (sumL < 2.0f && sumR < 2.0f) continue;    // both-banks-short gate (DAT_140172174=2.0)
