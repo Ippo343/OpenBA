@@ -270,6 +270,12 @@ extern "C" {
     void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);
 }
 
+// Weather simulation per-tick driver — Weather::ResetTime (0x1400944e0).
+// (decompiled body lives in code/Game/Game/weather_sim.cpp)
+extern "C" {
+    void Weather_ResetTime_Reimpl(void* weatherSelf, void* time);
+}
+
 // M3.5 Path B session 3 — typed-ExternalPtr serialize helper at 0x140007140.
 // (decompiled body lives in code/Game/Game/serialize_externals_typed.cpp)
 extern "C" {
@@ -585,6 +591,12 @@ static void RegisterCodeFunctions() {
     // (0x1400c48a0) resolve to our reimpls (EngineFuncsInit runs after this).
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
+
+    // Weather simulation tick — route Weather::ResetTime (called every sim tick
+    // from GameUpdateLoop::Update, gameupdateloop.cpp step 3e) to our reimpl so
+    // the temperature/snow-coverage sub-sim runs. EngineFuncsInit (after this)
+    // then resolves fn_Weather_ResetTime to Weather_ResetTime_Reimpl.
+    RegisterExeAddr(0x1400944e0, reinterpret_cast<uintptr_t>(&Weather_ResetTime_Reimpl));
 
     // In-game HUD bring-up — route the exe ToolbarDialog ctor (FUN_1400b9910) to
     // our reimpl so GameUpdateLoop::Startup can build the toolbar from the
