@@ -358,6 +358,73 @@ void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* selfC, int6
 }
 
 // ============================================================
+// AmbientEnvironmentComponent::InitRegion
+// (region/position half of impl_36a0, exe 0x1400436a0)
+// ============================================================
+// impl_36a0(self, gridX, gridY, rw, rh):
+//   self+0x28=gridX  self+0x2c=gridY  self+0x30=rw  self+0x34=rh
+//   grid   = *(gameWorld+0xf8);  gridWidth = *(int*)grid
+//   center = (gridY + rh/2)*gridWidth + gridX + rw/2       // center tile index
+//   off    = (float)(gridWidth/2) - 0.5f                    // DAT_140172114 == 0.5f
+//   pos    = ( center%gridWidth - off, center/gridWidth - off, 0 )
+//   self+0x38 = pos    // the original samples terrain height into z, then
+//                      // immediately overwrites z with 0 — so pos.z is always 0.
+//   FUN_140042960(siblingEmitter, self+0x38)  // push pos onto the emitter (+0x28)
+//   Update(self)                              // the per-frame slot already runs
+//                                             // this every tick, so we skip it here
+//                                             // to avoid seeding play before OnAdded.
+void AmbientEnvironmentComponent_InitRegion(AmbientEnvironmentComponent* selfC,
+                                            int gridX, int gridY, int rw, int rh) {
+    if (!selfC) return;
+    EnsureResolved();
+
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfC);
+    *reinterpret_cast<int*>(self + 0x28) = gridX;
+    *reinterpret_cast<int*>(self + 0x2c) = gridY;
+    *reinterpret_cast<int*>(self + 0x30) = rw;
+    *reinterpret_cast<int*>(self + 0x34) = rh;
+
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uint8_t* gw   = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* grid = *reinterpret_cast<uint8_t**>(gw + 0xf8);
+    if (!grid) return;
+    int gridWidth = *reinterpret_cast<int*>(grid + 0x00);
+    if (gridWidth <= 0) return;
+
+    long long center = (long long)(gridY + (rh >> 1)) * gridWidth + gridX + (rw >> 1);
+    float off = (float)(gridWidth >> 1) - 0.5f;
+    float worldX = (float)(center % gridWidth) - off;
+    float worldY = (float)(center / gridWidth) - off;
+
+    // Env component position (comp+0x38 Vector3), z forced to 0 as in the original.
+    *reinterpret_cast<float*>(self + 0x38) = worldX;
+    *reinterpret_cast<float*>(self + 0x3c) = worldY;
+    *reinterpret_cast<float*>(self + 0x40) = 0.0f;
+
+    // Push the position onto the sibling AmbientEmitterComponent (+0x28 Vector3).
+    // At spawn the emitter has no live handles yet (OnAdded runs at register time,
+    // after this), so FUN_140042960's MoveEmitter loop is a no-op and it only
+    // writes the position — which is all we do here.
+    void* emitter = FindSiblingEmitter(self);
+    if (emitter) {
+        uint8_t* e = reinterpret_cast<uint8_t*>(emitter);
+        *reinterpret_cast<float*>(e + 0x28) = worldX;
+        *reinterpret_cast<float*>(e + 0x2c) = worldY;
+        *reinterpret_cast<float*>(e + 0x30) = 0.0f;
+    }
+
+    static int s_trace = -1;
+    if (s_trace < 0) { const char* en = std::getenv("BANISHED_AMBIENT_TRACE"); s_trace = (en && en[0] && en[0] != '0') ? 1 : 0; }
+    if (s_trace) {
+        static int n = 0;
+        if (n++ < 12)
+            fprintf(stderr, "[ambientenv] InitRegion self=%p region=(%d,%d,%d,%d) "
+                    "pos=(%.1f,%.1f,0) emitter=%p\n",
+                    (void*)selfC, gridX, gridY, rw, rh, worldX, worldY, emitter);
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void AmbientEnvironmentComponent_InitFuncs() {

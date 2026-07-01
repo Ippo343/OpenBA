@@ -14,8 +14,10 @@
 #include "Component/ambientemittercomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Resolved helpers
@@ -56,24 +58,41 @@ static fn_ResizeEmitterArray_t s_fn_ResizeEmitterArray = nullptr;
 // FUN_140042e10(self) -- building ambient audio setup (clean reimpl below).
 extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self);
 
-// IsDerivedFrom dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// Type ID for AmbientEmitterDescription at DAT_1401c3e98
-static uint32_t* s_TypeId_AmbientEmitterDesc = nullptr;
-
 static bool s_initialized = false;
+
+// ============================================================
+// Type id for AmbientEmitterDescription (comp+0x18 building description).
+// ============================================================
+// The .rdata type-id global DAT_1401c3e98 is readable in DLL mode (exe mapped)
+// but NOT in standalone (ResolveAddr(Module::Exe, .rdata) hits a not-implemented
+// stub — see reference_standalone_rdata_null_fallback). So in standalone look the
+// id up by name via the factory registry (the same CRC32 fn_IsDerivedFrom
+// compares against); in DLL mode read the live .rdata slot. Latch only once the
+// factory registry has frozen the ids (they start at the 0xFFFFFFFF sentinel).
+static uint32_t s_tidEmitterDesc = 0;
+static bool s_tidResolved = false;
+static void EnsureEmitterDescTid() {
+    if (s_tidResolved) return;
+#ifdef STANDALONE_EXE
+    uint32_t t = ::Object::GetTypeIdByName("AmbientEmitterDescription");
+#else
+    uintptr_t p = ResolveAddr(Module::Exe, 0x1401c3e98);
+    uint32_t t = p ? *reinterpret_cast<uint32_t*>(p) : 0;
+#endif
+    if (t != 0 && t != 0xFFFFFFFFu) { s_tidEmitterDesc = t; s_tidResolved = true; }
+}
 
 // ============================================================
 // Helper: Get building description component
 // ============================================================
+// Uses the shared fn_IsDerivedFrom engine func (resolved in both modes) rather
+// than the .rdata dispatch slot, so the building-emitter path works in standalone.
 static void* GetBuildingData(void* self) {
+    EnsureEmitterDescTid();
     void* obj = *(void**)((uintptr_t)self + 0x18);
-    if (!obj || !s_fn_IsDerivedFrom_dispatch || !s_TypeId_AmbientEmitterDesc)
+    if (!obj || !fn_IsDerivedFrom || !s_tidEmitterDesc)
         return nullptr;
-    bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_AmbientEmitterDesc);
-    return derived ? obj : nullptr;
+    return fn_IsDerivedFrom(obj, s_tidEmitterDesc) ? obj : nullptr;
 }
 
 // ============================================================
@@ -261,14 +280,25 @@ void AmbientEmitterComponent_Draw(AmbientEmitterComponent* self) {
 
     uintptr_t selfAddr = (uintptr_t)self;
 
-    // Resize emitter list: FUN_140001770(self+0x38, building[0x30])
-    if (s_fn_ResizeEmitterArray) {
-        int count = *(int*)((uintptr_t)building + 0x30);
-        s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), count);
-    }
+    // Resize emitter list to the building description's emitter count. Use the
+    // ported AmbientEmitterResize_Reimpl (not the resolved FUN_140001770) so this
+    // works in standalone, where 0x140001770 is not in the address registry.
+    int count = *(int*)((uintptr_t)building + 0x30);
+    AmbientEmitterResize_Reimpl((void*)(selfAddr + 0x38), count);
 
     // If building has audio flag at +0x20, set up the 3D ambient emitters.
-    if (*(char*)((uintptr_t)building + 0x20) != '\0') {
+    bool audioFlag = *(char*)((uintptr_t)building + 0x20) != '\0';
+
+    static int s_trace = -1;
+    if (s_trace < 0) { const char* e = getenv("BANISHED_AMBIENT_TRACE"); s_trace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (s_trace) {
+        static int n = 0;
+        if (n++ < 16)
+            fprintf(stderr, "[ambientemit] Draw/OnAdded self=%p building=%p count=%d audioFlag=%d\n",
+                    (void*)self, building, count, audioFlag ? 1 : 0);
+    }
+
+    if (audioFlag) {
         AmbientEmitterAudioSetup_Reimpl(self);
     }
 }
@@ -292,9 +322,6 @@ void AmbientEmitterComponent_InitFuncs() {
 
     slot = ResolveAddr(Module::Exe, 0x140152ac8);
     if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
     // Serialize float -- uses same overload pattern as int, at 0x140152470
     slot = ResolveAddr(Module::Exe, 0x140152470);
@@ -322,9 +349,8 @@ void AmbientEmitterComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152a48);
     if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
-    // Type ID
-    s_TypeId_AmbientEmitterDesc = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c3e98));
+    // (Building-description type id is now resolved lazily + standalone-safe via
+    // EnsureEmitterDescTid / GetBuildingData.)
 
     s_initialized = true;
 
@@ -338,7 +364,15 @@ void AmbientEmitterComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(AmbientEmitterComponent, 0x48, 0xC3)
+// Route the OnAdded slot (vtable +0x30 / index 6, dispatched by
+// ComponentEntity_OnAddedPass at register time — flags 0xC3 has +0x20 bit 0 set)
+// to the real AmbientEmitterComponent::Draw (0x140042ba0). This is what seeds a
+// building's ambient audio: resize the emitter array from the description, and if
+// the description carries the audio flag (desc+0x20) play + AddEmitter the 3D
+// looping sounds. Opt-in under BANISHED_AMBIENT_AUDIO (default ON via the env
+// check; =0 restores the inert no-op for A/B).
+COMPONENT_LIVE_FACTORY_ONADDED(AmbientEmitterComponent, 0x48, 0xC3,
+                               "BANISHED_AMBIENT_AUDIO", AmbientEmitterComponent_Draw)
 REGISTER_TYPE(AmbientEmitterComponent, "Component",
               &AmbientEmitterComponent_Factory, &AmbientEmitterComponent_CreateInPlace);
 #endif // STANDALONE_EXE

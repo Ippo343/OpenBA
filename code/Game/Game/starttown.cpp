@@ -21,6 +21,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #ifdef STANDALONE_EXE
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #endif
@@ -1836,6 +1837,36 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
 // templates, chunk stride <= 0 (would infinite-loop the grid), and per-pass caps.
 // ============================================================================
 
+// Spawn one ambient-environment entity for a grid tile and stamp its biome
+// region + emitter position BEFORE registering it. Mirrors the retail order in
+// ComponentEntity_impl_02f0: instantiate -> AmbientEnvironmentComponent_impl_36a0
+// (region/position) -> register (which runs OnAddedPass -> the emitter's OnAdded,
+// seeding its 3D handles at the now-correct position). Falls back to a plain
+// spawn+register when the env component isn't found (keeps the entity present).
+static bool SpawnEnvVolumeAndRegister(void* tmpl, void* entityList,
+                                      int gridX, int gridY, int chunk) {
+    if (!tmpl) return false;
+    if (!fn_EntityFactory_CreateEntity || !fn_EntityList_RegisterEntity ||
+        !fn_InternalBasePtr_Ctor || !fn_MemAlloc) return false;
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
+    void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
+    if (!ent) return false;
+
+    static uint32_t s_tidEnv = 0;
+    if (s_tidEnv == 0) s_tidEnv = TypeId("AmbientEnvironmentComponent");
+    void* envComp = FindComponentOnEntity(ent, s_tidEnv);
+    if (envComp)
+        AmbientEnvironmentComponent_InitRegion(
+            reinterpret_cast<AmbientEnvironmentComponent*>(envComp),
+            gridX, gridY, chunk, chunk);
+
+    void* ibp = nullptr;
+    fn_InternalBasePtr_Ctor(&ibp, ent);
+    int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
+    fn_EntityList_RegisterEntity(entityList, &ibp, category);
+    return true;
+}
+
 static int StartTown_SpawnEnvironment(uint8_t* startConfig, void* world) {
     void* entityList = *(void**)((uint8_t*)world + WORLD_ENTITYLIST);
     void* worldGeom  = *(void**)((uint8_t*)world + 0x110);
@@ -1871,14 +1902,27 @@ static int StartTown_SpawnEnvironment(uint8_t* startConfig, void* world) {
         }
     }
 
-    // Pass 2 — ambient environment volumes on a chunk grid.
+    // Pass 2 — ambient environment volumes on a chunk grid. When ambient audio is
+    // live, stamp each volume's biome-sample region + emitter position from its
+    // tile (gridX=x, gridY=y, rw=rh=chunk) so biome sampling varies by location and
+    // the emitters aren't all stuck at the world origin. Default (env off) keeps the
+    // original plain spawn+register so the run stays byte-for-byte unchanged.
     void* ambTmpl = StartTown_ResolveTemplate(startConfig + 0x138);
     const int chunk = *(int32_t*)(startConfig + 0x150);
     const int dim   = game ? *(int32_t*)game : 0;
+#ifdef STANDALONE_EXE
+    const bool ambientLive = ::ComponentFactory::LiveEnabled("BANISHED_AMBIENT_AUDIO");
+#else
+    const bool ambientLive = false;
+#endif
     if (ambTmpl && chunk > 0 && dim > 0) {
         for (int y = 0; y < dim && n2 < ENV_PASS_CAP; y += chunk)
-            for (int x = 0; x < dim && n2 < ENV_PASS_CAP; x += chunk)
-                if (SpawnAndRegister(ambTmpl, entityList)) ++n2;
+            for (int x = 0; x < dim && n2 < ENV_PASS_CAP; x += chunk) {
+                bool ok = ambientLive
+                    ? SpawnEnvVolumeAndRegister(ambTmpl, entityList, x, y, chunk)
+                    : SpawnAndRegister(ambTmpl, entityList);
+                if (ok) ++n2;
+            }
     }
 
     // Pass 3 — the single global environment entity.
