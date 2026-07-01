@@ -150,17 +150,25 @@ hunger-accumulation fix FIRST as a quick win** (see note under Phase 3).
   faithful no-op when townMgr+0x20 empty, default build byte-clean, world builds 10951 ents).
 - ✅ **townMgr+0x20 population wired** — StartTown_SpawnWorkplace appends the ForesterLodge entity
   IBP via FUN_140003110 (regCount 0→1). Diagnostic env `BANISHED_PHASE1_EMPLOY`.
-- 🔴 **FINAL BLOCKER (runtime-confirmed): the spawned ForesterLodge has NO ResidenceComponent
-  (c7cf0 worker-roster) and NO AttendanceComponent** (21 comps: Map/Interact(1333608116)/Work/
-  WorkPlace(1731492573)/… but not c7cf0). Both finders (sub_0e70 + FindAvailableBuilding) REQUIRE
-  a ResidenceComponent worker-roster on the workplace → sub_0e70 skips the lodge → no citizen
-  employed. The roster (c7cf0) + InteractComponent work-positions live on the **MultiObject job-HOST
-  sub-entity**, materialized at BUILD-COMPLETION — a path standalone skips ([[project_economy_loop]]
-  MultiObject-host detour). **⇒ Remaining Phase-1 work = materialize the workplace's MultiObject
-  job-host sub-entity (or hand-add a ResidenceComponent worker-roster + InteractComponent
-  work-positions) so a finder can seat a worker.** Distinct substantial subsystem — next session.
-- Infrastructure landed this session (all faithful, A/B-safe, build+run-verified, uncommitted):
-  town_workplace_registry.cpp (+reg), sub_0e70 port, townMgr+0x20 wiring, address_registry.cpp.
+- ✅ **REFRAME (2nd RE agent, template+xref verified): `sub_0e70` is the RESIDENCE/household finder
+  (townMgr+0x20, needs ResidenceComponent c7cf0 = houses only), NOT the workplace path.** The
+  ForesterLodge legitimately has no c7cf0 (WoodHouse.rsc has `residence`; lodge has `work`+`workplace`
+  only) — adding one would be UNFAITHFUL. **Forester employment = townMgr+0x100 profession BST +
+  FindAvailableBuilding (0x14008d100), and is PLAYER-DRIVEN via the ProfessionUI worker-count
+  cascade (impl_dd10 0x14007dd10 → cbf0/ca20/c5f0/c4b0). There is NO organic auto-assigner** (the
+  optimizer only rebalances existing workers). See [[reference_citizen_employment_path]].
+- ✅ **Registration corrected to townMgr+0x100** (starttown.cpp `TownRegistry_RegisterWorkplace`) —
+  the faithful list for a workplace. Self-skips because the inert WorkPlaceComponent's profession
+  key (+0x48) reads 0 (populated by WorkPlaceDescription Serialize/Startup — Phase 5). Dormant +
+  faithful; A/B-safe, crash-free.
+- ✅ **PHASE 1 INFRASTRUCTURE COMPLETE (committed).** The employment plumbing is in place:
+  town_workplace_registry.cpp (AddWorkplaceToProfessionTree), sub_0e70 residence finder (faithful),
+  townMgr+0x100 registration wiring. Actual worker ASSIGNMENT deferred to **Phase 5 (ProfessionUI)**.
+- 📋 **PHASE 5 HANDOFF (worker assignment):** (1) bring WorkPlaceComponent live enough to populate
+  +0x48 profession key (from WorkPlaceDescription) so TownRegistry_RegisterWorkplace actually inserts;
+  (2) port FindAvailableBuilding (0x14008d100) + the profession-assign cascade impl_dd10/cbf0/ca20/
+  c5f0/c4b0; (3) wire the ProfessionUI worker-count widget to drive it. Then a citizen gets the
+  profession (+0x1f0) + workplace (+0x238) → Gather(6)/Work(5) candidate → paths to the lodge.
 
 ## Phase 1 — Building economy components live + town registry
 

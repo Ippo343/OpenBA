@@ -74,6 +74,9 @@ extern bool g_wpcRosterOnly;
 // Apply the occupied end-state visual for a rostered house (ModelKick mode 2 + StatusIcon
 // toggle). MUST run at gameplay time (live scene). See its definition in workplacecomponent.cpp.
 extern void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp);
+// Phase 1 economy: register a workplace into the townMgr+0x100 profession BST
+// (code/Game/Game/town_workplace_registry.cpp).
+extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
 
 // WorkPlaceComponent pointers of the founding houses rostered in roster-only mode, whose
 // occupied visual was deferred to gameplay time. Drained once by
@@ -813,24 +816,22 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
         fflush(stderr);
     }
 
-    // ---- Phase 1: register the workplace into townMgr+0x20 (the flat list scanned by
-    // CitizenComponent::Update -> sub_0e70, the organic job-finder). An idle adult
-    // citizen with no workplace then finds this lodge and AssignWorkplace seats them
-    // (+0x238), unlocking the Gather/Work states so they path to the job instead of
-    // wandering. ADD via FUN_140003110 (8-byte array append; NOT 002cc0 which removes).
-    // The array holds entity IBP values (sub_0e70 CheckPtr-resolves each to an entity).
+    // ---- Phase 1 infra: register the workplace into the townMgr+0x100 PROFESSION BST
+    // (the list FindAvailableBuilding scans), keyed by WorkPlaceComponent+0x48. This is
+    // the faithful list for a WORKPLACE — townMgr+0x20 is the RESIDENCE/house list
+    // (scanned by sub_0e70, which correctly ignores a lodge since a lodge has no
+    // ResidenceComponent). This only makes the lodge FINDABLE; actual worker ASSIGNMENT
+    // is player-driven via the Phase-5 ProfessionUI worker-count widget (there is no
+    // organic auto-assigner in retail). Mirrors the exe placement-path registration
+    // (FUN_14012f520 / WorkPlaceDescription_helper_edf0 -> AddWorkplaceToProfessionTree).
     if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
         int64_t townMgr = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
-        typedef void (*fn_ArrayAdd3110_t)(int64_t*, int, void*);
-        static fn_ArrayAdd3110_t s_add3110 = nullptr;
-        if (!s_add3110)
-            s_add3110 = (fn_ArrayAdd3110_t)ResolveAddr(Module::Exe, 0x140003110);
-        if (townMgr && s_add3110) {
-            int cnt = *(int*)(townMgr + 0x28);
-            fn_InternalBasePtr_CheckPtr(&entIBP);
-            s_add3110((int64_t*)(townMgr + 0x20), cnt + 1, &entIBP);
-            fprintf(stderr, "[Phase1Employ] registered lodge into townMgr+0x20: %d -> %d\n",
-                    cnt, *(int*)(townMgr + 0x28));
+        void* wpc = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
+        if (townMgr && wpc) {
+            TownRegistry_RegisterWorkplace(townMgr, wpc);
+            fprintf(stderr, "[Phase1Employ] registered lodge WorkPlaceComponent into "
+                    "townMgr+0x100 (profKey=%llu)\n",
+                    (unsigned long long)*(uint64_t*)((uint8_t*)wpc + 0x48));
             fflush(stderr);
         }
     }
