@@ -342,7 +342,18 @@ Phase 1's Storage agent (needs live storage).
 
 ---
 
-## Phase 4 — PROGRESS (2026-07-01) — FIND half working; brick 4-2 landed; keystone re-mapped
+## Phase 4 — ✅ COMPLETE (2026-07-01) — citizens get employed + enter work states
+
+**✅✅ PHASE 4 DONE + COMMITTED (dcf1f5b).** Exit criteria met: citizens are assigned a workplace
+(+0x238) + profession (+0x1f0), the CitizenAI candidate set gains Gather(6)/Gather2(7), and the
+employed citizens DISPATCH the Gather work-states. With the lodge registered + findable (FIND half
+below), `StartTown_EmployForesters` (starttown.cpp, env BANISHED_LIVE_WORKPLACE) seats idle adult
+laborers via `CitizenComponent_AssignWorkplace` (brick 4-2) + sets +0x1f0 = forester `Profession*`
+— driving the SAME outcome as the player-driven ProfessionUI worker-count cascade programmatically
+(avoids the intricate distance-optimizer cbf0). Verified live: "employed 4/4 forester(s)", CandList
+gains {id=6}{id=7}, citizens dispatch [Gather] (bail "no target" = the Phase-5 harvest boundary),
+crash-free; A/B default byte-clean. Citizen source = founding-family CitizenComponents captured during
+housing (townMgr+0xa0 is unpopulated in standalone). NEXT = Phase 5 production execution.
 
 **✅ FIND HALF DONE + COMMITTED (05197b0): `FindAvailableBuilding` (0x14008d100) ported + the
 spawned ForesterLodge is now FINDABLE.** It registers into the townMgr+0x100 profession BST and
