@@ -1295,9 +1295,9 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
 //     unreliable in the partial standalone factory tree (returns false → null d →
 //     crash). We trust comp+0x18 (the copy-ctor stored the resource's own desc)
 //     and null-guard every deref (IsDerivedFromOrTrust policy).
-//   * Position jitter / random yaw use Random::RandFloat (wired) rather than
-//     RandFloatTol (its dispatch slot 0x140151400 is unfilled in standalone →
-//     would no-op to 0 anyway). RandFloat∈[0,1] → remap to [-1,1] for jitter.
+//   * Position jitter / random yaw use Random::RandFloatTol when its Runtime export
+//     is resolved (byte-faithful, matches Entity_impl_6540); if unresolved, fall back
+//     to the RandFloat∈[0,1] → [-1,1] remap (same draw count, approximate values).
 //   * The 120db0 growth/scale block only runs when the GrowthComponent's sibling
 //     links (+0x28 MeshInstance host, +0x30 ModelComponent, +0x38 GrowthDescription)
 //     are populated — i.e. when GrowthComponent is LIVE (BANISHED_LIVE_GROWTH) and
@@ -1533,8 +1533,12 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
     float pos[3] = {0,0,0};
     fn_MapGetTerrainPos(game, pos, in, 0, nullptr);
 
-    // RandFloat∈[0,1] → [-1,1] tolerance (= RandFloatTol) for x/y jitter AND yaw.
-    auto rtol = [&]() -> float { return rng && fn_Random_RandFloat ? fn_Random_RandFloat(rng) * 2.0f - 1.0f : 0.0f; };
+    // Per-resource jitter/yaw tolerance — byte-faithful to Entity_impl_6540, which
+    // uses System::Random::RandFloatTol → [-1,1]. fn_Random_RandFloatTol is the
+    // worldgen_f390_shims link shim over the Runtime export (same Random family as the
+    // RandFloat/RandTol/Rand this function already requires); it returns 0 only if the
+    // export can't resolve, which never happens once the engine funcs are wired.
+    auto rtol = [&]() -> float { return rng ? fn_Random_RandFloatTol(rng) : 0.0f; };
     float worldX = rtol() * jitter + pos[0];
     float worldY = rtol() * jitter + pos[1];
     float worldZ = pos[2];

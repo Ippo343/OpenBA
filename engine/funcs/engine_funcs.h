@@ -1952,6 +1952,12 @@ extern fn_Random_Rand_t fn_Random_Rand;
 typedef float (*fn_Random_RandFloat_t)(void* self);
 extern fn_Random_RandFloat_t fn_Random_RandFloat;
 
+// System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
+// extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
+// the Runtime export "?RandFloatTol@Random@System@@QEAAMXZ"); declared there and
+// reused by callers that need the tolerance-range primitive.
+extern "C" float fn_Random_RandFloatTol(void* self);
+
 // GetCurrentProductIndex (FUN_140119470 in exe)
 // Reads +0x50 product index; if not -1 (0xffffffff), returns it directly.
 // If -1, performs weighted random selection from +0x58 float array (count at +0x60)
