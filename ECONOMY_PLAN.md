@@ -216,7 +216,37 @@ disjoint files; lead integrates + does the registry seed. ~2-3 agents.
 
 ---
 
-## Phase 2 — Housing assignment
+## Phase 2 — DONE (2026-07-01)
+
+**✅ PHASE 2 COMPLETE — housing wired into the default combo + verified live.**
+Per the re-scope note at the top of this file, housing was already *implemented*
+(the founding-family `AssignHousing` path in `starttown.cpp`); Phase 2's remaining
+work was to enable it by default and verify. Done:
+- **Makefile `SA_LIVE_ENV`** now includes `BANISHED_LIVE_RESIDENCE=1
+  BANISHED_LIVE_HOUSING=1`, so a plain `mingw32-make sa-run` (and the launch.json
+  configs that mirror it) launch with housed founding families — no hand-set envs.
+- **Verified live (multiple runs, crash-free):** `[startTown::housing]` reports
+  all 6 founding families rostered into 6 captured WoodHouses (~21-25 members
+  housed depending on RNG child counts); each member's residence ref
+  (`CitizenComponent+0x248`) is set AND the house's `WorkPlaceComponent` occupant
+  roster (`+0x60`) matches the family size; the deferred occupied-house mesh
+  visuals apply at frame 3 ("crash-free"). Zero REDZONE/exception markers.
+- **A/B safe:** the change is launch-time env only (a make-recipe var list), so the
+  compiled binary is byte-identical; the `LiveEnabled()` code gates still no-op on a
+  bare direct launch (envs unset). No rebuild semantics changed.
+- **Boundary note:** housing does NOT change the candidate set (still
+  `{SeekHappiness p5, Education p3, Idle p2, Leisure p2}`) — this is faithful. A
+  housed, jobless, fed citizen leisure-wanders in retail too. "Path home" behavior
+  is gated on **Phase 3 (needs)**: needs are stuck at 0, so citizens never get a
+  sleep/eat trigger to return home. Work (id5) is gated on **Phase 4 (workplace)**.
+  So the correct next phase for visible goal-directed behavior is **Phase 3** (the
+  hunger-accumulation quick-win) and then **Phase 4** (workplace assignment).
+- **Organic Update path** (`CitizenComponent::Update` AssignHousing, gated on
+  adulthood at citizencomponent.cpp:682) is a backstop for aged-up/new citizens; it
+  no-ops for start-town children by design. The founding-family path is the faithful
+  start-town mechanism and is the one wired on.
+
+## Phase 2 — Housing assignment (original spec, superseded by the DONE block above)
 
 **Objective:** `CitizenComponent::Update`'s AssignHousing finds an available WoodHouse
 ResidenceComponent and links it → citizen housed (`+0x68 != 0`). Family members share a
