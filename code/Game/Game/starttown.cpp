@@ -1638,6 +1638,22 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     static const char* s_capEnv = std::getenv("BANISHED_RES_CAP");
     const int poolCap = s_capEnv ? atoi(s_capEnv) : RES_POOL_CAP;
 
+    // FAITHFUL RNG ALIGNMENT (FUN_1400a12b0 prologue). Before the pool loop the
+    // original constructs THREE PerlinNoise objects (freq = g_fUVScale on both axes)
+    // that are never subsequently used — but the 6 Random::RandTol draws they consume
+    // offset the shared world RNG (world+0xd8). Omitting them shifts every downstream
+    // draw, so the scatter can't reproduce a vanilla map seed. Replicate exactly: 6
+    // RandTol + 3 deterministic ctor calls (the ctor is seeded purely by its int args
+    // and never touches the RNG, so a single throwaway buffer is byte-equivalent).
+    {
+        uint8_t throwaway[0x100];
+        for (int i = 0; i < 3; ++i) {
+            int t1 = fn_Random_RandTol(rng, 0x7ffffff);
+            int t2 = fn_Random_RandTol(rng, 0x7ffffff);
+            fn_PerlinNoise_Ctor(throwaway, uvScale, uvScale, t2, t1);
+        }
+    }
+
     int spawned = 0;
     for (int e = 0; e < count; ++e) {
         if (onlyPool >= 0 && e != onlyPool) continue;
@@ -1665,15 +1681,16 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         const float slopeMin  = *(float*)(desc + 0x44);
         const int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
 
-        int s1 = fn_Random_RandTol(rng, 0x7ffffff);
-        int s2 = fn_Random_RandTol(rng, 0x7ffffff);
-        uint8_t perlin[0x100] = {};
-        fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
-
         // Per-pool growth-variant setup (FUN_1400a12b0's NaturalResourceDescription
         // +0x48 block). When set (trees/crops), build one Perlin field per growth
         // variant group so each cell can pick a biome-clustered variant; rocks/ore
         // have +0x48 clear and keep the default variant.
+        //
+        // FAITHFUL RNG ORDER: the original builds the per-variant Perlins FIRST (inside
+        // the +0x48 block), THEN the scatter Perlin. Both are seeded from the same world
+        // RNG, so the build order decides which seeds each field receives — it must run
+        // variant-then-scatter or trees end up with a different distribution than vanilla
+        // for a given map seed (and every later pool inherits the RNG offset).
         static const bool s_noVariant = std::getenv("BANISHED_NO_RES_VARIANT") != nullptr;
         const bool hasVariants = !s_noVariant && desc[0x48] != 0;
         void* modelDesc = hasVariants ? FindDescriptionOnTemplate(tmpl, TypeId("ModelDescription")) : nullptr;
@@ -1687,13 +1704,27 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         int vOverrideDenom  = *(int32_t*)(desc + 0x5c);
         if (vOverrideDenom <= 0) vOverrideDenom = 1;
         static constexpr int MAX_VARIANTS = 8;
-        if (variantCount > MAX_VARIANTS) variantCount = MAX_VARIANTS;
         uint8_t vPerlin[MAX_VARIANTS][0x100];
-        for (int vi = 0; vi < variantCount; ++vi) {
-            int vs1 = fn_Random_RandTol(rng, 0x7ffffff);
-            int vs2 = fn_Random_RandTol(rng, 0x7ffffff);
-            fn_PerlinNoise_Ctor(vPerlin[vi], vFreqX, vFreqY, vs2, vs1);
+        // The original loops the FULL (uncapped) variant count, building one Perlin per
+        // group. The stack buffer caps storage at MAX_VARIANTS, so draw RandTol for every
+        // variant (keeps the RNG stream aligned even if a resource ever exceeds the cap)
+        // but only Ctor into the buffer for the first MAX_VARIANTS. Trees have < 8 groups.
+        if (hasVariants && variantCount > 0) {
+            for (int vi = 0; vi < variantCount; ++vi) {
+                int vs1 = fn_Random_RandTol(rng, 0x7ffffff);
+                int vs2 = fn_Random_RandTol(rng, 0x7ffffff);
+                if (vi < MAX_VARIANTS)
+                    fn_PerlinNoise_Ctor(vPerlin[vi], vFreqX, vFreqY, vs2, vs1);
+            }
         }
+        if (variantCount > MAX_VARIANTS) variantCount = MAX_VARIANTS;
+
+        // Scatter Perlin — built AFTER the variant Perlins, matching a12b0's draw order.
+        int s1 = fn_Random_RandTol(rng, 0x7ffffff);
+        int s2 = fn_Random_RandTol(rng, 0x7ffffff);
+        uint8_t perlin[0x100] = {};
+        fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
+
         const bool doVariant = hasVariants && modelDesc && variantCount > 0 && fn_Random_Rand;
         fprintf(stderr, "[startTown::res] [%d] variants:has=%d count=%d thr=%.3f denom=%d "
                 "(scatter div=%.2f thr=%.3f dens=%.3f)\n",
