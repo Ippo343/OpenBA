@@ -105,6 +105,18 @@ static void Ensure_50f0() {
 void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p4, float p5) {
     Ensure_50f0();
 
+    // Standalone-inert guard: `self` is the animation target (a ModelComponent / resource
+    // component). In retail it is never null — the caller resolved it from a live entity.
+    // In standalone some finds resolve null when a shared type-id global is the unfilled
+    // sentinel (e.g. AnimateNaturalResource → WorkBase_FindComponent_52c0 on a tree, whose
+    // c7b30 global stays 0xFFFFFFFF). The animation then targets the inert resource-entity
+    // MeshInstance layer, which isn't brought up. Skip as a safe no-op rather than deref
+    // null at self+0x18 — matches this function's existing inert-world no-op philosophy
+    // below and the move-tick tail's inert-ModelComponent guards. Live/DLL mode (self
+    // non-null) is unchanged. This keeps the organic forester cut sequence crash-safe once
+    // the citizen actually arrives at a tree (the MoveTo/arrival keystone now works).
+    if (self == 0) return;
+
     void* obj = *reinterpret_cast<void**>(self + 0x18);
     // The type-gate validates the ModelComponent's description (self+0x18) is a
     // ModelDescription (DAT_1401c7a88 — mislabeled "FenceDescription" in the global;

@@ -143,10 +143,20 @@ bool PerformWork_ResolveFuncs() {
     s_fn_CitizenBreakCheck = reinterpret_cast<fn_CitizenBreakCheck_t>(
         ResolveAddr(Module::Exe, 0x140116650));
 
-    // Float constants
+    // Float constants. In STANDALONE mode ResolveAddr(Module::Exe, dataAddr) returns
+    // NULL for raw .rdata floats that aren't in the address registry (see
+    // reference_standalone_rdata_null_fallback), so fall back to the real values read
+    // from the exe .rdata: 0x14017214c=1.0 (g_fUVScale), 0x1401722a0=-180.0 (yaw min),
+    // 0x140172220=180.0 (yaw max). Without the fallback, AbstractImpl's yaw-range check
+    // (`yaw >= *s_fYawMin`) dereferences a null pointer — the crash hit the first time a
+    // forester organically arrived at a tree and its chop PerformWork precheck ran.
+    static float s_fbConst1 = 1.0f, s_fbYawMin = -180.0f, s_fbYawMax = 180.0f;
     s_fConst1 = (float*)ResolveAddr(Module::Exe, 0x14017214c);
+    if (!s_fConst1) s_fConst1 = &s_fbConst1;
     s_fYawMin = (float*)ResolveAddr(Module::Exe, 0x1401722a0);
+    if (!s_fYawMin) s_fYawMin = &s_fbYawMin;
     s_fYawMax = (float*)ResolveAddr(Module::Exe, 0x140172220);
+    if (!s_fYawMax) s_fYawMax = &s_fbYawMax;
 
     // Vtable addresses
     s_vtable_PerformWork = ResolveAddr(Module::Exe, 0x14015fea0);

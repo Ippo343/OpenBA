@@ -92,10 +92,11 @@ Phase 4  Job / workplace assignment + laborer default ─► citizens employed (
 Phase 5  ✅ Production execution end-to-end (RemoveNaturalResource → FUN_1401260f0 → RegisterRawMaterial;
              │  town stock increments, verified; entity-lifecycle side gated pending materialization)
              ▼
-Phase 6  Fix citizen MoveTo / arrival (pathfinder steering) → citizens NAVIGATE to targets → the whole
-             │  loop runs ORGANICALLY without force harnesses  ★ NEXT
+Phase 6  ✅ DONE — citizen MoveTo/arrival steering FIXED (curCell fix) → citizens NAVIGATE + arrive;
+             │  organic forester cut sequence drains to RemoveNaturalResource crash-free
              ▼
-Phase 7  Population response (food consumed → hunger relief; births/deaths; depletion)  [was Phase 6]
+Phase 7  Population response + close the organic produce loop (cut-sequence target wiring: RemoveNaturalResource
+             │  +0x28 → tree not citizen) → hunger relief; births/deaths; depletion  [was Phase 6]  ★ NEXT
 ```
 
 Phases 1→2→4 are the critical path for "citizens do purposeful things." Phase 3 can
@@ -557,7 +558,48 @@ only matter inside the gated entity-spawn block. See [[project_economy_loop]].
 
 ---
 
-## Phase 6 — Fix citizen MoveTo / arrival (pathfinder steering) — enables ORGANIC testing without force harnesses ★ NEXT
+## Phase 6 — ✅ COMPLETE (2026-07-01) — citizen MoveTo/arrival steering FIXED; citizens navigate + arrive
+
+**✅✅ PHASE 6 DONE — the MoveTo/arrival keystone is fixed and verified; citizens now steer along the
+A* path, turn at waypoints, and STOP at their target.** Root cause + fix + organic verification:
+
+- **ROOT CAUSE (Ghidra-verified vs the real `MoveTo::Execute` 0x1400c8570, `MoveTo_Slot5`):** the reimpl's
+  CASE-2 traversal compared the wrong cells. The real code advances the path index when the citizen's
+  **current cell** (`iVar11 = curCell`) equals `pathNodes[pathIndex]`, and reads terrain speed at
+  `curCell`. The port used **`destCell`** (the final destination cell) in BOTH places. `destCell` only
+  equals `pathNodes[pathIndex]` when the index already points at the last node → the index never advanced
+  for intermediate waypoints → `UpdateFacing` (0x1400c8d20) was never re-called → the citizen bee-lined in
+  a FIXED heading past its target forever and only "arrived" if the straight line happened to pass through
+  the destination cell. `MoveTo::Execute` was a DISABLED HOOK (bug class 3), so this was never A/B-caught.
+- **FIX (`code/Game/Action/moveto.cpp`, 2 lines):** the terrain-speed lookup and the waypoint-reached
+  comparison now use **`curCell`**, matching the real function exactly.
+- **VERIFIED LIVE (default sa-run combo, `BANISHED_MOVETICK_TRACE`):** citizen `want` heading now changes
+  continuously (e.g. cit#0: 28 distinct headings) as it curves toward successive waypoints, `applied`
+  yaw tracks it (visible turning), and the citizen **STOPS at its target** (`delta=0 speed=0 stackTop`
+  pops) then picks a new leisure target — retail-faithful navigation. 17+ arrivals per run, crash-free.
+  The old "straight line off into the distance forever" runaway is GONE.
+- **ORGANIC FORESTER DELIVERY PROVEN (no `BANISHED_FORCE_HARVEST`):** with `BANISHED_FORCE_FORESTERWORK`,
+  the citizen now **organically walks to the tree and the cut sequence DRAINS** all the way to the produce
+  trigger: `[ORGANIC-PRODUCE] RemoveNaturalResource::Main REACHED`, crash-free. My arrival fix newly
+  exposed 4 downstream dominoes in the forester chain, all fixed clean:
+  1. `MoveTo::Execute` curCell (THE keystone).
+  2. `PerformWork::AbstractImpl` (chop) — `s_fYawMin/s_fYawMax` (0x1401722a0/0x140172220) are rdata-null
+     in standalone → real-value fallbacks (`performwork.cpp`).
+  3. `Math::Vector3::FromYawPitch` dispatch slot 0x1401512a0 unregistered → registered to
+     `?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z` (`address_registry.cpp`).
+  4. `AnimateNaturalResource` + the shared `WorkBase_FindComponent_52c0` returning null (inert
+     resource-entity animation layer) → standalone-inert null-guards (`action_base_movedeps.cpp`,
+     `animatenaturalresource.cpp`, `removenaturalresource.cpp`).
+- **REMAINING ECONOMY GAP (NOT movement — handed to Phase 7 / economy cut-construction):** the organic
+  `RemoveNaturalResource` action's **target `+0x28` is wired to the CITIZEN, not the tree** (diagnostic:
+  `target +0x28 == citizen address`), so the NR-component find resolves null and the produce is skipped
+  crash-safely (no organic stock increment YET). The fix is in the cut-sequence builder
+  (`PerformWork_Action_Ctor3`/ForesterWork), a construction detail separate from MoveTo/arrival. The
+  produce ACCOUNTING itself (`FUN_1401260f0` → `RegisterRawMaterial` → stock++) is already Phase-5-verified.
+- **A/B GREEN:** default sa-run (no force envs) navigates + arrives crash-free; the always-on change
+  (FromYawPitch slot registration) is a pure additive real-runtime-fn registration.
+
+### Phase 6 — original spec (superseded by the COMPLETE block above)
 
 **Objective:** make citizens physically NAVIGATE to a target cell (steer along an A* path and
 DETECT ARRIVAL), instead of drifting in a straight line via walk-anim root-motion. This is the single

@@ -880,6 +880,12 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0Vector3@Math@@QEAA@AEBVScalar@1@00@Z"));
     RegisterDispatchSlot(0x140151298,   // Math::Vector3::Dot(this, other) const -> Scalar
         (uintptr_t)ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
+    RegisterDispatchSlot(0x1401512a0,   // Math::Vector3::FromYawPitch(Scalar&,Scalar&) -> Vector3
+        // Static value-return ABI: RCX=hidden retbuf, RDX=yaw, R8=pitch. Read by
+        // PerformWork::AbstractImpl (performwork.cpp) to convert the chop yaw into a
+        // facing direction — unregistered → s_fn_FromYawPitch null → null-call the first
+        // time a forester organically arrives at a tree and runs its chop precheck.
+        (uintptr_t)ResolveExport("?FromYawPitch@Vector3@Math@@SA?AV12@AEBVScalar@2@0@Z"));
 
     // Achievement::Goal::Serialize — base serialize for StatGoal/TimeGoal/etc.
     // (virtual, Runtime export `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z`,

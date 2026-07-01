@@ -710,11 +710,12 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
         return 1;
     }
 
-    // Look up terrain type at current target cell for speed calculation
-    // The current target cell is pathNodes[curCell] -- but we use destCell (the cell
-    // we're heading toward) which is pathNodes[pathIndex-1] or similar
+    // Look up terrain type at the citizen's CURRENT cell for the speed calculation.
+    // Verified vs the real MoveTo::Execute (0x1400c8570): the terrain byte is read at
+    // iVar11 = curCell (the cell the citizen currently occupies), NOT destCell. Using
+    // destCell here samples the wrong tile's movement cost.
     uintptr_t cellArrayBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
-    uint8_t terrainType = *(uint8_t*)(cellArrayBase + (int64_t)destCell * 0x30 + 0x29);
+    uint8_t terrainType = *(uint8_t*)(cellArrayBase + (int64_t)curCell * 0x30 + 0x29);
 
     float speed;
     bool onRoad = *(uint8_t*)(s + 0x474) != 0;
@@ -745,9 +746,15 @@ int MoveTo_Execute_Impl(void* self, void* actionStack, void* time) {
     targetEntity = *(uintptr_t*)(s + 0x28);
     *(float*)(targetEntity + 0x38) = speed * *(float*)(s + 0x478);
 
-    // Check if we've reached the current waypoint cell
+    // Check if the citizen's CURRENT cell has reached the current waypoint cell.
+    // Verified vs the real MoveTo::Execute (0x1400c8570): the comparison is
+    // iVar11 (curCell) != pathNodes[pathIndex], NOT destCell. The prior port compared
+    // the FINAL destination cell against the waypoint, so the index only advanced when
+    // pathIndex already pointed at the last node — intermediate waypoints never fired,
+    // UpdateFacing was never re-called, and the citizen bee-lined in a fixed heading
+    // past its target forever instead of steering along the A* path.
     int32_t waypointCell = *(int32_t*)(s + 0x68 + (int64_t)pathIndex * 4);
-    if (destCell != waypointCell) {
+    if (curCell != waypointCell) {
         // Haven't reached the current waypoint yet, keep moving
         return 1;
     }

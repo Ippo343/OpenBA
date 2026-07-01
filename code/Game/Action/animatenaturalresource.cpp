@@ -167,10 +167,16 @@ int AnimateNaturalResource_Execute_Impl(AnimateNaturalResource* self, void* acti
     (void)actionStack;
     (void)time;
 
-    void* localIBP[4];
+    void* localIBP[4] = {nullptr, nullptr, nullptr, nullptr};
     fn_InternalBasePtr_CheckPtr(&self->_field20);
     s_fn_GetModelComp(self->_field20, localIBP);
     fn_InternalBasePtr_CheckPtr(localIBP);
+
+    // Standalone-inert guard: on a tree whose ModelComponent find resolves null (inert
+    // resource-entity render layer, unfilled type-id global), report "not animating" so the
+    // action completes rather than dereferencing null+0x28 inside MeshInstance::IsAnimating.
+    // Retail (live model) is unchanged.
+    if (localIBP[0] == nullptr) return 0;
 
     // MeshInstance is at modelComp + 0x28, check if still animating
     return s_fn_IsAnimating((uint8_t*)(localIBP[0]) + 0x28) ? 1 : 0;

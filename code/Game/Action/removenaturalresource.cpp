@@ -232,8 +232,25 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
     fn_InternalBasePtr_CheckPtr(s + 0x28);
     s_fn_FindNRComp(*(void**)(s + 0x28), &nrCompIBP);
 
-    // Get the description from the NR component
+    // Standalone-safety: the NR component find can resolve null when the action's target
+    // (+0x28) is not wired to a live tree entity. In retail it is always a valid natural
+    // resource, so the original derefs local_res8+0x18 unconditionally. Guard so the
+    // organic forester cut sequence (which now reaches here — the MoveTo/arrival keystone
+    // makes the citizen actually arrive at the tree) is crash-safe rather than dereffing
+    // null+0x18. The diagnostic reports the target so the cut-sequence target wiring (the
+    // remaining economy gap, PerformWork_Action_Ctor3) can be closed. Returning 0 completes
+    // the action so the citizen isn't wedged. Live/DLL mode (non-null) is unchanged.
     fn_InternalBasePtr_CheckPtr(&nrCompIBP);
+    if (nrCompIBP == nullptr) {
+        if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
+            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNaturalResource: NR-comp null "
+                    "(target +0x28=%p) — cut-sequence target not wired to a tree; skipping "
+                    "produce (crash-safe). Movement keystone reached this point organically.\n",
+                    *(void**)(s + 0x28));
+            fflush(stderr);
+        }
+        return 0;
+    }
     uintptr_t nrComp = (uintptr_t)nrCompIBP;
     void* descObj = *(void**)(nrComp + 0x18);
 
