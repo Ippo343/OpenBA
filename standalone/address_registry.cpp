@@ -970,6 +970,12 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Rand@Random@System@@QEAAII@Z"));
     RegisterDispatchSlot(0x140152b00,                       // System::Time::Time(float)
         (uintptr_t)ResolveExport("??0Time@System@@QEAA@M@Z"));
+    // System::Time::AsSeconds — CitizenComponent::Update reads this to get dt_sec for
+    // hunger/thirst/age accumulation. Unregistered => s_fn_Time_AsSeconds NULL =>
+    // dt_sec 0.0f => needs never climb (Phase-3 accumulation bug). Ghidra: first
+    // indirect CALL in Update @0x140112eb4 = CALL [0x140151318] -> Time::AsSeconds.
+    RegisterDispatchSlot(0x140151318,                       // System::Time::AsSeconds() const
+        (uintptr_t)ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
 
     RegisterDispatchSlot(0x140152738,
         (uintptr_t)ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));

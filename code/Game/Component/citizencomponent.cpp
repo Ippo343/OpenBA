@@ -227,12 +227,20 @@ static void EnsureHelpers() {
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ab0);
     if (slot) s_fn_CheckPtr_slot = *reinterpret_cast<fn_CheckPtr_slot_t*>(slot);
 
-    // Dispatch slot for Time::AsSeconds
-    slot = ResolveAddr(Module::Exe, 0x140152a70);
+    // Dispatch slot for Time::AsSeconds. The correct slot is 0x140151318 (verified
+    // in Ghidra: the first indirect CALL in CitizenComponent::Update @0x140112eb4 is
+    // `CALL qword ptr [0x140151318]` -> System::Time::AsSeconds). The previous value
+    // (0x140152a70) actually resolves to Math::Vector3::operator== — with that wrong
+    // slot, s_fn_Time_AsSeconds was NULL in standalone (unregistered) so dt_sec fell
+    // back to 0.0f every tick and hunger/thirst/age never accumulated (Phase-3 bug).
+    slot = ResolveAddr(Module::Exe, 0x140151318);
     if (slot) s_fn_Time_AsSeconds = *reinterpret_cast<fn_Time_AsSeconds_t*>(slot);
 
-    // Dispatch slot for Time::Time(float)
-    slot = ResolveAddr(Module::Exe, 0x140152a80);
+    // Dispatch slot for Time::Time(float) (seconds -> Time ticks). Correct slot is
+    // 0x140152b00 (Ghidra: the food/fuel-consume loops call `CALL qword ptr
+    // [0x140152b00]` @0x1401133ca/0x140113409 before ConsumeFood/ConsumeFuel). The
+    // previous value (0x140152a80) resolved to SoundEffect::_typeInfo.
+    slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_FromSeconds = *reinterpret_cast<fn_Time_FromSeconds_t*>(slot);
 
     // Direct exe addresses for CitizenComponent sub-functions

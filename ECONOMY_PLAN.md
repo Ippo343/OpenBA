@@ -269,6 +269,44 @@ citizens path to their house instead of random cells.
 
 ---
 
+## Phase 3 — PROGRESS (2026-07-01) — ★ QUICK-WIN DONE (needs now accumulate)
+
+**✅ NEEDS-ACCUMULATION QUICK-WIN COMPLETE + VERIFIED.** Root cause of the "hunger/thirst
+stuck at 0.0" bug was found and fixed:
+
+- **Root cause (NOT any of the three hypothesized candidates).** Instrumented the hunger
+  branch live: `gameFlags=0` (accumulation branch taken, not the `>>1&1` zeroing),
+  `rate(desc+0xC0)=100.0`, `div(DAT_14017225c)=3600.0`, no disease — all fine. The bug
+  was **`dt_sec = System::Time::AsSeconds(deltaTime)` returning 0.0** every tick, so
+  `hunger += dt_sec*rate/div` was always `+= 0`. Same `dt_sec` feeds age + thirst, so
+  those were frozen too.
+- **Why dt_sec was 0:** `citizencomponent.cpp` read the `Time::AsSeconds` fn ptr from the
+  **wrong dispatch slot** `0x140152a70` (which actually resolves to `Math::Vector3::operator==`).
+  The correct slot is **`0x140151318`** (Ghidra: first indirect CALL in
+  `CitizenComponent::Update` @0x140112eb4 = `CALL [0x140151318]`). It was also unregistered
+  in standalone, so the read returned NULL → `dt_sec` fell back to `0.0f`. Likewise the
+  `Time::Time(float)` slot was wrong (`0x140152a80` = `SoundEffect::_typeInfo`); correct is
+  **`0x140152b00`** (used by the food/fuel-consume loops; already registered).
+- **Fix (2 files, minimal, A/B-safe):** (1) `citizencomponent.cpp` — corrected both slot
+  addresses; (2) `standalone/address_registry.cpp` — registered `0x140151318` →
+  `?AsSeconds@Time@System@@QEBAMXZ` (`0x140152b00` was already registered). DLL mode is
+  unaffected (the exe loader fills these slots itself); byte-faithful accumulation logic.
+- **Verified live (default sa-run combo, no accel):** `dt=0.01667` (60 Hz), hunger climbs
+  `0.088→0.177→…→0.711` and thirst `0.126→…→1.022` — steady linear accumulation toward the
+  warn thresholds (hunger 18 / thirst 15, read from `desc+0xCC`/`+0xEC`). World builds,
+  housing applies, process stable, **crash-free**.
+- **Food-seeking candidate CONFIRMED (accelerated verify run):** once hunger/thirst cross
+  their warn thresholds, `CitizenAI_BuildCandidateStateList` puts **id 0xf (thirst) / id 0xe
+  (hunger) at priority 7 at the TOP** of the candidate list, outranking SeekHappiness(5)/
+  Education(3)/Idle/Leisure(2). i.e. a hungry/thirsty citizen now selects the food/water-
+  seeking state instead of leisure-wandering — the "go eat" behavior the user asked about.
+- **Deferred to Phase 1 (live stocked storage):** the downstream of the eat/drink state —
+  physically pathing to a **stocked** StorageBarn, `ConsumeFood`/`ConsumeFuel` pulling food,
+  and the barn count decrementing — still needs a live StorageComponent with real stock
+  (buildings' economy components are inert; town registry `gameWorld+0xf0` unbuilt). The
+  candidate now fires; the consume no-ops until storage is live. Fold full-consume into the
+  Phase 1 Storage agent as originally planned.
+
 ## Phase 3 — Needs accumulation + food/storage consumption ★ quick win available
 
 **Objective:** hunger (`+0x44`) / thirst (`+0x48`) accumulate over time; the food-
