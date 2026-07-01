@@ -31,6 +31,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 
 // ============================================================
@@ -219,6 +220,11 @@ void RemoveNaturalResource_Serialize_Impl(RemoveNaturalResource* self, void* str
 int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* actionStack) {
     RemoveNaturalResource_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
     (void)actionStack;
+    if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
+        fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNaturalResource::Main REACHED (self=%p, RemoveNatRes=%p)\n",
+                (void*)self, (void*)s_fn_RemoveNatRes);
+        fflush(stderr);
+    }
     uint8_t* s = (uint8_t*)self;
     void* nrCompIBP = nullptr;
 

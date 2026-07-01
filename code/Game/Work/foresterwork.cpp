@@ -17,6 +17,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 
 // ============================================================
@@ -908,6 +909,36 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                             // Get terrain height
                             float cutPathPos[3];
                             s_fn_GetTerrainPos(mapGrid, cutPathPos, cutPos, 0, nullptr);
+
+                            // ── PHASE 5 PRODUCE VERIFICATION (env BANISHED_FORCE_HARVEST, default OFF) ──
+                            // The organic delivery of a citizen to the tree is gated on the pathfinder
+                            // MoveTo/arrival keystone (project_citizen_pathfinding_zero_dest) — citizens
+                            // currently drift via walk-anim root-motion and never arrive. To verify the
+                            // Phase-5 PRODUCTION chain (RemoveNaturalResource::Main → FUN_1401260f0 →
+                            // RegisterRawMaterial) end-to-end independent of that movement blocker, this
+                            // block invokes the real produce helper directly on the tree the real forester
+                            // scan just found + validated. It mirrors RemoveNaturalResource::Main's flag
+                            // setup (natResComp+0x2d harvestable, +0x2c mature) then calls 0x1401260f0.
+                            if (std::getenv("BANISHED_FORCE_HARVEST")) {
+                                typedef void (*RemoveNatRes_t)(void* natResComp, void* workIBP, char flag);
+                                static RemoveNatRes_t s_forceProduce =
+                                    reinterpret_cast<RemoveNatRes_t>(ResolveAddr(Module::Exe, 0x1401260f0));
+                                static int s_harvestCount = 0;
+                                if (s_forceProduce && s_harvestCount < 6) {
+                                    ++s_harvestCount;
+                                    uintptr_t nrc = *(uintptr_t*)natResCompIBP2;
+                                    *(uint8_t*)(nrc + 0x2d) = 1;   // harvestable
+                                    *(uint8_t*)(nrc + 0x2c) = 1;   // mature
+                                    uintptr_t czEnt = *(uintptr_t*)citizenIBP;
+                                    uintptr_t residence = czEnt ? *(uintptr_t*)(czEnt + 0x248) : 0;
+                                    uintptr_t workIBPbuf[2] = { residence, 0 };
+                                    fprintf(stderr, "[FORCE-HARVEST] #%d invoking produce on tree natResComp=%p "
+                                            "(mirrors RemoveNaturalResource::Main; bypasses MoveTo arrival)\n",
+                                            s_harvestCount, (void*)nrc);
+                                    fflush(stderr);
+                                    s_forceProduce((void*)nrc, workIBPbuf, 1);
+                                }
+                            }
 
                             // Create PerformWork action (cut tree)
                             // Get target entity IBP

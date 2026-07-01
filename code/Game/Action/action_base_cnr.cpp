@@ -19,6 +19,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // Lazily-resolved exe sub-helpers and type-ID globals (shared by this batch).
@@ -489,8 +491,22 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     int64_t parent = *reinterpret_cast<int64_t*>(s + 0x10);
     int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
 
+    // [standalone] Entity-lifecycle gate (BANISHED_PRODUCE_SPAWN_ENTITY, default OFF).
+    // Both the tree-REMOVAL (queue the resource entity into the world entity list's dirty
+    // list at entityList+0xd0) and the item-SPAWN (below) feed the engine's entity lifecycle,
+    // whose next-frame EntityList_PreUpdate → Serialize faults in Runtime-x64.dll on the
+    // partially-materialized standalone entities. The economy effect (town stock increment
+    // via RegisterRawMaterial) is separable and always runs; this gate defers only the
+    // visual/lifecycle side until entity materialization is live. (This function runs only on
+    // the standalone registered path; DLL mode runs the original exe helper — gate is inert there.)
+    static int s_spawnItem = -1;
+    if (s_spawnItem < 0) {
+        const char* e = std::getenv("BANISHED_PRODUCE_SPAWN_ENTITY");
+        s_spawnItem = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+
     // Detach model from the build queue when not already queued (bit 10 of +0x40).
-    if (parent != 0) {
+    if (s_spawnItem && parent != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
         if (((*reinterpret_cast<uint32_t*>(parent + 0x40) >> 10) & 1) == 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
@@ -539,6 +555,32 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // this slot by pointer; keep it live in a dedicated 8-byte local.
     int64_t cellSlot = static_cast<int64_t>(static_cast<uint32_t>(cell));
 
+    // ── ECONOMY ACCOUNTING (always) ─────────────────────────────────────────
+    // Increment the town raw-material stock — the essential produce effect the economy loop
+    // consumes. RegisterRawMaterial needs only the citizen/work IBP, the resource description
+    // and the yield amount; NOT the spawned physical item entity, so it runs unconditionally.
+    int64_t regIBP = *reinterpret_cast<int64_t*>(citizenIBP);
+    if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {
+        int64_t descEnt = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
+        fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes harvest: amount=%d cell=%d harvestFlag=%d "
+                        "descEnt=%p RegisterRawMaterial=%p\n",
+                amount, cell, (int)harvestFlag, (void*)descEnt, (void*)s_fn_88ef0);
+        fflush(stderr);
+    }
+    if (s_fn_88ef0)
+        s_fn_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,
+                   *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
+
+    // ── PHYSICAL ITEM ENTITY (opt-in: BANISHED_PRODUCE_SPAWN_ENTITY) ─────────
+    // Clone/position/register the ground-pile item entity. In standalone the clone is only
+    // partially materialized (inert component factories); once it joins the live world entity
+    // list the next frame's EntityList_PreUpdate → Serialize faults in Runtime-x64.dll. Gate
+    // the whole visual/lifecycle block until entity materialization is live — the stock
+    // accounting above is what the economy loop reads. (This function runs only on the
+    // standalone registered path; DLL mode runs the original exe helper, so the gate never
+    // affects DLL-mode faithfulness.)
+    if (!s_spawnItem) return;
+
     // Query the existing surface tile at the cell (for its material id at +0x24).
     int64_t surfIBP = 0;
     if (s_fn_8d50) s_fn_8d50(*reinterpret_cast<int64_t*>(gameWorld + 0x118), &surfIBP, cell);
@@ -562,8 +604,10 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     void* rng = *reinterpret_cast<void**>(gameWorld + 0xd8);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rawMatIBP);
     int rt = s_fn_RandTol ? s_fn_RandTol(rng, 2) : 0;
-    float amtScale = s_p_DAT_140172204 ? *s_p_DAT_140172204 : 0.0f;
-    if (s_fn_9760) s_fn_9760(rawMatIBP, cell, static_cast<float>(rt) * amtScale);
+    // DAT_140172204 = 90.0f (rotation scale). It resolves NULL in standalone (raw .rdata
+    // constant) — use the real value, not 0 (see reference_standalone_rdata_null_fallback).
+    float amtScale = s_p_DAT_140172204 ? *s_p_DAT_140172204 : 90.0f;
+    if (s_fn_9760 && rawMatIBP != 0) s_fn_9760(rawMatIBP, cell, static_cast<float>(rt) * amtScale);
 
     if (*reinterpret_cast<int64_t*>(citizenIBP) != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(citizenIBP);
@@ -572,9 +616,11 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         if (s_fn_022480) s_fn_022480(cit28, &cellSlot);
     }
 
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rawMatIBP);
-    *reinterpret_cast<int*>(rawMatIBP + 0x28) = amount;
-    *reinterpret_cast<int64_t*>(rawMatIBP + 0x30) = 0;
+    if (rawMatIBP != 0) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&rawMatIBP);
+        *reinterpret_cast<int*>(rawMatIBP + 0x28) = amount;
+        *reinterpret_cast<int64_t*>(rawMatIBP + 0x30) = 0;
+    }
 
     if (surfIBP != 0) {
         int64_t nrIBP = 0;
@@ -584,11 +630,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         if (p) *reinterpret_cast<uint32_t*>(*reinterpret_cast<int64_t*>(p) + 0x2c) = surfMatId;
     }
 
-    // Register the new entity + hand it to the storage manager.
-    int64_t regIBP = *reinterpret_cast<int64_t*>(citizenIBP);
-    if (s_fn_88ef0)
-        s_fn_88ef0(*reinterpret_cast<int64_t*>(gameWorld + 0xf0), &regIBP, harvestFlag,
-                   *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20), amount);
     int64_t listIBP = newIBP;
     if (s_fn_c48a0)
         s_fn_c48a0(*reinterpret_cast<void***>(gameWorld + 0xe8), &listIBP,

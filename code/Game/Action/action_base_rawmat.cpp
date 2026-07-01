@@ -27,6 +27,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (standalone type-id fallback)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -290,6 +291,15 @@ int ActRm_GetResourceCategory_88f90(void* /*unused*/, uintptr_t entity) {
 void* ActRm_FindComponent_223c0(uintptr_t entity, void* retIBP) {
     EnsureTids();
     uint32_t typeId = s_pTid_1c7c80 ? *s_pTid_1c7c80 : 0;
+    // [standalone] The shared .rdata type-id global DAT_1401c7c80 (RawMaterialComponent) is
+    // unfilled (0/0xFFFFFFFF) in standalone → the scan would match nothing and return null,
+    // crashing the produce's downstream PositionEntity. Self-resolve via GetTypeIdByName
+    // (the proven citizen-brick pattern; verified c7c80 <- RawMaterialComponent_RegisterType).
+    if (typeId == 0 || typeId == 0xFFFFFFFFu) {
+        static uint32_t s_c7c80 = 0;
+        if (s_c7c80 == 0) s_c7c80 = ::Object::GetTypeIdByName("RawMaterialComponent");
+        typeId = s_c7c80;
+    }
     void* found = nullptr;
     int n = *reinterpret_cast<int*>(entity + 0x38);
     uintptr_t base = *reinterpret_cast<uintptr_t*>(entity + 0x30);
@@ -503,11 +513,15 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpA);
     uint8_t* objA = reinterpret_cast<uint8_t*>(ibpA[0]);
     int rot = static_cast<int>(rotation);   // CVTTSS2SI = truncate toward zero
-    *reinterpret_cast<int16_t*>(objA + 0x28) = static_cast<int16_t>(col);
-    *reinterpret_cast<int16_t*>(objA + 0x2a) = static_cast<int16_t>(row);
-    *reinterpret_cast<int32_t*>(objA + 0x2c) = 0x10001;
     if (rot < 0) { do { rot += 0x168; } while (rot < 0); }
-    *reinterpret_cast<int32_t*>(objA + 0x30) = rot;
+    // [standalone] objA = the spawned item entity's MapComponent (tile placement). On a freshly
+    // cloned raw-material entity in standalone this can be inert/absent; guard the tile writes.
+    if (objA) {
+        *reinterpret_cast<int16_t*>(objA + 0x28) = static_cast<int16_t>(col);
+        *reinterpret_cast<int16_t*>(objA + 0x2a) = static_cast<int16_t>(row);
+        *reinterpret_cast<int32_t*>(objA + 0x2c) = 0x10001;
+        *reinterpret_cast<int32_t*>(objA + 0x30) = rot;
+    }
 
     // GridToWorld: localPos = ((cellIndex%w) - half, (cellIndex/w) - half, 0).
     float half = static_cast<float>(mapWidth >> 1) - (s_pHalfCell_172114 ? *s_pHalfCell_172114 : 0.5f);
@@ -520,13 +534,18 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibpB);
     uint8_t* objB = reinterpret_cast<uint8_t*>(ibpB[0]);
-    float yaw = rotation, pitch = 0.0f;
-    uint32_t xform[8] = {0};  // FromYawPitchOffset out (7 dwords copied)
-    if (fn_Transform_FromYawPitchOffset)
-        fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, worldPos);
-    uint32_t* dstT = reinterpret_cast<uint32_t*>(objB + 0x148);
-    for (int i = 0; i < 7; i++) dstT[i] = xform[i];   // +0x148..+0x160
-    *reinterpret_cast<float*>(objB + 0x168) = rotation;
-    if (fn_Geometry_SetTransform)
-        fn_Geometry_SetTransform(objB + 0x28, objB + 0x148);
+    // [standalone] objB = the spawned item entity's Geometry/model component (visual transform).
+    // Inert/absent on the freshly cloned raw-material entity in standalone → guard the transform
+    // writes (this is the inert rendering layer; the economy accounting in the caller is unaffected).
+    if (objB) {
+        float yaw = rotation, pitch = 0.0f;
+        uint32_t xform[8] = {0};  // FromYawPitchOffset out (7 dwords copied)
+        if (fn_Transform_FromYawPitchOffset)
+            fn_Transform_FromYawPitchOffset(xform, &yaw, &pitch, worldPos);
+        uint32_t* dstT = reinterpret_cast<uint32_t*>(objB + 0x148);
+        for (int i = 0; i < 7; i++) dstT[i] = xform[i];   // +0x148..+0x160
+        *reinterpret_cast<float*>(objB + 0x168) = rotation;
+        if (fn_Geometry_SetTransform)
+            fn_Geometry_SetTransform(objB + 0x28, objB + 0x148);
+    }
 }

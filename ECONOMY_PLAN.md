@@ -89,9 +89,13 @@ Phase 3  Needs accumulation + food/storage consumption
 Phase 4  Job / workplace assignment + laborer default ─► citizens employed (+0x238)
              │                                   └─► Gather/Work states; hauling
              ▼
-Phase 5  Production execution end-to-end (work-completion → CreateRawMaterial → RegisterRawMaterial)
+Phase 5  ✅ Production execution end-to-end (RemoveNaturalResource → FUN_1401260f0 → RegisterRawMaterial;
+             │  town stock increments, verified; entity-lifecycle side gated pending materialization)
              ▼
-Phase 6  Population response (food consumed → hunger relief; births/deaths; depletion)
+Phase 6  Fix citizen MoveTo / arrival (pathfinder steering) → citizens NAVIGATE to targets → the whole
+             │  loop runs ORGANICALLY without force harnesses  ★ NEXT
+             ▼
+Phase 7  Population response (food consumed → hunger relief; births/deaths; depletion)  [was Phase 6]
 ```
 
 Phases 1→2→4 are the critical path for "citizens do purposeful things." Phase 3 can
@@ -501,31 +505,103 @@ path to workplaces or haul to the barn.
 
 ---
 
-## Phase 5 — Production execution end-to-end
+## Phase 5 — ✅ COMPLETE (2026-07-01) — production executes end-to-end; town stock increments
 
-**Objective:** a worked job produces a resource into storage. Largely done for the
-forester (find→decide→cut→execute crash-free, commit a3c9a4d) — remaining gap is
-work-COMPLETION chaining: citizen physically reaches the target, the work-timer
-(self+0x30) completes, a harvest-complete handler pushes CreateRawMaterial (0x1400c6b40)
-→ RegisterRawMaterial (0x140088ef0, verified). See [[project_economy_loop]].
+**✅✅ PHASE 5 DONE — a harvested tree produces raw material into the town stock, verified live.**
+The full produce chain is ported, registered, wired, and **crash-free**:
 
-**Blocking dependency:** Phase 4 (employed citizens driving work).
+- **The real produce chain (Ghidra-verified this session):** the forester's cut-sequence builder
+  `PerformWork_Action_Ctor3` (0x1400c1eb0, ported `WorkAct_PerformWorkCtor_c1eb0`, registered) appends
+  a **RemoveNaturalResource** action to the citizen's action stack (NOT a separate CreateRawMaterial —
+  the plan's earlier phrasing was loose). When RemoveNaturalResource executes, its Main (0x1400cab10,
+  ported) calls **FUN_1401260f0** (the harvest-produce helper, already ported as
+  `ActCNR_RemoveNatRes_1260f0` in `action_base_cnr.cpp` + registered at 0x1401260f0), which spawns the
+  raw-material item + calls **RegisterRawMaterial** (0x140088ef0 = `CreateRawMaterial_helper_8ef0`,
+  Phase-B-verified accounting) → `townMgr+0x170[cat].+0x10 += amount`.
+- **Bugs fixed to make the produce actually run + increment stock in standalone (all in this session):**
+  1. `ActRm_FindComponent_223c0` read the raw `.rdata` type-id global `DAT_1401c7c80` (RawMaterialComponent),
+     which is unfilled in standalone → the find returned null → downstream `PositionEntity` crashed on
+     `null+0x10`. **Fixed:** self-resolve via `GetTypeIdByName("RawMaterialComponent")` (proven pattern).
+  2. `ActRm_PositionEntity_9760` wrote the visual transform to the spawned item's inert MapComponent
+     (`objA`) / Geometry (`objB`) components (null in standalone) → `null+0x148` fault. **Fixed:** guard
+     both null (inert visual layer).
+  3. `DAT_140172204` (90.0f rotation) fell back to `0.0f` in standalone (rdata-null). **Fixed:** 90.0f.
+  4. Feeding the removed tree entity + the spawned item entity to the **live world entity list**
+     (entityList+0xd0 / gameWorld+0xe8) makes the next frame's `EntityList_PreUpdate → Serialize` fault
+     in Runtime-x64.dll on the partially-materialized standalone entities. **Fixed:** restructured
+     `ActCNR_RemoveNatRes_1260f0` so **RegisterRawMaterial (the economy accounting) always runs**, and the
+     entity-lifecycle side (tree-removal-queue append + item clone/position/register) is gated behind
+     `BANISHED_PRODUCE_SPAWN_ENTITY` (default OFF) until entity materialization is live. The stock count
+     is what the economy loop reads; the physical ground-pile is the inert visual layer.
+- **VERIFIED LIVE (full economy combo + `BANISHED_FORCE_HARVEST`):** the real forester scan finds a real
+  mature tree and invokes the produce → `[ORGANIC-PRODUCE] RemoveNatRes harvest: amount=3 ... stock 0->3`,
+  process stable full duration, **0-byte crash log**. A/B default build (economy envs off) byte-clean +
+  crash-free.
+- **`BANISHED_FORCE_HARVEST` (default OFF)** is a gated verification harness in `foresterwork.cpp`: when
+  the real forester scan finds+validates a tree, it invokes the produce directly (mirroring
+  RemoveNaturalResource::Main's flag setup) to exercise the production chain **independent of the citizen
+  physically arriving** — because organic arrival is gated on the MoveTo/pathfinder keystone (see Phase 6).
 
-**Entry points:** ForesterWork (0x1400eaec0), PerformWork::Main, the work-completion
-chaining (deep inert subsystem). Trace which pushed action runs vs aborts
-(`[ORGANIC-PRODUCE]` traces already in place, gated BANISHED_FORESTER_SCAN_TRACE).
+**⚠️ Why forcing is still needed for organic delivery (the Phase-6 handoff):** citizens are DRIVEN
+(ForesterWork pushes the cut sequence: MoveTo→chop→RemoveNaturalResource) and they physically MOVE, but
+they **drift in a straight line via walk-anim root-motion** (constant facing/delta) instead of steering
+along an A* path — so MoveTo never detects arrival, the cut sequence never drains, and
+RemoveNaturalResource never executes organically. This affects EVERY citizen (not forester-specific) and
+is the `project_citizen_pathfinding_zero_dest` keystone — a SEPARATE subsystem from the economy produce
+chain. Fixing it (Phase 6 below) removes the need for `BANISHED_FORCE_*` harnesses.
 
-**Agent spin-out:** one agent, resume from the existing economy_loop checkpoint.
+**Remaining faithfulness polish (low priority, non-blocking):** two produce sub-helpers are still
+null-guarded rather than ported — `FUN_1400f8d50` (tree work-node BST search, reads the empty gw+0x118
+tree; cosmetic surface-material routing) and `FUN_140022480` (place-near WorkPlaceDescription find). Both
+only matter inside the gated entity-spawn block. See [[project_economy_loop]].
 
 ---
 
-## Phase 6 — Population response
+## Phase 6 — Fix citizen MoveTo / arrival (pathfinder steering) — enables ORGANIC testing without force harnesses ★ NEXT
+
+**Objective:** make citizens physically NAVIGATE to a target cell (steer along an A* path and
+DETECT ARRIVAL), instead of drifting in a straight line via walk-anim root-motion. This is the single
+gate that lets the whole economy loop run ORGANICALLY (forester walks to a tree → chops → produces;
+hungry citizen walks to a stocked barn → eats) with **no `BANISHED_FORCE_*` harnesses**. Re-oriented to
+here (2026-07-01) after Phase 5 verified the produce chain works but is only reachable via forcing.
+
+**The observed bug (measured this session, full economy combo + `BANISHED_MOVETICK_TRACE`):** every
+citizen (forester AND regular) moves with a **constant facing + constant per-tick delta** (e.g. forester
+`want=-7.864°` fixed, delta=(0.00205,0.01486) every tick) — a straight-line bee-line that overshoots the
+target and never stops. The move-tick TAIL runs (chIdx>=0, position updates, terrain z follows), so the
+citizen physically moves; what's missing is the **MoveTo action steering the heading toward the next
+A* waypoint each frame + signalling arrival**. So MoveTo either computes an empty/trivial path or the
+move-tick applies a fixed root-motion velocity that MoveTo never course-corrects.
+
+**Blocking dependency:** none (independent of the economy work; it's the pathfinder/movement subsystem).
+
+**Entry points / where to look (see [[project_citizen_pathfinding_zero_dest]] + [[project_phase3_keystone_d]]
+task #34):** `MoveTo::AbstractImpl`/`Execute` (moveto.cpp) — does it compute a real path and write the
+per-frame heading/velocity the move-tick reads? The A* path setup (`PathSetup_c8c10` →
+`SetTerrainCosts_e550` → `Pf_EnqueueCmd1_a6a30`, which task #34 flagged deref'ing a null worker/queue at
++0x170) — is the pathfinder queue object actually seeded so A* returns a real waypoint list, or does it
+bail to an empty path (→ root-motion drift)? The move-tick (`CharacterComponent_MoveTick_1094c0`,
+citizenai_executor.cpp) — is it reading a MoveTo-updated heading, or a stale one set once? Note the
+81fcfda "A* correct + grid-faithful" claim in this file's header refers to the A* GRID search returning
+valid cell paths; the DELIVERY of the citizen along that path (steering + arrival) is what's broken here.
+
+**Verify:** with the economy combo (no force harnesses), a citizen's `[MoveTick]` facing CHANGES as it
+navigates (turns at waypoints) and it STOPS at the target; the forester's pushed cut sequence DRAINS
+(`newTop+0x60` returns to <0) and `RemoveNaturalResource::Main` fires organically → `[ORGANIC-PRODUCE]`
+without `BANISHED_FORCE_HARVEST`.
+
+**Agent spin-out:** pathfinder/movement specialist; opus + lead Ghidra-verify; this is a keystone, likely
+multi-brick (path-compute correctness → per-frame steering → arrival detection).
+
+---
+
+## Phase 7 — Population response (was Phase 6)
 
 **Objective:** consumed food relieves hunger; sustained starvation → death; adequate
 food/housing → births; resources deplete/replenish. Closes the loop so the town is a
 living system.
 
-**Blocking dependency:** Phases 3 + 5.
+**Blocking dependency:** Phases 3 + 5 + 6 (organic delivery, so consumption/hauling actually runs).
 
 **Entry points:** CitizenComponent::Update mortality/aging (already ported, guarded),
 food-stock decrement, birth logic (CitizenAI LongTermPlan / partner). Mostly bring-up +
@@ -541,7 +617,9 @@ verification of already-ported code.
 3. **Phase 2** (housing assignment) — 1 agent.
 4. **Phase 4** (workplace/laborer assignment) — 1 agent.
 5. **Phase 3 full** (food consumption from stocked barn) — folded with Phase 1 storage.
-6. **Phase 5** (production) then **Phase 6** (population) — resume from checkpoints.
+6. **Phase 5** (production) — ✅ DONE (stock increments; verified via BANISHED_FORCE_HARVEST).
+7. **Phase 6** (fix MoveTo/arrival) — the pathfinder-steering keystone; unblocks organic testing.
+8. **Phase 7** (population) — resume from checkpoints, once organic delivery runs.
 
 Each phase lands crash-safe and env-gated independently; default build stays
 byte-identical. Verify with the test combo + A/B after every merge.
