@@ -450,13 +450,36 @@ static int TryPlacePath(int32_t* param_1, int param_2 /*nptCount*/, float param_
     SubdivideSeg(param_1, (int32_t**)&pts, lo, hi, subAmp, subAmp2);
 
     // ---- VALIDATION ----
-    // (The original first runs a pure LengthSquared pre-pass over point pairs; it
-    //  draws no RNG and, for valid subdivide output, never rejects — omitted as a
-    //  no-op.) Then: self-intersection + cross-path intersection; reject if both
-    //  intersection parameters are strictly in (0,1).
+    // Then: self-intersection + cross-path intersection; reject if both
+    // intersection parameters are strictly in (0,1).
     int n = pts.count;
     uint8_t* P = (uint8_t*)pts.data;
     bool reject = false;
+
+    // Nearest-neighbour adjacency pre-pass (retail FUN_1400cc850 first loop, the
+    // DAT_140172268=1e6 running-min block). For each vertex i, find the closest
+    // OTHER vertex by LengthSquared and reject the whole candidate unless that
+    // closest index is i's immediate neighbour (i-1 or i+1). Draws NO RNG, so it
+    // does not perturb the MT stream — it only rejects self-approaching polylines
+    // that retail retries away (prevents merged/over-wide troughs & spurious pits).
+    {
+        int prevPick = -1;
+        for (int i = 0; i < n && !reject; ++i) {
+            int   bestIdx = -2;
+            float best    = 1e6f;                     // DAT_140172268
+            float* pa = (float*)(P + (size_t)i * 0x1c);
+            for (int j = 0; j < n; ++j) {
+                if (i == j) continue;
+                float* pb = (float*)(P + (size_t)j * 0x1c);
+                float dvx = pa[0] - pb[0];
+                float dvy = pa[1] - pb[1];
+                float lensq = dvx * dvx + dvy * dvy;  // Math::Vector2::LengthSquared
+                if (lensq < best) { best = lensq; bestIdx = j; }
+            }
+            if (bestIdx != prevPick + 2 && bestIdx != prevPick) reject = true;
+            prevPick++;
+        }
+    }
 
     for (int i = 0; i < n - 1 && !reject; ++i) {
         float* a0 = (float*)(P + (size_t)i * 0x1c);

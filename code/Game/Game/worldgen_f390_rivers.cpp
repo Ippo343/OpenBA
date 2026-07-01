@@ -307,11 +307,12 @@ extern "C" void wg_f390_rivers(void* hfp) {
     for (int i = 0; i < count1; ++i) {
         int   minE = sizeRow[5];              // +0x14
         int   maxE = sizeRow[6];              // +0x18
-        float fE   = fn_Random_RandFloat(rng) * (float)(maxE - minE) + (float)minE;
-        float dirx = fn_Random_RandFloatTol(rng);
-        float diry = fn_Random_RandFloatTol(rng);
-        float off  = (float)center - (float)(int)fE;
-        float rec[3] = { off * dirx, off * diry, fE };   // {x,y,radius=edgeParam}
+        float fE    = fn_Random_RandFloat(rng) * (float)(maxE - minE) + (float)minE;
+        float draw1 = fn_Random_RandFloatTol(rng);
+        float draw2 = fn_Random_RandFloatTol(rng);
+        float off   = (float)center - (float)(int)fE;
+        // retail CONCAT44(off*draw1, off*draw2): x=low=off*draw2, y=high=off*draw1.
+        float rec[3] = { off * draw2, off * draw1, fE };   // {x, y, radius=edgeParam}
         wg_VecPush0xC(scratch, scratchCount + 1, rec);
         scratchCount = *(int*)(scratch + 0x08);
     }
@@ -321,25 +322,26 @@ extern "C" void wg_f390_rivers(void* hfp) {
     for (int i = 0; i < count2; ++i) {
         int   minE = sizeRow[2];              // +0x08
         int   maxE = sizeRow[3];              // +0x0c
-        float fE   = fn_Random_RandFloat(rng) * (float)(maxE - minE) + (float)minE;
-        float dirx = fn_Random_RandFloatTol(rng);
-        float diry = fn_Random_RandFloatTol(rng);
-        float off  = (float)center - (float)(int)fE;
-        float px   = off * dirx;
-        float py   = off * diry;
+        float fE    = fn_Random_RandFloat(rng) * (float)(maxE - minE) + (float)minE;
+        float draw1 = fn_Random_RandFloatTol(rng);
+        float draw2 = fn_Random_RandFloatTol(rng);
+        float off   = (float)center - (float)(int)fE;
+        // retail CONCAT44(off*draw1, off*draw2): new.x=low=off*draw2, new.y=high=off*draw1.
+        float newX  = off * draw2;
+        float newY  = off * draw1;
         // reject if too close to any existing scratch point:
-        //   for each pt s: d = pt - s; len = sqrt(Dot(d,d)); if len+fE < s.radius -> reject
+        //   for each pt s: d = new - s; len = sqrt(Dot(d,d)); if len+fE < s.radius -> reject
         bool reject = false;
         const uint8_t* sd = *(const uint8_t**)(scratch + 0x00);
         for (int j = 0; j < scratchCount; ++j) {
             const float* sp = (const float*)(sd + (size_t)j * 0xC);
-            float dv[2] = { py - sp[0], px - sp[1] };  // packing per the decomp (.x/.y swap)
-            float dot;  fn_Vector2_Dot(dv, &dot);      // |d|^2 into dot
+            float dv[2] = { newX - sp[0], newY - sp[1] };  // {dx, dy} = retail local_res18/1c
+            float dot;  fn_Vector2_Dot(dv, &dot);          // |d|^2 into dot
             float len = wg_sqrtf(dot);
             if (len + fE < sp[2]) { reject = true; break; }
         }
         if (!reject) {
-            float rec[3] = { px, py, fE };
+            float rec[3] = { newX, newY, fE };
             wg_VecPush0xC(p + HF_LISTB, *(int*)(p + HF_LISTB + 0x08) + 1, rec);
         }
     }
@@ -477,14 +479,17 @@ extern "C" void wg_f390_stamp(void* hfp) {
             int      recCnt = *(int*)(patch + 0x08);
             for (int ri = 0; ri < recCnt; ++ri) {
                 const float* r = (const float*)(recs + (size_t)ri * 0x1c);
-                float center[2] = { r[0], r[1] };
-                float innerRad  = r[2];   // +0x08
-                float innerPow  = r[3];   // +0x0c
-                float outerRad  = r[4];   // +0x10
-                float outerPow  = r[5];   // +0x14
-                float outerStr  = r[6];   // +0x18
-                wg_StampBrush_eee0(hf, center, innerRad, innerPow, kOne, 0, maskB);     // MIN -> maskB
-                wg_StampBrush_eee0(hf, center, outerRad, outerPow, outerStr, 1, maskC); // MAX -> maskC
+                // Retail record layout: {x@0, y@4, strength@0x08, innerCutoff@0x0c,
+                // innerBase@0x10, outerCutoff@0x14, outerBase@0x18}. e910 reads it
+                // identically to ec50 (verified 0x1400ce910 / 0x1400cec50).
+                float center[2]   = { r[0], r[1] };
+                float outerStr    = r[2];   // +0x08  strength
+                float innerCutoff = r[3];   // +0x0c  inner radius (cutoff)
+                float innerBase   = r[4];   // +0x10  inner falloff base
+                float outerCutoff = r[5];   // +0x14  outer radius (cutoff)
+                float outerBase   = r[6];   // +0x18  outer falloff base
+                wg_StampBrush_eee0(hf, center, innerCutoff, innerBase, kOne, 0, maskB);     // MIN -> maskB
+                wg_StampBrush_eee0(hf, center, outerCutoff, outerBase, outerStr, 1, maskC); // MAX -> maskC
             }
         }
     }

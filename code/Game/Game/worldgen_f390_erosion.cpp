@@ -78,8 +78,8 @@ static constexpr float kErodeMaxXfer    = 0.8f;     // 0x140172128 = 0x3f4ccccd 
                                                     //   dword 0x3f4ccccd is 0.8, used live in cc080.
 static constexpr float kCenterWeight    = 2.0f;     // 0x140172174 = 0x40000000 (c350 center / eee0 mul)
 static constexpr float kRadiusThreshold = 0.99f;    // 0x140172144 = 0x3f7d70a4 (eee0 radius-growth)
-static constexpr float kListCExp        = 2.0f;     // 0x140172174 = 0x40000000 (ec50 listC powf base arg)
-static constexpr float kListCStrength   = 2.25f;    // 0x14017217c = 0x40100000 (ec50 listC strength)
+static constexpr float kListCExp        = 2.25f;    // 0x14017217c = 0x40100000 (ec50 listC powf base arg = DAT_14017217c)
+static constexpr float kListCStrength   = 2.0f;     // 0x140172174 = 0x40000000 (ec50 listC strength   = DAT_140172174)
 static const     uint32_t kSignBitMask  = 0x80000000u; // 0x1401722c0 (float-negate XOR mask)
 
 // ============================================================================
@@ -330,7 +330,7 @@ extern "C" void wg_f390_erosion(void* hfv) {
 //
 //   Pass B — listC points (param_1[0xe]/[0x10]): for each 0xC-stride record
 //       {float pt[2]@0, float radius@8}:
-//       eee0(hf, pt, cutoff=radius, base=2.0, strength=2.25, mode 1 -> subMask)  // MAX
+//       eee0(hf, pt, cutoff=radius, base=2.25, strength=2.0, mode 1 -> subMask)  // MAX
 //
 // Finalize (the carve) — for every heightmap cell i in [0, param_1[4]):
 //       h[i] = mulMask[i] * h[i] - subMask[i]
@@ -387,12 +387,12 @@ extern "C" void wg_f390_carve(void* hfv) {
                 center[0] = *(float*)(rec + 0);
                 center[1] = *(float*)(rec + 4);
                 float a = *(float*)(rec + 0x08);   // pass-2 strength
-                float b = *(float*)(rec + 0x0c);   // pass-1 falloff base
-                float c = *(float*)(rec + 0x10);   // pass-1 cutoff
-                float d = *(float*)(rec + 0x14);   // pass-2 cutoff
+                float b = *(float*)(rec + 0x0c);   // pass-1 cutoff (inner radius)
+                float c = *(float*)(rec + 0x10);   // pass-1 falloff base
+                float d = *(float*)(rec + 0x14);   // pass-2 cutoff (outer radius)
                 float e = *(float*)(rec + 0x18);   // pass-2 falloff base
-                // MIN into mulMask: eee0(center, cutoff=c, base=b, strength=1.0, mode 0)
-                wg_eee0_radial_brush(param_1, center, c, b, kOne, 0, mulMaskHdr);
+                // MIN into mulMask: eee0(center, cutoff=b, base=c, strength=1.0, mode 0)
+                wg_eee0_radial_brush(param_1, center, b, c, kOne, 0, mulMaskHdr);
                 // MAX into subMask: eee0(center, cutoff=d, base=e, strength=a, mode 1)
                 wg_eee0_radial_brush(param_1, center, d, e, a, 1, subMaskHdr);
             }

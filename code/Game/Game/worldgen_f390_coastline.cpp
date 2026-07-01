@@ -475,10 +475,13 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         int lastIdx = cand.count - 1;
         float* pLast = (float*)((uint8_t*)cand.data + (size_t)lastIdx * PATHPT_STRIDE);
         uint32_t which = s_Rand1 ? s_Rand1(rng, 4) : 0;
-        if (which == 0)      { pLast[0] = span * kHalf;    pLast[1] = rf; }
-        else if (which == 1) { pLast[0] = rf;              pLast[1] = span * kHalf; }
-        else if (which == 2) { pLast[0] = rf;              pLast[1] = span * kNegHalf; }
-        else                 { pLast[0] = span * kNegHalf; pLast[1] = rf; }
+        // Retail CONCAT44 packing (verified 0x1400cc850, param_9>=0 block):
+        //  which0: (x=rf,        y=span*0.5)   which1: (x=span*0.5,  y=rf)
+        //  which2: (x=span*-0.5, y=rf)         which3: (x=rf,        y=span*-0.5)
+        if (which == 0)      { pLast[0] = rf;              pLast[1] = span * kHalf; }
+        else if (which == 1) { pLast[0] = span * kHalf;    pLast[1] = rf; }
+        else if (which == 2) { pLast[0] = span * kNegHalf; pLast[1] = rf; }
+        else                 { pLast[0] = rf;              pLast[1] = span * kNegHalf; }
 
         midIdx = 0;
         float amp  = span * kQuarter;
