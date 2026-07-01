@@ -20,6 +20,7 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 
 // Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
@@ -30,12 +31,53 @@ namespace {
 // 0x140003110 — growable 8-byte-element array: set-count-to newCount + append *elem.
 typedef void (*fn_ArrayAdd3110_t)(int64_t* arrayStruct, int newCount, void* elemIBP);
 fn_ArrayAdd3110_t s_arrayAdd3110 = nullptr;
+
+// --- FindAvailableBuilding (0x14008d100) reader-side closure ---
+// 0x140089470 — per-profession building-list distance sort/optimize. OPTIONAL:
+//   pure reorder of node.arr; skipped (unregistered) leaves correctness intact.
+typedef void  (*fn_Optimize89470_t)(int64_t townMgr, uint64_t professionKey);
+// 0x14012e5c0 — WorkComponent CalcMaxWorkers (returns max worker slots).
+typedef int   (*fn_CalcMaxWorkers_t)(void* workComp);
+// 0x140002e10 — find storage/host + reachability probe; returns an IBP* (=outBuf).
+typedef void* (*fn_FindReach_t)(int64_t buildingEntity, void* outIBP);
+
+fn_Optimize89470_t  s_optimize89470  = nullptr;
+fn_CalcMaxWorkers_t s_calcMaxWorkers = nullptr;
+fn_FindReach_t      s_findReach      = nullptr;
 bool s_init = false;
 
 void EnsureFns() {
     if (s_init) return;
-    s_arrayAdd3110 = reinterpret_cast<fn_ArrayAdd3110_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_arrayAdd3110   = reinterpret_cast<fn_ArrayAdd3110_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_optimize89470  = reinterpret_cast<fn_Optimize89470_t>(ResolveAddr(Module::Exe, 0x140089470));
+    s_calcMaxWorkers = reinterpret_cast<fn_CalcMaxWorkers_t>(ResolveAddr(Module::Exe, 0x14012e5c0));
+    s_findReach      = reinterpret_cast<fn_FindReach_t>(ResolveAddr(Module::Exe, 0x140002e10));
     s_init = true;
+}
+
+// Scan an entity's component list (entity+0x30 = IBP array, entity+0x38 = count)
+// for the first component whose GetTypeId (vtable +0x10) equals `typeId`. Mirrors
+// FUN_14008d100's two inline scan loops exactly: it stops at the first GetTypeId
+// match and returns it only if IsDerivedFrom(comp, typeId) also holds — otherwise
+// null (it does NOT keep scanning past a GetTypeId hit).
+typedef uint32_t (*GetTypeId_t)(void*);
+void* FindComponentByTypeId(int64_t entity, uint32_t typeId) {
+    int i = 0;
+    while (i < *reinterpret_cast<int*>(entity + 0x38)) {           // count re-read (faithful)
+        void* elem = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elem);
+        void* comp = *reinterpret_cast<void**>(elem);
+        if (comp == nullptr) { ++i; continue; }
+        uint32_t tid = ((GetTypeId_t)(*reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10)))(comp);
+        if (tid == typeId) {
+            void* elem2 = reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(entity + 0x30) + (int64_t)i * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(elem2);
+            void* compVal = *reinterpret_cast<void**>(elem2);
+            return (fn_IsDerivedFrom && fn_IsDerivedFrom(compVal, typeId)) ? compVal : nullptr;
+        }
+        ++i;
+    }
+    return nullptr;
 }
 } // namespace
 
@@ -104,4 +146,107 @@ extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceC
     if (key == 0) return;   // no profession -> not an employer workplace
     int64_t refLocal = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(workplaceComp) + 0x10);
     ResidenceComponent_impl_95a0(townMgr, &refLocal, key);
+}
+
+// ============================================================
+// 0x14008d100 — FindAvailableBuilding = the READER of the townMgr+0x100 profession
+//   BST. Given a professionKey, returns (in *out) an available workplace building
+//   entity for that profession — one that (a) has a WorkPlaceComponent whose live
+//   worker count (+0x60) is below its WorkComponent's capacity (+0x30), and
+//   (b) is currently reachable. If none qualify (or the key is absent / BST empty)
+//   it writes an empty InternalBasePtr into *out. Faithful 1:1 port.
+//     param_1 = townMgr (*(gameWorld+0xf0))
+//     param_2 = out    (InternalBasePtr* the caller receives; also the return value)
+//     param_3 = professionKey
+// ============================================================
+extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey) {
+    EnsureFns();
+
+    // Type-ids resolved self-contained (do NOT read the shared .rdata DWORDs).
+    static uint32_t s_tidWorkPlace = 0;   // DWORD_1401c80e0 = WorkPlaceComponent
+    static uint32_t s_tidWork      = 0;   // DWORD_1401c8070 = WorkComponent
+    if (s_tidWorkPlace == 0) s_tidWorkPlace = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    if (s_tidWork      == 0) s_tidWork      = ::Object::GetTypeIdByName("WorkComponent");
+
+    // Step 1: optimize/sort the profession node's building list (OPTIONAL — guard).
+    if (s_optimize89470) s_optimize89470(townMgr, professionKey);
+
+    // Step 2: walk the +0x100 profession BST for the key (key<node -> left[+0x20];
+    // key>node -> right[+0x28]; == -> found).
+    uint64_t* node = *reinterpret_cast<uint64_t**>(townMgr + 0x100);   // root
+    uint64_t* found = nullptr;
+    while (node != nullptr) {
+        if (professionKey < node[0]) {                    // *node = key at +0x00
+            node = reinterpret_cast<uint64_t*>(node[4]);  // left  (+0x20)
+        } else if (professionKey <= node[0]) {
+            found = node;                                 // exact match
+            break;
+        } else {
+            node = reinterpret_cast<uint64_t*>(node[5]);  // right (+0x28)
+        }
+    }
+
+    // Key absent -> empty result.
+    if (found == nullptr) {
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, nullptr);
+        return out;
+    }
+
+    // Step 3: scan the profession node's building array (base +0x08, count +0x10).
+    int count = static_cast<int>(found[2]);                // +0x10 count (low dword)
+    for (int i = 0; i < count; ++i) {
+        // building entity ref (InternalBasePtr value) at node.arr[i].
+        int64_t buildingIBP = *reinterpret_cast<int64_t*>(static_cast<int64_t>(found[1]) + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildingIBP);
+        int64_t building = buildingIBP;
+        if (building == 0) continue;
+
+        // 3a: find its WorkPlaceComponent; wrap in an IBP (matches original).
+        void* wpc = FindComponentByTypeId(building, s_tidWorkPlace);
+        int64_t wpcIBP = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpcIBP, wpc);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIBP);
+        int64_t wpcPtr = wpcIBP;
+        if (wpcPtr == 0) continue;                        // defensive (never in valid data)
+
+        int workerCount = *reinterpret_cast<int*>(wpcPtr + 0x60);   // WPC+0x60 = live workers
+
+        // owning entity is the embedded IBP at WPC+0x10 — CheckPtr then deref.
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(wpcPtr + 0x10));
+        int64_t owner = *reinterpret_cast<int64_t*>(wpcPtr + 0x10);
+        if (owner == 0) continue;                         // defensive
+
+        // 3b: find the WorkComponent on the owning entity; wrap in an IBP.
+        void* wc = FindComponentByTypeId(owner, s_tidWork);
+        int64_t wcIBP = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wcIBP, wc);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wcIBP);
+        int64_t wcPtr = wcIBP;
+        if (wcPtr == 0) continue;                         // defensive
+
+        // capacity = WorkComponent+0x30; lazily compute+cache via CalcMaxWorkers.
+        int capacity = *reinterpret_cast<int*>(wcPtr + 0x30);
+        if (capacity == 0 && s_calcMaxWorkers) {
+            capacity = s_calcMaxWorkers(reinterpret_cast<void*>(wcPtr));
+            *reinterpret_cast<int*>(wcPtr + 0x30) = capacity;
+        }
+
+        // 3c: room available -> reachability probe; if reachable, this is our pick.
+        if (workerCount < capacity) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildingIBP);
+            int64_t tmpIBP[2] = { 0, 0 };                 // 16-byte scratch IBP (matches local_50)
+            if (s_findReach) {
+                void* reach = s_findReach(building, tmpIBP);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reach);
+                if (reach && *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50) != 0) {
+                    *reinterpret_cast<int64_t*>(out) = building;   // *out = building entity ptr
+                    return out;
+                }
+            }
+        }
+    }
+
+    // No qualifying building -> empty result.
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, nullptr);
+    return out;
 }

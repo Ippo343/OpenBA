@@ -77,6 +77,10 @@ extern void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp);
 // Phase 1 economy: register a workplace into the townMgr+0x100 profession BST
 // (code/Game/Game/town_workplace_registry.cpp).
 extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
+// Phase-4 reader: FindAvailableBuilding (0x14008d100) — returns (in *out) an available
+// workplace for a profession key from the townMgr+0x100 BST. Used to verify the lodge
+// is findable after seating its profession key + registering it.
+extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t professionKey);
 
 // WorkPlaceComponent pointers of the founding houses rostered in roster-only mode, whose
 // occupied visual was deferred to gameplay time. Drained once by
@@ -828,10 +832,46 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
         int64_t townMgr = *(int64_t*)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
         void* wpc = FindComponentOnEntity(entity, TypeId("WorkPlaceComponent"));
         if (townMgr && wpc) {
+            // Phase 4: seat the WorkPlaceComponent profession key (WPC+0x48) from the
+            // lodge's own WorkPlaceDescription (WPC+0x18 -> desc+0x20 = the forester
+            // Profession*, the value ProfessionList/townMgr+0x100 key by). The retail
+            // seater FUN_14012f520 reads it from the ProfessionList iteration cursor
+            // (gw+0xb0+0x38); at spawn we take the equivalent value off our own desc so
+            // registration + a FindAvailableBuilding query use the SAME key by
+            // construction. Skip if the desc carries no profession (key stays 0).
+            uint8_t* w = reinterpret_cast<uint8_t*>(wpc);
+            void* wpDesc = *reinterpret_cast<void**>(w + 0x18);
+            uint64_t profKey = wpDesc ? *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(wpDesc) + 0x20) : 0;
+            if (profKey != 0) *reinterpret_cast<uint64_t*>(w + 0x48) = profKey;
+
+            // Enable the workplace: WPC+0x50 = 1. Retail sets this via the activation tail
+            // Entity_impl_fc00(WPC, 1) (0x14012fc00, first line `*(WPC+0x50)=param_2`); the
+            // rest of that fn is inert mesh/status-icon/roster work. FindAvailableBuilding's
+            // reachability gate reads this flag (FUN_140002e10 -> WPC+0x50 != 0); the inert
+            // lodge never ran the activation so it stayed 0. Set the faithful core directly.
+            *reinterpret_cast<char*>(w + 0x50) = 1;
+
             TownRegistry_RegisterWorkplace(townMgr, wpc);
-            fprintf(stderr, "[Phase1Employ] registered lodge WorkPlaceComponent into "
-                    "townMgr+0x100 (profKey=%llu)\n",
-                    (unsigned long long)*(uint64_t*)((uint8_t*)wpc + 0x48));
+            fprintf(stderr, "[Phase4Employ] lodge WPC=%p desc=%p profKey(desc+0x20)=0x%llx "
+                    "-> seated WPC+0x48=0x%llx; registered into townMgr+0x100\n",
+                    wpc, wpDesc, (unsigned long long)profKey,
+                    (unsigned long long)*(uint64_t*)(w + 0x48));
+
+            // Verify the reader finds it: FindAvailableBuilding(townMgr, &out, profKey)
+            // returns this lodge entity (its WorkPlaceComponent worker count < WorkComponent
+            // capacity + the WPC+0x50 enable flag). Proves the townMgr+0x100 registry + the
+            // FindAvailableBuilding reader work end-to-end (the FIND half of producer
+            // employment). The remaining ASSIGN half = the ProfessionUI worker-count seat
+            // cascade (impl_dd10 0x14007dd10 -> cbf0/ca20/c5f0/c4b0 -> AssignWorkplace).
+            if (profKey != 0) {
+                int64_t foundIBP = 0;
+                FindAvailableBuilding(townMgr, &foundIBP, profKey);
+                fprintf(stderr, "[Phase4Employ] FindAvailableBuilding(profKey=0x%llx) -> %p "
+                        "(lodge entity=%p) %s\n",
+                        (unsigned long long)profKey, (void*)foundIBP, entity,
+                        (foundIBP == reinterpret_cast<int64_t>(entity)) ? "MATCH" :
+                        (foundIBP != 0 ? "other-building" : "NOT-FOUND"));
+            }
             fflush(stderr);
         }
     }

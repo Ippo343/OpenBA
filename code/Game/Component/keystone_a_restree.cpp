@@ -71,6 +71,9 @@ void EnsureMem() {
     if (!s_memAlloc)
         s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
             ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAXII@Z"));
+    if (!s_memAlloc)   // proven-working overload (size in RCX / align in RDX — ABI-compatible)
+        s_memAlloc = reinterpret_cast<MemAllocStatic_t>(
+            ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
     s_memFree = reinterpret_cast<MemFreeStatic_t>(slot(0x140152b68));
     if (!s_memFree)
         s_memFree = reinterpret_cast<MemFreeStatic_t>(

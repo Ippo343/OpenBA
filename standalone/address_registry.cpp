@@ -376,6 +376,10 @@ extern void RegisterComponentGap_D();
 // a550/a710/129ff0. Dormant until a workplace is findable (townMgr+0x20 populated);
 // makes the organic sub_0e70 -> AssignWorkplace path actually set citizen+0x238.
 extern void RegisterCitizenAssignWorkplace();
+// Phase-4 economy: FindAvailableBuilding (0x14008d100) — reads the townMgr+0x100
+// profession BST, returns an available workplace for a profession key (the producer
+// employment path: WorkPlaceComponent/WorkComponent -> townMgr+0x100 -> here).
+extern void RegisterTownWorkplaceReader();
 
 // Work registration wave (2026-06-18) — shared base-helper sub-batch.
 // reg file: standalone/reg_work_base.cpp ; bodies: code/Game/Work/work_base_reimpl.cpp.
@@ -482,6 +486,7 @@ static void RegisterCodeFunctions() {
     RegisterComponentGap_B();
     RegisterComponentGap_C();
     RegisterCitizenAssignWorkplace();
+    RegisterTownWorkplaceReader();
     RegisterComponentGap_D();
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
