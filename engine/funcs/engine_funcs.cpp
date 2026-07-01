@@ -815,6 +815,12 @@ fn_Graphics_Camera_SetFrustum_t  fn_Graphics_Camera_SetFrustum  = nullptr;
 
 fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter = nullptr;
 fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume = nullptr;
+fn_Audio_Scene_FindEffect3D_t fn_Audio_Scene_FindEffect3D = nullptr;
+fn_Audio_Scene_PlayEffect3D_t fn_Audio_Scene_PlayEffect3D = nullptr;
+fn_Audio_Scene_AddEmitter_t fn_Audio_Scene_AddEmitter = nullptr;
+fn_Audio_Scene_RemoveEmitter_t fn_Audio_Scene_RemoveEmitter = nullptr;
+fn_Audio_Scene_GetEmitterCount_t fn_Audio_Scene_GetEmitterCount = nullptr;
+fn_Audio_Scene_StopEffect3D_t fn_Audio_Scene_StopEffect3D = nullptr;
 fn_Vector3_Equals_t fn_Vector3_Equals = nullptr;
 fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
 fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
@@ -3663,6 +3669,19 @@ bool EngineFuncsInit() {
         ResolveExport("?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z"));
     fn_Audio_Scene_SetEmitterVolume = reinterpret_cast<fn_Audio_Scene_SetEmitterVolume_t>(
         ResolveExport("?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z"));
+    // Audio::Scene 3D emitter API (ambient environment + building emitters).
+    fn_Audio_Scene_FindEffect3D = reinterpret_cast<fn_Audio_Scene_FindEffect3D_t>(
+        ResolveExport("?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z"));
+    fn_Audio_Scene_PlayEffect3D = reinterpret_cast<fn_Audio_Scene_PlayEffect3D_t>(
+        ResolveExport("?PlayEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@AEBVVector3@Math@@@Z"));
+    fn_Audio_Scene_AddEmitter = reinterpret_cast<fn_Audio_Scene_AddEmitter_t>(
+        ResolveExport("?AddEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z"));
+    fn_Audio_Scene_RemoveEmitter = reinterpret_cast<fn_Audio_Scene_RemoveEmitter_t>(
+        ResolveExport("?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z"));
+    fn_Audio_Scene_GetEmitterCount = reinterpret_cast<fn_Audio_Scene_GetEmitterCount_t>(
+        ResolveExport("?GetEmitterCount@Scene@Audio@@QEBAHI@Z"));
+    fn_Audio_Scene_StopEffect3D = reinterpret_cast<fn_Audio_Scene_StopEffect3D_t>(
+        ResolveExport("?StopEffect3D@Scene@Audio@@QEAAXI@Z"));
     fn_Vector3_Equals = reinterpret_cast<fn_Vector3_Equals_t>(
         ResolveExport("?operator==@Vector3@Math@@QEBA_NAEBV12@@Z"));
     fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(

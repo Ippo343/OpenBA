@@ -162,6 +162,7 @@ extern "C" {
     void RegisterWellDescriptionVtable();
     void RegisterWildAnimalDescriptionVtable();
     void RegisterAnimAudioEventVtable();
+    void RegisterAmbientExternalPtrSerialize();
     void RegisterProfessionVtable();
     void RegisterNameDatabaseVtable();
     void RegisterDiseaseVtable();
@@ -1381,6 +1382,10 @@ static void RegisterVtablesAndTypeIds() {
     // the Character animation closure; without a real factory the citizen template
     // load hit "[NullFactory] Hit for type: AnimAudioEvent". See animaudioevent.cpp.
     RegisterAnimAudioEventVtable();
+    // Ambient audio: SoundEffect ExternalPtr serialize (0x1400019a0) + biome-table
+    // array resize (0x140002540) so the ambient descriptions actually load their
+    // day/night sound refs (else they deserialize as null → silent ambient).
+    RegisterAmbientExternalPtrSerialize();
 
     // M5 5c citizens — Profession (Object::External) referenced by CitizenDescription.
     RegisterProfessionVtable();

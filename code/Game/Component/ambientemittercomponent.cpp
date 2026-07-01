@@ -53,9 +53,8 @@ static fn_Serialize_Float_t s_fn_Serialize_Float = nullptr;
 typedef void (*fn_ResizeEmitterArray_t)(void* arrayField, int newCount);
 static fn_ResizeEmitterArray_t s_fn_ResizeEmitterArray = nullptr;
 
-// FUN_140042e10(self) -- audio setup
-typedef void (*fn_AudioSetup_t)(void* self);
-static fn_AudioSetup_t s_fn_AudioSetup = nullptr;
+// FUN_140042e10(self) -- building ambient audio setup (clean reimpl below).
+extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self);
 
 // IsDerivedFrom dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -202,6 +201,55 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
 }
 
 // ============================================================
+// Building ambient audio setup — clean reimpl of FUN_140042e10.
+// ============================================================
+// For each emitter entry (count at self+0x40, 0x10-byte entries in the array at
+// self+0x38), ensures a 3D looping SoundEffect is playing at the building's
+// position (self+0x28) via the world Audio::Scene (gameWorld+0x78):
+//   entry {+0x00 uint handle, +0x04 float volume, +0x08 ExternalPtr soundRef}
+// The soundRef is lazily copied from the building's AmbientEmitterDescription
+// (self+0x18, type DAT_1401c3e98) sound array at desc+0x28 (stride 8). FindEffect3D
+// reuses an existing channel; PlayEffect3D (SoundType 3 = ambient) starts a new
+// one; AddEmitter registers this building as a spatial source of that effect.
+extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
+    if (!self) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    int count = *(int*)(s + 0x40);
+    if (count <= 0) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    if (!fn_Audio_Scene_FindEffect3D || !fn_Audio_Scene_PlayEffect3D ||
+        !fn_Audio_Scene_AddEmitter) return;
+
+    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x78);
+    if (!scene) return;
+
+    void* building = GetBuildingData(self);   // AmbientEmitterDescription (may be null)
+    void* soundArray = building ? *(void**)((uintptr_t)building + 0x28) : nullptr;
+    uint8_t* arrBase = *(uint8_t**)(s + 0x38);
+    if (!arrBase) return;
+
+    const void* pos = reinterpret_cast<const void*>(s + 0x28);   // Vector3 position
+
+    for (int i = 0; i < count; ++i) {
+        uint8_t* entry = arrBase + (intptr_t)i * 0x10;
+        uint64_t* soundRef = reinterpret_cast<uint64_t*>(entry + 8);
+        // Lazily bind the sound resource from the building description.
+        if (*soundRef == 0 && soundArray)
+            *soundRef = reinterpret_cast<const uint64_t*>(soundArray)[i];
+
+        uint32_t handle = fn_Audio_Scene_FindEffect3D(scene, *soundRef);
+        *(uint32_t*)(entry + 0) = handle;
+        if (handle == 0) {
+            int64_t timeZero = 0;                 // System::Time(0)
+            float   posZero[3] = { 0.0f, 0.0f, 0.0f };
+            handle = fn_Audio_Scene_PlayEffect3D(scene, *soundRef, 3, &timeZero, posZero);
+            *(uint32_t*)(entry + 0) = handle;
+        }
+        fn_Audio_Scene_AddEmitter(scene, handle, pos, *(float*)(entry + 4));
+    }
+}
+
+// ============================================================
 // AmbientEmitterComponent::Draw (vtable slot [6], 0x140042ba0)
 // ============================================================
 // Gets building data via IsDerivedFrom(+0x18, DAT_1401c3e98).
@@ -219,10 +267,9 @@ void AmbientEmitterComponent_Draw(AmbientEmitterComponent* self) {
         s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), count);
     }
 
-    // If building has audio flag at +0x20
+    // If building has audio flag at +0x20, set up the 3D ambient emitters.
     if (*(char*)((uintptr_t)building + 0x20) != '\0') {
-        if (s_fn_AudioSetup)
-            s_fn_AudioSetup(self);
+        AmbientEmitterAudioSetup_Reimpl(self);
     }
 }
 
@@ -267,9 +314,7 @@ void AmbientEmitterComponent_InitFuncs() {
     s_fn_ResizeEmitterArray = reinterpret_cast<fn_ResizeEmitterArray_t>(
         ResolveAddr(Module::Exe, 0x140001770));
 
-    // Audio setup
-    s_fn_AudioSetup = reinterpret_cast<fn_AudioSetup_t>(
-        ResolveAddr(Module::Exe, 0x140042e10));
+    // (Building ambient audio setup is now the clean AmbientEmitterAudioSetup_Reimpl.)
 
     // IO::Serializer::GetVersion -- read from the registered dispatch slot
     // 0x140152a48 (same slot decalcomponent.cpp uses). Was wrongly pointed at
@@ -284,9 +329,8 @@ void AmbientEmitterComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AmbientEmitterComponent] Funcs resolved: CompSerialize=%p V3Serialize=%p Audio=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Vector3_Serialize,
-           (void*)s_fn_AudioSetup);
+    printf("[AmbientEmitterComponent] Funcs resolved: CompSerialize=%p V3Serialize=%p\n",
+           (void*)s_fn_Component_Serialize, (void*)s_fn_Vector3_Serialize);
 #endif
 }
 

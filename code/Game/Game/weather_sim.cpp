@@ -90,8 +90,14 @@ const float kKfCount       = 48.0f;            // DAT_1401721e4
 // engine_funcs; resolve lazily.
 typedef float (*fn_RandFloatTol_t)(void* rng);   // ?RandFloatTol@Random@System@@QEAAMXZ
 typedef void  (*fn_RemoveGlobalObject_t)(void* scene, void* geo);
+// ComponentEntity_CopyCtor (0x1400c3720) — clone an entity from a template desc.
+typedef void* (*fn_EntityCopyCtor_t)(void* mem, void* templateDesc);
+// EntityList register (0x1400c48a0) — RCX=entityList(gameWorld+0xe8), RDX=IBP*, R8D=typeId.
+typedef void  (*fn_EntityRegister_t)(void* entityList, void* ibp, int typeId);
 fn_RandFloatTol_t       s_fnRandFloatTol       = nullptr;
 fn_RemoveGlobalObject_t s_fnRemoveGlobalObject = nullptr;
+fn_EntityCopyCtor_t     s_fnEntityCopyCtor     = nullptr;
+fn_EntityRegister_t     s_fnEntityRegister     = nullptr;
 bool s_simResolved = false;
 void EnsureSimResolved() {
     if (s_simResolved) return;
@@ -103,6 +109,43 @@ void EnsureSimResolved() {
             ResolveAddr(Module::Runtime, 0x1800c8000));
     s_fnRemoveGlobalObject = reinterpret_cast<fn_RemoveGlobalObject_t>(
         ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+    s_fnEntityCopyCtor = reinterpret_cast<fn_EntityCopyCtor_t>(
+        ResolveAddr(Module::Exe, 0x1400c3720));
+    s_fnEntityRegister = reinterpret_cast<fn_EntityRegister_t>(
+        ResolveAddr(Module::Exe, 0x1400c48a0));
+}
+
+// Part 6 ambient-audio entity spawn: clone the envRes+0x20 template
+// (an AmbientEnvironment carrier entity — biome wind/nature beds) and register it
+// into the world entity list (gameWorld+0xe8). Mirrors the tail of Weather::ResetTime.
+void SpawnAmbientEntity(uint8_t* w, uint8_t* gw) {
+    void* envRes = *reinterpret_cast<void**>(w + 0x00);
+    if (!envRes) return;
+    void* templateDesc = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(envRes) + 0x20);
+    if (!templateDesc) return;
+    if (!s_fnEntityCopyCtor || !s_fnEntityRegister || !fn_MemAlloc ||
+        !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor)
+        return;
+
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+    if (!mem) return;
+    void* entity = s_fnEntityCopyCtor(mem, templateDesc);
+
+    void* ibp = nullptr;                                 // Object::InternalBasePtr (8 bytes)
+    fn_InternalBasePtr_Ctor(&ibp, entity);
+    int typeId = *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(templateDesc) + 0x20);
+    void* entityList = *reinterpret_cast<void**>(gw + 0xe8);
+    if (entityList)
+        s_fnEntityRegister(entityList, &ibp, typeId);
+
+    static int s_trace = -1;
+    if (s_trace < 0) {
+        const char* e = std::getenv("BANISHED_AMBIENT_TRACE");
+        s_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (s_trace)
+        fprintf(stderr, "[wxambient] spawned ambient entity=%p template=%p typeId=%d list=%p\n",
+                entity, templateDesc, typeId, entityList);
 }
 
 // Part 5 — FUN_1400935f0 weather-type state machine. Regenerates the temperature
@@ -361,20 +404,40 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     if (time)
         *reinterpret_cast<int64_t*>(w + 0x70) += *reinterpret_cast<int64_t*>(time);
 
-    // --- Part 6: ambient-spawn chance (FUN_1400a9290). The gated entity is the
-    //     ambient-audio environment entity (envRes+0x20 template) — EXCLUDED per
-    //     scope (audio). We still run the faithful timer/chance so the +0x70
-    //     accumulator is consumed exactly as retail, then skip the audio spawn. ---
+    // --- Part 6: ambient-spawn chance (FUN_1400a9290). Spawns the ambient-audio
+    //     environment entity (envRes+0x20 template) — the biome wind/nature bed —
+    //     when the roll fires in warm clear weather. Gated by BANISHED_AMBIENT_AUDIO
+    //     so the audio feature stays opt-in / A/B-safe. ---
     {
+        static int s_ambient = -1;
+        if (s_ambient < 0) {
+            const char* e = std::getenv("BANISHED_AMBIENT_AUDIO");
+            s_ambient = (e && e[0] && e[0] != '0' && e[0] != 'f' && e[0] != 'F') ? 1 : 0;
+        }
         void* climate = *reinterpret_cast<void**>(w + 0x08);
         uint32_t disasterBits = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(gw) + 0xd0);
         void* rng = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0xd8);
+
+        // Debug: BANISHED_AMBIENT_FORCE_SPAWN=1 spawns the ambient entity once on
+        // the first tick (bypassing the rare warm-clear chance roll) so the audio
+        // pipeline can be verified without waiting for the weather to line up.
+        static int s_forceSpawn = -1;
+        if (s_forceSpawn < 0) {
+            const char* e = std::getenv("BANISHED_AMBIENT_FORCE_SPAWN");
+            s_forceSpawn = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        static bool s_forcedOnce = false;
+        if (s_ambient && s_forceSpawn && !s_forcedOnce) {
+            s_forcedOnce = true;
+            SpawnAmbientEntity(w, reinterpret_cast<uint8_t*>(gw));
+        }
+
         if (*reinterpret_cast<float*>(w + 0x18) > kColdThresh &&
             *reinterpret_cast<int*>(w + 0x10) == 0 &&
             ((disasterBits >> 7) & 1) == 0 && climate && rng) {
             const float* p = reinterpret_cast<const float*>(reinterpret_cast<uint8_t*>(climate) + 0x108);
-            if (SpawnChance(w + 0x70, p, rng)) {
-                // Ambient environment entity spawn (audio) — intentionally skipped.
+            if (SpawnChance(w + 0x70, p, rng) && s_ambient) {
+                SpawnAmbientEntity(w, reinterpret_cast<uint8_t*>(gw));
             }
         }
     }

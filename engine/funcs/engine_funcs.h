@@ -2938,6 +2938,39 @@ extern fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter;
 typedef void (*fn_Audio_Scene_SetEmitterVolume_t)(void* scene, uint32_t emitterId, void* pos, float volume);
 extern fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume;
 
+// --- Audio::Scene 3D emitter API (ambient environment + building emitters) ---
+// These back the AmbientEnvironmentComponent / AmbientEmitterComponent audio
+// (biome wind/nature beds, per-building loops). All are Runtime-x64.dll exports;
+// resolved by mangled name so both DLL and standalone builds share the pointer.
+
+// Audio::Scene::FindEffect3D(ExternalPtr<SoundEffect>) -> uint handle (0 if none)
+// RCX=this, RDX=soundRef (8-byte ExternalPtr by value).
+typedef uint32_t (*fn_Audio_Scene_FindEffect3D_t)(void* scene, uint64_t soundRef);
+extern fn_Audio_Scene_FindEffect3D_t fn_Audio_Scene_FindEffect3D;
+
+// Audio::Scene::PlayEffect3D(ExternalPtr<SoundEffect>, SoundType, const Time&, const Vector3&) -> uint handle
+// RCX=this, RDX=soundRef, R8D=soundType(3), R9=Time*, [rsp+20h]=Vector3* pos.
+typedef uint32_t (*fn_Audio_Scene_PlayEffect3D_t)(void* scene, uint64_t soundRef, int soundType,
+                                                  const void* timePtr, const void* posVec3);
+extern fn_Audio_Scene_PlayEffect3D_t fn_Audio_Scene_PlayEffect3D;
+
+// Audio::Scene::AddEmitter(uint id, const Vector3&, float vol)
+// RCX=this, EDX=id, R8=Vector3*, XMM3=vol.
+typedef void (*fn_Audio_Scene_AddEmitter_t)(void* scene, uint32_t id, const void* posVec3, float vol);
+extern fn_Audio_Scene_AddEmitter_t fn_Audio_Scene_AddEmitter;
+
+// Audio::Scene::RemoveEmitter(uint id, const Vector3&)
+typedef void (*fn_Audio_Scene_RemoveEmitter_t)(void* scene, uint32_t id, const void* posVec3);
+extern fn_Audio_Scene_RemoveEmitter_t fn_Audio_Scene_RemoveEmitter;
+
+// Audio::Scene::GetEmitterCount(uint id) const -> int
+typedef int (*fn_Audio_Scene_GetEmitterCount_t)(void* scene, uint32_t id);
+extern fn_Audio_Scene_GetEmitterCount_t fn_Audio_Scene_GetEmitterCount;
+
+// Audio::Scene::StopEffect3D(uint id)
+typedef void (*fn_Audio_Scene_StopEffect3D_t)(void* scene, uint32_t id);
+extern fn_Audio_Scene_StopEffect3D_t fn_Audio_Scene_StopEffect3D;
+
 // Math::Vector3::operator== — compares two Vector3 for equality
 // RCX=lhs(Vector3*), RDX=rhs(Vector3*) -> returns bool
 typedef bool (*fn_Vector3_Equals_t)(void* lhs, void* rhs);

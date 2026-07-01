@@ -7,10 +7,10 @@
 #include <cstdint>
 
 // Update (vtable slot [9], 0x140043310): Samples terrain grid for dominant biome,
-// blends day/night ambient sounds based on time-of-day.
-// Very complex (222 instructions), deeply interacts with grid, biome config, audio scene.
-// Delegates to original via resolved function pointer.
-void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* self);
+// blends day/night ambient sounds based on temperature, driving the sibling
+// AmbientEmitterComponent through the world Audio::Scene. Faithful reimpl.
+// The component Update ABI is (self, Time*); the original reads only `self`.
+void AmbientEnvironmentComponent_Update(AmbientEnvironmentComponent* self, int64_t* time);
 
 // Init: resolve all internal function pointers (called once at startup)
 void AmbientEnvironmentComponent_InitFuncs();
