@@ -324,35 +324,56 @@ click on the ground → a house is placed. User-visible, screenshot-verified.
 
 ---
 
-## Phase 3B — Placement preview + CreateBar rendering [deferred follow-on]
+## Phase 3B — Placement preview + CreateBar rendering [in progress]
 
-**Status (2026-07-02):** Phase 3 activation is DONE (real click → tool active + ticked,
-crash-free). The **visible preview is not yet rendering** — deferred to this 3B pass before
-returning to it. Two groundwork fixes already landed (committed, Ghidra-verified correct but
-insufficient on their own): `TransformFromYaw` (0x140151288) resolved via its Runtime export
-`?FromYawPitchOffset@Transform@Math@@SA...` (the IAT slot is null in standalone → the preview
-mesh was getting a zeroed/degenerate transform), and the transform **offset** switched from
-zero to the cursor world-`pos` from sub_da00 (Ghidra 0x1400fdff3: R9=offset=pos, that's what
-makes the ghost follow the cursor). **User-tested: ghost still not visible** → more is wrong.
+**Status (2026-07-02, updated):** the ghost preview mesh now renders (root-caused + fixed +
+verified). Remaining: the CreateBar cost/size panel populate+position (item 2, in progress).
 
-**3B work items (measured / to investigate):**
-- **Ghost mesh still invisible** despite SceneAddObject/GeomSetTransform/MeshUpdateHier being
-  registered + TransformFromYaw now resolved + offset=pos. Investigate: does
-  `Graphics::Scene::AddObject` return a valid index and actually enqueue the MeshInstance for
-  the in-game render pass in standalone? Is the MeshInstance's mesh/material fully built by
-  Startup (variant/mesh set, but material/bounds)? Is the 96-byte Transform ABI from
-  `FromYawPitchOffset` (static, hidden retbuf RCX=retbuf/RDX=yaw/R8=pitch/R9=offset) landing
-  correctly? Consider RenderDoc capture of a frame with the tool active to see if the mesh is
-  submitted at all.
-- **CreateBar dialog empty + mis-positioned (top-left).** `operator_fc60` (0x1400ffc60, the
-  dialog cost/icon/bbox populate) is an unregistered EXE function → null → the panel never gets
-  its contents; and the standalone toolbar doesn't run EntityUI::Startup's positioning, so the
-  dialog lands at (0,0). Port/register 0x1400ffc60 + `GeomGetTransform` (0x140151460, member,
-  returns Transform by value / hidden retbuf — its only consumer is fc60) + a position pass.
-- **Footprint-tile overlay** (`EntityUI_ToolDraw_SA`, tool +0x40) is written but not wired into
-  `GameUpdateLoop::Draw` (needs the engine `Context*`).
-- Once the ghost + confirm-place are visually verified, fold `BANISHED_LIVE_TOOLS` into
-  `SA_LIVE_ENV`.
+### ✅ Item 1 — Ghost mesh renders (DONE, verified, committed a5bf926)
+**Root cause found:** the Phase-3B groundwork `TransformFromYaw` fix was DEAD. In
+`placementtool.cpp` the `#ifdef STANDALONE_EXE` export fallback for `s_fn_TransformFromYaw`
+ran BEFORE the unconditional `s_fn_TransformFromYaw = resolveIAT(0x140151288)` a few lines
+later, which — the slot being unregistered in standalone → null — **clobbered the fallback
+back to null**. So the fn ptr was null, `localTransform` stayed all-zero (cos=0 → degenerate
+rotation matrix), the mesh collapsed to a point = invisible. "Resolved but insufficient" was a
+misdiagnosis: it never actually took effect. `SceneAddObject`/`GeomSetTransform`/`MeshUpdateHier`
+were all fine (registered in `address_registry.cpp` 1008-1013).
+**Fix:** register dispatch slots `0x140151288` (Transform::FromYawPitchOffset) and `0x140151460`
+(Geometry::GetTransform) in `address_registry.cpp` alongside the sibling Graphics Transform
+slots; reorder `placementtool.cpp` EnsureFuncs so the export fallback runs AFTER resolveIAT.
+**Verified** (`BANISHED_TOOL_HARNESS=preview BANISHED_LIVE_TOOLS=1`, new cursor-free ghost-preview
+probe drives the exact Serialize pipeline at a fixed cell): `TransformFromYaw` non-null,
+`transform=[negSin=0, cos=1.0, pos=(-3,-3.5,0)]` (matches the known Math::Transform layout —
+non-degenerate, carries the world pos), `sceneObjectIdx` valid (mesh submitted to the live
+gameWorld+0x60 scene — same scene the working ModelComponent path uses), 0-byte crash log. A/B
+default clean. **Ghost mesh now stands in the live scene** at the probe cell — a human can
+launch `BANISHED_TOOL_HARNESS=preview BANISHED_LIVE_TOOLS=1 make sa-run` to SEE the WoodHouse
+ghost at (124,124) (visual confirm still recommended).
+
+### ⏳ Item 2 — CreateBar populate + position (in progress)
+**CreateBar OPEN is confirmed working in standalone** (probe: OnKey → `OpenToolDialog(*(tool+0x10))`
+loads `Dialog/CreateBar.rsc`, builds the DialogInstance, AddDialog's it; controller+0x00 dialog
+IBP goes 0→live, crash-free). It is empty+top-left ONLY because `operator_fc60` (0x1400ffc60,
+the populate+`SetUpperLeft` positioner) is a null unregistered exe fn in standalone. Being ported
+(closure: e600/e420/ebb0 unported; e700/e360 in tool_base_drag; ec70/fe960 already registered)
+into new files `code/Game/Player/tool_base_createbar.cpp` + `standalone/reg_player_createbar.cpp`.
+🔑 note: `tool+0x10` = the EntityUI/dialog **controller** (SetEditMode sets `tool+0x10 = entityUI`,
+`+0x20 = descriptor`, `+0x18 = ToolSetting IBP` — Ghidra 0x140102b60); PlacementTool.h's "+0x10
+dialogPtr" comment is misleading. The controller's +0x00 = dialog IBP, +0x08/0x0c = cached
+screen x/y (seeded −1.0), +0x18 = its DialogInstance, +0x30 = descriptionPtr, +0x80 = existing
+flag. GeomGetTransform (0x140151460) now registered (item-1 commit).
+
+### ⏳ Item 3 — Footprint-tile overlay (wired; tiles gated on a deferred sim-gap)
+The Draw call is ALREADY in place: `GameUpdateLoop::Draw` Step 11 (gameupdateloop.cpp ~L1398)
+dispatches the active tool's `vtable+0x40` Draw `(tool, videoCtx, drawFlag)` every frame,
+faithful to the exe Draw (0x140096010). `PlacementTool_Draw_Impl` runs but **early-returns
+because `s_fn_sub_1380` (0x140101380) is null** — sub_1380's closure needs the DEFERRED shared
+sim-gap `CharacterComponent_impl_08c0` (0x1401008c0) + `_f5d0` (0x14009f5d0), avoided by all
+prior waves. So the footprint TILES await that closure; the wiring itself is done + crash-safe
+(guarded). `EntityUI_ToolDraw_SA` in tool_activation_standalone.cpp is a redundant alt path.
+
+- Once the ghost + confirm-place + CreateBar are visually verified, fold `BANISHED_LIVE_TOOLS`
+  into `SA_LIVE_ENV`.
 
 ---
 
