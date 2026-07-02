@@ -75,6 +75,13 @@ extern "C" void PlayerTrade_Retrace_25920(int64_t* root, int64_t* cursor); // 0x
 // Type-id global storage — defined in reg_work_tail_trade.cpp (standalone), filled
 // after Engine::Startup. The IsDerivedFrom in c8a0 reads the *value* at DWORD_1401c7158.
 extern "C" uint32_t g_tid_TradeWork_CitizenComponent; // DWORD_1401c7158
+#ifndef STANDALONE_EXE
+// DLL mode compiles this file but not standalone/reg_work_tail_trade.cpp -- provide
+// the definition here. Value 0 = "type-id unresolved", which the two use sites below
+// explicitly treat as skip-validation (cascade-safe, keep the object). Surfaced as an
+// undefined-reference link error once the M-D response-file link exposed it.
+extern "C" uint32_t g_tid_TradeWork_CitizenComponent = 0;
+#endif
 
 // ============================================================
 // 0x14002c830 — c710 node-alloc sub-helper. Allocates a 0x38-byte AVL node, copies

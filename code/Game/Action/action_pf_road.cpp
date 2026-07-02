@@ -35,6 +35,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (M-D scoped finder fallback)
+#endif
 
 namespace {
 
@@ -72,7 +75,7 @@ typedef void  (*fn_GridToWorld_t)(int* mapGrid, float* out3, float* in2, char fl
 
 // Dispatch-slot helpers (CALL qword ptr [0x140xxxxxx] in the original): read the runtime fn-ptr
 // out of the .rdata slot (the moveto.cpp / autosavedialog.cpp idiom).
-typedef void  (*fn_QuatRotate_t)(void* quat, float* inoutVec3);                                  // [0x1401525f0]
+typedef void  (*fn_QuatRotate_t)(void* quat, float* outVec3, const float* inVec3);               // [0x1401525f0] (3-arg — R8 = input vec; Ghidra dropped it)
 typedef float (*fn_Vec3Heading_t)(void* vec3);                                                   // [0x1401512d8]
 typedef void* (*fn_TransformMul_t)(void* transform, void* retVec3, void* inVec3);                // [0x140151470] member-ABI
 typedef void* (*fn_Vec3CtorScalar_t)(void* self, void* scalar);                                  // [0x140151320]
@@ -583,14 +586,60 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     uintptr_t ibp = 0;   // local_res8 (object pointer after ClearPathQueue)
     if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<int64_t*>(s + 0x10), &ibp);
+#ifdef STANDALONE_EXE
+    // [M-D SCOPED FALLBACK] "ClearPathQueue" = the shared ModelComponent finder
+    // FUN_140003f60, whose type-id comes from raw .rdata 0x1401c7a50 — NULL in
+    // standalone, so the find never matches (the GrowthComponent +0x30 lesson;
+    // the shared global must stay unfilled). Self-contained scan of the owning
+    // entity; if it still has no ModelComponent, return a zero vec instead of
+    // the retail unguarded `null+0x148` transform read.
+    if (ibp == 0) {
+        static uint32_t s_tidModel = 0;
+        if (s_tidModel == 0) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        int64_t ownEnt = *reinterpret_cast<int64_t*>(s + 0x10);
+        if (ownEnt && s_tidModel) {
+            int n = *reinterpret_cast<int*>(ownEnt + 0x38);
+            int64_t arr = *reinterpret_cast<int64_t*>(ownEnt + 0x30);
+            for (int k = 0; k < n && arr; ++k) {
+                void* c = *reinterpret_cast<void**>(arr + (int64_t)k * 8);
+                if (!c) continue;
+                uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
+                typedef uint32_t (*getTid_t)(void*);
+                if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) {
+                    ibp = reinterpret_cast<uintptr_t>(c);
+                    break;
+                }
+            }
+        }
+        if (ibp == 0) {
+            if (p5) *p5 = 0.0f;
+            retVec3[0] = retVec3[1] = retVec3[2] = 0.0f;
+            return retVec3;
+        }
+    }
+#endif
+
+    // Point node for (p3, p4) from the description's pair list — disasm-verified
+    // (0x140122ea2..0x140122f42): pair {array,count} stride 0x10 at desc+0x28+p3*0x10;
+    // node stride 0x18 = {offset.xyz @0x0, dir.xyz @0xc}. The heading branch rotates
+    // node.dir (R8 = arr + 0xc + p4*0x18) and the tail transforms node.offset
+    // (R8 = arr + p4*0x18). Both R8 args were Ghidra-dropped in the old port
+    // (passed as nullptr -> Runtime read of 0 once interact points went live).
+    uint8_t* nodeArr = build
+        ? *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(build) + 0x28 +
+                                       static_cast<size_t>(p3) * 0x10)
+        : nullptr;
+    uint8_t* node = nodeArr ? nodeArr + static_cast<size_t>(p4) * 0x18 : nullptr;
+    static const float kZero3[3] = {0, 0, 0};
 
     if (p5 != nullptr) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ibp);
         uint32_t xform[8];   // local_50..local_38 = 7 dwords copied from obj+0x148
         for (int k = 0; k < 7; k++)
             xform[k] = *reinterpret_cast<uint32_t*>(ibp + 0x148 + k * 4);
-        float dir[3] = {0, 0, 0};   // local_60 (Vector3)
-        if (s_fn_QuatRotate) s_fn_QuatRotate(xform, dir);   // Math::Quaternion::Rotate(&xform, dir)
+        float dir[4] = {0, 0, 0, 0};   // local_60 (Vector3 out)
+        if (s_fn_QuatRotate)
+            s_fn_QuatRotate(xform, dir, node ? reinterpret_cast<float*>(node + 0xc) : kZero3);
         float h = s_fn_Vec3Heading ? s_fn_Vec3Heading(dir) : 0.0f;
         *p5 = h;
     }
@@ -599,7 +648,9 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     uint32_t xform2[8];
     for (int k = 0; k < 7; k++)
         xform2[k] = *reinterpret_cast<uint32_t*>(ibp + 0x148 + k * 4);
-    if (s_fn_TransformMul) s_fn_TransformMul(xform2, retVec3, nullptr);  // Transform::operator*(this, ret, [implicit])
+    if (s_fn_TransformMul)
+        s_fn_TransformMul(xform2, retVec3,
+                          node ? reinterpret_cast<float*>(node) : const_cast<float*>(kZero3));
     return retVec3;
 }
 

@@ -31,6 +31,43 @@
 #include <cmath>
 #include <vector>
 
+// ============================================================================
+// Economy Brick M-D — live town storage (BANISHED_LIVE_STORAGE, default OFF).
+// Ports in code/Game/Game/town_storage_seed.cpp (Ghidra 1:1, see that file):
+//   * TownRegistry_RegisterStorageLocation  = 0x14012d230 (townMgr+0x00 ADD;
+//     retail fires it from the StorageLocationComponent OnAdded vtable slot,
+//     which our inert components never run — so the spawn path calls it).
+//   * TownStorage_BuildCompleteInit_7ff0    = 0x140107ff0 (build-complete
+//     StorageComponent init: +0x38 = _volumeLimit * area, +0x3c = _storageFlags.
+//     Faithful for our start town because it spawns fully-BUILT buildings).
+//   * StartTown_SeedStartingResources       = 0x1400a1f00 (seven-mask seeding).
+// The raw-material TEMPLATE registration below mirrors the FUN_1400a3300 loop
+// at 0x1400a33b4 (pool startConfig+0xa0 / count +0xa8, stride 0x18 ExternalRef
+// -> FUN_140091e60 dedup-append into townMgr+0x110), which retail runs AFTER
+// the spawn passes and BEFORE Game_impl_1f00 — same order kept here.
+// ============================================================================
+extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
+extern "C" void TownStorage_BuildCompleteInit_7ff0(void* componentWithEntity);
+extern "C" void StartTown_SeedStartingResources(void* startConfig);
+extern "C" void TownStorage_TraceDump();
+
+static bool LiveStorageEnabled() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = getenv("BANISHED_LIVE_STORAGE");
+        v = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return v == 1;
+}
+static bool StorageTraceOn() {
+    static int v = -1;
+    if (v < 0) {
+        const char* e = getenv("BANISHED_STORAGE_TRACE");
+        v = (e && *e && e[0] != '0') ? 1 : 0;
+    }
+    return v == 1;
+}
+
 static constexpr int   CELL_STRIDE = 0x30;
 static constexpr int   CELL_TYPE   = 0x29;     // tile type byte
 static constexpr int   GAME_CELLS  = 0x80;     // Game+0x80 = {void* data, int count, int cap}
@@ -459,6 +496,42 @@ static void StartTown_ProbeWorkplaceKey(void* entityV) {
         fflush(stderr);
     }
 }
+
+// Economy Brick M-D — bring up the storage on a freshly spawned FULLY-BUILT
+// building (StorageBarn/StorageYard). Mirrors what retail does for the same
+// entity state:
+//   1. build-complete storage init (BuildDescription_helper_7ff0): capacity
+//      +0x38 = _volumeLimit(desc+0x24) * (_areaBasedLimit(desc+0x20) ? mapW*mapH
+//      : 1), mask +0x3c = _storageFlags(desc+0x28). Passing the StorageComponent
+//      itself is layout-equivalent to retail's BuildComponent (both hold the
+//      entity IBP at +0x10).
+//   2. town storage-location registration (StorageLocationComponent OnAdded →
+//      d230): append the entity to townMgr+0x00 so the citizen eat chain
+//      (CitizenAI_helper_e370) and Game_SpawnResources can find it.
+// Our CopyCtor already wires comp+0x10 (entity) and +0x18 (description).
+static void StartTown_WireStorage(void* entity, int entryIdx) {
+    if (!LiveStorageEnabled() || !entity) return;
+    void* storageComp = FindComponentOnEntity(entity, TypeId("StorageComponent"));
+    if (!storageComp) return;                      // not a storage building
+    TownStorage_BuildCompleteInit_7ff0(storageComp);
+
+    void* slc = FindComponentOnEntity(entity, TypeId("StorageLocationComponent"));
+    // FAITHFUL registration set: retail's townMgr+0x00 ADD (d230) fires from the
+    // StorageLocationComponent lifecycle, so ONLY `storagelocation`-bearing
+    // templates (StorageBarn/StorageYard/StorageCart/Tavern) join the list. The
+    // WoodHouses carry a plain StorageComponent (food/fuel at home) but are NOT
+    // storage locations — registering them made the citizen food-search + the
+    // start-resource seeder treat houses as barns (unfaithful; also crashed the
+    // town-list searches pre-fallback). Init (7ff0) still runs for them above.
+    if (slc) TownRegistry_RegisterStorageLocation(slc);
+    if (StorageTraceOn()) {
+        uint8_t* sc = (uint8_t*)storageComp;
+        fprintf(stderr, "[StorageSeed] struct[%d] entity=%p storage=%p slc=%p "
+                "cap=%d mask=0x%x\n", entryIdx, entity, storageComp, slc,
+                *(int32_t*)(sc + 0x38), *(uint32_t*)(sc + 0x3c));
+        fflush(stderr);
+    }
+}
 #endif // STANDALONE_EXE
 
 // NOTE: the resource path now uses StartTown_PlaceResourceCell (the Entity_impl_6540
@@ -629,6 +702,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         fn_InternalBasePtr_CheckPtr(&entIBP);
         StartTown_RunOnCreatePass((void*)entIBP);
         StartTown_ProbeWorkplaceKey((void*)entIBP);   // TODO #2 gating diagnostic
+
+        // Brick M-D (BANISHED_LIVE_STORAGE): run the build-complete storage init
+        // + town storage-location registration for this fully-built building —
+        // retail's StorageLocationComponent OnAdded fires during RegisterEntity,
+        // so this sits right after it.
+        StartTown_WireStorage(entity, i);
 #endif
 
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
@@ -2285,4 +2364,58 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
             "entityList count %d -> %d\n", n, afterEnv, after);
     fflush(stderr);
+
+    // ========================================================================
+    // Brick M-D (BANISHED_LIVE_STORAGE) — starting-resource seeding. Mirrors
+    // the tail of FUN_1400a3300 (after all spawn passes):
+    //   1. 0x1400a33b4 loop: register the raw-material TEMPLATE pool
+    //      (startConfig+0xa0, count +0xa8, stride 0x18 ExternalRef) into
+    //      townMgr+0x110 via FUN_140091e60 (dedup-append; already ported +
+    //      registered as RawMaterialComponent_RegisterRawMaterial).
+    //   2. 0x1400a342b: Game_impl_1f00(startConfig) — seed the seven start
+    //      resources (wood/stone/iron/fuel/FOOD/herb/tool) into the registered
+    //      storage locations (barn/yard, wired in StartTown_WireStorage above).
+    // ========================================================================
+    if (LiveStorageEnabled()) {
+        void* townMgr = nullptr;
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+            townMgr = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
+        typedef void (*fn_RegisterRawMat_t)(void* townMgr, void* templateEntity);
+        fn_RegisterRawMat_t regRawMat = reinterpret_cast<fn_RegisterRawMat_t>(
+            ResolveAddr(Module::Exe, 0x140091e60));
+
+        const int rmCount = *(int32_t*)(sc + 0xa8);
+        uint8_t* rmPool   = *(uint8_t**)(sc + 0xa0);
+        int registered = 0;
+        if (townMgr && regRawMat && rmPool) {
+            for (int i = 0; i < rmCount; ++i) {
+                // Retail resolves a copy of the ExternalRef by name (FUN_14001b1d0)
+                // and registers the resolved template; unresolved entries are
+                // skipped here (standalone guard) instead of appending NULL.
+                void* tmpl = StartTown_ResolveTemplate(rmPool + (size_t)i * POOLENTRY_STRIDE);
+                if (!tmpl) {
+                    fprintf(stderr, "[StorageSeed] rawmat template[%d] unresolved\n", i);
+                    fflush(stderr);
+                    continue;
+                }
+                regRawMat(townMgr, tmpl);
+                ++registered;
+            }
+        }
+        if (StorageTraceOn()) {
+            fprintf(stderr, "[StorageSeed] rawmat templates: pool=%d registered=%d "
+                    "townMgr=%p (+0x118 count=%d) storageLocs(+0x08)=%d\n",
+                    rmCount, registered, townMgr,
+                    townMgr ? *(int32_t*)((uint8_t*)townMgr + 0x118) : -1,
+                    townMgr ? *(int32_t*)((uint8_t*)townMgr + 0x08) : -1);
+            fflush(stderr);
+        }
+
+        // Game_impl_1f00 — the seven-mask seeding driver (counts at
+        // startConfig+0xfc..+0x114).
+        StartTown_SeedStartingResources(sc);
+
+        // Final state dump (townMgr+0x00 count, per-location capacity/slots).
+        TownStorage_TraceDump();
+    }
 }

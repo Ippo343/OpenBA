@@ -818,15 +818,57 @@ close any of these by adding null-guards (that re-introduces the very bypasses b
   whether the goal is (a) faithful player-driven employment via UI, or (b) keep a minimal programmatic
   drive of the REAL cascade as an explicit demo harness. Either way the field-poke goes away.
 
-- **Brick M-D — Live StorageComponent + stocked food.** Unblocks **Defer 2** (`ConsumeFood`
-  relieves hunger). Graduate StorageComponent live (`COMPONENT_LIVE_FACTORY_S`, c7e78) so the barn
-  holds real stock; seed the StorageBarn with FOOD at world-build; verify `ConsumeFood`
-  (0x140112990, citizencomponent.cpp:582) pulls + decrements the barn count and hunger drops. Needs
-  a FOOD producer too (forester makes LOG, not food) — a gatherer/farmer, or seed starting food.
+- **Brick M-D — ✅ DONE (2026-07-02). Live town storage + stocked food + the EAT chain — Defer 2
+  CLOSED** (env `BANISHED_LIVE_STORAGE`, default OFF; verified with `BANISHED_NEEDS_ACCEL=100` +
+  `BANISHED_LIVE_REGIONMAP=1` + `BANISHED_STORAGE_TRACE=1`). **VERIFIED LIVE: 6 hungry citizens
+  organically walk to the StorageBarn and EAT — hunger 23.6→0 at 1.0/unit, barn slot count
+  decrements per unit, 0-byte crash log.** The plan's "ConsumeFood relieves hunger" wording was
+  LOOSE — ConsumeFood (0x140112990) is only the happiness/variety accumulator; the real relief =
+  **EatFromStorage (0x1401152e0, Ghidra-mislabeled `CitizenComponent_ReleaseWorkplace`)**, reached
+  via eat state 0/0xe → `e370` food search (scans **townMgr+0x00 storage-location list** + 0x10
+  markets) → `PerformWork_Action_Ctor6` pushes MoveTo→PerformWork(8)→SendCompMsg(msg 2 → the
+  CitizenComponent vtable+0x78 dispatcher). Full chain map in memory `reference_eat_food_chain`.
+  What landed (two agent bricks + lead integration):
+  1. **World half** (`town_storage_seed.cpp` + starttown wiring): build-complete storage init
+     `BuildDescription_helper_7ff0` port (0x140107ff0 — sets +0x38 = _volumeLimit×area, +0x3c =
+     _storageFlags; it IGNORES `_available`, resolving the "+0x21 gates Draw" puzzle — Draw/OnAdded
+     only serves _available=true storages like yard/cart/citizen-inventory); townMgr+0x00
+     registration via the d230 port for `storagelocation`-bearing buildings ONLY (barn+yard —
+     registering houses was tried and reverted as unfaithful); townMgr+0x110 raw-material template
+     registry via the already-ported 091e60 dedup-append (mirrors a3300's 0x1400a33b4 loop); the
+     seven-mask seeder `Game_impl_1f00`/`Game_SpawnResources` ports (0x1400a1f00/0x140091660,
+     counts from startConfig+0xfc..+0x114: Easy = 150 log / 70 stone / 50 iron / 50 tool /
+     **2400 FOOD** / 400 firewood / 40 clothing — all placed via cd80 accept + AddItem d000).
+  2. **Citizen half** (`citizen_needsupdate.cpp` + wiring): CitizenComponent_NeedsUpdate
+     (0x140112260, the 9-case vtable+0x78 message dispatcher) + warm-house thirst helper_21e0
+     ports; vtable slot 15 wired in the CitizenComponent live factory (manual macro expansion);
+     the SendComponentMessage AbstractImpl/GetTarget were already ported+wired; a scoped msg-2
+     typeid heal in the CopyCtor (ctor6's typeid comes from unregistered .rdata c7158 → 0).
+     Also fixed a REAL pre-existing bug: EatFromStorage used the ResidenceComponent finder
+     (0x140008090) where retail uses the StorageComponent finder (0x140006270, disasm-verified);
+     and QueryCount was rewritten volume-weighted (matDesc+0x48 × count) per the real cf10.
+  3. **Cross-cutting root causes fixed during verification** (each found via gate traces):
+     (a) InteractDescription::Serialize read the load-direction flag from the WRONG level
+     (`*(serializer+8)` instead of the stream's `*(stream+8)`) → the use/build/create interact
+     point lists NEVER built → ChildSum=0 → d5d0 found no barn access point → every food search
+     failed. (b) `Pf_EntityResolvePos_2e20` dropped the Ghidra-hidden R8 point argument in BOTH
+     transform calls (rotate + operator*) and ignored p3/p4 — rebuilt faithfully from disasm
+     (node = desc pair[p3] array + p4*0x18, {offset@0, dir@0xc}); scoped ModelComponent-finder
+     fallback added (3f60's c7a50 typeid stays deliberately unfilled). (c) **StorageComponent
+     type-id 0x1401c7e78 added to reg_economy_typeids** (filled from GetTypeIdByName after
+     startup, like its 13 peers) — four independent crash/no-op sites all traced to the shared
+     6270 finder's dead typeid (EatFromStorage, ef40, e370/dd30 mask fallbacks, ConsumeListAppend
+     64b0's reserve bump). (d) `BANISHED_NEEDS_ACCEL=<mult>` harness (default OFF) scales ONLY
+     hunger/thirst accumulation for verification.
+  **A/B:** default `sa-run` (no economy envs) soak crash-free, no [StorageSeed]/[EatMsg] output
+  (gates off). Remaining fold-ins for later bricks: retire the msg-0 warm-house typeid ambiguity,
+  port NeedsUpdate sub-helpers fde0/17a0/1540 (msg 1/4/5, currently resolve-or-skip), and a FOOD
+  producer (gatherer/farmer) so stock replenishes organically (Defer: seeded stock only).
 
-Suggested order: **M-A ✅ → M-B ✅ → M-D → M-C** (M-A was a 1-line extra-deref fix; M-B closed the
+Suggested order: **M-A ✅ → M-B ✅ → M-D ✅ → M-C** (M-A was a 1-line extra-deref fix; M-B closed the
 real materialization keystone — the NULL ComponentEntity vtable — and retired
-`PRODUCE_SPAWN_ENTITY`. M-C is the most entangled + carries the player-driven design decision).
+`PRODUCE_SPAWN_ENTITY`; M-D landed live town storage + the full organic EAT chain.
+M-C is the most entangled + carries the player-driven design decision).
 Each brick lands crash-safe; the remaining `FORCE_*`/`MATURE_TREES` harnesses retire as their
 brick lands.
 

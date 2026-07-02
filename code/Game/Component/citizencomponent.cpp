@@ -396,10 +396,20 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     }
 
     // --- Hunger accumulation ---
+    // [DIAG HARNESS, default OFF] BANISHED_NEEDS_ACCEL=<mult> multiplies ONLY the
+    // hunger/thirst accumulation rate so the eat/drink chain can be exercised in
+    // seconds instead of ~10 sim-minutes (warn threshold ~16 at 0.028/s). Unset
+    // or 1 => byte-identical accumulation (Economy Brick M-D verification).
+    static float s_needsAccel = -1.0f;
+    if (s_needsAccel < 0.0f) {
+        const char* e = getenv("BANISHED_NEEDS_ACCEL");
+        s_needsAccel = 1.0f;
+        if (e && e[0]) { float v = (float)atof(e); if (v > 0.0f) s_needsAccel = v; }
+    }
     if ((gameFlags >> 1 & 1) == 0) {
         float hungerRate = *reinterpret_cast<float*>(desc + 0xC0);
         float hungerDiv = s_DAT_14017225c ? *s_DAT_14017225c : 1.0f;
-        *reinterpret_cast<float*>(p + 0x44) += (dt_sec * hungerRate) / hungerDiv;
+        *reinterpret_cast<float*>(p + 0x44) += (dt_sec * s_needsAccel * hungerRate) / hungerDiv;
     } else {
         *reinterpret_cast<uint32_t*>(p + 0x44) = 0;
     }
@@ -414,7 +424,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         // Thirst rate depends on clothing level (field at +0x1E4)
         int clothingLevel = *reinterpret_cast<int*>(p + 0x1E4);
         float thirstRate = *reinterpret_cast<float*>(desc + 0xDC + (int64_t)clothingLevel * 4);
-        *reinterpret_cast<float*>(p + 0x48) += (dt_sec * thirstRate) / fVar14;
+        *reinterpret_cast<float*>(p + 0x48) += (dt_sec * s_needsAccel * thirstRate) / fVar14;
     }
 
     // --- Handle life event from profession name ---
@@ -1923,9 +1933,51 @@ void CitizenComp_helper_1b90(int64_t selfV) {
 }
 
 // Reimpl of CitizenComponent_ReleaseWorkplace (0x1401152e0):
-// drain the citizen's pending work hours (+0x44) against its workplace, recording
-// produced/consumed tiles, marking the workplace's storage dirty, and propagating
-// the workplace's capability flags (+0x5c bits) into the citizen's +0x54 state mask.
+// NOTE the retail label "ReleaseWorkplace" is a MISNOMER — this is EatFromStorage
+// (Economy Brick M-D): while hunger (+0x44) > 0, pick a stocked edible from the
+// target's StorageComponent (Entity_impl_ef40), SubtractItem, bump the town
+// per-category consumed counter (townMgr+0x170[cat*0x20+0xC]), OR the material's
+// diet bits (+0x5c) into the citizen's +0x54 state mask, hunger -= g_fUVScale (1.0f).
+// [EatMsg] traces gated on BANISHED_STORAGE_TRACE.
+#ifdef STANDALONE_EXE
+// Forward decl (factory_registration.h is only included further down, in the
+// factory section) — the standalone type-name -> CRC registry lookup.
+namespace Object { uint32_t GetTypeIdByName(const char* name); }
+static inline uint32_t StandaloneTypeIdByName(const char* n) {
+    return ::Object::GetTypeIdByName(n);
+}
+// [SCOPED STANDALONE FALLBACK] self-contained StorageComponent find on an entity
+// (+0x30 comp array / +0x38 count). The registered 6270 port (work_base_reimpl.cpp)
+// reads its type-id from raw .rdata 0x1401c7e78 which is UNREGISTERED in standalone,
+// so its match can never fire; do NOT fill the shared global (that would un-dormant
+// ~20 other readers — the GrowthComponent +0x30 lesson). Used by the eat chain
+// (EatFromStorage + Entity_impl_ef40).
+static int64_t StandaloneFindStorageComp(void* entity) {
+    if (!entity) return 0;
+    uint32_t tidStorage = StandaloneTypeIdByName("StorageComponent");
+    if (tidStorage == 0) return 0;
+    uint8_t* ent = reinterpret_cast<uint8_t*>(entity);
+    int cnt = *reinterpret_cast<int32_t*>(ent + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(ent + 0x30);
+    for (int i = 0; i < cnt && arr; ++i) {
+        void* comp = *reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
+        if (!comp) continue;
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*getTid_t)(void*);
+        if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(comp) == tidStorage)
+            return reinterpret_cast<int64_t>(comp);
+    }
+    return 0;
+}
+#endif
+static bool EatStorageTraceOn() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_STORAGE_TRACE");
+        s = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s == 1;
+}
 void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
     EnsureCallees();
     uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
@@ -1934,10 +1986,39 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
     fn_InternalBasePtr_CheckPtr(param2);
     void* entity = *reinterpret_cast<void**>(param2);
     int64_t storeIBP = 0;
-    if (s_fn_EntityFindCompStorage) s_fn_EntityFindCompStorage((int64_t)entity, &storeIBP);
+    // Disasm 0x140115311: CALL 0x140006270 — the StorageComponent finder
+    // (DAT_1401c7e78), NOT 0x140008090 (that one is the ResidenceComponent finder,
+    // DAT_1401c7cf0 — the previous code here used it by mistake, so the eat loop
+    // found no storage on storage-only food buildings).
+    if (s_fn_EntityFindCompStorage6270) s_fn_EntityFindCompStorage6270((int64_t)entity, &storeIBP);
+#ifdef STANDALONE_EXE
+    // Scoped standalone fallback — see StandaloneFindStorageComp.
+    if (storeIBP == 0) storeIBP = StandaloneFindStorageComp(entity);
+#endif
+    if (storeIBP == 0) {
+        // Retail assumes the eat target always carries a StorageComponent (it would
+        // fault inside SubtractItem otherwise). In standalone the target may lack a
+        // live storage until the world-side M-D brick lands — skip with a trace.
+        static int s_noStore = 0;
+        if (s_noStore < 4) { ++s_noStore;
+            fprintf(stderr, "[EatMsg] EatFromStorage: target=%p has NO StorageComponent — skip\n",
+                    entity);
+            fflush(stderr);
+        }
+        return;
+    }
 
     float uv = s_pUVScale ? *s_pUVScale : 1.0f;
     float hours = *reinterpret_cast<float*>(self + 0x44);
+    if (EatStorageTraceOn()) {
+        static int n = 0;
+        if (n < 24) { ++n;
+            fprintf(stderr, "[EatMsg] EatFromStorage: citizen=%p hunger=%.3f store=%p step=%.3f\n",
+                    reinterpret_cast<void*>(selfV), hours,
+                    reinterpret_cast<void*>(storeIBP), uv);
+            fflush(stderr);
+        }
+    }
     do {
         if (hours <= 0.0f) return;
         int64_t arg = *reinterpret_cast<int64_t*>(param2);
@@ -1974,9 +2055,20 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
             if (old != dst && old) fn_MemFreeStatic(old);
         }
 
-        // mark the workplace storage dirty + bump the world overlay counter
+        // subtract one unit from the storage + bump the town per-category
+        // consumed counter (townMgr = *(gameWorld+0xf0), counters at +0x170,
+        // 0x20-byte stride, count at +0xC).
         fn_InternalBasePtr_CheckPtr(&storeIBP);
         if (s_fn_FUN_14012d150) s_fn_FUN_14012d150(storeIBP, work, 1);
+        if (EatStorageTraceOn()) {
+            static int n = 0;
+            if (n < 24) { ++n;
+                fprintf(stderr, "[EatMsg]   eat unit: material=%p hungerBefore=%.3f\n",
+                        reinterpret_cast<void*>(work),
+                        *reinterpret_cast<float*>(self + 0x44));
+                fflush(stderr);
+            }
+        }
         int64_t worldGrid = *reinterpret_cast<int64_t*>(
             reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xf0);
         if (s_fn_FUN_140088f90) {
@@ -1990,16 +2082,21 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
 
         // find the RawMaterialDescription (DAT_1401c7cb8) on the work entity, OR its
         // capability bits into the citizen's +0x54 state mask.
+        // Typeid via the registered storage (filled from GetTypeIdByName after
+        // Engine::Startup in standalone); skip the scan while it is unfilled
+        // (0 / 0xFFFFFFFF) so a zero id can't false-match an inert stub component.
         void* mat = nullptr;
-        int rows = *reinterpret_cast<int*>(work + 0x30);
+        uint32_t matTid = s_TypeId_RawMat1c7cb8 ? *s_TypeId_RawMat1c7cb8 : 0;
+        int rows = (matTid != 0 && matTid != 0xFFFFFFFFu)
+                       ? *reinterpret_cast<int*>(work + 0x30) : 0;
         for (int i = 0; i < rows; i++) {
             int64_t comp = *reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(work + 0x28) + (int64_t)i * 8);
             int64_t vt = *reinterpret_cast<int64_t*>(comp);
             typedef uint32_t (*getType_t)(void*);
             uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(reinterpret_cast<void*>(comp));
-            if (tid == (s_TypeId_RawMat1c7cb8 ? *s_TypeId_RawMat1c7cb8 : 0)) {
+            if (tid == matTid) {
                 void* obj = reinterpret_cast<void*>(comp);
-                mat = fn_IsDerivedFrom(obj, *s_TypeId_RawMat1c7cb8) ? obj : nullptr;
+                mat = fn_IsDerivedFrom(obj, matTid) ? obj : nullptr;
                 break;
             }
         }
@@ -2322,6 +2419,14 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     int64_t storeIBP = 0;
     if (s_fn_EntityFindCompStorage6270)
         s_fn_EntityFindCompStorage6270(*reinterpret_cast<int64_t*>(param_3), &storeIBP);
+#ifdef STANDALONE_EXE
+    // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
+    // null bail: retail asserts the storage exists; in standalone an entity in a
+    // town search list may still lack a live StorageComponent — treat as no slot.
+    if (storeIBP == 0)
+        storeIBP = StandaloneFindStorageComp(*reinterpret_cast<void**>(param_3));
+    if (storeIBP == 0) { *param_2 = 0; return param_2; }
+#endif
 
     fn_InternalBasePtr_CheckPtr(&storeIBP);
     uint32_t chosen = 0xffffffff;
@@ -2974,9 +3079,65 @@ static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time
     CitizenComponent_Update(self, reinterpret_cast<void*>(time));
 }
 
-COMPONENT_LIVE_FACTORY_S(CitizenComponent, 0x290, 0xCB,
-                         "BANISHED_LIVE_CITIZEN",
-                         CitizenComponent_UpdateAdapter, CitizenComponent_BodyInit)
+// ------------------------------------------------------------------
+// Manual COMPONENT_LIVE_FACTORY_S expansion (+ slot 15 message handler).
+// Byte-identical to
+//   COMPONENT_LIVE_FACTORY_S(CitizenComponent, 0x290, 0xCB,
+//                            "BANISHED_LIVE_CITIZEN",
+//                            CitizenComponent_UpdateAdapter, CitizenComponent_BodyInit)
+// except FinishLiveVtable ALSO graduates vtable slot 15 (+0x78 — the component
+// message handler that SendComponentMessage::AbstractImpl (0x1400caef0)
+// dispatches; retail slot = CitizenComponent_NeedsUpdate 0x140112260) to the
+// citizen_needsupdate.cpp port when BANISHED_LIVE_STORAGE is set (Economy Brick
+// M-D, citizen/eat-message half). Default (env off) => slot 15 stays the inert
+// no-op stub => the eat SendComponentMessage remains a no-op exactly as before.
+// ------------------------------------------------------------------
+extern void CitizenComponent_NeedsUpdate(void*, int, uint64_t*, int, int); // citizen_needsupdate.cpp
+
+static uint32_t CitizenComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("CitizenComponent");
+    return cached;
+}
+static void* CitizenComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+static void CitizenComponent_UpdateVSlot(void* s, void* t) {
+    CitizenComponent_UpdateAdapter(reinterpret_cast<CitizenComponent*>(s),
+                                   reinterpret_cast<int64_t*>(t));
+}
+static void CitizenComponent_StartupVSlot(void* s) {
+    CitizenComponent_BodyInit(reinterpret_cast<CitizenComponent*>(s));
+}
+// slot +0x78 / index 15 — called as (comp, msgId, &targetEntityIBP, extra, extra2)
+// by SendComponentMessage_AbstractImpl_Impl (code/Game/Action/sendcomponentmessage.cpp).
+static void CitizenComponent_NeedsUpdateVSlot(void* s, int msg, void* target,
+                                              int p4, int p5) {
+    CitizenComponent_NeedsUpdate(s, msg, reinterpret_cast<uint64_t*>(target), p4, p5);
+}
+static void CitizenComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_CITIZEN")) {
+        CitizenComponent_LiveVtable[4] =
+            reinterpret_cast<void*>(&CitizenComponent_StartupVSlot);
+        CitizenComponent_LiveVtable[9] =
+            reinterpret_cast<void*>(&CitizenComponent_UpdateVSlot);
+    }
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGE"))
+        CitizenComponent_LiveVtable[15] =
+            reinterpret_cast<void*>(&CitizenComponent_NeedsUpdateVSlot);
+}
+extern "C" void* CitizenComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x290, 0xCB,
+        CitizenComponent_LiveVtable,
+        reinterpret_cast<void*>(&CitizenComponent_LiveGetTypeId));
+    CitizenComponent_FinishLiveVtable();
+    return p;
+}
+static void* CitizenComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x290, 0xCB,
+        CitizenComponent_LiveVtable,
+        reinterpret_cast<void*>(&CitizenComponent_LiveGetTypeId));
+    CitizenComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(CitizenComponent, "Component",
               &CitizenComponent_Factory, &CitizenComponent_CreateInPlace);
 #endif // STANDALONE_EXE

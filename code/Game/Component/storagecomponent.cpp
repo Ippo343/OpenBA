@@ -16,6 +16,7 @@
 #include "Component/storagecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 
@@ -107,16 +108,38 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
+// Effective type-ids — raw .rdata global preferred (DLL mode), with the
+// documented standalone fallback ::Object::GetTypeIdByName (the raw
+// 0x1401c7xxx addresses resolve to NULL in the standalone exe; the shared
+// globals are never written).
+// ============================================================
+static uint32_t EffTid_StorageDescription() {
+    if (s_TypeId_StorageDescription && *s_TypeId_StorageDescription)
+        return *s_TypeId_StorageDescription;
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageDescription");
+    return cached;
+}
+static uint32_t EffTid_RawMaterialDescription() {
+    if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription)
+        return *g_TypeId_RawMaterialDescription;
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
+    return cached;
+}
+
+// ============================================================
 // Helper: Get StorageDescription sibling component
 // ============================================================
 static void* GetStorageDescription(StorageComponent* self) {
     EnsureHelpers();
-    if (!fn_IsDerivedFrom || !s_TypeId_StorageDescription) return nullptr;
+    uint32_t tid = EffTid_StorageDescription();
+    if (!fn_IsDerivedFrom || tid == 0) return nullptr;
 
     void* obj = self->_unk18;
     if (!obj) return nullptr;
 
-    bool derived = fn_IsDerivedFrom(obj, *s_TypeId_StorageDescription);
+    bool derived = fn_IsDerivedFrom(obj, tid);
     return derived ? obj : nullptr;
 }
 
@@ -299,15 +322,41 @@ void StorageComponent_Draw(StorageComponent* self) {
 }
 
 // ============================================================
-// StorageComponent::QueryCount (0x14012cf10) — null-safe reimpl
+// Helper: find the RawMaterialDescription on a material TEMPLATE entity
+// (descriptions at +0x28 raw-pointer array / +0x30 count) — the inline
+// scan shared by QueryCount / Helper_c560 in the original.
 // ============================================================
-// O(n*m) iteration: for each storage slot, iterate items checking
-// type via IsDerivedFrom. Guards against NULL RawMaterialDescription.
-// This is the existing inline function from engine_funcs.h, extracted here.
+static void* FindRawMatDescription(uintptr_t materialEntity) {
+    uint32_t tid = EffTid_RawMaterialDescription();
+    if (!materialEntity || !fn_IsDerivedFrom || tid == 0) return nullptr;
+    int compCount = *(int*)(materialEntity + 0x30);
+    uintptr_t compArray = *(uintptr_t*)(materialEntity + 0x28);
+    for (int i = 0; i < compCount; i++) {
+        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (typeId == tid) {
+            // Original: IsDerivedFrom-narrow, then break either way.
+            return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;
+        }
+    }
+    return nullptr;
+}
+
+// ============================================================
+// StorageComponent::QueryCount (0x14012cf10) — faithful reimpl
+// ============================================================
+// VOLUME-weighted total (verified vs Ghidra): for each storage slot
+// (comp+0x28, stride 0x10: {materialEntity(8), count(4), reserved(4)}), find
+// the material's RawMaterialDescription and accumulate
+//   desc(+0x48 unit volume) * slot count(+0x08).
+// The previous port summed raw counts (UNFAITHFUL — capacity +0x38 is in
+// volume units, _volumeLimit * area). Standalone-inert guard: a slot whose
+// material has no RawMaterialDescription contributes 0 (retail reads
+// *(NULL+0x48)).
 
 int StorageComponent_QueryCount(void* storageComp) {
     if (!storageComp) return 0;
-    if (!fn_IsDerivedFrom || !g_TypeId_RawMaterialDescription) return 0;
 
     uintptr_t sc = (uintptr_t)storageComp;
     int slotCount = *(int*)(sc + 0x30);
@@ -316,8 +365,9 @@ int StorageComponent_QueryCount(void* storageComp) {
 
     for (int i = 0; i < slotCount; i++) {
         uintptr_t slotEntry = slotArray + (uintptr_t)i * 0x10;
-        int itemCount = *(int*)(slotEntry + 0x08);
-        total += itemCount;
+        void* matDesc = FindRawMatDescription(*(uintptr_t*)slotEntry);
+        int unitVol = matDesc ? *(int*)((uintptr_t)matDesc + 0x48) : 0;
+        total += unitVol * *(int*)(slotEntry + 0x08);
     }
 
     return total;
@@ -331,23 +381,8 @@ int StorageComponent_QueryCount(void* storageComp) {
 // guards against NULL.
 
 uint32_t StorageComponent_Helper_c560(void* param_1, void* param_2) {
-    if (!fn_IsDerivedFrom || !g_TypeId_RawMaterialDescription) return 0;
-
-    uintptr_t p2 = (uintptr_t)param_2;
-    int compCount = *(int*)(p2 + 0x30);
-    uintptr_t compArray = *(uintptr_t*)(p2 + 0x28);
-    void* rawMatDesc = nullptr;
-
-    for (int i = 0; i < compCount; i++) {
-        void* comp = *(void**)(compArray + (uintptr_t)i * 8);
-        typedef uint32_t (*GetTypeId_t)(void*);
-        uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-        if (typeId == *g_TypeId_RawMaterialDescription) {
-            if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription))
-                rawMatDesc = comp;
-            break;
-        }
-    }
+    // Type-id via EffTid (raw global in DLL mode, GetTypeIdByName in standalone).
+    void* rawMatDesc = FindRawMatDescription((uintptr_t)param_2);
 
     if (!rawMatDesc) return 0;
 

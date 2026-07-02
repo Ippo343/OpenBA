@@ -355,6 +355,24 @@ int64_t* CitizenAI_FindBestTarget_dd30(int64_t* param_1, int64_t* param_2, uint3
                             void* pIVar10 = s_fn_findStorage ? s_fn_findStorage(*reinterpret_cast<int64_t*>(lVarComp + 0x10), local_78s) : nullptr;
                             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar10);
                             int64_t stor = pIVar10 ? *reinterpret_cast<int64_t*>(pIVar10) : 0;
+                            // [M-D SCOPED FALLBACK] the registered 6270-family finder reads
+                            // dead .rdata typeid 0x1401c7e78 (unregistered in standalone) ->
+                            // never matches; self-contained scan of the owning entity's comp
+                            // list instead (shared global stays unfilled by design).
+                            if (stor == 0) {
+                                static uint32_t s_tidStorageComp = 0;
+                                if (s_tidStorageComp == 0)
+                                    s_tidStorageComp = ::Object::GetTypeIdByName("StorageComponent");
+                                int64_t ownEnt = *reinterpret_cast<int64_t*>(lVarComp + 0x10);
+                                if (ownEnt && s_tidStorageComp) {
+                                    int n2 = *reinterpret_cast<int*>(ownEnt + 0x38);
+                                    int64_t arr2 = *reinterpret_cast<int64_t*>(ownEnt + 0x30);
+                                    for (int k = 0; k < n2 && arr2; ++k) {
+                                        void* c2 = *reinterpret_cast<void**>(arr2 + (int64_t)k * 8);
+                                        if (c2 && CompTypeId(c2) == s_tidStorageComp) { stor = reinterpret_cast<int64_t>(c2); break; }
+                                    }
+                                }
+                            }
                             mask = stor ? *reinterpret_cast<uint32_t*>(stor + 0x3c) : 0;
                         }
 

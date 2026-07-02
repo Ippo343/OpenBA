@@ -30,6 +30,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
 constexpr uintptr_t kVtable  = 0x140163930;
@@ -84,9 +86,24 @@ void InteractDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
 
     // ---- post-load build (load only; reads from the resolved external) ----
-    void* serObj = *(void**)(serializer + 8);
-    bool loading = serObj && (*(int*)((uintptr_t)serObj + 8) == 0);
+    // Direction flag: retail tests *(int*)(stream + 8) == 0 (FUN_140123500 reads
+    // param_2+8 DIRECTLY). The old read `*(serializer+8)` grabbed the serializer's
+    // second qword instead of the stream's direction field -> `loading` was always
+    // false -> the use/build/create node lists never built -> ChildSum(interact)==0
+    // -> d5d0 found no access point -> the eat/food search rejected every barn
+    // (Economy Brick M-D root cause #3).
+    bool loading = (*(int*)((uintptr_t)stream + 8) == 0);
     void* ext = *(void**)(s + 0x20);
+    // [M-D diag, env BANISHED_STORAGE_TRACE, capped]
+    static int s_idTrace = -1;
+    if (s_idTrace < 0) { const char* e = getenv("BANISHED_STORAGE_TRACE"); s_idTrace = (e && e[0] && e[0] != '0') ? 12 : 0; }
+    if (s_idTrace > 0) { --s_idTrace;
+        fprintf(stderr, "[InteractDesc] self=%p loading=%d ext=%p childCnt=%d eq=%p fyp=%p\n",
+                self, (int)loading, ext,
+                ext ? *(int32_t*)((uintptr_t)ext + 0x38) : -1,
+                (void*)fn_String_Equals, (void*)fn_Math_Vector3_FromYawPitch);
+        fflush(stderr);
+    }
     if (loading && ext && fn_String_Equals && fn_Math_Vector3_FromYawPitch) {
         uint8_t* children = *(uint8_t**)((uintptr_t)ext + 0x30);
         int childCount = *(int32_t*)((uintptr_t)ext + 0x38);
@@ -105,6 +122,11 @@ void InteractDescription_Serialize(void* self, void* stream) {
             node[4] = *(uint32_t*)&dir[1];
             node[5] = *(uint32_t*)&dir[2];
 
+            if (s_idTrace > 0) { --s_idTrace;
+                fprintf(stderr, "[InteractDesc]  child[%d] isUse=%d isBuild=%d\n", i,
+                        (int)fn_String_Equals(child, "use"), (int)fn_String_Equals(child, "build"));
+                fflush(stderr);
+            }
             if (fn_String_Equals(child, "use")) {
                 AppendNode((void*)(s + 0x28), node);
             } else if (fn_String_Equals(child, "build")) {

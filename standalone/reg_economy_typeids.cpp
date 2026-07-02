@@ -115,6 +115,18 @@ static uint32_t g_tid_WorkDescription      = 0;   // 0x1401c80a8
 // lodge carries a WorkComponent (the Phase A dump's comp[9]); filling this lets the find match.
 static uint32_t g_tid_WorkComponent        = 0;   // 0x1401c8070
 
+// 0x1401c7e78 StorageComponent — read by the SHARED storage finder FUN_140006270
+// (WorkBase_FindComponent_6270) and its callers across the eat/consume chain:
+// EatFromStorage (0x1401152e0), Entity_impl_ef40 slot pick, the e370/dd30 mask
+// fallbacks, ConsumeListAppend 0x1400c64b0 (reserve bump on the citizen's own
+// inventory), cd80 accept-check, c560 flag test, QueryCount cf10. Unfilled, every
+// one of those finds returned null and the retail-faithful unguarded derefs
+// faulted the moment Brick M-D made town storage live (4 separate crash sites).
+// Filling follows the same pattern as the 13 ids above; inert storage components
+// found by newly-matching scans have zeroed bodies (count 0 / flags 0), so
+// dormant readers see empty-storage no-ops. A/B the default build.
+static uint32_t g_tid_StorageComponent     = 0;   // 0x1401c7e78
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -130,6 +142,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7b68, reinterpret_cast<uintptr_t>(&g_tid_NaturalResourceDescription));
     RegisterExeAddr(0x1401c80a8, reinterpret_cast<uintptr_t>(&g_tid_WorkDescription));
     RegisterExeAddr(0x1401c8070, reinterpret_cast<uintptr_t>(&g_tid_WorkComponent));
+    RegisterExeAddr(0x1401c7e78, reinterpret_cast<uintptr_t>(&g_tid_StorageComponent));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -147,6 +160,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_NaturalResourceDescription = ::Object::GetTypeIdByName("NaturalResourceDescription");
     g_tid_WorkDescription      = ::Object::GetTypeIdByName("WorkDescription");
     g_tid_WorkComponent        = ::Object::GetTypeIdByName("WorkComponent");
+    g_tid_StorageComponent     = ::Object::GetTypeIdByName("StorageComponent");
 }
 
 #endif // STANDALONE_EXE

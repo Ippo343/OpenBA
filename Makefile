@@ -111,9 +111,13 @@ standalone: $(SA_TARGET)
 standalone-debug: SA_CXXFLAGS += -g -O0 -D_DEBUG
 standalone-debug: $(SA_TARGET)
 
-# Link all objects into the DLL
+# Link all objects into the DLL. The object list goes through a GCC response
+# file (@file): the inline command outgrew the Windows CreateProcess 32K limit
+# (mingw32-make "e=87 The parameter is incorrect") once the M-D bricks added
+# more code/Game translation units.
 $(TARGET): $(OBJECTS) $(HDE_OBJECTS) $(DEF_FILE) | $(BUILD_DIR)
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $(OBJECTS) $(HDE_OBJECTS) $(DEF_FILE) $(LIBS)
+	$(file >$(BUILD_DIR)/link_objs.rsp,$(OBJECTS) $(HDE_OBJECTS))
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ @$(BUILD_DIR)/link_objs.rsp $(DEF_FILE) $(LIBS)
 	@echo "Built: $@"
 	@ls -lh $@
 

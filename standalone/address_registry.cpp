@@ -448,6 +448,8 @@ extern void RegisterWorkTailSerializeBatch();// Phase 2 Keystone B tail: Pasture
 extern void RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A: zone+road enqueue (a6f00/9d360/9ce00/a6e30)
 extern void RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A: residence RB-tree (17230/15ec0/172f0/17460/14b40)
 extern void RegisterTownWorkplaceRegistry();  // Phase 3 economy: profession-BST workplace insert (0x1400895a0)
+extern "C" void RegisterTownStorageSeed();    // Economy M-D world half: d230/7ff0/91660/a1f00 (storage registry + start-resource seeder)
+extern "C" void RegisterCitizenNeedsUpdate(); // Economy M-D citizen half: NeedsUpdate 112260 + helper_21e0 (+ rdata floats)
 extern void RegisterKeystoneAMapBatch();     // Phase 2 Keystone A: map overlay/init (1241b0/9dc20/124750/9dee0/e2c0)
 extern void RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A: Game::Dtor + worker-thread teardown (9ed60 + 8 subs)
 extern void RegisterRegionGraphBuildBatch(); // Keystone A: region graph ctor + coarse array (a8670/1e060/1e420/f9e0)
@@ -557,6 +559,8 @@ static void RegisterCodeFunctions() {
     RegisterKeystoneAZoneBatch();    // Phase 2 Keystone A — zone+road enqueue cluster
     RegisterKeystoneARestreeBatch(); // Phase 2 Keystone A — residence RB-tree cluster
     RegisterTownWorkplaceRegistry(); // Phase 3 economy — profession-BST workplace insert
+    RegisterTownStorageSeed();       // Economy M-D — storage-location registry + start-resource seeder
+    RegisterCitizenNeedsUpdate();    // Economy M-D — CitizenComponent message dispatch (eat/drink delivery)
     RegisterKeystoneAMapBatch();     // Phase 2 Keystone A — map overlay/init cluster
     RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A — Game::Dtor + worker-thread teardown
     RegisterRegionGraphBuildBatch(); // Keystone A — region graph ctor + coarse-cell array (8670/e060/e420/f9e0)
