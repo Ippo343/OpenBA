@@ -48,3 +48,4 @@ Banished_RE.lock
 
 # RenderDoc captures (large binary .rdc artifacts)
 captures/
+*psd

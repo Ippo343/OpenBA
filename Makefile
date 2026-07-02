@@ -85,6 +85,11 @@ SA_SRCS = $(GAME_SRC_SRCS) \
 
 SA_OBJECTS = $(addprefix $(SA_OBJ_DIR)/, $(subst /,__,$(SA_SRCS:.cpp=.o)))
 
+# Windows resources (exe icon)
+SA_RC = standalone/icon.rc
+SA_RC_OBJ = $(SA_OBJ_DIR)/standalone__icon__rc.o
+WINDRES = windres
+
 .PHONY: all debug release deploy clean undeploy run standalone standalone-debug sa-deploy sa-run sa-run-menu
 
 all: debug
@@ -216,8 +221,8 @@ $(OBJ_DIR)/runtime__src__achievement__%.o: runtime/src/achievement/%.cpp | $(OBJ
 # ============================================================
 # Standalone EXE link + compile rules
 # ============================================================
-$(SA_TARGET): $(SA_OBJECTS) | $(SA_BUILD_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ $(SA_OBJECTS) $(SA_LIBS)
+$(SA_TARGET): $(SA_OBJECTS) $(SA_RC_OBJ) | $(SA_BUILD_DIR)
+	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ $(SA_OBJECTS) $(SA_RC_OBJ) $(SA_LIBS)
 	@echo "Built standalone: $@"
 	@ls -lh $@
 
@@ -281,6 +286,10 @@ $(SA_OBJ_DIR)/runtime__src__io__%.o: runtime/src/io/%.cpp | $(SA_OBJ_DIR)
 
 $(SA_OBJ_DIR)/standalone__%.o: standalone/%.cpp | $(SA_OBJ_DIR)
 	$(CXX) $(SA_CXXFLAGS) $(SA_INCLUDES) -c $< -o $@
+
+# Exe icon resource (windres compiles .rc -> COFF object)
+$(SA_RC_OBJ): $(SA_RC) ba_icon.ico | $(SA_OBJ_DIR)
+	$(WINDRES) $(SA_RC) -o $@
 
 # ============================================================
 # DLL build directories
