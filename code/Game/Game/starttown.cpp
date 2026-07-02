@@ -113,6 +113,13 @@ static std::vector<void*> g_foundingCitizens;
 struct CitizenComponent;
 extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* housingPtr);
 
+// Brick M-C — the real town-citizen-list registrar (CitizenComponent_OnAdd 0x140114000)
+// + the headless ProfessionUI worker-seat cascade driver (citizen_employ_cascade.cpp).
+// CitizenEmploy_SeatWorkers runs the exact FindAvailableBuilding + cbf0->ca20->c5f0->c4b0
+// fallback dd10 uses, seating each worker via +0x1f0=prof + AssignHousing(+0x248 roster).
+extern "C" void CitizenComponent_OnAdd(void* citizenComp);
+extern "C" int  CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
+
 // WorkPlaceComponent attach/detach roster-only mode (workplacecomponent.cpp). Set true for
 // the build-time founding-housing pass so the roster is populated WITHOUT the gameplay-time
 // Scene mesh-visual toggle (which deadlocks mid-build). See the flag's definition.
@@ -1000,36 +1007,51 @@ static void StartTown_EmployForesters() {
     int capacity = (wc && *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(wc) + 0x30) > 0)
                  ? *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(wc) + 0x30) : 4;
 
-    // Citizen source = the founding-family CitizenComponents captured during housing
-    // (townMgr+0xa0's own citizen list is not populated in standalone).
-    int citCount = (int)g_foundingCitizens.size();
-    int64_t lodgeIBP = reinterpret_cast<int64_t>(g_pForceWorkBuilding);
-    int employed = 0;
-    for (int i = 0; i < citCount && employed < capacity; ++i) {
-        int64_t citizen = reinterpret_cast<int64_t>(g_foundingCitizens[i]);
-        if (citizen == 0) continue;
-        int64_t desc = *reinterpret_cast<int64_t*>(citizen + 0x288);
-        if (desc == 0) continue;
-        // Adult (age >= adultAge desc+0x44), idle (no active task +0x208), unemployed (+0x238==0).
-        bool adult = *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(citizen + 0x3c);
-        bool idle  = *reinterpret_cast<int64_t*>(citizen + 0x208) == 0;
-        bool free  = *reinterpret_cast<int64_t*>(citizen + 0x238) == 0;
-        if (!(adult && idle && free)) continue;
-
-        *reinterpret_cast<uint64_t*>(citizen + 0x1f0) = g_foresterProfKey;   // profession = forester
-        int64_t wpIBP = lodgeIBP;
-        CitizenComponent_AssignWorkplace(reinterpret_cast<void*>(citizen), &wpIBP, employed);
-
-        int64_t assigned = *reinterpret_cast<int64_t*>(citizen + 0x238);
-        fprintf(stderr, "[Phase4Employ] seat #%d citizen=%p prof(+0x1f0)=0x%llx workplace(+0x238)=%p %s\n",
-                employed, reinterpret_cast<void*>(citizen),
-                (unsigned long long)*reinterpret_cast<uint64_t*>(citizen + 0x1f0),
-                reinterpret_cast<void*>(assigned),
-                (assigned == lodgeIBP) ? "OK" : "FAIL");
-        ++employed;
+    // --- Brick M-C: drive the REAL ProfessionUI worker-seat cascade instead of the old
+    // +0x1f0/+0x238 field-poke. Two faithful prerequisites the inert standalone citizen
+    // init skips (FUN_140117080 is guarded off, so +0x1f0 stays 0): the founding colonists
+    // must be (1) LABORERS — +0x1f0 = ProfessionList(gw+0xb0)+0x30, the default profession
+    // retail colonists carry — and (2) registered into the town citizen list townMgr+0xa0
+    // via the real registrar CitizenComponent_OnAdd (0x140114000), the list the cascade
+    // strategies scan. Then CitizenEmploy_SeatWorkers runs the exact FindAvailableBuilding
+    // + cbf0->ca20->c5f0->c4b0 fallback dd10 uses per worker, seating each via
+    // +0x1f0=forester + AssignHousing (+0x248 = the lodge's WorkPlaceComponent roster).
+    uint64_t laborerKey = 0;
+    {
+        int64_t profList = *reinterpret_cast<int64_t*>(
+            reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xb0);
+        if (profList) laborerKey = *reinterpret_cast<uint64_t*>(
+            reinterpret_cast<uint8_t*>(profList) + 0x30);
     }
-    fprintf(stderr, "[Phase4Employ] employed %d/%d forester(s) at the lodge (citizenList count=%d)\n",
-            employed, capacity, citCount);
+    static bool s_citizenListPopulated = false;
+    int seeded = 0;
+    for (void* c : g_foundingCitizens) {
+        if (!c) continue;
+        int64_t cz   = reinterpret_cast<int64_t>(c);
+        int64_t desc = *reinterpret_cast<int64_t*>(cz + 0x288);
+        bool adult = desc && *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(cz + 0x3c);
+        // Seed the laborer profession on idle adults so the cascade's +0x1f0==laborerKey
+        // filter matches them (retail init does this; ours is guarded off).
+        if (laborerKey && adult && *reinterpret_cast<int64_t*>(cz + 0x1f0) == 0)
+            { *reinterpret_cast<uint64_t*>(cz + 0x1f0) = laborerKey; ++seeded; }
+        // Register into the real townMgr+0xa0 town-citizen list (once per citizen).
+        if (!s_citizenListPopulated) CitizenComponent_OnAdd(c);
+    }
+    s_citizenListPopulated = true;
+
+    // The cascade's seat epilogue calls AssignHousing -> the roster attach into the
+    // lodge's WorkPlaceComponent (+0x58/+0x60), whose gameplay-time Scene mesh-visual
+    // toggle deadlocks during this build-time pass — same guard the founding-housing
+    // pass uses (g_wpcRosterOnly).
+    bool prevRosterOnly = g_wpcRosterOnly;
+    g_wpcRosterOnly = true;
+    int seated = CitizenEmploy_SeatWorkers(townMgr, g_foresterProfKey, capacity);
+    g_wpcRosterOnly = prevRosterOnly;
+
+    fprintf(stderr, "[Phase4Employ] M-C cascade: foundingCitizens=%d laborerKey=0x%llx seeded=%d "
+            "-> seated %d/%d forester(s) profKey=0x%llx\n",
+            (int)g_foundingCitizens.size(), (unsigned long long)laborerKey, seeded,
+            seated, capacity, (unsigned long long)g_foresterProfKey);
     fflush(stderr);
 }
 

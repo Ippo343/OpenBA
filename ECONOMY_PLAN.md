@@ -807,16 +807,41 @@ close any of these by adding null-guards (that re-introduces the very bypasses b
   `BANISHED_LIVE_REGIONMAP=1` (else `Map_CalcDistance` falls back to euclidean+gridW and the
   radius gate rejects every cell — the scan finds nothing and never reaches produce).
 
-- **Brick M-C — Town citizen list (`townMgr+0xa0`) + real employ cascade.** Unblocks **Defer 3**
-  (retire `StartTown_EmployForesters` field-poke). `FUN_14008cbf0` (the distance-optimizer seat)
-  iterates `townMgr+0xa0` (town citizen list), which is unpopulated in standalone. TASK: find the
-  retail ADD site for `townMgr+0xa0` and populate it at spawn (mirror the `g_foundingCitizens`
-  capture into the real registry); then port `impl_dd10 (0x14007dd10) → cbf0/ca20/c5f0/c4b0` and drive
-  it. ⚠️ DESIGN DECISION FIRST: retail producer employment is PLAYER-DRIVEN (0 default workers) — the
-  faithful start-town has NO employed foresters until the player assigns them. So "faithful" here may
-  mean wiring the ProfessionUI worker-count widget (real click path) rather than any auto-seat. Decide
-  whether the goal is (a) faithful player-driven employment via UI, or (b) keep a minimal programmatic
-  drive of the REAL cascade as an explicit demo harness. Either way the field-poke goes away.
+- **Brick M-C — ✅ DONE (2026-07-02). Town citizen list (`townMgr+0xa0`) + real employ cascade —
+  Defer 3 CLOSED; the `StartTown_EmployForesters` field-poke is RETIRED.** Design decision: chose
+  **(b)** — port the REAL cascade + drive it via the existing env-gated demo (`BANISHED_LIVE_WORKPLACE`),
+  consistent with M-A/M-B/M-D. What landed (`code/Game/Component/citizen_employ_cascade.cpp` +
+  `standalone/reg_citizen_employ_cascade.cpp`):
+  1. **townMgr+0xa0 ADD site FOUND + ported** = `CitizenComponent_OnAdd` (0x140114000) — wraps the
+     CitizenComponent in an IBP and appends to `townMgr+0xa0` via the already-ported `FUN_140003110`.
+     It's a vtable OnAdded slot (DATA-xref only), inert in standalone → the employ pass calls it per
+     founding citizen to populate the real town-citizen list the cascade scans.
+  2. **The full seat cascade ported 1:1** — `cbf0` (distance-optimized relocate), `ca20` (nearest
+     employed laborer), `c5f0` (most-laborer house, incl. the `FUN_1400896a0` house shuffle), `c4b0`
+     (first idle laborer) — plus a headless driver `CitizenEmploy_SeatWorkers(townMgr, profKey, count)`
+     mirroring `dd10`'s (0x14007dd10) per-worker `FindAvailableBuilding + cbf0→ca20→c5f0→c4b0` fallback
+     (dd10 itself reads a NumberEditElement widget we don't have). All ~7 deps were already ported.
+  3. **Two faithful seeding prerequisites** (the inert standalone citizen init `FUN_140117080` is
+     guarded off, so `+0x1f0` stays 0): the founding colonists are seeded as LABORERS
+     (`+0x1f0 = ProfessionList(gw+0xb0)+0x30`, what retail colonists carry) so the cascade's
+     `+0x1f0==laborerKey` filter matches them, and registered into townMgr+0xa0.
+  🔑 **CORRECTED FIELD SEMANTICS (Ghidra-verified; the prior "+0x238=workplace, cascade→AssignWorkplace"
+  note was WRONG):** `AssignWorkplace` (0x1401163d0) sets **+0x238** = RESIDENCE (rosters into c7cf0
+  ResidenceComponent); `AssignHousing` (0x140111ee0) sets **+0x248** = WORKPLACE (rosters into c80e0
+  WorkPlaceComponent) — the names are BACKWARDS vs effect. The real cascade seats a worker via
+  `+0x1f0=profession` + `AssignHousing`→`+0x248=workplace` (it does NOT touch `+0x238`).
+  **VERIFIED LIVE** (`BANISHED_LIVE_WORKPLACE + SPAWN_ADULTS + LIVE_REGIONMAP + MATURE_TREES +
+  EMPLOY_TRACE`): `foundingCitizens=20 seeded=20 → seated 4/4 forester(s)`; each seat shows
+  `+0x1f0`=forester + `+0x248`=lodge, **0-byte crash log**. A/B default `sa-run` (no economy envs):
+  byte-clean, zero cascade output, crash-free, world builds (9038 ents) + housing applies.
+  **Note on the visible Gather:** the old field-poke set `+0x238`=lodge, which tripped the adult Gather
+  candidate gate (`+0x238!=0` = *housed*) — semantically abusing the residence field. The faithful
+  cascade correctly leaves `+0x238`=0 (the founding citizens' residence link was never set — Phase-2
+  housing uses `AssignHousing`→`+0x248`), so the seated foresters are *employed* (`+0x248`) but not
+  *housed* (`+0x238`) → the organic Gather candidate stays gated on residence materialization (a
+  separate concern, and the employ pass is opt-in `BANISHED_LIVE_WORKPLACE`, never in the default demo;
+  `BANISHED_FORCE_FORESTERWORK` still drives work directly). See
+  [[reference_employ_cascade_field_semantics]].
 
 - **Brick M-D — ✅ DONE (2026-07-02). Live town storage + stocked food + the EAT chain — Defer 2
   CLOSED** (env `BANISHED_LIVE_STORAGE`, default OFF; verified with `BANISHED_NEEDS_ACCEL=100` +
@@ -865,12 +890,14 @@ close any of these by adding null-guards (that re-introduces the very bypasses b
   port NeedsUpdate sub-helpers fde0/17a0/1540 (msg 1/4/5, currently resolve-or-skip), and a FOOD
   producer (gatherer/farmer) so stock replenishes organically (Defer: seeded stock only).
 
-Suggested order: **M-A ✅ → M-B ✅ → M-D ✅ → M-C** (M-A was a 1-line extra-deref fix; M-B closed the
-real materialization keystone — the NULL ComponentEntity vtable — and retired
-`PRODUCE_SPAWN_ENTITY`; M-D landed live town storage + the full organic EAT chain.
-M-C is the most entangled + carries the player-driven design decision).
-Each brick lands crash-safe; the remaining `FORCE_*`/`MATURE_TREES` harnesses retire as their
-brick lands.
+Suggested order: **M-A ✅ → M-B ✅ → M-D ✅ → M-C ✅** — ALL FOUR MATERIALIZATION BRICKS DONE.
+M-A was a 1-line extra-deref fix; M-B closed the real materialization keystone (the NULL
+ComponentEntity vtable) and retired `PRODUCE_SPAWN_ENTITY`; M-D landed live town storage + the full
+organic EAT chain; M-C populated townMgr+0xa0 (real `CitizenComponent_OnAdd` registrar) + ported the
+real ProfessionUI seat cascade (`dd10`→`cbf0/ca20/c5f0/c4b0`) and retired the `EmployForesters`
+field-poke. All four Defers (1/2/3/4) are closed. Each brick lands crash-safe + A/B-clean; the
+remaining `FORCE_*`/`MATURE_TREES` harnesses are default-OFF conveniences that drive verification
+paths directly.
 
 ## Recommended agent sequence (the "do 1 then 2 then 3")
 
