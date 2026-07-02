@@ -244,6 +244,25 @@ void FirePreviewPlacement(void* entityUI) {
         printf("[ToolHarness] preview: no active tool — cannot drive ghost preview\n");
         return;
     }
+    // Prerequisite check for the CreateBar populate (Phase 3B item 2): drive OnKey
+    // (+0x30) with param2=1 — its dialog-open branch calls OpenToolDialog(*(tool+0x10))
+    // which loads Dialog/CreateBar.rsc + AddDialog's it, writing the dialog IBP into
+    // the controller's +0x00. tool+0x10 = the EntityUI/controller (SetEditMode sets it).
+    // Log the controller's +0x00 before/after so we can confirm the CreateBar opens.
+    {
+        uint8_t* t = static_cast<uint8_t*>(tool);
+        void* controller = *reinterpret_cast<void**>(t + 0x10);   // = EntityUI (dialog controller)
+        uint64_t before = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
+        void** vt = *reinterpret_cast<void***>(tool);
+        typedef char (*OnKey_t)(void*, char);
+        ((OnKey_t)vt[6])(tool, 1);   // vt[6] = +0x30 OnKey; param2=1 -> open CreateBar
+        uint64_t after = controller ? *reinterpret_cast<uint64_t*>(controller) : 0;
+        printf("[ToolHarness] CreateBar open probe: controller(tool+0x10)=%p dialogIBP(+0x00) "
+               "before=%llx after=%llx -> %s\n", controller,
+               (unsigned long long)before, (unsigned long long)after,
+               (after != 0) ? "OPENED" : "not opened");
+    }
+
     const int centerCell = Cell(124, 124);
     printf("[ToolHarness] driving ghost PREVIEW at cell %d (124,124)...\n", centerCell);
     int r = PlacementTool_HarnessPreviewAtCell(tool, centerCell);
