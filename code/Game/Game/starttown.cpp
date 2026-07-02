@@ -1609,6 +1609,59 @@ static void StartTown_MarkResourceCellGrid(void* gameVoid, void* ownerEntity, in
     }
 }
 
+// CreateNaturalResource_impl_dee0 — UN-mark (economy brick M-B). Faithful port of the
+// dee0 semantics the REMOVAL path needs: for each footprint cell, reclassify the
+// terrain type back to its natural class (occupied/shape cells only, with dee0's
+// buildable(2) override when the cell is owned by a DIFFERENT entity), and null the
+// cell entity-link (cell+0x08) for EVERY footprint cell (dee0 writes the null IBP
+// unconditionally, outside the shape check). Retail dispatch: entity mark-removal
+// (FUN_1400c2ea0) -> MapComponent vtable+0x38 (0x1401242f0) -> impl_4750 (0x140124750)
+// -> dee0. Without this the removed tree's cell keeps a dangling entity pointer
+// (CheckPtr is a release no-op — the IBP system is raw pointers) and any grid reader
+// (CitizenAI leisure box scan, forester scan) faults on the freed entity.
+extern "C" void StartTown_UnmarkResourceCellGrid(void* gameVoid, void* ownerEntity, int tileX,
+                                                 int tileY, int w, int h, const char* shape, int rot) {
+    if (!gameVoid || w <= 0 || h <= 0 || !fn_MapGetTerrainPos) return;
+    uint8_t* game = (uint8_t*)gameVoid;
+    const int dim = *(int32_t*)game;
+    uint8_t* cells = *(uint8_t**)(game + GAME_CELLS);
+    if (dim <= 0 || !cells) return;
+    const int shapeLen = shape ? *(const int*)(shape - 8) : 0;
+
+    for (int iy = 0; iy < h; ++iy) {
+        for (int ix = 0; ix < w; ++ix) {
+            const int cx = ix + tileX, cy = iy + tileY;
+            if (cx < 0 || cy < 0 || cx >= dim || cy >= dim) continue;  // OOB guard (std-safe)
+            const int cellIdx = cy * dim + cx;
+
+            // Occupancy from the rot-aware shape grid (same verified math as the mark).
+            bool occupied;
+            if (!shape || shapeLen == 0) {
+                occupied = true;
+            } else {
+                int gx, gy, gw;
+                if (rot == 0x5a)          { gw = h; gx = iy;            gy = (w - ix) - 1; }
+                else if (rot == 0xb4)     { gw = w; gx = (w - ix) - 1;  gy = (h - iy) - 1; }
+                else if (rot == 0x10e)    { gw = h; gx = (h - iy) - 1;  gy = ix; }
+                else                      { gw = w; gx = ix;            gy = iy; }
+                const long sidx = (long)gy * (gw + 1) + gx;
+                const char c = (sidx >= 0 && sidx < shapeLen) ? shape[sidx] : 0;
+                occupied = (c == '#' || c == '_');
+            }
+
+            uint8_t* cell = cells + (size_t)cellIdx * CELL_STRIDE;
+            if (occupied) {
+                uint8_t t = (uint8_t)StartTown_ClassifyCell(gameVoid, dim, cellIdx);
+                void* cellOwner = *(void**)cell;   // cell+0x00
+                if ((1u << (t & 0x1f) & 0x1e0u) && cellOwner && cellOwner != ownerEntity)
+                    t = 2;
+                StartTown_WriteCellType(game, cells, cellIdx, t);
+            }
+            *(uintptr_t*)(cell + 0x08) = 0;        // dee0: null the cell entity-link, ALWAYS
+        }
+    }
+}
+
 static void StartTown_MatureResource(void* nrComp);   // defined below (BANISHED_MATURE_TREES)
 
 // Entity_impl_6540 — write the MapComponent grid cell (tileX/tileY, w=1,h=1) and
@@ -1646,6 +1699,13 @@ static void StartTown_PlaceResourceCell(void* entity, int cellIdx, void* game, v
             if (mapDesc) shape = *(const char**)((uint8_t*)mapDesc + 0x28);  // String char*
             StartTown_MarkResourceCellGrid(game, entity, tileX, tileY, /*w*/1, /*h*/1,
                                            shape, /*rot*/0);
+
+            // M-B: mirror MapComponent_Slot12's post-write flag — bit 0x100000 of
+            // comp+0x20 = "occupancy currently written on the grid". The removal path
+            // (c2ea0 -> vtable+0x38 -> impl_4750) gates the grid UN-mark on this bit,
+            // so it must be set exactly when the collapse above wrote cell+0x08.
+            if (g_resOccupancy)
+                *(uint32_t*)(mc + 0x20) |= 0x100000u;
         }
     }
 

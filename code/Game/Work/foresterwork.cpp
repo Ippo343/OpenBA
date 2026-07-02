@@ -681,7 +681,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 
     // [G3 DIAG] count scan-loop bail points (gated to first few ticks via static below)
     static int s_dbgTick = 0;
-    bool dbg = (std::getenv("BANISHED_FORESTER_SCAN_TRACE") != nullptr) && (s_dbgTick < 6);
+    bool dbg = (std::getenv("BANISHED_FORESTER_SCAN_TRACE") != nullptr) && (s_dbgTick < 12);
     int d_attempts = 0, d_precheck1e0 = 0, d_passable = 0, d_zone = 0, d_occ0 = 0,
         d_resFound = 0, d_dist = 0, d_cut = 0, d_plant = 0;
     int d_cutCap = 0, d_cutGrowth = 0, d_cutFlags20 = 0, d_cutPath = 0, d_cutDone = 0;
@@ -937,6 +937,14 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                                             s_harvestCount, (void*)nrc);
                                     fflush(stderr);
                                     s_forceProduce((void*)nrc, workIBPbuf, 1);
+                                    // With BANISHED_PRODUCE_SPAWN_ENTITY the force-produce just
+                                    // REMOVED the tree (dirty-list -> freed next EntityList tick).
+                                    // Do NOT also queue the real cut sequence on it: its pending
+                                    // AnimateNaturalResource/PerformWork children would execute
+                                    // against the freed entity (retail order runs all tree-touching
+                                    // actions BEFORE RemoveNaturalResource, so this ordering only
+                                    // exists under the harness). Scan on for a different tree.
+                                    goto next_attempt;
                                 }
                             }
 
@@ -970,12 +978,14 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     if (dbg) {
         s_dbgTick++;
         fprintf(stderr, "[ForesterScan] tick attempts=%d radius=%d wpCell=%d "
+                "pre1e0=%d passable=%d zone=%d occ0=%d "
                 "pass_dist=%d resFound=%d cutBranch=%d | cut: cap=%d growth>=thr=%d flags20=%d "
-                "path=%d DONE(PerformWork)=%d maxGrowthSeen=%.3f thr=%.3f\n",
+                "path=%d DONE(PerformWork)=%d maxGrowthSeen=%.3f thr=%.3f czCell=%u entCell=%d\n",
                 d_attempts, workplaceRadius, workplaceCell,
+                d_precheck1e0, d_passable, d_zone, d_occ0,
                 d_dist, d_resFound, d_cut,
                 d_cutCap, d_cutGrowth, d_cutFlags20, d_cutPath, d_cutDone,
-                d_maxGrowth, fGrowthThreshold);
+                d_maxGrowth, fGrowthThreshold, citizenGridCell, entityCellSigned);
         fflush(stderr);
     }
 

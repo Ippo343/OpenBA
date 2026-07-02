@@ -345,6 +345,16 @@ struct ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 
+// Economy brick M-B — standalone ComponentEntity vtable (primary 0x14015fa78 +
+// embedded base vtable 0x14015faa0 = &array[5]). Body/rationale in
+// code/Game/Entity/componententity.cpp. Without it every entity has vtable NULL
+// and the first virtual dispatch (DeletePtr's dtor call on the produce/removal
+// path, EntityList Serialize) faults.
+extern "C" void* g_ComponentEntity_StandaloneVtable[12];
+// M-B (cont.) — removal-side grid occupancy un-mark (impl_4750 standalone body,
+// code/Game/Component/mapcomponent.cpp).
+extern "C" void MapComponent_DetachOccupancy_4750(void* self);
+
 // In-game HUD — ToolbarDialog ctor reimpl (FUN_1400b9910), body in
 // code/Game/Dialog/toolbardialog.cpp. C++ linkage (not extern "C").
 void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
@@ -606,6 +616,21 @@ static void RegisterCodeFunctions() {
     // (0x1400c48a0) resolve to our reimpls (EngineFuncsInit runs after this).
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
+
+    // Economy brick M-B — ComponentEntity vtable materialization. Entities are
+    // constructed with *(void**)self = ResolveAddr(0x14015fa78); registering the
+    // static vtable array gives every standalone entity a REAL vtable (scalar
+    // dtor / Serialize / base dtor), which the entity-removal + item-spawn
+    // lifecycle (DeletePtr, dirty-list Serialize) virtual-calls. 0x14015faa0 is
+    // the embedded base-class vtable at slot 5 of the same .rdata block.
+    RegisterExeAddr(0x14015fa78, reinterpret_cast<uintptr_t>(&g_ComponentEntity_StandaloneVtable[0]));
+    RegisterExeAddr(0x14015faa0, reinterpret_cast<uintptr_t>(&g_ComponentEntity_StandaloneVtable[5]));
+
+    // M-B (cont.) — CreateNaturalResource_impl_4750 = the removal-side occupancy
+    // UN-mark (dee0 clear), tail-called from the ported MapComponent_OnCreate
+    // (vtable+0x38, dispatched by entity mark-removal c2ea0). Registering it makes
+    // mapcomponent.cpp's s_fn_MapInit resolve; gated on comp+0x20 bit 0x100000.
+    RegisterExeAddr(0x140124750, reinterpret_cast<uintptr_t>(&MapComponent_DetachOccupancy_4750));
 
     // Weather simulation tick — route Weather::ResetTime (called every sim tick
     // from GameUpdateLoop::Update, gameupdateloop.cpp step 3e) to our reimpl so

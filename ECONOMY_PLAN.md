@@ -707,10 +707,11 @@ Each remaining bypass exists *because* of that gap and cannot be removed without
    `FUN_140022480` are ported + called in `ActCNR_RemoveNatRes_1260f0`, gated behind
    `BANISHED_PRODUCE_SPAWN_ENTITY`. No porting work remained; the plan text was stale (fixed).
 
-2. **`BANISHED_PRODUCE_SPAWN_ENTITY` (Defer 1, ROOT).** Tree-removal (entityList+0xd0 dirty
-   append) + item-spawn feed the engine entity lifecycle → next-frame `EntityList_PreUpdate →
-   Serialize` faults in Runtime-x64.dll on the partially-materialized standalone entity. This
-   is the shared keystone; closing it unlocks the others. Not a quick win.
+2. **✅ `BANISHED_PRODUCE_SPAWN_ENTITY` (Defer 1, ROOT) — CLOSED by Brick M-B (2026-07-01).**
+   The "partially-materialized entity" was specifically the NULL ComponentEntity vtable
+   (0x14015fa78 unregistered) + the missing removal-side grid occupancy un-mark. Both fixed
+   (see Brick M-B below); the gate is retired (default ON, `=0` opt-out). Tree removal +
+   ground-pile item spawn run crash-free organically.
 
 3. **Phase-1 storage live + stocked food (Defer 2).** StorageComponent inert → no stocked FOOD
    → `ConsumeFood` no-ops (hunger relief never happens). Same materialization class.
@@ -771,19 +772,40 @@ close any of these by adding null-guards (that re-introduces the very bypasses b
   (adds a per-harvest trace), `BANISHED_GROWTH_FORCE_HARVEST` (forces a tiny growthScale so the next
   live tick exercises DoHarvestReset deterministically). No new grid-build code was needed.
 
-- **Brick M-B — Dirty-list Serialize fault (`BANISHED_PRODUCE_SPAWN_ENTITY`).** Unblocks **Defer 1**
-  (resource depletion + physical ground-pile item). The produce item is built by
-  `ComponentEntity_CopyCtor` (FUN_1400c3720): it creates each component via
-  `Object::Factory::CreateObject(factory, typeId)` from the template desc list (RawMaterialFig =
-  value/map/model/work/rawmaterial). It then joins `entityList+0xd0` (the DIRTY list, via
-  FUN_140003110), and the next frame's `EntityList_PreUpdate → Serialize` faults in Runtime-x64.dll.
-  TASK: fast-repro via `BANISHED_FORCE_HARVEST + PRODUCE_SPAWN_ENTITY` (no forester walk needed —
-  verify the harness actually reaches the spawn; it invokes produce when the scan validates a tree,
-  so pair with `MATURE_TREES`), symbolize the Serialize fault, and find the specific stub factory /
-  faulting component Serialize. Contrast: start-town trees created by the SAME factory path join the
-  world via `fn_EntityList_RegisterEntity` (normal list) crash-free — so the fault is specific to the
-  DIRTY-list PreUpdate→Serialize path or a raw-material-only component. Fix the materialization, not
-  the symptom.
+- **Brick M-B — ✅ DONE (2026-07-01). Dirty-list lifecycle fault — Defer 1 CLOSED;
+  `BANISHED_PRODUCE_SPAWN_ENTITY` retired (now default ON, `=0` opt-out).** Three root causes, all
+  materialization (no null-guards):
+  1. **NULL ComponentEntity vtable (THE keystone).** `0x14015fa78` was never registered, so EVERY
+     standalone entity was constructed with `vtable == NULL` (`ResolveAddr` → NULL in
+     `componententity.cpp EnsureResolved`). Invisible in the spawn/tick flow (nothing virtual-calls
+     an entity) — but the removal path's `InternalBasePtr::DeletePtr` (Runtime 0x1800c0150) does the
+     first-ever virtual dispatch (`CALL [vtable[0]]` = scalar dtor, Ghidra-verified at the faulting
+     instruction) and crashed. Same root as the historical "PreUpdate → Serialize" fault (slot 3).
+     FIX: `g_ComponentEntity_StandaloneVtable[12]` in `componententity.cpp` — flat replica of the
+     .rdata block (primary 4 slots + RTTI gap + embedded base vtable at `0x14015faa0` = &[5]),
+     wired to the already-ported Dtor/Serialize/Slot5/Slot8 + lazy GetTypeId; registered for both
+     addresses in `address_registry.cpp`.
+  2. **Dangling tile-grid entity-link after removal.** `Object::InternalBasePtr` is a RAW pointer
+     (Ctor stores, `CheckPtr` is a release NO-OP — Ghidra-verified) — retail avoids dangling by
+     discipline: entity mark-removal `FUN_1400c2ea0` walks components calling vtable+0x38 →
+     MapComponent (0x1401242f0, already ported) → `impl_4750` (0x140124750) → `dee0` un-marks the
+     footprint (nulls cell+0x08 for every cell, reclassifies terrain), gated on comp+0x20 bit
+     0x100000 ("occupancy written"). All stubs in standalone → the freed tree stayed linked at
+     cell+0x08 → CitizenAI leisure box-scan faulted on it. FIX: `StartTown_UnmarkResourceCellGrid`
+     (dee0 port, starttown.cpp) + `MapComponent_DetachOccupancy_4750` (mapcomponent.cpp, registered
+     at 0x140124750) + MapComponent inert vtable slot 7 → the ported OnCreate handler + the
+     spawn-side collapse now sets bit 0x100000 (mirroring `MapComponent_Slot12`).
+  3. **FORCE_HARVEST harness ordering (not a product bug).** Retail's cut sequence runs ALL
+     tree-touching actions (AnimateNaturalResource ×2, chop PerformWork) BEFORE
+     RemoveNaturalResource (stack pops reverse-append; c1eb0-verified) — after removal only
+     citizen-targeting actions remain, so retail never touches the freed tree. The harness
+     force-produced (removed the tree) and THEN queued the real cut on the same tree → its pending
+     AnimateNR ran on freed memory. FIX: harness skips queueing the cut for a force-harvested tree.
+  **VERIFIED:** 8.5-min soak, 37 organic produces (stock →48) with full tree-removal + ground-pile
+  item spawn, 0 crashes; default-on re-verify (no env) 6 organic produces crash-free; default
+  `sa-run` combo A/B crash-free; DLL-mode build clean. Repro env note: the forester scan needs
+  `BANISHED_LIVE_REGIONMAP=1` (else `Map_CalcDistance` falls back to euclidean+gridW and the
+  radius gate rejects every cell — the scan finds nothing and never reaches produce).
 
 - **Brick M-C — Town citizen list (`townMgr+0xa0`) + real employ cascade.** Unblocks **Defer 3**
   (retire `StartTown_EmployForesters` field-poke). `FUN_14008cbf0` (the distance-optimizer seat)
@@ -802,10 +824,11 @@ close any of these by adding null-guards (that re-introduces the very bypasses b
   (0x140112990, citizencomponent.cpp:582) pulls + decrements the barn count and hunger drops. Needs
   a FOOD producer too (forester makes LOG, not food) — a gatherer/farmer, or seed starting food.
 
-Suggested order: **M-A ✅ → M-B → M-D → M-C** (M-A DONE — was a 1-line extra-deref fix, not a
-grid build; the grid was already materialized. M-C is the most entangled + carries the player-driven
-design decision). Each brick lands crash-safe + env-gated; the `FORCE_*`/`MATURE_TREES` harnesses
-retire one at a time as their brick lands.
+Suggested order: **M-A ✅ → M-B ✅ → M-D → M-C** (M-A was a 1-line extra-deref fix; M-B closed the
+real materialization keystone — the NULL ComponentEntity vtable — and retired
+`PRODUCE_SPAWN_ENTITY`. M-C is the most entangled + carries the player-driven design decision).
+Each brick lands crash-safe; the remaining `FORCE_*`/`MATURE_TREES` harnesses retire as their
+brick lands.
 
 ## Recommended agent sequence (the "do 1 then 2 then 3")
 

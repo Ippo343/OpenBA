@@ -281,7 +281,89 @@ void MapComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(MapComponent, 0x38, 0x83)
+
+// ============================================================
+// Economy brick M-B — grid occupancy UN-mark on entity removal
+// ============================================================
+// Standalone body for CreateNaturalResource_impl_4750 (0x140124750), the
+// removal-side mirror of the occupancy write. Retail dispatch: entity
+// mark-removal FUN_1400c2ea0 walks the component list and calls vtable+0x38 on
+// removable components -> MapComponent_OnCreate (0x1401242f0, ported above) ->
+// tail-calls impl_4750 -> dee0 (clear the footprint's cell entity-links +
+// reclassify terrain). Gated on comp+0x20 bit 0x100000 ("occupancy currently
+// written"), set by the spawn-side collapse (starttown.cpp
+// StartTown_PlaceResourceCell) exactly when cell+0x08 was written. Without
+// this, removing a produce-harvested tree leaves the cell grid pointing at the
+// FREED entity (CheckPtr is a release no-op) and any grid reader — the
+// CitizenAI leisure box scan, the forester scan — faults on it.
+//
+// dee0 body: StartTown_UnmarkResourceCellGrid (starttown.cpp) — the verified
+// shape/classify/write logic shared with the spawn-side mark.
+extern "C" void StartTown_UnmarkResourceCellGrid(void* game, void* ownerEntity, int tileX,
+                                                 int tileY, int w, int h, const char* shape, int rot);
+
+extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
+    uint8_t* self = reinterpret_cast<uint8_t*>(selfV);
+    if (!self) return;
+    uint32_t flags = *(uint32_t*)(self + 0x20);
+    if (((flags >> 20) & 1) == 0) return;          // occupancy not written
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    void* game = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    if (!game) return;
+
+    // Owner entity (comp+0x10 IBP value) — dee0 compares it against cell+0x00 for
+    // the buildable(2) override.
+    void* ownerEntity = *(void**)(self + 0x10);
+
+    // MapDescription shape (desc+0x28 String buffer). The original IsDerivedFrom
+    // guard rejects valid descriptions in standalone's partial factory tree (the
+    // documented FUN_1401253d0-class landmine), so trust the linked description —
+    // it comes straight from the entity template. Null desc => no shape (1x1).
+    void* desc = *(void**)(self + 0x18);
+    const char* shape = desc ? *(const char**)((uint8_t*)desc + 0x28) : nullptr;
+
+    StartTown_UnmarkResourceCellGrid(game, ownerEntity,
+                                     (int)*(int16_t*)(self + 0x28),
+                                     (int)*(int16_t*)(self + 0x2a),
+                                     (int)*(int16_t*)(self + 0x2c),
+                                     (int)*(int16_t*)(self + 0x2e),
+                                     shape, *(int32_t*)(self + 0x30));
+
+    // Clear the occupancy-written bit (4750: flags &= ~0x100000). The original's
+    // low-16 changed -> RefreshEntityFlags notify can never fire from this bit,
+    // so it is faithfully omitted.
+    *(uint32_t*)(self + 0x20) = flags & ~0x100000u;
+}
+
+// COMPONENT_INERT_FACTORY(MapComponent, 0x38, 0x83), expanded by hand so the
+// per-type vtable's +0x38 slot (index 7 — the slot FUN_1400c2ea0 dispatches at
+// entity removal) routes to the ported MapComponent_OnCreate above (whose
+// impl_4750 tail is the grid un-mark). Default-safe: the bit-0x100000 gate means
+// it no-ops unless the spawn-side collapse wrote occupancy for this component.
+static uint32_t MapComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("MapComponent");
+    return cached;
+}
+static void* MapComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static void MapComponent_DetachVSlot(void* s) {
+    MapComponent_OnCreate(reinterpret_cast<MapComponent*>(s));
+}
+static void MapComponent_FinishVtable() {
+    MapComponent_InertVtable[7] = reinterpret_cast<void*>(&MapComponent_DetachVSlot);
+}
+extern "C" void* MapComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x83,
+        MapComponent_InertVtable, reinterpret_cast<void*>(&MapComponent_InertGetTypeId));
+    MapComponent_FinishVtable();
+    return p;
+}
+static void* MapComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x83,
+        MapComponent_InertVtable, reinterpret_cast<void*>(&MapComponent_InertGetTypeId));
+    MapComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(MapComponent, "Component",
               &MapComponent_Factory, &MapComponent_CreateInPlace);
 #endif // STANDALONE_EXE

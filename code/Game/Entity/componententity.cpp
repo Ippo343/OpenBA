@@ -804,4 +804,63 @@ extern "C" void* ComponentEntity_Factory_SA(void) {
 }
 REGISTER_TYPE(ComponentEntity, "Object::Internal",
               &ComponentEntity_Factory_SA, &ComponentEntity_CreateInPlace_SA);
+
+// ============================================================
+// Standalone ComponentEntity vtable (economy brick M-B)
+// ============================================================
+// 0x14015fa78 was never registered, so EVERY standalone entity was constructed
+// with vtable == NULL (EnsureResolved -> ResolveAddr -> NULL). Nothing in the
+// normal spawn/tick flow virtual-calls an entity, so this stayed invisible —
+// until the produce/removal path: EntityList_RemoveEntity ends with
+// InternalBasePtr::DeletePtr(entityIBP), whose Runtime body (0x1800c0150) does
+// the FIRST-ever virtual dispatch on the entity (`CALL [vtable[0]]`, the scalar
+// deleting dtor) and faulted on the NULL vtable. Same root for the dirty-list
+// Serialize fault (vtable slot 3).
+//
+// .rdata layout at 0x14015fa78 (Ghidra) is TWO adjacent vtables, replicated
+// here as one flat 12-qword array exactly like the original:
+//   [0..3]  primary  (0x14015fa78): Dtor / GetTypeInfo / GetTypeId / Serialize
+//   [4]     0        (RTTI complete-object-locator gap of the next vtable)
+//   [5..11] base     (0x14015faa0): Slot5 dtor / GetTypeInfo2 / GetTypeId2 /
+//                    Slot8 load / _purecall / ret0 / ret0
+// address_registry.cpp registers 0x14015fa78 -> &[0] and 0x14015faa0 -> &[5],
+// so both EnsureResolved() lookups above and every vtable-identity compare
+// resolve consistently. DLL mode never queries the registry (real vtable is
+// mapped), so this is standalone-only by construction.
+
+// Slots 1/6 (GetTypeInfo): the original returns a Runtime-filled type-info
+// global (0x1401c5d78 / 0x1401c5db0) that has no standalone storage yet.
+static void* CE_VGetTypeInfo(void*) { return nullptr; }
+// Slots 2/7 (GetTypeId): original returns *(uint32_t*)0x1401c5d70 (/0x1401c5da8),
+// the factory-assigned type id — REGISTER_TYPE above makes the by-name lookup
+// return exactly that assignment.
+static uint32_t CE_VGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ComponentEntity");
+    return cached;
+}
+// Slot 9: shared _purecall handler (0x14003addc). Reaching it is a real bug —
+// report loudly instead of the original's blocking MessageBox.
+static void CE_VPurecall(void*) {
+    fprintf(stderr, "[ComponentEntity] _purecall vtable slot 9 invoked — missing override\n");
+    fflush(stderr);
+}
+// Slots 10/11 (0x1400c4a90 / 0x1400c4b90): xor eax,eax; ret.
+static int CE_VRet0(void*) { return 0; }
+
+extern "C" { extern void* g_ComponentEntity_StandaloneVtable[12]; }
+void* g_ComponentEntity_StandaloneVtable[12] = {
+    reinterpret_cast<void*>(&ComponentEntity_Dtor),       // [0] 0x140021a00 scalar dtor
+    reinterpret_cast<void*>(&CE_VGetTypeInfo),            // [1] 0x1400219b0
+    reinterpret_cast<void*>(&CE_VGetTypeId),              // [2] 0x1400219a0
+    reinterpret_cast<void*>(&ComponentEntity_Serialize),  // [3] 0x1400c3140
+    nullptr,                                              // [4] RTTI locator gap
+    reinterpret_cast<void*>(&ComponentEntity_Slot5),      // [5] 0x140021c90 base dtor
+    reinterpret_cast<void*>(&CE_VGetTypeInfo),            // [6] 0x140021c80
+    reinterpret_cast<void*>(&CE_VGetTypeId),              // [7] 0x140021c70
+    reinterpret_cast<void*>(&ComponentEntity_Slot8),      // [8] 0x1400c4b40 load
+    reinterpret_cast<void*>(&CE_VPurecall),               // [9] 0x14003addc _purecall
+    reinterpret_cast<void*>(&CE_VRet0),                   // [10] 0x1400c4a90
+    reinterpret_cast<void*>(&CE_VRet0),                   // [11] 0x1400c4b90
+};
 #endif // STANDALONE_EXE

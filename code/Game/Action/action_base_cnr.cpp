@@ -491,18 +491,21 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     int64_t parent = *reinterpret_cast<int64_t*>(s + 0x10);
     int64_t entityList = *reinterpret_cast<int64_t*>(gameWorld + 0xe8);
 
-    // [standalone] Entity-lifecycle gate (BANISHED_PRODUCE_SPAWN_ENTITY, default OFF).
-    // Both the tree-REMOVAL (queue the resource entity into the world entity list's dirty
-    // list at entityList+0xd0) and the item-SPAWN (below) feed the engine's entity lifecycle,
-    // whose next-frame EntityList_PreUpdate → Serialize faults in Runtime-x64.dll on the
-    // partially-materialized standalone entities. The economy effect (town stock increment
-    // via RegisterRawMaterial) is separable and always runs; this gate defers only the
-    // visual/lifecycle side until entity materialization is live. (This function runs only on
-    // the standalone registered path; DLL mode runs the original exe helper — gate is inert there.)
+    // [standalone] Entity-lifecycle gate (BANISHED_PRODUCE_SPAWN_ENTITY, default ON since
+    // economy brick M-B; set =0 to opt out for A/B). The historical fault ("next-frame
+    // EntityList PreUpdate/removal faults in Runtime") was the NULL ComponentEntity vtable —
+    // 0x14015fa78 was unregistered, so InternalBasePtr::DeletePtr's first-ever virtual
+    // dispatch (the scalar dtor) called through NULL. With the vtable materialized
+    // (componententity.cpp g_ComponentEntity_StandaloneVtable) and the removal-side grid
+    // occupancy un-mark wired (mapcomponent.cpp MapComponent_DetachOccupancy_4750), the
+    // full lifecycle — tree removal via the entityList+0xd0 dirty list + ground-pile item
+    // clone/position/register — runs crash-free (soak-verified: 37 organic produces).
+    // (This function runs only on the standalone registered path; DLL mode runs the
+    // original exe helper — the gate is inert there.)
     static int s_spawnItem = -1;
     if (s_spawnItem < 0) {
         const char* e = std::getenv("BANISHED_PRODUCE_SPAWN_ENTITY");
-        s_spawnItem = (e && e[0] && e[0] != '0') ? 1 : 0;
+        s_spawnItem = (e && e[0] == '0') ? 0 : 1;
     }
 
     // Detach model from the build queue when not already queued (bit 10 of +0x40).
