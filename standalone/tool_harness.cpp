@@ -40,6 +40,9 @@ extern "C" int   PlacementTool_HarnessStartupProbe(void* toolSelf);
 extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
 // Phase 2: drive the faithful CREATE path (helper_d650) for a chosen centre cell.
 extern "C" int   PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell);
+// Phase 3B: drive the ghost-preview pipeline (Scene::AddObject + TransformFromYaw +
+// Geometry::SetTransform) for a fixed cell — a cursor-free stand-in for Serialize.
+extern "C" int   PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell);
 
 // Phase 3: the SetEditMode reimpl the toolbar case-1 click drives (entityui.cpp).
 // Walks the tool-mode tree at entityUI+0x10 (built by EntityUI_BuildToolModeTree_SA),
@@ -228,6 +231,25 @@ void FireActivatePlacement(void* entityUI) {
     }
 }
 
+// GUI_PLAN Keystone F, Phase 3B: activate the PlacementTool via the real
+// SetEditMode path (as "click" does), then drive the ghost-PREVIEW pipeline for a
+// fixed map cell. Serialize's preview normally follows the OS cursor (sub_da00),
+// which the headless harness lacks; this proves the preview transform + scene
+// submission work by planting a visible ghost mesh at a known cell. Confirms the
+// Phase-3B TransformFromYaw fix (was null in standalone → invisible ghost).
+void FirePreviewPlacement(void* entityUI) {
+    FireActivatePlacement(entityUI);
+    void* tool = entityUI ? *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28) : nullptr;
+    if (!tool) {
+        printf("[ToolHarness] preview: no active tool — cannot drive ghost preview\n");
+        return;
+    }
+    const int centerCell = Cell(124, 124);
+    printf("[ToolHarness] driving ghost PREVIEW at cell %d (124,124)...\n", centerCell);
+    int r = PlacementTool_HarnessPreviewAtCell(tool, centerCell);
+    printf("[ToolHarness] ghost PREVIEW -> %d (1=mesh submitted with a valid transform)\n", r);
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -239,6 +261,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     printf("[ToolHarness] firing at frame %d (tool=\"%s\")\n", frameNum, s_toolName);
     if (std::strcmp(s_toolName, "click") == 0) {
         FireActivatePlacement(entityUI);
+    } else if (std::strcmp(s_toolName, "preview") == 0) {
+        FirePreviewPlacement(entityUI);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
     } else {

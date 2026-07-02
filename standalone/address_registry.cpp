@@ -1005,6 +1005,17 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("??0Transform@Math@@QEAA@XZ"));
     RegisterDispatchSlot(0x1401522e0,                       // Math::Transform::Serialize
         (uintptr_t)ResolveExport("?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z"));
+    // Math::Transform::FromYawPitchOffset — used by PlacementTool::Serialize to build
+    // the ghost-preview transform from cursor yaw + world offset. The exe reaches it via
+    // this .rdata slot, empty in standalone; without it the preview mesh gets an all-zero
+    // (degenerate) transform => collapsed/invisible ghost. Static fn, returns Transform
+    // by value (hidden retbuf). Sibling of the Transform ctor slot just above.
+    RegisterDispatchSlot(0x140151288,                       // Transform::FromYawPitchOffset
+        (uintptr_t)ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
+    // Graphics::Geometry::GetTransform — read back the mesh transform (bbox for the
+    // CreateBar cost dialog). Member fn, returns Transform by value (hidden retbuf).
+    RegisterDispatchSlot(0x140151460,                       // Geometry::GetTransform
+        (uintptr_t)ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
     RegisterDispatchSlot(0x1401512e0,                       // Geometry::SetTransform
         (uintptr_t)ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
     RegisterDispatchSlot(0x140151370,                       // Scene::AddObject

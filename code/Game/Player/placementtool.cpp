@@ -184,14 +184,6 @@ static void EnsureFuncs() {
     // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
     if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
     if (!s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr = reinterpret_cast<fn_IBP_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
-    // Math::Transform::FromYawPitchOffset is a STATIC fn returning Transform by value
-    // (hidden retbuf: RCX=retbuf, RDX=yaw, R8=pitch, R9=offset) — matches the 4-arg
-    // typedef. Its exe IAT slot 0x140151288 is unregistered in standalone (→ null), so
-    // the preview mesh got a zeroed (degenerate) transform → invisible ghost. Resolve
-    // the Runtime export directly. (Name recovered from the exe slot name-table.)
-    if (!s_fn_TransformFromYaw)
-        s_fn_TransformFromYaw = reinterpret_cast<fn_TransformFromYaw_t>(
-            ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
 #endif
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     s_fn_TransformFromYaw  = (fn_TransformFromYaw_t)resolveIAT(0x140151288);
@@ -200,6 +192,22 @@ static void EnsureFuncs() {
     s_fn_GeomGetTransform  = (fn_GeomGetTransform_t)resolveIAT(0x140151460);
     s_fn_StringCtor        = (fn_StringCtor_t)resolveIAT(0x140151428);
     s_fn_StringDtor        = (fn_StringDtor_t)resolveIAT(0x140152af0);
+#ifdef STANDALONE_EXE
+    // Math::Transform::FromYawPitchOffset is a STATIC fn returning Transform by value
+    // (hidden retbuf: RCX=retbuf, RDX=yaw, R8=pitch, R9=offset) — matches the 4-arg
+    // typedef. Its exe IAT slot 0x140151288 is registered in standalone via
+    // address_registry (RegisterDispatchSlot), so resolveIAT above normally returns it;
+    // this ResolveExport is a belt-and-suspenders fallback if the slot is ever empty.
+    // Without a valid pointer the preview mesh gets a zeroed (degenerate) transform →
+    // invisible ghost. (Name recovered from the exe slot name-table.) Likewise
+    // GeomGetTransform (0x140151460) is now registered; keep an export fallback.
+    if (!s_fn_TransformFromYaw)
+        s_fn_TransformFromYaw = reinterpret_cast<fn_TransformFromYaw_t>(
+            ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
+    if (!s_fn_GeomGetTransform)
+        s_fn_GeomGetTransform = reinterpret_cast<fn_GeomGetTransform_t>(
+            ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
+#endif
 
     // Direct exe function addresses
     s_fn_HighlightRemove   = (fn_HighlightRemove_t)ResolveAddr(Module::Exe, 0x1400b0d00);
@@ -1293,12 +1301,18 @@ extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
 // Try a single centre cell: compute the footprint rect + world-centre pos (orient 0,
 // yaw 0), call the faithful helper_d650. Returns nonzero only when a building was
 // actually created. On validity failure this is a harmless no-op.
-static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
+// Compute the footprint rectangle + world-centre position for a chosen centre
+// cell, mirroring sub_da00 exactly (orient 0 → no width/height swap, yaw 0). This
+// is the cursor-free stand-in for sub_da00's screen pick, shared by the CREATE
+// (helper_d650) and PREVIEW (ghost) harness probes. Returns false if the footprint
+// falls off the map.
+static bool HarnessCellPlacement(PlacementTool* self, int centerCell,
+                                 int* outStartCol, int* outStartRow,
+                                 int* outEndCol, int* outEndRow, float* pos) {
     uintptr_t descComp = (uintptr_t)self->descComponent;  // +0x28 CreatePlacedDescription
-    if (!descComp) return 0;
+    if (!descComp) return false;
 
-    // Footprint dims live in the CreatePlacedDescription (+0x44 width, +0x48 height),
-    // per sub_da00. orient 0 → no width/height swap.
+    // Footprint dims live in the CreatePlacedDescription (+0x44 width, +0x48 height).
     uint32_t dimX = *(uint32_t*)(descComp + 0x44);
     uint32_t dimY = *(uint32_t*)(descComp + 0x48);
 
@@ -1330,7 +1344,7 @@ static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
     // Footprint fully on map, startCol >= 1 (mirrors sub_da00's own gate).
     if (startCol < 0 || width <= startCol || startRow < 0 || width <= startRow ||
         startCol < 1 || width <= endCol || endRow < 0 || width <= endRow) {
-        return 0;
+        return false;
     }
 
     // World-centre position = average of the two diagonal corner cells' world
@@ -1339,7 +1353,7 @@ static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
     static fn_GridToWorld_t gridToWorld = nullptr;
     if (!gridToWorld) gridToWorld = (fn_GridToWorld_t)ResolveAddr(Module::Exe, 0x14009f3e0);
     const float halfCell = 0.5f;
-    float pos[3] = {0.0f, 0.0f, 0.0f};
+    pos[0] = pos[1] = pos[2] = 0.0f;
     if (gridToWorld) {
         int gw = grid[0];
         float centerOff = (float)(gw >> 1) - halfCell;
@@ -1356,6 +1370,17 @@ static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
         pos[0] = (worldB[0] + worldA[0]) * halfCell;
         pos[1] = (worldB[1] + worldA[1]) * halfCell;
     }
+
+    *outStartCol = startCol; *outStartRow = startRow;
+    *outEndCol   = endCol;   *outEndRow   = endRow;
+    return true;
+}
+
+static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
+    int startCol, startRow, endCol, endRow;
+    float pos[3] = {0.0f, 0.0f, 0.0f};
+    if (!HarnessCellPlacement(self, centerCell, &startCol, &startRow, &endCol, &endRow, pos))
+        return 0;
 
     typedef uint64_t (*fn_helper_d650_t)(void* self, int, int, int, int, const void*, float);
     static fn_helper_d650_t create = nullptr;
@@ -1418,5 +1443,75 @@ extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) 
             kMaxRadius, attempts);
     fflush(stderr);
     return 0;
+}
+
+// GUI_PLAN Keystone F, Phase 3B — cursor-free GHOST PREVIEW probe.
+// Serialize's preview normally follows the OS cursor via sub_da00, which the
+// headless harness has none of. This drives the exact same ghost pipeline
+// (Scene::AddObject → Transform::FromYawPitchOffset → Geometry::SetTransform →
+// MeshInstance::UpdateHierarchy) for a fixed centre cell, leaving the preview mesh
+// standing in the live render scene so the fix is provable without a mouse. It
+// logs the resolved fn pointers + the resulting transform translation so a
+// degenerate (all-zero) transform — the old "invisible ghost" bug — is visible in
+// the log. Does NOT create a permanent entity (that's HarnessPlaceAtCell).
+extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell) {
+    PlacementTool* self = (PlacementTool*)toolSelf;
+    EnsureFuncs();
+
+    if (!self->descComponent || !self->meshInstance) {
+        fprintf(stderr, "[Preview] descComponent(+0x28)=%p meshInstance(+0x68)=%p — run Startup first\n",
+                (void*)self->descComponent, (void*)self->meshInstance);
+        fflush(stderr);
+        return 0;
+    }
+
+    fprintf(stderr, "[Preview] fns: TransformFromYaw=%p SceneAddObject=%p GeomSetTransform=%p "
+            "MeshUpdateHier=%p\n",
+            (void*)s_fn_TransformFromYaw, (void*)s_fn_SceneAddObject,
+            (void*)s_fn_GeomSetTransform, (void*)s_fn_MeshUpdateHier);
+    fflush(stderr);
+
+    int startCol, startRow, endCol, endRow;
+    float pos[3] = {0.0f, 0.0f, 0.0f};
+    if (!HarnessCellPlacement(self, centerCell, &startCol, &startRow, &endCol, &endRow, pos)) {
+        fprintf(stderr, "[Preview] cell %d off-map — no preview\n", centerCell);
+        fflush(stderr);
+        return 0;
+    }
+    fprintf(stderr, "[Preview] cell=%d rect=(%d,%d)-(%d,%d) pos=(%.2f,%.2f,%.2f)\n",
+            centerCell, startCol, startRow, endCol, endRow, pos[0], pos[1], pos[2]);
+
+    // 1) Submit the preview mesh to the live scene (gameWorld+0x60 — same scene the
+    //    working ModelComponent render path uses).
+    uintptr_t gameWorld = GetGameWorld();
+    void* scene = *(void**)(gameWorld + 0x60);
+    if ((int)self->sceneObjectIdx < 0 && s_fn_SceneAddObject && scene && self->meshInstance) {
+        self->sceneObjectIdx = (int)s_fn_SceneAddObject(scene, self->meshInstance);
+    }
+
+    // 2) Build the placement transform from yaw + cursor world offset (the fix:
+    //    TransformFromYaw was null in standalone → zero transform → invisible).
+    uint8_t localTransform[96];
+    memset(localTransform, 0, sizeof(localTransform));
+    float yawVal = 0.0f, zeroPitch = 0.0f;
+    if (s_fn_TransformFromYaw) s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, pos);
+
+    // Log the first 12 floats so a degenerate (all-zero) transform is obvious and the
+    // translation (which should carry pos) is visible.
+    const float* xf = reinterpret_cast<const float*>(localTransform);
+    fprintf(stderr, "[Preview] transform[0..11]= %.2f %.2f %.2f %.2f | %.2f %.2f %.2f %.2f | "
+            "%.2f %.2f %.2f %.2f\n",
+            xf[0], xf[1], xf[2], xf[3], xf[4], xf[5], xf[6], xf[7], xf[8], xf[9], xf[10], xf[11]);
+
+    if (s_fn_GeomSetTransform && self->meshInstance) s_fn_GeomSetTransform(self->meshInstance, localTransform);
+    if (s_fn_MeshUpdateHier && self->meshInstance)   s_fn_MeshUpdateHier(self->meshInstance);
+
+    bool degenerate = (xf[0] == 0.0f && xf[1] == 0.0f && xf[2] == 0.0f &&
+                       xf[4] == 0.0f && xf[5] == 0.0f && xf[6] == 0.0f);
+    fprintf(stderr, "[Preview] sceneObjectIdx=%d transform=%s — ghost mesh %s in the live scene\n",
+            (int)self->sceneObjectIdx, degenerate ? "DEGENERATE(all-zero!)" : "valid",
+            (self->sceneObjectIdx >= 0 && !degenerate) ? "SUBMITTED" : "NOT submitted");
+    fflush(stderr);
+    return (self->sceneObjectIdx >= 0 && !degenerate) ? 1 : 0;
 }
 #endif // STANDALONE_EXE
