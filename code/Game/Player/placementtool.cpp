@@ -1208,4 +1208,159 @@ extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
     fflush(stderr);
     return 1;
 }
+
+// ============================================================
+// Standalone tool-harness CREATE driver (GUI_PLAN Keystone F, Phase 2).
+// ============================================================
+// Drives the faithful CREATE path (helper_d650 = ToolTile_ValidateCreate_fd650)
+// for a HARNESS-CHOSEN centre cell, bypassing sub_da00's cursor pick
+// (ScreenToCell/GetMouseRay/terrain-march) which has no valid cursor at the
+// settle frame. Mirrors sub_da00's exact footprint-rectangle + world-centre math
+// (tool_base_ray.cpp PlayerRay_PlacementPosCalc_fda00, lines ~375-439) with
+// orientation fixed at 0 — so it never derefs rotationIBP (+0x48), and yaw = 0.
+//
+// helper_d650 reads self+0x10 (dialogPtr) → *(that)+0x80 as the "existing
+// placement constraint" flag; the real path fills it from OpenToolDialog. Here we
+// point it at a zeroed controller buffer so +0x80 == 0 and the constraint block is
+// skipped (a fresh, unconstrained placement).
+//
+// Requires PlacementTool_Startup_Impl to have run first (descComponent/mapComponent/
+// createComponent/meshInstance/meshVariant populated) — the probe above does that.
+//
+// The per-cell footprint validity (helper_d650 → d580 → f5d0) rejects any cell that
+// is occupied (another entity), wrong terrain type, or too steep. Map centre is
+// occupied by the start-town buildings/trees, so we SCAN outward in expanding
+// Chebyshev rings and place at the first buildable cell. helper_d650 is fully
+// side-effect-free when validity fails (it returns before MemAlloc/CopyCtor), so
+// repeated attempts are safe.
+
+// Try a single centre cell: compute the footprint rect + world-centre pos (orient 0,
+// yaw 0), call the faithful helper_d650. Returns nonzero only when a building was
+// actually created. On validity failure this is a harmless no-op.
+static int HarnessTryPlaceAtCell(PlacementTool* self, int centerCell) {
+    uintptr_t descComp = (uintptr_t)self->descComponent;  // +0x28 CreatePlacedDescription
+    if (!descComp) return 0;
+
+    // Footprint dims live in the CreatePlacedDescription (+0x44 width, +0x48 height),
+    // per sub_da00. orient 0 → no width/height swap.
+    uint32_t dimX = *(uint32_t*)(descComp + 0x44);
+    uint32_t dimY = *(uint32_t*)(descComp + 0x48);
+
+    uintptr_t gameWorld = GetGameWorld();
+    int* grid = *(int**)(gameWorld + 0xf8);
+    int width = grid[0];
+    int col = centerCell % width;
+    int row = centerCell / width;
+
+    // Centre the footprint over (col,row) — mirrors sub_da00 exactly.
+    int startCol, endCol, startRow, endRow, dimYHalf;
+    if ((dimX & 1) == 0) {
+        startCol = (col - ((int)dimX >> 1)) + 1;
+        endCol   = ((int)dimX >> 1) + col;
+    } else {
+        int h = (int)(dimX - 1) >> 1;
+        startCol = col - h;
+        endCol   = h + col;
+    }
+    if ((dimY & 1) == 0) {
+        dimYHalf = (int)dimY >> 1;
+        startRow = (row - dimYHalf) + 1;
+    } else {
+        dimYHalf = (int)(dimY - 1) >> 1;
+        startRow = row - dimYHalf;
+    }
+    endRow = dimYHalf + row;
+
+    // Footprint fully on map, startCol >= 1 (mirrors sub_da00's own gate).
+    if (startCol < 0 || width <= startCol || startRow < 0 || width <= startRow ||
+        startCol < 1 || width <= endCol || endRow < 0 || width <= endRow) {
+        return 0;
+    }
+
+    // World-centre position = average of the two diagonal corner cells' world
+    // positions via GridToWorld (CharacterComponent_impl_f3e0 @ 0x14009f3e0). 0.5.
+    typedef float* (*fn_GridToWorld_t)(int*, float*, float*, char, void*);
+    static fn_GridToWorld_t gridToWorld = nullptr;
+    if (!gridToWorld) gridToWorld = (fn_GridToWorld_t)ResolveAddr(Module::Exe, 0x14009f3e0);
+    const float halfCell = 0.5f;
+    float pos[3] = {0.0f, 0.0f, 0.0f};
+    if (gridToWorld) {
+        int gw = grid[0];
+        float centerOff = (float)(gw >> 1) - halfCell;
+        int idxA = startRow * gw + startCol;
+        float inA[3] = { (float)(idxA % gw) - centerOff, (float)(idxA / gw) - centerOff, 0.0f };
+        float worldA[3] = {0.0f, 0.0f, 0.0f};
+        gridToWorld(grid, worldA, inA, '\0', nullptr);
+
+        int idxB = endRow * gw + endCol;
+        float inB[3] = { (float)(idxB % gw) - centerOff, (float)(idxB / gw) - centerOff, 0.0f };
+        float worldB[3] = {0.0f, 0.0f, 0.0f};
+        gridToWorld(grid, worldB, inB, '\0', nullptr);
+
+        pos[0] = (worldB[0] + worldA[0]) * halfCell;
+        pos[1] = (worldB[1] + worldA[1]) * halfCell;
+    }
+
+    typedef uint64_t (*fn_helper_d650_t)(void* self, int, int, int, int, const void*, float);
+    static fn_helper_d650_t create = nullptr;
+    if (!create) create = (fn_helper_d650_t)ResolveAddr(Module::Exe, 0x1400fd650);
+    if (!create) return 0;
+    uint64_t placed = create(self, startCol, startRow, endCol, endRow, pos, 0.0f /*yaw*/);
+    return (int)(placed & 0xff);
+}
+
+extern "C" int PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell) {
+    PlacementTool* self = (PlacementTool*)toolSelf;
+    EnsureFuncs();
+
+    if (!self->descComponent) {
+        fprintf(stderr, "[Placement] PLACE: descComponent(+0x28) NULL — run Startup first\n");
+        fflush(stderr);
+        return 0;
+    }
+
+    uintptr_t gameWorld = GetGameWorld();
+    int* grid = *(int**)(gameWorld + 0xf8);
+    int width = grid[0];
+    int c0 = centerCell % width;
+    int r0 = centerCell / width;
+    uintptr_t dc = (uintptr_t)self->descComponent;
+    fprintf(stderr, "[Placement] PLACE: scanning from (col=%d row=%d) foot=%ux%u for a buildable cell...\n",
+            c0, r0, *(uint32_t*)(dc + 0x44), *(uint32_t*)(dc + 0x48));
+    fflush(stderr);
+
+    // Wire a zeroed dialog-controller so helper_d650's *(self+0x10)+0x80 reads 0
+    // (no existing-placement constraint). Static so it outlives this call.
+    static uint8_t s_zeroDialogCtrl[0x100] = {0};
+    self->dialogPtr = (void*)&s_zeroDialogCtrl[0];
+
+    // Expanding Chebyshev-ring scan around the centre; place at the first hit.
+    const int kMaxRadius = 48;
+    int attempts = 0;
+    for (int rad = 0; rad <= kMaxRadius; rad++) {
+        for (int dr = -rad; dr <= rad; dr++) {
+            for (int dcx = -rad; dcx <= rad; dcx++) {
+                // Only the perimeter of this ring (interior handled by smaller rad).
+                if (rad != 0 && dr > -rad && dr < rad && dcx > -rad && dcx < rad) continue;
+                int rr = r0 + dr, cc = c0 + dcx;
+                if (rr < 1 || rr >= width - 1 || cc < 1 || cc >= width - 1) continue;
+                attempts++;
+                int cell = rr * width + cc;
+                if (HarnessTryPlaceAtCell(self, cell)) {
+                    fprintf(stderr, "[Placement] PLACE: SUCCESS at cell %d (col=%d row=%d), "
+                            "ring=%d after %d attempts — building entity materialized\n",
+                            cell, cc, rr, rad, attempts);
+                    fflush(stderr);
+                    if (s_fn_FUN_1401000f0) s_fn_FUN_1401000f0(self);  // finalize (place sound)
+                    return 1;
+                }
+            }
+        }
+    }
+    if (s_fn_FUN_140100140) s_fn_FUN_140100140(self);  // fail (error sound)
+    fprintf(stderr, "[Placement] PLACE: FAILED — no buildable cell within radius %d (%d attempts)\n",
+            kMaxRadius, attempts);
+    fflush(stderr);
+    return 0;
+}
 #endif // STANDALONE_EXE

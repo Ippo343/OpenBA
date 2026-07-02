@@ -38,6 +38,8 @@ extern "C" void* RemovalTool_Factory_SA(void);
 extern "C" void* PlacementTool_Factory_SA(void);
 extern "C" int   PlacementTool_HarnessStartupProbe(void* toolSelf);
 extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
+// Phase 2: drive the faithful CREATE path (helper_d650) for a chosen centre cell.
+extern "C" int   PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell);
 
 namespace {
 
@@ -135,10 +137,12 @@ void FireRemovalTool(void* entityUI) {
     printf("[ToolHarness] RemovalTool sequence complete.\n");
 }
 
-// GUI_PLAN Keystone F, Phase 1: construct a PlacementTool, point descriptionPtr
-// (+0x20) at a resolved simple-building template, and run the (probe-guarded)
-// Startup so the otherwise-dormant placement path fires. dialogPtr (+0x10) is
-// left null — Startup never reads it (OnKey/the create path do; that's Phase 2).
+// GUI_PLAN Keystone F, Phase 1+2: construct a PlacementTool, point descriptionPtr
+// (+0x20) at a resolved simple-building template, run the (probe-guarded) Startup,
+// then (Phase 2) drive the faithful CREATE path (helper_d650) at a valid centre
+// cell so a real building entity materializes in the world — harness-driven, no
+// cursor/keypress. dialogPtr (+0x10) is supplied a zeroed controller by the create
+// driver (skips the existing-placement constraint).
 void FirePlacementTool() {
     // A simple placeable building the Easy start-town already spawns.
     const char* kTemplate = "Template\\WoodHouse.rsc";
@@ -164,6 +168,17 @@ void FirePlacementTool() {
 
     int ok = PlacementTool_HarnessStartupProbe(tool);
     printf("[ToolHarness] PlacementTool Startup probe -> %d\n", ok);
+    if (!ok) {
+        printf("[ToolHarness] Startup probe failed — skipping CREATE (Phase 2)\n");
+        return;
+    }
+
+    // Phase 2: place the building at map centre (same valley cell the RemovalTool
+    // harness targets). 256-wide grid; cell(124,124).
+    const int centerCell = Cell(124, 124);
+    printf("[ToolHarness] PlacementTool CREATE at cell %d (124,124)...\n", centerCell);
+    int placed = PlacementTool_HarnessPlaceAtCell(tool, centerCell);
+    printf("[ToolHarness] PlacementTool CREATE -> %d (1=building materialized)\n", placed);
     printf("[ToolHarness] PlacementTool sequence complete.\n");
 }
 

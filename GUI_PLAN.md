@@ -191,7 +191,43 @@ MeshInstance allocated; 0-byte crash log; A/B default byte-clean.
 
 ---
 
-## Phase 2 — PlacementTool CREATE path (place a building entity)
+## Phase 2 — ✅ DONE (2026-07-02) — PlacementTool CREATE path places a building entity
+
+**✅✅ PHASE 2 COMPLETE + A/B-VERIFIED.** With `BANISHED_TOOL_HARNESS=placement`, after Phase-1
+Startup the harness drives the faithful CREATE path and a WoodHouse entity **materializes in
+the world crash-free** and survives the next-frame `EntityList` tick (30s+ soak, 0-byte crash
+log). Default `sa-run` (harness off) is byte-clean: 0 `[Placement] PLACE` traces, harness
+`disabled`, 35s+ crash-free.
+
+- **Harness bypasses `sub_da00`'s cursor pick.** `sub_da00` (→ `ScreenToCell` → `GetMouseRay`
+  → terrain-march) needs a live cursor over the map, which the harness has none of at the
+  settle frame. Instead the harness (`PlacementTool_HarnessPlaceAtCell`, placementtool.cpp)
+  mirrors `sub_da00`'s exact footprint-rectangle + world-centre math (orient 0 → never derefs
+  `rotationIBP`, yaw 0) for a chosen centre cell, wires a **zeroed dialog-controller** at
+  `+0x10` (so `helper_d650`'s `*(self+0x10)+0x80` existing-placement flag reads 0 and the
+  constraint block is skipped), then calls the registered `helper_d650`
+  (`ToolTile_ValidateCreate_fd650`) directly.
+- **🔑 The keystone crash was `003f60`'s NULL c7a50 (ModelComponent) type-id.** `helper_d650`
+  calls the shared component-finder `FUN_140003f60` **twice** (transform set + model-variant
+  fixup); it resolves ModelComponent from raw `.rdata 0x1401c7a50`, which is **NULL in
+  standalone** → returns a null component → `SetTransformFromYaw(null)` writes `null+0x148`
+  (crash). FIX = a **scoped** `GetTypeIdByName("ModelComponent")` fallback at both call sites
+  in `tool_base_tile.cpp` (the proven M-D `pf_road` pattern; the shared c7a50 global stays
+  unfilled so the produce/animation callers of `003f60` are unregressed). The DLL-mode guards
+  (`if (modelComp != 0)` / `if (plVar4 != nullptr)`) are behaviour-identical (never null in
+  the real game). No further dominoes — the ComponentEntity standalone vtable (Brick M-B,
+  `0x14015fa78`) already covers the copied entity's dispatch.
+- **Occupancy scan.** Map centre (124,124) is occupied by the start-town buildings/trees, so
+  the per-cell validity (`d580`→`f5d0`: empty + terrain-mask + slope) rejected it. Since
+  `helper_d650` is side-effect-free on validity failure, the harness scans outward in
+  expanding Chebyshev rings and places at the first buildable cell (landed at (127,121),
+  ring 3, 32 attempts).
+- **Files:** `code/Game/Player/placementtool.cpp` (`PlacementTool_HarnessPlaceAtCell` +
+  `HarnessTryPlaceAtCell` ring-scan driver), `standalone/tool_harness.cpp` (`FirePlacementTool`
+  calls the CREATE driver after the Startup probe), `code/Game/Player/tool_base_tile.cpp`
+  (`ToolTile_FindModelComponentScoped` + the two guarded `003f60` sites).
+
+### Phase 2 — original spec (superseded by the DONE block above)
 
 **Objective:** drive `OnKey` key-5 (confirm) at a valid map cell → `sub_da00` (position) →
 `helper_d650` (validate + CREATE) → a building entity materializes in the world, crash-free.

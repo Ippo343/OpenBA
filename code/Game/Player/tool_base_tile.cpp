@@ -15,6 +15,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
+#endif
 
 // ============================================================
 // 0x140003870 — SetTransformFromYaw
@@ -189,6 +192,31 @@ static void EnsureD650Deps() {
     s_d650Init = true;
 }
 
+#ifdef STANDALONE_EXE
+// Scoped ModelComponent finder. The shared component finder 003f60 resolves its
+// target type-id from raw .rdata 0x1401c7a50 (= ModelComponent), which is NULL in
+// the standalone exe, so it returns a null component — and helper_d650 derefs that
+// null twice (SetTransformFromYaw target + the model-variant fixup). Mirror the
+// M-D pf_road scoped fallback: find the ModelComponent on the entity ourselves via
+// GetTypeIdByName. Kept SCOPED here (do NOT fill the shared c7a50 global — that
+// regresses the verified produce/animation callers of 003f60).
+static void* ToolTile_FindModelComponentScoped(long long entity) {
+    static uint32_t s_tidModel = 0;
+    if (s_tidModel == 0) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    if (!entity || !s_tidModel) return nullptr;
+    int n = *reinterpret_cast<int*>(entity + 0x38);
+    long long arr = *reinterpret_cast<long long*>(entity + 0x30);
+    for (int k = 0; k < n && arr; ++k) {
+        void* c = *reinterpret_cast<void**>(arr + static_cast<long long>(k) * 8);
+        if (!c) continue;
+        typedef uint32_t (*getTid_t)(void*);
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(c);
+        if ((*reinterpret_cast<getTid_t*>(vt + 0x10))(c) == s_tidModel) return c;
+    }
+    return nullptr;
+}
+#endif
+
 unsigned long long ToolTile_ValidateCreate_fd650(
         long long param_1, int param_2, int param_3, int param_4, int param_5,
         const void* param_6, float param_7) {
@@ -275,26 +303,37 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, &local_48)) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
-    ToolTile_SetTransformFromYaw_3870(*reinterpret_cast<long long*>(pIVar8), param_6, param_7);
+    long long modelComp = pIVar8 ? *reinterpret_cast<long long*>(pIVar8) : 0;
+#ifdef STANDALONE_EXE
+    // 003f60's c7a50 type-id is NULL in standalone → null component. Scoped fallback.
+    if (modelComp == 0) modelComp = reinterpret_cast<long long>(ToolTile_FindModelComponentScoped(local_res8));
+#endif
+    if (modelComp != 0) ToolTile_SetTransformFromYaw_3870(modelComp, param_6, param_7);
 
     // Resolve again (different out-IBP) and fix up the model component.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     unsigned char local_38[16];
     pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, local_38)) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
-    long long* plVar4 = *reinterpret_cast<long long**>(pIVar8);
-    int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
-    if (fn_IsDerivedFrom && s_pTid_c7a88) {
-        fn_IsDerivedFrom(reinterpret_cast<void*>(plVar4[3]), *s_pTid_c7a88);
+    long long* plVar4 = pIVar8 ? *reinterpret_cast<long long**>(pIVar8) : nullptr;
+#ifdef STANDALONE_EXE
+    // Same c7a50-NULL fallback as the transform site above.
+    if (plVar4 == nullptr) plVar4 = reinterpret_cast<long long*>(ToolTile_FindModelComponentScoped(local_res8));
+#endif
+    if (plVar4 != nullptr) {
+        int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
+        if (fn_IsDerivedFrom && s_pTid_c7a88) {
+            fn_IsDerivedFrom(reinterpret_cast<void*>(plVar4[3]), *s_pTid_c7a88);
+        }
+        *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
+        if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {
+            // vtable +0x38 call
+            (*reinterpret_cast<void(**)(long long*)>(*plVar4 + 0x38))(plVar4);
+        }
+        *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
+        if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
     }
-    *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x164) = static_cast<short>(uVar2);
-    if (-1 < *reinterpret_cast<short*>(reinterpret_cast<long long>(plVar4) + 0x166)) {
-        // vtable +0x38 call
-        (*reinterpret_cast<void(**)(long long*)>(*plVar4 + 0x38))(plVar4);
-    }
-    *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
-    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
-    if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
 
     // Register the new entity in the world entity list.
     local_48 = reinterpret_cast<void*>(local_res8);
