@@ -769,6 +769,16 @@ static void* ResolveTemplateByPath(const char* path) {
     return tmpl;
 }
 
+#ifdef STANDALONE_EXE
+// Exposed for the standalone tool-injection harness (standalone/tool_harness.cpp):
+// resolve a building DESCRIPTION template ("Template\\<Name>.rsc") to point a
+// PlacementTool's descriptionPtr (+0x20) at. Thin extern "C" wrapper over the
+// static resolver so the harness need not re-plumb the ExternalFactory singleton.
+extern "C" void* StartTown_ResolveTemplateByPath(const char* path) {
+    return ResolveTemplateByPath(path);
+}
+#endif
+
 static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
     (void)startConfig;

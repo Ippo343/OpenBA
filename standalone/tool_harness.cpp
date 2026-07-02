@@ -28,6 +28,17 @@
 // vtable installed and drag-cell defaults (startCell/endCell/lastEndCell = -1).
 extern "C" void* RemovalTool_Factory_SA(void);
 
+// Standalone PlacementTool bring-up (GUI_PLAN Keystone F, Phase 1).
+//   PlacementTool_Factory_SA          — MemAlloc'd 0x70 PlacementTool + std vtable.
+//   PlacementTool_HarnessStartupProbe — logs descriptionPtr's component array +
+//     the 4 *Description type-ids, confirms ModelDescription present, then calls
+//     the faithful Startup (bails safely if Model absent).
+//   StartTown_ResolveTemplateByPath   — resolve "Template\\<Name>.rsc" to a
+//     building DESCRIPTION ComponentEntity for descriptionPtr (+0x20).
+extern "C" void* PlacementTool_Factory_SA(void);
+extern "C" int   PlacementTool_HarnessStartupProbe(void* toolSelf);
+extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
+
 namespace {
 
 // RemovalTool field offsets (DragTool base + RemovalTool).
@@ -124,18 +135,54 @@ void FireRemovalTool(void* entityUI) {
     printf("[ToolHarness] RemovalTool sequence complete.\n");
 }
 
+// GUI_PLAN Keystone F, Phase 1: construct a PlacementTool, point descriptionPtr
+// (+0x20) at a resolved simple-building template, and run the (probe-guarded)
+// Startup so the otherwise-dormant placement path fires. dialogPtr (+0x10) is
+// left null — Startup never reads it (OnKey/the create path do; that's Phase 2).
+void FirePlacementTool() {
+    // A simple placeable building the Easy start-town already spawns.
+    const char* kTemplate = "Template\\WoodHouse.rsc";
+    printf("[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
+    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    printf("[ToolHarness] template -> %p\n", tmpl);
+    if (!tmpl) {
+        printf("[ToolHarness] ERROR: template resolve returned null\n");
+        return;
+    }
+
+    void* tool = PlacementTool_Factory_SA();
+    if (!tool) {
+        printf("[ToolHarness] ERROR: PlacementTool_Factory_SA returned null\n");
+        return;
+    }
+    uint8_t* t = static_cast<uint8_t*>(tool);
+
+    // descriptionPtr (+0x20) = the building description entity Startup searches.
+    *reinterpret_cast<void**>(t + 0x20) = tmpl;
+    printf("[ToolHarness] PlacementTool=%p descriptionPtr(+0x20)=%p — running Startup probe...\n",
+           tool, tmpl);
+
+    int ok = PlacementTool_HarnessStartupProbe(tool);
+    printf("[ToolHarness] PlacementTool Startup probe -> %d\n", ok);
+    printf("[ToolHarness] PlacementTool sequence complete.\n");
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     Init();
     if (!s_enabled || s_fired) return;
-    if (!entityUI) return;
     if (frameNum < s_settleFrame) return;
 
     s_fired = true;
     printf("[ToolHarness] firing at frame %d (tool=\"%s\")\n", frameNum, s_toolName);
-    // Only "removal" is wired for now; default to it.
-    FireRemovalTool(entityUI);
+    if (std::strcmp(s_toolName, "placement") == 0) {
+        FirePlacementTool();
+    } else {
+        // Default / "removal": the original DragTool path (needs the live EntityUI).
+        if (!entityUI) return;
+        FireRemovalTool(entityUI);
+    }
 }
 
 #endif  // STANDALONE_EXE

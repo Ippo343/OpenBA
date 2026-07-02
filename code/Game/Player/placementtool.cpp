@@ -17,6 +17,9 @@
 #include "Tool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -943,6 +946,35 @@ static void EnsureStartupFuncs() {
     // MeshInstance vtable at 0x14015e240 (LEA, not deref -- direct address in .rdata)
     s_pMeshInstanceVtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
 
+#ifdef STANDALONE_EXE
+    // The four *Description type-id globals Startup's findComp reads are filled in
+    // engine_funcs.cpp via ResolveAddr(Exe, .rdata) — which is NULL in the standalone
+    // exe (raw .rdata constants don't resolve, see reference_standalone_rdata_null_fallback).
+    // They are read by dormant tools that have never run in standalone, so they are
+    // unfilled here. Point them at local storage filled from the LIVE factory tree
+    // (ResolveTypeIdByNameLazy), the proven ToolbarStandalone_Init pattern. The `if
+    // (!global)` guard makes this a no-op in DLL mode (already filled).
+    // 🔑 The engine_funcs LABELS for these 4 globals are WRONG (Ghidra-verified via the
+    // RegisterType DATA writers, 2026-07-02). True types, per slot:
+    //   +0x28 descComponent   = DAT_1401c7468 = CreatePlacedDescription (NOT "SizeDescription")
+    //   +0x30 mapComponent    = DAT_1401c7a18 = MapDescription          (NOT "AreaDescription")
+    //   +0x38 createComponent = DAT_1401c7a88 = ModelDescription        (NOT "FenceDescription");
+    //         Startup derefs createComponent+0x28 (mesh count) UNGUARDED — MUST be present.
+    //   +0x40 radiusComponent = DWORD_1401c4870 = RadiusDescription     (NOT "RadiusComponent")
+    static uint32_t s_tid_CreatePlaced = 0, s_tid_Map = 0, s_tid_Model = 0, s_tid_Radius = 0;
+    s_tid_CreatePlaced = ::Object::ResolveTypeIdByNameLazy("CreatePlacedDescription");
+    s_tid_Map          = ::Object::ResolveTypeIdByNameLazy("MapDescription");
+    s_tid_Model        = ::Object::ResolveTypeIdByNameLazy("ModelDescription");
+    s_tid_Radius       = ::Object::ResolveTypeIdByNameLazy("RadiusDescription");
+    if (!g_TypeId_SizeDescription) g_TypeId_SizeDescription = &s_tid_CreatePlaced; // +0x28
+    if (!g_TypeId_AreaDescription) g_TypeId_AreaDescription = &s_tid_Map;          // +0x30
+    if (!g_TypeId_FenceDescription) g_TypeId_FenceDescription = &s_tid_Model;      // +0x38
+    if (!g_TypeId_RadiusComponent) g_TypeId_RadiusComponent = &s_tid_Radius;      // +0x40
+    fprintf(stderr, "[Placement] type-ids: CreatePlaced=%u Map=%u Model=%u Radius=%u\n",
+            s_tid_CreatePlaced, s_tid_Map, s_tid_Model, s_tid_Radius);
+    fflush(stderr);
+#endif
+
     s_startupFuncsResolved = true;
 }
 
@@ -1110,4 +1142,70 @@ extern "C" void* PlacementTool_Factory_SA(void) {
     return Tool_Alloc(0x70, g_PlacementTool_Vtable, 0);
 }
 REGISTER_TYPE(PlacementTool, "Tool", &PlacementTool_Factory_SA, &PlacementTool_CreateInPlace_SA);
+
+// ============================================================
+// Standalone tool-harness probe (NOT a faithful reimpl — scaffolding for
+// standalone/tool_harness.cpp, Phase-1 of GUI_PLAN Keystone F).
+// Logs descriptionPtr(+0x20)'s component array + the 4 *Description type-ids
+// Startup searches for, confirms the mesh-bearing ModelDescription (+0x38
+// target) is present, THEN calls the faithful Startup. If Model is absent it
+// logs and bails rather than letting Startup's unguarded createComponent+0x28
+// deref hard-crash — so a wrong descriptionPtr source is diagnosed, not fatal.
+// ============================================================
+extern "C" int PlacementTool_HarnessStartupProbe(void* toolSelf) {
+    PlacementTool* self = (PlacementTool*)toolSelf;
+    EnsureStartupFuncs();  // fills the 4 g_TypeId_* globals (and logs them)
+
+    uintptr_t entity = (uintptr_t)self->descriptionPtr;  // +0x20
+    if (!entity) {
+        fprintf(stderr, "[Placement] PROBE: descriptionPtr(+0x20) is NULL\n");
+        fflush(stderr);
+        return 0;
+    }
+
+    int count = *(int*)(entity + 0x30);
+    void** comps = *(void***)(entity + 0x28);
+    fprintf(stderr, "[Placement] PROBE: descEntity=%p compArray=%p count=%d\n",
+            (void*)entity, (void*)comps, count);
+
+    uint32_t tCreate = g_TypeId_SizeDescription  ? *g_TypeId_SizeDescription  : 0; // CreatePlacedDescription
+    uint32_t tMap    = g_TypeId_AreaDescription   ? *g_TypeId_AreaDescription   : 0; // MapDescription
+    uint32_t tModel  = g_TypeId_FenceDescription  ? *g_TypeId_FenceDescription  : 0; // ModelDescription
+    uint32_t tRadius = g_TypeId_RadiusComponent   ? *g_TypeId_RadiusComponent   : 0; // RadiusDescription
+
+    bool haveCreate = false, haveMap = false, haveModel = false, haveRadius = false;
+    if (comps && count > 0 && count < 256) {
+        for (int i = 0; i < count; i++) {
+            void* c = comps[i];
+            if (!c) continue;
+            typedef uint32_t (*getid_t)(void*);
+            getid_t gid = *(getid_t*)(*(uintptr_t*)c + 0x10);
+            uint32_t id = gid(c);
+            if (id == tCreate) haveCreate = true;
+            if (id == tMap)    haveMap = true;
+            if (id == tModel)  haveModel = true;
+            if (id == tRadius) haveRadius = true;
+            fprintf(stderr, "[Placement] PROBE:   comp[%d]=%p typeId=%u\n", i, c, id);
+        }
+    }
+    fprintf(stderr, "[Placement] PROBE: present Create=%d Map=%d Model=%d Radius=%d\n",
+            haveCreate, haveMap, haveModel, haveRadius);
+    fflush(stderr);
+
+    if (!haveModel) {
+        fprintf(stderr, "[Placement] PROBE: ModelDescription ABSENT — skipping Startup "
+                        "(would crash at +0x38 deref). descriptionPtr is not the right "
+                        "entity for this template.\n");
+        fflush(stderr);
+        return 0;
+    }
+
+    fprintf(stderr, "[Placement] PROBE: Model present — calling faithful Startup...\n");
+    fflush(stderr);
+    PlacementTool_Startup_Impl(self);
+    fprintf(stderr, "[Placement] PROBE: Startup returned (meshInstance=%p variant=%d)\n",
+            self->meshInstance, self->meshVariant);
+    fflush(stderr);
+    return 1;
+}
 #endif // STANDALONE_EXE

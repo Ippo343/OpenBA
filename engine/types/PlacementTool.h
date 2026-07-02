@@ -40,10 +40,12 @@ struct PlacementTool {
     void*    descriptionPtr;     // +0x20: pointer to ComponentEntity (description/config)
 
     // --- PlacementTool fields ---
-    void*    descComponent;      // +0x28: component found via DAT_1401c7468 (PlacementDescription)
-    void*    mapComponent;       // +0x30: component found via DAT_1401c7a18 (MapComponent?)
-    void*    createComponent;    // +0x38: component found via DAT_1401c7a88 (CreateComponent?)
-    void*    radiusComponent;    // +0x40: component found via DAT_1401c4870 (RadiusComponent)
+    // 🔑 Component types Ghidra-verified via RegisterType DATA writers (2026-07-02);
+    // the DAT globals' engine_funcs labels are WRONG — true types below.
+    void*    descComponent;      // +0x28: found via DAT_1401c7468 = CreatePlacedDescription
+    void*    mapComponent;       // +0x30: found via DAT_1401c7a18 = MapDescription
+    void*    createComponent;    // +0x38: found via DAT_1401c7a88 = ModelDescription (mesh; Startup derefs +0x28 UNGUARDED)
+    void*    radiusComponent;    // +0x40: found via DAT_1401c4870 = RadiusDescription
     uint64_t rotationIBP;        // +0x48: InternalBasePtr to RotationSetting
     int32_t  lastStartCol;       // +0x50: last cell column (for tick sound check)
     int32_t  lastStartRow;       // +0x54: last cell row (for tick sound check)
