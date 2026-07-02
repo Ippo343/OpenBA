@@ -184,6 +184,14 @@ static void EnsureFuncs() {
     // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
     if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
     if (!s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr = reinterpret_cast<fn_IBP_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
+    // Math::Transform::FromYawPitchOffset is a STATIC fn returning Transform by value
+    // (hidden retbuf: RCX=retbuf, RDX=yaw, R8=pitch, R9=offset) — matches the 4-arg
+    // typedef. Its exe IAT slot 0x140151288 is unregistered in standalone (→ null), so
+    // the preview mesh got a zeroed (degenerate) transform → invisible ghost. Resolve
+    // the Runtime export directly. (Name recovered from the exe slot name-table.)
+    if (!s_fn_TransformFromYaw)
+        s_fn_TransformFromYaw = reinterpret_cast<fn_TransformFromYaw_t>(
+            ResolveExport("?FromYawPitchOffset@Transform@Math@@SA?AV12@AEBVScalar@2@0AEBVVector3@2@@Z"));
 #endif
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     s_fn_TransformFromYaw  = (fn_TransformFromYaw_t)resolveIAT(0x140151288);
@@ -592,19 +600,18 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         }
     }
 
-    // Set transform: FromYawPitchOffset(outTransform, &yaw, &pitch=0, &offset=zero)
-    // The yaw comes from sub_da00 output. Pitch and offset are zero.
+    // Set transform: FromYawPitchOffset(retbuf, &yaw, &pitch=0, &offset).
+    // 🔑 Ghidra (0x1400fdff3): R9=offset = the cursor WORLD position from sub_da00
+    // (pos[]), NOT zero — that is what makes the ghost mesh follow the cursor. R8=pitch
+    // is zeroed ([RBP-0x70]).
     uint8_t localTransform[96];
     memset(localTransform, 0, sizeof(localTransform));
     float zeroPitch = 0.f;
-    float zeroOffset[3] = {0.f, 0.f, 0.f};
 
-    // Original stores yaw into [RBP-0x78], passes that as XMM6/param
-    // yaw[0] already has the float yaw value from sub_da00
+    // yaw[0] already has the float yaw value from sub_da00.
     if (s_fn_TransformFromYaw) {
-        // Match original: MOVSS [RBP-0x78], XMM6 then LEA RDX,[RBP-0x78]
         float yawVal = yaw[0];
-        s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, zeroOffset);
+        s_fn_TransformFromYaw(localTransform, &yawVal, &zeroPitch, pos);
     }
 
     if (s_fn_GeomSetTransform && self->meshInstance) {

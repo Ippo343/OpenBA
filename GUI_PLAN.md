@@ -324,6 +324,38 @@ click on the ground → a house is placed. User-visible, screenshot-verified.
 
 ---
 
+## Phase 3B — Placement preview + CreateBar rendering [deferred follow-on]
+
+**Status (2026-07-02):** Phase 3 activation is DONE (real click → tool active + ticked,
+crash-free). The **visible preview is not yet rendering** — deferred to this 3B pass before
+returning to it. Two groundwork fixes already landed (committed, Ghidra-verified correct but
+insufficient on their own): `TransformFromYaw` (0x140151288) resolved via its Runtime export
+`?FromYawPitchOffset@Transform@Math@@SA...` (the IAT slot is null in standalone → the preview
+mesh was getting a zeroed/degenerate transform), and the transform **offset** switched from
+zero to the cursor world-`pos` from sub_da00 (Ghidra 0x1400fdff3: R9=offset=pos, that's what
+makes the ghost follow the cursor). **User-tested: ghost still not visible** → more is wrong.
+
+**3B work items (measured / to investigate):**
+- **Ghost mesh still invisible** despite SceneAddObject/GeomSetTransform/MeshUpdateHier being
+  registered + TransformFromYaw now resolved + offset=pos. Investigate: does
+  `Graphics::Scene::AddObject` return a valid index and actually enqueue the MeshInstance for
+  the in-game render pass in standalone? Is the MeshInstance's mesh/material fully built by
+  Startup (variant/mesh set, but material/bounds)? Is the 96-byte Transform ABI from
+  `FromYawPitchOffset` (static, hidden retbuf RCX=retbuf/RDX=yaw/R8=pitch/R9=offset) landing
+  correctly? Consider RenderDoc capture of a frame with the tool active to see if the mesh is
+  submitted at all.
+- **CreateBar dialog empty + mis-positioned (top-left).** `operator_fc60` (0x1400ffc60, the
+  dialog cost/icon/bbox populate) is an unregistered EXE function → null → the panel never gets
+  its contents; and the standalone toolbar doesn't run EntityUI::Startup's positioning, so the
+  dialog lands at (0,0). Port/register 0x1400ffc60 + `GeomGetTransform` (0x140151460, member,
+  returns Transform by value / hidden retbuf — its only consumer is fc60) + a position pass.
+- **Footprint-tile overlay** (`EntityUI_ToolDraw_SA`, tool +0x40) is written but not wired into
+  `GameUpdateLoop::Draw` (needs the engine `Context*`).
+- Once the ghost + confirm-place are visually verified, fold `BANISHED_LIVE_TOOLS` into
+  `SA_LIVE_ENV`.
+
+---
+
 ## Phase 4 — Utility dialogs (case 2) [independent, parallelizable]
 
 **Objective:** clicking a Utility toolbar item (townhall / trade post) opens its management
