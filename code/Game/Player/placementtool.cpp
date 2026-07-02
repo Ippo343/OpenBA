@@ -177,6 +177,14 @@ static void EnsureFuncs() {
     s_fn_CloseDialog       = (fn_CloseDialog_t)resolveIAT(0x140151550);
     s_fn_IBP_Ctor          = (fn_IBP_Ctor_t)resolveIAT(0x140152a90);
     s_fn_IBP_CheckPtr      = (fn_IBP_CheckPtr_t)resolveIAT(0x140152ab0);
+#ifdef STANDALONE_EXE
+    // These IAT dispatch slots are unregistered in standalone (→ null). The resolved
+    // engine_funcs globals are the canonical fallback (SetEditMode uses them). A null
+    // IBP_Ctor silently makes an IBP wrapping a NON-null object come out 0 — e.g. the
+    // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
+    if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
+    if (!s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr = reinterpret_cast<fn_IBP_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
+#endif
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     s_fn_TransformFromYaw  = (fn_TransformFromYaw_t)resolveIAT(0x140151288);
     s_fn_GeomSetTransform  = (fn_GeomSetTransform_t)resolveIAT(0x1401512e0);
@@ -942,6 +950,17 @@ static void EnsureStartupFuncs() {
 
     // RotationSetting type ID at 0x1401c63c8 (read as uint32_t*)
     s_pTypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);
+#ifdef STANDALONE_EXE
+    // 0x1401c63c8 is a raw .rdata constant → NULL in standalone. Without it Startup's
+    // IsDerivedFrom(setting, RotationSetting) is skipped → rotationIBP (+0x48) wraps
+    // null → sub_da00 crashes on rot+0x10 (the orientation read). Fill from the live
+    // factory tree, same as the *Description type-ids above.
+    if (!s_pTypeId_RotationSetting) {
+        static uint32_t s_tid_RotationSetting = 0;
+        s_tid_RotationSetting = ::Object::ResolveTypeIdByNameLazy("RotationSetting");
+        s_pTypeId_RotationSetting = &s_tid_RotationSetting;
+    }
+#endif
 
     // MeshInstance vtable at 0x14015e240 (LEA, not deref -- direct address in .rdata)
     s_pMeshInstanceVtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
@@ -1119,6 +1138,19 @@ static uint32_t PlacementTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("PlacementTool");
     return c;
 }
+// +0x58 (Slot11) GetToolSettingTypeId — faithful port of FencedTool_Slot11
+// (0x140026920): `*ret = TypeInfo_RotationSetting; return ret;`. SetEditMode
+// (FUN_140102b60 / Toolbar_ShowGroup_Impl) calls this on first activation and
+// DEREFERENCES the returned pointer, so a Tool_Ret0 stub (returns 0 → *0) would
+// crash. Returns the live RotationSetting factory type-id.
+static uint32_t* PlacementTool_GetSettingType(void*, uint32_t* ret) {
+    static uint32_t s_tid = 0;
+    if (!s_tid) s_tid = ::Object::GetTypeIdByName("RotationSetting");
+    if (ret) *ret = s_tid;
+    return ret;
+}
+// +0x60 (Slot12) GetCursorId — exe body is literally `MOV EAX,5; RET`.
+static int PlacementTool_GetCursor(void*) { return 5; }
 static void* g_PlacementTool_Vtable[13] = {
     (void*)&PlacementTool_Dtor_Impl,      // +0x00 Dtor
     (void*)&Tool_Slot1,                   // +0x08
@@ -1129,17 +1161,34 @@ static void* g_PlacementTool_Vtable[13] = {
     (void*)&PlacementTool_OnKey_Impl,     // +0x30 OnKey
     (void*)&PlacementTool_Serialize_Impl, // +0x38 Serialize (preview)
     (void*)&PlacementTool_Draw_Impl,      // +0x40 Draw
-    (void*)&Tool_Ret0,                    // +0x48
-    (void*)&Tool_Ret0,                    // +0x50
-    (void*)&Tool_Ret0,                    // +0x58
-    (void*)&Tool_Ret0,                    // +0x60
+    (void*)&Tool_Ret0,                    // +0x48 Slot9 (can-deactivate? returns 0)
+    (void*)&Tool_Ret0,                    // +0x50 Slot10
+    (void*)&PlacementTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId
+    (void*)&PlacementTool_GetCursor,      // +0x60 Slot12 GetCursorId (=5)
 };
 extern "C" void RegisterPlacementToolVtable() {
     RegisterExeAddr(0x140161d20, (uintptr_t)g_PlacementTool_Vtable);
 }
-extern "C" void* PlacementTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x70, g_PlacementTool_Vtable, 0);}
+// PlacementTool_Ctor (0x1400fe850) inits the preview-state caches to -1: +0x50/+0x54
+// (lastStartCol/Row), +0x58 lastCenterCell, +0x5c radiusDisplayIdx, +0x60 sceneObjectIdx.
+// Tool_Alloc/InitInPlace only ZEROES [0x10,size) — leaving these 0, which Serialize
+// reads as a live scene/highlight index and removes → crash on the bogus index 0.
+static void PlacementTool_InitCtorFields_SA(void* p) {
+    if (!p) return;
+    uint8_t* t = static_cast<uint8_t*>(p);
+    *reinterpret_cast<int64_t*>(t + 0x50) = -1;   // lastStartCol / lastStartRow
+    *reinterpret_cast<int64_t*>(t + 0x58) = -1;   // lastCenterCell / radiusDisplayIdx
+    *reinterpret_cast<int32_t*>(t + 0x60) = -1;   // sceneObjectIdx
+}
+extern "C" void* PlacementTool_CreateInPlace_SA(void* mem) {
+    void* p = Tool_InitInPlace(mem, 0x70, g_PlacementTool_Vtable, 0);
+    PlacementTool_InitCtorFields_SA(p);
+    return p;
+}
 extern "C" void* PlacementTool_Factory_SA(void) {
-    return Tool_Alloc(0x70, g_PlacementTool_Vtable, 0);
+    void* p = Tool_Alloc(0x70, g_PlacementTool_Vtable, 0);
+    PlacementTool_InitCtorFields_SA(p);
+    return p;
 }
 REGISTER_TYPE(PlacementTool, "Tool", &PlacementTool_Factory_SA, &PlacementTool_CreateInPlace_SA);
 

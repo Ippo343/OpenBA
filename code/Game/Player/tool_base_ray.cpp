@@ -17,6 +17,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
 
 // ============================================================
 // Locally-resolved dispatch-slot helpers (Runtime exports behind exe .rdata slots)
@@ -57,13 +58,19 @@ static void EnsureRayExports() {
     s_rayExportsResolved = true;
 }
 
-// Math::Vector2::Normalize(this) -> Vector2& (in place) — dispatch slot 0x1401526b0 (registered).
-static void (*s_fn_Vector2_Normalize)(void* vec2) = nullptr;
+// Math::Vector2::Normalize() const -> Vector2 BY VALUE — dispatch slot 0x1401526b0.
+// 🔑 Mangled ?Normalize@Vector2@Math@@QEBA?AV12@XZ: `?AV12@` = returns Vector2 by value.
+// Math::Vector2 is non-trivial (has ctors) so the MS x64 ABI returns it via a HIDDEN
+// buffer: RCX=retbuf, RDX=this(const). It is NOT in-place. The old `void(void*)` decl
+// put the object in RCX and left RDX(this) = the function-ptr value → the callee wrote
+// through a code address (crash). Correct ABI: (retbuf, self) -> retbuf.
+typedef float* (*fn_Vec2Normalize_t)(float* retbuf, const void* self);
+static fn_Vec2Normalize_t s_fn_Vector2_Normalize = nullptr;
 static bool s_vec2Resolved = false;
 static void EnsureVec2() {
     if (s_vec2Resolved) return;
     uintptr_t slot = ResolveAddr(Module::Exe, 0x1401526b0);
-    if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<void(**)(void*)>(slot);
+    if (slot) s_fn_Vector2_Normalize = *reinterpret_cast<fn_Vec2Normalize_t*>(slot);
     s_vec2Resolved = true;
 }
 
@@ -118,11 +125,16 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 
     int width = *reinterpret_cast<int*>(param_1 + 0xc0);
 
-    // normDir = normalize(param_3.x, param_3.y)
-    float normDir[2];
-    normDir[0] = param_3[0];
-    normDir[1] = param_3[1];
-    if (s_fn_Vector2_Normalize) s_fn_Vector2_Normalize(normDir);
+    // normDir = normalize(param_3.x, param_3.y).  Vector2::Normalize is const + returns
+    // by value (hidden retbuf: RCX=retbuf, RDX=this) — see the typedef note above.
+    float srcDir[2] = { param_3[0], param_3[1] };
+    float normDir[2] = { srcDir[0], srcDir[1] };
+    if (s_fn_Vector2_Normalize) {
+        float ret2[2] = { 0.0f, 0.0f };
+        float* r = s_fn_Vector2_Normalize(ret2, srcDir);
+        normDir[0] = r[0];
+        normDir[1] = r[1];
+    }
 
     float center = static_cast<float>(width >> 1);
     float centerPos[2] = { center, center };      // local_res8[0],[1]

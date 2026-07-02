@@ -32,6 +32,19 @@
 // from the BANISHED_LIVE_TOOLBAR-gated HUD path in Startup below.
 extern "C" void ToolbarStandalone_Init();
 
+// GUI_PLAN Keystone F Phase 3 — player tool activation + per-frame tick
+// (code/Game/Player/tool_activation_standalone.cpp). Gated behind BANISHED_LIVE_TOOLS
+// so the default build stays byte-identical: build the tool-mode tree at EntityUI
+// startup, tick the active tool each frame (OnKey/Serialize/cursor), draw its footprint.
+extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI);
+extern "C" int  EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time);
+extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFlag);
+static bool LiveToolsEnabled() {
+    static int g = -1;
+    if (g < 0) { const char* e = getenv("BANISHED_LIVE_TOOLS"); g = (e && e[0] && !(e[0]=='0' && e[1]=='\0')) ? 1 : 0; }
+    return g != 0;
+}
+
 // In-app RenderDoc capture driver — ticked once per in-game rendered frame so a
 // delayed capture armed by OptionsDialog::ApplyVideoSettings (after an MSAA/res
 // apply) actually fires. No-op unless the exe was launched via RenderDoc's UI.
@@ -923,6 +936,13 @@ post_simulation:
             // first, then per-frame movement, matching the original helper order.
             Game::Camera_UpdateHotkeys(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
             Game::Camera_UpdateMovement(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
+            // Phase 3: tick the active player tool (the tool half of EntityUI::Update
+            // that camera_input.cpp omitted) — OnKey (dialog + left-click confirm) +
+            // Serialize (ghost preview) + cursor. -1 = no active tool -> keep default.
+            if (LiveToolsEnabled()) {
+                int toolCursor = EntityUI_ToolTick_SA(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
+                if (toolCursor >= 0) cursorIndex = toolCursor;
+            }
 #endif
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
             int64_t result = fn_EntityUI_Update ? fn_EntityUI_Update(self->m_entityUI, *(int64_t*)time, noInputFocus) : 1; // [GUARD-M5]
@@ -1701,6 +1721,11 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // standalone (M5 first slice). [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling EntityUI::Startup...\n");
     if (fn_EntityUI_Startup) fn_EntityUI_Startup(self->m_entityUI);
+#ifdef STANDALONE_EXE
+    // Standalone: fn_EntityUI_Startup (0x140101ee0) is NULL, so build the tool-mode
+    // tree ourselves (Phase 3) so a build-button click resolves the PlacementTool.
+    if (LiveToolsEnabled()) EntityUI_BuildToolModeTree_SA(self->m_entityUI);
+#endif
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");

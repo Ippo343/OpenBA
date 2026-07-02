@@ -253,7 +253,55 @@ the create returning a non-null entity; 0 crash; A/B clean.
 
 ---
 
-## Phase 3 — Wire to the REAL click (case-0 OpenToolDialog)
+## Phase 3 — ✅ DONE (2026-07-02) — real click activates the tool + drives it per-frame
+
+**✅✅ PHASE 3 COMPLETE + A/B-VERIFIED.** With `BANISHED_LIVE_TOOLS=1` a build-button
+click activates a PlacementTool through the **real `SetEditMode` path**, and the tool is
+driven every frame (OnKey → CreateBar dialog + confirm; Serialize → mouse-pick ghost
+preview) **crash-free**. Automated proof via `BANISHED_TOOL_HARNESS=click` (calls the same
+`SetEditMode` the toolbar case-1 click invokes): the PlacementTool materializes at
+`entityUI+0x28` with `descComp`/`meshInstance`/`rotationIBP` all populated, the pick-ray
+resolves cells, and the per-frame tick soaks 60s+ with a 0-byte crash log. Default `sa-run`
+(LIVE_TOOLS off, harness off) is byte-clean: 0 tool markers, world builds + ticks, 0-byte
+crash log.
+
+- **🔑 The plan's action-type table was BACKWARDS (Ghidra-verified).** `ToolbarDialog::OnEvent`
+  (FUN_1400b92a0) **case 0** = open a sub-toolbar (recursive ToolbarDialog); **case 1** =
+  `FUN_140102b60` = **SetEditMode** = the real tool activation (descriptor = `item+0x58`).
+  `OpenToolDialog` (ff9e0) is called by the tool's OWN OnKey, not the dispatcher.
+- **The tool-mode tree** (`entityUI+0x10`) is built by `EntityUI::Startup` (101ee0, 8 inserts
+  triggerTypeId→toolTypeId). That's NULL in standalone (101ee0 unregistered) → SetEditMode
+  dead-ends. Fix = `EntityUI_BuildToolModeTree_SA` (tool_activation_standalone.cpp): faithful
+  AVL insert (`helper_ddb0`/`sub_df10` + registered `4b40` rebalance) of the
+  `CreatePlacedDescription→PlacementTool` node (covers ALL placeable buildings) + fills the
+  `Tool`/`ToolSetting` base type-ids. Called at gameupdateloop.cpp:1706.
+- **Per-frame tick** = `EntityUI_ToolTick_SA` (the tool half of EntityUI::Update + helper_f6e0
+  that camera_input.cpp omitted): active tool `+0x30` OnKey(activeFlag) + right-click cancel +
+  `+0x38` Serialize(&time,activeFlag) + `+0x60` cursor. Wired in gameupdateloop.cpp Step 10.
+- **4 real bugs fixed to reach crash-free:** (1) PlacementTool vtable `+0x58` GetToolSettingTypeId
+  was a `Tool_Ret0` stub → SetEditMode deref'd null; ported it to return RotationSetting typeid
+  (+`+0x60`→5). (2) `s_pTypeId_RotationSetting` (raw .rdata 0x1401c63c8) NULL in standalone →
+  Startup skipped the setting → rotationIBP null → sub_da00 `rot+0x10` crash; filled via
+  GetTypeIdByName. (3) `s_fn_IBP_Ctor` IAT slot NULL in standalone → an IBP wrapping the
+  non-null RotationSetting came out 0; fell back to the resolved `fn_InternalBasePtr_Ctor`.
+  (4) **`Vector2::Normalize` ABI bug** (tool_base_ray.cpp): `?AV12@` returns Vector2 BY VALUE
+  (hidden retbuf RCX=retbuf/RDX=this) but was called in-place `void(void*)` → wrote through a
+  code address; fixed to `(retbuf,self)`. (5) `PlacementTool_Factory_SA` (Tool_Alloc) zeroed the
+  preview-index caches, but the Ctor sets `+0x50/+0x58/+0x60 = -1` → Serialize removed a bogus
+  scene/highlight index 0 → crash; replicate the -1 inits.
+- **Files:** `code/Game/Player/tool_activation_standalone.cpp` (NEW: tree build + tick + draw),
+  `code/Game/Player/placementtool.cpp` (vtable +0x58/+0x60, RotationSetting typeid fill,
+  IBP_Ctor fallback, ctor-field init), `code/Game/Player/tool_base_ray.cpp` (Vector2::Normalize
+  ABI), `code/Game/Game/gameupdateloop.cpp` (LiveToolsEnabled gate + tree-build + tick calls),
+  `standalone/tool_harness.cpp` (`click` harness value).
+- **⏳ Remaining (manual/UX):** screenshot-verify a real mouse click on the House button places
+  a house (the machinery is proven crash-free; needs a human with the cursor over the map, as
+  the pick + left-click confirm read the live OS cursor). Footprint-tile overlay (tool +0x40
+  `EntityUI_ToolDraw_SA`) is written but not yet wired into GameUpdateLoop::Draw (the ghost
+  MESH preview via Serialize's SceneAddObject already renders). Fold `BANISHED_LIVE_TOOLS` into
+  `SA_LIVE_ENV` once user-confirmed.
+
+### Phase 3 — original spec (superseded by the DONE block above)
 
 **Objective:** a real toolbar button click (case 0 = Tool) opens the PlacementTool via
 `OpenToolDialog`, mouse position drives the placement preview per-frame (Serialize +0x38),

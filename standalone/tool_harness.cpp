@@ -41,6 +41,12 @@ extern "C" void* StartTown_ResolveTemplateByPath(const char* path);
 // Phase 2: drive the faithful CREATE path (helper_d650) for a chosen centre cell.
 extern "C" int   PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell);
 
+// Phase 3: the SetEditMode reimpl the toolbar case-1 click drives (entityui.cpp).
+// Walks the tool-mode tree at entityUI+0x10 (built by EntityUI_BuildToolModeTree_SA),
+// resolves PlacementTool from the descriptor's CreatePlacedDescription, CreateObject's
+// it + Startup, installs it at entityUI+0x28. C++ linkage (not extern "C").
+void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
+
 namespace {
 
 // RemovalTool field offsets (DragTool base + RemovalTool).
@@ -182,6 +188,46 @@ void FirePlacementTool() {
     printf("[ToolHarness] PlacementTool sequence complete.\n");
 }
 
+// GUI_PLAN Keystone F, Phase 3: exercise the REAL toolbar-click activation path.
+// Instead of hand-building the tool (FirePlacementTool), resolve a building descriptor
+// and call SetEditMode — exactly what ToolbarDialog::OnEvent case-1 does on a click.
+// SetEditMode walks the tool-mode tree (EntityUI_BuildToolModeTree_SA must have run,
+// i.e. BANISHED_LIVE_TOOLS=1), matches CreatePlacedDescription -> PlacementTool,
+// CreateObject's + Startup's the tool, and installs it at entityUI+0x28. From there the
+// per-frame tick (EntityUI_ToolTick_SA, also LIVE_TOOLS-gated) drives OnKey/Serialize:
+// the CreateBar dialog opens and the ghost preview follows the mouse; a left-click
+// (KeyMap action 5) then places the building. This proves the click->activate->preview
+// path without hand-wiring the tool.
+void FireActivatePlacement(void* entityUI) {
+    if (!entityUI) { printf("[ToolHarness] ERROR: entityUI null\n"); return; }
+    const char* kTemplate = "Template\\WoodHouse.rsc";
+    printf("[ToolHarness] resolving building template \"%s\"...\n", kTemplate);
+    void* tmpl = StartTown_ResolveTemplateByPath(kTemplate);
+    printf("[ToolHarness] template -> %p\n", tmpl);
+    if (!tmpl) { printf("[ToolHarness] ERROR: template resolve returned null\n"); return; }
+
+    void* before = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    printf("[ToolHarness] SetEditMode(entityUI=%p, descriptor=%p) — activating PlacementTool "
+           "via the tool-mode tree (activeTool before=%p)...\n", entityUI, tmpl, before);
+    EntityUI_SetEditMode_Impl(entityUI, reinterpret_cast<uint64_t>(tmpl));
+
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    printf("[ToolHarness] after SetEditMode: activeTool(entityUI+0x28)=%p\n", tool);
+    if (tool) {
+        uint8_t* t = static_cast<uint8_t*>(tool);
+        printf("[ToolHarness]   tool vtable=%p back-ptr(+0x10)=%p descriptionPtr(+0x20)=%p "
+               "descComp(+0x28)=%p meshInstance(+0x68)=%p\n",
+               *reinterpret_cast<void**>(t), *reinterpret_cast<void**>(t + 0x10),
+               *reinterpret_cast<void**>(t + 0x20), *reinterpret_cast<void**>(t + 0x28),
+               *reinterpret_cast<void**>(t + 0x68));
+        printf("[ToolHarness] PlacementTool ACTIVE — per-frame tick (LIVE_TOOLS) now drives "
+               "OnKey/Serialize; move the mouse over the map + left-click to place.\n");
+    } else {
+        printf("[ToolHarness] activation FAILED — no tool at entityUI+0x28 (tree miss or "
+               "CreateObject null). Ensure BANISHED_LIVE_TOOLS=1.\n");
+    }
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -191,7 +237,9 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
 
     s_fired = true;
     printf("[ToolHarness] firing at frame %d (tool=\"%s\")\n", frameNum, s_toolName);
-    if (std::strcmp(s_toolName, "placement") == 0) {
+    if (std::strcmp(s_toolName, "click") == 0) {
+        FireActivatePlacement(entityUI);
+    } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
     } else {
         // Default / "removal": the original DragTool path (needs the live EntityUI).
