@@ -477,9 +477,55 @@ ghost is therefore **faithful** to this code path. Vanilla placement validity fe
 red/green **footprint tiles** (item below), not mesh alpha. No code change; item closed as
 not-a-bug. (True translucency would be a separate, non-original enhancement.)
 
-### ⏳ 3C item — Red/green validity tiles = still DEFERRED (unchanged)
-Item 3 (the `sub_1380`→`08c0`/`f5d0` shared sim-gap) is untouched — see Phase 3B item 3. This is
-the genuine remaining visual gap (and the real source of the "is this spot valid" coloring).
+### 🟡 3C item — Red/green validity tiles = RENDERS (port done); Z-placement OPEN (2026-07-03)
+The `sub_1380`→`08c0` closure is ported + registered and the green/red grid RENDERS crash-free
+(user-confirmed it draws). **OPEN for next session: the grid's vertical placement.** The overlay is
+verified FAITHFUL (b10e0 heights == the game's own aa20 terrain ray, e.g. 0.055/0.062/0.066), but:
+- the placed building anchors at **Z=0** (`sub_da00` forces `pos.z=0`; retail too — decompile-confirmed),
+- so the terrain-conforming grid reads as sitting *above* the sunk model ("arbitrary plane above").
+- An experimental base-anchor (subtract footprint-centre terrain Z) over-corrected → grid z-fought/hid
+  UNDER the rendered ground even with a +0.10 lift → still not visible. So the rendered ground here sits
+  ABOVE the Z=0 model base by more than the small heights suggest — i.e. the **rendered terrain mesh vs
+  the collision heightmap disagree on Z** in standalone (the real root; retail they agree).
+- **Committed default = FAITHFUL** (grid conforms to collision terrain — visible, correct). The base-anchor
+  is OPT-IN via `BANISHED_TOOL_ZLIFT=<world-units>` (sets anchor-on + lift) as a knob for next session.
+- **Next-session plan:** find the rendered terrain mesh's actual height for a cell (the mesh builder,
+  serialize_heightmap_mesh.cpp / the splat) and reconcile it with the collision heightmap OR fix the
+  model-sink (why the Z=0 building sits below the rendered ground). Likely the terrain-mesh Z scale/offset,
+  not the overlay.
+
+The `sub_1380`→`08c0` closure is now ported + registered. New files:
+`code/Game/Player/tool_base_tilerender.cpp` (ports `b10e0` 6-corner terrain sampler, `08c0`
+Video::Context tessellate+submit, `1380` per-cell validate+record build) and
+`standalone/reg_player_tilerender.cpp` (registers 0x1400b10e0/0x1401008c0/0x140101380; wired into
+`RegisterCodeFunctions`). The two remaining leaves were ALREADY registered: `f5d0` (0x14009f5d0 →
+reg_player_path) and `0f90` (0x1400b0f90 → reg_pf_road; only used by 08c0's DEAD first loop —
+`sub_1380` always passes an empty `param_4` road-record set, so only 08c0's second loop runs on the
+building-placement path).
+
+Key RE facts (all disasm-verified):
+- Tile record = 5 ints (0x14 stride): `[col, row, texVariant(0/1/2), colorRGBA, angle=yawInt+yawAngle]`.
+  Color: green `0xff00ff00` (valid) / red `0xffff0000` (invalid or forceRed) / yellow `0xffffff00`
+  (existing-placement marker).
+- 08c0 vertex = 6 floats (0x18): `[x, y, z, u, v, colorBits]`. Position = terrain corner (b10e0);
+  uv = a per-vertex atlas template (even/odd by `(col+row)&1`) rotated by `angle*deg2rad` and offset
+  by `texVariant*0.125` (atlas column); `BeginVertices(count*6, 0x18)` / `EndVertices(0)`.
+- Constants (raw .rdata → NULL in SA, inlined bit-exact): half=0.5, uvScale=0.125 (`0x3e000000`),
+  deg2rad=0.017453292 (`0x3c8efa35`), heightScale=1/256 (`0x3b800000`).
+- Render exports resolved in-TU by mangled name (recovered from the exe dispatch-slot name-table
+  0x1401c027e): `MaterialInstance::Setup`, `Matrix::Identity` (static retbuf), `Context::SetTransform/
+  BeginVertices/AddVertex/EndVertices`, `Vector3(MMM)`. Material = FindOrLoad("Terrain/Selection.rsc")
+  validated against `MaterialInstance` typeinfo slot 0x140151350 with an IsDerivedFromOrTrust fallback
+  (slot may be null in SA). `Filename` ctor/dtor via the pre-wired engine_funcs pointers.
+
+Draw path (already wired): `GameUpdateLoop::Draw` Step 11 dispatches the active tool's `vtable[8]`
+(+0x40) → `PlacementTool_Draw_Impl` → `s_fn_sub_1380` (now non-null) → the overlay. Runs when a
+placement tool is active (`BANISHED_LIVE_TOOLS=1`) and the cursor is over the map (`sub_da00` valid).
+
+**🐞 Crash fixed (first interactive run):** the record-array builder used the raw static `MemAlloc`
+export which doesn't resolve in SA → returned null but count still incremented → 08c0 dereferenced a
+null record (`READ of 0x4`). FIX = `fn_MemAlloc(g_pMemAllocSingleton,…)`/`fn_MemFreeStatic`, only
+advance count when a record is stored, + guard 08c0 against a null base. Builds clean; grid renders.
 
 Files touched in the earlier 3C-core pass: `code/Game/Player/tool_base_ray.cpp` (Normalize inline +
 GetMouseRay guard + pick diagnostics), `code/Game/Action/action_pf_road.cpp` (`aa20` contiguous

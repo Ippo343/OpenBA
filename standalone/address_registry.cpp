@@ -478,6 +478,7 @@ extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenTool
 extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100380 entity screen-rect + ec70/098210/fe960 (Math via ResolveExport)
 extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 HighlightAdd -> b0d80 -> ace40 tessellation + BST family (TIER-2 geometry, worker-thread-free)
 extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 CreateBar populate+position (e600/e420/e700/e360/ebb0 same-TU; ec70/fe960 via ResolveAddr)
+extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 + 1008c0 + 101380 green/red footprint validity overlay (f5d0/0f90 already registered)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -604,6 +605,9 @@ static void RegisterCodeFunctions() {
     RegisterPlayerCreateBarBatch();// GUI Phase 3B: ffc60 CreateBar populate+position — fills the
     //   placement dialog's textSize/textStatus/imageIcon + SetUpperLeft over the footprint.
     //   Closure fully satisfied (sub-helpers same-TU; ec70/fe960 via reg_player_screenrect).
+    RegisterPlayerTileRenderBatch();// GUI Phase 3C: b10e0 + 1008c0 + 101380 — the green/red
+    //   footprint validity overlay tiles (closes reg_player_place.cpp's 101380 DEFER).
+    //   f5d0 (reg_player_path) + 0f90 (reg_pf_road) already registered; render exports resolved in-TU.
 
     // Game registration wave — closure-safe leaf helpers (dtors/teardown + terrain).
     RegisterGameLeafBatch();       // String-array dtors 1b030/1b0a0/a8a0, MusicPlayer 18220,
