@@ -18,6 +18,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cmath>
 
 // ============================================================
 // Locally-resolved dispatch-slot helpers (Runtime exports behind exe .rdata slots)
@@ -125,15 +127,18 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 
     int width = *reinterpret_cast<int*>(param_1 + 0xc0);
 
-    // normDir = normalize(param_3.x, param_3.y).  Vector2::Normalize is const + returns
-    // by value (hidden retbuf: RCX=retbuf, RDX=this) — see the typedef note above.
+    // normDir = normalize(param_3.x, param_3.y) — the 2D ray direction (DDA divisor).
+    // 🔑 Math::Vector2 is 8 bytes (2 floats); MSVC x64 returns it in RAX, NOT via a
+    // hidden return buffer (only structs >8 bytes use one). The dispatch-slot call
+    // (retbuf,self) therefore mis-passed the args and normalized (0,0)->(0,0), leaving a
+    // ZERO direction — the DDA then can't step (step=0), tests only the seed cell, and
+    // never hits the terrain (the "no ghost / CreateBar stuck top-left" root cause).
+    // Compute the unit direction inline: behaviour-identical, no ABI dependency.
     float srcDir[2] = { param_3[0], param_3[1] };
     float normDir[2] = { srcDir[0], srcDir[1] };
-    if (s_fn_Vector2_Normalize) {
-        float ret2[2] = { 0.0f, 0.0f };
-        float* r = s_fn_Vector2_Normalize(ret2, srcDir);
-        normDir[0] = r[0];
-        normDir[1] = r[1];
+    {
+        float len = std::sqrt(srcDir[0] * srcDir[0] + srcDir[1] * srcDir[1]);
+        if (len > 1e-6f) { normDir[0] = srcDir[0] / len; normDir[1] = srcDir[1] / len; }
     }
 
     float center = static_cast<float>(width >> 1);
@@ -196,6 +201,14 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
         }
     }
 
+#ifdef STANDALONE_EXE
+    static int s_marchDiag = -1;
+    if (s_marchDiag < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_marchDiag = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    static int s_marchN = 0;
+    bool diagThis = s_marchDiag && (s_marchN++ < 3);
+    int visited = 0, aa20calls = 0;
+    uintptr_t aa20dbg = ResolveAddr(Module::Exe, 0x1400aaa20);
+#endif
     // Main DDA march.
     for (;;) {
         int axis = (tMax[1] <= tMax[0]) ? 1 : 0;   // SETBE: S[3] <= S[2]
@@ -208,15 +221,32 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
                 hit = reinterpret_cast<fn_aa20_t>(fn)(
                     param_1, cell[0], cell[1], param_3, param_2, param_4,
                     param_5, param_6, nullptr);
+#ifdef STANDALONE_EXE
+                if (diagThis) aa20calls++;
+#endif
             }
             if (hit) return 1;
         }
+#ifdef STANDALONE_EXE
+        if (diagThis) visited++;
+#endif
         // Advance along the chosen axis.
         float oldTMax = tMax[axis];
         cell[axis] += step[axis];
         tMax[axis] = oldTMax + tDelta[axis];
-        if (oldTMax >= *param_4)   // exceeded max parametric distance
+        if (oldTMax >= *param_4) {  // exceeded max parametric distance
+#ifdef STANDALONE_EXE
+            if (diagThis) {
+                fprintf(stderr, "[March] width=%d normDir=(%.3f,%.3f) seedCell=(%d,%d) "
+                        "tEnter=%.2f tExit=%.2f aa20=%p visited=%d aa20calls=%d -> NO HIT (maxDist)\n",
+                        width, normDir[0], normDir[1],
+                        (int)(center + param_2[0]), (int)(center + param_2[1]),
+                        tEnter, tExit, (void*)aa20dbg, visited, aa20calls);
+                fflush(stderr);
+            }
+#endif
             return 0;
+        }
     }
 }
 
@@ -256,6 +286,27 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
 
     int screenW = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 4);
     int screenH = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 8);
+
+#ifdef STANDALONE_EXE
+    {
+        static int s_on = -1;
+        if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_on) {
+            static bool s_once = false;
+            if (!s_once) { s_once = true;
+                fprintf(stderr, "[MouseRay] keyMap=%p display=%p screenW=%d screenH=%d mouseX=%d mouseY=%d "
+                        "gvFn=%p (display+4/+8 = Video::Device dims)\n",
+                        keyMap, display, screenW, screenH, (int)mouseX, (int)mouseY, (void*)fn_KeyMap_GetValue);
+                fflush(stderr);
+            }
+        }
+    }
+    // Safety: garbage/zero screen dims would let the bounds check pass with junk and then
+    // crash in the camera-ray math (writing a by-value result through a bad retbuf). Reject
+    // implausible display sizes so sub_da00 returns invalid instead of hard-faulting.
+    if (screenW <= 0 || screenH <= 0 || screenW > 16384 || screenH > 16384)
+        return 0;
+#endif
 
     if (mouseX < 0 || mouseX >= screenW || mouseY < 0 || mouseY >= screenH)
         return 0;
@@ -329,6 +380,24 @@ extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
 
     uint8_t hit = PlayerRay_TerrainMarch_aa530(
         map, origin, dir, &maxDist, hitPos, scratch);
+
+#ifdef STANDALONE_EXE
+    {
+        static int s_on = -1;
+        if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_on) {
+            static int s_n = 0;
+            if (s_n++ < 8) {
+                fprintf(stderr, "[ScreenToCell] ok=%d origin=(%.2f,%.2f,%.2f) dir=(%.2f,%.2f,%.2f) "
+                        "map=%p hit=%d hitPos=(%.2f,%.2f,%.2f)\n",
+                        (int)ok, origin[0], origin[1], origin[2], dir[0], dir[1], dir[2],
+                        (void*)map, (int)hit, hitPos[0], hitPos[1], hitPos[2]);
+                fflush(stderr);
+            }
+        }
+    }
+#endif
+
     if (hit == 0)
         return -1;
 

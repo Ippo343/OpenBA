@@ -389,6 +389,55 @@ prior waves. So the footprint TILES await that closure; the wiring itself is don
 
 ---
 
+## Phase 3C — Placement UX polish [in progress]
+
+**Status (2026-07-02):** ✅ **The ghost building now FOLLOWS THE CURSOR** (user-confirmed,
+crash-free). Getting there meant fixing the entire cursor→terrain pick chain, which had NEVER
+run in standalone — a 6-bug cascade (all in the placement raycast, gated behind `sub_da00`
+returning invalid so nothing downstream ever ran):
+
+1. **`Vector2::Normalize` returned (0,0)** (tool_base_ray.cpp `PlayerRay_TerrainMarch_aa530`).
+   `Math::Vector2` is 8 bytes → MSVC x64 returns it **in RAX, not via a hidden retbuf**; the
+   `(retbuf,self)` call normalized (0,0). → the DDA had a zero direction (step 0, seed cell
+   only). FIX = compute the 2D unit direction inline.
+2. **`aa20` degenerate triangles** (action_pf_road.cpp `Pf_CellQuadRay_aa20`). The port passed
+   `&local_58` etc. to `aa810` as `Vector3*` from **non-contiguous float locals** AND
+   `(void)`-cast the corner **heights** — so every tri handed to Möller-Trumbore had garbage/no
+   z. FIX = contiguous `float V00/V01/V10/V11[3]` incl. heights (the recurring Vector3-locals bug).
+3. **Height scale null** — `f1720bc()` (`DAT_1401720bc`) is a raw .rdata const → 0 in standalone
+   → flat terrain. FIX = 1/256 (0x3b800000) fallback.
+4. **Wrong `fUV` constant** — the corner spacing read `0x1401720b8` (≈0.001) but the disasm
+   (0x1400aaaf7) uses **`0x14017214c` = 1.0**; ≈0.001 collapsed the quad → `det≈0` → every ray
+   missed. FIX = read 0x14017214c with a 1.0 fallback.
+5. **`GetMouseRay` crash guard** — reject implausible display dims before the camera-ray math.
+6. **`Geometry::GetTransform` by-value crash** (placementtool.cpp Serialize). It returns
+   `Transform` by value (member, hidden retbuf RCX=this/RDX=retbuf); the 1-arg call left RDX
+   garbage → it wrote the Transform into Runtime code → hard-fault the moment `valid=1`. FIX =
+   call with a retbuf. This is the "crash on click" the earlier passes hit.
+
+Diagnostics (all `BANISHED_TOOL_DIAG=1`, A/B-safe): `[SerDiag]` `[MouseRay]` `[ScreenToCell]`
+`[March]` trace the pick chain; `[Placement] mesh built` / `[fc60]` trace the mesh + populate.
+
+**3C remaining (user-observed, deferred):**
+- **CreateBar still stuck top-left + solid (not repositioning).** `operator_fc60` runs and
+  populates, but `SetUpperLeft` isn't moving it — the `fe960` screen-projection likely returns 0
+  (empty rect) or the centre math is off. Investigate `Pf`/`fe960` projection of the footprint
+  corners + the `GetRoot` bounds + the smoothing (`param_1+0x08/0x0c` seeded −1). It renders
+  "solid colored" because it's showing the raw CreateBar.rsc template, not the live-positioned panel.
+- **Ghost is opaque, not translucent.** `PlacementTool::Startup` overwrites the preview
+  MeshInstance vtable with `0x14015e240` — **skipped in standalone** (raw .rdata vtable → null),
+  so the mesh keeps the base opaque material instead of the ghost/translucent one that vtable
+  selects. Build a standalone `0x14015e240` MeshInstance vtable (or set the preview material/alpha
+  another way).
+- **Red/green validity tiles missing** = Item 3 (the `sub_1380`→`08c0`/`f5d0` deferred sim-gap).
+
+Files touched this pass: `code/Game/Player/tool_base_ray.cpp` (Normalize inline + GetMouseRay
+guard + pick diagnostics), `code/Game/Action/action_pf_road.cpp` (`aa20` contiguous verts +
+heights + hscale/uv constants), `code/Game/Player/placementtool.cpp` (GetTransform retbuf ABI +
+mesh/Serialize diagnostics).
+
+---
+
 ## Phase 4 — Utility dialogs (case 2) [independent, parallelizable]
 
 **Objective:** clicking a Utility toolbar item (townhall / trade post) opens its management

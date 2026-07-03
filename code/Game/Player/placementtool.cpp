@@ -78,7 +78,11 @@ static fn_MeshUpdateHier_t s_fn_MeshUpdateHier = nullptr;
 
 // Graphics::Geometry::GetTransform — IAT dispatch slot [0x140151460]
 // Verified from Serialize disasm at 0x1400fe1b5: CALL [0x140151460]
-typedef void* (*fn_GeomGetTransform_t)(void* geometry);
+// 🔑 Returns Math::Transform BY VALUE (member fn, hidden retbuf ABI: RCX=this,
+// RDX=retbuf). MUST be called with a retbuf — calling it (mesh) with no retbuf leaves
+// RDX garbage and the fn writes the Transform through it → hard-fault (WRITE into
+// Runtime code). Signature: void GetTransform(Geometry* this, Transform* retbuf).
+typedef void (*fn_GeomGetTransform_t)(void* geometry, void* retbuf);
 static fn_GeomGetTransform_t s_fn_GeomGetTransform = nullptr;
 
 // System::String::String (copy ctor) — IAT dispatch slot [0x140151428]
@@ -555,6 +559,27 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         valid = s_fn_sub_da00(self, &startCol, &startRow, &endCol, &endRow, pos, yaw);
     }
 
+#ifdef STANDALONE_EXE
+    // Diagnostic (BANISHED_TOOL_DIAG=1): throttled log of the per-frame Serialize state.
+    // The ghost mesh is only in the scene while sub_da00 returns VALID (cursor over the
+    // map); an invalid frame removes it. This tells us whether the cursor→terrain pick
+    // actually resolves in-game (the linchpin for both the ghost AND operator_fc60).
+    {
+        static int s_diagOn = -1;
+        if (s_diagOn < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_diagOn = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_diagOn) {
+            static int s_frame = 0;
+            if ((s_frame++ % 30) == 0) {
+                fprintf(stderr, "[SerDiag] active=%d valid=%d cell=(%d,%d)-(%d,%d) pos=(%.2f,%.2f,%.2f) "
+                        "yaw=%.2f sceneObjIdx=%d mesh=%p\n",
+                        (int)param3, (int)valid, startCol, startRow, endCol, endRow,
+                        pos[0], pos[1], pos[2], yaw[0], (int)self->sceneObjectIdx, self->meshInstance);
+                fflush(stderr);
+            }
+        }
+    }
+#endif
+
     if (!valid || param3 == 0) {
         // --- Invalid / inactive: remove scene object and highlight ---
         if ((int)self->sceneObjectIdx >= 0) {
@@ -730,10 +755,13 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         memset(bbox, 0, sizeof(bbox));
     }
 
-    // Get transform pointer from mesh
+    // Get the mesh transform (by value → hidden retbuf; RCX=mesh, RDX=&retbuf).
+    uint8_t meshTransformBuf[96];
+    memset(meshTransformBuf, 0, sizeof(meshTransformBuf));
     void* meshTransform = nullptr;
     if (s_fn_GeomGetTransform && mesh) {
-        meshTransform = s_fn_GeomGetTransform(mesh);
+        s_fn_GeomGetTransform(mesh, meshTransformBuf);
+        meshTransform = meshTransformBuf;
     }
 
     // Update dialog with placement info via operator_fc60
@@ -1136,6 +1164,24 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
 
     // Store variant index
     self->meshVariant = (int32_t)variant;
+
+#ifdef STANDALONE_EXE
+    // Diagnostic: dump the built preview mesh's state so we can see why it may not
+    // render. s_pMeshInstanceVtable is NULL in standalone (0x14015e240 is a raw .rdata
+    // vtable → ResolveAddr(Exe, .rdata)=0), so the exe's vtable override is SKIPPED and
+    // the mesh keeps the base Graphics::MeshInstance vtable. Log the bounds (mesh+0x34,
+    // 6 floats) — if zero, the renderer frustum-culls it → invisible.
+    if (self->meshInstance) {
+        uintptr_t m = (uintptr_t)self->meshInstance;
+        const float* b = (const float*)(m + 0x34);
+        fprintf(stderr, "[Placement] mesh built: mesh=%p vtable=%p (override %s) meshPtr=%p "
+                "count=%u variant=%u bounds=[%.2f %.2f %.2f .. %.2f %.2f %.2f]\n",
+                self->meshInstance, *(void**)m,
+                s_pMeshInstanceVtable ? "APPLIED" : "SKIPPED(null in SA!)",
+                mesh, meshCount, variant, b[0], b[1], b[2], b[3], b[4], b[5]);
+        fflush(stderr);
+    }
+#endif
 }
 
 // ============================================================

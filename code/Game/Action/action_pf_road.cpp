@@ -166,7 +166,10 @@ static inline float fUV()      { return s_pUVScale    ? *s_pUVScale    : 0.0f; }
 static inline float f172214()  { return s_pDAT_172214 ? *s_pDAT_172214 : 0.0f; }
 static inline float f17214c()  { return s_pDAT_17214c ? *s_pDAT_17214c : 0.0f; }
 static inline float f172264()  { return s_pDAT_172264 ? *s_pDAT_172264 : 0.0f; }
-static inline float f1720bc()  { return s_pDAT_1720bc ? *s_pDAT_1720bc : 0.0f; }
+// DAT_1401720bc = heightmap int16 -> world-height scale = 0x3b800000 = 1/256. Raw .rdata
+// constant, NULL in standalone (ResolveAddr(Exe,.rdata)=0) → without this fallback the
+// terrain reads flat (all corner heights 0), so the placement ray only ever "hits" z=0.
+static inline float f1720bc()  { return s_pDAT_1720bc ? *s_pDAT_1720bc : 0.00390625f; }
 static inline float f172114()  { return s_pDAT_172114 ? *s_pDAT_172114 : 0.5f; }
 
 static inline int ClampCell(int v, int w) {
@@ -318,82 +321,65 @@ int Pf_CellQuadRay_aa20(int64_t self, int x, int y, void* p4 /*Vector3* dir*/, f
     int64_t lW = hmW;
     short* hm = *reinterpret_cast<short**>(self + 0xd8);
     float hscale = f1720bc();
-
-    int cx0 = ClampCell(x, hmW);
-    int cy0 = ClampCell(y, hmW);
-
-    float local_58 = static_cast<float>(x - half);
-    float local_54 = static_cast<float>(y - half);
-
-    int xp1 = x + 1;
-
-    float local_50 = static_cast<float>(static_cast<int>(hm[cy0 * lW + cx0])) * hscale;
-
-    int cxp = (xp1 < 0) ? 0 : xp1;
-    if (hmW <= cxp) cxp = hmW - 1;
-    int cy1 = ClampCell(y, hmW);
-
-    float local_38 = local_58 + fUV();
-    int yp1 = y + 1;
-    int cxp2 = (xp1 < 0) ? 0 : xp1;
-    if (hmW <= cxp2) cxp2 = hmW - 1;
-
-    float local_20 = static_cast<float>(static_cast<int>(hm[cy1 * lW + cxp])) * hscale;
-
-    int cyp = (yp1 < 0) ? 0 : yp1;
-    if (hmW <= cyp) cyp = hmW - 1;
-
-    float local_44 = local_54 + fUV();
-    int cx2 = ClampCell(x, hmW);
-
-    float local_30 = static_cast<float>(static_cast<int>(hm[cyp * lW + cxp2])) * hscale;
-
-    int cyp2 = (yp1 < 0) ? 0 : yp1;
-    if (hmW <= cyp2) cyp2 = hmW - 1;
-
-    float local_res18[2];
-    local_res18[0] = *p6;
-    uint64_t uVar10 = static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(&local_res18[0]));
-
-    float local_40 = static_cast<float>(static_cast<int>(hm[cyp2 * lW + cx2])) * hscale;
-
-    float local_res10[2];
-    local_res10[0] = 0.0f;
-    float local_48 = local_58;
-    float local_34 = local_44;
-    float local_28 = local_38;
-    float local_24 = local_54;
-    // local_20/30/40/50 = the 4 corner heights: the original loads them (heightmap reads) but the
-    // a810 tri-tests don't consume them in the decompile — kept for faithfulness, sunk to silence.
-    (void)local_50; (void)local_20; (void)local_30; (void)local_40; (void)local_34; (void)local_24;
-
-    bool bVar15;
-    if (((x + y) & 1) == 0) {
-        uint64_t r = s_fn_CellRayTri ? s_fn_CellRayTri(uVar10, p5, p4, local_res18, &local_58, &local_28, &local_48, local_res10, p9) : 0;
-        bVar15 = (static_cast<char>(r) != 0);
-        if (bVar15) local_res18[0] = local_res10[0];
-        uint64_t r2 = s_fn_CellRayTri ? s_fn_CellRayTri(uVar10, p5, p4, local_res18, &local_28, &local_38, &local_48, local_res10, p9) : 0;
-        if (static_cast<char>(r2) != 0) bVar15 = true;
-    } else {
-        uint64_t r = s_fn_CellRayTri ? s_fn_CellRayTri(uVar10, p5, p4, local_res18, &local_58, &local_28, &local_38, local_res10, p9) : 0;
-        bVar15 = (static_cast<char>(r) != 0);
-        if (bVar15) local_res18[0] = local_res10[0];
-        uint64_t r2 = s_fn_CellRayTri ? s_fn_CellRayTri(uVar10, p5, p4, local_res18, &local_58, &local_38, &local_48, local_res10, p9) : 0;
-        if (static_cast<char>(r2) != 0) bVar15 = true;
+    // Cell-corner world spacing. The original (disasm 0x1400aaaf7) adds *0x14017214c = 1.0
+    // to step to the next corner — NOT fUV()=*0x1401720b8=0.001, which collapses the quad
+    // to a near-degenerate sliver so aa810's det≈0 and every ray misses. Raw .rdata => null
+    // in standalone => 1.0 fallback.
+    float uv = 1.0f;
+    {
+        const float* pUv = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
+        if (pUv) uv = *pUv;
     }
 
-    // outHit = origin + t*dir  (param_4 = dir at p4[0..2]; here treated as float[3]).
+    // Heightmap sample at (col,row), clamped to the map — matches the original's
+    // per-corner ClampCell of x/x+1 and y/y+1. height = int16 sample * hscale.
+    auto H = [&](int col, int row) -> float {
+        int cc = ClampCell(col, hmW);
+        int cr = ClampCell(row, hmW);
+        return static_cast<float>(static_cast<int>(hm[cr * lW + cc])) * hscale;
+    };
+
+    float bx = static_cast<float>(x - half);   // base world X (cell corner)
+    float by = static_cast<float>(y - half);   // base world Y
+
+    // 🔑 The 4 quad corners as CONTIGUOUS Vector3 {x,y,z}. aa810 reads each &V as a
+    // Vector3, so x/y/z MUST be adjacent in memory. The previous port used separate
+    // float locals (local_58/54/50 …) and even (void)-cast the corner HEIGHTS, so every
+    // triangle passed to aa810 had a garbage/absent z → degenerate → the ray never hit
+    // the terrain (root cause of "no ghost / CreateBar stuck top-left"). z = corner height.
+    float V00[3] = { bx,      by,      H(x,     y)     };  // (x,   y)
+    float V01[3] = { bx + uv, by,      H(x + 1, y)     };  // (x+1, y)
+    float V10[3] = { bx,      by + uv, H(x,     y + 1) };  // (x,   y+1)
+    float V11[3] = { bx + uv, by + uv, H(x + 1, y + 1) };  // (x+1, y+1)
+
+    float maxTbuf[1] = { *p6 };
+    uint64_t maxBits = static_cast<uint64_t>(*reinterpret_cast<uint32_t*>(&maxTbuf[0]));
+    float outT[1] = { 0.0f };
+
+    // Split the quad into two triangles by (x+y) parity, ray-test each (aa810).
+    bool hit;
+    if (((x + y) & 1) == 0) {
+        uint64_t r = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V00, V01, V10, outT, p9) : 0;
+        hit = (static_cast<char>(r) != 0);
+        if (hit) maxTbuf[0] = outT[0];
+        uint64_t r2 = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V01, V11, V10, outT, p9) : 0;
+        if (static_cast<char>(r2) != 0) hit = true;
+    } else {
+        uint64_t r = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V00, V01, V11, outT, p9) : 0;
+        hit = (static_cast<char>(r) != 0);
+        if (hit) maxTbuf[0] = outT[0];
+        uint64_t r2 = s_fn_CellRayTri ? s_fn_CellRayTri(maxBits, p5, p4, maxTbuf, V00, V11, V10, outT, p9) : 0;
+        if (static_cast<char>(r2) != 0) hit = true;
+    }
+
+    // outHit = origin + t*dir  (p4 = dir Vector3; p5 = origin).
     float* dir = reinterpret_cast<float*>(p4);
-    float t = local_res10[0];
-    float d2 = dir[2];
-    float d1 = dir[1];
-    float s2 = p5[2];
-    float s1 = p5[1];
+    float t = outT[0];
     p7[0] = t * dir[0] + p5[0];
-    p7[1] = t * d1 + s1;
-    p7[2] = t * d2 + s2;
+    p7[1] = t * dir[1] + p5[1];
+    p7[2] = t * dir[2] + p5[2];
     *p8 = t;
-    return bVar15 ? 1 : 0;
+    return hit ? 1 : 0;
 }
 
 // ============================================================
