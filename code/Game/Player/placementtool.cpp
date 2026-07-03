@@ -190,6 +190,12 @@ static void EnsureFuncs() {
     if (!s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr = reinterpret_cast<fn_IBP_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
 #endif
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
+    // Standalone: the raw IAT slot 0x140151758 is unfilled → null, which would make
+    // EVERY key check (rotate/flip AND the key-5 place-confirm) no-op — the "can't place
+    // the building" symptom. Fall back to the export-resolved engine_funcs global (the
+    // same one the working camera-input path uses). Harmless in DLL mode (slot is filled).
+    if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
+        s_fn_KeyMapPressed = reinterpret_cast<fn_KeyMapPressed_t>(fn_KeyMap_Pressed);
     s_fn_TransformFromYaw  = (fn_TransformFromYaw_t)resolveIAT(0x140151288);
     s_fn_GeomSetTransform  = (fn_GeomSetTransform_t)resolveIAT(0x1401512e0);
     s_fn_MeshUpdateHier    = (fn_MeshUpdateHier_t)resolveIAT(0x140152888);
@@ -428,6 +434,10 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
 
     // Key 0x13: Rotate counter-clockwise
     bool rotCCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x13) : false;
+#ifdef STANDALONE_EXE
+    { const char* e = std::getenv("BANISHED_TOOL_DIAG");
+      if (e && e[0] && e[0] != '0' && rotCCW) { fprintf(stderr, "[OnKey] rotate-CCW key(0x13) PRESSED on this frame\n"); fflush(stderr); } }
+#endif
     if (rotCCW) {
         // Access rotationIBP at self+0x48, CheckPtr, then decrement value at +0x10
         void* rotIBPAddr = (void*)(selfAddr + 0x48);
@@ -447,6 +457,10 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     } else {
         // Key 0x14: Rotate clockwise
         bool rotCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x14) : false;
+#ifdef STANDALONE_EXE
+        { const char* e = std::getenv("BANISHED_TOOL_DIAG");
+          if (e && e[0] && e[0] != '0' && rotCW) { fprintf(stderr, "[OnKey] rotate-CW key(0x14) PRESSED on this frame\n"); fflush(stderr); } }
+#endif
         if (rotCW) {
             void* rotIBPAddr = (void*)(selfAddr + 0x48);
             if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
@@ -476,6 +490,19 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     // --- Placement confirmation (key 5, only when active) ---
     if (param2 != 0) {
         bool placeKey = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 5) : false;
+#ifdef STANDALONE_EXE
+        {
+            static int s_ok = -1;
+            if (s_ok < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_ok = (e && e[0] && e[0] != '0') ? 1 : 0; }
+            if (s_ok) {
+                static bool s_once = false;
+                if (!s_once) { s_once = true;
+                    fprintf(stderr, "[OnKey] active: keyMap=%p KeyMapPressed=%p (place-confirm armed)\n",
+                            keyMap, (void*)s_fn_KeyMapPressed); fflush(stderr); }
+                if (placeKey) { fprintf(stderr, "[OnKey] key-5 PRESSED (left-click) — running confirm\n"); fflush(stderr); }
+            }
+        }
+#endif
         if (placeKey) {
             // Calculate placement position
             int startCol = 0, startRow = 0, endCol = 0, endRow = 0;
@@ -485,11 +512,22 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
             if (s_fn_sub_da00) {
                 bool valid = s_fn_sub_da00(self, &startCol, &startRow,
                                             &endCol, &endRow, pos, yaw);
+#ifdef STANDALONE_EXE
+                { const char* e = std::getenv("BANISHED_TOOL_DIAG");
+                  if (e && e[0] && e[0] != '0') {
+                    fprintf(stderr, "[OnKey] confirm: sub_da00 valid=%d cell=(%d,%d)-(%d,%d) helper_d650=%p\n",
+                            valid, startCol, startRow, endCol, endRow, (void*)s_fn_helper_d650); fflush(stderr); } }
+#endif
                 if (valid) {
                     // Try to place via helper_d650
                     if (s_fn_helper_d650) {
                         bool placed = s_fn_helper_d650(self, startCol, startRow,
                                                         endCol, endRow, pos, yaw[0]);
+#ifdef STANDALONE_EXE
+                        { const char* e = std::getenv("BANISHED_TOOL_DIAG");
+                          if (e && e[0] && e[0] != '0') {
+                            fprintf(stderr, "[OnKey] helper_d650 placed=%d\n", placed); fflush(stderr); } }
+#endif
                         if (placed) {
                             // Placement success — finalize
                             if (s_fn_FUN_1401000f0) {
@@ -708,6 +746,23 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     if (s_fn_FUN_140005160) {
         s_fn_FUN_140005160(self->descriptionPtr, &costResult);
     }
+#ifdef STANDALONE_EXE
+    {
+        static bool s_costLogged = false;
+        const char* e = std::getenv("BANISHED_TOOL_DIAG");
+        if (!s_costLogged && e && e[0] && e[0] != '0') {
+            s_costLogged = true;
+            int arrCount = costResult ? *(int*)(costResult + 0x58) : -1;
+            uintptr_t arrBase = costResult ? *(uintptr_t*)(costResult + 0x50) : 0;
+            uint64_t str0 = (arrBase && arrCount > 0) ? *(uint64_t*)(arrBase) : 0;
+            const char* chars = str0 ? (const char*)str0 : "";
+            fprintf(stderr, "[cost] costResult(ToolbarDescription)=%p arr@+0x50=%p count@+0x58=%d "
+                    "str[0]=%llx chars=\"%.32s\"\n", (void*)costResult, (void*)arrBase, arrCount,
+                    (unsigned long long)str0, chars);
+            fflush(stderr);
+        }
+    }
+#endif
 
     // Build cost string: index into string array at (costResult+0x50)
     // Index is 0 (valid) or 1 (invalid), based on tileValid

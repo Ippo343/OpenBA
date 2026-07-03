@@ -389,7 +389,13 @@ prior waves. So the footprint TILES await that closure; the wiring itself is don
 
 ---
 
-## Phase 3C — Placement UX polish [in progress]
+## Phase 3C — Placement UX polish [CreateBar + ghost-cursor DONE; only red/green tiles left]
+
+**Status (2026-07-02, updated):** of the three 3C items, **two are now closed**: the CreateBar
+**repositions over the footprint** (3 standalone bugs fixed — Display/GetRoot resolution + GetRoot
+retbuf ABI; A/B-verified) and the "opaque ghost" was RE-shown to be a **misdiagnosis** (the
+`0x14015e240` vtable is render-inert). The only genuine remainder is the **red/green validity
+tiles** (Item 3, the deferred `sub_1380`→`08c0`/`f5d0` sim-gap). See the ✅ sub-sections below.
 
 **Status (2026-07-02):** ✅ **The ghost building now FOLLOWS THE CURSOR** (user-confirmed,
 crash-free). Getting there meant fixing the entire cursor→terrain pick chain, which had NEVER
@@ -418,23 +424,67 @@ returning invalid so nothing downstream ever ran):
 Diagnostics (all `BANISHED_TOOL_DIAG=1`, A/B-safe): `[SerDiag]` `[MouseRay]` `[ScreenToCell]`
 `[March]` trace the pick chain; `[Placement] mesh built` / `[fc60]` trace the mesh + populate.
 
-**3C remaining (user-observed, deferred):**
-- **CreateBar still stuck top-left + solid (not repositioning).** `operator_fc60` runs and
-  populates, but `SetUpperLeft` isn't moving it — the `fe960` screen-projection likely returns 0
-  (empty rect) or the centre math is off. Investigate `Pf`/`fe960` projection of the footprint
-  corners + the `GetRoot` bounds + the smoothing (`param_1+0x08/0x0c` seeded −1). It renders
-  "solid colored" because it's showing the raw CreateBar.rsc template, not the live-positioned panel.
-- **Ghost is opaque, not translucent.** `PlacementTool::Startup` overwrites the preview
-  MeshInstance vtable with `0x14015e240` — **skipped in standalone** (raw .rdata vtable → null),
-  so the mesh keeps the base opaque material instead of the ghost/translucent one that vtable
-  selects. Build a standalone `0x14015e240` MeshInstance vtable (or set the preview material/alpha
-  another way).
-- **Red/green validity tiles missing** = Item 3 (the `sub_1380`→`08c0`/`f5d0` deferred sim-gap).
+### ✅ 3C item — CreateBar now REPOSITIONS over the footprint (DONE, A/B-verified 2026-07-02)
 
-Files touched this pass: `code/Game/Player/tool_base_ray.cpp` (Normalize inline + GetMouseRay
-guard + pick diagnostics), `code/Game/Action/action_pf_road.cpp` (`aa20` contiguous verts +
-heights + hscale/uv constants), `code/Game/Player/placementtool.cpp` (GetTransform retbuf ABI +
-mesh/Serialize diagnostics).
+The CreateBar was stuck top-left because `operator_fc60`'s screen-projection + root-bounds tail
+had **three standalone-only bugs**, each gating the next (found by instrumenting the ported
+`fe960`/`fc60` with `BANISHED_TOOL_DIAG`, then Ghidra-verifying the ABI):
+
+1. **`fe960` (screenrect port) returned 0 → `Display()` was null.** `tool_base_screenrect.cpp`
+   `Display()` read `**g_pSingletonExref_151a80` (the exref the original exe uses), which is
+   **unresolved in standalone**, so the whole projection bailed. FIX = prefer
+   `*g_pVideoDeviceSingleton` (the same Video::Device the working `GetMouseRay` uses; `+4`/`+8`
+   = W/H), exref as fallback. This reimpl is standalone-only (DLL mode calls the real exe fn), so
+   the change is safe. → `fe960` now projects the 8 footprint corners to a valid on-screen rect
+   (e.g. `min=(664,312) max=(842,516)` at 1280×720), tracking the ghost.
+2. **`fn_DialogInstance_GetRoot` was NULL in standalone.** It resolves via dispatch slot
+   `0x1401527f8`, which is **unfilled** in SA → `fc60` bailed at `if (!rootElem) return;` (before
+   `SetUpperLeft`). The pre-existing `ResolveExport` fallback used the WRONG mangled name
+   (`…QEAAAEAV?$InternalBasePtr…`). FIX (engine_funcs.cpp) = the real export
+   `?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ`.
+3. **`GetRoot` ABI was wrong (hidden retbuf).** It returns `InternalPtr<Element>` **by value**
+   (Ghidra hides it; Runtime disasm `MOV RAX,[RCX+0x50]; MOV [RDX],RAX; MOV RAX,RDX` ⇒
+   RCX=this, RDX=&retbuf). The port called it 1-arg → `MOV [RDX],RAX` would write through a
+   garbage RDX. FIX = typedef `(self, retbuf)` + call `GetRoot(dialog, &rootRetbuf)`
+   (engine_funcs.h + tool_base_createbar.cpp). Only one caller, so the typedef change is safe.
+
+**Verified** (`BANISHED_TOOL_HARNESS=preview BANISHED_LIVE_TOOLS=1 BANISHED_TOOL_DIAG=1`):
+`[fc60] positioned CreateBar: rect=(664.6,312.1,841.9,515.9) root=(0,0,96,40) -> upperLeft=(705,292)`
+— the CreateBar now moves to follow the footprint, crash-free (0-byte crash log; the `Vector2`
+Min/Max/`*=` retbuf ABI and the `GetRoot` hidden-retbuf are all exercised). **A/B GREEN**: default
+`sa-run` (LIVE_TOOLS off) = 0 `[fc60]`/`[fe960]` traces, 0-byte crash log, world ticks. The remaining
+CreateBar confirmation (does the populated size/cost text read correctly) is a human-with-cursor
+visual check; the positioning + populate machinery is proven.
+Files: `code/Game/Player/tool_base_screenrect.cpp` (`Display()` + projection diag),
+`engine/funcs/engine_funcs.{h,cpp}` (`GetRoot` name + retbuf ABI),
+`code/Game/Player/tool_base_createbar.cpp` (`GetRoot` retbuf call + tail diag).
+
+### ✅ 3C item — "opaque ghost" is a MISDIAGNOSIS, not a bug (RE-verified 2026-07-02)
+
+The plan claimed `PlacementTool::Startup` overwrites the preview MeshInstance vtable with
+`0x14015e240` to "select a translucent material," skipped in standalone → opaque. **Ghidra RE
+disproves this:** `0x14015e240` is a **render-inert** thin subclass vtable —
+- slots 1–8 are `FF 25` **IAT import thunks** jumping straight to the base Runtime-x64.dll
+  `MeshInstance` methods (the same ones the ctor-installed base vtable already uses);
+- slot 0 (the only exe-side entry, `0x140019e80`) is a scalar-deleting dtor whose body just calls
+  `Graphics::MeshInstance::~MeshInstance` + the exe's `MemFree`;
+- `Startup` sets **no** material / alpha / render-flag — only the vtable + mesh + variant.
+
+So the override exists purely so exe code can allocate/free a MeshInstance; it changes **nothing**
+about rendering. Applying a standalone `0x14015e240` would NOT make the ghost translucent — the
+standalone mesh already runs the identical Runtime render methods via its base vtable. The opaque
+ghost is therefore **faithful** to this code path. Vanilla placement validity feedback is the
+red/green **footprint tiles** (item below), not mesh alpha. No code change; item closed as
+not-a-bug. (True translucency would be a separate, non-original enhancement.)
+
+### ⏳ 3C item — Red/green validity tiles = still DEFERRED (unchanged)
+Item 3 (the `sub_1380`→`08c0`/`f5d0` shared sim-gap) is untouched — see Phase 3B item 3. This is
+the genuine remaining visual gap (and the real source of the "is this spot valid" coloring).
+
+Files touched in the earlier 3C-core pass: `code/Game/Player/tool_base_ray.cpp` (Normalize inline +
+GetMouseRay guard + pick diagnostics), `code/Game/Action/action_pf_road.cpp` (`aa20` contiguous
+verts + heights + hscale/uv constants), `code/Game/Player/placementtool.cpp` (GetTransform retbuf
+ABI + mesh/Serialize diagnostics).
 
 ---
 

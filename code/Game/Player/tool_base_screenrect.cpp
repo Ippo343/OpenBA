@@ -36,6 +36,21 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#ifdef STANDALONE_EXE
+#include <cstdio>
+#include <cstdlib>
+// One-shot screen-rect projection diagnostics (BANISHED_TOOL_DIAG). A/B-safe: only
+// emits when the placement pick chain is active + the env is set. Bounded line count.
+static int  s_srDiag = -1;
+static int  s_srDiagBudget = 24;
+static bool SRDiagOn() {
+    if (s_srDiag < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_srDiag = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s_srDiag != 0 && s_srDiagBudget > 0;
+}
+#define SRDIAG(...) do { if (SRDiagOn()) { --s_srDiagBudget; fprintf(stderr, __VA_ARGS__); fflush(stderr); } } while (0)
+#else
+#define SRDIAG(...) do {} while (0)
+#endif
 
 // ============================================================
 // Locally-resolved Math/Volume dispatch-slot exports (value-return, member ABI).
@@ -124,8 +139,14 @@ static inline uintptr_t GameWorld() {
     return reinterpret_cast<uintptr_t>(g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
 }
 
-// Display object = **g_pSingletonExref_151a80 (slot -> ptr -> Video::Device; +4=width, +8=height).
+// Display object = Video::Device; +4=width, +8=height.
+// The original exe reads it via **g_pSingletonExref_151a80 (slot -> ptr -> Device),
+// but that exref is unresolved in standalone (this reimpl is standalone-only — DLL
+// mode calls the real exe fn), so prefer *g_pVideoDeviceSingleton, the same Device
+// instance the working GetMouseRay path uses. Fall back to the exref double-deref.
 static inline void* Display() {
+    if (g_pVideoDeviceSingleton && *g_pVideoDeviceSingleton)
+        return *g_pVideoDeviceSingleton;
     if (!g_pSingletonExref_151a80) return nullptr;
     void* p = *g_pSingletonExref_151a80;
     return p ? *reinterpret_cast<void**>(p) : nullptr;
@@ -248,6 +269,9 @@ extern "C" uint8_t PlayerScreenRect_WorldToScreen_098210(uintptr_t param_1, floa
     if (s_MatMulVec4 && matPtr) s_MatMulVec4(matPtr, clip, v4);
 
     float w = clip[3];   // local_fc
+    SRDIAG("[W2S] cam=%p proj[0..3]=[%.3f %.3f %.3f %.3f] world=(%.2f,%.2f,%.2f) clip=(%.3f,%.3f,%.3f,w=%.3f)\n",
+           (void*)param_1, ((float*)projMat)[0], ((float*)projMat)[1], ((float*)projMat)[2], ((float*)projMat)[3],
+           param_2[0], param_2[1], param_2[2], clip[0], clip[1], clip[2], w);
     if (w <= 0.0f)
         return 0;
 
@@ -287,15 +311,16 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
     const float scaleDiv = 100.0f;     // DAT_140172208
 
     void* disp = Display();
-    if (!disp) return 0;
+    if (!disp) { SRDIAG("[fe960] FAIL: Display() null\n"); return 0; }
     int W = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(disp) + 4);  // R14
     int H = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(disp) + 8);  // R15
 
     float runMin[2] = { bigPos, bigPos };   // [RBP+0x30]
     float runMax[2] = { bigNeg, bigNeg };   // [RBP-0x50]
 
+    SRDIAG("[fe960] disp=%p W=%d H=%d cornerCount=%u\n", disp, W, H, param_2);
     if (static_cast<int>(param_2) <= 0)
-        return 0;
+        { SRDIAG("[fe960] FAIL: cornerCount<=0\n"); return 0; }
 
     uintptr_t camHolder = *reinterpret_cast<uintptr_t*>(GameWorld() + 0xe0);
 
@@ -323,17 +348,19 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
     }
 
     if (!any)
-        return 0;
+        { SRDIAG("[fe960] FAIL: no corner projected (all behind camera)\n"); return 0; }
 
     // Reject if the box is entirely off the display.
     //   if (runMin.x > W) fail ; if (0 > runMax.x) fail ;
     //   if (runMin.y > H) fail ; if (0 > runMax.y) fail.
     float fW = static_cast<float>(W);
     float fH = static_cast<float>(H);
-    if (runMin[0] > fW) return 0;
-    if (0.0f > runMax[0]) return 0;
-    if (runMin[1] > fH) return 0;
-    if (0.0f > runMax[1]) return 0;
+    SRDIAG("[fe960] projected rect min=(%.1f,%.1f) max=(%.1f,%.1f) vs W=%d H=%d\n",
+           runMin[0], runMin[1], runMax[0], runMax[1], W, H);
+    if (runMin[0] > fW) { SRDIAG("[fe960] FAIL: minX>W\n"); return 0; }
+    if (0.0f > runMax[0]) { SRDIAG("[fe960] FAIL: maxX<0\n"); return 0; }
+    if (runMin[1] > fH) { SRDIAG("[fe960] FAIL: minY>H\n"); return 0; }
+    if (0.0f > runMax[1]) { SRDIAG("[fe960] FAIL: maxY<0\n"); return 0; }
 
     // Clamp runMin to [0, (W,H)] : runMin = Min( Max(runMin, 0), (W,H) ).
     {

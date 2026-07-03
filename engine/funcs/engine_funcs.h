@@ -2201,9 +2201,10 @@ typedef bool (*fn_KeyMap_Released_t)(void* self, int slot, int keyId);
 extern fn_KeyMap_Released_t fn_KeyMap_Released;
 
 // UI::DialogInstance::GetRoot(this) -> InternalBasePtr<Element>* (returns ptr to root element IBP)
-// ?GetRoot@DialogInstance@UI@@QEAAAEAV?$InternalBasePtr@VElement@UI@@@Object@@XZ
-// Dispatch table at 0x1401527f8
-typedef void* (*fn_DialogInstance_GetRoot_t)(void* self);
+// ?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
+// Dispatch table at 0x1401527f8. Returns InternalPtr<Element> BY VALUE (hidden
+// retbuf: RCX=this, RDX=&retbuf; returns retbuf in RAX). Caller supplies retbuf.
+typedef void* (*fn_DialogInstance_GetRoot_t)(void* self, void* retbuf);
 extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
 
 // Audio::Scene::PlayEffect(this, soundId, count, time) — plays a sound effect

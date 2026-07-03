@@ -468,9 +468,23 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
 
     // --- Read the dialog root bounds (+0x68 left, +0x6c top, +0x70 right, +0x74 bottom) ---
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(param_1);
-    void* rootIBP = fn_DialogInstance_GetRoot ? fn_DialogInstance_GetRoot(dialog) : nullptr;
+    // GetRoot returns InternalPtr<Element> by value (hidden retbuf); rootIBP == &rootRetbuf.
+    uint64_t rootRetbuf = 0;
+    void* rootIBP = fn_DialogInstance_GetRoot ? fn_DialogInstance_GetRoot(dialog, &rootRetbuf) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rootIBP);
     void* rootElem = rootIBP ? *reinterpret_cast<void**>(rootIBP) : nullptr;
+#ifdef STANDALONE_EXE
+    {
+        static bool s_rootLogged = false;
+        if (!s_rootLogged) { s_rootLogged = true;
+            fprintf(stderr, "[fc60] post-fe960: GetRoot=%p SetUpperLeft=%p rect=(%.0f,%.0f,%.0f,%.0f) "
+                    "rootIBP=%p rootElem=%p\n", (void*)fn_DialogInstance_GetRoot,
+                    (void*)fn_DialogInstance_SetUpperLeft, rect[0], rect[1], rect[2], rect[3],
+                    rootIBP, rootElem);
+            fflush(stderr);
+        }
+    }
+#endif
     if (!rootElem) return;
     int left   = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x68);
     int top    = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x6c);

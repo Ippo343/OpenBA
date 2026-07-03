@@ -3106,7 +3106,14 @@ bool EngineFuncsInit() {
     // DialogInstance::GetRoot — dispatch table at 0x1401527f8
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401527f8));
-        if (dispatch) fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(*dispatch);
+        if (dispatch && *dispatch)
+            fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(*dispatch);
+    }
+    // Fallback (standalone: the dispatch slot above is unfilled → null, which stalled the
+    // CreateBar repositioner in tool_base_createbar.cpp). Resolve the Runtime export directly.
+    if (!fn_DialogInstance_GetRoot) {
+        fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(
+            ResolveExport("?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ"));
     }
     // Audio::Scene::PlayEffect — dispatch table at 0x140152830
     {
