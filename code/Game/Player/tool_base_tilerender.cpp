@@ -265,7 +265,10 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
 
     // Even/odd tile UV templates (6 (u,v) pairs each), verbatim from the decompile.
     static const float TMPL_ODD[12]  = {0,0, 1,1, 1,0, 0,0, 0,1, 1,1};   // local_2b0
-    static const float TMPL_EVEN[12] = {0,0, 0,1, 1,0, 0,0, 1,1, 1,1};   // local_1c8
+    // local_1c8: verts 3,4 are (1,0),(0,1) — NOT (0,0),(1,1). Getting these wrong makes an
+    // EVEN tile's 2nd triangle map to a degenerate UV (v4==v5==(1,1)) → the arrow texel
+    // smears along the diagonal = the stray "|\/" sliver on even-parity entry tiles.
+    static const float TMPL_EVEN[12] = {0,0, 0,1, 1,0, 1,0, 0,1, 1,1};   // local_1c8
 
     // --- Loop 1: road-segment records (param_4). DEAD on placement path (count4==0). ---
     for (int rIdx = 0; rIdx < count4; rIdx++) {
