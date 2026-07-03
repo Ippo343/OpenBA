@@ -477,6 +477,7 @@ extern void RegisterPlayerTradeBatch();    // Player wave r2c (trade): EditTool 
 extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenToolDialog ff9e0 + child-dialog vtable 0x14015f5a0
 extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100380 entity screen-rect + ec70/098210/fe960 (Math via ResolveExport)
 extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 HighlightAdd -> b0d80 -> ace40 tessellation + BST family (TIER-2 geometry, worker-thread-free)
+extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 CreateBar populate+position (e600/e420/e700/e360/ebb0 same-TU; ec70/fe960 via ResolveAddr)
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -600,6 +601,9 @@ static void RegisterCodeFunctions() {
     //   0x14015f5a0 can't be registered without crashing the menu at startup (the menu's
     //   BuildId child in mainmenudialog.cpp assumes that shared vtable resolves null).
     //   See reg_player_toolui.cpp header. Kept wired as a no-op for when the fix lands.
+    RegisterPlayerCreateBarBatch();// GUI Phase 3B: ffc60 CreateBar populate+position — fills the
+    //   placement dialog's textSize/textStatus/imageIcon + SetUpperLeft over the footprint.
+    //   Closure fully satisfied (sub-helpers same-TU; ec70/fe960 via reg_player_screenrect).
 
     // Game registration wave — closure-safe leaf helpers (dtors/teardown + terrain).
     RegisterGameLeafBatch();       // String-array dtors 1b030/1b0a0/a8a0, MusicPlayer 18220,

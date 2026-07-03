@@ -324,10 +324,13 @@ click on the ground → a house is placed. User-visible, screenshot-verified.
 
 ---
 
-## Phase 3B — Placement preview + CreateBar rendering [in progress]
+## Phase 3B — Placement preview + CreateBar rendering [core DONE]
 
-**Status (2026-07-02, updated):** the ghost preview mesh now renders (root-caused + fixed +
-verified). Remaining: the CreateBar cost/size panel populate+position (item 2, in progress).
+**Status (2026-07-02, updated):** the ghost preview mesh renders (item 1 ✅) and the CreateBar
+cost/size panel populates + positions (item 2 ✅) — both root-caused, ported, and crash-free
+verified. Item 3 (footprint tiles) is wired but gated on a deferred shared sim-gap. The
+remaining confirmations are VISUAL (a human with the cursor over the map) — the machinery is
+proven crash-free.
 
 ### ✅ Item 1 — Ghost mesh renders (DONE, verified, committed a5bf926)
 **Root cause found:** the Phase-3B groundwork `TransformFromYaw` fix was DEAD. In
@@ -350,18 +353,27 @@ default clean. **Ghost mesh now stands in the live scene** at the probe cell —
 launch `BANISHED_TOOL_HARNESS=preview BANISHED_LIVE_TOOLS=1 make sa-run` to SEE the WoodHouse
 ghost at (124,124) (visual confirm still recommended).
 
-### ⏳ Item 2 — CreateBar populate + position (in progress)
-**CreateBar OPEN is confirmed working in standalone** (probe: OnKey → `OpenToolDialog(*(tool+0x10))`
-loads `Dialog/CreateBar.rsc`, builds the DialogInstance, AddDialog's it; controller+0x00 dialog
-IBP goes 0→live, crash-free). It is empty+top-left ONLY because `operator_fc60` (0x1400ffc60,
-the populate+`SetUpperLeft` positioner) is a null unregistered exe fn in standalone. Being ported
-(closure: e600/e420/ebb0 unported; e700/e360 in tool_base_drag; ec70/fe960 already registered)
-into new files `code/Game/Player/tool_base_createbar.cpp` + `standalone/reg_player_createbar.cpp`.
-🔑 note: `tool+0x10` = the EntityUI/dialog **controller** (SetEditMode sets `tool+0x10 = entityUI`,
+### ✅ Item 2 — CreateBar populate + position (DONE, crash-free-verified)
+**CreateBar OPEN confirmed** (probe: OnKey → `OpenToolDialog(*(tool+0x10))` loads
+`Dialog/CreateBar.rsc`, builds the DialogInstance, AddDialog's it; controller+0x00 dialog IBP
+goes 0→live). It was empty+top-left ONLY because `operator_fc60` (0x1400ffc60, the populate +
+`SetUpperLeft` positioner) was a null unregistered exe fn. **Ported** `operator_fc60` + its
+sub-helpers (e600 "textSize", e420 "textStatus", e700 size-region, e360 "imageIcon" tint, ebb0
+box-corner project; ec70/fe960 reused via ResolveAddr) into `code/Game/Player/tool_base_createbar.cpp`
++ `standalone/reg_player_createbar.cpp`, registered at `RegisterCodeFunctions()`. **Verified**
+(preview harness drives operator_fc60 against the live-open dialog): controller resolves non-null
+(`ctrlTid`=real CRC, `ctrl`≠0 — populate does NOT no-op), every ABI-sensitive call runs crash-free
+(GetController[R8=type-id, Ghidra-verified], FindElement×3 [hidden-retbuf], UIString ctor [3-arg
+R8], Vector3::Min/Transform::operator* [by-value], SetUpperLeft), 0-byte crash log. Final
+SetUpperLeft is gated on `fe960`'s on-screen projection (returns 0 for the harness's synthetic
+off-screen box) → real cursor positioning is the user's visual confirm.
+🔑 type-ids (Ghidra RegisterType-writers): `DAT_1401c4d40`=**BuildRequirementUI** (controller),
+`DWORD_1401c7f58`=**ToolbarDescription** (description comp) — filled via GetTypeIdByName in SA.
+🔑 `tool+0x10` = the EntityUI/dialog **controller** (SetEditMode sets `tool+0x10 = entityUI`,
 `+0x20 = descriptor`, `+0x18 = ToolSetting IBP` — Ghidra 0x140102b60); PlacementTool.h's "+0x10
-dialogPtr" comment is misleading. The controller's +0x00 = dialog IBP, +0x08/0x0c = cached
-screen x/y (seeded −1.0), +0x18 = its DialogInstance, +0x30 = descriptionPtr, +0x80 = existing
-flag. GeomGetTransform (0x140151460) now registered (item-1 commit).
+dialogPtr" comment is misleading. Controller layout: +0x00 dialog IBP, +0x08/0x0c cached screen
+x/y (seeded −1.0), +0x18 its DialogInstance, +0x30 descriptionPtr, +0x38/0x40/0x50/0x58 size-region
+fields, +0x68..0x74 root bounds. GeomGetTransform (0x140151460) registered (item-1 commit).
 
 ### ⏳ Item 3 — Footprint-tile overlay (wired; tiles gated on a deferred sim-gap)
 The Draw call is ALREADY in place: `GameUpdateLoop::Draw` Step 11 (gameupdateloop.cpp ~L1398)

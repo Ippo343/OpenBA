@@ -18,6 +18,8 @@
 #ifdef STANDALONE_EXE
 
 #include "tool_harness.h"
+#include "resolve.h"
+#include "engine_funcs.h"   // fn_String_Ctor_CStr/Dtor for the operator_fc60 probe
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -267,6 +269,42 @@ void FirePreviewPlacement(void* entityUI) {
     printf("[ToolHarness] driving ghost PREVIEW at cell %d (124,124)...\n", centerCell);
     int r = PlacementTool_HarnessPreviewAtCell(tool, centerCell);
     printf("[ToolHarness] ghost PREVIEW -> %d (1=mesh submitted with a valid transform)\n", r);
+
+    // Phase 3B item 2: drive operator_fc60 (CreateBar populate + position) once against
+    // the now-open dialog, mirroring PlacementTool::Serialize's exact arg list, to prove
+    // the newly-ported populate path runs crash-free (headless can't move the cursor, so
+    // the tick's Serialize never reaches this call on its own). box = meshInstance+0x34
+    // (the built bbox), transform via Geometry::GetTransform(mesh); cost = empty string.
+    {
+        uint8_t* t2 = static_cast<uint8_t*>(tool);
+        void* controller = *reinterpret_cast<void**>(t2 + 0x10);   // EntityUI / dialog controller
+        void* mesh = *reinterpret_cast<void**>(t2 + 0x68);          // meshInstance
+        typedef void (*fc60_t)(void*, int, int, void*, char, char, char, int, int, int, void*, void*);
+        fc60_t fc60 = reinterpret_cast<fc60_t>(ResolveAddr(Module::Exe, 0x1400ffc60));
+        if (fc60 && controller && mesh &&
+            *reinterpret_cast<void**>(controller) != nullptr /*dialog open*/) {
+            void* box = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mesh) + 0x34);
+            // Geometry::GetTransform(mesh) -> Transform by value (member, hidden retbuf).
+            uint8_t xf[96] = {};
+            uintptr_t slot = ResolveAddr(Module::Exe, 0x140151460);
+            if (slot && *reinterpret_cast<void**>(slot)) {
+                typedef void* (*getxf_t)(void*, void*);
+                (*reinterpret_cast<getxf_t*>(slot))(mesh, xf);
+            }
+            uint8_t costStr[8] = {};   // empty System::String
+            if (fn_String_Ctor_CStr) fn_String_Ctor_CStr(costStr, "");
+            printf("[ToolHarness] driving operator_fc60 (CreateBar populate+position) "
+                   "controller=%p mesh=%p...\n", controller, mesh);
+            fc60(controller, 0, 0, costStr, /*valid*/1, /*p6*/1, /*p7*/0, /*p8*/1,
+                 /*startCell*/-1, /*endCell*/-1, box, xf);
+            if (fn_String_Dtor) fn_String_Dtor(costStr);
+            printf("[ToolHarness] operator_fc60 returned — CreateBar populate ran crash-free\n");
+        } else {
+            printf("[ToolHarness] operator_fc60 probe skipped (fc60=%p controller=%p mesh=%p "
+                   "dialogOpen=%d)\n", (void*)fc60, controller, mesh,
+                   controller ? (*reinterpret_cast<void**>(controller) != nullptr) : 0);
+        }
+    }
 }
 
 }  // namespace
