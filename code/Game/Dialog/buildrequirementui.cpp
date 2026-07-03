@@ -19,6 +19,10 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -169,6 +173,40 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 
     // --- Process description if resolved ---
     uintptr_t desc = *(uintptr_t*)(s + 0x30);
+#ifdef STANDALONE_EXE
+    // IsDerivedFromOrTrust: all three datasource type checks above go through
+    // fn_IsDerivedFrom, which is unreliable in the partial standalone factory tree
+    // and returns false for a legit description entity — leaving +0x30 null so the
+    // title/cost/status elements keep their .rsc placeholder ("????"). When the
+    // tool opens the CreateBar (OpenToolDialog) the datasource IS the building's
+    // description ComponentEntity, bound to +0x28 by DialogInstance::AddController.
+    // If nothing resolved but +0x28 presents a sane component array (the same guard
+    // already applied to the toolbar-button userData path below), trust it directly.
+    if (!desc) {
+        void* ds = *(void**)(s + 0x28);
+        if (SaneHeapPtr(ds)) {
+            int32_t cc = *(int32_t*)((uintptr_t)ds + 0x30);
+            void*   ca = *(void**)((uintptr_t)ds + 0x28);
+            if (cc > 0 && cc < 256 && SaneHeapPtr(ca)) {
+                desc = (uintptr_t)ds;
+                *(void**)(s + 0x30) = ds;
+            }
+        }
+    }
+#endif
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
+        static int s_s4 = 0;
+        if (s_s4 < 10) { ++s_s4;
+            void* ds = *(void**)(s + 0x28);
+            int dsCompCount = ds ? *(int32_t*)((uintptr_t)ds + 0x30) : -1;
+            void* dsCompArr = ds ? *(void**)((uintptr_t)ds + 0x28) : nullptr;
+            fprintf(stderr, "[Slot4] self=%p dataSource(+0x28)=%p ds.compCount(+0x30)=%d ds.compArr(+0x28)=%p resolvedDesc(+0x30)=%p\n",
+                    (void*)s, ds, dsCompCount, dsCompArr, (void*)desc);
+            fflush(stderr);
+        }
+    }
+#endif
     if (!desc) return;
 
     // Find BuildRequirementComponent in description's component list
@@ -222,6 +260,18 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         if (textPtr && buildReqComp) {
             // Create UI::String from BuildRequirementComponent: StringTable at +0x30, name at +0x38
             uintptr_t brc = (uintptr_t)buildReqComp;
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+            if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
+                static int s_t = 0;
+                if (s_t < 8) { ++s_t;
+                    uint64_t nameKey = *(uint64_t*)(brc + 0x38);
+                    fprintf(stderr, "[title] brc=%p stringTable(brc+0x30)=%p nameKey=\"%.32s\"\n",
+                            (void*)brc, (void*)*(uint64_t*)(brc + 0x30),
+                            nameKey ? (const char*)nameKey : "");
+                    fflush(stderr);
+                }
+            }
+#endif
             uint8_t uiStr[16];
             fn_UIString_Ctor(uiStr, *(uint64_t*)(brc + 0x30), (void*)(brc + 0x38));
 

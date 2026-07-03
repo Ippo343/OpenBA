@@ -188,6 +188,12 @@ static void EnsureFuncs() {
     // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
     if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
     if (!s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr = reinterpret_cast<fn_IBP_CheckPtr_t>(fn_InternalBasePtr_CheckPtr);
+    // CloseDialog slot 0x140151550 is likewise unfilled in standalone → null, so the
+    // tool's Shutdown2/OnKey close paths no-op and the CreateBar never disappears when
+    // the tool is dismissed (right-click). Fall back to the export-resolved global
+    // (same fn DragTool_CloseToolDialog uses). Harmless in DLL mode (slot is filled).
+    if (!s_fn_CloseDialog && fn_UI_CloseDialog)
+        s_fn_CloseDialog = reinterpret_cast<fn_CloseDialog_t>(fn_UI_CloseDialog);
 #endif
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     // Standalone: the raw IAT slot 0x140151758 is unfilled → null, which would make
@@ -747,19 +753,26 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         s_fn_FUN_140005160(self->descriptionPtr, &costResult);
     }
 #ifdef STANDALONE_EXE
+    // Log each DISTINCT costResult (dedupe by pointer) so the trace captures the real
+    // building being placed, not just the first (often-empty) default tool state.
     {
-        static bool s_costLogged = false;
         const char* e = std::getenv("BANISHED_TOOL_DIAG");
-        if (!s_costLogged && e && e[0] && e[0] != '0') {
-            s_costLogged = true;
-            int arrCount = costResult ? *(int*)(costResult + 0x58) : -1;
-            uintptr_t arrBase = costResult ? *(uintptr_t*)(costResult + 0x50) : 0;
-            uint64_t str0 = (arrBase && arrCount > 0) ? *(uint64_t*)(arrBase) : 0;
-            const char* chars = str0 ? (const char*)str0 : "";
-            fprintf(stderr, "[cost] costResult(ToolbarDescription)=%p arr@+0x50=%p count@+0x58=%d "
-                    "str[0]=%llx chars=\"%.32s\"\n", (void*)costResult, (void*)arrBase, arrCount,
-                    (unsigned long long)str0, chars);
-            fflush(stderr);
+        if (e && e[0] && e[0] != '0' && costResult) {
+            static uintptr_t s_seen[16] = {0};
+            static int s_seenN = 0;
+            bool known = false;
+            for (int k = 0; k < s_seenN; ++k) if (s_seen[k] == costResult) { known = true; break; }
+            if (!known && s_seenN < 16) {
+                s_seen[s_seenN++] = costResult;
+                int arrCount = *(int*)(costResult + 0x58);
+                uintptr_t arrBase = *(uintptr_t*)(costResult + 0x50);
+                uint64_t str0 = (arrBase && arrCount > 0) ? *(uint64_t*)(arrBase) : 0;
+                uint64_t str1 = (arrBase && arrCount > 1) ? *(uint64_t*)(arrBase + 8) : 0;
+                fprintf(stderr, "[cost] costResult(ToolbarDescription)=%p arr@+0x50=%p count@+0x58=%d "
+                        "str0=\"%.32s\" str1=\"%.32s\"\n", (void*)costResult, (void*)arrBase, arrCount,
+                        str0 ? (const char*)str0 : "", str1 ? (const char*)str1 : "");
+                fflush(stderr);
+            }
         }
     }
 #endif

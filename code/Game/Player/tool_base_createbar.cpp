@@ -46,6 +46,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
+#include <cstdlib>
 
 namespace {
 
@@ -188,8 +189,18 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
 //   SetParameter(elem, 0, (System::String)UIString(comp.stringTable, comp+0x40))
 //   hide/show by whether costString is empty.
 extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    static int s_e420n = 0;
+    const char* s_e420diag = std::getenv("BANISHED_TOOL_DIAG");
+    bool s_e420on = s_e420diag && s_e420diag[0] && s_e420diag[0] != '0' && s_e420n < 12;
+#endif
     void* descEntity = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x30);
-    if (!descEntity) return;
+    if (!descEntity) {
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+        if (s_e420on) { ++s_e420n; fprintf(stderr, "[e420] BAIL: descEntity(ctrl+0x30)=NULL\n"); fflush(stderr); }
+#endif
+        return;
+    }
 
     // Find the ToolbarDescription-typed component (base +0x28, count +0x30).
     void* comp = nullptr;
@@ -217,16 +228,42 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, nameStr);
     void* elem = reinterpret_cast<void*>(elemBuf);
     if (fn_String_Dtor) fn_String_Dtor(nameStr);
-    if (!elem) return;
+    if (!elem) {
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+        if (s_e420on) { ++s_e420n; fprintf(stderr, "[e420] BAIL: 'textStatus' element not found (comp=%p)\n", comp); fflush(stderr); }
+#endif
+        return;
+    }
 
     // Defensive: the original assumes the ToolbarDescription component always
     // exists (comp != null) and unconditionally derefs comp+0x30. Guard it so a
     // standalone description entity that lacks the component leaves textStatus
     // empty instead of null-derefing. (The retail invariant holds; this only
     // matters for degraded standalone data.)
-    if (!comp) return;
+    if (!comp) {
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+        if (s_e420on) { ++s_e420n; fprintf(stderr, "[e420] BAIL: no ToolbarDescription comp on descEntity=%p\n", descEntity); fflush(stderr); }
+#endif
+        return;
+    }
 
     void* stringTable = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x30);
+
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
+        static int s_n = 0;
+        if (s_n < 12) {
+            ++s_n;
+            // costStr is a System::String (8-byte COW): *costStr = char* data.
+            uint64_t sdat = costStr ? *reinterpret_cast<uint64_t*>(costStr) : 0;
+            fprintf(stderr, "[e420] comp=%p stringTable(comp+0x30)=%p costStrKey=\"%.32s\" nameKey(comp+0x40)=\"%.32s\"\n",
+                    comp, stringTable, sdat ? reinterpret_cast<const char*>(sdat) : "",
+                    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x40)
+                        ? reinterpret_cast<const char*>(*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(comp) + 0x40)) : "");
+            fflush(stderr);
+        }
+    }
+#endif
 
     // UIString_A = UIString(stringTable, costString); SetText(elem, UIString_A).
     uint8_t uiA[16] = {};
