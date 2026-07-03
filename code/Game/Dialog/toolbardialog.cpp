@@ -29,6 +29,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 
 #ifdef _DEBUG
@@ -513,6 +514,19 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param) {
     uintptr_t self = (uintptr_t)gameSubsys;
 
+#ifdef STANDALONE_EXE
+    // g_TypeId_UIDescription resolves from raw .rdata (0x1401c7f90) → NULL in the
+    // standalone exe. Without it the UIDescription sub-item search below never
+    // matches → no dialog opens. Point it at local storage filled from the live
+    // factory tree (the proven placementtool/ToolbarStandalone_Init pattern).
+    if (!g_TypeId_UIDescription) {
+        static uint32_t s_tid_UIDescription = 0;
+        if (s_tid_UIDescription == 0)
+            s_tid_UIDescription = ::Object::GetTypeIdByName("UIDescription");
+        g_TypeId_UIDescription = &s_tid_UIDescription;
+    }
+#endif
+
     // Get the UserInterface singleton: *(gameWorld + 0x98)
     void* gameWorld = *g_pGameWorldSingleton;
     void* userInterface = *(void**)((uintptr_t)gameWorld + 0x98);
@@ -649,6 +663,16 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     // Return the dialog reference
     *(void**)retBuf = (void*)(uintptr_t)dialogRef;
 }
+
+#ifdef STANDALONE_EXE
+// GUI_PLAN Keystone F, Phase 4 — harness entry. Fires the utility-dialog open path
+// (toolbar case 2) headlessly: pass the utility item's Description ptr (item+0x58,
+// e.g. a resolved Template\Utility*.rsc) as `param`. Mirrors the case-2 dispatch.
+extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
+    uint8_t retBuf[16] = {};
+    Toolbar_Utility_Impl(gameSubsys, retBuf, param);
+}
+#endif
 
 // ============================================================
 // Toolbar_ToggleAll_Impl (was fn_Toolbar_ToggleAll, FUN_140101ce0)

@@ -46,6 +46,11 @@ extern "C" int   PlacementTool_HarnessPlaceAtCell(void* toolSelf, int centerCell
 // Geometry::SetTransform) for a fixed cell — a cursor-free stand-in for Serialize.
 extern "C" int   PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell);
 
+// Phase 4: fire the utility-dialog open path (toolbar case 2) headlessly.
+//   ToolbarUtility_HarnessOpen(gameSubsys, param) — param = a utility item's
+//   Description ptr (a resolved Template\Utility*.rsc). Opens its management dialog.
+extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param);
+
 // Phase 3: the SetEditMode reimpl the toolbar case-1 click drives (entityui.cpp).
 // Walks the tool-mode tree at entityUI+0x10 (built by EntityUI_BuildToolModeTree_SA),
 // resolves PlacementTool from the descriptor's CreatePlacedDescription, CreateObject's
@@ -307,6 +312,35 @@ void FirePreviewPlacement(void* entityUI) {
     }
 }
 
+// GUI_PLAN Keystone F, Phase 4: exercise the Utility-dialog open path (toolbar
+// case 2). A utility toolbar item (statusbar/eventlog/map/profession/limit/help)
+// carries a Description ptr at item+0x58 (a resolved Template\Utility*.rsc);
+// Toolbar_Utility_Impl finds its UIDescription child, builds a DialogInstance with
+// the ToolUI child vtable, and AddDialog's it. This fires that path with a resolved
+// template as the param — proving open + subsequent-frame render are crash-free
+// without a live cursor/click. Template overridable via BANISHED_UTILITY_TEMPLATE.
+void FireUtilityDialog() {
+    const char* tmplName = std::getenv("BANISHED_UTILITY_TEMPLATE");
+    if (!tmplName || tmplName[0] == '\0') tmplName = "Template\\UtilityMap.rsc";
+    printf("[ToolHarness] resolving utility template \"%s\"...\n", tmplName);
+    void* desc = StartTown_ResolveTemplateByPath(tmplName);
+    printf("[ToolHarness] utility Description -> %p\n", desc);
+    if (!desc) {
+        printf("[ToolHarness] ERROR: utility template resolve returned null\n");
+        return;
+    }
+
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gameWorld) { printf("[ToolHarness] ERROR: gameWorld null\n"); return; }
+    void* gameSys = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
+    printf("[ToolHarness] gameSubsys(gameWorld+0x120)=%p — opening utility dialog "
+           "(param=Description %p)...\n", gameSys, desc);
+
+    ToolbarUtility_HarnessOpen(gameSys, reinterpret_cast<uint64_t>(desc));
+    printf("[ToolHarness] utility-dialog open returned — dialog should now render "
+           "(watch subsequent frames for crashes).\n");
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -322,6 +356,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FirePreviewPlacement(entityUI);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
+    } else if (std::strcmp(s_toolName, "utility") == 0) {
+        FireUtilityDialog();
     } else {
         // Default / "removal": the original DragTool path (needs the live EntityUI).
         if (!entityUI) return;

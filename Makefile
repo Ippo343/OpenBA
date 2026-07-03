@@ -225,8 +225,11 @@ $(OBJ_DIR)/runtime__src__achievement__%.o: runtime/src/achievement/%.cpp | $(OBJ
 # ============================================================
 # Standalone EXE link + compile rules
 # ============================================================
+# The object list exceeds the Windows CreateProcess ~32KB command-line limit, so
+# link via a GNU-make-generated response file (@file) instead of inline args.
 $(SA_TARGET): $(SA_OBJECTS) $(SA_RC_OBJ) | $(SA_BUILD_DIR)
-	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ $(SA_OBJECTS) $(SA_RC_OBJ) $(SA_LIBS)
+	$(file >$(SA_BUILD_DIR)/link_objects.rsp,$(SA_OBJECTS) $(SA_RC_OBJ))
+	$(CXX) $(SA_CXXFLAGS) $(SA_LDFLAGS) -o $@ @$(SA_BUILD_DIR)/link_objects.rsp $(SA_LIBS)
 	@echo "Built standalone: $@"
 	@ls -lh $@
 

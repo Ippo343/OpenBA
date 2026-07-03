@@ -2672,7 +2672,13 @@ bool EngineFuncsInit() {
     // Vtable pointers for toolbar-related dialogs
     g_ToolbarDialog_Vtable = ResolveAddr(Module::Exe, 0x14015fa00);
     g_PauseDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f550);
-    g_ToolUI_ChildDialog_Vtable = ResolveAddr(Module::Exe, 0x14015f5a0);
+    // 0x14015f5a0 is the shared ToolUI child-dialog vtable. In standalone it is
+    // DELIBERATELY left unregistered (registering it poisons the menu's BuildId
+    // child — see reg_player_toolui.cpp), so ResolveAddr returns 0 here; only
+    // overwrite when non-null so we KEEP the standalone replacement vtable that
+    // RegisterPlayerToolUIBatch (AddressRegistryInit, runs earlier) installed.
+    if (uintptr_t toolUIChildVt = ResolveAddr(Module::Exe, 0x14015f5a0))
+        g_ToolUI_ChildDialog_Vtable = toolUIChildVt;
     // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — resolved above (entityui section)
     // Toolbar item sort function
     fn_ToolbarSort = reinterpret_cast<fn_ToolbarSort_t>(

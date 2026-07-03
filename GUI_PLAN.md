@@ -534,30 +534,71 @@ ABI + mesh/Serialize diagnostics).
 
 ---
 
-## Phase 4 — Utility dialogs (case 2) [independent, parallelizable]
+## Phase 4 — Utility dialogs (case 2) [CORE DONE — text dialog opens crash-free 2026-07-03]
 
-**Objective:** clicking a Utility toolbar item (townhall / trade post) opens its management
-dialog crash-free.
+**✅ A text Utility dialog (Help) OPENS + soaks 26s crash-free** via the harness
+(`BANISHED_TOOL_HARNESS=utility BANISHED_UTILITY_TEMPLATE='Template\UtilityHelp.rsc'`), and
+default `sa-run` (harness off) is byte-clean (41s, 0-byte crash log). Correction to the plan's
+premise: **Town Hall / Trade are NOT Utility** items — they are `Action=Tool`/`Properties`
+(case 0/PlacementTool). The genuine actionType-2 items are the report/overview dialogs
+(`statusbar`/`eventlog`/`map`/`profession`/`limit`/`help`), each pointing at
+`Template\Utility<X>.rsc` whose UIDescription child loads `Dialog/StandardDialog.rsc`.
 
-**Entry points:** `Toolbar_Utility_Impl` (toolbardialog.cpp:513, orig 0x140101a80) — ported
-but untested: it gets the UserInterface singleton (`*(gameWorld+0x98)`), reads the
-UIDescription child (+0x28 external res), constructs a DialogInstance
-(`fn_DialogInstance_Ctor`), sets the ToolUI child vtable, and inserts into the position BST
-at `gameSubsys+0x50`. Likely dominoes: null `fn_DialogInstance_Ctor` / ToolUI vtable /
-UIDescription type-id in standalone. The ToolUI child vtable already exists
-(`g_ToolUI_ChildDialog_Vtable_Standalone`, Part A).
+**What it took (all standalone-only; DLL mode uses the real exe fns / vtable):**
+1. **Two exe helper ports** — `code/Game/Dialog/toolbar_utility_helpers.cpp` +
+   `standalone/reg_toolbar_utility.cpp`: `FindDialogByControllerType` (0x140100270, toggle
+   detect) and the AVL find-or-insert `BST_Insert_0x14` (0x140014890, dialog-position node).
+   Both were unregistered → the engine_funcs pointers `fn_FindDialogByControllerType` /
+   `fn_BST_Insert_0x14` stayed NULL → the first calls in `Toolbar_Utility_Impl` were null-calls.
+   Retrace `0x140014b40` was already registered (reg_keystone_a_restree).
+2. **Type-id fills** — `g_TypeId_UIDescription` (0x1401c7f90, lazy `GetTypeIdByName("UIDescription")`
+   in `Toolbar_Utility_Impl`) and `ToolUI` (0x1401c5788, in the FindDialog port). Raw `.rdata` →
+   NULL in SA.
+3. **🔑 THE KEYSTONE BUG** — `engine_funcs.cpp` (EngineFuncsInit) unconditionally did
+   `g_ToolUI_ChildDialog_Vtable = ResolveAddr(Exe, 0x14015f5a0)`, which is **0 in standalone**
+   (that shared vtable is deliberately NOT registered — registering it poisons the menu, see
+   reg_player_toolui.cpp). Because EngineFuncsInit runs AFTER `AddressRegistryInit`
+   (`RegisterPlayerToolUIBatch` had set the good value), it **clobbered it back to 0** → the new
+   dialog got a NULL vtable at +0 → `UI::UserInterface::AddDialog` (calls dialog `vtable[+0x20]`)
+   crashed `READ of 0x20`. FIX = null-guard: only overwrite `g_ToolUI_ChildDialog_Vtable` when
+   ResolveAddr returns non-null (keeps the SA replacement vtable; DLL mode still gets the real one).
 
-**Verify:** click Town Hall / Trade → the dialog opens + renders; 0 crash.
+**⚠️ Two follow-ups (open):**
+- **`map` crashes ~1s after open** in `UserInterface::UpdateEvents`, dispatching a queued event
+  to a target whose `vtable[+0x40]` (OnElementEvent) is null — almost certainly `Dialog/Map.rsc`'s
+  custom minimap element (an exe UI type with no standalone vtable). Text dialogs (Help) have no
+  such element and are fine. Each utility dialog with a custom content element will need that
+  element's standalone vtable.
+- **Controllers render NO content**: all utility controllers (MapUI/StatusBarUI/ProfessionUI/
+  EventLogUI/HelpUI/ResourceLimitUI) are no-op `StubNop` stubs in `ui_dialog_stub_factories.cpp`
+  (only Dtor/GetTypeId real). So the dialogs open but are empty. Promoting a controller to a real
+  Slot4 reimpl (the BuildRequirementUI/HotKeyToolTipUI pattern in that file) is the "renders
+  content" increment.
+
+**🔧 Build bug fixed en route:** the standalone link was silently failing on the Windows ~32KB
+`CreateProcess` command-line limit (~400 object files; my 2 new `.o` tipped it over) — every SA
+build since had been linking a **stale exe**. The `$(SA_TARGET)` rule now links via a GNU-make
+response file (`$(file >…link_objects.rsp,…)` + `@file`). Watch for this if adding TUs.
+
+**Entry points:** `Toolbar_Utility_Impl` (toolbardialog.cpp:513, orig 0x140101a80),
+`ToolbarUtility_HarnessOpen` (extern "C" wrapper), `FireUtilityDialog` (tool_harness.cpp,
+`"utility"` value). The ToolUI child vtable is `g_ToolUI_ChildDialog_Vtable_Standalone` (Part A).
+
+**Verify (remaining):** a real in-game click on a Utility button (human w/ cursor) opens the
+dialog; promote at least one controller so it renders content; give `map` its element vtable.
 
 ---
 
-## Phase 5 — Menu buttons + speed controls [quick wins]
+## Phase 5 — Menu buttons + speed controls [SKIP — speed buttons already work]
 
+> **⏭️ SKIP THIS PHASE (user-confirmed 2026-07-03):** the **game-speed controls all work**
+> (SpeedDown/Pause/Unpause/SpeedUp/SpeedDisplay, OnEvent cases 6-10) — no work needed. The
+> in-game menu Save/Load/Menu sub-buttons remain stubbed but are low-value; do not spend a
+> phase on them. Phase 5 is considered closed / skippable.
+
+- ~~**Game-speed controls** (OnEvent cases 6-10)~~ — ✅ already work (user-confirmed).
 - **In-game menu Save/Load/Menu/Goal/Map/Tutorial** (StandaloneStub_Slot8_OnCommand,
-  mainmenudialog.cpp) — each needs its sub-dialog's standalone vtable (null today).
-  Do the cheap/safe ones (e.g. Menu→main menu) first.
-- **Game-speed controls** (OnEvent cases 6-10: SpeedDown/Pause/Unpause/SpeedUp/SpeedDisplay)
-  — likely just call the game-speed setter; verify the target isn't null in standalone.
+  mainmenudialog.cpp) — still stubbed; low value, deprioritized (not blocking DoD).
 
 ---
 
