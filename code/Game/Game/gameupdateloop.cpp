@@ -1373,11 +1373,16 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         uintptr_t pc = (uintptr_t)self->m_playerController;
 
-        // Original copies Transform3 (7 floats at +0x98) and projection matrix (16 floats at +0xC8)
-        // from PlayerController onto the stack, then calls AsMatrix → SetCamera.
+        // Original copies Transform3 (12 floats at +0x98..+0xC4 = 48 bytes) and projection
+        // matrix (16 floats at +0xC8) from PlayerController onto the stack, then calls
+        // AsMatrix → SetCamera. Math::Transform3 is a 48-byte struct (3x4). Copying only
+        // 7 floats (the earlier bug) left AsMatrix reading 20 bytes of stack garbage —
+        // including the camera translation — producing a corrupt view matrix that threw
+        // the 3D placement overlay behind the camera (RenderDoc VS-out w<0). Terrain was
+        // unaffected (drawn earlier inside Renderer::Draw with its own camera).
         // AsMatrix returns Matrix by value (64 bytes) — requires hidden return pointer ABI.
-        uint8_t transform3[28]; // 7 floats = Transform3
-        for (int i = 0; i < 7; i++) {
+        uint8_t transform3[48]; // 12 floats = Transform3 (48 bytes)
+        for (int i = 0; i < 12; i++) {
             ((uint32_t*)transform3)[i] = *(uint32_t*)(pc + 0x98 + i * 4);
         }
 

@@ -272,8 +272,8 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         const int32_t* rec = reinterpret_cast<const int32_t*>(*param_4 + (int64_t)rIdx * 0x20);
         float variantCol = (float)rec[2] * uvScale;                 // local_364
         float angle = (float)rec[4] * deg2rad;                      // rec+0x10
-        float cs = std::cos(angle);                                 // FUN_140131c90
-        float sn = std::sin(angle);                                 // helper_1090
+        float sinA = std::sin(angle);   // FUN_140131c90 = sin (verified small-angle series ≈ x)
+        float cosA = std::cos(angle);   // helper_1090 = cos (verified series ≈ 1 - x²/2)
         int w = grid[0];
         float rc = (float)(w >> 1) - half;
         // corner A (rec+0,+4)
@@ -310,8 +310,8 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
             float vt = TMPL_ODD[k * 2 + 1];
             float vtx[6];
             vtx[0] = quad[k][0]; vtx[1] = quad[k][1]; vtx[2] = quad[k][2];
-            vtx[3] = ((vt - half) * cs + (ut - half) * sn + half) * uvScale + variantCol;
-            vtx[4] = ((vt - half) * sn - (ut - half) * cs) + half;
+            vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + half) * uvScale + variantCol;
+            vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + half;
             std::memcpy(&vtx[5], &rec[3], 4);                        // color = rec+0xc
             if (s_ctxAddVtx) s_ctxAddVtx(ctx, vtx);
         }
@@ -343,8 +343,8 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         const float* tmpl = (((rec[0] + rec[1]) & 1) == 0) ? TMPL_EVEN : TMPL_ODD;
         float variantCol = (float)rec[2] * uvScale;                 // XMM8
         float angle = (float)rec[4] * deg2rad;                      // rec+0x10 * deg2rad
-        float cs = std::cos(angle);                                 // XMM7
-        float sn = std::sin(angle);                                 // XMM6
+        float sinA = std::sin(angle);   // FUN_140131c90 = sin (was mislabeled cos → arrows misrotated)
+        float cosA = std::cos(angle);   // helper_1090 = cos
         for (int k = 0; k < 6; k++) {
             float ut = tmpl[k * 2];
             float vt = tmpl[k * 2 + 1];
@@ -355,8 +355,8 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
 #ifdef STANDALONE_EXE
             if (OverlayAnchorOn()) vtx[2] += OverlayZLift() - baselineZ;  // opt-in base-anchor (see helper)
 #endif
-            vtx[3] = ((vt - half) * cs + (ut - half) * sn + half) * uvScale + variantCol;
-            vtx[4] = ((vt - half) * sn - (ut - half) * cs) + half;
+            vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + half) * uvScale + variantCol;
+            vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + half;
             std::memcpy(&vtx[5], &rec[3], 4);                        // color = rec+0xc
             if (s_ctxAddVtx) s_ctxAddVtx(ctx, vtx);
         }
