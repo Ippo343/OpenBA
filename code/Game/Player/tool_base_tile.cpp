@@ -17,6 +17,8 @@
 #include <cstdint>
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
+#include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
+#include <cstdlib>                           // std::getenv
 #endif
 
 // ============================================================
@@ -215,6 +217,60 @@ static void* ToolTile_FindModelComponentScoped(long long entity) {
     }
     return nullptr;
 }
+
+// Standalone-only: show the COMPLETED building model on a freshly placed entity.
+// helper_d650 faithfully leaves the placed building's ModelComponent at "no
+// finished model" (+0x166 = -1) — the retail construction-site start state, which
+// retail advances to the completed sub-mesh when the BuildComponent finishes. That
+// component is inert in standalone, so a player-placed building would sit model-less
+// forever (rendered as the "(?)" status icon with no mesh). Mirror StartTown's
+// "show the completed building, not its foundation" fix (starttown.cpp ~L671 /
+// ApplyResourceModelVariant): keep the visual style helper_d650 chose (+0x164),
+// force the LAST sub-mesh = finished build (+0x166), SetMesh it, so the register-
+// time OnAddedPass -> ModelComponent::Draw submits the finished mesh to the scene.
+// modelDesc layout: +0x20 group array, +0x28 group count; each group is 0x18 bytes
+// with sub-count at +0x10 and sub-mesh array ptr at +0x08 (indexed by modelVariant).
+static void (*s_fn_tileSetMesh)(void*, void*) = nullptr;   // MeshInstance::SetMesh (slot 0x140151498)
+static bool s_tileMeshInit = false;
+static void ToolTile_ForceCompletedModel(long long modelComp) {
+    if (!s_tileMeshInit) {
+        s_tileMeshInit = true;
+        uintptr_t sl = ResolveAddr(Module::Exe, 0x140151498);
+        if (sl) s_fn_tileSetMesh = *reinterpret_cast<void(**)(void*, void*)>(sl);
+    }
+    if (!modelComp) return;
+    uint8_t* m = reinterpret_cast<uint8_t*>(modelComp);
+    void* modelDesc = *reinterpret_cast<void**>(m + 0x18);
+    if (!modelDesc) return;
+    uint8_t* d = reinterpret_cast<uint8_t*>(modelDesc);
+    uint8_t* groupArray = *reinterpret_cast<uint8_t**>(d + 0x20);
+    uint32_t groupCount = *reinterpret_cast<uint32_t*>(d + 0x28);
+    if (!groupArray || groupCount == 0) return;
+
+    // Keep the variant style helper_d650 wrote to +0x164; clamp to a valid group.
+    int variantIdx = *reinterpret_cast<int16_t*>(m + 0x164);
+    if (variantIdx < 0 || static_cast<uint32_t>(variantIdx) >= groupCount) variantIdx = 0;
+    uint8_t* group = groupArray + static_cast<int64_t>(variantIdx) * 0x18;
+    int subCount = *reinterpret_cast<int*>(group + 0x10);
+    int modelVariant = (subCount > 0) ? subCount - 1 : 0;   // last sub-mesh = complete
+
+    *reinterpret_cast<int16_t*>(m + 0x164) = static_cast<int16_t>(variantIdx);
+    *reinterpret_cast<int16_t*>(m + 0x166) = static_cast<int16_t>(modelVariant);
+
+    void* mesh = nullptr;
+    uint8_t* subArr = *reinterpret_cast<uint8_t**>(group + 0x08);
+    if (subArr) mesh = *reinterpret_cast<void**>(subArr + static_cast<int64_t>(modelVariant) * 8);
+    if (mesh && s_fn_tileSetMesh)
+        s_fn_tileSetMesh(reinterpret_cast<void*>(m + 0x28), mesh);
+
+    if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
+        std::fprintf(stderr, "[place-model] modelComp=%p desc=%p groups=%u variantIdx=%d "
+                     "subCount=%d modelVariant=%d mesh=%p setMesh=%p\n",
+                     (void*)modelComp, modelDesc, groupCount, variantIdx, subCount,
+                     modelVariant, mesh, (void*)s_fn_tileSetMesh);
+        std::fflush(stderr);
+    }
+}
 #endif
 
 unsigned long long ToolTile_ValidateCreate_fd650(
@@ -331,6 +387,11 @@ unsigned long long ToolTile_ValidateCreate_fd650(
             (*reinterpret_cast<void(**)(long long*)>(*plVar4 + 0x38))(plVar4);
         }
         *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
+#ifdef STANDALONE_EXE
+        // No BuildComponent completion flow in standalone → force the finished
+        // building mesh so the register-time OnAddedPass renders it (see helper).
+        ToolTile_ForceCompletedModel(reinterpret_cast<long long>(plVar4));
+#endif
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
         if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
     }
