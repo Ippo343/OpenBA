@@ -32,6 +32,13 @@
 void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                       void** materialOut, char useBlend, const char* elementName) {
     uintptr_t s = (uintptr_t)self;
+#ifdef STANDALONE_EXE
+    bool trc = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    #define MAPTRC(msg) do { if (trc) { printf("[SetupImg] " msg " (elem=%s)\n", elementName); fflush(stdout);} } while(0)
+#else
+    #define MAPTRC(msg) do {} while(0)
+#endif
+    MAPTRC("enter");
 
     // Defensive (standalone bring-up): the minimap ImageBuffer must exist — the
     // very first thing below is fn_ImageBuffer_Width(imageBuffer). If the GPU
@@ -40,6 +47,12 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor ||
         !fn_ImageBuffer_Width || !fn_FindElement) {
+#ifdef STANDALONE_EXE
+        if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p "
+               "MatCtor=%p SSCtor=%p ImgW=%p FindElem=%p\n", elementName, imageBuffer,
+               (void*)fn_MemAlloc, g_pMemAllocSingleton, (void*)fn_MaterialInstance_Ctor,
+               (void*)fn_SpriteSheet_Ctor, (void*)fn_ImageBuffer_Width, (void*)fn_FindElement);
+#endif
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;
@@ -68,6 +81,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     }
     fn_Filename_AdjustDelimiters(filenameBuf);
 
+    MAPTRC("material alloc+ctor done");
     void* ext = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
     void* material = nullptr;
     if (ext) {
@@ -81,10 +95,13 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // --- Add ImageBuffer as "diffuse" texture ---
     uint8_t diffuseStr[8];
     fn_String_Ctor_CStr(diffuseStr, "diffuse");
+    MAPTRC("SetMaterial done, add diffuse texture");
     fn_MaterialInstance_AddTexture(*materialOut, diffuseStr, imageBuffer);
     fn_String_Dtor(diffuseStr);
 
+    MAPTRC("BuildParameters");
     fn_MaterialInstance_BuildParameters(*materialOut);
+    MAPTRC("BuildParameters done, alloc spritesheet");
 
     // --- Allocate and construct SpriteSheet (0x58 bytes) ---
     void* sheet = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
@@ -121,9 +138,11 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     imgW = fn_ImageBuffer_Width(imageBuffer);
     imgH = fn_ImageBuffer_Height(imageBuffer);
     uint64_t nameEmpty = 0, groupEmpty = 0;
+    MAPTRC("AddSpriteInfo");
     fn_SpriteSheet_AddSpriteInfo(*spriteSheetOut, &nameEmpty, &groupEmpty, 0, 0, imgW, imgH);
     fn_String_Dtor(&nameEmpty);
     fn_String_Dtor(&groupEmpty);
+    MAPTRC("AddSpriteInfo done");
 
     // Set sprite info with UV scale
     imgW = fn_ImageBuffer_Width(imageBuffer);

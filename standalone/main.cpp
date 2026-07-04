@@ -315,6 +315,42 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS* ep) {
                   (void*)ep->ExceptionRecord->ExceptionInformation[1]);
     }
 
+    // Specialized handler: EXEC-of-0 through a virtual call (RIP==0). The faulting
+    // instruction was `CALL [vtable + N]` where that slot is NULL. RCX = the object
+    // (this). Dump its vtable (module + offset identifies the type) + the first 13
+    // slots so we can see WHICH slot is null. Used to diagnose the minimap
+    // UpdateEvents crash (target->vtable[+0x40] == 0).
+    if (code == EXCEPTION_ACCESS_VIOLATION &&
+        ep->ExceptionRecord->ExceptionInformation[0] == 8 /*EXEC*/ &&
+        ep->ExceptionRecord->ExceptionInformation[1] == 0 &&
+        ctx->Rcx && !IsBadReadPtr((void*)ctx->Rcx, 8)) {
+        void* target = (void*)ctx->Rcx;
+        uintptr_t vt = *(uintptr_t*)target;
+        CrashLogf("VCALL-of-0: this=%p vtable=%p\n", target, (void*)vt);
+        HMODULE vmod = nullptr;
+        if (vt && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                     GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                     (LPCSTR)vt, &vmod) && vmod) {
+            char path[MAX_PATH] = {0};
+            GetModuleFileNameA(vmod, path, MAX_PATH);
+            const char* nm = strrchr(path, '\\');
+            CrashLogf("  vtable in %s + 0x%llX  (base=%p)\n",
+                      nm ? nm + 1 : path, (unsigned long long)(vt - (uintptr_t)vmod),
+                      (void*)vmod);
+        } else {
+            CrashLogf("  vtable in UNKNOWN module (heap? bad ptr?)\n");
+        }
+        if (vt && !IsBadReadPtr((void*)vt, 13 * 8)) {
+            for (int i = 0; i < 13; i++)
+                CrashLogf("  vtable[+0x%02X] = %p\n", i * 8, *((void**)vt + i));
+        }
+        if (!IsBadReadPtr(target, 0x40)) {
+            for (int i = 0; i < 8; i++)
+                CrashLogf("  this[+0x%02X] = 0x%016llX\n", i * 8,
+                          (unsigned long long)*((uint64_t*)target + i));
+        }
+    }
+
     // Specialized handler: IsDerivedFrom-NULL-this crash. RIP at Runtime+0xC039A
     // is the very first vtable read with RCX=NULL (factory returned NULL).
     // RDX at that point holds the EXPECTED typeId (the External base check).
@@ -1087,10 +1123,42 @@ static void InstallWndMsgHook() {
 // ============================================================
 // Initialization sequence
 // ============================================================
+// First-chance vectored handler that logs ONLY the fatal fail-fast /stack-cookie
+// code (0xC0000409, STATUS_STACK_BUFFER_OVERRUN) — a __security_check_cookie /
+// __fastfail failure bypasses SetUnhandledExceptionFilter entirely, so nothing
+// reaches standalone_crash.log. Everything else (the game's normal first-chance
+// SEH-absorbed AVs) passes straight through untouched.
+static LONG WINAPI FirstChanceFailFast(EXCEPTION_POINTERS* ep) {
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    if (code == 0xC0000409 /*STATUS_STACK_BUFFER_OVERRUN*/ ||
+        code == 0xC0000602 /*STATUS_FAIL_FAST_EXCEPTION*/) {
+        if (g_crashLog == INVALID_HANDLE_VALUE) OpenCrashLog();
+        CrashLogRaw("\n=== STANDALONE FAIL-FAST (first-chance) ===\n");
+        CrashLogf("Code: 0x%08lX  Address: %p\n", code,
+                  ep->ExceptionRecord->ExceptionAddress);
+        HMODULE mod = nullptr;
+        void* addr = ep->ExceptionRecord->ExceptionAddress;
+        if (addr && GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                                       GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                       (LPCSTR)addr, &mod) && mod) {
+            char path[MAX_PATH] = {0};
+            GetModuleFileNameA(mod, path, MAX_PATH);
+            const char* nm = strrchr(path, '\\');
+            CrashLogf("Module: %s + 0x%llX  (base=%p)\n", nm ? nm + 1 : path,
+                      (unsigned long long)((uintptr_t)addr - (uintptr_t)mod), (void*)mod);
+        }
+        PrintStackTrace(ep->ContextRecord);
+        CrashLogf("=== END FAIL-FAST ===\n");
+        FlushLogsToDisk();
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
 static bool Init() {
     // 1. Install crash handler — only catches second-chance exceptions
     //    so first-chance AVs absorbed by Banished's SEH chains stay quiet.
     SetUnhandledExceptionFilter(CrashHandler);
+    AddVectoredExceptionHandler(1, FirstChanceFailFast);
 
     // 1a. Open the dedicated crash log NOW (before any pure-virtual /
     //     terminate handler can be hit). Re-opens are no-ops because

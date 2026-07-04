@@ -129,18 +129,18 @@ extern "C" void ToolUI_InitChildDialogVtable() {
     static bool s_ready = false;
     if (s_ready) return;
     auto* vt = g_ToolUI_ChildDialog_Vtable_Standalone;
-    vt[1] = reinterpret_cast<void*>(ResolveExport(kSym_TypeName));        // +0x08
-    vt[2] = reinterpret_cast<void*>(ResolveExport(kSym_Type));            // +0x10
-    vt[3] = reinterpret_cast<void*>(ResolveExport(kSym_Persist));         // +0x18
-    vt[4] = reinterpret_cast<void*>(ResolveExport(kSym_OnOpened));        // +0x20
-    vt[5] = reinterpret_cast<void*>(ResolveExport(kSym_OnClosed));        // +0x28
-    vt[6] = reinterpret_cast<void*>(ResolveExport(kSym_OnUpdateLayout));  // +0x30
-    vt[7] = reinterpret_cast<void*>(ResolveExport(kSym_OnUpdate));        // +0x38
-    vt[8] = reinterpret_cast<void*>(ResolveExport(kSym_OnElementEvent));  // +0x40
-    vt[9] = reinterpret_cast<void*>(ResolveExport(kSym_OnSerSettings));   // +0x48
-    // If any slot failed to resolve (Runtime not ready), leave s_ready false so a
-    // later call retries — a partially-null shared vtable must never go live.
-    for (int i = 1; i < 10; i++) if (!vt[i]) return;
+    // Copy slots 1..9 straight from the CANONICAL Runtime DialogInstance vtable
+    // (Runtime 0x180156d70 — the address the DialogInstance ctor stores into every
+    // instance; verified via the ctor's `LEA RAX,[0x180156d70]`). Slot 0 stays our
+    // scalar-deleting dtor. This is definitive and avoids per-slot mangled-name
+    // resolution: `?OnElementEvent@DialogInstance@UI@@…` (slot 8, +0x40) did NOT
+    // resolve by name → slot 8 was left NULL → UI::UserInterface::UpdateEvents
+    // dispatched the map dialog's vtable+0x40 (OnElementEvent) to 0 (EXEC-of-0).
+    uintptr_t canon = ResolveAddr(Module::Runtime, 0x180156d70);
+    if (!canon) return;   // Runtime not loaded yet — retry on a later call.
+    const uintptr_t* cv = reinterpret_cast<const uintptr_t*>(canon);
+    for (int i = 1; i < 10; ++i) vt[i] = reinterpret_cast<void*>(cv[i]);
+    for (int i = 1; i < 10; ++i) if (!vt[i]) return;  // partial vtable must not go live
     s_ready = true;
 }
 

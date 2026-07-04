@@ -36,6 +36,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#ifdef STANDALONE_EXE
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 namespace {
 constexpr uintptr_t kVtable  = 0x140164a70;
@@ -89,12 +93,21 @@ void UIDescription_Serialize(void* self, void* stream) {
     // 4. on load, allocate/zero the element array (+0x30), stride 0x28.
     //    Fresh-load: count/cap are 0 from the ctor, so the exe resize helper
     //    (FUN_140039a50) collapses to "alloc count*0x28 + zero each element".
-    void* serObj = *(void**)(serializer + 8);
-    bool loading = serObj && (*(int*)((uintptr_t)serObj + 8) == 0);
-    if (loading) {
-        if (fn_MemAlloc && g_pMemAllocSingleton && count > 0) {
+    // Ensure the element array (+0x30, stride 0x28) has room for `count` elements.
+    // The exe calls a resize helper (FUN_140039a50) that is load/save-agnostic:
+    // on LOAD `count` was just read from the stream and the array is empty (fresh
+    // object) so it allocates; on SAVE the array already holds `count` elements so
+    // it is a no-op. We reproduce that directly rather than sniff a load/save flag
+    // — the previous `*(serObj+8)==0` heuristic was WRONG (that slot holds stream
+    // payload bytes, never a clean 0/1), so it was ALWAYS false and the array was
+    // NEVER allocated → every UIDescription dialog lost its sub-controllers.
+    int cap = *(int32_t*)(s + 0x3c);
+    uint8_t* arr = *(uint8_t**)(s + 0x30);
+    if (count > 0 && (arr == nullptr || cap < count)) {
+        if (fn_MemAlloc && g_pMemAllocSingleton) {
             void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 0x28, 8);
             *(void**)(s + 0x30) = buf;
+            *(int32_t*)(s + 0x3c) = buf ? count : 0;
             if (buf) {
                 uint8_t* e = reinterpret_cast<uint8_t*>(buf);
                 for (int i = 0; i < count; ++i, e += 0x28) {
@@ -105,12 +118,14 @@ void UIDescription_Serialize(void* self, void* stream) {
                     *(uint64_t*)(e + 0x20) = 0;  // String (empty)
                 }
             }
-        } else {
-            *(void**)(s + 0x30) = nullptr;
         }
-        *(int32_t*)(s + 0x38) = count;
-        *(int32_t*)(s + 0x3c) = count;
     }
+    *(int32_t*)(s + 0x38) = count;
+#ifdef STANDALONE_EXE
+    if (std::getenv("BANISHED_MAP_TRACE"))
+        printf("[UIDescSer] self=%p count=%d entries=%p cap->%d\n",
+               self, count, *(void**)(s + 0x30), *(int32_t*)(s + 0x3c));
+#endif
 
     // 5. per-element serialize
     uint8_t* buf = *(uint8_t**)(s + 0x30);

@@ -3102,6 +3102,27 @@ bool EngineFuncsInit() {
         if (dispatch) fn_DialogInstance_AddController6 =
             reinterpret_cast<fn_DialogInstance_AddController6_t>(*dispatch);
     }
+#ifdef STANDALONE_EXE
+    // Standalone: the three exe IAT dispatch slots above are unregistered → null,
+    // so the UIDescription controller-injection (ToolUI::Slot4 →
+    // UIDesc_AddControllers_Impl) EXEC-faulted on a null fn ptr. Resolve them by
+    // Runtime RVA directly (verified addresses / signatures):
+    //   TabElement::AddTab                                    = 0x1800da130
+    //   DialogInstance::AddController(…,InternalPtr<Element>)  = 0x1801133b0  (tab page)
+    //   DialogInstance::AddController(…,ExternalPtr<ElementDescription>,String&)
+    //                                                         = 0x180113470  (non-tab:
+    //     finds the _insertAt element, builds the ElementDescription via its
+    //     vtable+0x40, inserts it as a child, then creates the controller).
+    if (!fn_TabElement_AddTab)
+        fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(
+            ResolveAddr(Module::Runtime, 0x1800da130));
+    if (!fn_DialogInstance_AddControllerTab)
+        fn_DialogInstance_AddControllerTab = reinterpret_cast<fn_DialogInstance_AddControllerTab_t>(
+            ResolveAddr(Module::Runtime, 0x1801133b0));
+    if (!fn_DialogInstance_AddController6)
+        fn_DialogInstance_AddController6 = reinterpret_cast<fn_DialogInstance_AddController6_t>(
+            ResolveAddr(Module::Runtime, 0x180113470));
+#endif
 
     // --- DragTool support ---
     // KeyMap::Released — dispatch table at 0x1401528f0
@@ -3544,6 +3565,37 @@ bool EngineFuncsInit() {
     }
     // UV scale float: DAT_14017214c
     g_fUVScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
+
+#ifdef STANDALONE_EXE
+    // Standalone: the MaterialInstance/SpriteSheet/Sprite dispatch slots above are
+    // unregistered → null, so MapUI::SetupImage guard-returned (MatCtor/SSCtor null)
+    // and the minimap never bound its textures. Resolve them directly by their
+    // Runtime export names (mangled names read from the exe .rdata name table).
+    if (!fn_MaterialInstance_Ctor)
+        fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(
+            ResolveExport("??0MaterialInstance@Graphics@@QEAA@XZ"));
+    if (!fn_SpriteSheet_Ctor)
+        fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(
+            ResolveExport("??0SpriteSheet@UI@@QEAA@XZ"));
+    if (!fn_MaterialInstance_SetMaterial)
+        fn_MaterialInstance_SetMaterial = reinterpret_cast<fn_MaterialInstance_SetMaterial_t>(
+            ResolveExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z"));
+    if (!fn_MaterialInstance_AddTexture)
+        fn_MaterialInstance_AddTexture = reinterpret_cast<fn_MaterialInstance_AddTexture_t>(
+            ResolveExport("?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z"));
+    if (!fn_MaterialInstance_BuildParameters)
+        fn_MaterialInstance_BuildParameters = reinterpret_cast<fn_MaterialInstance_BuildParameters_t>(
+            ResolveExport("?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ"));
+    if (!fn_Sprite_Ctor_ByIndex)
+        fn_Sprite_Ctor_ByIndex = reinterpret_cast<fn_Sprite_Ctor_ByIndex_t>(
+            ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z"));
+    if (!fn_SpriteSheet_SetSpriteInfo)
+        fn_SpriteSheet_SetSpriteInfo = reinterpret_cast<fn_SpriteSheet_SetSpriteInfo_t>(
+            ResolveExport("?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z"));
+    if (!fn_SpriteSheet_AddSpriteInfo)
+        fn_SpriteSheet_AddSpriteInfo = reinterpret_cast<fn_SpriteSheet_AddSpriteInfo_t>(
+            ResolveExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z"));
+#endif
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);

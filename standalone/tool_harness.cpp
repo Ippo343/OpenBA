@@ -434,7 +434,24 @@ void FireUtilityDialog() {
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     Init();
-    if (!s_enabled || s_fired) return;
+    if (!s_enabled) return;
+
+    // Delayed re-scan: 90 frames after the initial fire, re-enumerate the open
+    // dialogs and drive MapUI again. The UIDescription controller inserts the
+    // Map.rsc:content sub-tree (imageMap/imageOverlay/frustum) on a LATER frame
+    // than the open, so a same-frame scan misses it. Only for the map paths.
+    static bool s_rescanned = false;
+    if (s_fired && !s_rescanned && frameNum >= s_settleFrame + 90) {
+        s_rescanned = true;
+        if (std::strcmp(s_toolName, "utility") == 0 ||
+            std::strcmp(s_toolName, "scan") == 0) {
+            printf("[ToolHarness] DELAYED rescan at frame %d (looking for minimap content)...\n",
+                   frameNum);
+            ToolbarUtility_HarnessDriveController("MapUI");
+        }
+    }
+
+    if (s_fired) return;
     if (frameNum < s_settleFrame) return;
 
     s_fired = true;

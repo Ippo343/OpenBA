@@ -90,6 +90,51 @@ static void* FrustumOutlineDescription_VtblStub_ReturnNull(void*, ...)  { return
 
 static void* FrustumOutlineDescription_CreateInPlace(void* memory);
 
+// The FrustumOutlineElement factory (code/Game/Component/frustumoutlineelement.cpp):
+// MemAlloc(0xd8) + UI::Element ctor (installs the base Runtime Element vtable) +
+// UI::Sprite default-ctor at +0xc0 + *(+0xd0) = -1.
+extern "C" void* FrustumOutlineElement_Factory_SA(void);
+
+// ============================================================
+// CreateElement (vtable +0x40, exe 0x14006c340)
+// ============================================================
+// The element-tree build calls the ElementDescription's create-element slot
+// (+0x40) to instantiate each element. For the minimap's `frustum` element this
+// produces a FrustumOutlineElement; leaving it a ReturnNull stub made building
+// `Dialog/Map.rsc:content` (Group{imageMap,imageOverlay,frustum}) yield a null
+// child, so the whole content sub-tree was never inserted at `userGroup0`.
+//
+// Faithful port of FrustumOutlineDescription_CreateElement (0x14006c340):
+//   1. Alloc + construct the FrustumOutlineElement.
+//   2. Wrap in an InternalBasePtr, run ElementDescription::CreateInstance(desc,&ibp)
+//      (applies the generic ElementDescription fields to the new element).
+//   3. width  <- desc+0x78  ->  element+0xd0
+//      height <- desc+0x7c  ->  element+0xd4
+//   4. Return the element pointer through param_2 (RDX out-buffer).
+// NOTE: the exe also sets element+0xc0 sprite via Sprite_Ctor_Name(spriteSheet@
+// desc+0x68, name@desc+0x70). That primitive is not yet wired; the default Sprite
+// installed by the factory is retained (frustum outline uses its own line sprite in
+// Draw). imageMap/imageOverlay render regardless.
+static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2) {
+    void* elem = FrustumOutlineElement_Factory_SA();
+
+    uint8_t ibp[16] = {};
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, elem);
+    if (fn_ElementDescription_CreateInstance)
+        fn_ElementDescription_CreateInstance(self, ibp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+    void* e = *reinterpret_cast<void**>(ibp);
+
+    if (e) {
+        uint8_t* d = reinterpret_cast<uint8_t*>(self);
+        uint8_t* el = reinterpret_cast<uint8_t*>(e);
+        *reinterpret_cast<int*>(el + 0xd0) = *reinterpret_cast<int*>(d + 0x78);  // width
+        *reinterpret_cast<int*>(el + 0xd4) = *reinterpret_cast<int*>(d + 0x7c);  // height
+    }
+    if (param_2) *param_2 = e;
+    return param_2;
+}
+
 static void* g_FrustumOutlineDescription_Vtable[11] = {
     reinterpret_cast<void*>(&FrustumOutlineDescription_Dtor),               // +0x00 Dtor
     reinterpret_cast<void*>(&FrustumOutlineDescription_VtblStub_ReturnNull),// +0x08 GetTypeInfo
@@ -99,7 +144,7 @@ static void* g_FrustumOutlineDescription_Vtable[11] = {
     reinterpret_cast<void*>(&FrustumOutlineDescription_Serialize),          // +0x28 Serialize
     reinterpret_cast<void*>(&FrustumOutlineDescription_VtblStub_Return0),   // +0x30 Cleanup
     reinterpret_cast<void*>(&FrustumOutlineDescription_VtblStub_Return0),   // +0x38 thunk
-    reinterpret_cast<void*>(&FrustumOutlineDescription_VtblStub_ReturnNull),// +0x40 CreateElement
+    reinterpret_cast<void*>(&FrustumOutlineDescription_CreateElement),     // +0x40 CreateElement
     reinterpret_cast<void*>(&FrustumOutlineDescription_CreateInPlace),      // +0x48 CreateInPlace
     reinterpret_cast<void*>(&FrustumOutlineDescription_VtblStub_ReturnNull),// +0x50 (guard)
 };

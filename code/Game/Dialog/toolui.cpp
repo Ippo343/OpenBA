@@ -21,6 +21,10 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#ifdef STANDALONE_EXE
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 // Forward declaration — defined in entityui.cpp
 extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
@@ -52,6 +56,21 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
     if (count <= 0) return;
 
     uintptr_t entries = *(uintptr_t*)(desc + 0x30);
+#ifdef STANDALONE_EXE
+    if (std::getenv("BANISHED_MAP_TRACE")) {
+        printf("[UIDescAdd] uiDesc=%p count=%d entries=%p dataSource=%p\n",
+               uiDesc, count, (void*)entries, dataSource);
+        for (int j = 0; j < count && j < 4; j++) {
+            uintptr_t e = entries + (uintptr_t)j * 0x28;
+            uint64_t nameStrVal = *(uint64_t*)(e + 0x20);
+            printf("[UIDescAdd]   entry[%d]@%p type=%u elemDesc=%p config=%p tabDesc=%p "
+                   "nameStrPtr=0x%llx\n", j, (void*)e, *(uint32_t*)e,
+                   *(void**)(e + 0x08), *(void**)(e + 0x10), *(void**)(e + 0x18),
+                   (unsigned long long)nameStrVal);
+        }
+        fflush(stdout);
+    }
+#endif
 
     for (int i = 0; i < count; i++) {
         uintptr_t entry = entries + (uintptr_t)i * 0x28;
@@ -167,6 +186,13 @@ void ToolUI_Slot4(ToolUI* self) {
         }
     }
 
+    // If the data source resolved to no description (+0x30 still null), there is
+    // nothing to populate — the title/UIDescription sections below dereference
+    // desc+0x30 unconditionally, so bail. In the exe the data source is always a
+    // BuildComponent or a ComponentEntity so +0x30 is set; this guards the
+    // standalone case where a raw description could reach here.
+    if (*(void**)(s + 0x30) == nullptr) return;
+
     // Find "labelTitle" element via DialogInstance
     {
         uint8_t nameStr[8], retBuf[16];
@@ -253,12 +279,21 @@ void ToolUI_Slot4(ToolUI* self) {
         void* desc = *(void**)(s + 0x30);
         int descCount = *(int*)((uintptr_t)desc + 0x30);
         uintptr_t descArray = *(uintptr_t*)((uintptr_t)desc + 0x28);
+#ifdef STANDALONE_EXE
+        if (std::getenv("BANISHED_MAP_TRACE"))
+            printf("[ToolUI_Slot4] desc(self+0x30)=%p descCount=%d uiDescTid=%u\n",
+                   desc, descCount, g_TypeId_UIDescription ? *g_TypeId_UIDescription : 0);
+#endif
 
         for (int i = 0; i < descCount; i++) {
             void* entry = *(void**)(descArray + (uintptr_t)i * 8);
             typedef int (*fn_GetTypeId_t)(void*);
             void** vtbl = *(void***)entry;
             int typeId = ((fn_GetTypeId_t)vtbl[2])(entry);
+#ifdef STANDALONE_EXE
+            if (std::getenv("BANISHED_MAP_TRACE"))
+                printf("[ToolUI_Slot4]   descEntry[%d]=%p tid=%d\n", i, entry, typeId);
+#endif
 
             if (typeId == (int)*g_TypeId_UIDescription) {
                 bool check = fn_IsDerivedFrom(entry, *g_TypeId_UIDescription);

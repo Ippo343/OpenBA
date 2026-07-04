@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 
 namespace {
 
@@ -240,7 +241,7 @@ namespace uistub_MapUI {
     void Slot4(void* self) {
         EnsureTypeIds();
         static bool s_logged = false;
-        if (!s_logged) {
+        if (!s_logged && std::getenv("BANISHED_MAP_TRACE")) {
             s_logged = true;
             void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
             void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
@@ -278,7 +279,66 @@ UI_DIALOG_STUB(StatusBarUI,         "UI::DialogController", 0x1D0);
 UI_DIALOG_STUB(StatusIconUI,        "UI::DialogController", 0x40);
 UI_DIALOG_STUB(StorageCapacityUI,   "UI::DialogController", 0x38);
 UI_DIALOG_STUB(TitleDescToolTipUI,  "UI::DialogController", 0x30);
-UI_DIALOG_STUB(ToolUI,              "UI::DialogController", 0x58);
+// ---- ToolUI: PROMOTED to the real Slot4 reimpl (map-render bring-up) ----------
+// ToolUI is StandardDialog.rsc's controller — created for EVERY StandardDialog-
+// based utility dialog (Map/Help/Goal/…). Its Slot4 (+0x20, Setup) reads the
+// dialog's data source (a ComponentEntity → its description), finds the title/
+// close/drag elements, and — crucially — searches the description for a
+// UIDescription and calls UIDesc_AddControllers_Impl, which injects each of the
+// UIDescription's sub-controllers (for UtilityMap: the MapUI controller +
+// Dialog/Map.rsc:content = imageMap/imageOverlay/frustum) at their _insertAt
+// element ("userGroup0") via DialogInstance::AddController6. The generic no-op
+// stub left Slot4 dead, so NO utility dialog ever built its inner content — the
+// minimap was never instantiated. Wiring Slot4 to the real reimpl runs the whole
+// injection chain. Slots 8/9 (drag/event) stay no-ops (safe): the map renders and
+// soaks without them; a null-slot (StubNop) never EXEC-faults.
+struct ToolUI;
+extern void ToolUI_Slot4(ToolUI* self);
+namespace uistub_ToolUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("ToolUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // ToolUI_Slot4 + UIDesc_AddControllers_Impl dereference these exe-.rdata type-id
+    // globals (null in standalone). Lazy-fill from the live factory tree post-
+    // Engine::Startup. Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_build=0, s_entity=0, s_breq=0, s_uidesc=0, s_tab=0;
+        // NB: g_TypeId_BuildComponent maps to exe .rdata 0x1401c7318 whose real
+        // identity is ComponentDescription (verified: written by
+        // ComponentDescription_Register), NOT BuildComponent — the engine_funcs
+        // label is misleading. ToolUI::Slot4 branch-1 tests the datasource against
+        // THIS id (a utility dialog's datasource is a ComponentDescription), so it
+        // must be filled with the ComponentDescription type-id.
+        if (!g_TypeId_BuildComponent)            { s_build =::Object::ResolveTypeIdByNameLazy("ComponentDescription");      if(s_build)  g_TypeId_BuildComponent=&s_build; }
+        if (!g_TypeId_ComponentEntity)           { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");           if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_BuildRequirementComponent) { s_breq  =::Object::ResolveTypeIdByNameLazy("BuildRequirementComponent"); if(s_breq)   g_TypeId_BuildRequirementComponent=&s_breq; }
+        if (!g_TypeId_UIDescription)             { s_uidesc=::Object::ResolveTypeIdByNameLazy("UIDescription");             if(s_uidesc) g_TypeId_UIDescription=&s_uidesc; }
+        if (!g_TypeId_TabElement)                { s_tab   =::Object::ResolveTypeIdByNameLazy("TabElement");                if(s_tab)    g_TypeId_TabElement=&s_tab; }
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        // The reimpl unconditionally dereferences these; skip rather than fault if
+        // any failed to resolve.
+        if (!self || !g_TypeId_BuildComponent || !g_TypeId_ComponentEntity
+            || !g_TypeId_BuildRequirementComponent || !g_TypeId_UIDescription
+            || !g_TypeId_TabElement) return;
+        static bool s_logged=false;
+        if(!s_logged && std::getenv("BANISHED_MAP_TRACE")){ s_logged=true;
+            printf("[ToolUI::Slot4] dispatched self=%p ds(+0x28)=%p\n",
+                   self, *reinterpret_cast<void**>((char*)self+0x28)); fflush(stdout); }
+        ToolUI_Slot4(reinterpret_cast<ToolUI*>(self));
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x58;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x58,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(ToolUI, "UI::DialogController",
+              &uistub_ToolUI::Factory, &uistub_ToolUI::InPlace);
 UI_DIALOG_STUB(TownHallUI,          "UI::DialogController", 0x1E8);
 UI_DIALOG_STUB(TradeUI,             "UI::DialogController", 0x148);
 UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
