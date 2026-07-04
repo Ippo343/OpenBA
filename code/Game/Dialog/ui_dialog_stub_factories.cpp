@@ -290,10 +290,18 @@ UI_DIALOG_STUB(TitleDescToolTipUI,  "UI::DialogController", 0x30);
 // element ("userGroup0") via DialogInstance::AddController6. The generic no-op
 // stub left Slot4 dead, so NO utility dialog ever built its inner content — the
 // minimap was never instantiated. Wiring Slot4 to the real reimpl runs the whole
-// injection chain. Slots 8/9 (drag/event) stay no-ops (safe): the map renders and
-// soaks without them; a null-slot (StubNop) never EXEC-faults.
+// injection chain. Slot9 (+0x48, event) is now wired too so the close (X) button
+// works; Slot8 (+0x40, per-frame drag-follow) stays a no-op (drag is cosmetic and
+// Slot9 alone leaves the drag-init flags harmlessly set until mouse-up clears them).
 struct ToolUI;
 extern void ToolUI_Slot4(ToolUI* self);
+// Slot9 (+0x48) is ToolUI's OnElementEvent handler. It contains the buttonClose
+// (element id 1, msg 0x12) -> UserInterface::CloseDialog logic that dismisses the
+// dialog, plus focus (msg 8..10 -> BringDialogToFront) and drag-init (msg 2).
+// DialogInstance::OnElementEvent (Runtime 0x180114ed0) dispatches every element
+// event to each controller's vtable+0x48, so leaving this a no-op meant the map/
+// Help/etc. dialogs' X button (and every close button) did nothing.
+extern void ToolUI_Slot9(ToolUI* self, void* param2, int msg, int id, int mx, int my);
 namespace uistub_ToolUI {
     static void* g_vt[kStubVtableSlots];
     uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("ToolUI"); return c; }
@@ -331,8 +339,14 @@ namespace uistub_ToolUI {
                    self, *reinterpret_cast<void**>((char*)self+0x28)); fflush(stdout); }
         ToolUI_Slot4(reinterpret_cast<ToolUI*>(self));
     }
+    // OnElementEvent (+0x48). Dispatched with (self, &elementPtr, msg, id, x, y, ...);
+    // the real handler closes the dialog on the buttonClose (id 1, msg 0x12).
+    void Slot9(void* self, void* p2, int msg, int id, int mx, int my) {
+        if (self) ToolUI_Slot9(reinterpret_cast<ToolUI*>(self), p2, msg, id, mx, my);
+    }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
-    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_wire;
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                          g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x58;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x58,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
     void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }

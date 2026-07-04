@@ -18,6 +18,7 @@
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
+#include "resolve.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------
@@ -63,9 +64,172 @@ static void Frustum_ComputeLayout(void* self, int x, int y, int w, int h) {
     if (fn_Element_ComputeLayout) fn_Element_ComputeLayout(self, x, y, w, h);
 }
 
-// Slot 6 (+0x30) — Draw. No-op (see header comment).
+// ===========================================================================
+// Camera-frustum ground-projection — port of FrustumOutlineElement_helper_c5b0
+// (exe 0x14006c5b0). Projects the camera view-frustum's 4 FAR corners onto the
+// z=0 ground plane, writing 4 world-space Vector3 points to out[0..3] (12 bytes
+// each). Registered at 0x14006c5b0 (see frustumoutlinedescription.cpp) so
+// fn_MapUI_ProjectCornersToGround (minimap click-to-move-camera) resolves too.
+// ===========================================================================
+typedef void* (*Frustum_fnGetFrustum_t)(void* camera, void* retFrustum);
+typedef void  (*Frustum_fnGetCorners_t)(void* frustum, void* out8Vec3);
+typedef void* (*Frustum_fnNormalize_t)(const void* self, void* retVec3);
+typedef void* (*Frustum_fnRotate_t)(const void* transform, void* retVec3, const void* vec);
+typedef void  (*Frustum_fnDot_t)(const void* self, void* retScalar, const void* other);
+
+static Frustum_fnGetFrustum_t s_getFrustum = nullptr;
+static Frustum_fnGetCorners_t s_getCorners = nullptr;
+static Frustum_fnNormalize_t  s_normalize  = nullptr;
+static Frustum_fnRotate_t     s_rotate     = nullptr;
+static Frustum_fnDot_t        s_dot        = nullptr;
+static bool s_frustumMathReady = false;
+
+// These are plain Runtime engine exports; resolve them by name directly. (The
+// exe reaches them through .rdata dispatch slots 0x1401518a8/a0, 0x140151860,
+// 0x1401512c0, 0x140151298 — but only the last two are registered in standalone,
+// so a slot lookup on the others just logs a harmless "NOT IMPLEMENTED".)
+static void EnsureFrustumMathFns() {
+    if (s_frustumMathReady) return;
+    s_frustumMathReady = true;
+    s_getFrustum = reinterpret_cast<Frustum_fnGetFrustum_t>(
+        ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
+    s_getCorners = reinterpret_cast<Frustum_fnGetCorners_t>(
+        ResolveExport("?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z"));
+    s_normalize = reinterpret_cast<Frustum_fnNormalize_t>(
+        ResolveExport("?Normalize@Vector3@Math@@QEBA?AV12@XZ"));
+    s_rotate = reinterpret_cast<Frustum_fnRotate_t>(
+        ResolveExport("?Rotate@Transform3@Math@@QEBA?AVVector3@2@AEBV32@@Z"));
+    s_dot = reinterpret_cast<Frustum_fnDot_t>(
+        ResolveExport("?Dot@Vector3@Math@@QEBA?AVScalar@2@AEBV12@@Z"));
+}
+
+extern "C" void FrustumOutline_ProjectCorners(float* out) {
+    if (!out) return;
+    EnsureFrustumMathFns();
+    if (!s_getFrustum || !s_getCorners || !s_normalize || !s_rotate || !s_dot) return;
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gw) return;
+    uint8_t* cam = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(gw) + 0xe0);
+    if (!cam) return;
+
+    // Camera Transform3 (rotation + translation, 0x30 bytes) at cam+0x98;
+    // translation Vector3 at cam+0xbc. Copy the transform so Rotate reads a
+    // stable object.
+    uint8_t xform[0x30];
+    for (int i = 0; i < 0x30; ++i) xform[i] = cam[0x98 + i];
+    const float trans[3] = { *reinterpret_cast<float*>(cam + 0xbc),
+                             *reinterpret_cast<float*>(cam + 0xc0),
+                             *reinterpret_cast<float*>(cam + 0xc4) };
+
+    // 8 view-frustum corners (camera object at cam+0x34), in camera space.
+    uint8_t frustum[0x80];
+    void* fr = s_getFrustum(cam + 0x34, frustum);
+    float corners[8 * 3] = {0};
+    s_getCorners(fr, corners);
+
+    // Far corners 4..7 -> normalized -> rotated into world-space ray directions.
+    float dir[4 * 3];
+    for (int i = 4; i < 8; ++i) {
+        float nrm[4] = {0};
+        s_normalize(&corners[i * 3], nrm);
+        float rot[4] = {0};
+        s_rotate(xform, rot, nrm);
+        dir[(i - 4) * 3 + 0] = rot[0];
+        dir[(i - 4) * 3 + 1] = rot[1];
+        dir[(i - 4) * 3 + 2] = rot[2];
+    }
+
+    // Ground plane z=0: t = -trans.z / dir.z ; point = trans + t*dir.
+    // (The exe scales t by DAT_14017214c == 1.0f.)
+    const float up[3] = { 0.0f, 0.0f, 1.0f };
+    float sbuf[4] = {0};
+    s_dot(up, sbuf, trans);
+    const float negTransZ = -sbuf[0];
+    for (int i = 0; i < 4; ++i) {
+        float dz[4] = {0};
+        s_dot(up, dz, &dir[i * 3]);
+        if (dz[0] == 0.0f) continue;
+        float t = (1.0f / dz[0]) * negTransZ;
+        out[i * 3 + 0] = trans[0] + t * dir[i * 3 + 0];
+        out[i * 3 + 1] = trans[1] + t * dir[i * 3 + 1];
+        out[i * 3 + 2] = trans[2] + t * dir[i * 3 + 2];
+    }
+}
+
+// SpriteContext scissor overloads used by the outline Draw. Both return a
+// Video::Viewport BY VALUE — a hidden retbuf is the first arg after `this`,
+// which the engine_funcs fn_SpriteContext_SetScissor* typedefs omit — so we
+// resolve the slots here with the correct member value-return ABI.
+typedef void* (*Frustum_fnSetScissor4_t)(void* ctx, void* retVP, int x, int y, int w, int h);
+typedef void* (*Frustum_fnSetScissorVP_t)(void* ctx, void* retVP, const void* vp);
+static Frustum_fnSetScissor4_t  s_setScissor4  = nullptr;
+static Frustum_fnSetScissorVP_t s_setScissorVP = nullptr;
+static bool s_frustumDrawReady = false;
+static void EnsureFrustumDrawFns() {
+    if (s_frustumDrawReady) return;
+    s_frustumDrawReady = true;
+    s_setScissor4 = reinterpret_cast<Frustum_fnSetScissor4_t>(
+        ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z"));
+    s_setScissorVP = reinterpret_cast<Frustum_fnSetScissorVP_t>(
+        ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z"));
+}
+
+// Slot 6 (+0x30) — Draw. Port of FrustumOutlineElement_Draw (exe 0x14006be90):
+// draws the camera view-frustum footprint as a 4-line wire quad clipped to the
+// minimap rect. (AddLine no-ops on a spriteless sprite — CreateElement wires the
+// element's line sprite from the description; see frustumoutlinedescription.cpp.)
 static void Frustum_Draw(void* self, void* ctx, uint8_t alpha) {
-    (void)self; (void)ctx; (void)alpha;
+    uint8_t* e = reinterpret_cast<uint8_t*>(self);
+    if (fn_Element_Draw) fn_Element_Draw(self, ctx, alpha);   // base element draw
+    if (!self || !ctx || !fn_SpriteContext_AddLine) return;
+
+    // Line color = element+0x38 modulated by alpha (halved if flag bit 18 set).
+    uint32_t a32 = alpha;
+    if (*reinterpret_cast<uint32_t*>(e + 0x34) & 0x40000) a32 = (uint32_t)(alpha >> 1);
+    uint32_t v = *reinterpret_cast<uint32_t*>(e + 0x38);
+    uint32_t color = ((((v >> 8) & 0xffff0000u) * a32 ^ v) & 0xffffffu)
+                     ^ (((v >> 8) & 0xff0000u) * a32);
+
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gw) return;
+
+    float pts[4 * 3] = {0};
+    FrustumOutline_ProjectCorners(pts);
+
+    // Map the world-space ground corners to minimap pixel coordinates.
+    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    int   width   = *reinterpret_cast<int*>(e + 0xd0);
+    int   height  = *reinterpret_cast<int*>(e + 0xd4);
+    int*  gridPtr = *reinterpret_cast<int**>(reinterpret_cast<uintptr_t>(gw) + 0xf8);
+    if (!gridPtr || *gridPtr == 0) return;
+    float scale = (float)width / (float)(*gridPtr);
+    float halfW = (float)width * 0.5f;
+    float halfH = (float)height * 0.5f;
+    for (int i = 0; i < 4; ++i) {
+        float sx = scale * pts[i * 3 + 0] + halfW;
+        float sy = scale * pts[i * 3 + 1] + halfH;
+        pts[i * 3 + 0] = sx;
+        pts[i * 3 + 1] = ((float)width - uvScale) - sy;   // flip Y into image space
+        pts[i * 3 + 2] = 0.0f;
+    }
+
+    int ex = *reinterpret_cast<int*>(e + 0x68);   // element origin X
+    int ey = *reinterpret_cast<int*>(e + 0x6c);   // element origin Y
+    void* sprite = e + 0xc0;
+    auto ix = [&](int i){ return (int)pts[i * 3 + 0] + ex; };
+    auto iy = [&](int i){ return (int)pts[i * 3 + 1] + ey; };
+
+    EnsureFrustumDrawFns();
+    uint8_t savedVP[24] = {0}, scratchVP[24] = {0};
+    if (s_setScissor4) s_setScissor4(ctx, savedVP, ex, ey, width, height);
+
+    // Wire quad, corner order pt0-pt1-pt3-pt2-pt0 (matches the exe's 4 AddLines).
+    fn_SpriteContext_AddLine(ctx, sprite, ix(0), iy(0), ix(1), iy(1), color);
+    fn_SpriteContext_AddLine(ctx, sprite, ix(1), iy(1), ix(3), iy(3), color);
+    fn_SpriteContext_AddLine(ctx, sprite, ix(2), iy(2), ix(3), iy(3), color);
+    fn_SpriteContext_AddLine(ctx, sprite, ix(2), iy(2), ix(0), iy(0), color);
+
+    if (s_setScissor4 && s_setScissorVP) s_setScissorVP(ctx, scratchVP, savedVP);
 }
 
 static void* FrustumOutlineElement_Build(void* p) {

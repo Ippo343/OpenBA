@@ -110,11 +110,9 @@ extern "C" void* FrustumOutlineElement_Factory_SA(void);
 //      (applies the generic ElementDescription fields to the new element).
 //   3. width  <- desc+0x78  ->  element+0xd0
 //      height <- desc+0x7c  ->  element+0xd4
-//   4. Return the element pointer through param_2 (RDX out-buffer).
-// NOTE: the exe also sets element+0xc0 sprite via Sprite_Ctor_Name(spriteSheet@
-// desc+0x68, name@desc+0x70). That primitive is not yet wired; the default Sprite
-// installed by the factory is retained (frustum outline uses its own line sprite in
-// Draw). imageMap/imageOverlay render regardless.
+//   4. Set element+0xc0 sprite via Sprite::Sprite(spriteSheet@desc+0x68,
+//      name@desc+0x70) — the frustum outline's line sprite (now wired below).
+//   5. Return the element pointer through param_2 (RDX out-buffer).
 static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2) {
     void* elem = FrustumOutlineElement_Factory_SA();
 
@@ -128,6 +126,19 @@ static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2)
     if (e) {
         uint8_t* d = reinterpret_cast<uint8_t*>(self);
         uint8_t* el = reinterpret_cast<uint8_t*>(e);
+        // Build the outline's line Sprite from the description's spriteSheet
+        // (+0x68 ExternalPtr) + name (+0x70 String) and store at element+0xc0.
+        // The factory installed a default (spriteless) Sprite, and
+        // SpriteContext::AddLine no-ops when the sprite's spritesheet is null —
+        // so without this the frustum outline never draws. Guard on a non-null
+        // spriteSheet so a Map.rsc that omits the sprite stays crash-safe.
+        uint64_t spriteSheet = *reinterpret_cast<uint64_t*>(d + 0x68);
+        if (spriteSheet && fn_Sprite_Sprite) {
+            uint64_t spriteRet[2] = {0, 0};
+            fn_Sprite_Sprite(spriteRet, spriteSheet, d + 0x70);
+            *reinterpret_cast<uint64_t*>(el + 0xc0) = spriteRet[0];
+            *reinterpret_cast<uint64_t*>(el + 0xc8) = spriteRet[1];
+        }
         *reinterpret_cast<int*>(el + 0xd0) = *reinterpret_cast<int*>(d + 0x78);  // width
         *reinterpret_cast<int*>(el + 0xd4) = *reinterpret_cast<int*>(d + 0x7c);  // height
     }
@@ -149,9 +160,17 @@ static void* g_FrustumOutlineDescription_Vtable[11] = {
     reinterpret_cast<void*>(&FrustumOutlineDescription_VtblStub_ReturnNull),// +0x50 (guard)
 };
 
+// Defined in frustumoutlineelement.cpp — the port of the frustum ground-corner
+// projection (exe 0x14006c5b0). Registering it makes fn_MapUI_ProjectCornersToGround
+// / fn_FrustumProject resolve, which also enables minimap click-to-move-camera
+// (MapUI_HandleClick early-returns while that pointer is null).
+extern "C" void FrustumOutline_ProjectCorners(float* out);
+
 extern "C" void RegisterFrustumOutlineDescriptionVtable() {
     RegisterExeAddr(kFrustumOutlineDescriptionVtable,
                     reinterpret_cast<uintptr_t>(g_FrustumOutlineDescription_Vtable));
+    RegisterExeAddr(0x14006c5b0,
+                    reinterpret_cast<uintptr_t>(&FrustumOutline_ProjectCorners));
 }
 
 extern "C" void* FrustumOutlineDescription_Factory(void) {

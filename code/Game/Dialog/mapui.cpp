@@ -234,8 +234,9 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     // Call the ground projection function — fills corner positions from camera frustum
     fn_MapUI_ProjectCornersToGround(fullBuf);
 
-    // The original code averages the 4 projected corners but the result is unused;
-    // the actual camera movement only depends on click position and map grid size.
+    // The original also averages the 4 projected corners (0.25 * Σcorners) but
+    // DISCARDS the result — dead code confirmed in the 0x14006c850 disassembly —
+    // so the camera move depends only on the click position and map grid size.
 
     // Get game world and camera data
     void* gameWorld = *g_pGameWorldSingleton;
@@ -250,7 +251,7 @@ void MapUI_HandleClick(void* param1, int clickX, int clickY, int mapWidth, int m
     // Compute world-space scale factor: mapGridSize / mapWidth
     float worldScale = (float)mapGridSize / (float)mapWidth;
 
-    // Set camera target position at camCtrl+0x1C/0x20/0x24
+    // Set camera focus at camCtrl+0x1C/0x20/0x24 (same field WASD panning drives).
     // Maps click position: X = (clickX - halfWidth) * scale, Y = (halfHeight - clickY) * scale
     *(float*)(camCtrl + 0x1C) = (float)(clickX - (mapWidth >> 1)) * worldScale;
     *(float*)(camCtrl + 0x20) = (float)((mapHeight >> 1) - clickY) * worldScale;
