@@ -476,6 +476,7 @@ extern void RegisterPlayerRayBatch();      // Player wave r2 (ray): aa530 Terrai
 extern void RegisterPlayerTradeBatch();    // Player wave r2c (trade): EditTool 66800 + EntityUI 666b0 + AVL tree family (102e30/2c690/25740/25920/15000/14ed0)
 extern void RegisterPlayerToolUIBatch();   // Player wave r2c (toolui): OpenToolDialog ff9e0 + child-dialog vtable 0x14015f5a0
 extern void RegisterToolbarUtilityBatch(); // GUI Phase 4: utility-dialog helpers (140100270 FindDialogByCtrlType + 140014890 BST insert)
+extern void RegisterEditToolSelectBatch(); // EditTool select-entity->open-info-dialog (fd3b0 Entity_impl_d3b0)
 extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100380 entity screen-rect + ec70/098210/fe960 (Math via ResolveExport)
 extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 HighlightAdd -> b0d80 -> ace40 tessellation + BST family (TIER-2 geometry, worker-thread-free)
 extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 CreateBar populate+position (e600/e420/e700/e360/ebb0 same-TU; ec70/fe960 via ResolveAddr)
@@ -612,6 +613,10 @@ static void RegisterCodeFunctions() {
     RegisterToolbarUtilityBatch(); // GUI Phase 4: utility-dialog (toolbar case 2) helpers —
     //   140100270 FindDialogByControllerType + 140014890 BST_Insert_0x14. Retrace 14b40 already
     //   registered (reg_keystone_a_restree); child-dialog vtable via RegisterPlayerToolUIBatch.
+    RegisterEditToolSelectBatch(); // EditTool click-to-select: fd3b0 Entity_impl_d3b0 opens the
+    //   clicked entity's info DialogInstance (routes fn_EditTool_SelectEntity from edittool.cpp
+    //   OnKey). Same DialogInstance ctor + g_ToolUI_ChildDialog_Vtable + AddDialog wiring as the
+    //   Phase-4 utility path; teardown/refresh helpers fcc90/fc9e0 deferred (null-guarded).
 
     // Game registration wave — closure-safe leaf helpers (dtors/teardown + terrain).
     RegisterGameLeafBatch();       // String-array dtors 1b030/1b0a0/a8a0, MusicPlayer 18220,

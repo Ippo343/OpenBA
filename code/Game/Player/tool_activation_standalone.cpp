@@ -144,10 +144,18 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     if (tid_CreatePlaced && tid_PlacementTool)
         Tree_Insert(tree, tid_CreatePlaced, tid_PlacementTool);
 
+    // EditTool: the default world-SELECTION tool. Retail's EntityUI::Startup inserts it
+    // as node key=0 (the very first insert) — SetEditMode(pc, 0) resolves this node to
+    // install EditTool as the idle tool, whose OnKey (+0x30) picks the entity under the
+    // cursor and opens its info dialog. Without this node the select path is dead in SA.
+    uint32_t tid_EditTool = ::Object::ResolveTypeIdByNameLazy("EditTool");
+    if (tid_EditTool)
+        Tree_Insert(tree, 0, tid_EditTool);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
-            "node{CreatePlaced=%u -> PlacementTool=%u} count=%d\n",
+            "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} count=%d\n",
             entityUI, s_tid_Tool, s_tid_ToolSetting, tid_CreatePlaced, tid_PlacementTool,
-            *(int32_t*)(tree + 1));
+            tid_EditTool, *(int32_t*)(tree + 1));
     fflush(stderr);
 }
 
@@ -160,7 +168,14 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     if (!entityUI) return -1;
     uintptr_t pc = (uintptr_t)entityUI;
     void* toolSlot = (void*)(pc + 0x28);        // InternalBasePtr to the active tool
-    if (*(void**)toolSlot == nullptr) return -1;  // no active tool
+    if (*(void**)toolSlot == nullptr) {
+        // No active tool — install the default EditTool (retail EntityUI::Update does this
+        // via SetEditMode(pc, 0)). EditTool is the idle world-selection tool: its per-frame
+        // OnKey picks the entity under the cursor on left-click and opens its info dialog.
+        // Guarded to run only when idle so it does NOT churn (destroy+recreate) each frame.
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        if (*(void**)toolSlot == nullptr) return -1;  // still none (EditTool node missing)
+    }
 
     // (1) OnKey (+0x30): open/close CreateBar dialog, rotate/flip, left-click confirm.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(toolSlot);

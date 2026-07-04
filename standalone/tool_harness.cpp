@@ -65,6 +65,16 @@ extern "C" void MapParamsDialog_HarnessOpen();
 // it + Startup, installs it at entityUI+0x28. C++ linkage (not extern "C").
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
+// GUI: entity-selection (EditTool) harness. Scans the region map near centre and drives
+// the EditTool select path on the first dialog-capable entity (edittool.cpp).
+extern "C" int EditTool_HarnessSelectNearby(void* editTool);
+// Drive the select path on a specific entity (edittool.cpp) — returns 1 if a dialog opened.
+extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
+// A captured founding-house building entity (starttown.cpp) — a definitive UIDescription-
+// bearing entity, independent of the region-map/cursor pick.
+extern "C" void* StartTown_GetFoundingHouseEntity(int index);
+extern "C" int   StartTown_GetFoundingHouseCount();
+
 namespace {
 
 // RemovalTool field offsets (DragTool base + RemovalTool).
@@ -430,6 +440,44 @@ void FireUtilityDialog() {
     }
 }
 
+// GUI (click building/citizen → info dialog): activate the default EditTool via the real
+// SetEditMode(pc, 0) path (mode-tree must be built — BANISHED_LIVE_TOOLS=1), then drive the
+// cursor-free select scan so an entity's info DialogInstance opens crash-free without a live
+// cursor. The live path (real mouse click) runs through EditTool::OnKey every frame.
+void FireSelectEntity(void* entityUI) {
+    if (!entityUI) { printf("[ToolHarness] ERROR: entityUI null\n"); return; }
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    if (!tool) {
+        printf("[ToolHarness] no active tool — installing default EditTool via SetEditMode(pc,0)...\n");
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    }
+    if (!tool) {
+        printf("[ToolHarness] EditTool activation FAILED (no tool at entityUI+0x28). "
+               "Ensure BANISHED_LIVE_TOOLS=1 so the mode-tree (with the key=0 EditTool node) is built.\n");
+        return;
+    }
+    printf("[ToolHarness] EditTool active (%p)\n", tool);
+
+    // (1) Definitive test: open a captured founding-house building's info dialog directly.
+    int houses = StartTown_GetFoundingHouseCount();
+    printf("[ToolHarness] founding houses captured: %d\n", houses);
+    int opened = 0;
+    for (int i = 0; i < houses && !opened; i++) {
+        void* house = StartTown_GetFoundingHouseEntity(i);
+        if (!house) continue;
+        printf("[ToolHarness] selecting founding house[%d] entity=%p...\n", i, house);
+        opened = EditTool_HarnessSelectEntity(tool, house);
+    }
+
+    // (2) Fallback: region-map scan near centre (catches whatever occupies cells).
+    if (!opened) {
+        printf("[ToolHarness] no house dialog yet — scanning region map near centre...\n");
+        opened = EditTool_HarnessSelectNearby(tool);
+    }
+    printf("[ToolHarness] select -> %d (1=an entity's info dialog opened)\n", opened);
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -462,6 +510,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FirePreviewPlacement(entityUI);
     } else if (std::strcmp(s_toolName, "placement") == 0) {
         FirePlacementTool();
+    } else if (std::strcmp(s_toolName, "select") == 0) {
+        FireSelectEntity(entityUI);
     } else if (std::strcmp(s_toolName, "utility") == 0) {
         FireUtilityDialog();
     } else if (std::strcmp(s_toolName, "mapmenu") == 0) {

@@ -106,6 +106,54 @@ static std::vector<int64_t> g_foundingHouseIBPs;
 // the deferred employ pass seats idle adults from this list at the lodge.
 static std::vector<void*> g_foundingCitizens;
 
+// GUI select harness: expose a captured founding-house building ENTITY (the value is the
+// ComponentEntity ptr stored at ResidenceComponent+0x10) so the EditTool select harness can
+// open a real building's info dialog without depending on the region-map/cursor pick. Returns
+// null if index is out of range.
+extern "C" void* StartTown_GetFoundingHouseEntity(int index) {
+    if (index < 0 || (size_t)index >= g_foundingHouseIBPs.size()) return nullptr;
+    return reinterpret_cast<void*>(g_foundingHouseIBPs[(size_t)index]);
+}
+extern "C" int StartTown_GetFoundingHouseCount() {
+    return (int)g_foundingHouseIBPs.size();
+}
+
+// GUI click-to-select: mark a building's footprint cells as occupied by the building ENTITY
+// (cell+0x08), reproducing the net effect of the real game's MapComponent::Draw ->
+// FUN_14009dc20. The region-map cell array lives at Game+0x80 (0x30 bytes/cell, dim from
+// Game+0x00); the reader FUN_1400a0280 returns cell+0x00 then cell+0x08. Standalone's
+// MapComponent is inert so Draw never fires and buildings are ABSENT from this array — which
+// is what EditTool's click-pick reads to resolve the entity under the cursor. Without this,
+// clicking a building finds nothing. Mirrors the resource path's identical write (~L1724).
+// Also makes footprints navigation-blocking (faithful). Default ON (opt out BANISHED_LIVE_PICKMAP=0).
+static bool StartTown_PickMapEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_PICKMAP");
+        on = (e && (e[0] == '0' || strcmp(e, "false") == 0)) ? 0 : 1;
+    }
+    return on;
+}
+static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fpW, int fpH,
+                                        uintptr_t entIBP) {
+    if (!StartTown_PickMapEnabled() || !game || !entIBP) return;
+    uint8_t* cells = *(uint8_t**)((uint8_t*)game + 0x80);
+    int dim = *(int32_t*)game;
+    if (!cells || dim <= 0) return;
+    int marked = 0;
+    for (int iy = 0; iy < fpH; ++iy)
+        for (int ix = 0; ix < fpW; ++ix) {
+            int cx = tileX + ix, cy = tileY + iy;
+            if (cx < 0 || cx >= dim || cy < 0 || cy >= dim) continue;
+            int idx = dim * cy + cx;
+            *(uintptr_t*)(cells + (size_t)idx * 0x30 + 0x08) = entIBP;  // dc20: cell+0x08 = entity
+            marked++;
+        }
+    fprintf(stderr, "[startTown::pickmap] marked %d footprint cells @ (%d,%d) %dx%d entity=%p\n",
+            marked, tileX, tileY, fpW, fpH, (void*)entIBP);
+    fflush(stderr);
+}
+
 // Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp). Sets the
 // citizen's residence ref (+0x248) AND rosters the citizen into the house's
 // WorkPlaceComponent occupant list (+0x58/+0x60) via the attach helper (FUN_14012fa20).
@@ -710,6 +758,12 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         StartTown_RunOnCreatePass((void*)entIBP);
         StartTown_ProbeWorkplaceKey((void*)entIBP);   // TODO #2 gating diagnostic
 
+        // Click-to-select: register this building's footprint in the region-map cell array so
+        // EditTool's click-pick (FUN_1400a0280) resolves it under the cursor -> opens its info
+        // dialog. (Inert MapComponent never marks it; standalone-only, DLL uses the real dc20.)
+        fn_InternalBasePtr_CheckPtr(&entIBP);
+        StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
+
         // Brick M-D (BANISHED_LIVE_STORAGE): run the build-complete storage init
         // + town storage-location registration for this fully-built building —
         // retail's StorageLocationComponent OnAdded fires during RegisterEntity,
@@ -893,6 +947,10 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
 #ifdef STANDALONE_EXE
     fn_InternalBasePtr_CheckPtr(&entIBP);
     StartTown_RunOnCreatePass((void*)entIBP);   // fires ResidenceComponent::OnCreate (LIVE_RESIDENCE)
+    // Click-to-select: mark the workplace footprint in the region-map cell array (see
+    // StartTown_MarkBuildingCells) so EditTool's click-pick resolves it under the cursor.
+    fn_InternalBasePtr_CheckPtr(&entIBP);
+    StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
 #endif
 
     // ---- THE PHASE A DIAGNOSTIC: dump the component set. --------------------

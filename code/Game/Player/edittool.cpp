@@ -20,6 +20,19 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+
+// BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
+static int SelDiagOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_SELECT_DIAG"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s;
+}
+
+#ifdef STANDALONE_EXE
+// Forward decl (full header is included in the STANDALONE factory block at file end).
+namespace Object { uint32_t GetTypeIdByName(const char* name); }
+#endif
 
 // ============================================================
 // EditTool vtable addresses (for vtable chain in Dtor)
@@ -144,7 +157,8 @@ typedef void (*fn_RectangleCtor_t)(void* self);
 static fn_RectangleCtor_t s_fn_RectangleCtor = nullptr;
 
 // DialogInstance::GetRoot — IAT dispatch slot [0x1401517a8]
-typedef void* (*fn_GetRoot_t)(void* dialog);
+// Returns InternalPtr<Element> BY VALUE: RCX=dialog, RDX=hidden retbuf (Phase-4 ABI).
+typedef void* (*fn_GetRoot_t)(void* dialog, void* retbuf);
 static fn_GetRoot_t s_fn_GetRoot = nullptr;
 
 // DialogInstance::GetController — IAT dispatch slot [0x140151768]
@@ -222,6 +236,53 @@ static void EnsureEditFuncs() {
     s_pTypeId_ToolUI       = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5788);
     s_pTypeId_PageToggleUI = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c4f00);
 
+#ifdef STANDALONE_EXE
+    // In standalone the raw .rdata IAT dispatch slots above resolve to 0 (unregistered),
+    // which would leave the pick + reposition pipeline dead (KeyMapPressed null -> OnKey
+    // returns before ever picking). Fall back to the engine_funcs pointers, which ARE
+    // resolved by mangled export name from Runtime-x64.dll and work in standalone (the same
+    // ones placement/utility use). Only override when the slot came back null.
+    if (!s_fn_CheckPtr && fn_InternalBasePtr_CheckPtr)
+        s_fn_CheckPtr = (fn_CheckPtr_t)fn_InternalBasePtr_CheckPtr;
+    if (!s_fn_GetController && fn_DialogInstance_GetController)
+        s_fn_GetController = (fn_GetController_t)fn_DialogInstance_GetController;
+    if (!s_fn_IsDerived && fn_IsDerivedFrom)
+        s_fn_IsDerived = (fn_IsDerived_t)fn_IsDerivedFrom;
+    if (!s_fn_IBPCtor && fn_InternalBasePtr_Ctor)
+        s_fn_IBPCtor = (fn_IBPCtor_t)fn_InternalBasePtr_Ctor;
+    if (!s_fn_GetRoot && fn_DialogInstance_GetRoot)
+        s_fn_GetRoot = (fn_GetRoot_t)fn_DialogInstance_GetRoot;   // 2-arg (self, retbuf) ABI
+    if (!s_fn_GetPaddedSize && fn_Element_GetPaddedSize)
+        s_fn_GetPaddedSize = (fn_GetPaddedSize_t)fn_Element_GetPaddedSize;
+    if (!s_fn_SetUpperLeft && fn_DialogInstance_SetUpperLeft)
+        s_fn_SetUpperLeft = (fn_SetUpperLeft_t)fn_DialogInstance_SetUpperLeft;
+    if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
+        s_fn_KeyMapPressed = (fn_KeyMapPressed_t)fn_KeyMap_Pressed;
+    // Picking::Scene::Intersect / GetUserData — Runtime exports, resolved by mangled name.
+    if (!s_fn_PickingIntersect)
+        s_fn_PickingIntersect = (fn_PickingIntersect_t)ResolveExport(
+            "?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z");
+    if (!s_fn_PickingGetUserData)
+        s_fn_PickingGetUserData = (fn_PickingGetUserData_t)ResolveExport(
+            "?GetUserData@Scene@Picking@@QEBAPEAXI@Z");
+
+    // Reposition (Startup +0x38) type-ids: raw .rdata is NULL in standalone. Fill by name so
+    // the GetController(ToolUI)/(EntityUI) lookups resolve. 0x1401c5788="ToolUI",
+    // 0x1401c4f00="EntityUI" (the s_pTypeId_PageToggleUI name is a legacy misnomer — the
+    // RegisterType writer for 0x1401c4f00 names it "EntityUI").
+    // (GetTypeIdByName returns 0xFFFFFFFF before Factory::Startup; retry until a real id.)
+    static uint32_t s_tid_ToolUI_sa = 0, s_tid_EntityUI_sa = 0;
+    auto validTid = [](uint32_t v) { return v != 0 && v != 0xFFFFFFFFu; };
+    if (!s_pTypeId_ToolUI || !validTid(s_tid_ToolUI_sa)) {
+        if (!validTid(s_tid_ToolUI_sa)) s_tid_ToolUI_sa = ::Object::GetTypeIdByName("ToolUI");
+        s_pTypeId_ToolUI = &s_tid_ToolUI_sa;
+    }
+    if (!s_pTypeId_PageToggleUI || !validTid(s_tid_EntityUI_sa)) {
+        if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = ::Object::GetTypeIdByName("EntityUI");
+        s_pTypeId_PageToggleUI = &s_tid_EntityUI_sa;
+    }
+#endif
+
     s_editFuncsResolved = true;
 }
 
@@ -288,6 +349,14 @@ void EditTool_Startup_Impl(EditTool* self) {
     uintptr_t pageToggleIBP = 0;
     if (s_fn_IBPCtor) s_fn_IBPCtor(&pageToggleIBP, (void*)pageToggleObj);
 
+    // Standalone safety: this reposition only runs once an entity's info dialog is open, a
+    // path never exercised until GUI select landed. If either controller came back null (a
+    // missing standalone controller, or an entity whose dialog lacks a ToolUI/EntityUI), we
+    // cannot position — skip rather than deref a null IBP. The dialog still shows at its .rsc
+    // default position. Retail always has both controllers.
+    if (toolUIIBP == 0 || pageToggleIBP == 0)
+        return;
+
     // Check ToolUI controller flag at +0x40
     if (s_fn_CheckPtr) s_fn_CheckPtr(&toolUIIBP);
     if (*(char*)(toolUIIBP + 0x40) != 0) {
@@ -321,7 +390,8 @@ void EditTool_Startup_Impl(EditTool* self) {
     if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
     dialogPtr = *(uintptr_t*)entityIBP;
     void* rootIBPPtr = nullptr;
-    if (s_fn_GetRoot) rootIBPPtr = s_fn_GetRoot((void*)dialogPtr);
+    uintptr_t rootRetbuf = 0;  // InternalPtr<Element> return-by-value buffer
+    if (s_fn_GetRoot) { s_fn_GetRoot((void*)dialogPtr, &rootRetbuf); rootIBPPtr = &rootRetbuf; }
 
     if (s_fn_CheckPtr && rootIBPPtr) s_fn_CheckPtr(rootIBPPtr);
 
@@ -402,6 +472,18 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
 
     uintptr_t selfAddr = (uintptr_t)self;
 
+    if (SelDiagOn()) {
+        static int calls = 0;
+        if (calls < 3) { calls++;
+            printf("[SelDiag] OnKey#%d param2=%d KMP=%p CamRay=%p MapHit=%p AtCell=%p "
+                   "Pick=%p GetUD=%p keyExref=%p\n", calls, param2,
+                   (void*)s_fn_KeyMapPressed, (void*)s_fn_CameraRay, (void*)s_fn_MapHitTest,
+                   (void*)s_fn_EntityAtCell, (void*)s_fn_PickingIntersect,
+                   (void*)s_fn_PickingGetUserData, (void*)g_pKeyMapObjectExref);
+            fflush(stdout);
+        }
+    }
+
     if (param2 == 0) return 1;
 
     // Check tool state: self+0x10 -> state struct
@@ -420,6 +502,8 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     // Check KeyMap::Pressed(keyMap, 0, 5)
     if (!s_fn_KeyMapPressed) return 1;
     bool pressed = s_fn_KeyMapPressed(keyMap, 0, 5);
+    if (SelDiagOn() && pressed)
+        printf("[SelDiag] action-5 PRESSED (keyMap=%p) — running pick\n", (void*)keyMap);
     if (!pressed) return 1;
 
     // Get world data pointers
@@ -472,9 +556,18 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
             if (cellIndex > 0 && s_fn_EntityAtCell) {
                 uintptr_t retIBP = 0;
                 void* result = s_fn_EntityAtCell(entityList, &retIBP, cellIndex);
-                foundEntity = *(uintptr_t*)result;
+                if (result) foundEntity = *(uintptr_t*)result;
             }
+            if (SelDiagOn())
+                printf("[SelDiag] mapHit=1 hitPos=(%.2f,%.2f) cell=(%d,%d) cellEntity=%p\n",
+                       hitPos[0], hitPos[1], cellX, cellY, (void*)foundEntity);
+        } else if (SelDiagOn()) {
+            printf("[SelDiag] mapHit=0 (ray missed terrain) ray o=(%.2f,%.2f,%.2f) d=(%.2f,%.2f,%.2f)\n",
+                   rayOrigin[0], rayOrigin[1], rayOrigin[2], rayDir[0], rayDir[1], rayDir[2]);
         }
+    } else if (SelDiagOn()) {
+        printf("[SelDiag] MapHitTest skipped (MapHit=%p mapComp=%p)\n",
+               (void*)s_fn_MapHitTest, (void*)mapComponent);
     }
 
     // Picking scene intersection (3D ray picking for precise entity selection)
@@ -495,6 +588,11 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
                 foundEntity = pickIBP;
             }
         }
+        if (SelDiagOn())
+            printf("[SelDiag] Picking hitId=%d -> foundEntity=%p\n", hitId, (void*)foundEntity);
+    } else if (SelDiagOn()) {
+        printf("[SelDiag] Picking skipped (Pick=%p scene=%p)\n",
+               (void*)s_fn_PickingIntersect, pickingScene);
     }
 
     // Select the found entity if valid and different from current
@@ -517,7 +615,12 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
             if (fn_EditTool_SelectEntity) {
                 fn_EditTool_SelectEntity((void*)selfAddr, &entityParam);
             }
+            if (SelDiagOn())
+                printf("[SelDiag] SELECT entity=%p -> dialog(self+0x28)=%p\n",
+                       (void*)foundEntity, *(void**)(selfAddr + 0x28));
         }
+    } else if (SelDiagOn()) {
+        printf("[SelDiag] no entity under cursor — nothing selected\n");
     }
 
     return 1;
@@ -537,6 +640,14 @@ static uint32_t EditTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("EditTool");
     return c;
 }
+// Slot11 (+0x58) GetSettingTypeId — EditTool has no ToolSetting. Retail (0x140004950)
+// writes 0 into the caller's retbuf and returns it; SetEditMode reads *result and skips
+// setting creation when 0. A plain Tool_Ret0 (returns the *value* 0 = null ptr) would make
+// SetEditMode deref null — the same trap Phase 3 fixed for PlacementTool. Return the retbuf.
+static uint32_t* EditTool_GetSettingTypeId(void*, uint32_t* retbuf) {
+    if (retbuf) *retbuf = 0;
+    return retbuf;
+}
 static void* g_EditTool_Vtable[13] = {
     (void*)&EditTool_Dtor_Impl,      // +0x00 Dtor
     (void*)&Tool_Slot1,              // +0x08
@@ -549,11 +660,78 @@ static void* g_EditTool_Vtable[13] = {
     (void*)&Tool_Ret0,               // +0x40
     (void*)&Tool_Ret0,               // +0x48
     (void*)&EditTool_Serialize_Impl, // +0x50 Serialize (entity ref)
-    (void*)&Tool_Ret0,               // +0x58
+    (void*)&EditTool_GetSettingTypeId, // +0x58 GetSettingTypeId (writes 0 to retbuf)
     (void*)&Tool_Ret0,               // +0x60
 };
 extern "C" void RegisterEditToolVtable() {
     RegisterExeAddr(0x140161ca0, (uintptr_t)g_EditTool_Vtable);
+}
+
+// Cursor-free select harness (BANISHED_TOOL_HARNESS=select). The live pick needs the OS
+// cursor over an entity, which the headless settle-frame lacks. This mirrors OnKey's
+// cell-fallback: scan the region map around the start-town centre via EntityAtCell and
+// drive fn_EditTool_SelectEntity on each occupant until one opens an info dialog
+// (editTool+0x28 goes non-null). Entities without a UIDescription (trees/rocks) safely
+// no-op, so the first building/citizen hit is what opens. Returns 1 if a dialog opened.
+// Drive the select path on ONE specific entity (a definitive UIDescription-bearing building
+// from the founding-house capture). Returns 1 if an info dialog opened (editTool+0x28 set).
+extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
+    EnsureEditFuncs();
+    if (!editTool || !entity) return 0;
+    if (!fn_EditTool_SelectEntity) { printf("[EditSel] fn_EditTool_SelectEntity null (M2 unported?)\n"); return 0; }
+    // Clear any prior selection ref so d3b0 doesn't early-out on a repeat.
+    uintptr_t entityParam = (uintptr_t)entity;
+    fn_EditTool_SelectEntity(editTool, &entityParam);
+    void* dlg = *(void**)((uintptr_t)editTool + 0x28);
+    printf("[EditSel] direct select entity=%p -> dialog=%p (%s)\n",
+           entity, dlg, dlg ? "OPENED" : "no dialog");
+    return dlg != 0 ? 1 : 0;
+}
+
+extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
+    EnsureEditFuncs();
+    if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
+    if (!fn_EditTool_SelectEntity) { printf("[EditSel] fn_EditTool_SelectEntity null (M2 unported?)\n"); return 0; }
+
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xf8);
+    int* mapSize = *(int**)(gameWorld + 0xf8);
+    int gridSize = (mapSize && *mapSize > 0) ? *mapSize : 256;
+    int tried = 0, found = 0;
+
+    // Expanding Chebyshev rings around centre (124,124), same valley the placement/
+    // removal harnesses target.
+    for (int ring = 0; ring <= 16; ring++) {
+        for (int dy = -ring; dy <= ring; dy++) {
+            for (int dx = -ring; dx <= ring; dx++) {
+                if (ring > 0 && dx > -ring && dx < ring && dy > -ring && dy < ring)
+                    continue;  // ring perimeter only
+                int cx = 124 + dx, cy = 124 + dy;
+                if (cx < 0 || cx >= gridSize || cy < 0 || cy >= gridSize) continue;
+                int cellIndex = gridSize * cy + cx;
+                if (cellIndex <= 0 || !s_fn_EntityAtCell) continue;
+
+                uintptr_t retIBP = 0;
+                void* result = s_fn_EntityAtCell(entityList, &retIBP, cellIndex);
+                uintptr_t entity = result ? *(uintptr_t*)result : 0;
+                if (!entity) continue;
+                found++;
+
+                uintptr_t entityParam = entity;
+                fn_EditTool_SelectEntity(editTool, &entityParam);
+                tried++;
+                void* dlg = *(void**)((uintptr_t)editTool + 0x28);
+                if (dlg != 0) {
+                    printf("[EditSel] cell(%d,%d) entity=%p OPENED info dialog=%p "
+                           "(tried=%d occupants=%d)\n", cx, cy, (void*)entity, dlg, tried, found);
+                    return 1;
+                }
+            }
+        }
+    }
+    printf("[EditSel] no dialog opened after scanning rings (occupants=%d tried=%d) — "
+           "entities may lack a UIDescription\n", found, tried);
+    return 0;
 }
 extern "C" void* EditTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x38, g_EditTool_Vtable, 0);}
 extern "C" void* EditTool_Factory_SA(void) {
