@@ -56,12 +56,36 @@ static void Frustum_ComputeSize(void* self) {
     }
 }
 
-// Slot 5 (+0x28) — ComputeLayout (exe 0x14006c1c0). Delegate to the concrete base
-// UI::Element::ComputeLayout (a real Runtime export even though the vtable slot is
-// pure). The frustum-specific screen-rect write (+0x68..+0x74) only feeds the
-// outline Draw, which is a no-op here, so it is omitted.
+// UI::Element::GetAlignedPosition (member overload, Runtime 0x180115ff0). Computes the
+// element's aligned screen rect from its size (+0x60/+0x64), margins (+0x18..+0x24) and
+// alignment (+0x30) within the parent-allocated (x,y,w,h). __thiscall: this in RCX.
+typedef void (*Frustum_fnGetAlignedPos_t)(void* self, int x, int y, int w, int h,
+                                          int p5, int p6, int* outX, int* outY,
+                                          int* outW, int* outH, bool b1, bool b2);
+static Frustum_fnGetAlignedPos_t s_getAlignedPos = nullptr;
+static bool s_getAlignedPosReady = false;
+
+// Slot 5 (+0x28) — ComputeLayout (exe 0x14006c1c0). Faithful port: run the base
+// UI::Element::ComputeLayout, then compute the aligned screen rect via GetAlignedPosition
+// and store it at +0x68 (left) / +0x6c (top) / +0x70 (right) / +0x74 (bottom). The outline
+// Draw reads +0x68/+0x6c as the absolute pixel offset for its lines and scissor — without
+// this write they stay 0 and the frustum draws relative to screen origin instead of the
+// inset minimap rect (renders too high/left).
 static void Frustum_ComputeLayout(void* self, int x, int y, int w, int h) {
     if (fn_Element_ComputeLayout) fn_Element_ComputeLayout(self, x, y, w, h);
+    if (!s_getAlignedPosReady) {
+        s_getAlignedPosReady = true;
+        s_getAlignedPos = reinterpret_cast<Frustum_fnGetAlignedPos_t>(
+            ResolveExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z"));
+    }
+    if (!s_getAlignedPos) return;
+    int outX = 0, outY = 0, outW = 0, outH = 0;
+    s_getAlignedPos(self, x, y, w, h, 0, 0, &outX, &outY, &outW, &outH, false, false);
+    uint8_t* e = reinterpret_cast<uint8_t*>(self);
+    *reinterpret_cast<int*>(e + 0x68) = outX;
+    *reinterpret_cast<int*>(e + 0x70) = outX + outW;
+    *reinterpret_cast<int*>(e + 0x6c) = outY;
+    *reinterpret_cast<int*>(e + 0x74) = outY + outH;
 }
 
 // ===========================================================================
