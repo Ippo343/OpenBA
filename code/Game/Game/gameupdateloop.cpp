@@ -39,6 +39,9 @@ extern "C" void ToolbarStandalone_Init();
 extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI);
 extern "C" int  EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time);
 extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFlag);
+// Minimap terrain painter (code/Game/Game/minimap_paint.cpp) — standalone fallback for
+// the exe FUN_1400a5140 (ImageCapture::DrawCheck), wired into fn_ImageCapture_DrawCheck.
+extern "C" void Minimap_PaintTerrain(void* minimap, void* context, void* worldGeom, void* sunLight);
 static bool LiveToolsEnabled() {
     static int g = -1;
     if (g < 0) { const char* e = getenv("BANISHED_LIVE_TOOLS"); g = (e && e[0] && !(e[0]=='0' && e[1]=='\0')) ? 1 : 0; }
@@ -495,6 +498,13 @@ static void EnsureInit() {
     // Draw sub-functions
     fn_ImageCapture_DrawCheck = reinterpret_cast<fn_ImageCapture_DrawCheck_t>(
         ResolveAddr(Module::Exe, 0x1400a5140));
+    // Standalone: the exe FUN_1400a5140 isn't loaded, so ResolveAddr returns null and
+    // the minimap terrain would never be painted. Fall back to our clean port
+    // (code/Game/Game/minimap_paint.cpp) so the minimap renders real terrain.
+    if (!fn_ImageCapture_DrawCheck) {
+        fn_ImageCapture_DrawCheck =
+            reinterpret_cast<fn_ImageCapture_DrawCheck_t>(&Minimap_PaintTerrain);
+    }
     fn_PlayerController_UpdateCamera = reinterpret_cast<fn_PlayerController_UpdateCamera_t>(
         ResolveAddr(Module::Exe, 0x140098660));
     fn_Weather_DrawUpdate = reinterpret_cast<fn_Weather_DrawUpdate_t>(
@@ -1200,8 +1210,10 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         uint8_t* imageCapture = (uint8_t*)self->m_imageCapture;
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        // [GUARD-M5] fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is unwired in
-        // standalone; skip the image-capture terrain-refresh dance entirely.
+        // fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is our clean port
+        // Minimap_PaintTerrain in standalone (see Startup fallback above). It fires
+        // once — when the minimap's terrain GPU buffer (imageCapture+0x08) is still
+        // null — to render the terrain top-down into the minimap pixel arrays.
         if (fn_ImageCapture_DrawCheck && *(int64_t*)(imageCapture + 8) == 0) {
             // Remove and re-add global objects for terrain update
             void* gameWorld = *g_pGameWorldSingleton;
