@@ -281,6 +281,57 @@ void MapComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
+#include <cstdlib>
+
+// ============================================================
+// GUI Keystone F — minimap OVERLAY paint (tree/stone/building dots)
+// ============================================================
+// Retail: EntityList::RegisterEntity -> ComponentEntity_OnAddedPass dispatches
+// MapComponent vtable+0x30 = MapComponent::Draw (0x140124370), which gates on
+// MapDescription+0x30 and calls sub_41b0 (0x1401241b0): if desc+0x32 it paints
+// the footprint rect into the minimap overlay pixel array (gameWorld+0x148,
+// array +0x28) with the description's map color (desc+0x34) via helper_4d30
+// (0x1400a4d30 = MapTerrainClear_Reimpl above), setting the minimap dirty
+// flag; GameUpdateLoop::Update "Step 16" then re-uploads the overlay texture.
+// Removal (vtable+0x38, 0x1401242f0) paints the same rect with 0 (transparent).
+//
+// In standalone the inert vtable's +0x30 slot was a stub, so entities never
+// painted onto the minimap: terrain rendered, but no trees/stone/buildings.
+// This wires the PAINT half into slot 6. The occupancy half (41b0 -> dc20)
+// stays collapsed into the spawn sites (starttown.cpp), which pre-set bit
+// 0x100000 — the faithful 41b0 skips EVERYTHING (paint included) on that bit,
+// so the paint here must ignore it. The registered 41b0 port is not called:
+// its IsDerivedFrom(MapDescription) returns false in standalone's partial
+// factory tree (documented landmine) and it null-derefs; we trust the linked
+// description (mc+0x18), same as MapComponent_DetachOccupancy_4750 below.
+static void MapComponent_PaintMinimapRect(uint8_t* mc, bool clear) {
+    void* desc = *(void**)(mc + 0x18);
+    if (!desc) return;
+    // 41b0's paint gate (and 2f0's clear gate) = desc+0x32; the attach path
+    // additionally has MapComponent::Draw's desc+0x30 gate.
+    if (*(uint8_t*)((uint8_t*)desc + 0x32) == 0) return;
+    if (!clear && *(uint8_t*)((uint8_t*)desc + 0x30) == 0) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uint8_t* minimap = *(uint8_t**)((uintptr_t)*g_pGameWorldSingleton + 0x148);
+    if (!minimap || !*(void**)(minimap + 0x28)) return;  // overlay array not built yet
+    int width = *(int32_t*)(minimap + 4);
+    int x = *(int16_t*)(mc + 0x28), y = *(int16_t*)(mc + 0x2a);
+    int w = *(int16_t*)(mc + 0x2c), h = *(int16_t*)(mc + 0x2e);
+    // Unplaced components keep the 0xFFFF ctor sentinel in the tile fields, and
+    // helper_4d30 has no bounds checks — a bad rect would scribble outside the
+    // pixel array. Skip anything not fully inside the grid.
+    if (x < 0 || y < 0 || w <= 0 || h <= 0 || x + w > width || y + h > width) return;
+    uint32_t color = clear ? 0u : *(uint32_t*)((uint8_t*)desc + 0x34);
+    MapTerrainClear_Reimpl(minimap, (int)color, x, y, w, h);
+
+    static bool s_trace = std::getenv("BANISHED_MAP_TRACE") != nullptr;
+    if (s_trace) {
+        static int s_count = 0;
+        if (++s_count <= 20 || (s_count % 500) == 0)
+            printf("[MinimapOverlay] %s #%d rect(%d,%d %dx%d) color=%08x\n",
+                   clear ? "clear" : "paint", s_count, x, y, w, h, color);
+    }
+}
 
 // ============================================================
 // Economy brick M-B — grid occupancy UN-mark on entity removal
@@ -346,10 +397,21 @@ static uint32_t MapComponent_InertGetTypeId(void*) {
     return cached;
 }
 static void* MapComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+static void MapComponent_OnAddedVSlot(void* s) {
+    // slot 6 (+0x30) — dispatched by ComponentEntity_OnAddedPass at register
+    // time (MapComponent flags 0x83 have bit 0 set). Paint the minimap dot.
+    MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/false);
+}
 static void MapComponent_DetachVSlot(void* s) {
+    // Retail removal (0x1401242f0) first clears the minimap overlay rect via
+    // helper_4d30(minimap, 0, ...) when desc+0x32. The same branch inside the
+    // ported MapComponent_OnCreate is dead in standalone (IsDerivedFrom
+    // landmine), so do it here trusting the linked description.
+    MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/true);
     MapComponent_OnCreate(reinterpret_cast<MapComponent*>(s));
 }
 static void MapComponent_FinishVtable() {
+    MapComponent_InertVtable[6] = reinterpret_cast<void*>(&MapComponent_OnAddedVSlot);
     MapComponent_InertVtable[7] = reinterpret_cast<void*>(&MapComponent_DetachVSlot);
 }
 extern "C" void* MapComponent_Factory(void) {
