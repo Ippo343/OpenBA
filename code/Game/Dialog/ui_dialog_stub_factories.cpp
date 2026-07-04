@@ -291,10 +291,14 @@ UI_DIALOG_STUB(TitleDescToolTipUI,  "UI::DialogController", 0x30);
 // stub left Slot4 dead, so NO utility dialog ever built its inner content — the
 // minimap was never instantiated. Wiring Slot4 to the real reimpl runs the whole
 // injection chain. Slot9 (+0x48, event) is now wired too so the close (X) button
-// works; Slot8 (+0x40, per-frame drag-follow) stays a no-op (drag is cosmetic and
-// Slot9 alone leaves the drag-init flags harmlessly set until mouse-up clears them).
+// works, and Slot8 (+0x40, per-frame drag-follow) so the title-bar drag actually
+// moves the dialog: Runtime DialogInstance::OnUpdate (0x180115400) calls every
+// controller's vtable+0x40 with (controller, Time&) each frame; Slot9's msg=2
+// drag-init only sets the flags, Slot8 does the SetUpperLeft follow + writes the
+// new position into the utility-dialog position BST (gameSubsys+0x50).
 struct ToolUI;
 extern void ToolUI_Slot4(ToolUI* self);
+extern void ToolUI_Slot8(ToolUI* self);
 // Slot9 (+0x48) is ToolUI's OnElementEvent handler. It contains the buttonClose
 // (element id 1, msg 0x12) -> UserInterface::CloseDialog logic that dismisses the
 // dialog, plus focus (msg 8..10 -> BringDialogToFront) and drag-init (msg 2).
@@ -339,6 +343,16 @@ namespace uistub_ToolUI {
                    self, *reinterpret_cast<void**>((char*)self+0x28)); fflush(stdout); }
         ToolUI_Slot4(reinterpret_cast<ToolUI*>(self));
     }
+    // Per-frame update (+0x40). Runtime DialogInstance::OnUpdate dispatches
+    // (controller, Time&); the reimpl ignores the Time arg. Idle cost is two flag
+    // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
+    // exref + the Runtime fns the drag path dereferences unconditionally.
+    void Slot8(void* self, void* /*time*/) {
+        if (!self || !g_pKeyMapObjectExref || !*g_pKeyMapObjectExref
+            || !fn_KeyMap_GetValue || !fn_DialogInstance_SetUpperLeft
+            || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+        ToolUI_Slot8(reinterpret_cast<ToolUI*>(self));
+    }
     // OnElementEvent (+0x48). Dispatched with (self, &elementPtr, msg, id, x, y, ...);
     // the real handler closes the dialog on the buttonClose (id 1, msg 0x12).
     void Slot9(void* self, void* p2, int msg, int id, int mx, int my) {
@@ -346,6 +360,7 @@ namespace uistub_ToolUI {
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
     struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
+                          g_vt[8]=reinterpret_cast<void*>(&Slot8);
                           g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
     void Zero(void* p){ for(size_t o=0;o<(size_t)0x58;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
     void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x58,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
