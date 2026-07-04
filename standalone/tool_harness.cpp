@@ -51,6 +51,14 @@ extern "C" int   PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCe
 //   Description ptr (a resolved Template\Utility*.rsc). Opens its management dialog.
 extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param);
 
+// Map-render bring-up: create + upload the minimap GPU ImageBuffers
+// (gameWorld+0x148 +0x08 terrain / +0x10 overlay) from the raw pixel arrays.
+extern "C" void Minimap_CreateAndUpload(void* mapObj);
+// Drive a named controller's Slot4 (+0x20 SetupImage) on the just-opened dialog.
+extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName);
+// Open the in-game "Map" menu dialog (buttonMap id 11 → MapParamsDialog).
+extern "C" void MapParamsDialog_HarnessOpen();
+
 // Phase 3: the SetEditMode reimpl the toolbar case-1 click drives (entityui.cpp).
 // Walks the tool-mode tree at entityUI+0x10 (built by EntityUI_BuildToolModeTree_SA),
 // resolves PlacementTool from the descriptor's CreatePlacedDescription, CreateObject's
@@ -333,12 +341,93 @@ void FireUtilityDialog() {
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) { printf("[ToolHarness] ERROR: gameWorld null\n"); return; }
     void* gameSys = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x120);
+
+    // --- Minimap GPU-buffer bring-up (BEFORE opening the dialog) --------------
+    // The minimap subsystem (gameWorld+0x148) has its CPU pixel arrays allocated
+    // but never painted / uploaded in standalone. Optionally paint a test pattern
+    // (default ON for the map harness so there's visible content), then create +
+    // upload the GPU ImageBuffers so MapUI::SetupImage has valid textures to bind.
+    {
+        uintptr_t gw = reinterpret_cast<uintptr_t>(gameWorld);
+        void* mapObj = *reinterpret_cast<void**>(gw + 0x148);
+        bool isMap = std::strstr(tmplName, "Map") != nullptr;
+        const char* tp = std::getenv("BANISHED_MAP_TESTPATTERN");
+        bool testPattern = isMap && !(tp && (tp[0] == '0'));  // default ON for map
+        if (mapObj && isMap) {
+            uintptr_t m = reinterpret_cast<uintptr_t>(mapObj);
+            int width = *reinterpret_cast<int*>(m + 0x04);
+            uint32_t* terr = *reinterpret_cast<uint32_t**>(m + 0x18);
+            uint32_t* over = *reinterpret_cast<uint32_t**>(m + 0x28);
+            if (testPattern && terr && width > 0) {
+                // Terrain: 16-cell checkerboard of two greens + blue diagonal.
+                for (int y = 0; y < width; y++)
+                    for (int x = 0; x < width; x++) {
+                        uint32_t c = ((x >> 4) ^ (y >> 4)) & 1 ? 0xff2f8f2fu : 0xff1f5f1fu;
+                        if (((x - y) & 0x3f) < 3) c = 0xff3f6fcfu;  // diagonal river
+                        terr[y * width + x] = c;
+                    }
+                *reinterpret_cast<uint8_t*>(m + 0x00) = 1;  // mark dirty
+                printf("[MapProbe] painted %dx%d test pattern into terrain array\n", width, width);
+            }
+            if (testPattern && over && width > 0) {
+                // Overlay: red border rectangle, otherwise transparent.
+                for (int y = 0; y < width; y++)
+                    for (int x = 0; x < width; x++) {
+                        bool border = x < 2 || y < 2 || x >= width - 2 || y >= width - 2;
+                        over[y * width + x] = border ? 0xffff0000u : 0x00000000u;
+                    }
+            }
+            Minimap_CreateAndUpload(mapObj);
+            printf("[MapProbe] Minimap_CreateAndUpload done — buffers +0x08=%p +0x10=%p\n",
+                   *reinterpret_cast<void**>(m + 0x08), *reinterpret_cast<void**>(m + 0x10));
+        }
+    }
+
     printf("[ToolHarness] gameSubsys(gameWorld+0x120)=%p — opening utility dialog "
            "(param=Description %p)...\n", gameSys, desc);
 
     ToolbarUtility_HarnessOpen(gameSys, reinterpret_cast<uint64_t>(desc));
     printf("[ToolHarness] utility-dialog open returned — dialog should now render "
            "(watch subsequent frames for crashes).\n");
+
+    // Drive MapUI::SetupImage explicitly (AddDialog doesn't reach controller setup
+    // through the standalone ToolUI child-dialog vtable). Binds the uploaded
+    // terrain/overlay textures to the dialog's imageMap/imageOverlay elements.
+    if (std::strstr(tmplName, "Map") != nullptr)
+        ToolbarUtility_HarnessDriveController("MapUI");
+
+    // --- Minimap image-buffer probe (map-render bring-up) ---------------------
+    // MapUI::Slot4 (SetupImage) reads the minimap subsystem at gameWorld+0x148,
+    // then its terrain ImageBuffer (+0x08) and overlay ImageBuffer (+0x10). If
+    // those buffers are null in standalone the minimap can't render. Report them.
+    {
+        uintptr_t gw = reinterpret_cast<uintptr_t>(gameWorld);
+        void* mapObj = *reinterpret_cast<void**>(gw + 0x148);
+        printf("[MapProbe] gameWorld+0x148 (minimap subsystem) = %p\n", mapObj);
+        if (mapObj) {
+            uint64_t* q = reinterpret_cast<uint64_t*>(mapObj);
+            for (int i = 0; i < 8; i++)
+                printf("[MapProbe]   +0x%02x = 0x%016llx\n", i * 8,
+                       (unsigned long long)q[i]);
+            int* w = reinterpret_cast<int*>(mapObj);
+            printf("[MapProbe]   ints +0x00=%d +0x04=%d +0x18=%d +0x1c=%d\n",
+                   w[0], w[1], w[6], w[7]);
+            // Sample the raw pixel arrays: +0x18 terrain, +0x28 overlay.
+            uintptr_t m2 = reinterpret_cast<uintptr_t>(mapObj);
+            uint32_t* terr = *reinterpret_cast<uint32_t**>(m2 + 0x18);
+            uint32_t* over = *reinterpret_cast<uint32_t**>(m2 + 0x28);
+            int width = w[1];
+            auto sampleArr = [width](const char* nm, uint32_t* a) {
+                if (!a) { printf("[MapProbe]   %s=null\n", nm); return; }
+                int nz = 0, n = width * width;
+                for (int i = 0; i < n; i++) if (a[i]) nz++;
+                printf("[MapProbe]   %s nonzero=%d/%d  sample=[%08x %08x %08x %08x] mid=%08x\n",
+                       nm, nz, n, a[0], a[1], a[2], a[3], a[n / 2 + width / 2]);
+            };
+            sampleArr("terrain(+0x18)", terr);
+            sampleArr("overlay(+0x28)", over);
+        }
+    }
 }
 
 }  // namespace
@@ -358,6 +447,12 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FirePlacementTool();
     } else if (std::strcmp(s_toolName, "utility") == 0) {
         FireUtilityDialog();
+    } else if (std::strcmp(s_toolName, "mapmenu") == 0) {
+        MapParamsDialog_HarnessOpen();
+    } else if (std::strcmp(s_toolName, "scan") == 0) {
+        // Scan all live HUD dialogs (UI+0x28 list) for a MapUI controller /
+        // imageMap element — locate where the visual minimap lives.
+        ToolbarUtility_HarnessDriveController("MapUI");
     } else {
         // Default / "removal": the original DragTool path (needs the live EntityUI).
         if (!entityUI) return;

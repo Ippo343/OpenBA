@@ -31,6 +31,9 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
+#ifdef STANDALONE_EXE
+#include <cstdio>
+#endif
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -605,6 +608,10 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 
         // Override vtable to ToolUI child dialog vtable
         *(uintptr_t*)dialogInst = g_ToolUI_ChildDialog_Vtable;
+#ifdef STANDALONE_EXE
+        extern void* g_HarnessLastUtilityDialog;
+        g_HarnessLastUtilityDialog = dialogInst;   // harness: drive its controllers
+#endif
     }
 
     // Wrap in InternalBasePtr
@@ -665,12 +672,113 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 }
 
 #ifdef STANDALONE_EXE
+// Captures the last DialogInstance created by Toolbar_Utility_Impl so the harness
+// can reach its controllers (e.g. drive MapUI::SetupImage after open).
+void* g_HarnessLastUtilityDialog = nullptr;
+
+// Recursively dump a UI::Element tree. Element layout (Runtime RE):
+//   +0x10 name (System::String: *ptr = data, len at data-8) · +0xa0 children
+//   array (Element*[]) · +0xa8 child count · vtable[2] = GetTypeId.
+static void HarnessDumpElemTree(void* elem, int depth, int* counter) {
+    if (!elem || depth > 8 || *counter > 300) return;
+    (*counter)++;
+    char* nameData = *reinterpret_cast<char**>(reinterpret_cast<uintptr_t>(elem) + 0x10);
+    int len = nameData ? *reinterpret_cast<int*>(nameData - 8) : 0;
+    uint32_t tid = 0;
+    { void** vt = *reinterpret_cast<void***>(elem);
+      if (vt && vt[2]) { typedef uint32_t(*G)(void*); tid = reinterpret_cast<G>(vt[2])(elem); } }
+    printf("[ElemTree] %*selem=%p tid=%u name='%.*s'\n", depth * 2, "",
+           elem, tid, len > 0 ? len : 0, nameData ? nameData : "");
+    void** kids = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(elem) + 0xa0);
+    int kc = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(elem) + 0xa8);
+    for (int i = 0; kids && i < kc; i++) HarnessDumpElemTree(kids[i], depth + 1, counter);
+}
+
 // GUI_PLAN Keystone F, Phase 4 — harness entry. Fires the utility-dialog open path
 // (toolbar case 2) headlessly: pass the utility item's Description ptr (item+0x58,
 // e.g. a resolved Template\Utility*.rsc) as `param`. Mirrors the case-2 dispatch.
 extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
     uint8_t retBuf[16] = {};
+    g_HarnessLastUtilityDialog = nullptr;
     Toolbar_Utility_Impl(gameSubsys, retBuf, param);
+}
+
+// Harness: fetch a named controller from the just-opened utility dialog and
+// dispatch its vtable slot 4 (+0x20 — MapUI/etc. "SetupImage" / refresh). Used to
+// drive the minimap render after open, since AddDialog doesn't reach the
+// controller setup through the standalone ToolUI child-dialog vtable.
+extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName) {
+    if (!fn_DialogInstance_GetController || !fn_UI_GetFirstDialog) {
+        printf("[HarnessDrive] GetController/GetFirstDialog null\n"); return;
+    }
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gameWorld) { printf("[HarnessDrive] gameWorld null\n"); return; }
+    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
+    if (!ui) { printf("[HarnessDrive] UserInterface null\n"); return; }
+
+    uint32_t tid = ::Object::GetTypeIdByName(controllerName);
+    printf("[HarnessDrive] searching open dialogs for '%s' (tid=%u)\n", controllerName, tid);
+
+    // The open-dialog collection is a DynArray at UserInterface+0x28 (data ptr) /
+    // +0x30 (count) — that's where UserInterface::AddDialog (Runtime 0x180120ee0)
+    // pushes. Each element is an InternalPtr<DialogInstance> (8 bytes). Enumerate
+    // it, dumping each dialog's controllers to locate the (nested) MapUI.
+    uintptr_t uiAddr = reinterpret_cast<uintptr_t>(ui);
+    uintptr_t* data = *reinterpret_cast<uintptr_t**>(uiAddr + 0x28);
+    int count = *reinterpret_cast<int*>(uiAddr + 0x30);
+    printf("[HarnessDrive] UI+0x28 dialog array=%p count=%d\n", data, count);
+    for (int idx = 0; data && idx < count && idx < 32; idx++) {
+        uintptr_t ip = data[idx];              // InternalPtr value
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ip);
+        void* dialog = reinterpret_cast<void*>(ip);
+        if (!dialog) { printf("[HarnessDrive] dialog[%d]=null\n", idx); continue; }
+        void** ctrlArr = *reinterpret_cast<void***>(reinterpret_cast<uintptr_t>(dialog) + 0x78);
+        int cnt = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(dialog) + 0x80);
+        uint32_t dlgTid = 0;
+        { void** dvt = *reinterpret_cast<void***>(dialog);
+          if (dvt && dvt[2]) { typedef uint32_t(*G)(void*); dlgTid = reinterpret_cast<G>(dvt[2])(dialog); } }
+        printf("[HarnessDrive] dialog[%d]=%p dlgTid=%u controllers=%d:", idx, dialog, dlgTid, cnt);
+        for (int i = 0; ctrlArr && i < cnt && i < 16; i++) {
+            void* c = ctrlArr[i]; uint32_t ctid = 0;
+            if (c) { void** vt = *reinterpret_cast<void***>(c);
+                if (vt && vt[2]) { typedef uint32_t(*G)(void*); ctid = reinterpret_cast<G>(vt[2])(c); } }
+            printf(" [%d]tid=%u", i, ctid);
+        }
+        printf("\n");
+        // Dump the dialog's element tree (root = dialog+0x50) so we see exactly
+        // what content was built (names, types) and whether the minimap is there.
+        {
+            void* root = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(dialog) + 0x50);
+            printf("[HarnessDrive] dialog[%d] root elem=%p — tree:\n", idx, root);
+            int counter = 0;
+            HarnessDumpElemTree(root, 0, &counter);
+            printf("[HarnessDrive] (tree had %d elements)\n", counter);
+        }
+        // Probe the dialog's element tree for the minimap content elements — if
+        // they exist here, the content is embedded (no MapUI controller needed to
+        // locate them; we can bind textures directly).
+        if (fn_DialogInstance_FindElement && fn_String_Ctor_CStr && fn_String_Dtor) {
+            const char* names[] = { "imageMap", "imageOverlay", "buttonOk", "map", "image" };
+            for (const char* nm : names) {
+                uint8_t nb[8]; fn_String_Ctor_CStr(nb, nm);
+                uint64_t r = 0; fn_DialogInstance_FindElement(dialog, &r, nb);
+                fn_String_Dtor(nb);
+                printf("[HarnessDrive]   FindElement('%s')=%p\n", nm, reinterpret_cast<void*>(r));
+            }
+        }
+        uintptr_t ctrlBuf[2] = {0, 0};
+        fn_DialogInstance_GetController(dialog, ctrlBuf, tid);
+        if (ctrlBuf[0]) {
+            void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
+            printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot4\n",
+                   controllerName, ctrl, idx);
+            void** vt = *reinterpret_cast<void***>(ctrl);
+            if (vt && vt[4]) { typedef void(*S)(void*); reinterpret_cast<S>(vt[4])(ctrl);
+                printf("[HarnessDrive] Slot4 done\n"); }
+            return;
+        }
+    }
+    printf("[HarnessDrive] '%s' not found in %d open dialogs\n", controllerName, count);
 }
 #endif
 

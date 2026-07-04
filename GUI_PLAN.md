@@ -580,6 +580,39 @@ premise: **Town Hall / Trade are NOT Utility** items — they are `Action=Tool`/
 build since had been linking a **stale exe**. The `$(SA_TARGET)` rule now links via a GNU-make
 response file (`$(file >…link_objects.rsp,…)` + `@file`). Watch for this if adding TUs.
 
+### Phase 4 follow-on — MAP RENDER bring-up [pipeline DONE; render BLOCKED on nested dialog] (2026-07-03)
+
+Wiring the `map` Utility dialog to actually render the minimap. **The minimap GPU-upload
+pipeline is ported + verified crash-free; the visual render is blocked on dialog machinery.**
+Default SA build A/B clean (0-byte crash, 0 map traces, world builds). All new code is
+harness-gated (`BANISHED_TOOL_HARNESS=utility BANISHED_UTILITY_TEMPLATE='Template\UtilityMap.rsc'`).
+
+**Minimap subsystem RE (Application-x64.exe), `gameWorld+0x148`** (plain struct, no vtable):
+`+0x00` dirty · `+0x04` width (256) · `+0x08` ImageBuffer* terrain (GPU) · `+0x10` overlay (GPU) ·
+`+0x18` uint32* terrain raw pixels · `+0x28` uint32* overlay raw pixels (painted by
+`MapComponent_helper_4d30` 0x1400a4d30). `gameupdateloop_load.cpp` Step 31 **allocates** the arrays
+but **never paints** them → both ALL-ZERO in SA. The GPU buffers are created+uploaded only on the
+minimap Serialize (`FUN_1400a57f0`) IsLoading tail (`FUN_1400a4e80` create + `CopyToTexture` ×2),
+which the direct-build standalone never hits.
+
+**✅ DONE + verified:**
+- `code/Game/Game/minimap_upload.cpp` — `Minimap_CreateAndUpload(mapObj)` ports create+upload (mirrors
+  `serialize_image_upload.cpp`; NoiseUI ImageBuffer vtable 0x14015c8c0 slot9=Create; filterMode=1).
+  Both buffers create (createOk=1) + upload crash-free (test-pattern terrain reaches GPU).
+- `MapUI` promoted stub→real (`ui_dialog_stub_factories.cpp`: Slot4=SetupImage +0x20, Slot9 +0x48;
+  MapUI vtable 0x14015c350, slot3 empty). `mapui.cpp` SetupImage made SA-safe (guard the ModDialog
+  subclass-vtable overrides 0x14015c400/0x14015c3b0 — unregistered→0 in SA — keep base ctor vtable).
+
+**🚧 BLOCKER:** the map Utility dialog's **top controller = ToolUI** (tid 3486617099), NOT MapUI
+(1120223838). MapUI + `imageMap`/`imageOverlay` elements + `FrustumOutlineElement` (minimap element,
+vtable 0x14015c2a0) live in a **nested child** (UIDescription-loaded). Harness walks `fn_UI_GetFirstDialog`
+(GetController @Runtime 0x180113320 matches `dialog+0x78`[ctrl array]/`+0x80`[count] by `vtable[+0x10]`
+GetTypeId) — but the enum shows only **1 dialog with 0 controllers**, which is NOT the created ToolUI
+dialog (that has 1 ctrl via direct access). **Resolve this dialog-list discrepancy next**; confirm the
+nested Map content is even instantiated in SA. Then port the **terrain painter** (`+0x18` from heightmap)
+and give `FrustumOutlineElement` a safe `vtable[+0x40]` (Phase-4 event crash). See
+[[project_map_render_investigation]].
+
 **Entry points:** `Toolbar_Utility_Impl` (toolbardialog.cpp:513, orig 0x140101a80),
 `ToolbarUtility_HarnessOpen` (extern "C" wrapper), `FireUtilityDialog` (tool_harness.cpp,
 `"utility"` value). The ToolUI child vtable is `g_ToolUI_ChildDialog_Vtable_Standalone` (Part A).

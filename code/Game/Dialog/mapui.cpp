@@ -13,6 +13,10 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#ifdef STANDALONE_EXE
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 // ============================================================
 // SetupImage (0x14006cb00): Create MaterialInstance + SpriteSheet
@@ -29,13 +33,28 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                       void** materialOut, char useBlend, const char* elementName) {
     uintptr_t s = (uintptr_t)self;
 
+    // Defensive (standalone bring-up): the minimap ImageBuffer must exist — the
+    // very first thing below is fn_ImageBuffer_Width(imageBuffer). If the GPU
+    // buffer was never created (Minimap_CreateAndUpload not yet run) skip rather
+    // than fault. Also require the core primitives.
+    if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
+        !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor ||
+        !fn_ImageBuffer_Width || !fn_FindElement) {
+        *materialOut = nullptr;
+        *spriteSheetOut = nullptr;
+        return;
+    }
+
     // --- Allocate and construct MaterialInstance (0x60 bytes) ---
     void* matInst = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
     void* materialPtr = nullptr;
     if (matInst) {
         fn_MaterialInstance_Ctor(matInst);
-        // Set vtable to the UI MaterialInstance vtable
-        *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
+        // Set vtable to the UI MaterialInstance vtable. In standalone this shared
+        // ModDialog subclass vtable (0x14015c400) is not registered → 0; keep the
+        // base vtable the ctor installed so later dispatch stays valid.
+        if (g_ModDialog_MaterialInstanceVtable)
+            *(uintptr_t*)matInst = g_ModDialog_MaterialInstanceVtable;
         materialPtr = matInst;
     }
     *materialOut = materialPtr;
@@ -72,8 +91,10 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     void* spriteSheet = nullptr;
     if (sheet) {
         fn_SpriteSheet_Ctor(sheet);
-        // Set vtable to the UI SpriteSheet vtable
-        *(uintptr_t*)sheet = g_ModDialog_SpriteSheetVtable;
+        // Set vtable to the UI SpriteSheet vtable (guard null in standalone —
+        // keep the base ctor vtable if the ModDialog subclass isn't registered).
+        if (g_ModDialog_SpriteSheetVtable)
+            *(uintptr_t*)sheet = g_ModDialog_SpriteSheetVtable;
         spriteSheet = sheet;
     }
     *spriteSheetOut = spriteSheet;
@@ -128,6 +149,11 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
         fn_IsDerivedFrom(rawElem, *g_TypeId_ImageElement)) {
         imageElem = rawElem;
     }
+#ifdef STANDALONE_EXE
+    if (std::getenv("BANISHED_MAP_TRACE"))
+        printf("[SetupImage] elem '%s': raw=%p imageElem=%p mat=%p sheet=%p\n",
+               elementName, rawElem, imageElem, *materialOut, *spriteSheetOut);
+#endif
     uint64_t imageElemPtr = 0;
     fn_InternalBasePtr_Ctor((void*)&imageElemPtr, imageElem);
     fn_String_Dtor(elemNameStr);

@@ -922,6 +922,8 @@ void StandaloneImpl_Slot7_OnUpdate(void* self, const void* time) {
 // but for now only Quit is wired (the others need sub-dialog scaffolding that
 // isn't standalone-ready yet — they'll just log a "not wired" warning so we
 // can see clicks register).
+void StandaloneOpenMapParams(void* self);  // defined below (map dialog bring-up)
+
 void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     if (msg != 0x12) return;
     printf("[MainMenuDialog::OnCommand] self=%p msg=0x%x id=%d\n", self, msg, id);
@@ -962,6 +964,10 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         printf("[MainMenuDialog::OnCommand] -> OpenOptions\n");
         MainMenuDialog_OpenOptions(reinterpret_cast<MainMenuDialog*>(self));
         break;
+    case kButton_Map:
+        printf("[MainMenuDialog::OnCommand] -> OpenMap (MapParamsDialog)\n");
+        StandaloneOpenMapParams(self);
+        break;
     default:
         printf("[MainMenuDialog::OnCommand] button id=%d not yet wired in standalone\n", id);
         break;
@@ -1001,6 +1007,120 @@ void* g_MainMenuDialog_Vtable_Standalone[20] = {
 
 void* GetMainMenuDialogVtable() {
     return reinterpret_cast<void*>(g_MainMenuDialog_Vtable_Standalone);
+}
+
+// ============================================================
+// MapParamsDialog standalone bring-up — in-game "Map" button (id 11)
+// ============================================================
+// buttonMap → MainMenuDialog_OpenMap → Dialog/MapParams.rsc (the map name/seed/
+// terrain/climate/condition/disaster info dialog). MapParamsDialog is a no-op
+// stub in standalone, so give it a real 20-slot vtable that wires its already-
+// reimplemented slots (Startup +0x20, Shutdown +0x28, Update +0x30, OnEvent
+// +0x40; exe vtable 0x14015c180) + reuses the shared DialogInstance base stubs.
+// StandaloneOpenMapParams mirrors MainMenuDialog_OpenGoal: DialogInstance_Ctor
+// (builds the element tree + AddController) → patch vtable → AddDialog (which
+// dispatches the dialog's +0x20 Startup). All fn deps are already resolved.
+// MapParamsDialog + its Startup/Slot5/Update/OnEvent are declared globally in
+// Dialog/ui_dialogs.h (included above). Reference them via :: so unqualified
+// lookup inside this anonymous namespace resolves to the real global symbols.
+extern void* g_MapParamsDialog_Vtable_Standalone[20];
+
+static void* MP_VDtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_MapParamsDialog_Vtable_Standalone;
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+static uint32_t MP_VTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("MapParamsDialog");
+    return c;
+}
+static void MP_VStartup(void* self) {
+    printf("[MapParamsDialog::Startup] self=%p\n", self);
+    if (!self) return;
+    MapParamsDialog_Startup(reinterpret_cast<MapParamsDialog*>(self));
+    // Startup stores the found element ptrs at +0xB8..+0xF0; non-null => the
+    // dialog's element tree was built + the named elements resolved (content).
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    printf("[MapParamsDialog::Startup] elems editName=%p seed=%p terrain=%p size=%p "
+           "climate=%p condition=%p disaster=%p ok=%p\n",
+           *reinterpret_cast<void**>(s + 0xB8), *reinterpret_cast<void**>(s + 0xC0),
+           *reinterpret_cast<void**>(s + 0xC8), *reinterpret_cast<void**>(s + 0xD0),
+           *reinterpret_cast<void**>(s + 0xD8), *reinterpret_cast<void**>(s + 0xE0),
+           *reinterpret_cast<void**>(s + 0xE8), *reinterpret_cast<void**>(s + 0xF0));
+}
+static int  MP_VSlot5(void* self) {
+    return self ? MapParamsDialog_Slot5(reinterpret_cast<MapParamsDialog*>(self)) : 0;
+}
+static void MP_VUpdate(void* self) {
+    if (self) MapParamsDialog_Update(reinterpret_cast<MapParamsDialog*>(self));
+}
+static void MP_VOnEvent(void* self, void* elem, int t, int d) {
+    if (self) MapParamsDialog_OnEvent(reinterpret_cast<MapParamsDialog*>(self), elem, t, d);
+}
+
+void* g_MapParamsDialog_Vtable_Standalone[20] = {
+    reinterpret_cast<void*>(&MP_VDtor),                          // +0x00 Dtor
+    reinterpret_cast<void*>(&StandaloneStub_Slot1_TypeName),     // +0x08 TypeName
+    reinterpret_cast<void*>(&MP_VTypeId),                        // +0x10 GetTypeId
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<3>),    // +0x18 Persist
+    reinterpret_cast<void*>(&MP_VStartup),                       // +0x20 Startup
+    reinterpret_cast<void*>(&MP_VSlot5),                         // +0x28 Shutdown
+    reinterpret_cast<void*>(&MP_VUpdate),                        // +0x30 Update
+    reinterpret_cast<void*>(&StandaloneImpl_Slot7_OnUpdate),     // +0x38 OnUpdate
+    reinterpret_cast<void*>(&MP_VOnEvent),                       // +0x40 OnEvent
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<9>),    // +0x48
+    reinterpret_cast<void*>(&StandaloneStub_Slot10_DIDtor),      // +0x50 DI Dtor
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<11>),   // +0x58
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<12>),   // +0x60
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<13>),   // +0x68
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<14>),   // +0x70
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<15>),   // +0x78
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<16>),   // +0x80
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<17>),   // +0x88
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<18>),   // +0x90
+    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<19>),   // +0x98
+};
+
+// Core open path — mirrors MainMenuDialog_OpenGoal but with the MapParams vtable.
+static void StandaloneOpenMapParams_UI(void* ui) {
+    if (!ui) { printf("[OpenMap] ui null\n"); return; }
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
+        !fn_InternalBasePtr_Ctor || !fn_UI_AddDialog) {
+        printf("[OpenMap] core fns unresolved\n"); return;
+    }
+    void* extRes = LoadDialogResource("Dialog/MapParams.rsc");
+    if (!extRes) { printf("[OpenMap] Dialog/MapParams.rsc not loaded\n"); return; }
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xF8, 8);
+    if (!dlgMem) return;
+    for (size_t o = 0; o < 0xF8; o += 8)
+        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(dlgMem) + o) = 0;
+    uint8_t nullIBP[8] = {};
+    fn_InternalBasePtr_Ctor(nullIBP, nullptr);
+    uint64_t parentBuf = *reinterpret_cast<uint64_t*>(nullIBP);
+    fn_DialogInstance_Ctor(dlgMem, ui, extRes, &parentBuf, 0, 0, 0);
+    *reinterpret_cast<void**>(dlgMem) = g_MapParamsDialog_Vtable_Standalone;
+    uint8_t ibp[8] = {};
+    fn_InternalBasePtr_Ctor(ibp, dlgMem);
+    fn_UI_AddDialog(ui, ibp);
+    printf("[OpenMap] MapParamsDialog opened + AddDialog'd (dlg=%p)\n", dlgMem);
+}
+
+// Called from the Slot8 OnCommand dispatch (id 11 = buttonMap).
+void StandaloneOpenMapParams(void* self) {
+    if (!self) return;
+    StandaloneOpenMapParams_UI(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10));
+}
+
+// Harness entry — open the map dialog headlessly (UI from gameWorld+0x98).
+extern "C" void MapParamsDialog_HarnessOpen() {
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gw) { printf("[OpenMap] gameWorld null\n"); return; }
+    void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x98);
+    printf("[OpenMap] harness open: ui=%p\n", ui);
+    StandaloneOpenMapParams_UI(ui);
 }
 
 // In-place construct MainMenuDialog from a MenuDLT loop. Mirrors exe ctor

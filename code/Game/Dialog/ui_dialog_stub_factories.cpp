@@ -39,6 +39,7 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstddef>
+#include <cstdio>
 
 namespace {
 
@@ -209,7 +210,62 @@ UI_DIALOG_STUB(EventLogUI,          "UI::DialogController", 0x80);
 UI_DIALOG_STUB(HelpUI,              "UI::DialogController", 0x78);
 // HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).
 UI_DIALOG_STUB(ImmigrationUI,       "UI::DialogController", 0x50);
-UI_DIALOG_STUB(MapUI,               "UI::DialogController", 0x50);
+// ---- MapUI: PROMOTED to the real reimpl (map-render bring-up) ----------------
+// The minimap dialog's controller. Slot4 (+0x20, SetupImage) builds a
+// MaterialInstance + SpriteSheet from the minimap subsystem's terrain/overlay
+// ImageBuffers (gameWorld+0x148 +0x08/+0x10) and binds them to the "imageMap"/
+// "imageOverlay" elements. Slot9 (+0x48) handles minimap clicks → move camera.
+// The generic stub left both no-ops so the map dialog opened blank. The GPU
+// buffers are created by Minimap_CreateAndUpload (code/Game/Game/minimap_upload.cpp);
+// SetupImage is standalone-guarded (skips if the buffer is null / vtables absent).
+struct MapUI;
+extern void MapUI_Slot4(MapUI* self);
+extern void MapUI_Slot9(MapUI* self, void* param2, int msg, int id, int cx, int cy);
+namespace uistub_MapUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("MapUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // SetupImage dereferences g_TypeId_Material / g_TypeId_ImageElement (both
+    // resolve from raw exe .rdata/exref → null in standalone). Lazy-fill from the
+    // live factory tree post-Engine::Startup. g_fUVScale has a 1.0 fallback in
+    // mapui.cpp already. Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_mat=0, s_img=0;
+        if (!g_TypeId_Material)     { s_mat=::Object::ResolveTypeIdByNameLazy("Material");     if(s_mat) g_TypeId_Material=&s_mat; }
+        if (!g_TypeId_ImageElement) { s_img=::Object::ResolveTypeIdByNameLazy("ImageElement"); if(s_img) g_TypeId_ImageElement=&s_img; }
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        static bool s_logged = false;
+        if (!s_logged) {
+            s_logged = true;
+            void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+            void* mapObj = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x148) : nullptr;
+            printf("[MapUI::Slot4] dispatched self=%p mat_tid=%p img_tid=%p "
+                   "matVtbl=%p ssVtbl=%p terrBuf=%p ovrBuf=%p\n", self,
+                   (void*)g_TypeId_Material, (void*)g_TypeId_ImageElement,
+                   (void*)g_ModDialog_MaterialInstanceVtable,
+                   (void*)g_ModDialog_SpriteSheetVtable,
+                   mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x08) : nullptr,
+                   mapObj ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mapObj) + 0x10) : nullptr);
+            fflush(stdout);
+        }
+        if (self) MapUI_Slot4(reinterpret_cast<MapUI*>(self));
+    }
+    void Slot9(void* self, void* p2, int msg, int id, int cx, int cy) {
+        if (self) MapUI_Slot9(reinterpret_cast<MapUI*>(self), p2, msg, id, cx, cy);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(MapUI, "UI::DialogController",
+              &uistub_MapUI::Factory, &uistub_MapUI::InPlace);
 UI_DIALOG_STUB(ModBrowseUI,         "UI::DialogController", 0x30);
 UI_DIALOG_STUB(NoiseUI,             "UI::DialogController", 0x70);
 UI_DIALOG_STUB(PageToggleUI,        "UI::DialogController", 0x48);
