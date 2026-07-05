@@ -400,17 +400,16 @@ static void EnsureCallees() {
 // resolved local copy, exactly like the original. Closure: only CheckPtr (engine).
 // Faithful ports; the only difference vs the exe is the scale constant address.
 // ============================================================
-static float* s_pSetupYoungScale = nullptr; // DAT_14017214c
-static float* s_pSetupAdultScale = nullptr; // DAT_14017212c
-static float* s_pSetupElderScale = nullptr; // DAT_140172118
-static bool   s_setupScalesResolved = false;
-static void EnsureSetupScales() {
-    if (s_setupScalesResolved) return;
-    s_pSetupYoungScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_pSetupAdultScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017212c));
-    s_pSetupElderScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172118));
-    s_setupScalesResolved = true;
-}
+// Byte-faithful scale constants (DAT_14017214c/12c/118). HARDCODED literals, not
+// read via ResolveAddr(Module::Exe, .rdata) — that returns NULL in standalone, so
+// the previous `s_pXScale ? *s_pXScale : 1.0f` fallback collapsed EVERY age-state
+// to 1.0, meaning children (SetupElder) never shrank and the per-frame OnUpdate2
+// age→scale switch silently overwrote any external scale with 1.0. The C++
+// literals compile to the exact bit patterns: 1.0f=0x3f800000, 0.83f=0x3f547ae1,
+// 0.66f=0x3f28f5c3.
+static constexpr float kScaleYoung = 1.0f;   // grown / adult full-size
+static constexpr float kScaleAdult = 0.83f;  // intermediate life-state
+static constexpr float kScaleElder = 0.66f;  // child / small render
 
 static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
     uint8_t* citizen = reinterpret_cast<uint8_t*>(citizenP);
@@ -425,19 +424,30 @@ static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
     *reinterpret_cast<float*>(mesh + 0x138) = scale;
     *reinterpret_cast<float*>(mesh + 0x13c) = scale;
     *reinterpret_cast<float*>(mesh + 0x140) = (float)idx;
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    static int s_setupLog = 0;
+    if (s_setupLog < 24) {
+        ++s_setupLog;
+        int64_t desc = *reinterpret_cast<int64_t*>(citizen + 0x288);
+        float thresh = desc ? *reinterpret_cast<float*>(desc + 0x44) : -1.0f;
+        float age = *reinterpret_cast<float*>(citizen + 0x3c);
+        int64_t state208 = *reinterpret_cast<int64_t*>(citizen + 0x208);
+        fprintf(stderr, "[SetupAgeMesh] citizen=%p scale=%.2f colour=%d age=%.2f "
+                "thresh=%.2f state208=%lld\n",
+                (void*)citizen, scale, idx, age, thresh, (long long)state208);
+        fflush(stderr);
+    }
+#endif
 }
 
 void CitizenComponent_SetupYoung_Reimpl(void* citizen) {
-    EnsureSetupScales();
-    CitizenComp_SetupAgeMesh(citizen, s_pSetupYoungScale ? *s_pSetupYoungScale : 1.0f);
+    CitizenComp_SetupAgeMesh(citizen, kScaleYoung);
 }
 void CitizenComponent_SetupAdult_Reimpl(void* citizen) {
-    EnsureSetupScales();
-    CitizenComp_SetupAgeMesh(citizen, s_pSetupAdultScale ? *s_pSetupAdultScale : 1.0f);
+    CitizenComp_SetupAgeMesh(citizen, kScaleAdult);
 }
 void CitizenComponent_SetupElder_Reimpl(void* citizen) {
-    EnsureSetupScales();
-    CitizenComp_SetupAgeMesh(citizen, s_pSetupElderScale ? *s_pSetupElderScale : 1.0f);
+    CitizenComp_SetupAgeMesh(citizen, kScaleElder);
 }
 
 // Reimpl of Entity_FindComponent_Storage (0x140008090):

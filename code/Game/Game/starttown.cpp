@@ -1166,35 +1166,42 @@ static constexpr int FAMILY_STRIDE  = 8;       // {bool _educated@+0, int _maxCh
 // random variant group within the citizen description's range and re-SetMesh'es.
 // Returns the chosen index or -1 (no change). Must run after Serialize, before
 // RegisterEntity.
-extern "C" int ModelComponent_RandomizeVariant(void* modelComp);
+extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx);
 
-// Gate: BANISHED_CITIZEN_VARIANT. Default off => citizens render byte-identical
-// to before (all share the description's fixed variant).
+// Gate: BANISHED_CITIZEN_VARIANT. Default ON (user-verified: gives per-citizen
+// male/female models instead of every colonist sharing the description's fixed
+// variant); opt out with BANISHED_CITIZEN_VARIANT=0. NB this only varies the mesh
+// variant GROUP (gender). Clothing colour (+0x34) and age/height (+0x40/+0x3c),
+// which the retail deferred init FUN_140117080 also randomizes, are still
+// uniform — that init is guarded off in standalone (housing/animation deps).
 static bool CitizenVariantOn() {
     static int en = -1;
     if (en < 0) {
         const char* e = std::getenv("BANISHED_CITIZEN_VARIANT");
-        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+        en = (e && (e[0] == '0' || e[0] == '\0')) ? 0 : 1;
     }
     return en == 1;
 }
 
-// Give a freshly-instantiated citizen entity a per-citizen model variant so the
-// colonists are not all visually identical. The original picks this in the
-// deferred CitizenComponent init (guarded off in standalone); here we reproduce
-// only the safe mesh-swap, before the entity is registered so its OnAdded adds
-// the chosen mesh. No-op unless BANISHED_CITIZEN_VARIANT is set.
-static void SetCitizenModelVariant(void* entity, uint32_t tidModel) {
+// Give a freshly-instantiated citizen entity its gender mesh variant GROUP
+// (+0x164) via ModelComponent_RandomizeVariant. The original derives this from the
+// citizen's gender (retail variantIdx=(gender==0)?1:0); we pass an explicit index
+// so a founding family's two adults get opposite-gender models (a couple) and kids
+// alternate — matching CitizenComponent_impl_0dd0 — instead of a random pick. Runs
+// before the entity is registered so its OnAdded adds the chosen mesh. Returns the
+// resolved render ModelComponent (for the colour/scale pass) or 0. No-op unless
+// BANISHED_CITIZEN_VARIANT is set (default on).
+static uintptr_t SetCitizenModelVariant(void* entity, uint32_t tidModel, int variantIdx) {
     if (!CitizenVariantOn() || !entity || tidModel == 0 ||
         !fn_InternalBasePtr_Ctor || !fn_InternalBasePtr_CheckPtr)
-        return;
+        return 0;
     void* mc = FindComponentOnEntity(entity, tidModel);
-    if (!mc) return;
+    if (!mc) return 0;
     uintptr_t mcIBP = 0;
     fn_InternalBasePtr_Ctor(&mcIBP, mc);
     fn_InternalBasePtr_CheckPtr(&mcIBP);
-    if (!mcIBP) return;
-    int chosen = ModelComponent_RandomizeVariant((void*)mcIBP);
+    if (!mcIBP) return 0;
+    int chosen = ModelComponent_RandomizeVariant((void*)mcIBP, variantIdx);
 #if defined(STANDALONE_EXE) && defined(_DEBUG)
     static int s_varLog = 0;
     if (s_varLog < 12) {
@@ -1205,6 +1212,103 @@ static void SetCitizenModelVariant(void* entity, uint32_t tidModel) {
     }
 #else
     (void)chosen;
+#endif
+    return mcIBP;
+}
+
+// Per-citizen clothing colour + age-size, applied through the SAME path retail's
+// CitizenComp_SetupAgeMesh uses: the render ModelComponent reached via
+// CitizenComponent+0x278 (character sub-component InternalBasePtr) deref +0x68.
+//   * Colour — retail (Rand()+Rand())&7 into citizen+0x34; a single Rand(rng,8) is
+//     distributionally identical (uniform 0-7). Written as float to mesh+0x140
+//     (= MeshInstance+0x118); GetInstanceTransform (Runtime 0x180101280) packs it
+//     into instance-matrix element [15] where the citizen shader reads it.
+//   * Age size — uniform scale to mesh+0x134/138/13c (= MeshInstance+0x10c/110/114):
+//     grown 1.0 (0x3f800000), child 0.66 (0x3f28f5c3). HARDCODED literals — the
+//     Setup*_Reimpl helpers read the .rdata scale constants via ResolveAddr, which
+//     is NULL in standalone (would collapse everyone to the 1.0 fallback).
+// Runs AFTER RegisterEntity: the citizen+0x278/+0x68 character-model link and the
+// scene mesh instance are only fully wired once OnAdded has run, and writing the
+// instance fields post-OnAdded avoids OnAdded re-initialising them under us.
+// `genderMc` is the ModelComponent SetCitizenModelVariant re-pointed, logged only
+// to confirm it is the same instance this path resolves.
+static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
+                                   uintptr_t genderMc) {
+    if (!CitizenVariantOn() || !entity || !fn_InternalBasePtr_Ctor ||
+        !fn_InternalBasePtr_CheckPtr)
+        return;
+    void* cc = FindComponentOnEntity(entity, TypeId("CitizenComponent"));
+    if (!cc) return;
+    uintptr_t ccIBP = 0;
+    fn_InternalBasePtr_Ctor(&ccIBP, cc);
+    fn_InternalBasePtr_CheckPtr(&ccIBP);
+    uint8_t* citizen = (uint8_t*)ccIBP;
+    if (!citizen) return;
+
+    if (!rng)
+        rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                  ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
+
+    // Colour index → citizen+0x34 (source of truth) AND the mesh instance slot.
+    int colorIdx = (rng && fn_Random_Rand) ? (int)fn_Random_Rand(rng, 8) : 0;
+    *(int32_t*)(citizen + 0x34) = colorIdx;
+
+    // Age — the REAL driver of the render scale. The per-frame OnUpdate2
+    // (0x1401140f0) re-derives the model scale from age every frame:
+    //   age(+0x3c) <  thresh(desc+0x44) && !dead(+0x208==0) -> SetupElder 0.66 (child)
+    //   age(+0x3c) >= thresh                                 -> SetupYoung 1.0  (adult)
+    // Our deferred citizen init (FUN_140117080) is off, so age is 0 for everyone and
+    // OnUpdate2 shrinks ALL colonists to the child scale. Reproduce the retail
+    // founding-family age draw (CitizenComponent_impl_0dd0) so adults span a real
+    // range and children fall below the threshold:
+    //   adult age = RandFloat*(desc+0x54*0.5 - desc+0x50) + desc+0x50   (DAT_140172114=0.5)
+    //   child age = RandFloat*(desc+0x44)  = uniform [0, threshold)
+    int64_t descP = *(int64_t*)(citizen + 0x288);
+    float thresh  = descP ? *(float*)(descP + 0x44) : 2.0f;
+    float age;
+    if (!descP || !(rng && fn_Random_RandFloat)) {
+        age = isChild ? 0.0f : (thresh + 1.0f);          // fallback
+    } else if (isChild) {
+        age = fn_Random_RandFloat(rng) * thresh;         // [0, threshold)
+    } else {
+        float amin = *(float*)(descP + 0x50);
+        float amax = *(float*)(descP + 0x54);
+        age = fn_Random_RandFloat(rng) * (amax * 0.5f - amin) + amin;
+        if (age < thresh) age = thresh;                  // keep adults adult-sized
+    }
+    *(float*)(citizen + 0x3c) = age;
+    // Guard against an age>=lifespan death check: keep maxAge(+0x40) above age.
+    if (*(float*)(citizen + 0x40) <= age)
+        *(float*)(citizen + 0x40) = age + 100.0f;
+
+    // Resolve the character sub-component (+0x278) then its ModelComponent (+0x68),
+    // exactly like CitizenComp_SetupAgeMesh. Direct colour + matching initial scale
+    // avoid a one-frame pop before OnUpdate2 first runs; OnUpdate2 then keeps the
+    // scale in sync with the age set above.
+    fn_InternalBasePtr_CheckPtr(citizen + 0x278);
+    uintptr_t charIBP = *(uintptr_t*)(citizen + 0x278);
+    uintptr_t mesh = charIBP ? *(uintptr_t*)(charIBP + 0x68) : 0;
+    if (mesh) fn_InternalBasePtr_CheckPtr(&mesh);
+
+    float scale = isChild ? 0.66f : 1.0f;
+    if (mesh) {
+        uint8_t* m = (uint8_t*)mesh;
+        *(float*)(m + 0x134) = scale;
+        *(float*)(m + 0x138) = scale;
+        *(float*)(m + 0x13c) = scale;
+        *(float*)(m + 0x140) = (float)colorIdx;
+    }
+
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    static int s_appLog = 0;
+    if (s_appLog < 12) {
+        ++s_appLog;
+        fprintf(stderr, "[startTown::citizen] colorscale citizen=%p mesh=%p same=%d "
+                "colour=%d scale=%.2f age=%.2f thresh=%.2f%s\n",
+                (void*)citizen, (void*)mesh, (int)(mesh && mesh == genderMc),
+                colorIdx, scale, age, thresh, isChild ? " (child)" : "");
+        fflush(stderr);
+    }
 #endif
 }
 
@@ -1290,25 +1394,35 @@ static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
 // or nullptr. CitizenComponent initialisation (FUN_140117080) is deferred — see
 // the section header; only the spawn-cell transform (Foundation-F) is reproduced.
 static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
-                             const float base[3], float jitter, void* rng) {
+                             const float base[3], float jitter, void* rng,
+                             bool isChild, int variantIdx) {
     if (!citizenTemplate) return nullptr;
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
     void* ent = mem ? fn_EntityFactory_CreateEntity(mem, citizenTemplate) : nullptr;
     uintptr_t entIBP = 0;
     fn_InternalBasePtr_Ctor(&entIBP, ent);
 
-    // Per-citizen model variant + spawn-cell transform — after instantiation
+    // Per-citizen gender mesh variant + spawn-cell transform — after instantiation
     // (Serialize ran, +0x166 set) and BEFORE registration (so OnAdded adds the
     // chosen mesh to the scene at the spawn-cell transform).
+    uintptr_t genderMc = 0;
     if (ent) {
         fn_InternalBasePtr_CheckPtr(&entIBP);
         uint32_t tidModel = TypeId("ModelComponent");
-        SetCitizenModelVariant((void*)entIBP, tidModel);
+        genderMc = SetCitizenModelVariant((void*)entIBP, tidModel, variantIdx);
         SetCitizenSpawnTransform((void*)entIBP, tidModel, base, jitter, rng);
     }
 
     int category = *(int32_t*)((uint8_t*)citizenTemplate + TEMPLATE_CATEGORY);
     fn_EntityList_RegisterEntity(entityList, &entIBP, category);
+
+    // Colour + randomized age (→ age-size) — applied AFTER registration, once
+    // OnAdded has wired the character-model link (citizen+0x278/+0x68) and the
+    // scene mesh instance.
+    if (ent) {
+        fn_InternalBasePtr_CheckPtr(&entIBP);
+        ApplyCitizenColorScale((void*)entIBP, isChild, rng, genderMc);
+    }
     return ent;
 }
 
@@ -1457,6 +1571,10 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
     // BANISHED_LIVE_HOUSING is set; otherwise the vector is simply discarded.
     std::vector<std::vector<void*>> famEntities;
 
+    // Kid gender alternates across the whole spawn (as retail's `bVar12` does),
+    // persisting between families. Starts on gender 0.
+    int kidVariant = 0;
+
     int spawned = 0;
     for (int f = 0; f < famCount; ++f) {
         uint8_t* fam = families + (size_t)f * FAMILY_STRIDE;
@@ -1465,16 +1583,19 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         famEntities.emplace_back();
         std::vector<void*>& fe = famEntities.back();
 
-        // Two adults (male + female).
-        if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng)) { ++spawned; fe.push_back(a); }
-        if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng)) { ++spawned; fe.push_back(b); }
+        // Two adults — a couple: opposite gender models (variant groups 0 and 1),
+        // random adult age, full-size. Matches CitizenComponent_impl_0dd0.
+        if (void* a = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/0)) { ++spawned; fe.push_back(a); }
+        if (void* b = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/false, /*variantIdx=*/1)) { ++spawned; fe.push_back(b); }
 
-        // Children: Rand(0.._maxChildCount).
+        // Children: Rand(0.._maxChildCount) — alternating gender, child scale (0.66).
         int kids = 0;
         if (rng && fn_Random_Rand && maxChildren >= 0)
             kids = (int)fn_Random_Rand(rng, maxChildren + 1);
-        for (int c = 0; c < kids; ++c)
-            if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng)) { ++spawned; fe.push_back(k); }
+        for (int c = 0; c < kids; ++c) {
+            if (void* k = SpawnOneCitizen(citizenTemplate, entityList, base, jitter, rng, /*isChild=*/true, /*variantIdx=*/kidVariant)) { ++spawned; fe.push_back(k); }
+            kidVariant ^= 1;
+        }
 
         fprintf(stderr, "[startTown::citizen] family[%d] educated=%d maxKids=%d kids=%d\n",
                 f, educated, maxChildren, kids);

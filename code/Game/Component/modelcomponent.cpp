@@ -240,8 +240,10 @@ static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t mode
 // the scene). desc+0x28 is the variant-group count (the same field the building
 // randomize path uses as its Rand range), so the pick is always in-bounds.
 //
-// Returns the chosen variant index, or -1 if no change was made.
-extern "C" int ModelComponent_RandomizeVariant(void* modelComp) {
+// Returns the chosen variant index, or -1 if no change was made. `forceIdx` picks
+// a specific variant GROUP (e.g. gender: retail uses variantIdx=(gender==0)?1:0);
+// pass -1 to keep the original random pick over the group count.
+extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     EnsureHelpers();
     if (!modelComp || !s_fn_MeshInstance_SetMesh || !s_fn_Random_Rand) return -1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
@@ -255,9 +257,14 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp) {
     uint32_t count = *(uint32_t*)(d + 0x28);
     if (count <= 1) return -1;
 
-    void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
-    if (!randomPtr) return -1;
-    int16_t variantIdx = (int16_t)s_fn_Random_Rand(randomPtr, count);
+    int16_t variantIdx;
+    if (forceIdx >= 0) {
+        variantIdx = (int16_t)((uint32_t)forceIdx % count);   // clamp into range
+    } else {
+        void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
+        if (!randomPtr) return -1;
+        variantIdx = (int16_t)s_fn_Random_Rand(randomPtr, count);
+    }
     *(int16_t*)(s + 0x164) = variantIdx;
 
     // Keep the model variant Serialize already chose (+0x166); skip if it has no
