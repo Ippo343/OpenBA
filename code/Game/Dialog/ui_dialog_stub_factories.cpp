@@ -204,9 +204,11 @@ UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
 UI_DIALOG_STUB(ControlUI,           "UI::DialogController", 0x40);
 UI_DIALOG_STUB(DebugUI,             "DialogController",     0x130);
-UI_DIALOG_STUB(CitizenUI,           "UI::DialogController", 0xE8);
+// CitizenUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/citizenui.cpp
+// (wires Slot4/6/7/9 so the clicked-citizen panel shows name/age/profession/hearts).
 UI_DIALOG_STUB(DestroyUI,           "UI::DialogController", 0x78);
-UI_DIALOG_STUB(EntityUI,            "UI::DialogController", 0x48);
+// EntityUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/entityui.cpp
+// (wires Slot4 so the entity panel gets its +0x30 entity ref → correct positioning).
 UI_DIALOG_STUB(EventLogUI,          "UI::DialogController", 0x80);
 UI_DIALOG_STUB(HelpUI,              "UI::DialogController", 0x78);
 // HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).

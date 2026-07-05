@@ -369,27 +369,39 @@ static void EnsureTailInit() {
 // needed). Runs once per citizen when its pick-id (PickingComponent+0x28) is still
 // unregistered (<0). Returns the new pick-id, or -1 if it could not register
 // (description not a PickingDescription / no pick-mesh table — standalone-safe).
+// Emit a one-shot reason string explaining why RegisterCitizenPickMesh bailed, so a
+// live run pinpoints the remaining gap without a debugger. Cheap (first 8 only).
+static void PickRegFail(const char* why) {
+    if (!MoveTickTraceOn()) return;
+    static int n = 0;
+    if (n < 8) { ++n; fprintf(stderr, "[PickReg] FAIL: %s\n", why); fflush(stderr); }
+}
+
 static int RegisterCitizenPickMesh(uint8_t* self) {
     int64_t model    = *reinterpret_cast<int64_t*>(self + 0x68);   // ModelComponent
     int64_t pickComp = *reinterpret_cast<int64_t*>(self + 0x70);   // PickingComponent
-    if (model == 0 || pickComp == 0) return -1;
+    if (model == 0 || pickComp == 0) { PickRegFail("model/pickComp null"); return -1; }
 
     int16_t variantIdx   = *reinterpret_cast<int16_t*>(model + 0x164);  // sVar1
     int16_t modelVariant = *reinterpret_cast<int16_t*>(model + 0x166);  // sVar2
-    if (modelVariant < 0) return -1;                                    // (-1 < sVar2) gate
+    if (modelVariant < 0) { PickRegFail("modelVariant<0"); return -1; } // (-1 < sVar2) gate
 
     // The pick mesh comes from the PickingComponent's description (+0x18), which must
     // be a PickingDescription. Its pick-mesh table is at desc+0x20, indexed exactly
     // like the render mesh: *(*(desc+0x20) + variantIdx*0x10) + modelVariant*8.
     void* desc = *reinterpret_cast<void**>(pickComp + 0x18);
-    if (desc == nullptr || s_slot_isDerived == nullptr || s_tidPickingDesc == 0) return -1;
-    if (!s_slot_isDerived(desc, s_tidPickingDesc)) return -1;
+    if (desc == nullptr || s_slot_isDerived == nullptr || s_tidPickingDesc == 0) {
+        PickRegFail("desc null / isDerived null / tidPickingDesc 0"); return -1;
+    }
+    if (!s_slot_isDerived(desc, s_tidPickingDesc)) { PickRegFail("desc !PickingDescription"); return -1; }
     int64_t meshTable = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
-    if (meshTable == 0) return -1;
+    if (meshTable == 0) { PickRegFail("meshTable(desc+0x20) null"); return -1; }
     int64_t group = *reinterpret_cast<int64_t*>(meshTable + static_cast<int64_t>(variantIdx) * 0x10);
-    if (group == 0) return -1;
+    if (group == 0) { PickRegFail("mesh group null"); return -1; }
     void* meshHandle = *reinterpret_cast<void**>(group + static_cast<int64_t>(modelVariant) * 8);
-    if (meshHandle == nullptr || s_fn_pickAddMesh == nullptr) return -1;
+    if (meshHandle == nullptr || s_fn_pickAddMesh == nullptr) {
+        PickRegFail("meshHandle null / AddMesh unresolved"); return -1;
+    }
 
     // Transform snapshot (0x1C bytes, model+0x148..+0x163) — the move-tick wrote it
     // this frame; the original copies it into a stack Transform passed by pointer.

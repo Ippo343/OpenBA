@@ -26,6 +26,60 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+// A partially-initialized standalone citizen can leave CitizenAI description/pointer
+// fields as garbage (0, the -1 unresolved-IBP sentinel, or non-canonical high values
+// like 0xfffffffffffffee7). CitizenUI_Slot7 dereferences several of these directly
+// (matching the original, which relies on the live game having them resolved). Reject
+// anything that isn't a plausible Win64 user-space heap pointer before dereferencing,
+// so the panel shows what it can instead of faulting. In DLL mode these are always
+// real pointers, so this is a no-op there.
+static inline bool CitUI_OkPtr(uintptr_t p) {
+    return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
+}
+
+// TextElement::SetParameter (Runtime 0x18011e9b0) writes *(elem+0xC8)[index] but only
+// when index < *(int*)(elem+0xD0) (the param count). A citizen dialog element that
+// standalone resolves by name can be a partially-initialized TextElement with a positive
+// param count but a garbage param-array pointer (+0xC8) — the write then faults. Only
+// call SetParameter when the element genuinely has a valid parameter array. In DLL mode
+// the array is always live, so this passes through unchanged.
+// A System::String is an 8-byte pointer to a ref-counted buffer (buffer[-4] = refcount).
+// SetParameter/SetText increment the source String's refcount (write buffer[-4]); an
+// uninitialized citizen field (e.g. the name at CitizenAI+0x28 is unset in standalone)
+// holds a garbage buffer pointer, faulting there. Accept only a null (empty) or a real
+// buffer pointer. In DLL mode citizen Strings are always live, so this passes through.
+static inline bool CitUI_OkString(const void* strObj) {
+    if (!CitUI_OkPtr(reinterpret_cast<uintptr_t>(strObj))) return false;
+    uintptr_t buf = *reinterpret_cast<const uintptr_t*>(strObj);
+    return buf == 0 || CitUI_OkPtr(buf);
+}
+
+static inline bool CitUI_OkTextParam(void* elem) {
+    if (!CitUI_OkPtr((uintptr_t)elem)) return false;
+    int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(elem) + 0xD0);
+    if (count <= 0) return false;  // SetParameter is a no-op for 0 params anyway
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(elem) + 0xC8);
+    if (!CitUI_OkPtr(arr)) return false;
+    // The destination param slot arr[0] holds the CURRENT System::String (an 8-byte
+    // ref-counted buffer pointer); SetParameter releases it (touches buffer+8) before
+    // assigning the new one. A standalone dialog can allocate the param array but leave
+    // its String entries uninitialized (garbage buffer pointer), faulting in the release.
+    // Require the slot to be null (empty String) or a real pointer.
+    uintptr_t cur = *reinterpret_cast<uintptr_t*>(arr);   // index 0 (all our SetParameter calls use 0)
+    if (cur != 0 && !CitUI_OkPtr(cur)) return false;
+    // SetParameter also walks the element's +0x98 parent chain setting a dirty flag on
+    // each ancestor. A detached / uninitialized standalone element can have a garbage
+    // parent link, faulting in that loop before the (valid) param array is even touched.
+    // Require the whole chain to be well-formed: every link a real pointer, terminating
+    // at 0, within a sane depth. A live tree-attached element always satisfies this.
+    uintptr_t p = reinterpret_cast<uintptr_t>(elem);
+    for (int i = 0; i < 64 && p != 0; ++i) {
+        if (!CitUI_OkPtr(p)) return false;
+        p = *reinterpret_cast<uintptr_t*>(p + 0x98);
+    }
+    return p == 0;  // reached the root cleanly (not truncated by the depth cap)
+}
+
 // CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
 // are now in the shared header: Dialog/citizen_icon_helpers.h
 
@@ -74,7 +128,10 @@ static uint64_t FindDialogElem(void* dialogInst, const char* name) {
     uint64_t result = 0;
     fn_DialogInstance_FindElement(dialogInst, &result, nameStr);
     fn_String_Dtor(nameStr);
-    return result;
+    // A missing element yields a non-null sentinel / unresolved value here rather than
+    // 0 (seen as 0xffffffff00000000), which defeats the `if (elem)` guards downstream
+    // and faults inside the engine. Normalise anything that isn't a real pointer to 0.
+    return CitUI_OkPtr(result) ? result : 0;
 }
 
 // Helper: Find element by name in element tree, return InternalPtr value
@@ -84,7 +141,8 @@ static uint64_t FindElemInTree(void* elem, const char* name) {
     uint64_t result = 0;
     fn_FindElement(elem, &result, nameStr);
     fn_String_Dtor(nameStr);
-    return result;
+    // Normalise a missing/unresolved element to 0 (see FindDialogElem).
+    return CitUI_OkPtr(result) ? result : 0;
 }
 
 // ============================================================
@@ -201,6 +259,17 @@ void CitizenUI_Slot7(CitizenUI* self) {
     void* descBase = *(void**)(ai + 0x18);
     bool isDesc = fn_IsDerivedFrom(descBase, *g_TypeId_CitizenDescription);
     void* citizenDesc = isDesc ? descBase : nullptr;
+    if (!CitUI_OkPtr((uintptr_t)citizenDesc)) citizenDesc = nullptr;
+
+    // CitizenAI+0x288 caches the CitizenDescription pointer; the original reads
+    // *(ai+0x288)+0x118 / +0x44 directly. In standalone that cache can be garbage
+    // (unresolved) while the Component-base description (+0x18, validated above as
+    // citizenDesc) is valid. Use +0x288 when it looks like a real pointer, else fall
+    // back to citizenDesc (the same CitizenDescription); 0 if neither is valid.
+    // In DLL mode +0x288 is always valid, so this is a no-op there.
+    uintptr_t aiDesc = *(uintptr_t*)(ai + 0x288);
+    if (!CitUI_OkPtr(aiDesc)) aiDesc = (uintptr_t)citizenDesc;
+    if (!CitUI_OkPtr(aiDesc)) aiDesc = 0;
 
     // --- Gender icon visibility ---
     // +0x38 on CitizenAI: 0 = female, nonzero = male
@@ -217,8 +286,9 @@ void CitizenUI_Slot7(CitizenUI* self) {
     if (imageMale) fn_Element_SetFlagsOnOff(imageMale, isMale ? 0 : 1, isMale ? 1 : 0);
 
     // --- Education visibility ---
-    // age at +0x210 (int), education age threshold at description+0x118 via CitizenAI+0x288
-    bool isEducated = (*(int*)(ai + 0x210) < *(int*)(*(uintptr_t*)(ai + 0x288) + 0x118));
+    // age at +0x210 (int), education age threshold at description+0x118 (aiDesc = the
+    // CitizenDescription; see aiDesc note above). Skip if no description resolved.
+    bool isEducated = aiDesc && (*(int*)(ai + 0x210) < *(int*)(aiDesc + 0x118));
     void* textEducatedNo = (void*)*(uint64_t*)(s + 0x60);
     if (isEducated) {
         if (textEducatedNo) fn_Element_SetFlagsOnOff(textEducatedNo, 0, 1);  // show textEducatedNo
@@ -232,7 +302,11 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // --- Name text ---
     // CitizenAI+0x28 is the citizen's name (System::String)
     void* textName = (void*)*(uint64_t*)(s + 0x40);
-    if (textName) fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
+    // Guard both the destination element AND the source name String (ai+0x28), which is
+    // uninitialized on a standalone citizen and would fault when SetParameter bumps its
+    // ref-count.
+    if (CitUI_OkString((void*)(ai + 0x28)) && CitUI_OkTextParam(textName))
+        fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
 
     // --- Age number ---
     float ageFloat = *(float*)(ai + 0x3c);
@@ -269,7 +343,10 @@ void CitizenUI_Slot7(CitizenUI* self) {
         void* descBase2 = *(void**)(ai + 0x18);
         bool isDesc2 = fn_IsDerivedFrom(descBase2, *g_TypeId_CitizenDescription);
         void* desc2 = isDesc2 ? descBase2 : nullptr;
-        toolValue = (toolItem != *(int*)((uintptr_t)desc2 + 0x110)) + 1;
+        if (!CitUI_OkPtr((uintptr_t)desc2)) desc2 = nullptr;
+        // desc2 (CitizenDescription) may be null on a partially-initialized standalone
+        // citizen — treat a missing description as "default tool" rather than faulting.
+        toolValue = desc2 ? ((toolItem != *(int*)((uintptr_t)desc2 + 0x110)) + 1) : 1;
     }
     {
         void* toolElem = (void*)*(uint64_t*)(s + 0x70);
@@ -293,42 +370,56 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // Else: use +0x1F0 (current profession description)
     {
         void* profElem = (void*)*(uint64_t*)(s + 0x50);
+        auto okPtr = [](uintptr_t p) { return CitUI_OkPtr(p); };
         if (profElem) {
-            uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0);
+            uintptr_t gwHead = *(uintptr_t*)*g_pGameWorldSingleton;
+            uintptr_t profListBase = okPtr(gwHead) ? *(uintptr_t*)(gwHead + 0xB0) : 0;
 
-            bool isChild = (*(float*)(ai + 0x3c) < *(float*)(*(uintptr_t*)(ai + 0x288) + 0x44));
+            bool isChild = aiDesc && (*(float*)(ai + 0x3c) < *(float*)(aiDesc + 0x44));
             bool hasWorkplace = (*(uintptr_t*)(ai + 0x208) != 0);
 
             uint8_t textVal[16];
+            bool haveText = false;
             if (isChild || hasWorkplace) {
-                uintptr_t profEntry;
-                if (*(uintptr_t*)(ai + 0x208) == 0) {
-                    profEntry = *(uintptr_t*)(profListBase + 0x40);  // child
-                } else {
-                    profEntry = *(uintptr_t*)(profListBase + 0x48);  // worker with workplace
+                uintptr_t profEntry = 0;
+                if (okPtr(profListBase)) {
+                    profEntry = (*(uintptr_t*)(ai + 0x208) == 0)
+                                    ? *(uintptr_t*)(profListBase + 0x40)   // child
+                                    : *(uintptr_t*)(profListBase + 0x48);  // worker w/ workplace
                 }
-                uint64_t strTable = *(uint64_t*)(profEntry + 0x20);
-                uint8_t uiStr[16];
-                fn_UIString_Ctor(uiStr, strTable, (void*)(profEntry + 0x30));
-                *(uint64_t*)textVal = *(uint64_t*)uiStr;
-                *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+                if (okPtr(profEntry)) {
+                    uint64_t strTable = *(uint64_t*)(profEntry + 0x20);
+                    uint8_t uiStr[16];
+                    fn_UIString_Ctor(uiStr, strTable, (void*)(profEntry + 0x30));
+                    *(uint64_t*)textVal = *(uint64_t*)uiStr;
+                    *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+                    haveText = true;
+                }
             } else {
                 uintptr_t profDesc = *(uintptr_t*)(ai + 0x1F0);
-                uint64_t strTable = *(uint64_t*)(profDesc + 0x20);
-                uint8_t uiStr[16];
-                fn_UIString_Ctor(uiStr, strTable, (void*)(profDesc + 0x30));
-                *(uint64_t*)textVal = *(uint64_t*)uiStr;
-                *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+                if (okPtr(profDesc)) {
+                    uint64_t strTable = *(uint64_t*)(profDesc + 0x20);
+                    uint8_t uiStr[16];
+                    fn_UIString_Ctor(uiStr, strTable, (void*)(profDesc + 0x30));
+                    *(uint64_t*)textVal = *(uint64_t*)uiStr;
+                    *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
+                    haveText = true;
+                }
             }
-            fn_TextElement_SetText(profElem, textVal);
+            if (haveText) fn_TextElement_SetText(profElem, textVal);
         }
     }
 
     // --- Health hearts and happiness stars ---
-    CitizenUI_UpdateIconDisplay_Impl(s + 0xA0,
-        *(float*)(ai + 0x50), *(float*)((uintptr_t)citizenDesc + 0x70));
-    CitizenUI_UpdateIconDisplay_Impl(s + 0xC0,
-        *(float*)(ai + 0x80), *(float*)((uintptr_t)citizenDesc + 0xA4));
+    // Max values come from the CitizenDescription (+0x70 health, +0xA4 happiness);
+    // use the resolved aiDesc/citizenDesc and skip if neither is a valid pointer.
+    {
+        uintptr_t hd = aiDesc ? aiDesc : (uintptr_t)citizenDesc;
+        if (CitUI_OkPtr(hd)) {
+            CitizenUI_UpdateIconDisplay_Impl(s + 0xA0, *(float*)(ai + 0x50), *(float*)(hd + 0x70));
+            CitizenUI_UpdateIconDisplay_Impl(s + 0xC0, *(float*)(ai + 0x80), *(float*)(hd + 0xA4));
+        }
+    }
 
     // --- Profession button enabled state ---
     // Enabled if workplace (+0x248) or job entity (+0x208) exists
@@ -356,15 +447,32 @@ void CitizenUI_Slot7(CitizenUI* self) {
     }
 
     // --- textNameIs: set name parameter ---
+    // In standalone the "textNameIs" element resolves to a partially-constructed
+    // TextElement whose parameter-array String entries are uninitialized (garbage buffer
+    // pointers), so SetParameter faults deep inside System::String::operator= even though
+    // the element, its +0xC8 array and its +0x98 chain all validate. It is a redundant
+    // secondary name label — the primary textName above already shows the citizen's name
+    // — so skip it in standalone. DLL mode keeps the original behaviour (CheckPtr + set).
+#ifndef STANDALONE_EXE
+    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
     void* textNameIs = (void*)*(uint64_t*)(s + 0x90);
     if (textNameIs) fn_TextElement_SetParameter(textNameIs, 0, (void*)(ai + 0x28));
+#endif
 
     // --- Action text ---
     // Get entity reference from CitizenAI+0x10, find profession component
     uintptr_t entityFromAI = *(uintptr_t*)(ai + 0x10);
     uint64_t profCompRef = 0;
-    fn_FindProfessionComponent((void*)entityFromAI, &profCompRef);
+    // Guard the entity backref (component-list walk dereferences entity+0x30/+0x38);
+    // a partially-initialized standalone citizen can leave it as garbage.
+    if (CitUI_OkPtr(entityFromAI))
+        fn_FindProfessionComponent((void*)entityFromAI, &profCompRef);
 
+    // The profession component may be absent — profCompRef null — when the citizen
+    // has no profession (child) or, in standalone, when the ProfessionComponent
+    // type-id could not be resolved from the factory tree (fn_FindProfessionComponent
+    // then finds nothing). Skip the action text rather than dereferencing null+0x28.
+    if (profCompRef != 0) {
     // Read action index from profession component (+0x28)
     int actionIndex = *(int*)(*(uintptr_t*)&profCompRef + 0x28);
 
@@ -408,6 +516,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             fn_TextElement_SetText(actionElem, textVal);
         }
     }
+    }  // if (profCompRef != 0)
 }
 
 // ============================================================
@@ -546,3 +655,136 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         fn_UI_AddDialog(ui, &dialogRef);
     }
 }
+
+// ============================================================
+// STANDALONE promotion — real CitizenUI controller vtable
+// ============================================================
+// Clicking a citizen (now pickable via the Picking::Scene) opens a dialog whose
+// controller is CitizenUI. In standalone this type was a StubNop (all slots no-op)
+// so the panel opened blank. This block installs a real per-class vtable wiring the
+// reimplemented slots above, following the ToolUI/MapUI promotion pattern in
+// ui_dialog_stub_factories.cpp (which previously registered CitizenUI as a stub —
+// that registration is REMOVED there to avoid a duplicate REGISTER_TYPE).
+//
+// Vtable offsets (verified from the exe CitizenUI vtable @ 0x14015ba00):
+//   +0x20 (idx4) Slot4  = Setup (find elements + button ids)
+//   +0x30 (idx6) Slot6  = close sub-dialog
+//   +0x38 (idx7) Slot7  = content update (name/age/profession/hearts/stars)
+//   +0x40 (idx8)        = base DialogController::OnUpdate (per-frame; the framework
+//                         DialogInstance::OnUpdate dispatches ONLY +0x40 each frame,
+//                         Runtime 0x180115400) — base is a content no-op, so we drive
+//                         Slot7 here to refresh the panel every frame.
+//   +0x48 (idx9) Slot9  = button dispatch (profession/home/follow)
+//
+// Every exe-.rdata type-id / multiplier CitizenUI_Slot7 dereferences is NULL in
+// standalone (raw .rdata addr → ResolveAddr returns null). EnsureGlobals lazy-fills
+// them from the live factory tree (post-Engine::Startup); Slot7 is guarded to skip
+// (not fault) if any critical id failed to resolve.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstdint>
+#include <cstddef>
+#include <cstdlib>
+#include <cstdio>
+
+namespace citizenui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("CitizenUI");
+    return c;
+}
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// g_pAgeMultiplier's exe .rdata (0x140172198) is uninitialized in the standalone
+// image (unreadable / zero-fill), so fall back to 1.0 — citizen age at CitizenAI+0x3c
+// is already in display years for the panel. Not a crash risk either way; the fallback
+// just avoids a null-deref in the age line.
+static float s_ageMul = 1.0f;
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_cd = 0, s_cai = 0, s_prof = 0, s_ext = 0;
+    static uint32_t s_profZero = 0;  // safe no-op type-id for FindProfessionComponent
+    if (!g_TypeId_ComponentEntity)        { s_ce  = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_CitizenDescription)     { s_cd  = ::Object::ResolveTypeIdByNameLazy("CitizenDescription"); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
+    if (!g_TypeId_CitizenAIComponent_FC)  { s_cai = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent"); if (s_cai)  g_TypeId_CitizenAIComponent_FC = &s_cai; }
+    if (!g_TypeId_ProfessionComponent)    { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_ProfessionComponent = &s_prof; }
+    // ProfessionComponent's registered name doesn't resolve in the standalone factory
+    // tree (0x1401c70e8 is contested between ProfessionComponent and a CitizenAI
+    // message-id in our notes). It's used ONLY by the Slot7 action-text lookup, which
+    // is now null-guarded (skips if the component isn't found). Point the global at a
+    // static 0 so fn_FindProfessionComponent is a safe no-op (finds nothing) instead of
+    // dereferencing a null type-id pointer.
+    if (!g_TypeId_ProfessionComponent)    { g_TypeId_ProfessionComponent = &s_profZero; }
+    if (!g_pExternalTypeId)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_pExternalTypeId = &s_ext; }
+    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
+
+    static bool s_logged = false;
+    if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
+        s_logged = true;
+        fprintf(stderr, "[CitizenUI] globals: CE=%p CD=%p CAI=%p Prof=%p Ext=%p\n",
+                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_CitizenDescription,
+                (void*)g_TypeId_CitizenAIComponent_FC, (void*)g_TypeId_ProfessionComponent,
+                (void*)g_pExternalTypeId);
+        fflush(stderr);
+    }
+}
+
+void W_Slot4(void* self) { EnsureGlobals(); if (self) CitizenUI_Slot4(reinterpret_cast<CitizenUI*>(self)); }
+void W_Slot6(void* self) { if (self) CitizenUI_Slot6(reinterpret_cast<CitizenUI*>(self)); }
+void W_Slot7(void* self) {
+    EnsureGlobals();
+    // ProfessionComponent is not required — its only use (action text) is null-guarded
+    // and its global has a safe static-0 fallback (see EnsureGlobals).
+    if (!self || !g_TypeId_ComponentEntity || !g_TypeId_CitizenDescription
+        || !g_TypeId_CitizenAIComponent_FC) return;
+    CitizenUI_Slot7(reinterpret_cast<CitizenUI*>(self));
+}
+void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }   // +0x40 per-frame
+void W_Slot9(void* self, void* p2, int msg, int id) {
+    EnsureGlobals();
+    // Follow button (0x228) builds a FollowDialog whose vtable is g_FollowDialog_Vtable
+    // — null in standalone. CitizenUI_Slot9 handles profession/home unconditionally;
+    // guard the follow path by skipping if the vtable is unresolved (leave a no-op).
+    if (self) CitizenUI_Slot9(reinterpret_cast<CitizenUI*>(self),
+                              reinterpret_cast<uint64_t>(p2), msg, id);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
+        g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
+        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
+    }
+} g_init;
+
+void Zero(void* p) { for (size_t o = 0; o < (size_t)0xE8; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0xE8, 8);
+    if (!p) return nullptr;
+    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+}
+void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+
+}  // namespace citizenui_sa
+
+REGISTER_TYPE(CitizenUI, "UI::DialogController",
+              &citizenui_sa::Factory, &citizenui_sa::InPlace);
+
+#endif  // STANDALONE_EXE

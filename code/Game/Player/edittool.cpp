@@ -688,6 +688,40 @@ extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
     return dlg != 0 ? 1 : 0;
 }
 
+// Drive the select path on a CITIZEN. Citizens aren't in the region-map cell array
+// (they move) — they register in the Picking::Scene via PickingComponent OnAdded /
+// the move-tick (see citizenai_executor.cpp RegisterCitizenPickMesh). Their pick
+// userData is the entity backref we can recover with Picking::Scene::GetUserData.
+// This bypasses the cursor ray (headless harness) but exercises the exact chain a
+// real click uses: pick userData -> EditTool_SelectEntity -> CitizenUI dialog.
+extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
+    EnsureEditFuncs();
+    if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
+    if (!fn_EditTool_SelectEntity || !s_fn_PickingGetUserData) {
+        printf("[EditSel] citizen select unavailable (SelectEntity=%p GetUserData=%p)\n",
+               (void*)fn_EditTool_SelectEntity, (void*)s_fn_PickingGetUserData);
+        return 0;
+    }
+    void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
+    if (!scene) { printf("[EditSel] picking scene null\n"); return 0; }
+
+    // Citizens register with low pick-ids (0..N). Probe the first several; the first
+    // that yields a live userData entity gets selected.
+    for (int id = 0; id < 16; id++) {
+        void* userData = s_fn_PickingGetUserData(scene, id);
+        if (!userData) continue;
+        printf("[EditSel] citizen pick-id %d -> entity=%p; selecting...\n", id, userData);
+        uintptr_t entityParam = (uintptr_t)userData;
+        fn_EditTool_SelectEntity(editTool, &entityParam);
+        void* dlg = *(void**)((uintptr_t)editTool + 0x28);
+        printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",
+               userData, dlg, dlg ? "OPENED" : "no dialog");
+        if (dlg) return 1;
+    }
+    printf("[EditSel] no citizen pick userData found in ids 0..15\n");
+    return 0;
+}
+
 extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
     EnsureEditFuncs();
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }

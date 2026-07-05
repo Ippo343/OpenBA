@@ -912,3 +912,98 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 // ============================================================
 // EntityUI::Shutdown (vtable +0x18) — No-op
 // ============================================================
+
+// ============================================================
+// STANDALONE promotion — real EntityUI controller vtable
+// ============================================================
+// EntityUI is the common outer frame controller for every entity info panel
+// (center/pin/pages + tracks the selected entity). In standalone it was a StubNop,
+// so its Slot4 never ran — which left the controller's entity ref (+0x30) null. The
+// EditTool select-repositions the panel beside the clicked entity by reading that
+// +0x30 ref, so with the stub it opened top-left. Wiring Slot4 sets +0x30 (fixes
+// positioning) and discovers the buttonCenter/checkPin/pages elements.
+//
+// Vtable offsets (verified from the exe EntityUI vtable @ 0x14015bb90):
+//   +0x20 (idx4) Slot4 = Startup/Setup  (sets +0x30 entity ref; find elements)
+//   +0x30 (idx6) Slot6 = remove entity from the world tracking set
+// Slot7 (page switching, +0x38), Slot8 (input, +0x40) and Slot9 (center/pin buttons,
+// +0x48) are intentionally left StubNop for now: they dereference many exe-.rdata
+// component type-ids and (Slot8/9) drive EditTool::SetEditMode / EditTool vtable
+// calls — higher risk with no display payoff. The panel's close/drag come from its
+// sibling ToolUI controller (already wired), and clicking works via EditTool::OnKey.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstdint>
+#include <cstddef>
+#include <cstdlib>
+#include <cstdio>
+
+namespace entityui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("EntityUI");
+    return c;
+}
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_tool = 0;
+    if (!g_TypeId_ComponentEntity) { s_ce   = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
+    if (!g_TypeId_ToolUI)          { s_tool = ::Object::ResolveTypeIdByNameLazy("ToolUI");          if (s_tool) g_TypeId_ToolUI = &s_tool; }
+
+    static bool s_logged = false;
+    if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
+        s_logged = true;
+        fprintf(stderr, "[EntityUI] globals: CE=%p ToolUI=%p\n",
+                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_ToolUI);
+        fflush(stderr);
+    }
+}
+
+void W_Slot4(void* self) {
+    EnsureGlobals();
+    if (!self || !g_TypeId_ComponentEntity || !g_TypeId_ToolUI) return;
+    EntityUI_Slot4(reinterpret_cast<EntityUI*>(self));
+}
+void W_Slot6(void* self) { if (self) EntityUI_Slot6(reinterpret_cast<EntityUI*>(self)); }
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
+        g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
+    }
+} g_init;
+
+void Zero(void* p) { for (size_t o = 0; o < (size_t)0x48; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x48, 8);
+    if (!p) return nullptr;
+    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+}
+void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+
+}  // namespace entityui_sa
+
+REGISTER_TYPE(EntityUI, "UI::DialogController",
+              &entityui_sa::Factory, &entityui_sa::InPlace);
+
+#endif  // STANDALONE_EXE
+// (original comment header retained below)
+// ============================================================
+// EntityUI::Shutdown (vtable +0x18) — No-op
+// ============================================================

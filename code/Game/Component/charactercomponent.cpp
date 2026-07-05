@@ -213,8 +213,17 @@ static void CharacterComponent_BodyInit(CharacterComponent* self) {
         // is unaffected). When the picking subsystem registers citizens via AddMesh, +0x28
         // will hold a real id and this becomes a no-op.
         void* pickComp = *reinterpret_cast<void**>(p + 0x70);
-        if (pickComp)
+        if (pickComp) {
             *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(pickComp) + 0x28) = -1;
+            // PickingComponent::Startup (exe 0x140128c30) copies the component's entity
+            // backref (+0x10) into +0x30 — this is the InternalBasePtr value handed to
+            // Picking::Scene::AddMesh as the pick userData (Entity_impl_8f50 param_1[6]),
+            // and returned verbatim by GetUserData when the citizen is clicked. The inert
+            // standalone factory never runs slot +0x20, so do the copy here so the citizen
+            // pick mesh carries a non-null owner (else the click resolves to a null entity).
+            uint8_t* pc = reinterpret_cast<uint8_t*>(pickComp);
+            *reinterpret_cast<void**>(pc + 0x30) = *reinterpret_cast<void**>(pc + 0x10);
+        }
 
         int64_t model = *reinterpret_cast<int64_t*>(p + 0x68);
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;

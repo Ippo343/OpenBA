@@ -70,6 +70,8 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 extern "C" int EditTool_HarnessSelectNearby(void* editTool);
 // Drive the select path on a specific entity (edittool.cpp) — returns 1 if a dialog opened.
 extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity);
+// Select a citizen recovered from the Picking::Scene (edittool.cpp) — tests CitizenUI.
+extern "C" int EditTool_HarnessSelectCitizen(void* editTool);
 // A captured founding-house building entity (starttown.cpp) — a definitive UIDescription-
 // bearing entity, independent of the region-map/cursor pick.
 extern "C" void* StartTown_GetFoundingHouseEntity(int index);
@@ -478,6 +480,25 @@ void FireSelectEntity(void* entityUI) {
     printf("[ToolHarness] select -> %d (1=an entity's info dialog opened)\n", opened);
 }
 
+// Same as FireSelectEntity but targets a CITIZEN recovered from the Picking::Scene,
+// so the opened dialog is controlled by CitizenUI (name/age/profession/hearts).
+void FireSelectCitizen(void* entityUI) {
+    if (!entityUI) { printf("[ToolHarness] ERROR: entityUI null\n"); return; }
+    void* tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    if (!tool) {
+        printf("[ToolHarness] no active tool — installing default EditTool via SetEditMode(pc,0)...\n");
+        EntityUI_SetEditMode_Impl(entityUI, 0);
+        tool = *reinterpret_cast<void**>(static_cast<uint8_t*>(entityUI) + 0x28);
+    }
+    if (!tool) {
+        printf("[ToolHarness] EditTool activation FAILED. Ensure BANISHED_LIVE_TOOLS=1.\n");
+        return;
+    }
+    printf("[ToolHarness] EditTool active (%p) — selecting a picked citizen...\n", tool);
+    int opened = EditTool_HarnessSelectCitizen(tool);
+    printf("[ToolHarness] selectcitizen -> %d (1=a CitizenUI dialog opened)\n", opened);
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -512,6 +533,8 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FirePlacementTool();
     } else if (std::strcmp(s_toolName, "select") == 0) {
         FireSelectEntity(entityUI);
+    } else if (std::strcmp(s_toolName, "selectcitizen") == 0) {
+        FireSelectCitizen(entityUI);
     } else if (std::strcmp(s_toolName, "utility") == 0) {
         FireUtilityDialog();
     } else if (std::strcmp(s_toolName, "mapmenu") == 0) {
