@@ -11,6 +11,15 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
+#ifdef STANDALONE_EXE
+// By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
+// bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
+// component finder (Entity_FindComponent_MeshInstance, 0x140002f90) keys off the
+// StatusIconComponent type-id .rdata global DAT_1401c7e08, which is UNFILLED (0xFFFFFFFF)
+// in the standalone image and therefore matches no component for any entity.
+static void* StatusIconUI_FindStatusIconComp(void* entity);
+#endif
+
 // ============================================================
 // StatusIconUI::Serialize (vtable +0x20) — Cache icon child elements
 // ============================================================
@@ -82,17 +91,28 @@ void StatusIconUI_Startup(StatusIconUI* self) {
     fn_InternalBasePtr_Ctor(entityBuf, entityPtr);
     void* entityInternal = *(void**)entityBuf;
 
-    // Find MeshInstance component
+    // Find the StatusIconComponent (the exe finder is named "MeshInstance" but it keys
+    // off type-id DAT_1401c7e08 = StatusIconComponent; its +0xF0 word is the status-icon
+    // active bitfield — the SAME bits that drive the 3D warning billboards).
     void* meshComp = nullptr;
     fn_FindComponent_MeshInstance(entityInternal, &meshComp);
+#ifdef STANDALONE_EXE
+    // Standalone: the exe finder's type-id global is unfilled → returns null for every
+    // entity. Resolve the StatusIconComponent by name instead so the panel reads live bits.
+    if (!meshComp) meshComp = StatusIconUI_FindStatusIconComp(entityInternal);
+#endif
 
     // Determine if icons should be visible based on page state
     bool iconsActive = true;
 
     void* parentController = *(void**)((uintptr_t)self + 0x10);
     if (parentController != nullptr) {
-        // Check if parent is a DialogController
-        bool isDC = fn_IsDerivedFrom(parentController, *g_TypeId_DialogController);
+        // Check if parent is a DialogController. Guard the type-id deref: in standalone the
+        // exe .rdata type-id globals are null (page-check then defaults iconsActive=true,
+        // which is the correct "show icons per active bits" behaviour for a single-view
+        // panel). In DLL mode the globals are always non-null, so this is a no-op there.
+        bool isDC = g_TypeId_DialogController &&
+                    fn_IsDerivedFrom(parentController, *g_TypeId_DialogController);
         void* dcPtr = isDC ? parentController : nullptr;
 
         // Check if controller's dialog element (+0x20) is null
@@ -105,7 +125,8 @@ void StatusIconUI_Startup(StatusIconUI* self) {
             void* pageToggle = nullptr;
             if (ctrlResult != 0) {
                 void* ctrlPtr = (void*)ctrlResult;
-                bool isPageToggle = fn_IsDerivedFrom(ctrlPtr, *g_TypeId_PageToggleUI);
+                bool isPageToggle = g_TypeId_PageToggleUI &&
+                                    fn_IsDerivedFrom(ctrlPtr, *g_TypeId_PageToggleUI);
                 pageToggle = isPageToggle ? ctrlPtr : nullptr;
             }
 
@@ -134,8 +155,12 @@ void StatusIconUI_Startup(StatusIconUI* self) {
     for (int i = 0; i < iconCount; i++) {
         void* iconElem = (void*)iconArray[i];
 
-        // Read bitfield from MeshInstance component at +0xF0
-        uint32_t bitfield = *(uint32_t*)((uintptr_t)meshComp + 0xF0);
+        // Read the status-icon active bitfield from StatusIconComponent+0xF0. Guard the
+        // deref: if no StatusIconComponent was found (a partial-world entity, or a building
+        // without one in standalone), treat all bits as clear → every icon is hidden, which
+        // is the correct "no active warnings" appearance (and never faults). In DLL mode
+        // meshComp is always the real component, so this reads the live bits unchanged.
+        uint32_t bitfield = meshComp ? *(uint32_t*)((uintptr_t)meshComp + 0xF0) : 0;
         bool bitSet = (bitfield & bitMask) != 0;
 
         if (bitSet && iconsActive) {
@@ -150,3 +175,143 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         bitMask = (bitMask << 1) | (bitMask >> 31);
     }
 }
+
+// ============================================================
+// STANDALONE promotion — real StatusIconUI controller vtable
+// ============================================================
+// StatusIconUI is the sub-controller that owns the "icons" group in an entity info
+// panel's title bar (the imageStatusHome/Food/Cold/Job/Tool/Disease icons for a citizen,
+// and the equivalent construction/warning icons for a building). In standalone it was a
+// StubNop (ui_dialog_stub_factories.cpp), so NEITHER its Serialize (+0x20 — caches the
+// icon child elements) NOR its visibility update (+0x38 — shows/hides each icon per the
+// StatusIconComponent's +0xF0 active-bit) ever ran. With nothing toggling them, every icon
+// stayed at its .rsc-default visible state → ALL icons showed at once regardless of the
+// entity's real status. This block installs a real per-class vtable that:
+//   +0x20 (idx4)  W_Serialize  — cache the "icons" group children (runs once at setup)
+//   +0x38 (idx7)  W_Startup    — the exe's real visibility-update slot (kept for fidelity)
+//   +0x40 (idx8)  W_OnUpdate   — the ONLY slot the framework dispatches per frame
+//                                (DialogInstance::OnUpdate, Runtime 0x180115400); it drives
+//                                the visibility update every frame so the icons track state.
+// Mirrors the CitizenUI / EntityUI promotion pattern (idx8 → the per-frame content slot).
+//
+// The StatusIconComponent's +0xF0 bits are populated by the citizen/building status logic
+// (StatusIcon_Toggle in code/Game/Component/statusiconcomponent.cpp). When those bits are
+// live the panel reflects real status; when they are all clear (a healthy citizen, or a
+// standalone entity whose status logic hasn't populated them) the guarded read yields 0 and
+// every icon is hidden — the correct "no active warnings" appearance, and never "all shown".
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstdint>
+#include <cstddef>
+#include <cstdlib>
+#include <cstdio>
+
+// By-name StatusIconComponent finder (forward-declared at the top of this file). The exe
+// finder Entity_FindComponent_MeshInstance (0x140002f90) compares each component's GetTypeId
+// against DAT_1401c7e08 (the StatusIconComponent type-id), which is 0xFFFFFFFF (unfilled) in
+// the standalone image → it matches nothing. Resolving the type-id from the live factory
+// tree by name matches the established brick pattern (cf. StatusIcon_FindCompByName) and has
+// no shared-global dependency. Entity component array at entity+0x30 (ptr) / +0x38 (count),
+// each slot an InternalBasePtr. Returns null if the entity carries no StatusIconComponent.
+static void* StatusIconUI_FindStatusIconComp(void* entity) {
+    if (!entity || !fn_IsDerivedFrom) return nullptr;
+    uint32_t want = ::Object::GetTypeIdByName("StatusIconComponent");
+    if (want == 0 || want == 0xFFFFFFFFu) return nullptr;
+    uintptr_t e = (uintptr_t)entity;
+    int count = *(int*)(e + 0x38);
+    int64_t arr = *(int64_t*)(e + 0x30);
+    for (int i = 0; i < count; i++) {
+        void** ibp = (void**)(arr + (int64_t)i * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(ibp);
+        void* comp = *ibp;
+        if (!comp) continue;
+        typedef uint32_t (*GetTypeId_t)(void*);
+        uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (tid == want)
+            return fn_IsDerivedFrom(comp, want) ? comp : nullptr;
+    }
+    return nullptr;
+}
+
+namespace statusiconui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("StatusIconUI");
+    return c;
+}
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
+    // ComponentEntity is required — Startup casts the panel's data source (+0x28) to it.
+    if (!g_TypeId_ComponentEntity) { s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce) g_TypeId_ComponentEntity = &s_ce; }
+    // DialogController + PageToggleUI feed the (cosmetic) page-gating branch. If they don't
+    // resolve, Startup's guards default iconsActive=true (icons shown per the active bits),
+    // which is the correct single-view behaviour — so these are best-effort, not required.
+    if (!g_TypeId_DialogController) { s_dc = ::Object::ResolveTypeIdByNameLazy("DialogController"); if (s_dc) g_TypeId_DialogController = &s_dc; }
+    if (!g_TypeId_PageToggleUI)     { s_pt = ::Object::ResolveTypeIdByNameLazy("PageToggleUI");     if (s_pt) g_TypeId_PageToggleUI = &s_pt; }
+
+    static bool s_logged = false;
+    if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
+        s_logged = true;
+        fprintf(stderr, "[StatusIconUI] globals: CE=%p DC=%p PageToggle=%p\n",
+                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_DialogController,
+                (void*)g_TypeId_PageToggleUI);
+        fflush(stderr);
+    }
+}
+
+// +0x20 setup: cache the "icons" group child elements into self+0x30 (array) / +0x38 (count).
+void W_Serialize(void* self) { EnsureGlobals(); if (self) StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self)); }
+
+// +0x38: the visibility update. Lazily runs Serialize once if the setup slot didn't populate
+// the icon array (self+0x30 null), so the per-frame path is robust even if idx4 never fired.
+void W_Startup(void* self) {
+    EnsureGlobals();
+    if (!self || !g_TypeId_ComponentEntity) return;
+    if (*reinterpret_cast<uint64_t*>((char*)self + 0x30) == 0)
+        StatusIconUI_Serialize(reinterpret_cast<StatusIconUI*>(self));
+    StatusIconUI_Startup(reinterpret_cast<StatusIconUI*>(self));
+}
+
+// +0x40 per-frame (the only slot DialogInstance::OnUpdate dispatches each frame) → drive the
+// visibility update so the icons continuously track the entity's live StatusIconComponent bits.
+void W_OnUpdate(void* self, void* /*time*/) { W_Startup(self); }
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Serialize);
+        g_vt[7] = reinterpret_cast<void*>(&W_Startup);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+    }
+} g_init;
+
+void Zero(void* p) { for (size_t o = 0; o < (size_t)0x40; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x40, 8);
+    if (!p) return nullptr;
+    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+}
+void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+
+}  // namespace statusiconui_sa
+
+REGISTER_TYPE(StatusIconUI, "UI::DialogController",
+              &statusiconui_sa::Factory, &statusiconui_sa::InPlace);
+
+#endif  // STANDALONE_EXE

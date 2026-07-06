@@ -278,7 +278,8 @@ UI_DIALOG_STUB(RadiusUI,            "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ResourceLimitUI,     "UI::DialogController", 0x40);
 UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
 UI_DIALOG_STUB(StatusBarUI,         "UI::DialogController", 0x1D0);
-UI_DIALOG_STUB(StatusIconUI,        "UI::DialogController", 0x40);
+// ---- StatusIconUI: PROMOTED to real SA vtable (statusiconui.cpp) — icons now
+//      show/hide per StatusIconComponent +0xF0 state instead of all-at-once ----
 UI_DIALOG_STUB(StorageCapacityUI,   "UI::DialogController", 0x38);
 UI_DIALOG_STUB(TitleDescToolTipUI,  "UI::DialogController", 0x30);
 // ---- ToolUI: PROMOTED to the real Slot4 reimpl (map-render bring-up) ----------
@@ -376,7 +377,8 @@ UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
 UI_DIALOG_STUB(WorkPlaceUI,         "UI::DialogController", 0x60);
 UI_DIALOG_STUB(BuildUI,             "UI::DialogController", 0x50);
 UI_DIALOG_STUB(ResidenceUI,         "UI::DialogController", 0x40);
-UI_DIALOG_STUB(StorageUI,           "UI::DialogController", 0x40);
+// ---- StorageUI: PROMOTED to real SA vtable (storageui.cpp) — Inventory/Storage
+//      tab now populates rows from the entity's StorageComponent instead of "0" ----
 UI_DIALOG_STUB(TutorialUI,          "UI::DialogController", 0x60);
 
 // ---- SelectResourceUI subclasses (parent is the abstract SelectResourceUI) --

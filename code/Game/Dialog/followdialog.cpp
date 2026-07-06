@@ -102,9 +102,9 @@ void FollowDialog_Slot4(FollowDialog* self) {
     }
 
     // Set follow-active flag: *(gameWorld+0x120)+0x38 = 1
-    void* gameWorld = *g_pGameWorldSingleton;
-    void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
-    *(uint8_t*)((uintptr_t)subsys + 0x38) = 1;
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* subsys = gameWorld ? *(void**)((uintptr_t)gameWorld + 0x120) : nullptr;
+    if (subsys) *(uint8_t*)((uintptr_t)subsys + 0x38) = 1;
 }
 
 // ============================================================
@@ -124,6 +124,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
 
     // Get CitizenAI inner ptr from InternalBasePtr at +0xB8
     uintptr_t ai = *(uintptr_t*)(s + 0xB8);
+    if (!ai) return;  // guard: followed-entity ref may be uninit/cleared
 
     // --- Profession text (parameter 1 on textFollow at +0xC8) ---
     // If isChild (age < childThreshold) OR hasWorkplace: show child/worker profession
@@ -147,16 +148,18 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
 
         // Build UI::String from profession entry's string table (+0x20) and name key (+0x30)
         // Convert to System::String and set as parameter 1 on textFollow
-        uint8_t uiStr[16];
-        fn_UIString_Ctor(uiStr, *(uint64_t*)(profEntry + 0x20), (void*)(profEntry + 0x30));
-        uint8_t sysStr[8];
-        fn_UIString_ToSystemString(uiStr, sysStr);
-
         void* textFollow = *(void**)(s + 0xC8);
-        fn_TextElement_SetParameter(textFollow, 1, sysStr);
+        if (profEntry && textFollow) {
+            uint8_t uiStr[16];
+            fn_UIString_Ctor(uiStr, *(uint64_t*)(profEntry + 0x20), (void*)(profEntry + 0x30));
+            uint8_t sysStr[8];
+            fn_UIString_ToSystemString(uiStr, sysStr);
 
-        // Cleanup System::String
-        fn_String_Dtor(sysStr);
+            fn_TextElement_SetParameter(textFollow, 1, sysStr);
+
+            // Cleanup System::String
+            fn_String_Dtor(sysStr);
+        }
     }
 
     // --- Action text (textAction at +0xD0, set by index from element's string table) ---
@@ -165,8 +168,10 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
     uint64_t profCompRef = 0;
     fn_FindProfessionComponent((void*)entityRef, &profCompRef);
 
-    // Read action index from ProfessionComponent+0x28
-    int actionIndex = *(int*)(*(uintptr_t*)&profCompRef + 0x28);
+    // Read action index from CitizenAIComponent+0x28.
+    // Guard: FindProfessionComponent yields null if the type-id is unresolved
+    // (standalone) — deref of null+0x28 would fault.
+    int actionIndex = profCompRef ? *(int*)((uintptr_t)profCompRef + 0x28) : 0;
 
     // Special case: action 9 (idle/searching for home)
     // Check if citizen's home tile entity has a different profession — if so, show index 0x10
@@ -198,6 +203,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
     // Build UI::String from textAction element's own string table at +0xD8, by index
     {
         void* textAction = *(void**)(s + 0xD0);
+        if (!textAction) return;  // guard: element may be unresolved
         uintptr_t elemPtr = (uintptr_t)textAction;
         uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
         uint8_t uiStr[16];
@@ -273,6 +279,7 @@ void FollowDialog_Slot7(FollowDialog* self) {
     // Get the followed entity from InternalBasePtr at +0xB8
     // CheckPtr validates the reference, then read entity+0x10 to get inner ref
     uintptr_t entityRef = *(uintptr_t*)(s + 0xB8);
+    if (!entityRef) return;  // guard: followed-entity ref may be uninit/cleared
     uintptr_t entityInner = *(uintptr_t*)(entityRef + 0x10);
 
     // Find CharacterComponent on the entity
@@ -280,22 +287,27 @@ void FollowDialog_Slot7(FollowDialog* self) {
     fn_FindComponent_Character((void*)entityInner, compBuf);
     void* charComp = *(void**)compBuf;
 
-    // Read character position: x at +0x158, z at +0x15C on the component's internal data
-    uintptr_t compData = *(uintptr_t*)charComp;
-    uint32_t posX = *(uint32_t*)(compData + 0x158);
-    uint32_t posZ = *(uint32_t*)(compData + 0x15C);
+    // Read character position: x at +0x158, z at +0x15C on the component's internal data.
+    // Only update the camera when the CharacterComponent resolved (guard the deref).
+    if (charComp) {
+        uintptr_t compData = *(uintptr_t*)charComp;
+        uint32_t posX = *(uint32_t*)(compData + 0x158);
+        uint32_t posZ = *(uint32_t*)(compData + 0x15C);
 
-    // Write position to camera subsystem: gameWorld->+0xE0 -> {+0x1C, +0x20, +0x24}
-    void* world = *g_pGameWorldSingleton;
-    uintptr_t cameraSys = *(uintptr_t*)((uintptr_t)world + 0xE0);
-    *(uint32_t*)(cameraSys + 0x1C) = posX;
-    *(uint32_t*)(cameraSys + 0x20) = posZ;
-    *(uint32_t*)(cameraSys + 0x24) = 0;
+        // Write position to camera subsystem: gameWorld->+0xE0 -> {+0x1C, +0x20, +0x24}
+        void* world = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        uintptr_t cameraSys = world ? *(uintptr_t*)((uintptr_t)world + 0xE0) : 0;
+        if (cameraSys) {
+            *(uint32_t*)(cameraSys + 0x1C) = posX;
+            *(uint32_t*)(cameraSys + 0x20) = posZ;
+            *(uint32_t*)(cameraSys + 0x24) = 0;
+        }
+    }
 
     // Check Escape key (key ID 8) — if pressed, close the follow dialog.
     // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on self.
-    void* keyMap = ***(void****)g_pKeyMapObjectExref;
-    if (fn_KeyMap_Pressed(keyMap, 0, 8)) {
+    void* keyMap = g_pKeyMapObjectExref ? ***(void****)g_pKeyMapObjectExref : nullptr;
+    if (keyMap && fn_KeyMap_Pressed(keyMap, 0, 8)) {
         fn_InternalBasePtr_CheckPtr((void*)(s + 0xC0));
         uintptr_t followedInner = *(uintptr_t*)(s + 0xC0);
 
@@ -315,3 +327,102 @@ void FollowDialog_Slot7(FollowDialog* self) {
         }
     }
 }
+
+// ============================================================
+// STANDALONE EXE: real FollowDialog vtable
+// ============================================================
+// In standalone mode the exe .rdata vtable at 0x14015be00 is never populated, so
+// g_FollowDialog_Vtable (engine_funcs) resolves to NULL. CitizenUI_Slot9 patches
+// a freshly-constructed FollowDialog's vtable pointer with g_FollowDialog_Vtable
+// → a NULL vtable → hard-fault the instant the UI dispatches the dialog. That is
+// the Follow-button crash.
+//
+// This block builds a real 10-slot FollowDialog vtable mirroring the exe layout
+// exactly (verified against 0x14015be00 in Ghidra):
+//   +0x00 idx0  ScalarDtor          -> FD_SA_Dtor         (was 0x140011AF0)
+//   +0x08 idx1  static getter        -> returns 0          (was 0x140011A10)
+//   +0x10 idx2  GetTypeId            -> FD_SA_TypeId       (was 0x140011A00)
+//   +0x18 idx3  Persist              -> no-op (serialize)  (was 0x14003A948)
+//   +0x20 idx4  Setup                -> FollowDialog_Slot4 (was 0x140069340)
+//   +0x28 idx5  Shutdown             -> FollowDialog_Slot5 (was 0x140069320)
+//   +0x30 idx6  OnUpdateLayout       -> FollowDialog_Slot6 (was 0x140068F70)
+//   +0x38 idx7  OnUpdate (per-frame) -> FollowDialog_Slot7 (was 0x140069250)
+//   +0x40 idx8  OnCommand            -> FollowDialog_Slot8 (was 0x140069230)
+//   +0x48 idx9  OnSerializeSettings  -> no-op (serialize)  (was 0x14003A954)
+//
+// The per-frame follow-camera tick is idx7 (+0x38) — the DialogInstance OnUpdate
+// hook the UserInterface calls on each open dialog — NOT idx8. (idx8 is only
+// invoked on element/button events with msg==0x12.)
+//
+// CitizenUI_Slot9 (standalone) falls back to FollowDialog_GetStandaloneVtable()
+// when g_FollowDialog_Vtable is null. The FollowDialog REGISTER_TYPE entry (with
+// its type id and dormant-safe factory) still lives in ui_dialog_stub_factories.cpp;
+// this vtable is only bound to the manually-constructed instance.
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+
+namespace {
+
+void* GetFollowDialogVtable();  // fwd
+
+// idx0 — scalar deleting destructor. Mirrors FollowDialog_ScalarDtor (0x140011AF0):
+// reset vtable, run the DialogInstance base dtor, free the object if flag bit 0.
+void* FD_SA_Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = GetFollowDialogVtable();
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// idx1 — small static getter in the exe (returns DAT_1401c4fe8). Not consulted on
+// the follow path; return 0.
+void* FD_SA_Slot1(void*) { return nullptr; }
+
+// idx2 — GetTypeId.
+uint32_t FD_SA_TypeId(void*) {
+    static uint32_t cached = 0;
+    if (!cached) cached = ::Object::GetTypeIdByName("FollowDialog");
+    return cached;
+}
+
+// idx3 / idx9 — base DialogInstance serialization thunks. Never invoked for a live
+// follow dialog; harmless no-op.
+void FD_SA_SerializeStub(void*, ...) {}
+
+// Typed reimpl trampolines wrapping the void*-based vtable ABI.
+void FD_SA_Slot4(void* self) { FollowDialog_Slot4(reinterpret_cast<FollowDialog*>(self)); }
+void FD_SA_Slot5(void* self) { FollowDialog_Slot5(reinterpret_cast<FollowDialog*>(self)); }
+void FD_SA_Slot6(void* self, void* p2, void* p3, void* p4) {
+    FollowDialog_Slot6(reinterpret_cast<FollowDialog*>(self), p2, p3, p4);
+}
+void FD_SA_Slot7(void* self) { FollowDialog_Slot7(reinterpret_cast<FollowDialog*>(self)); }
+void FD_SA_Slot8(void* self, void* e, int msg, int id) {
+    FollowDialog_Slot8(reinterpret_cast<FollowDialog*>(self), e, msg, id);
+}
+
+void* g_FollowDialog_Vtable_Standalone[10] = {
+    reinterpret_cast<void*>(&FD_SA_Dtor),           // +0x00 idx0 ScalarDtor
+    reinterpret_cast<void*>(&FD_SA_Slot1),          // +0x08 idx1 getter
+    reinterpret_cast<void*>(&FD_SA_TypeId),         // +0x10 idx2 GetTypeId
+    reinterpret_cast<void*>(&FD_SA_SerializeStub),  // +0x18 idx3 Persist
+    reinterpret_cast<void*>(&FD_SA_Slot4),          // +0x20 idx4 Setup
+    reinterpret_cast<void*>(&FD_SA_Slot5),          // +0x28 idx5 Shutdown
+    reinterpret_cast<void*>(&FD_SA_Slot6),          // +0x30 idx6 OnUpdateLayout
+    reinterpret_cast<void*>(&FD_SA_Slot7),          // +0x38 idx7 OnUpdate (per-frame)
+    reinterpret_cast<void*>(&FD_SA_Slot8),          // +0x40 idx8 OnCommand
+    reinterpret_cast<void*>(&FD_SA_SerializeStub),  // +0x48 idx9 OnSerializeSettings
+};
+
+void* GetFollowDialogVtable() {
+    return reinterpret_cast<void*>(g_FollowDialog_Vtable_Standalone);
+}
+
+}  // namespace
+
+extern "C" void* FollowDialog_GetStandaloneVtable() {
+    return GetFollowDialogVtable();
+}
+
+#endif  // STANDALONE_EXE

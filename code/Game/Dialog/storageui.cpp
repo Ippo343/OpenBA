@@ -587,3 +587,165 @@ void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*unus
     }
 }
 
+// ============================================================
+// STANDALONE promotion — real StorageUI controller vtable
+// ============================================================
+// The citizen (and building) info panel's Inventory/Storage tab is driven by a
+// StorageUI controller bound to the panel's `storageTable`. In standalone this
+// type was a StubNop (all slots no-op, see ui_dialog_stub_factories.cpp — that
+// stub registration is REMOVED there to avoid a duplicate REGISTER_TYPE), so the
+// tab never built or populated its rows and stayed on the .rsc template cell that
+// renders "0". This block installs a real per-class vtable wiring the two
+// reimplemented methods above (StorageUI_Serialize builds+sizes the table and
+// caches the row element ptrs; StorageUI_Startup fills the rows from the entity's
+// StorageComponent), following the CitizenUI/EntityUI promotion pattern.
+//
+// Vtable offsets (verified from the exe StorageUI vtable @ 0x14015f970):
+//   +0x00 (idx0) ScalarDtor
+//   +0x10 (idx2) GetTypeId
+//   +0x20 (idx4) Serialize = table build (setup; framework calls once). It calls
+//                Startup (via vtable[7]) at its end to do the initial populate.
+//   +0x38 (idx7) Startup   = populate rows from the entity's carried inventory.
+//   +0x40 (idx8)           = base DialogController::OnUpdate (per-frame; the
+//                framework DialogInstance::OnUpdate dispatches ONLY +0x40 each
+//                frame, Runtime 0x180115400). Base is a content no-op, so we drive
+//                the refresh here: build once (if the framework's idx4 setup didn't
+//                run yet), then re-populate every frame so the counts stay live.
+//
+// Every exe-.rdata type-id these methods dereference is filled from the live
+// factory tree (RawMaterialDescription/StorageComponent are already registered in
+// standalone; ComponentEntity is lazy-resolved here). W_* skip (not fault) if a
+// critical id or the ExternalFactory singleton has not resolved yet.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include <cstdlib>
+#include <cstdio>
+
+namespace storageui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("StorageUI");
+    return c;
+}
+
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    // Free the cached row-element array at +0x30 (mirrors the exe ScalarDtor).
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* rows = *reinterpret_cast<void**>(s + 0x30);
+    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_raw = 0;
+    if (!g_TypeId_ComponentEntity) {
+        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
+    }
+    // RawMaterialDescription (0x1401c7cb8) is normally registered in standalone
+    // (reg_action_child_ctors2.cpp), but lazy-resolve as a belt-and-braces fallback.
+    if (!g_TypeId_RawMaterialDescription) {
+        s_raw = ::Object::ResolveTypeIdByNameLazy("RawMaterialDescription");
+        if (s_raw) g_TypeId_RawMaterialDescription = &s_raw;
+    }
+    // g_TypeId_StorageComponent_FC (0x1401c7e78, used by fn_FindComponent_Storage)
+    // and g_pExternalFactorySingleton are filled by engine_funcs init in standalone.
+}
+
+// All globals StorageUI_Serialize/Startup dereference must be live before we run,
+// or a null-deref would fault (MinGW has no __try/__except to catch it).
+bool Ready() {
+    return g_TypeId_ComponentEntity
+        && g_TypeId_RawMaterialDescription
+        && g_TypeId_StorageComponent_FC
+        && g_pExternalFactorySingleton && *g_pExternalFactorySingleton;
+}
+
+static void Trace(const char* what, void* self) {
+    if (!std::getenv("BANISHED_DIALOG_TRACE")) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    fprintf(stderr, "[StorageUI] %s self=%p ready=%d rows(+0x38)=%d\n",
+            what, self, Ready() ? 1 : 0,
+            self ? *reinterpret_cast<int*>(s + 0x38) : -1);
+    fflush(stderr);
+}
+
+// idx4 (+0x20): setup — build+size the table, cache row ptrs, then Startup.
+void W_Serialize(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready()) { Trace("Serialize SKIP", self); return; }
+    Trace("Serialize", self);
+    StorageUI_Serialize(reinterpret_cast<StorageUI*>(self));
+}
+
+// idx7 (+0x38): populate rows from the entity's StorageComponent (also called by
+// StorageUI_Serialize via vtable[7]).
+void W_Startup(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    StorageUI_Startup(reinterpret_cast<StorageUI*>(self));
+}
+
+// idx8 (+0x40): per-frame. Self-heal — if the table hasn't been built yet
+// (+0x38 row count still 0), run Serialize once; otherwise just re-populate so
+// the item counts stay live.
+void W_OnUpdate(void* self, void* /*time*/) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
+        StorageUI_Serialize(reinterpret_cast<StorageUI*>(self));
+    } else {
+        StorageUI_Startup(reinterpret_cast<StorageUI*>(self));
+    }
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Serialize);
+        g_vt[7] = reinterpret_cast<void*>(&W_Startup);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace storageui_sa
+
+REGISTER_TYPE(StorageUI, "UI::DialogController",
+              &storageui_sa::Factory, &storageui_sa::InPlace);
+
+#endif  // STANDALONE_EXE
+

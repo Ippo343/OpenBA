@@ -30,6 +30,28 @@
 #include <cstdlib>
 #endif
 
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+// FollowDialog's real standalone vtable (built in followdialog.cpp). In standalone
+// mode the exe .rdata FollowDialog vtable (0x14015be00) is never populated, so
+// g_FollowDialog_Vtable stays null; Slot9 uses this as the fallback.
+extern "C" void* FollowDialog_GetStandaloneVtable();
+
+// #6a: g_TypeId_ProfessionComponent (exe .rdata DAT_1401c70e8) is actually the
+// CitizenAIComponent type id — the component whose +0x28 holds the citizen's
+// current action-state index (drives the Action text on the panel and the Follow
+// dialog). It is NULL in standalone (raw .rdata constant → ResolveAddr returns 0),
+// so fn_FindProfessionComponent yields null and the Action line can't resolve.
+// Resolve it lazily from the live Runtime factory tree on first panel update.
+static void CitizenUI_EnsureProfessionTypeId() {
+    if (g_TypeId_ProfessionComponent) return;  // already wired (DLL mode)
+    static uint32_t s_profTid = 0;
+    if (s_profTid == 0)
+        s_profTid = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent");
+    if (s_profTid) g_TypeId_ProfessionComponent = &s_profTid;
+}
+#endif
+
 // A partially-initialized standalone citizen can leave CitizenAI description/pointer
 // fields as garbage (0, the -1 unresolved-IBP sentinel, or non-canonical high values
 // like 0xfffffffffffffee7). CitizenUI_Slot7 dereferences several of these directly
@@ -245,6 +267,10 @@ void CitizenUI_Slot6(CitizenUI* self) {
 
 void CitizenUI_Slot7(CitizenUI* self) {
     uintptr_t s = (uintptr_t)self;
+
+#ifdef STANDALONE_EXE
+    CitizenUI_EnsureProfessionTypeId();
+#endif
 
     // Get entity from data source (+0x28), cast to ComponentEntity
     void* entityBase = *(void**)(s + 0x28);
@@ -569,6 +595,10 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
     uintptr_t s = (uintptr_t)self;
 
+#ifdef STANDALONE_EXE
+    CitizenUI_EnsureProfessionTypeId();
+#endif
+
     if (param4 == 0x227) {
         // --- buttonProfession: go to workplace/job ---
         void* entityBase = *(void**)(s + 0x28);
@@ -657,8 +687,15 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
             void* userInterface = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
             fn_DialogInstance_Ctor(followDialog, userInterface, checkedRes, &nullParent, 0, 0, 0);
 
-            // Patch vtable to FollowDialog
-            *(void**)followDialog = (void*)g_FollowDialog_Vtable;
+            // Patch vtable to FollowDialog.
+            void* fdVtable = (void*)g_FollowDialog_Vtable;
+#ifdef STANDALONE_EXE
+            // Standalone: exe .rdata vtable (0x14015be00) is null → g_FollowDialog_Vtable
+            // unresolved. Use the real reimplemented vtable from followdialog.cpp,
+            // otherwise the dialog gets a NULL vtable and hard-faults on dispatch.
+            if (!fdVtable) fdVtable = FollowDialog_GetStandaloneVtable();
+#endif
+            *(void**)followDialog = fdVtable;
 
             // Set FollowDialog-specific fields
             uintptr_t fd = (uintptr_t)followDialog;

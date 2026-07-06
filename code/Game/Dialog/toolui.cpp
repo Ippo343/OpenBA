@@ -322,6 +322,30 @@ void ToolUI_Slot4(ToolUI* self) {
 void ToolUI_Slot8(ToolUI* self) {
     uintptr_t s = (uintptr_t)self;
 
+#ifdef STANDALONE_EXE
+    // --- Standalone drag-enable for entity / citizen info panels ---------------
+    // Retail arms the entity panel's title-bar drag through EntityUI's per-frame
+    // input handler (exe 0x140066AD0 EntityUI::Slot8), which UNCONDITIONALLY sets
+    // this ToolUI controller's +0x4C (drag-enable) = 1 every frame. In standalone
+    // that EntityUI input slot is a StubNop — its +0x40 per-frame dispatch runs the
+    // page-switching Slot7 instead — so +0x4C is never set and the entity/citizen
+    // panel can never arm a drag (Slot9's mouse-down falls through both the +0x40
+    // borderTitle branch and the +0x4C pending branch). Utility dialogs are
+    // unaffected: they drag via the borderTitle handle (+0x40, set in Slot4) and
+    // their datasource is a ComponentDescription, not a ComponentEntity.
+    //
+    // Mirror EntityUI's drag-enable here, in ToolUI's OWN per-frame slot (this
+    // function is g_vt[8], dispatched every frame by DialogInstance::OnUpdate), but
+    // only for entity dialogs (datasource at +0x28 is a ComponentEntity). This arms
+    // the pending-drag path that Slot9's mouse-down triggers and this function then
+    // follows. In DLL mode the real EntityUI handler does it, so this is SA-only.
+    if (g_TypeId_ComponentEntity) {
+        void* ds = *(void**)(s + 0x28);
+        if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity))
+            *(uint8_t*)(s + 0x4C) = 1;
+    }
+#endif
+
     // Pending drag: check mouse movement threshold
     if (*(char*)(s + 0x4D) != 0) {
         void* keyMap = ***(void****)g_pKeyMapObjectExref;
@@ -487,6 +511,21 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         return;
     } else if (msg == 0x12 && id == 1) {
         // Close button — close dialog and remove from entity tracking
+#ifdef STANDALONE_EXE
+        // Standalone dialogs/controllers are only partially initialized. Validate the
+        // pointers this path dereferences before use so a bad field can't fault: the
+        // CloseDialog fn, the world singleton (walked for the tracking BST below), and
+        // the dialog-instance pointer behind the IBP at +0x18 (deref'd for its
+        // UserInterface at +0x10). Range check matches CitUI_OkPtr (canonical Win64
+        // user-space heap window). In DLL mode these are always live, so this is inert.
+        if (!fn_UI_CloseDialog || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+            return;
+        {
+            fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
+            uintptr_t di = *(uintptr_t*)(s + 0x18);
+            if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return;
+        }
+#endif
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* userInterface = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
