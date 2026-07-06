@@ -1168,6 +1168,10 @@ static constexpr int FAMILY_STRIDE  = 8;       // {bool _educated@+0, int _maxCh
 // RegisterEntity.
 extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx);
 
+// Faithful port of the citizen name generator (citizen_names.cpp). Fills a C-string
+// (>=0x100 byte buffer) with a 4-gram Markov name from Game/Names/{Male,Female}.ndb.
+extern "C" bool GenerateCitizenName(void* rng, bool female, char* out, int cap);
+
 // Gate: BANISHED_CITIZEN_VARIANT. Default ON (user-verified: gives per-citizen
 // male/female models instead of every colonist sharing the description's fixed
 // variant); opt out with BANISHED_CITIZEN_VARIANT=0. NB this only varies the mesh
@@ -1233,7 +1237,7 @@ static uintptr_t SetCitizenModelVariant(void* entity, uint32_t tidModel, int var
 // `genderMc` is the ModelComponent SetCitizenModelVariant re-pointed, logged only
 // to confirm it is the same instance this path resolves.
 static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
-                                   uintptr_t genderMc) {
+                                   uintptr_t genderMc, int variantIdx) {
     if (!CitizenVariantOn() || !entity || !fn_InternalBasePtr_Ctor ||
         !fn_InternalBasePtr_CheckPtr)
         return;
@@ -1297,6 +1301,35 @@ static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
         *(float*)(m + 0x138) = scale;
         *(float*)(m + 0x13c) = scale;
         *(float*)(m + 0x140) = (float)colorIdx;
+    }
+
+    // Gender field (citizen+0x38) + name String (citizen+0x28). The retail deferred
+    // init (FUN_140117080) sets +0x38 = gender (0 = female, nonzero = male) and
+    // assigns a generated name to +0x28; both are read by the CitizenUI dialog
+    // (gender icon, textName). Our variant scheme maps variantIdx 0 -> male model
+    // (retail variantIdx = (gender==0)), so gender = (variantIdx==0) ? 1 : 0 and the
+    // name uses Female.ndb when variantIdx != 0. Done LAST so the colour/age RNG
+    // stream above (user-verified) is unchanged.
+    bool female = (variantIdx != 0);
+    *(int32_t*)(citizen + 0x38) = female ? 0 : 1;
+    // The name at +0x28 is an uninitialized System::String on a standalone citizen
+    // (garbage buffer ptr). Construct a fresh String in place from the generated
+    // C-string — a constructor doesn't release the (garbage) old value, which is the
+    // correct behaviour for uninitialized storage.
+    if (fn_String_Ctor_CStr) {
+        char nameBuf[0x100];
+        if (GenerateCitizenName(rng, female, nameBuf, (int)sizeof(nameBuf))) {
+            fn_String_Ctor_CStr((void*)(citizen + 0x28), nameBuf);
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+            static int s_nameLog = 0;
+            if (s_nameLog < 12) {
+                ++s_nameLog;
+                fprintf(stderr, "[startTown::citizen] name='%s' female=%d\n",
+                        nameBuf, (int)female);
+                fflush(stderr);
+            }
+#endif
+        }
     }
 
 #if defined(STANDALONE_EXE) && defined(_DEBUG)
@@ -1421,7 +1454,7 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
     // scene mesh instance.
     if (ent) {
         fn_InternalBasePtr_CheckPtr(&entIBP);
-        ApplyCitizenColorScale((void*)entIBP, isChild, rng, genderMc);
+        ApplyCitizenColorScale((void*)entIBP, isChild, rng, genderMc, variantIdx);
     }
     return ent;
 }

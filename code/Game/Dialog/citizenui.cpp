@@ -25,6 +25,10 @@
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#include <cstdio>
+#include <cstdlib>
+#endif
 
 // A partially-initialized standalone citizen can leave CitizenAI description/pointer
 // fields as garbage (0, the -1 unresolved-IBP sentinel, or non-canonical high values
@@ -305,8 +309,35 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // Guard both the destination element AND the source name String (ai+0x28), which is
     // uninitialized on a standalone citizen and would fault when SetParameter bumps its
     // ref-count.
-    if (CitUI_OkString((void*)(ai + 0x28)) && CitUI_OkTextParam(textName))
+    bool okName = CitUI_OkString((void*)(ai + 0x28));
+    bool okParam = CitUI_OkTextParam(textName);
+    if (okName && okParam)
         fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
+#if defined(STANDALONE_EXE) && defined(_DEBUG)
+    {
+        static int s_nameTrace = 0;
+        if (s_nameTrace < 4 && std::getenv("BANISHED_DIALOG_TRACE")) {
+            ++s_nameTrace;
+            const char* nm = okName ? (const char*)*(char**)(ai + 0x28) : "<invalid>";
+            fprintf(stderr, "[CitizenUI::Slot7] textName=%p okString=%d okParam=%d name='%s'"
+                    " -> SetParameter %s\n", textName, (int)okName, (int)okParam,
+                    nm ? nm : "(null)", (okName && okParam) ? "FIRED" : "skipped");
+            // Diagnose empty-rows: are the content text elements' string tables (+0xD8)
+            // and format/param arrays bound? All rows (incl. static labels) render empty
+            // if the content sub-panel's elements never got their strings.
+            void* clo = (void*)*(uint64_t*)(s + 0x68);   // textClothing
+            auto D8 = [](void* e)->void*{ return e ? *(void**)((uintptr_t)e + 0xD8) : nullptr; };
+            auto vis = [](void* e)->uint32_t{ return e ? *(uint32_t*)((uintptr_t)e + 0x34) : 0; };
+            fprintf(stderr, "[CitizenUI::Slot7]   textName: strTbl(+0xD8)=%p flags(+0x34)=0x%x "
+                    "paramCnt(+0xD0)=%d paramArr(+0xC8)=%p | clothing=%p strTbl=%p flags=0x%x\n",
+                    D8(textName), vis(textName),
+                    textName ? *(int*)((uintptr_t)textName + 0xD0) : -1,
+                    textName ? *(void**)((uintptr_t)textName + 0xC8) : nullptr,
+                    clo, D8(clo), vis(clo));
+            fflush(stderr);
+        }
+    }
+#endif
 
     // --- Age number ---
     float ageFloat = *(float*)(ai + 0x3c);
@@ -717,7 +748,15 @@ void EnsureGlobals() {
     static uint32_t s_profZero = 0;  // safe no-op type-id for FindProfessionComponent
     if (!g_TypeId_ComponentEntity)        { s_ce  = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");    if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
     if (!g_TypeId_CitizenDescription)     { s_cd  = ::Object::ResolveTypeIdByNameLazy("CitizenDescription"); if (s_cd)   g_TypeId_CitizenDescription = &s_cd; }
-    if (!g_TypeId_CitizenAIComponent_FC)  { s_cai = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent"); if (s_cai)  g_TypeId_CitizenAIComponent_FC = &s_cai; }
+    // g_TypeId_CitizenAIComponent_FC is DAT_1401c7158 — despite the "CitizenAI" name,
+    // Entity_FindComponent_CitizenAI searches for type-id 1401c7158 which is the
+    // *CitizenComponent* (the name at +0x28, age +0x3c, profession +0x1f0, housing
+    // +0x248, desc +0x288 all live on it — the same component the founding path writes
+    // the generated name to). Resolving the literal "CitizenAIComponent" here finds a
+    // DIFFERENT sibling component whose +0x28 is unset, so the dialog read the wrong
+    // object. Resolve "CitizenComponent" (matching the founding writer's TypeId lookup)
+    // so the dialog reads the citizen data that was actually filled in.
+    if (!g_TypeId_CitizenAIComponent_FC)  { s_cai = ::Object::GetTypeIdByName("CitizenComponent"); if (s_cai)  g_TypeId_CitizenAIComponent_FC = &s_cai; }
     if (!g_TypeId_ProfessionComponent)    { s_prof= ::Object::ResolveTypeIdByNameLazy("ProfessionComponent");if (s_prof) g_TypeId_ProfessionComponent = &s_prof; }
     // ProfessionComponent's registered name doesn't resolve in the standalone factory
     // tree (0x1401c70e8 is contested between ProfessionComponent and a CitizenAI
