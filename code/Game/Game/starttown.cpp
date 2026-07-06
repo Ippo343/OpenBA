@@ -154,10 +154,11 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
     fflush(stderr);
 }
 
-// Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp). Sets the
-// citizen's residence ref (+0x248) AND rosters the citizen into the house's
-// WorkPlaceComponent occupant list (+0x58/+0x60) via the attach helper (FUN_14012fa20).
-// Used by StartTown_AssignFoundingHousing.
+// Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp) — the MISNAMED
+// WORKPLACE assigner: sets citizen +0x248 (job) AND rosters into the house's WorkPlaceComponent
+// (c80e0) occupant list (+0x58/+0x60). Retained for reference / the gameplay employ path; the
+// founding-housing pass now uses CitizenComponent_AssignWorkplace instead (the RESIDENCE
+// assigner, +0x238 / c7cf0), so founding citizens are housed, not employed-at-home.
 struct CitizenComponent;
 extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* housingPtr);
 
@@ -1513,12 +1514,26 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
 //
 // As a self-contained founding placement we pair each founding family with one spawned
 // WoodHouse (captured at ResidenceComponent::OnCreate, see g_foundingHouseIBPs — townMgr+0x20
-// itself is never populated in standalone) and set each member's residence reference
-// (CitizenComponent+0x248 = house). That is the citizen-side half of AssignHousing
-// (0x140111ee0) — the field the per-tick Update reads as "housed". The faithful roster-ATTACH
-// half (the house tracking its occupants + "occupied" mesh visuals) is a separate type-id/
-// visual domino chain, documented at the assignment site. Requires BANISHED_LIVE_RESIDENCE
-// (else no houses are captured). Gated on BANISHED_LIVE_HOUSING; default build is a no-op.
+// itself is never populated in standalone) and make each member a RESIDENT of that house.
+//
+// CORRECTED field semantics (the two exe assigner names are INVERTED vs effect — verified
+// from the faithful citizen-panel button port + the retail housing solver FUN_1400d62a0):
+//   * CitizenComponent+0x238 = RESIDENCE / HOME. Set by CitizenComponent_AssignWorkplace
+//     (0x1401163d0, MISNAMED). It rosters the citizen into the house's ResidenceComponent
+//     (c7cf0, found via Entity_FindComponent_Storage 0x140008090 which matches c7cf0 exactly)
+//     slot[0] resident array (+0x50). The citizen-panel Home button (id 0x226) reads +0x238.
+//   * CitizenComponent+0x248 = WORKPLACE / JOB. Set by CitizenComponent_AssignHousing
+//     (0x140111ee0, MISNAMED) into the WorkPlaceComponent (c80e0) roster. The Profession
+//     button (id 0x227) reads +0x248.
+//
+// The founding default is an UNEMPLOYED laborer (retail spawns no starting job building), so
+// we assign ONLY the residence: AssignWorkplace(citizen, houseEntityIBP, 0) — exactly as the
+// retail housing solver FUN_1400d62a0 does (slotIndex 0, IBP = ResidenceComponent+0x10). This
+// sets +0x238 = home, rosters into c7cf0 slot[0], and leaves +0x248 = 0 so the Profession
+// button correctly greys out. The occupied-house mesh visual (residence a710 model-notify
+// 2b70 = an empty no-op even in retail; AmbientEmitter smoke = inert in standalone) is a
+// separate rendering follow-up. Requires BANISHED_LIVE_RESIDENCE (else no houses are captured).
+// Gated on BANISHED_LIVE_HOUSING; default build is a no-op.
 static bool HousingEnvOn() {
     static int en = -1;
     if (en < 0) {
@@ -1528,70 +1543,130 @@ static bool HousingEnvOn() {
     return en == 1;
 }
 
+// Ensure the house's ResidenceComponent (c7cf0) resident-roster array (+0x50/+0x58) is
+// allocated. Retail sizes it in ResidenceComponent::Serialize/Slot14 (0x14012a120):
+//   capacity = ResidenceDescription(comp+0x18)->+0x20 (max occupants);
+//   ResidenceComponent_Controller_sub_7ad0(comp+0x50, capacity)  [= ResizeResidentArray
+//   0x140037ad0] allocates `capacity` zeroed {data,count,cap}[] slots and sets +0x58=capacity.
+// In standalone that slot bails: it is gated on IsDerivedFrom(desc, c7d28 ResidenceDescription),
+// which returns FALSE (the SA description's type-id isn't recognised), so the array is never
+// allocated (+0x50 null / +0x58 0) and a710's Roster(+0x50)[0] would deref null. Reproduce the
+// sizing here, TRUSTING the linked description at +0x18 (the established SA derive-or-trust
+// pattern). Idempotent; returns true when +0x50 is allocated with >=1 slot.
+static bool StartTown_EnsureResidenceRoster(void* resComp) {
+    if (!resComp) return false;
+    uint8_t* rc = reinterpret_cast<uint8_t*>(resComp);
+    if (*reinterpret_cast<int64_t*>(rc + 0x50) != 0 && *reinterpret_cast<int32_t*>(rc + 0x58) >= 1)
+        return true;                                   // already sized
+
+    void* desc = *reinterpret_cast<void**>(rc + 0x18); // ResidenceDescription (trusted, no IsDerivedFrom)
+    if (!desc) {
+        fprintf(stderr, "[startTown::housing] residence roster: comp=%p has no description (+0x18) — "
+                "cannot size\n", resComp); fflush(stderr);
+        return false;
+    }
+    int capacity = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(desc) + 0x20);  // desc+0x20 = max occupants
+    if (capacity < 1) capacity = 1;
+    if (capacity > 16) capacity = 16;                  // sanity clamp (guards a garbage read)
+
+    typedef void (*fn_Resize_t)(void* arrayFieldPtr, int newCount);   // 0x140037ad0 (registered)
+    fn_Resize_t resize = reinterpret_cast<fn_Resize_t>(ResolveAddr(Module::Exe, 0x140037ad0));
+    if (!resize) {
+        fprintf(stderr, "[startTown::housing] residence roster: ResizeResidentArray(140037ad0) "
+                "unresolved\n"); fflush(stderr);
+        return false;
+    }
+    resize(reinterpret_cast<void*>(rc + 0x50), capacity);
+
+    int64_t sa = *reinterpret_cast<int64_t*>(rc + 0x50);
+    int sc = *reinterpret_cast<int32_t*>(rc + 0x58);
+    fprintf(stderr, "[startTown::housing] residence roster sized: comp=%p desc=%p capacity=%d -> "
+            "+0x50=%llx +0x58=%d\n", resComp, desc, capacity, (unsigned long long)sa, sc);
+    fflush(stderr);
+    return sa != 0 && sc >= 1;
+}
+
 static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>>& families) {
     if (!HousingEnvOn()) return;
     uint32_t tidCitizen = TypeId("CitizenComponent");                  // 0x1401c7158
     fprintf(stderr, "[startTown::housing] families=%zu capturedHouses=%zu tidCitizen=%u\n",
             families.size(), g_foundingHouseIBPs.size(), tidCitizen);
     fflush(stderr);
-    if (g_foundingHouseIBPs.empty() || tidCitizen == 0) {
+    uint32_t tidResidence = TypeId("ResidenceComponent");             // 0x1401c7cf0
+    if (g_foundingHouseIBPs.empty() || tidCitizen == 0 || tidResidence == 0) {
         fprintf(stderr, "[startTown::housing] no captured residences "
-                "(need BANISHED_LIVE_RESIDENCE) — skip\n"); fflush(stderr); return;
+                "(need BANISHED_LIVE_RESIDENCE; tidResidence=%u) — skip\n",
+                tidResidence); fflush(stderr); return;
     }
 
-    // Drive the FULL faithful AssignHousing in roster-only mode: it sets each citizen's
-    // residence ref (+0x248) AND appends the citizen to the house's WorkPlaceComponent
-    // occupant roster (+0x58/+0x60), but skips the gameplay-time Scene mesh-visual toggle
-    // (which deadlocks when driven during this build-time pass — see g_wpcRosterOnly).
+    // Defensive: keep any incidental WorkPlaceComponent attach in roster-only mode during the
+    // build (the residence path AssignWorkplace->a710 does no Scene op, but a family member's
+    // stale +0x248 detach could route through the c80e0 path — see g_wpcRosterOnly).
+    bool prevRosterOnly = g_wpcRosterOnly;
     g_wpcRosterOnly = true;
     for (size_t f = 0; f < families.size() && f < g_foundingHouseIBPs.size(); ++f) {
         int64_t houseIBP = g_foundingHouseIBPs[f];
         if (houseIBP == 0) continue;
-        int housed = 0;
+
+        // Locate the house's ResidenceComponent (c7cf0) — the RESIDENT roster the faithful
+        // residence assigner (AssignWorkplace 0x1401163d0 -> a710) appends into. Its slot
+        // array (+0x50) is sized to the residence capacity by ResidenceComponent::Serialize
+        // during spawn (BANISHED_LIVE_RESIDENCE). Guard against an un-serialized roster
+        // (null slot-array base / zero slots) so a710's Roster(+0x50)[0] can't deref null.
+        void* resComp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
+        if (!resComp) {
+            fprintf(stderr, "[startTown::housing] family[%zu] house#%zu has no ResidenceComponent "
+                    "(c7cf0) — skip\n", f, f); fflush(stderr);
+            continue;
+        }
+        int64_t slotArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
+        int slotCnt = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x58);
+        if (slotArr == 0 || slotCnt < 1) {
+            // Roster array not sized (SA ResidenceComponent::Serialize bailed on the
+            // IsDerivedFrom gate) — size it faithfully now, else a710 would deref null.
+            if (!StartTown_EnsureResidenceRoster(resComp)) {
+                fprintf(stderr, "[startTown::housing] family[%zu] house#%zu residence roster "
+                        "bring-up failed — skip\n", f, f); fflush(stderr);
+                continue;
+            }
+            slotArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
+            slotCnt = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x58);
+        }
+
+        int housed = 0, misfiled = 0;
         for (void* ent : families[f]) {
             void* citComp = FindComponentOnEntity(ent, tidCitizen);
             if (!citComp) continue;
             g_foundingCitizens.push_back(citComp);   // Phase 4: source for the employ pass
-            // FULL faithful AssignHousing (0x140111ee0): detaches the citizen from any prior
-            // residence then (a) sets the residence reference CitizenComponent+0x248 — the
-            // field the per-tick Update reads as "housed" — AND (b) rosters the citizen into
-            // the house's WorkPlaceComponent occupant list (+0x58/+0x60) via the attach helper
-            // (FUN_14012fa20). The gates were the c80e0 (WorkPlaceComponent) + c8118
-            // (WorkPlaceDescription) type-id globals, now filled in reg_economy_typeids.cpp.
-            // So the house now TRACKS its occupants, not just the citizen pointing at it.
+            // Faithful residence assignment — the retail housing solver FUN_1400d62a0 calls
+            // AssignWorkplace(citizen, houseOwnerEntityIBP, 0). It (a) sets CitizenComponent
+            // +0x238 = home and (b) rosters the citizen into the house's ResidenceComponent
+            // (c7cf0) slot[0] resident array (+0x50). It leaves +0x248 (workplace) UNTOUCHED
+            // = 0, so the citizen is the retail founding default (unemployed laborer) and the
+            // citizen-panel Profession button (id 0x227, reads +0x248) correctly greys out.
             int64_t houseIBPLocal = houseIBP;
-            CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(citComp), &houseIBPLocal);
-            // NOTE (Home-button follow-up): the exe citizen-panel Home button (id 0x226,
-            // 0x1400650F0) centers on CitizenComponent+0x238 = the RESIDENCE/home field,
-            // which AssignHousing (the misnamed WORKPLACE assigner) never sets — so the
-            // Home button no-ops. Setting +0x238 = house here is NOT safe yet: the live
-            // CitizenAI candidate list (citizenai_candidatelist.cpp:492) gates the hunger-
-            // gather branch on +0x238!=0 and CitizenComp_HasSufficientResources reads the
-            // residence's StorageComponent rows (+0x50); our SA houses have that row array
-            // null (storage not fully live), so it null-derefs (crash confirmed). Fixing
-            // the Home button therefore requires residence-storage bring-up first (or a
-            // rows==0 guard in HasSufficientResources + verifying the resulting gather
-            // behavior). Deferred — see the citizen-dialog open-items note.
-            int64_t assigned = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248);
-            if (assigned != 0) ++housed;
+            CitizenComponent_AssignWorkplace(citComp, &houseIBPLocal, 0);
+            int64_t home = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x238);
+            int64_t work = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248);
+            if (home != 0) ++housed;
+            if (work != 0) ++misfiled;   // expected 0 for an unemployed founding laborer
         }
-        // Read back the house's WorkPlaceComponent occupant roster count (+0x60) to
-        // verify the FULL AssignHousing attach rostered the family (not just set +0x248).
-        int roster = -1;
-        uint32_t tidWP = TypeId("WorkPlaceComponent");                  // 0x1401c80e0
-        void* wp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidWP);
-        if (wp) {
-            roster = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(wp) + 0x60);
-            // Queue this house's occupied visual for the deferred gameplay-time pass (the
-            // Scene mesh-visual can't run now without deadlocking — see g_wpcRosterOnly).
-            if (roster > 0) g_pendingOccupiedVisuals.push_back(reinterpret_cast<int64_t>(wp));
+
+        // Read back the residence roster: slot[0].count = residents actually attached
+        // (retail reads *(*(c7cf0+0x50)+8) in FUN_1400d62a0's re-house loop).
+        int residents = -1;
+        {
+            int64_t sa = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(resComp) + 0x50);
+            if (sa) residents = *reinterpret_cast<int32_t*>(sa + 8);
         }
-        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu members "
-                "(citizen+0x248); house WorkPlaceComponent roster(+0x60)=%d\n",
-                f, f, (unsigned long long)houseIBP, housed, families[f].size(), roster);
+        fprintf(stderr, "[startTown::housing] family[%zu] -> house#%zu (IBP=%llx): housed %d/%zu "
+                "members (citizen+0x238); ResidenceComponent(c7cf0) slot[0] residents=%d slots=%d; "
+                "+0x248!=0 (should be 0) on %d members\n",
+                f, f, (unsigned long long)houseIBP, housed, families[f].size(),
+                residents, slotCnt, misfiled);
         fflush(stderr);
     }
-    g_wpcRosterOnly = false;   // restore: gameplay-time AssignHousing keeps the full visual
+    g_wpcRosterOnly = prevRosterOnly;   // restore
 }
 
 // Drive the deferred occupied-house visuals once the scene is live. Called every
@@ -1613,6 +1688,115 @@ extern "C" void StartTown_ApplyPendingOccupiedVisuals(int frameNum) {
     g_pendingOccupiedVisuals.clear();
     s_applied = true;
     fprintf(stderr, "[startTown::housing] deferred occupied visuals applied (crash-free)\n");
+    fflush(stderr);
+}
+
+// ---- Founding-house household inventory + home-food reserve (BANISHED_LIVE_HOUSING) --------
+// Two edible-food seeds per founding WoodHouse, using AddItem FUN_14012d000 (append/increment
+// a storage slot at comp+0x28; no Scene op, build-time safe). MUST run AFTER
+// StartTown_SeedStartingResources so the town raw-material TEMPLATE pool (townMgr+0x110) — the
+// same edible templates the barn seeder uses — is populated. Gated on BANISHED_LIVE_HOUSING.
+//
+// (A) DISPLAY container — the plain StorageComponent (c7e78, cap/flag-inited to 1000/mask 0x60
+//     by StartTown_WireStorage's 7ff0 pass): a small token stock so a clicked house shows a
+//     non-empty inventory in whichever panel reads c7e78.
+//
+// (B) HOME-FOOD reserve — the ResidenceComponent (c7cf0) OWN storage slots at +0x28. This is
+//     the container CitizenComp_HasSufficientResources (0x1401156e0) actually reads: it finds
+//     c7cf0 via 0x140008090, then Storage_GetResourceCount (0x14012a9d0) sums the EDIBLE units
+//     in c7cf0+0x28 and compares `iVar7(occupiedResidentSlots=1) * iVar2(residentsInSlot) *
+//     (int)(CitizenDesc+0xc4)` against it. Once we roster residents (+0x50 slot[0]), that
+//     product is nonzero, so an EMPTY c7cf0 store would return "insufficient" and spam
+//     GatherResources(id6). We seed c7cf0 with `residents * (int)(CitizenDesc+0xc4)` edible
+//     units + a margin so the check returns "sufficient" → NO Gather spam. Crash-safe:
+//     GetResourceCount matches the food's RawMaterialDescription via DWORD_1401c7cb8 (filled
+//     in SA by reg_action_child_ctors2), so no null-deref on the +0x5c edible-flag read.
+static void StartTown_SeedHouseInventory(int unitsPerHouse) {
+    if (!HousingEnvOn() || g_foundingHouseIBPs.empty()) return;
+    void* townMgr = nullptr;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+        townMgr = *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xf0);
+    if (!townMgr) return;
+
+    typedef void (*fn_AddItem_t)(int64_t storage, int64_t material, int n);   // 0x14012d000
+    fn_AddItem_t addItem = reinterpret_cast<fn_AddItem_t>(ResolveAddr(Module::Exe, 0x14012d000));
+    if (!addItem) { fprintf(stderr, "[startTown::housing] AddItem(14012d000) unresolved — no house food\n"); fflush(stderr); return; }
+
+    // Pick an edible raw-material template (RawMaterialDescription+0x5c & 0x20 = edible)
+    // from the town template pool (townMgr+0x110 base / +0x118 count).
+    uint32_t tidRawMat = TypeId("RawMaterialDescription");
+    int tmplCount = *(int32_t*)((uint8_t*)townMgr + 0x118);
+    int64_t tmplArr = *(int64_t*)((uint8_t*)townMgr + 0x110);
+    int64_t foodTmpl = 0;
+    uint32_t foodFlags = 0;
+    for (int t = 0; t < tmplCount && foodTmpl == 0; ++t) {
+        int64_t tmpl = tmplArr ? *(int64_t*)(tmplArr + (int64_t)t * 8) : 0;
+        void* desc = tmpl ? FindDescriptionOnTemplate(reinterpret_cast<void*>(tmpl), tidRawMat) : nullptr;
+        if (!desc) continue;
+        uint32_t flags = *(uint32_t*)((uint8_t*)desc + 0x5c);
+        if (flags & 0x20) { foodTmpl = tmpl; foodFlags = flags; }   // edible
+    }
+    if (foodTmpl == 0) {
+        fprintf(stderr, "[startTown::housing] no edible raw-material template (templates=%d) — no house food\n", tmplCount);
+        fflush(stderr); return;
+    }
+
+    uint32_t tidStorage = TypeId("StorageComponent");                 // 0x1401c7e78
+    uint32_t tidResidence = TypeId("ResidenceComponent");             // 0x1401c7cf0
+    // Storage_GetResourceCount (0x14012a9d0) — for the home-food read-back verification.
+    typedef int (*fn_GetResCount_t)(int64_t comp);
+    fn_GetResCount_t getResCount = reinterpret_cast<fn_GetResCount_t>(ResolveAddr(Module::Exe, 0x14012a9d0));
+    int seeded = 0;
+    for (int64_t houseIBP : g_foundingHouseIBPs) {
+        if (!houseIBP) continue;
+        void* sc = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidStorage);
+        if (sc) {
+            // (A) DISPLAY container c7e78. Faithful accept gate (StorageComponent_helper_c560):
+            // the storage flag mask (+0x3c) must intersect the material's flags (+0x5c).
+            uint32_t mask = *(uint32_t*)((uint8_t*)sc + 0x3c);
+            if ((mask & foodFlags) != 0) {
+                addItem(reinterpret_cast<int64_t>(sc), foodTmpl, unitsPerHouse);
+                int rows = *(int32_t*)((uint8_t*)sc + 0x30);
+                int64_t rowArr = *(int64_t*)((uint8_t*)sc + 0x28);
+                int slot0cnt = (rows > 0 && rowArr) ? *(int32_t*)(rowArr + 8) : 0;
+                ++seeded;
+                fprintf(stderr, "[startTown::housing] house food(c7e78 display): storage=%p +%d "
+                        "units -> rows=%d slot0count=%d cap(+0x38)=%d mask=0x%x\n",
+                        sc, unitsPerHouse, rows, slot0cnt, *(int32_t*)((uint8_t*)sc + 0x38), mask);
+                fflush(stderr);
+            }
+        }
+
+        // (B) HOME-FOOD reserve into the ResidenceComponent (c7cf0) OWN storage slots (+0x28) —
+        // the container HasSufficientResources reads. Seed `residents * (int)(CitizenDesc+0xc4)`
+        // + margin edible units so the hunger check returns "sufficient" (no Gather spam).
+        void* rescomp = FindComponentOnEntity(reinterpret_cast<void*>(houseIBP), tidResidence);
+        if (!rescomp) continue;
+        int64_t slotArr = *(int64_t*)((uint8_t*)rescomp + 0x50);
+        int residents = slotArr ? *(int32_t*)(slotArr + 8) : 0;   // slot[0].count
+        int reqInt = 0;                                            // (int)(CitizenDescription+0xc4)
+        if (slotArr) {
+            int64_t slot0data = *(int64_t*)slotArr;               // slot[0].data (resident ptr array)
+            int64_t resident = slot0data ? *(int64_t*)slot0data : 0;   // data[0] = first resident comp
+            int64_t cd = resident ? *(int64_t*)(resident + 0x288) : 0; // CitizenDescription
+            if (cd) reqInt = (int)*(float*)(cd + 0xc4);
+        }
+        int threshold = residents * reqInt;                       // iVar7(1) * residents * factor
+        int seedN = threshold + (residents > 0 ? residents : 0);  // strictly exceed the threshold
+        if (seedN < 8) seedN = 8;                                 // minimum visible reserve
+        if (seedN > 500) seedN = 500;                             // sanity clamp
+        addItem(reinterpret_cast<int64_t>(rescomp), foodTmpl, seedN);
+        int have = getResCount ? getResCount(reinterpret_cast<int64_t>(rescomp)) : -1;
+        fprintf(stderr, "[startTown::housing] house food(c7cf0 home): residence=%p residents=%d "
+                "reqPerResident=%d threshold=%d seeded=%d -> GetResourceCount=%d %s\n",
+                rescomp, residents, reqInt, threshold, seedN, have,
+                (have >= threshold) ? "(SUFFICIENT: no Gather)" : "(WARN: still insufficient)");
+        fflush(stderr);
+    }
+    fprintf(stderr, "[startTown::housing] seeded food into %d/%zu houses (%d units each, "
+            "edibleTmpl=%llx flags=0x%x)\n",
+            seeded, g_foundingHouseIBPs.size(), unitsPerHouse,
+            (unsigned long long)foodTmpl, foodFlags);
     fflush(stderr);
 }
 
@@ -2716,6 +2900,13 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
         // Game_impl_1f00 — the seven-mask seeding driver (counts at
         // startConfig+0xfc..+0x114).
         StartTown_SeedStartingResources(sc);
+
+        // Founding-house household inventory (BANISHED_LIVE_HOUSING): now that the town
+        // raw-material TEMPLATE pool (townMgr+0x110) is populated, seed a small edible-food
+        // stock into each founding WoodHouse's StorageComponent so a clicked house shows a
+        // non-empty inventory. Must run here (post-seed), not in the housing pass (which runs
+        // before the template pool exists).
+        StartTown_SeedHouseInventory(8);
 
         // Final state dump (townMgr+0x00 count, per-location capacity/slots).
         TownStorage_TraceDump();
