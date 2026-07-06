@@ -20,6 +20,69 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#endif
+
+// ============================================================
+// Pile-rendering bring-up (BANISHED_LIVE_STORAGEDISPLAY, default OFF)
+// ============================================================
+// The StorageYard/StorageCart carry a StorageDisplayComponent that renders visible
+// stacks of the stored raw materials. In standalone this component is spawned inert,
+// so nothing draws. The factory at the bottom of this file graduates the three draw
+// vtable slots (Draw/Update/OnUpdate2) when BANISHED_LIVE_STORAGEDISPLAY is set; the
+// helpers below make the two raw-.rdata type-ids (ModelDescription, RawMaterial-
+// Description) resolvable in SA and provide a throttled diagnostic trace.
+
+// Diagnostic trace (BANISHED_STORAGEDISPLAY_TRACE) — throttled so the self-driven
+// per-frame Update cannot flood the log.
+static bool StorageDisplayTraceOn() {
+    static int v = -1;
+    if (v < 0) { const char* e = getenv("BANISHED_STORAGEDISPLAY_TRACE");
+                 v = (e && *e && e[0] != '0') ? 1 : 0; }
+    return v == 1;
+}
+static bool SDDBudget(int& counter, int cap) {
+    if (counter >= cap) return false;
+    ++counter;
+    return true;
+}
+
+// ModelDescription type-id (DAT_1401c7a88) — used by cbd0 to find a material entity's
+// display model. In DLL mode the raw .rdata slot holds the id; in standalone it
+// resolves NULL, so fall back to the runtime type registry (valid after
+// Object::Factory::Startup). Never writes the shared .rdata global.
+static uint32_t* s_pModelDescTid_rdata = nullptr;
+static bool      s_modelDescRdataResolved = false;
+static uint32_t SDD_ModelDescTypeId() {
+    if (!s_modelDescRdataResolved) {
+        s_pModelDescTid_rdata = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
+        s_modelDescRdataResolved = true;
+    }
+    if (s_pModelDescTid_rdata && *s_pModelDescTid_rdata != 0 && *s_pModelDescTid_rdata != 0xFFFFFFFF)
+        return *s_pModelDescTid_rdata;
+#ifdef STANDALONE_EXE
+    static uint32_t cached = 0;
+    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("ModelDescription");
+    if (cached != 0xFFFFFFFF) return cached;
+#endif
+    return 0;
+}
+
+// RawMaterialDescription type-id (DAT_1401c7cb8, exposed as g_TypeId_RawMaterialDescription)
+// — used by Update to size each material's pile. Same DLL/SA split as above.
+static uint32_t SDD_RawMatDescTypeId() {
+    if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
+        && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
+        return *g_TypeId_RawMaterialDescription;
+#ifdef STANDALONE_EXE
+    static uint32_t cached = 0;
+    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
+    if (cached != 0xFFFFFFFF) return cached;
+#endif
+    return 0;
+}
 
 // ============================================================
 // Resolved helpers
@@ -124,13 +187,14 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x1401512e0);
     if (slot) s_fn_SetTransform = *reinterpret_cast<fn_SetTransform_t*>(slot);
 
-    // Entity_FindComponent_Storage — FUN_140003050 looks for StorageComponent type (DWORD_1401c8070)
-    // Wait, actually 0x140003050 finds by type DWORD_1401c8070 = StorageLocationComponent
-    // The actual storage find for StorageDisplayComponent uses a different approach
-    // From the decompilation: Entity_FindComponent_Storage is called on the entity
-    // Let me use the address from the decompilation
+    // Entity_FindComponent_Storage (0x140006270) — finds the entity's StorageComponent
+    // (type DWORD_1401c7e78). Verified in the real Update disassembly at 0x1400563e0:
+    // the CALL at 0x140056432 targets 0x140006270, NOT 0x140003050. (0x140003050 finds
+    // type 0x1401c8070 = WorkComponent — which the yard ALSO carries, so the old wiring
+    // silently found the WorkComponent and read StorageComponent field offsets off it,
+    // an out-of-bounds read. Registered in SA as WorkBase_FindComponent_6270.)
     s_fn_FindComponent_Storage = reinterpret_cast<fn_FindComponent_Storage_t>(
-        ResolveAddr(Module::Exe, 0x140003050));
+        ResolveAddr(Module::Exe, 0x140006270));
 
     s_fn_SetDisplayMesh = reinterpret_cast<fn_SetDisplayMesh_t>(
         ResolveAddr(Module::Exe, 0x1400562b0));
@@ -247,14 +311,40 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
     int* mapInfo = *(int**)(gameState + 0xf8);
     if (!mapInfo) return;
 
-    float yawAngle = s_pYawConstant ? *s_pYawConstant : 0.0f;
-    float halfTile = s_pHalfTileOffset ? *s_pHalfTileOffset : 0.0f;
+    // Real-value fallbacks: these raw .rdata floats resolve NULL in standalone
+    // (ResolveAddr on a .rdata constant returns null), so use the true retail values
+    // instead of 0 — else piles shift by a half-tile and lose the checkerboard yaw.
+    //   DAT_140172204 = 0x42b40000 = 90.0f (per-cell checkerboard yaw, degrees)
+    //   DAT_140172114 = 0x3f000000 = 0.5f  (half-tile center bias)
+    float yawAngle = (s_pYawConstant   && *s_pYawConstant   != 0.0f) ? *s_pYawConstant   : 90.0f;
+    float halfTile = (s_pHalfTileOffset && *s_pHalfTileOffset != 0.0f) ? *s_pHalfTileOffset : 0.5f;
 
     int displayCount = *(int*)(selfAddr + 0x30);
     if (displayCount <= 0) return;
 
     int mapSize = *mapInfo;
     float halfMap = (float)(mapSize >> 1) - halfTile;
+
+    // Anchor trace: the yard's OWN world position (tile->world of its origin cell), so
+    // per-pile world positions below can be compared against where the yard sits.
+    if (StorageDisplayTraceOn()) {
+        static int s_yardBudget = 0;
+        if (SDDBudget(s_yardBudget, 20)) {
+            float ov[4] = {0,0,0,0}, ow[4] = {0,0,0,0};
+            if (s_fn_Vector3_Ctor && s_fn_TileToWorld) {
+                int oidx = mapSize * (int)tileY0 + (int)tileX0;
+                s_fn_Vector3_Ctor(ov, (float)(oidx % mapSize) - halfMap,
+                                      (float)(oidx / mapSize) - halfMap, 0.0f);
+                s_fn_TileToWorld(mapInfo, ow, ov, '\0', nullptr);
+            }
+            fprintf(stderr, "[StorageDisplay] Draw self=%p yardTile=(%d,%d) size=%dx%d "
+                    "yardWorld=(%.2f,%.2f,%.2f) displays=%d TileToWorld=%p FromYaw=%p SetXform=%p\n",
+                    (void*)selfAddr, (int)tileX0, (int)tileY0, colCount, height,
+                    ow[0], ow[1], ow[2], displayCount,
+                    (void*)s_fn_TileToWorld, (void*)s_fn_FromYawPitchOffset, (void*)s_fn_SetTransform);
+            fflush(stderr);
+        }
+    }
 
     for (int i = 0; i < displayCount; i++) {
         int row = i / colCount + (int)tileY0;
@@ -270,8 +360,9 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
                 0.0f);
         }
 
-        // Convert tile to world position
-        float worldPos[4];
+        // Convert tile to world position (f3e0). worldPos[0]/[1] are the world X/Y
+        // on the yard footprint; the original drops worldPos[2] and uses z=0.
+        float worldPos[4] = {0.f, 0.f, 0.f, 0.f};
         if (s_fn_TileToWorld) {
             s_fn_TileToWorld(mapInfo, worldPos, (float*)vec3Buf, '\0', nullptr);
         }
@@ -287,17 +378,31 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
         uintptr_t displayArray = *(uintptr_t*)(selfAddr + 0x28);
         uint8_t transformBuf[72];
         void* transform = nullptr;
-        // pitchBits holds the actual yaw value (alternated by tile); yawBits=0
-        // is the pitch. Offset is zero. (Variable naming is intentionally swapped
-        // to match the original call's argument order.)
-        float zeroOffset[3] = {0.f, 0.f, 0.f};
+        // FromYawPitchOffset(retbuf, yaw=&pitchBits, pitch=&yawBits[=0], offset).
+        // (Names are swapped to match the original's arg order.) The OFFSET is the
+        // per-cell world position {worldPos.x, worldPos.y, 0} — verified in the real
+        // Draw disassembly (0x1400568c9/cf write worldPos.x/.y into the offset vec,
+        // 0x1400568ba forces offset.z=0). The prior port passed a ZERO offset here,
+        // which placed every pile mesh at the world origin (invisible on the yard).
+        float offset[3] = { worldPos[0], worldPos[1], 0.0f };
         if (s_fn_FromYawPitchOffset) {
-            transform = s_fn_FromYawPitchOffset(transformBuf, &pitchBits, &yawBits, zeroOffset);
+            transform = s_fn_FromYawPitchOffset(transformBuf, &pitchBits, &yawBits, offset);
         }
 
         // Apply transform to geometry
         if (s_fn_SetTransform && transform) {
             s_fn_SetTransform((void*)(displayArray + (uintptr_t)i * 0x128), transform);
+        }
+
+        if (StorageDisplayTraceOn()) {
+            static int s_posBudget = 0;
+            if (SDDBudget(s_posBudget, 60)) {
+                fprintf(stderr, "[StorageDisplay]   pos i=%d tile=(%d,%d) world=(%.2f,%.2f,%.2f) "
+                        "yardOrigin=(%d,%d) yaw=%s\n",
+                        i, col, row, worldPos[0], worldPos[1], worldPos[2],
+                        (int)tileX0, (int)tileY0, ((row + col) & 1) ? "0" : "const");
+                fflush(stderr);
+            }
         }
     }
 }
@@ -402,6 +507,14 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
         float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
         int totalWeight = *(int*)(storageComp + 0x38);
         int displayCount = *(int*)(selfAddr + 0x30);
+        const uint32_t rawMatTid = SDD_RawMatDescTypeId();
+
+        static int s_updBudget = 0;
+        if (StorageDisplayTraceOn() && SDDBudget(s_updBudget, 60)) {
+            fprintf(stderr, "[StorageDisplay] Update self=%p slots=%d totalWeight=%d displays=%d rawMatTid=0x%08x\n",
+                    (void*)selfAddr, slotCount, totalWeight, displayCount, rawMatTid);
+            fflush(stderr);
+        }
 
         if (slotCount > 0 && totalWeight > 0) {
             for (int slotIdx = 0; slotIdx < slotCount; slotIdx++) {
@@ -418,18 +531,27 @@ void StorageDisplayComponent_Update(StorageDisplayComponent* self) {
                 // Get material type entity from slot
                 uintptr_t materialType = *(uintptr_t*)slotEntry;
 
+                static int s_slotBudget = 0;
+                if (StorageDisplayTraceOn() && SDDBudget(s_slotBudget, 120)) {
+                    fprintf(stderr, "[StorageDisplay]   slot=%d material=%p itemCount=%d\n",
+                            slotIdx, (void*)materialType, itemCount);
+                    fflush(stderr);
+                }
+
                 // Find RawMaterialDescription on material type
-                // The decompilation does a manual component search with typeId check
+                // The decompilation does a manual component search with typeId check.
+                // (SA: rawMatTid comes from the runtime registry fallback — see helper.)
                 void* rawMatDesc = nullptr;
-                if (materialType && fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
+                if (materialType && fn_IsDerivedFrom && rawMatTid) {
                     int compCount = *(int*)(materialType + 0x30);
                     uintptr_t compArray = *(uintptr_t*)(materialType + 0x28);
                     for (int c = 0; c < compCount; c++) {
                         void* comp = *(void**)(compArray + (uintptr_t)c * 8);
+                        if (!comp) continue;   // guard partially-materialized SA entity
                         typedef uint32_t (*GetTypeId_t)(void*);
                         uint32_t typeId = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-                        if (typeId == *g_TypeId_RawMaterialDescription) {
-                            if (fn_IsDerivedFrom(comp, *g_TypeId_RawMaterialDescription)) {
+                        if (typeId == rawMatTid) {
+                            if (fn_IsDerivedFrom(comp, rawMatTid)) {
                                 rawMatDesc = comp;
                             }
                             break;
@@ -622,26 +744,25 @@ static void EnsureSlotHelpers() {
 // Returns retbuf. Closure-safe: only IsDerivedFrom (engine). The type-id is a .rdata
 // global resolved at call time. Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
-static uint32_t* s_cbd0_TypeId = nullptr; // DAT_1401c7a88
-static bool s_cbd0Resolved = false;
 void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
-    if (!s_cbd0Resolved) {
-        s_cbd0_TypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
-        s_cbd0Resolved = true;
-    }
+    // DAT_1401c7a88 = ModelDescription. SA resolves it via the runtime registry
+    // fallback (SDD_ModelDescTypeId); DLL uses the real .rdata id.
+    const uint32_t modelTid = SDD_ModelDescTypeId();
     uint8_t* host = reinterpret_cast<uint8_t*>(hostP);
     void* found = nullptr;
-    int count = *reinterpret_cast<int*>(host + 0x30);
-    int64_t arr = *reinterpret_cast<int64_t*>(host + 0x28);
-    for (int i = 0; i < count; i++) {
-        void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
-        int64_t vt = *reinterpret_cast<int64_t*>(comp);
-        typedef uint32_t (*getType_t)(void*);
-        uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
-        if (s_cbd0_TypeId && tid == *s_cbd0_TypeId) {
-            void* resolved = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
-            if (fn_IsDerivedFrom(resolved, *s_cbd0_TypeId)) found = resolved;
-            break;
+    if (host && modelTid) {
+        int count = *reinterpret_cast<int*>(host + 0x30);
+        int64_t arr = *reinterpret_cast<int64_t*>(host + 0x28);
+        for (int i = 0; i < count; i++) {
+            void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
+            if (!comp) continue;   // guard partially-materialized SA entity
+            int64_t vt = *reinterpret_cast<int64_t*>(comp);
+            typedef uint32_t (*getType_t)(void*);
+            uint32_t tid = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+            if (tid == modelTid) {
+                if (fn_IsDerivedFrom(comp, modelTid)) found = comp;
+                break;
+            }
         }
     }
     *reinterpret_cast<void**>(retbuf) = found;
@@ -668,21 +789,31 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
         return;
     }
 
-    // materialType != 0: select the LOD mesh nearest the requested fraction
+    // materialType != 0: select the LOD mesh nearest the requested fraction.
+    // Every deref below is null-guarded so a partially-materialized SA material
+    // entity (no ModelDescription / empty MeshGroup) can't fault SetMesh — it just
+    // renders no pile for that slot instead of crashing the shared Graphics::Scene.
     int64_t cbd0Ret = 0;
     if (s_fn_SDC_Cbd0) s_fn_SDC_Cbd0((void*)materialType, &cbd0Ret);
+    if (!cbd0Ret) return;                                   // material has no ModelDescription
     uintptr_t lodTable = *(uintptr_t*)(cbd0Ret + 0x20);
+    if (!lodTable) return;                                  // ModelDescription has no MeshGroup
     int lodCount = *(int*)(lodTable + 0x28);
+    if (lodCount <= 0) return;                              // empty LOD table
     int lodIdx = lodCount - 1;
     int scaled = (int)((float)lodCount * fraction);
     if (scaled < lodIdx) lodIdx = scaled;
-    int64_t meshPtr = *(int64_t*)(*(uintptr_t*)(lodTable + 0x20) + (int64_t)lodIdx * 8);
+    if (lodIdx < 0) lodIdx = 0;                             // clamp (fraction may be ~0)
+    uintptr_t meshArr = *(uintptr_t*)(lodTable + 0x20);
+    if (!meshArr) return;
+    int64_t meshPtr = *(int64_t*)(meshArr + (int64_t)lodIdx * 8);
+    if (!meshPtr) return;                                   // no mesh at this LOD
 
     arrBase = *(uintptr_t*)(self + 0x28);
     uint32_t objId = *(uint32_t*)(arrBase + 0x120 + off);
     if ((int32_t)objId >= 0) {
         if (*(int64_t*)(arrBase + 0xc0 + off) == meshPtr) {
-            return;   // already showing this mesh
+            return;   // already showing this mesh (steady-state early-out)
         }
         if (s_fn_SDC_SceneRemove) s_fn_SDC_SceneRemove(scene, objId);
     }
@@ -690,6 +821,15 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
     void* geom = (void*)(arrBase + off);
     uint32_t newId = s_fn_SDC_SceneAdd ? s_fn_SDC_SceneAdd(scene, geom) : 0xffffffff;
     *(uint32_t*)((uintptr_t)geom + 0x120) = newId;
+
+    if (StorageDisplayTraceOn()) {
+        static int s_setBudget = 0;
+        if (SDDBudget(s_setBudget, 500)) {
+            fprintf(stderr, "[StorageDisplay]   setMesh idx=%d material=%p lodIdx=%d/%d mesh=%p objId=%u frac=%.3f\n",
+                    index, (void*)materialType, lodIdx, lodCount, (void*)meshPtr, newId, fraction);
+            fflush(stderr);
+        }
+    }
 }
 
 // ============================================================
@@ -711,7 +851,132 @@ void StorageDisplayComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(StorageDisplayComponent, 0x38, 0xCB)
+
+// StorageYard/StorageCart resource-pile rendering (BANISHED_LIVE_STORAGEDISPLAY,
+// default OFF — like BANISHED_SELECTION_OUTLINE).
+//
+// DRIVER NOTE (why the self-drive was replaced): in retail the pile refresh is driven
+// by the storage-change entity-notify (component vtable +0x58/OnUpdate2 via
+// FUN_1400c2bf0). The SA per-frame component tick does NOT dispatch this component's
+// +0x48 Update slot (verified: with slots wired, ZERO Update calls fire — its
+// UpdatePriority=Fourth bucket isn't Update-ticked in standalone, and the notify event
+// is never raised). So we drive it EXPLICITLY, mirroring the working StatusIcon queue:
+//   * The Startup slot (index 4 / +0x20) — which ComponentEntity::StartupComponents DOES
+//     dispatch at spawn in SA — registers every spawned StorageDisplayComponent into a
+//     driver list (StorageDisplay_RegisterDriven).
+//   * GameUpdateLoop::Update calls StorageDisplay_DriveAll(frame) once the scene is live
+//     (frame>=3); it Draw+Update's each registered component every tick. Draw
+//     (MeshArrayResize) and SetDisplayMesh both early-out cheaply when unchanged, so
+//     steady-state cost is a handful of yards * a few slots.
+// The live vtable also wires slots 6/9/11 (Draw/Update/OnUpdate2) so a vtable dispatch
+// (if one ever occurs) lands on the real bodies. Default (env off) => nothing wired,
+// list never populated, driver a no-op => the default sa-run stays byte-identical.
+static uint32_t StorageDisplayComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageDisplayComponent");
+    return cached;
+}
+static void* StorageDisplayComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+// ---- Explicit per-frame driver (StatusIcon_DrainForceShow pattern) ----
+static StorageDisplayComponent* s_sddDriveList[512];
+static int  s_sddDriveCount = 0;
+static void StorageDisplay_RegisterDriven(StorageDisplayComponent* self) {
+    if (!self) return;
+    for (int i = 0; i < s_sddDriveCount; ++i)   // dedup (Startup can re-run on reload)
+        if (s_sddDriveList[i] == self) return;
+    if (s_sddDriveCount < 512) s_sddDriveList[s_sddDriveCount++] = self;
+}
+
+// index 4 — Startup(self): register this instance for the per-frame driver. (The inert
+// factory zero-fills the body; the fields Draw/Update read — +0x10 entity ref, +0x28
+// display array, +0x30 count — are set by the generic ComponentEntity CopyCtor before
+// StartupComponents runs, so no body-init is needed here.)
+static void StorageDisplayComponent_StartupVSlot(void* s) {
+    StorageDisplay_RegisterDriven(reinterpret_cast<StorageDisplayComponent*>(s));
+}
+// index 6 — Draw(self): grid position layout.
+static void StorageDisplayComponent_DrawVSlot(void* s) {
+    StorageDisplayComponent_Draw(reinterpret_cast<StorageDisplayComponent*>(s));
+}
+// index 9 — Update tick (self, Time*). Not dispatched by the SA bucket loop for this
+// component (see DRIVER NOTE); wired so a stray vtable dispatch still lands correctly.
+static void StorageDisplayComponent_TickVSlot(void* s, void* /*time*/) {
+    StorageDisplayComponent* self = reinterpret_cast<StorageDisplayComponent*>(s);
+    StorageDisplayComponent_Draw(self);
+    StorageDisplayComponent_Update(self);
+}
+// index 11 — OnUpdate2(self): retail Draw+Update refresh.
+static void StorageDisplayComponent_OnUpdate2VSlot(void* s) {
+    StorageDisplayComponent_OnUpdate2(reinterpret_cast<StorageDisplayComponent*>(s));
+}
+static void StorageDisplayComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGEDISPLAY")) {
+        StorageDisplayComponent_LiveVtable[4]  =
+            reinterpret_cast<void*>(&StorageDisplayComponent_StartupVSlot);
+        StorageDisplayComponent_LiveVtable[6]  =
+            reinterpret_cast<void*>(&StorageDisplayComponent_DrawVSlot);
+        StorageDisplayComponent_LiveVtable[9]  =
+            reinterpret_cast<void*>(&StorageDisplayComponent_TickVSlot);
+        StorageDisplayComponent_LiveVtable[11] =
+            reinterpret_cast<void*>(&StorageDisplayComponent_OnUpdate2VSlot);
+    }
+}
+extern "C" void* StorageDisplayComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xCB,
+        StorageDisplayComponent_LiveVtable,
+        reinterpret_cast<void*>(&StorageDisplayComponent_LiveGetTypeId));
+    StorageDisplayComponent_FinishLiveVtable();
+    return p;
+}
+static void* StorageDisplayComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xCB,
+        StorageDisplayComponent_LiveVtable,
+        reinterpret_cast<void*>(&StorageDisplayComponent_LiveGetTypeId));
+    StorageDisplayComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(StorageDisplayComponent, "Component",
               &StorageDisplayComponent_Factory, &StorageDisplayComponent_CreateInPlace);
+
+// Per-frame driver drain — the integrator adds the single call site in
+// GameUpdateLoop::Update, right after StatusIcon_DrainForceShow(s_frameNum):
+//     extern void StorageDisplay_DrainDraw(int frameNum);
+//     StorageDisplay_DrainDraw(s_frameNum);
+// Iterates the registered StorageDisplayComponents once the scene is live and
+// Draw+Update's each (Draw lays out the w*h pile grid; Update allocates pile meshes
+// from the seeded StorageComponent contents — equivalent to the retail OnUpdate2, but
+// called directly to avoid any vtable-slot dependency). Idempotent per tick: Draw's
+// MeshArrayResize and SetDisplayMesh both early-out when nothing changed.
+extern "C" void StorageDisplay_DrainDraw(int frameNum) {
+    if (s_sddDriveCount == 0) return;
+    if (frameNum < 3) return;                                  // wait for scene + seeding
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
+    void* scene = *(void**)(gw + 0x60);
+    if (!scene) return;                                        // scene not live yet — retry
+
+    int driven = 0;
+    for (int i = 0; i < s_sddDriveCount; ++i) {
+        StorageDisplayComponent* cc = s_sddDriveList[i];
+        if (!cc) continue;
+        // Validate the entity backref before the draw bodies deref it.
+        if (fn_InternalBasePtr_CheckPtr)
+            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cc + 0x10));
+        if (*(uintptr_t*)((uintptr_t)cc + 0x10) == 0) continue;   // no owning entity yet
+        StorageDisplayComponent_Draw(cc);      // lay out the w*h pile grid
+        StorageDisplayComponent_Update(cc);    // allocate pile meshes from storage
+        ++driven;
+    }
+
+    if (StorageDisplayTraceOn()) {
+        static int s_lastDriven = -1;
+        if (driven != s_lastDriven) {          // log only when the driven count changes
+            s_lastDriven = driven;
+            fprintf(stderr, "[StorageDisplay::Drive] frame=%d queued=%d driven=%d scene=%p\n",
+                    frameNum, s_sddDriveCount, driven, scene);
+            fflush(stderr);
+        }
+    }
+}
 #endif // STANDALONE_EXE

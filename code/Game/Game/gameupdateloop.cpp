@@ -736,6 +736,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // (env BANISHED_STATUSICON_FORCESHOW; one-shot). No-op unless the env is set.
     extern void StatusIcon_DrainForceShow(int frameNum);
     StatusIcon_DrainForceShow(s_frameNum);
+
+    // Resource-pile rendering: drive each StorageYard/StorageCart StorageDisplayComponent
+    // (Draw+Update) once the scene is live. SA never ticks this component's +0x48 Update, so
+    // this explicit per-frame drain is what makes the piles appear/refresh. No-op unless
+    // BANISHED_LIVE_STORAGEDISPLAY populated the driver list at spawn.
+    extern void StorageDisplay_DrainDraw(int frameNum);
+    StorageDisplay_DrainDraw(s_frameNum);
 #endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",
