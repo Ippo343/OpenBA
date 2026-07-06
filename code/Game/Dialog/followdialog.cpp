@@ -268,8 +268,16 @@ void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int pa
 // ============================================================
 // FollowDialog::Slot7 (vtable +0x38) — Update: follow camera position
 // ============================================================
-// Reads position from the followed entity's CharacterComponent and
-// updates the camera target position. Checks for Escape key to close.
+// This is the DialogInstance per-frame self-tick. The Runtime framework calls
+// it every frame from UI::DialogInstance::Update (0x180113980):
+//     (**(code **)(*(longlong *)this + 0x38))(this);   // idx7 (+0x38) on the dialog
+// which is driven by UI::UserInterface::Update (0x1801213C0) iterating each open
+// dialog. So idx7 is the correct slot for the camera-follow tick (idx8/+0x40 is
+// OnCommand, only invoked on element events with msg==0x12).
+//
+// Reads position from the followed entity's ModelComponent (found by exe type-id
+// 0x1401c7a50 via fn_FindComponent_Character / FUN_140003f60) and writes it to the
+// camera target. Checks for Escape key to close.
 //
 // Original: 0x140069250.
 
@@ -287,10 +295,15 @@ void FollowDialog_Slot7(FollowDialog* self) {
     fn_FindComponent_Character((void*)entityInner, compBuf);
     void* charComp = *(void**)compBuf;
 
-    // Read character position: x at +0x158, z at +0x15C on the component's internal data.
-    // Only update the camera when the CharacterComponent resolved (guard the deref).
+    // Read model position: x at +0x158, z at +0x15C on the ModelComponent itself.
+    // fn_FindComponent_Character writes the component pointer directly into the retbuf,
+    // so charComp IS the ModelComponent — do NOT deref again (that would read the
+    // component's vtable+0x158, garbage). Matches the exe (0x140069250: MOV RAX,[retbuf]
+    // then MOVSS [RAX+0x158]) and Toolbar_CenterOnEntity_Impl (model = retbuf value,
+    // read model+0x158). The previous *(uintptr_t*)charComp deref was the follow bug.
+    // Only update the camera when the ModelComponent resolved (guard the null).
     if (charComp) {
-        uintptr_t compData = *(uintptr_t*)charComp;
+        uintptr_t compData = (uintptr_t)charComp;
         uint32_t posX = *(uint32_t*)(compData + 0x158);
         uint32_t posZ = *(uint32_t*)(compData + 0x15C);
 

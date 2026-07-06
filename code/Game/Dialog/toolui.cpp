@@ -512,6 +512,26 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
     } else if (msg == 0x12 && id == 1) {
         // Close button — close dialog and remove from entity tracking
 #ifdef STANDALONE_EXE
+        // Before closing an ENTITY info panel, drop the selecting EditTool's stale
+        // dialog reference. Retail tears the tool down on close (EntityUI::Slot9 ->
+        // SetEditMode(0)); that slot is stubbed in standalone, so otherwise the
+        // EditTool keeps ticking (EditTool_Startup_Impl, the +0x38 per-frame slot) on
+        // the now-freed dialog and faults next frame inside GetController — CheckPtr
+        // marks the dead ref with the -1 sentinel and GetController(-1) reads
+        // 0xffffffffffffffff. Clearing the tool's selection (+0x28) makes its tick
+        // early-out (it bails when entityRef == 0). Scoped to entity dialogs
+        // (this ToolUI's datasource at +0x28 is a ComponentEntity) so utility dialogs
+        // (map/help) that share this close path don't lose the user's active tool.
+        if (g_TypeId_ComponentEntity && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            void* ds = *(void**)(s + 0x28);
+            if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity)) {
+                uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);
+                if (pc) {
+                    void* activeTool = *(void**)(pc + 0x28);
+                    if (activeTool) *(uint64_t*)((uintptr_t)activeTool + 0x28) = 0;
+                }
+            }
+        }
         // Standalone dialogs/controllers are only partially initialized. Validate the
         // pointers this path dereferences before use so a bad field can't fault: the
         // CloseDialog fn, the world singleton (walked for the tracking BST below), and
