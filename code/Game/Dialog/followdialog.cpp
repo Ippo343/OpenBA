@@ -410,7 +410,24 @@ void FD_SA_Slot5(void* self) { FollowDialog_Slot5(reinterpret_cast<FollowDialog*
 void FD_SA_Slot6(void* self, void* p2, void* p3, void* p4) {
     FollowDialog_Slot6(reinterpret_cast<FollowDialog*>(self), p2, p3, p4);
 }
-void FD_SA_Slot7(void* self) { FollowDialog_Slot7(reinterpret_cast<FollowDialog*>(self)); }
+// Lazily bind the ModelComponent type-id fn_FindComponent_Character needs. The global
+// g_TypeId_CharacterComponent is DAT_1401c7a50 = ModelComponent's TypeInfo (documented
+// misnomer, engine_funcs.h:4476). Its raw exe .rdata slot is never registered in the
+// standalone build (ResolveAddr -> 0), so the finder early-returns null and the follow
+// camera never receives the citizen's ModelComponent+0x158 position -> the dialog ticks
+// but the camera never tracks. Resolve it by name from the live factory tree (same fix
+// pattern as statusiconcomponent.cpp). In DLL mode the id is already live from .rdata so
+// this short-circuits (no-op); the value written by name equals what .rdata holds.
+void EnsureFollowGlobals() {
+    static uint32_t s_tidModel = 0;
+    uint32_t* g = g_TypeId_CharacterComponent;
+    if (!g || *g == 0 || *g == 0xFFFFFFFFu) {
+        if (!s_tidModel) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+        if (s_tidModel) g_TypeId_CharacterComponent = &s_tidModel;
+    }
+}
+
+void FD_SA_Slot7(void* self) { EnsureFollowGlobals(); FollowDialog_Slot7(reinterpret_cast<FollowDialog*>(self)); }
 void FD_SA_Slot8(void* self, void* e, int msg, int id) {
     FollowDialog_Slot8(reinterpret_cast<FollowDialog*>(self), e, msg, id);
 }

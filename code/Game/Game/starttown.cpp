@@ -1123,6 +1123,48 @@ static void StartTown_EmployForesters() {
     fflush(stderr);
 }
 
+// ---------------------------------------------------------------------------
+// Seed the default "Laborer" profession on founding adults (ungated).
+//
+// Retail's per-citizen init FUN_140117080 sets CitizenComponent+0x1f0 =
+// ProfessionList(gw+0xb0)+0x30 (the default Laborer Profession*) for every adult
+// colonist. That initializer is guarded off in standalone, so +0x1f0 stays 0 and the
+// citizen info panel's Job line reads a null profession -> renders blank. This pass
+// reproduces just the laborer seed for the founding colonists WITHOUT the forester-
+// employment gating (StartTown_EmployForesters only runs under BANISHED_LIVE_WORKPLACE).
+// Children keep +0x1f0 == 0 (their panel branch uses ProfessionList+0x40 "Student").
+// Idempotent (sets only when +0x1f0 == 0), so it composes with EmployForesters' own
+// seed. Depends on the founding-housing pass having collected g_foundingCitizens and on
+// ProfessionList (gw+0xb0) being live (LoadProfessionList_Step2, default-on). Standalone-
+// only build-time pass -> no-op in DLL mode (retail runs the real FUN_140117080).
+static void StartTown_SeedLaborerProfessions() {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    int64_t profList = *reinterpret_cast<int64_t*>(
+        reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xb0);
+    if (!profList) return;
+    uint64_t laborerKey = *reinterpret_cast<uint64_t*>(
+        reinterpret_cast<uint8_t*>(profList) + 0x30);
+    if (!laborerKey) {
+        fprintf(stderr, "[startTown::laborer] ProfessionList+0x30 (default profession) null "
+                "— Profession.rsc not live; Job line stays blank\n"); fflush(stderr);
+        return;
+    }
+    int seeded = 0;
+    for (void* c : g_foundingCitizens) {
+        if (!c) continue;
+        int64_t cz   = reinterpret_cast<int64_t>(c);
+        int64_t desc = *reinterpret_cast<int64_t*>(cz + 0x288);
+        bool adult = desc && *reinterpret_cast<float*>(desc + 0x44) <= *reinterpret_cast<float*>(cz + 0x3c);
+        if (adult && *reinterpret_cast<int64_t*>(cz + 0x1f0) == 0) {
+            *reinterpret_cast<uint64_t*>(cz + 0x1f0) = laborerKey; ++seeded;
+        }
+    }
+    fprintf(stderr, "[startTown::laborer] seeded Laborer on %d/%zu founding adults "
+            "(laborerKey=0x%llx)\n", seeded, g_foundingCitizens.size(),
+            (unsigned long long)laborerKey);
+    fflush(stderr);
+}
+
 // ============================================================================
 // CITIZENS pool — CitizenComponent_impl_0dd0 (0x1400a0dd0) + sub_1040 (0x1400a1040).
 // Spawns the initial colonists. For each family entry (startConfig+0x60, count
@@ -1519,6 +1561,17 @@ static void StartTown_AssignFoundingHousing(const std::vector<std::vector<void*>
             // So the house now TRACKS its occupants, not just the citizen pointing at it.
             int64_t houseIBPLocal = houseIBP;
             CitizenComp_AssignHousing(reinterpret_cast<CitizenComponent*>(citComp), &houseIBPLocal);
+            // NOTE (Home-button follow-up): the exe citizen-panel Home button (id 0x226,
+            // 0x1400650F0) centers on CitizenComponent+0x238 = the RESIDENCE/home field,
+            // which AssignHousing (the misnamed WORKPLACE assigner) never sets — so the
+            // Home button no-ops. Setting +0x238 = house here is NOT safe yet: the live
+            // CitizenAI candidate list (citizenai_candidatelist.cpp:492) gates the hunger-
+            // gather branch on +0x238!=0 and CitizenComp_HasSufficientResources reads the
+            // residence's StorageComponent rows (+0x50); our SA houses have that row array
+            // null (storage not fully live), so it null-derefs (crash confirmed). Fixing
+            // the Home button therefore requires residence-storage bring-up first (or a
+            // rows==0 guard in HasSufficientResources + verifying the resulting gather
+            // behavior). Deferred — see the citizen-dialog open-items note.
             int64_t assigned = *reinterpret_cast<int64_t*>(reinterpret_cast<uint8_t*>(citComp) + 0x248);
             if (assigned != 0) ++housed;
         }
@@ -2580,6 +2633,11 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] citizens: spawned %d; entityList count %d -> %d\n",
             nc, afterStruct, afterCitizens);
     fflush(stderr);
+
+    // Seed the default Laborer profession on founding adults (ungated) so the citizen
+    // info panel's Job line renders "Laborer" instead of blank. Runs after citizens +
+    // founding housing (g_foundingCitizens) exist and ProfessionList (gw+0xb0) is loaded.
+    StartTown_SeedLaborerProfessions();
 
     // PHASE 4 ASSIGN half — seat laborers at the lodge (env BANISHED_LIVE_WORKPLACE) now
     // that citizens + founding housing exist. Sets citizen+0x238 -> Gather/Work candidates.

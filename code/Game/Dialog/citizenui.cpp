@@ -429,8 +429,14 @@ void CitizenUI_Slot7(CitizenUI* self) {
         void* profElem = (void*)*(uint64_t*)(s + 0x50);
         auto okPtr = [](uintptr_t p) { return CitUI_OkPtr(p); };
         if (profElem) {
-            uintptr_t gwHead = *(uintptr_t*)*g_pGameWorldSingleton;
-            uintptr_t profListBase = okPtr(gwHead) ? *(uintptr_t*)(gwHead + 0xB0) : 0;
+            // gw+0xB0 is the ProfessionList, read directly off the GameWorld base
+            // (single deref) — matching retail (0x140064AE0) and the other call sites
+            // (the WorldGrid read at +0x118 below, starttown +0xb0). The prior
+            // *(uintptr_t*)*g_pGameWorldSingleton double-deref read GameWorld field 0 and
+            // then +0xB0 off THAT -> garbage profListBase, blanking the Student/worker Job
+            // text. Byte-faithful correction (wrong in DLL mode too, latent there).
+            uintptr_t gwBase = (uintptr_t)*g_pGameWorldSingleton;
+            uintptr_t profListBase = okPtr(gwBase) ? *(uintptr_t*)(gwBase + 0xB0) : 0;
 
             bool isChild = aiDesc && (*(float*)(ai + 0x3c) < *(float*)(aiDesc + 0x44));
             bool hasWorkplace = (*(uintptr_t*)(ai + 0x208) != 0);
