@@ -688,6 +688,32 @@ extern "C" int EditTool_HarnessSelectEntity(void* editTool, void* entity) {
     return dlg != 0 ? 1 : 0;
 }
 
+// Dump a dialog's element tree with geometry + flags so we can see WHY injected
+// content isn't drawing (zero size? off-screen? visibility flag?). Element layout:
+//   +0x10 name (System::String) · +0x34 flags · +0x38..0x58 rect fields
+//   +0xa0 children array · +0xa8 child count · vtable[2]=GetTypeId
+static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
+    if (!elem || depth > 10 || *counter > 200) return;
+    (*counter)++;
+    uintptr_t e = (uintptr_t)elem;
+    char* nameData = *(char**)(e + 0x10);
+    int len = nameData ? *(int*)(nameData - 8) : 0;
+    uint32_t tid = 0;
+    { void** vt = *(void***)elem;
+      if (vt && vt[2]) { typedef uint32_t(*G)(void*); tid = ((G)vt[2])(elem); } }
+    uint32_t flags = *(uint32_t*)(e + 0x34);
+    // Element bounds: +0x68 x, +0x6c y, +0x70 w, +0x74 h (ints) — from
+    // TabElement::UpdateContainers geometry math.
+    int bx = *(int*)(e + 0x68), by = *(int*)(e + 0x6c);
+    int bw = *(int*)(e + 0x70), bh = *(int*)(e + 0x74);
+    printf("[CitTree] %*selem=%p tid=%u flags=0x%x name='%.*s' | rect=(%d,%d %dx%d)\n",
+           depth * 2, "", elem, tid, flags, len > 0 ? len : 0, nameData ? nameData : "",
+           bx, by, bw, bh);
+    void** kids = *(void***)(e + 0xa0);
+    int kc = *(int*)(e + 0xa8);
+    for (int i = 0; kids && i < kc; i++) DumpCitizenElemTree(kids[i], depth + 1, counter);
+}
+
 // Drive the select path on a CITIZEN. Citizens aren't in the region-map cell array
 // (they move) — they register in the Picking::Scene via PickingComponent OnAdded /
 // the move-tick (see citizenai_executor.cpp RegisterCitizenPickMesh). Their pick
@@ -716,7 +742,16 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
         void* dlg = *(void**)((uintptr_t)editTool + 0x28);
         printf("[EditSel] citizen select entity=%p -> dialog=%p (%s)\n",
                userData, dlg, dlg ? "OPENED" : "no dialog");
-        if (dlg) return 1;
+        if (dlg) {
+            if (std::getenv("BANISHED_DIALOG_TRACE")) {
+                void* root = *(void**)((uintptr_t)dlg + 0x50);
+                printf("[CitTree] dialog=%p root=%p — element tree:\n", dlg, root);
+                int counter = 0;
+                DumpCitizenElemTree(root, 0, &counter);
+                printf("[CitTree] (%d elements)\n", counter);
+            }
+            return 1;
+        }
     }
     printf("[EditSel] no citizen pick userData found in ids 0..15\n");
     return 0;

@@ -91,6 +91,10 @@ static void GetDescPage_Impl(void* entityDesc, void* retval)
 static bool BuildComplete_Impl(void* posComp)
 {
     if (!posComp) return false;
+    // In SA the exe .rdata type-id global can be null (raw .rdata not resolvable);
+    // treat "can't classify" as not-complete rather than dereferencing null. DLL
+    // mode always has it, so this is a no-op there.
+    if (!g_TypeId_ResourceComponent) return false;
 
     void* desc = *(void**)((uintptr_t)posComp + 0x18);
     bool isResource = fn_IsDerivedFrom(desc, *g_TypeId_ResourceComponent);
@@ -554,6 +558,7 @@ void EntityUI_Slot6(EntityUI* self) {
 void EntityUI_Slot7(EntityUI* self) {
     uintptr_t s = (uintptr_t)self;
 
+#ifndef STANDALONE_EXE
     // Get current EditTool selection from player controller (IBP at +0x28)
     void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
     void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
@@ -613,6 +618,9 @@ void EntityUI_Slot7(EntityUI* self) {
             }
         }
     }
+#endif  // STANDALONE_EXE — tool-hint highlight uses EditTool vtbl[13]/ToolUI vtbl[10]
+        // (risky in SA, cosmetic only); the page-selection below is what makes the
+        // entity/citizen content actually render, so it always runs.
 
     // Find components on entity to determine page state
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x30));
@@ -958,15 +966,26 @@ void* Dtor(void* self, uint32_t flags) {
 }
 
 void EnsureGlobals() {
-    static uint32_t s_ce = 0, s_tool = 0;
+    static uint32_t s_ce = 0, s_tool = 0, s_uidesc = 0;
     if (!g_TypeId_ComponentEntity) { s_ce   = ::Object::ResolveTypeIdByNameLazy("ComponentEntity"); if (s_ce)   g_TypeId_ComponentEntity = &s_ce; }
     if (!g_TypeId_ToolUI)          { s_tool = ::Object::ResolveTypeIdByNameLazy("ToolUI");          if (s_tool) g_TypeId_ToolUI = &s_tool; }
+    // EntityUI::Slot7 (page switching) reads the entity description's UIDescription
+    // component (+0x40 = default page index) via GetDescPage_Impl, which derefs
+    // *g_TypeId_UIDescription. In SA that exe .rdata global is null, so resolve the
+    // type-id from the live factory tree. Without it, Slot7 can't pick the citizen's
+    // content page and the panel stays on the empty default page (blank body).
+    if (!g_TypeId_UIDescription)   { s_uidesc = ::Object::ResolveTypeIdByNameLazy("UIDescription"); if (s_uidesc) g_TypeId_UIDescription = &s_uidesc; }
+    // Building panels reach BuildComplete_Impl (page selection for in-progress
+    // construction), which classifies the position component's ResourceComponent.
+    static uint32_t s_res = 0;
+    if (!g_TypeId_ResourceComponent) { s_res = ::Object::ResolveTypeIdByNameLazy("ResourceComponent"); if (s_res) g_TypeId_ResourceComponent = &s_res; }
 
     static bool s_logged = false;
     if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
         s_logged = true;
-        fprintf(stderr, "[EntityUI] globals: CE=%p ToolUI=%p\n",
-                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_ToolUI);
+        fprintf(stderr, "[EntityUI] globals: CE=%p ToolUI=%p UIDesc=%p\n",
+                (void*)g_TypeId_ComponentEntity, (void*)g_TypeId_ToolUI,
+                (void*)g_TypeId_UIDescription);
         fflush(stderr);
     }
 }
@@ -977,6 +996,22 @@ void W_Slot4(void* self) {
     EntityUI_Slot4(reinterpret_cast<EntityUI*>(self));
 }
 void W_Slot6(void* self) { if (self) EntityUI_Slot6(reinterpret_cast<EntityUI*>(self)); }
+// Slot7 = page switching. The info panel's element tree has the entity/citizen
+// content on a non-default page of the "pages" PageElement (e.g. the tabbed
+// "pageTabGroup" for citizens). Slot7 reads the entity's default page and calls
+// PageElement::SetActivePage — WITHOUT it the panel shows only the empty default
+// page (chrome/title only). The SA build of EntityUI_Slot7 skips the cosmetic
+// tool-hint highlight (EditTool/ToolUI vtable calls, #ifndef STANDALONE_EXE) and
+// runs only the page-selection, which is what makes the body render.
+void W_Slot7(void* self) {
+    EnsureGlobals();
+    if (!self || !g_TypeId_UIDescription) return;
+    EntityUI_Slot7(reinterpret_cast<EntityUI*>(self));
+}
+// +0x40 per-frame: the framework dispatches only vtable+0x40 each frame, so drive
+// the page-selection Slot7 from here (the exe's real +0x40 is the input handler,
+// intentionally left a no-op in SA — higher risk, no display payoff).
+void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }
 
 struct Init {
     Init() {
@@ -985,6 +1020,8 @@ struct Init {
         g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
         g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
         g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
+        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
     }
 } g_init;
 
