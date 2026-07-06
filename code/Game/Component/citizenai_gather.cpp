@@ -97,8 +97,15 @@ typedef int      (*fn_getCount_t)(int64_t storageWrap);                         
 typedef void     (*fn_transfer_t)(int64_t carrier, int64_t storage, int one);            // 0x1400ca230
 typedef void     (*fn_findPath_t)(void* outResult, void* citizenPtr, int pathType,
                                   void* destEntityIBP, float* destPos, void* srcEntityIBP,
-                                  float* srcPos, long sourceEntity, int itemCount, int flags,
+                                  float* srcPos, int64_t materialDesc, int itemCount, int flags,
                                   int p11, char p12, int p13, int p14);                   // 0x1400bf790
+// NB: the 8th param is a 64-bit RawMaterialDescription* (0 = "any material"), NOT a 32-bit
+// `long`. On Win64 `long` is 32-bit: declaring it `long` here made the caller write only the
+// low dword of the 8-byte stack slot, leaving the high dword as stack garbage. The callee
+// (WorkAct_GatherRawMatCtor_bf790 / exe Pathfinding_FindPath, which reads the full 8 bytes via
+// CONCAT44) then reassembled e.g. 0x1fa00000000 and passed it to the PickupStored ctor
+// (ca520), whose `if (materialDesc==0) return` guard was bypassed -> READ of +0x30 off garbage
+// -> ACCESS_VIOLATION once LIVE_STORAGE made storage non-empty. int64_t writes the full 0.
 typedef uint64_t (*fn_ltp_t)(int64_t citizen);                                           // 0x140115e60
 
 static fn_dd30_t       s_dd30       = nullptr;
