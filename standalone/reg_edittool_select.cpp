@@ -14,10 +14,12 @@
 // fn_UI_AddDialog, fn_IsDerivedFrom, fn_InternalBasePtr_Ctor/_CheckPtr, fn_MemAlloc) plus
 // g_ToolUI_ChildDialog_Vtable (RegisterPlayerToolUIBatch) and the EntityUI/UIDescription/
 // UIComponent type-ids (filled lazily via Object::GetTypeIdByName inside the body).
-// The two teardown/refresh helpers 0x1400fcc90 (Entity_impl_cc90) and 0x1400fc9e0
-// (Entity_impl_c9e0) remain DEFERRED (their closure transits the Entity_impl_c4a0
-// render-mesh family) — the body resolves them as exe pointers and null-guards them, so
-// the dialog opens with those steps skipped. See the body header for the full rationale.
+// The two teardown/refresh helpers 0x1400fcc90 (Entity_impl_cc90, deselect/clear) and
+// 0x1400fc9e0 (Entity_impl_c9e0, select/paint) are ported in tool_base_render.cpp and
+// registered by RegisterPlayerRenderBatch — but only under BANISHED_SELECTION_OUTLINE
+// (their closure transits the Entity_impl_c4a0 EdgeMesh render family). The body resolves
+// them as exe pointers and null-guards them, so with the outline off the dialog still
+// opens with those steps skipped. See the body header for the full rationale.
 #ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>

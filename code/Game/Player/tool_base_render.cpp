@@ -49,6 +49,17 @@
 //     its embedded EdgeMeshInstance at +0x28 is unconstructed. c4a0 lazily runs
 //     the EdgeMeshInstance ctor the first time (when its vtable ptr is null)
 //     before any virtual dispatch on it.
+//   * c4a0's ModelComponent lookup (retail: Entity_ClearPathQueue 0x140003f60)
+//     yields the model-variant indices (+0x164/+0x166) that pick the per-variant
+//     prebuilt outline mesh — the path retail uses for CITIZENS (which have no
+//     terrain footprint, so the build branch can't fire). The shared registered
+//     3f60 reads its type-id from .rdata (DWORD_1401c7a50), NULL in standalone,
+//     so it always returned null there -> variant read as (-1,-1) -> build branch
+//     -> bail. We do that FindComponent inline (FindModelComp) with the
+//     GetTypeIdByName fallback so the citizen's ModelComponent is actually found.
+//     (Still gated: whether the citizen HighlightDescription's +0x20 per-variant
+//     mesh table loaded in SA is reported by BANISHED_OUTLINE_TRACE's
+//     "PREBUILT-branch ... cellMesh=" line.)
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -86,6 +97,7 @@ fn_void1_t    s_c3470 = nullptr;   // 0x1400c3470 (flag-change notify)
 
 uint32_t s_tid_Highlight = 0;      // DAT_1401c4410 HighlightComponent
 uint32_t s_tid_HighlightDesc = 0;  // DAT_1401c4448 HighlightDescription
+uint32_t s_tid_Model = 0;          // DWORD_1401c7a50 ModelComponent (c4a0 variant find)
 bool     s_resolved = false;
 
 uint32_t ResolveTid(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
@@ -171,6 +183,38 @@ void Sub7080(int64_t container, void* outIBP) {
                 *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
             CheckPtr(slot2);
             void* comp2 = *reinterpret_cast<void**>(slot2);
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
+            break;
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(outIBP, found);
+}
+
+// ===========================================================================
+// FindComponent(ModelComponent) — the lookup Entity_ClearPathQueue (0x140003f60)
+//   performs inside c4a0 to fetch the entity's model-variant indices (+0x164 /
+//   +0x166). Ported inline here (mirrors Sub7080) instead of calling the shared
+//   registered 3f60 (reg_action_cnr.cpp), because that reads the ModelComponent
+//   type-id straight from .rdata (DWORD_1401c7a50), which is NULL in the
+//   standalone image -> the shared helper always returns null there. With the
+//   GetTypeIdByName fallback the citizen's ModelComponent is actually found, so
+//   c4a0 can take the per-variant prebuilt-mesh path (how retail outlines
+//   citizens / other model-variant entities that have no terrain footprint).
+// ===========================================================================
+void FindModelComp(int64_t container, void* outIBP) {
+    const uint32_t tid = ResolveTid(0x1401c7a50, "ModelComponent", &s_tid_Model);
+    void* found = nullptr;
+    int count = *reinterpret_cast<int32_t*>(container + 0x38);
+    for (int i = 0; i < count; i++) {
+        uint64_t* slot = reinterpret_cast<uint64_t*>(
+            *reinterpret_cast<uintptr_t*>(container + 0x30) + (int64_t)i * 8);
+        CheckPtr(slot);
+        void* comp = *reinterpret_cast<void**>(slot);
+        uint32_t ct = reinterpret_cast<uint32_t(*)(void*)>(
+            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(comp) + 0x10))(comp);
+        if (ct == tid) {
+            CheckPtr(slot);
+            void* comp2 = *reinterpret_cast<void**>(slot);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp2, tid)) found = comp2;
             break;
         }
@@ -489,7 +533,7 @@ void Impl_c4a0(int64_t self) {
     // "any neighbour already highlighting" test over sibling components.
     uint64_t charIBP = 0, compIBP = 0;
     CheckPtr(reinterpret_cast<void*>(self + 0x10));
-    if (s_3f60) s_3f60(*reinterpret_cast<int64_t*>(self + 0x10), &charIBP);
+    FindModelComp(*reinterpret_cast<int64_t*>(self + 0x10), &charIBP);   // was s_3f60 (null tid in SA)
     CheckPtr(reinterpret_cast<void*>(self + 0x10));
     if (s_4740) s_4740(*reinterpret_cast<int64_t*>(self + 0x10), &compIBP);
 
@@ -562,12 +606,21 @@ void Impl_c4a0(int64_t self) {
     }
 
 add_prebuilt:
-    // Per-cell prebuilt mesh path: mesh = descTable[iVar10][iVar11], transform from charComp+0x28.
+    // Per-variant prebuilt mesh path (how retail outlines citizens / model-variant
+    // entities): mesh = descTable[variantIdx][modelVariant], transform from the
+    // ModelComponent (charIBP+0x28). descTable = HighlightDescription+0x20.
     if (iVar10 >= 0 && iVar11 >= 0 && desc) {
         CheckPtr(&charIBP);
         int64_t table = *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x20);
-        int64_t row = *reinterpret_cast<int64_t*>(table + (int64_t)iVar10 * 0x10);
-        void* cellMesh = *reinterpret_cast<void**>(row + (int64_t)iVar11 * 8);
+        // Standalone guard: if the HighlightDescription's prebuilt-mesh table (or the
+        // selected row/entry) never loaded, bail instead of dereferencing null / OOB.
+        // Retail guarantees the table is populated + consistent with the model's
+        // variant range; a fresh/inert description in SA may leave it empty.
+        int64_t row = table ? *reinterpret_cast<int64_t*>(table + (int64_t)iVar10 * 0x10) : 0;
+        void* cellMesh = row ? *reinterpret_cast<void**>(row + (int64_t)iVar11 * 8) : nullptr;
+        OT("c4a0 PREBUILT-branch variant=(%d,%d) desc=%p table=%p row=%p cellMesh=%p",
+           iVar10, iVar11, desc, (void*)table, (void*)row, cellMesh);
+        if (cellMesh == nullptr) return;   // nothing loaded to draw
         if (fn_EdgeMeshInstance_SetMesh)
             fn_EdgeMeshInstance_SetMesh(reinterpret_cast<void*>(self + 0x28), cellMesh,
                                         reinterpret_cast<void*>(charIBP + 0x28));
@@ -576,6 +629,8 @@ add_prebuilt:
         void* inst = reinterpret_cast<void*>(self + 0x28);
         reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
         uint32_t id = fn_SceneAddObject ? fn_SceneAddObject(scene, inst) : 0xffffffff;
+        OT("c4a0 PREBUILT SUBMITTED sceneId=%u instVtbl=%p modelXform(charIBP+0x28)=%p",
+           id, *reinterpret_cast<void**>(inst), reinterpret_cast<void*>(charIBP + 0x28));
         uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
         *reinterpret_cast<uint32_t*>(self + 0x120) = id;
         uint32_t f1 = f0 | 4;
@@ -680,14 +735,47 @@ void Impl_c9e0(int64_t self) {
     }
 }
 
+// ===========================================================================
+// Entity_impl_cc90 (0x1400fcc90) — DESELECT.
+//
+// Retail cc90 does THREE things: (1) clear the highlight on the currently-
+// selected entity (cb40, reads self+0x30), (2) null the tool's selected-dialog
+// (self+0x28) and selected-entity (self+0x30) refs, and (3) close the open
+// DialogInstance if its controller derives from ToolUI (DWORD_1401c5788) and
+// isn't "pinned" (controller+0x40 == 0). d3b0 (EditTool::SelectEntity) calls it
+// BEFORE overwriting self+0x30 with the newly-clicked entity, so cb40 clears the
+// PREVIOUS entity's outline — which is exactly the "clear on deselect" fix.
+//
+// *** STANDALONE: we do ONLY step (1), the highlight-clear. ***
+// Steps (2)+(3) — nulling self+0x30 and calling UI::CloseDialog — regress the SA
+// select path. Our EditTool picking handler (edittool.cpp:629) re-fires d3b0 as
+// the cursor/entities move and guards redundant selects with
+// `self->lastEntityRef(+0x30) != foundEntity`. Nulling +0x30 defeats that guard,
+// and CloseDialog re-enters the deselect path (dialog OnRemove -> EditTool
+// deactivate vtable slot 0x1401ee710 -> cc90) while +0x30 is null — so the
+// just-opened info panel gets torn down every frame (observed: citizen dialog
+// never stays up; [Outline] trace shows cc90->c9e0 looping on one entity). In SA
+// the dialog lifecycle is owned by d3b0/OnKey (step 4 reuses/replaces the panel),
+// so the retail teardown here is both redundant and harmful. Keeping just cb40
+// gives the outline-clear without disturbing the panel. (In DLL mode the real exe
+// cc90 runs unmodified — this body is standalone-only, reached via the registered
+// 0x1400fcc90 under BANISHED_SELECTION_OUTLINE.)
+// ===========================================================================
+void Impl_cc90(int64_t self) {
+    EnsureFuncs();
+    OT("cc90 CLEAR-only selectedEntity=%p", *reinterpret_cast<void**>(self + 0x30));
+    Impl_cb40(self);   // clear the previous entity's outline; leave dialog/refs alone
+}
+
 }  // namespace
 
 // ===========================================================================
 // Exported entry points (registered in standalone/reg_player_render.cpp when
 // BANISHED_SELECTION_OUTLINE is set). c9e0/cc90 are what edittool_select.cpp
-// resolves; cc90's dialog-close half stays in edittool_select's own cc90 port,
-// so here cc90 is aliased to the highlight-clear (cb40) — see the registrar.
+// resolves: c9e0 sets+paints the outline on the newly-selected entity, cc90
+// clears the previous entity's outline and closes its dialog (deselect).
 // ===========================================================================
 extern "C" void HighlightSelect_Impl(void* self)   { Impl_c9e0(reinterpret_cast<int64_t>(self)); }  // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<int64_t>(self)); }  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast<int64_t>(self)); }  // 0x14004c4a0
+extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<int64_t>(self)); }  // 0x1400fcc90

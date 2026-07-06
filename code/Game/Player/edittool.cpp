@@ -119,7 +119,13 @@ bool EditTool_Serialize_Impl(EditTool* self, uint64_t* param_2) {
 typedef bool (*fn_Entity_impl_0380_t)(uintptr_t entity, void* entityIBP, void* rectOut);
 static fn_Entity_impl_0380_t s_fn_Entity_impl_0380 = nullptr;
 
-// Helper: Entity_impl_cc90 (0x1400fcc90) — fallback positioning when entity rect fails
+// Helper: Entity_impl_cc90 (0x1400fcc90) — DESELECT (clears the selection outline +
+// closes the info dialog), which retail calls here as the "can't place the dialog ->
+// drop the selection" fallback when the entity's screen rect can't be computed.
+// Deliberately UNRESOLVED in standalone (0x1400fcc90 is not registered — see
+// standalone/reg_player_render.cpp): our 0380 screen-rect helper fails for citizens,
+// so a live cc90 would deselect+clear the citizen's highlight EVERY FRAME. Null here
+// -> this fallback is a no-op, and the selection outline persists.
 typedef void (*fn_Entity_impl_cc90_t)(uintptr_t self);
 static fn_Entity_impl_cc90_t s_fn_Entity_impl_cc90 = nullptr;
 
@@ -398,7 +404,9 @@ void EditTool_Startup_Impl(EditTool* self) {
     }
 
     if (!gotRect) {
-        // Fallback positioning
+        // Retail deselects here (cc90) when the entity rect can't be computed.
+        // Intentionally null in standalone (see the s_fn_Entity_impl_cc90 decl) so we
+        // don't wipe the selection outline every frame 0380 fails for citizens.
         if (s_fn_Entity_impl_cc90) s_fn_Entity_impl_cc90(selfAddr);
         return;
     }

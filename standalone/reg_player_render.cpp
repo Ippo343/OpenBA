@@ -33,6 +33,7 @@
 extern "C" void HighlightSelect_Impl(void*);    // 0x1400fc9e0
 extern "C" void HighlightClear_Impl(void*);     // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(void*);   // 0x14004c4a0
+extern "C" void HighlightDeselect_Impl(void*);  // 0x1400fcc90
 
 void RegisterPlayerRenderBatch() {
     const char* e = std::getenv("BANISHED_SELECTION_OUTLINE");
@@ -41,5 +42,14 @@ void RegisterPlayerRenderBatch() {
     RegisterExeAddr(0x1400fc9e0, reinterpret_cast<uintptr_t>(&HighlightSelect_Impl));
     RegisterExeAddr(0x1400fcb40, reinterpret_cast<uintptr_t>(&HighlightClear_Impl));
     RegisterExeAddr(0x14004c4a0, reinterpret_cast<uintptr_t>(&HighlightRepaint_Impl));
+    // NOTE: cc90 (0x1400fcc90, deselect) is deliberately NOT registered. The clear-
+    // on-reselect is done in edittool_select.cpp's d3b0 step 6 (via cb40) instead,
+    // which fires only when a NEW selection actually completes. cc90 is ALSO the
+    // EditTool deactivate vtable slot (0x1401ee710), which the tool invokes EVERY
+    // FRAME in standalone — if cc90 were registered, that per-frame call would run
+    // its cb40 and wipe the just-set highlight one frame after c9e0 submits it
+    // (observed: c9e0=1, cc90=8973, citizen outline removed the frame after
+    // SUBMITTED). Leaving 0x1400fcc90 unresolved makes that per-frame slot a no-op.
+    // (void)&HighlightDeselect_Impl;  // still exported for DLL-mode / documentation
 }
 #endif

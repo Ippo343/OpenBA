@@ -47,17 +47,19 @@
 namespace {
 
 // ---- helper exe function pointers -------------------------------------------
-// Entity_impl_cc90 (0x1400fcc90) — close the previously-open selection panel.
+// Entity_impl_cc90 (0x1400fcc90) — deselect: clear the previous entity's outline
+//   (Entity_impl_cb40) + close the previously-open selection panel.
 // Entity_impl_c9e0 (0x1400fc9e0) — finalize: mark the entity's UIComponents dirty
 //   (+0x11c) and repaint the selection overlay via Entity_impl_c4a0.
-// Both are DEFERRED (unregistered) in standalone because their closure transits the
-// Entity_impl_c4a0 render-mesh family (0x14004c4a0/0x14004b930 EdgeMesh tessellation) —
-// see standalone/reg_player_edit.cpp / code/Game/Player/tool_base_render.cpp. Resolved as
-// direct exe pointers: real in DLL mode, NULL in standalone -> null-guarded skip. Effect
-// of skipping: the info dialog still OPENS; only the previous-panel teardown and the
-// selection-highlight overlay repaint are skipped. Documented deferred domino.
+// Both are ported in code/Game/Player/tool_base_render.cpp and registered by
+// RegisterPlayerRenderBatch — but ONLY when BANISHED_SELECTION_OUTLINE is set
+// (their closure transits the EdgeMesh render-mesh family, which mutates the live
+// Graphics::Scene). Resolved here as direct exe pointers: real in DLL mode, our
+// ports in standalone-with-outline, NULL in standalone-default -> null-guarded skip.
+// Effect when skipped (outline off, the shipping default): the info dialog still
+// OPENS; only the previous-panel teardown + selection-highlight repaint are skipped.
 typedef void (*fn_void_self_t)(void* self);
-fn_void_self_t s_fn_cc90 = nullptr;   // 0x1400fcc90
+fn_void_self_t s_fn_cb40 = nullptr;   // 0x1400fcb40 (clear highlight on self+0x30)
 fn_void_self_t s_fn_c9e0 = nullptr;   // 0x1400fc9e0
 bool s_resolved = false;
 
@@ -67,7 +69,7 @@ uint32_t s_tid_UIComponent = 0;    // DAT_1401c7fc8
 
 void EnsureFuncs() {
     if (s_resolved) return;
-    s_fn_cc90 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fcc90));
+    s_fn_cb40 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fcb40));
     s_fn_c9e0 = reinterpret_cast<fn_void_self_t>(ResolveAddr(Module::Exe, 0x1400fc9e0));
     s_resolved = true;
 }
@@ -132,8 +134,15 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
     if (*reinterpret_cast<uint64_t*>(self + 0x30) == *entityIBP) return;
 
-    // 2. Close the previously-open panel (deferred no-op in standalone).
-    if (s_fn_cc90) s_fn_cc90(selfV);
+    // 2. (Retail calls Entity_impl_cc90 here to tear down the previous panel +
+    //    clear its outline. We DON'T, because our EditTool::OnKey pick handler
+    //    (edittool.cpp:629) re-runs this select PER FRAME while the pick button
+    //    reads "pressed", firing for whatever entity is under the cursor. Clearing
+    //    the old outline here would then wipe the current selection every frame the
+    //    cursor drifts off it — e.g. a walking citizen leaves its outline flickering
+    //    off. Instead we clear the previous outline at step 6, which is only reached
+    //    when a NEW selection actually completes (a dialog is opening). A hover over
+    //    a no-dialog entity returns early below and leaves the current outline intact.)
 
     // 3. UserInterface = *(gameWorld + 0x98).
     void* gameWorld = *g_pGameWorldSingleton;
@@ -239,7 +248,12 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         if (fn_UI_AddDialog) fn_UI_AddDialog(ui, &addRef);
     }
 
-    // 6. Finalize: record the open dialog + selected entity, refresh selection overlay.
+    // 6. Finalize. We're now committed to selecting `entity` (a dialog is opening),
+    //    so THIS is the point to clear the previous entity's outline — cb40 clears
+    //    the highlight on self+0x30, which is still the OLD entity until the store
+    //    below. (Moved off the per-frame step-2 cc90 path so hover-picks over
+    //    no-dialog entities can't wipe the current selection; see step 2.)
+    if (s_fn_cb40) s_fn_cb40(selfV);
     *reinterpret_cast<uint64_t*>(self + 0x28) = resultDialog;
     *reinterpret_cast<uint64_t*>(self + 0x30) = *entityIBP;
     if (s_fn_c9e0) s_fn_c9e0(selfV);
