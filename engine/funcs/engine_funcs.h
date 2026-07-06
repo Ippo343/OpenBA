@@ -4490,7 +4490,10 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
         uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
         void* panelController = nullptr;
-        if (controllerRaw != 0) {
+        // g_TypeId_PageToggleUI is an exe .rdata type-id that is NULL in standalone
+        // until lazily resolved; dereferencing *g_TypeId_PageToggleUI would fault.
+        // In DLL mode it is always live, so this guard is a no-op there.
+        if (controllerRaw != 0 && g_TypeId_PageToggleUI) {
             fn_InternalBasePtr_CheckPtr(controllerBuf);
             if (fn_IsDerivedFrom((void*)controllerRaw, *g_TypeId_PageToggleUI)) {
                 panelController = (void*)controllerRaw;
@@ -4623,10 +4626,15 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     }
 
     // === Section 4: Select entity in EditTool ===
+    // g_TypeId_EditTool is an exe .rdata type-id that is NULL in standalone until
+    // lazily resolved (e.g. CitizenUI::EnsureGlobals). Dereferencing *g_TypeId_EditTool
+    // with a null pointer reads address 0 and hard-faults. The camera snap (Section 3)
+    // has already run, so if we can't classify the EditTool we simply skip the re-select
+    // — the camera still moves to the entity. In DLL mode the id is always live.
     void* currentTool = *(void**)(tc + 0x28);
     void* editTool = nullptr;
 
-    if (currentTool) {
+    if (currentTool && g_TypeId_EditTool) {
         fn_InternalBasePtr_CheckPtr(&currentTool);
         if (fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool)) {
             editTool = currentTool;
@@ -4636,14 +4644,14 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     uint64_t editToolRef = 0;
     fn_InternalBasePtr_Ctor(&editToolRef, editTool);
 
-    if (editToolRef == 0) {
+    if (editToolRef == 0 && g_TypeId_EditTool) {
         // Switch to EditTool mode
         EntityUI_SetEditMode_Impl(toolController, 0);
 
         // Re-read current tool after mode switch
         void* newTool = *(void**)(tc + 0x28);
         editTool = nullptr;
-        if (newTool) {
+        if (newTool && g_TypeId_EditTool) {
             fn_InternalBasePtr_CheckPtr(&newTool);
             if (fn_IsDerivedFrom(newTool, *g_TypeId_EditTool)) {
                 editTool = newTool;

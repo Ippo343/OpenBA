@@ -803,6 +803,13 @@ void EnsureGlobals() {
     // dereferencing a null type-id pointer.
     if (!g_TypeId_ProfessionComponent)    { g_TypeId_ProfessionComponent = &s_profZero; }
     if (!g_pExternalTypeId)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_pExternalTypeId = &s_ext; }
+    // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
+    // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
+    // Resolve it here so the camera snap AND the EditTool re-highlight both work; the
+    // inline also guards the deref, so an unresolved id degrades to camera-move only
+    // instead of faulting.
+    static uint32_t s_edit = 0;
+    if (!g_TypeId_EditTool)               { s_edit = ::Object::ResolveTypeIdByNameLazy("EditTool");          if (s_edit) g_TypeId_EditTool = &s_edit; }
     if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
 
     static bool s_logged = false;
