@@ -13,6 +13,13 @@
 #include <cstdint>
 #include <cstring>
 
+// Standalone profession-list data is not fully live (the CitizenAI +0x288 desc
+// backref and the ProfessionList entries can be garbage/-1). Mirror the
+// citizenui.cpp CitUI_OkPtr guard so Slot6's profession-text build can't deref a
+// bogus pointer and hardfault (the Follow crash). Byte-faithful in DLL mode where
+// these pointers are always valid.
+static inline bool FD_OkPtr(uintptr_t p) { return p >= 0x10000 && p < 0x7FFFFFFFFFF0ULL; }
+
 // ============================================================
 // WorldGrid_FindEntity (0x1400f9a60)
 // ============================================================
@@ -129,27 +136,34 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
     // --- Profession text (parameter 1 on textFollow at +0xC8) ---
     // If isChild (age < childThreshold) OR hasWorkplace: show child/worker profession
     // Otherwise: show current profession description
-    bool isChild = (*(float*)(ai + 0x3C) < *(float*)(*(uintptr_t*)(ai + 0x288) + 0x44));
+    // isChild: guard the CitizenAI +0x288 desc backref (garbage/-1 in standalone).
+    uintptr_t descBack = *(uintptr_t*)(ai + 0x288);
+    bool isChild = FD_OkPtr(descBack) &&
+                   (*(float*)(ai + 0x3C) < *(float*)(descBack + 0x44));
     bool hasWorkplace = (*(uintptr_t*)(ai + 0x208) != 0);
 
     {
-        uintptr_t profEntry;
+        uintptr_t profEntry = 0;
         if (isChild || hasWorkplace) {
             // ProfessionList at gameWorld+0xB0 -> +0x40 (child) or +0x48 (worker)
             uintptr_t profListBase = *(uintptr_t*)(*(uintptr_t*)*g_pGameWorldSingleton + 0xB0);
-            if (*(uintptr_t*)(ai + 0x208) == 0) {
-                profEntry = *(uintptr_t*)(profListBase + 0x40);  // child profession
-            } else {
-                profEntry = *(uintptr_t*)(profListBase + 0x48);  // worker profession
+            if (FD_OkPtr(profListBase)) {
+                if (*(uintptr_t*)(ai + 0x208) == 0) {
+                    profEntry = *(uintptr_t*)(profListBase + 0x40);  // child profession
+                } else {
+                    profEntry = *(uintptr_t*)(profListBase + 0x48);  // worker profession
+                }
             }
         } else {
             profEntry = *(uintptr_t*)(ai + 0x1F0);  // current profession description
         }
 
         // Build UI::String from profession entry's string table (+0x20) and name key (+0x30)
-        // Convert to System::String and set as parameter 1 on textFollow
+        // Convert to System::String and set as parameter 1 on textFollow.
+        // Guard: profEntry (and its +0x20 string-table ptr) can be garbage in standalone
+        // where the profession-description data is not live — deref would hardfault.
         void* textFollow = *(void**)(s + 0xC8);
-        if (profEntry && textFollow) {
+        if (FD_OkPtr(profEntry) && FD_OkPtr(*(uint64_t*)(profEntry + 0x20)) && textFollow) {
             uint8_t uiStr[16];
             fn_UIString_Ctor(uiStr, *(uint64_t*)(profEntry + 0x20), (void*)(profEntry + 0x30));
             uint8_t sysStr[8];

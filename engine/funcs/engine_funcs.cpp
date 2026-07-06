@@ -580,6 +580,20 @@ fn_SceneRemoveObject_t fn_SceneRemoveObject = nullptr;
 fn_Transform_FromYawPitchOffset_t fn_Transform_FromYawPitchOffset = nullptr;
 fn_Geometry_SetTransform_t fn_Geometry_SetTransform = nullptr;
 fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy = nullptr;
+// Graphics::EdgeMesh family (selection-outline tessellation)
+fn_MemAllocStatic_t                fn_MemAllocStatic = nullptr;
+fn_Vector3_DefaultCtor_t           fn_Vector3_DefaultCtor = nullptr;
+fn_Quaternion_Ctor_t               fn_Quaternion_Ctor = nullptr;
+fn_Box_Ctor_t                      fn_Box_Ctor = nullptr;
+fn_Box_Extend_t                    fn_Box_Extend = nullptr;
+fn_Box_Assign_t                    fn_Box_Assign = nullptr;
+fn_EdgeMesh_Ctor_t                 fn_EdgeMesh_Ctor = nullptr;
+fn_EdgeMesh_TriangleVertex_Ctor_t  fn_EdgeMesh_TriangleVertex_Ctor = nullptr;
+fn_EdgeMesh_EdgeVertex_Ctor_t      fn_EdgeMesh_EdgeVertex_Ctor = nullptr;
+fn_EdgeMesh_Set_t                  fn_EdgeMesh_Set = nullptr;
+fn_EdgeMesh_SetMaterials_t         fn_EdgeMesh_SetMaterials = nullptr;
+fn_EdgeMeshInstance_SetMesh_t      fn_EdgeMeshInstance_SetMesh = nullptr;
+fn_EdgeMeshInstance_Ctor_t         fn_EdgeMeshInstance_Ctor = nullptr;
 fn_TileRender_t fn_TileRender = nullptr;
 fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
 fn_FencedPlacementParams_t fn_FencedPlacementParams = nullptr;
@@ -3184,6 +3198,41 @@ bool EngineFuncsInit() {
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152888));
         if (dispatch) fn_MeshInstance_UpdateHierarchy = reinterpret_cast<fn_MeshInstance_UpdateHierarchy_t>(*dispatch);
+    }
+
+    // --- Graphics::EdgeMesh family (selection-outline tessellation) ---
+    // Resolve by mangled name (Runtime exports). The exe dispatch slots that
+    // reach these (0x140151338/348/368/378/380/388/390, 0x1401513b8/f0/f8,
+    // 0x140152a78/b60) are empty in standalone, so ResolveExport is primary.
+    fn_MemAllocStatic = reinterpret_cast<fn_MemAllocStatic_t>(
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
+    fn_Vector3_DefaultCtor = reinterpret_cast<fn_Vector3_DefaultCtor_t>(
+        ResolveExport("??0Vector3@Math@@QEAA@XZ"));
+    fn_Quaternion_Ctor = reinterpret_cast<fn_Quaternion_Ctor_t>(
+        ResolveExport("??0Quaternion@Math@@QEAA@MMMM@Z"));
+    fn_Box_Ctor = reinterpret_cast<fn_Box_Ctor_t>(
+        ResolveExport("??0Box@Volume@@QEAA@XZ"));
+    fn_Box_Extend = reinterpret_cast<fn_Box_Extend_t>(
+        ResolveExport("?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z"));
+    fn_Box_Assign = reinterpret_cast<fn_Box_Assign_t>(
+        ResolveExport("??4Box@Volume@@QEAAAEAV01@AEBV01@@Z"));
+    fn_EdgeMesh_Ctor = reinterpret_cast<fn_EdgeMesh_Ctor_t>(
+        ResolveExport("??0EdgeMesh@Graphics@@QEAA@XZ"));
+    fn_EdgeMesh_TriangleVertex_Ctor = reinterpret_cast<fn_EdgeMesh_TriangleVertex_Ctor_t>(
+        ResolveExport("??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z"));
+    fn_EdgeMesh_EdgeVertex_Ctor = reinterpret_cast<fn_EdgeMesh_EdgeVertex_Ctor_t>(
+        ResolveExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z"));
+    fn_EdgeMesh_Set = reinterpret_cast<fn_EdgeMesh_Set_t>(
+        ResolveExport("?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z"));
+    fn_EdgeMesh_SetMaterials = reinterpret_cast<fn_EdgeMesh_SetMaterials_t>(
+        ResolveExport("?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@000@Z"));
+    fn_EdgeMeshInstance_SetMesh = reinterpret_cast<fn_EdgeMeshInstance_SetMesh_t>(
+        ResolveExport("?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@PEAVMeshInstance@2@@Z"));
+    fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
+        ResolveExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ"));
+    if (!fn_EdgeMeshInstance_Ctor) {
+        fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
+            ResolveAddr(Module::Runtime, 0x1800174f0));
     }
     // CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering (exe function)
     fn_TileRender = reinterpret_cast<fn_TileRender_t>(

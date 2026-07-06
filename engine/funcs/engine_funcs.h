@@ -5127,6 +5127,92 @@ extern fn_Geometry_SetTransform_t fn_Geometry_SetTransform;
 typedef void (*fn_MeshInstance_UpdateHierarchy_t)(void* mesh);
 extern fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy;
 
+// ============================================================
+// Graphics::EdgeMesh family — selection-outline tessellation
+// (used by the ported entity-highlight render chain in
+//  code/Game/Player/tool_base_render.cpp). All resolved from
+//  Runtime-x64.dll by mangled name (the exe reaches them via the
+//  dispatch slots noted; those slots are empty in standalone).
+// ============================================================
+
+// System::MemoryAllocator::MemAlloc — STATIC (size, alignment) -> void*
+// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z   (exe slot 0x140152b60)
+// NOTE: distinct from fn_MemAlloc (the member form taking the singleton).
+typedef void* (*fn_MemAllocStatic_t)(uint64_t size, int alignment);
+extern fn_MemAllocStatic_t fn_MemAllocStatic;
+
+// Math::Vector3::Vector3() — default ctor (zero). exe slot 0x140152a78
+// ??0Vector3@Math@@QEAA@XZ
+typedef void* (*fn_Vector3_DefaultCtor_t)(void* self);
+extern fn_Vector3_DefaultCtor_t fn_Vector3_DefaultCtor;
+
+// Math::Quaternion::Quaternion(x,y,z,w). exe slot 0x140151348
+// ??0Quaternion@Math@@QEAA@MMMM@Z
+typedef void* (*fn_Quaternion_Ctor_t)(void* self, float x, float y, float z, float w);
+extern fn_Quaternion_Ctor_t fn_Quaternion_Ctor;
+
+// Volume::Box::Box() — default ctor. exe slot 0x1401513f8
+// ??0Box@Volume@@QEAA@XZ
+typedef void* (*fn_Box_Ctor_t)(void* self);
+extern fn_Box_Ctor_t fn_Box_Ctor;
+
+// Volume::Box::Extend(const Vector3&) const -> Box (value return). exe slot 0x1401513f0
+// ?Extend@Box@Volume@@QEBA?AV12@AEBVVector3@Math@@@Z
+// Member value-return ABI: RCX=this(box), RDX=retbuf(Box*), R8=Vector3* -> returns retbuf.
+typedef void* (*fn_Box_Extend_t)(void* box, void* retbuf, const void* vec3);
+extern fn_Box_Extend_t fn_Box_Extend;
+
+// Volume::Box::operator=(const Box&) -> Box&. exe slot 0x1401513b8
+// ??4Box@Volume@@QEAAAEAV01@AEBV01@@Z   RCX=this, RDX=src -> returns this
+typedef void* (*fn_Box_Assign_t)(void* dst, const void* src);
+extern fn_Box_Assign_t fn_Box_Assign;
+
+// Graphics::EdgeMesh::EdgeMesh() — ctor. exe slot 0x140151338
+// ??0EdgeMesh@Graphics@@QEAA@XZ
+typedef void* (*fn_EdgeMesh_Ctor_t)(void* self);
+extern fn_EdgeMesh_Ctor_t fn_EdgeMesh_Ctor;
+
+// Graphics::EdgeMesh::TriangleVertex::TriangleVertex(const Vector3&). exe slot 0x140151378
+// ??0TriangleVertex@EdgeMesh@Graphics@@QEAA@AEBVVector3@Math@@@Z   -> returns this (8-byte vtx)
+typedef void* (*fn_EdgeMesh_TriangleVertex_Ctor_t)(void* self, const void* vec3);
+extern fn_EdgeMesh_TriangleVertex_Ctor_t fn_EdgeMesh_TriangleVertex_Ctor;
+
+// Graphics::EdgeMesh::EdgeVertex::EdgeVertex(const TriangleVertex&, TriangleVertex&, int). slot 0x140151390
+// ??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z  -> returns this (16-byte vtx)
+typedef void* (*fn_EdgeMesh_EdgeVertex_Ctor_t)(void* self, const void* tvA, const void* tvB, int flags);
+extern fn_EdgeMesh_EdgeVertex_Ctor_t fn_EdgeMesh_EdgeVertex_Ctor;
+
+// Graphics::EdgeMesh::Set(...) — 25 params. exe slot 0x140151380
+// ?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z
+// Layout: (this, int, const TriList*, int, const TriList*, then four
+//          {int,ushort*,int,void*,int} vertex/index streams, const Box&).
+typedef bool (*fn_EdgeMesh_Set_t)(
+    void* self,
+    int a0, const void* triList0,
+    int a1, const void* triList1,
+    int c0, void* p0, int c1, void* p1, int stride0,
+    int c2, void* p2, int c3, void* p3, int e2,
+    int c4, void* p4, int c5, void* p4b, int stride1,
+    int c6, void* p6, int c7, void* p7, int e6,
+    const void* box);
+extern fn_EdgeMesh_Set_t fn_EdgeMesh_Set;
+
+// Graphics::EdgeMesh::SetMaterials(m0,m1,m2,m3) — ExternalPtr<MaterialInstance> by value (8B each).
+// ?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@000@Z  slot 0x140151388
+typedef void (*fn_EdgeMesh_SetMaterials_t)(void* self, void* m0, void* m1, void* m2, void* m3);
+extern fn_EdgeMesh_SetMaterials_t fn_EdgeMesh_SetMaterials;
+
+// Graphics::EdgeMeshInstance::SetMesh(ExternalPtr<EdgeMesh>, arg). exe slot 0x140151368
+// ?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@...@Z
+typedef void (*fn_EdgeMeshInstance_SetMesh_t)(void* self, void* mesh, void* arg);
+extern fn_EdgeMeshInstance_SetMesh_t fn_EdgeMeshInstance_SetMesh;
+
+// Graphics::EdgeMeshInstance::EdgeMeshInstance() — default ctor (constructs the
+// HighlightComponent+0x28 sub-object, which is zeroed under COMPONENT_INERT_FACTORY).
+// ??0EdgeMeshInstance@Graphics@@QEAA@XZ   (Runtime 0x1800174f0)
+typedef void* (*fn_EdgeMeshInstance_Ctor_t)(void* self);
+extern fn_EdgeMeshInstance_Ctor_t fn_EdgeMeshInstance_Ctor;
+
 // CharacterComponent_impl_08c0 (0x1401008c0) — tile debug overlay rendering
 // Submits colored tile arrays to the scene. Used by all Draw functions.
 // RCX=self, RDX=Context*, R8=tileArray1, R9=tileArray2

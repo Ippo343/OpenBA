@@ -1,28 +1,45 @@
 // standalone/reg_player_render.cpp
 // Player registration wave, round 2d — batch "render" registrar.
 //
-// VERDICT: target DEFERRED — this registrar is intentionally EMPTY.
-// See code/Game/Player/tool_base_render.cpp for the full closure analysis.
+// Entity SELECTION-OUTLINE (the retail yellow outline around a selected/followed
+// entity). The full HighlightComponent EdgeMesh tessellation chain is ported in
+// code/Game/Player/tool_base_render.cpp (b930 tessellator + c4a0 render mutation
+// + the c9e0/cb40/7080/b440/b10e0/74a0 closure). This registrar wires the entry
+// points our other reimplemented code reaches by exe address:
 //
-// 0x1400fcc90 Entity_impl_cc90 — DEFER. Closure transits Entity_impl_c4a0
-//   (0x14004c4a0, render mutation against the live Graphics::Scene) ->
-//   TradeWork_impl_b930 (0x14004b930, ~250-line EdgeMesh tessellation/vertex-buffer
-//   builder). b930 cannot be ported 1:1 with confidence: CONCAT44 count/capacity
-//   packing aliased with ushort* views, multiple inlined array-growth loops with
-//   divergent strides, and a ~28-argument Graphics::EdgeMesh::Set whose arg recovery
-//   is unreliable. Per the wave SAFETY RULE, deferring b930 defers its whole consumer
-//   chain (c4a0 -> cb40 -> cc90).
+//   0x1400fc9e0  Entity_impl_c9e0  -> HighlightSelect_Impl   (select finalize; the
+//                one edittool_select.cpp resolves as s_fn_c9e0 to paint the outline)
+//   0x14004c4a0  Entity_impl_c4a0  -> HighlightRepaint_Impl  (rebuild+resubmit mesh)
+//   0x1400fcb40  Entity_impl_cb40  -> HighlightClear_Impl    (clear highlight flag)
 //
-//   Also unregistered in the closure (to land in the dedicated sub-wave, bottom-up):
-//     exe code : 0x140007080 0x1400074a0 0x14004b440 0x1400b10e0 (portable leaves)
-//                0x14004b930 0x14004c4a0 0x1400fcb40 0x1400fcc90
-//     slots    : 0x140151378 0x140151390 0x140152b60 0x140152b68 (all -> Runtime exports)
+// *** DEFAULT OFF — gated on BANISHED_SELECTION_OUTLINE ***
+// When the env var is unset (the shipping default) NOTHING is registered, so
+// s_fn_c9e0/s_fn_cc90 in edittool_select.cpp stay null and the select path is
+// byte-identical to today (info dialog opens, no overlay). This is deliberate:
+// b930 mutates the live Graphics::Scene, so a wrong tessellation would be silent
+// corruption with no A/B signal on this DORMANT path — keeping it opt-in means
+// the default build is provably unaffected. Enable with
+//   BANISHED_SELECTION_OUTLINE=1 make sa-run   (or add to a test env combo).
 //
-// Registering cc90 with b930 half-ported is silent corruption on a DORMANT (edit-tool
-// overlay) path the A/B test cannot catch — strictly worse than the safe no-op.
+// The internal closure (b930, b440, b10e0, 74a0, 7080, cb40) is NOT registered
+// separately — those are direct C++ calls within the ported TU. (b10e0 is also
+// registered by RegisterPlayerTileRenderBatch for the placement footprint grid;
+// registering it here too would double-register.)
 #ifdef STANDALONE_EXE
+#include "resolve.h"
+#include <cstdint>
+#include <cstdlib>
+
+extern "C" void HighlightSelect_Impl(void*);    // 0x1400fc9e0
+extern "C" void HighlightClear_Impl(void*);     // 0x1400fcb40
+extern "C" void HighlightRepaint_Impl(void*);   // 0x14004c4a0
 
 void RegisterPlayerRenderBatch() {
-    // intentionally empty — 0x1400fcc90 DEFERRED (see header / tool_base_render.cpp)
+    const char* e = std::getenv("BANISHED_SELECTION_OUTLINE");
+    if (!e || !e[0] || e[0] == '0') return;   // default OFF -> leave everything unregistered
+
+    RegisterExeAddr(0x1400fc9e0, reinterpret_cast<uintptr_t>(&HighlightSelect_Impl));
+    RegisterExeAddr(0x1400fcb40, reinterpret_cast<uintptr_t>(&HighlightClear_Impl));
+    RegisterExeAddr(0x14004c4a0, reinterpret_cast<uintptr_t>(&HighlightRepaint_Impl));
 }
 #endif

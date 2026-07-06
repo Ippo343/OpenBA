@@ -481,6 +481,7 @@ extern void RegisterPlayerScreenRectBatch();// Player wave r2d (screenrect): 100
 extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 HighlightAdd -> b0d80 -> ace40 tessellation + BST family (TIER-2 geometry, worker-thread-free)
 extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 CreateBar populate+position (e600/e420/e700/e360/ebb0 same-TU; ec70/fe960 via ResolveAddr)
 extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 + 1008c0 + 101380 green/red footprint validity overlay (f5d0/0f90 already registered)
+extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh tessellation -> c4a0/c9e0/cb40); GATED default-OFF on BANISHED_SELECTION_OUTLINE
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -610,6 +611,10 @@ static void RegisterCodeFunctions() {
     RegisterPlayerTileRenderBatch();// GUI Phase 3C: b10e0 + 1008c0 + 101380 — the green/red
     //   footprint validity overlay tiles (closes reg_player_place.cpp's 101380 DEFER).
     //   f5d0 (reg_player_path) + 0f90 (reg_pf_road) already registered; render exports resolved in-TU.
+    RegisterPlayerRenderBatch();   // Selection outline: b930 EdgeMesh tessellation chain ->
+    //   c9e0 select-finalize (edittool_select's s_fn_c9e0) + c4a0 render + cb40 clear.
+    //   GATED default-OFF (BANISHED_SELECTION_OUTLINE): registers nothing unless enabled,
+    //   so the shipping select path stays byte-identical. See reg_player_render.cpp.
     RegisterToolbarUtilityBatch(); // GUI Phase 4: utility-dialog (toolbar case 2) helpers —
     //   140100270 FindDialogByControllerType + 140014890 BST_Insert_0x14. Retrace 14b40 already
     //   registered (reg_keystone_a_restree); child-dialog vtable via RegisterPlayerToolUIBatch.
