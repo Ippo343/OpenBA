@@ -308,6 +308,23 @@ void EditTool_Startup_Impl(EditTool* self) {
     // Resolve lazy/weak pointer
     if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
 
+    // If the referenced info dialog was destroyed while this EditTool kept its
+    // selection — in standalone the panel's close (ToolUI CloseDialog) does NOT tear
+    // the tool down the way retail's EntityUI::Slot9 -> SetEditMode(0) does — CheckPtr
+    // marks the IBP with the -1 "dead reference" sentinel (0xffffffffffffffff). The
+    // code below dereferences it and calls GetController(-1,...), which faults deep in
+    // the Runtime. Treat a dead / non-canonical ref as "nothing selected": clear it so
+    // the per-frame tick becomes a safe no-op (line above already early-outs on 0).
+    // In DLL mode the dialog is always live here (retail destroys the tool on close),
+    // so this guard never triggers.
+    {
+        uintptr_t resolved = *(uintptr_t*)entityIBP;
+        if (resolved < 0x10000 || resolved > 0x00007FFFFFFFFFFFULL) {
+            self->entityRef = 0;
+            return;
+        }
+    }
+
     // Get ToolUI controller from dialog
     uintptr_t dialogPtr = *(uintptr_t*)entityIBP;  // deref IBP to get dialog
     uintptr_t controllerResult = 0;
