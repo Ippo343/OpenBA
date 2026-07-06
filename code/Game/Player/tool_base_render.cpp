@@ -79,6 +79,18 @@ static inline bool OTrace() {
 }
 #define OT(...) do { if (OTrace()) { std::fprintf(stderr, "[Outline] " __VA_ARGS__); std::fprintf(stderr, "\n"); } } while(0)
 
+// The whole outline chain is opt-in (BANISHED_SELECTION_OUTLINE) — normally
+// gated by NOT registering the exe addresses (standalone/reg_player_render.cpp).
+// The per-frame follow re-sync (Impl_HighlightFollow) is instead reached by a
+// direct cross-TU call from EditTool_Startup_Impl, so it self-gates on the same
+// env var to stay a no-op on the shipping default path (both build modes).
+static int s_outlineEnabled = -1;
+static inline bool OutlineEnabled() {
+    if (s_outlineEnabled < 0) { const char* e = std::getenv("BANISHED_SELECTION_OUTLINE");
+                                s_outlineEnabled = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s_outlineEnabled != 0;
+}
+
 namespace {
 
 // ---- exe .rdata float constants (NULL in standalone -> real-value fallback) ----
@@ -767,6 +779,70 @@ void Impl_cc90(int64_t self) {
     Impl_cb40(self);   // clear the previous entity's outline; leave dialog/refs alone
 }
 
+// ===========================================================================
+// HighlightFollow — per-frame transform re-sync so a MOVING selected entity's
+//   outline TRACKS it (walking citizens). self = EditTool* (its +0x30 = the
+//   currently-selected entity, set by d3b0/edittool_select.cpp:258).
+//
+// NOT a retail function. Retail relies on the Graphics::Scene ticking
+// EdgeMeshInstance::Update (vtable slot [1]) on every scene geometry each frame;
+// that Update re-reads the transform from the instance's bound MeshInstance
+// (EdgeMeshInstance+0xc8, set by SetMesh's 3rd arg = the ModelComponent's
+// MeshInstance at ModelComp+0x28) at +0x84 and Geometry::SetTransform's it — so
+// the outline stays glued to the model. In standalone the Graphics::Scene is a
+// passive render container: geometry is repositioned EXPLICITLY per frame (the
+// citizen move-tick calls Geometry::SetTransform on its own MeshInstance, see
+// citizenai_executor.cpp:582). c4a0 calls EdgeMeshInstance::Update only ONCE at
+// select, so the outline freezes at the click location while the citizen walks
+// away — its skinning still animates because the bone palette lives in the
+// shared MeshInstance, but the world transform never re-syncs. This re-runs that
+// same Update every frame over the selected entity's active HighlightComponent,
+// so the outline follows.
+//
+// For BUILDING highlights (the c4a0 "build" branch) the instance's bound
+// MeshInstance (+0xc8) is null — SetMesh's 3rd arg was 0 — so
+// EdgeMeshInstance::Update early-outs; buildings don't move, so this is a
+// harmless no-op for them.
+// ===========================================================================
+void Impl_HighlightFollow(int64_t self) {
+    if (!OutlineEnabled()) return;
+    EnsureFuncs();
+    if (*reinterpret_cast<int64_t*>(self + 0x30) == 0) return;      // nothing selected
+    CheckPtr(reinterpret_cast<void*>(self + 0x30));                 // resolve the entity IBP
+    int64_t entity = *reinterpret_cast<int64_t*>(self + 0x30);
+    // Dead / non-canonical ref (a torn-down entity leaves the -1 sentinel) — Sub7080
+    // would deref it. Treat as "nothing to follow" (mirrors edittool.cpp:328).
+    if (static_cast<uint64_t>(entity) < 0x10000 ||
+        static_cast<uint64_t>(entity) > 0x00007FFFFFFFFFFFULL) return;
+
+    uint64_t hi = 0;
+    Sub7080(entity, &hi);                                           // find HighlightComponent
+    if (hi == 0) return;
+    CheckPtr(&hi);
+    if (*reinterpret_cast<char*>(hi + 0x11c) == 0) return;          // highlight not active
+    if (*reinterpret_cast<int32_t*>(hi + 0x120) < 0) return;        // not currently in the scene
+
+    void* inst = reinterpret_cast<void*>(hi + 0x28);                // embedded EdgeMeshInstance
+    if (*reinterpret_cast<void**>(inst) == nullptr) return;         // unconstructed (inert) — skip
+
+    uint8_t time[8];
+    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
+    // vtable slot [1] = EdgeMeshInstance::Update(time): pulls the current transform
+    // from the bound MeshInstance (+0xc8 -> +0x84) and Geometry::SetTransform's it.
+    reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
+
+    if (OTrace()) {
+        static long s_n = 0;
+        void* bound = *reinterpret_cast<void**>(reinterpret_cast<int64_t>(inst) + 0xc8);
+        if ((s_n++ % 120) == 0 && bound) {
+            // Transform copied by Update starts at boundMesh+0x84; world pos is the
+            // trailing xyz (+0x94/+0x98/+0x9c). Confirms the outline is re-syncing.
+            float* p = reinterpret_cast<float*>(reinterpret_cast<int64_t>(bound) + 0x94);
+            OT("FOLLOW hi=%p boundMesh=%p pos=(%.3f,%.3f,%.3f)", (void*)hi, bound, p[0], p[1], p[2]);
+        }
+    }
+}
+
 }  // namespace
 
 // ===========================================================================
@@ -779,3 +855,8 @@ extern "C" void HighlightSelect_Impl(void* self)   { Impl_c9e0(reinterpret_cast<
 extern "C" void HighlightClear_Impl(void* self)     { Impl_cb40(reinterpret_cast<int64_t>(self)); }  // 0x1400fcb40
 extern "C" void HighlightRepaint_Impl(void* self)   { Impl_c4a0(reinterpret_cast<int64_t>(self)); }  // 0x14004c4a0
 extern "C" void HighlightDeselect_Impl(void* self)  { Impl_cc90(reinterpret_cast<int64_t>(self)); }  // 0x1400fcc90
+
+// Per-frame follow re-sync (NOT an exe address). Called directly from
+// EditTool_Startup_Impl (edittool.cpp) every frame; self-gates on
+// BANISHED_SELECTION_OUTLINE so it is a no-op unless the outline is enabled.
+extern "C" void HighlightFollow_Impl(void* self)    { Impl_HighlightFollow(reinterpret_cast<int64_t>(self)); }

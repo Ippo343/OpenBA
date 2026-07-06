@@ -300,10 +300,20 @@ static void EnsureEditFuncs() {
 // is false, gets entity screen rect and positions dialog near it.
 //
 // Original: 0x1400fcda0
+// Per-frame selection-outline follow re-sync (tool_base_render.cpp). Keeps a
+// moving selected entity's yellow outline glued to it as it walks. Self-gates on
+// BANISHED_SELECTION_OUTLINE, so it is a no-op on the shipping default path.
+extern "C" void HighlightFollow_Impl(void* self);
+
 void EditTool_Startup_Impl(EditTool* self) {
     EnsureEditFuncs();
 
     uintptr_t selfAddr = (uintptr_t)self;
+
+    // Re-sync the selection outline to the (possibly moving) selected entity every
+    // frame BEFORE the dialog-positioning early-outs below — the follow reads the
+    // selected-entity ref at +0x30 and is independent of the info dialog at +0x28.
+    HighlightFollow_Impl(self);
 
     // Early out: if entity IBP at +0x28 is null, nothing to do
     if (self->entityRef == 0)
