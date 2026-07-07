@@ -18,6 +18,10 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#endif
 
 // ============================================================
 // Resolved helpers
@@ -148,12 +152,213 @@ void DecalComponent_Serialize(DecalComponent* self) {
 // ============================================================
 // DecalComponent::Draw (vtable slot [6], 0x14011b560)
 // ============================================================
-// Complex terrain decal rendering: 111 instructions.
-// Reads building data, entity position, decal textures.
-// Delegates to original function.
+// Real terrain-decal rendering (was a delegate to the exe body). Faithful 1:1 port of
+// the 0x14011b560 disassembly: read the building footprint (MapComponent tile bbox +
+// rotation), the model variant index (ModelComponent+0x164 → per-variant UV rect), and
+// the DecalDescription (material list + tiled/uv params), then submit one decal to the
+// terrain-decal system (gameWorld+0x110) via AddDecal (TradeWork_impl_0d80 @ b0d80).
+// AddDecal fills a slot in the +0x1f0 array and tessellates it (ace40); the slot is then
+// rendered every frame by GeomDraw_CollectDraw's +0x1f0 loop (geometry_draw.cpp). The
+// resulting decalId is stored at self+0x2c so OnCreate can release it.
+//
+// This is the brown ground foundation under a StorageYard (and any building carrying a
+// DecalDescription). STANDALONE: reached via the live vtable / driver below when
+// BANISHED_LIVE_DECAL is set; the b0d80 → ace40 closure must be registered
+// (reg_player_highlight.cpp) and the Transform2/Vector2 slots wired.
+
+// AddDecal (0x1400b0d80, tool_base_highlight.cpp) — 19-arg tile-slot manager + tessellate.
+extern "C" int TradeWork_impl_0d80(int64_t sys, int minX, int minY, int maxX, int maxY,
+                                   uint8_t alpha, uint32_t rot, int64_t material,
+                                   uint8_t tiledFlag, uint32_t p10, uint32_t uv0, uint32_t uv1,
+                                   uint32_t uv2, uint32_t uv3, char p15, int p16, int p17,
+                                   uint64_t p18, uint8_t p19);
+
+// Draw-path helpers (resolved independently of DecalComponent_InitFuncs, which is only
+// called from the DLL hook — in standalone the driver calls Draw without InitFuncs).
+typedef void  (*fn_CheckPtr_draw_t)(void* ptr);
+typedef void* (*fn_FindComp_t)(void* entityInner, void* retIBP);
+static fn_CheckPtr_draw_t s_fn_CheckPtr_draw   = nullptr;
+static fn_FindComp_t      s_fn_FindComp_Map    = nullptr;   // 0x140004680 (MapComponent)
+static fn_FindComp_t      s_fn_FindComp_Model  = nullptr;   // 0x140003f60 (ModelComponent)
+static void**             s_pGameStateDraw      = nullptr;   // DAT_1401c3dd8
+static bool s_drawHelpersInit = false;
+
+static bool DecalTraceOn() {
+    static int v = -1;
+    if (v < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
+                 v = (e && *e && e[0] != '0') ? 1 : 0; }
+    return v == 1;
+}
+
+// DecalDescription type-id (DAT_1401c75b8). In DLL mode the raw .rdata slot holds the id;
+// in standalone that .rdata address resolves NULL, so fall back to the runtime type
+// registry (valid after Object::Factory::Startup) — same split as StorageDisplayComponent.
+static uint32_t DecalDescTypeId() {
+    if (s_TypeId_DecalDesc && *s_TypeId_DecalDesc != 0 && *s_TypeId_DecalDesc != 0xFFFFFFFF)
+        return *s_TypeId_DecalDesc;
+#ifdef STANDALONE_EXE
+    static uint32_t cached = 0;
+    if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("DecalDescription");
+    if (cached != 0xFFFFFFFF) return cached;
+#endif
+    return 0;
+}
+
+static void EnsureDrawHelpers() {
+    if (s_drawHelpersInit) return;
+    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152ab0);   // InternalBasePtr::CheckPtr
+    if (slot) s_fn_CheckPtr_draw = *reinterpret_cast<fn_CheckPtr_draw_t*>(slot);
+    s_fn_FindComp_Map   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+    s_fn_FindComp_Model = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    s_pGameStateDraw    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
+    if (!s_TypeId_DecalDesc)
+        s_TypeId_DecalDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75b8));
+    if (!s_fn_IsDerivedFrom_dispatch) {
+        uintptr_t s = ResolveAddr(Module::Exe, 0x140152a98);
+        if (s) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(s);
+    }
+    s_drawHelpersInit = true;
+}
+
 void DecalComponent_Draw(DecalComponent* self) {
-    if (s_fn_OriginalDraw)
-        s_fn_OriginalDraw(self);
+    EnsureDrawHelpers();
+    static int s_dbg = 0;
+    bool trc = DecalTraceOn() && (s_dbg < 30);
+    if (trc) { ++s_dbg;
+        fprintf(stderr, "[Decal] Draw ENTER self=%p gs=%p findMap=%p findModel=%p\n",
+                (void*)self, s_pGameStateDraw ? *s_pGameStateDraw : nullptr,
+                (void*)s_fn_FindComp_Map, (void*)s_fn_FindComp_Model); fflush(stderr); }
+    if (!self || !s_pGameStateDraw || !*s_pGameStateDraw) {
+        if (trc) { fprintf(stderr, "[Decal]   bail: no gamestate\n"); fflush(stderr); }
+        return;
+    }
+    uintptr_t selfA = reinterpret_cast<uintptr_t>(self);
+
+    // CheckPtr(owner) then FindComponent(MapComponent) for the tile footprint.
+    if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
+    uintptr_t mapBuf[2] = {0, 0};
+    if (s_fn_FindComp_Map) s_fn_FindComp_Map(*reinterpret_cast<void**>(selfA + 0x10), mapBuf);
+    if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(mapBuf);
+    uintptr_t mapComp = mapBuf[0];
+    if (!mapComp) {
+        if (trc) { fprintf(stderr, "[Decal]   bail: no MapComponent\n"); fflush(stderr); }
+        return;
+    }
+
+    int minX   = *reinterpret_cast<int16_t*>(mapComp + 0x28);
+    int minY   = *reinterpret_cast<int16_t*>(mapComp + 0x2a);
+    int width  = *reinterpret_cast<int16_t*>(mapComp + 0x2c);
+    int height = *reinterpret_cast<int16_t*>(mapComp + 0x2e);
+    uint32_t rotation = *reinterpret_cast<uint32_t*>(mapComp + 0x30);
+
+    // FindComponent(ModelComponent) → per-variant UV rect index (+0x164). Default 0.
+    int variant = 0;
+    if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
+    uintptr_t modelBuf[2] = {0, 0};
+    if (s_fn_FindComp_Model) s_fn_FindComp_Model(*reinterpret_cast<void**>(selfA + 0x10), modelBuf);
+    if (modelBuf[0] != 0) {
+        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(modelBuf);
+        variant = *reinterpret_cast<int16_t*>(modelBuf[0] + 0x164);
+    }
+
+    // DecalDescription = IsDerivedFrom(self+0x18, DecalDescription typeId) ? self+0x18 : null.
+    void* obj = *reinterpret_cast<void**>(selfA + 0x18);
+    uint32_t decalTid = DecalDescTypeId();
+    void* decalDesc = nullptr;
+    if (s_fn_IsDerivedFrom_dispatch && decalTid && obj &&
+        s_fn_IsDerivedFrom_dispatch(obj, decalTid))
+        decalDesc = obj;
+    if (!decalDesc) {
+        if (trc) { fprintf(stderr, "[Decal]   bail: obj=%p not DecalDescription (tid=0x%08x)\n",
+                           obj, decalTid); fflush(stderr); }
+        return;
+    }
+    uintptr_t dd = reinterpret_cast<uintptr_t>(decalDesc);
+
+    // SA fixup: retail DecalComponent::Serialize copies decalScale (+0x30) from the
+    // DecalDescription's _initialAlpha (+0x20); that lifecycle slot never runs in
+    // standalone (inert component → +0x30 zero-filled), so seed it here or the decal
+    // would be drawn at alpha 0 (invisible). Mirrors DecalComponent_Serialize.
+    if (self->decalScale == 0.0f) self->decalScale = *reinterpret_cast<float*>(dd + 0x20);
+
+    // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
+    float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
+    float uv[4] = {0.0f, 0.0f, uvScale, uvScale};
+    int variantCount = *reinterpret_cast<int*>(dd + 0x40);
+    if (variant < variantCount) {
+        uintptr_t varr = *reinterpret_cast<uintptr_t*>(dd + 0x38);
+        if (varr) {
+            float* e = reinterpret_cast<float*>(varr + static_cast<uintptr_t>(variant) * 0x10);
+            uv[0] = e[0]; uv[1] = e[1]; uv[2] = e[2]; uv[3] = e[3];
+        }
+    }
+
+    uintptr_t gs = reinterpret_cast<uintptr_t>(*s_pGameStateDraw);
+    uintptr_t decalSys = *reinterpret_cast<uintptr_t*>(gs + 0x110);
+    if (!decalSys) {
+        if (trc) { fprintf(stderr, "[Decal]   bail: no decalSys (gs+0x110)\n"); fflush(stderr); }
+        return;
+    }
+
+    // material = DecalDescription material-array[decalState].
+    uintptr_t matArray = *reinterpret_cast<uintptr_t*>(dd + 0x28);
+    if (!matArray) {
+        if (trc) { fprintf(stderr, "[Decal]   bail: no material array (dd+0x28) state=%u\n",
+                           self->decalState); fflush(stderr); }
+        return;
+    }
+    int64_t material = *reinterpret_cast<int64_t*>(matArray + static_cast<uintptr_t>(self->decalState) * 8);
+
+    uint8_t  tiledFlag = *reinterpret_cast<uint8_t*>(dd + 0x24);
+    uint8_t  p19       = *reinterpret_cast<uint8_t*>(dd + 0x25);
+    uint32_t p10       = *reinterpret_cast<uint32_t*>(dd + 0x48);
+    int alpha = static_cast<int>(self->decalScale * 255.0f);   // DAT_14017222c = 255.0f
+
+    int id = TradeWork_impl_0d80(
+        static_cast<int64_t>(decalSys), minX, minY,
+        width - 1 + minX, height - 1 + minY,
+        static_cast<uint8_t>(alpha), rotation, material, tiledFlag,
+        p10,
+        *reinterpret_cast<uint32_t*>(&uv[0]), *reinterpret_cast<uint32_t*>(&uv[1]),
+        *reinterpret_cast<uint32_t*>(&uv[2]), *reinterpret_cast<uint32_t*>(&uv[3]),
+        '\0', 0, 0, 0, p19);
+    self->decalId = id;
+
+    // Diagnostic (BANISHED_DECAL_TRACE) — throttled. Confirms the decal path fires and
+    // whether AddDecal placed a slot (id>=0) or bailed (id==-1, e.g. null material).
+    static int s_traceOn = -1;
+    if (s_traceOn < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
+                         s_traceOn = (e && *e && e[0] != '0') ? 1 : 0; }
+    if (s_traceOn) {
+        static int s_budget = 0;
+        if (s_budget < 40) {
+            ++s_budget;
+            // Read back the tessellated slot geometry (slot = decalSys+0x1f0 base + id*0x60):
+            //   +0x08 vtx base, +0x10 vtxCount, +0x18 idx base, +0x20 idxCount.
+            // First vertex position shorts at vtx+0x00/+0x02/+0x04 (from caa0).
+            long vtxCount = -1, idxCount = -1; int px = 0, py = 0, pz = 0; void* vb = nullptr;
+            if (id >= 0) {
+                uintptr_t sbase = *reinterpret_cast<uintptr_t*>(decalSys + 0x1f0);
+                if (sbase) {
+                    uintptr_t slot = sbase + static_cast<uintptr_t>(id) * 0x60;
+                    vb       = *reinterpret_cast<void**>(slot + 0x08);
+                    vtxCount = *reinterpret_cast<int32_t*>(slot + 0x10);
+                    idxCount = *reinterpret_cast<int32_t*>(slot + 0x20);
+                    if (vb) { px = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x00);
+                              py = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x02);
+                              pz = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x04); }
+                }
+            }
+            fprintf(stderr, "[Decal] Draw self=%p tile=(%d,%d %dx%d) rot=%d tiled=%d "
+                    "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) sys=%p id=%d "
+                    "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d)\n",
+                    (void*)self, minX, minY, width, height, (int)rotation, (int)tiledFlag,
+                    (void*)material, variant, variantCount, alpha,
+                    uv[0], uv[1], uv[2], uv[3], (void*)decalSys, id,
+                    vtxCount, idxCount, vb, px, py, pz);
+            fflush(stderr);
+        }
+    }
 }
 
 // ============================================================
@@ -232,7 +437,111 @@ void DecalComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
-COMPONENT_INERT_FACTORY(DecalComponent, 0x38, 0xc3)
+// Building ground-decal rendering (BANISHED_LIVE_DECAL, default OFF — like
+// BANISHED_LIVE_STORAGEDISPLAY). A building's DecalDescription (e.g. StorageYard's
+// brown dirt "foundation" — StorageYard.rsc `decal` -> Terrain/TiledDecals/
+// StorageYardMaterial.rsc) is painted onto the terrain by DecalComponent::Draw, which
+// AddDecal's it into the terrain-decal system at gameWorld+0x110. That slot array is
+// walked + submitted every frame by GeomDraw_CollectDraw (geometry_draw.cpp), so the
+// decal only needs to be BUILT ONCE.
+//
+// DRIVER NOTE (same as StorageDisplayComponent): the retail decal build is driven by the
+// component lifecycle (OnCreate/OnAdded via the Fourth UpdatePriority bucket), which is
+// NOT ticked in standalone. So we drive it explicitly:
+//   * Startup slot (index 4 / +0x20) — dispatched by ComponentEntity::StartupComponents
+//     at spawn — registers each spawned DecalComponent into a driver list.
+//   * GameUpdateLoop::Update calls DecalComponent_DrainDraw(frame) once the scene is live;
+//     it Draw()s each registered component whose decal hasn't been placed yet
+//     (decalId < 0). Once AddDecal returns a slot index, decalId >= 0 and it is skipped
+//     (build-once; a still-loading material leaves decalId == -1 and retries next tick).
+// Default (env off) => nothing wired, list never populated, driver a no-op => the default
+// sa-run stays byte-identical.
+static uint32_t DecalComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("DecalComponent");
+    return cached;
+}
+static void* DecalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+static DecalComponent* s_decalDriveList[512];
+static int  s_decalDriveCount = 0;
+static void DecalComponent_RegisterDriven(DecalComponent* self) {
+    if (!self) return;
+    for (int i = 0; i < s_decalDriveCount; ++i)   // dedup (Startup can re-run on reload)
+        if (s_decalDriveList[i] == self) return;
+    if (s_decalDriveCount < 512) s_decalDriveList[s_decalDriveCount++] = self;
+}
+
+// index 4 — Startup(self): register this instance for the per-frame driver.
+static void DecalComponent_StartupVSlot(void* s) {
+    DecalComponent_RegisterDriven(reinterpret_cast<DecalComponent*>(s));
+    if (DecalTraceOn()) {
+        static int n = 0;
+        if (n < 8) { ++n; fprintf(stderr, "[Decal] Startup registered self=%p (count=%d)\n",
+                                  s, s_decalDriveCount); fflush(stderr); }
+    }
+}
+// index 6 — Draw(self): build + submit the terrain decal.
+static void DecalComponent_DrawVSlot(void* s) {
+    DecalComponent_Draw(reinterpret_cast<DecalComponent*>(s));
+}
+// index 7 — OnCreate(self): release the decal slot (already reimplemented).
+static void DecalComponent_OnCreateVSlot(void* s) {
+    DecalComponent_OnCreate(reinterpret_cast<DecalComponent*>(s));
+}
+static void DecalComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) {
+        DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);
+        DecalComponent_LiveVtable[6] = reinterpret_cast<void*>(&DecalComponent_DrawVSlot);
+        DecalComponent_LiveVtable[7] = reinterpret_cast<void*>(&DecalComponent_OnCreateVSlot);
+    }
+}
+extern "C" void* DecalComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xc3,
+        DecalComponent_LiveVtable,
+        reinterpret_cast<void*>(&DecalComponent_LiveGetTypeId));
+    DecalComponent_FinishLiveVtable();
+    return p;
+}
+static void* DecalComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xc3,
+        DecalComponent_LiveVtable,
+        reinterpret_cast<void*>(&DecalComponent_LiveGetTypeId));
+    DecalComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(DecalComponent, "Component",
               &DecalComponent_Factory, &DecalComponent_CreateInPlace);
+
+// Per-frame driver drain — the integrator adds the call site in GameUpdateLoop::Update,
+// right after StorageDisplay_DrainDraw(s_frameNum):
+//     extern void DecalComponent_DrainDraw(int frameNum);
+//     DecalComponent_DrainDraw(s_frameNum);
+// Draw()s each registered DecalComponent whose decal hasn't been placed yet (build-once).
+extern "C" void DecalComponent_DrainDraw(int frameNum) {
+    if (s_decalDriveCount == 0) {
+        if (DecalTraceOn()) {
+            static int once = 0;
+            if (frameNum >= 3 && once < 1) { ++once;
+                fprintf(stderr, "[Decal::Drive] frame=%d queued=0 (no DecalComponent registered — "
+                        "Startup slot never fired / gate off)\n", frameNum); fflush(stderr); }
+        }
+        return;
+    }
+    if (frameNum < 3) return;                                  // wait for scene + seeding
+    int built = 0;
+    for (int i = 0; i < s_decalDriveCount; ++i) {
+        DecalComponent* cc = s_decalDriveList[i];
+        if (!cc) continue;
+        if (cc->decalId >= 0) { ++built; continue; }           // already placed
+        DecalComponent_Draw(cc);                               // self-guarding (returns if not ready)
+        if (cc->decalId >= 0) ++built;
+    }
+    if (DecalTraceOn()) {
+        static int s_last = -1;
+        if (built != s_last) { s_last = built;
+            fprintf(stderr, "[Decal::Drive] frame=%d queued=%d built=%d\n",
+                    frameNum, s_decalDriveCount, built); fflush(stderr); }
+    }
+}
 #endif // STANDALONE_EXE

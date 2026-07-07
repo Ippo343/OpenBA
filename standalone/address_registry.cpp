@@ -1004,6 +1004,38 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z"));
 
     // ----------------------------------------------------------------
+    // Terrain-decal / radius-highlight tessellation (BANISHED_LIVE_DECAL, Player wave 5).
+    // Math::Transform2 / Vector2 ops read by TradeWork_impl_ace40
+    // (tool_base_highlight_tess.cpp) to compose the per-tile UV->world transform and
+    // project the 4 quad corners. Mangled names = the exe's own import strings
+    // (0x1401bf138.. / 0x1401bbdf0). FromYawOffset is STATIC (value-return: RCX=retbuf);
+    // the two operator* are member value-return (RCX=this, RDX=retbuf, R8=arg).
+    // ----------------------------------------------------------------
+    RegisterDispatchSlot(0x140151e58,   // Math::Vector2::Vector2() default ctor
+        (uintptr_t)ResolveExport("??0Vector2@Math@@QEAA@XZ"));
+    RegisterDispatchSlot(0x140152648,   // Math::Transform2::Transform2(Scalar&, Vector2&)
+        (uintptr_t)ResolveExport("??0Transform2@Math@@QEAA@AEBVScalar@1@AEBVVector2@1@@Z"));
+    RegisterDispatchSlot(0x140152650,   // Math::Transform2::FromYawOffset(Scalar&, Vector2&) [static]
+        (uintptr_t)ResolveExport("?FromYawOffset@Transform2@Math@@SA?AV12@AEBVScalar@2@AEBVVector2@2@@Z"));
+    RegisterDispatchSlot(0x140152640,   // Math::Transform2::operator*(Transform2&) const -> Transform2
+        (uintptr_t)ResolveExport("??DTransform2@Math@@QEBA?AV01@AEBV01@@Z"));
+    RegisterDispatchSlot(0x140152658,   // Math::Transform2::operator*(Vector2&) const -> Vector2
+        (uintptr_t)ResolveExport("??DTransform2@Math@@QEBA?AVVector2@1@AEBV21@@Z"));
+
+    // System::MemoryAllocator static MemAlloc/MemFree dispatch slots. Read via the
+    // slot-deref pattern (*(fn**)ResolveAddr(0x140152b60/b68)) by the TradeWork tile
+    // tessellation (tool_base_highlight*.cpp) AND every Work action helper
+    // (work_act_*.cpp). Previously UNREGISTERED → ResolveAddr returned null and those
+    // reimpls' MemAlloc/MemFree fn-ptrs stayed null; the terrain-decal tessellator's
+    // index-buffer MemAlloc then returned null → AppendIndex wrote through a null base
+    // (ACCESS_VIOLATION). NOTE the real export is SAPEAX_KH (uint64 size, int align) —
+    // the ...SAPEAXII fallback string used by those files does NOT exist.
+    RegisterDispatchSlot(0x140152b60,   // MemAlloc(size, align) static -> void*
+        (uintptr_t)ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
+    RegisterDispatchSlot(0x140152b68,   // MemFree(void*) static
+        (uintptr_t)ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+
+    // ----------------------------------------------------------------
     // Foundation F — Graphics render-path dispatch slots (ModelComponent).
     // ----------------------------------------------------------------
     // The real (non-inert) ModelComponent constructs a Graphics::MeshInstance

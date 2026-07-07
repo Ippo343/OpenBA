@@ -257,6 +257,7 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     // 0x1F0 — array of 0x60-byte structs at +0x1F0 (count +0x1F8).
     int count1F8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1F8);
     uint8_t* base1F0 = *reinterpret_cast<uint8_t**>(selfBytes + 0x1F0);
+    int dbgSubmitted = 0, dbgCulled = 0;
     for (int idx = 0; idx < count1F8; ++idx) {
         uint64_t* elem = reinterpret_cast<uint64_t*>(base1F0 + (size_t)idx * 0x60);
         if (elem[0] == 0) continue;
@@ -273,7 +274,7 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
         float box[6] = { xmin, ymin, 0.0f, xmax, ymax, 0.0f };
 
         uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
-        if (r == 0x40) continue;
+        if (r == 0x40) { ++dbgCulled; continue; }
 
         // key1 = 1 normally; 3 if (uint8_t)(elem + 0x5D) != 0.
         uint16_t key1 = (elemBytes[0x5D] != 0) ? 3 : 1;
@@ -281,6 +282,21 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
         void* mat = reinterpret_cast<void*>(elem[0]);
         fn_Renderer_AddDrawItem(renderer, self, mat, key1, key2, 0.0f, uvScale,
                                 1, nullptr, 0);
+        ++dbgSubmitted;
+    }
+    // Decal-render diagnostic (BANISHED_DECAL_TRACE): how many +0x1F0 decal slots this
+    // WorldGeometry submits vs frustum-culls per frame. Logged only when it changes.
+    {
+        static int s_dbgOn = -1;
+        if (s_dbgOn < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
+                           s_dbgOn = (e && *e && e[0] != '0') ? 1 : 0; }
+        if (s_dbgOn) {
+            static int s_last = -999;
+            int key = dbgSubmitted * 1000 + dbgCulled;
+            if (key != s_last) { s_last = key;
+                fprintf(stderr, "[Decal::Render] +0x1F0 slots: count=%d submitted=%d culled=%d\n",
+                        count1F8, dbgSubmitted, dbgCulled); fflush(stderr); }
+        }
     }
 
     // 0x200 — same struct layout, count at +0x208. Differs in: filter is

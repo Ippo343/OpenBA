@@ -743,6 +743,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // BANISHED_LIVE_STORAGEDISPLAY populated the driver list at spawn.
     extern void StorageDisplay_DrainDraw(int frameNum);
     StorageDisplay_DrainDraw(s_frameNum);
+
+    // Building ground-decal rendering: build each DecalComponent's terrain decal (e.g.
+    // the StorageYard brown foundation) once the scene is live. SA never ticks this
+    // component's lifecycle, so this explicit per-frame drain places the decal (build-once).
+    // No-op unless BANISHED_LIVE_DECAL populated the driver list at spawn.
+    extern void DecalComponent_DrainDraw(int frameNum);
+    DecalComponent_DrainDraw(s_frameNum);
 #endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",
