@@ -276,9 +276,18 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     float TF_uvRect[6] = { fVar31, 0.0f, 0.0f, fVar32,       fVar33,    fVar34    };
     float TF_scale[6]  = { fVar35, 0.0f, 0.0f, fVar35,       0.0f,      0.0f      };
 
+    // FromYawOffset (0x140152650) reads an 8-byte (Vector2) OFFSET from R8. The disasm
+    // passes a dedicated zeroed slot ([RBP-0x60] = MOV qword,0 → {0,0}); we must give it a
+    // real 8-byte zero Vector2 — NOT &local_2a0 (a lone int), whose second float lane reads a
+    // garbage adjacent stack local. That lane held -1.0, injecting a translate(0,-1) that
+    // shifted every decal's diffuse V down by one uv-cell height (0.15625): the barn survived
+    // (v0=0.844 → 0.688, still positive) but top-row cells (v0=0) folded NEGATIVE → sampled
+    // off-atlas → transparent → houses/stockpiles invisible. Verified via [ace40::op] trace:
+    // with {0,0} r168 offset, decal V now maps positive/in-atlas (barn f5=3456=0.84375·4096).
+    float yawOffset[2] = { 0.0f, 0.0f };   // disasm [RBP-0x60] clean {0,0}
     void* r138 = nullptr; void* r168 = nullptr; void* r108 = nullptr;
     if (opT2Scalar) r138 = opT2Scalar(T_138, &local_2a0, &local_228);          // 0x140152648 (ctor1)
-    if (opT2YawOff) r168 = opT2YawOff(T_168, &local_29c, &local_2a0);          // 0x140152650 (yawOff)
+    if (opT2YawOff) r168 = opT2YawOff(T_168, &local_29c, yawOffset);           // 0x140152650 (yawOff)
     if (opT2Scalar) r108 = opT2Scalar(T_108, &local_2b0_0, &local_2a8);        // 0x140152648 (ctor3)
 
     if (opT2MulT2) {

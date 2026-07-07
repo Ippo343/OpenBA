@@ -344,11 +344,19 @@ void DecalComponent_Draw(DecalComponent* self) {
     }
     uintptr_t dd = reinterpret_cast<uintptr_t>(decalDesc);
 
-    // SA fixup: retail DecalComponent::Serialize copies decalScale (+0x30) from the
-    // DecalDescription's _initialAlpha (+0x20); that lifecycle slot never runs in
-    // standalone (inert component → +0x30 zero-filled), so seed it here or the decal
-    // would be drawn at alpha 0 (invisible). Mirrors DecalComponent_Serialize.
-    if (self->decalScale == 0.0f) self->decalScale = *reinterpret_cast<float*>(dd + 0x20);
+    // Decal alpha (+0x30 decalScale, used as decalScale*255 -> the vertex alpha /
+    // shader lightFogAlpha.w). Retail lifecycle:
+    //   * Serialize seeds it from DecalDescription._initialAlpha (dd+0x20 = 0.5) — the
+    //     DURING-CONSTRUCTION (half-built, translucent foundation) value.
+    //   * When the building COMPLETES, DecalComponent Slot12(msg=1) sets +0x30 = 1.0
+    //     (0x3f800000) and re-adds the decal -> a fully-opaque finished foundation.
+    // Neither lifecycle slot runs on our inert standalone components, and start-town
+    // buildings spawn ALREADY COMPLETE, so seed the completed alpha (1.0) directly.
+    // (Using _initialAlpha=0.5 drew every finished foundation at half opacity — the
+    // washed-out look vs retail. Confirmed against retail RenderDoc event 1230:
+    // vsout lightFogAlpha.w = 1.0.) A real construction pipeline would instead start
+    // this at 0.5 and drive the Slot12(msg=1) ramp to 1.0 on completion.
+    if (self->decalScale == 0.0f) self->decalScale = 1.0f;
 
     // Per-variant UV rect (defaults {0,0,uvScale,uvScale} when variant >= count).
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;

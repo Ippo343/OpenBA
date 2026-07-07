@@ -200,8 +200,17 @@ void Pf_RoadVtxFill_caa0(int64_t self, int x, int y, short* outVtx, uint8_t blen
     outVtx[0] = static_cast<short>(static_cast<short>(x) - hSv);
     outVtx[1] = static_cast<short>(static_cast<short>(y) - hSv);
 
-    float bias  = f17214c();   // DAT_14017214c
-    float uvScl = fUV();       // g_fUVScale
+    // Terrain-normal -> rgba8 encode (disasm 0x1400acb1a..0x1400acba6):
+    //   byte = (normal_component + 1.0) * 127.5
+    // where 1.0 = DAT_14017214c (XMM3, the +1 UNORM offset) and 127.5 = DAT_140172214
+    // (XMM2, the [-1,1]->[0,255] scale). Hardcoded (not via the f17214c()/f172214()
+    // accessors) because in standalone ResolveAddr(Exe,.rdata) returns NULL, so those
+    // accessors give their 0.0 fallback -> the encode collapses to ~0 -> the decal/road
+    // shader decodes a garbage ~(-1,-1,-1) normal -> lighting washes out (decal renders
+    // pale/faint instead of the retail dark, properly-lit dirt). The prior port ALSO
+    // swapped the two constants (used f17214c()=1.0 as the scale, fUV() as the offset).
+    const float addOff = 1.0f;    // DAT_14017214c
+    const float encScl = 127.5f;  // DAT_140172214
     int hmW = *reinterpret_cast<int*>(self + 0xd0);
 
     int cx = (x < 0) ? 0 : x;
@@ -212,16 +221,16 @@ void Pf_RoadVtxFill_caa0(int64_t self, int x, int y, short* outVtx, uint8_t blen
     short* hm = *reinterpret_cast<short**>(self + 0xd8);
     short hVal = hm[static_cast<int64_t>(hmW) * cy + cx];
 
-    // normal[2] += uv; normal[0] += uv  (local_10/local_18)
-    float n2 = normal[2] + uvScl;
-    float n0 = normal[0] + uvScl;
+    // normal encode: byte = (normal + 1.0) * 127.5  (all three components)
+    float n2 = normal[2] + addOff;
+    float n0 = normal[0] + addOff;
     reinterpret_cast<uint8_t*>(outVtx)[0xf] = 0;                    // *(byte*)(outVtx+0xf) = 0
     reinterpret_cast<uint16_t*>(outVtx)[3] = static_cast<uint16_t>(blend);   // outVtx[3] = (ushort)blend
     outVtx[2] = hVal;                                              // outVtx[2] = height short
-    // byte uv triplet at outVtx bytes 0xc, 0xd, 0xe:
-    reinterpret_cast<int8_t*>(outVtx)[0xc] = static_cast<int8_t>(static_cast<int64_t>(n0 * bias));
-    reinterpret_cast<int8_t*>(outVtx)[0xd] = static_cast<int8_t>(static_cast<int64_t>((normal[1] + uvScl) * bias));
-    reinterpret_cast<int8_t*>(outVtx)[0xe] = static_cast<int8_t>(static_cast<int64_t>(n2 * bias));
+    // normal->rgba8 triplet at outVtx bytes 0xc (x), 0xd (y), 0xe (z):
+    reinterpret_cast<int8_t*>(outVtx)[0xc] = static_cast<int8_t>(static_cast<int64_t>(n0 * encScl));
+    reinterpret_cast<int8_t*>(outVtx)[0xd] = static_cast<int8_t>(static_cast<int64_t>((normal[1] + addOff) * encScl));
+    reinterpret_cast<int8_t*>(outVtx)[0xe] = static_cast<int8_t>(static_cast<int64_t>(n2 * encScl));
     // AO uv shorts at outVtx[4], outVtx[5]:
     float span = static_cast<float>(*reinterpret_cast<int*>(self + 0xc0));
     outVtx[4] = static_cast<short>(static_cast<int>((static_cast<float>(x) / span) * f172264()));
