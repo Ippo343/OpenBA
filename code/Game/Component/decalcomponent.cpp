@@ -253,12 +253,16 @@ void DecalComponent_Draw(DecalComponent* self) {
 
     // FindComponent(ModelComponent) → per-variant UV rect index (+0x164). Default 0.
     int variant = 0;
+    float mdlPos[3] = {0, 0, 0};   // building's rendered world pos (ModelComponent+0x148 Transform +0x10..0x18)
     if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
     uintptr_t modelBuf[2] = {0, 0};
     if (s_fn_FindComp_Model) s_fn_FindComp_Model(*reinterpret_cast<void**>(selfA + 0x10), modelBuf);
     if (modelBuf[0] != 0) {
         if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(modelBuf);
         variant = *reinterpret_cast<int16_t*>(modelBuf[0] + 0x164);
+        mdlPos[0] = *reinterpret_cast<float*>(modelBuf[0] + 0x148 + 0x10);
+        mdlPos[1] = *reinterpret_cast<float*>(modelBuf[0] + 0x148 + 0x14);
+        mdlPos[2] = *reinterpret_cast<float*>(modelBuf[0] + 0x148 + 0x18);
     }
 
     // DecalDescription = IsDerivedFrom(self+0x18, DecalDescription typeId) ? self+0x18 : null.
@@ -342,6 +346,11 @@ void DecalComponent_Draw(DecalComponent* self) {
             // non-zero spread confirms the ace40 chain fix (uvRect + 4096 scale restored).
             long vtxCount = -1, idxCount = -1; int px = 0, py = 0, pz = 0; void* vb = nullptr;
             int uv0u = -1, uv0v = -1, uv1u = -1, uv1v = -1, uv2u = -1, uv2v = -1; int stride = 0x14;
+            // Objective geometry-health scan (confirms the ace40 dedup-index fix): the
+            // maximum index must be < vtxCount (no out-of-range fetch) and the vertex
+            // position bbox must hug the footprint (no stray vertex at the origin, which
+            // was the "sliver to map center" signature).
+            int maxIdx = -1, oobCount = -1; int vminX = 0, vmaxX = 0, vminY = 0, vmaxY = 0;
             if (id >= 0) {
                 uintptr_t sbase = *reinterpret_cast<uintptr_t*>(decalSys + 0x1f0);
                 if (sbase) {
@@ -357,7 +366,33 @@ void DecalComponent_Draw(DecalComponent* self) {
                               uv1u = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x08);
                               uv1v = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0A);
                               uv2u = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x08);
-                              uv2v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x0A); }
+                              uv2v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x0A);
+                              vminX = vmaxX = px; vminY = vmaxY = py;
+                              for (long vi = 0; vi < vtxCount && vi < 4096; ++vi) {
+                                  int x = *reinterpret_cast<int16_t*>((uintptr_t)vb + vi*stride + 0x00);
+                                  int y = *reinterpret_cast<int16_t*>((uintptr_t)vb + vi*stride + 0x02);
+                                  if (x < vminX) vminX = x; if (x > vmaxX) vmaxX = x;
+                                  if (y < vminY) vminY = y; if (y > vmaxY) vmaxY = y;
+                              } }
+                    uint16_t* ib = *reinterpret_cast<uint16_t**>(slot + 0x18);
+                    if (ib && idxCount > 0) { maxIdx = 0; oobCount = 0;
+                        for (long ii = 0; ii < idxCount && ii < 4096; ++ii) {
+                            int v = ib[ii]; if (v > maxIdx) maxIdx = v;
+                            if (v >= vtxCount) ++oobCount;
+                        } }
+                    // stored slot footprint (b0d80 wrote iVar2+tile here) + the decal
+                    // system's centering fields (0xc0 = map dim, 0xc4 = ?). caa0 renders
+                    // each vertex at storedTile - (0xc0>>1); if 0xc4 != 0xc0 the decal is
+                    // shifted off its building by iVar2 = (0xc0-0xc4)>>1.
+                    int c0 = *reinterpret_cast<int32_t*>(decalSys + 0xc0);
+                    int c4 = *reinterpret_cast<int32_t*>(decalSys + 0xc4);
+                    fprintf(stderr, "[Decal]   slotFP min(%d,%d) max(%d,%d) | f0xc0=%d f0xc4=%d "
+                            "iVar2=%d  (tile min was %d,%d) | mdlPos=(%.1f,%.1f,%.1f) "
+                            "decalV0world=(%d,%d) [expect ~mdlPos.x/z]\n",
+                            *reinterpret_cast<int32_t*>(slot + 0x2c), *reinterpret_cast<int32_t*>(slot + 0x30),
+                            *reinterpret_cast<int32_t*>(slot + 0x34), *reinterpret_cast<int32_t*>(slot + 0x38),
+                            c0, c4, (c0 - c4) >> 1, minX, minY,
+                            mdlPos[0], mdlPos[1], mdlPos[2], px, py);
                 }
             }
             // p10 = dd+0x48 is the tessellator's UV *divisor* (ace40 cVar1==0 branch,
@@ -368,12 +403,14 @@ void DecalComponent_Draw(DecalComponent* self) {
             float p10f = *reinterpret_cast<float*>(&p10);
             fprintf(stderr, "[Decal] Draw self=%p tile=(%d,%d %dx%d) rot=%d tiled=%d "
                     "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) p10=%g(0x%08x) sys=%p id=%d "
-                    "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d) uvINT16=[(%d,%d)(%d,%d)(%d,%d)]\n",
+                    "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d) uvINT16=[(%d,%d)(%d,%d)(%d,%d)] "
+                    "maxIdx=%d oob=%d posBBox=x[%d,%d]y[%d,%d]\n",
                     (void*)self, minX, minY, width, height, (int)rotation, (int)tiledFlag,
                     (void*)material, variant, variantCount, alpha,
                     uv[0], uv[1], uv[2], uv[3], p10f, p10, (void*)decalSys, id,
                     vtxCount, idxCount, vb, px, py, pz,
-                    uv0u, uv0v, uv1u, uv1v, uv2u, uv2v);
+                    uv0u, uv0v, uv1u, uv1v, uv2u, uv2v,
+                    maxIdx, oobCount, vminX, vmaxX, vminY, vmaxY);
             fflush(stderr);
         }
     }
@@ -560,6 +597,45 @@ extern "C" void DecalComponent_DrainDraw(int frameNum) {
         if (built != s_last) { s_last = built;
             fprintf(stderr, "[Decal::Drive] frame=%d queued=%d built=%d\n",
                     frameNum, s_decalDriveCount, built); fflush(stderr); }
+
+        // One-shot alignment probe at a LATE frame (model transforms populated by now):
+        // for each decal, read its owner ModelComponent world pos (+0x148 Transform +0x10/18)
+        // and the decal's stored slot footprint (world = slotMin - 0xc0>>1). If the building
+        // sits at ~2x the decal's world coord, the decal grid is missing the tile->grid x2.
+        static int s_probed = 0;
+        if (frameNum == 200 && !s_probed) { s_probed = 1;
+            EnsureDrawHelpers();
+            uintptr_t gs = s_pGameStateDraw ? reinterpret_cast<uintptr_t>(*s_pGameStateDraw) : 0;
+            uintptr_t decalSys = gs ? *reinterpret_cast<uintptr_t*>(gs + 0x110) : 0;
+            int half = decalSys ? (*reinterpret_cast<int32_t*>(decalSys + 0xc0) >> 1) : 0;
+            // StorageDisplay-style centering (the correctly-placed piles): mapSize = *(int*)*(int**)(gs+0xf8),
+            // world = tile - ((mapSize>>1) - 0.5). If this differs from decalWorld, we found the offset.
+            int mapSize = 0;
+            { int* mapInfo = gs ? *reinterpret_cast<int**>(gs + 0xf8) : nullptr;
+              if (mapInfo) mapSize = *mapInfo; }
+            float sdHalf = (float)(mapSize >> 1) - 0.5f;
+            fprintf(stderr, "[Decal::Align] mapSize(gs+0xf8)=%d  0xc0>>1=%d  sdHalfMap=%.1f\n",
+                    mapSize, half, sdHalf);
+            for (int i = 0; i < s_decalDriveCount; ++i) {
+                DecalComponent* cc = s_decalDriveList[i];
+                if (!cc || cc->decalId < 0 || !decalSys) continue;
+                uintptr_t ccA = reinterpret_cast<uintptr_t>(cc);
+                uintptr_t mb[2] = {0,0};
+                if (s_fn_FindComp_Model) s_fn_FindComp_Model(*reinterpret_cast<void**>(ccA + 0x10), mb);
+                float mx = 0, mz = 0;
+                if (mb[0]) { mx = *reinterpret_cast<float*>(mb[0] + 0x148 + 0x10);
+                             mz = *reinterpret_cast<float*>(mb[0] + 0x148 + 0x18); }
+                uintptr_t sbase = *reinterpret_cast<uintptr_t*>(decalSys + 0x1f0);
+                uintptr_t slot = sbase + static_cast<uintptr_t>(cc->decalId) * 0x60;
+                int smnX = *reinterpret_cast<int32_t*>(slot + 0x2c);
+                int smnY = *reinterpret_cast<int32_t*>(slot + 0x30);
+                fprintf(stderr, "[Decal::Align] id=%d decalWorld=(%d,%d) modelWorld=(%.1f,%.1f) "
+                        "ratio=(%.2f,%.2f)\n", cc->decalId, smnX - half, smnY - half, mx, mz,
+                        mx != 0 ? mx / (float)(smnX - half) : 0.0f,
+                        mz != 0 ? mz / (float)(smnY - half) : 0.0f);
+            }
+            fflush(stderr);
+        }
     }
 }
 #endif // STANDALONE_EXE

@@ -160,8 +160,14 @@ inline void EmitVertex(int64_t lVar16, int64_t* poolRoot, int64_t* pool,
         rec[3] = desc[3]; rec[4] = desc[4];
         rec[5] = (uint32_t)curCount;          // CONCAT44((int)local_2c8, local_268)
         idx = (uint16_t)curCount;
-        TradeWork_impl_1f6b0(poolRoot, outNode, desc);                 // 0x14001f6b0
-        if (fnPool) fnPool(pool, curCount + 1, rec);                   // 0x14001f8d0
+        // CRITICAL argument split (matches ace40 disasm exactly): the BST insert stores
+        // `rec` — the 6-int key whose +0x14 slot is the vertex INDEX — so that a later
+        // dedup HIT reads back the correct index via node+0x14. The vertex POOL stores the
+        // raw `desc` (position + UVs). Passing these swapped makes node+0x14 hold garbage
+        // descriptor bytes; every shared-corner dedup hit then returns a wild index and the
+        // triangle stretches off toward the bogus vertex (the "sliver to map center" bug).
+        TradeWork_impl_1f6b0(poolRoot, outNode, rec);                  // 0x14001f6b0 (key = rec)
+        if (fnPool) fnPool(pool, curCount + 1, desc);                  // 0x14001f8d0 (vertex = desc)
     } else {
         idx = *reinterpret_cast<uint16_t*>(node + 0x14);
     }
@@ -397,8 +403,11 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
                             emit(c0); emit(c3); emit(c1);
                             emit(c1); emit(c3); emit(c2);
                         } else {
+                            // odd-parity tile: triangles (c0,c2,c1) and (c0,c3,c2) — the
+                            // last vertex is c2 (descBlock+0x28), NOT c1. Matches the ace40
+                            // disasm else-branch find order 278,250,264,278,23c,250.
                             emit(c0); emit(c2); emit(c1);
-                            emit(c0); emit(c3); emit(c1);
+                            emit(c0); emit(c3); emit(c2);
                         }
                     } // doTile
 

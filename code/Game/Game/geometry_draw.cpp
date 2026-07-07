@@ -396,6 +396,17 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         int32_t  idxCount  = *reinterpret_cast<int32_t*>(elem + 0x20);
         bool     ok = fn_Context_BeginIndexedVertices(context, vertCount,
                                                        vertStride, idxCount);
+        {
+            static int s_on = -1;
+            if (s_on < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
+                            s_on = (e && *e && e[0] != '0') ? 1 : 0; }
+            if (s_on) { static int n = 0; if (n < 60) { ++n;
+                fprintf(stderr, "[Decal::ItemDraw] 0x2000 elem=%p vtx=%d idx=%d BeginOK=%d "
+                        "stageVertPtr=%p stageStride=%d\n", (void*)elem, vertCount, idxCount, ok,
+                        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x20E0),
+                        *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x20E8));
+                fflush(stderr); } }
+        }
         if (!ok) return;
 
         // Memcpy vert data into context->stagingVertBuf at context+0x20E0,
