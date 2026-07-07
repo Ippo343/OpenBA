@@ -119,6 +119,12 @@ bool EditTool_Serialize_Impl(EditTool* self, uint64_t* param_2) {
 typedef bool (*fn_Entity_impl_0380_t)(uintptr_t entity, void* entityIBP, void* rectOut);
 static fn_Entity_impl_0380_t s_fn_Entity_impl_0380 = nullptr;
 
+// Citizen-fallback helper (see TryProjectEntityModelPos below):
+//   0x140098210 — project a world Vector3 through the camera to screen pixels
+//                 (RCX=camHolder, RDX=worldPos[3], R8=screen[2]; returns 1 if in front).
+typedef uint8_t (*fn_WorldToScreen_t)(uintptr_t camHolder, float* worldPos, float* screen);
+static fn_WorldToScreen_t s_fn_WorldToScreen = nullptr;
+
 // Helper: Entity_impl_cc90 (0x1400fcc90) — DESELECT (clears the selection outline +
 // closes the info dialog), which retail calls here as the "can't place the dialog ->
 // drop the selection" fallback when the entity's screen rect can't be computed.
@@ -232,6 +238,7 @@ static void EnsureEditFuncs() {
 
     // Direct exe function addresses
     s_fn_Entity_impl_0380     = (fn_Entity_impl_0380_t)ResolveAddr(Module::Exe, 0x140100380);
+    s_fn_WorldToScreen        = (fn_WorldToScreen_t)ResolveAddr(Module::Exe, 0x140098210);
     s_fn_Entity_impl_cc90     = (fn_Entity_impl_cc90_t)ResolveAddr(Module::Exe, 0x1400fcc90);
     s_fn_EditTool_helper_6800 = (fn_EditTool_helper_6800_t)ResolveAddr(Module::Exe, 0x140066800);
     s_fn_CameraRay            = (fn_CameraRay_t)ResolveAddr(Module::Exe, 0x1401005a0);
@@ -304,6 +311,81 @@ static void EnsureEditFuncs() {
 // moving selected entity's yellow outline glued to it as it walks. Self-gates on
 // BANISHED_SELECTION_OUTLINE, so it is a no-op on the shipping default path.
 extern "C" void HighlightFollow_Impl(void* self);
+
+// Resolve the ModelComponent class type-id: prefer the raw .rdata DWORD (valid in DLL
+// mode); in the standalone exe that constant is null, so fall back to the live factory
+// tree by name (the same reason 0x140003f60's registered reimpl finds nothing in SA).
+static uint32_t ModelComponentTypeId() {
+    static uint32_t cached = 0;
+    if (cached) return cached;
+    uint32_t* p = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
+    if (p && *p) { cached = *p; return cached; }
+#ifdef STANDALONE_EXE
+    uint32_t v = ::Object::GetTypeIdByName("ModelComponent");
+    if (v && v != 0xFFFFFFFFu) cached = v;
+#endif
+    return cached;
+}
+
+// Project a dynamic entity's (e.g. a citizen's) live world position to a screen point.
+// Used as the reposition fallback for entities that Entity_impl_0380 can't bound (no
+// static footprint / model box). Reads the origin (translation) of the entity's
+// ModelComponent world Transform — ModelComponent+0x148 is a Math::Transform (0x1C),
+// whose last 3 floats (+0x158/+0x15c/+0x160) are the world x/y/z — and projects it
+// through the camera. Returns false (caller leaves the panel at its default position)
+// if the component is missing or the point is behind the camera.
+static bool TryProjectEntityModelPos(uintptr_t entityObj, float* outX, float* outY) {
+    if (!s_fn_WorldToScreen || !entityObj) return false;
+
+    // Scan the entity's component list (entity+0x30 = array of component IBPs,
+    // entity+0x38 = count) for its ModelComponent. This mirrors 0x140003f60 but with a
+    // type-id that actually resolves in standalone (0x140003f60's registered reimpl reads
+    // the raw .rdata ModelComponent id, which is null in SA, so it never matches).
+    const uint32_t modelTid = ModelComponentTypeId();
+    if (!modelTid) return false;
+
+    uintptr_t modelComp = 0;
+    int count = *(int32_t*)(entityObj + 0x38);
+    uintptr_t arr = *(uintptr_t*)(entityObj + 0x30);
+    for (int i = 0; i < count; i++) {
+        uint64_t* slot = (uint64_t*)(arr + (int64_t)i * 8);
+        if (s_fn_CheckPtr) s_fn_CheckPtr(slot);
+        void* comp = *(void**)slot;
+        if (!comp) continue;
+        typedef uint32_t (*GetTid_t)(void*);
+        uint32_t tid = ((GetTid_t)(*(uintptr_t**)comp)[2])(comp);
+        if (tid == modelTid) {
+            if (!s_fn_IsDerived || s_fn_IsDerived(comp, modelTid)) modelComp = (uintptr_t)comp;
+            break;
+        }
+    }
+    if (!modelComp) return false;
+
+    // World position = ModelComponent transform translation (+0x148 + 0x10).
+    float* pos = (float*)(modelComp + 0x158);
+    float worldPos[3] = { pos[0], pos[1], pos[2] };
+
+    uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
+    uintptr_t camHolder = *(uintptr_t*)(gameWorld + 0xe0);
+    if (!camHolder) return false;
+
+    float screen[2] = { 0.0f, 0.0f };
+    if (!s_fn_WorldToScreen(camHolder, worldPos, screen)) return false;
+    *outX = screen[0];
+    *outY = screen[1];
+    return true;
+}
+
+// One-shot bounded reposition tracer (BANISHED_SELECT_DIAG). Startup runs every
+// frame, so cap output to a handful of lines.
+static bool RepoDiag() {
+    if (!SelDiagOn()) return false;
+    static int budget = 8;
+    if (budget <= 0) return false;
+    --budget;
+    return true;
+}
+#define REPO_DIAG(...) do { if (RepoDiag()) { printf(__VA_ARGS__); fflush(stdout); } } while (0)
 
 void EditTool_Startup_Impl(EditTool* self) {
     EnsureEditFuncs();
@@ -382,18 +464,25 @@ void EditTool_Startup_Impl(EditTool* self) {
     uintptr_t pageToggleIBP = 0;
     if (s_fn_IBPCtor) s_fn_IBPCtor(&pageToggleIBP, (void*)pageToggleObj);
 
+    REPO_DIAG("[Repos] entityRef(dialog)=%p toolUIIBP=%p pageToggleIBP=%p\n",
+              (void*)self->entityRef, (void*)toolUIIBP, (void*)pageToggleIBP);
+
     // Standalone safety: this reposition only runs once an entity's info dialog is open, a
     // path never exercised until GUI select landed. If either controller came back null (a
     // missing standalone controller, or an entity whose dialog lacks a ToolUI/EntityUI), we
     // cannot position — skip rather than deref a null IBP. The dialog still shows at its .rsc
     // default position. Retail always has both controllers.
-    if (toolUIIBP == 0 || pageToggleIBP == 0)
+    if (toolUIIBP == 0 || pageToggleIBP == 0) {
+        REPO_DIAG("[Repos] BAIL: null controller (toolUI=%p pageToggle=%p)\n",
+                  (void*)toolUIIBP, (void*)pageToggleIBP);
         return;
+    }
 
     // Check ToolUI controller flag at +0x40
     if (s_fn_CheckPtr) s_fn_CheckPtr(&toolUIIBP);
     if (*(char*)(toolUIIBP + 0x40) != 0) {
         // Flag is set — skip positioning
+        REPO_DIAG("[Repos] BAIL: toolUI+0x40 pinned flag set\n");
         return;
     }
 
@@ -413,10 +502,34 @@ void EditTool_Startup_Impl(EditTool* self) {
         gotRect = s_fn_Entity_impl_0380(entityObj, &entityParam, rectangle);
     }
 
+    REPO_DIAG("[Repos] entityObj=%p gotRect=%d rect(L,T,R,B)=[%.1f %.1f %.1f %.1f]\n",
+              (void*)entityObj, (int)gotRect,
+              *(float*)&rectangle[0], *(float*)&rectangle[4],
+              *(float*)&rectangle[8], *(float*)&rectangle[12]);
+
+    // Citizen / dynamic-entity fallback: 0380 only yields a rect for entities with a
+    // static footprint or model bounding-box (buildings). Citizens have neither, so it
+    // returns 0 and — without this — their info panel stays at the .rsc default corner.
+    // Project the entity's ModelComponent world-transform origin to screen and synthesize
+    // a zero-width rect centred on it, so the shared positioning math below drops the
+    // panel just above the citizen. (Retail's 0380 also fails here; this is a standalone
+    // QoL addition, guarded so it never runs when 0380 already produced a rect.)
+    if (!gotRect) {
+        float sx = 0.0f, sy = 0.0f;
+        if (TryProjectEntityModelPos(entityObj, &sx, &sy)) {
+            *(float*)&rectangle[0] = sx;   // left
+            *(float*)&rectangle[4] = sy;   // top
+            *(float*)&rectangle[8] = sx;   // right (== left -> midX = sx, centred)
+            gotRect = true;
+            REPO_DIAG("[Repos] citizen fallback: projected worldpos -> screen(%.1f,%.1f)\n", sx, sy);
+        }
+    }
+
     if (!gotRect) {
         // Retail deselects here (cc90) when the entity rect can't be computed.
         // Intentionally null in standalone (see the s_fn_Entity_impl_cc90 decl) so we
         // don't wipe the selection outline every frame 0380 fails for citizens.
+        REPO_DIAG("[Repos] BAIL: no screen rect (0380 failed for this entity)\n");
         if (s_fn_Entity_impl_cc90) s_fn_Entity_impl_cc90(selfAddr);
         return;
     }
@@ -436,21 +549,21 @@ void EditTool_Startup_Impl(EditTool* self) {
         s_fn_GetPaddedSize((void*)rootElement, &dialogWidth, &dialogHeight);
     }
 
-    // Calculate dialog position from entity rect
-    // rectangle layout: +0x00=left(float), +0x04=top(float), +0x08..+0x10=more rect data,
-    //                   +0x10=right?, etc.
-    // From disasm: rect+0x00 and rect+0x10 are used (rect.left and rect.right)
-    // local_res8._4_4_ = rect[+0x04] (y component)
-    // local_res20 = rect[+0x00] (x component)
-    // The formula: midX = (rect.left + rect.right) * 0.5
-    float rectLeft = *(float*)&rectangle[0];
-    float rectTop  = *(float*)&rectangle[4];
-    float rectRight = *(float*)&rectangle[16]; // from local_28 mapping to rect+0x10
+    // Calculate dialog position from entity rect.
+    // The rect is a Volume::Rectangle (16 bytes) filled by fe960:
+    //   +0x00 = minX (left), +0x04 = minY (top), +0x08 = maxX (right), +0x0c = maxY.
+    // In the original disasm (EditTool::OnCreate @0x1400fcda0) the 16-byte rect spans two
+    // stack slots: local_30 (bytes 0..7) and local_28 (bytes 8..15). It reads:
+    //   local_res20     = local_30._0_4_  -> rect+0x00 (minX / left)
+    //   local_res8._4_4_= local_30._4_4_  -> rect+0x04 (minY / top)
+    //   (float)local_28 = rect+0x08       -> maxX / right   <-- NOT rect+0x10
+    //   midX = (left + right) * 0.5
+    // A prior port misread local_28 as rect+0x10 (past the 16-byte rect), which reads 0
+    // and pulls every dialog toward the left edge. maxX lives at +0x08.
+    float rectLeft  = *(float*)&rectangle[0];
+    float rectTop   = *(float*)&rectangle[4];
+    float rectRight = *(float*)&rectangle[8];
 
-    // From disassembly analysis:
-    // local_res20 = rect[0] (x), local_res8._4_4_ = rect[4] (y)
-    // local_38._0_4_ = rect[16] (x2)
-    // midX = (rect[0] + rect[16]) * 0.5f
     float midX = (rectLeft + rectRight) * 0.5f;
 
     // Construct Vector2 for dialog position
@@ -476,8 +589,30 @@ void EditTool_Startup_Impl(EditTool* self) {
     int scaledX = (int)((float)posX / uiScale);
     int scaledY = (int)((float)posY / uiScale);
 
+    // Keep the panel on-screen. The anchor projects to wherever the entity is, which can
+    // be near (or past) a screen edge — most visibly for citizens, whose anchor is a
+    // single projected point rather than a clamped footprint box. Clamp the upper-left to
+    // [0, screen-dialog] in UI space so the whole panel stays visible. Positions already
+    // inside the screen are unaffected, so building placement is unchanged.
+    if (uiScale > 0.0f && g_pVideoDeviceSingleton && *g_pVideoDeviceSingleton) {
+        uintptr_t disp = (uintptr_t)*g_pVideoDeviceSingleton;
+        int screenW = *(int*)(disp + 4);
+        int screenH = *(int*)(disp + 8);
+        if (screenW > 0 && screenH > 0) {
+            int maxX = (int)((float)screenW / uiScale) - dialogWidth;
+            int maxY = (int)((float)screenH / uiScale) - dialogHeight;
+            if (maxX < 0) maxX = 0;
+            if (maxY < 0) maxY = 0;
+            if (scaledX < 0) scaledX = 0; else if (scaledX > maxX) scaledX = maxX;
+            if (scaledY < 0) scaledY = 0; else if (scaledY > maxY) scaledY = maxY;
+        }
+    }
+
     if (s_fn_CheckPtr) s_fn_CheckPtr(entityIBP);
     dialogPtr = *(uintptr_t*)entityIBP;
+    REPO_DIAG("[Repos] SETPOS midX=%.1f rectTop=%.1f dlgW=%d dlgH=%d uiScale=%.3f "
+              "-> scaled=(%d,%d) SetUpperLeft=%p\n", midX, rectTop, dialogWidth,
+              dialogHeight, uiScale, scaledX, scaledY, (void*)s_fn_SetUpperLeft);
     if (s_fn_SetUpperLeft) {
         s_fn_SetUpperLeft((void*)dialogPtr, scaledX, scaledY, true);
     }

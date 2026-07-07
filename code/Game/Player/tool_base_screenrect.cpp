@@ -415,8 +415,13 @@ extern "C" uint8_t PlayerScreenRect_AccumulateRect_fe960(uint64_t /*param_1*/, u
 //   Transform (Math::Transform, 7 floats at +0x148..+0x160) -> local "transform" (28 B)
 //   Box (Volume::Box, 6 floats at +0x5c..+0x70)            -> local "box" (24 B)
 //   const clamp vec (R8 in the Min loop) = (1e6, 1e6, 2.5)  (0x49742400,0x49742400,0x40200000)
-extern "C" void PlayerScreenRect_Entity_0380(uintptr_t param_1, void* param_2,
-                                             uint64_t* param_3) {
+//
+// Return value: the original 0380 falls straight into the fe960 tail call and returns
+// whatever fe960 left in AL (its "rect is valid" bool) — EditTool::Startup reads it as
+// `char cVar5` and deselects when 0. We return that bool explicitly so the caller's
+// gotRect is deterministic instead of relying on leftover-EAX codegen.
+extern "C" uint8_t PlayerScreenRect_Entity_0380(uintptr_t param_1, void* param_2,
+                                                uint64_t* param_3) {
     EnsureScreenRectExports();
 
     // local_a8 = Rectangle()  (default ctor); copy its 16 bytes to param_3 as the seed.
@@ -533,5 +538,7 @@ extern "C" void PlayerScreenRect_Entity_0380(uintptr_t param_1, void* param_2,
     }
 
     // FUN_1400fe960(?, cornerCount, corners, param_3)  -> fills the screen rectangle.
-    PlayerScreenRect_AccumulateRect_fe960(0, cornerCount, corners, param_3);
+    // Its bool return (at least one corner in front of the camera + on-screen) is 0380's
+    // return value (see header note); the caller uses it to decide whether to reposition.
+    return PlayerScreenRect_AccumulateRect_fe960(0, cornerCount, corners, param_3);
 }

@@ -36,7 +36,7 @@
 extern "C" uint32_t PlayerScreenRect_BuildCorners_ec70(uint64_t, int, int, int, int, float*);
 extern "C" uint8_t  PlayerScreenRect_WorldToScreen_098210(uintptr_t, float*, float*);
 extern "C" uint8_t  PlayerScreenRect_AccumulateRect_fe960(uint64_t, uint32_t, float*, void*);
-extern "C" void     PlayerScreenRect_Entity_0380(uintptr_t, void*, uint64_t*);
+extern "C" uint8_t  PlayerScreenRect_Entity_0380(uintptr_t, void*, uint64_t*);
 
 // NOTE: the 14 value-return Math ops (Vector2/3/4, Matrix, Transform3, Box, Rectangle)
 // are NOT registered as dispatch slots here. The reimpl bodies in tool_base_screenrect.cpp
