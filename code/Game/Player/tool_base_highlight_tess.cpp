@@ -247,24 +247,39 @@ extern "C" void TradeWork_impl_ace40(int64_t param_1, int param_2, char param_3,
     uint64_t uStack_2e0 = (uint64_t)(uint32_t&)local_290_hi << 0x20;
     uint64_t local_2d8 = ((uint64_t)(uint32_t&)fStack_284 << 32) | (uint32_t&)local_288;
 
-    // Transform2 chain (orig slots 0x140152648/650/640). Each Transform2 is 0x18 bytes.
+    // Transform2 chain (orig slots 0x140152648/650/640). Each Transform2 is 0x18 bytes
+    // (6 floats: [m00, m01, m10, m11, tx, ty]).
     uint8_t T_138[0x18], T_168[0x18], T_108[0x18];
     uint8_t T_160[0x18], T_148[0x18], T_118[0x18], T_e8[0x18], T_1f0[0x18];
-    void* rhs18 = &local_2e8;   // RBP+0x18 group (src-UV transform inputs)
-    void* rhs30 = &local_2d8;   // RBP+0x30 group (dst transform inputs)
+
+    // The three "raw data" operands of the operator* chain. CRITICAL: these MUST be
+    // contiguous 0x18-byte Transform2 buffers. The prior port built them from separate,
+    // non-adjacent stack locals (local_2e8/uStack_2e0/local_2d8, local_220/218/210,
+    // local_208/200/1f8) and — worse — passed only &local_2e8/&local_2d8 into the chain,
+    // DROPPING the uv-rect and the 4096 scale entirely. Result: T_1f0 had neither the
+    // uv-rect mapping nor the ×4096 texel scale, so every per-tile UV came out as the raw
+    // 0..1 value and truncated to int16 (0, 0/1) -> the decal sampled texel (0,0) (the empty
+    // corner of the dirt-splat atlas) -> transparent black -> invisible. Rebuilt as real
+    // contiguous buffers and wired EXACTLY per the ace40 disassembly at 0x1400ad0d0..0ad127:
+    //   T_1f0 = ((((flip * r108) * r168) * r138) * uvRect) * scale
+    // Layout confirmed from the disasm store pattern (e.g. RBP+0x18 = [fVar31,0,0,fVar32,
+    // fVar33,fVar34] = uvRect; RBP+0x30 = [fVar35,0,0,fVar35,0,0] = scale; RSP+0x50 = flip).
+    float TF_flip[6]   = { fVar36, 0.0f, 0.0f, local_290_hi, local_288, fStack_284 };
+    float TF_uvRect[6] = { fVar31, 0.0f, 0.0f, fVar32,       fVar33,    fVar34    };
+    float TF_scale[6]  = { fVar35, 0.0f, 0.0f, fVar35,       0.0f,      0.0f      };
 
     void* r138 = nullptr; void* r168 = nullptr; void* r108 = nullptr;
-    if (opT2Scalar) r138 = opT2Scalar(T_138, &local_2a0, &local_228);          // 0x140152648
-    if (opT2YawOff) r168 = opT2YawOff(T_168, &local_29c, &local_2a0);          // 0x140152650
-    if (opT2Scalar) r108 = opT2Scalar(T_108, &local_2b0_0, &local_2a8);        // 0x140152648
+    if (opT2Scalar) r138 = opT2Scalar(T_138, &local_2a0, &local_228);          // 0x140152648 (ctor1)
+    if (opT2YawOff) r168 = opT2YawOff(T_168, &local_29c, &local_2a0);          // 0x140152650 (yawOff)
+    if (opT2Scalar) r108 = opT2Scalar(T_108, &local_2b0_0, &local_2a8);        // 0x140152648 (ctor3)
 
     if (opT2MulT2) {
         void* acc;
-        acc = opT2MulT2((void*)&local_2e8, T_160, r108);   // 0x140152640
-        acc = opT2MulT2(acc, T_148, r168);
-        acc = opT2MulT2(acc, T_118, r138);
-        acc = opT2MulT2(acc, T_e8,  rhs18);
-        acc = opT2MulT2(acc, T_1f0, rhs30);                // -> final transform (T_1f0)
+        acc = opT2MulT2(TF_flip, T_160, r108);   // 0x140152640  flip   * ctor3(r108)
+        acc = opT2MulT2(acc, T_148, r168);        //              (..)   * yawOff(r168)
+        acc = opT2MulT2(acc, T_118, r138);        //              (..)   * ctor1(r138)
+        acc = opT2MulT2(acc, T_e8,  TF_uvRect);   //              (..)   * uvRect
+        acc = opT2MulT2(acc, T_1f0, TF_scale);    //              (..)   * scale  -> T_1f0
         (void)acc;
     }
 

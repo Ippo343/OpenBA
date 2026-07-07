@@ -336,7 +336,12 @@ void DecalComponent_Draw(DecalComponent* self) {
             // Read back the tessellated slot geometry (slot = decalSys+0x1f0 base + id*0x60):
             //   +0x08 vtx base, +0x10 vtxCount, +0x18 idx base, +0x20 idxCount.
             // First vertex position shorts at vtx+0x00/+0x02/+0x04 (from caa0).
+            // Also read the DIFFUSE UV int16 pair (vtx+0x08/+0x0A) for the first 3 verts — this
+            // is what the tessellator T_1f0 transform writes; it must span ~0..4096 across the
+            // footprint (VS scales by 1/4096). If it reads (0,0/1) the UV collapsed (the bug);
+            // non-zero spread confirms the ace40 chain fix (uvRect + 4096 scale restored).
             long vtxCount = -1, idxCount = -1; int px = 0, py = 0, pz = 0; void* vb = nullptr;
+            int uv0u = -1, uv0v = -1, uv1u = -1, uv1v = -1, uv2u = -1, uv2v = -1; int stride = 0x14;
             if (id >= 0) {
                 uintptr_t sbase = *reinterpret_cast<uintptr_t*>(decalSys + 0x1f0);
                 if (sbase) {
@@ -346,16 +351,29 @@ void DecalComponent_Draw(DecalComponent* self) {
                     idxCount = *reinterpret_cast<int32_t*>(slot + 0x20);
                     if (vb) { px = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x00);
                               py = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x02);
-                              pz = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x04); }
+                              pz = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x04);
+                              uv0u = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x08);
+                              uv0v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x0A);
+                              uv1u = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x08);
+                              uv1v = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0A);
+                              uv2u = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x08);
+                              uv2v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x0A); }
                 }
             }
+            // p10 = dd+0x48 is the tessellator's UV *divisor* (ace40 cVar1==0 branch,
+            // fVar_div): the per-tile UV is (uvRect / p10) * 4096. If p10 is large (or the
+            // uvRect is the normalized {0,0,1,1} default while p10 expects texel units) the
+            // UV collapses toward texel (0,0) -> the decal samples the empty corner of the
+            // dirt-splat atlas -> transparent black. Logged to pin the exact bad input.
+            float p10f = *reinterpret_cast<float*>(&p10);
             fprintf(stderr, "[Decal] Draw self=%p tile=(%d,%d %dx%d) rot=%d tiled=%d "
-                    "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) sys=%p id=%d "
-                    "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d)\n",
+                    "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) p10=%g(0x%08x) sys=%p id=%d "
+                    "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d) uvINT16=[(%d,%d)(%d,%d)(%d,%d)]\n",
                     (void*)self, minX, minY, width, height, (int)rotation, (int)tiledFlag,
                     (void*)material, variant, variantCount, alpha,
-                    uv[0], uv[1], uv[2], uv[3], (void*)decalSys, id,
-                    vtxCount, idxCount, vb, px, py, pz);
+                    uv[0], uv[1], uv[2], uv[3], p10f, p10, (void*)decalSys, id,
+                    vtxCount, idxCount, vb, px, py, pz,
+                    uv0u, uv0v, uv1u, uv1v, uv2u, uv2v);
             fflush(stderr);
         }
     }
