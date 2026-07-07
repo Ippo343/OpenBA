@@ -73,6 +73,9 @@ extern "C" void FillTypeIdGlobals_worktail_trade();
 extern "C" void FillTypeIdGlobals_worktail_fire();
 extern "C" void FillEconomyTypeIdGlobals();
 extern "C" void FillTypeIdGlobals_worktail_serialize();
+// StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
+// find type-id globals (reg_pipeline_typeids.cpp; storage gated on BANISHED_LIVE_DECAL).
+extern "C" void FillPipelineTypeIds();
 #endif
 
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
@@ -406,6 +409,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_worktail_fire();     // Phase 2 B tail — FireWork InteractComponent id (0x1401c7900)
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
+    FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
 #endif
 
     if (ok != 0) {

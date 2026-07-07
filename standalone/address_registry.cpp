@@ -441,6 +441,7 @@ extern "C" float CharacterComponent_Sinf_131c90(float); // Phase 3 Keystone D: m
 extern "C" float CharacterComponent_Cosf_131090(float); // Phase 3 Keystone D: move-tick heading cosf (0x140131090)
 extern void RegisterCharManager();           // Phase 3 Keystone D: char spatial-hash manager (sub_83f0/8660/8c40/8d00/28c0/8560)
 extern void RegisterEconomyTypeIds();        // Phase 3 economy: building-find type-id globals (InteractDescription c7938)
+extern void RegisterPipelineTypeIds();       // StartTown 1fc0 pipeline: CreatePlacedDescription c7468 / ModelComponent c7a50 / ModelDescription c7a88 (gated BANISHED_LIVE_DECAL)
 extern void RegisterWorkActBatch();          // Phase 2 Keystone B3: 5 Work action-queue builders
 extern void RegisterWorkTailTradeBatch();    // Phase 2 Keystone B tail: TradeWork AVL serialize (c8a0/c710/c830)
 extern void RegisterWorkTailFireBatch();     // Phase 2 Keystone B tail: FireWork spiral search (881d0/88730)
@@ -586,6 +587,7 @@ static void RegisterCodeFunctions() {
     RegisterDialogBatch();         // WorkplaceUI FindComponent (d6c0) + AutoSaveDialog handler (5dec0)
     RegisterTutorialBaseBatch();   // Tutorial gap -> 0: serialize family (26fb0/27ad0/27de0/28cf0/28f40/29190) + Check helpers (92010/910a0/13920/12e5c0/12fbb0)
     RegisterEconomyTypeIds();      // Phase 3 economy: InteractDescription c7938 storage (filled by FillEconomyTypeIdGlobals)
+    RegisterPipelineTypeIds();     // StartTown 1fc0 pipeline: ModelComponent/ModelDescription/CreatePlacedDescription find (filled by FillPipelineTypeIds; gated BANISHED_LIVE_DECAL)
 
     // Player registration wave (round 1) — closure-safe tool sub-helpers.
     RegisterPlayerDragBatch();     // 5160 FindDescription, ff980 CloseDialog, ffbf0/1000f0/100140 sounds, 1018d0 ClearPathEntities

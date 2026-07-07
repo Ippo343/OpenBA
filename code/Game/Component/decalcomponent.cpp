@@ -220,6 +220,65 @@ static void EnsureDrawHelpers() {
     s_drawHelpersInit = true;
 }
 
+// FindComponent(ModelComponent) — SA-safe. The exe helper 0x140003f60 matches on the
+// raw .rdata type-id constant DWORD_1401c7a50, which is NEVER seeded in standalone
+// (same class of gap as the DecalDescription type-id — see DecalDescTypeId()). With
+// that constant null, the exe FindComponent's `if (typeId)` guard fails and it returns
+// a null component, so the decal read variant=0 and always sampled atlas cell (0,0)
+// (transparent). We therefore resolve the ModelComponent type-id from the runtime
+// registry (Object::GetTypeIdByName, valid after Object::Factory::Startup) and walk the
+// owner entity's component list ourselves — the same manual find StartTown already uses
+// successfully (FindComponentOnEntity). In DLL mode the exe constant is live, so we keep
+// delegating to the faithful 0x140003f60. Returns the ModelComponent ptr or nullptr.
+static void* FindModelComponentOnOwner(void* ownerEnt) {
+#ifdef STANDALONE_EXE
+    // Preferred faithful path: the exe FindComponent(ModelComponent) (0x140003f60) now
+    // works in standalone because the ModelComponent type-id .rdata constant
+    // (DWORD_1401c7a50) is seeded by reg_pipeline_typeids.cpp (gated on BANISHED_LIVE_DECAL).
+    // Fall back to the manual GetTypeIdByName walk if the seeding is absent (e.g. the exe
+    // helper unresolved). One-shot log records which path resolved the model.
+    if (ownerEnt && s_fn_FindComp_Model) {
+        uintptr_t exeBuf[2] = {0, 0};
+        s_fn_FindComp_Model(ownerEnt, exeBuf);
+        static int s_pathLog = 0;
+        if (DecalTraceOn() && s_pathLog < 4) { ++s_pathLog;
+            fprintf(stderr, "[Decal::Find] exe 0x140003f60 -> %p (seeded-typeid path %s)\n",
+                    (void*)exeBuf[0], exeBuf[0] ? "OK" : "FAILED->fallback"); fflush(stderr); }
+        if (exeBuf[0]) {
+            if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(exeBuf);
+            return reinterpret_cast<void*>(exeBuf[0]);
+        }
+    }
+    static uint32_t s_tidModel = 0;
+    if (s_tidModel == 0 || s_tidModel == 0xFFFFFFFF)
+        s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    if (!ownerEnt || s_tidModel == 0 || s_tidModel == 0xFFFFFFFF) return nullptr;
+    uint8_t* e = reinterpret_cast<uint8_t*>(ownerEnt);
+    int count = *reinterpret_cast<int32_t*>(e + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        uintptr_t vt = *reinterpret_cast<uintptr_t*>(comp);
+        typedef uint32_t (*fn_GetTypeId_t)(void*);
+        uint32_t id = (*reinterpret_cast<fn_GetTypeId_t*>(vt + 0x10))(comp);
+        if (id == s_tidModel) {
+            if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(slot);
+            return *slot;
+        }
+    }
+    return nullptr;
+#else
+    if (!s_fn_FindComp_Model || !ownerEnt) return nullptr;
+    uintptr_t modelBuf[2] = {0, 0};
+    s_fn_FindComp_Model(ownerEnt, modelBuf);
+    if (modelBuf[0] && s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(modelBuf);
+    return reinterpret_cast<void*>(modelBuf[0]);
+#endif
+}
+
 void DecalComponent_Draw(DecalComponent* self) {
     EnsureDrawHelpers();
     static int s_dbg = 0;
@@ -251,18 +310,24 @@ void DecalComponent_Draw(DecalComponent* self) {
     int height = *reinterpret_cast<int16_t*>(mapComp + 0x2e);
     uint32_t rotation = *reinterpret_cast<uint32_t*>(mapComp + 0x30);
 
-    // FindComponent(ModelComponent) → per-variant UV rect index (+0x164). Default 0.
+    // FindComponent(ModelComponent) → per-variant UV rect index (+0x164). This is the
+    // per-building visual style StartTown randomises (ComponentEntity_impl_1fc0 in
+    // retail); it selects which atlas cell of the tiled-decal material this building's
+    // foundation samples. Defaults to 0 if no ModelComponent is found.
     int variant = 0;
     float mdlPos[3] = {0, 0, 0};   // building's rendered world pos (ModelComponent+0x148 Transform +0x10..0x18)
+    int mdlVar166 = -1;
+    void* mdlDesc = nullptr;
     if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(selfA + 0x10));
-    uintptr_t modelBuf[2] = {0, 0};
-    if (s_fn_FindComp_Model) s_fn_FindComp_Model(*reinterpret_cast<void**>(selfA + 0x10), modelBuf);
-    if (modelBuf[0] != 0) {
-        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(modelBuf);
-        variant = *reinterpret_cast<int16_t*>(modelBuf[0] + 0x164);
-        mdlPos[0] = *reinterpret_cast<float*>(modelBuf[0] + 0x148 + 0x10);
-        mdlPos[1] = *reinterpret_cast<float*>(modelBuf[0] + 0x148 + 0x14);
-        mdlPos[2] = *reinterpret_cast<float*>(modelBuf[0] + 0x148 + 0x18);
+    void* modelComp = FindModelComponentOnOwner(*reinterpret_cast<void**>(selfA + 0x10));
+    if (modelComp != nullptr) {
+        uintptr_t mc = reinterpret_cast<uintptr_t>(modelComp);
+        variant   = *reinterpret_cast<int16_t*>(mc + 0x164);
+        mdlVar166 = *reinterpret_cast<int16_t*>(mc + 0x166);
+        mdlPos[0] = *reinterpret_cast<float*>(mc + 0x148 + 0x10);
+        mdlPos[1] = *reinterpret_cast<float*>(mc + 0x148 + 0x14);
+        mdlPos[2] = *reinterpret_cast<float*>(mc + 0x148 + 0x18);
+        mdlDesc   = *reinterpret_cast<void**>(mc + 0x18);
     }
 
     // DecalDescription = IsDerivedFrom(self+0x18, DecalDescription typeId) ? self+0x18 : null.
@@ -403,11 +468,13 @@ void DecalComponent_Draw(DecalComponent* self) {
             float p10f = *reinterpret_cast<float*>(&p10);
             fprintf(stderr, "[Decal] Draw self=%p tile=(%d,%d %dx%d) rot=%d tiled=%d "
                     "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) p10=%g(0x%08x) sys=%p id=%d "
+                    "| MDL model=%p desc=%p var166=%d "
                     "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d) uvINT16=[(%d,%d)(%d,%d)(%d,%d)] "
                     "maxIdx=%d oob=%d posBBox=x[%d,%d]y[%d,%d]\n",
                     (void*)self, minX, minY, width, height, (int)rotation, (int)tiledFlag,
                     (void*)material, variant, variantCount, alpha,
                     uv[0], uv[1], uv[2], uv[3], p10f, p10, (void*)decalSys, id,
+                    modelComp, mdlDesc, mdlVar166,
                     vtxCount, idxCount, vb, px, py, pz,
                     uv0u, uv0v, uv1u, uv1v, uv2u, uv2v,
                     maxIdx, oobCount, vminX, vmaxX, vminY, vmaxY);

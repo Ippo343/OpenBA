@@ -674,13 +674,25 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             }
         }
 
-        // Foundation F — set the ModelComponent world transform so its OnAdded
-        // (ModelComponent_Draw, fired by RegisterEntity -> OnAddedPass below) places
-        // the mesh at the building footprint centre. Mirrors the transform block of
-        // ComponentEntity_impl_1fc0 (call site 0x1400a24bc): footprint centre =
-        // midpoint of the origin/far corner terrain positions; yaw = raw orient;
-        // pitch = 0. ModelComponent_Draw then calls Geometry::SetTransform(+0x28,
-        // +0x148). Without this the mesh would render at the world origin.
+        // ── ModelComponent world TRANSFORM — faithful 1:1 port of the transform
+        // block of ComponentEntity_impl_1fc0 (0x1400a218b..0x1400a2513).
+        //
+        // Retail derives the footprint-centre world position by terrain-sampling the
+        // footprint's origin corner and its far corner (both as flat tile indices
+        // into the map grid), midpointing the two world positions, then building a
+        // yaw-only Transform there:
+        //   dim      = *mapGrid                         (mapGrid = *(gw+0xf8) = `game`)
+        //   corner1  = dim*tileY + tileX                (footprint origin)
+        //   corner2  = (tileY+fpH)*dim + tileX + fpW    (footprint far corner)
+        //   worldXY  = f3e0(mapGrid, {idx%dim - (dim>>1), idx/dim - (dim>>1), 0})
+        //              == fn_MapGetTerrainPos (0x14009f3e0, verified identical)
+        //   centre   = (world1 + world2) * DAT_140172114  (=0.5f, kCenterBias)
+        //   yaw      = (float)orient   (raw entry+0x28, pre-normalisation); pitch = 0
+        // Retail then: FromYawPitchOffset(tmp,&yaw,&pitch,&centre) ->
+        //   Transform::operator=(model+0x148,tmp) -> model+0x168 = yaw ->
+        //   Graphics::Geometry::SetTransform(model+0x28, model+0x148)  (0x1400a250f).
+        // `game` is the already-deref'd mapGrid (caller: game = *(gw+0xf8), line ~2790),
+        // so dim = *(int*)game and f3e0's first arg is `game`, exactly retail's *local_b0.
         if (game && fn_MapGetTerrainPos && fn_Transform_FromYawPitchOffset) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
@@ -688,23 +700,33 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 fn_InternalBasePtr_Ctor(&mcIBP, modelComp);
                 fn_InternalBasePtr_CheckPtr(&mcIBP);
                 uint8_t* mc = (uint8_t*)mcIBP;
-                int dim = *(int32_t*)game;
+                const int dim = *(int32_t*)game;
                 if (mc && dim > 0) {
                     const float half = (float)(dim >> 1);
-                    // Origin corner (tileX, tileY) and far corner (tileX+fpW, tileY+fpH).
+                    // corner1 — footprint origin (tileX, tileY).
                     int idx1 = dim * tileY + tileX;
                     float in1[3] = { (float)(idx1 % dim) - half, (float)(idx1 / dim) - half, 0.0f };
                     float p1[3] = {0,0,0};
-                    fn_MapGetTerrainPos(game, p1, in1, 0, nullptr);
+                    fn_MapGetTerrainPos(game, p1, in1, '\0', nullptr);
+                    // corner2 — footprint far corner (tileX+fpW, tileY+fpH).
                     int idx2 = (tileY + fpH) * dim + tileX + fpW;
                     float in2[3] = { (float)(idx2 % dim) - half, (float)(idx2 / dim) - half, 0.0f };
                     float p2[3] = {0,0,0};
-                    fn_MapGetTerrainPos(game, p2, in2, 0, nullptr);
-                    float center[3] = { (p1[0]+p2[0])*0.5f, (p1[1]+p2[1])*0.5f, (p1[2]+p2[2])*0.5f };
+                    fn_MapGetTerrainPos(game, p2, in2, '\0', nullptr);
+                    float center[3] = { (p1[0]+p2[0])*kCenterBias,     // DAT_140172114 = 0.5f
+                                        (p1[1]+p2[1])*kCenterBias,
+                                        (p1[2]+p2[2])*kCenterBias };
                     float yaw = (float)orient, pitch = 0.0f;
-                    // Writes the Transform straight into ModelComponent+0x148.
+                    // FromYawPitchOffset writes the Transform straight into +0x148 (byte-
+                    // identical to retail's tmp-retbuf + Transform::operator=(+0x148,tmp)).
                     fn_Transform_FromYawPitchOffset((void*)(mc + 0x148), &yaw, &pitch, center);
-                    *(float*)(mc + 0x168) = yaw;
+                    *(float*)(mc + 0x168) = yaw;   // MOVSS [model+0x168], (float)orient
+                    // Graphics::Geometry::SetTransform(model+0x28, model+0x148) — the piece the
+                    // old approximation dropped (it assumed ModelComponent_Draw would push it
+                    // later). Without this the Geometry/MeshInstance at +0x28 (and its derived
+                    // world-pos +0x158) never picks up the +0x148 matrix, leaving it stale/0.
+                    if (fn_Geometry_SetTransform)
+                        fn_Geometry_SetTransform((void*)(mc + 0x28), (void*)(mc + 0x148));
                 }
             }
         }
