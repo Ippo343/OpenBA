@@ -419,6 +419,10 @@ void DecalComponent_Draw(DecalComponent* self) {
             // non-zero spread confirms the ace40 chain fix (uvRect + 4096 scale restored).
             long vtxCount = -1, idxCount = -1; int px = 0, py = 0, pz = 0; void* vb = nullptr;
             int uv0u = -1, uv0v = -1, uv1u = -1, uv1v = -1, uv2u = -1, uv2v = -1; int stride = 0x14;
+            // texcoord.zw (vtx +0xC/+0xE) — the tiled-mask atlas rect written by cc10 from the
+            // DAT_1401c23d0 LUT. For a tiled decal (tiled=1) these must be non-zero (~128..3968);
+            // if 0 the LUT fallback didn't fire and the TiledDecal mask samples empty -> invisible.
+            int zw0z = -1, zw0w = -1, zw1z = -1, zw1w = -1;
             // Objective geometry-health scan (confirms the ace40 dedup-index fix): the
             // maximum index must be < vtxCount (no out-of-range fetch) and the vertex
             // position bbox must hug the footprint (no stray vertex at the origin, which
@@ -440,6 +444,10 @@ void DecalComponent_Draw(DecalComponent* self) {
                               uv1v = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0A);
                               uv2u = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x08);
                               uv2v = *reinterpret_cast<int16_t*>((uintptr_t)vb + 2*stride + 0x0A);
+                              zw0z = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x0C);
+                              zw0w = *reinterpret_cast<int16_t*>((uintptr_t)vb + 0x0E);
+                              zw1z = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0C);
+                              zw1w = *reinterpret_cast<int16_t*>((uintptr_t)vb + stride + 0x0E);
                               vminX = vmaxX = px; vminY = vmaxY = py;
                               for (long vi = 0; vi < vtxCount && vi < 4096; ++vi) {
                                   int x = *reinterpret_cast<int16_t*>((uintptr_t)vb + vi*stride + 0x00);
@@ -478,6 +486,7 @@ void DecalComponent_Draw(DecalComponent* self) {
                     "mat=%p variant=%d/%d alpha=%d uv=(%.3f,%.3f,%.3f,%.3f) p10=%g(0x%08x) sys=%p id=%d "
                     "| MDL model=%p desc=%p var166=%d "
                     "| vtx=%ld idx=%ld vb=%p v0pos=(%d,%d,%d) uvINT16=[(%d,%d)(%d,%d)(%d,%d)] "
+                    "zwINT16=[(%d,%d)(%d,%d)] "
                     "maxIdx=%d oob=%d posBBox=x[%d,%d]y[%d,%d]\n",
                     (void*)self, minX, minY, width, height, (int)rotation, (int)tiledFlag,
                     (void*)material, variant, variantCount, alpha,
@@ -485,6 +494,7 @@ void DecalComponent_Draw(DecalComponent* self) {
                     modelComp, mdlDesc, mdlVar166,
                     vtxCount, idxCount, vb, px, py, pz,
                     uv0u, uv0v, uv1u, uv1v, uv2u, uv2v,
+                    zw0z, zw0w, zw1z, zw1w,
                     maxIdx, oobCount, vminX, vmaxX, vminY, vmaxY);
             fflush(stderr);
         }

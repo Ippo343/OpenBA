@@ -291,7 +291,45 @@ void Pf_RoadQuad_cc10(int64_t self, int x, int y, int64_t outQuad, int dirIdx, u
         puVar6 += 10;
         if (3 < iVar5) {
             int64_t lVar1 = static_cast<int64_t>(dirIdx) * 8;
+            // Tiled-decal / road mask-atlas rect LUT (DAT_1401c23d0). Each of the 47
+            // tile-shape variants (0..46, dirIdx = Pf_TileShapeLut_ae180 result, or 46 =
+            // DAT_1401c23cf for the non-tiled foundation default) has 4 uint16 giving the
+            // atlas cell corners {t0,t1,t2,t3}; cc10 scatters them into the 4 vertices'
+            // texcoord.zw (bytes +0xc/+0xe of each 0x14-stride vertex). The TiledDecal_ps
+            // shader samples the 'tiles' mask at texcoord.zw/4096, so a NULL table (the raw
+            // .rdata pointer resolves NULL in standalone — reference_standalone_rdata_null_fallback)
+            // leaves texcoord.zw = 0 -> mask.y ~ 0 -> the tiled decal alpha collapses to 0
+            // -> invisible. Embed the retail bytes (exact, read from 0x1401c23d0) as the
+            // fallback so the mask samples the correct per-tile cell. Bytes are little-endian
+            // uint16 pairs; casting the byte array to uint16_t* is valid on x64.
+            alignas(2) static const uint8_t kZwLutBytes[376] = {
+                128,0,128,0,128,1,128,1, 128,2,128,0,128,3,128,1,
+                128,4,128,0,128,5,128,1, 128,6,128,0,128,7,128,1,
+                128,8,128,0,128,9,128,1, 128,10,128,0,128,11,128,1,
+                128,12,128,0,128,13,128,1, 128,14,128,0,128,15,128,1,
+                128,0,128,2,128,1,128,3, 128,2,128,2,128,3,128,3,
+                128,4,128,2,128,5,128,3, 128,6,128,2,128,7,128,3,
+                128,8,128,2,128,9,128,3, 128,10,128,2,128,11,128,3,
+                128,12,128,2,128,13,128,3, 128,14,128,2,128,15,128,3,
+                128,0,128,4,128,1,128,5, 128,2,128,4,128,3,128,5,
+                128,4,128,4,128,5,128,5, 128,6,128,4,128,7,128,5,
+                128,8,128,4,128,9,128,5, 128,10,128,4,128,11,128,5,
+                128,12,128,4,128,13,128,5, 128,14,128,4,128,15,128,5,
+                128,0,128,6,128,1,128,7, 128,2,128,6,128,3,128,7,
+                128,4,128,6,128,5,128,7, 128,6,128,6,128,7,128,7,
+                128,8,128,6,128,9,128,7, 128,10,128,6,128,11,128,7,
+                128,12,128,6,128,13,128,7, 128,14,128,6,128,15,128,7,
+                128,0,128,8,128,1,128,9, 128,2,128,8,128,3,128,9,
+                128,4,128,8,128,5,128,9, 128,6,128,8,128,7,128,9,
+                128,8,128,8,128,9,128,9, 128,10,128,8,128,11,128,9,
+                128,12,128,8,128,13,128,9, 128,14,128,8,128,15,128,9,
+                128,0,128,10,128,1,128,11, 128,2,128,10,128,3,128,11,
+                128,4,128,10,128,5,128,11, 128,6,128,10,128,7,128,11,
+                128,8,128,10,128,9,128,11, 128,10,128,10,128,11,128,11,
+                128,12,128,10,128,12,128,10,
+            };
             const uint16_t* idxTbl = reinterpret_cast<const uint16_t*>(ResolveAddr(Module::Exe, 0x1401c23d0));
+            if (!idxTbl) idxTbl = reinterpret_cast<const uint16_t*>(kZwLutBytes);
             if (idxTbl) {
                 const uint16_t* t = reinterpret_cast<const uint16_t*>(reinterpret_cast<uintptr_t>(idxTbl) + lVar1);
                 // DAT_1401c23d0=t[0], d2=t[1], d4=t[2], d6=t[3]
