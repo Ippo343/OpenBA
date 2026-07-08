@@ -54,12 +54,14 @@ typedef int          (*fn_GetNodeIndex_t)(void* graphicsMesh, const char* name);
 typedef void         (*fn_GeomAttach_t)(void* geom, void* attach, int nodeIdx);  // 0x140152968
 typedef void         (*fn_MeshSetMesh_t)(void* meshInstance, void* mesh);        // 0x140151498
 typedef unsigned int (*fn_SceneAdd_t)(void* scene, void* geom);                  // 0x140151370
+typedef void         (*fn_MIDefCtor_t)(void* meshInstance);                      // 0x140151490
 
 static fn_Vector4Ctor_t  s_slot_Vector4Ctor = nullptr;
 static fn_GetNodeIndex_t s_slot_GetNodeIndex = nullptr;
 static fn_GeomAttach_t   s_slot_GeomAttach = nullptr;
 static fn_MeshSetMesh_t  s_slot_SetMesh = nullptr;
 static fn_SceneAdd_t     s_slot_SceneAdd = nullptr;
+static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 
 // ModelDescription type-id (DAT_1401c7a88). DLL: raw .rdata id; SA: runtime registry.
 static uint32_t ShowTool_ModelDescTid() {
@@ -120,6 +122,24 @@ bool ShowTool_ResolveFuncs() {
     if (iatEntry) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iatEntry);
 
     s_TypeInfo_ShowToolEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
+#ifdef STANDALONE_EXE
+    // DAT_1401c7158 is the CitizenComponent type-id (verified: CitizenComponent_
+    // RegisterType writes it). In standalone that raw exe .rdata slot is null, so
+    // resolve the id from the runtime registry and hand out a pointer to our own
+    // storage. This is used ONLY by ShowTool::Serialize's entity type-check — the
+    // carry path never touches it — but it's in the `ok` gate below, so leaving it
+    // null makes ShowTool_ResolveFuncs fail and AbstractImpl bail before ever
+    // running ShowCarried (the held-item model never appears).
+    if (!s_TypeInfo_ShowToolEntity || !*s_TypeInfo_ShowToolEntity
+        || *s_TypeInfo_ShowToolEntity == 0xFFFFFFFF) {
+        static uint32_t s_citizenTid = 0;
+        uint32_t tid = ::Object::GetTypeIdByName("CitizenComponent");
+        if (tid && tid != 0xFFFFFFFF) {
+            s_citizenTid = tid;
+            s_TypeInfo_ShowToolEntity = &s_citizenTid;
+        }
+    }
+#endif
     s_fn_HideTool = reinterpret_cast<void(*)(void*)>(
         ResolveAddr(Module::Exe, 0x1401176e0));
     s_fn_ShowToolOnEntity = reinterpret_cast<void(*)(void*, int)>(
@@ -140,6 +160,7 @@ bool ShowTool_ResolveFuncs() {
     s_slot_GeomAttach   = reinterpret_cast<fn_GeomAttach_t>(rslot(0x140152968));
     s_slot_SetMesh      = reinterpret_cast<fn_MeshSetMesh_t>(rslot(0x140151498));
     s_slot_SceneAdd     = reinterpret_cast<fn_SceneAdd_t>(rslot(0x140151370));
+    s_slot_MI_DefCtor   = reinterpret_cast<fn_MIDefCtor_t>(rslot(0x140151490));
     // The GetNodeIndexFromName / Geometry::Attach dispatch slots are NOT registered in
     // standalone (the exe .rdata slot resolves to 0), so fall back to the Runtime-x64.dll
     // functions directly (ASLR handled by ResolveAddr). Without these the held-item mesh
@@ -264,12 +285,28 @@ static void ShowTool_ShowCarried(void* entityV) {
     if (!meshSlot) return;
     uint64_t mesh = *(uint64_t*)meshSlot;
 
+    // Ensure the held-item MeshInstance (entity+0xb8) is a constructed object.
+    // Retail treats +0xb8 as an embedded, already-constructed Graphics::MeshInstance
+    // and only SetMesh's it; but in standalone the character's held-item slot may
+    // never have been initialized (this is the first carried item), leaving it
+    // zeroed. SetMesh/Attach tolerate a zeroed object, but MeshInstance::Update is
+    // then skipped (null vtable) and Graphics::Scene::AddObject faults on the
+    // uninitialized geometry (READ of +0x40). Default-construct it in place — the
+    // same 0x128-byte MeshInstance default-ctor the StorageDisplayComponent pile
+    // renderer uses before its own SetMesh+AddObject — with sceneId(+0x120) = -1.
+    void** heldVt = *(void***)(e + 0xb8);
+    if (!heldVt && s_slot_MI_DefCtor) {
+        s_slot_MI_DefCtor(e + 0xb8);
+        *(uint32_t*)(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1 (not yet in scene)
+    }
+
     if (std::getenv("BANISHED_CARRY_TRACE")) {
         static int n = 0;
         if (n++ < 40) {
-            fprintf(stderr, "[ShowTool] carried: item=%p mesh=%llx scale=%.3f nodeReady=%d\n",
+            fprintf(stderr, "[ShowTool] carried: item=%p mesh=%llx scale=%.3f nodeReady=%d heldVt=%p defCtor=%p\n",
                     bestItem, (unsigned long long)mesh, carryScale,
-                    (s_slot_GetNodeIndex && s_slot_GeomAttach) ? 1 : 0);
+                    (s_slot_GetNodeIndex && s_slot_GeomAttach) ? 1 : 0,
+                    (void*)heldVt, (void*)s_slot_MI_DefCtor);
             fflush(stderr);
         }
     }
@@ -316,6 +353,16 @@ static void ShowTool_ShowCarried(void* entityV) {
 // ============================================================
 int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     (void)actionStack;
+    // Trace the requested toolId up front (a plain field read, no deps) so a run
+    // shows which ShowTool variants reach the executor even when a dep is missing.
+    if (std::getenv("BANISHED_CARRY_TRACE")) {
+        static int n0 = 0;
+        if (n0++ < 80) {
+            fprintf(stderr, "[ShowTool] AbstractImpl ENTER toolId=%d resolved=%d\n",
+                    (int)*(uint32_t*)((uint8_t*)self + 0x28), s_showtool_funcs_resolved ? 1 : 0);
+            fflush(stderr);
+        }
+    }
     // Lazy resolve: when this action is built via the exe action-ctor path (not our
     // factory) ShowTool_ResolveFuncs never ran, so s_fn_* are null -> EXEC-of-null when
     // the executor runs it (e.g. a forester's PerformWork cut sequence shows the axe).
