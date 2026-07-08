@@ -181,6 +181,11 @@ static fn_CheckPtr_draw_t s_fn_CheckPtr_draw   = nullptr;
 static fn_FindComp_t      s_fn_FindComp_Map    = nullptr;   // 0x140004680 (MapComponent)
 static fn_FindComp_t      s_fn_FindComp_Model  = nullptr;   // 0x140003f60 (ModelComponent)
 static void**             s_pGameStateDraw      = nullptr;   // DAT_1401c3dd8
+// RefreshEntityFlags (0x1400c3470) — re-aggregate the owning entity's component flags
+// and (un)register it in the update tree; used to bucket the decal's owner via the draw
+// flag so the tree walk's +0x40 slot drives the build-once, then un-bucket once placed.
+typedef void (*fn_EntityFlagUpdate_t)(void* entity);
+static fn_EntityFlagUpdate_t s_fn_EntityFlagUpdate = nullptr;
 static bool s_drawHelpersInit = false;
 
 static bool DecalTraceOn() {
@@ -211,6 +216,7 @@ static void EnsureDrawHelpers() {
     s_fn_FindComp_Map   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fn_FindComp_Model = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_pGameStateDraw    = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
+    s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(ResolveAddr(Module::Exe, 0x1400c3470));
     if (!s_TypeId_DecalDesc)
         s_TypeId_DecalDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c75b8));
     if (!s_fn_IsDerivedFrom_dispatch) {
@@ -603,22 +609,30 @@ static uint32_t DecalComponent_LiveGetTypeId(void*) {
 }
 static void* DecalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static DecalComponent* s_decalDriveList[512];
-static int  s_decalDriveCount = 0;
-static void DecalComponent_RegisterDriven(DecalComponent* self) {
-    if (!self) return;
-    for (int i = 0; i < s_decalDriveCount; ++i)   // dedup (Startup can re-run on reload)
-        if (s_decalDriveList[i] == self) return;
-    if (s_decalDriveCount < 512) s_decalDriveList[s_decalDriveCount++] = self;
+// Bucket (or un-bucket) this decal's owning entity into the update tree via the draw flag
+// (component +0x20 bit 0x4), so the EntityList tree walk dispatches the component's +0x40
+// slot. c3470 (RefreshEntityFlags) re-aggregates the owner's flags and (de)registers it;
+// it no-ops safely if the entityList isn't set yet (the flag itself is then picked up by
+// the later EntityList registration). Setting the flag ⇒ eventual bucketing either way.
+static void DecalComponent_SetDrawFlag(void* s, bool on) {
+    EnsureDrawHelpers();
+    uintptr_t c = reinterpret_cast<uintptr_t>(s);
+    uint32_t oldFlags = *reinterpret_cast<uint32_t*>(c + 0x20);
+    uint32_t newFlags = on ? (oldFlags | 0x4u) : (oldFlags & ~0x4u);
+    if (newFlags == oldFlags) return;
+    *reinterpret_cast<uint32_t*>(c + 0x20) = newFlags;
+    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *reinterpret_cast<void**>(c + 0x10)) {
+        if (s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(reinterpret_cast<void*>(c + 0x10));
+        if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*reinterpret_cast<void**>(c + 0x10));
+    }
 }
 
-// index 4 — Startup(self): register this instance for the per-frame driver.
+// index 4 — Startup(self): bucket the owner so the tree walk drives the build-once.
 static void DecalComponent_StartupVSlot(void* s) {
-    DecalComponent_RegisterDriven(reinterpret_cast<DecalComponent*>(s));
+    DecalComponent_SetDrawFlag(s, true);
     if (DecalTraceOn()) {
         static int n = 0;
-        if (n < 8) { ++n; fprintf(stderr, "[Decal] Startup registered self=%p (count=%d)\n",
-                                  s, s_decalDriveCount); fflush(stderr); }
+        if (n < 8) { ++n; fprintf(stderr, "[Decal] Startup bucketed self=%p\n", s); fflush(stderr); }
     }
 }
 // index 6 — Draw(self): build + submit the terrain decal.
@@ -629,11 +643,21 @@ static void DecalComponent_DrawVSlot(void* s) {
 static void DecalComponent_OnCreateVSlot(void* s) {
     DecalComponent_OnCreate(reinterpret_cast<DecalComponent*>(s));
 }
+// index 8 (+0x40) — per-frame draw-tick, dispatched by the EntityList tree walk once the
+// owner is bucketed. Build-once: attempt the build until placed (Draw self-guards if the
+// scene/material aren't ready), then un-bucket so the tree stops ticking this component
+// (the placed decal is thereafter rendered by GeomDraw_CollectDraw, not the update tree).
+static void DecalComponent_TickVSlot(void* s, void* /*time*/) {
+    DecalComponent* cc = reinterpret_cast<DecalComponent*>(s);
+    if (cc->decalId < 0) DecalComponent_Draw(cc);   // retry the build until the material is ready
+    if (cc->decalId >= 0) DecalComponent_SetDrawFlag(s, false);   // placed → un-bucket
+}
 static void DecalComponent_FinishLiveVtable() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_DECAL")) {
         DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);
         DecalComponent_LiveVtable[6] = reinterpret_cast<void*>(&DecalComponent_DrawVSlot);
         DecalComponent_LiveVtable[7] = reinterpret_cast<void*>(&DecalComponent_OnCreateVSlot);
+        DecalComponent_LiveVtable[8] = reinterpret_cast<void*>(&DecalComponent_TickVSlot);
     }
 }
 extern "C" void* DecalComponent_Factory(void) {
@@ -653,74 +677,4 @@ static void* DecalComponent_CreateInPlace(void* mem) {
 REGISTER_TYPE(DecalComponent, "Component",
               &DecalComponent_Factory, &DecalComponent_CreateInPlace);
 
-// Per-frame driver drain — the integrator adds the call site in GameUpdateLoop::Update,
-// right after StorageDisplay_DrainDraw(s_frameNum):
-//     extern void DecalComponent_DrainDraw(int frameNum);
-//     DecalComponent_DrainDraw(s_frameNum);
-// Draw()s each registered DecalComponent whose decal hasn't been placed yet (build-once).
-extern "C" void DecalComponent_DrainDraw(int frameNum) {
-    if (s_decalDriveCount == 0) {
-        if (DecalTraceOn()) {
-            static int once = 0;
-            if (frameNum >= 3 && once < 1) { ++once;
-                fprintf(stderr, "[Decal::Drive] frame=%d queued=0 (no DecalComponent registered — "
-                        "Startup slot never fired / gate off)\n", frameNum); fflush(stderr); }
-        }
-        return;
-    }
-    if (frameNum < 3) return;                                  // wait for scene + seeding
-    int built = 0;
-    for (int i = 0; i < s_decalDriveCount; ++i) {
-        DecalComponent* cc = s_decalDriveList[i];
-        if (!cc) continue;
-        if (cc->decalId >= 0) { ++built; continue; }           // already placed
-        DecalComponent_Draw(cc);                               // self-guarding (returns if not ready)
-        if (cc->decalId >= 0) ++built;
-    }
-    if (DecalTraceOn()) {
-        static int s_last = -1;
-        if (built != s_last) { s_last = built;
-            fprintf(stderr, "[Decal::Drive] frame=%d queued=%d built=%d\n",
-                    frameNum, s_decalDriveCount, built); fflush(stderr); }
-
-        // One-shot alignment probe at a LATE frame (model transforms populated by now):
-        // for each decal, read its owner ModelComponent world pos (+0x148 Transform +0x10/18)
-        // and the decal's stored slot footprint (world = slotMin - 0xc0>>1). If the building
-        // sits at ~2x the decal's world coord, the decal grid is missing the tile->grid x2.
-        static int s_probed = 0;
-        if (frameNum == 200 && !s_probed) { s_probed = 1;
-            EnsureDrawHelpers();
-            uintptr_t gs = s_pGameStateDraw ? reinterpret_cast<uintptr_t>(*s_pGameStateDraw) : 0;
-            uintptr_t decalSys = gs ? *reinterpret_cast<uintptr_t*>(gs + 0x110) : 0;
-            int half = decalSys ? (*reinterpret_cast<int32_t*>(decalSys + 0xc0) >> 1) : 0;
-            // StorageDisplay-style centering (the correctly-placed piles): mapSize = *(int*)*(int**)(gs+0xf8),
-            // world = tile - ((mapSize>>1) - 0.5). If this differs from decalWorld, we found the offset.
-            int mapSize = 0;
-            { int* mapInfo = gs ? *reinterpret_cast<int**>(gs + 0xf8) : nullptr;
-              if (mapInfo) mapSize = *mapInfo; }
-            float sdHalf = (float)(mapSize >> 1) - 0.5f;
-            fprintf(stderr, "[Decal::Align] mapSize(gs+0xf8)=%d  0xc0>>1=%d  sdHalfMap=%.1f\n",
-                    mapSize, half, sdHalf);
-            for (int i = 0; i < s_decalDriveCount; ++i) {
-                DecalComponent* cc = s_decalDriveList[i];
-                if (!cc || cc->decalId < 0 || !decalSys) continue;
-                uintptr_t ccA = reinterpret_cast<uintptr_t>(cc);
-                uintptr_t mb[2] = {0,0};
-                if (s_fn_FindComp_Model) s_fn_FindComp_Model(*reinterpret_cast<void**>(ccA + 0x10), mb);
-                float mx = 0, mz = 0;
-                if (mb[0]) { mx = *reinterpret_cast<float*>(mb[0] + 0x148 + 0x10);
-                             mz = *reinterpret_cast<float*>(mb[0] + 0x148 + 0x18); }
-                uintptr_t sbase = *reinterpret_cast<uintptr_t*>(decalSys + 0x1f0);
-                uintptr_t slot = sbase + static_cast<uintptr_t>(cc->decalId) * 0x60;
-                int smnX = *reinterpret_cast<int32_t*>(slot + 0x2c);
-                int smnY = *reinterpret_cast<int32_t*>(slot + 0x30);
-                fprintf(stderr, "[Decal::Align] id=%d decalWorld=(%d,%d) modelWorld=(%.1f,%.1f) "
-                        "ratio=(%.2f,%.2f)\n", cc->decalId, smnX - half, smnY - half, mx, mz,
-                        mx != 0 ? mx / (float)(smnX - half) : 0.0f,
-                        mz != 0 ? mz / (float)(smnY - half) : 0.0f);
-            }
-            fflush(stderr);
-        }
-    }
-}
 #endif // STANDALONE_EXE
