@@ -382,6 +382,13 @@ static void** g_pDebugSingleton = nullptr;
 // ============================================================
 static bool s_initialized = false;
 static int s_frameNum = 0;
+
+// Per-render-frame token (incremented once per GameUpdateLoop::Update). Exposed so the
+// tree-driven ParticleComponent tick can un-stamp each pooled emit-state at most once
+// per frame (matching retail's once-per-render-frame _frameIndex advance in
+// Renderer::Render), independent of how many houses share the emit or how many sim
+// sub-iterations the speed multiplier runs.
+extern "C" int GameUpdateLoop_CurrentFrame() { return s_frameNum; }
 // Debug trace — disabled for performance, enable when debugging
 #define TRACE(...) do { } while(0)
 
@@ -750,13 +757,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // No-op unless BANISHED_LIVE_DECAL populated the driver list at spawn.
     extern void DecalComponent_DrainDraw(int frameNum);
     DecalComponent_DrainDraw(s_frameNum);
-
-    // Building particle emitters (chimney smoke): SA's tree walk never dispatches
-    // the component's +0x40 per-frame slot for buildings, so drive fade + particle
-    // simulation explicitly. No-op unless BANISHED_LIVE_PARTICLE populated the
-    // driver list at spawn. (Deviation: also ticks while the game is UI-paused.)
-    extern void ParticleComponent_DrainTick(int frameNum, void* time);
-    ParticleComponent_DrainTick(s_frameNum, time);
 #endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",

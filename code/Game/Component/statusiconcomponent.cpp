@@ -708,6 +708,45 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
     }
 }
 
+// Resolve the WorkPlaceDescription type id (DAT_1401c8118). In standalone the raw .rdata
+// slot is zero-filled/unregistered at ResolveAddr time, so fall back to the runtime name
+// lookup (Object::GetTypeIdByName), the established SA type-id fallback pattern.
+static uint32_t StatusIcon_WorkPlaceDescTypeId() {
+    static uint32_t cached = 0;
+    static bool tried = false;
+    if (tried) return cached;
+    tried = true;
+    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8118));
+    if (p && *p != 0 && *p != 0xFFFFFFFFu) { cached = *p; return cached; }
+    uint32_t byName = ::Object::GetTypeIdByName("WorkPlaceDescription");
+    cached = (byName == 0xFFFFFFFFu) ? 0 : byName;
+    return cached;
+}
+
+// FAITHFUL "no workers" test, mirroring the sole retail raiser of status bit 4 (0x10) —
+// WorkPlaceComponent::SetAccepting (Entity_impl_fc00, 0x14012fc00). Retail raises the
+// warning ONLY when the workplace is ACCEPTING workers (+0x50), its occupant roster
+// (+0x60) is empty, AND its active job (+0x48) is still the description's designated job
+// (desc+0x20) — i.e. an ACTIVE, unstaffed workplace. A BUILT house's *construction*
+// workplace has jobSlot(+0x48) cleared to 0 (!= desc.job) once finished (the same field
+// WorkPlaceUI's spinner-hide keys on, 284a7a5), so it correctly raises NO warning. The
+// prior naive `roster==0` check wrongly warned on every empty roster, lighting spurious
+// "no workers" icons on finished houses (a house isn't a live workplace).
+static bool StatusIcon_WorkplaceNeedsWorker(void* wpV) {
+    uintptr_t wp = (uintptr_t)wpV;
+    if (*(char*)(wp + 0x50) == 0) return false;           // not accepting → no warning
+    if (*(int*)(wp + 0x60) != 0)  return false;           // roster non-empty → staffed
+    int64_t jobSlot = *(int64_t*)(wp + 0x48);
+    if (jobSlot == 0) return false;                       // built / no active job
+    uint32_t descTid = StatusIcon_WorkPlaceDescTypeId();
+    void* descObj = *(void**)(wp + 0x18);
+    if (descTid && descObj && fn_IsDerivedFrom && fn_IsDerivedFrom(descObj, descTid))
+        return jobSlot == *(int64_t*)((uintptr_t)descObj + 0x20);  // job still the desc job
+    // Desc type-id unresolved: jobSlot!=0 + accepting + empty roster is the proven
+    // built-vs-construction discriminator (WorkPlaceUI spinner-hide), so warn.
+    return true;
+}
+
 // Find the owner entity's WorkPlaceComponent (occupant-roster controller, type 0x1401c80e0).
 // Entity component array at entity+0x30, count +0x38; each slot an InternalBasePtr.
 // Mirrors Entity_FindComponent_MeshInstance (0x140002f90). Returns null if absent (e.g. a
@@ -776,14 +815,16 @@ extern "C" void StatusIcon_DrainForceShow(int frameNum) {
             // Legacy debug: force-show every icon (active bit 0), then position.
             StatusIcon_Toggle(cc, 0, true);
         } else {
-            // REAL occupancy: warning bit 4 by the owner workplace's roster count.
+            // FAITHFUL occupancy: warning bit 4 (0x10) only for an ACTIVE, unstaffed
+            // workplace (accepting && empty roster && jobSlot==desc.job). Built houses,
+            // whose construction workplace has jobSlot cleared, no longer warn.
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(c + 0x10));
             uintptr_t entity = *(uintptr_t*)(c + 0x10);
             void* wp = StatusIcon_FindWorkPlace(entity);
             if (!wp) { ++noWp; continue; }
-            bool occupied = *(int*)((uintptr_t)wp + 0x60) > 0;
-            StatusIcon_Toggle(cc, 4, occupied ? false : true);
-            if (occupied) ++cleared;
+            bool warn = StatusIcon_WorkplaceNeedsWorker(wp);
+            StatusIcon_Toggle(cc, 4, warn);
+            if (!warn) ++cleared;
             else {
                 ++warned;
                 // Diagnostic: was the SET suppressed by the faithful cull guard?
@@ -793,17 +834,26 @@ extern "C" void StatusIcon_DrainForceShow(int frameNum) {
         if (*(int32_t*)(c + 0x100) >= 0) ++shown;
     }
 
+    // Count icons that would actually DRAW a sprite (active-bits word +0xF0 != 0), across
+    // ALL queued icons (incl. non-workplace ones the loop above `continue`d past).
+    int litCount = 0;
+    for (int i = 0; i < s_iconDriveCount; ++i) {
+        StatusIconComponent* cc = s_iconDriveList[i];
+        if (cc && *(uint32_t*)((uintptr_t)cc + 0xF0) != 0) ++litCount;
+    }
+
     static bool trace = [](){ const char* e = getenv("BANISHED_STATUSICON_TRACE");
                               return e && e[0] && e[0] != '0'; }();
     // Log on the first run and whenever the shown-in-scene count changes (so the moment a
     // warning icon actually enters the scene is captured) — not every frame.
     static int s_lastShown = -1;
-    if (trace && shown != s_lastShown) {
-        s_lastShown = shown;
+    static int s_lastLit = -1;
+    if (trace && (shown != s_lastShown || litCount != s_lastLit)) {
+        s_lastShown = shown; s_lastLit = litCount;
         printf("[StatusIcon::Drive] frame=%d queued=%d mode=%s warned=%d (culled=%d) cleared=%d "
-               "noWorkplace=%d shown-in-scene=%d scene=%p settings=%p\n",
+               "noWorkplace=%d shown-in-scene=%d lit(+0xF0!=0)=%d scene=%p settings=%p\n",
                frameNum, s_iconDriveCount, forceShow ? "FORCESHOW" : "OCCUPANCY",
-               warned, culledWarn, cleared, noWp, shown, scene, settings);
+               warned, culledWarn, cleared, noWp, shown, litCount, scene, settings);
         fflush(stdout);
     }
 }

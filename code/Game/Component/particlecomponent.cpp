@@ -96,26 +96,16 @@ static float PC_UVScale();  // defined with the helper ports below
 
 static bool s_initialized = false;
 
-// Entity re-bucket toggle. Retail's StartEmitter/StopEmitter set the component's
-// draw flag (self+0x20 bit 0x4) and call RefreshEntityFlags (c3470), which
-// re-aggregates the OWNING entity's flags and registers it into the per-frame
-// component-update tree. In standalone we drive the particle tick EXPLICITLY
-// (ParticleComponent_DrainTick), so that bucketing is unnecessary — and worse,
-// it wakes the house entity's other per-frame component slots (workplace/status
-// evaluation) which produce bogus results in SA: built houses showed a spurious
-// "no citizens available to work" + "?"/cold status icons. Default ON (env
-// BANISHED_PARTICLE_ENTITY_FLAGS unset) => skip the re-bucket. Set the env to a
-// non-zero value to restore the faithful retail behavior for A/B.
-static bool PC_RebucketEntity() {
-#ifdef STANDALONE_EXE
-    static int v = -1;
-    if (v < 0) { const char* e = getenv("BANISHED_PARTICLE_ENTITY_FLAGS");
-                 v = (e && *e && e[0] != '0') ? 1 : 0; }
-    return v == 1;
-#else
-    return true;
-#endif
-}
+// Entity re-bucket — FAITHFUL retail behavior, now the SOLE per-frame tick driver.
+// Retail's StartEmitter/StopEmitter set the component's draw flag (self+0x20 bit 0x4)
+// and call RefreshEntityFlags (c3470), which re-aggregates the OWNING entity's flags
+// and registers it into the per-frame component-update tree; the tree walk then
+// dispatches this component's +0x40 slot (PC_TickVSlot) every frame. Earlier this was
+// suppressed in SA because re-bucketing a house woke its broken workplace/status
+// evaluation (spurious "no workers"/?/cold icons); that eval is now fixed (the
+// StatusIcon occupancy driver is faithful — see StatusIcon_WorkplaceNeedsWorker), so
+// the re-bucket is safe AND required to drive the tick. Always on.
+static bool PC_RebucketEntity() { return true; }
 
 // ParticleDescription type id — DLL mode reads the exe .rdata slot; in standalone
 // that ResolveAddr returns NULL (raw .rdata is not registered), so fall back to
@@ -940,25 +930,65 @@ static uint32_t ParticleComponent_LiveGetTypeId(void*) {
 }
 static void* ParticleComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-// ---- Explicit per-frame driver (StorageDisplay_DrainDraw pattern) ----
-// SA's EntityList tree walk never dispatches this component's +0x40 per-frame
-// slot for building entities (same gap as StorageDisplay's +0x48 — verified by
-// static, never-fading smoke). GameUpdateLoop::Update drives every spawned
-// ParticleComponent explicitly; UpdateTick early-outs per emitter unless it is
-// live in the scene, so steady-state cost is a few houses * one emitter.
-static ParticleComponent* s_pcDriveList[1024];
-static int s_pcDriveCount = 0;
-static void ParticleComponent_RegisterDriven(ParticleComponent* self) {
-    if (!self) return;
-    for (int i = 0; i < s_pcDriveCount; ++i)   // dedup (Startup can re-run)
-        if (s_pcDriveList[i] == self) return;
-    if (s_pcDriveCount < 1024) s_pcDriveList[s_pcDriveCount++] = self;
+// ---- Per-frame frame-index un-stamp (Runtime-semantics fix, NOT a tick driver) ----
+// The tick itself is now driven faithfully by the EntityList tree walk: StartEmitter's
+// c3470 re-bucket registers the owning entity into the update tree, and the walk
+// (EntityList_TreeNodeHandler) dispatches this component's +0x40 slot (PC_TickVSlot)
+// every frame. The one thing SA still lacks is the per-render-frame advance of the
+// shared Graphics::ParticleInstance::_frameIndex (Runtime static @0x1801fe77c) that
+// retail's Renderer::Render performs; without it ParticleSystemInstance::Update dedups
+// forever (emitState+0x2c == fi) and the sim freezes. Advancing the GLOBAL counter is
+// not an option — the status-icon billboards share the mechanism and were built around
+// the frozen counter (advancing it makes icons re-simulate as drifting particles).
+// Instead, right before each tick, un-stamp THIS component's own live emitters so
+// exactly one instance per state simulates. Blast radius = this component's smoke.
+extern "C" int GameUpdateLoop_CurrentFrame();  // per-render-frame token (read-only)
+
+static void PC_UnstampOwnEmitters(ParticleComponent* self) {
+    static int32_t* s_pFrameIndex = nullptr;
+    static bool s_resolved = false;
+    if (!s_resolved) {
+        s_pFrameIndex = reinterpret_cast<int32_t*>(
+            ResolveAddr(Module::Runtime, 0x1801fe77c));
+        s_resolved = true;
+    }
+    if (!s_pFrameIndex || !self) return;
+    int32_t fi = *s_pFrameIndex;
+
+    // Per-frame emit dedup. The 6 founding houses share only ~3 POOLED emit-states
+    // (verified: emit-diag showed one emit ref'd by 3 houses). Un-stamping a shared
+    // emit once per referencing house would re-simulate it Nx/frame (smoke Nx too
+    // fast). Instead un-stamp each DISTINCT emit at most once per render frame; the
+    // first house's tick then simulates it and the rest dedup (emit+0x2c == fi). This
+    // reproduces retail's once-per-render-frame advance without the deleted two-phase
+    // driver. The seen-set resets when the GameUpdateLoop frame token changes.
+    static int s_gen = -1;
+    static uintptr_t s_seen[64];
+    static int s_seenCount = 0;
+    int frame = GameUpdateLoop_CurrentFrame();
+    if (frame != s_gen) { s_gen = frame; s_seenCount = 0; }
+
+    uintptr_t s = (uintptr_t)self;
+    PCGeoEntry* arr = *(PCGeoEntry**)(s + 0x38);
+    int total = *(int32_t*)(s + 0x40);
+    for (int i = 0; arr && i < total; ++i) {
+        if (!arr[i].geo || arr[i].sceneId < 0) continue;
+        uintptr_t g = (uintptr_t)arr[i].geo;
+        uintptr_t res  = *(uintptr_t*)(g + 0xc0);
+        uintptr_t emit = *(uintptr_t*)(g + 0xc8);
+        if (!res || !emit || *(uint8_t*)(res + 0x20) == 0) continue;
+        bool seen = false;
+        for (int k = 0; k < s_seenCount; ++k) if (s_seen[k] == emit) { seen = true; break; }
+        if (seen) continue;                          // already un-stamped this frame
+        if (s_seenCount < 64) s_seen[s_seenCount++] = emit;
+        if (*(int32_t*)(emit + 0x2c) == fi)
+            *(int32_t*)(emit + 0x2c) = fi - 1;
+    }
 }
 
 static void PC_StartupVSlot(void* s) {
     ParticleComponent_InitFuncs();
     ParticleComponent_Serialize(reinterpret_cast<ParticleComponent*>(s));
-    ParticleComponent_RegisterDriven(reinterpret_cast<ParticleComponent*>(s));
 }
 static void PC_OnAddedVSlot(void* s) {
     ParticleComponent_InitFuncs();
@@ -969,7 +999,9 @@ static void PC_OnRemovedVSlot(void* s) {
     ParticleComponent_OnCreate(reinterpret_cast<ParticleComponent*>(s));
 }
 static void PC_TickVSlot(void* s, void* time) {
-    ParticleComponent_UpdateTick(reinterpret_cast<ParticleComponent*>(s), time);
+    ParticleComponent* self = reinterpret_cast<ParticleComponent*>(s);
+    PC_UnstampOwnEmitters(self);   // SA per-frame frame-index advance (see helper) before the tick
+    ParticleComponent_UpdateTick(self, time);
 }
 static void PC_OnUpdate2VSlot(void* s) {
     ParticleComponent_InitFuncs();
@@ -1006,58 +1038,6 @@ static void* ParticleComponent_CreateInPlace(void* mem) {
 }
 REGISTER_TYPE(ParticleComponent, "Component",
               &ParticleComponent_Factory, &ParticleComponent_CreateInPlace);
-
-// Per-frame drain — called from GameUpdateLoop::Update alongside the other SA
-// drivers. `time` is the frame Time* (fade integration + particle simulation).
-extern "C" void ParticleComponent_DrainTick(int frameNum, void* time) {
-    if (frameNum < 3 || !time || s_pcDriveCount == 0) return;
-
-    // Shared-emit unfreeze, scoped to OUR emitters only. The smoke
-    // ParticleSystem resources carry the shared-emit-state flag (res+0x20):
-    // ParticleSystemInstance::Update dedups per frame via emitState+0x2c ==
-    // Graphics::ParticleInstance::_frameIndex (Runtime static @0x1801fe77c).
-    // In SA nothing advances _frameIndex in-game, so after the first Update the
-    // stamp matches forever and the sim freezes. Advancing the GLOBAL counter
-    // is NOT an option — the status-icon billboards share the mechanism and
-    // were built around the frozen counter (advancing it made icons re-simulate
-    // as particles: drifting/expiring "?" icons). Instead, un-stamp just our
-    // live emitters' shared states once per frame so exactly one instance per
-    // state simulates — retail per-frame semantics, blast radius = smoke only.
-    static int32_t* s_pFrameIndex = nullptr;
-    if (!s_pFrameIndex)
-        s_pFrameIndex = reinterpret_cast<int32_t*>(
-            ResolveAddr(Module::Runtime, 0x1801fe77c));
-    if (s_pFrameIndex) {
-        int32_t fi = *s_pFrameIndex;
-        for (int c = 0; c < s_pcDriveCount; ++c) {
-            uintptr_t s = (uintptr_t)s_pcDriveList[c];
-            PCGeoEntry* arr = *(PCGeoEntry**)(s + 0x38);
-            int total = *(int32_t*)(s + 0x40);
-            for (int i = 0; arr && i < total; ++i) {
-                if (!arr[i].geo || arr[i].sceneId < 0) continue;
-                uintptr_t g = (uintptr_t)arr[i].geo;
-                uintptr_t res  = *(uintptr_t*)(g + 0xc0);
-                uintptr_t emit = *(uintptr_t*)(g + 0xc8);
-                if (res && emit && *(uint8_t*)(res + 0x20) != 0 &&
-                    *(int32_t*)(emit + 0x2c) == fi)
-                    *(int32_t*)(emit + 0x2c) = fi - 1;
-            }
-        }
-    }
-
-    for (int i = 0; i < s_pcDriveCount; ++i)
-        PC_TickVSlot(s_pcDriveList[i], time);
-    if (PCTraceOn()) {
-        static int s_tickLog = 0;
-        if (s_tickLog < 3 || (s_tickLog % 600) == 0) {
-            printf("[Particle] drain tick frame=%d comps=%d dt=%.4f\n",
-                   frameNum, s_pcDriveCount,
-                   s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(time) : -1.0f);
-            fflush(stdout);
-        }
-        s_tickLog++;
-    }
-}
 
 // Register the helper closure at its exe addresses so the shared bodies above
 // (and any other reimpl referencing them) resolve in standalone.
