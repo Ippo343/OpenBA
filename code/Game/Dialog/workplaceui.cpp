@@ -512,3 +512,183 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
         WorkplaceUI_ToggleWorkplace_Impl(self);
     }
 }
+
+// ============================================================
+// STANDALONE promotion — real WorkPlaceUI controller vtable
+// ============================================================
+// The WorkPlaceUI panel (Dialog/Work.rsc:workPlace — the "workers X of Y" label
+// with the up/down worker/job spinners) is listed in the UIDescription of every
+// building that has a WorkPlaceComponent, INCLUDING non-production ones like the
+// WoodHouse/StoneHouse and StorageBarn: those carry a *construction* workplace so
+// citizens can be assigned to build them. Their WorkPlaceDescription has no
+// profession ("no actual work done here once the building is built"), so once the
+// building is complete the workplace's profession (WorkPlaceComponent+0x48) is
+// null and retail's WorkplaceUI::Startup HIDES the whole panel — that is why a
+// finished house / barn / stockpile shows only the center/pin/close chrome plus its
+// residence/storage content, and no worker spinner.
+//
+// In standalone this type was a StubNop (all slots no-op, see ui_dialog_stub_
+// factories.cpp — that stub registration is REMOVED there to avoid a duplicate
+// REGISTER_TYPE), so Startup never ran and the construction-workplace spinner
+// stayed visible on completed houses/barns. This installs a real per-class vtable
+// that drives the exact show/hide decision from Startup's head:
+//     show  ⇔  WorkPlaceComponent found  AND  its profession (+0x48) != 0
+// i.e. hide on a built house/barn/pile (no active profession), show while it is
+// still under construction and on genuine production workplaces.
+//
+// Only the visibility decision is ported here — the heavy worker-count population
+// tail of Startup is deliberately skipped in SA: it calls two exe helper functions
+// via ResolveAddr(Module::Exe,…) (FUN_14000d6c0 / FUN_140002ed0) that resolve NULL
+// in standalone, and iterates the citizen list. The user-visible requirement is
+// that the panel disappears on the storage/house dialogs; a shown production panel
+// keeps its .rsc default content exactly as the StubNop already left it (no
+// regression). This mirrors the StorageUI/StorageCapacityUI/ResidenceUI promotions.
+//
+// Vtable offsets (verified from the exe WorkPlaceUI vtable @ 0x14015e030):
+//   +0x00 (idx0) ScalarDtor   +0x10 (idx2) GetTypeId
+//   +0x20 (idx4) Serialize (0x140087940) — element discovery (skipped in SA)
+//   +0x38 (idx7) Startup   (0x140087080) — full refresh (visibility subset in SA)
+//   +0x40 (idx8)           — base DialogController::OnUpdate (per-frame). The
+//                framework dispatches ONLY +0x40 each frame, so the visibility
+//                refresh is driven here so it stays live as buildings complete.
+//   +0x48 (idx9) OnRemove  (0x1400877e0) — button dispatch (no-op in SA; the
+//                worker/job spinners aren't wired without Serialize's element IDs).
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include <cstdlib>
+
+namespace workplaceui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("WorkPlaceUI");
+    return c;
+}
+
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    // No owned heap fields (Serialize is skipped in SA, so +0x30..+0x58 stay the
+    // zero-filled InternalBasePtr values the factory set). Just free self.
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// The exe-.rdata type-id globals the visibility check dereferences are NULL in
+// standalone. Lazy-fill from the live runtime type registry (valid after
+// Object::Factory::Startup). "WorkPlaceComponent" is the registered name that
+// fn_FindComponent_BuildState2 searches by (slot 0x1401c80e0).
+void EnsureGlobals() {
+    static uint32_t s_ce = 0, s_wpc = 0;
+    if (!g_TypeId_ComponentEntity) {
+        s_ce = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ce) g_TypeId_ComponentEntity = &s_ce;
+    }
+    if (!g_TypeId_WorkplaceComponent) {
+        s_wpc = ::Object::ResolveTypeIdByNameLazy("WorkPlaceComponent");
+        if (s_wpc) g_TypeId_WorkplaceComponent = &s_wpc;
+    }
+}
+
+bool Ready() {
+    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_WorkplaceComponent && *g_TypeId_WorkplaceComponent;
+}
+
+// Faithful visibility subset of WorkplaceUI_Startup (0x140087080): show the
+// workPlace panel only while the building has an active workplace profession.
+void UpdateVisibility(void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    void* panelElem = *reinterpret_cast<void**>(s + 0x20);
+    if (!panelElem) return;  // controller not bound to its element yet
+
+    // Resolve the bound entity (data source at +0x28).
+    void* dataSource = *reinterpret_cast<void**>(s + 0x28);
+    bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+    void* entity = isEntity ? dataSource : nullptr;
+    uint8_t entityBuf[8];
+    fn_InternalBasePtr_Ctor(entityBuf, entity);
+    fn_InternalBasePtr_CheckPtr(entityBuf);
+    void* entityPtr = *reinterpret_cast<void**>(entityBuf);
+
+    // Find the WorkPlaceComponent (fn_FindComponent_BuildState2 → g_TypeId_WorkplaceComponent).
+    uint64_t workComp = 0;
+    fn_FindComponent_BuildState2(entityPtr, &workComp);
+    fn_InternalBasePtr_CheckPtr(&workComp);
+
+    // Show only when the workplace has an active profession (+0x48 != 0); hidden
+    // on a completed house/barn/pile whose construction workplace has cleared it.
+    bool show = workComp != 0 &&
+                *reinterpret_cast<uintptr_t*>(static_cast<uintptr_t>(workComp) + 0x48) != 0;
+
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        static int n = 0;
+        if (n++ < 10) {
+            fprintf(stderr, "[WorkPlaceUI] self=%p workComp=0x%llx prof=0x%llx show=%d\n",
+                    self, (unsigned long long)workComp,
+                    workComp ? (unsigned long long)*reinterpret_cast<uintptr_t*>(
+                        static_cast<uintptr_t>(workComp) + 0x48) : 0ull, show ? 1 : 0);
+            fflush(stderr);
+        }
+    }
+
+    fn_Element_SetFlagsOnOff(panelElem, show ? 0u : 1u, show ? 1u : 0u);
+}
+
+// idx8 (+0x40): per-frame — keep the panel's visibility in sync as buildings
+// finish construction (profession clears → panel hides).
+void W_OnUpdate(void* self, void* /*time*/) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    UpdateVisibility(self);
+}
+
+// idx7 (+0x38): Startup — same visibility decision on the framework's setup call.
+void W_Startup(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    UpdateVisibility(self);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[7] = reinterpret_cast<void*>(&W_Startup);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x68); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x68), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace workplaceui_sa
+
+REGISTER_TYPE(WorkPlaceUI, "UI::DialogController",
+              &workplaceui_sa::Factory, &workplaceui_sa::InPlace);
+
+#endif  // STANDALONE_EXE

@@ -376,7 +376,10 @@ REGISTER_TYPE(ToolUI, "UI::DialogController",
 UI_DIALOG_STUB(TownHallUI,          "UI::DialogController", 0x1E8);
 UI_DIALOG_STUB(TradeUI,             "UI::DialogController", 0x148);
 UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
-UI_DIALOG_STUB(WorkPlaceUI,         "UI::DialogController", 0x60);
+// ---- WorkPlaceUI: PROMOTED to real SA vtable (workplaceui.cpp) — the construction
+//      workplace spinner panel now self-hides once a building is complete (its
+//      profession clears), so finished houses/barns/piles show only center/pin/close
+//      + their residence/storage content instead of a stale worker up/down spinner. ----
 UI_DIALOG_STUB(BuildUI,             "UI::DialogController", 0x50);
 // ---- ResidenceUI: PROMOTED to real SA vtable (residenceui.cpp) — a house panel now
 //      lists its residents (name/gender/age/profession) from the ResidenceComponent
