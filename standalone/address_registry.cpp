@@ -106,6 +106,7 @@ extern "C" {
     void RegisterHighlightDescriptionVtable();
     void RegisterDecalDescriptionVtable();
     void RegisterParticleDescriptionVtable();
+    void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
     void RegisterHerdDescriptionVtable();
     void RegisterPopulationDescriptionVtable();
     void RegisterAnimalDescriptionVtable();
@@ -1445,6 +1446,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterHighlightDescriptionVtable();
     RegisterDecalDescriptionVtable();
     RegisterParticleDescriptionVtable();
+    RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
     RegisterHerdDescriptionVtable();
     RegisterPopulationDescriptionVtable();
     RegisterAnimalDescriptionVtable();

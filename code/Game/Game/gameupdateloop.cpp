@@ -750,6 +750,13 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // No-op unless BANISHED_LIVE_DECAL populated the driver list at spawn.
     extern void DecalComponent_DrainDraw(int frameNum);
     DecalComponent_DrainDraw(s_frameNum);
+
+    // Building particle emitters (chimney smoke): SA's tree walk never dispatches
+    // the component's +0x40 per-frame slot for buildings, so drive fade + particle
+    // simulation explicitly. No-op unless BANISHED_LIVE_PARTICLE populated the
+    // driver list at spawn. (Deviation: also ticks while the game is UI-paused.)
+    extern void ParticleComponent_DrainTick(int frameNum, void* time);
+    ParticleComponent_DrainTick(s_frameNum, time);
 #endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",

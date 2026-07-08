@@ -19,6 +19,12 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
+#include <cstdlib>
+
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#endif
 
 // ============================================================
 // Resolved helpers
@@ -86,17 +92,62 @@ static fn_OnRemove_Orig_t s_fn_OnRemove_Orig = nullptr;
 
 static uint32_t* s_pParticleDescTypeId = nullptr;  // DAT_1401c4758
 static float* s_pUVScale = nullptr;  // g_fUVScale (constant 1.0)
+static float PC_UVScale();  // defined with the helper ports below
 
 static bool s_initialized = false;
+
+// Entity re-bucket toggle. Retail's StartEmitter/StopEmitter set the component's
+// draw flag (self+0x20 bit 0x4) and call RefreshEntityFlags (c3470), which
+// re-aggregates the OWNING entity's flags and registers it into the per-frame
+// component-update tree. In standalone we drive the particle tick EXPLICITLY
+// (ParticleComponent_DrainTick), so that bucketing is unnecessary — and worse,
+// it wakes the house entity's other per-frame component slots (workplace/status
+// evaluation) which produce bogus results in SA: built houses showed a spurious
+// "no citizens available to work" + "?"/cold status icons. Default ON (env
+// BANISHED_PARTICLE_ENTITY_FLAGS unset) => skip the re-bucket. Set the env to a
+// non-zero value to restore the faithful retail behavior for A/B.
+static bool PC_RebucketEntity() {
+#ifdef STANDALONE_EXE
+    static int v = -1;
+    if (v < 0) { const char* e = getenv("BANISHED_PARTICLE_ENTITY_FLAGS");
+                 v = (e && *e && e[0] != '0') ? 1 : 0; }
+    return v == 1;
+#else
+    return true;
+#endif
+}
+
+// ParticleDescription type id — DLL mode reads the exe .rdata slot; in standalone
+// that ResolveAddr returns NULL (raw .rdata is not registered), so fall back to
+// the runtime type registry (valid after Object::Factory::Startup).
+static uint32_t PC_DescTypeId() {
+    if (s_pParticleDescTypeId && *s_pParticleDescTypeId != 0 &&
+        *s_pParticleDescTypeId != 0xFFFFFFFF)
+        return *s_pParticleDescTypeId;
+#ifdef STANDALONE_EXE
+    static uint32_t cached = 0;
+    if (cached == 0 || cached == 0xFFFFFFFF)
+        cached = ::Object::GetTypeIdByName("ParticleDescription");
+    if (cached != 0 && cached != 0xFFFFFFFF) return cached;
+#endif
+    return 0;
+}
 
 // Helper: get particle description from _unk18
 static void* GetParticleDesc(void* self) {
     void* baseObj = *(void**)((uintptr_t)self + 0x18);
-    if (s_fn_IsDerivedFrom_d && s_pParticleDescTypeId) {
-        if (s_fn_IsDerivedFrom_d(baseObj, *s_pParticleDescTypeId))
-            return baseObj;
-    }
+    if (!baseObj) return nullptr;
+#ifdef STANDALONE_EXE
+    // +0x18 is the description sub-block the component was instantiated from;
+    // the SA factory tree can false-negative IsDerivedFrom, so trust non-null
+    // (Object::IsDerivedFromOrTrust convention).
+    return Object::IsDerivedFromOrTrust(baseObj, PC_DescTypeId()) ? baseObj : nullptr;
+#else
+    uint32_t tid = PC_DescTypeId();
+    if (s_fn_IsDerivedFrom_d && tid && s_fn_IsDerivedFrom_d(baseObj, tid))
+        return baseObj;
     return nullptr;
+#endif
 }
 
 // ============================================================
@@ -155,7 +206,7 @@ void ParticleComponent_Draw(ParticleComponent* self) {
     void* desc = GetParticleDesc(self);
     if (!desc) return;
 
-    float uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
+    float uvScale = PC_UVScale();
 
     int emitterCount = *(int*)((uintptr_t)desc + 0x30);
     if (emitterCount <= 0) return;
@@ -291,6 +342,498 @@ void ParticleComponent_OnUpdate2(ParticleComponent* self) {
 }
 
 // ============================================================
+// Full ports of the exe helper closure (used by the standalone exe; in DLL
+// mode ResolveAddr returns the original exe code so these stay dormant).
+// Decompiled from Application-x64.exe:
+//   0x140052480  Setup        — (re)build geometry+flag arrays, create one
+//                               Graphics::ParticleSystemInstance per emitter
+//                               via the referenced ParticleSystem resource's
+//                               vtable+0x40 (CreateInstance, Runtime-side)
+//   0x140052560  Place        — position emitter i: model transform / map-cell
+//                               terrain pos / identity, then attach-point table
+//                               (desc+0x20) or mesh-node lookup by name
+//   0x140052990  StopEmitter  — Scene::RemoveObject + flag bookkeeping
+//   0x140052a50  StartEmitter — Place + Update(0) + Scene::AddObject + flags
+//   0x140053660  StartFade    — fade-in rate = 1/t1, opacity=0, StartEmitter
+//   0x140052b30  UpdateTick   — per-frame (vtable+0x40): node-follow transform
+//                               + opacity fade integration + geometry Update
+//   0x140053090  Event        — event 2 = fade-in start, 3 = fade-out (b2 set)
+// ============================================================
+
+// Geometry-array entry (self+0x38 array, stride 0x18; count at self+0x40)
+struct PCGeoEntry {
+    void*   geo;       // +0x00 Graphics::ParticleSystemInstance (Geometry subclass)
+    int32_t sceneId;   // +0x08 Graphics::Scene object id, -1 = not in scene
+    int32_t nodeIdx;   // +0x0c mesh-node / attach-point index to follow, -1 = static
+    float   fadeRate;  // +0x10 opacity units/sec (0 = steady)
+    int32_t _pad14;    // +0x14
+};
+static_assert(sizeof(PCGeoEntry) == 0x18, "PCGeoEntry stride");
+
+// Emitter entry in ParticleDescription (+0x28 array, stride 0x28) — layout per
+// code/Game/Component/particledescription.cpp:
+//   +0x00 External* particleSystem, +0x08 String name, +0x10 b0 followNode,
+//   +0x11 b1 autoStart, +0x12 b2 eventToggled, +0x13 b3 noModelTransform,
+//   +0x18 Time t0 prewarm, +0x20 Time t1 fadeDuration
+
+// --- extra resolved deps for the ports ---
+// MeshInstance::GetNodeToWorld — member returning Transform by value:
+// RCX=this, RDX=retbuf, R8D=nodeIndex (dispatch slot 0x140152998).
+typedef void* (*fn_GetNodeToWorld_t)(void* meshInstance, void* retTransform, int nodeIndex);
+static fn_GetNodeToWorld_t s_fn_GetNodeToWorld = nullptr;
+
+// Math::Transform::operator* — member: RCX=this, RDX=retbuf, R8=&rhs
+// (dispatch slot 0x140151430).
+typedef void* (*fn_TransformMul_t)(const void* self, void* retTransform, const void* rhs);
+static fn_TransformMul_t s_fn_TransformMul = nullptr;
+
+// System::String::operator==(const String&) — RCX=&lhs field, RDX=&rhs field
+// (dispatch slot 0x140151438).
+typedef bool (*fn_StringEqStr_t)(const void* lhs, const void* rhs);
+static fn_StringEqStr_t s_fn_StringEqStr = nullptr;
+
+// Graphics::GraphicsMesh::GetNodeIndexFromName(mesh, nameChars) — slot 0x140152970.
+typedef int (*fn_GetNodeIdxFromName_t)(void* mesh, const char* name);
+static fn_GetNodeIdxFromName_t s_fn_GetNodeIdxFromName = nullptr;
+
+// FindComponent helpers (exe): 0x140003f60 = ModelComponent, 0x140004680 = MapComponent.
+// (entity, retbuf IBP) — retbuf[0] receives the component pointer (or 0).
+typedef void* (*fn_PCFindComponent_t)(uintptr_t entity, void* retIBP);
+static fn_PCFindComponent_t s_fn_FindComp_Model = nullptr;
+static fn_PCFindComponent_t s_fn_FindComp_Map = nullptr;
+
+// Throttled diagnostic trace (BANISHED_PARTICLE_TRACE)
+static bool PCTraceOn() {
+    static int v = -1;
+    if (v < 0) { const char* e = getenv("BANISHED_PARTICLE_TRACE");
+                 v = (e && *e && e[0] != '0') ? 1 : 0; }
+    return v == 1;
+}
+static int s_pcTraceBudget = 0;
+
+#ifdef STANDALONE_EXE
+// g_fUVScale is the retail .rdata constant 1.0f. In SA the ResolveAddr for
+// 0x140172234 lands inside an unrelated registered data blob (observed value
+// 300.0 → fade rate 300/s, opacity 15+ → permanently opaque smoke), so use
+// the known retail value directly.
+static float PC_UVScale() { return 1.0f; }
+#else
+static float PC_UVScale() { return s_pUVScale ? *s_pUVScale : 1.0f; }
+#endif
+
+// Owning entity from the component's +0x10 InternalBasePtr.
+static uintptr_t PC_Entity(void* self) {
+    void* ibp = (void*)((uintptr_t)self + 0x10);
+    if (*(uintptr_t*)ibp == 0) return 0;
+    if (s_fn_CheckPtr) s_fn_CheckPtr(ibp);
+    return *(uintptr_t*)ibp;
+}
+
+static void* PC_FindComp(fn_PCFindComponent_t fn, uintptr_t entity) {
+    if (!fn || !entity) return nullptr;
+    uintptr_t buf[2] = {0, 0};
+    fn(entity, buf);
+    if (buf[0] && s_fn_CheckPtr) s_fn_CheckPtr(buf);
+    return (void*)buf[0];
+}
+
+// Geometry-array (re)size — port of FUN_14000a640 (stride 0x18).
+// Header at self+0x38: {void* data(+0), int count(+8), int cap(+0xc)}.
+// New entries init to {geo=0, sceneId=-1, nodeIdx=0, fadeRate=0}.
+static void PC_GeoArrayResize(void* header, int newCount) {
+    uint8_t* h = (uint8_t*)header;
+    int oldCount = *(int32_t*)(h + 8);
+    if (newCount == oldCount) return;
+
+    uint8_t* oldData = *(uint8_t**)h;
+    *(int32_t*)(h + 8) = newCount;
+    if (*(int32_t*)(h + 0xc) < newCount) {
+        int cap = (newCount == oldCount + 1 && oldCount != 0) ? newCount * 3 : newCount;
+        *(int32_t*)(h + 0xc) = cap;
+        *(void**)h = (fn_MemAlloc && g_pMemAllocSingleton)
+                     ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)cap * 0x18, 8)
+                     : nullptr;
+    }
+    uint8_t* data = *(uint8_t**)h;
+    if (!data) { *(int32_t*)(h + 8) = 0; *(int32_t*)(h + 0xc) = 0; return; }
+    int keep = (oldData == data) ? oldCount : 0;  // in-place: old entries stay valid
+    for (int i = 0; i < newCount; i++) {
+        PCGeoEntry* e = (PCGeoEntry*)(data + (size_t)i * 0x18);
+        if (i < keep) continue;
+        if (i < oldCount && oldData) {
+            memcpy(e, oldData + (size_t)i * 0x18, 0x18);
+        } else {
+            e->geo = nullptr; e->sceneId = -1; e->nodeIdx = 0;
+            e->fadeRate = 0.0f; e->_pad14 = 0;
+        }
+    }
+    if (oldData && oldData != data && fn_MemFreeStatic) fn_MemFreeStatic(oldData);
+}
+
+// ============================================================
+// ParticleComponent_helper_2560 — place emitter i (0x140052560)
+// ============================================================
+extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+    void* desc = GetParticleDesc(self);
+    if (!desc) return;
+    uint8_t* elem = *(uint8_t**)((uintptr_t)desc + 0x28) + (size_t)index * 0x28;
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    if (!geoArr) return;
+    PCGeoEntry* ge = &geoArr[index];
+    if (!ge->geo) return;   // resource failed to load — leave emitter inert
+
+    uintptr_t entity = PC_Entity(self);
+    void* model = PC_FindComp(s_fn_FindComp_Model, entity);
+    void* mapc  = PC_FindComp(s_fn_FindComp_Map, entity);
+
+    // Transform = quat(x,y,z,w) at +0x00, pos(x,y,z) at +0x10 — 7 floats.
+    float tf[7] = {0, 0, 0, PC_UVScale(), 0, 0, 0};   // identity
+    if (model && elem[0x13] == 0) {
+        // Building/entity model transform (+0x148)
+        memcpy(tf, (uint8_t*)model + 0x148, 7 * sizeof(float));
+    } else if (mapc && g_pGameWorldSingleton && *g_pGameWorldSingleton && fn_MapGetTerrainPos) {
+        // Centre cell of the entity's map footprint → terrain-height world pos
+        void* mapDims = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+        int W = mapDims ? *(int*)mapDims : 0;
+        if (W > 0) {
+            uintptr_t m = (uintptr_t)mapc;
+            int idx = ((int)*(int16_t*)(m + 0x2a) + ((int)*(int16_t*)(m + 0x2e) >> 1)) * W
+                    + ((int)*(int16_t*)(m + 0x2c) >> 1) + (int)*(int16_t*)(m + 0x28);
+            float half = (float)(W >> 1) - 0.5f;
+            float in[3]  = {(float)(idx % W) - half, (float)(idx / W) - half, 0.0f};
+            float out[3] = {0, 0, 0};
+            fn_MapGetTerrainPos(mapDims, out, in, '\0', nullptr);
+            tf[4] = out[0]; tf[5] = out[1]; tf[6] = out[2];
+        }
+    }
+
+    float pos[3] = {tf[4], tf[5], tf[6]};
+    int followIdx = -1;
+    void* attach = *(void**)((uintptr_t)desc + 0x20);
+    if (attach) {
+        // Named attach-point table: entries {String name(+0), Vector3 offset(+8)}, stride 0x18
+        int n = *(int32_t*)((uintptr_t)attach + 0x38);
+        uint8_t* arr = *(uint8_t**)((uintptr_t)attach + 0x30);
+        for (int j = 0; j < n && arr; j++) {
+            if (s_fn_StringEqStr && s_fn_StringEqStr(arr + (size_t)j * 0x18, elem + 8)) {
+                float zero = 0.0f, ypo[7], prod[7];
+                if (fn_Transform_FromYawPitchOffset && s_fn_TransformMul) {
+                    fn_Transform_FromYawPitchOffset(ypo, &zero, &zero, arr + (size_t)j * 0x18 + 8);
+                    s_fn_TransformMul(ypo, prod, tf);
+                    pos[0] = prod[4]; pos[1] = prod[5]; pos[2] = prod[6];
+                }
+                followIdx = j;
+                break;
+            }
+        }
+    } else if (model) {
+        // Mesh-node lookup by emitter name (e.g. a "smoke" node in the building mesh)
+        void* mesh = *(void**)((uintptr_t)model + 0xe8);
+        char* name = *(char**)(elem + 8);
+        if (mesh && name && *(int32_t*)(name - 8) != 0 && s_fn_GetNodeIdxFromName) {
+            int n = s_fn_GetNodeIdxFromName(mesh, name);
+            if (n >= 0) {
+                if (s_fn_GetNodeToWorld) {
+                    float ntw[7] = {0, 0, 0, 1, 0, 0, 0};
+                    s_fn_GetNodeToWorld((uint8_t*)model + 0x28, ntw, n);
+                    pos[0] = ntw[4]; pos[1] = ntw[5]; pos[2] = ntw[6];
+                }
+                followIdx = n;
+            }
+        }
+    }
+
+    // Final placement: identity rotation + computed position
+    float finalTf[7] = {0, 0, 0, PC_UVScale(), pos[0], pos[1], pos[2]};
+    if (fn_Geometry_SetTransform) fn_Geometry_SetTransform(ge->geo, finalTf);
+
+    // Configure the instance from its ParticleSystem resource (vtable+0x48)
+    void* res = *(void**)(elem + 0);
+    void** vt = *(void***)ge->geo;
+    if (res && vt && vt[9]) {
+        typedef void (*fn_setSystem_t)(void*, void*);
+        ((fn_setSystem_t)vt[9])(ge->geo, res);
+    }
+
+    ge->sceneId = -1;
+    ge->nodeIdx = (elem[0x10] != 0) ? followIdx : -1;
+
+    if (PCTraceOn() && s_pcTraceBudget < 64) {
+        s_pcTraceBudget++;
+        char* nm = *(char**)(elem + 8);
+        printf("[Particle] place self=%p i=%d name=%s follow=%d pos=(%.1f,%.1f,%.1f) res=%p geo=%p\n",
+               (void*)self, index, nm ? nm : "(null)", ge->nodeIdx, pos[0], pos[1], pos[2], res, ge->geo);
+        fflush(stdout);
+    }
+
+    // Prewarm: tick the emitter forward by t0 (elem+0x18) in engine fixed steps
+    int64_t t0 = *(int64_t*)(elem + 0x18);
+    if (t0 > 0 && g_pEngineSingleton && *g_pEngineSingleton && vt && vt[1]) {
+        int64_t step = *(int64_t*)((uintptr_t)*g_pEngineSingleton + 0x48);
+        if (step > 0) {
+            typedef void (*fn_geoUpdate_t)(void*, void*);
+            for (int64_t acc = step; ; acc += step) {
+                ((fn_geoUpdate_t)vt[1])(ge->geo, &step);
+                if (acc >= t0) break;
+            }
+        }
+    }
+}
+
+// ============================================================
+// ParticleComponent_helper_2990 — stop emitter i (0x140052990)
+// ============================================================
+extern "C" void ParticleComponent_StopEmitter(ParticleComponent* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    if (!geoArr) return;
+    PCGeoEntry* ge = &geoArr[index];
+    if (ge->sceneId >= 0) {
+        if (s_fn_SceneRemoveObject && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
+            if (scene) s_fn_SceneRemoveObject(scene, (uint32_t)ge->sceneId);
+        }
+        ge->sceneId = -1;
+    }
+    uint8_t* flagArr = *(uint8_t**)(s + 0x28);
+    if (flagArr) flagArr[index] = 0;
+
+    // Any emitter still live? Keep the per-frame flag.
+    int total = *(int32_t*)(s + 0x40);
+    for (int j = 0; j < total; j++)
+        if (geoArr[j].sceneId >= 0) return;
+
+    if (!PC_RebucketEntity()) return;
+    uint32_t oldFlags = *(uint32_t*)(s + 0x20);
+    uint32_t newFlags = oldFlags & ~0x4u;
+    *(uint32_t*)(s + 0x20) = newFlags;
+    if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
+        if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(s + 0x10));
+        if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*(void**)(s + 0x10));
+    }
+}
+
+// ============================================================
+// ParticleComponent_helper_2a50 — start emitter i (0x140052a50)
+// ============================================================
+extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    if (!geoArr) return;
+    PCGeoEntry* ge = &geoArr[index];
+
+    void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                  ? *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60) : nullptr;
+    if (ge->sceneId >= 0 && scene && s_fn_SceneRemoveObject)
+        s_fn_SceneRemoveObject(scene, (uint32_t)ge->sceneId);
+
+    ParticleComponent_Place(self, index);
+    if (!ge->geo || !scene) return;
+
+    // Initial Update(Time(0)) then add to the scene
+    int64_t zeroTime = 0;
+    void** vt = *(void***)ge->geo;
+    if (vt && vt[1]) {
+        typedef void (*fn_geoUpdate_t)(void*, void*);
+        ((fn_geoUpdate_t)vt[1])(ge->geo, &zeroTime);
+    }
+    if (fn_Graphics_Scene_AddObject)
+        ge->sceneId = (int32_t)fn_Graphics_Scene_AddObject(scene, ge->geo);
+
+    if (PC_RebucketEntity()) {
+        uint32_t oldFlags = *(uint32_t*)(s + 0x20);
+        uint32_t newFlags = oldFlags | 0x4u;
+        *(uint32_t*)(s + 0x20) = newFlags;
+        if (((newFlags ^ oldFlags) & 0xFFFF) != 0 && *(uintptr_t*)(s + 0x10) != 0) {
+            if (s_fn_CheckPtr) s_fn_CheckPtr((void*)(s + 0x10));
+            if (s_fn_EntityFlagUpdate) s_fn_EntityFlagUpdate(*(void**)(s + 0x10));
+        }
+    }
+    uint8_t* flagArr = *(uint8_t**)(s + 0x28);
+    if (flagArr) flagArr[index] = 1;
+
+    if (PCTraceOn() && s_pcTraceBudget < 96) {
+        s_pcTraceBudget++;
+        printf("[Particle] start self=%p i=%d sceneId=%d\n", (void*)self, index, ge->sceneId);
+        fflush(stdout);
+    }
+}
+
+// ============================================================
+// FUN_140053660 — start emitter i with fade-in (0x140053660)
+// ============================================================
+extern "C" void ParticleComponent_StartEmitterFade(ParticleComponent* self, int index) {
+    uintptr_t s = (uintptr_t)self;
+    void* desc = GetParticleDesc(self);
+    if (!desc) return;
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    if (!geoArr) return;
+    PCGeoEntry* ge = &geoArr[index];
+
+    uint8_t* elem = *(uint8_t**)((uintptr_t)desc + 0x28) + (size_t)index * 0x28;
+    float t1 = s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(elem + 0x20) : 1.0f;
+    ge->fadeRate = PC_UVScale() / t1;
+
+    if (ge->geo) {
+        uintptr_t g = (uintptr_t)ge->geo;
+        if (*(float*)(g + 0x7c) != 0.0f) {
+            *(uint32_t*)(g + 0x2c) |= 4;      // dirty
+            *(uint64_t*)(g + 0x7c) = 0;       // opacity (both floats) = 0
+        }
+    }
+    ParticleComponent_StartEmitter(self, index);
+}
+
+// ============================================================
+// ParticleComponent_sub_2480 — setup (0x140052480)
+// ============================================================
+extern "C" void ParticleComponent_Setup(ParticleComponent* self) {
+    uintptr_t s = (uintptr_t)self;
+    void* desc = GetParticleDesc(self);
+    if (!desc) {
+        if (PCTraceOn() && s_pcTraceBudget < 64) {
+            s_pcTraceBudget++;
+            printf("[Particle] setup self=%p: no ParticleDescription (+0x18=%p)\n",
+                   (void*)self, *(void**)(s + 0x18));
+            fflush(stdout);
+        }
+        return;
+    }
+    int n = *(int32_t*)((uintptr_t)desc + 0x30);
+    PC_GeoArrayResize((void*)(s + 0x38), n);
+    if (s_fn_ResizeBoolArray) s_fn_ResizeBoolArray((void*)(s + 0x28), n);
+
+    uint8_t* emArr = *(uint8_t**)((uintptr_t)desc + 0x28);
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    int total = *(int32_t*)(s + 0x40);
+    if (!emArr || !geoArr) return;
+    for (int i = 0; i < total; i++) {
+        void* res = *(void**)(emArr + (size_t)i * 0x28);
+        void* inst = nullptr;
+        if (res) {
+            // ParticleSystem resource vtable+0x40 = CreateInstance (Runtime-side)
+            void** rvt = *(void***)res;
+            if (rvt && rvt[8]) {
+                typedef void* (*fn_createInst_t)(void*);
+                inst = ((fn_createInst_t)rvt[8])(res);
+            }
+        }
+        geoArr[i].geo = inst;
+        ParticleComponent_Place(self, i);
+    }
+    if (PCTraceOn() && s_pcTraceBudget < 64) {
+        s_pcTraceBudget++;
+        printf("[Particle] setup self=%p emitters=%d\n", (void*)self, total);
+        fflush(stdout);
+    }
+}
+
+// ============================================================
+// ParticleComponent per-frame tick (vtable +0x40, 0x140052b30)
+// ============================================================
+extern "C" void ParticleComponent_UpdateTick(ParticleComponent* self, void* time) {
+    uintptr_t s = (uintptr_t)self;
+    int total = *(int32_t*)(s + 0x40);
+    if (total <= 0) return;
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    if (!geoArr) return;
+    float uvScale = PC_UVScale();
+
+    for (int i = 0; i < total; i++) {
+        PCGeoEntry* ge = &geoArr[i];
+
+        // Node/attach-point follow: recompute transform every frame
+        if (ge->nodeIdx >= 0 && ge->geo) {
+            uintptr_t entity = PC_Entity(self);
+            void* model = PC_FindComp(s_fn_FindComp_Model, entity);
+            void* desc = GetParticleDesc(self);
+            if (desc && model) {
+                float tf[7] = {0, 0, 0, 1, 0, 0, 0};
+                bool have = false;
+                void* attach = *(void**)((uintptr_t)desc + 0x20);
+                if (attach) {
+                    uint8_t* arr = *(uint8_t**)((uintptr_t)attach + 0x30);
+                    if (arr && fn_Transform_FromYawPitchOffset && s_fn_TransformMul) {
+                        float modelTf[7];
+                        memcpy(modelTf, (uint8_t*)model + 0x148, 7 * sizeof(float));
+                        float zero = 0.0f, ypo[7];
+                        fn_Transform_FromYawPitchOffset(ypo, &zero, &zero,
+                                                        arr + (size_t)ge->nodeIdx * 0x18 + 8);
+                        s_fn_TransformMul(ypo, tf, modelTf);
+                        have = true;
+                    }
+                } else if (s_fn_GetNodeToWorld) {
+                    s_fn_GetNodeToWorld((uint8_t*)model + 0x28, tf, ge->nodeIdx);
+                    have = true;
+                }
+                if (have && fn_Geometry_SetTransform)
+                    fn_Geometry_SetTransform(ge->geo, tf);
+            }
+        }
+
+        // Opacity fade integration + geometry tick (only while in the scene)
+        if (ge->sceneId >= 0 && ge->geo) {
+            uintptr_t g = (uintptr_t)ge->geo;
+            float op = *(float*)(g + 0x7c);
+            if (ge->fadeRate != 0.0f) {
+                float dt = s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(time) : 0.0f;
+                op += dt * ge->fadeRate;
+                if (op > uvScale) {
+                    ge->fadeRate = 0.0f;
+                    op = uvScale;
+                } else if (op < 0.0f) {
+                    ge->fadeRate = 0.0f;
+                    ParticleComponent_StopEmitter(self, i);
+                    continue;
+                } else if (op <= 0.0f) {
+                    ParticleComponent_StopEmitter(self, i);
+                    continue;
+                }
+            } else if (op <= 0.0f) {
+                ParticleComponent_StopEmitter(self, i);
+                continue;
+            }
+            if (op != *(float*)(g + 0x7c)) {
+                *(uint32_t*)(g + 0x2c) |= 4;   // dirty
+                *(float*)(g + 0x7c) = op;
+                *(float*)(g + 0x80) = op;
+            }
+            void** vt = *(void***)ge->geo;
+            if (vt && vt[1]) {
+                typedef void (*fn_geoUpdate_t)(void*, void*);
+                ((fn_geoUpdate_t)vt[1])(ge->geo, time);
+            }
+        }
+    }
+}
+
+// ============================================================
+// ParticleComponent_Slot12 — event handler (vtable +0x60, 0x140053090)
+// event 2 = start with fade-in, event 3 = begin fade-out (b2 emitters only)
+// ============================================================
+extern "C" void ParticleComponent_Event(ParticleComponent* self, int eventCode) {
+    uintptr_t s = (uintptr_t)self;
+    void* desc = GetParticleDesc(self);
+    if (!desc) return;
+    uint8_t* emArr = *(uint8_t**)((uintptr_t)desc + 0x28);
+    PCGeoEntry* geoArr = *(PCGeoEntry**)(s + 0x38);
+    int total = *(int32_t*)(s + 0x40);
+    if (!emArr || !geoArr) return;
+
+    for (int i = 0; i < total; i++) {
+        uint8_t* elem = emArr + (size_t)i * 0x28;
+        if (elem[0x12] == 0) continue;   // b2: event-toggled emitters only
+        if (eventCode == 2) {
+            ParticleComponent_StartEmitterFade(self, i);
+        } else if (eventCode == 3) {
+            float t1 = s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(elem + 0x20) : 1.0f;
+            geoArr[i].fadeRate = -(PC_UVScale() / t1);
+        }
+    }
+}
+
+// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void ParticleComponent_InitFuncs() {
@@ -343,14 +886,188 @@ void ParticleComponent_InitFuncs() {
     // Note: the bool array serialize is different from single bool serialize
     // The original uses IO::Serializer::Serialize(serializer, count, boolArray, name)
 
+    // --- deps for the full helper-closure ports ---
+    slot = ResolveAddr(Module::Exe, 0x140152970);   // GraphicsMesh::GetNodeIndexFromName
+    if (slot) s_fn_GetNodeIdxFromName = *reinterpret_cast<fn_GetNodeIdxFromName_t*>(slot);
+    if (!s_fn_GetNodeIdxFromName)                    // SA: slot unregistered — use the export
+        s_fn_GetNodeIdxFromName = reinterpret_cast<fn_GetNodeIdxFromName_t>(
+            ResolveExport("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z"));
+    s_fn_GetNodeToWorld = reinterpret_cast<fn_GetNodeToWorld_t>(
+        ResolveExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z"));
+    s_fn_TransformMul = reinterpret_cast<fn_TransformMul_t>(
+        ResolveExport("??DTransform@Math@@QEBA?AV01@AEBV01@@Z"));
+    s_fn_StringEqStr = reinterpret_cast<fn_StringEqStr_t>(
+        ResolveExport("??8String@System@@QEBA_NAEBV01@@Z"));
+    s_fn_FindComp_Model = reinterpret_cast<fn_PCFindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140003f60));   // FindComponent(ModelComponent)
+    s_fn_FindComp_Map = reinterpret_cast<fn_PCFindComponent_t>(
+        ResolveAddr(Module::Exe, 0x140004680));   // FindComponent(MapComponent)
+
+    if (PCTraceOn()) {
+        printf("[Particle] InitFuncs: nodeIdxFromName=%p nodeToWorld=%p tfMul=%p strEq=%p "
+               "findModel=%p findMap=%p setup=%p descTid=%08x\n",
+               (void*)s_fn_GetNodeIdxFromName, (void*)s_fn_GetNodeToWorld,
+               (void*)s_fn_TransformMul, (void*)s_fn_StringEqStr,
+               (void*)s_fn_FindComp_Model, (void*)s_fn_FindComp_Map,
+               (void*)s_fn_ParticleSetup, PC_DescTypeId());
+        fflush(stdout);
+    }
+
     s_initialized = true;
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
+// Building particle effects (chimney smoke etc). Gated on BANISHED_LIVE_PARTICLE
+// (or global BANISHED_LIVE_COMPONENTS); default (env off) stays inert.
+//
+// Live slot map (retail vtable 0x14015a290):
+//   [4]  +0x20 Startup   (0x140053230) — Setup: create ParticleSystemInstances
+//   [6]  +0x30 OnAdded   (0x140052f70) — fade-in start of autoStart(b1) emitters
+//   [7]  +0x38 OnRemoved (0x140052e80) — remove all emitters from the scene
+//   [8]  +0x40 per-frame (0x140052b30) — node-follow + fade + geometry Update
+//   [11] +0x58 OnUpdate2 (0x1400531b0) — setup + restart flagged emitters
+//   [12] +0x60 Event     (0x140053090) — event 2/3 fade-in/out (b2 emitters)
+// Slot [3] (+0x18 save/load serialize) stays inert — SA does not exercise
+// component saves, and the bool array is rebuilt by Startup anyway.
 #ifdef STANDALONE_EXE
-#include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(ParticleComponent, 0x48, 0xC3)
+#include "address_registry.h"
+
+static uint32_t ParticleComponent_LiveGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("ParticleComponent");
+    return cached;
+}
+static void* ParticleComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+
+// ---- Explicit per-frame driver (StorageDisplay_DrainDraw pattern) ----
+// SA's EntityList tree walk never dispatches this component's +0x40 per-frame
+// slot for building entities (same gap as StorageDisplay's +0x48 — verified by
+// static, never-fading smoke). GameUpdateLoop::Update drives every spawned
+// ParticleComponent explicitly; UpdateTick early-outs per emitter unless it is
+// live in the scene, so steady-state cost is a few houses * one emitter.
+static ParticleComponent* s_pcDriveList[1024];
+static int s_pcDriveCount = 0;
+static void ParticleComponent_RegisterDriven(ParticleComponent* self) {
+    if (!self) return;
+    for (int i = 0; i < s_pcDriveCount; ++i)   // dedup (Startup can re-run)
+        if (s_pcDriveList[i] == self) return;
+    if (s_pcDriveCount < 1024) s_pcDriveList[s_pcDriveCount++] = self;
+}
+
+static void PC_StartupVSlot(void* s) {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_Serialize(reinterpret_cast<ParticleComponent*>(s));
+    ParticleComponent_RegisterDriven(reinterpret_cast<ParticleComponent*>(s));
+}
+static void PC_OnAddedVSlot(void* s) {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_Draw(reinterpret_cast<ParticleComponent*>(s));
+}
+static void PC_OnRemovedVSlot(void* s) {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_OnCreate(reinterpret_cast<ParticleComponent*>(s));
+}
+static void PC_TickVSlot(void* s, void* time) {
+    ParticleComponent_UpdateTick(reinterpret_cast<ParticleComponent*>(s), time);
+}
+static void PC_OnUpdate2VSlot(void* s) {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_OnUpdate2(reinterpret_cast<ParticleComponent*>(s));
+}
+static void PC_EventVSlot(void* s, int eventCode) {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_Event(reinterpret_cast<ParticleComponent*>(s), eventCode);
+}
+
+static void ParticleComponent_FinishLiveVtable() {
+    if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_PARTICLE")) {
+        ParticleComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PC_StartupVSlot);
+        ParticleComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PC_OnAddedVSlot);
+        ParticleComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PC_OnRemovedVSlot);
+        ParticleComponent_LiveVtable[8]  = reinterpret_cast<void*>(&PC_TickVSlot);
+        ParticleComponent_LiveVtable[11] = reinterpret_cast<void*>(&PC_OnUpdate2VSlot);
+        ParticleComponent_LiveVtable[12] = reinterpret_cast<void*>(&PC_EventVSlot);
+    }
+}
+extern "C" void* ParticleComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0xC3,
+        ParticleComponent_LiveVtable,
+        reinterpret_cast<void*>(&ParticleComponent_LiveGetTypeId));
+    ParticleComponent_FinishLiveVtable();
+    return p;
+}
+static void* ParticleComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0xC3,
+        ParticleComponent_LiveVtable,
+        reinterpret_cast<void*>(&ParticleComponent_LiveGetTypeId));
+    ParticleComponent_FinishLiveVtable();
+    return mem;
+}
 REGISTER_TYPE(ParticleComponent, "Component",
               &ParticleComponent_Factory, &ParticleComponent_CreateInPlace);
+
+// Per-frame drain — called from GameUpdateLoop::Update alongside the other SA
+// drivers. `time` is the frame Time* (fade integration + particle simulation).
+extern "C" void ParticleComponent_DrainTick(int frameNum, void* time) {
+    if (frameNum < 3 || !time || s_pcDriveCount == 0) return;
+
+    // Shared-emit unfreeze, scoped to OUR emitters only. The smoke
+    // ParticleSystem resources carry the shared-emit-state flag (res+0x20):
+    // ParticleSystemInstance::Update dedups per frame via emitState+0x2c ==
+    // Graphics::ParticleInstance::_frameIndex (Runtime static @0x1801fe77c).
+    // In SA nothing advances _frameIndex in-game, so after the first Update the
+    // stamp matches forever and the sim freezes. Advancing the GLOBAL counter
+    // is NOT an option — the status-icon billboards share the mechanism and
+    // were built around the frozen counter (advancing it made icons re-simulate
+    // as particles: drifting/expiring "?" icons). Instead, un-stamp just our
+    // live emitters' shared states once per frame so exactly one instance per
+    // state simulates — retail per-frame semantics, blast radius = smoke only.
+    static int32_t* s_pFrameIndex = nullptr;
+    if (!s_pFrameIndex)
+        s_pFrameIndex = reinterpret_cast<int32_t*>(
+            ResolveAddr(Module::Runtime, 0x1801fe77c));
+    if (s_pFrameIndex) {
+        int32_t fi = *s_pFrameIndex;
+        for (int c = 0; c < s_pcDriveCount; ++c) {
+            uintptr_t s = (uintptr_t)s_pcDriveList[c];
+            PCGeoEntry* arr = *(PCGeoEntry**)(s + 0x38);
+            int total = *(int32_t*)(s + 0x40);
+            for (int i = 0; arr && i < total; ++i) {
+                if (!arr[i].geo || arr[i].sceneId < 0) continue;
+                uintptr_t g = (uintptr_t)arr[i].geo;
+                uintptr_t res  = *(uintptr_t*)(g + 0xc0);
+                uintptr_t emit = *(uintptr_t*)(g + 0xc8);
+                if (res && emit && *(uint8_t*)(res + 0x20) != 0 &&
+                    *(int32_t*)(emit + 0x2c) == fi)
+                    *(int32_t*)(emit + 0x2c) = fi - 1;
+            }
+        }
+    }
+
+    for (int i = 0; i < s_pcDriveCount; ++i)
+        PC_TickVSlot(s_pcDriveList[i], time);
+    if (PCTraceOn()) {
+        static int s_tickLog = 0;
+        if (s_tickLog < 3 || (s_tickLog % 600) == 0) {
+            printf("[Particle] drain tick frame=%d comps=%d dt=%.4f\n",
+                   frameNum, s_pcDriveCount,
+                   s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(time) : -1.0f);
+            fflush(stdout);
+        }
+        s_tickLog++;
+    }
+}
+
+// Register the helper closure at its exe addresses so the shared bodies above
+// (and any other reimpl referencing them) resolve in standalone.
+extern "C" void RegisterParticleComponentAddrs() {
+    RegisterExeAddr(0x140052480, reinterpret_cast<uintptr_t>(&ParticleComponent_Setup));
+    RegisterExeAddr(0x140052560, reinterpret_cast<uintptr_t>(&ParticleComponent_Place));
+    RegisterExeAddr(0x140052990, reinterpret_cast<uintptr_t>(&ParticleComponent_StopEmitter));
+    RegisterExeAddr(0x140052a50, reinterpret_cast<uintptr_t>(&ParticleComponent_StartEmitter));
+    RegisterExeAddr(0x140053660, reinterpret_cast<uintptr_t>(&ParticleComponent_StartEmitterFade));
+    RegisterExeAddr(0x140052b30, reinterpret_cast<uintptr_t>(&ParticleComponent_UpdateTick));
+    RegisterExeAddr(0x140053090, reinterpret_cast<uintptr_t>(&ParticleComponent_Event));
+}
 #endif // STANDALONE_EXE
