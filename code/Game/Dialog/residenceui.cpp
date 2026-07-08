@@ -20,6 +20,15 @@
 #include <cstdint>
 #include <cstdio>
 
+// Range check for pointers a standalone citizen may leave uninitialized. A rostered
+// CitizenComponent in standalone can have a garbage description cache (+0x288) or an
+// unset name String; the raw derefs the faithful retail port does would fault (MinGW
+// has no __try/__except to catch it). These guards are no-ops in DLL mode, where the
+// live game always populates the fields. Same idea as CitUI_OkPtr in citizenui.cpp.
+static inline bool RUI_OkPtr(uintptr_t p) {
+    return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
+}
+
 // ============================================================
 // File-local helper: ResidenceUI_ArrayPush_Impl (FUN_140021020)
 // ============================================================
@@ -304,7 +313,12 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     fn_InternalBasePtr_CheckPtr(&citizen);
                     fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x10));
                     void* textName = *(void**)(rowBase + 0x10);
-                    if (textName) fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
+                    // SA safety: the name String buffer (citizen+0x28) may be unset on a
+                    // standalone citizen; SetParameter refcounts the source buffer and
+                    // would fault on garbage. 0 (empty String) is fine. No-op in DLL.
+                    uintptr_t nameBuf = *(uintptr_t*)(citizen + 0x28);
+                    if (textName && (nameBuf == 0 || RUI_OkPtr(nameBuf)))
+                        fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     fn_InternalBasePtr_CheckPtr(&citizen);
@@ -316,40 +330,54 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     if (textAge) fn_TextElement_SetParameter(textAge, 0, ageStr);
                     fn_String_Dtor(ageStr);
 
-                    // Determine profession text based on age/death status
+                    // Determine profession text. Faithful to retail 0x1400B51F0:
+                    //   if (age < desc.childThreshold(+0x44) || job(+0x208) != 0):
+                    //       job == 0 -> ProfessionList+0x40 (child/student label)
+                    //       job != 0 -> ProfessionList+0x48 (employed label)
+                    //   else (adult, no job) -> the citizen's own profession (+0x1f0)
+                    // (The prior port had these branches scrambled and read +0x208 as a
+                    //  "dead" flag; corrected here.) Every deref is range-guarded so a
+                    // standalone citizen with a garbage description cache can't fault.
                     fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x20));
                     void* textProfession = *(void**)(rowBase + 0x20);
 
                     fn_InternalBasePtr_CheckPtr(&citizen);
                     float age = *(float*)(citizen + 0x3c);
-                    uintptr_t descPtr = *(uintptr_t*)(citizen + 0x288);
-                    float oldAgeThreshold = *(float*)(descPtr + 0x44);
-                    uintptr_t deadFlag = *(uintptr_t*)(citizen + 0x208);
+                    uintptr_t jobEntity = *(uintptr_t*)(citizen + 0x208);
 
-                    // UI::String is 16 bytes. Construct from ExternalPtr<StringTable> entry.
-                    // The UIString ctor from single ExternalPtr is at dispatch 0x140151300.
-                    // We call it via fn_UIString_Ctor_Entry(retval, externalPtr).
-                    // UI::String ctor needs 3 args: (retbuf, externalPtr at +0x20, stringName at +0x30)
-                    // fn_UIString_Ctor_Entry only passes 2 — Ghidra drops R8 (the string name).
+                    // Child-age threshold from the citizen description (+0x288 cache;
+                    // fall back to the component's own description at +0x18 when the
+                    // cache is garbage in standalone).
+                    uintptr_t descPtr = *(uintptr_t*)(citizen + 0x288);
+                    if (!RUI_OkPtr(descPtr)) descPtr = *(uintptr_t*)(citizen + 0x18);
+                    float oldAgeThreshold = RUI_OkPtr(descPtr)
+                                          ? *(float*)(descPtr + 0x44) : 1e30f;
+
+                    // UI::String ctor needs 3 args: (retbuf, externalPtr at +0x20,
+                    // stringName at +0x30). fn_UIString_Ctor passes all three; the
+                    // Ghidra decompile drops R8 (the +0x30 name) on the call.
                     uint64_t uiStr[2];
-                    if (age < oldAgeThreshold && deadFlag == 0) {
-                        // Normal citizen: profession from citizen+0x1f0
-                        uintptr_t profDesc = *(uintptr_t*)(citizen + 0x1f0);
-                        fn_UIString_Ctor(uiStr, *(uint64_t*)(profDesc + 0x20), (void*)(profDesc + 0x30));
-                    } else if (deadFlag != 0) {
-                        // Dead: "deceased" from ProfessionList +0x48
-                        void* world = *g_pGameWorldSingleton;
-                        uintptr_t profList = *(uintptr_t*)((uintptr_t)world + 0xB0);
-                        uintptr_t entry = *(uintptr_t*)(profList + 0x48);
-                        fn_UIString_Ctor(uiStr, *(uint64_t*)(entry + 0x20), (void*)(entry + 0x30));
+                    bool builtProf = false;
+                    if (age < oldAgeThreshold || jobEntity != 0) {
+                        // Child (no job) -> ProfList+0x40; employed -> ProfList+0x48.
+                        void* world = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+                        uintptr_t profList = world ? *(uintptr_t*)((uintptr_t)world + 0xB0) : 0;
+                        if (RUI_OkPtr(profList)) {
+                            uintptr_t entry = *(uintptr_t*)(profList + (jobEntity == 0 ? 0x40 : 0x48));
+                            if (RUI_OkPtr(entry)) {
+                                fn_UIString_Ctor(uiStr, *(uint64_t*)(entry + 0x20), (void*)(entry + 0x30));
+                                builtProf = true;
+                            }
+                        }
                     } else {
-                        // Old/retired: "elderly" from ProfessionList +0x40
-                        void* world = *g_pGameWorldSingleton;
-                        uintptr_t profList = *(uintptr_t*)((uintptr_t)world + 0xB0);
-                        uintptr_t entry = *(uintptr_t*)(profList + 0x40);
-                        fn_UIString_Ctor(uiStr, *(uint64_t*)(entry + 0x20), (void*)(entry + 0x30));
+                        // Adult laborer: the citizen's own profession object (+0x1f0).
+                        uintptr_t profDesc = *(uintptr_t*)(citizen + 0x1f0);
+                        if (RUI_OkPtr(profDesc)) {
+                            fn_UIString_Ctor(uiStr, *(uint64_t*)(profDesc + 0x20), (void*)(profDesc + 0x30));
+                            builtProf = true;
+                        }
                     }
-                    if (textProfession) fn_TextElement_SetText(textProfession, uiStr);
+                    if (textProfession && builtProf) fn_TextElement_SetText(textProfession, uiStr);
 
                     // Activate buttonGoto: vtable[8](this)
                     fn_InternalBasePtr_CheckPtr((void*)(rowBase + 0x28));
@@ -491,5 +519,162 @@ void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
         ResidenceUI_GoToCitizen(self, id - 300);
     }
 }
+
+// ============================================================
+// STANDALONE promotion — real ResidenceUI controller vtable
+// ============================================================
+// A house's info panel lists its residents (name / gender / age / profession, one
+// row per occupant) via a ResidenceUI controller bound to the panel's residenceTable.
+// In standalone this type was a StubNop (all slots no-op, see ui_dialog_stub_factories
+// .cpp — that stub is REMOVED there to avoid a duplicate REGISTER_TYPE), so Slot4
+// (build the row table) and Slot7 (fill rows from the ResidenceComponent roster at
+// +0x50/+0x58) never dispatched and the list stayed empty even though founding rosters
+// the residents. This installs a real per-class vtable, following the StorageUI
+// promotion pattern.
+//
+// Vtable offsets (verified from the exe ResidenceUI vtable @ 0x14015f6d0):
+//   +0x00 (idx0) ScalarDtor (0x140020fc0)  +0x10 (idx2) GetTypeId (0x140020f40)
+//   +0x20 (idx4) Slot4  (0x1400b5850) — build+cache the per-row element array (+0x30/+0x38)
+//   +0x38 (idx7) Slot7  (0x1400b51f0) — populate rows from the ResidenceComponent roster
+//   +0x40 (idx8)        (0x14003a96c)  — base DialogController::OnUpdate (per-frame). We
+//               drive the refresh here: build once (until +0x38 row count is set), then
+//               re-populate every frame so the roster stays live as residents change.
+//   +0x48 (idx9) Slot9  (0x1400b5820) — resident-row click dispatch (id 300+index)
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include <cstdlib>
+
+namespace residenceui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+// Standalone-local fallbacks for exe-.rdata globals that resolve NULL in standalone.
+static uint32_t s_resTid = 0;       // ResidenceComponent type-id
+static uint32_t s_ceTid  = 0;       // ComponentEntity type-id
+static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("ResidenceUI");
+    return c;
+}
+
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    // Free the cached per-row element array at +0x30 (mirrors the exe ScalarDtor).
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* rows = *reinterpret_cast<void**>(s + 0x30);
+    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void EnsureGlobals() {
+    if (!g_TypeId_ComponentEntity) {
+        s_ceTid = ::Object::ResolveTypeIdByNameLazy("ComponentEntity");
+        if (s_ceTid) g_TypeId_ComponentEntity = &s_ceTid;
+    }
+    if (!g_TypeId_ResidenceComponent) {
+        s_resTid = ::Object::ResolveTypeIdByNameLazy("ResidenceComponent");
+        if (s_resTid) g_TypeId_ResidenceComponent = &s_resTid;
+    }
+    // g_pAgeMultiplier (0x140172198) is zero-fill in standalone; point it at the same
+    // 1.0 fallback citizenui.cpp uses so resident ages match the citizen dialog.
+    if (!g_pAgeMultiplier) g_pAgeMultiplier = &s_ageMul;
+}
+
+bool Ready() {
+    return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
+        && g_TypeId_ResidenceComponent && *g_TypeId_ResidenceComponent
+        && g_pAgeMultiplier
+        && g_pGameWorldSingleton && *g_pGameWorldSingleton;
+}
+
+// idx4 (+0x20): build the per-row element array. Runs once (Slot4 appends rows, so it
+// must not run twice — the OnUpdate self-heal below guards on +0x38 == 0).
+void W_Slot4(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    ResidenceUI_Slot4(reinterpret_cast<ResidenceUI*>(self));
+}
+
+// idx7 (+0x38): populate the rows from the residence roster.
+void W_Slot7(void* self) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        static int n = 0;
+        if (n++ < 5) {
+            uintptr_t s = reinterpret_cast<uintptr_t>(self);
+            fprintf(stderr, "[ResidenceUI] Slot7 self=%p rowSlots(+0x38)=%d\n",
+                    self, *reinterpret_cast<int*>(s + 0x38));
+            fflush(stderr);
+        }
+    }
+    ResidenceUI_Slot7(reinterpret_cast<ResidenceUI*>(self));
+}
+
+// idx8 (+0x40): per-frame. Build the table once (row count still 0), then keep the
+// roster display live by re-populating every frame.
+void W_OnUpdate(void* self, void* /*time*/) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    if (*reinterpret_cast<int*>(s + 0x38) == 0) {
+        ResidenceUI_Slot4(reinterpret_cast<ResidenceUI*>(self));
+    }
+    ResidenceUI_Slot7(reinterpret_cast<ResidenceUI*>(self));
+}
+
+// idx9 (+0x48): resident-row click. Dispatched (self, &elementPtr, msg, id, x, y).
+void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
+    if (!self || !Ready()) return;
+    ResidenceUI_Slot9(reinterpret_cast<ResidenceUI*>(self), p2, msg, id);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
+        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace residenceui_sa
+
+REGISTER_TYPE(ResidenceUI, "UI::DialogController",
+              &residenceui_sa::Factory, &residenceui_sa::InPlace);
+
+#endif  // STANDALONE_EXE
 
 // ============================================================

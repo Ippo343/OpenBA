@@ -280,7 +280,9 @@ UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
 UI_DIALOG_STUB(StatusBarUI,         "UI::DialogController", 0x1D0);
 // ---- StatusIconUI: PROMOTED to real SA vtable (statusiconui.cpp) — icons now
 //      show/hide per StatusIconComponent +0xF0 state instead of all-at-once ----
-UI_DIALOG_STUB(StorageCapacityUI,   "UI::DialogController", 0x38);
+// ---- StorageCapacityUI: PROMOTED to real SA vtable (storagecapacityui.cpp) — the
+//      storage building's "X%" fill number now computes+renders instead of staying
+//      blank (Serialize finds the ProgressElement, Startup sets count/capacity %). ----
 UI_DIALOG_STUB(TitleDescToolTipUI,  "UI::DialogController", 0x30);
 // ---- ToolUI: PROMOTED to the real Slot4 reimpl (map-render bring-up) ----------
 // ToolUI is StandardDialog.rsc's controller — created for EVERY StandardDialog-
@@ -376,7 +378,9 @@ UI_DIALOG_STUB(TradeUI,             "UI::DialogController", 0x148);
 UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
 UI_DIALOG_STUB(WorkPlaceUI,         "UI::DialogController", 0x60);
 UI_DIALOG_STUB(BuildUI,             "UI::DialogController", 0x50);
-UI_DIALOG_STUB(ResidenceUI,         "UI::DialogController", 0x40);
+// ---- ResidenceUI: PROMOTED to real SA vtable (residenceui.cpp) — a house panel now
+//      lists its residents (name/gender/age/profession) from the ResidenceComponent
+//      roster instead of staying empty. ----
 // ---- StorageUI: PROMOTED to real SA vtable (storageui.cpp) — Inventory/Storage
 //      tab now populates rows from the entity's StorageComponent instead of "0" ----
 UI_DIALOG_STUB(TutorialUI,          "UI::DialogController", 0x60);

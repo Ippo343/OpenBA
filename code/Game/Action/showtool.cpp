@@ -14,6 +14,10 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
+#include <cstdlib>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#endif
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -35,6 +39,74 @@ static void (*s_fn_ShowToolOnEntity)(void* entity, int toolId) = nullptr;
 // DAT_1401c7158 -- TypeInfo for entity type check
 static uint32_t* s_TypeInfo_ShowToolEntity = nullptr;
 
+// ---- Carry-model path (ShowTool with toolId < 0) --------------------------------
+// The retail show function (Entity_impl_73b0) reads the carried resource's mesh from
+// its ModelDescription (DAT_1401c7a88) and its carry-scale from its RawMaterial-
+// Description (DWORD_1401c7cb8). Both type-ids are read straight from exe .rdata, so
+// in standalone (where those slots are null) 73b0 never matches the mesh component and
+// null-derefs. This is a faithful C++ re-port of 73b0's toolId<0 branch that resolves
+// the type-ids from the runtime registry in standalone and guards the two component
+// lookups, so a material template lacking either component simply shows no model
+// instead of crashing. Verified 1:1 against the Ghidra decompile + disassembly of
+// 0x1401173b0; dispatch-slot identities confirmed via Ghidra external xrefs.
+typedef void*        (*fn_Vector4Ctor_t)(void* retbuf, const void* scalar); // slot 0x140152958
+typedef int          (*fn_GetNodeIndex_t)(void* graphicsMesh, const char* name); // 0x140152970
+typedef void         (*fn_GeomAttach_t)(void* geom, void* attach, int nodeIdx);  // 0x140152968
+typedef void         (*fn_MeshSetMesh_t)(void* meshInstance, void* mesh);        // 0x140151498
+typedef unsigned int (*fn_SceneAdd_t)(void* scene, void* geom);                  // 0x140151370
+
+static fn_Vector4Ctor_t  s_slot_Vector4Ctor = nullptr;
+static fn_GetNodeIndex_t s_slot_GetNodeIndex = nullptr;
+static fn_GeomAttach_t   s_slot_GeomAttach = nullptr;
+static fn_MeshSetMesh_t  s_slot_SetMesh = nullptr;
+static fn_SceneAdd_t     s_slot_SceneAdd = nullptr;
+
+// ModelDescription type-id (DAT_1401c7a88). DLL: raw .rdata id; SA: runtime registry.
+static uint32_t ShowTool_ModelDescTid() {
+    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
+    if (p && *p && *p != 0xFFFFFFFF) return *p;
+#ifdef STANDALONE_EXE
+    static uint32_t c = 0;
+    if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("ModelDescription");
+    if (c != 0xFFFFFFFF) return c;
+#endif
+    return 0;
+}
+// RawMaterialDescription type-id (DWORD_1401c7cb8 / g_TypeId_RawMaterialDescription).
+static uint32_t ShowTool_RawMatTid() {
+    if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription
+        && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
+        return *g_TypeId_RawMaterialDescription;
+    uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
+    if (p && *p && *p != 0xFFFFFFFF) return *p;
+#ifdef STANDALONE_EXE
+    static uint32_t c = 0;
+    if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("RawMaterialDescription");
+    if (c != 0xFFFFFFFF) return c;
+#endif
+    return 0;
+}
+
+// Scan an entity's component list (count@+0x30, IBP array@+0x28) for the first
+// component whose runtime type-id (vtable+0x10 == GetTypeId) equals `tid`. Faithful to
+// the two scan loops inside 73b0. Returns null if not found (SA-safe).
+static void* ShowTool_FindComponentByTid(void* hostP, uint32_t tid) {
+    if (!hostP || !tid) return nullptr;
+    uint8_t* host = reinterpret_cast<uint8_t*>(hostP);
+    int count = *reinterpret_cast<int*>(host + 0x30);
+    int64_t arr = *reinterpret_cast<int64_t*>(host + 0x28);
+    for (int i = 0; i < count; i++) {
+        void* comp = *reinterpret_cast<void**>(arr + (int64_t)i * 8);
+        if (!comp) continue;
+        int64_t vt = *reinterpret_cast<int64_t*>(comp);
+        typedef uint32_t (*getType_t)(void*);
+        uint32_t got = (*reinterpret_cast<getType_t*>(vt + 0x10))(comp);
+        if (got == tid)
+            return fn_IsDerivedFrom(comp, tid) ? comp : nullptr;
+    }
+    return nullptr;
+}
+
 static bool s_showtool_funcs_resolved = false;
 
 // ============================================================
@@ -54,6 +126,28 @@ bool ShowTool_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401173b0));
     s_fn_IBP_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
+
+    // Carry-model dispatch slots (values filled by the runtime into exe .rdata slots;
+    // resolve the slot address, then deref to the fn ptr). Optional for the core action
+    // methods — each is null-guarded at the call site in ShowTool_ShowCarried — so they
+    // are NOT part of the `ok` gate below.
+    auto rslot = [](uintptr_t a) -> void* {
+        uintptr_t s = ResolveAddr(Module::Exe, a);
+        return s ? *reinterpret_cast<void**>(s) : nullptr;
+    };
+    s_slot_Vector4Ctor  = reinterpret_cast<fn_Vector4Ctor_t>(rslot(0x140152958));
+    s_slot_GetNodeIndex = reinterpret_cast<fn_GetNodeIndex_t>(rslot(0x140152970));
+    s_slot_GeomAttach   = reinterpret_cast<fn_GeomAttach_t>(rslot(0x140152968));
+    s_slot_SetMesh      = reinterpret_cast<fn_MeshSetMesh_t>(rslot(0x140151498));
+    s_slot_SceneAdd     = reinterpret_cast<fn_SceneAdd_t>(rslot(0x140151370));
+    // The GetNodeIndexFromName / Geometry::Attach dispatch slots are NOT registered in
+    // standalone (the exe .rdata slot resolves to 0), so fall back to the Runtime-x64.dll
+    // functions directly (ASLR handled by ResolveAddr). Without these the held-item mesh
+    // could not be parented to the character's "tool" bone.
+    if (!s_slot_GetNodeIndex)
+        s_slot_GetNodeIndex = reinterpret_cast<fn_GetNodeIndex_t>(ResolveAddr(Module::Runtime, 0x1800fee90));
+    if (!s_slot_GeomAttach)
+        s_slot_GeomAttach = reinterpret_cast<fn_GeomAttach_t>(ResolveAddr(Module::Runtime, 0x1800a3fa0));
 
     bool ok = s_fn_CheckPtr && s_TypeInfo_ShowToolEntity &&
               s_fn_HideTool && s_fn_ShowToolOnEntity && s_fn_IBP_Serialize &&
@@ -98,6 +192,124 @@ void ShowTool_Serialize_Impl(void* self, void* stream) {
 }
 
 // ============================================================
+// ShowTool_ShowCarried — faithful port of Entity_impl_73b0's toolId<0 branch.
+// Attaches the model of the resource the citizen is carrying to the "tool" bone of
+// the character mesh. The carried item = the highest-count entry in the citizen's
+// StorageComponent; its mesh comes from that item's ModelDescription and its scale
+// from the item's RawMaterialDescription (+0x50 carry-scale). Every lookup is guarded
+// so a partially-materialized standalone material (missing ModelDescription/
+// RawMaterialDescription, which is exactly what crashed the retail function in SA)
+// simply shows no model instead of faulting.
+// ============================================================
+static void ShowTool_ShowCarried(void* entityV) {
+    uint8_t* e = reinterpret_cast<uint8_t*>(entityV);
+
+    const bool trc = std::getenv("BANISHED_CARRY_TRACE") != nullptr;
+    static int s_trcN = 0;
+    if (trc && s_trcN < 60) { ++s_trcN;
+        fprintf(stderr, "[ShowTool] ShowCarried ENTER entity=%p\n", entityV); fflush(stderr); }
+
+    // Skip if the entity is flagged for destruction (bit 10 of inner+0x40).
+    s_fn_CheckPtr(e + 0x10);
+    void* inner = *(void**)(e + 0x10);
+    if (!inner) return;
+    if (((*(uint32_t*)((uint8_t*)inner + 0x40)) >> 10) & 1) return;
+
+    // Hide the previously-shown item first, if any.
+    if (*(int*)(e + 0x1dc) >= 0) s_fn_HideTool(entityV);
+
+    // Character mesh holder = StateMachineComponent(+0x278) -> +0x68.
+    s_fn_CheckPtr(e + 0x278);
+    void* smComp = *(void**)(e + 0x278);
+    if (!smComp) return;
+    uintptr_t charMeshHolder = *(uintptr_t*)((uint8_t*)smComp + 0x68);
+    if (!charMeshHolder) return;
+
+    // --- Storage scan: pick the highest-count item in the citizen's storage. ---
+    s_fn_CheckPtr(e + 0x10);
+    uint64_t storageIBP[2] = {0, 0};
+    fn_FindComponent_Storage(*(void**)(e + 0x10), storageIBP);
+    s_fn_CheckPtr(storageIBP);
+    uintptr_t storageComp = (uintptr_t)storageIBP[0];
+    if (!storageComp) { if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bail: no storageComp\n");fflush(stderr);} return; }
+    int itemCount = *(int*)(storageComp + 0x30);
+    if (itemCount < 1) { if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bail: itemCount<1 (%d)\n",itemCount);fflush(stderr);} return; }
+
+    void* bestItem = nullptr;
+    int bestCount = 0;
+    for (int i = 0; i < itemCount; i++) {
+        s_fn_CheckPtr(storageIBP);
+        uintptr_t itemArr = *(uintptr_t*)(storageComp + 0x28);
+        int cnt = *(int*)(itemArr + (int64_t)i * 0x10 + 8);
+        if (bestCount < cnt) {
+            bestCount = cnt;
+            bestItem = *(void**)(itemArr + (int64_t)i * 0x10);
+        }
+    }
+    if (!bestItem) { if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bail: no bestItem\n");fflush(stderr);} return; }
+
+    // --- Resolve the display mesh (ModelDescription) + carry-scale (RawMaterial). ---
+    void* modelDesc = ShowTool_FindComponentByTid(bestItem, ShowTool_ModelDescTid());
+    if (trc && s_trcN<60){++s_trcN; fprintf(stderr,"[ShowTool]  bestItem=%p count=%d modelTid=%u modelDesc=%p rawTid=%u\n",
+        bestItem, bestCount, ShowTool_ModelDescTid(), modelDesc, ShowTool_RawMatTid());fflush(stderr);}
+    if (!modelDesc) return;                       // SA guard: no display model -> nothing shown
+    void* rawMat = ShowTool_FindComponentByTid(bestItem, ShowTool_RawMatTid());
+    if (!rawMat) return;                          // SA guard
+    float carryScale = *(float*)((uint8_t*)rawMat + 0x50);
+
+    // mesh = **( *(modelDesc+0x20) + 8 )  (faithful double-deref from 73b0).
+    uintptr_t meshGroup = *(uintptr_t*)((uint8_t*)modelDesc + 0x20);
+    if (!meshGroup) return;
+    uintptr_t meshSlot = *(uintptr_t*)(meshGroup + 8);
+    if (!meshSlot) return;
+    uint64_t mesh = *(uint64_t*)meshSlot;
+
+    if (std::getenv("BANISHED_CARRY_TRACE")) {
+        static int n = 0;
+        if (n++ < 40) {
+            fprintf(stderr, "[ShowTool] carried: item=%p mesh=%llx scale=%.3f nodeReady=%d\n",
+                    bestItem, (unsigned long long)mesh, carryScale,
+                    (s_slot_GetNodeIndex && s_slot_GeomAttach) ? 1 : 0);
+            fflush(stderr);
+        }
+    }
+
+    // --- Assign the mesh to the citizen's held-item MeshInstance (entity+0xb8). ---
+    if (s_slot_SetMesh) s_slot_SetMesh(e + 0xb8, (void*)mesh);
+
+    // Scale Vector4 (splat carryScale) -> entity+0x1c4..0x1d0.
+    float scaleVec[4] = { carryScale, carryScale, carryScale, carryScale };
+    if (s_slot_Vector4Ctor) s_slot_Vector4Ctor(scaleVec, &carryScale);
+    *(float*)(e + 0x1c4) = scaleVec[0];
+    *(float*)(e + 0x1c8) = scaleVec[1];
+    *(float*)(e + 0x1cc) = scaleVec[2];
+    *(float*)(e + 0x1d0) = scaleVec[3];
+
+    // Attach the held-item geometry to the character mesh's "tool" node/bone.
+    s_fn_CheckPtr(&charMeshHolder);
+    void* graphicsMesh = *(void**)(charMeshHolder + 0xe8);
+    s_fn_CheckPtr(&charMeshHolder);
+    int nodeIdx = (s_slot_GetNodeIndex && graphicsMesh)
+                ? s_slot_GetNodeIndex(graphicsMesh, "tool") : -1;
+    if (s_slot_GeomAttach) s_slot_GeomAttach((void*)(charMeshHolder + 0x28), e + 0xb8, nodeIdx);
+
+    // MeshInstance::Update(entity+0xb8, &time0) — vtable slot idx1 (+0x8).
+    uint8_t time0[16] = {0};
+    void** meshVt = *(void***)(e + 0xb8);
+    if (meshVt) {
+        typedef void (*upd_t)(void*, void*);
+        ((upd_t)meshVt[1])(e + 0xb8, time0);
+    }
+
+    // Add the held-item geometry to the live Graphics::Scene (gameWorld+0x60).
+    void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0x60) : nullptr;
+    uint32_t objId = (scene && s_slot_SceneAdd) ? s_slot_SceneAdd(scene, e + 0xb8) : 0xffffffff;
+    *(int*)(e + 0x1d8) = -2;                       // toolId (carry sentinel)
+    *(uint32_t*)(e + 0x1dc) = objId;               // scene object handle
+}
+
+// ============================================================
 // ShowTool::AbstractImpl / _purecall (0x140042710)
 // If toolId > 10 and != 0xFFFFFFFE, hide tool. Otherwise show tool.
 // Always returns 1.
@@ -112,6 +324,11 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     uint8_t* s = (uint8_t*)self;
     uint32_t toolId = *(uint32_t*)(s + 0x28);
 
+    if (std::getenv("BANISHED_CARRY_TRACE")) {
+        static int n = 0;
+        if (n++ < 40) { fprintf(stderr, "[ShowTool] AbstractImpl toolId=%d\n", (int)toolId); fflush(stderr); }
+    }
+
     if (toolId > 10 && toolId != 0xFFFFFFFE) {
         s_fn_CheckPtr(s + 0x20);
         void* entity = *(void**)(s + 0x20);
@@ -124,12 +341,15 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     void* entity = *(void**)(s + 0x20);
     if (!entity) return 1;  // entity removed, nothing to do
 
-    // toolId < 0 (e.g. 0xFFFFFFFE = -2) triggers a "find best material from
-    // storage" codepath inside Entity_impl_73b0 that crashes when the material
-    // entity lacks the expected component (DAT_1401c7a88). The component search
-    // leaves a NULL ptr that gets dereferenced at +0x20. Since this path only
-    // controls which mesh to show on the citizen model (purely visual), skip it.
-    if ((int)toolId < 0) return 1;
+    // toolId < 0 (e.g. 0xFFFFFFFE = -2) is the "carry" path: show the model of the
+    // resource the citizen is hauling. The retail helper (Entity_impl_73b0) reads the
+    // ModelDescription/RawMaterialDescription type-ids straight from exe .rdata, which
+    // is null in standalone — so it can never match the mesh component and null-derefs.
+    // Use our faithful, guarded re-port instead (works in both modes).
+    if ((int)toolId < 0) {
+        ShowTool_ShowCarried(entity);
+        return 1;
+    }
 
     s_fn_ShowToolOnEntity(entity, (int)toolId);
     return 1;
