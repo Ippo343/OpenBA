@@ -344,8 +344,15 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     *reinterpret_cast<float*>(p + 0x3C) = newAge;
 
     // --- Accumulate timers ---
-    *reinterpret_cast<int64_t*>(p + 0x58) += dt_ticks;   // food timer
-    *reinterpret_cast<int64_t*>(p + 0x90) += dt_ticks;   // fuel timer
+    // [DIAG HARNESS, default OFF] BANISHED_FUEL_ACCEL=<mult> scales ONLY the food/fuel
+    // timer accumulation so the ConsumeFood/ConsumeFuel (warmth) chain can be exercised
+    // in seconds instead of the ~15 real-minutes one 900s fuel interval needs. Unset/1 =>
+    // byte-identical accumulation.
+    static int64_t s_fuelAccel = -1;
+    if (s_fuelAccel < 0) { const char* e = getenv("BANISHED_FUEL_ACCEL");
+        s_fuelAccel = 1; if (e && e[0]) { long v = atol(e); if (v > 0) s_fuelAccel = v; } }
+    *reinterpret_cast<int64_t*>(p + 0x58) += dt_ticks * s_fuelAccel;   // food timer
+    *reinterpret_cast<int64_t*>(p + 0x90) += dt_ticks * s_fuelAccel;   // fuel timer
     *reinterpret_cast<int64_t*>(p + 0x1E8) -= dt_ticks;  // education countdown
     if (*reinterpret_cast<int64_t*>(p + 0x208) != 0) {
         *reinterpret_cast<int64_t*>(p + 0x218) += dt_ticks;  // school timer
@@ -2551,6 +2558,7 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
 
     uint32_t f = *reinterpret_cast<uint32_t*>(p + 0x88);
     float* acc = reinterpret_cast<float*>(p + 0x80);
+    float warmBefore = *acc;   // [WarmTrace] snapshot before this tick's recompute
     if ((f & 2) != 0)    *acc -= c1a8;
     if ((f & 0x40) != 0) *acc -= c174;
     if ((char)f < 0)     *acc -= c194;   // bit 7 of low byte
@@ -2618,6 +2626,21 @@ void CitizenComp_ConsumeFuel(CitizenComponent* param_1) {
     if (*acc <= 0.0f && *acc != 0.0f) *reinterpret_cast<uint32_t*>(p + 0x80) = 0;
     float capA4 = *reinterpret_cast<float*>(desc + 0xa4);
     if (capA4 < *acc) *acc = capA4;
+
+    // [WarmTrace] gated on BANISHED_STORAGE_TRACE — verify houses/citizens stay warm.
+    // Prints warmth accumulator (+0x80) before/after, its cap (desc+0xa4), and the
+    // computed heating demand target (fVar5). Capped to avoid log spam.
+    {
+        static int s_wt = -1;
+        if (s_wt < 0) { const char* e = std::getenv("BANISHED_STORAGE_TRACE");
+                        s_wt = (e && e[0] && e[0] != '0') ? 40 : 0; }
+        if (s_wt > 0) { --s_wt;
+            fprintf(stderr, "[WarmTrace] citizen=%p warm %.3f->%.3f cap=%.3f target=%.3f home238=%p\n",
+                    (void*)param_1, warmBefore, *acc, capA4, fVar5,
+                    (void*)*reinterpret_cast<int64_t*>(p + 0x238));
+            fflush(stderr);
+        }
+    }
 }
 
 // ============================================================

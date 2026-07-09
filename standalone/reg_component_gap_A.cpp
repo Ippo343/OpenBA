@@ -54,12 +54,37 @@ extern void AttendanceComponent_ReleaseLink59b0(void* workerP);
 // Cascade round: now closure-safe (TryFindPartner 0x140111840 landed this round).
 extern void AttendanceComponent_ReleasePartnerSlot(void* workerP, char reroll); // 0x140115a50
 
+// ConsumeFuel (warmth) .rdata constants — raw .rdata addrs return NULL via
+// ResolveAddr in standalone, so citizencomponent.cpp's `?:` fallbacks (all 0.0)
+// were used. c0ec=0 in particular zeroed the ENTIRE heating-demand term
+// (fVar5 = ... * c0ec * cap), pinning every citizen's warmth at max regardless of
+// weather or firewood. Real values read from Application-x64.exe .rdata via Ghidra:
+//   0x1401720ec = 0x3E000000 = 0.125f  (heating-demand scale — the critical one)
+//   0x140172168 = 0x3FE0000000000000 = 0.5 (double; warmth decay step when demand<cur)
+//   0x1401721a8 = 0x41000000 = 8.0f    (warmth flag-bit-1 penalty)
+static const float  k_rdata_1720ec = 0.125f;
+static const double k_rdata_172168 = 0.5;
+static const float  k_rdata_1721a8 = 8.0f;
+// ConsumeFood (happiness/variety) constant — same 0.0-fallback degeneracy as the
+// warmth ones. `c100`=`DAT_140172100` is subtracted from the food-comfort
+// accumulator (+0x50) as the "stale/insufficient-variety food" penalty; NULL in
+// standalone -> fallback 0.0 nullified the penalty. Real .rdata value (Ghidra):
+//   0x140172100 = 0x3E800000 = 0.25f
+// (uv scale 0x14017214c = 1.0f already matches its fallback; c180 0x140172180 and
+//  hungerDiv 0x14017225c are registered elsewhere — only 172100 was missing.)
+static const float  k_rdata_172100 = 0.25f;
+
 void RegisterComponentGap_A() {
     // citizencomponent.cpp
     RegisterExeAddr(0x1401158d0, reinterpret_cast<uintptr_t>(&CitizenComp_CheckWorkplaceValid));
     RegisterExeAddr(0x14008ef40, reinterpret_cast<uintptr_t>(&CitizenComp_Entity_impl_ef40));
     RegisterExeAddr(0x140112990, reinterpret_cast<uintptr_t>(&CitizenComp_ConsumeFood));   // re-verify: leaf
     RegisterExeAddr(0x140112ae0, reinterpret_cast<uintptr_t>(&CitizenComp_ConsumeFuel));   // re-verify: 7fb0/8090 reg
+    // Warmth demand/decay constants (see note above) — real .rdata values.
+    RegisterExeAddr(0x1401720ec, reinterpret_cast<uintptr_t>(&k_rdata_1720ec));
+    RegisterExeAddr(0x140172168, reinterpret_cast<uintptr_t>(&k_rdata_172168));
+    RegisterExeAddr(0x1401721a8, reinterpret_cast<uintptr_t>(&k_rdata_1721a8));
+    RegisterExeAddr(0x140172100, reinterpret_cast<uintptr_t>(&k_rdata_172100));
 
     // cascade round (snapshot3): citizen-lifecycle finder chain (bottom-up)
     RegisterExeAddr(0x1400440f0, reinterpret_cast<uintptr_t>(&CitizenComp_sub_40f0));       // reachability test
