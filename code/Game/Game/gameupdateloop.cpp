@@ -739,10 +739,10 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     extern void StartTown_ApplyPendingOccupiedVisuals(int frameNum);  // C linkage (file is extern "C")
     StartTown_ApplyPendingOccupiedVisuals(s_frameNum);
 
-    // Phase B: drain the deferred StatusIcon FORCESHOW queue once the scene is live
-    // (env BANISHED_STATUSICON_FORCESHOW; one-shot). No-op unless the env is set.
-    extern void StatusIcon_DrainForceShow(int frameNum);
-    StatusIcon_DrainForceShow(s_frameNum);
+    // (StatusIcon "no workers" warnings are now raised by the genuine event
+    // WorkPlaceComponent_SetAccepting at workplace activation and cleared by
+    // WorkplaceComponent_Attach — the per-frame occupancy-poll drain was removed.
+    // See code/Game/Component/statusiconcomponent.cpp.)
 
     // (StorageDisplayComponent pile rendering is now driven natively by EntityList::Update's
     // 5-bucket +0x48 tick — the explicit per-frame drain was removed once the spurious

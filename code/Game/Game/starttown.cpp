@@ -177,6 +177,10 @@ extern bool g_wpcRosterOnly;
 // Apply the occupied end-state visual for a rostered house (ModelKick mode 2 + StatusIcon
 // toggle). MUST run at gameplay time (live scene). See its definition in workplacecomponent.cpp.
 extern void WorkplaceComponent_ApplyOccupiedVisual(int64_t comp);
+// Faithful port of the workplace activation tail Entity_impl_fc00(WPC, 1) (0x14012fc00):
+// sets the accepting flag (+0x50) AND raises the "no workers" warning status-icon when the
+// workplace is unstaffed. See its definition in workplacecomponent.cpp.
+extern void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting);
 // Phase 1 economy: register a workplace into the townMgr+0x100 profession BST
 // (code/Game/Game/town_workplace_registry.cpp).
 extern "C" void TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
@@ -1047,12 +1051,15 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
             if (profKey != 0) *reinterpret_cast<uint64_t*>(w + 0x48) = profKey;
             g_foresterProfKey = profKey;   // for the deferred employ pass
 
-            // Enable the workplace: WPC+0x50 = 1. Retail sets this via the activation tail
-            // Entity_impl_fc00(WPC, 1) (0x14012fc00, first line `*(WPC+0x50)=param_2`); the
-            // rest of that fn is inert mesh/status-icon/roster work. FindAvailableBuilding's
-            // reachability gate reads this flag (FUN_140002e10 -> WPC+0x50 != 0); the inert
-            // lodge never ran the activation so it stayed 0. Set the faithful core directly.
-            *reinterpret_cast<char*>(w + 0x50) = 1;
+            // Enable the workplace via the faithful activation tail Entity_impl_fc00(WPC, 1)
+            // (0x14012fc00): sets the accepting flag WPC+0x50 = 1 AND raises the "no workers"
+            // warning status-icon (bit 4) since the lodge spawns unstaffed on its designated
+            // job. This is the genuine build-complete -> accepting EVENT that drives the
+            // warning; WorkplaceComponent_Attach clears it when the employ pass seats a
+            // forester. (Replaces the old per-frame StatusIcon occupancy poll.) The accepting
+            // flag also gates FindAvailableBuilding's reachability check (FUN_140002e10 ->
+            // WPC+0x50 != 0); the inert lodge never ran the activation so it stayed 0.
+            WorkPlaceComponent_SetAccepting(reinterpret_cast<int64_t>(wpc), true);
 
             TownRegistry_RegisterWorkplace(townMgr, wpc);
             fprintf(stderr, "[Phase4Employ] lodge WPC=%p desc=%p profKey(desc+0x20)=0x%llx "

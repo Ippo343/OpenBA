@@ -355,6 +355,67 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
         s_fn_WPC_AppendToList((int64_t*)(comp + 0x58), *(int*)(comp + 0x60) + 1, workerIbp);
 }
 
+// ============================================================
+// WorkPlaceComponent::SetAccepting — faithful port of Entity_impl_fc00 (0x14012fc00),
+// accepting=true path only (the genuine build-complete -> accepting transition).
+// ============================================================
+// Retail fires this when a workplace comes online. For accepting=true it: stores the
+// accepting flag (+0x50), clears the "closed"/"manually-disabled" status-icon bits (1,0),
+// then — when the workplace is UNSTAFFED on its designated job (roster +0x60 == 0 &&
+// jobSlot +0x48 == desc.job desc+0x20) — RAISES the "no workers" warning bit 4 (0x10) on
+// the building's StatusIconComponent. This is the SOLE faithful raiser of that warning;
+// once a worker is attached, WorkplaceComponent_Attach clears the bit again
+// (MeshFlag(mesh,4,0)). The 2D panel (statusiconui.cpp) reads the resulting +0xF0 bitfield.
+//
+// The status-icon mesh is located and toggled through the SAME registered exe helpers
+// Attach/Detach use — the finder Entity_FindComponent_MeshInstance (0x140002f90, keyed off
+// the StatusIconComponent type id) and the flag setter FUN_14012c3f0 (0x14012c3f0). Both
+// resolve in standalone (seeded by reg_economy_typeids / reg_component_people), so the
+// warning is driven by the real toggle code path, not a second port. The raise's cull-guard
+// and Scene Add/position/notify all live inside FUN_14012c3f0, so a plain MeshFlag(mesh,4,1)
+// reproduces the original's inlined raise byte-for-byte.
+//
+// The accepting=false path (evict every worker + re-home them) is deliberately NOT ported:
+// no standalone caller ever deactivates a workplace (start-town only activates the lodge).
+void WorkPlaceComponent_SetAccepting(int64_t comp, bool accepting) {
+    EnsureHelpers();
+    EnsureWpcBodyHelpers();
+
+    *(char*)(comp + 0x50) = accepting ? 1 : 0;
+    if (!accepting) return;   // eviction path unported — see note above.
+
+    // Locate the building's StatusIconComponent (the "mesh" the icon toggles hang off).
+    uint64_t meshIbp = 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+    int64_t* mesh = *(int64_t**)&meshIbp;
+    if (!mesh || !s_fn_WPC_MeshFlag) return;   // partial-world: no renderable icon.
+
+    // Clear the "closed"/"disabled" indicator bits (1 then 0) — a now-accepting workplace
+    // is no longer showing the closed sign.
+    s_fn_WPC_MeshFlag(mesh, 1, '\0');
+    s_fn_WPC_MeshFlag(mesh, 0, '\0');
+
+    // Raise the "no workers" warning (bit 4) only for an UNSTAFFED workplace still on its
+    // designated job (roster empty && jobSlot == desc.job) — the faithful raise condition.
+    if (*(int*)(comp + 0x60) != 0) return;                 // already staffed → no warning.
+    void* descObj = *(void**)(comp + 0x18);
+    void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+                  fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
+    if (!desc) return;                                     // no description → cannot key job.
+    if (*(int64_t*)(comp + 0x48) != *(int64_t*)((uintptr_t)desc + 0x20)) return;  // not the job.
+
+    // Re-find the mesh (mirrors the original's per-call finder) and raise bit 4. The
+    // cull-guard + Scene Add + positioning + entity-notify all execute inside the toggle.
+    meshIbp = 0;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
+    if (s_fn_WPC_FindMesh) s_fn_WPC_FindMesh(*(int64_t*)(comp + 0x10), &meshIbp);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&meshIbp);
+    mesh = *(int64_t**)&meshIbp;
+    if (mesh) s_fn_WPC_MeshFlag(mesh, 4, '\x01');
+}
+
 // Apply the OCCUPIED end-state visual for a house whose roster was filled in roster-only
 // mode (g_wpcRosterOnly suppressed the Scene mesh-visual during the build-time founding
 // pass — see StartTown_AssignFoundingHousing). This reproduces the visual the attach would

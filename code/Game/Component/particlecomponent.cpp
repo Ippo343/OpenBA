@@ -102,9 +102,9 @@ static bool s_initialized = false;
 // and registers it into the per-frame component-update tree; the tree walk then
 // dispatches this component's +0x40 slot (PC_TickVSlot) every frame. Earlier this was
 // suppressed in SA because re-bucketing a house woke its broken workplace/status
-// evaluation (spurious "no workers"/?/cold icons); that eval is now fixed (the
-// StatusIcon occupancy driver is faithful — see StatusIcon_WorkplaceNeedsWorker), so
-// the re-bucket is safe AND required to drive the tick. Always on.
+// evaluation (spurious "no workers"/?/cold icons); that eval is now fixed (the building
+// "no workers" warning is raised only by WorkPlaceComponent_SetAccepting on an unstaffed
+// active workplace), so the re-bucket is safe AND required to drive the tick. Always on.
 static bool PC_RebucketEntity() { return true; }
 
 // ParticleDescription type id — DLL mode reads the exe .rdata slot; in standalone
