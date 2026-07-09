@@ -591,17 +591,17 @@ void DecalComponent_InitFuncs() {
 // walked + submitted every frame by GeomDraw_CollectDraw (geometry_draw.cpp), so the
 // decal only needs to be BUILT ONCE.
 //
-// DRIVER NOTE (same as StorageDisplayComponent): the retail decal build is driven by the
-// component lifecycle (OnCreate/OnAdded via the Fourth UpdatePriority bucket), which is
-// NOT ticked in standalone. So we drive it explicitly:
+// DRIVER NOTE (tree-driven, commit 85845b9): the retail decal build is driven by the
+// component lifecycle (OnCreate/OnAdded via the Fourth UpdatePriority bucket). In
+// standalone that bucket IS reachable once the owner entity is bucketed, so the build is
+// driven through the faithful tree walk (no explicit per-frame drain):
 //   * Startup slot (index 4 / +0x20) — dispatched by ComponentEntity::StartupComponents
-//     at spawn — registers each spawned DecalComponent into a driver list.
-//   * GameUpdateLoop::Update calls DecalComponent_DrainDraw(frame) once the scene is live;
-//     it Draw()s each registered component whose decal hasn't been placed yet
-//     (decalId < 0). Once AddDecal returns a slot index, decalId >= 0 and it is skipped
-//     (build-once; a still-loading material leaves decalId == -1 and retries next tick).
-// Default (env off) => nothing wired, list never populated, driver a no-op => the default
-// sa-run stays byte-identical.
+//     at spawn — sets the draw flag (+0x20 bit 0x4) + c3470-rebuckets the owner, letting
+//     the OnAdded pass dispatch slot 6 (Draw = AddDecal).
+//   * The new +0x40 slot (index 8) retries the build while decalId < 0 (a still-loading
+//     material leaves decalId == -1), then un-buckets once placed (clears bit 0x4 + c3470)
+//     — build-once. Once AddDecal returns a slot index, decalId >= 0 and it is skipped.
+// Default (env off) => nothing wired => the default sa-run stays byte-identical.
 static uint32_t DecalComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("DecalComponent");
