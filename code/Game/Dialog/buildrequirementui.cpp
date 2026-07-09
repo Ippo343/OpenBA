@@ -117,8 +117,15 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     //   3. Object::Internal (UI Element) — get user data, check if BuildComponent
     void* dataSource = *(void**)(s + 0x28);
 
+    // NULL-datasource guard (standalone): the Runtime's Object::Base::IsDerivedFrom
+    // (0x1800c0390) reads `this->vtable[2]()` with NO null check on `this`, so calling
+    // it with a NULL dataSource faults immediately (RCX=NULL vtable read at +0xC039A —
+    // the crash handler mislabels this "factory returned NULL"). Retail always binds a
+    // BuildComponent to a build-requirement panel's +0x28; in standalone a house/info
+    // dialog can leave +0x28 NULL. Skip all three IsDerivedFrom probes when null — the
+    // desc stays unresolved and the function returns cleanly at `if (!desc)` below.
     // Try path 1: datasource IsA BuildComponent
-    bool isBuild = fn_IsDerivedFrom(dataSource, *g_TypeId_BuildComponent);
+    bool isBuild = dataSource && fn_IsDerivedFrom(dataSource, *g_TypeId_BuildComponent);
     if (isBuild && dataSource) {
         // Re-verify (matches original double-check pattern)
         isBuild = fn_IsDerivedFrom(dataSource, *g_TypeId_BuildComponent);
@@ -127,7 +134,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     }
     // Try path 2: datasource IsA ComponentEntity
     else {
-        bool isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
+        bool isEntity = dataSource && fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
         if (isEntity && dataSource) {
             // Re-verify and extract description at entity+0x28
             isEntity = fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity);
@@ -137,7 +144,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         // Try path 3: datasource IsA Object::Internal (UI Element)
         else {
             uint32_t internalTypeId = g_TypeId_ObjectInternal ? *g_TypeId_ObjectInternal : 0;
-            bool isInternal = fn_IsDerivedFrom(dataSource, internalTypeId);
+            bool isInternal = dataSource && fn_IsDerivedFrom(dataSource, internalTypeId);
             void* internalObj = isInternal ? dataSource : nullptr;
 
             uint8_t bpBuf[8];
