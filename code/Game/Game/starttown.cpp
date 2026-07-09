@@ -446,7 +446,19 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 // building goes invisible). So we run OnCreate ONLY on the ResidenceComponent — the
 // one component brought up for the townMgr+0x20 residence registration. The full
 // faithful pass is restored once the other components' OnCreate are verified
-// standalone-safe. Still sets the 0x400 "OnCreate done" sentinel.
+// standalone-safe.
+//
+// IMPORTANT — we do NOT set the 0x400 entity-flag bit here. FUN_1400c2ea0 is the
+// entity *removal* pass (its real callers are death / migration / removal-tool /
+// resource-depletion — see xrefs), and 0x400 is its "removed from world" marker.
+// The faithful per-frame update system treats bit 0x400 as "skip this entity":
+// EntityList::Update's 5-bucket +0x48 tick and the +0x40 tree walk both bail on
+// `(entity+0x40 >> 10) & 1`. Retail never runs c2ea0 on a live start-town building,
+// so those buildings keep bit 0x400 CLEAR and tick normally. We only borrow c2ea0's
+// component-walk shape to dispatch ResidenceComponent::OnCreate (townMgr registration);
+// stamping the removal sentinel would (wrongly) mark the live building removed and
+// permanently exclude its components — e.g. StorageDisplayComponent::Update — from the
+// native tick, which is exactly the bug this omission fixes.
 static void StartTown_RunOnCreatePass(void* entityV) {
     if (!entityV || !fn_InternalBasePtr_CheckPtr) return;
     if (!::ComponentFactory::LiveEnabled("BANISHED_LIVE_RESIDENCE")) return;
@@ -489,7 +501,10 @@ static void StartTown_RunOnCreatePass(void* entityV) {
             fflush(stderr);
         }
     }
-    *entFlags |= 0x400;                                // OnCreate-done sentinel
+    // (Deliberately NOT setting *entFlags |= 0x400 — see the note above: that is
+    // c2ea0's "removed from world" marker and would exclude this live building from
+    // the faithful +0x48 / +0x40 tick.)
+    (void)entFlags;
 }
 
 // TODO #2 gating diagnostic — does the workplace profession key resolve LIVE in

@@ -853,24 +853,19 @@ void StorageDisplayComponent_InitFuncs() {
 #include "Component/component_factory_base.h"
 
 // StorageYard/StorageCart resource-pile rendering (BANISHED_LIVE_STORAGEDISPLAY,
-// default OFF — like BANISHED_SELECTION_OUTLINE).
+// default OFF unless SA_LIVE_ENV enables it).
 //
-// DRIVER NOTE (why the self-drive was replaced): in retail the pile refresh is driven
-// by the storage-change entity-notify (component vtable +0x58/OnUpdate2 via
-// FUN_1400c2bf0). The SA per-frame component tick does NOT dispatch this component's
-// +0x48 Update slot (verified: with slots wired, ZERO Update calls fire — its
-// UpdatePriority=Fourth bucket isn't Update-ticked in standalone, and the notify event
-// is never raised). So we drive it EXPLICITLY, mirroring the working StatusIcon queue:
-//   * The Startup slot (index 4 / +0x20) — which ComponentEntity::StartupComponents DOES
-//     dispatch at spawn in SA — registers every spawned StorageDisplayComponent into a
-//     driver list (StorageDisplay_RegisterDriven).
-//   * GameUpdateLoop::Update calls StorageDisplay_DriveAll(frame) once the scene is live
-//     (frame>=3); it Draw+Update's each registered component every tick. Draw
-//     (MeshArrayResize) and SetDisplayMesh both early-out cheaply when unchanged, so
-//     steady-state cost is a handful of yards * a few slots.
-// The live vtable also wires slots 6/9/11 (Draw/Update/OnUpdate2) so a vtable dispatch
-// (if one ever occurs) lands on the real bodies. Default (env off) => nothing wired,
-// list never populated, driver a no-op => the default sa-run stays byte-identical.
+// DRIVER: faithful — the pile refresh is the component's own per-frame Update (+0x48),
+// dispatched natively by EntityList::Update's 5-bucket round-robin (see entitylist.cpp
+// Step 4). That tick was previously believed dead in SA and replaced by an explicit
+// per-frame drain; it is in fact alive (processCount is set, buckets are populated). The
+// one thing that blocked THIS component was its owner StorageYard being wrongly stamped
+// with entity flag bit 0x400 ("removed from world") by StartTown_RunOnCreatePass — fixed
+// there. With that clear, the bucket tick calls this component's vtable +0x48 (slot 9 =
+// TickVSlot below = Draw+Update) every cadence, exactly like retail. No explicit driver.
+//
+// The live vtable wires the real bodies into slots 6/9/11 (Draw / Update / OnUpdate2).
+// Slot 9 is the active native driver; 6 and 11 back any incidental vtable dispatch.
 static uint32_t StorageDisplayComponent_LiveGetTypeId(void*) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("StorageDisplayComponent");
@@ -878,42 +873,25 @@ static uint32_t StorageDisplayComponent_LiveGetTypeId(void*) {
 }
 static void* StorageDisplayComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-// ---- Explicit per-frame driver (StatusIcon_DrainForceShow pattern) ----
-static StorageDisplayComponent* s_sddDriveList[512];
-static int  s_sddDriveCount = 0;
-static void StorageDisplay_RegisterDriven(StorageDisplayComponent* self) {
-    if (!self) return;
-    for (int i = 0; i < s_sddDriveCount; ++i)   // dedup (Startup can re-run on reload)
-        if (s_sddDriveList[i] == self) return;
-    if (s_sddDriveCount < 512) s_sddDriveList[s_sddDriveCount++] = self;
-}
-
-// index 4 — Startup(self): register this instance for the per-frame driver. (The inert
-// factory zero-fills the body; the fields Draw/Update read — +0x10 entity ref, +0x28
-// display array, +0x30 count — are set by the generic ComponentEntity CopyCtor before
-// StartupComponents runs, so no body-init is needed here.)
-static void StorageDisplayComponent_StartupVSlot(void* s) {
-    StorageDisplay_RegisterDriven(reinterpret_cast<StorageDisplayComponent*>(s));
-}
 // index 6 — Draw(self): grid position layout.
 static void StorageDisplayComponent_DrawVSlot(void* s) {
     StorageDisplayComponent_Draw(reinterpret_cast<StorageDisplayComponent*>(s));
 }
-// index 9 — Update tick (self, Time*). Not dispatched by the SA bucket loop for this
-// component (see DRIVER NOTE); wired so a stray vtable dispatch still lands correctly.
+// index 9 — Update tick (self, Time*): the NATIVE +0x48 driver dispatched by the
+// EntityList 5-bucket round-robin. Draw lays out the w*h pile grid; Update allocates the
+// pile meshes from the (seeded/live) StorageComponent contents. Both early-out cheaply
+// when unchanged, so steady-state cost is a handful of yards * a few slots per cadence.
 static void StorageDisplayComponent_TickVSlot(void* s, void* /*time*/) {
     StorageDisplayComponent* self = reinterpret_cast<StorageDisplayComponent*>(s);
     StorageDisplayComponent_Draw(self);
     StorageDisplayComponent_Update(self);
 }
-// index 11 — OnUpdate2(self): retail Draw+Update refresh.
+// index 11 — OnUpdate2(self): retail Draw+Update refresh (event/broadcast path).
 static void StorageDisplayComponent_OnUpdate2VSlot(void* s) {
     StorageDisplayComponent_OnUpdate2(reinterpret_cast<StorageDisplayComponent*>(s));
 }
 static void StorageDisplayComponent_FinishLiveVtable() {
     if (::ComponentFactory::LiveEnabled("BANISHED_LIVE_STORAGEDISPLAY")) {
-        StorageDisplayComponent_LiveVtable[4]  =
-            reinterpret_cast<void*>(&StorageDisplayComponent_StartupVSlot);
         StorageDisplayComponent_LiveVtable[6]  =
             reinterpret_cast<void*>(&StorageDisplayComponent_DrawVSlot);
         StorageDisplayComponent_LiveVtable[9]  =
@@ -939,44 +917,4 @@ static void* StorageDisplayComponent_CreateInPlace(void* mem) {
 REGISTER_TYPE(StorageDisplayComponent, "Component",
               &StorageDisplayComponent_Factory, &StorageDisplayComponent_CreateInPlace);
 
-// Per-frame driver drain — the integrator adds the single call site in
-// GameUpdateLoop::Update, right after StatusIcon_DrainForceShow(s_frameNum):
-//     extern void StorageDisplay_DrainDraw(int frameNum);
-//     StorageDisplay_DrainDraw(s_frameNum);
-// Iterates the registered StorageDisplayComponents once the scene is live and
-// Draw+Update's each (Draw lays out the w*h pile grid; Update allocates pile meshes
-// from the seeded StorageComponent contents — equivalent to the retail OnUpdate2, but
-// called directly to avoid any vtable-slot dependency). Idempotent per tick: Draw's
-// MeshArrayResize and SetDisplayMesh both early-out when nothing changed.
-extern "C" void StorageDisplay_DrainDraw(int frameNum) {
-    if (s_sddDriveCount == 0) return;
-    if (frameNum < 3) return;                                  // wait for scene + seeding
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
-    void* scene = *(void**)(gw + 0x60);
-    if (!scene) return;                                        // scene not live yet — retry
-
-    int driven = 0;
-    for (int i = 0; i < s_sddDriveCount; ++i) {
-        StorageDisplayComponent* cc = s_sddDriveList[i];
-        if (!cc) continue;
-        // Validate the entity backref before the draw bodies deref it.
-        if (fn_InternalBasePtr_CheckPtr)
-            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)cc + 0x10));
-        if (*(uintptr_t*)((uintptr_t)cc + 0x10) == 0) continue;   // no owning entity yet
-        StorageDisplayComponent_Draw(cc);      // lay out the w*h pile grid
-        StorageDisplayComponent_Update(cc);    // allocate pile meshes from storage
-        ++driven;
-    }
-
-    if (StorageDisplayTraceOn()) {
-        static int s_lastDriven = -1;
-        if (driven != s_lastDriven) {          // log only when the driven count changes
-            s_lastDriven = driven;
-            fprintf(stderr, "[StorageDisplay::Drive] frame=%d queued=%d driven=%d scene=%p\n",
-                    frameNum, s_sddDriveCount, driven, scene);
-            fflush(stderr);
-        }
-    }
-}
 #endif // STANDALONE_EXE
