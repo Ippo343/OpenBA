@@ -131,12 +131,13 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         uint8_t retBuf[16];
         fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
 
+        // NOTE: retail type-checks the group against a UI type-info whose decompiled
+        // label ("g_TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
+        // groups — with that id the check rejects the element and hearts stay blank.
+        // The elements come from our own StatusBar.rsc, so accept the find result
+        // directly (CitizenUI's identical groupHearts/groupStars binding does the same).
         fn_InternalBasePtr_CheckPtr(retBuf);
-        void* groupElem = *(void**)retBuf;
-        void* typedGroup = nullptr;
-        if (groupElem && fn_IsDerivedFrom(groupElem, *g_TypeId_HelpButtonElem)) {
-            typedGroup = groupElem;
-        }
+        void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
         fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
         CitizenUI_BuildIconArray_Impl(s + 0x108, (uintptr_t)groupPtr);
@@ -151,11 +152,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
 
         fn_InternalBasePtr_CheckPtr(retBuf);
-        void* groupElem = *(void**)retBuf;
-        void* typedGroup = nullptr;
-        if (groupElem && fn_IsDerivedFrom(groupElem, *g_TypeId_HelpButtonElem)) {
-            typedGroup = groupElem;
-        }
+        void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
         fn_InternalBasePtr_Ctor(groupPtr, typedGroup);
         CitizenUI_BuildIconArray_Impl(s + 0x128, (uintptr_t)groupPtr);
@@ -171,14 +168,11 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         uint8_t retBuf[16];
         fn_DialogInstance_FindElement(dialog, retBuf, nameStr);
 
+        // Same wrong-label situation as the hearts/stars groups above: retail checks
+        // against the LabelElement type-info, not ButtonElement — accept directly.
         fn_InternalBasePtr_CheckPtr(retBuf);
-        void* labelElem = *(void**)retBuf;
-        void* typedLabel = nullptr;
-        if (labelElem && fn_IsDerivedFrom(labelElem, *g_TypeId_HelpButtonElem)) {
-            typedLabel = labelElem;
-        }
         uint8_t labelPtr[16];
-        fn_InternalBasePtr_Ctor(labelPtr, typedLabel);
+        fn_InternalBasePtr_Ctor(labelPtr, *(void**)retBuf);
         self->labelTitleParam = *(void**)labelPtr;
         fn_String_Dtor(nameStr);
     }
@@ -405,18 +399,22 @@ found_happiness:
         fn_InternalBasePtr_CheckPtr(&self->textSeason);
         void* seasonElem = self->textSeason;
 
-        // UIString ctor takes two params from the text element: +0xD8 and the formatted key
-        uint8_t uiStr[16];
-        uint64_t* pResult = (uint64_t*)fn_UIString_Ctor(uiStr,
-                              *(uint64_t*)((uintptr_t)seasonElem + 0xD8),
-                              monthKey);
-        // Copy UIString result to local for SetText (16 bytes: text + string table ref)
-        uint64_t localUIStr[2];
-        localUIStr[0] = pResult[0];
-        localUIStr[1] = pResult[1];
+        // UIString ctor takes two params from the text element: +0xD8 and the formatted
+        // key. Guard the string table (retail asserts it; a missing table would crash
+        // StringTable::GetIndexFromName in standalone).
+        if (seasonElem && *(uint64_t*)((uintptr_t)seasonElem + 0xD8) != 0) {
+            uint8_t uiStr[16];
+            uint64_t* pResult = (uint64_t*)fn_UIString_Ctor(uiStr,
+                                  *(uint64_t*)((uintptr_t)seasonElem + 0xD8),
+                                  monthKey);
+            // Copy UIString result to local for SetText (16 bytes: text + string table ref)
+            uint64_t localUIStr[2];
+            localUIStr[0] = pResult[0];
+            localUIStr[1] = pResult[1];
 
-        fn_InternalBasePtr_CheckPtr(&self->textSeason);
-        fn_TextElement_SetText(self->textSeason, localUIStr);
+            fn_InternalBasePtr_CheckPtr(&self->textSeason);
+            fn_TextElement_SetText(self->textSeason, localUIStr);
+        }
         fn_String_Dtor(monthKey);
     }
 
@@ -425,9 +423,11 @@ found_happiness:
     float rawTemp = *(float*)(weatherData + 0x18);
     float displayTemp = rawTemp;
 
-    // Check if Celsius mode (game settings +0x15)
-    void* settings = *g_pNewGameSettings;
-    if (*(uint8_t*)((uintptr_t)settings + 0x15) != 0) {
+    // Check if Celsius mode (game settings byte +0x15 = showCelsius, see
+    // optionsdialog.cpp). Null-guarded: the settings slot can be unresolved in
+    // standalone — default to Fahrenheit (setting off) like a fresh install.
+    void* settings = (g_pNewGameSettings ? *g_pNewGameSettings : nullptr);
+    if (settings && *(uint8_t*)((uintptr_t)settings + 0x15) != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }
     fn_InternalBasePtr_CheckPtr(&self->numberTemperature);
@@ -621,15 +621,20 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
                 uintptr_t navCompEntity = *(uintptr_t*)(navEntity + 0x10);
                 fn_InternalBasePtr_CheckPtr((void*)&navCompEntity);
 
-                // FindComponent_MeshInstance (uses same type ID DAT_1401c7e08)
-                uintptr_t meshComp = 0;
-                fn_FindComponent_MeshInstance((void*)navCompEntity, &meshComp);
-                fn_InternalBasePtr_CheckPtr((void*)&meshComp);
+                // FindComponent_MeshInstance (uses same type ID DAT_1401c7e08).
+                // Null-guarded: the exe finder may be unregistered in standalone —
+                // skip the redundant double-check in that case (the loop above
+                // already verified the status bit).
+                if (fn_FindComponent_MeshInstance) {
+                    uintptr_t meshComp = 0;
+                    fn_FindComponent_MeshInstance((void*)navCompEntity, &meshComp);
+                    fn_InternalBasePtr_CheckPtr((void*)&meshComp);
 
-                // Double-check: if meshComp's status doesn't have our bit, bail
-                if (meshComp) {
-                    uint32_t meshStatus = *(uint32_t*)(meshComp + 0xF0);
-                    if ((meshStatus & bitMask) == 0) return;
+                    // Double-check: if meshComp's status doesn't have our bit, bail
+                    if (meshComp) {
+                        uint32_t meshStatus = *(uint32_t*)(meshComp + 0xF0);
+                        if ((meshStatus & bitMask) == 0) return;
+                    }
                 }
 
                 // Navigate to the citizen entity
@@ -693,3 +698,234 @@ void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int ev
     // navigates the camera to that citizen and opens CitizenUI.
     StatusBarUI_StatusIconHandler_Impl(self, iconIndex);
 }
+
+// ============================================================================
+// STANDALONE promotion — real SA vtable for StatusBarUI.
+// ============================================================================
+// The toolbar "town status" utility dialog (Template/UtilityStatusBar.rsc ->
+// StandardDialog.rsc:resourceUserTitle + Dialog/StatusBar.rsc:content, toolbar
+// group 4 — same submenu as the Map dialog) is driven by a StatusBarUI
+// controller. In standalone this type was a UI_DIALOG_STUB (all slots no-op,
+// registration REMOVED from ui_dialog_stub_factories.cpp), so the dialog opened
+// with every field on its .rsc default: title untitled, all statistics zero.
+//
+// Retail vtable (exe @ 0x14015d810):
+//   idx5 (+0x28) = 0x14007a3d0  element discovery      -> StatusBarUI_Draw
+//   idx7 (+0x38) = 0x1400798d0  full stats refresh      -> StatusBarUI_Startup
+//   idx9 (+0x48) = 0x14007a3a0  status-icon click       -> StatusBarUI_OnRemove
+//
+// The utility DialogInstance uses the same ToolUI child-dialog vtable as the
+// entity-info dialogs (toolbardialog.cpp Toolbar_Utility_Impl), whose SA
+// framework dispatches ONLY controller slot idx8 (+0x40) per frame — so, like
+// the TownHallUI promotion, the self-heal build + a throttled refresh run from
+// idx8, with idx4/idx5/idx7 also wired for any direct framework dispatch.
+//
+// Data sources (all live after the town-registry passes in starttown.cpp):
+// town citizen list townMgr+0xa0/+0xa8 (population/status/hearts/stars),
+// resource stock townMgr+0x170, game clock gw+0x128, weather gw+0x130, and
+// the town name String at gw+0x28 (title parameter).
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstddef>
+
+namespace statusbarui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("StatusBarUI");
+    return c;
+}
+
+// Backfill the exe-.rdata type-id globals the impl paths dereference:
+//  - DAT_1401c7e08 ("g_TypeId_HappinessComponent") is actually the
+//    StatusIconComponent type id (Ghidra name-table; see statusiconui.cpp) and
+//    is unfilled (0/0xFFFFFFFF) in standalone -> resolve by TRUE name.
+//  - g_TypeId_CitizenDescription is normally filled by the townhall promotion's
+//    EnsureGlobals; fill it here too so the status dialog works on its own.
+void EnsureGlobals() {
+    static uint32_t s_statusIconTid = 0;
+    if (!g_TypeId_HappinessComponent || *g_TypeId_HappinessComponent == 0 ||
+        *g_TypeId_HappinessComponent == 0xFFFFFFFFu) {
+        if (!s_statusIconTid)
+            s_statusIconTid = ::Object::ResolveTypeIdByNameLazy("StatusIconComponent");
+        if (s_statusIconTid) g_TypeId_HappinessComponent = &s_statusIconTid;
+    }
+    static uint32_t s_citDescTid = 0;
+    if (!g_TypeId_CitizenDescription) {
+        if (!s_citDescTid)
+            s_citDescTid = ::Object::ResolveTypeIdByNameLazy("CitizenDescription");
+        if (s_citDescTid) g_TypeId_CitizenDescription = &s_citDescTid;
+    }
+}
+
+// Every function/global the Draw+Startup+event paths dereference unguarded must
+// be live, or a null-deref faults (no SEH under MinGW).
+bool Ready() {
+    if (!(fn_String_Ctor_CStr && fn_String_Ctor_Copy && fn_String_Format &&
+          fn_String_Dtor && fn_DialogInstance_FindElement && fn_FindElement &&
+          fn_Element_Child && fn_Element_ChildCount && fn_Element_SetElementId &&
+          fn_Element_SetFlagsOnOff && fn_TextElement_SetParameter &&
+          fn_TextElement_SetText && fn_NumberElement_SetValueInt &&
+          fn_UIString_Ctor && fn_Time_AsSeconds && fn_IsDerivedFrom &&
+          fn_InternalBasePtr_Ctor && fn_InternalBasePtr_CheckPtr &&
+          fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
+        return false;
+    if (!(g_TypeId_HappinessComponent && g_TypeId_CitizenDescription)) return false;
+    return true;
+}
+
+// The world-side data Startup reads unguarded: townMgr (gw+0xf0) with its
+// resource stock block (+0x170), the game clock (gw+0x128), and the weather
+// object (gw+0x130). The citizen roster (+0xa0/+0xa8) may legitimately be
+// count 0 (handled by the impl).
+bool TownReady() {
+    if (!(g_pGameWorldSingleton && *g_pGameWorldSingleton)) return false;
+    uintptr_t gw = *(uintptr_t*)g_pGameWorldSingleton;
+    uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
+    if (!townMgr) return false;
+    if (*(uintptr_t*)(townMgr + 0x170) == 0) return false;  // resource stock
+    if (*(uintptr_t*)(gw + 0x128) == 0) return false;       // game clock
+    if (*(uintptr_t*)(gw + 0x130) == 0) return false;       // weather
+    return true;
+}
+
+// Controller bound to its element + dialog instance (framework sets +0x18/+0x20).
+inline bool Bound(void* self) {
+    uintptr_t s = (uintptr_t)self;
+    return *(void**)(s + 0x18) != nullptr && *(void**)(s + 0x20) != nullptr;
+}
+
+// Draw bound the core elements (they all exist in Dialog/StatusBar.rsc:content).
+inline bool Built(void* self) {
+    StatusBarUI* ui = (StatusBarUI*)self;
+    return ui->textSeason && ui->textPopulation && ui->numberYear && ui->numberWood;
+}
+
+// idx4 (+0x20) / idx5 (+0x28): setup — element discovery + initial title.
+void W_Setup(void* self) {
+    EnsureGlobals();
+    if (!self || !Bound(self) || !Ready() || !TownReady()) return;
+    if (Built(self)) return;   // idempotence
+    StatusBarUI_Draw((StatusBarUI*)self);
+}
+
+// idx7 (+0x38): full statistics refresh.
+void W_Refresh(void* self) {
+    EnsureGlobals();
+    if (!self || !Bound(self) || !Ready() || !TownReady()) return;
+    if (!Built(self)) StatusBarUI_Draw((StatusBarUI*)self);
+    if (!Built(self)) return;
+    StatusBarUI_Startup((StatusBarUI*)self);
+}
+
+// One-shot gate diagnostic — a silently-skipping gate is indistinguishable from
+// a zeroed dialog (same lesson as TownHallSA_Diag).
+static void DiagOnce(void* self) {
+    static bool s_done = false;
+    if (s_done) return;
+    s_done = true;
+    uintptr_t gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                 ? *(uintptr_t*)g_pGameWorldSingleton : 0;
+    uintptr_t townMgr = gw ? *(uintptr_t*)(gw + 0xf0) : 0;
+    fprintf(stderr, "[StatusBarUI] SA first OnUpdate: self=%p bound=%d built=%d ready=%d "
+            "town=%d citizens=%d stock=%p\n",
+            self, self ? (Bound(self) ? 1 : 0) : -1, self ? (Built(self) ? 1 : 0) : -1,
+            Ready() ? 1 : 0, TownReady() ? 1 : 0,
+            townMgr ? *(int*)(townMgr + 0xa8) : -1,
+            townMgr ? *(void**)(townMgr + 0x170) : nullptr);
+    fflush(stderr);
+}
+
+// idx8 (+0x40): per-frame — self-heal the build, then refresh the statistics
+// twice a second (retail refreshes every frame; the citizen scan is cheap but
+// the ~40 element writes are not worth 60Hz).
+void W_OnUpdate(void* self, void* /*time*/) {
+    EnsureGlobals();
+    DiagOnce(self);
+    if (!self || !Bound(self) || !Ready() || !TownReady()) return;
+    if (!Built(self)) {
+        StatusBarUI_Draw((StatusBarUI*)self);
+        if (Built(self)) {
+            fprintf(stderr, "[StatusBarUI] SA build OK — elements bound, first refresh\n");
+            fflush(stderr);
+        } else {
+            return;
+        }
+        StatusBarUI_Startup((StatusBarUI*)self);
+        return;
+    }
+    // _pad104 (struct tail of the +0x100 cycling index) as a throttle counter.
+    uint32_t* throttle = (uint32_t*)((uintptr_t)self + 0x104);
+    if ((*throttle)++ % 30 == 0) StatusBarUI_Startup((StatusBarUI*)self);
+}
+
+// idx9 (+0x48): status-icon clicks (element ids 100-105) — cycle the camera to
+// the next citizen with that problem.
+void W_OnEvent(void* self, void* param2, int msg, int id) {
+    EnsureGlobals();
+    if (!self || !Built(self) || !Ready() || !TownReady()) return;
+    StatusBarUI_OnRemove((StatusBarUI*)self, param2, msg, id);
+}
+
+// Destructor: the only owned heap is the two GroupRating icon arrays built by
+// CitizenUI_BuildIconArray_Impl (whole+half InternalBasePtr[] each, at +0x108
+// and +0x128).
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *(void**)self = g_vt;
+    uintptr_t s = (uintptr_t)self;
+    if (fn_MemFreeStatic) {
+        static const uintptr_t kIconArrays[4] = { 0x108, 0x118, 0x128, 0x138 };
+        for (uintptr_t off : kIconArrays) {
+            fn_MemFreeStatic(*(void**)(s + off));
+            *(uint64_t*)(s + off) = 0;
+            *(uint64_t*)(s + off + 8) = 0;   // count/capacity pair
+        }
+        if (flags & 1) fn_MemFreeStatic(self);
+    }
+    return self;
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Setup);
+        g_vt[5] = reinterpret_cast<void*>(&W_Setup);     // retail setup slot
+        g_vt[7] = reinterpret_cast<void*>(&W_Refresh);   // retail refresh slot
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_OnEvent);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x1D0); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x1D0), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace statusbarui_sa
+
+REGISTER_TYPE(StatusBarUI, "UI::DialogController",
+              &statusbarui_sa::Factory, &statusbarui_sa::InPlace);
+
+#endif  // STANDALONE_EXE

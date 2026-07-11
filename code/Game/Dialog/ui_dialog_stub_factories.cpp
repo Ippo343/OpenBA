@@ -277,7 +277,9 @@ UI_DIALOG_STUB(ProfessionUI,        "UI::DialogController", 0x78);
 UI_DIALOG_STUB(RadiusUI,            "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ResourceLimitUI,     "UI::DialogController", 0x40);
 UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
-UI_DIALOG_STUB(StatusBarUI,         "UI::DialogController", 0x1D0);
+// ---- StatusBarUI: PROMOTED to real SA vtable (statusbarui.cpp) — the toolbar
+//      "town status" utility dialog (group 4, next to Map) now renders the town
+//      name title + population/resources/weather/hearts/stars instead of zeros ----
 // ---- StatusIconUI: PROMOTED to real SA vtable (statusiconui.cpp) — icons now
 //      show/hide per StatusIconComponent +0xF0 state instead of all-at-once ----
 // ---- StorageCapacityUI: PROMOTED to real SA vtable (storagecapacityui.cpp) — the
