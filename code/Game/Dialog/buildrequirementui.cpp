@@ -154,7 +154,10 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             if (elemPtr) {
                 fn_InternalBasePtr_CheckPtr(bpBuf);
                 void* userData = fn_Element_GetUserData(elemPtr);
-                isBuild = fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent);
+                // Element_GetUserData can return NULL (element carries no user data);
+                // Runtime IsDerivedFrom has no null-this check (crash READ 0x0 at +0xC039A),
+                // so guard exactly as the +0x28 datasource probes above do.
+                isBuild = userData && fn_IsDerivedFrom(userData, *g_TypeId_BuildComponent);
                 void* descResolved = isBuild ? userData : nullptr;
                 // Standalone divergence: the in-game Toolbar sub-item buttons store
                 // their building DESCRIPTION entity as userData (toolbardialog.cpp

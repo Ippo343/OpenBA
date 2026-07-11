@@ -60,6 +60,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // Object::GetTypeIdByName (.rdata type-id fallback)
+#endif
 
 namespace {
 
@@ -125,11 +128,24 @@ static void EnsureFns() {
     s_PickReachable    = reinterpret_cast<fn_PickReachable_t>(ResolveAddr(Module::Exe, 0x14004edb0));
     s_FindComp_4680    = reinterpret_cast<fn_FindCompMember_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_Sqrtf            = reinterpret_cast<fn_Sqrtf_t>(ResolveAddr(Module::Exe, 0x140132010));
+    // Type-id .rdata globals. In standalone ResolveAddr(Exe, .rdata) returns NULL, so the
+    // `*s_pTid_X` reads at the use sites fault (READ of 0x0). Resolve the VALUES self-
+    // contained via Object::GetTypeIdByName and point the pointers at static storage
+    // (names verified from the *_RegisterType writers in factory_registrations.csv).
+#ifdef STANDALONE_EXE
+    static uint32_t v_c7cb8, v_c7ee8, v_c4560, v_c7e78, v_c7f20;
+    v_c7cb8 = ::Object::GetTypeIdByName("RawMaterialDescription");     s_pTid_c7cb8 = &v_c7cb8;
+    v_c7ee8 = ::Object::GetTypeIdByName("StorageLocationComponent");   s_pTid_c7ee8 = &v_c7ee8;
+    v_c4560 = ::Object::GetTypeIdByName("MarketLocationComponent");    s_pTid_c4560 = &v_c4560;
+    v_c7e78 = ::Object::GetTypeIdByName("StorageComponent");           s_pTid_c7e78 = &v_c7e78;
+    v_c7f20 = ::Object::GetTypeIdByName("StorageLocationDescription"); s_pTid_c7f20 = &v_c7f20;
+#else
     s_pTid_c7cb8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pTid_c7ee8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ee8));
     s_pTid_c4560 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4560));
     s_pTid_c7e78 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
     s_pTid_c7f20 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f20));
+#endif
     s_pHalfCell_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_QueryCount = reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
     s_init = true;
@@ -137,7 +153,19 @@ static void EnsureFns() {
 
 static inline void  CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uint32_t GetTypeId(void* obj) {
+    // A null component slot yields no type-id match. The exe's slots are never null;
+    // in standalone a partially-built entity can leave one null (crash READ of 0x0 on
+    // the vtable load). Return 0 (matches no registered type-id) so the scan skips it.
+    if (!obj) return 0;
     return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
+}
+
+// Standalone drop-target diagnostic (BANISHED_DROP_TRACE, default off).
+static bool Pf_DropTrace() {
+    static int t = -1;
+    if (t < 0) { const char* e = std::getenv("BANISHED_DROP_TRACE");
+        t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return t == 1;
 }
 
 } // namespace
@@ -616,8 +644,14 @@ FOUND_a8:
                         CheckPtr(&local_c0);
                         int64_t lVar22 = local_c0;
                         void* pvVar3 = *(void**)(local_c0 + 0x18);
-                        void* pvVar13 = fn_IsDerivedFrom(pvVar3, *s_pTid_c7f20) ? pvVar3 : (void*)0x0;
-                        uint32_t uVar10 = *(uint32_t*)((int64_t)pvVar13 + 0x20);
+                        // Guard: the exe derefs this description unconditionally, but in
+                        // standalone local_c0's description (+0x18) can be null/unresolved,
+                        // and Runtime IsDerivedFrom has no null-check (crash READ 0x0).
+                        void* pvVar13 = (pvVar3 && fn_IsDerivedFrom(pvVar3, *s_pTid_c7f20)) ? pvVar3 : (void*)0x0;
+                        if (Pf_DropTrace() && !pvVar13)
+                            std::fprintf(stderr, "[DropTrace] entity=%p StorLocDesc null (pvVar3=%p) -> flag=0 (inner-residence path)\n",
+                                         (void*)local_c8, pvVar3);
+                        uint32_t uVar10 = pvVar13 ? *(uint32_t*)((int64_t)pvVar13 + 0x20) : 0;
                         if (uVar10 == 0) {
                             CheckPtr((void*)(lVar22 + 0x10));
                             lVar22 = *(int64_t*)(lVar22 + 0x10);
@@ -648,7 +682,14 @@ FOUND_78:
                             CheckPtr(&local_78);
                             uVar10 = *(uint32_t*)(local_78 + 0x3c);
                         }
-                        if ((*(uint32_t*)((int64_t)pvVar19 + 0x5c) & uVar10) == 0) goto LAB_14008db2a;
+                        // Guard: pvVar19 (the drop-source RawMaterialDescription on param_4)
+                        // is non-null in the exe; standalone can leave it null. No source
+                        // mask => the candidate can't accept this material => skip it.
+                        uint32_t srcMask = pvVar19 ? *(uint32_t*)((int64_t)pvVar19 + 0x5c) : 0;
+                        if (Pf_DropTrace() && !pvVar19)
+                            std::fprintf(stderr, "[DropTrace] entity=%p pvVar19(src RawMatDesc) null -> skip candidate\n",
+                                         (void*)local_c8);
+                        if ((srcMask & uVar10) == 0) goto LAB_14008db2a;
                     }
                     CheckPtr(&local_a8);
                     bool accepted = false;
