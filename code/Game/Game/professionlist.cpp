@@ -176,6 +176,88 @@ int ProfessionList_Serialize(ProfessionList* self, void* stream) {
 }
 
 // ============================================================
+// ProfessionList::Startup (0x1400a90a0) — build the profession ARRAY
+// ============================================================
+// Iterates every Profession external in the ExternalFactory (TypeInfo_Profession
+// @ 0x1401c5a98), pushes each with the player-selectable flag (+0x4e) set into
+// the dynamic array at +0x20/+0x28/+0x2c (grow ×3), then sorts ascending by the
+// profession's sort priority (+0x48) — FUN_14001e7c0 is an introsort on that key;
+// an insertion sort gives the same ordering (N ≈ a dozen professions).
+//
+// Called from GameUpdateLoop::Startup (gameupdateloop.cpp resolves exe 0x1400a90a0
+// via fn_ProfessionList_Startup — registered for standalone below). Without it the
+// array stays empty (count 0) and every profession-array consumer (TownHallUI
+// General/Professions tabs, ProfessionUI) sees zero professions and shows blank.
+#ifdef STANDALONE_EXE
+namespace Object { uint32_t GetTypeIdByName(const char* name); }  // fwd (full header below)
+#endif
+extern "C" void ProfessionList_Startup_Impl(void* profList) {
+    uintptr_t pl = (uintptr_t)profList;
+    if (!pl || !fn_ExternalFactory_FindNext || !fn_IsDerivedFrom ||
+        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
+        !fn_MemAlloc || !g_pMemAllocSingleton)
+        return;
+
+    // Profession type id: raw .rdata dword in DLL mode; live type tree in standalone.
+    uint32_t profTid = 0;
+    {
+        uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5a98));
+        if (p && *p) profTid = *p;
+    }
+#ifdef STANDALONE_EXE
+    if (!profTid) profTid = ::Object::GetTypeIdByName("Profession");
+#endif
+    if (!profTid) return;
+
+    void* factory = *g_pExternalFactorySingleton;
+    for (void* it = fn_ExternalFactory_FindNext(factory, profTid, nullptr); it;
+         it = fn_ExternalFactory_FindNext(factory, profTid, it)) {
+        if (!fn_IsDerivedFrom(it, profTid)) continue;
+        if (*(uint8_t*)((uintptr_t)it + 0x4e) == 0) continue;  // not player-selectable
+
+        // Growable push into +0x20 (buf) / +0x28 (count) / +0x2c (cap).
+        int count = *(int*)(pl + 0x28);
+        void* oldBuf = *(void**)(pl + 0x20);
+        *(int*)(pl + 0x28) = count + 1;
+        if (*(int*)(pl + 0x2c) < count + 1) {
+            int newCap = (count != 0) ? (count + 1) * 3 : count + 1;
+            *(int*)(pl + 0x2c) = newCap;
+            *(void**)(pl + 0x20) = fn_MemAlloc(g_pMemAllocSingleton,
+                                               (uint64_t)newCap << 3, 8);
+        }
+        void** buf = *(void***)(pl + 0x20);
+        if (!buf) { *(int*)(pl + 0x28) = count; continue; }
+        if (buf != oldBuf) {
+            for (int i = 0; i < count; i++)
+                buf[i] = ((void**)oldBuf)[i];
+            fn_MemFreeStatic(oldBuf);
+        }
+        buf[count] = it;
+    }
+
+    // Sort ascending by sort priority (Profession+0x48) — FUN_14001e7c0 semantics.
+    int n = *(int*)(pl + 0x28);
+    uintptr_t* arr = *(uintptr_t**)(pl + 0x20);
+    if (n > 1 && arr) {
+        for (int i = 1; i < n; i++) {
+            uintptr_t key = arr[i];
+            int keyPri = *(int*)(key + 0x48);
+            int j = i - 1;
+            while (j >= 0 && *(int*)(arr[j] + 0x48) > keyPri) {
+                arr[j + 1] = arr[j];
+                j--;
+            }
+            arr[j + 1] = key;
+        }
+    }
+
+#ifdef _DEBUG
+    printf("[ProfessionList] Startup: %d professions in array (tid=0x%08x)\n",
+           *(int*)(pl + 0x28), profTid);
+#endif
+}
+
+// ============================================================
 // Standalone factory scaffolding
 // ============================================================
 // ProfessionList (Object::External, 0x50) is loaded from Profession.rsc during the
@@ -210,6 +292,11 @@ static void* g_PL_Vtable[9] = {
 
 extern "C" void RegisterProfessionListVtable() {
     RegisterExeAddr(ProfessionListAddr::Vtable, reinterpret_cast<uintptr_t>(g_PL_Vtable));
+    // ProfessionList::Startup (array populate + sort) — GameUpdateLoop::Startup
+    // resolves exe 0x1400a90a0 (fn_ProfessionList_Startup) and calls it when the
+    // profession list is live; unregistered it was NULL and the call was skipped,
+    // leaving the profession array empty (TownHallUI blank-tab root cause).
+    RegisterExeAddr(0x1400a90a0, reinterpret_cast<uintptr_t>(&ProfessionList_Startup_Impl));
 }
 
 extern "C" void* ProfessionList_Factory(void) {

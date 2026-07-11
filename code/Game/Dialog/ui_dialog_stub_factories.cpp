@@ -373,7 +373,9 @@ namespace uistub_ToolUI {
 }
 REGISTER_TYPE(ToolUI, "UI::DialogController",
               &uistub_ToolUI::Factory, &uistub_ToolUI::InPlace);
-UI_DIALOG_STUB(TownHallUI,          "UI::DialogController", 0x1E8);
+// ---- TownHallUI: PROMOTED to real SA vtable (townhallui.cpp) — the town-hall
+//      General statistics / Professions / Production / Inventory / Graph /
+//      Agriculture panel now populates from the full reimplementation. ----
 UI_DIALOG_STUB(TradeUI,             "UI::DialogController", 0x148);
 UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
 // ---- WorkPlaceUI: PROMOTED to real SA vtable (workplaceui.cpp) — the construction

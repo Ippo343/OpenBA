@@ -660,6 +660,9 @@ extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 // In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
+// TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
+// of the fn-pointer / type-id / town-data gates behind the town-hall panel.
+extern "C" void TownHallSA_Diag(int frameNum);
 #endif
 
 // fn_MemFreeStatic is already available from engine_funcs.h
@@ -732,6 +735,11 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
     ToolHarness_Tick(self->m_entityUI, s_frameNum);
+
+    // TownHallUI gate diagnostic (one-shot at frame 120): reports missing fn
+    // pointers / type-ids / town data that would silently blank the town-hall
+    // statistics panel (code/Game/Dialog/townhallui.cpp).
+    TownHallSA_Diag(s_frameNum);
 
     // Apply the deferred founding-house "occupied" visuals now that the scene is live
     // (the Scene mesh-visual can't run during the build-time founding pass — it

@@ -17,7 +17,21 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+
+// Component-scan / update diagnostics — gated: the open town-hall panel drives the
+// FindComponent scans below EVERY frame (per-frame slot → UpdateAll/UpdateInventory
+// over all entities), and unconditional logging at that rate tanks FPS (same failure
+// as the ResidenceUI/StorageUI per-frame logs — see BANISHED_DIALOG_TRACE).
+static bool TH_Trace() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_DIALOG_TRACE");
+        s = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s != 0;
+}
 
 // ============================================================
 // Helpers
@@ -1418,19 +1432,19 @@ static void* AgriBST_Next(void* node) {
 // Note: these entities use +0x28/+0x30 layout (not +0x30/+0x38 like ComponentEntity)
 static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
     if (!entity) {
-        printf("[TH_FindComp] entity is NULL for typeId=0x%x\n", typeId);
+        if (TH_Trace()) printf("[TH_FindComp] entity is NULL for typeId=0x%x\n", typeId);
         return nullptr;
     }
     void** compArray = *(void***)(entity + 0x28);
     int compCount = *(int*)(entity + 0x30);
 
     if (!compArray) {
-        printf("[TH_FindComp] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
+        if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
                (unsigned long long)entity, typeId);
         return nullptr;
     }
     if (compCount < 0 || compCount > 200) {
-        printf("[TH_FindComp] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
+        if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
                (unsigned long long)entity, compCount, typeId);
         return nullptr;
     }
@@ -1438,14 +1452,14 @@ static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
     for (int i = 0; i < compCount; i++) {
         void* comp = compArray[i];
         if ((uintptr_t)comp < 0x10000 || (uintptr_t)comp >= 0xFFFFFFFF00000000ULL) {
-            printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx SKIPPED (bad ptr, typeId=0x%x)\n",
+            if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx SKIPPED (bad ptr, typeId=0x%x)\n",
                    (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId);
             continue;
         }
         // vtable slot 2 (+0x10) = GetTypeId()
         void** vtable = *(void***)comp;
         if (!vtable) {
-            printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx NULL vtable (typeId=0x%x)\n",
+            if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx NULL vtable (typeId=0x%x)\n",
                    (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId);
             continue;
         }
@@ -1453,14 +1467,14 @@ static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
         int id = ((fn_GetTypeId_t)vtable[2])(comp);
         if ((uint32_t)id == typeId) {
             bool derived = fn_IsDerivedFrom(comp, typeId);
-            printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
+            if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
                    (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId, (int)derived);
             if (derived)
                 return comp;
             break;
         }
     }
-    printf("[TH_FindComp] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
+    if (TH_Trace()) printf("[TH_FindComp] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
            (unsigned long long)entity, typeId, compCount);
     return nullptr;
 }
@@ -1470,19 +1484,19 @@ static void* TownHall_FindComponentByTypeId(uintptr_t entity, uint32_t typeId) {
 // Each array element is an InternalBasePtr that needs CheckPtr before deref.
 static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId) {
     if (!entity) {
-        printf("[TH_FindComp_CE] entity is NULL for typeId=0x%x\n", typeId);
+        if (TH_Trace()) printf("[TH_FindComp_CE] entity is NULL for typeId=0x%x\n", typeId);
         return nullptr;
     }
     uintptr_t compArrayBase = *(uintptr_t*)(entity + 0x30);
     int compCount = *(int*)(entity + 0x38);
 
     if (!compArrayBase) {
-        printf("[TH_FindComp_CE] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
+        if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx compArray is NULL (typeId=0x%x)\n",
                (unsigned long long)entity, typeId);
         return nullptr;
     }
     if (compCount < 0 || compCount > 200) {
-        printf("[TH_FindComp_CE] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
+        if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx bad compCount=%d (typeId=0x%x)\n",
                (unsigned long long)entity, compCount, typeId);
         return nullptr;
     }
@@ -1501,14 +1515,14 @@ static void* TownHall_FindComponentByTypeId_CE(uintptr_t entity, uint32_t typeId
         int id = ((fn_GetTypeId_t)vtable[2])(comp);
         if ((uint32_t)id == typeId) {
             bool derived = fn_IsDerivedFrom(comp, typeId);
-            printf("[TH_FindComp_CE] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
+            if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx comp[%d]=0x%llx typeId MATCH=0x%x isDerived=%d\n",
                    (unsigned long long)entity, i, (unsigned long long)(uintptr_t)comp, typeId, (int)derived);
             if (derived)
                 return comp;
             break;
         }
     }
-    printf("[TH_FindComp_CE] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
+    if (TH_Trace()) printf("[TH_FindComp_CE] entity=0x%llx typeId=0x%x NOT FOUND (searched %d comps)\n",
            (unsigned long long)entity, typeId, compCount);
     return nullptr;
 }
@@ -1641,7 +1655,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             // Find ValueDescription component on entity
             void* valDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeInfo_ValueDescription);
             if (!valDesc) {
-                printf("[TH_UpdateProd] valDesc NULL for entity=0x%llx, skipping entry %d\n",
+                if (TH_Trace()) printf("[TH_UpdateProd] valDesc NULL for entity=0x%llx, skipping entry %d\n",
                        (unsigned long long)entityPtr, i);
                 elemOff += 0x10;
                 continue;
@@ -1813,7 +1827,7 @@ next_entity: ;
                 // Find SelectDescription component (DAT_1401c48a8) on entity
                 void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
 
-                printf("[TH_Agri] entity=0x%llx found in tempBST, selectDesc=%p\n",
+                if (TH_Trace()) printf("[TH_Agri] entity=0x%llx found in tempBST, selectDesc=%p\n",
                        (unsigned long long)entityPtr, selectDesc);
 
                 // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
@@ -1840,7 +1854,7 @@ next_entity: ;
                 fn_InternalBasePtr_CheckPtr((void*)labelPtr);
                 Element_VCall50(*(void**)labelPtr, (int)0xFFC0C0C0);
             } else {
-                printf("[TH_Agri] entity=0x%llx NOT found in tempBST (displayIdx=%d)\n",
+                if (TH_Trace()) printf("[TH_Agri] entity=0x%llx NOT found in tempBST (displayIdx=%d)\n",
                        (unsigned long long)entityPtr, displayIdx);
             }
 
@@ -2414,3 +2428,393 @@ void TownHallUI_OnRemove(TownHallUI* self, void* param2, int msg, int id) {
             TownHallUI_OnProfessionSpinner(self, id - 0x1966);
     }
 }
+
+// ============================================================
+// STANDALONE promotion — real TownHallUI controller vtable
+// ============================================================
+// The town-hall panel (Dialog/TownHall.rsc — the General statistics / Professions /
+// Production / Inventory / Graph / Agriculture tab dialog opened by clicking a Town
+// Hall) is driven by a TownHallUI controller. In standalone this type was a StubNop
+// (all slots no-op, see ui_dialog_stub_factories.cpp — that stub registration is
+// REMOVED there to avoid a duplicate REGISTER_TYPE), so the dialog opened with every
+// field left on its .rsc template default: the "general statistics" numbers never
+// populated. This installs a real per-class vtable wiring the fully-reimplemented
+// methods above, following the StorageUI/WorkPlaceUI promotion pattern.
+//
+// Vtable offsets (verified from the exe TownHallUI vtable @ 0x14015dce0, see
+// engine/reimpl/townhallui.cpp):
+//   +0x00 (idx0)  ScalarDtor — frees the prof/prod/inv/agri arrays + 3 BSTs
+//   +0x10 (idx2)  GetTypeId
+//   +0x20 (idx4)  Serialize  = element discovery + InitGeneral/Professions/
+//                 Production/Inventory/Graph/Agriculture (framework setup call)
+//   +0x38 (idx7)  Startup    = UpdateGeneral/Professions/Production/Agriculture
+//   +0x40 (idx8)  OnCreate   = per-frame: graph refresh on tick change +
+//                 UpdateInventory + UpdateAll (the framework dispatches ONLY +0x40
+//                 each frame, so the self-heal build + a throttled Startup refresh
+//                 are driven here — keeps the General tab's month/counts live)
+//   +0x48 (idx9)  OnEvent    = profession buttons 0x1999+, graph combos
+//                 0x1964/0x1965 (msg 0x14), profession spinners 0x1966+ (msg 0x15)
+//   +0x50 (idx10) Update     = tab/combo state persist (IO::Serializer stream)
+//
+// The exe helper functions these methods call through fn_* pointers are ported in
+// townhall_helpers.cpp + citizen_employ_cascade.cpp and registered by
+// standalone/reg_townhallui.cpp, so EngineFuncsInit resolves them in SA.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstddef>
+
+namespace townhallui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("TownHallUI");
+    return c;
+}
+
+// ---- exe-.rdata type-id globals the TownHallUI paths dereference ----
+// All lazily filled from the live runtime type registry (valid after
+// Object::Factory::Startup). Registered names Ghidra-verified this session via the
+// .rdata name-table / RegisterType writers — several engine_funcs labels are
+// historical mislabels:
+//   exref 0x1401516c8 "g_TypeId_SpinnerElement"      -> UI::NumberElement
+//   DAT   0x1401c7d98 "g_TypeId_BuildStateComponent" -> StateMachineComponent
+//   DAT   0x1401c4b80 "g_TypeId_BuildingComponent"   -> TradeComponent
+//   DAT   0x1401c7318 "g_TypeId_BuildComponent"      -> ComponentDescription
+void EnsureGlobals() {
+    struct Entry { uint32_t** global; const char* name; };
+    static uint32_t storage[20] = {0};
+    static const Entry entries[] = {
+        { &g_TypeId_TabElement,               "TabElement" },
+        { &g_TypeId_TableElement,             "TableElement" },
+        { &g_TypeId_LabelElement,             "LabelElement" },
+        { &g_TypeId_TextElement,              "TextElement" },
+        { &g_TypeId_SpinnerElement,           "NumberElement" },
+        { &g_TypeId_NumberEditElement,        "NumberEditElement" },
+        { &g_TypeId_ComboElement,             "ComboElement" },
+        { &g_TypeId_HelpButtonElem,           "ButtonElement" },
+        { &g_TypeId_ImageElement,             "ImageElement" },
+        { &g_TypeId_StringTable,              "StringTable" },
+        { &g_TypeId_CitizenDescription,       "CitizenDescription" },
+        { &g_TypeInfo_ValueDescription,       "ValueDescription" },
+        { &g_TypeId_SelectDescription,        "SelectDescription" },
+        { &g_TypeId_BuildComponent,           "ComponentDescription" },
+        { &g_TypeId_BuildStateComponent,      "StateMachineComponent" },
+        { &g_TypeId_BuildingComponent,        "TradeComponent" },
+        // belt-and-braces: normally filled via the economy type-id registry
+        { &g_TypeId_RawMaterialDescription,   "RawMaterialDescription" },
+        { &g_TypeId_StorageComponent_FC,      "StorageComponent" },
+        { &g_TypeId_WorkplaceComponent,       "WorkPlaceComponent" },
+        { &g_TypeId_StorageLocationComponent, "WorkComponent" },
+    };
+    for (size_t i = 0; i < sizeof(entries) / sizeof(entries[0]); ++i) {
+        if (*entries[i].global) continue;
+        if (!storage[i]) storage[i] = ::Object::ResolveTypeIdByNameLazy(entries[i].name);
+        if (storage[i]) *entries[i].global = &storage[i];
+    }
+}
+
+// Every global/function the Serialize+Startup+per-frame paths dereference
+// unguarded must be live, or a null-deref faults (no SEH under MinGW).
+bool Ready() {
+    if (!(g_TypeId_TabElement && g_TypeId_TableElement && g_TypeId_LabelElement &&
+          g_TypeId_TextElement && g_TypeId_SpinnerElement && g_TypeId_NumberEditElement &&
+          g_TypeId_ComboElement && g_TypeId_HelpButtonElem && g_TypeId_ImageElement &&
+          g_TypeId_StringTable && g_TypeId_CitizenDescription && g_TypeInfo_ValueDescription &&
+          g_TypeId_SelectDescription && g_TypeId_BuildComponent && g_TypeId_BuildStateComponent &&
+          g_TypeId_BuildingComponent && g_TypeId_RawMaterialDescription &&
+          g_TypeId_StorageComponent_FC && g_TypeId_WorkplaceComponent &&
+          g_TypeId_StorageLocationComponent))
+        return false;
+    if (!(fn_GroupRating_Init && fn_GroupRating_Update && fn_ProfArrayPush &&
+          fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
+          fn_BST_Insert_0x14 && fn_BST_FreeNodes && fn_QueryProductionStat &&
+          fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize &&
+          fn_TableElement_SetSize && fn_TableElement_SetChild2 && fn_TableElement_SetChild3 &&
+          fn_GraphElement_RemoveGraphs && fn_GraphElement_AddGraph &&
+          fn_GraphElement_AddGraphPoint && fn_StringTable_GetCount && fn_Time_AsSeconds &&
+          fn_NumberEditElement_SetValue && fn_NumberEditElement_SetMinMax))
+        return false;
+    if (!(g_pExternalFactorySingleton && *g_pExternalFactorySingleton)) return false;
+    return true;
+}
+
+// The town-side data the update paths read unguarded: townMgr (gw+0xf0) with its
+// citizen roster, the profession list (gw+0xb0), the game clock (gw+0x128), and
+// the townMgr history/production record blocks (+0x150 / +0x170) that the graph
+// and production tabs index into.
+bool TownReady() {
+    if (!(g_pGameSingleton && *g_pGameSingleton)) return false;
+    uintptr_t gw = *(uintptr_t*)g_pGameSingleton;
+    uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
+    uintptr_t profList = *(uintptr_t*)(gw + 0xb0);
+    if (!townMgr || !profList) return false;
+    if (*(int*)(profList + 0x28) <= 0 || *(uintptr_t*)(profList + 0x20) == 0) return false;
+    if (*(uintptr_t*)(gw + 0x128) == 0) return false;
+    if (*(uintptr_t*)(townMgr + 0x150) == 0) return false;   // stat-history series
+    if (*(uintptr_t*)(townMgr + 0x170) == 0) return false;   // production records
+    return true;
+}
+
+static void Trace(const char* what, void* self) {
+    if (!TH_Trace()) return;
+    fprintf(stderr, "[TownHallUI] %s self=%p ready=%d town=%d built=%d\n",
+            what, self, Ready() ? 1 : 0, TownReady() ? 1 : 0,
+            self ? *(int*)((uintptr_t)self + 0x48) : -1);
+    fflush(stderr);
+}
+
+// InitProfessions pushed at least one row once Serialize has run.
+inline bool Built(void* self) { return *(int*)((uintptr_t)self + 0x48) != 0; }
+
+// Controller bound to its element + dialog instance (framework sets +0x18/+0x20).
+inline bool Bound(void* self) {
+    uintptr_t s = (uintptr_t)self;
+    return *(void**)(s + 0x18) != nullptr && *(void**)(s + 0x20) != nullptr;
+}
+
+// One-shot gate diagnostic — prints WHICH component of Ready()/TownReady() is
+// missing (a silently-skipping gate looks identical to "blank dialog"). Logs a
+// handful of lines once per session; also callable at world-build time via
+// TownHallSA_Diag (gameupdateloop.cpp) so the dialog-independent gates are
+// visible without opening the panel.
+void DiagPrint(const char* where, void* self) {
+    struct N { const char* n; void* p; };
+    const N fns[] = {
+        {"fn_GroupRating_Init",   (void*)fn_GroupRating_Init},
+        {"fn_GroupRating_Update", (void*)fn_GroupRating_Update},
+        {"fn_ProfArrayPush",      (void*)fn_ProfArrayPush},
+        {"fn_ProdArrayPush",      (void*)fn_ProdArrayPush},
+        {"fn_BST_Rebalance_0x30", (void*)fn_BST_Rebalance_0x30},
+        {"fn_BST_Rebalance_0x28", (void*)fn_BST_Rebalance_0x28},
+        {"fn_BST_Insert_0x14",    (void*)fn_BST_Insert_0x14},
+        {"fn_BST_FreeNodes",      (void*)fn_BST_FreeNodes},
+        {"fn_QueryProductionStat",(void*)fn_QueryProductionStat},
+        {"fn_InventorySort_Asc",  (void*)fn_InventorySort_Asc},
+        {"fn_InventorySort_Desc", (void*)fn_InventorySort_Desc},
+        {"fn_DynArray_Resize",    (void*)fn_DynArray_Resize},
+        {"fn_TableElement_SetSize",   (void*)fn_TableElement_SetSize},
+        {"fn_TableElement_SetChild2", (void*)fn_TableElement_SetChild2},
+        {"fn_TableElement_SetChild3", (void*)fn_TableElement_SetChild3},
+        {"fn_GraphElement_RemoveGraphs", (void*)fn_GraphElement_RemoveGraphs},
+        {"fn_GraphElement_AddGraph",     (void*)fn_GraphElement_AddGraph},
+        {"fn_GraphElement_AddGraphPoint",(void*)fn_GraphElement_AddGraphPoint},
+        {"fn_StringTable_GetCount", (void*)fn_StringTable_GetCount},
+        {"fn_Time_AsSeconds",       (void*)fn_Time_AsSeconds},
+        {"fn_NumberEditElement_SetValue",  (void*)fn_NumberEditElement_SetValue},
+        {"fn_NumberEditElement_SetMinMax", (void*)fn_NumberEditElement_SetMinMax},
+    };
+    const N tids[] = {
+        {"TabElement", g_TypeId_TabElement}, {"TableElement", g_TypeId_TableElement},
+        {"LabelElement", g_TypeId_LabelElement}, {"TextElement", g_TypeId_TextElement},
+        {"NumberElement", g_TypeId_SpinnerElement}, {"NumberEditElement", g_TypeId_NumberEditElement},
+        {"ComboElement", g_TypeId_ComboElement}, {"ButtonElement", g_TypeId_HelpButtonElem},
+        {"ImageElement", g_TypeId_ImageElement}, {"StringTable", g_TypeId_StringTable},
+        {"CitizenDescription", g_TypeId_CitizenDescription},
+        {"ValueDescription", g_TypeInfo_ValueDescription},
+        {"SelectDescription", g_TypeId_SelectDescription},
+        {"ComponentDescription", g_TypeId_BuildComponent},
+        {"StateMachineComponent", g_TypeId_BuildStateComponent},
+        {"TradeComponent", g_TypeId_BuildingComponent},
+        {"RawMaterialDescription", g_TypeId_RawMaterialDescription},
+        {"StorageComponent", g_TypeId_StorageComponent_FC},
+        {"WorkPlaceComponent", g_TypeId_WorkplaceComponent},
+        {"WorkComponent", g_TypeId_StorageLocationComponent},
+    };
+    fprintf(stderr, "[TownHallSA] %s: self=%p bound=%d built=%d ready=%d town=%d extFactory=%d\n",
+            where, self,
+            self ? (Bound(self) ? 1 : 0) : -1,
+            self ? (Built(self) ? 1 : 0) : -1,
+            Ready() ? 1 : 0, TownReady() ? 1 : 0,
+            (g_pExternalFactorySingleton && *g_pExternalFactorySingleton) ? 1 : 0);
+    for (const N& f : fns)
+        if (!f.p) fprintf(stderr, "[TownHallSA]   MISSING fn: %s\n", f.n);
+    for (const N& t : tids)
+        if (!t.p) fprintf(stderr, "[TownHallSA]   MISSING typeId: %s\n", t.n);
+    if (g_pGameSingleton && *g_pGameSingleton) {
+        uintptr_t gw = *(uintptr_t*)g_pGameSingleton;
+        uintptr_t townMgr = *(uintptr_t*)(gw + 0xf0);
+        uintptr_t profList = *(uintptr_t*)(gw + 0xb0);
+        fprintf(stderr, "[TownHallSA]   gw=%p townMgr=%p profList=%p profCnt=%d clock=%p hist(+150)=%p prod(+170)=%p\n",
+                (void*)gw, (void*)townMgr, (void*)profList,
+                profList ? *(int*)(profList + 0x28) : -1,
+                (void*)*(uintptr_t*)(gw + 0x128),
+                townMgr ? (void*)*(uintptr_t*)(townMgr + 0x150) : nullptr,
+                townMgr ? (void*)*(uintptr_t*)(townMgr + 0x170) : nullptr);
+    } else {
+        fprintf(stderr, "[TownHallSA]   g_pGameSingleton=%p (*=%p)\n",
+                (void*)g_pGameSingleton,
+                g_pGameSingleton ? *(void**)g_pGameSingleton : nullptr);
+    }
+    fflush(stderr);
+}
+
+// idx4 (+0x20): setup — element discovery + the six Init* passes.
+void W_Serialize(void* self) {
+    EnsureGlobals();
+    if (!self || !Bound(self) || !Ready() || !TownReady()) { Trace("Serialize SKIP", self); return; }
+    if (Built(self)) return;   // idempotence: the framework or self-heal already built
+    Trace("Serialize", self);
+    TownHallUI_Serialize((TownHallUI*)self);
+}
+
+// idx7 (+0x38): full content refresh (General/Professions/Production/Agriculture).
+void W_Startup(void* self) {
+    EnsureGlobals();
+    if (!self || !Bound(self) || !Ready() || !TownReady()) return;
+    if (!Built(self)) TownHallUI_Serialize((TownHallUI*)self);
+    if (!Built(self)) return;
+    TownHallUI_Startup((TownHallUI*)self);
+}
+
+// idx8 (+0x40): per-frame. Self-heal the build, run the faithful per-frame
+// OnCreate (graph tick check + UpdateInventory + UpdateAll), and refresh the
+// slower Startup content (General numbers, hearts/stars, professions) twice a
+// second so the statistics stay live while the panel is open.
+void W_OnUpdate(void* self, void* /*time*/) {
+    EnsureGlobals();
+    static bool s_diagOnce = false;
+    if (!s_diagOnce) { s_diagOnce = true; DiagPrint("first OnUpdate", self); }
+    if (!self || !Bound(self) || !Ready() || !TownReady()) return;
+    if (!Built(self)) {
+        TownHallUI_Serialize((TownHallUI*)self);
+        if (!Built(self)) return;
+        TownHallUI_Startup((TownHallUI*)self);
+        return;
+    }
+    TownHallUI_OnCreate((TownHallUI*)self);
+    uint32_t* throttle = (uint32_t*)((uintptr_t)self + 0x1E4);  // _pad1E4 (struct tail gap)
+    if ((*throttle)++ % 30 == 0) TownHallUI_Startup((TownHallUI*)self);
+}
+
+// idx9 (+0x48): events — profession go-to buttons, graph combos, worker spinners.
+void W_OnEvent(void* self, void* param2, int msg, int id) {
+    EnsureGlobals();
+    if (!self || !Built(self) || !Ready() || !TownReady()) return;
+    TownHallUI_OnRemove((TownHallUI*)self, param2, msg, id);
+}
+
+// idx10 (+0x50): tab/combo state persist over an IO stream.
+void W_Update(void* self, void* stream) {
+    EnsureGlobals();
+    if (!self || !stream || !Built(self) || !Ready() || !TownReady()) return;
+    if (!(g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Int &&
+          g_fn_Serializer_GetVersion))
+        return;
+    TownHallUI_Update((TownHallUI*)self, stream);
+}
+
+// ---- destructor: free the owned containers (mirrors exe 0x1400810d0 via
+// engine/reimpl/townhallui.cpp::Reimpl_ScalarDtor) ----
+
+void FreeBST_10_18(void* node) {
+    if (!node) return;
+    FreeBST_10_18(*(void**)((uintptr_t)node + 0x10));
+    FreeBST_10_18(*(void**)((uintptr_t)node + 0x18));
+    fn_MemFreeStatic(node);
+}
+void FreeBST_20_28(void* node) {
+    if (!node) return;
+    FreeBST_20_28(*(void**)((uintptr_t)node + 0x20));
+    FreeBST_20_28(*(void**)((uintptr_t)node + 0x28));
+    fn_MemFreeStatic(node);
+}
+void FreeBST_18_20(void* node) {
+    if (!node) return;
+    FreeBST_18_20(*(void**)((uintptr_t)node + 0x18));
+    FreeBST_18_20(*(void**)((uintptr_t)node + 0x20));
+    fn_MemFreeStatic(node);
+}
+
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *(void**)self = g_vt;
+    uintptr_t s = (uintptr_t)self;
+    if (fn_MemFreeStatic) {
+        FreeBST_10_18(*(void**)(s + 0x1D8));
+        *(uint64_t*)(s + 0x1D8) = 0; *(uint32_t*)(s + 0x1E0) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0x1C8));
+        *(uint64_t*)(s + 0x1C8) = 0; *(uint64_t*)(s + 0x1D0) = 0;
+        FreeBST_20_28(*(void**)(s + 0x138));
+        *(uint64_t*)(s + 0x138) = 0; *(uint32_t*)(s + 0x140) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0x118));
+        *(uint64_t*)(s + 0x118) = 0; *(uint64_t*)(s + 0x120) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xF0));
+        *(uint64_t*)(s + 0xF0) = 0; *(uint64_t*)(s + 0xF8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xE0));
+        *(uint64_t*)(s + 0xE0) = 0; *(uint64_t*)(s + 0xE8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xD0));
+        *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xC0));
+        *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xB0));
+        *(uint64_t*)(s + 0xB0) = 0; *(uint64_t*)(s + 0xB8) = 0;
+        FreeBST_18_20(*(void**)(s + 0x50));
+        *(uint64_t*)(s + 0x50) = 0; *(uint32_t*)(s + 0x58) = 0;
+        int profRows = *(int*)(s + 0x48);
+        uintptr_t profArr = *(uintptr_t*)(s + 0x40);
+        for (int i = 0; i < profRows && profArr; i++) {
+            uintptr_t rowList = profArr + (uintptr_t)i * 0x40 + 0x30;
+            fn_MemFreeStatic(*(void**)rowList);
+            *(uint64_t*)rowList = 0; *(uint64_t*)(rowList + 8) = 0;
+        }
+        fn_MemFreeStatic(*(void**)(s + 0x40));
+        *(uint64_t*)(s + 0x40) = 0; *(uint64_t*)(s + 0x48) = 0;
+        if (flags & 1) fn_MemFreeStatic(self);
+    }
+    return self;
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0]  = reinterpret_cast<void*>(&Dtor);
+        g_vt[2]  = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4]  = reinterpret_cast<void*>(&W_Serialize);
+        g_vt[7]  = reinterpret_cast<void*>(&W_Startup);
+        g_vt[8]  = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9]  = reinterpret_cast<void*>(&W_OnEvent);
+        g_vt[10] = reinterpret_cast<void*>(&W_Update);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x1E8); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x1E8), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace townhallui_sa
+
+// World-build-time gate diagnostic (called once from GameUpdateLoop::Update at an
+// early frame, see gameupdateloop.cpp) — reports the dialog-independent gates
+// (fn pointers / type-ids / town data) without needing the panel opened.
+extern "C" void TownHallSA_Diag(int frameNum) {
+    static bool s_done = false;
+    if (s_done || frameNum < 120) return;
+    s_done = true;
+    townhallui_sa::EnsureGlobals();
+    townhallui_sa::DiagPrint("world-build", nullptr);
+}
+
+REGISTER_TYPE(TownHallUI, "UI::DialogController",
+              &townhallui_sa::Factory, &townhallui_sa::InPlace);
+
+#endif  // STANDALONE_EXE

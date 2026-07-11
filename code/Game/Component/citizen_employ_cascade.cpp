@@ -464,3 +464,23 @@ extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey
     }
     return seated;
 }
+
+// ============================================================================
+// Registerable exports of the four seat strategies. The exe's ONLY dispatcher of
+// these addresses is TownHallUI's profession spinner (CitizenComponent_impl_dd10,
+// 0x14007dd10 -> fn_CitizenList_FindIdle/FindWorking/FindStudent/FindAny). Now that
+// the town-hall panel is promoted in standalone, that path is live, so expose the
+// file-static strategies for RegisterExeAddr (standalone/reg_townhallui.cpp).
+// ============================================================================
+extern "C" void* CitizenEmploy_Strat_cbf0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+    EnsureFns(); return Strat_cbf0(townMgr, out, availPtr, profKey);
+}
+extern "C" void* CitizenEmploy_Strat_ca20(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+    EnsureFns(); return Strat_ca20(townMgr, out, availPtr, profKey);
+}
+extern "C" void* CitizenEmploy_Strat_c5f0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+    EnsureFns(); return Strat_c5f0(townMgr, out, availPtr, profKey);
+}
+extern "C" void* CitizenEmploy_Strat_c4b0(int64_t townMgr, void* out, int64_t* availPtr, int64_t profKey) {
+    EnsureFns(); return Strat_c4b0(townMgr, out, availPtr, profKey);
+}
