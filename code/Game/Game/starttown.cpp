@@ -369,6 +369,114 @@ static void* StartTown_ResolveTemplate(uint8_t* entry) {
     return tmpl;
 }
 
+// ============================================================================
+// AGRICULTURE AVAILABILITY — the tail of FUN_1400a3300 (after Game_impl_1f00).
+//
+// The Town Hall "Agri" tab greys every crop/animal icon whose building
+// ComponentDescription is NOT in the town-manager's available-agriculture list
+// (townMgr(gw+0xf0)+0x120, count +0x128, cap +0x12c). TownHallUI::UpdateAgriculture
+// (FUN_14007c220) only brightens an icon (SetColor via label vtable+0x50) when the
+// description is found there; otherwise it stays the dark .rsc default. Retail
+// seeds this list at start-town from the scenario start-condition's three agri
+// pools (a RANDOM subset of each, dedup-appended), and later adds to it on trade
+// purchases (FUN_140081420). Our start-town ported the sibling raw-material pool
+// (+0x110 via 0x140091e60) but skipped these three loops, so +0x120 stayed empty
+// and every icon rendered greyed.
+//
+//   crops    : pool ptr sc+0xb0, pool size sc+0xb8, grant count sc+0xe0
+//   livestock: pool ptr sc+0xc0, pool size sc+0xc8, grant count sc+0xe4
+//   orchards : pool ptr sc+0xd0, pool size sc+0xd8, grant count sc+0xe8
+//
+// Each pool entry is the standard 0x18-stride ExternalRef; resolve it to the
+// crop/animal ComponentDescription (the SAME cached External that
+// InitAgriculture's ExternalFactory::FindNext keys the agri BST on, so the
+// pointers match). The retail orchard loop additionally calls FUN_1400a0b10
+// (spawns the initial orchard resource in the world) before the availability add;
+// that world-spawn is a separate concern from the tab greying and is intentionally
+// omitted here — only the availability registration is ported.
+
+// Reimplementation of 0x140091a20 ("Game_RemoveEntity" is a Ghidra mislabel — the
+// body is an add-if-not-present into the +0x120 dynamic array). Kept inline because
+// standalone cannot ResolveAddr an unported exe address.
+static void TownMgr_AddAvailableAgri(uint8_t* townMgr, void* desc) {
+    if (!townMgr || !desc || !fn_MemAlloc || !g_pMemAllocSingleton) return;
+    void**  arr   = *(void***)(townMgr + 0x120);
+    int     count = *(int32_t*)(townMgr + 0x128);
+    // Dedup: already present -> nothing to do.
+    for (int i = 0; i < count; ++i)
+        if (arr && arr[i] == desc) return;
+
+    int newCount = count + 1;
+    void** oldArr = arr;
+    *(int32_t*)(townMgr + 0x128) = newCount;
+    if (*(int32_t*)(townMgr + 0x12c) < newCount) {
+        int newCap = newCount;
+        if (count != 0) newCap = newCount * 3;
+        *(int32_t*)(townMgr + 0x12c) = newCap;
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)newCap << 3, 8);
+        *(void***)(townMgr + 0x120) = reinterpret_cast<void**>(nb);
+    }
+    void** dst = *(void***)(townMgr + 0x120);
+    int copyStart = (oldArr == dst) ? count : 0;
+    for (int i = copyStart; i < newCount; ++i) {
+        if (i < count) dst[i] = oldArr[i];
+        else           dst[i] = desc;
+    }
+    if (oldArr != dst && oldArr && fn_MemFreeStatic) fn_MemFreeStatic(oldArr);
+}
+
+static bool AgriTraceOn() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_AGRI_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s != 0;
+}
+
+// Seed one agri pool: pick `count` random entries from the `size`-entry pool and
+// dedup-append each resolved description into townMgr+0x120. Faithful to the retail
+// loop (System::Random::Rand(worldRng, size) per pick).
+static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
+                        int poolOff, int sizeOff, int countOff, const char* label) {
+    uint8_t* pool  = *(uint8_t**)(sc + poolOff);
+    int      size  = *(int32_t*)(sc + sizeOff);
+    int      count = *(int32_t*)(sc + countOff);
+    if (AgriTraceOn())
+        fprintf(stderr, "[AgriSeed] %s: pool=%p size=%d grant=%d\n", label, pool, size, count);
+    if (!pool || size <= 0 || count <= 0) return 0;
+    int added = 0;
+    for (int i = 0; i < count; ++i) {
+        uint32_t idx = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, (uint32_t)size)
+                                               : (uint32_t)(i % size);
+        uint8_t* entry = pool + (size_t)idx * POOLENTRY_STRIDE;
+        void* tmpl = StartTown_ResolveTemplate(entry);
+        if (AgriTraceOn())
+            fprintf(stderr, "[AgriSeed]   %s[%d] idx=%u tmpl=%p\n", label, i, idx, tmpl);
+        if (!tmpl) continue;
+        TownMgr_AddAvailableAgri(townMgr, tmpl);
+        ++added;
+    }
+    return added;
+}
+
+// Ungated: registers the town's starting available crops/livestock/orchards into
+// townMgr+0x120 so the Town Hall Agri tab brightens them (instead of all-greyed).
+// Independent of live storage; only needs townMgr + the resolved templates.
+static void StartTown_SeedAvailableAgriculture(uint8_t* sc) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
+    uint8_t* townMgr = *(uint8_t**)(gw + 0xf0);
+    void*    rng     = *(void**)(gw + 0xd8);
+    if (!townMgr) return;
+
+    int before = *(int32_t*)(townMgr + 0x128);
+    int c = SeedAgriPool(sc, townMgr, rng, 0xb0, 0xb8, 0xe0, "crops");
+    int a = SeedAgriPool(sc, townMgr, rng, 0xc0, 0xc8, 0xe4, "livestock");
+    int o = SeedAgriPool(sc, townMgr, rng, 0xd0, 0xd8, 0xe8, "orchards");
+    fprintf(stderr, "[AgriSeed] available-agriculture seeded: crops=%d livestock=%d "
+            "orchards=%d; townMgr+0x120 count %d -> %d\n",
+            c, a, o, before, *(int32_t*)(townMgr + 0x128));
+    fflush(stderr);
+}
+
 // ComponentEntity_impl_09e0 (0x1400a09e0): the simplest spawn pass. For each
 // entry in the pool at startConfig+0x90 (count at +0x98), resolve its template
 // and spawn+register a copy. No transforms, no terrain queries.
@@ -2992,6 +3100,13 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     fprintf(stderr, "[startTown::spawn] simple pool: spawned %d entities; "
             "entityList count %d -> %d\n", n, afterEnv, after);
     fflush(stderr);
+
+    // AGRICULTURE availability (ungated) — the three agri-pool loops from the tail
+    // of FUN_1400a3300. Registers the town's starting crops/livestock/orchards into
+    // townMgr+0x120 so the Town Hall Agri tab brightens them instead of showing
+    // every icon greyed. Independent of live storage; must run after the town
+    // manager exists (it does — gw+0xf0 set during world build).
+    StartTown_SeedAvailableAgriculture(sc);
 
     // ========================================================================
     // Brick M-D (BANISHED_LIVE_STORAGE) — starting-resource seeding. Mirrors

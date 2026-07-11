@@ -212,7 +212,83 @@ UI_DIALOG_STUB(DestroyUI,           "UI::DialogController", 0x78);
 UI_DIALOG_STUB(EventLogUI,          "UI::DialogController", 0x80);
 UI_DIALOG_STUB(HelpUI,              "UI::DialogController", 0x78);
 // HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).
-UI_DIALOG_STUB(ImmigrationUI,       "UI::DialogController", 0x50);
+// ---- ImmigrationUI: PROMOTED to a real SA vtable (immigrationui.cpp) ----------
+// The Town Hall "Nomads" tab: Dialog/Immigration.rsc is inserted into the empty
+// nomadTab GroupDescription and driven by ImmigrationUI (see Template/TownHall.rsc
+// _controllers). The generic stub left every slot a no-op, so the tab showed the
+// .rsc placeholder text and dead Allow/Deny buttons. Wiring Slot4 (+0x20 setup —
+// finds textNone/textNomad/buttonAllow/buttonDeny, sets button ids), Slot7 (+0x38
+// update — finds the ImmigrationComponent on the town-hall entity, enables the
+// buttons + shows the nomad-request text when a group is waiting), and Slot9
+// (+0x48 event — Allow=39000/Deny=0x9859 dispatch to the nomad camp's StateMachine)
+// makes the tab live. Construction stays the stub alloc+zero+vtable; the framework
+// fills the base fields (dialog +0x18, datasource entity +0x28) afterward — the
+// same shape as the ResourceLimitUI/StatusBarUI promotions. The ported Slot7/Slot9
+// degrade to the "no nomads" state if the entity/component is unbound in standalone
+// (see immigrationui.cpp guards), so a missing ImmigrationComponent can't fault.
+struct ImmigrationUI;
+extern void ImmigrationUI_Slot4(ImmigrationUI* self);
+extern void ImmigrationUI_Slot7(ImmigrationUI* self);
+extern void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
+                                int param5, int param6);
+namespace uistub_ImmigrationUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("ImmigrationUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // ImmigrationUI Slot7/Slot9 dereference these exe-.rdata type-id globals (null in
+    // standalone): the entity IsA check (ComponentEntity — the reimpl already guards a
+    // null id), fn_FindComponent_Immigration (ImmigrationComponent), and
+    // fn_FindComponent_BuildState (DAT_1401c7d98, whose true identity is
+    // StateMachineComponent — the engine_funcs label is a historical mislabel, see
+    // [[project_townhallui_promoted]]). Fill from the live factory tree post-Engine::
+    // Startup; Entity_FindComponentByExeTypeId derefs the id ptr, so it must be live.
+    void EnsureGlobals() {
+        static uint32_t s_entity=0, s_immig=0, s_bstate=0;
+        if (!g_TypeId_ComponentEntity)      { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ImmigrationComponent) { s_immig =::Object::ResolveTypeIdByNameLazy("ImmigrationComponent");   if(s_immig)  g_TypeId_ImmigrationComponent=&s_immig; }
+        if (!g_TypeId_BuildStateComponent)  { s_bstate=::Object::ResolveTypeIdByNameLazy("StateMachineComponent");  if(s_bstate) g_TypeId_BuildStateComponent=&s_bstate; }
+    }
+    bool Ready() {
+        return g_TypeId_ComponentEntity && g_TypeId_ImmigrationComponent &&
+               g_TypeId_BuildStateComponent &&
+               g_pGameWorldSingleton && *g_pGameWorldSingleton;
+    }
+    void Trace(const char* slot, void* self) {
+        if (!std::getenv("BANISHED_NOMAD_TRACE")) return;
+        static int n=0; if (n>=16) return; ++n;
+        void* ent = self ? *reinterpret_cast<void**>((uintptr_t)self+0x28) : nullptr;
+        printf("[ImmigrationUI] %s self=%p entity(+0x28)=%p dlg(+0x18)=%p\n", slot, self, ent,
+               self ? *reinterpret_cast<void**>((uintptr_t)self+0x18) : nullptr);
+        fflush(stdout);
+    }
+    void Slot4(void* self) {
+        if (!self) return;
+        Trace("Slot4", self);
+        ImmigrationUI_Slot4(reinterpret_cast<ImmigrationUI*>(self));
+    }
+    void Slot7(void* self) {
+        EnsureGlobals();
+        if (!self || !Ready()) return;
+        Trace("Slot7", self);
+        ImmigrationUI_Slot7(reinterpret_cast<ImmigrationUI*>(self));
+    }
+    void Slot9(void* self, void* p2, int msg, int id, int p5, int p6) {
+        EnsureGlobals();
+        if (!self || !Ready()) return;
+        Trace("Slot9", self);
+        ImmigrationUI_Slot9(reinterpret_cast<ImmigrationUI*>(self), p2, msg, id, p5, p6);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(ImmigrationUI, "UI::DialogController",
+              &uistub_ImmigrationUI::Factory, &uistub_ImmigrationUI::InPlace);
 // ---- MapUI: PROMOTED to the real reimpl (map-render bring-up) ----------------
 // The minimap dialog's controller. Slot4 (+0x20, SetupImage) builds a
 // MaterialInstance + SpriteSheet from the minimap subsystem's terrain/overlay

@@ -86,6 +86,22 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
     uint64_t immigComp = 0;
     fn_FindComponent_Immigration((void*)entityBasePtr, &immigComp);
 
+    // Standalone safety: retail always finds the ImmigrationComponent on the
+    // town-hall entity, so it never guards. In standalone the dialog's entity
+    // (+0x28) or the component may be unbound; degrade to the "no nomads" state
+    // (buttons disabled, textNone shown) instead of dereferencing NULL.
+    if (immigComp == 0) {
+        void* bAllow = (void*)*(uint64_t*)(s + 0x40);
+        void* bDeny  = (void*)*(uint64_t*)(s + 0x48);
+        typedef void (*fn_SetEnabled_t)(void*, bool);
+        if (bAllow) ((fn_SetEnabled_t)(*(void***)bAllow)[8])(bAllow, false);
+        if (bDeny)  ((fn_SetEnabled_t)(*(void***)bDeny)[8])(bDeny, false);
+        // Show textNone (+0x30), hide textNomad (+0x38).
+        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x38), 1, 0);
+        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x30), 0, 1);
+        return;
+    }
+
     // Read immigration count at comp+0x60
     uint32_t immigCount = *(uint32_t*)(immigComp + 0x60);
 
@@ -96,12 +112,16 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
     uint64_t buildStateComp = 0;
     fn_FindComponent_BuildState(subEntity, &buildStateComp);
 
-    // Check build state: byte at +0x52, if negative use +0x50, compare to 0x11
-    char state = *(char*)(*(uint64_t*)&buildStateComp + 0x52);
-    if (state < 0) {
-        state = *(char*)(*(uint64_t*)&buildStateComp + 0x50);
+    // Check build state: byte at +0x52, if negative use +0x50, compare to 0x11.
+    // Guard the sub-entity's BuildState too (unbuilt/absent nomad camp in SA).
+    bool buildComplete = false;
+    if (*(uint64_t*)&buildStateComp != 0) {
+        char state = *(char*)(*(uint64_t*)&buildStateComp + 0x52);
+        if (state < 0) {
+            state = *(char*)(*(uint64_t*)&buildStateComp + 0x50);
+        }
+        buildComplete = (state == 0x11);
     }
-    bool buildComplete = (state == 0x11);
 
     // Enable/disable buttons at +0x40 and +0x48 via vtable[8] (SetEnabled)
     void* buttonAllow = (void*)*(uint64_t*)(s + 0x40);
@@ -176,6 +196,7 @@ void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
     uint64_t immigComp = 0;
     fn_FindComponent_Immigration((void*)entityBasePtr, &immigComp);
     fn_InternalBasePtr_CheckPtr(&immigComp);
+    if (immigComp == 0) return;   // no component bound (standalone safety)
 
     // Get sub-entity from ImmigrationComponent+0x10
     fn_InternalBasePtr_CheckPtr((void*)(immigComp + 0x10));
@@ -187,9 +208,11 @@ void ImmigrationUI_Slot9(ImmigrationUI* self, void* param2, int msg, int id,
 
     // Read the BuildState pointer value
     uintptr_t bsPtr = *(uintptr_t*)&buildState;
+    if (bsPtr == 0) return;
 
     // Get StateMachine sub-object at BuildState+0x48
     void* smObj = *(void**)(bsPtr + 0x48);
+    if (!smObj) return;
     void** smVtable = *(void***)smObj;
 
     // Call vtable[2] (offset 0x10): RequestAction(self, &controllerSelf, currentState, mode)
