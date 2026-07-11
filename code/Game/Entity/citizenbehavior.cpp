@@ -527,8 +527,11 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     uint8_t* buildingList = *reinterpret_cast<uint8_t**>(world + 0xb0);
 
     // ---- Step 1: Collect grid cell IDs for all buildings ----
-    int buildingCount = *reinterpret_cast<int*>(buildingList + 0x28);
-    int64_t* buildingArray = *reinterpret_cast<int64_t**>(buildingList + 0x20);
+    // Retail (0x1400d70c0): lVar3 = *(gw+0xf0), loop over *(int*)(lVar3+0x28)
+    // entries of *(longlong*)(lVar3+0x20) — the CitizenBehavior/town RESIDENCE
+    // list, NOT gw+0xb0 (that is the ProfessionList, used only in Step 4 keys).
+    int buildingCount = *reinterpret_cast<int*>(citizenBehavior + 0x28);
+    int64_t* buildingArray = *reinterpret_cast<int64_t**>(citizenBehavior + 0x20);
 
     // Dynamic array for building grid IDs
     int* buildingCells = nullptr;
@@ -1343,9 +1346,12 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
     int workingPct = 0;
 
     if (citizenCount > 0) {
-        // Get CitizenDescription from first citizen's +0x18 via IsDerivedFrom
-        uint64_t firstIBP = *reinterpret_cast<uint64_t*>(
-            *reinterpret_cast<uintptr_t*>(self->allCitizensPtr()));
+        // Get CitizenDescription from first citizen's +0x18 via IsDerivedFrom.
+        // Retail (0x14008a730): local_res8 = **(ulonglong**)(param_1+0xa0) —
+        // allCitizensPtr() IS the array base, so ONE deref gives array[0] (the
+        // citizen IBP value). A second deref would read the citizen's vtable
+        // and +0x18 lands in .text (IsDerivedFrom faults on a code address).
+        uint64_t firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
         if (fn_InternalBasePtr_CheckPtr) {
             fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&firstIBP));
         }
@@ -1365,8 +1371,8 @@ void CitizenBehavior_CollectStats(CitizenBehaviorRaw* self) {
         }
 
         // Re-read first citizen for maxHappiness from CitizenDescription+0x70
-        firstIBP = *reinterpret_cast<uint64_t*>(
-            *reinterpret_cast<uintptr_t*>(self->allCitizensPtr()));
+        // (same single-deref as above).
+        firstIBP = *reinterpret_cast<uint64_t*>(self->allCitizensPtr());
         if (fn_InternalBasePtr_CheckPtr) {
             fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(&firstIBP));
         }

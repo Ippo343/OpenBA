@@ -841,6 +841,25 @@ static void DiagOnce(void* self) {
     fflush(stderr);
 }
 
+// Delayed one-shot stock dump — fires on the ~10th throttled refresh (~5s in),
+// after CitizenBehavior_Update's CountResources has re-tallied townMgr+0x170,
+// so the log shows the values the dialog is actually displaying.
+static void DiagStockOnce(void) {
+    static int s_calls = 0;
+    if (s_calls < 0 || ++s_calls != 10) return;
+    s_calls = -1;
+    uintptr_t gw = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                 ? *(uintptr_t*)g_pGameWorldSingleton : 0;
+    uintptr_t townMgr = gw ? *(uintptr_t*)(gw + 0xf0) : 0;
+    uintptr_t stock = townMgr ? *(uintptr_t*)(townMgr + 0x170) : 0;
+    if (!stock) return;
+    fprintf(stderr, "[StatusBarUI] SA stock slots (cur@+0):");
+    for (int i = 0; i < 0x15; i++)
+        fprintf(stderr, " %d:%d", i, *(int*)(stock + (uintptr_t)i * 0x20));
+    fprintf(stderr, "\n");
+    fflush(stderr);
+}
+
 // idx8 (+0x40): per-frame — self-heal the build, then refresh the statistics
 // twice a second (retail refreshes every frame; the citizen scan is cheap but
 // the ~40 element writes are not worth 60Hz).
@@ -861,7 +880,10 @@ void W_OnUpdate(void* self, void* /*time*/) {
     }
     // _pad104 (struct tail of the +0x100 cycling index) as a throttle counter.
     uint32_t* throttle = (uint32_t*)((uintptr_t)self + 0x104);
-    if ((*throttle)++ % 30 == 0) StatusBarUI_Startup((StatusBarUI*)self);
+    if ((*throttle)++ % 30 == 0) {
+        StatusBarUI_Startup((StatusBarUI*)self);
+        DiagStockOnce();
+    }
 }
 
 // idx9 (+0x48): status-icon clicks (element ids 100-105) — cycle the camera to

@@ -127,6 +127,12 @@ static uint32_t g_tid_WorkComponent        = 0;   // 0x1401c8070
 // dormant readers see empty-storage no-ops. A/B the default build.
 static uint32_t g_tid_StorageComponent     = 0;   // 0x1401c7e78
 
+// 0x1401c7190 CitizenDescription — read (via g_TypeId_CitizenDescription) by
+// CitizenBehavior_CollectStats to fetch maxHappiness/maxHealth from the first
+// citizen's description for the town-hall graph percentage series. Null-guarded
+// there (percentages just record 0 when unfilled), so filling is additive.
+static uint32_t g_tid_CitizenDescription   = 0;   // 0x1401c7190
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -143,6 +149,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c80a8, reinterpret_cast<uintptr_t>(&g_tid_WorkDescription));
     RegisterExeAddr(0x1401c8070, reinterpret_cast<uintptr_t>(&g_tid_WorkComponent));
     RegisterExeAddr(0x1401c7e78, reinterpret_cast<uintptr_t>(&g_tid_StorageComponent));
+    RegisterExeAddr(0x1401c7190, reinterpret_cast<uintptr_t>(&g_tid_CitizenDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -161,6 +168,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_WorkDescription      = ::Object::GetTypeIdByName("WorkDescription");
     g_tid_WorkComponent        = ::Object::GetTypeIdByName("WorkComponent");
     g_tid_StorageComponent     = ::Object::GetTypeIdByName("StorageComponent");
+    g_tid_CitizenDescription   = ::Object::GetTypeIdByName("CitizenDescription");
 }
 
 #endif // STANDALONE_EXE

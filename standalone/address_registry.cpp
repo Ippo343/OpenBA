@@ -453,6 +453,7 @@ extern void RegisterTownWorkplaceRegistry();  // Phase 3 economy: profession-BST
 extern "C" void RegisterTownStorageSeed();    // Economy M-D world half: d230/7ff0/91660/a1f00 (storage registry + start-resource seeder)
 extern "C" void RegisterCitizenNeedsUpdate(); // Economy M-D citizen half: NeedsUpdate 112260 + helper_21e0 (+ rdata floats)
 extern void RegisterCitizenEmployCascade();   // Economy M-C: townMgr+0xa0 registrar (CitizenComponent_OnAdd 0x140114000)
+extern "C" void RegisterCitizenBehaviorTick(); // Town-manager tick: CitizenBehavior_Update 0x14008c2b0 (stock recompute for status/town-hall dialogs) + 0x1401721fc=75.0f
 extern void RegisterTownHallBatch();          // TownHallUI promotion: GroupRating/array-push/AVL28/prod-stat/sort/RemoveWorker + seat strategies
 extern void RegisterKeystoneAMapBatch();     // Phase 2 Keystone A: map overlay/init (1241b0/9dc20/124750/9dee0/e2c0)
 extern void RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A: Game::Dtor + worker-thread teardown (9ed60 + 8 subs)
@@ -571,6 +572,7 @@ static void RegisterCodeFunctions() {
     RegisterTownStorageSeed();       // Economy M-D — storage-location registry + start-resource seeder
     RegisterCitizenNeedsUpdate();    // Economy M-D — CitizenComponent message dispatch (eat/drink delivery)
     RegisterCitizenEmployCascade();  // Economy M-C — townMgr+0xa0 citizen-list registrar (CitizenComponent_OnAdd)
+    RegisterCitizenBehaviorTick();   // Town-manager tick — CitizenBehavior_Update (townMgr+0x170 stock recompute + 75s stats recorder)
     RegisterTownHallBatch();         // TownHallUI promotion — GroupRating/array-push/AVL28/prod-stat/sort/RemoveWorker + seat strategies
     RegisterKeystoneAMapBatch();     // Phase 2 Keystone A — map overlay/init cluster
     RegisterKeystoneAGameDtorBatch();// Phase 2 Keystone A — Game::Dtor + worker-thread teardown
