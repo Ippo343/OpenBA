@@ -124,9 +124,16 @@ void** NodeVtable();
         Name##_LiveVtable[16] = reinterpret_cast<void*>(&Name##_GetDefaultState); \
         Name##_LiveVtable[17] = reinterpret_cast<void*>(&Name##_CreateState);  \
         (PopulateFn)();                                                        \
-        if (mem)                                                               \
+        if (mem) {                                                             \
             *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + (NodeOff)) \
                 = reinterpret_cast<void*>((NodeVtableFn)());                    \
+            /* node+0x18 = the owning component (the real ctor sets this via   \
+               selfPtr @ comp+NodeOff+0x18). The exe enter/update/transition   \
+               dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`, so a  \
+               real handler needs this back-pointer to receive its component. */\
+            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + (NodeOff) + 0x18) \
+                = mem;                                                         \
+        }                                                                      \
     }                                                                           \
     extern "C" void* Name##_Factory(void) {                                    \
         void* p = ::ComponentFactory::MakeInertTyped((Size), (Flags),         \

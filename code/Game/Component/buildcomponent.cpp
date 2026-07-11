@@ -502,12 +502,17 @@ void BuildComponent_InitFuncs() {
 namespace { struct BuildCtrlTag {}; }
 using BuildCtrlDispatch = ::ControllerLive::Dispatcher<BuildCtrlTag>;
 
+// state-1 enter handler (BuildDescription_helper_8290) — the construction spawner.
+extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode);
+
 static void BuildComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = BuildCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
     // sub_f500(1, enter, trans30, trans38=setup, update)
-    TableRegisterState(t, 1, nullptr, nullptr, nullptr, nullptr);
+    // state-1 enter = the real ported spawner (site-register + storage-config + gather work).
+    TableRegisterState(t, 1, reinterpret_cast<void*>(&BuildComponent_State1Enter),
+                       nullptr, nullptr, nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 3, nullptr);
     TableRegisterState(t, 8, nullptr, nullptr, nullptr, nullptr);

@@ -143,12 +143,15 @@ struct Dispatcher {
     static void* NodeData(void* node) {
         return *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(node) + 0x18);
     }
-    // slot 3 (+0x18): Enter — dispatch table[idx].enterHandler(node+0x18)
-    static char Enter(void* node, void* /*sm*/, int idx) {
+    // slot 3 (+0x18): Enter — dispatch table[idx].enterHandler(node+0x18, sm)
+    // The exe enter dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`, so a real
+    // handler receives RCX=controller-data AND RDX=sm (preserved through the tail-JMP,
+    // bug-class #6). Forward sm as the 2nd arg; 1-arg handlers ignore the extra RDX.
+    static char Enter(void* node, void* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].enterHandler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*)>(h)(NodeData(node));
+        return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
     }
     // slot 4 (+0x20): Update — dispatch table[idx].updateHandler(node+0x18)
     static char Update(void* node, void* /*sm*/, int idx) {

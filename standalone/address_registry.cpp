@@ -392,6 +392,12 @@ extern void RegisterCitizenAssignWorkplace();
 // employment path: WorkPlaceComponent/WorkComponent -> townMgr+0x100 -> here).
 extern void RegisterTownWorkplaceReader();
 
+// Construction Phase 3, brick 1 (spawner) — BuildComponent state-1 enter handler +
+// leaves (sub_8630, GatherRawMaterials_Ctor). Bodies: buildcomponent_state1.cpp,
+// buildcomponent_sub8630.cpp, gatherrawmaterials_ctor.cpp.
+extern "C" void RegisterBuildComponentState1();
+extern "C" void RegisterBuildComponentSub8630();
+extern "C" void RegisterGatherRawMaterialsCtor();
 // Work registration wave (2026-06-18) — shared base-helper sub-batch.
 // reg file: standalone/reg_work_base.cpp ; bodies: code/Game/Work/work_base_reimpl.cpp.
 extern void RegisterWorkBaseBatch();
@@ -510,6 +516,11 @@ static void RegisterCodeFunctions() {
     RegisterCitizenAssignWorkplace();
     RegisterTownWorkplaceReader();
     RegisterComponentGap_D();
+
+    // Construction Phase 3, brick 1 — spawner: state-1 enter handler + leaves.
+    RegisterBuildComponentState1();
+    RegisterBuildComponentSub8630();
+    RegisterGatherRawMaterialsCtor();
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
     RegisterWorkBaseBatch();
