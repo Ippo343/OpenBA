@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
+#include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
 #ifdef STANDALONE_EXE
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #endif
@@ -152,6 +153,43 @@ static void StartTown_MarkBuildingCells(void* game, int tileX, int tileY, int fp
     fprintf(stderr, "[startTown::pickmap] marked %d footprint cells @ (%d,%d) %dx%d entity=%p\n",
             marked, tileX, tileY, fpW, fpH, (void*)entIBP);
     fflush(stderr);
+}
+
+// MESH-PRECISE BUILDING PICKING. Retail lets you click anywhere on a building because
+// picking ray-tests the 3D model mesh via Picking::Scene; in standalone that mesh is
+// never registered (PickingComponent::OnAdded/Startup — 0x140128f50/c30 — are inert),
+// so EditTool falls back to the coarse terrain-cell footprint pick (StartTown_Mark-
+// BuildingCells), which only hits when the ray lands on the ground footprint => the
+// "click-the-middle" pickiness. We drive the faithful registration here for each static
+// start-town building (PickingComponent_RegisterMesh). Default ON; opt out with
+// BANISHED_LIVE_PICKMESH=0. BANISHED_PICKMESH_PROBE=1 additionally dumps the component's
+// fields + scene pointer (the diagnostic that established the SA ground truth).
+static uint32_t TypeId(const char* name);
+static void* FindComponentOnEntity(void* entity, uint32_t typeId);
+static void StartTown_PickMeshProbe(void* entity) {
+    static bool s_probe = [](){ const char* e = std::getenv("BANISHED_PICKMESH_PROBE");
+                                return e && e[0] && e[0] != '0'; }();
+    static bool s_enable = [](){ const char* e = std::getenv("BANISHED_LIVE_PICKMESH");
+                                 return !(e && (e[0]=='0' || strcmp(e,"false")==0)); }();
+    if (!entity || (!s_probe && !s_enable)) return;
+    uint32_t tidPick = TypeId("PickingComponent");
+    void* pc = FindComponentOnEntity(entity, tidPick);
+    if (s_probe) {
+        void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
+                    ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0x70) : nullptr;
+        fprintf(stderr, "[PickMesh] entity=%p Picking::Scene(gw+0x70)=%p tidPick=%u pc=%p\n",
+                entity, scene, tidPick, pc);
+        if (pc) {
+            uint8_t* p = (uint8_t*)pc;
+            void* f18 = *(void**)(p + 0x18);
+            void* meshTbl = f18 ? *(void**)((uint8_t*)f18 + 0x20) : nullptr;
+            fprintf(stderr, "[PickMesh]   +0x10(owner)=%p +0x18(desc)=%p desc+0x20(tbl)=%p "
+                    "+0x28(pickId)=%d +0x30(userData)=%p\n", *(void**)(p+0x10), f18, meshTbl,
+                    *(int32_t*)(p+0x28), *(void**)(p+0x30));
+        }
+        fflush(stderr);
+    }
+    if (s_enable && pc) PickingComponent_RegisterMesh(pc);
 }
 
 // Faithful CitizenComponent::AssignHousing (0x140111ee0, citizencomponent.cpp) — the MISNAMED
@@ -805,6 +843,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // dialog. (Inert MapComponent never marks it; standalone-only, DLL uses the real dc20.)
         fn_InternalBasePtr_CheckPtr(&entIBP);
         StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
+        StartTown_PickMeshProbe((void*)entIBP);
 
         // Brick M-D (BANISHED_LIVE_STORAGE): run the build-complete storage init
         // + town storage-location registration for this fully-built building —
@@ -1025,6 +1064,8 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
         }
         fflush(stderr);
     }
+
+    StartTown_PickMeshProbe(entity);
 
     // ---- Phase 1 infra: register the workplace into the townMgr+0x100 PROFESSION BST
     // (the list FindAvailableBuilding scans), keyed by WorkPlaceComponent+0x48. This is
