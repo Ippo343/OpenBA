@@ -141,3 +141,86 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
     int newVal = fn_SpinnerElement_GetValue(spinner);
     SetResourceLimit(typedSrc, newVal);
 }
+
+// ============================================================
+// Standalone entry points — resource index supplied explicitly
+// ============================================================
+// In standalone the ResourceLimitUI child controllers never get their datasource
+// bound (self+0x10 == NULL): the config->controller binding flows through base
+// DialogController slots that the generic dialog stub no-ops, and through the
+// ResourceLimitUIConfig field-deserialize that the stub skips. The framework still
+// creates + dispatches the 11 row controllers in template/table order, which is
+// exactly the resource-index order the Town Hall's (user-verified) count columns
+// use: Log=0, Stone=1, Iron=2, Herbs=3, Tools=4, Fuel=5, Food=6, Clothing=7,
+// Alcohol=8, Coal=9, Textile=10 -> townMgr(gw+0xf0)+0x170[idx*0x20+8]. So the
+// standalone promotion supplies the index by dispatch order and drives the
+// "editLimit" spinner directly, bypassing the missing config. These mirror the
+// config-based Slot4/7/9 above but take an explicit index and never touch
+// self+0x10 (so IsDerivedFrom is never called on a NULL datasource).
+
+static int GetResourceLimitByIdx(int resourceIndex) {
+    if (!g_pGameWorldSingleton) return 0;
+    void* worldSingleton = *g_pGameWorldSingleton;
+    if (!worldSingleton) return 0;
+    void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
+    if (!subObj) return 0;
+    uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
+    if (!arrayBase) return 0;
+    return *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8);
+}
+
+static void SetResourceLimitByIdx(int resourceIndex, int value) {
+    if (!g_pGameWorldSingleton) return;
+    void* worldSingleton = *g_pGameWorldSingleton;
+    if (!worldSingleton) return;
+    void* subObj = *(void**)((uintptr_t)worldSingleton + 0xF0);
+    if (!subObj) return;
+    uintptr_t arrayBase = *(uintptr_t*)((uintptr_t)subObj + 0x170);
+    if (!arrayBase) return;
+    *(int*)(arrayBase + (int64_t)resourceIndex * 0x20 + 8) = value;
+}
+
+// Read the live default/limit for a row (used by the trace + external checks).
+int ResourceLimitUI_ReadLimit_SA(int resourceIndex) {
+    return GetResourceLimitByIdx(resourceIndex);
+}
+
+// Setup (vtable +0x20): find "editLimit" within this row's element subtree, cache
+// it at self->data30, configure id/min/max, seed it from the live limit.
+void ResourceLimitUI_Setup_SA(ResourceLimitUI* self, int resourceIndex) {
+    void* dialogElem = *(void**)((uintptr_t)self + 0x20);
+    if (!dialogElem) return;
+    self->data30 = FindElemAsBasePtr(dialogElem, "editLimit");
+    void* spinner = (void*)self->data30;
+    if (!spinner) return;
+    fn_SpinnerElement_SetElementId(spinner, 0x3039);
+    fn_SpinnerElement_SetMinMax(spinner, 0, 999999);
+    fn_SpinnerElement_SetValue(spinner, GetResourceLimitByIdx(resourceIndex));
+}
+
+// Update (vtable +0x38): keep the spinner synced with the live limit unless the
+// user is actively editing it.
+void ResourceLimitUI_Sync_SA(ResourceLimitUI* self, int resourceIndex) {
+    void* spinner = (void*)self->data30;
+    if (!spinner) return;
+    int currentLimit = GetResourceLimitByIdx(resourceIndex);
+    int spinnerVal = fn_SpinnerElement_GetValue(spinner);
+    if (currentLimit != spinnerVal && !fn_SpinnerElement_IsActive(spinner))
+        fn_SpinnerElement_SetValue(spinner, currentLimit);
+}
+
+// Event (vtable +0x48): on spinner change (msg 0x15, id 0x3039) write the new
+// value back to the live limit.
+void ResourceLimitUI_Write_SA(ResourceLimitUI* self, void* param2, int msg, int id,
+                              int resourceIndex) {
+    if (msg != 0x15 || id != 0x3039) return;
+    void* spinner = (void*)self->data30;
+    if (!spinner || !param2) return;
+    void* sender = *(void**)param2;
+    if (sender != spinner) {
+        uint64_t childResult = 0;
+        fn_Element_Child(spinner, &childResult, 0);
+        if (sender != (void*)childResult) return;
+    }
+    SetResourceLimitByIdx(resourceIndex, fn_SpinnerElement_GetValue(spinner));
+}

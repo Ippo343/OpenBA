@@ -275,7 +275,68 @@ UI_DIALOG_STUB(PageToggleUI,        "UI::DialogController", 0x48);
 UI_DIALOG_STUB(ProductionUI,        "UI::DialogController", 0x50);
 UI_DIALOG_STUB(ProfessionUI,        "UI::DialogController", 0x78);
 UI_DIALOG_STUB(RadiusUI,            "UI::DialogController", 0x38);
-UI_DIALOG_STUB(ResourceLimitUI,     "UI::DialogController", 0x40);
+// ---- ResourceLimitUI: PROMOTED to the real reimpl (resource-limit bring-up) --
+// Each row of the Town Hall "Limits" tab (Log/Stone/Iron/Herbs/Tools/Fuel/Food/
+// Clothing/Alcohol/Coal/Textile) is a ResourceLimitUI child controller bound to a
+// ResourceLimitUIConfig (resource index at config+0x20). Slot4 (+0x20, setup)
+// finds the row's "editLimit" spinner and seeds it from the live per-resource
+// limit at townMgr(gw+0xf0)+0x170[idx*0x20+8]; Slot7 (+0x38) keeps it synced;
+// Slot9 (+0x48) writes an edited value back. The generic stub left every slot a
+// no-op, so all limit spinners showed the .rsc default 0 even though the
+// town-manager ctor (TradeComponent_impl_0a30) seeds real per-resource defaults
+// (200 / 5000 / 100 / 50 / 500 / 1000 ...). Construction stays the stub
+// alloc+zero+vtable; the framework fills the base fields (dialog +0x18,
+// datasource +0x10, element root +0x20) afterward. Same shape as the
+// BuildRequirementUI / MapUI promotions above.
+// The standalone-only entry points (index supplied by dispatch order; see the
+// "Standalone entry points" note in code/Game/Dialog/resourcelimitui.cpp).
+struct ResourceLimitUI;
+extern void ResourceLimitUI_Setup_SA(ResourceLimitUI* self, int resourceIndex);
+extern void ResourceLimitUI_Sync_SA(ResourceLimitUI* self, int resourceIndex);
+extern void ResourceLimitUI_Write_SA(ResourceLimitUI* self, void* param2, int msg, int id, int resourceIndex);
+extern int  ResourceLimitUI_ReadLimit_SA(int resourceIndex);
+namespace uistub_ResourceLimitUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("ResourceLimitUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // Dispatch-order -> resource index. The framework never binds the child
+    // controller's datasource (self+0x10) in standalone, so the retail Slot4/7/9
+    // (which read the resource index from config+0x20) would IsDerivedFrom(NULL)
+    // and fault. Instead we number the 11 row controllers by the order the
+    // framework sets them up, which equals the .rsc/table order == resource index
+    // (Log=0..Textile=10). One registry per dialog build: a 12th distinct `self`
+    // means a fresh build, so wrap back to 0.
+    static void* g_selves[11];
+    static int   g_count = 0;
+    int IdxFor(void* self) {
+        for (int i=0;i<g_count;i++) if (g_selves[i]==self) return i;
+        if (g_count >= 11) { for (int i=0;i<11;i++) g_selves[i]=nullptr; g_count=0; }
+        g_selves[g_count]=self;
+        return g_count++;
+    }
+    void Trace(const char* slot, void* self, int idx) {
+        if (!std::getenv("BANISHED_LIMIT_TRACE")) return;
+        static int n=0; if (n>=24) return; ++n;
+        void* cfg = self ? *reinterpret_cast<void**>((uintptr_t)self+0x10) : nullptr;
+        int cfgIdx = cfg ? *reinterpret_cast<int*>((uintptr_t)cfg+0x20) : -1;
+        printf("[ResourceLimitUI] %s self=%p cfg=%p cfg+0x20=%d dispIdx=%d liveLimit=%d\n",
+               slot, self, cfg, cfgIdx, idx, ResourceLimitUI_ReadLimit_SA(idx));
+        fflush(stdout);
+    }
+    void Slot4(void* self){ if(!self) return; int idx=IdxFor(self); Trace("Slot4",self,idx); ResourceLimitUI_Setup_SA(reinterpret_cast<ResourceLimitUI*>(self), idx); }
+    void Slot7(void* self){ if(!self) return; int idx=IdxFor(self); ResourceLimitUI_Sync_SA(reinterpret_cast<ResourceLimitUI*>(self), idx); }
+    void Slot9(void* self, void* p2, int msg, int id, int, int){ if(!self) return; int idx=IdxFor(self); Trace("Slot9",self,idx); ResourceLimitUI_Write_SA(reinterpret_cast<ResourceLimitUI*>(self), p2, msg, id, idx); }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); g_vt[7]=reinterpret_cast<void*>(&Slot7); g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x40;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x40,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(ResourceLimitUI, "UI::DialogController",
+              &uistub_ResourceLimitUI::Factory, &uistub_ResourceLimitUI::InPlace);
 UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
 // ---- StatusBarUI: PROMOTED to real SA vtable (statusbarui.cpp) — the toolbar
 //      "town status" utility dialog (group 4, next to Map) now renders the town
@@ -415,6 +476,14 @@ UI_DIALOG_STUB(TutorialHighlightDialog, "UI::DialogInstance", 0xF0);
 
 // ---- DialogControllerConfig family (all 0x28) -------------------------------
 UI_DIALOG_STUB(ControlUIConfig,       "UI::DialogControllerConfig", 0x28);
+// ResourceLimitUIConfig stays a generic stub: standalone creates these config
+// objects (Factory fires) but never runs their field-deserialize (Serialize) nor
+// links them to the row controllers, so config+0x20 (resource index) is always 0
+// and controller+0x10 (config) is always null. The resource index is therefore
+// unrecoverable from the config in standalone — the ResourceLimitUI promotion
+// above sources it from dispatch order (== .rsc/table order == resource index)
+// instead. See the "Standalone entry points" note in
+// code/Game/Dialog/resourcelimitui.cpp.
 UI_DIALOG_STUB(ResourceLimitUIConfig, "UI::DialogControllerConfig", 0x28);
 UI_DIALOG_STUB(StatusIconUIConfig,    "UI::DialogControllerConfig", 0x28);
 UI_DIALOG_STUB(UpgradeUIConfig,       "UI::DialogControllerConfig", 0x28);
