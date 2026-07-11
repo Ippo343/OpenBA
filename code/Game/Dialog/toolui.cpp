@@ -24,6 +24,7 @@
 #ifdef STANDALONE_EXE
 #include <cstdio>
 #include <cstdlib>
+#include "resolve.h"
 #endif
 
 // Forward declaration — defined in entityui.cpp
@@ -528,7 +529,29 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
                 uintptr_t pc = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0x120);
                 if (pc) {
                     void* activeTool = *(void**)(pc + 0x28);
-                    if (activeTool) *(uint64_t*)((uintptr_t)activeTool + 0x28) = 0;
+                    if (activeTool) {
+                        // Deselect like retail cc90 steps (1)+(2): clear the
+                        // selection highlight (Entity_impl_cb40 reads the entity
+                        // from tool+0x30, so call it BEFORE nulling), then drop
+                        // both the dialog ref (+0x28) and the selected-entity ref
+                        // (+0x30). Leaving +0x30 set kept the outline lit after
+                        // close AND blocked re-selecting the same building
+                        // (EditTool::OnKey's `lastEntityRef != foundEntity` guard
+                        // and d3b0's step-1 early-out both saw it as still
+                        // selected). cb40 resolves to our tool_base_render.cpp
+                        // port only when BANISHED_SELECTION_OUTLINE registered it;
+                        // otherwise NULL -> skip (no outline to clear).
+                        typedef void (*fn_cb40_t)(void*);
+                        static fn_cb40_t s_fn_cb40 = nullptr;
+                        static bool s_cb40Resolved = false;
+                        if (!s_cb40Resolved) {
+                            s_fn_cb40 = (fn_cb40_t)ResolveAddr(Module::Exe, 0x1400fcb40);
+                            s_cb40Resolved = true;
+                        }
+                        if (s_fn_cb40) s_fn_cb40(activeTool);
+                        *(uint64_t*)((uintptr_t)activeTool + 0x28) = 0;
+                        *(uint64_t*)((uintptr_t)activeTool + 0x30) = 0;
+                    }
                 }
             }
         }
