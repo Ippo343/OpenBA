@@ -19,4 +19,8 @@ void PickingComponent_InitFuncs();
 // buildings, whose real OnAdded/Startup lifecycle never fires in standalone. Idempotent
 // enough for a single spawn-time call per entity. `pc` = raw PickingComponent pointer.
 void PickingComponent_RegisterMesh(void* pc);
+
+// Convenience: find `entity`'s PickingComponent and register its mesh (for callers that
+// hold an entity, e.g. the player-placement create path). Respects BANISHED_LIVE_PICKMESH.
+void PickingComponent_RegisterMeshForEntity(void* entity);
 #endif

@@ -17,6 +17,7 @@
 #include <cstdint>
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
+#include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
 #endif
@@ -402,6 +403,15 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         s_fn_c48a0(*reinterpret_cast<void**>(gameWorld + 0xe8), &local_48,
                    *reinterpret_cast<int*>(*reinterpret_cast<long long*>(param_1 + 0x20) + 0x20));
     }
+
+#ifdef STANDALONE_EXE
+    // Mesh-precise picking: register the placed building's (now-completed, forced above)
+    // model mesh into Picking::Scene so it's clickable anywhere on the model — the same
+    // fix start-town buildings get. Retail would drive this via PickingComponent::OnAdded
+    // during the build lifecycle, which is inert in standalone. Respects LIVE_PICKMESH.
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
+    PickingComponent_RegisterMeshForEntity(reinterpret_cast<void*>(local_res8));
+#endif
 
     unsigned long long uVar9 = s_fn_subd960 ? s_fn_subd960(param_1) : 0;
     return (uVar9 & ~0xffULL) | 1ULL;

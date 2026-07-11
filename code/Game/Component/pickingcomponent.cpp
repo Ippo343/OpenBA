@@ -15,6 +15,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 // ============================================================
 // Resolved helpers
@@ -144,8 +146,20 @@ static void* PC_FindModelComponent(void* entity) {
     return nullptr;
 }
 
+// Master enable for mesh-precise picking registration. Default ON; opt out with
+// BANISHED_LIVE_PICKMESH=0. Centralized here so every caller (start-town spawn,
+// player placement, …) shares one gate.
+static bool PC_PickMeshEnabled() {
+    static int on = -1;
+    if (on < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_PICKMESH");
+        on = (e && (e[0] == '0' || strcmp(e, "false") == 0)) ? 0 : 1;
+    }
+    return on != 0;
+}
+
 void PickingComponent_RegisterMesh(void* pc) {
-    if (!pc) return;
+    if (!pc || !PC_PickMeshEnabled()) return;
     PickingComponent_InitFuncs();
     if (!s_addMeshInit) {
         s_fn_AddMesh = (fn_PickingAddMesh_t)ResolveExport(
@@ -213,6 +227,31 @@ uint32_t PC_ModelTypeId() {
         s_tidModelComponent = ::Object::GetTypeIdByName("ModelComponent");
     return s_tidModelComponent;
 }
+}
+
+// Entity-level convenience: find the entity's PickingComponent and register its mesh.
+// Used by callers that hold an entity rather than the component (player placement, etc.).
+static uint32_t s_tidPickComponent = 0;
+void PickingComponent_RegisterMeshForEntity(void* entity) {
+    if (!entity || !PC_PickMeshEnabled() || !fn_InternalBasePtr_CheckPtr) return;
+    if (s_tidPickComponent == 0 || s_tidPickComponent == 0xFFFFFFFF)
+        s_tidPickComponent = ::Object::GetTypeIdByName("PickingComponent");
+    if (s_tidPickComponent == 0) return;
+    uint8_t* e = (uint8_t*)entity;
+    int count = *(int32_t*)(e + 0x38);
+    uintptr_t arr = *(uintptr_t*)(e + 0x30);
+    for (int i = 0; i < count; ++i) {
+        void** slot = (void**)(arr + (uintptr_t)i * 8);
+        fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        uintptr_t vt = *(uintptr_t*)comp;
+        typedef uint32_t (*gt_t)(void*);
+        if ((*(gt_t*)(vt + 0x10))(comp) == s_tidPickComponent) {
+            PickingComponent_RegisterMesh(comp);
+            return;
+        }
+    }
 }
 #endif // STANDALONE_EXE
 
