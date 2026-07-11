@@ -2645,6 +2645,11 @@ void DiagPrint(const char* where, void* self) {
                 (void*)*(uintptr_t*)(gw + 0x128),
                 townMgr ? (void*)*(uintptr_t*)(townMgr + 0x150) : nullptr,
                 townMgr ? (void*)*(uintptr_t*)(townMgr + 0x170) : nullptr);
+        // UpdateGeneral's two data sources: the town citizen list (+0xa0/+0xa8,
+        // CitizenComponent_OnAdd) and the residence list (+0x20/+0x28, helper_9de0).
+        if (townMgr)
+            fprintf(stderr, "[TownHallSA]   citizens(+0xa8)=%d homes(+0x28)=%d\n",
+                    *(int*)(townMgr + 0xa8), *(int*)(townMgr + 0x28));
     } else {
         fprintf(stderr, "[TownHallSA]   g_pGameSingleton=%p (*=%p)\n",
                 (void*)g_pGameSingleton,

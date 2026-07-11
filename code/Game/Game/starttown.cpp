@@ -206,6 +206,10 @@ extern void CitizenComp_AssignHousing(CitizenComponent* self, int64_t* housingPt
 // fallback dd10 uses, seating each worker via +0x1f0=prof + AssignHousing(+0x248 roster).
 extern "C" void CitizenComponent_OnAdd(void* citizenComp);
 extern "C" int  CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey, int count);
+// Residence-list registrar (ResidenceDescription_helper_9de0 port, citizen_employ_cascade.cpp):
+// appends a built house's owner-entity IBP into townMgr+0x20 (count +0x28) — the list the
+// town-hall "Homes" stat reads. Retail fires it from the residence build-state callback.
+extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP);
 
 // WorkPlaceComponent attach/detach roster-only mode (workplacecomponent.cpp). Set true for
 // the build-time founding-housing pass so the roster is populated WITHOUT the gameplay-time
@@ -1135,6 +1139,54 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
 }
 
 // ============================================================================
+// Town-manager registry passes (ungated).
+//
+// Retail keeps two lists on the TownManager (gw+0xf0) that the town-hall
+// statistics dialog (TownHallUI::UpdateGeneral) and the Goal/StatValue counters
+// read: the town citizen list (+0xa0 array / +0xa8 count, appended by the real
+// registrar CitizenComponent_OnAdd 0x140114000) and the residence list
+// (+0x20/+0x28, appended by ResidenceDescription_helper_9de0 — wired by retail
+// as the residence build-state callback, i.e. when a house becomes BUILT).
+// Standalone start-town spawns citizens/houses without running either
+// registrar, so both lists stayed empty and the town-hall General tab rendered
+// all zeros (0 citizens/adults/children/families/homes, flat hearts/stars).
+//
+// OnAdd is a plain append (no dedup), so the citizen pass keeps a once-guard
+// shared with StartTown_EmployForesters (which needs the same registration and
+// previously did it inline, gated behind BANISHED_LIVE_WORKPLACE).
+static bool s_townCitizensRegistered = false;
+static void StartTown_RegisterTownCitizens() {
+    if (s_townCitizensRegistered) return;
+    s_townCitizensRegistered = true;
+    int n = 0;
+    for (void* c : g_foundingCitizens) {
+        if (!c) continue;
+        CitizenComponent_OnAdd(c);
+        ++n;
+    }
+    fprintf(stderr, "[startTown::registry] registered %d founding citizens into townMgr+0xa0\n", n);
+    fflush(stderr);
+}
+
+// Houses: ResidenceComponent::OnCreate's list op on townMgr+0x20 is a REMOVE
+// (FUN_140002cc0); the ADD retail runs at build-complete never fires in
+// standalone. Register the captured founding-house IBPs (the exact +0x10 value
+// helper_9de0 appends) once, after the OnCreate pass has run.
+static void StartTown_RegisterTownResidences() {
+    static bool s_done = false;
+    if (s_done) return;
+    s_done = true;
+    int n = 0;
+    for (int64_t ibp : g_foundingHouseIBPs) {
+        if (!ibp) continue;
+        TownRegistry_RegisterResidence(ibp);
+        ++n;
+    }
+    fprintf(stderr, "[startTown::registry] registered %d founding houses into townMgr+0x20\n", n);
+    fflush(stderr);
+}
+
+// ============================================================================
 // Phase 4 ASSIGN half (env BANISHED_LIVE_WORKPLACE) — seat laborers at the lodge.
 //
 // The faithful producer-employment flow is player-driven (ProfessionUI worker count
@@ -1177,7 +1229,9 @@ static void StartTown_EmployForesters() {
         if (profList) laborerKey = *reinterpret_cast<uint64_t*>(
             reinterpret_cast<uint8_t*>(profList) + 0x30);
     }
-    static bool s_citizenListPopulated = false;
+    // Register into the real townMgr+0xa0 town-citizen list (shared once-guard;
+    // normally already done by the ungated StartTown_RegisterTownCitizens pass).
+    StartTown_RegisterTownCitizens();
     int seeded = 0;
     for (void* c : g_foundingCitizens) {
         if (!c) continue;
@@ -1188,10 +1242,7 @@ static void StartTown_EmployForesters() {
         // filter matches them (retail init does this; ours is guarded off).
         if (laborerKey && adult && *reinterpret_cast<int64_t*>(cz + 0x1f0) == 0)
             { *reinterpret_cast<uint64_t*>(cz + 0x1f0) = laborerKey; ++seeded; }
-        // Register into the real townMgr+0xa0 town-citizen list (once per citizen).
-        if (!s_citizenListPopulated) CitizenComponent_OnAdd(c);
     }
-    s_citizenListPopulated = true;
 
     // The cascade's seat epilogue calls AssignHousing -> the roster attach into the
     // lodge's WorkPlaceComponent (+0x58/+0x60), whose gameplay-time Scene mesh-visual
@@ -2907,6 +2958,12 @@ extern "C" void StartTown_SpawnEntities(void* startConfig, void* world) {
     // info panel's Job line renders "Laborer" instead of blank. Runs after citizens +
     // founding housing (g_foundingCitizens) exist and ProfessionList (gw+0xb0) is loaded.
     StartTown_SeedLaborerProfessions();
+
+    // Town-manager registry (ungated) — register the founding citizens into
+    // townMgr+0xa0 and the founding houses into townMgr+0x20, the two lists the
+    // town-hall statistics dialog reads (was: General tab all zeros).
+    StartTown_RegisterTownCitizens();
+    StartTown_RegisterTownResidences();
 
     // PHASE 4 ASSIGN half — seat laborers at the lodge (env BANISHED_LIVE_WORKPLACE) now
     // that citizens + founding housing exist. Sets citizen+0x238 -> Gather/Work candidates.

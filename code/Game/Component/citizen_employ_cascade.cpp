@@ -401,6 +401,24 @@ extern "C" void CitizenComponent_OnAdd(void* citizenComp) {
 }
 
 // ============================================================================
+// 0x140129de0 — ResidenceDescription_helper_9de0: append a built house's
+// owner-entity IBP (= ResidenceComponent+0x10) to the townMgr+0x20 residence
+// list (count at +0x28). Retail wires this as the residence build-state
+// callback (helper_a350, state 2 = built) so a house registers the moment its
+// construction completes; the town-hall "Homes" stat and the housing shuffle
+// read this list. The exe copies the +0x10 IBP value raw (no re-ctor) — same
+// here; the caller passes the value it captured at ResidenceComponent::OnCreate.
+// ============================================================================
+extern "C" void TownRegistry_RegisterResidence(int64_t houseEntityIBP) {
+    EnsureFns();
+    if (!houseEntityIBP || !g_pGameWorldSingleton || !*g_pGameWorldSingleton || !s_arrayAdd3110) return;
+    int64_t townMgr = TownMgr();
+    if (townMgr == 0) return;
+    s_arrayAdd3110(reinterpret_cast<int64_t*>(townMgr + 0x20),
+                   *reinterpret_cast<int*>(townMgr + 0x28) + 1, &houseEntityIBP);
+}
+
+// ============================================================================
 // Headless driver — mirrors CitizenComponent_impl_dd10's per-worker inner loop.
 // Seats up to `count` workers of profession `profKey`; returns the number actually
 // seated. (dd10 derives profKey from a UI profession index via *(*(gw+0xb0)+0x20 +
