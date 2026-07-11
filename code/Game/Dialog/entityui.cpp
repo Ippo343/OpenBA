@@ -835,38 +835,76 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
     }
 
     if (id == 0x65) {
-        // Center camera on entity — navigate to entity via BuildComponent
+        // Center camera on entity (buttonCenter). Faithful to the exe center block
+        // (0x140066880..0x140066a8c) — the same position math as
+        // Toolbar_CenterOnEntity_Impl Section 2:
+        //   - ModelComponent present AND no MultiObjectComponent  -> single object
+        //     (citizen/animal/small building): use the model's world Transform
+        //     translation (ModelComponent+0x148 Transform, pos at +0x158/+0x15C).
+        //   - otherwise -> multi-object building: midpoint of the MapComponent grid
+        //     footprint's far corner and origin corner, each mapped tile->world via
+        //     fn_MapGetTerrainPos, then averaged (DAT_140172114 = 0.5).
+        // Writes ONLY the camera focus target (game+0xe0 +0x1c/+0x20/+0x24, z forced
+        // 0 as retail does); the camera smoothly slides to it. No re-select / no snap
+        // (that is what distinguishes this from Toolbar_CenterOnEntity, which also
+        // reopens the target dialog).
+        uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
         void* entityPtr = *(void**)(s + 0x30);
 
-        // Try to find a path/position component to center on
-        void* pathComp = nullptr;
-        {
-            // Entity_ClearPathQueue (FUN_14000a170-ish, actually different)
-            // Use BuildComponent center position
-            void* buildComp = nullptr;
-            fn_FindComponent_Build(entityPtr, &buildComp);
-            if (buildComp) {
-                // Read transform position from BuildComponent+0x28/+0x2A/+0x2C/+0x2E
-                int* worldGrid = *(int**)((uintptr_t)(*g_pGameWorldSingleton) + 0xf8);
-                int gridSize = *worldGrid;
-                int16_t posX = *(int16_t*)((uintptr_t)buildComp + 0x28);
-                int16_t posY = *(int16_t*)((uintptr_t)buildComp + 0x2a);
-                int16_t sizeX = *(int16_t*)((uintptr_t)buildComp + 0x2c);
-                int16_t sizeY = *(int16_t*)((uintptr_t)buildComp + 0x2e);
+        float focus[2] = {0.0f, 0.0f};
+        bool gotPos = false;
 
-                // Calculate center tile
-                int centerIdx = (int)sizeX + ((int)sizeY + (int)posY) * gridSize + (int)posX;
-
-                // Convert tile to world position
-                float worldX = (float)(centerIdx % gridSize) - (float)(gridSize >> 1);
-                float worldY = (float)(centerIdx / gridSize) - (float)(gridSize >> 1);
-
-                // Set camera target
-                void* cameraTarget = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0xe0);
-                *(float*)((uintptr_t)cameraTarget + 0x1c) = worldX * 0.5f;
-                *(float*)((uintptr_t)cameraTarget + 0x20) = worldY * 0.5f;
-                *(float*)((uintptr_t)cameraTarget + 0x24) = 0.0f;
+        uint64_t modelRef = 0;
+        fn_FindComponent_Character(entityPtr, &modelRef);
+        if (modelRef != 0) {
+            uint64_t multiRef = 0;
+            fn_FindComponent_MultiObject(entityPtr, &multiRef);
+            if (multiRef == 0) {
+                fn_InternalBasePtr_CheckPtr(&modelRef);
+                uintptr_t model = (uintptr_t)modelRef;
+                focus[0] = *(float*)(model + 0x158);
+                focus[1] = *(float*)(model + 0x15C);
+                gotPos = true;
             }
+        }
+
+        if (!gotPos) {
+            uint64_t buildRef = 0;
+            fn_FindComponent_Build(entityPtr, &buildRef);
+            if (buildRef != 0) {
+                uintptr_t build = (uintptr_t)buildRef;
+                int* mapGrid = *(int**)(game + 0xf8);
+                int gridSize = *mapGrid;
+                float halfGrid = (float)(gridSize >> 1);
+
+                int16_t posX = *(int16_t*)(build + 0x28);
+                int16_t posY = *(int16_t*)(build + 0x2a);
+                int16_t extX = *(int16_t*)(build + 0x2c);
+                int16_t extY = *(int16_t*)(build + 0x2e);
+
+                int idx1 = (int)extX + ((int)extY + (int)posY) * gridSize + (int)posX;
+                float inXY1[3] = { (float)(idx1 % gridSize) - halfGrid,
+                                   (float)(idx1 / gridSize) - halfGrid, 0.0f };
+                float pos1[3] = {0.0f, 0.0f, 0.0f};
+                if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(mapGrid, pos1, inXY1, '\0', nullptr);
+
+                int idx2 = gridSize * (int)posY + (int)posX;
+                float inXY2[3] = { (float)(idx2 % gridSize) - halfGrid,
+                                   (float)(idx2 / gridSize) - halfGrid, 0.0f };
+                float pos2[3] = {0.0f, 0.0f, 0.0f};
+                if (fn_MapGetTerrainPos) fn_MapGetTerrainPos(mapGrid, pos2, inXY2, '\0', nullptr);
+
+                focus[0] = (pos1[0] + pos2[0]) * 0.5f;
+                focus[1] = (pos1[1] + pos2[1]) * 0.5f;
+                gotPos = true;
+            }
+        }
+
+        if (gotPos) {
+            uintptr_t cameraTarget = *(uintptr_t*)(game + 0xe0);
+            *(float*)(cameraTarget + 0x1c) = focus[0];
+            *(float*)(cameraTarget + 0x20) = focus[1];
+            *(float*)(cameraTarget + 0x24) = 0.0f;
         }
         return;
     }
@@ -888,6 +926,12 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         uint8_t toolBuf[8];
         fn_InternalBasePtr_Ctor(toolBuf, toolUI);
         void* toolPtr = *(void**)toolBuf;
+
+        // The pin state lives on the checkPin element (+0x38, set in Slot4) and the
+        // pin flag on the sibling ToolUI controller (+0x40). Both must exist to pin;
+        // in standalone a partially-built dialog could be missing either, so guard
+        // before dereferencing them (no-op in DLL mode where both are always live).
+        if (toolPtr == nullptr || *(uintptr_t*)(s + 0x38) == 0) return;
 
         // Read current pin state from checkPin element (+0x38) -> +0xD8
         char pinState = *(char*)(*(uintptr_t*)(s + 0x38) + 0xd8);
@@ -934,11 +978,15 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 // Vtable offsets (verified from the exe EntityUI vtable @ 0x14015bb90):
 //   +0x20 (idx4) Slot4 = Startup/Setup  (sets +0x30 entity ref; find elements)
 //   +0x30 (idx6) Slot6 = remove entity from the world tracking set
-// Slot7 (page switching, +0x38), Slot8 (input, +0x40) and Slot9 (center/pin buttons,
-// +0x48) are intentionally left StubNop for now: they dereference many exe-.rdata
-// component type-ids and (Slot8/9) drive EditTool::SetEditMode / EditTool vtable
-// calls — higher risk with no display payoff. The panel's close/drag come from its
-// sibling ToolUI controller (already wired), and clicking works via EditTool::OnKey.
+//   +0x38 (idx7) Slot7 = page switching (driven per-frame via W_OnUpdate on +0x40)
+//   +0x48 (idx9) Slot9 = OnElementEvent: buttonCenter (0x65) + checkPin (100) buttons
+// Slot9 is wired (W_Slot9) so the panel's "center" and "pin" options work — for every
+// entity dialog, since EntityUI is the shared frame controller. It forwards only the
+// center/pin ids; the close button (id 1) stays with the sibling ToolUI::Slot9 to
+// avoid retail's SetEditMode(0) tool-teardown (see W_Slot9). Slot8 (the real +0x40
+// input handler) remains a no-op — its +0x40 slot is reused to drive Slot7 per-frame,
+// and clicking entities works via EditTool::OnKey. The panel's close/drag come from
+// the ToolUI controller (already wired).
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -980,6 +1028,20 @@ void EnsureGlobals() {
     static uint32_t s_res = 0;
     if (!g_TypeId_ResourceComponent) { s_res = ::Object::ResolveTypeIdByNameLazy("ResourceComponent"); if (s_res) g_TypeId_ResourceComponent = &s_res; }
 
+    // EntityUI::Slot9's buttonCenter (id 0x65) finds the entity's ModelComponent
+    // (single object -> use its Transform) or, failing that, its MapComponent grid
+    // footprint (multi-object building). Those finders read exe .rdata type-id
+    // globals that ResolveAddr leaves NULL in standalone, so fill them from the live
+    // factory tree. NB the engine_funcs labels are misleading: g_TypeId_Character-
+    // Component is actually ModelComponent (DAT_1401c7a50) and g_TypeId_BuildComponent
+    // _Slot4 is actually MapComponent (DAT_1401c79e0, written by MapComponent_Register-
+    // Type) — verified via Ghidra DATA xrefs. Without these the center button would
+    // find no component and (build path) null-deref.
+    static uint32_t s_model = 0, s_multi = 0, s_mapc = 0;
+    if (!g_TypeId_CharacterComponent)    { s_model = ::Object::ResolveTypeIdByNameLazy("ModelComponent");       if (s_model) g_TypeId_CharacterComponent = &s_model; }
+    if (!g_TypeId_MultiObjectComponent)  { s_multi = ::Object::ResolveTypeIdByNameLazy("MultiObjectComponent"); if (s_multi) g_TypeId_MultiObjectComponent = &s_multi; }
+    if (!g_TypeId_BuildComponent_Slot4)  { s_mapc  = ::Object::ResolveTypeIdByNameLazy("MapComponent");         if (s_mapc)  g_TypeId_BuildComponent_Slot4 = &s_mapc; }
+
     static bool s_logged = false;
     if (!s_logged && std::getenv("BANISHED_DIALOG_TRACE")) {
         s_logged = true;
@@ -1013,6 +1075,31 @@ void W_Slot7(void* self) {
 // intentionally left a no-op in SA — higher risk, no display payoff).
 void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }
 
+// +0x48 OnElementEvent — the button-command dispatch. Runtime DialogInstance::On-
+// ElementEvent (0x180114ed0) forwards every element event to each controller's
+// vtable+0x48, so this receives the frame buttons: buttonCenter (id 0x65, msg 0x12)
+// and checkPin (id 100). Those are what implement the panel's "center" and "pin"
+// options for EVERY entity info dialog (EntityUI is the shared frame controller on
+// both building and citizen panels). Wiring this makes them functional in standalone.
+//
+// The close button (id 1) is intentionally NOT forwarded here: retail EntityUI::Slot9
+// closes via SetEditMode(0), which tears down the active EditTool (vtable Shutdown +
+// DeletePtr). In standalone the sibling ToolUI::Slot9 already handles the close (and
+// drops the EditTool's stale dialog ref instead of destroying the tool — see
+// toolui.cpp Slot9), so running SetEditMode here would re-introduce the very
+// tool-teardown crash that path avoids. Skipping id 1 leaves close to ToolUI.
+void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
+    if (!self || msg != 0x12) return;
+    if (id == 1) return;              // close -> handled by ToolUI::Slot9
+    if (id != 0x65 && id != 100) return;
+    EnsureGlobals();
+    // pin (id 100) needs the ToolUI type-id to fetch the sibling controller; center
+    // (id 0x65) tolerates null component type-ids (finders just return "not found").
+    if (id == 100 && !g_TypeId_ToolUI) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
+    EntityUI_Slot9(reinterpret_cast<EntityUI*>(self), p2, msg, id);
+}
+
 struct Init {
     Init() {
         for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
@@ -1022,6 +1109,7 @@ struct Init {
         g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
         g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
         g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
     }
 } g_init;
 

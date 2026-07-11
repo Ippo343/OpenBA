@@ -19,6 +19,19 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+
+// ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
+// hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
+// per resident EVERY frame — the dominant cost that tanked the framerate once a second
+// entity panel could stay pinned open. Gate them behind BANISHED_DIALOG_TRACE (cached
+// once). Kept inside _DEBUG so release builds are unchanged.
+#ifdef _DEBUG
+static bool ResDbgTrace() {
+    static const bool s_on = std::getenv("BANISHED_DIALOG_TRACE") != nullptr;
+    return s_on;
+}
+#endif
 
 // Range check for pointers a standalone citizen may leave uninitialized. A rostered
 // CitizenComponent in standalone can have a garbage description cache (+0x288) or an
@@ -235,6 +248,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     fn_InternalBasePtr_CheckPtr(&storageComp);
 
 #ifdef _DEBUG
+    if (ResDbgTrace())
     printf("[ResidenceUI::Slot7] self=%p entity=%p resComp=0x%llx\n",
            (void*)self, entity, (unsigned long long)storageComp);
 #endif
@@ -248,6 +262,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
     // Outer loop: iterate room groups (storageComp+0x58 = group count)
     int groupCount = *(int*)(storageComp + 0x58);
 #ifdef _DEBUG
+    if (ResDbgTrace())
     printf("[ResidenceUI::Slot7] groupCount=%d totalRowSlots=%d\n",
            groupCount, *(int*)(s + 0x38));
 #endif
@@ -263,6 +278,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                 totalResidents += residentCount;
                 int endRow = rowIdx + residentCount;
 #ifdef _DEBUG
+                if (ResDbgTrace())
                 printf("[ResidenceUI::Slot7]   group[%d]: residentCount=%d rowIdx=%d\n",
                        g, residentCount, rowIdx);
 #endif
@@ -277,7 +293,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     fn_InternalBasePtr_CheckPtr(&citizen);
 
 #ifdef _DEBUG
-                    {
+                    if (ResDbgTrace()) {
                         uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + rowIdx * 0x30;
                         void* imgM = *(void**)(rowBase + 0x00);
                         void* imgF = *(void**)(rowBase + 0x08);
