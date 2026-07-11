@@ -66,6 +66,7 @@ bool s_resolved = false;
 uint32_t s_tid_EntityUI = 0;       // DWORD_1401c4f00
 uint32_t s_tid_UIDescription = 0;  // DWORD_1401c7f90
 uint32_t s_tid_UIComponent = 0;    // DAT_1401c7fc8
+uint32_t s_tid_ToolUI = 0;         // DWORD_1401c5788 (cc90 close-prev-dialog gate)
 
 void EnsureFuncs() {
     if (s_resolved) return;
@@ -254,6 +255,41 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     //    below. (Moved off the per-frame step-2 cc90 path so hover-picks over
     //    no-dialog entities can't wipe the current selection; see step 2.)
     if (s_fn_cb40) s_fn_cb40(selfV);
+
+    // 6a. Close the PREVIOUSLY-open info dialog (self+0x28) before replacing it with
+    //     the new one. This is retail cc90's third action (see Entity_impl_cc90 @
+    //     0x1400fcc90): GetController(oldDialog, ToolUI); if the controller isn't
+    //     "pinned" (ctrl+0x40 == 0) -> UI::CloseDialog. Without this the old panel
+    //     lingers and every new building/citizen click stacks another dialog, which
+    //     reads exactly like the pin option being stuck on. We do ONLY the close
+    //     here (not cc90's ref-nulling): self+0x28/+0x30 are overwritten immediately
+    //     below, so nulling them would just defeat the EditTool::OnKey per-frame
+    //     `lastEntityRef != foundEntity` guard and re-fire the select every frame
+    //     (the documented citizen-dialog flicker). The +0x40 pin flag is honored, so
+    //     a user-pinned panel is left open — matching retail.
+    void* oldDialog = *reinterpret_cast<void**>(self + 0x28);
+    if (oldDialog && oldDialog != reinterpret_cast<void*>(resultDialog) && fn_UI_CloseDialog) {
+        const uint32_t tidToolUI = ResolveTypeId(0x1401c5788, "ToolUI", &s_tid_ToolUI);
+        uint64_t ctrlBuf = 0;
+        if (fn_DialogInstance_GetController)
+            fn_DialogInstance_GetController(oldDialog, &ctrlBuf, tidToolUI);
+        void* ctrl = nullptr;
+        if (ctrlBuf != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlBuf);
+            void* c = reinterpret_cast<void*>(ctrlBuf);
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidToolUI)) ctrl = c;
+        }
+        uint64_t ctrlRef = 0;
+        if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ctrlRef, ctrl);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&ctrlRef);
+        // Not pinned (ctrl+0x40 == 0) -> close it. (A null controller -> ctrlRef 0,
+        // reading +0x40 off 0 would fault, so require a resolved controller first.)
+        if (ctrlRef != 0 && *reinterpret_cast<char*>(ctrlRef + 0x40) == 0) {
+            uint64_t closeRef = reinterpret_cast<uint64_t>(oldDialog);
+            fn_UI_CloseDialog(ui, &closeRef);
+        }
+    }
+
     *reinterpret_cast<uint64_t*>(self + 0x28) = resultDialog;
     *reinterpret_cast<uint64_t*>(self + 0x30) = *entityIBP;
     if (s_fn_c9e0) s_fn_c9e0(selfV);
