@@ -32,7 +32,17 @@ namespace AsyncLoader {
 // Kick a load on a background thread. The worker calls
 // `loop->vtable->Load(loop)`. Safe to call repeatedly — each call waits for
 // the previous load to finish before starting a new one.
-void StartAsyncLoad(UpdateLoop* loop);
+//
+// By default the load runs SYNCHRONOUSLY on the caller thread (see the header
+// note above) unless BANISHED_ASYNC_LOAD is set. Pass forceThreaded=true to
+// ALWAYS use a worker thread regardless of the env — used for the new-game
+// world build (GameUpdateLoop::Load), which is multi-second: running it on a
+// worker keeps the loading screen animating (tips cycling) on the main thread,
+// which only draws the splash UI (never the game scene) until the build's
+// completion signal lets the loop transition. The free-list race that made the
+// worker path unsafe is now covered by standalone/allocator_lock.cpp (Allocate
+// AND Free take the allocator critical section).
+void StartAsyncLoad(UpdateLoop* loop, bool forceThreaded = false);
 
 // True while the most recent StartAsyncLoad's worker is still running.
 bool IsAsyncLoadBusy();

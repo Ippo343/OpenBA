@@ -100,14 +100,14 @@ static bool AsyncLoadOptIn() {
     return cached != 0;
 }
 
-void StartAsyncLoad(UpdateLoop* loop) {
+void StartAsyncLoad(UpdateLoop* loop, bool forceThreaded) {
     DrainPriorJob();
     if (!loop) {
         printf("[AsyncLoader] StartAsyncLoad: null loop, skipping\n");
         return;
     }
     LoadJob* job = new LoadJob{loop, {false}, nullptr};
-    if (!AsyncLoadOptIn()) {
+    if (!AsyncLoadOptIn() && !forceThreaded) {
         printf("[AsyncLoader] running load synchronously on caller thread "
                "(default — avoids non-thread-safe-allocator race; set "
                "BANISHED_ASYNC_LOAD=1 for the old worker thread)\n");
@@ -116,8 +116,9 @@ void StartAsyncLoad(UpdateLoop* loop) {
         g_currentJob = job;       // DrainPriorJob will just delete it
         return;
     }
-    printf("[AsyncLoader] BANISHED_ASYNC_LOAD set — using worker thread "
-           "(WARNING: races the non-thread-safe allocator, may crash)\n");
+    printf("[AsyncLoader] using worker thread (forceThreaded=%d, "
+           "BANISHED_ASYNC_LOAD=%d) — allocator free-list is serialized by "
+           "allocator_lock.cpp\n", (int)forceThreaded, (int)AsyncLoadOptIn());
     job->thread = reinterpret_cast<HANDLE>(_beginthreadex(
         nullptr, 0, &WorkerProc, job, 0, nullptr));
     if (!job->thread) {

@@ -40,7 +40,72 @@
 #include <cstdint>
 #include <windows.h>
 
+// Defined in code/Game/Game/gameupdateloop_load.cpp. Returns true once the
+// new-game world build for `loop` (a GameUpdateLoop) has fully completed.
+extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop);
+
 namespace {
+
+// Fix 2: port of the "random loading tip" block in retail FUN_140098DA0
+// (GameLoadDialogLoopT::Update). Finds the "descText" TextElement in the loading
+// dialog and sets its text to a random entry from the element's string table
+// (element+0xD8), using the loop's embedded System::Random at self+0x194.
+//
+// Retail cycles this every 2.0s (DAT_140172174) off the self+0xB58 timer; the
+// caller drives the timing. This helper just sets one tip. Fully defensive: it
+// silently no-ops if the dialog/element/table or any engine fn is missing (e.g.
+// ShiningRock.rsc has no descText — FindElement then returns the missing-element
+// sentinel, which we normalise to null and skip).
+void SetRandomLoadingTip(DialogLoaderLoopT* self) {
+    if (!self || !self->m_dialogInstance) return;
+    if (!fn_String_Ctor_CStr || !fn_String_Dtor || !fn_DialogInstance_FindElement ||
+        !fn_StringTable_GetCount || !fn_Random_Rand || !fn_UIString_Ctor_Index ||
+        !fn_TextElement_SetText) {
+        return;
+    }
+
+    // Find "descText" in the dialog instance (member value-return ABI:
+    // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
+    uint8_t nameStr[8];
+    fn_String_Ctor_CStr(nameStr, "descText");
+    uint64_t elemBuf = 0;
+    fn_DialogInstance_FindElement(self->m_dialogInstance, &elemBuf, nameStr);
+    fn_String_Dtor(nameStr);
+
+    // Normalise the missing-element sentinel (0xffffffff........) to null.
+    uintptr_t raw = static_cast<uintptr_t>(elemBuf);
+    if (raw < 0x10000 || raw > 0x00007FFFFFFFFFFFULL) return;
+    void* elem = reinterpret_cast<void*>(raw);
+
+    // Verify LabelElement lineage (TextElement derives from LabelElement),
+    // mirroring retail's IsDerivedFrom(obj, LabelElement typeId) gate.
+    if (fn_IsDerivedFrom && g_TypeId_LabelElement &&
+        !fn_IsDerivedFrom(elem, *g_TypeId_LabelElement)) {
+        return;
+    }
+
+    // StringTable at element+0xD8; pick a random 1-based index in [1, count].
+    void* table = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(elem) + 0xD8);
+    if (!table) return;
+    int count = fn_StringTable_GetCount(table);
+    if (count <= 0) return;
+    void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x194);
+    uint32_t idx = fn_Random_Rand(rng, static_cast<uint32_t>(count - 1));
+
+    uint8_t uiStr[16];
+    fn_UIString_Ctor_Index(uiStr, reinterpret_cast<uint64_t>(table),
+                           static_cast<int>(idx + 1));
+    uint8_t textVal[16];
+    *reinterpret_cast<uint64_t*>(textVal)     = *reinterpret_cast<uint64_t*>(uiStr);
+    *reinterpret_cast<uint64_t*>(textVal + 8) = *reinterpret_cast<uint64_t*>(uiStr + 8);
+    fn_TextElement_SetText(elem, textVal);
+
+    static int s_tipLog = 0;
+    if (s_tipLog++ < 8) {
+        printf("[SplashDLT] loading tip set: descText=%p table=%p count=%d idx=%u\n",
+               elem, table, count, idx + 1);
+    }
+}
 
 void Stub_Destroy(UpdateLoop* self, unsigned flags) {
     printf("[SplashDLT::Destroy] self=%p flags=%u\n", (void*)self, flags);
@@ -105,21 +170,26 @@ void Stub_Startup(UpdateLoop* self) {
                (void*)fn_DialogLoaderLoopT_Startup);
     }
 
-    // Step 3: kick our standalone async loader on next->vtable->Load. This
-    // replaces the Runtime Engine::Loader thread (which hangs in standalone
-    // mode). The worker thread runs MenuDLT::Load (or LoadingSplash::Load
-    // etc.) in parallel with this splash's Update/Draw, so the splash
-    // animation no longer freezes for ~125ms while MenuDLT::Load runs.
-    // Stub_Update gates the transition on AsyncLoader::IsAsyncLoadBusy()
-    // and ChunkedSceneLoader::IsBusy().
+    // Step 3: the next loop's load (next->vtable->Load) used to be kicked HERE,
+    // synchronously, before the reveal was ever triggered. For the boot splashes
+    // that was a ~60-125ms hitch, but for the new-game path next->Load is
+    // GameUpdateLoop::Load — the entire world build (worldgen + start-town +
+    // resources), ~5.8s — so the screen sat BLACK for ~5.8s and only faded the
+    // loading dialog in AFTER the load had finished. The loading screen provided
+    // no feedback during the actual work (see notes: fade->load->fade stall).
+    //
+    // Fix 1: DEFER the load kick into Stub_Update. Startup now only builds the
+    // dialog + triggers the reveal (below); Stub_Update lets the reveal animate
+    // for a few frames so the loading dialog is actually on-screen, then kicks
+    // the (still-synchronous, main-thread) load. The load is not moved to a
+    // worker thread because the engine allocator + Graphics::Scene::AddGlobalObject
+    // are not thread-safe (see async_loader.cpp) — but the one frozen frame now
+    // shows a proper loading screen + tip instead of a black hang.
     //
     // Note: ChunkedSceneLoader::Init has already run during boot (from
     // RunGameMain in code/Game/Game/game_main.cpp), so MenuDLT struct
     // fields (+0xb90 menuScene, +0xb98 renderer, etc.) are populated and
     // PhaseB chunks are ready to be Tick()'d in Stub_Update below.
-    if (next) {
-        AsyncLoader::StartAsyncLoad(next);
-    }
 
     // Trigger reveal. With async loading, only Step 1's own-rsc load is
     // synchronous (~10ms for ShiningRock/Loading splashes; usually skipped
@@ -201,10 +271,85 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
     ll->m_elapsedTicks += dt->ticks;
 
+    // ---- Fix 1: deferred load kick ----
+    // The next loop's Load (for the new-game path, GameUpdateLoop::Load — the
+    // ~5.8s world build) used to run synchronously inside Stub_Startup BEFORE
+    // the reveal, so the screen sat black for the whole build. Now Startup only
+    // triggers the reveal; here we let it animate for a few frames so the
+    // loading dialog is actually on-screen, then kick the (still main-thread,
+    // still blocking) load. The one frozen frame now shows a real loading screen
+    // + tip instead of a black hang. Single-slot static like fadeOutInitiatedFor
+    // below — splash loops run one at a time, each with a unique `self`.
+    static UpdateLoop* loadKickedFor = nullptr;
+    if (loadKickedFor != self && ll->m_nextLoop) {
+        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+        float revealAlpha = UIFade::GetCurrentAlpha(ui);   // 1=black -> 0=revealed
+        int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
+            ? *g_Timer_ticksPerSecond / 4 : 0;             // 0.25s safety cap
+        bool revealed = (revealAlpha < 0.5f);
+        bool timedOut = (revealCap && ll->m_elapsedTicks >= revealCap);
+        if (revealed || timedOut) {
+            loadKickedFor = self;
+            // The new-game world build (GameUpdateLoop::Load) is multi-second.
+            // Run it on a WORKER thread so the main thread keeps animating the
+            // loading screen + cycling tips (the worldReady gate below holds the
+            // transition until it finishes). Without forceThreaded the default is
+            // a synchronous main-thread load — fine for the small boot splashes,
+            // but with BANISHED_GAME_PRELOAD on the main thread wins the build
+            // race and freezes for ~6s. For the boot splashes (not the game loop)
+            // stay synchronous.
+            bool isGameLoop =
+                (g_GameUpdateLoop_Vtable &&
+                 *reinterpret_cast<void**>(ll->m_nextLoop) ==
+                     reinterpret_cast<void*>(g_GameUpdateLoop_Vtable));
+            // Fix 2: show an initial random tip immediately.
+            SetRandomLoadingTip(ll);
+            *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58) = 0;
+            printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f -> kicking "
+                   "deferred load of next=%p (gameLoop=%d, threaded=%d)\n",
+                   (void*)self, revealAlpha, (void*)ll->m_nextLoop,
+                   (int)isGameLoop, (int)isGameLoop);
+            AsyncLoader::StartAsyncLoad(ll->m_nextLoop, /*forceThreaded=*/isGameLoop);
+        } else {
+            // Still revealing the loading screen — keep animating, do not advance
+            // to the load or the fade-out yet.
+            return true;
+        }
+    }
+
+    // ---- Fix 2: cycle the loading tip every ~2s while the screen animates ----
+    // Retail FUN_140098DA0 drives this off the self+0xB58 timer at DAT_140172174
+    // (= 2.0s). Visible today only during the post-load hold; becomes continuous
+    // once the world build is chunked across frames (Fix 3).
+    if (loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0) {
+        int64_t* tipTimer =
+            reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58);
+        *tipTimer += dt->ticks;
+        if (*tipTimer >= *g_Timer_ticksPerSecond * 2) {   // 2.0s
+            *tipTimer = 0;
+            SetRandomLoadingTip(ll);
+        }
+    }
+
+    // Hold the loading screen until (a) the minimum display time elapsed AND
+    // (b) for the new-game path, the world build has finished. Retail keeps the
+    // loading screen up for the ENTIRE GameUpdateLoop::Load (the build runs on a
+    // background thread) and only fades the game in — with citizens already
+    // mid-path — once it's done. Without (b) we'd fade to black and transition
+    // into GameUpdateLoop while it is still building, drawing a half-built world.
+    // For every other loop (boot splashes -> MenuDLT) worldReady stays true and
+    // the transition is purely time-based, exactly as before.
+    bool worldReady = true;
+    if (ll->m_nextLoop && g_GameUpdateLoop_Vtable &&
+        *reinterpret_cast<void**>(ll->m_nextLoop) ==
+            reinterpret_cast<void*>(g_GameUpdateLoop_Vtable)) {
+        worldReady = GameUpdateLoop_IsWorldBuilt(ll->m_nextLoop);
+    }
+
     // Once the splash hold elapses, kick off the fade-OUT (to opaque black)
     // and wait one extra tick before transitioning. Mirrors the original
     // FUN_140098DA0 (LoaderLoop::Update) sequence.
-    if (ll->m_elapsedTicks >= ll->m_delayTicks) {
+    if (ll->m_elapsedTicks >= ll->m_delayTicks && worldReady) {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
 
         static UpdateLoop* fadeOutInitiatedFor = nullptr;

@@ -714,6 +714,22 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
 // ============================================================
 // GameUpdateLoop::Load (0x140096b00) — orchestration
 // ============================================================
+
+// World-build completion signal. GameUpdateLoop::Load runs on whichever thread
+// wins the single-owner race (our main-thread AsyncLoader OR the Runtime loader
+// thread spawned inside fn_DialogLoaderLoopT_Startup). The loading-screen loop
+// (splash_loop_stubs.cpp) polls GameUpdateLoop_IsWorldBuilt(next) to hold the
+// loading screen up until the build genuinely finishes, so GameUpdateLoop::Draw
+// never renders a half-built world (torn scene reads) and the screen shows a
+// real loading screen + tips for the whole build, like retail. Distinct from the
+// s_loadingLoop *ownership* guard below (which is set at build START).
+static std::atomic<void*> s_worldBuiltLoop{nullptr};
+
+extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop) {
+    return loop != nullptr &&
+           s_worldBuiltLoop.load(std::memory_order_acquire) == loop;
+}
+
 extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // Single-owner build guard. The loop's Load (+0x30) is dispatched TWICE,
     // concurrently, on the SAME GameUpdateLoop (confirmed 2026-06-17, two distinct
@@ -1197,6 +1213,12 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             fn_Audio_Scene_Pause(aScene, 2, false);
         }
     }
+
+    // Publish the completion signal LAST, after every subsystem + the world are
+    // fully built, so GameUpdateLoop_IsWorldBuilt only returns true once the loop
+    // is safe to transition into and draw. release-store pairs with the acquire
+    // load in the poller.
+    s_worldBuiltLoop.store(loopVoid, std::memory_order_release);
 
     fprintf(stderr, "[GUL::Load] EXIT — world built: game=%p ui=%p entityList=%p scene=%p sun=%p\n",
             *(void**)(p + 0xF8), *(void**)(p + 0x98), *(void**)(p + 0xE8),
