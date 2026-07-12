@@ -298,6 +298,15 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
     void* obj = *reinterpret_cast<void**>(taskIBP);
     uint32_t ciTid = g_TypeId_CitizenAIComponent_FC ? *g_TypeId_CitizenAIComponent_FC : 0;
+#ifdef STANDALONE_EXE
+    // The IsA gate reads DWORD_1401c7158 (== g_TypeId_CitizenAIComponent_FC, actually the
+    // CitizenComponent type-id — see citizenui.cpp:794). That raw .rdata global is null in
+    // the standalone exe unless some other path (e.g. the citizen UI dialog) has already
+    // healed it, so heal it here too — otherwise ciTid==0 makes CanStartWork bail (return 0)
+    // and every registered haul task is judged invalid, driving the enqueue↔invalidate reset
+    // loop that stops any construction haul from completing.
+    if (!ciTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CitizenComponent"); ciTid = v; }
+#endif
     if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
@@ -309,6 +318,15 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
 
     uint32_t completeTaskTid = 0;
     if (uint32_t* pCT = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5e50))) completeTaskTid = *pCT;
+#ifdef STANDALONE_EXE
+    // 0x1401c5e50 == CompleteTask TypeInfo (decomp/application.md). Raw .rdata type-id
+    // globals resolve to NULL in the standalone exe, so completeTaskTid stays 0 and the
+    // IsDerivedFrom(elem, completeTaskTid) below can NEVER recognise the CompleteTask node
+    // the haul chain pushed onto the citizen — CanStartWork then returns 0 for a citizen
+    // that IS validly hauling, and GatherRawMaterials::Update invalidates+removes it every
+    // tick (the enqueue↔reset loop). Heal via the runtime type registry by name.
+    if (!completeTaskTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CompleteTask"); completeTaskTid = v; }
+#endif
     int wantId = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x20);
 
     for (int i = 0; i < count; i++) {

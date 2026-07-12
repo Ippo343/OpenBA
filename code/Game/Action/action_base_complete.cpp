@@ -32,6 +32,18 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+static bool ACT_Trace() {
+    static int t = -1;
+    if (t < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return t == 1;
+}
 
 namespace {
 
@@ -93,6 +105,9 @@ static void* FindTaskNode(uintptr_t taskMgr, int taskIdx) {
 bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
                                 void* targetRef, uint32_t taskParam) {
     void* node = FindTaskNode(reinterpret_cast<uintptr_t>(taskMgr), taskIdx);
+    if (ACT_Trace())
+        std::fprintf(stderr, "[BuildTrace] TryCompleteTask taskMgr=%p taskIdx=%d taskParam=0x%x -> node=%p\n",
+                     taskMgr, taskIdx, (unsigned)taskParam, node);
     if (node == nullptr) return false;
 
     void* ibp = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(node) + 0x8);
@@ -104,6 +119,9 @@ bool ActCt_TryCompleteTask_8760(void* taskMgr, void* entityRef, int taskIdx,
     typedef uint64_t (*vfn_t)(void* self, void* a, void* b, uint32_t p);
     vfn_t vf = *reinterpret_cast<vfn_t*>(*owner + 0x30);
     uint64_t r = vf(owner, &entityCopy, &targetCopy, taskParam);
+    if (ACT_Trace())
+        std::fprintf(stderr, "[BuildTrace] TryCompleteTask -> owner=%p OnComplete returned 0x%llx\n",
+                     (void*)owner, (unsigned long long)r);
     return (r & 0xff) != 0;
 }
 

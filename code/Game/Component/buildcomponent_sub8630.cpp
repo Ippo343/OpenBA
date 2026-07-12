@@ -31,10 +31,25 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #endif
+
+// Gated per-material delivered/required dump (BANISHED_BUILD_TRACE). Confirms whether
+// the demo-site StorageComponent physically RECEIVES hauled wood (delivered climbs)
+// vs the haul enqueue↔cancel loop where nothing sticks. Diagnostic only.
+static bool BC8630_Trace() {
+    static int t = -1;
+    if (t < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        t = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return t == 1;
+}
 
 // Entity_FindComponent_Storage @ 0x140006270 — returns the site StorageComponent
 // (type-id 0x1401c7e78) into the retIBP buffer. Registered in standalone
@@ -118,6 +133,21 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp) {
         }
 
         int required = costQty * multiplier;
+        // Trace ONLY when the delivered amount CHANGES (this gate is polled every frame in
+        // state 1; an unthrottled per-frame fflush floods the log and stalls the game while
+        // the site waits for materials). Keyed by (buildComp,slot) so each site's progress
+        // still shows, without the per-frame spam.
+        if (BC8630_Trace() && i < 8) {
+            static const void* s_lastSite[8] = {nullptr};
+            static int s_lastDelivered[8] = {-1};
+            if (s_lastSite[i] != buildComp || s_lastDelivered[i] != delivered) {
+                s_lastSite[i] = buildComp;
+                s_lastDelivered[i] = delivered;
+                std::fprintf(stderr, "[BuildTrace] HaveAllMaterials site=%p storage=%p mat[%d] type=%p delivered=%d required=%d (costQty=%d mult=%d)%s\n",
+                             buildComp, (void*)storage, i, matType, delivered, required, costQty, multiplier,
+                             delivered < required ? " SHORT" : " OK");
+            }
+        }
         if (delivered < required)
             return false;   // this material is not fully delivered yet
     }
