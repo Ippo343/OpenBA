@@ -153,12 +153,29 @@ struct Dispatcher {
         if (!h) return 0;
         return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
     }
-    // slot 4 (+0x20): Update — dispatch table[idx].updateHandler(node+0x18)
-    static char Update(void* node, void* /*sm*/, int idx) {
+    // slot 1 (+0x08): RequestTransition(node, curIdx, int* pDesiredStateId) -> transIdx / -1
+    // The state handlers call this to request a transition: it searches the CURRENT
+    // state's registered transition list for one whose targetId == *pDesired and returns
+    // that transition's index (which StateMachine::Tick later feeds to OnState/slot28 to
+    // run the transition action). Mirrors the exe node slot +0x08 dispatcher. It does NOT
+    // remap *pDesired for this table (transition targetIds are literal state ids).
+    static int RequestTransition(void* /*node*/, int curIdx, int* pDesired) {
+        if (!pDesired || curIdx < 0 || curIdx >= table.count) return -1;
+        const StateEntry& e = table.entries[curIdx];
+        int desired = *pDesired;
+        for (int i = 0; i < e.transitionCount; ++i)
+            if (e.transitions[i].targetId == desired) return i;
+        return -1;
+    }
+    // slot 4 (+0x20): Update — dispatch table[idx].updateHandler(node+0x18, sm)
+    // Like Enter, the exe update dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`
+    // preserving RDX=sm (bug-class #6), so real update handlers (e.g. sub_81e0/sub_76e0)
+    // receive (controller-data, sm) and use sm to request state transitions.
+    static char Update(void* node, void* sm, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].updateHandler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*)>(h)(NodeData(node));
+        return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
     }
     // slot 5 (+0x28): OnState — table[actIdx].transitions[trIdx].handler(node+0x18)
     static void OnState(void* node, void* /*sm*/, int actIdx, int trIdx) {
@@ -175,12 +192,18 @@ struct Dispatcher {
         if (!h) return 0;
         return reinterpret_cast<char (*)(void*)>(h)(NodeData(node));
     }
-    // slot 7 (+0x38): Transition — dispatch table[idx].trans38Handler(node+0x18)
-    static char Trans38(void* node, void* /*sm*/, void* /*time*/, int idx) {
+    // slot 7 (+0x38): DrawAlt — dispatch table[idx].trans38Handler(node+0x18, sm)
+    // ⚠ This is the PER-FRAME handler. StateMachineComponent::Update calls
+    // StateMachine::Tick(sm, time, useAltDraw=1, doDraw=1) every frame, and Tick's
+    // DRAW phase (useAltDraw=1) invokes node slot +0x38 every frame — whereas the
+    // UPDATE phase (slot +0x20) only runs when a transition is pending. So the real
+    // per-tick state work (BuildDescription sub_76e0/sub_81e0 proportional build +
+    // transition-request) lives in the trans38Handler, and it receives (data, sm).
+    static char Trans38(void* node, void* sm, void* /*time*/, int idx) {
         if (idx < 0 || idx >= table.count) return 0;
         void* h = table.entries[idx].trans38Handler;
         if (!h) return 0;
-        return reinterpret_cast<char (*)(void*)>(h)(NodeData(node));
+        return reinterpret_cast<char (*)(void*, void*)>(h)(NodeData(node), sm);
     }
     // Any other slot (dtor/GetTypeId/Serialize/…) — safe no-op.
     static void* Stub(void*, ...) { return nullptr; }
@@ -189,6 +212,7 @@ struct Dispatcher {
         if (vtbl[0] == nullptr) {
             for (int i = 0; i < 16; ++i) vtbl[i] = reinterpret_cast<void*>(&Stub);
             vtbl[0] = reinterpret_cast<void*>(&Step);
+            vtbl[1] = reinterpret_cast<void*>(&RequestTransition);
             vtbl[3] = reinterpret_cast<void*>(&Enter);
             vtbl[4] = reinterpret_cast<void*>(&Update);
             vtbl[5] = reinterpret_cast<void*>(&OnState);
@@ -200,5 +224,32 @@ struct Dispatcher {
 };
 template <class Tag> StateTable Dispatcher<Tag>::table = {};
 template <class Tag> void*      Dispatcher<Tag>::vtbl[16] = {};
+
+// Request a state transition from a ported state handler, replicating the exe idiom:
+//   int d=desiredStateId; int i = node->slot08(node, sm->index, &d);
+//   if (i>=0) { sm[+0xb]=i (transition index); sm[+0xa]=d (pending state id); }
+// The SM object layout: +0x00 cur-node, +0x09 current node-local index (int8),
+// +0x0a pending state id (int8), +0x0b transition-target index (int8). StateMachine::Tick
+// picks up +0x0a/+0x0b on its next pass to run the transition action and enter the target.
+// (The exe first runs a nested Tick when sm->index < 0; we instead bail — RequestTransition
+// bounds-checks curIdx, so a <0 index simply defers the request one tick.)
+inline void RequestStateTransition(void* sm, int desiredStateId) {
+    if (!sm) return;
+    uint8_t* s = reinterpret_cast<uint8_t*>(sm);
+    void* node = *reinterpret_cast<void**>(s + 0x00);
+    if (!node) return;
+    void* vt = *reinterpret_cast<void**>(node);
+    if (!vt) return;
+    typedef int (*RT_t)(void*, int, int*);
+    RT_t rt = *reinterpret_cast<RT_t*>(reinterpret_cast<uint8_t*>(vt) + 0x08);
+    if (!rt) return;
+    int curIdx = *reinterpret_cast<int8_t*>(s + 0x09);
+    int desired = desiredStateId;
+    int idx = rt(node, curIdx, &desired);
+    if (idx >= 0) {
+        *reinterpret_cast<int8_t*>(s + 0x0b) = static_cast<int8_t>(idx);
+        *reinterpret_cast<int8_t*>(s + 0x0a) = static_cast<int8_t>(desired);
+    }
+}
 
 }  // namespace ControllerLive

@@ -100,6 +100,70 @@ static bool BCS1_Trace() {
     return s_bcs1_trace == 1;
 }
 
+// ---- Construction-demo gating (standalone) ---------------------------------------
+// StartTown force-completes every start-town building (advances its ModelComponent to
+// the final construction sub-mesh). Driving State1Enter on such a building would RESET
+// its storage (f090 resize + accept-mask), blanking finished houses. To keep the build
+// pipeline testable without that damage we (a) seed ONE genuine foundation as the demo
+// site and (b) skip everything else. `g_pConstructionDemoSite` (set by StartTown) is the
+// BuildComponent of that one foundation; when non-null, ONLY it is driven. When it is
+// null (no demo seeded) we still skip buildings whose model is already complete.
+extern "C" { void* g_pConstructionDemoSite = nullptr; }
+
+#ifdef STANDALONE_EXE
+// Best-effort completion check: a force-completed building has its ModelComponent build
+// variant (+0x166) at the final sub-mesh of a multi-stage group; a genuine foundation
+// sits at variant 0. Foundation / single-mesh buildings -> false (i.e. "build me").
+static bool BCS1_IsModelComplete(uintptr_t buildComp) {
+    if (fn_InternalBasePtr_CheckPtr)
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(buildComp + 0x10));
+    uintptr_t entity = *reinterpret_cast<uintptr_t*>(buildComp + 0x10);
+    if (!entity) return false;
+    uint32_t tidModel = ::Object::GetTypeIdByName("ModelComponent");
+    if (!tidModel) return false;
+    int count = *reinterpret_cast<int*>(entity + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    if (!arr) return false;
+    void* model = nullptr;
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        typedef uint32_t (*GT_t)(void*);
+        uint32_t t = ((GT_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+        if (t == tidModel) { model = comp; break; }
+    }
+    if (!model) return false;
+    uint8_t* m = reinterpret_cast<uint8_t*>(model);
+    int16_t modelVariant = *reinterpret_cast<int16_t*>(m + 0x166);
+    if (modelVariant <= 0) return false;                      // foundation / not advanced
+    int16_t variantIdx = *reinterpret_cast<int16_t*>(m + 0x164);
+    void* modelDesc = *reinterpret_cast<void**>(m + 0x18);
+    if (!modelDesc) return true;                              // advanced but no desc -> treat complete
+    void* groupArray = *reinterpret_cast<void**>((uint8_t*)modelDesc + 0x20);
+    uint32_t groupCount = *reinterpret_cast<uint32_t*>((uint8_t*)modelDesc + 0x28);
+    if (!groupArray || variantIdx < 0 || (uint32_t)variantIdx >= groupCount) return true;
+    int subCount = *reinterpret_cast<int32_t*>((uint8_t*)groupArray +
+                        (int64_t)variantIdx * 0x18 + 0x10);
+    return (subCount > 1 && modelVariant >= subCount - 1);
+}
+
+// Shared construction-demo gate. Returns true if this BuildComponent must NOT be driven
+// through the construction state machine (State1Enter / State1Update / state-8 handlers):
+//   * the seeded demo foundation -> drive it (false);
+//   * any other building when a demo site is registered -> skip (drive ONLY the demo);
+//   * any completed building (model at final sub-mesh) when no demo -> skip.
+// This must gate the PER-FRAME handlers too (State1Update), not just State1Enter — else a
+// completed building's node self-advances 1->8->2 and its finalize clobbers finished storage.
+extern "C" bool BuildComponent_DemoGateSkip(void* buildComp) {
+    if (!buildComp) return false;
+    if (g_pConstructionDemoSite && buildComp == g_pConstructionDemoSite) return false;
+    if (g_pConstructionDemoSite != nullptr) return true;
+    return BCS1_IsModelComplete(reinterpret_cast<uintptr_t>(buildComp));
+}
+#endif
+
 // The state-1 ENTER handler. param1 = BuildComponent, param2 = state-machine node.
 extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     uintptr_t self = reinterpret_cast<uintptr_t>(buildComp);
@@ -131,6 +195,17 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         s_storageResize = reinterpret_cast<BCS1_StorageResize_t>(ResolveAddr(Module::Exe, 0x14000f090));
         s_res = true;
     }
+
+#ifdef STANDALONE_EXE
+    // ---- Construction-demo gate (see g_pConstructionDemoSite header note) ----------
+    // Must run BEFORE any mutation (multiplier write / model reset / storage reset).
+    if (BuildComponent_DemoGateSkip(buildComp)) {
+        if (BCS1_Trace())
+            std::fprintf(stderr, "[BuildTrace] State1Enter SKIP self=%p (demoSite=%p)\n",
+                         buildComp, g_pConstructionDemoSite);
+        return 1;
+    }
+#endif
 
     // +0x4c = 1 (default multiplier)
     *reinterpret_cast<uint32_t*>(self + 0x4c) = 1;

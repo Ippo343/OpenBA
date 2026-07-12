@@ -502,21 +502,35 @@ void BuildComponent_InitFuncs() {
 namespace { struct BuildCtrlTag {}; }
 using BuildCtrlDispatch = ::ControllerLive::Dispatcher<BuildCtrlTag>;
 
-// state-1 enter handler (BuildDescription_helper_8290) — the construction spawner.
-extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode);
+// Ported state handlers (buildcomponent_state1.cpp / buildcomponent_state8.cpp).
+extern "C" int  BuildComponent_State1Enter(void* buildComp, void* smNode);   // sub_8290 (slot +0x18)
+extern "C" char BuildComponent_State1Update(void* buildComp, void* sm);      // sub_81e0 (slot +0x38, per-frame)
+extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm);       // sub_7ae0 (slot +0x18)
+extern "C" char BuildComponent_State8Update(void* buildComp, void* sm);      // sub_76e0 (slot +0x38, per-frame)
+extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm);     // sub_7600 (slot +0x20, exit-transition)
+extern "C" char BuildComponent_State8To2Action(void* buildComp);             // sub_75e0 (slot +0x28, 8->2 action)
 
+// Table field->node-slot mapping (see controller_state_table.h + buildcomponent_state8.cpp):
+//   enterHandler (arg2) -> slot +0x18 Enter        (on state entry)
+//   trans38Handler(arg4) -> slot +0x38 DrawAlt     (PER-FRAME; altDraw=1 every frame)
+//   updateHandler(arg5) -> slot +0x20 Update       (only when a transition is pending)
+//   transition handler   -> slot +0x28 OnState     (the 8->2 action)
+// TableRegisterState(t, id, enterH, trans30H, trans38H, updateH):
 static void BuildComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = BuildCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
-    // sub_f500(1, enter, trans30, trans38=setup, update)
-    // state-1 enter = the real ported spawner (site-register + storage-config + gather work).
+    // state 1: enter=State1Enter (spawner); per-frame=State1Update (materials -> req 8).
     TableRegisterState(t, 1, reinterpret_cast<void*>(&BuildComponent_State1Enter),
-                       nullptr, nullptr, nullptr);
+                       nullptr, reinterpret_cast<void*>(&BuildComponent_State1Update), nullptr);
     TableAddTransition(t, 8, nullptr);
     TableAddTransition(t, 3, nullptr);
-    TableRegisterState(t, 8, nullptr, nullptr, nullptr, nullptr);
-    TableAddTransition(t, 2, nullptr);
+    // state 8: enter=State8Enter (mesh reset); per-frame=State8Update (progress -> frames,
+    //          complete -> req 2); exit-transition=State8OneShot; 8->2 action=Finalize.
+    TableRegisterState(t, 8, reinterpret_cast<void*>(&BuildComponent_State8Enter),
+                       nullptr, reinterpret_cast<void*>(&BuildComponent_State8Update),
+                       reinterpret_cast<void*>(&BuildComponent_State8OneShot));
+    TableAddTransition(t, 2, reinterpret_cast<void*>(&BuildComponent_State8To2Action));
     TableAddTransition(t, 3, nullptr);
     TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);

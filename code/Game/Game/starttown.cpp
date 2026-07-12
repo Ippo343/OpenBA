@@ -768,6 +768,32 @@ static void StartTown_WireStorage(void* entity, int entryIdx) {
 static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
                                       int16_t variantIdx, int16_t modelVariant);
 
+// ── Construction-demo foundation (BANISHED_LIVE_BUILDCTRL) ────────────────────────
+// When the live BuildComponent state machine is on we leave exactly ONE start-town
+// building at its foundation mesh (skip the force-complete below) and record its
+// BuildComponent as g_pConstructionDemoSite. State1Enter then drives ONLY that site
+// through gather→build→complete, so no finished building's storage gets clobbered.
+// Index selectable via BANISHED_BUILD_DEMO_INDEX (default 0 = first structure).
+#ifdef STANDALONE_EXE
+extern "C" void* g_pConstructionDemoSite;
+static bool BuildDemoEnabled() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_BUILDCTRL");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
+static int BuildDemoIndex() {
+    static int idx = -2;
+    if (idx == -2) {
+        const char* e = std::getenv("BANISHED_BUILD_DEMO_INDEX");
+        idx = (e && e[0]) ? std::atoi(e) : 0;
+    }
+    return idx;
+}
+#endif
+
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -908,7 +934,14 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // standalone, so InitialStructure buildings would sit at the foundation mesh.
         // Mirror ComponentEntity_impl_1fc0: pick a random visual style (variantIdx via
         // the world RNG, like 1fc0) but force the LAST sub-mesh = the finished build.
-        {
+        //
+        // Construction-demo exception: the ONE demo foundation is left at its
+        // foundation mesh so State1Enter can drive it through the real build stages.
+        bool isDemoFoundation = false;
+#ifdef STANDALONE_EXE
+        isDemoFoundation = BuildDemoEnabled() && (i == BuildDemoIndex());
+#endif
+        if (!isDemoFoundation) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
                 uintptr_t mIBP = 0;
@@ -957,11 +990,22 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
         StartTown_PickMeshProbe((void*)entIBP);
 
-        // Brick M-D (BANISHED_LIVE_STORAGE): run the build-complete storage init
-        // + town storage-location registration for this fully-built building —
-        // retail's StorageLocationComponent OnAdded fires during RegisterEntity,
-        // so this sits right after it.
-        StartTown_WireStorage(entity, i);
+        if (isDemoFoundation) {
+            // Record this foundation as the construction-demo site. Its storage is
+            // configured for INPUT materials by State1Enter (not the finished-building
+            // OUTPUT init), so skip StartTown_WireStorage here.
+            void* bc = FindComponentOnEntity(entity, TypeId("BuildComponent"));
+            g_pConstructionDemoSite = bc;
+            fprintf(stderr, "[startTown::struct] [%d] DEMO FOUNDATION seeded "
+                    "entity=%p buildComp=%p (left at foundation mesh)\n", i, entity, bc);
+            fflush(stderr);
+        } else {
+            // Brick M-D (BANISHED_LIVE_STORAGE): run the build-complete storage init
+            // + town storage-location registration for this fully-built building —
+            // retail's StorageLocationComponent OnAdded fires during RegisterEntity,
+            // so this sits right after it.
+            StartTown_WireStorage(entity, i);
+        }
 #endif
 
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
