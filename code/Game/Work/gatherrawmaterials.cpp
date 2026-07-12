@@ -447,6 +447,12 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;
 
+    // Ensure the exe-helper function pointers are resolved. The factory path calls
+    // ResolveFuncs at construction, but the construction gather work is built via
+    // GatherRawMaterials_Ctor_Impl (state-1 spawner), which does not — leaving every
+    // s_fn_* NULL and the first `call *s_fn_FindComp_Position` faulting at RIP=0.
+    GatherRawMaterials_ResolveFuncs();
+
     // --- Find PositionComponent on work entity (self+0x10) ---
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
     uintptr_t posCompIBP = 0;

@@ -398,6 +398,9 @@ extern void RegisterTownWorkplaceReader();
 extern "C" void RegisterBuildComponentState1();
 extern "C" void RegisterBuildComponentSub8630();
 extern "C" void RegisterGatherRawMaterialsCtor();
+// Construction 2b/2c — CitizenAI work-scheduler AVL insert (ec60 + 88a0), the post
+// chokepoint for gather haul + build labor. Body: code/Game/Component/citizenai_work_scheduler.cpp.
+extern "C" void RegisterCitizenAIWorkScheduler();
 // Work registration wave (2026-06-18) — shared base-helper sub-batch.
 // reg file: standalone/reg_work_base.cpp ; bodies: code/Game/Work/work_base_reimpl.cpp.
 extern void RegisterWorkBaseBatch();
@@ -521,6 +524,7 @@ static void RegisterCodeFunctions() {
     RegisterBuildComponentState1();
     RegisterBuildComponentSub8630();
     RegisterGatherRawMaterialsCtor();
+    RegisterCitizenAIWorkScheduler();
 
     // Work registration wave — shared base helpers (FindComponent family + tree free).
     RegisterWorkBaseBatch();

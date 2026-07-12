@@ -32,6 +32,9 @@ extern uint8_t WorkBase_ValidateTask_f7100(void*, void*, void*, void**);    // 0
 extern int      WorkBase_CalcDistance_8830(int*, uint32_t, uint32_t);              // 0x140008830
 extern uint64_t WorkBase_ValidateCell_a00f0(int*, uint32_t, uint32_t, int);        // 0x1400a00f0
 
+// Shared Work base constructor (work_base_reimpl.cpp) — void* fn(self, entityIBP)
+extern void*    Work_Ctor25_Impl(void*, void*);                                    // 0x1400f72e0
+
 void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x140002ed0, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_2ed0));
     RegisterExeAddr(0x140002f90, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_2f90));
@@ -45,5 +48,6 @@ void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x1400f7100, reinterpret_cast<uintptr_t>(&WorkBase_ValidateTask_f7100));
     RegisterExeAddr(0x140008830, reinterpret_cast<uintptr_t>(&WorkBase_CalcDistance_8830));
     RegisterExeAddr(0x1400a00f0, reinterpret_cast<uintptr_t>(&WorkBase_ValidateCell_a00f0));
+    RegisterExeAddr(0x1400f72e0, reinterpret_cast<uintptr_t>(&Work_Ctor25_Impl));
 }
 #endif

@@ -18,6 +18,10 @@
 #include <cstdint>
 #include <cmath>
 
+#ifdef STANDALONE_EXE
+namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
+#endif
+
 // ============================================================
 // FindComponent family
 // ============================================================
@@ -71,6 +75,15 @@ static void EnsureTypeIds() {
     s_pTid_3050 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
     s_pTid_52c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
     s_pTid_6270 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
+#ifdef STANDALONE_EXE
+    // Raw .rdata type-id globals are NULL in standalone; fall back to the runtime type
+    // registry so these FindComponent helpers actually match (else they return null and
+    // callers deref null). Names verified from decomp/application.md TypeInfo column.
+    static uint32_t v_2ed0, v_3050, v_6270;
+    if (!s_pTid_2ed0) { v_2ed0 = ::Object::GetTypeIdByName("InteractComponent"); s_pTid_2ed0 = &v_2ed0; }
+    if (!s_pTid_3050) { v_3050 = ::Object::GetTypeIdByName("WorkComponent");      s_pTid_3050 = &v_3050; }
+    if (!s_pTid_6270) { v_6270 = ::Object::GetTypeIdByName("StorageComponent");   s_pTid_6270 = &v_6270; }
+#endif
     s_tidInit = true;
 }
 
@@ -102,6 +115,68 @@ void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP) {
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
     EnsureTypeIds();
     return FindComponentByTypeId(entity, retIBP, s_pTid_6270);
+}
+
+// ============================================================
+// Work_Ctor25 (0x1400f72e0) — the shared Work base constructor.
+// ============================================================
+// Object::Internal::Internal(self); vtable = vtable_Work (0x1401612e0); +0x10 = entity
+// ptr (from *param2); sentinels +0x20/+0x28 = -1; and when an entity is present, compute
+// the work target cell (+0x28) from its MapComponent footprint (via FUN_140004680) and
+// store its WorkComponent (+0x18, via FUN_140003050). Faithful 1:1 port.
+//
+// NOT registered before: works built via the factory use Work_GenericCtor, but direct
+// Ctor ports (e.g. GatherRawMaterials_Ctor_Impl) call 0x1400f72e0 — NULL in standalone —
+// leaving the Work base (incl. the +0x10 entity ptr) uninitialised, so Execute later
+// deref'd *(work+0x10)=null. Registering this fixes those direct-construction paths.
+void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
+    uintptr_t vtWork = ResolveAddr(Module::Exe, 0x1401612e0);
+    if (vtWork) *reinterpret_cast<uintptr_t*>(s) = vtWork;
+
+    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x10) = pEntityIBP ? *reinterpret_cast<uint64_t*>(pEntityIBP) : 0;
+    *reinterpret_cast<uint64_t*>(s + 0x18) = 0;
+    *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
+    *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
+    *reinterpret_cast<uint32_t*>(s + 0x28) = 0xffffffff;
+    *reinterpret_cast<uint32_t*>(s + 0x2c) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
+    *reinterpret_cast<uint32_t*>(s + 0x40) = 0;
+
+    if (*reinterpret_cast<uint64_t*>(s + 0x10) != 0) {
+        typedef void* (*Find_t)(uintptr_t, void*);
+        Find_t f4680 = reinterpret_cast<Find_t>(ResolveAddr(Module::Exe, 0x140004680));
+        uintptr_t tmp = 0;
+        if (f4680) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x10);
+            void* r = f4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &tmp);
+            if (r && *reinterpret_cast<uintptr_t*>(r) != 0) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(s + 0x10);
+                r = f4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &tmp);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(r);
+                uintptr_t comp = *reinterpret_cast<uintptr_t*>(r);
+                if (comp && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+                    uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+                    int* mapGrid = *reinterpret_cast<int**>(gw + 0xf8);
+                    int mapSize = mapGrid ? *mapGrid : 0;
+                    int16_t f2e = *reinterpret_cast<int16_t*>(comp + 0x2e);
+                    int16_t f2a = *reinterpret_cast<int16_t*>(comp + 0x2a);
+                    int16_t f2c = *reinterpret_cast<int16_t*>(comp + 0x2c);
+                    int16_t f28 = *reinterpret_cast<int16_t*>(comp + 0x28);
+                    *reinterpret_cast<int*>(s + 0x28) =
+                        (((int)f2e >> 1) + (int)f2a) * mapSize + (((int)f2c >> 1) + (int)f28);
+                }
+            }
+        }
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pEntityIBP);
+        void* r2 = WorkBase_FindComponent_3050(
+            pEntityIBP ? *reinterpret_cast<uintptr_t*>(pEntityIBP) : 0, &tmp);
+        if (r2) *reinterpret_cast<uint64_t*>(s + 0x18) = *reinterpret_cast<uint64_t*>(r2);
+    }
+    return self;
 }
 
 // ============================================================
