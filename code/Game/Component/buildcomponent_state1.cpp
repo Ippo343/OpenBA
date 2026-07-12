@@ -182,6 +182,9 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     static BCS1_PostWork_t     s_postEc60 = nullptr;
     static BCS1_FindStorage_t  s_findStorage = nullptr;
     static BCS1_StorageResize_t s_storageResize = nullptr;
+    // FUN_140002e10 FindComponent_WorkPlace(entity, retIBP) -> WorkPlaceComponent (0x1401c80e0).
+    // Same finder GRM Execute uses to gate the gather on the site's "accepting" flag (+0x50).
+    static BCS1_FindComp_t     s_findWpc2e10 = nullptr;
     static bool s_res = false;
     if (!s_res) {
         s_find4740    = reinterpret_cast<BCS1_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
@@ -193,6 +196,7 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         s_postEc60    = reinterpret_cast<BCS1_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
         s_findStorage = reinterpret_cast<BCS1_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
         s_storageResize = reinterpret_cast<BCS1_StorageResize_t>(ResolveAddr(Module::Exe, 0x14000f090));
+        s_findWpc2e10 = reinterpret_cast<BCS1_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
         s_res = true;
     }
 
@@ -336,6 +340,35 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
             if (BCS1_Trace())
                 std::fprintf(stderr, "[BuildTrace] storage configured: matCount=%d found=%d acceptMask=0x%x totalQty=%d multiplier=%d\n",
                              matCount, found, acceptMask, totalQty, multiplier);
+        }
+
+        // Enable the site's WorkPlaceComponent so citizens actually gather for it.
+        // GatherRawMaterials::Execute (0x1400ebe40) gates the whole haul on the site's
+        // WorkPlaceComponent (0x1401c80e0) "accepting" flag (+0x50): when 0 it returns
+        // immediately ("workplace disabled") and never searches for source storage. In
+        // retail that flag is set by the WorkPlaceComponent's own live lifecycle; in the
+        // standalone exe that component is inert, so +0x50 stays 0 and no construction
+        // haul ever runs. Set it here (construction-start) via the SAME finder GRM uses,
+        // reproducing the accepting state a live WorkPlaceComponent would hold. (The full
+        // WorkPlaceComponent_SetAccepting also drives a status-icon warning; only the
+        // gate-relevant +0x50 is reproduced here — the visual is deferred to the live WPC.)
+        if (s_findWpc2e10) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(self + 0x10));
+            uintptr_t wpcIbp = 0;
+            s_findWpc2e10(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpcIbp);
+            if (wpcIbp != 0) {
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpcIbp);
+                void* wpc = *reinterpret_cast<void**>(&wpcIbp);
+                if (wpc) {
+                    char prev = *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50);
+                    *reinterpret_cast<char*>(reinterpret_cast<uintptr_t>(wpc) + 0x50) = 1;
+                    if (BCS1_Trace())
+                        std::fprintf(stderr, "[BuildTrace] WorkPlaceComponent accepting enabled (wpc=%p +0x50 %d->1)\n",
+                                     wpc, (int)prev);
+                }
+            } else if (BCS1_Trace()) {
+                std::fprintf(stderr, "[BuildTrace] (no WorkPlaceComponent on site to enable)\n");
+            }
         }
     } else {
         // -------- Materials present / instant: force transition to state 8 --------

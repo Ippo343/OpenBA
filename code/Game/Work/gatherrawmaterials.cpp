@@ -160,6 +160,20 @@ static void** s_vtable_Work = nullptr;                 // 0x1401612e0
 
 static bool s_resolved = false;
 
+// Gated Execute-decision trace (BANISHED_BUILD_TRACE), to pinpoint where a construction
+// gather work bails before enqueuing a real town->site haul. Diagnostic only.
+#include <cstdlib>
+#include <cstring>
+static int s_grm_trace = -1;
+static bool GRM_Trace() {
+    if (s_grm_trace < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        s_grm_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return s_grm_trace == 1;
+}
+#define GRM_TRACEF(...) do { if (GRM_Trace()) { std::fprintf(stderr, "[GRMExec] " __VA_ARGS__); std::fflush(stderr); } } while (0)
+
 // ============================================================
 // Resolution -- called once during hook installation
 // ============================================================
@@ -452,6 +466,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     // GatherRawMaterials_Ctor_Impl (state-1 spawner), which does not — leaving every
     // s_fn_* NULL and the first `call *s_fn_FindComp_Position` faulting at RIP=0.
     GatherRawMaterials_ResolveFuncs();
+    GRM_TRACEF("ENTER self=%p entityIBP=%p\n", (void*)self, entityIBP);
 
     // --- Find PositionComponent on work entity (self+0x10) ---
     fn_InternalBasePtr_CheckPtr((void*)(selfAddr + 0x10));
@@ -476,6 +491,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
     void* wpExtIBP = s_fn_FindComp_WpExt(*(uintptr_t*)(descComp + 0x10), (void*)&param3);
     fn_InternalBasePtr_CheckPtr(wpExtIBP);
     if (*(char*)(*(uintptr_t*)wpExtIBP + 0x50) == '\0') {
+        GRM_TRACEF("BAIL: workplace disabled (wpExt+0x50==0)\n");
         return 1;  // Workplace disabled
     }
 
@@ -504,7 +520,9 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
 
     // --- Iterate material slots ---
     int numSlots = (int)selfQ[10]; // self->field_50 count
+    GRM_TRACEF("past wp-check; numSlots=%d citizenCell=%u\n", numSlots, citizenCell);
     if (numSlots < 1) {
+        GRM_TRACEF("BAIL: numSlots<1\n");
         return 1;
     }
 
@@ -523,8 +541,10 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
         // Check: buildCount[slotIdx] + field_48[slotIdx] < targetAmount
         int buildCount = *(int*)(intOffset + selfQ[0xb]);      // self->field_58[slotIdx]
         int assignCount = *(int*)(intOffset + selfQ[9]);        // self->field_48[slotIdx]
+        GRM_TRACEF("slot[%d] target=%d build=%d assign=%d\n", slotIdx, targetAmount, buildCount, assignCount);
         if (buildCount + assignCount >= targetAmount) {
             // This slot is already fulfilled
+            GRM_TRACEF("slot[%d] SKIP already-fulfilled\n", slotIdx);
             goto next_slot;
         }
 
@@ -542,8 +562,10 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 *(uint64_t*)(slotOffset + matDescBase), 1, '\0', searchPos,
                 (void*)&excludeIBP);
 
+            GRM_TRACEF("slot[%d] FindStorageForResource -> foundEntity=%p\n", slotIdx, (void*)foundEntity);
             if (foundEntity == 0) {
                 // No storage found for this slot
+                GRM_TRACEF("slot[%d] SKIP no-source-storage\n", slotIdx);
                 goto next_slot;
             }
 
@@ -571,8 +593,11 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                     remaining = remCapacity / carryWeight;
                 }
 
+                GRM_TRACEF("slot[%d] remaining(pre-clamp)=%d carryWeight=%d cap=%d stored=%d\n",
+                           slotIdx, remaining, carryWeight, capacity, currentStored);
                 if (remaining == 0) {
                     // Can't carry anything -- replan
+                    GRM_TRACEF("slot[%d] BAIL: remaining==0 -> LongTermPlan replan\n", slotIdx);
                     fn_InternalBasePtr_CheckPtr(entityIBP);
                     s_fn_LongTermPlan(*(void**)entityIBP);
                     return 2;
@@ -644,6 +669,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 }
 
                 if (found == 0) {
+                    GRM_TRACEF("slot[%d] BAIL: no target pos (found==0, posDesc=%p)\n", slotIdx, posDesc);
                     return 1;
                 }
 
@@ -662,7 +688,10 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 uint64_t validated = s_fn_ValidateWorkAssign(selfAddr, &citizenRef,
                     targetCell, citizenCell, (void*)param3);
 
+                GRM_TRACEF("slot[%d] validateWorkAssign=%d availAmt=%d remaining(clamped)=%d targetCell=%d\n",
+                           slotIdx, (int)(char)validated, availableAmount, remaining, targetCell);
                 if ((char)validated == '\0') {
+                    GRM_TRACEF("slot[%d] BAIL: validateWorkAssign failed\n", slotIdx);
                     return 0;
                 }
 
@@ -713,6 +742,8 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 int* buildCountPtr = (int*)(selfQ[0xb] + (int64_t)slotIdx * 4);
                 *buildCountPtr += remaining;
 
+                GRM_TRACEF("slot[%d] ENQUEUED HAUL remaining=%d buildCount->%d (return 2)\n",
+                           slotIdx, remaining, *buildCountPtr);
                 return 2;
             }
         }
@@ -722,6 +753,7 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
         slotOffset += 0x10;
     }
 
+    GRM_TRACEF("EXIT: no work enqueued (all slots skipped) return 1\n");
     return 1;  // No work found
 }
 
