@@ -328,17 +328,28 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
         // so the real target is 0. Substitute a nominal positive target (base effort, or
         // 120 frames) so the mesh progression + completion demonstrate visibly. Real
         // BuildStructure labor (2c) computes and raises the true target.
+        // Ramp budget in frames (~60fps): default 600 (~10s) so the rise is easy to watch.
+        // Override with BANISHED_BUILD_DEMO_FRAMES.
+        static int rampFrames = -1;
+        if (rampFrames < 0) {
+            const char* e = std::getenv("BANISHED_BUILD_DEMO_FRAMES");
+            rampFrames = (e && e[0]) ? std::atoi(e) : 600;
+            if (rampFrames < 1) rampFrames = 600;
+        }
         if (target <= 0) {
-            int base = matComp ? *reinterpret_cast<int32_t*>((uint8_t*)matComp + 0x30) : 0;
-            target = base > 0 ? base : 120;
+            // Real target = matComp[0x30] * bc[0x4c]; bc[0x4c] is 0 in SA (Draw stage 4
+            // copies it from the uninitialized WorkPlaceComponent+0x58). Drive the ramp
+            // over rampFrames instead so the mesh progression is clearly visible. Real
+            // BuildStructure labor (2c) computes and raises the true target.
+            target = rampFrames;
             static bool s_loggedTarget = false;
             if (BC8_Trace() && !s_loggedTarget) {
                 s_loggedTarget = true;
-                std::fprintf(stderr, "[BuildTrace] (force) target was 0 (bc+0x4c=%d matComp=%p base=%d) -> using %d for the ramp\n",
-                             *reinterpret_cast<int32_t*>(bc + 0x4c), matComp, base, target);
+                std::fprintf(stderr, "[BuildTrace] (force) target was 0 (bc+0x4c=%d matComp=%p) -> ramp over %d frames\n",
+                             *reinterpret_cast<int32_t*>(bc + 0x4c), matComp, rampFrames);
             }
         }
-        int inc = target / 60; if (inc < 1) inc = 1;
+        int inc = target / rampFrames; if (inc < 1) inc = 1;
         int p = *reinterpret_cast<int32_t*>(bc + 0x48) + inc;
         if (p > target) p = target;
         *reinterpret_cast<int32_t*>(bc + 0x48) = p;
