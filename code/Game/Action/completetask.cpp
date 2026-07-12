@@ -17,6 +17,10 @@
 #include <cstdlib>
 #include <cstring>
 
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
+#endif
+
 // Gated construction-haul completion trace (BANISHED_BUILD_TRACE). Pinpoints whether
 // the citizen's delivery ever reaches CompleteTask::AbstractImpl and whether the task
 // manager (gameState+0x118) is live enough to drive work->OnComplete. Diagnostic only.
@@ -73,32 +77,53 @@ bool CompleteTask_ResolveFuncs() {
     s_fn_TaskReassign = reinterpret_cast<void(*)(void*, void*, int, void*, uint32_t)>(
         ResolveAddr(Module::Exe, 0x1400f8800));
 
-    // TypeInfo addresses
+    // TypeInfo globals used ONLY by Serialize (defensive ref-type validation on load).
+    // These are raw .rdata addresses -> NULL in the standalone exe. Heal them by name so
+    // save/load validation still works, and — crucially — so they do NOT gate the exec
+    // paths below (AbstractImpl/CheckEntity/GetTarget never touch them).
     s_TypeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4218));
+#ifdef STANDALONE_EXE
+    static uint32_t s_healCitizen = 0, s_healCompEntity = 0;
+    if (!s_TypeId_1401c7158) {
+        s_healCitizen = ::Object::GetTypeIdByName("CitizenComponent");   // workEntity (+0x20)
+        s_TypeId_1401c7158 = &s_healCitizen;
+    }
+    if (!s_TypeId_ComponentEntity) {
+        s_healCompEntity = ::Object::GetTypeIdByName("ComponentEntity"); // targetEntity (+0x28)
+        s_TypeId_ComponentEntity = &s_healCompEntity;
+    }
+#endif
 
-    // Game state singleton
+    // Game state singleton (== g_pGameWorldSingleton; the task manager is *(this+0x118)).
     s_pGameState = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
 
-    bool ok = s_fn_IBP_Serialize && s_fn_TryCompleteTask && s_fn_TaskCleanup &&
-              s_fn_TaskReassign && s_TypeId_1401c7158 && s_TypeId_ComponentEntity &&
-              s_pGameState && fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
-              fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int && g_fn_Serializer_GetVersion;
+    // Exec-critical gate. The action methods (AbstractImpl/CheckEntity/GetTarget) must run
+    // whenever the task-manager BST helpers, the game-state singleton, and the shared
+    // InternalBasePtr ops are live — they never reference the Serialize-only pointers
+    // (IBP::Serialize dispatch slot + the raw .rdata type-ids + the IO::Serializer fns).
+    // Gating them on those Serialize deps is exactly what silently disabled the entire
+    // completion path in the standalone exe (both are null there), so the task manager
+    // was reachable for POST but never for complete/cancel.
+    bool execOk = s_fn_TryCompleteTask && s_fn_TaskCleanup && s_fn_TaskReassign &&
+                  s_pGameState && fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom &&
+                  fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    printf("[CompleteTask] ResolveFuncs: IBPSer=%p TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_TryCompleteTask,
+    bool serializeOk = s_fn_IBP_Serialize && s_TypeId_1401c7158 && s_TypeId_ComponentEntity &&
+                       g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
+                       g_fn_Serialize_Bool && g_fn_Serialize_Int && g_fn_Serializer_GetVersion;
+    printf("[CompleteTask] ResolveFuncs: execOk=%d serializeOk=%d IBPSer=%p TryComplete=%p TaskCleanup=%p TaskReassign=%p\n",
+           (int)execOk, (int)serializeOk, (void*)s_fn_IBP_Serialize, (void*)s_fn_TryCompleteTask,
            (void*)s_fn_TaskCleanup, (void*)s_fn_TaskReassign);
     printf("[CompleteTask]   TypeId1=%p TypeIdCE=%p GameState=%p\n",
            (void*)s_TypeId_1401c7158, (void*)s_TypeId_ComponentEntity,
            s_pGameState ? *s_pGameState : nullptr);
-    if (!ok) printf("[CompleteTask] ERROR: some function pointers not resolved!\n");
+    if (!execOk) printf("[CompleteTask] ERROR: exec-critical pointers not resolved!\n");
 #endif
 
-    s_funcs_resolved = ok;
-    return ok;
+    s_funcs_resolved = execOk;
+    return execOk;
 }
 
 // ============================================================
@@ -141,17 +166,20 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
     // Serialize entity refs + task fields (version 1)
     g_fn_Serializer_Ctor(ser2, stream, 1);
 
-    // Work entity ref (+0x20) with type validation
-    s_fn_IBP_Serialize(&self->workEntity, ser2);
-    if (self->workEntity != nullptr) {
+    // Work entity ref (+0x20) with type validation. The IBP::Serialize slot and the
+    // .rdata type-id may be unavailable in the standalone exe (Serialize-only deps, not
+    // part of the exec gate) — null-guard so a save/load can't hard-fault; validation is
+    // simply skipped when the type-id can't be resolved.
+    if (s_fn_IBP_Serialize) s_fn_IBP_Serialize(&self->workEntity, ser2);
+    if (self->workEntity != nullptr && s_TypeId_1401c7158 && *s_TypeId_1401c7158) {
         if (!fn_IsDerivedFrom(self->workEntity, *s_TypeId_1401c7158)) {
             self->workEntity = nullptr;
         }
     }
 
     // Target entity ref (+0x28) with type validation
-    s_fn_IBP_Serialize(&self->targetEntity, ser2);
-    if (self->targetEntity != nullptr) {
+    if (s_fn_IBP_Serialize) s_fn_IBP_Serialize(&self->targetEntity, ser2);
+    if (self->targetEntity != nullptr && s_TypeId_ComponentEntity && *s_TypeId_ComponentEntity) {
         if (!fn_IsDerivedFrom(self->targetEntity, *s_TypeId_ComponentEntity)) {
             self->targetEntity = nullptr;
         }
