@@ -41,6 +41,7 @@
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
+extern "C" void* g_pBuildStructureWork = nullptr;                    // 2c-B probe: last spawned build work
 extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108d40 mesh-list fill
 extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp 1-arg ctor (0x1400e5a90)
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim); // full ctor (0x1400e59c0)
@@ -330,6 +331,18 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                 bsWork = BuildStructure_CreateInPlaceFull(mem, &siteEnt, 0);
             }
             if (bsWork) {
+                g_pBuildStructureWork = bsWork;   // 2c-B probe: correlate with 7b60 claim walk
+                if (BC8_Trace() && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+                    // 2c-B probe: the scheduler per-entity tree keys the build work under
+                    // BuildStructure::GetTarget = *(*(gw+0xb0)+0x38); the idle claim walk C looks
+                    // up *(*(gw+0xb0)+0x30) (gather's key). If +0x38 differs / is null, no idle
+                    // citizen reaches the build work.
+                    uintptr_t pc = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xb0);
+                    void* key30 = pc ? *reinterpret_cast<void**>(pc + 0x30) : nullptr;
+                    void* key38 = pc ? *reinterpret_cast<void**>(pc + 0x38) : nullptr;
+                    std::fprintf(stderr, "[BuildTrace] BuildTarget keys: gw+0xb0=%p +0x30(gather)=%p +0x38(build)=%p %s\n",
+                                 (void*)pc, key30, key38, key30 == key38 ? "SAME" : "DIFFER");
+                }
                 uintptr_t bsIBP = 0;
                 if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&bsIBP, bsWork);
                 // find the site WorkComponent (c8070) the work posts under

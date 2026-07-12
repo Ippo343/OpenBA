@@ -83,6 +83,9 @@
 #include <cstdio>
 #include <cstdlib>
 
+// 2c-B probe: the last BuildStructure work spawned by State8Enter (buildcomponent_state8.cpp).
+extern "C" void* g_pBuildStructureWork;
+
 namespace {
 
 // --- registered exe sub-callees ---
@@ -490,6 +493,13 @@ uint8_t Helper_sub_7b60(int64_t param_1, void** param_2, int64_t* param_3) {
             vt = *reinterpret_cast<void***>(payload);
             typedef uint32_t (*fn20_t)(int64_t self, int64_t* citizenHolder, int64_t ctxArg);
             uint32_t r = reinterpret_cast<fn20_t>(vt[0x20 / 8])(payload, &citizen, param_1 + 0x130);
+            // 2c-B probe: did the idle claim walk reach the spawned BuildStructure work?
+            if (g_pBuildStructureWork && reinterpret_cast<void*>(payload) == g_pBuildStructureWork) {
+                const char* e = getenv("BANISHED_BUILD_TRACE");
+                if (e && e[0] && e[0] != '0')
+                    fprintf(stderr, "[BuildTrace] 7b60 CLAIM-WALK reached BUILD work=%p Execute ret=%d citizen=%p\n",
+                            g_pBuildStructureWork, static_cast<int>(r), reinterpret_cast<void*>(citizen));
+            }
             if (static_cast<int>(r) == 2) return 1;
             if (static_cast<int>(r) == 1) {
                 CheckPtr(reinterpret_cast<void*>(cur));
@@ -587,7 +597,13 @@ uint64_t Helper_sub_79b0(int64_t param_1, void** param_2, void** param_3, int64_
     if (tryCommon && ret == 0) {
         // LAB_1400f7a89: build with a FRESH empty IBP as the skip-key holder (no skip filter),
         // but only when the citizen's "remember" flag (local_res20+0x4c) is set OR param_6.
-        if ((*reinterpret_cast<char*>(local_res20 + 0x4c) != '\0') || (param_6 != '\0')) {
+        // SA-invariant guard: retail reads *(local_res20+0x4c) unconditionally because param_4
+        // (the owner/target key) is never null at this idle-walk point. In the standalone exe a
+        // citizen occasionally reaches State_Idle with a null owner key (citizen+0x1f0 == 0, not
+        // yet home-assigned), so local_res20 can be 0 -> READ of 0x4c crash. Treat a null key as
+        // "no remembered target" (remember flag unset); the common walk still runs when param_6.
+        // TODO(2c-B follow-up): root-cause why some SA citizens have citizen+0x1f0 == 0.
+        if ((local_res20 != 0 && *reinterpret_cast<char*>(local_res20 + 0x4c) != '\0') || (param_6 != '\0')) {
             int64_t freshIbp[2] = {0, 0};
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(freshIbp, nullptr);
             uint8_t hit = BuildAndWalk(freshIbp[0]);
