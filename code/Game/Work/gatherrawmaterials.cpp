@@ -25,6 +25,10 @@
 #include <cstdint>
 #include <cstring>
 
+#ifdef STANDALONE_EXE
+namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
+#endif
+
 // ============================================================
 // Local function pointers resolved at init time
 // (only those NOT already declared in engine_funcs.h)
@@ -244,13 +248,31 @@ bool GatherRawMaterials_ResolveFuncs() {
     if (iatMemFree)
         s_fn_MemFree = *reinterpret_cast<GRM_MemFree_t*>(iatMemFree);
 
-    // Type IDs
+    // Type IDs. In the DLL build these come from raw .rdata; in standalone the .rdata
+    // globals are never seeded (ResolveAddr(Exe,.rdata)==NULL) so we fall back to the
+    // runtime type registry by name — otherwise Execute derefs *s_typeId_* (NULL) and
+    // crashes the moment a citizen claims the gather work.
     s_typeId_GatherDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7040));
     s_typeId_RawMatComp = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_typeId_PosDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7938));
+#ifdef STANDALONE_EXE
+    static uint32_t s_tidGatherDescVal = 0, s_tidRawMatCompVal = 0, s_tidPosDescVal = 0;
+    if (!s_typeId_GatherDesc) {
+        if (!s_tidGatherDescVal) s_tidGatherDescVal = ::Object::GetTypeIdByName("BuildDescription");
+        s_typeId_GatherDesc = &s_tidGatherDescVal;
+    }
+    if (!s_typeId_RawMatComp) {
+        if (!s_tidRawMatCompVal) s_tidRawMatCompVal = ::Object::GetTypeIdByName("RawMaterialDescription");
+        s_typeId_RawMatComp = &s_tidRawMatCompVal;
+    }
+    if (!s_typeId_PosDesc) {
+        if (!s_tidPosDescVal) s_tidPosDescVal = ::Object::GetTypeIdByName("MapDescription");
+        s_typeId_PosDesc = &s_tidPosDescVal;
+    }
+#endif
 
     bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_SerializeInt && s_fn_SerializeIntBulk &&
@@ -588,11 +610,17 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 void* posDescBase = *(void**)((uintptr_t)posCompIBP + 0x18);
                 int bestDist = 0x7fffffff;
 
-                bool isDerivedPos = fn_IsDerivedFrom(posDescBase, *s_typeId_PosDesc);
+                bool isDerivedPos = s_typeId_PosDesc && *s_typeId_PosDesc &&
+                                    fn_IsDerivedFrom(posDescBase, *s_typeId_PosDesc);
                 void* posDesc = isDerivedPos ? posDescBase : nullptr;
 
-                uint8_t found = s_fn_CalcBestTargetPos(posCompIBP,
-                    (uintptr_t)posDesc + 0x38, searchPos, targetPos, &bestDist);
+                // [STANDALONE GUARD] posDesc may be null if the position-description
+                // type-id (0x1401c7938) does not resolve by name in standalone. The real
+                // game always resolves it. Skip the primary target-pos calc when null
+                // (the child-target loop below still contributes a position); never pass
+                // null+0x38 into CalcBestTargetPos (it would read from 0x38).
+                uint8_t found = posDesc ? s_fn_CalcBestTargetPos(posCompIBP,
+                    (uintptr_t)posDesc + 0x38, searchPos, targetPos, &bestDist) : 0;
 
                 void* posComp2 = (void*)posCompIBP;
                 if (*(int*)((uintptr_t)posComp2 + 0x30) > 0) {

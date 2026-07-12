@@ -271,14 +271,27 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         uintptr_t workCompIbp = 0;
         if (s_find3050) s_find3050(*reinterpret_cast<uintptr_t*>(self + 0x10), &workCompIbp);
 
-        // POST to the reservation ledger — DEFERRED to the citizen-consumer brick.
-        // The 0x14012ec60 -> 0x1400f88a0 shared-AVL insert mutates gw+0x118 for ALL
-        // citizens; wiring it before the consumer is live risks corrupting the ledger.
-        // Trace the intent; do not actually post yet.
-        if (BCS1_Trace())
-            std::fprintf(stderr, "[BuildTrace] (deferred) would post gather work to ledger via ec60 (code 0x2001), workComp=%p\n",
-                         workCompIbp ? *reinterpret_cast<void**>(workCompIbp) : nullptr);
-        (void)s_postEc60;
+        // POST to the reservation ledger (brick 2b): CitizenAI_impl_ec60 inserts the
+        // gather work into the gw+0x118 priority AVL (via 0x1400f88a0) keyed by the
+        // WorkComponent, so an idle citizen claims it and runs GatherRawMaterials::Execute
+        // (the town->site haul). Exe: CitizenAI_impl_ec60(*pWorkCompIBP, 0x2001, 1, &workIBP).
+        // Gated behind BANISHED_BUILD_LIVE_HAUL so it can be A/B'd independently of the
+        // state-machine harness (it needs the live-citizen action stack + pathfinder).
+        static int s_liveHaul = -1;
+        if (s_liveHaul < 0) {
+            const char* e = std::getenv("BANISHED_BUILD_LIVE_HAUL");
+            s_liveHaul = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_liveHaul && s_postEc60 && workCompIbp != 0) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIbp);
+            s_postEc60(workCompIbp, 0x2001, 1, &workIbp);
+            if (BCS1_Trace())
+                std::fprintf(stderr, "[BuildTrace] posted gather work to ledger via ec60 (code 0x2001), workComp=%p work=%p\n",
+                             *reinterpret_cast<void**>(workCompIbp), work);
+        } else if (BCS1_Trace()) {
+            std::fprintf(stderr, "[BuildTrace] (gather post skipped: liveHaul=%d postFn=%p workComp=%p)\n",
+                         s_liveHaul, (void*)s_postEc60, (void*)workCompIbp);
+        }
 
         // configure the site StorageComponent accept-mask + capacity
         void* descObj = *reinterpret_cast<void**>(self + 0x18);
