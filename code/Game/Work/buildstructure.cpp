@@ -80,8 +80,65 @@ void* BuildStructure_Ctor(BuildStructure* self) {
 
     self->field_50 = nullptr;
     self->field_58 = 0;
+    // Retail zeroes +0x58 as a qword — also clears the array capacity at +0x5c.
+    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x5c) = 0;
     self->field_60 = nullptr;
     self->field_68 = 0;
+
+    return self;
+}
+
+// ============================================================
+// Full Ctor (0x1400e59c0) — 3-arg: (self, &entityIBP, altAnim)
+// ============================================================
+// The REAL retail ctor used by BuildComponent State8Enter (sub_7ae0). Unlike the
+// 1-arg ctor (0x1400e5a90) it (a) routes base init through Work_Ctor25 so field_10
+// (building entity), +0x18 (WorkComponent) and +0x28 (target cell) are populated, and
+// (b) ALLOCATES the build-position byte array field_50/field_58 sized to the site's
+// PositionComponent footprint (FUN_140123070 position count -> FUN_14000a590 resize),
+// zeroing every position byte. Without this array Execute's unbuilt-position scan finds
+// nothing (field_58 == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
+// 2c-B blocker. Faithful offset-for-offset port of the Ghidra decompilation.
+typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
+
+void* BuildStructure_CtorFull(BuildStructure* self, void* entityIBP, uint8_t altAnim) {
+    EnsureVtables();
+
+    // local_res10 = *entityIBP; Work_Ctor25(self, &local_res10) — base init + field_10.
+    void* entity = entityIBP ? *reinterpret_cast<void**>(entityIBP) : nullptr;
+    fn_WorkCtor25_t workCtor25 =
+        reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
+    if (workCtor25) {
+        void* tmp = entity;
+        workCtor25(self, &tmp);
+    }
+
+    self->vtable = s_vtable_BuildStructure;
+    self->field_48 = altAnim;
+    self->field_4c = 0;
+    self->field_50 = nullptr;
+    self->field_58 = 0;
+    // +0x5c is the array's capacity (read by FUN_14000a590). Retail zeroes +0x58 as a
+    // full qword; field_58 is int, so zero the capacity slot explicitly or the resize
+    // reads garbage capacity out of the fresh MemAlloc block and takes a bad realloc path.
+    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x5c) = 0;
+    self->field_60 = nullptr;
+    self->field_68 = 0;
+
+    // Allocate the build-position byte array from the site's PositionComponent count.
+    if (entityIBP) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(entityIBP);
+        uintptr_t posCompIBP = 0;
+        fn_Entity_FindComponent_Position(*reinterpret_cast<uintptr_t*>(entityIBP), &posCompIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&posCompIBP);
+        int count = fn_PositionComponent_Count ? fn_PositionComponent_Count(posCompIBP, 1) : 0;
+        // FUN_14000a590(&field_50, count): resizes the {data,count,cap} array in place,
+        // writing field_58 = count. New bytes are uninitialised, so zero-fill below.
+        if (fn_DynArray_Resize) fn_DynArray_Resize(&self->field_50, count);
+        int n = self->field_58;
+        uint8_t* arr = reinterpret_cast<uint8_t*>(self->field_50);
+        for (int i = 0; i < n && arr; i++) arr[i] = 0;
+    }
 
     return self;
 }
@@ -274,8 +331,20 @@ static int WorldToCell(int gridSize, float x, float z) {
 //
 // Returns 1 (not ready / skip) or 2 (work assigned).
 //
+static int s_bs_trace = -1;
+static bool BS_Trace() {
+    if (s_bs_trace < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        s_bs_trace = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_bs_trace == 1;
+}
+#define BS_TRACEF(...) do { if (BS_Trace()) std::fprintf(stderr, __VA_ARGS__); } while (0)
+
 int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     uintptr_t s = (uintptr_t)self;
+    BS_TRACEF("[BuildTrace] BuildStructure::Execute ENTER self=%p citizen=%p field_58=%d field_68=%d\n",
+              (void*)self, citizenPtr, self->field_58, self->field_68);
 
     // --- Phase 1: Validate building is enabled ---
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x10));
@@ -301,6 +370,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 
     // Check if building is enabled (byte at +0x50 of description)
     if (*(uint8_t*)(buildDescIBP + 0x50) == 0) {
+        BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (building disabled, desc+0x50=0)\n");
         return 1;
     }
 
@@ -308,6 +378,8 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     fn_InternalBasePtr_CheckPtr(&posCompIBP);
     int totalPositions = fn_PositionComponent_Count(posCompIBP, 1);
     if (self->field_68 >= totalPositions) {
+        BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (all built: field_68=%d >= total=%d)\n",
+                  self->field_68, totalPositions);
         return 1;
     }
 
@@ -390,7 +462,12 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     int chosenIndex = -1;
     int attemptCount = 0;
 
-    if (unbuiltCount <= 0) return 1;
+    BS_TRACEF("[BuildTrace] BuildStructure::Execute phases: field_58=%d unbuiltCount=%d totalPositions=%d buildingCell=%d\n",
+              self->field_58, unbuiltCount, totalPositions, buildingCell);
+    if (unbuiltCount <= 0) {
+        BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (unbuiltCount<=0)\n");
+        return 1;
+    }
 
     // --- Phase 6: Search for accessible unbuilt position ---
     while (attemptCount < unbuiltCount) {
@@ -584,6 +661,8 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                     // Mark build position as claimed
                     ((uint8_t*)self->field_50)[chosenIndex] = 1;
 
+                    BS_TRACEF("[BuildTrace] BuildStructure::Execute return 2 (ASSIGNED build pos %d, actions set up) self=%p\n",
+                              chosenIndex, (void*)self);
                     return 2;
                 }
             }
@@ -592,6 +671,8 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
         attemptCount++;
     }
 
+    BS_TRACEF("[BuildTrace] BuildStructure::Execute return 1 (no accessible unbuilt position after %d attempts)\n",
+              attemptCount);
     return 1;
 }
 
@@ -890,6 +971,11 @@ extern "C" void RegisterBuildStructureVtable() {
 }
 extern "C" void* BuildStructure_CreateInPlace(void* mem) {
     return BuildStructure_Ctor((BuildStructure*)mem);
+}
+// Full 3-arg ctor (0x1400e59c0) — sets field_10 + build-position array. Used by the
+// State8Enter staged work-spawn so BuildStructure::Execute can assign build positions.
+extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim) {
+    return BuildStructure_CtorFull((BuildStructure*)mem, entityIBP, altAnim);
 }
 extern "C" void* BuildStructure_Factory(void) {
     void* p = Work_Alloc(0x70);

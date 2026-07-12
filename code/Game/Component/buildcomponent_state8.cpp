@@ -42,7 +42,8 @@
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
 extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108d40 mesh-list fill
-extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp ctor (0x1400e5a90)
+extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp 1-arg ctor (0x1400e5a90)
+extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim); // full ctor (0x1400e59c0)
 #ifdef STANDALONE_EXE
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
 #else
@@ -316,15 +317,19 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         if (s_liveLabor) {
             void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
                             ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
-            void* bsWork = mem ? BuildStructure_CreateInPlace(mem) : nullptr;
-            if (bsWork) {
-                // field_10 = the site entity — BuildStructure::Execute reads *(work+0x10) as
-                // the building it constructs. The retail 1-arg ctor leaves it null; sub_7ae0
-                // loads the site entity for the work here, so construct the IBP explicitly.
+            // Construct via the FULL retail ctor (0x1400e59c0): it routes base init through
+            // Work_Ctor25 (sets field_10=site entity, +0x18 WorkComponent, +0x28 target cell)
+            // AND allocates the build-position byte array field_50/field_58 from the site's
+            // PositionComponent footprint. sub_7ae0 passes &(*(BuildComponent+0x10)) as the
+            // entity IBP. Without the array, BuildStructure::Execute sees 0 unbuilt positions
+            // and returns 1 (never assigns labor) — this is the 2c-B fix.
+            void* bsWork = nullptr;
+            if (mem) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
-                void* siteEnt = *reinterpret_cast<void**>(bc + 0x10);
-                if (fn_InternalBasePtr_Ctor)
-                    fn_InternalBasePtr_Ctor(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(bsWork) + 0x10), siteEnt);
+                void* siteEnt = *reinterpret_cast<void**>(bc + 0x10);   // *(BuildComponent+0x10)
+                bsWork = BuildStructure_CreateInPlaceFull(mem, &siteEnt, 0);
+            }
+            if (bsWork) {
                 uintptr_t bsIBP = 0;
                 if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&bsIBP, bsWork);
                 // find the site WorkComponent (c8070) the work posts under
@@ -335,8 +340,9 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
                     s_postEc60(workCompIBP, 0x2001, 1, &bsIBP);
                     if (BC8_Trace())
-                        std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work spawned+posted (work=%p workComp=%p)\n",
-                                     meshCount, bsWork, *reinterpret_cast<void**>(workCompIBP));
+                        std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work spawned+posted (work=%p workComp=%p buildPositions=%d)\n",
+                                     meshCount, bsWork, *reinterpret_cast<void**>(workCompIBP),
+                                     *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(bsWork) + 0x58));
                 } else if (BC8_Trace()) {
                     std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure spawned but post skipped (postFn=%p workComp=%p)\n",
                                  (void*)s_postEc60, (void*)workCompIBP);

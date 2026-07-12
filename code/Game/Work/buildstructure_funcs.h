@@ -16,6 +16,11 @@
 // Original: 0x1400e5a90
 void* BuildStructure_Ctor(BuildStructure* self);
 
+// Full ctor: Work_Ctor25 base init (field_10/+0x18/+0x28) + allocate the build-position
+// byte array (field_50/field_58) from the site's PositionComponent footprint.
+// Original: 0x1400e59c0 — the ctor BuildComponent State8Enter (sub_7ae0) actually uses.
+void* BuildStructure_CtorFull(BuildStructure* self, void* entityIBP, uint8_t altAnim);
+
 // ScalarDtor (vtable +0x00): Calls BaseDtor, conditionally frees memory.
 // Original: 0x140029680
 void* BuildStructure_ScalarDtor(BuildStructure* self, uint32_t flags);
