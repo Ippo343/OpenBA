@@ -42,6 +42,7 @@
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
 extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108d40 mesh-list fill
+extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp ctor (0x1400e5a90)
 #ifdef STANDALONE_EXE
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
 #else
@@ -93,6 +94,7 @@ typedef void  (*BC8_StorageClear_t)(void* slotArrayField, int n); // 0x14000f090
 typedef int   (*BC8_ResIdx_t)(void* slotArrayBase, void* matType); // 0x140088f90
 typedef int   (*BC8_FindInQueue_t)(void* arrayBase, void* ibp);    // 0x140017550
 typedef void  (*BC8_MeshFinalize_t)(void* meshInst, int a, char b); // 0x14012c3f0
+typedef void  (*BC8_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void* workIBP); // 0x14012ec60
 
 static BC8_Find_t          s_find3050    = nullptr;  // FUN_140003050 (WorkComponent finder)
 static BC8_Stop_t          s_stopWorker  = nullptr;  // FUN_14012eb50
@@ -104,9 +106,11 @@ static BC8_MeshFinalize_t  s_meshFinalize= nullptr;  // FUN_14012c3f0
 static BC8_StorageClear_t  s_storageClear= nullptr;  // FUN_14000f090
 static BC8_ResIdx_t        s_resIdx      = nullptr;  // FUN_140088f90
 static BC8_FindInQueue_t   s_findInQueue = nullptr;  // BuildComponent_helper_7550
+static BC8_PostWork_t      s_postEc60    = nullptr;  // CitizenAI_impl_ec60 (scheduler post)
 static bool s_bc8_res = false;
 static void BC8_Resolve() {
     if (s_bc8_res) return;
+    s_postEc60     = reinterpret_cast<BC8_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     s_find3050     = reinterpret_cast<BC8_Find_t>(ResolveAddr(Module::Exe, 0x140003050));
     s_stopWorker   = reinterpret_cast<BC8_Stop_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_modelRefresh = reinterpret_cast<BC8_ModelRefresh_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
@@ -211,7 +215,13 @@ static void* BC8_MatComp(uintptr_t bc) {
 }
 static int BC8_Target(uintptr_t bc, void* matComp) {
     if (!matComp) return 0;
-    return *reinterpret_cast<int32_t*>((uint8_t*)matComp + 0x30) * *reinterpret_cast<int32_t*>(bc + 0x4c);
+    // target = base build effort (matComp+0x30) * multiplier (bc+0x4c). The multiplier is
+    // WorkplaceComponent+0x58 (0 when the WPC is inert in the standalone exe); clamp to the
+    // retail default of 1 so the target never collapses to 0 (which would instant-complete
+    // the build with no visible labor). See buildcomponent_state1.cpp for the source clamp.
+    int mult = *reinterpret_cast<int32_t*>(bc + 0x4c);
+    if (mult <= 0) mult = 1;
+    return *reinterpret_cast<int32_t*>((uint8_t*)matComp + 0x30) * mult;
 }
 
 // Ensure the construction mesh list (bc+0x58 / count bc+0x60) is populated. In the
@@ -291,10 +301,53 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                 if (s_entity8f50) s_entity8f50(reinterpret_cast<void*>(entSlot));
             }
         }
-        // DEFERRED (brick 2c): alloc BuildStructure (0x70) + find WorkComponent (c8070)
-        // + CitizenAI_impl_ec60(worker, 0x2001, 1, &bsIBP) enqueue construct work.
+        // Brick 2c: alloc BuildStructure (0x70) + find the site WorkComponent (c8070)
+        // + CitizenAI_impl_ec60(worker, 0x2001, 1, &bsIBP) to enqueue the construct work,
+        // so citizens claim it and do timed BuildStructure labor (BuildStructure::Execute
+        // assigns each to a build position; PerformWork accumulates progress into bc+0x48).
+        // Faithful to sub_7ae0's STAGED tail. Gated behind BANISHED_BUILD_LIVE_HAUL (needs
+        // the live-citizen action stack + task manager, same as the gather post).
+#ifdef STANDALONE_EXE
+        static int s_liveLabor = -1;
+        if (s_liveLabor < 0) {
+            const char* e = std::getenv("BANISHED_BUILD_LIVE_HAUL");
+            s_liveLabor = (e && e[0] && e[0] != '0') ? 1 : 0;
+        }
+        if (s_liveLabor) {
+            void* mem = (fn_MemAlloc && g_pMemAllocSingleton)
+                            ? fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8) : nullptr;
+            void* bsWork = mem ? BuildStructure_CreateInPlace(mem) : nullptr;
+            if (bsWork) {
+                // field_10 = the site entity — BuildStructure::Execute reads *(work+0x10) as
+                // the building it constructs. The retail 1-arg ctor leaves it null; sub_7ae0
+                // loads the site entity for the work here, so construct the IBP explicitly.
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
+                void* siteEnt = *reinterpret_cast<void**>(bc + 0x10);
+                if (fn_InternalBasePtr_Ctor)
+                    fn_InternalBasePtr_Ctor(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(bsWork) + 0x10), siteEnt);
+                uintptr_t bsIBP = 0;
+                if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&bsIBP, bsWork);
+                // find the site WorkComponent (c8070) the work posts under
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
+                uintptr_t workCompIBP = 0;
+                if (s_find3050) s_find3050(*reinterpret_cast<uintptr_t*>(bc + 0x10), &workCompIBP);
+                if (s_postEc60 && workCompIBP != 0) {
+                    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
+                    s_postEc60(workCompIBP, 0x2001, 1, &bsIBP);
+                    if (BC8_Trace())
+                        std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work spawned+posted (work=%p workComp=%p)\n",
+                                     meshCount, bsWork, *reinterpret_cast<void**>(workCompIBP));
+                } else if (BC8_Trace()) {
+                    std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure spawned but post skipped (postFn=%p workComp=%p)\n",
+                                 (void*)s_postEc60, (void*)workCompIBP);
+                }
+            } else if (BC8_Trace()) {
+                std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure alloc/ctor failed (mem=%p)\n", mem);
+            }
+        } else
+#endif
         if (BC8_Trace())
-            std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work-spawn DEFERRED (2c)\n", meshCount);
+            std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work-spawn (liveLabor off)\n", meshCount);
     } else {
         // Instant branch (gw+0xd0&1) needs sub_8720 — DEFERRED.
         if (BC8_Trace())
@@ -359,6 +412,15 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
     BC8_EnsureMeshList(bc);
     int progress = *reinterpret_cast<int32_t*>(bc + 0x48);
     int meshCount = *reinterpret_cast<int32_t*>(bc + 0x60);
+
+    if (BC8_Trace()) {
+        static int s_lastProg = -999;
+        if (progress != s_lastProg) {
+            s_lastProg = progress;
+            std::fprintf(stderr, "[BuildTrace] State8Update progress=%d target=%d (bc+0x4c mult=%d meshCount=%d) self=%p\n",
+                         progress, target, *reinterpret_cast<int32_t*>(bc + 0x4c), meshCount, buildComp);
+        }
+    }
 
     if (progress < target) {
         // still building — advance each mesh to floor((progress/target)*frameCount),

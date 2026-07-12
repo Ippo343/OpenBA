@@ -220,7 +220,14 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     if (s_find4740) s_find4740(*reinterpret_cast<uintptr_t*>(self + 0x10), &wpIbp);
     if (wpIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
-        *reinterpret_cast<uint32_t*>(self + 0x4c) = *reinterpret_cast<uint32_t*>(wpIbp + 0x58);
+        // Retail: bc+0x4c = WorkplaceComponent+0x58 (the build-effort multiplier). In the
+        // standalone exe the WorkPlaceComponent lifecycle is inert so +0x58 stays 0, which
+        // would clobber the default 1 set just above and make the state-8 build target
+        // (matComp[0x30] * mult) collapse to 0 (instant completion, no visible labor). Only
+        // adopt the workplace value when it is a valid positive multiplier.
+        uint32_t wpMult = *reinterpret_cast<uint32_t*>(wpIbp + 0x58);
+        if ((int32_t)wpMult > 0)
+            *reinterpret_cast<uint32_t*>(self + 0x4c) = wpMult;
     }
 
     // reset the site ModelComponent build variant (a170 -> 8270); guarded
