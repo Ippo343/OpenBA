@@ -41,6 +41,7 @@
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
+extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108d40 mesh-list fill
 #ifdef STANDALONE_EXE
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
 #else
@@ -213,6 +214,21 @@ static int BC8_Target(uintptr_t bc, void* matComp) {
     return *reinterpret_cast<int32_t*>((uint8_t*)matComp + 0x30) * *reinterpret_cast<int32_t*>(bc + 0x4c);
 }
 
+// Ensure the construction mesh list (bc+0x58 / count bc+0x60) is populated. In the
+// retail game BuildComponent::Draw (0x140108d40) runs every frame as the component's
+// draw-tick (vtable +0x40) and fills this list with the site's ModelComponent(s). In
+// standalone the BuildComponent draw-tick is not wired for our seeded buildings, so the
+// list stays empty (count=0) and the state-8 mesh loops iterate zero times (no visible
+// rising). Invoke the faithful fill directly when the list is empty — the appended IBPs
+// persist for the whole state-8 duration, so one call suffices.
+static void BC8_EnsureMeshList(uintptr_t bc) {
+    if (*reinterpret_cast<int32_t*>(bc + 0x60) > 0) return;
+    BuildComponent_DrawReimpl(reinterpret_cast<void*>(bc));
+    if (BC8_Trace())
+        std::fprintf(stderr, "[BuildTrace] BC8_EnsureMeshList: filled via Draw, count now %d\n",
+                     *reinterpret_cast<int32_t*>(bc + 0x60));
+}
+
 // ==================================================================================
 // State1Update — sub_81e0 (per-frame while in state 1). trans38Handler for state 1.
 // ==================================================================================
@@ -256,6 +272,7 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
 
     if (instant == 0) {
         // STAGED: reset every construction mesh to frame 0.
+        BC8_EnsureMeshList(bc);
         int meshCount = *reinterpret_cast<int32_t*>(bc + 0x60);
         for (int i = 0; i < meshCount; ++i) {
             uintptr_t me = BC8_MeshElem(bc, i);
@@ -301,9 +318,26 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
     int target = BC8_Target(bc, matComp);
 
 #ifdef STANDALONE_EXE
-    if (BC8_DemoForce() && BC8_IsDemo(buildComp) && target > 0) {
+    if (BC8_DemoForce() && BC8_IsDemo(buildComp)) {
         // brick-2a harness: ramp progress toward target (~60 frames) to drive the mesh
         // progression + completion. Real BuildStructure labor = brick 2c.
+        //
+        // The real target = matComp[0x30] (base build effort) * bc[0x4c] (build
+        // multiplier). In standalone bc[0x4c] is 0 — BuildComponent::Draw stage 4 copies
+        // it from the WorkPlaceComponent's +0x58 field, which is never initialized here —
+        // so the real target is 0. Substitute a nominal positive target (base effort, or
+        // 120 frames) so the mesh progression + completion demonstrate visibly. Real
+        // BuildStructure labor (2c) computes and raises the true target.
+        if (target <= 0) {
+            int base = matComp ? *reinterpret_cast<int32_t*>((uint8_t*)matComp + 0x30) : 0;
+            target = base > 0 ? base : 120;
+            static bool s_loggedTarget = false;
+            if (BC8_Trace() && !s_loggedTarget) {
+                s_loggedTarget = true;
+                std::fprintf(stderr, "[BuildTrace] (force) target was 0 (bc+0x4c=%d matComp=%p base=%d) -> using %d for the ramp\n",
+                             *reinterpret_cast<int32_t*>(bc + 0x4c), matComp, base, target);
+            }
+        }
         int inc = target / 60; if (inc < 1) inc = 1;
         int p = *reinterpret_cast<int32_t*>(bc + 0x48) + inc;
         if (p > target) p = target;
@@ -311,6 +345,7 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
     }
 #endif
 
+    BC8_EnsureMeshList(bc);
     int progress = *reinterpret_cast<int32_t*>(bc + 0x48);
     int meshCount = *reinterpret_cast<int32_t*>(bc + 0x60);
 

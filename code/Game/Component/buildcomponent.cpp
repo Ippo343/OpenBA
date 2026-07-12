@@ -21,6 +21,24 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // Object::GetTypeIdByName
+#endif
+
+// Draw trace (BANISHED_BUILD_TRACE): confirms the per-frame Draw runs for build sites
+// and reports the mesh-list (+0x58/+0x60) fill. Shares the construction trace env var.
+static int s_bcDrawTrace = -1;
+static bool BCDraw_Trace() {
+    if (s_bcDrawTrace < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_TRACE");
+        s_bcDrawTrace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return s_bcDrawTrace == 1;
+}
+extern "C" void* g_pConstructionDemoSite;
 
 // ============================================================
 // Type ID globals needed by BuildComponent
@@ -266,16 +284,34 @@ int BuildComponent_FindInQueue(void* arrayBase, void* entityPtr) {
 typedef void* (*fn_BC_FindComp_t)(int64_t entity, void* retbuf);   // returns retbuf
 typedef void (*fn_BC_AddToList_t)(void* arrayField, int newCount, void* ibp);
 typedef void (*fn_BC_Entity8f50_t)(int64_t* ptr);
-static fn_BC_FindComp_t  s_fn_BC_FindMulti = nullptr;   // 0x140003f60 (MultiObject)
-static fn_BC_FindComp_t  s_fn_BC_Find26a30 = nullptr;   // 0x140026a30
+static fn_BC_FindComp_t  s_fn_BC_FindMulti = nullptr;   // 0x140003f60 (FindComponent ModelComponent)
+static fn_BC_FindComp_t  s_fn_BC_Find26a30 = nullptr;   // 0x140026a30 (FindComponent StorageComponent)
 static fn_BC_FindComp_t  s_fn_BC_FindWork  = nullptr;   // 0x140004740 (Workplace)
 static fn_BC_AddToList_t s_fn_BC_AddToList = nullptr;   // 0x140003110
 static fn_BC_Entity8f50_t s_fn_BC_Entity8f50 = nullptr; // 0x140128f50
-static uint32_t* s_pTId_MultiObj = nullptr;   // DAT_1401c7a88
-static uint32_t* s_pTId_Build    = nullptr;   // DWORD_1401c7a50
-static uint32_t* s_pTId_Storage  = nullptr;   // DAT_1401c7c10
-static uint32_t* s_pTId_Workplace = nullptr;  // DWORD_1401c7ac0
+// Type-id VALUES. In the DLL build these come from raw .rdata; in standalone the
+// .rdata globals are never seeded (ResolveAddr(Exe,.rdata)==NULL) so we fall back to
+// the runtime type registry by name — otherwise block 1's IsDerivedFrom is guarded out
+// and the site's ModelComponent never gets appended to +0x58 (empty mesh list).
+//   0x1401c7a88 = ModelDescription (checked on the found ModelComponent's +0x18 desc)
+//   0x1401c7a50 = ModelComponent   (block 2 collects these into +0x58)
+//   0x1401c7c10 = StorageComponent (block 2 collects these into +0x68)
+//   0x1401c7ac0 = WorkPlaceComponent (block 4 reads +0x58 build multiplier)
+static uint32_t s_tid_ModelDesc  = 0;   // DAT_1401c7a88
+static uint32_t s_tid_ModelComp  = 0;   // DWORD_1401c7a50
+static uint32_t s_tid_Storage    = 0;   // DAT_1401c7c10
+static uint32_t s_tid_Workplace  = 0;   // DWORD_1401c7ac0
 static bool s_bcDrawResolved = false;
+static uint32_t BC_ResolveTid(uintptr_t rdataGlobal, const char* name) {
+#ifdef STANDALONE_EXE
+    (void)rdataGlobal;
+    return ::Object::GetTypeIdByName(name);
+#else
+    (void)name;
+    uintptr_t g = ResolveAddr(Module::Exe, rdataGlobal);
+    return g ? *reinterpret_cast<uint32_t*>(g) : 0;
+#endif
+}
 static void EnsureDrawHelpers() {
     if (s_bcDrawResolved) return;
     s_fn_BC_FindMulti = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
@@ -283,17 +319,17 @@ static void EnsureDrawHelpers() {
     s_fn_BC_FindWork  = reinterpret_cast<fn_BC_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
     s_fn_BC_AddToList = reinterpret_cast<fn_BC_AddToList_t>(ResolveAddr(Module::Exe, 0x140003110));
     s_fn_BC_Entity8f50 = reinterpret_cast<fn_BC_Entity8f50_t>(ResolveAddr(Module::Exe, 0x140128f50));
-    s_pTId_MultiObj  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
-    s_pTId_Build     = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a50));
-    s_pTId_Storage   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c10));
-    s_pTId_Workplace = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ac0));
+    s_tid_ModelDesc = BC_ResolveTid(0x1401c7a88, "ModelDescription");
+    s_tid_ModelComp = BC_ResolveTid(0x1401c7a50, "ModelComponent");
+    s_tid_Storage   = BC_ResolveTid(0x1401c7c10, "StorageComponent");
+    s_tid_Workplace = BC_ResolveTid(0x1401c7ac0, "WorkPlaceComponent");
     s_bcDrawResolved = true;
 }
 
 // Scan an entity's component list (compHost+0x30 array, +0x38 count) for the
 // first component whose GetTypeId (vtable+0x10) == typeId; verify with IsDerivedFrom.
-static void* BC_FindComponentByType(int64_t compHost, uint32_t* pTypeId) {
-    if (!pTypeId) return nullptr;
+static void* BC_FindComponentByType(int64_t compHost, uint32_t typeId) {
+    if (!typeId) return nullptr;
     int count = *(int*)(compHost + 0x38);
     int64_t arr = *(int64_t*)(compHost + 0x30);
     for (int i = 0; i < count; i++) {
@@ -303,8 +339,8 @@ static void* BC_FindComponentByType(int64_t compHost, uint32_t* pTypeId) {
         if (!comp) continue;
         typedef uint32_t (*GetTypeId_t)(void*);
         uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
-        if (tid == *pTypeId) {
-            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *pTypeId)) return comp;
+        if (tid == typeId) {
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, typeId)) return comp;
             return nullptr;
         }
     }
@@ -320,8 +356,13 @@ void BuildComponent_DrawReimpl(void* selfP) {
     uintptr_t gw = (uintptr_t)*g_pGameWorldSingleton;
     if (*(uint8_t*)(gw + 0xd0) & 1) return;   // debug-disabled
 
-    // --- Stage 1: if the owner has a MultiObjectComponent with children, append
-    //     its first child's Build/Storage child-host to our work lists.
+    bool demoTrace = BCDraw_Trace() && g_pConstructionDemoSite && selfP == g_pConstructionDemoSite;
+    if (demoTrace)
+        std::fprintf(stderr, "[BuildTrace] Draw ENTER demo site=%p meshCount(+0x60)=%d\n",
+                     selfP, (int)self[0xc]);
+
+    // --- Stage 1: append the site's own ModelComponent (whose +0x18 ModelDescription
+    //     has a non-empty frame group) to the +0x58 mesh list / +0x68 storage list.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
     int64_t multiBuf = 0;
     if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
@@ -330,8 +371,8 @@ void BuildComponent_DrawReimpl(void* selfP) {
         if (s_fn_BC_FindMulti) s_fn_BC_FindMulti(self[2], &multiBuf);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&multiBuf);
         void* objBase = *(void**)(multiBuf + 0x18);
-        void* multi = (fn_IsDerivedFrom && s_pTId_MultiObj &&
-                       fn_IsDerivedFrom(objBase, *s_pTId_MultiObj)) ? objBase : nullptr;
+        void* multi = (fn_IsDerivedFrom && s_tid_ModelDesc &&
+                       fn_IsDerivedFrom(objBase, s_tid_ModelDesc)) ? objBase : nullptr;
         if (multi && *(int*)((uintptr_t)multi + 0x28) > 0) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
             int64_t b1 = 0;
@@ -358,7 +399,7 @@ void BuildComponent_DrawReimpl(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
             int64_t host = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host);
-            void* buildComp = BC_FindComponentByType(host, s_pTId_Build);
+            void* buildComp = BC_FindComponentByType(host, s_tid_ModelComp);
             int64_t ib1 = 0;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib1, buildComp);
             if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xb, (int)self[0xc] + 1, &ib1);
@@ -366,13 +407,17 @@ void BuildComponent_DrawReimpl(void* selfP) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
             int64_t host2 = *(int64_t*)((int64_t)j * 8 + *(int64_t*)(workBuf + 0x48));
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&host2);
-            void* storeComp = BC_FindComponentByType(host2, s_pTId_Storage);
+            void* storeComp = BC_FindComponentByType(host2, s_tid_Storage);
             int64_t ib2 = 0;
             if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ib2, storeComp);
             if (s_fn_BC_AddToList) s_fn_BC_AddToList(self + 0xd, (int)self[0xe] + 1, &ib2);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workBuf);
         }
     }
+
+    if (demoTrace)
+        std::fprintf(stderr, "[BuildTrace] Draw after fill: meshCount(+0x60)=%d (tid ModelDesc=%u ModelComp=%u)\n",
+                     (int)self[0xc], s_tid_ModelDesc, s_tid_ModelComp);
 
     // --- Stage 3: walk our collected Build list (+0xb / count +0xc), driving each
     //     child's job hosts; finalise Storage list entries via Entity_impl_8f50.
@@ -419,12 +464,12 @@ void BuildComponent_DrawReimpl(void* selfP) {
     // --- Stage 4: progress = 1; then read the WorkplaceComponent's progress at +0xb*8.
     *(int*)((uintptr_t)self + 0x4c) = 1;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
-    void* wp = BC_FindComponentByType(self[2], s_pTId_Workplace);
+    void* wp = BC_FindComponentByType(self[2], s_tid_Workplace);
     int64_t wpIbp = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp);
     if (wpIbp != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self + 2);
-        void* wp2 = BC_FindComponentByType(self[2], s_pTId_Workplace);
+        void* wp2 = BC_FindComponentByType(self[2], s_tid_Workplace);
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp2);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
         *(int*)((uintptr_t)self + 0x4c) = (int)((int64_t*)wpIbp)[0xb];
