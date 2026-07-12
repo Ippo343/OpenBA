@@ -38,6 +38,10 @@
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
 extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP); // 0x1400ec710
+#ifdef STANDALONE_EXE
+// town_workplace_registry.cpp — register a workplace into townMgr+0x100 (profession map).
+extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
+#endif
 
 // ---- Exe helpers (all already registered in standalone unless noted) -------------
 // FUN_140004740 InteractComponent_FindWorkplaceComponent(entity, retIBP) -> retIBP
@@ -372,6 +376,33 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                     if (BCS1_Trace())
                         std::fprintf(stderr, "[BuildTrace] WorkPlaceComponent accepting enabled (wpc=%p +0x50 %d->1)\n",
                                      wpc, (int)prev);
+#ifdef STANDALONE_EXE
+                    // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
+                    // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
+                    // handler FUN_14012f520 does this (the inert WPC controller never runs it in
+                    // standalone). This keeps the seated builders consistent: the employment tick's
+                    // Phase-1 housing-sync would RESET a citizen whose +0x1f0 (Builder) != its
+                    // workplace's required profession (+0x48), so +0x48 must read Builder.
+                    //
+                    // NOTE: we deliberately do NOT register the site into the townMgr+0x100
+                    // profession BST here. Doing so makes BuildPathGraph (0x1400d70c0) produce
+                    // pairs -> ProcessPaths drains -> the employment allocator (0x1400d43b0) runs
+                    // its Phase-5B, which calls AssignHousing(null) on EVERY idle laborer and can
+                    // deadlock the WPC Scene mesh-visual toggle (game hangs). The builder SEAT is
+                    // driven directly against the site entity in State8Enter (CitizenEmploy_
+                    // SeatWorkersAt), so the townMgr+0x100 lookup is unnecessary. Builder seating
+                    // is also deferred to State8Enter (after gather 1->8): seating at construction
+                    // start would convert the idle Laborers that HAUL the raw materials into
+                    // Builders before any hauling. Laborers haul; Builders build.
+                    uintptr_t gwPtr = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+                    uintptr_t profReg = gwPtr ? *reinterpret_cast<uintptr_t*>(gwPtr + 0xb0) : 0;
+                    uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
+                    if (builderMarker != 0)
+                        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
+                    if (BCS1_Trace())
+                        std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder (WPC+0x48=0x%llx, no townMgr+0x100 register; seat in State8Enter)\n",
+                                     (unsigned long long)builderMarker);
+#endif
                 }
             } else if (BCS1_Trace()) {
                 std::fprintf(stderr, "[BuildTrace] (no WorkPlaceComponent on site to enable)\n");

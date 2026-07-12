@@ -484,6 +484,65 @@ extern "C" int CitizenEmploy_SeatWorkers(int64_t townMgr, uint64_t professionKey
 }
 
 // ============================================================================
+// Direct-target variant of CitizenEmploy_SeatWorkers: seat up to `count` workers of
+// profession `profKey` onto a SPECIFIC workplace entity (`availEntity`), WITHOUT going
+// through FindAvailableBuilding (which requires the workplace to be registered in the
+// townMgr+0x100 profession BST). Used for construction sites: registering a build site
+// into townMgr+0x100 activates the BuildPathGraph->ProcessPaths->AssignCitizens drain
+// path, whose Phase-5B clears every idle laborer's housing via AssignHousing and can
+// deadlock the WPC Scene mesh-visual toggle. Seating directly against the site entity
+// avoids that entirely while running the exact same cbf0->ca20->c5f0->c4b0 cascade.
+// Each seat's AssignHousing attaches the worker to availEntity's WorkPlaceComponent
+// roster (+0x58/+0x60); once full the strategies find no more idle laborers and stop.
+// ============================================================================
+extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity, uint64_t professionKey, int count) {
+    EnsureFns();
+    if (townMgr == 0 || availEntity == 0 || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    if (professionKey == 0) return 0;
+    int64_t profKey = static_cast<int64_t>(professionKey);
+
+    int seated = 0;
+    for (int i = 0; i < count; ++i) {
+        int64_t result[2];
+        int64_t availArg;
+
+        result[0] = 0; availArg = availEntity;
+        Strat_cbf0(townMgr, result, &availArg, profKey);
+        int64_t seatedCz = result[0];
+        if (seatedCz == 0) {
+            result[0] = 0; availArg = availEntity;
+            Strat_ca20(townMgr, result, &availArg, profKey);
+            seatedCz = result[0];
+            if (seatedCz == 0) {
+                result[0] = 0; availArg = availEntity;
+                Strat_c5f0(townMgr, result, &availArg, profKey);
+                seatedCz = result[0];
+                if (seatedCz == 0) {
+                    result[0] = 0; availArg = availEntity;
+                    Strat_c4b0(townMgr, result, &availArg, profKey);
+                    seatedCz = result[0];
+                }
+            }
+        }
+
+        if (seatedCz != 0) {
+            ++seated;
+            if (Trace())
+                fprintf(stderr, "[EmployCascade] seatAt #%d citizen=%p prof(+0x1f0)=0x%llx "
+                        "workplace(+0x248)=%p avail=%p\n",
+                        seated, reinterpret_cast<void*>(seatedCz),
+                        (unsigned long long)*reinterpret_cast<int64_t*>(seatedCz + 0x1f0),
+                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x248)),
+                        reinterpret_cast<void*>(availEntity)), fflush(stderr);
+        } else {
+            if (Trace()) { fprintf(stderr, "[EmployCascade] seatAt #%d FAILED (no idle laborer)\n", i); fflush(stderr); }
+            break;
+        }
+    }
+    return seated;
+}
+
+// ============================================================================
 // Registerable exports of the four seat strategies. The exe's ONLY dispatcher of
 // these addresses is TownHallUI's profession spinner (CitizenComponent_impl_dd10,
 // 0x14007dd10 -> fn_CitizenList_FindIdle/FindWorking/FindStudent/FindAny). Now that

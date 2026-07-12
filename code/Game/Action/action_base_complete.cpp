@@ -321,6 +321,8 @@ static fn_GeometryAttach_t   s_GeomAttach     = nullptr;
 static fn_GeometryDetach_t   s_GeomDetach     = nullptr;
 static fn_SceneRemoveObject_t s_SceneRemove   = nullptr;
 static fn_GetNodeIdx_t       s_GetNodeIdx     = nullptr;
+typedef void (*fn_MIDefCtor_t)(void* meshInstance);       // 0x140151490 (MeshInstance default-ctor)
+static fn_MIDefCtor_t        s_MI_DefCtor     = nullptr;
 static float*                s_pUVScale       = nullptr;  // g_fUVScale (DAT_14017214c)
 static uint32_t*             s_pTid_FenceDesc = nullptr;  // DAT_1401c7a88
 static uint32_t*             s_pTid_RawMat    = nullptr;  // DAT_1401c7cb8
@@ -340,6 +342,7 @@ static void EnsureShow() {
         ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
     s_GetNodeIdx     = reinterpret_cast<fn_GetNodeIdx_t>(
         ResolveExport("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z"));
+    s_MI_DefCtor     = reinterpret_cast<fn_MIDefCtor_t>(ReadDispatchSlot(0x140151490));
     s_pUVScale       = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_pTid_FenceDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_pTid_RawMat    = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
@@ -471,6 +474,19 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
         uvScale = s_pUVScale ? *s_pUVScale : 1.0f;
     }
 
+    // Ensure the held-item MeshInstance (entity+0xb8) is a constructed object before
+    // any SetMesh/Attach/Update/AddObject. Retail treats +0xb8 as an embedded, already-
+    // constructed Graphics::MeshInstance; in standalone a builder/worker showing its
+    // first tool has never had that slot initialized (zeroed vtable), so MeshInstance::
+    // Update calls a null vtable and Scene::AddObject faults on the uninitialized geometry
+    // (READ of +0x40). Default-construct it in place with sceneId(+0x120) = -1 — the same
+    // guard showtool.cpp uses for carried items. (This was missing from the registered
+    // ActCt_ variant, crashing the FIRST build-labor ShowTool.)
+    if (*reinterpret_cast<void**>(e + 0xb8) == nullptr && s_MI_DefCtor) {
+        s_MI_DefCtor(reinterpret_cast<void*>(e + 0xb8));
+        *reinterpret_cast<uint32_t*>(e + 0xb8 + 0x120) = 0xffffffff;   // sceneId = -1
+    }
+
     // set mesh on the MeshInstance (entity+0xb8)
     if (s_SetMesh) s_SetMesh(reinterpret_cast<void*>(e + 0xb8), meshPtr);
 
@@ -489,12 +505,12 @@ void ActCt_ShowToolOnEntity_1173b0(void* entityV, int toolId) {
     CheckPtr(&model);
     void* graphicsMesh = *reinterpret_cast<void**>(model + 0xe8);
     CheckPtr(&model);
-    int nodeIdx = s_GetNodeIdx ? s_GetNodeIdx(graphicsMesh, "tool") : -1;
+    int nodeIdx = (s_GetNodeIdx && graphicsMesh) ? s_GetNodeIdx(graphicsMesh, "tool") : -1;
     if (s_GeomAttach) s_GeomAttach(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(e + 0xb8), nodeIdx);
 
-    // MeshInstance::Update(time=0) via vtable +0x8
+    // MeshInstance::Update(time=0) via vtable +0x8 (skip if the instance has no vtable)
     uint8_t timeVal[8];
-    if (s_TimeCtorMesh) {
+    if (s_TimeCtorMesh && *reinterpret_cast<uintptr_t*>(e + 0xb8) != 0) {
         s_TimeCtorMesh(timeVal, 0.0f);
         (*reinterpret_cast<void(**)(void*, void*)>(*reinterpret_cast<uintptr_t*>(e + 0xb8) + 8))(
             reinterpret_cast<void*>(e + 0xb8), timeVal);

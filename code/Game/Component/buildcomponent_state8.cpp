@@ -47,6 +47,14 @@ extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstr
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim); // full ctor (0x1400e59c0)
 #ifdef STANDALONE_EXE
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
+// citizen_employ_cascade.cpp — drive the real ProfessionUI seat cascade (cbf0/ca20/c5f0/c4b0)
+// against a SPECIFIC workplace entity (no FindAvailableBuilding / townMgr+0x100 lookup, which
+// would activate the freeze-prone employment drain path). Seats up to `count` workers of
+// `professionKey` onto `availEntity`; returns # seated.
+extern "C" int  CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity, uint64_t professionKey, int count);
+// workplacecomponent.cpp — roster-only mode: the WPC attach/detach (fa20/f7e0 reimpl) skips the
+// Scene mesh-visual toggle, so seating a Builder does NOT swap the site's build mesh.
+extern bool g_wpcRosterOnly;
 #else
 static inline bool BuildComponent_DemoGateSkip(void*) { return false; }
 #endif
@@ -356,6 +364,45 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                         std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work spawned+posted (work=%p workComp=%p buildPositions=%d)\n",
                                      meshCount, bsWork, *reinterpret_cast<void**>(workCompIBP),
                                      *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(bsWork) + 0x58));
+
+                    // ---- 2c-B: seat Builders now that the build work exists ----
+                    // Materials are delivered (state 1->8 passed) and the idle Laborers that
+                    // hauled them are free again, so NOW convert some to Builders to do the
+                    // labor. The employment tick (0x1400d43b0) only rebalances workplaces that
+                    // already have a worker; it never seats the FIRST builder. Retail's builders
+                    // come from the town's builder-profession COUNT (town-hall Professions UI ->
+                    // dd10 loops the FindAvailableBuilding + cbf0/ca20/c5f0/c4b0 cascade N times);
+                    // with no player in autostart we drive that exact cascade via the ported
+                    // headless driver, seating the site's builder capacity (WorkComponent+0x30,
+                    // lazily via CalcMaxWorkers 0x14012e5c0) so no iteration runs with avail==0.
+                    // Roster-only guard suppresses the site build-mesh toggle during the attach.
+                    uintptr_t gwB = g_pGameWorldSingleton ? reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) : 0;
+                    uintptr_t townMgrB = gwB ? *reinterpret_cast<uintptr_t*>(gwB + 0xf0) : 0;
+                    uintptr_t profRegB = gwB ? *reinterpret_cast<uintptr_t*>(gwB + 0xb0) : 0;
+                    uint64_t builderMarker = profRegB ? *reinterpret_cast<uint64_t*>(profRegB + 0x38) : 0;
+                    if (townMgrB && builderMarker) {
+                        static void* s_calcMaxWorkers = nullptr; static bool s_cmwRes = false;
+                        if (!s_cmwRes) { s_calcMaxWorkers = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14012e5c0)); s_cmwRes = true; }
+                        int builderCount = 0;
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&workCompIBP);
+                        int cap = *reinterpret_cast<int*>(workCompIBP + 0x30);
+                        if (cap <= 0 && s_calcMaxWorkers) {
+                            cap = reinterpret_cast<int(*)(void*)>(s_calcMaxWorkers)(reinterpret_cast<void*>(workCompIBP));
+                            *reinterpret_cast<int*>(workCompIBP + 0x30) = cap;
+                        }
+                        builderCount = cap > 0 ? cap : 1;
+                        if (const char* e = std::getenv("BANISHED_BUILDER_COUNT"); e && e[0]) builderCount = std::atoi(e);
+                        // site entity = *(BuildComponent+0x10) (the workplace the builders attach to)
+                        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(bc + 0x10));
+                        int64_t siteEntity = *reinterpret_cast<int64_t*>(bc + 0x10);
+                        bool prevRoster = g_wpcRosterOnly;
+                        g_wpcRosterOnly = true;
+                        int seated = siteEntity ? CitizenEmploy_SeatWorkersAt(static_cast<int64_t>(townMgrB), siteEntity, builderMarker, builderCount) : 0;
+                        g_wpcRosterOnly = prevRoster;
+                        if (BC8_Trace())
+                            std::fprintf(stderr, "[BuildTrace] State8Enter seated %d/%d Builder(s) at site=%p (builderMarker=0x%llx)\n",
+                                         seated, builderCount, (void*)siteEntity, (unsigned long long)builderMarker);
+                    }
                 } else if (BC8_Trace()) {
                     std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure spawned but post skipped (postFn=%p workComp=%p)\n",
                                  (void*)s_postEc60, (void*)workCompIBP);
