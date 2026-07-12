@@ -5,8 +5,9 @@
 // Vtable: 0x140162260
 //
 // Fields (from Ghidra decompilation):
-//   +0x48: uint32 buildState (serialized)
-//   +0x4C: uint32 buildProgress (init 1, serialized)
+//   +0x48: int32  laborProgress accumulator (init 0) — raised +1 per delivered
+//          build-labor SendComponentMessage (Slot15/+0x78); read by State8Update
+//   +0x4C: int32  costMultiplier (init 1) — target = matComp[0x30] * this
 //   +0x50: byte   buildFlag (serialized)
 //   +0x58: void*  entityArray1 (InternalBasePtr array ptr)
 //   +0x60: int    entityArray1Count
@@ -555,6 +556,44 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm);      // 
 extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm);     // sub_7600 (slot +0x20, exit-transition)
 extern "C" char BuildComponent_State8To2Action(void* buildComp);             // sub_75e0 (slot +0x28, 8->2 action)
 
+// ============================================================
+// BuildComponent message-receive handler — port of BuildComponent_Slot15
+// (0x140108710), the real vtable_BuildComponent slot +0x78 ("OnMessage").
+//
+// This is THE build-labor +0x48 progress credit. The build action chain
+// (FUN_1400c0690 / BuildStructure_SetupBuildActions) pushes a SendComponentMessage
+// targeting the BuildComponent (type-id c7008) with message-code 0. When the
+// citizen's PerformWork(3s) completes and the executor advances to that node,
+// SendComponentMessage::AbstractImpl (sendcomponentmessage.cpp) scans the entity's
+// components, matches this BuildComponent by GetTypeId, and calls its vtable+0x78.
+// The handler credits ONE unit of labor into BuildComponent+0x48; State8Update
+// ramps the build meshes as +0x48 climbs toward target (matComp[0x30] * bc[0x4c])
+// and requests 8->2 completion once it is reached.
+//
+// In standalone the live-factory (CONTROLLER_LIVE_FACTORY_STATES) fills the whole
+// vtable with inert no-op stubs and only overrides GetTypeId/GetDefaultState/
+// CreateState — leaving +0x78 a no-op, so the credit never fired. We install this
+// real handler into slot 15 (+0x78) from InstallLive (BuildComponent_InstallMsgSlot).
+//   Slot15 ABI (verified vs disasm): (self /*RCX*/, int msgCode /*RDX*/, trailing
+//   args unused). SendComponentMessage passes msgCode = sendMsg+0x34 (= 0 here).
+static void BuildComponent_MsgReceive(void* self, int msgCode,
+                                      void* /*srcEntityRef*/,
+                                      uint32_t /*p1*/, uint32_t /*p2*/) {
+    if (msgCode == 0) {
+        int* prog = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0x48);
+        *prog += 1;
+        if (BCDraw_Trace())
+            std::fprintf(stderr, "[BuildTrace] MsgReceive: credited bc+0x48 -> %d\n", *prog);
+    }
+}
+
+// Installs the real +0x78 message-receive handler into the live-factory vtable.
+// Defined AFTER the CONTROLLER_LIVE_FACTORY_STATES macro (which declares the
+// BuildComponent_LiveVtable array). Called from InstallLive via PopulateStateTable
+// on EVERY instance creation, because InitInertTyped re-stubs the shared vtable each
+// time, so real slots must be re-installed after that re-fill.
+static void BuildComponent_InstallMsgSlot();
+
 // Table field->node-slot mapping (see controller_state_table.h + buildcomponent_state8.cpp):
 //   enterHandler (arg2) -> slot +0x18 Enter        (on state entry)
 //   trans38Handler(arg4) -> slot +0x38 DrawAlt     (PER-FRAME; altDraw=1 every frame)
@@ -562,6 +601,10 @@ extern "C" char BuildComponent_State8To2Action(void* buildComp);             // 
 //   transition handler   -> slot +0x28 OnState     (the 8->2 action)
 // TableRegisterState(t, id, enterH, trans30H, trans38H, updateH):
 static void BuildComponent_PopulateStateTable() {
+    // (Re)install the +0x78 message-receive credit handler every InstallLive:
+    // InitInertTyped re-fills the shared LiveVtable with inert stubs on each instance
+    // creation, so this must run before (and independent of) the idempotent table guard.
+    BuildComponent_InstallMsgSlot();
     using namespace ::ControllerLive;
     StateTable& t = BuildCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
@@ -588,4 +631,10 @@ CONTROLLER_LIVE_FACTORY_STATES(BuildComponent, 0x78, 0x83, 0x28, 1,
                                BuildComponent_PopulateStateTable)
 REGISTER_TYPE(BuildComponent, "ControllerComponent",
               &BuildComponent_Factory, &BuildComponent_CreateInPlace);
+
+// Real vtable slot +0x78 = index 15 (15*8). BuildComponent_LiveVtable is the static
+// array declared by CONTROLLER_LIVE_FACTORY_STATES above; visible from here on.
+static void BuildComponent_InstallMsgSlot() {
+    BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
+}
 #endif // STANDALONE_EXE
