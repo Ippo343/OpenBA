@@ -15,6 +15,8 @@
 #include "resolve.h"
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // ============================================================
@@ -198,6 +200,15 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
         if (intervalFloat) {
             s_fn_Time_Ctor(&pathInterval, *intervalFloat);
         }
+    }
+
+    // TEST-ONLY accelerator: BANISHED_PATHGRAPH_FAST forces the path branch every
+    // tick (interval 0) so BuildPathGraph/ProcessPaths/AssignCitizens fire within
+    // seconds instead of after the 300s (0x140172234) gate. Remove after wiring #17.
+    {
+        static int s_fast = -1;
+        if (s_fast < 0) { const char* e = std::getenv("BANISHED_PATHGRAPH_FAST"); s_fast = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_fast) pathInterval = 0;
     }
 
     if (pathInterval <= q[0x32]) {
@@ -484,6 +495,10 @@ bool CitizenBehavior_ProcessPaths(PathGraph* pg) {
 
     // If all pairs processed, run post-processing
     if (pg->m_pendingIdx < 0) {
+        static int s_dbg = -1;
+        if (s_dbg < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s_dbg = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (s_dbg) std::fprintf(stderr, "[BuildTrace] ProcessPaths: drained -> assign branch (Reassign=%p Assign=%p)\n",
+                                (void*)fn_PathGraph_ReassignWorkers, (void*)fn_PathGraph_AssignCitizens);
         // Worker reassignment based on computed distances
         if (fn_PathGraph_ReassignWorkers) {
             fn_PathGraph_ReassignWorkers(pg);
@@ -519,6 +534,10 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     if (pg->m_pendingIdx >= 0) {
         return;
     }
+
+    static int s_bpgDbg = -1;
+    if (s_bpgDbg < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s_bpgDbg = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    int dbgEntities = 0, dbgEntRegionOk = 0, dbgBldRegionOk = 0, dbgPairsAdded = 0;
 
     // Get key pointers from the game world singleton
     uint8_t* world = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
@@ -625,6 +644,14 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
     // Building list at citizenBehavior+0xb0 (via game world +0xb0)
     int profGroupCount = *reinterpret_cast<int*>(buildingList + 0x28);
 
+    // diag (trace-gated): how many collected building cells sit in a valid region
+    if (s_bpgDbg) {
+        for (int bi = 0; bi < cellCount && buildingCells; bi++) {
+            if (*reinterpret_cast<int*>(navData + 0x18 + (int64_t)buildingCells[bi] * 0x30) >= 0)
+                ++dbgBldRegionOk;
+        }
+    }
+
     for (int gi = 0; gi < profGroupCount; gi++) {
         // Get profession key from building list
         uint64_t profKey = *reinterpret_cast<uint64_t*>(
@@ -673,6 +700,8 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
             // Get entity's region ID
             int entityRegion = *reinterpret_cast<int*>(
                 navData + 0x18 + (int64_t)(uint32_t)entityCell * 0x30);
+            ++dbgEntities;
+            if (entityRegion >= 0) ++dbgEntRegionOk;
 
             // Pair with each building cell
             if (entityRegion >= 0 && buildingCells != nullptr) {
@@ -752,6 +781,7 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
                     if (oldPairs != pg->m_pairs && oldPairs) {
                         if (fn_MemFreeStatic) fn_MemFreeStatic(oldPairs);
                     }
+                    ++dbgPairsAdded;
 
                     // Insert placeholder into BST to prevent duplicate pairs
                     struct { int high; int low; int value; } bstKey;
@@ -777,6 +807,13 @@ void CitizenBehavior_BuildPathGraph(PathGraph* pg) {
 
     // ---- Step 5: Set pending index ----
     pg->m_pendingIdx = (int)pg->m_pairCount - 1;
+
+    if (s_bpgDbg)
+        std::fprintf(stderr,
+            "[BuildTrace] BuildPathGraph: townEntities(+0x28)=%d cells=%d bldRegionOk=%d "
+            "profGroups=%d profEntities=%d entRegionOk=%d pairsAdded=%d -> pendingIdx=%d\n",
+            *reinterpret_cast<int*>(citizenBehavior + 0x28), cellCount, dbgBldRegionOk,
+            profGroupCount, dbgEntities, dbgEntRegionOk, dbgPairsAdded, pg->m_pendingIdx);
 
     // Free temporary building cells array
     if (buildingCells && fn_MemFreeStatic) {
