@@ -254,13 +254,25 @@ bool GatherRawMaterials_ResolveFuncs() {
     if (iatSerIntBulk)
         s_fn_SerializeIntBulk = *reinterpret_cast<GRM_SerializeIntBulk_t*>(iatSerIntBulk);
 
-    uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x1401527e8);
-    if (iatMemAlloc)
-        s_fn_MemAlloc = *reinterpret_cast<GRM_MemAlloc_t*>(iatMemAlloc);
-
-    uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x1401527f0);
-    if (iatMemFree)
-        s_fn_MemFree = *reinterpret_cast<GRM_MemFree_t*>(iatMemFree);
+    // MemAlloc/MemFree — resolve via the canonical Runtime exports (static size/align &
+    // ptr forms). The exe IAT dispatch slots (0x1401527e8/0x1401527f0) are UNREGISTERED in
+    // the standalone exe AND mislabelled (they index the _rng/Lerp imports, not
+    // MemoryAllocator) — see ForesterWork's identical fix. Without this s_fn_MemAlloc stays
+    // NULL and GatherRawMaterials::Validate crashes (EXEC of 0) at its removal-array grow
+    // when a citizen's Idle-state work-tree walk validates the posted gather work.
+    // ResolveExport reads the Runtime DLL exports directly and is correct in BOTH modes.
+    s_fn_MemAlloc = reinterpret_cast<GRM_MemAlloc_t>(
+        ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));     // static (size,align)
+    if (!s_fn_MemAlloc) {
+        uintptr_t iatMemAlloc = ResolveAddr(Module::Exe, 0x1401527e8);
+        if (iatMemAlloc) s_fn_MemAlloc = *reinterpret_cast<GRM_MemAlloc_t*>(iatMemAlloc);
+    }
+    s_fn_MemFree = reinterpret_cast<GRM_MemFree_t>(
+        ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));        // static (ptr)
+    if (!s_fn_MemFree) {
+        uintptr_t iatMemFree = ResolveAddr(Module::Exe, 0x1401527f0);
+        if (iatMemFree) s_fn_MemFree = *reinterpret_cast<GRM_MemFree_t*>(iatMemFree);
+    }
 
     // Type IDs. In the DLL build these come from raw .rdata; in standalone the .rdata
     // globals are never seeded (ResolveAddr(Exe,.rdata)==NULL) so we fall back to the
@@ -584,6 +596,21 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 int capacity = *(int*)(citizenStorageIBP + 0x38);
                 fn_InternalBasePtr_CheckPtr(&citizenStorageIBP);
                 int currentStored = s_fn_StorageQueryCount((void*)citizenStorageIBP);
+
+                // [CARRY-DIAG] when capacity is 0, dump the carry-storage's StorageDescription
+                // state to tell "no description" from "description present, Draw never ran".
+                if (GRM_Trace() && capacity == 0) {
+                    uintptr_t stComp = citizenStorageIBP;
+                    uintptr_t stDesc = stComp ? *(uintptr_t*)(stComp + 0x18) : 0;
+                    std::fprintf(stderr,
+                        "[GRMExec] CARRY-DIAG storageComp=%p carryEntity=%p desc=%p avail(+0x21)=%d maxPerSlot(+0x24)=%d areaBased(+0x20)=%d slotCount(+0x30)=%d\n",
+                        (void*)stComp, (void*)*(uintptr_t*)(citizenEnt + 0x10), (void*)stDesc,
+                        stDesc ? *(uint8_t*)(stDesc + 0x21) : -1,
+                        stDesc ? *(int*)(stDesc + 0x24) : -1,
+                        stDesc ? *(uint8_t*)(stDesc + 0x20) : -1,
+                        stComp ? *(int*)(stComp + 0x30) : -1);
+                    std::fflush(stderr);
+                }
 
                 int carryWeight = *(int*)((uintptr_t)rawMatComp + 0x48);
                 if (capacity - currentStored < carryWeight * remaining) {

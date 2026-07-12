@@ -23,6 +23,7 @@
 #include "Object/factory_registration.h"
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
+#include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
 #ifdef STANDALONE_EXE
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
 #endif
@@ -1757,6 +1758,52 @@ static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
 // it with the world. Returns the raw entity pointer (for optional later linking)
 // or nullptr. CitizenComponent initialisation (FUN_140117080) is deferred — see
 // the section header; only the spawn-cell transform (Foundation-F) is reproduced.
+// ---- Citizen carry-storage capacity init (BANISHED_LIVE_CITIZEN_CARRY) ----------
+// A citizen's carry StorageComponent has a valid StorageDescription (maxPerSlot +0x24
+// = 100, not area-based) but its capacity (+0x38) stays 0 in standalone: the component's
+// OnAdded/Draw slot (StorageComponent_Draw 0x14012c640, which sets +0x38 = maxPerSlot *
+// tileArea) never runs for citizens (inert in SA). With capacity 0 a citizen can carry
+// nothing, so every haul aborts — GatherRawMaterials::Execute recomputes remaining=0 and
+// replans, and no construction (or general economy) hauling ever completes. Run the
+// faithful Draw setup once at spawn. The carry storage is located exactly as
+// GatherRawMaterials does (Entity_FindComponent_Storage 0x140006270 on entity+0x10).
+// Gated default-OFF (A/B); fold into SA_LIVE_ENV once verified.
+static void CitizenCarryStorageInit(void* ent) {
+    static int s_on = -1;
+    if (s_on < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_CITIZEN_CARRY");
+        s_on = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    if (s_on != 1 || !ent || !fn_InternalBasePtr_CheckPtr) return;
+
+    static bool s_res = false;
+    static void* (*s_find6270)(uintptr_t, void*) = nullptr;
+    if (!s_res) {
+        s_find6270 = reinterpret_cast<void* (*)(uintptr_t, void*)>(ResolveAddr(Module::Exe, 0x140006270));
+        s_res = true;
+    }
+    static int s_log = 0;
+    bool logThis = (s_log < 6);
+    if (!s_find6270) { if (logThis) { ++s_log; fprintf(stderr, "[CarryInit] BAIL find6270 null\n"); fflush(stderr); } return; }
+
+    // `ent` IS the citizen entity; find its StorageComponent directly. (GRM Execute's
+    // `citizenEnt` is instead a component whose +0x10 dereferences to this same entity,
+    // hence GRM's extra +0x10 hop — which does NOT apply here.)
+    uintptr_t stIbp = 0;
+    s_find6270(reinterpret_cast<uintptr_t>(ent), &stIbp);
+    if (!stIbp) { if (logThis) { ++s_log; fprintf(stderr, "[CarryInit] BAIL no storage (ent=%p)\n", ent); fflush(stderr); } return; }
+    fn_InternalBasePtr_CheckPtr(&stIbp);
+    void* stComp = reinterpret_cast<void*>(stIbp);   // FindComponent writes the component ptr into the IBP
+
+    int before = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
+    StorageComponent_Draw(reinterpret_cast<StorageComponent*>(stComp));
+    int after = *reinterpret_cast<int*>((uintptr_t)stComp + 0x38);
+    if (logThis) { ++s_log;
+        fprintf(stderr, "[CarryInit] citizen storage=%p capacity(+0x38) %d->%d\n", stComp, before, after);
+        fflush(stderr);
+    }
+}
+
 static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
                              const float base[3], float jitter, void* rng,
                              bool isChild, int variantIdx) {
@@ -1787,6 +1834,10 @@ static void* SpawnOneCitizen(void* citizenTemplate, void* entityList,
         fn_InternalBasePtr_CheckPtr(&entIBP);
         ApplyCitizenColorScale((void*)entIBP, isChild, rng, genderMc, variantIdx);
     }
+
+    // Give the citizen its carry-storage capacity (StorageComponent OnAdded is inert in
+    // SA) so the citizen can actually pick up/haul materials. Default-OFF (A/B).
+    CitizenCarryStorageInit(ent);
     return ent;
 }
 
