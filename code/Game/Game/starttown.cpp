@@ -789,7 +789,12 @@ static int BuildDemoIndex() {
     static int idx = -2;
     if (idx == -2) {
         const char* e = std::getenv("BANISHED_BUILD_DEMO_INDEX");
-        idx = (e && e[0]) ? std::atoi(e) : 0;
+        // Default -1 = NO forced demo foundation: leaves g_pConstructionDemoSite null so
+        // BuildComponent_DemoGateSkip drives any player-placed foundation organically
+        // instead. A start-town building is force-completed into the demo only when an
+        // explicit index (>=0) is requested. (Old default 0 seeded the StorageBarn, which
+        // had no haul source anyway.)
+        idx = (e && e[0]) ? std::atoi(e) : -1;
     }
     return idx;
 }

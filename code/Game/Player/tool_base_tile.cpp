@@ -233,7 +233,14 @@ static void* ToolTile_FindModelComponentScoped(long long entity) {
 // with sub-count at +0x10 and sub-mesh array ptr at +0x08 (indexed by modelVariant).
 static void (*s_fn_tileSetMesh)(void*, void*) = nullptr;   // MeshInstance::SetMesh (slot 0x140151498)
 static bool s_tileMeshInit = false;
-static void ToolTile_ForceCompletedModel(long long modelComp) {
+// Set the placed building's ModelComponent build frame (+0x166) and SetMesh it so the
+// register-time OnAddedPass renders it. `foundation`:
+//   false -> LAST sub-mesh (finished building) — used when the live construction pipeline
+//            is OFF, so a placed building isn't stuck model-less forever.
+//   true  -> FIRST sub-mesh (variant 0 = construction-start foundation) — used when
+//            BANISHED_LIVE_BUILDCTRL is on: the BuildComponent state machine then drives
+//            the model up through the build stages to completion (organic construction).
+static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
     if (!s_tileMeshInit) {
         s_tileMeshInit = true;
         uintptr_t sl = ResolveAddr(Module::Exe, 0x140151498);
@@ -253,7 +260,9 @@ static void ToolTile_ForceCompletedModel(long long modelComp) {
     if (variantIdx < 0 || static_cast<uint32_t>(variantIdx) >= groupCount) variantIdx = 0;
     uint8_t* group = groupArray + static_cast<int64_t>(variantIdx) * 0x18;
     int subCount = *reinterpret_cast<int*>(group + 0x10);
-    int modelVariant = (subCount > 0) ? subCount - 1 : 0;   // last sub-mesh = complete
+    // foundation -> first sub-mesh (0); else last sub-mesh (complete). A single-mesh group
+    // has no construction stages, so 0 == complete either way (harmless).
+    int modelVariant = foundation ? 0 : ((subCount > 0) ? subCount - 1 : 0);
 
     *reinterpret_cast<int16_t*>(m + 0x164) = static_cast<int16_t>(variantIdx);
     *reinterpret_cast<int16_t*>(m + 0x166) = static_cast<int16_t>(modelVariant);
@@ -266,11 +275,21 @@ static void ToolTile_ForceCompletedModel(long long modelComp) {
 
     if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
         std::fprintf(stderr, "[place-model] modelComp=%p desc=%p groups=%u variantIdx=%d "
-                     "subCount=%d modelVariant=%d mesh=%p setMesh=%p\n",
+                     "subCount=%d modelVariant=%d (%s) mesh=%p setMesh=%p\n",
                      (void*)modelComp, modelDesc, groupCount, variantIdx, subCount,
-                     modelVariant, mesh, (void*)s_fn_tileSetMesh);
+                     modelVariant, foundation ? "foundation" : "complete", mesh, (void*)s_fn_tileSetMesh);
         std::fflush(stderr);
     }
+}
+
+// Organic construction is available when the live BuildComponent state machine is enabled.
+static bool ToolTile_OrganicConstruction() {
+    static int s_v = -1;
+    if (s_v < 0) {
+        const char* e = std::getenv("BANISHED_LIVE_BUILDCTRL");
+        s_v = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_v == 1;
 }
 #endif
 
@@ -389,9 +408,13 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         }
         *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
 #ifdef STANDALONE_EXE
-        // No BuildComponent completion flow in standalone → force the finished
-        // building mesh so the register-time OnAddedPass renders it (see helper).
-        ToolTile_ForceCompletedModel(reinterpret_cast<long long>(plVar4));
+        // With the live construction pipeline (BANISHED_LIVE_BUILDCTRL) the placed building
+        // is left at its FOUNDATION frame so the BuildComponent state machine drives it
+        // through organic gather -> build -> complete: BuildComponent_DemoGateSkip picks up
+        // any incomplete-model building when no demo foundation is seeded (BuildDemoIndex
+        // default = -1). Without the pipeline, force the finished mesh so the placed building
+        // renders (the original "no completion flow -> model-less forever" guard).
+        ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), ToolTile_OrganicConstruction());
 #endif
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
         if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
