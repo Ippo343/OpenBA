@@ -188,7 +188,11 @@ void BuildUI_Slot4(BuildUI* self) {
         fn_String_Dtor(zeroStr);
 
         uint8_t fmtBuf[8];
-        int capacity = *(int*)(smComp + 0x48);
+        // smComp (the site's build-material storage, found via fn_FindComponent_SM =
+        // ClearAreaComponent) can be null in standalone if that component isn't present
+        // / its type-id didn't resolve. Retail always has it; guard the deref so a
+        // partial panel (no capacity number) beats a crash.
+        int capacity = smComp ? *(int*)(smComp + 0x48) : 0;
         fn_String_Format(fmtBuf, "%d", (uint64_t)(uint32_t)capacity);
         fn_TextElement_SetParameter(*(void**)(s + 0x48), 1, fmtBuf);
         fn_String_Dtor(fmtBuf);
@@ -320,26 +324,32 @@ void BuildUI_Slot4(BuildUI* self) {
             fn_TextElement_SetParameter((void*)rowTextTotal, 1, fmtBuf);
             fn_String_Dtor(fmtBuf);
         } else {
-            // Empty row: clear text and sprite
-            uint8_t emptyStr[16];
-            fn_UIString_Ctor_Entry(emptyStr, 0);
-            fn_TextElement_SetText((void*)rowTextTotal, emptyStr);
+            // Empty row: clear text and sprite (cosmetic — blanks table rows beyond
+            // the material count). In standalone fn_UIString_Ctor_Entry (UI::String
+            // single-arg ctor, IAT dispatch slot 0x140151300) is unresolved -> null;
+            // calling it faulted (EXEC of 0, R8=0 at buildui.cpp:329). Guard it — an
+            // uncleared placeholder row beats a crash. Guard the sprite clear the same
+            // way. TODO: populate dispatch slot 0x140151300 to restore proper clearing.
+            if (fn_UIString_Ctor_Entry && fn_TextElement_SetText) {
+                uint8_t emptyStr[16];
+                fn_UIString_Ctor_Entry(emptyStr, 0);
+                fn_TextElement_SetText((void*)rowTextTotal, emptyStr);
 
-            uint8_t emptyStr2[16];
-            fn_UIString_Ctor_Entry(emptyStr2, 0);
-            fn_TextElement_SetText((void*)labelStorage, emptyStr2);
+                uint8_t emptyStr2[16];
+                fn_UIString_Ctor_Entry(emptyStr2, 0);
+                fn_TextElement_SetText((void*)labelStorage, emptyStr2);
+            }
 
-            uint8_t emptySprite[16];
+            if (fn_Sprite_Default_Ctor && fn_LabelElement_SetSprite) {
+                uint8_t emptySprite[16];
 #ifdef _DEBUG
-            Debug_Sprite_DefaultCtor(emptySprite);
+                Debug_Sprite_DefaultCtor(emptySprite);
+                Debug_LabelElement_SetSprite((void*)labelStorage, emptySprite);
 #else
-            fn_Sprite_Default_Ctor(emptySprite);
+                fn_Sprite_Default_Ctor(emptySprite);
+                fn_LabelElement_SetSprite((void*)labelStorage, emptySprite);
 #endif
-#ifdef _DEBUG
-            Debug_LabelElement_SetSprite((void*)labelStorage, emptySprite);
-#else
-            fn_LabelElement_SetSprite((void*)labelStorage, emptySprite);
-#endif
+            }
         }
 
         rowIdx++;
@@ -384,6 +394,11 @@ void BuildUI_Slot7(BuildUI* self) {
     // Find SM component (storage info)
     uint64_t smComp = 0;
     fn_FindComponent_SM((void*)entityPtr, &smComp);
+    // Progress/percent math below unconditionally derefs smComp (+0x48 capacity, +0x10
+    // entity self-ref via CountOccupiedBuildTiles). If the build-material storage
+    // component isn't found (standalone: missing component / unresolved type-id), skip
+    // this update rather than fault. Slot4 already set an initial "0/total" display.
+    if (smComp == 0) return;
 
     // Check if build is complete: totalRequired * multiplier <= posComp delivered total
     if (posComp != 0 && resourceComp != nullptr) {

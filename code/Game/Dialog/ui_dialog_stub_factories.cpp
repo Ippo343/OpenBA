@@ -630,7 +630,110 @@ UI_DIALOG_STUB(UpgradeUI,           "UI::DialogController", 0x38);
 //      workplace spinner panel now self-hides once a building is complete (its
 //      profession clears), so finished houses/barns/piles show only center/pin/close
 //      + their residence/storage content instead of a stale worker up/down spinner. ----
-UI_DIALOG_STUB(BuildUI,             "UI::DialogController", 0x50);
+// ---- BuildUI: PROMOTED to the real reimpl (2026-07-13) -----------------------
+// The in-game "under construction" panel: a per-material storage table
+// (delivered / required), a construction progress bar + percent, and a
+// pause-construction button. It is a DialogController bound into a building's
+// info dialog (created by EditTool select); the generic stub left every slot a
+// no-op, so selecting a building being built showed the ordinary (empty) info
+// panel with no materials/progress. Wiring Slot4 (setup +0x20), Slot7
+// (per-frame update +0x38) and Slot9 (button event +0x48) to the real bodies in
+// code/Game/Dialog/buildui.cpp populates it. Construction stays the stub
+// alloc+zero+vtable; the engine fills the base fields (dialog +0x20 / datasource
+// +0x28) afterward. Same shape as the BuildRequirementUI promotion above.
+struct BuildUI;  // opaque; the reimpl casts internally
+extern void BuildUI_Slot4(BuildUI* self);
+extern void BuildUI_Slot7(BuildUI* self);
+extern void BuildUI_Slot9(BuildUI* self, uint64_t param2, int param3, int param4);
+namespace uistub_BuildUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("BuildUI"); return c; }
+    // Dtor: free the Slot4-allocated row array at self+0x30 (MemAlloc'd fresh on
+    // every open), then the standard vtable-restore + conditional self-free.
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self;
+        if (fn_MemFreeStatic) fn_MemFreeStatic(*reinterpret_cast<void**>((uintptr_t)self + 0x30));
+        *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x30) = 0;
+        *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x38) = 0;
+        *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // Lazy-fill the exe-.rdata type-id globals the reimpl + its FindComponent
+    // helpers key off. In standalone these resolve from raw exe .rdata → null;
+    // fill from the live Factory tree (post-Engine::Startup), idempotent. The
+    // FindComponent helpers null-check their type-id pointer (a still-null one is
+    // a safe no-match, not a crash — Entity_FindComponentByExeTypeId:1139), so the
+    // only HARD requirements are the three ids the reimpl derefs directly:
+    // ComponentEntity / BuildDescription (g_TypeId_ResourceComponent) /
+    // RawMaterialDescription. Position=BuildComponent (0x1401c7008) and
+    // SM=ClearAreaComponent (0x1401c71c8) drive the resource/progress finds; the
+    // rest (MapComponent/WorkPlaceComponent/WorkComponent/StorageComponent) are
+    // already registered+filled by FillEconomyTypeIdGlobals.
+    void EnsureTypeIds() {
+        static uint32_t s_entity=0, s_buildDesc=0, s_rawMat=0, s_build=0, s_clear=0;
+        if (!g_TypeId_ComponentEntity)        { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");        if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
+        if (!g_TypeId_ResourceComponent)      { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");    if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
+        if (!g_TypeId_RawMaterialDescription) { s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
+        if (!g_TypeId_PositionComponent)      { s_build=::Object::ResolveTypeIdByNameLazy("BuildComponent");         if(s_build) g_TypeId_PositionComponent=&s_build; }
+        if (!g_TypeId_SMComponent)            { s_clear=::Object::ResolveTypeIdByNameLazy("ClearAreaComponent");      if(s_clear) g_TypeId_SMComponent=&s_clear; }
+    }
+    // Slot4 has run once self+0x40 (the "progress" element IBP) is populated.
+    inline bool IsSetUp(void* self) { return self && *reinterpret_cast<uint64_t*>((uintptr_t)self + 0x40) != 0; }
+    bool HardIdsReady() {
+        return g_TypeId_ComponentEntity && g_TypeId_ResourceComponent && g_TypeId_RawMaterialDescription;
+    }
+    void Slot4(void* self) {
+        EnsureTypeIds();
+        if (!self || !HardIdsReady()) return;
+        // Idempotent: the framework dispatches setup on attach; a re-drive would
+        // append a second copy of the storage rows to self+0x30 (count never reset)
+        // — exactly the ProfessionUI double-populate class. Skip if already set up.
+        if (IsSetUp(self)) return;
+        BuildUI_Slot4(reinterpret_cast<BuildUI*>(self));
+#if defined(_DEBUG)
+        if (const char* e=std::getenv("BANISHED_BUILDUI_TRACE"); e && e[0] && e[0]!='0') {
+            static int n=0; if(n<8){++n;
+                fprintf(stderr,"[BuildUI] Slot4 self=%p progress(+0x40)=%p rows(+0x30)=%p rowCount(+0x38)=%d\n",
+                        self, *reinterpret_cast<void**>((uintptr_t)self+0x40),
+                        *reinterpret_cast<void**>((uintptr_t)self+0x30),
+                        *reinterpret_cast<int*>((uintptr_t)self+0x38)); fflush(stderr);
+            }
+        }
+#endif
+    }
+    void Slot7(void* self) {
+        EnsureTypeIds();
+        // Per-frame update: the framework fires this every tick, including before
+        // Slot4 populates (self+0x40 progress / self+0x30 rows still null). Guard.
+        if (!IsSetUp(self) || !HardIdsReady()) return;
+        BuildUI_Slot7(reinterpret_cast<BuildUI*>(self));
+    }
+    void Slot9(void* self, uint64_t p2, int p3, int p4) {
+        EnsureTypeIds();
+        if (!self || !g_TypeId_ComponentEntity) return;
+        BuildUI_Slot9(reinterpret_cast<BuildUI*>(self), p2, p3, p4);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct SlotWire { SlotWire(){
+        g_vt[4]=reinterpret_cast<void*>(&Slot4);
+        g_vt[7]=reinterpret_cast<void*>(&Slot7);
+        g_vt[9]=reinterpret_cast<void*>(&Slot9);
+    } } g_sw;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x50;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){
+        if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr;
+        void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x50,8); if(!p) return nullptr;
+        Zero(p); *reinterpret_cast<void**>(p)=g_vt;
+#if defined(_DEBUG)
+        if (const char* e=std::getenv("BANISHED_BUILDUI_TRACE"); e && e[0] && e[0]!='0') {
+            static int n=0; if(n<8){++n; fprintf(stderr,"[BuildUI] Factory -> %p\n",p); fflush(stderr);} }
+#endif
+        return p;
+    }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(BuildUI, "UI::DialogController",
+              &uistub_BuildUI::Factory, &uistub_BuildUI::InPlace);
 // ---- ResidenceUI: PROMOTED to real SA vtable (residenceui.cpp) — a house panel now
 //      lists its residents (name/gender/age/profession) from the ResidenceComponent
 //      roster instead of staying empty. ----

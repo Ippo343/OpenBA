@@ -455,16 +455,19 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
             rampFrames = (e && e[0]) ? std::atoi(e) : 600;
             if (rampFrames < 1) rampFrames = 600;
         }
-        if (target <= 0) {
-            // Real target = matComp[0x30] * bc[0x4c]; bc[0x4c] is 0 in SA (Draw stage 4
-            // copies it from the uninitialized WorkPlaceComponent+0x58). Drive the ramp
-            // over rampFrames instead so the mesh progression is clearly visible. Real
-            // BuildStructure labor (2c) computes and raises the true target.
+        // Demo mode ALWAYS ramps over rampFrames. The real target (matComp[0x30] *
+        // bc[0x4c]) is tiny in SA — when bc[0x4c] (build multiplier) is 0, BC8_Target
+        // falls back to the bare base effort (~30), so the foundation would complete in
+        // ~30 ticks, too fast to inspect or click. Stretching to rampFrames keeps the
+        // building visibly under construction (default 600 ≈ 10s; raise BANISHED_BUILD_DEMO_FRAMES
+        // to e.g. 30000 for a leisurely click test). Real BuildStructure labor (2c) uses
+        // the true target and is unaffected (this block is demo-force + demo-site only).
+        {
             target = rampFrames;
             static bool s_loggedTarget = false;
             if (BC8_Trace() && !s_loggedTarget) {
                 s_loggedTarget = true;
-                std::fprintf(stderr, "[BuildTrace] (force) target was 0 (bc+0x4c=%d matComp=%p) -> ramp over %d frames\n",
+                std::fprintf(stderr, "[BuildTrace] (force) demo ramp: bc+0x4c=%d matComp=%p -> ramp over %d frames\n",
                              *reinterpret_cast<int32_t*>(bc + 0x4c), matComp, rampFrames);
             }
         }

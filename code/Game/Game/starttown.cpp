@@ -798,6 +798,22 @@ static int BuildDemoIndex() {
     }
     return idx;
 }
+// House-demo mode (BANISHED_BUILD_DEMO_HOUSE): pick the FIRST WoodHouse (residence)
+// as the construction-demo foundation, by component type rather than a fragile
+// numeric index. Targeting a storage building (StorageBarn, the old index-0 default)
+// made the build sim reconfigure the town's main resource pile into build-INPUT
+// storage → citizens had nowhere to pick materials up → haul crash. A house is a
+// pure consumer, so the barn/yard survive as the haul source. Only the first
+// residence is taken (g_demoHouseAssigned latches).
+static bool g_demoHouseAssigned = false;
+static bool BuildDemoWantsHouse() {
+    static int en = -1;
+    if (en < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_DEMO_HOUSE");
+        en = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return en == 1;
+}
 #endif
 
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
@@ -945,7 +961,18 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // foundation mesh so State1Enter can drive it through the real build stages.
         bool isDemoFoundation = false;
 #ifdef STANDALONE_EXE
-        isDemoFoundation = BuildDemoEnabled() && (i == BuildDemoIndex());
+        if (BuildDemoEnabled()) {
+            if (BuildDemoWantsHouse()) {
+                // First residence (WoodHouse) becomes the demo foundation.
+                if (!g_demoHouseAssigned &&
+                    FindComponentOnEntity(entity, TypeId("ResidenceComponent"))) {
+                    isDemoFoundation = true;
+                    g_demoHouseAssigned = true;
+                }
+            } else {
+                isDemoFoundation = (i == BuildDemoIndex());
+            }
+        }
 #endif
         if (!isDemoFoundation) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
