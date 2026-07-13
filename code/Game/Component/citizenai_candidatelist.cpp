@@ -656,8 +656,37 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
             bt_isBuilder = true;
     }
     auto bt_logEnter = [&](int r) -> int {
-        if (bt_isBuilder && r)
+        if (bt_isBuilder && r) {
             std::fprintf(stderr, "[BuilderTrace] citizen=%p ENTERED state=%d\n", bt_cit, state);
+            // One-shot field dump per builder (resolve child-vs-adult / workplace / housing).
+            static void* s_dumped[8] = {0,0,0,0,0,0,0,0}; static int s_dn = 0;
+            bool seen = false;
+            for (int i = 0; i < s_dn && i < 8; ++i) if (s_dumped[i] == bt_cit) { seen = true; break; }
+            if (!seen && s_dn < 8) {
+                s_dumped[s_dn++] = bt_cit;
+                uint8_t* c = reinterpret_cast<uint8_t*>(bt_cit);
+                int64_t desc = *reinterpret_cast<int64_t*>(c + 0x288);
+                float age = *reinterpret_cast<float*>(c + 0x3c);
+                float thr = desc ? *reinterpret_cast<float*>(desc + 0x44) : -1.0f;
+                float hunger = *reinterpret_cast<float*>(c + 0x44);
+                float thirst = *reinterpret_cast<float*>(c + 0x48);
+                float hThrC8 = desc ? *reinterpret_cast<float*>(desc + 0xc8) : -1.0f;  // state-0 hunger-other
+                float hThrCC = desc ? *reinterpret_cast<float*>(desc + 0xcc) : -1.0f;  // state-0xe hunger urgent
+                float hsr2Thr = desc ? *reinterpret_cast<float*>(desc + 0xd4) : -1.0f; // HSR2 threshold
+                std::fprintf(stderr, "[BuilderTrace] FIELDS citizen=%p hunger(+0x44)=%.2f thirst(+0x48)=%.2f "
+                             "hThr(desc+0xc8)=%.2f hThrUrg(desc+0xcc)=%.2f hsr2Thr(desc+0xd4)=%.2f age(+0x3c)=%.2f adultThr(desc+0x44)=%.2f\n",
+                             bt_cit, hunger, thirst, hThrC8, hThrCC, hsr2Thr, age, thr);
+                std::fprintf(stderr, "[BuilderTrace] FIELDS2 citizen=%p "
+                             "elder(+0x208)=%p wp(+0x238)=%p house(+0x248)=%p houseGate(+0x68)=%p workTarget(+0x228)=%p prof(+0x1f0)=0x%llx\n",
+                             bt_cit,
+                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x208)),
+                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x238)),
+                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x248)),
+                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x68)),
+                             reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(c + 0x228)),
+                             (unsigned long long)*reinterpret_cast<int64_t*>(c + 0x1f0));
+            }
+        }
         return r;
     };
 
@@ -665,8 +694,8 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
     if (*reinterpret_cast<int64_t*>(base + (int64_t)state * 8 + 0x40) < 1) {
         uintptr_t addr = 0;
         switch (state) {
-            case 0:  case 0xe: addr = 0x14010cd80; break;  // AdultTransition
-            case 1:  case 0xf: addr = 0x14010d2c0; break;  // ElderTransition
+            case 0:  case 0xe: addr = 0x14010cd80; break;  // EAT/GetFood (Ghidra "AdultTransition"=MISNOMER; +0x44=hunger, drains via msg2->EatFromStorage 0x1401152e0)
+            case 1:  case 0xf: addr = 0x14010d2c0; break;  // DRINK/GetWater (Ghidra "ElderTransition"=MISNOMER; +0x48=thirst)
             case 2:            addr = 0x14010b340; break;  // FindHousing
             case 3:            addr = 0x14010c360; break;  // Education
             case 4:            addr = 0x14010c890; break;  // GrowUp

@@ -47,10 +47,15 @@ typedef int   (*fn_Anchor7fb0_t)(void* entityIBPptr, float* out);
 typedef int   (*fn_CalcDist8830_t)(int* game, uint32_t cellA, uint32_t cellB);
 // 0x140003110 — growable 8-byte-element array: set-count + append *elemIBP.
 typedef void  (*fn_ArrayAdd3110_t)(int64_t* arrayStruct, int newCount, void* elemIBP);
+// 0x1401163d0 — CitizenComponent::AssignWorkplace(self, workplaceIBP, slotIndex).
+//   Passing &nullIBP,-1 detaches the citizen from any workplace worker list and clears
+//   citizen+0x238 (workplace) / +0x240 (slot) — the "become an unassigned laborer" clear.
+typedef void  (*fn_AssignWorkplace_t)(void* self, void* workplaceIBP, int slotIndex);
 
-fn_Anchor7fb0_t   s_anchor7fb0   = nullptr;
-fn_CalcDist8830_t s_calcDist8830 = nullptr;
-fn_ArrayAdd3110_t s_arrayAdd3110 = nullptr;
+fn_Anchor7fb0_t      s_anchor7fb0      = nullptr;
+fn_CalcDist8830_t    s_calcDist8830    = nullptr;
+fn_ArrayAdd3110_t    s_arrayAdd3110    = nullptr;
+fn_AssignWorkplace_t s_assignWorkplace = nullptr;
 uint32_t          s_tidResidence = 0;   // ResidenceComponent (c7cf0) — self-resolved
 bool              s_init         = false;
 
@@ -59,6 +64,7 @@ void EnsureFns() {
     s_anchor7fb0   = reinterpret_cast<fn_Anchor7fb0_t>(ResolveAddr(Module::Exe, 0x140087fb0));
     s_calcDist8830 = reinterpret_cast<fn_CalcDist8830_t>(ResolveAddr(Module::Exe, 0x140008830));
     s_arrayAdd3110 = reinterpret_cast<fn_ArrayAdd3110_t>(ResolveAddr(Module::Exe, 0x140003110));
+    s_assignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(ResolveAddr(Module::Exe, 0x1401163d0));
     if (s_tidResidence == 0) s_tidResidence = ::Object::GetTypeIdByName("ResidenceComponent");
     s_init = true;
 }
@@ -527,12 +533,27 @@ extern "C" int CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity,
 
         if (seatedCz != 0) {
             ++seated;
+            // A real retail Builder-profession citizen has NO producing workplace: work flows
+            // through the task-reservation system (+0x208 / town task-mgr), not AssignWorkplace,
+            // so citizen+0x238 == 0 for them (Ghidra-verified). Our idle-laborer seed carries a
+            // stale +0x238 (old/residence workplace) which makes the CitizenAI candidate brain
+            // offer GatherResources/2 (restock-your-workplace) forever — the "firewood at the
+            // build site" distraction. Clear it faithfully via AssignWorkplace(&null,-1) (proper
+            // worker-list detach + +0x238=0 / +0x240=-1) so the healthy-branch gather block,
+            // gated `if(+0x238!=0)`, is skipped and the builder falls through to Idle -> build.
+            int64_t prevWp = *reinterpret_cast<int64_t*>(seatedCz + 0x238);
+            if (prevWp != 0 && s_assignWorkplace) {
+                int64_t nullIBP = 0;
+                s_assignWorkplace(reinterpret_cast<void*>(seatedCz), &nullIBP, -1);
+            }
             if (Trace())
                 fprintf(stderr, "[EmployCascade] seatAt #%d citizen=%p prof(+0x1f0)=0x%llx "
-                        "workplace(+0x248)=%p avail=%p\n",
+                        "workplace(+0x248)=%p wpCleared(+0x238 %p->%p) avail=%p\n",
                         seated, reinterpret_cast<void*>(seatedCz),
                         (unsigned long long)*reinterpret_cast<int64_t*>(seatedCz + 0x1f0),
                         reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x248)),
+                        reinterpret_cast<void*>(prevWp),
+                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(seatedCz + 0x238)),
                         reinterpret_cast<void*>(availEntity)), fflush(stderr);
         } else {
             if (Trace()) { fprintf(stderr, "[EmployCascade] seatAt #%d FAILED (no idle laborer)\n", i); fflush(stderr); }
