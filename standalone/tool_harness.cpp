@@ -55,7 +55,7 @@ extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param);
 // (gameWorld+0x148 +0x08 terrain / +0x10 overlay) from the raw pixel arrays.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
 // Drive a named controller's Slot4 (+0x20 SetupImage) on the just-opened dialog.
-extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName);
+extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex);
 // Open the in-game "Map" menu dialog (buttonMap id 11 → MapParamsDialog).
 extern "C" void MapParamsDialog_HarnessOpen();
 
@@ -402,11 +402,16 @@ void FireUtilityDialog() {
     printf("[ToolHarness] utility-dialog open returned — dialog should now render "
            "(watch subsequent frames for crashes).\n");
 
-    // Drive MapUI::SetupImage explicitly (AddDialog doesn't reach controller setup
-    // through the standalone ToolUI child-dialog vtable). Binds the uploaded
-    // terrain/overlay textures to the dialog's imageMap/imageOverlay elements.
+    // Drive controller setup explicitly (AddDialog doesn't reach controller setup
+    // through the standalone ToolUI child-dialog vtable). Map: Slot4 SetupImage binds
+    // the uploaded terrain/overlay textures. Professions: Slot5 populates the table +
+    // spinner/number caches. The content sub-tree is often inserted a frame or more
+    // after the open, so the +90-frame delayed rescan (ToolHarness_Tick) is what
+    // usually lands it; this same-frame attempt is a best-effort.
     if (std::strstr(tmplName, "Map") != nullptr)
-        ToolbarUtility_HarnessDriveController("MapUI");
+        ToolbarUtility_HarnessDriveController("MapUI", 4);
+    else if (std::strstr(tmplName, "Profession") != nullptr)
+        ToolbarUtility_HarnessDriveController("ProfessionUI", 5);
 
     // --- Minimap image-buffer probe (map-render bring-up) ---------------------
     // MapUI::Slot4 (SetupImage) reads the minimap subsystem at gameWorld+0x148,
@@ -514,9 +519,12 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         s_rescanned = true;
         if (std::strcmp(s_toolName, "utility") == 0 ||
             std::strcmp(s_toolName, "scan") == 0) {
-            printf("[ToolHarness] DELAYED rescan at frame %d (looking for minimap content)...\n",
-                   frameNum);
-            ToolbarUtility_HarnessDriveController("MapUI");
+            const char* tmpl = std::getenv("BANISHED_UTILITY_TEMPLATE");
+            bool isProf = tmpl && std::strstr(tmpl, "Profession") != nullptr;
+            printf("[ToolHarness] DELAYED rescan at frame %d (looking for %s content)...\n",
+                   frameNum, isProf ? "profession" : "minimap");
+            if (isProf) ToolbarUtility_HarnessDriveController("ProfessionUI", 5);
+            else        ToolbarUtility_HarnessDriveController("MapUI", 4);
         }
     }
 
@@ -542,7 +550,7 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "scan") == 0) {
         // Scan all live HUD dialogs (UI+0x28 list) for a MapUI controller /
         // imageMap element — locate where the visual minimap lives.
-        ToolbarUtility_HarnessDriveController("MapUI");
+        ToolbarUtility_HarnessDriveController("MapUI", 4);
     } else {
         // Default / "removal": the original DragTool path (needs the live EntityUI).
         if (!entityUI) return;

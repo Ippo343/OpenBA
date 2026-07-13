@@ -704,10 +704,11 @@ extern "C" void ToolbarUtility_HarnessOpen(void* gameSubsys, uint64_t param) {
 }
 
 // Harness: fetch a named controller from the just-opened utility dialog and
-// dispatch its vtable slot 4 (+0x20 — MapUI/etc. "SetupImage" / refresh). Used to
-// drive the minimap render after open, since AddDialog doesn't reach the
-// controller setup through the standalone ToolUI child-dialog vtable.
-extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName) {
+// dispatch one of its vtable slots (slotIndex, e.g. 4=+0x20 MapUI "SetupImage",
+// 5=+0x28 ProfessionUI setup/populate). Used to drive controller setup after open,
+// since AddDialog doesn't reach the setup through the standalone ToolUI child-dialog
+// vtable. slotIndex defaults to 4 for the existing map callers.
+extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName, int slotIndex) {
     if (!fn_DialogInstance_GetController || !fn_UI_GetFirstDialog) {
         printf("[HarnessDrive] GetController/GetFirstDialog null\n"); return;
     }
@@ -770,11 +771,11 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         fn_DialogInstance_GetController(dialog, ctrlBuf, tid);
         if (ctrlBuf[0]) {
             void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
-            printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot4\n",
-                   controllerName, ctrl, idx);
+            printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot%d\n",
+                   controllerName, ctrl, idx, slotIndex);
             void** vt = *reinterpret_cast<void***>(ctrl);
-            if (vt && vt[4]) { typedef void(*S)(void*); reinterpret_cast<S>(vt[4])(ctrl);
-                printf("[HarnessDrive] Slot4 done\n"); }
+            if (vt && vt[slotIndex]) { typedef void(*S)(void*); reinterpret_cast<S>(vt[slotIndex])(ctrl);
+                printf("[HarnessDrive] Slot%d done\n", slotIndex); }
             return;
         }
     }

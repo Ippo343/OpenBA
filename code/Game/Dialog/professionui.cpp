@@ -352,14 +352,19 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     void* profArray = *(void**)((uintptr_t)profListPtr + 0x20);
 
     for (int i = 0; i < profCount; i++) {
-        // Re-read colCount from table each iteration (original does IMUL with fresh +0xC4)
+        // Re-read the flat-index stride from the table each iteration.
+        // The original (0x140076eb4) does `IMUL EBX,R13D` with EBX = *(table+0xC4)
+        // then `ADD EBX,R12D`, i.e. flatIdx = (+0xC4) * fastIdx + slowIdx, where the
+        // fast index (tableCol here) wraps at +0xC0. +0xC4 is the column stride (=2),
+        // +0xC0 is the row count (=10). Using +0xC0 as the stride and multiplying the
+        // SLOW index instead collapses the intended COLUMN-MAJOR layout (builder below
+        // laborer, as retail draws it) into row-major (builder to the right). Match the
+        // original exactly: stride = +0xC4, flatIdx = stride*tableCol + tableRow.
         fn_InternalBasePtr_CheckPtr((void*)&tableResult);
         fn_InternalBasePtr_CheckPtr((void*)&tableResult);
-        // +0xC0 stores the COLUMN count after SetSize (10 cols × 2 rows for 20 professions)
-        int curColCount = *(int*)((uintptr_t)tableResult + 0xC0);
+        int stride = *(int*)((uintptr_t)tableResult + 0xC4);
 
-        // Get cell element via flat index: colCount * row + col
-        int flatIdx = curColCount * tableRow + tableCol;
+        int flatIdx = stride * tableCol + tableRow;
         uint64_t cellElem = 0;
         fn_Element_Child((void*)tableResult, &cellElem, flatIdx);
         fn_InternalBasePtr_CheckPtr((void*)&cellElem);
@@ -526,17 +531,24 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         // Push number element to number array at +0x50
         PushToArray8(s, 0x50, (uint64_t)numberBuf);
 
-        // If this profession is the "None" profession (at profList+0x30), hide button and last row child
+        // If this profession is the transient "default/laborer" profession (profList+0x30,
+        // _default="laborer" in Profession.rsc), hide the two worker-count elements that
+        // are meaningless for the unassigned-laborer pool: child[3] "numberAvailable" and
+        // child[2] "ofText" (the "N of M" phrase). The spinner (locked in Slot8) and the
+        // child[4] "buttonGoto" (cycle-to-a-laborer) REMAIN visible — retail keeps them.
+        // NB: retail hides child index 2 here (verified in the 0x140076CA0 disassembly:
+        // `MOV R8D,0x2` before the Child call), NOT index 4 — hiding 4 wrongly removed the
+        // laborer's goto button.
         void* noneProfession = *(void**)((uintptr_t)profListPtr + 0x30);
         if (profDesc == noneProfession) {
             fn_InternalBasePtr_CheckPtr((void*)&numberBuf);
-            fn_Element_SetFlagsOnOff((void*)numberBuf, 1, 0);
+            fn_Element_SetFlagsOnOff((void*)numberBuf, 1, 0);   // child[3] numberAvailable
 
             fn_InternalBasePtr_CheckPtr((void*)&cellElem);
-            uint64_t lastChild = 0;
-            fn_Element_Child((void*)cellElem, &lastChild, 4);
-            fn_InternalBasePtr_CheckPtr((void*)&lastChild);
-            fn_Element_SetFlagsOnOff((void*)lastChild, 1, 0);
+            uint64_t ofTextChild = 0;
+            fn_Element_Child((void*)cellElem, &ofTextChild, 2); // child[2] ofText
+            fn_InternalBasePtr_CheckPtr((void*)&ofTextChild);
+            fn_Element_SetFlagsOnOff((void*)ofTextChild, 1, 0);
         }
 
         // Advance table position

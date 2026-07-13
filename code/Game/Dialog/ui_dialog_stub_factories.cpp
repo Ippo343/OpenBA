@@ -349,7 +349,116 @@ UI_DIALOG_STUB(ModBrowseUI,         "UI::DialogController", 0x30);
 UI_DIALOG_STUB(NoiseUI,             "UI::DialogController", 0x70);
 UI_DIALOG_STUB(PageToggleUI,        "UI::DialogController", 0x48);
 UI_DIALOG_STUB(ProductionUI,        "UI::DialogController", 0x50);
-UI_DIALOG_STUB(ProfessionUI,        "UI::DialogController", 0x78);
+// ---- ProfessionUI: PROMOTED to the real reimpl (profession-assignment bring-up) -
+// The toolbar "professions" overlay (Template\UtilityProfessions.rsc). Its controller
+// lists every profession with a worker-count spinner + a "goto" button. The real
+// reimpl lives in code/Game/Dialog/professionui.cpp; the generic stub left every slot
+// a no-op so the overlay opened empty. Wire the three real slots:
+//   Slot5 (+0x28, setup)  — builds the profession table, spinner/number element
+//                           caches, and the profession→index BST; self-calls Slot8.
+//   Slot8 (+0x40, update) — recounts citizens per profession each frame and refreshes
+//                           the spinner values + worker-slot numbers. DialogInstance::
+//                           OnUpdate dispatches this every frame once the controller is
+//                           attached — INCLUDING before Slot5 has populated the caches,
+//                           at which point the reimpl would deref the null spinner array
+//                           (self+0x40). Guard: skip until setup has run (+0x30 counts
+//                           array + +0x40 spinner array both non-null).
+//   Slot9 (+0x48, event)  — spinner change reassigns citizens between professions
+//                           (uses the CitizenList Find/Request/Remove worker fns already
+//                           registered for the Town Hall profession tab); button click
+//                           centers the camera on a citizen of that profession.
+// The worker-reassignment + type-id deps all resolve in standalone already (see
+// reg_townhallui.cpp / reg_town_workplace_registry_reader.cpp / reg_economy_typeids.cpp);
+// only NumberEditElement's type-id is unregistered — lazy-fill it so Slot5's spinner-
+// child validation runs (the reimpl already guards a null id, so this is optional but
+// tidy). Construction stays the stub alloc+zero+vtable; the framework fills the base
+// dialog/datasource fields afterward — same shape as the MapUI/ImmigrationUI promotions.
+struct ProfessionUI;
+extern void ProfessionUI_Slot5(ProfessionUI* self);
+extern void ProfessionUI_Slot8(ProfessionUI* self);
+extern void ProfessionUI_Slot9(ProfessionUI* self, void* param2, int param3, int param4);
+namespace uistub_ProfessionUI {
+    static void* g_vt[kStubVtableSlots];
+    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("ProfessionUI"); return c; }
+    void* Dtor(void* self, uint32_t flags) {
+        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
+        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
+    }
+    // NumberEditElement type-id resolves from a double-indirect exref (null in SA).
+    // Slot5 validates a spinner child against it (already guarded, so optional). Fill
+    // it from the live factory tree post-Engine::Startup. Idempotent.
+    void EnsureTypeIds() {
+        static uint32_t s_numEdit=0;
+        if (!g_TypeId_NumberEditElement) {
+            s_numEdit=::Object::ResolveTypeIdByNameLazy("NumberEditElement");
+            if (s_numEdit) g_TypeId_NumberEditElement=&s_numEdit;
+        }
+    }
+    void Trace(const char* slot, void* self) {
+        if (!std::getenv("BANISHED_PROFESSION_TRACE")) return;
+        static int n=0; if (n>=32) return; ++n;
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        uint32_t spinN = self?*reinterpret_cast<uint32_t*>(s+0x48):0;
+        printf("[ProfessionUI] %s self=%p dlg(+0x18)=%p root(+0x20)=%p counts(+0x30)=%p "
+               "spinners(+0x40)=%p n=%u numbers(+0x50)=%p n=%u\n", slot, self,
+               self?*reinterpret_cast<void**>(s+0x18):nullptr,
+               self?*reinterpret_cast<void**>(s+0x20):nullptr,
+               self?*reinterpret_cast<void**>(s+0x30):nullptr,
+               self?*reinterpret_cast<void**>(s+0x40):nullptr, spinN,
+               self?*reinterpret_cast<void**>(s+0x50):nullptr,
+               self?*reinterpret_cast<uint32_t*>(s+0x58):0);
+        // Dump the per-profession citizen counts (+0x30 int array) so we can confirm
+        // Slot8 computes real assignments, not all-zero placeholder rows.
+        int32_t* counts = self?*reinterpret_cast<int32_t**>(s+0x30):nullptr;
+        if (counts && spinN>0 && spinN<=64) {
+            printf("[ProfessionUI]   counts[0..%u]:", spinN-1);
+            for (uint32_t i=0;i<spinN;i++) printf(" %d", counts[i]);
+            printf("\n");
+        }
+        fflush(stdout);
+    }
+    // Has Slot5 populated the caches yet? counts(+0x30) is allocated by the Slot5 tail
+    // (ExeArrayResize2), spinners(+0x40) grown as each profession row is added.
+    bool IsSetUp(void* self) {
+        uintptr_t s=reinterpret_cast<uintptr_t>(self);
+        return *reinterpret_cast<void**>(s+0x30)!=nullptr &&
+               *reinterpret_cast<void**>(s+0x40)!=nullptr;
+    }
+    void Slot5(void* self) {
+        if (!self) return;
+        // Idempotent: the framework dispatches Slot5 once during dialog creation, which
+        // populates the table + spinner/number caches + BST. A SECOND run (e.g. the
+        // harness re-drive, or a stray framework re-dispatch) does NOT clear first —
+        // it re-clones the table cells and appends to the +0x40/+0x50 arrays, doubling
+        // them (n=20→40) while the counts array (+0x30) stays sized to profCount. The
+        // subsequent Slot8 then walks 40 half-built spinner IBPs and faults. Skip if
+        // setup already ran.
+        if (IsSetUp(self)) { Trace("Slot5-skip(already set up)", self); return; }
+        EnsureTypeIds();
+        Trace("Slot5", self);
+        ProfessionUI_Slot5(reinterpret_cast<ProfessionUI*>(self));
+    }
+    void Slot8(void* self) {
+        if (!self || !IsSetUp(self)) return;   // OnUpdate fires this pre-setup — skip
+        Trace("Slot8", self);
+        ProfessionUI_Slot8(reinterpret_cast<ProfessionUI*>(self));
+    }
+    void Slot9(void* self, void* p2, int msg, int id, int p5, int p6) {
+        (void)p5; (void)p6;
+        if (!self || !IsSetUp(self)) return;
+        Trace("Slot9", self);
+        ProfessionUI_Slot9(reinterpret_cast<ProfessionUI*>(self), p2, msg, id);
+    }
+    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+    struct Wire { Wire(){ g_vt[5]=reinterpret_cast<void*>(&Slot5);
+                          g_vt[8]=reinterpret_cast<void*>(&Slot8);
+                          g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_wire;
+    void Zero(void* p){ for(size_t o=0;o<(size_t)0x78;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
+    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x78,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
+    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+}
+REGISTER_TYPE(ProfessionUI, "UI::DialogController",
+              &uistub_ProfessionUI::Factory, &uistub_ProfessionUI::InPlace);
 UI_DIALOG_STUB(RadiusUI,            "UI::DialogController", 0x38);
 // ---- ResourceLimitUI: PROMOTED to the real reimpl (resource-limit bring-up) --
 // Each row of the Town Hall "Limits" tab (Log/Stone/Iron/Herbs/Tools/Fuel/Food/
