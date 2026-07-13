@@ -638,6 +638,29 @@ typedef uint64_t (*fn_StateHandlerPtr_t)(void* internal);   // case 0xd: (*(self
 int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
     uint8_t* base = reinterpret_cast<uint8_t*>(selfV);
 
+    // [BuilderTrace] throughput diagnostic (gated BANISHED_BUILD_TRACE): flag a seated
+    // builder (owner CitizenComponent +0x1f0 == builderMarker = *(*(gw+0xb0)+0x38)) so we
+    // can log which state it actually enters — to see why seated builders don't sustain
+    // build labor (build is claimed only from Idle/id 9 via the 7b60 work-tree walk).
+    static int s_bldrTrace = -1;
+    if (s_bldrTrace < 0) { const char* e = getenv("BANISHED_BUILD_TRACE"); s_bldrTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    void* bt_cit = nullptr;
+    bool  bt_isBuilder = false;
+    if (s_bldrTrace && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t gw  = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+        uintptr_t reg = *reinterpret_cast<uintptr_t*>(gw + 0xb0);
+        uint64_t marker = reg ? *reinterpret_cast<uint64_t*>(reg + 0x38) : 0;
+        bt_cit = *reinterpret_cast<void**>(base + 0x38);
+        if (marker && bt_cit &&
+            *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(bt_cit) + 0x1f0) == marker)
+            bt_isBuilder = true;
+    }
+    auto bt_logEnter = [&](int r) -> int {
+        if (bt_isBuilder && r)
+            std::fprintf(stderr, "[BuilderTrace] citizen=%p ENTERED state=%d\n", bt_cit, state);
+        return r;
+    };
+
     // Cooldown gate: *(int64*)(self + state*8 + 0x40) < 1
     if (*reinterpret_cast<int64_t*>(base + (int64_t)state * 8 + 0x40) < 1) {
         uintptr_t addr = 0;
@@ -667,18 +690,18 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(base + 0x38);
             void* internal = *reinterpret_cast<void**>(base + 0x38);
             (reinterpret_cast<fn_StateHandlerPtr_t>(fp))(internal);
-            return 1;   // original returns CONCAT71(.., 1) -> low byte always 1
+            return bt_logEnter(1);   // original returns CONCAT71(.., 1) -> low byte always 1
         }
 
         if (state == 0xb) {
             // case 0xb returns a bool in low byte.
             bool r = (bool)(reinterpret_cast<fn_StateHandler_t>(fp))((int64_t)base);
-            return r ? 1 : 0;
+            return bt_logEnter(r ? 1 : 0);
         }
 
         // all other cases: return the handler's low byte directly.
         uint64_t r = (reinterpret_cast<fn_StateHandler_t>(fp))((int64_t)base);
-        return (int)(r & 0xff);
+        return bt_logEnter((int)(r & 0xff));
     }
 
     // default: original returns (uint7)(state>>8)<<8 — low byte is 0.
