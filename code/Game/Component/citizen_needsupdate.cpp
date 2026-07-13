@@ -55,6 +55,7 @@ extern void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2);
 typedef void (*fn_helper_fde0_t)(int64_t self, int param);   // 0x14010fde0
 typedef void (*fn_helper_17a0_t)(int64_t self);              // 0x1401117a0
 typedef void (*fn_helper_1540_t)(int64_t self);              // 0x140111540
+typedef void (*fn_statusIcon_t)(void* statusIconComp, int mode, int flag); // 0x14012c3f0
 typedef bool (*fn_ResidenceCheck_t)(int64_t storageComp);    // 0x14012ac30
 typedef void* (*fn_FindResidence8090_t)(int64_t entity, void* outIBP); // 0x140008090
 typedef void (*fn_TimeCtorFloat_t)(void* outTime, float secs); // dispatch slot 0x140152b00
@@ -62,6 +63,7 @@ typedef void (*fn_TimeCtorFloat_t)(void* outTime, float secs); // dispatch slot 
 static fn_helper_fde0_t      s_fn_fde0 = nullptr;
 static fn_helper_17a0_t      s_fn_17a0 = nullptr;
 static fn_helper_1540_t      s_fn_1540 = nullptr;
+static fn_statusIcon_t       s_fn_12c3f0 = nullptr;   // StatusIcon mesh finalize (for the msg-1 inline port)
 static fn_ResidenceCheck_t   s_fn_2ac30 = nullptr;
 static fn_FindResidence8090_t s_fn_find8090 = nullptr;
 static fn_TimeCtorFloat_t    s_fn_TimeCtorF = nullptr;
@@ -75,6 +77,7 @@ static void EnsureNeedsUpdateFuncs() {
     s_fn_fde0    = reinterpret_cast<fn_helper_fde0_t>(ResolveAddr(Module::Exe, 0x14010fde0));
     s_fn_17a0    = reinterpret_cast<fn_helper_17a0_t>(ResolveAddr(Module::Exe, 0x1401117a0));
     s_fn_1540    = reinterpret_cast<fn_helper_1540_t>(ResolveAddr(Module::Exe, 0x140111540));
+    s_fn_12c3f0  = reinterpret_cast<fn_statusIcon_t>(ResolveAddr(Module::Exe, 0x14012c3f0));
     s_fn_2ac30   = reinterpret_cast<fn_ResidenceCheck_t>(ResolveAddr(Module::Exe, 0x14012ac30));
     s_fn_find8090 = reinterpret_cast<fn_FindResidence8090_t>(ResolveAddr(Module::Exe, 0x140008090));
     // .rdata float constants — NULL in standalone unless registered; real-value
@@ -184,9 +187,27 @@ void CitizenComponent_NeedsUpdate(void* selfV, int msg, uint64_t* param_3,
         CitizenComp_helper_21e0(reinterpret_cast<int64_t>(selfV), &local);
         return;
     }
-    case 1: {   // helper_fde0(self, param_4) — unported, resolve-or-skip
-        if (s_fn_fde0) s_fn_fde0(reinterpret_cast<int64_t>(selfV), param_4);
-        else SkipTraceOnce("fde0");
+    case 1: {   // happiness credit — helper_fde0 (0x14010fde0)
+        if (s_fn_fde0) { s_fn_fde0(reinterpret_cast<int64_t>(selfV), param_4); return; }
+        // 0x14010fde0 is NOT registered in standalone, so the SeekHappiness credit was
+        // silently dropped (SkipTrace) -> citizen+0xac stayed 0 -> SeekHappiness (candidate
+        // prio 5) validated forever and starved Idle/build. Inline the tiny helper:
+        //   FUN_14012c3f0(+0x280 StatusIconComponent, 4, 0)  [status-icon refresh; 12c3f0 IS registered]
+        //   citizen+0xac += param  (happiness) ; citizen+0xa8 = param
+        if (s_fn_12c3f0 && *reinterpret_cast<void**>(p + 0x280)) {
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x280);
+            s_fn_12c3f0(*reinterpret_cast<void**>(p + 0x280), 4, 0);
+        }
+        *reinterpret_cast<int32_t*>(p + 0xac) += param_4;
+        *reinterpret_cast<int32_t*>(p + 0xa8)  = param_4;
+        if (std::getenv("BANISHED_BUILD_TRACE")) {
+            static int n = 0;
+            if (n < 20) { ++n;
+                fprintf(stderr, "[HappyMsg] happiness credit: citizen=%p +0xac += %d -> %d\n",
+                        selfV, param_4, *reinterpret_cast<int32_t*>(p + 0xac));
+                fflush(stderr);
+            }
+        }
         return;
     }
     case 2: {   // EAT — drain hunger against the target's storage
