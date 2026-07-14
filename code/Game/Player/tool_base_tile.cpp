@@ -270,8 +270,22 @@ static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
     void* mesh = nullptr;
     uint8_t* subArr = *reinterpret_cast<uint8_t**>(group + 0x08);
     if (subArr) mesh = *reinterpret_cast<void**>(subArr + static_cast<int64_t>(modelVariant) * 8);
-    if (mesh && s_fn_tileSetMesh)
+    if (mesh && s_fn_tileSetMesh) {
         s_fn_tileSetMesh(reinterpret_cast<void*>(m + 0x28), mesh);
+        // Re-apply the placement yaw after the mesh swap. Retail's model-variant
+        // setters (FUN_1401253d0/FUN_140125240) run a detach(+0x38)→SetMesh→Draw(+0x30)
+        // cycle, and ModelComponent::Draw (0x140125xxx) re-applies the +0x148 Transform
+        // via Graphics::Geometry::SetTransform — but ONLY when the model isn't already
+        // in the scene (+0x16c < 0). This bare SetMesh skips that cycle, and the placed
+        // entity is copy-constructed from a template (fd650), so its +0x16c can be a
+        // stale scene id → the register-time OnAdded→Draw skips the transform re-apply
+        // → the built building loses the rotation the ghost showed. +0x148 already holds
+        // the yaw (SetTransformFromYaw_3870 wrote it at fd650 before this call), so push
+        // it onto the MeshInstance geometry directly — exactly what Draw would do.
+        if (fn_Geometry_SetTransform)
+            fn_Geometry_SetTransform(reinterpret_cast<void*>(m + 0x28),
+                                     reinterpret_cast<void*>(m + 0x148));
+    }
 
     if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
         std::fprintf(stderr, "[place-model] modelComp=%p desc=%p groups=%u variantIdx=%d "

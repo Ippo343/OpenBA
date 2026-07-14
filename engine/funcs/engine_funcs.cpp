@@ -1049,7 +1049,8 @@ fn_Map_CachePathDist_t fn_Map_CachePathDist = nullptr;
 fn_SetupBuildActions_t fn_SetupBuildActions = nullptr;
 fn_BST_Insert_t fn_BST_Insert = nullptr;
 fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceValid = nullptr;
-fn_CitizenComponent_HasVacancy_t fn_CitizenComponent_HasVacancy = nullptr;
+// fn_CitizenComponent_HasVacancy is now an inline in engine_funcs.h (was a null-in-SA
+// ResolveAddr pointer that crashed when called unguarded).
 fn_FindStorageLocationComp_t fn_FindStorageLocationComp = nullptr;
 fn_FindWorkplaceComp_t fn_FindWorkplaceComp = nullptr;
 
@@ -4530,8 +4531,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x140021a30));
     fn_CitizenComponent_CheckWorkplaceValid = reinterpret_cast<fn_CitizenComponent_CheckWorkplaceValid_t>(
         ResolveAddr(Module::Exe, 0x1401158d0));
-    fn_CitizenComponent_HasVacancy = reinterpret_cast<fn_CitizenComponent_HasVacancy_t>(
-        ResolveAddr(Module::Exe, 0x140017050));
     fn_FindStorageLocationComp = reinterpret_cast<fn_FindStorageLocationComp_t>(
         ResolveAddr(Module::Exe, 0x140003050));
     fn_FindWorkplaceComp = reinterpret_cast<fn_FindWorkplaceComp_t>(

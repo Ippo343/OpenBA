@@ -4916,10 +4916,29 @@ extern fn_BST_Insert_t fn_BST_Insert;
 typedef char (*fn_CitizenComponent_CheckWorkplaceValid_t)(void* citizen, void* workplaceIBP);
 extern fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceValid;
 
-// CitizenComponent_HasVacancy (0x140017050) — checks if WorkplaceComponent has available slots
-// RCX=WorkplaceComponent*. Returns bool.
-typedef bool (*fn_CitizenComponent_HasVacancy_t)(uintptr_t workplaceComp);
-extern fn_CitizenComponent_HasVacancy_t fn_CitizenComponent_HasVacancy;
+// CitizenComponent_HasVacancy (0x140017050) — WorkPlaceComponent roster (+0x60) < seat
+// capacity (its StorageLocationComponent/WorkComponent +0x30, lazily CalcMaxWorkers'd).
+// Reimplemented INLINE: it was ResolveAddr(Module::Exe,0x140017050), which is NULL in
+// standalone (that exe address isn't registered), and citizencomponent.cpp:1176/1193 call
+// it UNGUARDED — so once a placed building reaches construction and a citizen evaluates
+// switching workplaces, the null call crashed (VCALL-of-0). Byte-faithful to 0x140017050
+// (FUN_140003050 = fn_FindComponent_Workplace, FUN_14012e5c0 = fn_StorageCountQuery), plus
+// one SA safety guard the original lacks: a null storage-loc component → "no vacancy"
+// rather than dereferencing null+0x30. Works in both DLL and standalone builds.
+inline bool fn_CitizenComponent_HasVacancy(uintptr_t workplaceComp) {
+    int roster = *reinterpret_cast<int*>(workplaceComp + 0x60);
+    fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(workplaceComp + 0x10));
+    uint64_t slComp = 0;
+    fn_FindComponent_Workplace(*reinterpret_cast<void**>(workplaceComp + 0x10), &slComp);
+    fn_InternalBasePtr_CheckPtr(&slComp);
+    if (slComp == 0) return false;
+    uintptr_t sl = static_cast<uintptr_t>(slComp);
+    if (*reinterpret_cast<int*>(sl + 0x30) == 0) {
+        int cap = fn_StorageCountQuery(reinterpret_cast<void*>(sl));
+        *reinterpret_cast<int*>(sl + 0x30) = cap;
+    }
+    return roster < *reinterpret_cast<int*>(sl + 0x30);
+}
 
 // FUN_140003050 — FindStorageLocationComponent on entity (member fn, retval in RDX)
 // RCX=entity, RDX=retval IBP. Returns retval ptr.

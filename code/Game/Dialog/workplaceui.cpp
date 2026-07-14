@@ -642,19 +642,161 @@ void UpdateVisibility(void* self) {
     fn_Element_SetFlagsOnOff(panelElem, show ? 0u : 1u, show ? 1u : 0u);
 }
 
+// ------------------------------------------------------------------
+// Count population — faithful subset of WorkplaceUI_Startup (0x140087080).
+// ------------------------------------------------------------------
+// The SA promotion originally ported ONLY the show/hide decision, so the
+// workPlace panel's "X of Y" label (Dialog/Work.rsc:workPlaceCount) and the
+// profession-count label (maxCount) stayed at their .rsc placeholders — the
+// user-visible "builder count is blank" bug. Now that Builders are really seated
+// (WorkPlaceComponent+0x60 roster grows via the natural builder flow), reproduce
+// the retail count writes, which are all SA-safe (FindElement / TextElement::
+// SetParameter / String::Format resolve; the exe-helper laborer/button-enable
+// tail is deliberately still skipped — those buttons aren't wired in SA and that
+// path calls FUN_14000d6c0 which resolves NULL in standalone):
+//
+//   workPlaceCount (self+0x30): profession sprite + param0 = roster (WPC+0x60,
+//       seated workers/builders at THIS site) + param1 = capacity (the site's
+//       WorkComponent+0x30 = max slots, lazily CalcMaxWorkers'd).
+//   maxCount (self+0x38): param0 = town-wide count of citizens assigned to this
+//       profession (the "Builder count live in the town" side of the ask).
+//
+// Runs for any workplace panel, so the count is correct on every building dialog,
+// not just under-construction sites. `workComp` here is the WorkPlaceComponent
+// (fn_FindComponent_BuildState2 → g_TypeId_WorkplaceComponent), matching retail's
+// local_res18 — its +0x48 is the active profession, +0x60 the live roster.
+void PopulateCounts(void* self) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+
+    void* panelElem = *reinterpret_cast<void**>(s + 0x20);
+    if (!panelElem) return;
+
+    // Bound entity (data source at +0x28).
+    void* dataSource = *reinterpret_cast<void**>(s + 0x28);
+    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
+    uint8_t entityBuf[8];
+    fn_InternalBasePtr_Ctor(entityBuf, dataSource);
+    fn_InternalBasePtr_CheckPtr(entityBuf);
+    void* entityPtr = *reinterpret_cast<void**>(entityBuf);
+
+    // WorkPlaceComponent (retail local_res18).
+    uint64_t workComp = 0;
+    fn_FindComponent_BuildState2(entityPtr, &workComp);
+    fn_InternalBasePtr_CheckPtr(&workComp);
+    if (workComp == 0) return;
+    uintptr_t w = static_cast<uintptr_t>(workComp);
+
+    void* profession = *reinterpret_cast<void**>(w + 0x48);
+    if (!profession) return;  // no active profession → panel hidden, nothing to show
+
+    // Discover the two count elements once (they don't move); cache in the same
+    // fields retail's Serialize uses (self+0x30 workPlaceCount, +0x38 maxCount).
+    if (*reinterpret_cast<void**>(s + 0x30) == nullptr)
+        *reinterpret_cast<uint64_t*>(s + 0x30) = FindElemAsBasePtr(panelElem, "workPlaceCount");
+    if (*reinterpret_cast<void**>(s + 0x38) == nullptr)
+        *reinterpret_cast<uint64_t*>(s + 0x38) = FindElemAsBasePtr(panelElem, "maxCount");
+    void* elem30 = *reinterpret_cast<void**>(s + 0x30);   // workPlaceCount
+    void* elem38 = *reinterpret_cast<void**>(s + 0x38);   // maxCount
+
+    // Roster = seated workers/builders at this site (WorkPlaceComponent+0x60).
+    uint32_t roster = *reinterpret_cast<uint32_t*>(w + 0x60);
+
+    // Capacity = the site's WorkComponent (StorageLocationComponent, +0x30). Retail
+    // resolves it on the WPC's parent entity (WPC+0x10) and lazily CalcMaxWorkers's
+    // the +0x30 cache. The natural-builder flow (FindAvailableBuilding) usually has
+    // already primed +0x30, so it is read directly; StorageCountQuery only fills it
+    // when still zero, and only when its type-id deps are live (else capacity=0).
+    uint32_t capacity = 0;
+    if (g_TypeId_StorageLocationComponent && *g_TypeId_StorageLocationComponent) {
+        fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(w + 0x10));
+        void* parentEntity = *reinterpret_cast<void**>(w + 0x10);
+        uint64_t workC = 0;
+        fn_FindComponent_Workplace(parentEntity, &workC);
+        fn_InternalBasePtr_CheckPtr(&workC);
+        if (workC) {
+            uintptr_t c = static_cast<uintptr_t>(workC);
+            if (*reinterpret_cast<int*>(c + 0x30) == 0 &&
+                g_TypeId_WorkplaceJobType && *g_TypeId_WorkplaceJobType) {
+                int n = fn_StorageCountQuery(reinterpret_cast<void*>(c));
+                *reinterpret_cast<int*>(c + 0x30) = n;
+            }
+            capacity = *reinterpret_cast<uint32_t*>(c + 0x30);
+        }
+    }
+
+    // workPlaceCount: profession sprite + "roster / capacity".
+    if (elem30) {
+        uint64_t sheet = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(profession) + 0x28);
+        if (sheet && fn_Sprite_Ctor && fn_LabelElement_SetSprite) {
+            uint8_t spriteBuf[16];
+            fn_Sprite_Ctor(spriteBuf, sheet,
+                           reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(profession) + 0x30));
+            fn_LabelElement_SetSprite(elem30, spriteBuf);
+        }
+        if (fn_TextElement_SetParameter && fn_String_Format) {
+            uint8_t fmt[8];
+            fn_String_Format(fmt, "%d", static_cast<uint64_t>(roster));
+            fn_TextElement_SetParameter(elem30, 0, fmt);
+            fn_String_Dtor(fmt);
+            fn_String_Format(fmt, "%d", static_cast<uint64_t>(capacity));
+            fn_TextElement_SetParameter(elem30, 1, fmt);
+            fn_String_Dtor(fmt);
+        }
+    }
+
+    // maxCount: town-wide count of adult, unassigned-task citizens whose profession
+    // (citizen+0x1f0) matches this workplace's profession — the live "N builders in
+    // the town" figure. Pure field reads over the citizen list (no exe helpers).
+    if (elem38 && fn_TextElement_SetParameter && fn_String_Format) {
+        int assigned = 0;
+        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
+        if (citizenList) {
+            int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(citizenList) + 0xa8);
+            uintptr_t arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(citizenList) + 0xa0);
+            for (int i = 0; i < count && arr; ++i) {
+                uintptr_t citizen = *reinterpret_cast<uintptr_t*>(arr + static_cast<uintptr_t>(i) * 8);
+                fn_InternalBasePtr_CheckPtr(&citizen);
+                if (!citizen) continue;
+                void* citizenDesc = *reinterpret_cast<void**>(citizen + 0x288);
+                if (!citizenDesc) continue;
+                // Adult (age > adult-age) AND no active task (citizen+0x208 == 0).
+                if (*reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(citizenDesc) + 0x44)
+                        > *reinterpret_cast<float*>(citizen + 0x3c)) continue;
+                if (*reinterpret_cast<uintptr_t*>(citizen + 0x208) != 0) continue;
+                if (*reinterpret_cast<void**>(citizen + 0x1f0) == profession) ++assigned;
+            }
+        }
+        uint8_t fmt[8];
+        fn_String_Format(fmt, "%d", static_cast<uint64_t>(static_cast<uint32_t>(assigned)));
+        fn_TextElement_SetParameter(elem38, 0, fmt);
+        fn_String_Dtor(fmt);
+    }
+
+    if (std::getenv("BANISHED_DIALOG_TRACE")) {
+        static int n = 0;
+        if (n++ < 20)
+            fprintf(stderr, "[WorkPlaceUI] counts prof=%p roster=%u cap=%u elem30=%p elem38=%p\n",
+                    profession, roster, capacity, elem30, elem38), fflush(stderr);
+    }
+}
+
 // idx8 (+0x40): per-frame — keep the panel's visibility in sync as buildings
-// finish construction (profession clears → panel hides).
+// finish construction (profession clears → panel hides), and refresh the live
+// worker/builder counts (roster grows as builders are seated).
 void W_OnUpdate(void* self, void* /*time*/) {
     EnsureGlobals();
     if (!self || !Ready()) return;
     UpdateVisibility(self);
+    PopulateCounts(self);
 }
 
-// idx7 (+0x38): Startup — same visibility decision on the framework's setup call.
+// idx7 (+0x38): Startup — same visibility decision + count refresh on setup.
 void W_Startup(void* self) {
     EnsureGlobals();
     if (!self || !Ready()) return;
     UpdateVisibility(self);
+    PopulateCounts(self);
 }
 
 struct Init {
