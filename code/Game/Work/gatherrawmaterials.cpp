@@ -1224,4 +1224,48 @@ extern "C" void* GatherRawMaterials_Factory(void) {
     return p ? Work_GenericCtor(p, 0x78, g_GatherRawMaterials_Vtable) : nullptr;
 }
 REGISTER_TYPE(GatherRawMaterials, "Work", &GatherRawMaterials_Factory, &GatherRawMaterials_CreateInPlace);
+
+// ---- Construction force-harness wrappers (construction_force_harness.cpp) ----
+// Mirror the ForesterWork_Factory/ForceDrive/ExecuteReady trio so the generic
+// ForceWork harness can drive construction gathering.
+extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // gatherrawmaterials_ctor.cpp
+
+// Build a GatherRawMaterials bound to a construction SITE entity using the FAITHFUL
+// site ctor (seeds per-material slots from the site's BuildDescription + the amount
+// already in the site StorageComponent) rather than the generic factory. buildEntityIBP
+// is an InternalBasePtr* whose *value is the site entity pointer.
+extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
+    GatherRawMaterials_ResolveFuncs();
+    void* mem = Work_Alloc(0x78);
+    if (!mem) return nullptr;
+    return GatherRawMaterials_Ctor_Impl(mem, buildEntityIBP);
+}
+
+// Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
+// scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
+extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
+    return GatherRawMaterials_Execute_Impl(reinterpret_cast<GatherRawMaterials*>(self),
+                                           citizenIBP, 0, 0);
+}
+
+// Execute-readiness gate for the force harness. GatherRawMaterials_ResolveFuncs() also
+// requires the SERIALIZE-only fns (Work_Serialize / Serializer_* / SerializeInt /
+// SerializeIntBulk / TreeSerialize) and the dtor-only parent vtable — none of which
+// Execute or its pushed action chain touch, and SerializeIntBulk's IAT dispatch slot
+// (0x1401528c0) is unpopulated in standalone, which would falsely block the driver. So we
+// resolve everything, then gate on only the Execute-critical subset (mirrors
+// ForesterWork_ExecuteReady). Serialize never runs during standalone gameplay.
+extern "C" bool GatherRawMaterials_DepsReady() {
+    GatherRawMaterials_ResolveFuncs();   // populate all resolvable fns
+    return s_fn_ResizeIntArray && s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
+           s_fn_StateMachineRelease && s_fn_CanStartWork &&
+           s_fn_FindComp_Position && s_fn_FindComp_Unk && s_fn_FindComp_WpExt &&
+           s_fn_FindStorageForResource && s_fn_FindComp_Storage &&
+           s_fn_StorageQueryCount && s_fn_GetRemainingCapacity && s_fn_LongTermPlan &&
+           s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos && s_fn_ValidateWorkAssign &&
+           s_fn_PathfindingFindPath && s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
+           s_fn_TreeNodeCleanup && s_vtable_GatherRawMaterials &&
+           fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom && g_pGameWorldSingleton &&
+           s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
+}
 #endif // STANDALONE_EXE

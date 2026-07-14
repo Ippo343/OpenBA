@@ -40,11 +40,11 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "force_work.h"                     // generic ForceWork core (probes + drive)
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <windows.h>   // VirtualQuery — crash-safe probes for the lodge component scan
 
 // The force-worked ForesterLodge (starttown.cpp, BANISHED_LIVE_WORKPLACE).
 extern void* g_pForceWorkBuilding;
@@ -66,10 +66,6 @@ extern "C" void* ForesterWork_Factory(void);
 // harvestable tree it pushes a PerformWork (cut) sequence onto the citizen's action stack.
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP);
 
-// Entity component-IBP array layout (matches starttown.cpp ENT_COMP_ARR/CNT).
-static constexpr int ENT_COMP_ARR = 0x30;
-static constexpr int ENT_COMP_CNT = 0x38;
-
 static bool ForceForesterEnvOn() {
     static int s = -1;
     if (s < 0) {
@@ -79,77 +75,11 @@ static bool ForceForesterEnvOn() {
     return s == 1;
 }
 
-// ---- crash-safe memory probes (same policy as production_harness.cpp) ----
-static bool Readable(const void* p, size_t n) {
-    if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    DWORD prot = mbi.Protect;
-    if (prot & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const DWORD rd = PAGE_READONLY | PAGE_READWRITE | PAGE_EXECUTE_READ |
-                     PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_WRITECOPY;
-    if (!(prot & rd)) return false;
-    uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
-    return (reinterpret_cast<uintptr_t>(p) + n) <= end;
-}
-static bool Executable(const void* p) {
-    if (!p) return false;
-    MEMORY_BASIC_INFORMATION mbi;
-    if (VirtualQuery(p, &mbi, sizeof(mbi)) == 0) return false;
-    if (mbi.State != MEM_COMMIT) return false;
-    DWORD prot = mbi.Protect;
-    if (prot & (PAGE_NOACCESS | PAGE_GUARD)) return false;
-    const DWORD ex = PAGE_EXECUTE | PAGE_EXECUTE_READ |
-                     PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
-    return (prot & ex) != 0;
-}
-static inline uint32_t SafeGetTypeId(void* obj) {
-    if (!Readable(obj, 8)) return 0;
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(obj);
-    if (!Readable(reinterpret_cast<void*>(vt + 0x10), 8)) return 0;
-    void* slot = *reinterpret_cast<void**>(vt + 0x10);
-    if (!Executable(slot)) return 0;
-    typedef uint32_t (*gt_t)(void*);
-    return reinterpret_cast<gt_t>(slot)(obj);
-}
-
-// Find a component by type-id on an entity's IBP component list (crash-safe).
-static void* FindComp(void* entity, uint32_t tid) {
-    if (!entity || !tid || !Readable(entity, 0x40)) return nullptr;
-    int count = *reinterpret_cast<int*>((uintptr_t)entity + ENT_COMP_CNT);
-    uintptr_t arr = *reinterpret_cast<uintptr_t*>((uintptr_t)entity + ENT_COMP_ARR);
-    if (count <= 0 || count > 512 || !Readable(reinterpret_cast<void*>(arr), (size_t)count * 8))
-        return nullptr;
-    for (int i = 0; i < count; ++i) {
-        void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
-        void* comp = *slot;
-        if (SafeGetTypeId(comp) == tid) return comp;
-    }
-    return nullptr;
-}
-
-// Compute the lodge's work-area CENTER cell exactly as Work_Ctor25 does.
-static int LodgeCenterCell(void* lodge) {
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
-    static uint32_t tidMap = 0;
-    if (!tidMap) tidMap = ::Object::GetTypeIdByName("MapComponent");
-    void* mc = FindComp(lodge, tidMap);
-    if (!mc || !Readable(mc, 0x30)) return -1;
-    uintptr_t game = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
-    if (!game) return -1;
-    int dim = *reinterpret_cast<int*>(game);
-    if (dim <= 0) return -1;
-    int16_t tileX = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x28);
-    int16_t tileY = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x2a);
-    int16_t fpW   = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x2c);
-    int16_t fpH   = *reinterpret_cast<int16_t*>((uintptr_t)mc + 0x2e);
-    int cell = (((int)fpH >> 1) + (int)tileY) * dim + (((int)fpW >> 1) + (int)tileX);
-    if (cell < 0 || cell >= dim * dim) return -1;
-    return cell;
-}
+// Crash-safe probes + component scan + Work_Ctor25 center-cell now live in the shared
+// ForceWork core (force_work.h). Alias the two used repeatedly for readability.
+using ForceWork::Readable;
+using ForceWork::SafeGetTypeId;
+using ForceWork::FindComp;
 
 // Dump the lodge component set + locate a usable ForesterComponent (once). Returns the
 // ForesterComponent whose description derives from ForesterDescription, or null.
@@ -159,8 +89,8 @@ static void* VerifyLodgeForester(void* lodge, bool dump) {
     if (!tidForesterDesc) tidForesterDesc = ::Object::GetTypeIdByName("ForesterDescription");
 
     if (dump) {
-        int count = Readable(lodge, 0x40) ? *reinterpret_cast<int*>((uintptr_t)lodge + ENT_COMP_CNT) : 0;
-        uintptr_t arr = Readable(lodge, 0x40) ? *reinterpret_cast<uintptr_t*>((uintptr_t)lodge + ENT_COMP_ARR) : 0;
+        int count = Readable(lodge, 0x40) ? *reinterpret_cast<int*>((uintptr_t)lodge + ForceWork::kEntCompCnt) : 0;
+        uintptr_t arr = Readable(lodge, 0x40) ? *reinterpret_cast<uintptr_t*>((uintptr_t)lodge + ForceWork::kEntCompArr) : 0;
         fprintf(stderr, "[ForceForester] lodge=%p compCount=%d tid(ForesterComponent)=%u tid(ForesterDescription)=%u\n",
                 lodge, count, tidForesterComp, tidForesterDesc);
         if (count > 0 && count <= 512 && Readable(reinterpret_cast<void*>(arr), (size_t)count * 8)) {
@@ -242,12 +172,6 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     }
     if (s_verified != 1) return false;
 
-    // CharacterComponent + action stack.
-    uint8_t* cz = reinterpret_cast<uint8_t*>(citizen);
-    void* charComp = *reinterpret_cast<void**>(cz + 0x278);
-    if (!charComp || !Readable(charComp, 0x68)) return true;   // own it, but not ready yet
-    uint8_t* chc = reinterpret_cast<uint8_t*>(charComp);
-
     // Construct the ForesterWork ONCE and keep it (it carries a per-work cell BST @+0x48 and a
     // fail counter @+0x58 that must survive across drives). Faithful to ForesterWork_CopyCtor:
     // ForesterWork_Factory does the object build (vtable + Object::Internal + +0x20/+0x28 = -1),
@@ -257,33 +181,22 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
         s_fw = ForesterWork_Factory();
         if (!s_fw) return true;
         fn_InternalBasePtr_Ctor(reinterpret_cast<uint8_t*>(s_fw) + 0x10, lodge);  // +0x10 work-area IBP
-        int cell = LodgeCenterCell(lodge);
+        int cell = ForceWork::WorkAreaCenterCell(lodge);
         if (cell >= 0) *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(s_fw) + 0x28) = cell;
         fprintf(stderr, "[ForceForester] constructed ForesterWork=%p work+0x10=lodge "
                 "work+0x28(cell)=%d\n", s_fw, cell);
         fflush(stderr);
     }
 
-    // Only DRIVE when the citizen's action stack is IDLE (top-index +0x60 < 0): the prior
-    // work sequence has completed. ForesterWork::Execute is a Work DRIVER, NOT an action-stack
-    // item: the building's ResourceProduceComponent calls its Work-vtable slot DIRECTLY with the
-    // worker's IBP — (self, citizenIBP) ABI, NOT the action executor's (node, stack) ABI — and
-    // Execute then pushes a PerformWork (cut) sequence onto the citizen's OWN action stack.
-    // (Pushing the ForesterWork onto the action stack instead makes the executor mis-call it
-    // with the stack as param_2 -> garbage citizen deref.) So we mirror the building: call
-    // Execute directly with the citizen IBP; the executor (MoveTick) then runs the pushed cut.
-    if (*reinterpret_cast<int*>(chc + 0x60) >= 0) return true;
-
-    int64_t citizenIBP = 0;
-    fn_InternalBasePtr_Ctor(&citizenIBP, citizen);
-    int rc = ForesterWork_ForceDrive(s_fw, &citizenIBP);
-
+    // Drive Execute only when the citizen's action stack is IDLE — ForesterWork::Execute is a
+    // Work DRIVER, NOT an action-stack item: the building's ResourceProduceComponent calls its
+    // Work-vtable slot DIRECTLY with the worker's IBP ((self, citizenIBP) ABI), and Execute then
+    // pushes a PerformWork (cut) sequence onto the citizen's OWN action stack, which MoveTick's
+    // executor runs. ForceWork::DriveWhenIdle mirrors that (skips while the stack is busy). We
+    // own the citizen every tick so the AI state machine doesn't grab the idle stack first.
     static int s_driveCount = 0;
-    if (s_driveCount < 8) { ++s_driveCount;
-        fprintf(stderr, "[ForceForester] DRIVE ForesterWork::Execute#%d citizen=%p ret=%d "
-                "newTop+0x60=%d\n", s_driveCount, citizen, rc, *reinterpret_cast<int*>(chc + 0x60));
-        fflush(stderr);
-    }
+    ForceWork::DriveWhenIdle(citizen, s_fw, &ForesterWork_ForceDrive,
+                             "ForceForester", &s_driveCount, 8);
     return true;
 }
 

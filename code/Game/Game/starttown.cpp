@@ -777,6 +777,7 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
 // Index selectable via BANISHED_BUILD_DEMO_INDEX (default 0 = first structure).
 #ifdef STANDALONE_EXE
 extern "C" void* g_pConstructionDemoSite;
+extern "C" void* g_pConstructionDemoEntity;   // the demo foundation's OWNER entity (force-harness work-area)
 static bool BuildDemoEnabled() {
     static int en = -1;
     if (en < 0) {
@@ -1029,6 +1030,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             // OUTPUT init), so skip StartTown_WireStorage here.
             void* bc = FindComponentOnEntity(entity, TypeId("BuildComponent"));
             g_pConstructionDemoSite = bc;
+            g_pConstructionDemoEntity = entity;   // owner entity (work-area for the gather/build force harness)
             fprintf(stderr, "[startTown::struct] [%d] DEMO FOUNDATION seeded "
                     "entity=%p buildComp=%p (left at foundation mesh)\n", i, entity, bc);
             fflush(stderr);

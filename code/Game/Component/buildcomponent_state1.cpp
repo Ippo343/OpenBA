@@ -113,6 +113,9 @@ static bool BCS1_Trace() {
 // BuildComponent of that one foundation; when non-null, ONLY it is driven. When it is
 // null (no demo seeded) we still skip buildings whose model is already complete.
 extern "C" { void* g_pConstructionDemoSite = nullptr; }
+// The demo foundation's OWNER entity (set by StartTown alongside g_pConstructionDemoSite).
+// The construction force harness uses it as the GatherRawMaterials/BuildStructure work-area.
+extern "C" { void* g_pConstructionDemoEntity = nullptr; }
 
 #ifdef STANDALONE_EXE
 // Best-effort completion check: a force-completed building has its ModelComponent build

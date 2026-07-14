@@ -44,6 +44,10 @@ extern "C" void StartTown_DriveProduction();
 // real tree harvest -> production. Returns true if it owns the citizen this tick (the
 // caller then skips the competing AI state machine). Self-gated; no-op when env unset.
 extern "C" bool StartTown_ForcePushForesterWork(void* citizen);
+// Organic-construction test driver (construction_force_harness.cpp, env
+// BANISHED_FORCE_CONSTRUCT). Same contract: drives ONE citizen's construction Work
+// (gather -> build) at the demo foundation; owns the citizen when active; no-op when unset.
+extern "C" bool StartTown_ForcePushConstructionWork(void* citizen);
 
 // ============================================================
 // Resolved helpers
@@ -894,6 +898,7 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     // the competing AI state machine (Leisure/Wander would otherwise claim the idle stack
     // first) so ForesterWork::Execute keeps driving the real harvest/production chain.
     if (StartTown_ForcePushForesterWork(citizen)) return;
+    if (StartTown_ForcePushConstructionWork(citizen)) return;
 
     CitizenAIComponent_Update(self, time);
 }
