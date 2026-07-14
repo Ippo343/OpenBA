@@ -597,6 +597,25 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                     }
                 }
             }
+            // [DELIVERED-SYNC + IN-TRANSIT RECONCILE] The fulfilled check below is
+            // `field_58[slot] (in-transit) + field_48[slot] (delivered) >= target`. In retail
+            // OnComplete moves a completed haul FROM in-transit TO delivered (field_58 -= amt;
+            // field_48 += amt), keeping the sum == total committed. The standalone executor
+            // never reaches OnComplete, so field_58 keeps every enqueued amount forever while
+            // this bridge also credits the SAME physical units into field_48 — double-counting
+            // them (e.g. enqueue 9 -> build=9; deliver 9 -> assign=9; 9+9=18 >= 16 target, so
+            // GRM stops at 9/16 and never hauls the remaining 7). Reconcile here exactly as
+            // OnComplete would: as delivered rises, subtract the delta from in-transit so the
+            // gather keeps enqueuing until the site PHYSICALLY holds the full requirement.
+            {
+                int oldDelivered = *(int*)(intOffset + selfQ[9]);       // field_48[slot] (prev)
+                int delta = deliveredSync - oldDelivered;
+                if (delta > 0) {
+                    int* inTransit = (int*)(intOffset + selfQ[0xb]);    // field_58[slot]
+                    *inTransit -= delta;
+                    if (*inTransit < 0) *inTransit = 0;
+                }
+            }
             *(int*)(intOffset + selfQ[9]) = deliveredSync;  // field_48[slot] = site delivered
         }
 

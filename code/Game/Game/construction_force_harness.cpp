@@ -14,8 +14,14 @@
 //     citizen's stack; MoveTick's executor runs it. As materials physically arrive in the site
 //     storage the state-1 update (already ported) transitions the BuildComponent 1 → 8.
 //
-//   PHASE BUILD (state 8): TODO (task 5) — drive BuildStructure::Execute so build labor raises
-//     BuildComp+0x48 and the site completes 8 → 2.
+//   PHASE BUILD (state 8, all materials delivered): construct a BuildStructure bound to the
+//     site (BuildStructure_ConstructForSite → the faithful full ctor sizes the build-position
+//     byte array from the site footprint) and drive its Execute when idle. Execute assigns the
+//     citizen a build position and enqueues the timed-labor action chain. A labor-progress
+//     bridge (BANISHED_BUILD_SYNC_LABOR, default on) credits BuildComp+0x48 toward target each
+//     tick — standing in for the PerformWork→component-message the SA executor never reaches —
+//     so State8Update advances the mesh frames and requests 8 → 2. The phase switches on the
+//     sub_8630 "all materials in site storage" predicate (HaveAllMaterials).
 //
 // DELIVERED-SYNC: GatherRawMaterials credits delivered (field_48) from its OnComplete, which
 // fires from the citizen's DropOff→CompleteTask action — a node the standalone CitizenAI
@@ -35,13 +41,25 @@
 #include <cstdio>
 #include <cstdlib>
 
+namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
+
 // The demo foundation's OWNER entity (starttown.cpp, set alongside g_pConstructionDemoSite).
 extern "C" void* g_pConstructionDemoEntity;
 
-// Construction Work wrappers (gatherrawmaterials.cpp).
+// PHASE GATHER — GatherRawMaterials Work wrappers (gatherrawmaterials.cpp).
 extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP);
 extern "C" int   GatherRawMaterials_ForceDrive(void* self, void* citizenIBP);
 extern "C" bool  GatherRawMaterials_DepsReady();
+
+// PHASE BUILD — BuildStructure Work wrappers (buildstructure.cpp).
+extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP);
+extern "C" int   BuildStructure_ForceDrive(void* self, void* citizenIBP);
+extern "C" bool  BuildStructure_DepsReady();
+
+// State-1 -> 8 gather predicate (sub_8630, buildcomponent_sub8630.cpp): all raw materials in
+// the site storage? Used as the phase switch (gather -> build), same signal the real state
+// machine uses to transition 1 -> 8.
+extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);
 
 static bool ForceConstructEnvOn() {
     static int s = -1;
@@ -54,6 +72,61 @@ static bool ForceConstructEnvOn() {
         if (s == 1) _putenv_s("BANISHED_BUILD_SYNC_DELIVERED", "1");
     }
     return s == 1;
+}
+
+// Build-labor progress bridge (BANISHED_BUILD_SYNC_LABOR, default ON when FORCE_CONSTRUCT).
+// In retail, BuildComp+0x48 (labor accumulator) is raised by a component message posted when
+// a citizen's timed PerformWork action fires — the same executor node the standalone CitizenAI
+// executor never reaches (the gather half hit the identical gap at DropOff→CompleteTask). So
+// once the site is in state 8 and we are force-driving the REAL BuildStructure::Execute (which
+// assigns build positions + enqueues the labor action chain), we also credit BuildComp+0x48
+// toward its target each tick, standing in for the labor-complete message. State8Update
+// (buildcomponent_state8.cpp) reads +0x48 vs target = matComp[0x30]·bc[0x4c], advances the mesh
+// frames, and requests 8 -> 2 once progress >= target. Ramp paced over BANISHED_BUILD_DEMO_FRAMES
+// (default 600 ≈ 10s) so the rise is watchable.
+static bool BuildSyncLaborOn() {
+    static int s = -1;
+    if (s < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_SYNC_LABOR");
+        s = (e && e[0] == '0') ? 0 : 1;   // default ON; only "=0" disables
+    }
+    return s == 1;
+}
+static void CreditBuildProgress(void* bc, bool trace) {
+    if (!bc || !ForceWork::Readable(bc, 0x50)) return;
+    // target = base build effort (matComp = bc+0x18, +0x30) * build multiplier (bc+0x4c,
+    // clamp to retail default 1). Same formula BC8_Target uses. Probe-guarded; fall back to a
+    // nominal 60 if the description read looks bogus so a garbage target can't 1-shot complete.
+    void* matComp = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(bc) + 0x18);
+    int base = ForceWork::Readable(matComp, 0x34)
+                   ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(matComp) + 0x30) : 0;
+    int mult = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x4c);
+    if (mult <= 0) mult = 1;
+    int target = base * mult;
+    if (target <= 0 || target > 1000000) target = 60;
+
+    static int rampFrames = -1;
+    if (rampFrames < 0) {
+        const char* e = std::getenv("BANISHED_BUILD_DEMO_FRAMES");
+        rampFrames = (e && e[0]) ? std::atoi(e) : 600;
+        if (rampFrames < 1) rampFrames = 600;
+    }
+    int inc = target / rampFrames;
+    if (inc < 1) inc = 1;
+    int* prog = reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(bc) + 0x48);
+    int before = *prog;
+    int p = before + inc;
+    if (p > target) p = target;
+    *prog = p;
+    if (trace) {
+        static int s_last = -999999;
+        if (p != s_last) {
+            s_last = p;
+            std::fprintf(stderr, "[ForceBuild] progress bridge bc+0x48 %d -> %d / target %d (inc %d)\n",
+                         before, p, target, inc);
+            std::fflush(stderr);
+        }
+    }
 }
 
 // Driver. Called from the CitizenAI UpdateAdapter for ONE force-worked citizen (same hook as
@@ -71,36 +144,112 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     if (!s_owner) s_owner = citizen;
     if (citizen != s_owner) return false;
 
-    // One-time readiness gate: refuse to drive until every GatherRawMaterials::Execute
-    // dependency resolves, else Execute would null-deref a sub-fn / type-id.
-    static int s_verified = -1;   // -1 unchecked, 0 unusable, 1 usable
-    if (s_verified < 0) {
-        bool ok = GatherRawMaterials_DepsReady();
-        s_verified = ok ? 1 : 0;
-        fprintf(stderr, "[ForceConstruct] site=%p depsReady=%d -> %s\n", site, (int)ok,
-                s_verified ? "will drive" : "report-only (deps missing)");
+    const bool trace = ForceWork::EnvOn("BANISHED_BUILD_TRACE");
+
+    // ============================================================================
+    // PHASE SWITCH — gather (state 1) until all raw materials are in the site storage,
+    // then build (state 8). HaveAllMaterials is the same sub_8630 predicate the real state
+    // machine transitions 1 -> 8 on. Latch the build phase once entered so State8Finalize's
+    // storage reconfigure (which flips HaveAllMaterials back to false on completion) can't
+    // bounce us back to gather on a finished building.
+    // ============================================================================
+    static void* s_buildComp = nullptr;
+    if (!s_buildComp) {
+        static uint32_t tidBuild = 0;
+        if (!tidBuild) tidBuild = ::Object::GetTypeIdByName("BuildComponent");
+        s_buildComp = ForceWork::FindComp(site, tidBuild);
+    }
+    static int s_buildPhase = 0;
+    if (!s_buildPhase && s_buildComp) {
+        // Only trust HaveAllMaterials once State1Enter has initialized the build multiplier
+        // (bc+0x4c > 0). Before State1Enter runs, bc+0x4c is 0, so sub_8630 computes
+        // required = costQty·0 = 0 and returns true TRIVIALLY — which would switch to build
+        // on the very first tick, before the gather ever hauls (and before the site storage/
+        // workplace is even configured). Gating on mult>0 makes HaveAllMaterials reflect the
+        // real per-material requirement, so the switch fires only after the gather delivers.
+        int mult = ForceWork::Readable(s_buildComp, 0x50)
+                       ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_buildComp) + 0x4c) : 0;
+        if (mult > 0 && BuildComponent_HaveAllMaterials(s_buildComp)) {
+            s_buildPhase = 1;
+            if (trace) {
+                fprintf(stderr, "[ForceConstruct] all materials delivered (mult=%d) -> switch to BUILD phase (bc=%p)\n",
+                        mult, s_buildComp);
+                fflush(stderr);
+            }
+        }
+    }
+
+    if (!s_buildPhase) {
+        // ---- PHASE GATHER (state 1) ----
+        // One-time readiness gate: refuse to drive until every GatherRawMaterials::Execute
+        // dependency resolves, else Execute would null-deref a sub-fn / type-id.
+        static int s_verified = -1;   // -1 unchecked, 0 unusable, 1 usable
+        if (s_verified < 0) {
+            bool ok = GatherRawMaterials_DepsReady();
+            s_verified = ok ? 1 : 0;
+            fprintf(stderr, "[ForceConstruct] site=%p depsReady=%d -> %s\n", site, (int)ok,
+                    s_verified ? "will drive" : "report-only (deps missing)");
+            fflush(stderr);
+        }
+        if (s_verified != 1) return true;
+
+        // Construct the site GatherRawMaterials ONCE and keep it (its per-material slot arrays
+        // @+0x48/+0x58 must survive across drives). Faithful site ctor seeds the slots.
+        static void* s_gather = nullptr;
+        if (!s_gather) {
+            int64_t siteIBP = 0;
+            fn_InternalBasePtr_Ctor(&siteIBP, site);
+            s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
+            if (!s_gather) return true;   // own it, retry construction next tick
+            fprintf(stderr, "[ForceConstruct] constructed GatherRawMaterials=%p for site=%p\n",
+                    s_gather, site);
+            fflush(stderr);
+        }
+
+        // Drive the gather Execute when the citizen's action stack is idle (mirrors the site
+        // controller's Work-vtable call with the worker IBP). Own the citizen every tick.
+        static int s_driveCount = 0;
+        ForceWork::DriveWhenIdle(citizen, s_gather, &GatherRawMaterials_ForceDrive,
+                                 "ForceConstruct", &s_driveCount, 12);
+        return true;
+    }
+
+    // ---- PHASE BUILD (state 8) ----
+    // One-time readiness gate for BuildStructure::Execute (shares the engine_funcs globals).
+    static int s_buildVerified = -1;
+    if (s_buildVerified < 0) {
+        bool ok = BuildStructure_DepsReady();
+        s_buildVerified = ok ? 1 : 0;
+        fprintf(stderr, "[ForceBuild] site=%p depsReady=%d -> %s\n", site, (int)ok,
+                s_buildVerified ? "will drive" : "report-only (deps missing)");
         fflush(stderr);
     }
-    if (s_verified != 1) return false;
+    if (s_buildVerified != 1) return true;
 
-    // Construct the site GatherRawMaterials ONCE and keep it (its per-material slot arrays
-    // @+0x48/+0x58 must survive across drives). Faithful site ctor seeds the slots.
-    static void* s_gather = nullptr;
-    if (!s_gather) {
+    // Construct the site BuildStructure ONCE (its build-position byte array @+0x50/+0x58 must
+    // survive across drives). The faithful full ctor sizes it from the site footprint.
+    static void* s_build = nullptr;
+    if (!s_build) {
         int64_t siteIBP = 0;
         fn_InternalBasePtr_Ctor(&siteIBP, site);
-        s_gather = GatherRawMaterials_ConstructForSite(&siteIBP);
-        if (!s_gather) return true;   // own it, retry construction next tick
-        fprintf(stderr, "[ForceConstruct] constructed GatherRawMaterials=%p for site=%p\n",
-                s_gather, site);
+        s_build = BuildStructure_ConstructForSite(&siteIBP);
+        if (!s_build) return true;   // own it, retry construction next tick
+        fprintf(stderr, "[ForceBuild] constructed BuildStructure=%p for site=%p (buildPositions=%d)\n",
+                s_build, site, *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(s_build) + 0x58));
         fflush(stderr);
     }
 
-    // Drive the gather Execute when the citizen's action stack is idle (mirrors the site
-    // controller's Work-vtable call with the worker IBP). Own the citizen every tick.
-    static int s_driveCount = 0;
-    ForceWork::DriveWhenIdle(citizen, s_gather, &GatherRawMaterials_ForceDrive,
-                             "ForceConstruct", &s_driveCount, 12);
+    // Drive the build Execute when the citizen's action stack is idle (assigns a build
+    // position + enqueues the timed-labor action chain).
+    static int s_buildDriveCount = 0;
+    ForceWork::DriveWhenIdle(citizen, s_build, &BuildStructure_ForceDrive,
+                             "ForceBuild", &s_buildDriveCount, 12);
+
+    // Labor-progress bridge: credit BuildComp+0x48 toward target each tick (executor gap —
+    // the PerformWork->message that raises +0x48 organically never fires in SA). Run every
+    // tick (not only when idle) so completion proceeds even while the citizen is mid-chain.
+    if (BuildSyncLaborOn())
+        CreditBuildProgress(s_buildComp, trace);
     return true;
 }
 

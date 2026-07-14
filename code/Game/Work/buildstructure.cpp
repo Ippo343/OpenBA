@@ -982,4 +982,49 @@ extern "C" void* BuildStructure_Factory(void) {
     return p ? BuildStructure_Ctor((BuildStructure*)p) : nullptr;
 }
 REGISTER_TYPE(BuildStructure, "Work", &BuildStructure_Factory, &BuildStructure_CreateInPlace);
+
+// ---- Construction force-harness wrappers (construction_force_harness.cpp) ----
+// Mirror the GatherRawMaterials ConstructForSite/ForceDrive/DepsReady trio so the generic
+// ForceWork harness can drive the state-8 BUILD LABOR half exactly like it drives the
+// state-1 gather half. BuildStructure::Execute assigns the bound citizen a build position
+// and enqueues the timed-labor action chain (MoveTo/ShowTool/PerformWork/CompleteTask) onto
+// its CharacterComponent action stack; MoveTick's executor runs it. The gather driver reached
+// state 8 crash-free; this drives the site 8 -> 2.
+
+// Build a BuildStructure bound to a construction SITE entity using the FAITHFUL full ctor
+// (0x1400e59c0): it routes base init through Work_Ctor25 (field_10=site entity, +0x18
+// WorkComponent, +0x28 target cell) AND allocates the build-position byte array (field_50/
+// field_58) from the site's PositionComponent footprint — without which Execute's unbuilt-
+// position scan finds nothing (field_58==0) and returns 1 (never assigns labor). buildEntityIBP
+// is an InternalBasePtr* whose *value is the site entity pointer.
+extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP) {
+    EnsureHelpers();
+    EnsureVtables();
+    void* mem = Work_Alloc(0x70);
+    if (!mem) return nullptr;
+    return BuildStructure_CtorFull((BuildStructure*)mem, buildEntityIBP, 0);
+}
+
+// Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
+// citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
+extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
+    return BuildStructure_Execute((BuildStructure*)self, citizenIBP);
+}
+
+// Execute-readiness gate for the force harness. BuildStructure's Execute/ctor helpers are the
+// SHARED engine_funcs globals (resolved once at startup by the engine-funcs init), not local
+// s_fn_* — gate on the Execute+ctor-critical subset (mirrors GatherRawMaterials_DepsReady).
+// Serialize helpers + the dtor-only parent vtable are excluded (Execute never touches them).
+extern "C" bool BuildStructure_DepsReady() {
+    EnsureHelpers();
+    EnsureVtables();
+    return fn_InternalBasePtr_CheckPtr && fn_InternalBasePtr_Ctor &&
+           fn_Entity_FindComponent_Position && fn_Entity_FindComponent_Build &&
+           fn_Entity_FindComponent_BuildDesc && fn_Entity_FindComponent_MatDesc &&
+           fn_PositionComponent_Count && fn_CalcMaxBuilders && fn_DynArray_Resize &&
+           fn_Entity_GetPositionForIndex && fn_Map_Invalidate && fn_Map_CalcPathCost &&
+           fn_Map_NeighborLookup && fn_Map_CalcPathDist && fn_Map_CachePathDist &&
+           fn_SetupBuildActions && fn_BST_Insert && fn_IsA && fn_IsDerivedFrom &&
+           s_vtable_BuildStructure && g_pGameWorldSingleton && *g_pGameWorldSingleton;
+}
 #endif // STANDALONE_EXE
