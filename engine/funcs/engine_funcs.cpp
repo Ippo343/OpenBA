@@ -2810,6 +2810,13 @@ bool EngineFuncsInit() {
             fn_UIString_DefaultCtor = reinterpret_cast<fn_UIString_DefaultCtor_t>(*dispatch);
         }
     }
+    // Standalone: the exe dispatch slot above may be unpopulated (the runtime name-resolution
+    // that fills it doesn't run for our reimplemented callers) -> resolve straight from the
+    // Runtime DLL export instead, exactly like fn_Sprite_Default_Ctor below. Used by BuildUI/
+    // TradeUI/ProductionUI to blank surplus table rows with an empty UI::String.
+    if (!fn_UIString_DefaultCtor)
+        fn_UIString_DefaultCtor = reinterpret_cast<fn_UIString_DefaultCtor_t>(
+            ResolveExport("??0String@UI@@QEAA@XZ"));
     fn_Sprite_Default_Ctor = reinterpret_cast<fn_Sprite_Default_Ctor_t>(
         ResolveExport("??0Sprite@UI@@QEAA@XZ"));
     fn_Dialog_GetReference = reinterpret_cast<fn_Dialog_GetReference_t>(

@@ -324,19 +324,23 @@ void BuildUI_Slot4(BuildUI* self) {
             fn_TextElement_SetParameter((void*)rowTextTotal, 1, fmtBuf);
             fn_String_Dtor(fmtBuf);
         } else {
-            // Empty row: clear text and sprite (cosmetic — blanks table rows beyond
-            // the material count). In standalone fn_UIString_Ctor_Entry (UI::String
-            // single-arg ctor, IAT dispatch slot 0x140151300) is unresolved -> null;
-            // calling it faulted (EXEC of 0, R8=0 at buildui.cpp:329). Guard it — an
-            // uncleared placeholder row beats a crash. Guard the sprite clear the same
-            // way. TODO: populate dispatch slot 0x140151300 to restore proper clearing.
-            if (fn_UIString_Ctor_Entry && fn_TextElement_SetText) {
-                uint8_t emptyStr[16];
-                fn_UIString_Ctor_Entry(emptyStr, 0);
+            // Empty row: clear text and sprite (blanks table rows beyond the material
+            // count — a WoodHouse uses only 2 of the 7 storageItem cells). This mirrors the
+            // retail else-branch of 0x1400b1f40, which builds an EMPTY UI::String via the
+            // DEFAULT ctor (UI::String::String()) and SetText's it. The earlier reimpl used
+            // fn_UIString_Ctor_Entry — the NAMED single-arg ctor (IAT dispatch slot
+            // 0x140151300, unpopulated in standalone -> null -> EXEC of 0), so the clear was
+            // guarded off and the surplus rows kept their .rsc placeholder ("CountGathered"
+            // /"Labor"). fn_UIString_DefaultCtor is the correct default ctor (dispatch
+            // 0x140151ca8 + Runtime-export fallback) and resolves in standalone (same call
+            // TradeUI/ProductionUI use to blank their surplus rows).
+            if (fn_UIString_DefaultCtor && fn_TextElement_SetText) {
+                uint8_t emptyStr[16] = {};
+                fn_UIString_DefaultCtor(emptyStr);
                 fn_TextElement_SetText((void*)rowTextTotal, emptyStr);
 
-                uint8_t emptyStr2[16];
-                fn_UIString_Ctor_Entry(emptyStr2, 0);
+                uint8_t emptyStr2[16] = {};
+                fn_UIString_DefaultCtor(emptyStr2);
                 fn_TextElement_SetText((void*)labelStorage, emptyStr2);
             }
 
