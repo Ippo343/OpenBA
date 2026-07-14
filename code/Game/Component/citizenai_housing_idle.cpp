@@ -117,6 +117,19 @@ static void EnsureInit() {
 static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline uintptr_t GW() { return reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton); }
 
+// A plausible heap node pointer: non-null, not the -1 "invalid IBP" sentinel, and canonical
+// user-space (>= 64K, < 2^47). Used to fence the AVL rebalance walk (Helper_e360) against a
+// corrupt/invalid child or parent link — observed in standalone when an idle citizen's work-
+// candidate tree picks up a tool-placed building whose inert-factory component yields a -1
+// field, which fed 0xffffffffffffffff into the tree and faulted on deref (READ of -1). When
+// every link is valid this is a pure no-op; when one isn't, the walk treats it as absent
+// rather than dereferencing it. The transient tree is freed immediately after, so a slightly
+// less-balanced tree in that rare corrupt case only means a marginally different candidate pick.
+static inline bool ValidNode(int64_t p) {
+    uint64_t u = static_cast<uint64_t>(p);
+    return u >= 0x10000ULL && u < 0x0000800000000000ULL;
+}
+
 static inline void* NodeAlloc() {
     return fn_MemAlloc ? fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8) : nullptr;
 }
@@ -155,38 +168,39 @@ void* Helper_3f010(void* dst, uint64_t byteVal, uint64_t count) {
 // ============================================================
 void Helper_e360(int64_t* rootSlot, int64_t* param_2) {
     int64_t node = *param_2;
-    while (node != 0) {
+    while (ValidNode(node)) {
         int64_t n = *param_2;
+        if (!ValidNode(n)) break;                                // corrupt slot -> stop the walk
         int64_t parent = *reinterpret_cast<int64_t*>(n + 0x10);  // next up
         int64_t left  = *reinterpret_cast<int64_t*>(n + 0x18);
         int64_t right = *reinterpret_cast<int64_t*>(n + 0x20);
-        short hL = (left  != 0) ? static_cast<short>(*reinterpret_cast<short*>(left  + 0x2a) + 1) : 0;
-        short hR = (right != 0) ? static_cast<short>(*reinterpret_cast<short*>(right + 0x2a) + 1) : 0;
+        short hL = ValidNode(left)  ? static_cast<short>(*reinterpret_cast<short*>(left  + 0x2a) + 1) : 0;
+        short hR = ValidNode(right) ? static_cast<short>(*reinterpret_cast<short*>(right + 0x2a) + 1) : 0;
         short h = (hR < hL) ? hL : hR;
         *reinterpret_cast<short*>(n + 0x2a) = h;
         *reinterpret_cast<short*>(n + 0x28) = static_cast<short>(hR - hL);
 
         if (static_cast<short>(hR - hL) > 1) {
             int64_t rc = *reinterpret_cast<int64_t*>(n + 0x20);
-            if (rc != 0) {
+            if (ValidNode(rc)) {
                 // right-heavy: if right child is left-heavy, rotate it first (e580), then e450.
                 if (*reinterpret_cast<short*>(rc + 0x28) < 1 && *reinterpret_cast<short*>(rc + 0x28) < 0) {
                     if (s_rot_e580) s_rot_e580(rootSlot, rc);
                     n = *param_2;
                 }
-                if (s_rot_e450) s_rot_e450(rootSlot, n);
+                if (ValidNode(n) && s_rot_e450) s_rot_e450(rootSlot, n);
             }
         }
         n = *param_2;
-        if (*reinterpret_cast<short*>(n + 0x28) < -1) {
+        if (ValidNode(n) && *reinterpret_cast<short*>(n + 0x28) < -1) {
             int64_t lc = *reinterpret_cast<int64_t*>(n + 0x18);
-            if (lc != 0) {
+            if (ValidNode(lc)) {
                 // left-heavy: if left child is right-heavy, rotate it first (e450), then e580.
                 if (*reinterpret_cast<short*>(lc + 0x28) > -1 && *reinterpret_cast<short*>(lc + 0x28) > 0) {
                     if (s_rot_e450) s_rot_e450(rootSlot, lc);
                     n = *param_2;
                 }
-                if (s_rot_e580) s_rot_e580(rootSlot, n);
+                if (ValidNode(n) && s_rot_e580) s_rot_e580(rootSlot, n);
             }
         }
         *param_2 = parent;
@@ -236,6 +250,13 @@ void Helper_sub_8000(void* param_1, void* param_2, int64_t* param_3, int64_t* pa
                 bool descendLeft = false;
                 for (;;) {
                     int64_t self = existing;
+                    // Track the descent node for the post-insert rebalance. The originals
+                    // (0x1400f8000 / 0x1400f7c90) do `local_res8 = pIVar3` at the top of this
+                    // loop, so Helper_e360 walks UP from the insertion node. The port left
+                    // local_res8 pinned at param_1 (the citizen), so e360 read citizen fields
+                    // as AVL links and faulted on the -1 they held (READ of -1 crash once an
+                    // idle citizen's candidate tree grew past its root). Restore the update.
+                    local_res8 = reinterpret_cast<void*>(self);
                     if (*reinterpret_cast<int*>(self + 8) <= costKey) {
                         // self.key <= costKey
                         if (costKey <= *reinterpret_cast<int*>(self + 8)) {
@@ -386,6 +407,13 @@ void Helper_sub_7c90(void* param_1, void* param_2, void* param_3, int64_t* param
                 bool descendLeft = false;
                 for (;;) {
                     int64_t self = existing;
+                    // Track the descent node for the post-insert rebalance. The originals
+                    // (0x1400f8000 / 0x1400f7c90) do `local_res8 = pIVar3` at the top of this
+                    // loop, so Helper_e360 walks UP from the insertion node. The port left
+                    // local_res8 pinned at param_1 (the citizen), so e360 read citizen fields
+                    // as AVL links and faulted on the -1 they held (READ of -1 crash once an
+                    // idle citizen's candidate tree grew past its root). Restore the update.
+                    local_res8 = reinterpret_cast<void*>(self);
                     if (*reinterpret_cast<int*>(self + 8) <= costKey) {
                         if (costKey <= *reinterpret_cast<int*>(self + 8)) {
                             CheckPtr(reinterpret_cast<void*>(payload + 0x20));
