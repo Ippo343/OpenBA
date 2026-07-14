@@ -104,6 +104,20 @@ static bool BCS1_Trace() {
     return s_bcs1_trace == 1;
 }
 
+// Natural builder-flow gate (opt-in). When set, construction sites are registered into
+// the townMgr+0x100 profession BST under the Builder key at construction start (faithful
+// to retail's WPC OnCreate FUN_14012f520), so the tick-driven Builder pool (BuilderPool_Tick)
+// finds them via FindAvailableBuilding and seats idle laborers as Builders — instead of the
+// State8Enter hardcoded-entity direct seat. Off = the existing direct-seat/force-harness path.
+static int s_bcs1_builderNatural = -1;
+static bool BCS1_BuilderNatural() {
+    if (s_bcs1_builderNatural < 0) {
+        const char* e = std::getenv("BANISHED_BUILDER_NATURAL");
+        s_bcs1_builderNatural = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_bcs1_builderNatural == 1;
+}
+
 // ---- Construction-demo gating (standalone) ---------------------------------------
 // StartTown force-completes every start-town building (advances its ModelComponent to
 // the final construction sub-mesh). Driving State1Enter on such a building would RESET
@@ -402,9 +416,26 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                     uint64_t builderMarker = profReg ? *reinterpret_cast<uint64_t*>(profReg + 0x38) : 0;
                     if (builderMarker != 0)
                         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(wpc) + 0x48) = builderMarker;
-                    if (BCS1_Trace())
+
+                    // NATURAL builder flow (BANISHED_BUILDER_NATURAL): register the site into
+                    // the townMgr+0x100 profession BST keyed Builder — the step retail does at
+                    // WPC OnCreate (FUN_14012f520 → AddWorkplaceToProfessionTree 0x1400895a0).
+                    // This is what makes FindAvailableBuilding (0x14008d100) able to locate the
+                    // site, so the tick-driven Builder pool seats idle laborers here. Capacity
+                    // (WorkComponent+0x30) is computed lazily by FindAvailableBuilding via
+                    // CalcMaxWorkers; accepting (WPC+0x50) was set just above. The employment
+                    // allocator's AssignHousing churn (which townMgr+0x100 population activates)
+                    // is freeze-guarded by g_wpcRosterOnly inside CitizenAssignCitizens.
+                    // Off = the legacy path (no register; State8Enter direct-seats the builders).
+                    if (BCS1_BuilderNatural() && townMgr) {
+                        TownRegistry_RegisterWorkplace(static_cast<int64_t>(townMgr), wpc);
+                        if (BCS1_Trace())
+                            std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder + REGISTERED townMgr+0x100 (WPC+0x48=0x%llx, natural flow)\n",
+                                         (unsigned long long)builderMarker);
+                    } else if (BCS1_Trace()) {
                         std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder (WPC+0x48=0x%llx, no townMgr+0x100 register; seat in State8Enter)\n",
                                      (unsigned long long)builderMarker);
+                    }
 #endif
                 }
             } else if (BCS1_Trace()) {

@@ -83,6 +83,20 @@ static bool BC8_DemoForce() {
 }
 static bool BC8_IsDemo(void* bc) { return g_pConstructionDemoSite && bc == g_pConstructionDemoSite; }
 
+// Natural builder-flow gate (BANISHED_BUILDER_NATURAL, opt-in). When on, the site was
+// registered into townMgr+0x100 at State1Enter and the tick-driven Builder pool
+// (BuilderPool_Tick) seats builders via FindAvailableBuilding — so State8Enter must NOT
+// also run the hardcoded-entity direct seat (CitizenEmploy_SeatWorkersAt), or the site would
+// be double-staffed. Off = legacy path (direct seat here).
+static int s_bc8_builderNatural = -1;
+static bool BC8_BuilderNatural() {
+    if (s_bc8_builderNatural < 0) {
+        const char* e = std::getenv("BANISHED_BUILDER_NATURAL");
+        s_bc8_builderNatural = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_bc8_builderNatural == 1;
+}
+
 // ---- type ids (SA: runtime registry; DLL: raw .rdata) ----------------------------
 static uint32_t BC8_TypeId(const char* name, uintptr_t rdataGlobal) {
 #ifdef STANDALONE_EXE
@@ -380,7 +394,12 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                     uintptr_t townMgrB = gwB ? *reinterpret_cast<uintptr_t*>(gwB + 0xf0) : 0;
                     uintptr_t profRegB = gwB ? *reinterpret_cast<uintptr_t*>(gwB + 0xb0) : 0;
                     uint64_t builderMarker = profRegB ? *reinterpret_cast<uint64_t*>(profRegB + 0x38) : 0;
-                    if (townMgrB && builderMarker) {
+                    if (BC8_BuilderNatural()) {
+                        // Natural flow: the tick-driven Builder pool seats builders via the
+                        // townMgr+0x100 registration made at State1Enter — do NOT direct-seat here.
+                        if (BC8_Trace())
+                            std::fprintf(stderr, "[BuildTrace] State8Enter: natural flow -> deferring builder seat to BuilderPool_Tick (no direct SeatWorkersAt)\n");
+                    } else if (townMgrB && builderMarker) {
                         static void* s_calcMaxWorkers = nullptr; static bool s_cmwRes = false;
                         if (!s_cmwRes) { s_calcMaxWorkers = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14012e5c0)); s_cmwRes = true; }
                         int builderCount = 0;

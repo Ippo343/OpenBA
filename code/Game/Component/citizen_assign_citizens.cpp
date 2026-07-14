@@ -283,6 +283,17 @@ bool DropCitizen(NeedEntry& e, void* citizen) {
 
 }  // namespace
 
+// Build-time roster-only guard (workplacecomponent.cpp). When set, the WPC worker
+// attach/detach helpers (fa20/f7e0, reached through AssignHousing 0x140111ee0) skip
+// the Graphics::Scene mesh-visual toggle (Scene::Add/RemoveObject on gw+0x60 +
+// FUN_1400c3470 re-bucket + component-event broadcast) down to the bare roster-list
+// mutation. This allocator runs every town tick once townMgr+0x100 has any employer
+// workplace (e.g. a registered construction site), and its Phase 1/3/5A/5B AssignHousing
+// churn is O(idle-laborers) per tick — the exact scene churn that deadlocks. We hold the
+// guard across the whole allocation body so none of those AssignHousing calls touch the
+// scene. Verified sufficient in Ghidra (see reference_builder_profession_bst_flow).
+extern bool g_wpcRosterOnly;
+
 // ===========================================================================
 // CitizenComponent_impl_43b0 (0x1400d43b0)
 // ===========================================================================
@@ -307,6 +318,11 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
     int       citCount = *reinterpret_cast<int32_t*>(townMgr + 0xa8);
     uintptr_t mapRoot  = *reinterpret_cast<uintptr_t*>(townMgr + 0x100);
     float     uvScale  = s_uvScale ? *s_uvScale : 1.0f;
+
+    // Hold the roster-only guard for every AssignHousing call below (no early returns
+    // remain past this point). Restored just before the trace/return.
+    bool prevRoster = g_wpcRosterOnly;
+    g_wpcRosterOnly = true;
 
     // ---------- Phase 1: housing-sync ----------
     for (int i = 0; i < citCount; ++i) {
@@ -436,6 +452,8 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
         auto pit = profNeed.find(key);
         if (pit != profNeed.end() && --pit->second == 0) profNeed.erase(pit);
     }
+
+    g_wpcRosterOnly = prevRoster;
 
     if (CAC_Trace())
         std::fprintf(stderr,

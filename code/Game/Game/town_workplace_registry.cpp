@@ -22,6 +22,20 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+
+// Diagnostic gate for FindAvailableBuilding (shares BANISHED_BUILD_TRACE). Throttled so the
+// per-tick BuilderPool probe doesn't flood the log.
+static bool FAB_Trace() {
+    static int s = -1;
+    if (s < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); s = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s == 1;
+}
+static bool FAB_TraceThrottle() {
+    static int n = 0;
+    return (++n % 40) == 1;   // ~1 in 40 calls
+}
 
 // Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
 // *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.
@@ -186,14 +200,20 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         }
     }
 
+    const bool fabTrace = FAB_Trace() && FAB_TraceThrottle();
+
     // Key absent -> empty result.
     if (found == nullptr) {
+        if (fabTrace) { std::fprintf(stderr, "[FAB] key=0x%llx NOT FOUND in townMgr+0x100\n",
+                                     (unsigned long long)professionKey); std::fflush(stderr); }
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(out, nullptr);
         return out;
     }
 
     // Step 3: scan the profession node's building array (base +0x08, count +0x10).
     int count = static_cast<int>(found[2]);                // +0x10 count (low dword)
+    if (fabTrace) { std::fprintf(stderr, "[FAB] key=0x%llx node found, buildingCount=%d\n",
+                                 (unsigned long long)professionKey, count); std::fflush(stderr); }
     for (int i = 0; i < count; ++i) {
         // building entity ref (InternalBasePtr value) at node.arr[i].
         int64_t buildingIBP = *reinterpret_cast<int64_t*>(static_cast<int64_t>(found[1]) + (int64_t)i * 8);
@@ -225,25 +245,37 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
         if (wcPtr == 0) continue;                         // defensive
 
         // capacity = WorkComponent+0x30; lazily compute+cache via CalcMaxWorkers.
-        int capacity = *reinterpret_cast<int*>(wcPtr + 0x30);
+        int capRaw = *reinterpret_cast<int*>(wcPtr + 0x30);
+        int capacity = capRaw;
         if (capacity == 0 && s_calcMaxWorkers) {
             capacity = s_calcMaxWorkers(reinterpret_cast<void*>(wcPtr));
             *reinterpret_cast<int*>(wcPtr + 0x30) = capacity;
         }
 
         // 3c: room available -> reachability probe; if reachable, this is our pick.
+        char accepting = -1;
+        bool reachOk = false;
         if (workerCount < capacity) {
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&buildingIBP);
             int64_t tmpIBP[2] = { 0, 0 };                 // 16-byte scratch IBP (matches local_50)
             if (s_findReach) {
                 void* reach = s_findReach(building, tmpIBP);
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reach);
-                if (reach && *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50) != 0) {
+                if (reach) {
+                    accepting = *reinterpret_cast<char*>(*reinterpret_cast<int64_t*>(reach) + 0x50);
+                    reachOk = (accepting != 0);
+                }
+                if (reachOk) {
+                    if (fabTrace) { std::fprintf(stderr, "[FAB]   bld[%d] PICKED wpc=%p workers=%d capRaw=%d cap=%d accepting=%d\n",
+                                                 i, (void*)wpcPtr, workerCount, capRaw, capacity, (int)accepting); std::fflush(stderr); }
                     *reinterpret_cast<int64_t*>(out) = building;   // *out = building entity ptr
                     return out;
                 }
             }
         }
+        if (fabTrace) { std::fprintf(stderr, "[FAB]   bld[%d] REJECT wpc=%p wc=%p workers=%d capRaw=%d cap=%d (workers<cap=%d) reachFn=%p accepting=%d\n",
+                                     i, (void*)wpcPtr, (void*)wcPtr, workerCount, capRaw, capacity,
+                                     (int)(workerCount < capacity), (void*)s_findReach, (int)accepting); std::fflush(stderr); }
     }
 
     // No qualifying building -> empty result.

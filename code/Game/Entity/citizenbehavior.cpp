@@ -19,6 +19,10 @@
 #include <cstdlib>
 #include <cstring>
 
+// Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
+// is set (and, in DLL mode, always a no-op). Called at the end of CitizenBehavior_Update.
+extern "C" void BuilderPool_Tick();
+
 // ============================================================
 // Internal helper addresses (resolved lazily)
 // ============================================================
@@ -195,11 +199,15 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
     // System::Time::Time constructs a Time value from float
     int64_t pathInterval = 0;
     if (s_fn_Time_Ctor) {
+        // DAT_140172234 is a raw .rdata float; ResolveAddr(Module::Exe, .rdata) returns NULL
+        // in the standalone exe (only reimplemented code addresses are registered). Leaving
+        // pathInterval at 0 makes the path branch fire EVERY frame AND makes the accumulator
+        // clamp loop below non-terminating (`acc -= 0`). Fall back to the known 300s gate value.
+        float intervalSec = 300.0f;
         float* intervalFloat = reinterpret_cast<float*>(
             ResolveAddr(Module::Exe, 0x140172234));
-        if (intervalFloat) {
-            s_fn_Time_Ctor(&pathInterval, *intervalFloat);
-        }
+        if (intervalFloat) intervalSec = *intervalFloat;
+        s_fn_Time_Ctor(&pathInterval, intervalSec);
     }
 
     // TEST-ONLY accelerator: BANISHED_PATHGRAPH_FAST forces the path branch every
@@ -221,12 +229,21 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
             // Build new path graph
             CitizenBehavior_BuildPathGraph(pg);
         } else if (pg && pg->m_pendingIdx < 0 && pathInterval < q[0x32]) {
-            // Clamp accumulated time: subtract intervals until within one interval
-            int64_t acc = q[0x32];
-            do {
-                acc -= pathInterval;
-            } while (pathInterval < acc);
-            q[0x32] = acc;
+            // Clamp accumulated time: subtract intervals until within one interval.
+            // Guard against pathInterval <= 0 (BANISHED_PATHGRAPH_FAST forces 0, or a failed
+            // interval resolve) — `acc -= 0` would spin forever. This branch is reached only
+            // when ProcessPaths returns true (pairs drained), which requires townMgr+0x100 to
+            // be non-empty (e.g. a registered construction site) — so it stayed latent until
+            // the natural builder flow first populated that BST.
+            if (pathInterval > 0) {
+                int64_t acc = q[0x32];
+                do {
+                    acc -= pathInterval;
+                } while (pathInterval < acc);
+                q[0x32] = acc;
+            } else {
+                q[0x32] = 0;   // no positive interval to modulo by -> reset the accumulator
+            }
         }
     }
 
@@ -250,6 +267,14 @@ void CitizenBehavior_Update(CitizenBehaviorRaw* self, int64_t* deltaTime) {
         *reinterpret_cast<uint32_t*>(&q[0x35]) = 0; // clear notify flags
         q[0x34] = 0;
     }
+
+    // Tick-driven Builder pool (BANISHED_BUILDER_NATURAL, opt-in): keep registered
+    // construction sites staffed by seating idle Laborers as Builders via the real
+    // FindAvailableBuilding cascade, nearest-first, capped by site capacity. No-op unless
+    // the natural flow is enabled. This is the headless stand-in for the player's town-hall
+    // Builder count — the engine has no player-free first-builder seater (the periodic
+    // employment allocator only rebalances already-staffed sites). See builder_pool_driver.cpp.
+    BuilderPool_Tick();
 }
 
 // ============================================================
