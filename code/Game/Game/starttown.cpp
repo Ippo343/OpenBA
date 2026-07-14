@@ -832,38 +832,21 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     const uint32_t tidModelComponent = TypeId("ModelComponent");
 
     int spawned = 0;
-    for (int i = 0; i < count; ++i) {
-        uint8_t* entry = pool + (size_t)i * STRUCT_STRIDE;
 
-        void* tmpl = StartTown_ResolveTemplate(entry);
-        if (!tmpl) {
-            fprintf(stderr, "[startTown::struct] [%d] template unresolved\n", i);
-            fflush(stderr);
-            continue;
-        }
-
+    // Place ONE structure from `tmpl` at (tileX,tileY): create the entity, position its
+    // MapComponent + ModelComponent world transform, show the completed model (or leave it
+    // at the foundation mesh when isDemoFoundation), register it, then run the OnCreate /
+    // region-cell-mark / storage-wire passes. Returns the entity (or null). Factored out of
+    // the per-entry loop (as a faithful 1:1 lambda — same file-scope helpers/globals) so the
+    // construction-demo foundation can be spawned as a FRESH extra building AFTER the loop
+    // (follow-up #7) instead of cannibalising a real start house.
+    auto placeStructure = [&](void* tmpl, int tileX, int tileY, int orient,
+                              int w0, int h0, bool isDemoFoundation, int logIndex) -> void* {
         // Instantiate + wrap.
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, ENTITY_SIZE, 8);
         void* ent = mem ? fn_EntityFactory_CreateEntity(mem, tmpl) : nullptr;
         uintptr_t entIBP = 0;
         fn_InternalBasePtr_Ctor(&entIBP, ent);
-
-        // Footprint: CreatePlacedDescription on the template, else entry defaults.
-        int w0, h0;
-        void* placed = FindDescriptionOnTemplate(tmpl, tidCreatePlaced);
-        if (placed) {
-            w0 = *(int32_t*)((uint8_t*)placed + 0x44);
-            h0 = *(int32_t*)((uint8_t*)placed + 0x48);
-        } else {
-            w0 = *(int32_t*)(entry + ENTRY_DEF_W);
-            h0 = *(int32_t*)(entry + ENTRY_DEF_H);
-        }
-
-        const int offX   = *(int32_t*)(entry + ENTRY_OFFX);
-        const int offY   = *(int32_t*)(entry + ENTRY_OFFY);
-        const int orient = *(int32_t*)(entry + ENTRY_ORIENT);
-        const int tileX  = spawnX + offX;
-        const int tileY  = spawnY + offY;
 
         // 90 / -90 / 270 degrees swap the footprint axes.
         int fpW = w0, fpH = h0;
@@ -958,23 +941,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         // Mirror ComponentEntity_impl_1fc0: pick a random visual style (variantIdx via
         // the world RNG, like 1fc0) but force the LAST sub-mesh = the finished build.
         //
-        // Construction-demo exception: the ONE demo foundation is left at its
-        // foundation mesh so State1Enter can drive it through the real build stages.
-        bool isDemoFoundation = false;
-#ifdef STANDALONE_EXE
-        if (BuildDemoEnabled()) {
-            if (BuildDemoWantsHouse()) {
-                // First residence (WoodHouse) becomes the demo foundation.
-                if (!g_demoHouseAssigned &&
-                    FindComponentOnEntity(entity, TypeId("ResidenceComponent"))) {
-                    isDemoFoundation = true;
-                    g_demoHouseAssigned = true;
-                }
-            } else {
-                isDemoFoundation = (i == BuildDemoIndex());
-            }
-        }
-#endif
+        // Construction-demo exception: the demo foundation is left at its foundation mesh
+        // so the BuildComponent state machine can drive it through the real build stages.
         if (!isDemoFoundation) {
             void* modelComp = FindComponentOnEntity(entity, tidModelComponent);
             if (modelComp) {
@@ -997,7 +965,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                                               (int16_t)variantIdx, (int16_t)modelVariant);
                     fprintf(stderr, "[startTown::struct] [%d] complete-model variantIdx=%d "
                             "modelVariant=%d (subCount=%d groups=%u)\n",
-                            i, variantIdx, modelVariant, subCount, groupCount);
+                            logIndex, variantIdx, modelVariant, subCount, groupCount);
                     fflush(stderr);
                 }
             }
@@ -1032,26 +1000,109 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             g_pConstructionDemoSite = bc;
             g_pConstructionDemoEntity = entity;   // owner entity (work-area for the gather/build force harness)
             fprintf(stderr, "[startTown::struct] [%d] DEMO FOUNDATION seeded "
-                    "entity=%p buildComp=%p (left at foundation mesh)\n", i, entity, bc);
+                    "entity=%p buildComp=%p tile=(%d,%d) (left at foundation mesh)\n",
+                    logIndex, entity, bc, tileX, tileY);
             fflush(stderr);
         } else {
             // Brick M-D (BANISHED_LIVE_STORAGE): run the build-complete storage init
             // + town storage-location registration for this fully-built building —
             // retail's StorageLocationComponent OnAdded fires during RegisterEntity,
             // so this sits right after it.
-            StartTown_WireStorage(entity, i);
+            StartTown_WireStorage(entity, logIndex);
         }
 #endif
 
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
-                i, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
+                logIndex, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
         fflush(stderr);
+        return ent;
+    };
+
+    // Fresh construction-demo foundation (follow-up #7): the OLD path converted the FIRST
+    // start-town residence itself into the demo foundation, leaving the player one home
+    // short. Instead capture the first residence's template + footprint during the loop and
+    // spawn a COPY as the foundation AFTER the loop, clear of the whole cluster — every real
+    // start house stays complete. Only the house-demo path (default) does this; an explicit
+    // BANISHED_BUILD_DEMO_INDEX still marks that in-place building as the foundation.
+#ifdef STANDALONE_EXE
+    void* demoTmpl = nullptr;
+    int demoW0 = 0, demoH0 = 0;
+    int clusterMaxEdgeX = spawnX;
+#endif
+
+    for (int i = 0; i < count; ++i) {
+        uint8_t* entry = pool + (size_t)i * STRUCT_STRIDE;
+
+        void* tmpl = StartTown_ResolveTemplate(entry);
+        if (!tmpl) {
+            fprintf(stderr, "[startTown::struct] [%d] template unresolved\n", i);
+            fflush(stderr);
+            continue;
+        }
+
+        // Footprint: CreatePlacedDescription on the template, else entry defaults.
+        int w0, h0;
+        void* placed = FindDescriptionOnTemplate(tmpl, tidCreatePlaced);
+        if (placed) {
+            w0 = *(int32_t*)((uint8_t*)placed + 0x44);
+            h0 = *(int32_t*)((uint8_t*)placed + 0x48);
+        } else {
+            w0 = *(int32_t*)(entry + ENTRY_DEF_W);
+            h0 = *(int32_t*)(entry + ENTRY_DEF_H);
+        }
+
+        const int offX   = *(int32_t*)(entry + ENTRY_OFFX);
+        const int offY   = *(int32_t*)(entry + ENTRY_OFFY);
+        const int orient = *(int32_t*)(entry + ENTRY_ORIENT);
+        const int tileX  = spawnX + offX;
+        const int tileY  = spawnY + offY;
+
+#ifdef STANDALONE_EXE
+        // In-place demo only for the explicit-index path (default index -1 => never).
+        const bool inPlaceDemo = BuildDemoEnabled() && !BuildDemoWantsHouse() &&
+                                 (i == BuildDemoIndex());
+#else
+        const bool inPlaceDemo = false;
+#endif
+
+        void* ent = placeStructure(tmpl, tileX, tileY, orient, w0, h0, inPlaceDemo, i);
         if (ent) {
             ++spawned;
             // Capture the first structure entity for the BANISHED_FORCE_WORK harness.
-            if (!g_pForceWorkBuilding) g_pForceWorkBuilding = entity;
+            if (!g_pForceWorkBuilding) g_pForceWorkBuilding = ent;
         }
+
+#ifdef STANDALONE_EXE
+        // Track the cluster's east edge (to place the fresh demo foundation clear of it) and
+        // capture the first residence template as the demo-house source. Only the X-extent
+        // (footprint width after the orientation axis-swap) matters for the east edge.
+        const int fpWx = (orient == 0x5a || orient == -0x5a || orient == 0x10e) ? h0 : w0;
+        if (tileX + fpWx > clusterMaxEdgeX) clusterMaxEdgeX = tileX + fpWx;
+        if (BuildDemoEnabled() && BuildDemoWantsHouse() && !g_demoHouseAssigned && ent &&
+            FindComponentOnEntity(ent, TypeId("ResidenceComponent"))) {
+            demoTmpl = tmpl; demoW0 = w0; demoH0 = h0;
+            g_demoHouseAssigned = true;
+        }
+#endif
     }
+
+#ifdef STANDALONE_EXE
+    // Spawn the FRESH WoodHouse foundation two tiles east of the cluster, in the spawn row
+    // (a walkable band by construction), left at its foundation mesh and recorded as the
+    // construction-demo site — so the build-labor harness drives THIS building, not a real
+    // start house.
+    if (demoTmpl) {
+        const int dTileX = clusterMaxEdgeX + 2;
+        const int dTileY = spawnY;
+        void* demoEnt = placeStructure(demoTmpl, dTileX, dTileY, 0, demoW0, demoH0,
+                                       /*isDemoFoundation=*/true, -1);
+        if (demoEnt) ++spawned;
+        fprintf(stderr, "[startTown::struct] FRESH demo foundation spawned tile=(%d,%d) ent=%p\n",
+                dTileX, dTileY, demoEnt);
+        fflush(stderr);
+    }
+#endif
+
     return spawned;
 }
 
