@@ -473,7 +473,21 @@ void BuildComponent_DrawReimpl(void* selfP) {
         void* wp2 = BC_FindComponentByType(self[2], s_tid_Workplace);
         if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&wpIbp, wp2);
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&wpIbp);
-        *(int*)((uintptr_t)self + 0x4c) = (int)((int64_t*)wpIbp)[0xb];
+        // Retail: bc+0x4c = WorkPlaceComponent+0x58 (the build-effort multiplier). In the
+        // standalone exe the WorkPlaceComponent lifecycle is inert, so +0x58 stays 0 — which
+        // would clobber the default 1 set above and collapse the build target
+        // (matComp[0x30] * bc[0x4c]) to 0. Two downstream failures follow: (1) BC8_Target has
+        // to clamp it back to 1 for the mesh ramp, and (2) BuildComplete_Impl (the EntityUI
+        // page-routing predicate, retail 0x140109390) reads `totalRequired * bc[0x4c] <=
+        // bc[0x48]` == `0 <= 0` and reports the build COMPLETE the instant materials arrive
+        // (1->8) — flipping the dialog from the build page to the operational page while the
+        // building is still under construction (labor not yet done). Only adopt the workplace
+        // value when it's a valid positive multiplier (same clamp State1Enter applies); keep
+        // the default 1 otherwise, so the target stays matComp[0x30] and routing stays "under
+        // construction" until the labor accumulator (bc+0x48) actually reaches it.
+        int wpMult = (int)((int64_t*)wpIbp)[0xb];
+        if (wpMult > 0)
+            *(int*)((uintptr_t)self + 0x4c) = wpMult;
     }
 }
 
