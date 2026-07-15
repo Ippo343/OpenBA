@@ -253,6 +253,12 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
     if (s_fn_WPC_Accessor5780) s_fn_WPC_Accessor5780(*(int64_t*)(comp + 0x10), &accIbp);
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&accIbp);
+    // Partial-world guard: on an inert standalone workplace, Accessor5780 yields a null
+    // accessor object; passing it to Getter_e710 dereferences null+0x10 (READ of 0x10),
+    // which crashed when a citizen switched workplaces during the per-frame update (that
+    // path doesn't hold g_wpcRosterOnly). A null accessor means "nothing renderable to
+    // toggle", so skip the visual tail — same as g != 0 (entity already culled).
+    if (accIbp == 0) return;
     char g = s_fn_WPC_Getter_e710 ? s_fn_WPC_Getter_e710(*(int64_t*)&accIbp) : 1;
     if (g != '\0') return;
 
@@ -260,9 +266,12 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     if (jobSlot == 0) return;
 
     void* descObj = *(void**)(comp + 0x18);
-    void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+    // Guard descObj before IsDerivedFrom (Runtime IsDerivedFrom has no null-check) and
+    // desc before the +0x20 deref: an inert standalone workplace can carry a null/absent
+    // description. A null desc means the job can't match -> skip the visual tail.
+    void* desc = (descObj && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
                   fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
-    if (jobSlot != *(int64_t*)((uintptr_t)desc + 0x20)) return;
+    if (!desc || jobSlot != *(int64_t*)((uintptr_t)desc + 0x20)) return;
 
     uint64_t meshIbp2 = 0;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
@@ -329,9 +338,11 @@ void WorkplaceComponent_Attach(int64_t comp, void* workerIbp) {
         if (*(int*)(comp + 0x60) == 0) {
             void* descObj = *(void**)(comp + 0x18);
             int64_t jobSlot = *(int64_t*)(comp + 0x48);
-            void* desc = (fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
+            // Guard descObj before IsDerivedFrom (no null-check) and desc before the +0x20
+            // deref — an inert standalone workplace may have a null description.
+            void* desc = (descObj && fn_IsDerivedFrom && s_TypeId_WorkPlaceDesc &&
                           fn_IsDerivedFrom(descObj, *s_TypeId_WorkPlaceDesc)) ? descObj : nullptr;
-            if (jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
+            if (desc && jobSlot == *(int64_t*)((uintptr_t)desc + 0x20)) {
                 if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(comp + 0x10));
                 if (s_fn_WPC_ModelKick) s_fn_WPC_ModelKick(*(int64_t*)(comp + 0x10), 2);
             }

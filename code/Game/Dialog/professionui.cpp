@@ -798,6 +798,19 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 // Original: 0x1400763c0.
 
 static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
+#ifdef STANDALONE_EXE
+    // The add/remove cascade below reaches WorkplaceComponent Attach/Detach, whose
+    // gameplay-time Scene mesh-visual block dereferences inert standalone objects and
+    // faults (READ of 0x10 in Detach's e710 getter when the player lowered a builder
+    // count). Do the bare roster mutation only — the same guard the builder pool and the
+    // employment allocator hold around AssignHousing. DLL mode keeps the full visual path.
+    extern bool g_wpcRosterOnly;
+    struct RosterGuard {
+        bool prev;
+        RosterGuard() { prev = g_wpcRosterOnly; g_wpcRosterOnly = true; }
+        ~RosterGuard() { g_wpcRosterOnly = prev; }
+    } _rosterGuard;
+#endif
     uintptr_t s = (uintptr_t)self;
     int64_t idx = (int64_t)profIndex;
 

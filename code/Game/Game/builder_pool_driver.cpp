@@ -59,6 +59,23 @@ bool BuilderNaturalOn() {
     return s_natural == 1;
 }
 
+// The auto-increment pool (this file's tick auto-seating construction sites up to capacity)
+// was a bring-up test to prove organic construction end-to-end. It is now OFF by default:
+// builder assignment is player-driven through the town-hall Professions spinner
+// (ProfessionUI_HandleSpinner 0x1400763c0 -> FindAvailableBuilding + the cbf0/ca20/c5f0/c4b0
+// seat cascade, all registered in SA), which the always-topping-up pool would otherwise fight.
+// Site registration into townMgr+0x100 still happens under BANISHED_BUILDER_NATURAL
+// (buildcomponent_state1.cpp) so the spinner's cascade can find the sites. Set
+// BANISHED_BUILDER_AUTOPOOL=1 to restore the old auto-seating behaviour for testing.
+int s_autopool = -1;
+bool AutoPoolOn() {
+    if (s_autopool < 0) {
+        const char* e = std::getenv("BANISHED_BUILDER_AUTOPOOL");
+        s_autopool = (e && e[0] && e[0] != '0') ? 1 : 0;
+    }
+    return s_autopool == 1;
+}
+
 int s_trace = -1;
 bool Trace() {
     if (s_trace < 0) {
@@ -116,7 +133,7 @@ int64_t SeatOneAt(int64_t townMgr, int64_t avail, int64_t builderKey) {
 
 // Called from CitizenBehavior_Update (the town tick, 0x14008c2b0). Lightly throttled.
 extern "C" void BuilderPool_Tick() {
-    if (!BuilderNaturalOn()) return;
+    if (!BuilderNaturalOn() || !AutoPoolOn()) return;   // auto-increment off by default (spinner-driven now)
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     // Throttle: seating is cheap once sites are full (FindAvailableBuilding returns null fast),

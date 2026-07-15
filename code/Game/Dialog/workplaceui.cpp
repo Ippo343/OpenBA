@@ -558,6 +558,11 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
 #include <cstddef>
 #include <cstdlib>
 
+// Roster-only guard defined at global scope in workplacecomponent.cpp (suppresses the
+// gameplay-time Scene mesh-visual block in WorkplaceComponent Attach/Detach). Declared here
+// at GLOBAL scope so the reference inside the namespace binds to ::g_wpcRosterOnly.
+extern bool g_wpcRosterOnly;
+
 namespace workplaceui_sa {
 
 constexpr int kSlots = 48;
@@ -698,6 +703,23 @@ void PopulateCounts(void* self) {
     void* elem30 = *reinterpret_cast<void**>(s + 0x30);   // workPlaceCount
     void* elem38 = *reinterpret_cast<void**>(s + 0x38);   // maxCount
 
+    // Arm the worker up/down spinner buttons (self+0x40/+0x48) so their clicks route to
+    // OnRemove (vtable slot 9) as ids 0x1450/0x1451 — the per-building equivalent of the
+    // town-hall Professions spinner. Element ids are set once on discovery. The retail
+    // laborer-availability enable math is skipped (needs exe helpers); the buttons keep
+    // their .rsc-default clickable state and a click with no convertible laborer / no
+    // seated worker simply no-ops in the seat cascade.
+    if (*reinterpret_cast<void**>(s + 0x40) == nullptr) {
+        *reinterpret_cast<uint64_t*>(s + 0x40) = FindElemAsBasePtr(panelElem, "workerCountUp");
+        void* up = *reinterpret_cast<void**>(s + 0x40);
+        if (up && fn_Element_SetElementId) fn_Element_SetElementId(up, 0x1450);
+    }
+    if (*reinterpret_cast<void**>(s + 0x48) == nullptr) {
+        *reinterpret_cast<uint64_t*>(s + 0x48) = FindElemAsBasePtr(panelElem, "workerCountDown");
+        void* down = *reinterpret_cast<void**>(s + 0x48);
+        if (down && fn_Element_SetElementId) fn_Element_SetElementId(down, 0x1451);
+    }
+
     // Roster = seated workers/builders at this site (WorkPlaceComponent+0x60).
     uint32_t roster = *reinterpret_cast<uint32_t*>(w + 0x60);
 
@@ -799,6 +821,73 @@ void W_Startup(void* self) {
     PopulateCounts(self);
 }
 
+// idx9 (+0x48): OnRemove — per-building worker up/down spinner. Adds/removes ONE worker of
+// this building's profession (WorkPlaceComponent+0x48), the per-building equivalent of the
+// town-hall Professions spinner. Reuses the same registered cascade (RequestWorker =
+// FindAvailableBuilding, then FindIdle/Working/Student/Any = cbf0/ca20/c5f0/c4b0 to convert
+// a laborer; RemoveWorker to pull one). Held under g_wpcRosterOnly so the gameplay-time Scene
+// mesh-visual block in WorkplaceComponent Attach/Detach — which faults on inert SA objects
+// (READ of 0x10) — is skipped, exactly like the town-hall path and the builder pool.
+void W_OnRemove(void* self, void* /*p2*/, int msg, int id, int /*p5*/, int /*p6*/) {
+    EnsureGlobals();
+    if (!self || !Ready()) return;
+    if (msg != 0x12) return;                       // button click
+    if (id != 0x1450 && id != 0x1451) return;      // workerCountUp / workerCountDown
+
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* dataSource = *reinterpret_cast<void**>(s + 0x28);
+    if (!fn_IsDerivedFrom(dataSource, *g_TypeId_ComponentEntity)) return;
+    uint8_t eb[8];
+    fn_InternalBasePtr_Ctor(eb, dataSource);
+    fn_InternalBasePtr_CheckPtr(eb);
+    void* entityPtr = *reinterpret_cast<void**>(eb);
+
+    uint64_t wpc = 0;
+    fn_FindComponent_BuildState2(entityPtr, &wpc);
+    fn_InternalBasePtr_CheckPtr(&wpc);
+    if (!wpc) return;
+    uint64_t profId = *reinterpret_cast<uint64_t*>(static_cast<uintptr_t>(wpc) + 0x48);
+    if (!profId) return;
+
+    void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
+    if (!citizenList) return;
+
+    bool prevRoster = ::g_wpcRosterOnly;
+    ::g_wpcRosterOnly = true;
+
+    if (id == 0x1450) {
+        // Add one worker: request a slot, then convert idle -> working -> student -> any.
+        if (fn_CitizenList_RequestWorker && fn_CitizenList_FindIdle) {
+            uint64_t retBuf[2] = {0, 0};
+            fn_CitizenList_RequestWorker(citizenList, retBuf, profId);
+            uint64_t slot = retBuf[0];
+            uint64_t slotCopy = slot;
+            uint8_t fb[8] = {0};
+            void* result = fn_CitizenList_FindIdle(citizenList, fb, &slotCopy, profId);
+            int64_t found = *reinterpret_cast<int64_t*>(result);
+            if (found == 0 && fn_CitizenList_FindWorking) {
+                slotCopy = slot; uint8_t fb2[8] = {0};
+                result = fn_CitizenList_FindWorking(citizenList, fb2, &slotCopy, profId);
+                found = *reinterpret_cast<int64_t*>(result);
+            }
+            if (found == 0 && fn_CitizenList_FindStudent) {
+                slotCopy = slot; uint8_t fb3[8] = {0};
+                result = fn_CitizenList_FindStudent(citizenList, fb3, &slotCopy, profId);
+                found = *reinterpret_cast<int64_t*>(result);
+            }
+            if (found == 0 && fn_CitizenList_FindAny) {
+                slotCopy = slot; uint64_t anyBuf = 0;
+                fn_CitizenList_FindAny(citizenList, &anyBuf, &slotCopy, profId);
+            }
+        }
+    } else {  // 0x1451 — remove one worker of this profession
+        if (fn_CitizenList_RemoveWorker) fn_CitizenList_RemoveWorker(citizenList, profId);
+    }
+
+    ::g_wpcRosterOnly = prevRoster;
+}
+
 struct Init {
     Init() {
         for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
@@ -806,6 +895,7 @@ struct Init {
         g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
         g_vt[7] = reinterpret_cast<void*>(&W_Startup);
         g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_OnRemove);
     }
 } g_init;
 
