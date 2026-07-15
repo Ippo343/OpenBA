@@ -77,6 +77,13 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool);
 extern "C" void* StartTown_GetFoundingHouseEntity(int index);
 extern "C" int   StartTown_GetFoundingHouseCount();
 
+// Track A: run the ClearAreaComponent footprint sweep (0x140117d60 port) on a
+// building entity — marks its footprint resources for removal. code/Game/Component/clearareacomponent.cpp
+extern "C" int ClearAreaComponent_HarnessSweep(void* ownerEntity);
+extern "C" void* ClearAreaComponent_HarnessFind(void* entity, uint32_t* outFlags);
+extern "C" int   ClearAreaComponent_HarnessSweepComp(void* realComp);
+extern "C" void* ClearAreaComponent_HarnessOwner(void* realComp);
+
 namespace {
 
 // RemovalTool field offsets (DragTool base + RemovalTool).
@@ -504,11 +511,322 @@ void FireSelectCitizen(void* entityUI) {
     printf("[ToolHarness] selectcitizen -> %d (1=a CitizenUI dialog opened)\n", opened);
 }
 
+// ============================================================
+// Shared mark-for-removal BACKEND test ("markremoval")
+// ============================================================
+// Proves the resource-removal backend end-to-end WITHOUT the ClearAreaComponent
+// (track A) or RemovalTool::CalcPath (track B, still a passthrough). It fires the
+// exact 3-step pattern the retail ClearAreaDescription_helper_7d60 (0x140117d60)
+// uses per footprint cell, on ONE real map entity:
+//   1. FUN_1400c2ea0(entity)  — MarkForRemoval: notifies each component (slot+0x38)
+//      then sets flag bit 0x400 at entity+0x40. (registered: reg_action_hunt)
+//   2. FUN_140003110(&removalList, count+1, &entity) — push onto EntityList's
+//      pending-removal list at +0xD0. (registered: reg_action_hunt)
+// Then EntityList::Update Step 5 (entitylist.cpp) drains removalList every tick via
+// EntityList_RemoveEntity and clears it. This harness marks one entity, verifies the
+// flag + list count, then logs removalList.count + the tile slot across the next
+// frames so we can watch it drain to 0 and the entity vanish. If this works, both
+// track A and track B are just front-ends onto a proven backend.
+//
+// Map/EntityList layout (verified live + vs Ghidra):
+//   gameWorld+0xf8 -> map;  *map = grid width (256);  *(map+0x80) = tile array base.
+//   tile stride 0x30 bytes; two entity-ptr slots per cell at +0x00 and +0x08.
+//   gameWorld+0xe8 -> EntityList;  removalList IBPArray at +0xD0 {data; int count@+8}.
+
+// Drain-observation state (set by FireMarkRemoval, read each frame after).
+bool     s_mr_fired      = false;
+uint64_t s_mr_entity     = 0;    // the marked entity ptr (post-CheckPtr)
+uintptr_t s_mr_tileSlot  = 0;    // address of the tile slot it came from
+int      s_mr_fireFrame  = 0;
+
+inline void* GetGW() { return g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr; }
+
+// Read component[0]'s type-id (best-effort, for identifying what we marked).
+uint32_t Comp0TypeId(uintptr_t entity) {
+    int cnt = *reinterpret_cast<int*>(entity + 0x38);
+    void** arr = *reinterpret_cast<void***>(entity + 0x30);
+    if (cnt <= 0 || !arr || !arr[0]) return 0;
+    void* comp = arr[0];
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&comp);
+    if (!comp) return 0;
+    void** cvt = *reinterpret_cast<void***>(comp);
+    if (!cvt || !cvt[2]) return 0;                 // vtable +0x10 = GetTypeId
+    return reinterpret_cast<uint32_t(*)(void*)>(cvt[2])(comp);
+}
+
+void FireMarkRemoval() {
+    void* gw = GetGW();
+    if (!gw) { printf("[MarkRemoval] ERROR: gameWorld null\n"); return; }
+    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+
+    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    void* entityList = *reinterpret_cast<void**>(gwA + 0xe8);
+    if (!map || !entityList) {
+        printf("[MarkRemoval] ERROR: map=%p entityList=%p\n", map, entityList);
+        return;
+    }
+    int width = *reinterpret_cast<int*>(map);
+    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+    printf("[MarkRemoval] gw=%p map=%p width=%d tileArray=%p entityList=%p removalList.count(before)=%d\n",
+           gw, map, width, (void*)tileArray, entityList,
+           *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(entityList) + 0xD8));
+
+    // Resolve the two registered backend primitives.
+    typedef void (*MarkRemoval_t)(void*);
+    typedef void (*ArrayPush_t)(void*, int, void*);
+    auto c2ea0 = reinterpret_cast<MarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
+    auto push3110 = reinterpret_cast<ArrayPush_t>(ResolveAddr(Module::Exe, 0x140003110));
+    printf("[MarkRemoval] MarkForRemoval(c2ea0)=%p ArrayPush(3110)=%p\n", (void*)c2ea0, (void*)push3110);
+    if (!c2ea0 || !push3110) {
+        printf("[MarkRemoval] ERROR: backend primitives unregistered (null) — aborting\n");
+        return;
+    }
+
+    // Scan a rectangle near map centre for the first markable entity (either cell slot).
+    const int lo = 110, hi = 146;
+    int scanned = 0, occupied = 0;
+    for (int row = lo; row <= hi && !s_mr_fired; ++row) {
+        for (int col = lo; col <= hi && !s_mr_fired; ++col) {
+            int cell = width * row + col;
+            uintptr_t cellBase = tileArray + static_cast<uintptr_t>(cell) * 0x30;
+            ++scanned;
+            for (int slot = 8; slot >= 0; slot -= 8) {   // helper_7d60 uses +0x08; also try +0x00
+                uintptr_t slotAddr = cellBase + static_cast<uintptr_t>(slot);
+                uint64_t ent = *reinterpret_cast<uint64_t*>(slotAddr);
+                if (!ent) continue;
+                ++occupied;
+                // Mirror helper_7d60: local = slot value; CheckPtr(&local); test +0x40 bit 0x400.
+                void* local = reinterpret_cast<void*>(ent);
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
+                if (!local) continue;
+                uintptr_t e = reinterpret_cast<uintptr_t>(local);
+                uint32_t flags = *reinterpret_cast<uint32_t*>(e + 0x40);
+                if (flags & 0x400) continue;             // already marked
+                uint32_t tid = Comp0TypeId(e);
+                int compCnt = *reinterpret_cast<int*>(e + 0x38);
+                printf("[MarkRemoval] target found: cell=(%d,%d) idx=%d slot=+0x%02x entity=%p "
+                       "flags(+0x40)=0x%08x comps(+0x38)=%d comp0.typeId=0x%08x\n",
+                       row, col, cell, slot, local, flags, compCnt, tid);
+
+                // --- Step 1: MarkForRemoval (sets flag 0x400, notifies components) ---
+                if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local);
+                c2ea0(local);
+                uint32_t flagsAfter = *reinterpret_cast<uint32_t*>(
+                    reinterpret_cast<uintptr_t>(local) + 0x40);
+
+                // --- Step 2: push onto EntityList removalList (+0xD0) ---
+                uintptr_t rl = reinterpret_cast<uintptr_t>(entityList) + 0xD0;
+                int cntBefore = *reinterpret_cast<int*>(rl + 0x8);
+                push3110(reinterpret_cast<void*>(rl), cntBefore + 1, &local);
+                int cntAfter = *reinterpret_cast<int*>(rl + 0x8);
+
+                printf("[MarkRemoval] MARKED: flags 0x%08x -> 0x%08x (bit0x400 %s), "
+                       "removalList.count %d -> %d\n",
+                       flags, flagsAfter, (flagsAfter & 0x400) ? "SET" : "MISSING",
+                       cntBefore, cntAfter);
+                printf("[MarkRemoval] now watching EntityList::Update drain it (removalList.count "
+                       "should return to 0 and the tile slot clear within a few frames)...\n");
+
+                s_mr_entity    = reinterpret_cast<uint64_t>(local);
+                s_mr_tileSlot  = slotAddr;
+                s_mr_fired     = true;
+                break;
+            }
+        }
+    }
+    if (!s_mr_fired) {
+        printf("[MarkRemoval] no markable entity found in scan region (%d..%d)^2 "
+               "(scanned=%d occupied=%d) — try a denser (forested) area\n",
+               lo, hi, scanned, occupied);
+    }
+}
+
+// Track A: footprint-clear on placement. Runs ClearAreaComponent_FootprintSweep
+// (the 0x140117d60 port) on each captured founding-house building, marking any
+// footprint resources for removal, then watches EntityList::Update drain them.
+void FireClearFootprint() {
+    void* gw = GetGW();
+    if (!gw) { printf("[ClearFootprint] ERROR: gameWorld null\n"); return; }
+    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+    void* el = *reinterpret_cast<void**>(gwA + 0xe8);
+    int cntBefore = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
+
+    int houses = StartTown_GetFoundingHouseCount();
+    printf("[ClearFootprint] founding houses=%d removalList.count(before)=%d\n", houses, cntBefore);
+
+    int totalMarked = 0;
+    for (int i = 0; i < houses; ++i) {
+        void* house = StartTown_GetFoundingHouseEntity(i);
+        if (!house) continue;
+        uint32_t caFlags = 0;
+        void* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
+        void* caOwner = caComp ? ClearAreaComponent_HarnessOwner(caComp) : nullptr;
+        // Drive the REAL component's sweep (reads its own +0x10 owner) — the exact op a
+        // de-inerted Update tick would perform.
+        int marked = caComp ? ClearAreaComponent_HarnessSweepComp(caComp) : 0;
+        printf("[ClearFootprint] house[%d] entity=%p ClearAreaComp=%p owner(+0x10)=%p%s "
+               "flags=0x%08x(tickbit=%d) realSweep marked=%d\n",
+               i, house, caComp, caOwner, (caOwner == house) ? "(==entity OK)" : "(MISMATCH)",
+               caFlags, (caFlags >> 2) & 1, marked);
+        totalMarked += marked;
+    }
+
+    int cntAfter = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
+    printf("[ClearFootprint] total marked=%d  removalList.count %d -> %d%s\n",
+           totalMarked, cntBefore, cntAfter,
+           totalMarked == 0 ? "  (no resources under founding houses — cleared ground; "
+                              "port ran crash-free reading each footprint)" : "");
+
+    // Reuse the drain observer (tileSlot=0 → count-only) to watch EntityList::Update
+    // destroy the marked entities over the next frames.
+    if (totalMarked > 0) { s_mr_fired = true; s_mr_entity = 0; s_mr_tileSlot = 0; }
+}
+
+// Track A demonstration: prove the footprint sweep marks a real resource. SA placement
+// validity rejects resource cells (unlike retail, where the terrainMask permits placing
+// over clearable resources), so we can't anchor a house on a tree here. Instead we point
+// a founding house's BuildComponent footprint at a resource cell, sweep, then RESTORE the
+// footprint — a safe, deterministic proof that a building whose footprint contains a
+// resource marks it for removal via the ported helper_7d60 path.
+void FireClearPlace() {
+    void* gw = GetGW();
+    if (!gw) { printf("[ClearPlace] ERROR: gameWorld null\n"); return; }
+    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    if (!map) { printf("[ClearPlace] ERROR: map null\n"); return; }
+    int width = *reinterpret_cast<int*>(map);
+    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+
+    // 1. Find a resource cell (non-null tile occupant not yet flagged) near centre.
+    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    for (int row = 100; row <= 156 && rcRow < 0; ++row)
+        for (int col = 100; col <= 156 && rcRow < 0; ++col) {
+            int cell = width * row + col;
+            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
+            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+                rcRow = row; rcCol = col; resEnt = occ;
+            }
+        }
+    if (rcRow < 0) { printf("[ClearPlace] no resource cell found near centre\n"); return; }
+    printf("[ClearPlace] resource at cell=(%d,%d) entity=%p\n", rcRow, rcCol, (void*)resEnt);
+
+    // 2. Get a founding house and its BuildComponent (holds the footprint rect at +0x28).
+    void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
+    if (!house) { printf("[ClearPlace] no founding house to borrow\n"); return; }
+    uint64_t bc = 0;
+    fn_FindComponent_Build(house, &bc);
+    fn_InternalBasePtr_CheckPtr(&bc);
+    if (!bc) { printf("[ClearPlace] house has no BuildComponent\n"); return; }
+    uintptr_t b = (uintptr_t)bc;
+
+    // 3. Save the real footprint, then override it to a 1x1 rect over the resource cell.
+    int16_t sCol = *reinterpret_cast<int16_t*>(b + 0x28);
+    int16_t sRow = *reinterpret_cast<int16_t*>(b + 0x2a);
+    int16_t sW   = *reinterpret_cast<int16_t*>(b + 0x2c);
+    int16_t sH   = *reinterpret_cast<int16_t*>(b + 0x2e);
+    *reinterpret_cast<int16_t*>(b + 0x28) = (int16_t)rcCol;
+    *reinterpret_cast<int16_t*>(b + 0x2a) = (int16_t)rcRow;
+    *reinterpret_cast<int16_t*>(b + 0x2c) = 1;
+    *reinterpret_cast<int16_t*>(b + 0x2e) = 1;
+
+    void* el = *reinterpret_cast<void**>(gwA + 0xe8);
+    int cntBefore = el ? *reinterpret_cast<int*>((uintptr_t)el + 0xD8) : -1;
+
+    // 4. Sweep the house (with the overridden footprint) — marks the resource.
+    printf("[ClearPlace] sweeping house[0]=%p with footprint overridden to (%d,%d) 1x1...\n",
+           house, rcCol, rcRow);
+    int marked = ClearAreaComponent_HarnessSweep(house);
+
+    // 5. Restore the real footprint immediately (house uncorrupted).
+    *reinterpret_cast<int16_t*>(b + 0x28) = sCol;
+    *reinterpret_cast<int16_t*>(b + 0x2a) = sRow;
+    *reinterpret_cast<int16_t*>(b + 0x2c) = sW;
+    *reinterpret_cast<int16_t*>(b + 0x2e) = sH;
+
+    int cntAfter = el ? *reinterpret_cast<int*>((uintptr_t)el + 0xD8) : -1;
+    uint32_t resFlags = *reinterpret_cast<uint32_t*>((uintptr_t)resEnt + 0x40);
+    printf("[ClearPlace] marked=%d  resource flags(+0x40)=0x%08x (bit0x400 %s)  "
+           "removalList.count %d -> %d\n",
+           marked, resFlags, (resFlags & 0x400) ? "SET" : "MISSING", cntBefore, cntAfter);
+    if (marked > 0) { s_mr_fired = true; s_mr_entity = 0; s_mr_tileSlot = 0; }
+}
+
+// Track A step-2 demonstration: with the LIVE ClearAreaComponent enabled
+// (BANISHED_CLEAR_FOOTPRINT=1), point a founding house's footprint at a resource cell so
+// the GAME'S OWN per-frame component tick (not the harness) auto-clears it. Proves the
+// full automatic chain: EntityList ticks component -> FootprintSweep -> mark -> drain.
+void FireClearLive() {
+    void* gw = GetGW();
+    if (!gw) { printf("[ClearLive] ERROR: gameWorld null\n"); return; }
+    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    if (!map) { printf("[ClearLive] ERROR: map null\n"); return; }
+    int width = *reinterpret_cast<int*>(map);
+    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+
+    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    for (int row = 100; row <= 156 && rcRow < 0; ++row)
+        for (int col = 100; col <= 156 && rcRow < 0; ++col) {
+            int cell = width * row + col;
+            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
+            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+                rcRow = row; rcCol = col; resEnt = occ;
+            }
+        }
+    if (rcRow < 0) { printf("[ClearLive] no resource cell found\n"); return; }
+
+    void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
+    uint32_t caFlags = 0;
+    void* caComp = house ? ClearAreaComponent_HarnessFind(house, &caFlags) : nullptr;
+    if (!house || !caComp) { printf("[ClearLive] no house/ClearAreaComponent\n"); return; }
+    printf("[ClearLive] house[0]=%p ClearAreaComp=%p flags=0x%08x(tickbit=%d) — %s\n",
+           house, caComp, caFlags, (caFlags >> 3) & 1,
+           ((caFlags >> 3) & 1) ? "LIVE (will be ticked)"
+                                : "NOT live — set BANISHED_CLEAR_FOOTPRINT=1");
+
+    uint64_t bc = 0;
+    fn_FindComponent_Build(house, &bc);
+    fn_InternalBasePtr_CheckPtr(&bc);
+    if (!bc) { printf("[ClearLive] no BuildComponent\n"); return; }
+    uintptr_t b = (uintptr_t)bc;
+    // Override the footprint to a 1x1 rect over the resource (persistent — the live tick
+    // needs it in place when it fires). Minor house corruption acceptable for the probe.
+    *reinterpret_cast<int16_t*>(b + 0x28) = (int16_t)rcCol;
+    *reinterpret_cast<int16_t*>(b + 0x2a) = (int16_t)rcRow;
+    *reinterpret_cast<int16_t*>(b + 0x2c) = 1;
+    *reinterpret_cast<int16_t*>(b + 0x2e) = 1;
+    printf("[ClearLive] overrode house[0] footprint to resource cell (%d,%d) entity=%p — "
+           "waiting for the LIVE component tick to auto-clear it (watch [ClearArea LIVE])...\n",
+           rcCol, rcRow, (void*)resEnt);
+
+    s_mr_fired = true; s_mr_entity = 0; s_mr_tileSlot = 0;
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     Init();
     if (!s_enabled) return;
+
+    // markremoval drain observation: after the mark fires, log removalList.count +
+    // the tile slot for ~12 frames so we can watch EntityList::Update drain it.
+    if (s_mr_fired) {
+        int rel = frameNum - s_mr_fireFrame;
+        if (rel >= 0 && rel <= 12) {
+            void* gw = GetGW();
+            if (gw) {
+                uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+                void* el = *reinterpret_cast<void**>(gwA + 0xe8);
+                int cnt = el ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(el) + 0xD8) : -1;
+                uint64_t slotVal = s_mr_tileSlot ? *reinterpret_cast<uint64_t*>(s_mr_tileSlot) : 0;
+                bool drained = s_mr_tileSlot ? (cnt == 0 && slotVal != s_mr_entity)
+                                             : (cnt == 0);
+                printf("[Removal] +%2d frames: removalList.count=%d  tileSlot=%p  (%s)\n",
+                       rel, cnt, (void*)slotVal,
+                       drained ? "DRAINED — marked entities removed" : "pending");
+            }
+        }
+    }
 
     // Delayed re-scan: 90 frames after the initial fire, re-enumerate the open
     // dialogs and drive MapUI again. The UIDescription controller inserts the
@@ -545,6 +863,18 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
         FireSelectCitizen(entityUI);
     } else if (std::strcmp(s_toolName, "utility") == 0) {
         FireUtilityDialog();
+    } else if (std::strcmp(s_toolName, "markremoval") == 0) {
+        s_mr_fireFrame = frameNum;
+        FireMarkRemoval();
+    } else if (std::strcmp(s_toolName, "clearfootprint") == 0) {
+        s_mr_fireFrame = frameNum;
+        FireClearFootprint();
+    } else if (std::strcmp(s_toolName, "clearplace") == 0) {
+        s_mr_fireFrame = frameNum;
+        FireClearPlace();
+    } else if (std::strcmp(s_toolName, "clearlive") == 0) {
+        s_mr_fireFrame = frameNum;
+        FireClearLive();
     } else if (std::strcmp(s_toolName, "mapmenu") == 0) {
         MapParamsDialog_HarnessOpen();
     } else if (std::strcmp(s_toolName, "scan") == 0) {
