@@ -8,6 +8,8 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -641,12 +643,13 @@ void EntityUI_Slot7(EntityUI* self) {
     // Determine page index based on component state
     int pageIdx;
 
+    int8_t state52 = 0, state50 = 0;
     if (buildStateComp == 0) {
         pageIdx = -1;
     } else {
         // Check build state: +0x52 (if negative) use +0x50
-        int8_t state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);
-        int8_t state50 = *(int8_t*)((uintptr_t)buildStateComp + 0x50);
+        state52 = *(int8_t*)((uintptr_t)buildStateComp + 0x52);
+        state50 = *(int8_t*)((uintptr_t)buildStateComp + 0x50);
         pageIdx = (state52 < 0) ? (int)state50 : (int)state52;
     }
 
@@ -694,6 +697,30 @@ void EntityUI_Slot7(EntityUI* self) {
             } else {
                 fn_InternalBasePtr_CheckPtr((void*)(s + 0x40));
                 pageIdx = 2;
+            }
+        }
+    }
+
+    // One-shot page-routing diagnostic (BANISHED_PAGE_TRACE). Dumps every input feeding
+    // the page decision plus the chosen page, so we can see WHICH branch sends an entity
+    // (e.g. the default stockpile) to the under-construction build page (2) instead of its
+    // operational page. Rate-limited to distinct entity pointers so a per-frame Slot7 doesn't
+    // spam the log.
+    {
+        static int pt = -1;
+        if (pt < 0) { const char* e = std::getenv("BANISHED_PAGE_TRACE"); pt = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (pt == 1) {
+            static void* s_lastEnt = nullptr;
+            if (entityPtr != s_lastEnt) {
+                s_lastEnt = entityPtr;
+                bool complete = (posComp != 0) ? BuildComplete_Impl((void*)posComp) : false;
+                std::fprintf(stderr,
+                    "[PageTrace] ent=%p buildStateComp(0x1c7d98)=%p state52=%d state50=%d | "
+                    "posComp/BuildComp(0x1c7008)=%p destroyComp=%p smComp(0x1c71c8)=%p | "
+                    "BuildComplete=%d -> pageIdx=%d\n",
+                    entityPtr, buildStateComp, (int)state52, (int)state50,
+                    posComp, destroyComp, smComp, (int)complete, pageIdx);
+                std::fflush(stderr);
             }
         }
     }

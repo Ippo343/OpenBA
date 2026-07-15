@@ -969,6 +969,33 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     fflush(stderr);
                 }
             }
+
+            // ── Mark the pre-placed building as BUILT for the info-panel page router. ──
+            // These structures are spawned already-complete, but in standalone their
+            // state-machine controllers are inert, so StateMachineComponent setup never
+            // wrote the current-state byte (+0x52) — it sits at factory-zero 0. EntityUI::
+            // Slot7 (0x140066d80) reads that byte as pageIdx: pageIdx==0 forces the under-
+            // construction page (2, the "Remove 0 of 0" material table) for EVERY pre-built
+            // structure, regardless of BuildComplete. Stamp the build graph's completed
+            // state (2) so the panel routes to the operational page instead. (Demo
+            // foundations are excluded — the live build sim drives their real state.)
+            //
+            // Resolve by NAME via FindComponentOnEntity: the exe-.rdata type-id global
+            // g_TypeId_BuildStateComponent is still null during world-build (raw .rdata is
+            // unresolvable in SA; it's lazily filled post-Engine::Startup), so the IBP finder
+            // fn_FindComponent_BuildState returns null here. The name-based lookup matches on
+            // the live vtable GetTypeId, exactly like the modelComp lookup just above.
+            void* bsComp = FindComponentOnEntity(entity, TypeId("StateMachineComponent"));
+            if (bsComp) {
+                *(int8_t*)((uintptr_t)bsComp + 0x52) = 2;  // built/complete (build state graph state 2)
+                fprintf(stderr, "[startTown::struct] [%d] stamped StateMachineComponent+0x52=2 (built)\n",
+                        logIndex);
+                fflush(stderr);
+            } else {
+                fprintf(stderr, "[startTown::struct] [%d] WARN: StateMachineComponent not found for +0x52 stamp\n",
+                        logIndex);
+                fflush(stderr);
+            }
         }
 
         // Register with the world entity list (category = template+0x20).
