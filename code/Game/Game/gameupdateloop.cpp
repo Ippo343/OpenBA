@@ -742,31 +742,17 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                 if (pop > s_prevPop && pop > 0 && pop < 100000) {
                     EventLog_AddSimple(0xE, 2);  // new citizens — settler/immigration event
                 }
-
-                // [POPUP] Scenario/achievement popup demo (event types 0x1a-0x1d,
-                // sev 4, popup field >= 0). The faithful trigger is op_6830
-                // (0x140096830): when the GameUpdateLoop+0x150 AchievementInstance
-                // resolves IsMet()/HasFailed(), it fires 0x1a-0x1d. That path is
-                // dormant in a sandbox game (no scenario), so we surface the popup on
-                // a real population milestone instead — firing type 0x1c ("You've
-                // completed all goals!") exactly once when the town first reaches the
-                // threshold. This exercises EventNotifyDialog::Slot7's popup branch
-                // (category 5 filter is on) -> EventNotifyDialog_CreatePopup ->
-                // EventPopupDialog modal. Threshold is BANISHED_EVENT_POPUP_POP
-                // (default 10), lowerable for quick verification.
-                static int  s_popupThresh = -1;
-                static bool s_popupFired  = false;
-                if (s_popupThresh < 0) {
-                    const char* t = std::getenv("BANISHED_EVENT_POPUP_POP");
-                    s_popupThresh = (t && t[0]) ? atoi(t) : 10;
-                    if (s_popupThresh < 1) s_popupThresh = 1;
-                }
-                if (!s_popupFired && pop >= s_popupThresh && pop < 100000) {
-                    s_popupFired = true;
-                    EventLog_AddSimple(0x1C, 4);  // achievement popup — "completed all goals!"
-                }
-
                 if (pop != s_prevPop) s_prevPop = pop;
+
+                // NOTE: the scenario/achievement popup (event types 0x1a-0x1d, sev 4,
+                // popup field >= 0) is driven by the faithful source op_6830
+                // (0x140096830) — when the GameUpdateLoop+0x150 AchievementInstance
+                // resolves IsMet()/HasFailed(). That path is dormant in a sandbox game
+                // (no scenario), so no popup fires here. The creation path
+                // (EventNotifyDialog::Slot7 popup branch -> EventNotifyDialog_CreatePopup
+                // -> EventPopupDialog modal) is complete and drives any real 0x1a-0x1d
+                // event that reaches the log. Set BANISHED_EVENT_POPUP_POP to re-enable
+                // a population-milestone demo fire (see git history / commit 87f6de7).
 
                 // [SHORTAGE] Per-tick resource-shortage warnings (event types
                 // 0x11-0x18, sev 3). Faithful port of FUN_14008c100 scanning the
