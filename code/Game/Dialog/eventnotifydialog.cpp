@@ -20,6 +20,85 @@
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+
+// ============================================================
+// EventNotifyDialog_CreatePopup — modal popup creation (Slot7 popup branch)
+// ============================================================
+// Faithful to the popup branch inside EventNotifyDialog::Slot7 (0x140067C30):
+// when an event's popup field (entry+0x20) is >= 0, the ribbon raises a modal
+// EventPopupDialog for it. The exe allocates a 0xC0-byte DialogInstance built
+// against the ribbon's referenced dialog resource (EventNotify.rsc declares
+// `External _references ["EventPopup.rsc"]`), stamps the EventPopupDialog vtable
+// and the event-log index at +0xB8, then adds it to the UserInterface.
+//
+// In standalone we load Dialog/EventPopup.rsc by path (yielding the same
+// Dialog-typed External the exe reaches via self+0x18 -> Dialog::GetReference)
+// and drive the promoted EventPopupDialog standalone ctor. Returns the new
+// dialog, or null if the resource/allocation is unavailable.
+#ifdef STANDALONE_EXE
+extern "C" void* EventPopupDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
+                                                  void* parentIBP, int eventIndex);
+#endif
+
+static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventIndex) {
+    uintptr_t s = (uintptr_t)self;
+    void* ui = *(void**)(s + 0x10);
+    if (!ui) return nullptr;
+
+#ifdef STANDALONE_EXE
+    // Load Dialog/EventPopup.rsc once and cache it. The exe pulls this same resource
+    // from the ribbon's own referenced-resource slot (self+0x18); loading by path is
+    // equivalent and sidesteps the member-return Dialog::GetReference ABI.
+    static void* s_popupRes = nullptr;
+    static bool  s_triedRes = false;
+    if (!s_popupRes && !s_triedRes) {
+        s_triedRes = true;
+        if (fn_ExternalFactory_FindOrLoad && g_pExternalFactorySingleton &&
+            *g_pExternalFactorySingleton) {
+            uint8_t filename[8];
+            fn_Filename_CtorCStr(filename, "Dialog/EventPopup.rsc");
+            void* found = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+            fn_Filename_Dtor(filename);
+            // Accept the loaded resource if it is External-derived — the same guard the
+            // exe applies (IsDerivedFrom(External)) before using it as the popup's
+            // external context. g_pExternalTypeId is filled by EnsureGlobals each tick.
+            if (found && (!g_pExternalTypeId || fn_IsDerivedFrom(found, *g_pExternalTypeId)))
+                s_popupRes = found;
+            if (std::getenv("BANISHED_EVENT_TRACE")) {
+                fprintf(stderr, "[EventNotify] popup resource load: found=%p accepted=%p\n",
+                        found, s_popupRes);
+                fflush(stderr);
+            }
+        }
+    }
+    if (!s_popupRes) return nullptr;
+
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
+    if (!mem) return nullptr;
+    int64_t nullParent[1];
+    fn_InternalBasePtr_Ctor(nullParent, nullptr);
+    void* popup = EventPopupDialog_Ctor_Standalone(mem, ui, s_popupRes, nullParent, eventIndex);
+    if (!popup) { fn_MemFreeStatic(mem); return nullptr; }
+
+    int64_t dialogPtr[1];
+    fn_InternalBasePtr_Ctor(dialogPtr, popup);
+    fn_UI_AddDialog(ui, dialogPtr);
+    if (std::getenv("BANISHED_EVENT_TRACE")) {
+        fprintf(stderr, "[EventNotify] popup CREATED for eventIndex=%d dlg=%p\n",
+                eventIndex, popup);
+        fflush(stderr);
+    }
+    return popup;
+#else
+    // DLL mode: the exe's own Slot7 handles popups; our reimpl does not raise them
+    // here (standalone is the active target). No-op keeps behaviour parity with the
+    // previously-incomplete reimpl.
+    (void)eventIndex;
+    return nullptr;
+#endif
+}
 
 // ============================================================
 // File-local helper: EventNotifyDialog_ArrayPush (FUN_140011750)
@@ -390,31 +469,10 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                     if (*(char*)(category + 0x10 + eventLogPtr) != 0 &&
                         *(int*)(entryOffset + 0x1C + eventArray) >= 0) {
 
-                        // Check if popup needed (+0x20 field >= 0 means show popup)
+                        // Check if popup needed (+0x20 field >= 0 means show popup).
+                        // Raise the modal EventPopupDialog for this event-log index.
                         if (*(int*)(entryOffset + 0x20 + eventArray) >= 0) {
-                            // Create and show EventPopupDialog
-                            uint8_t refBuf[16];
-                            fn_Dialog_GetReference(*(void**)(s + 0x18), refBuf);
-                            void* dialogRef = *(void**)refBuf;
-
-                            // Check if dialogRef is External type
-                            bool isExternal = fn_IsDerivedFrom(dialogRef, *g_pExternalTypeId);
-                            void* extPtr = isExternal ? dialogRef : nullptr;
-
-                            // Allocate EventPopupDialog (0xC0 bytes)
-                            void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
-                            if (newDialog) {
-                                // Initialize with empty parent ptr
-                                uint8_t emptyPtr[8];
-                                fn_InternalBasePtr_Ctor(emptyPtr, nullptr);
-                                // Call DialogInstance ctor (complex — pass through to runtime)
-                                // This is simplified: we need the actual ctor call chain
-                                // For safety, use the original function for popup creation
-                            }
-
-                            // Add to UI
-                            // (This sub-path is complex with DialogInstance ctor + vtable setup.
-                            //  The notification entry below is the more critical path.)
+                            EventNotifyDialog_CreatePopup(self, scanIdx);
                         }
 
                         // Build notification entry (0x30 bytes)

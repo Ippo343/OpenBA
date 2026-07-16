@@ -219,3 +219,82 @@ extern "C" void EventLog_AddSimple(int eventType, int severity) {
     void* eventLog = *(void**)((uintptr_t)gameWorld + 0x138);
     EventLog_AddEvent(eventLog, eventType, severity, nullptr);
 }
+
+// ============================================================
+// EventLog_CheckResourceShortages (port of FUN_14008c100)
+// ============================================================
+// Per-tick resource-shortage warning scanner. townMgr = *(gameWorld+0xF0).
+// Two shortage tables hang off the town manager:
+//   townMgr+0x170: 21 entries, stride 0x20 — the first 6 are tracked resources
+//                  (logs/stone/iron/firewood/tools/food). Per entry:
+//                  cur +0x00, hi +0x04, produced +0x08, cooldown(Time) +0x18.
+//                  Firewood (index 3) folds in a secondary source at
+//                  table+0x120/+0x124/+0x128.
+//   townMgr+0x180: 2 entries, stride 0x10 — bulk/produced storage pools.
+//                  cur +0x00, hi +0x04, cooldown(Time) +0x08.
+// A low-reserve warning fires (sev 3, null entity) when current stock falls
+// below produced/20 (and produced/20 <= hi); a near-capacity warning fires when
+// a storage pool exceeds 95% ((hi/20)*19 < cur). After firing, the entry's
+// cooldown resets to 120s (DAT_140172210) so the warning can't repeat for two
+// game-minutes. Event types: 0x11-0x16 (low reserve), 0x17-0x18 (storage full).
+//
+// Self-gating: if produced==0 (resource untracked in this build) the ratio test
+// `cur < 0` is false, so no spurious warning — safe to tick unconditionally.
+extern "C" void EventLog_CheckResourceShortages(void* townMgr, void* timeDelta) {
+    if (!townMgr || !timeDelta) return;
+    void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+    if (!gameWorld) return;
+    void* eventLog = *(void**)((uintptr_t)gameWorld + 0x138);
+    if (!eventLog) return;
+    int64_t tick = *(int64_t*)timeDelta;
+
+    uint8_t cooldownTime[8];
+    fn_Time_Ctor_Float(cooldownTime, 120.0f);  // DAT_140172210
+    int64_t cooldownReset = *(int64_t*)cooldownTime;
+
+    // --- Table 1: low-reserve warnings (townMgr+0x170), 21 entries, 6 tracked ---
+    uintptr_t table1 = *(uintptr_t*)((uintptr_t)townMgr + 0x170);
+    if (table1) {
+        for (int i = 0; i < 21; i++) {
+            uintptr_t entry = table1 + (uintptr_t)i * 0x20;
+            int64_t* cooldown = (int64_t*)(entry + 0x18);
+            *cooldown -= tick;
+            if (*cooldown < 1) {
+                *cooldown = 0;
+                if (i < 6) {
+                    int cur      = *(int*)(entry + 0x00);
+                    int hi       = *(int*)(entry + 0x04);
+                    int produced = *(int*)(entry + 0x08);
+                    if (i == 3) {  // firewood folds in a secondary source
+                        cur      += *(int*)(table1 + 0x120);
+                        hi       += *(int*)(table1 + 0x124);
+                        produced += *(int*)(table1 + 0x128);
+                    }
+                    if (cur < produced / 20 && produced / 20 <= hi) {
+                        EventLog_AddEvent(eventLog, i + 0x11, 3, nullptr);
+                        *cooldown = cooldownReset;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- Table 2: storage-near-capacity warnings (townMgr+0x180), 2 entries ---
+    uintptr_t table2 = *(uintptr_t*)((uintptr_t)townMgr + 0x180);
+    if (table2) {
+        for (int i = 0; i < 2; i++) {
+            uintptr_t entry = table2 + (uintptr_t)i * 0x10;
+            int64_t* cooldown = (int64_t*)(entry + 0x08);
+            *cooldown -= tick;
+            if (*cooldown < 1) {
+                *cooldown = 0;
+                int cur = *(int*)(entry + 0x00);
+                int hi  = *(int*)(entry + 0x04);
+                if ((hi / 20) * 19 < cur) {
+                    EventLog_AddEvent(eventLog, i + 0x17, 3, nullptr);
+                    *cooldown = cooldownReset;
+                }
+            }
+        }
+    }
+}
