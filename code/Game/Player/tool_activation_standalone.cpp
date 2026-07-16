@@ -152,10 +152,23 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     if (tid_EditTool)
         Tree_Insert(tree, 0, tid_EditTool);
 
+    // RemovalTool (the clearance / remove tool). Retail's EntityUI::Startup keys it on
+    // CreateRemovalDescription (0x1401c74a0). The preloaded Dialog/Toolbar.rsc "Remove"
+    // button carries that component at item+0x58, so SetEditMode's component-scan matches
+    // this node and creates a RemovalTool. RemovalTool extends DragTool, so DragTool_OnKey
+    // drives the drag and calls slot 13 (RemovalTool_CalcPath -> ported RemovalCalc_Slot13)
+    // on drag-release — the whole clearance path. CalcPath cluster is registered
+    // (reg_keystone_a_removal.cpp); the 74a0 type-id is wired (reg_economy_typeids.cpp).
+    uint32_t tid_CreateRemoval = ::Object::ResolveTypeIdByNameLazy("CreateRemovalDescription");
+    uint32_t tid_RemovalTool   = ::Object::ResolveTypeIdByNameLazy("RemovalTool");
+    if (tid_CreateRemoval && tid_RemovalTool)
+        Tree_Insert(tree, tid_CreateRemoval, tid_RemovalTool);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
-            "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} count=%d\n",
+            "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} "
+            "node{CreateRemoval=%u -> RemovalTool=%u} count=%d\n",
             entityUI, s_tid_Tool, s_tid_ToolSetting, tid_CreatePlaced, tid_PlacementTool,
-            tid_EditTool, *(int32_t*)(tree + 1));
+            tid_EditTool, tid_CreateRemoval, tid_RemovalTool, *(int32_t*)(tree + 1));
     fflush(stderr);
 }
 

@@ -264,6 +264,10 @@ extern "C" {
     void Reimpl_ExternalPtr_Serialize_GraphicsMesh(void* refField, void* serializer);
     void Reimpl_ExternalPtr_Serialize_Weather(void* refField, void* serializer);
     void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
+    // FUN_1400049c0 — ExternalPtr<ComponentDescription>[] array serializer.
+    // (decompiled body lives in code/Game/Game/serialize_externals_array.cpp)
+    void Reimpl_ExternalPtrArray_Serialize(void* serializer, int count,
+                                           long long arrayBase, void* deadInit);
 }
 
 // M3.5 Path B session 2 — 0x60B struct array lifecycle helpers
@@ -497,6 +501,7 @@ extern void RegisterPlayerHighlightBatch(); // Player wave 5 (highlight): 55430 
 extern void RegisterPlayerCreateBarBatch(); // GUI Phase 3B (createbar): ffc60 CreateBar populate+position (e600/e420/e700/e360/ebb0 same-TU; ec70/fe960 via ResolveAddr)
 extern void RegisterPlayerTileRenderBatch();// GUI Phase 3C (tilerender): b10e0 + 1008c0 + 101380 green/red footprint validity overlay (f5d0/0f90 already registered)
 extern void RegisterPlayerRenderBatch();    // Selection outline (b930 EdgeMesh tessellation -> c4a0/c9e0/cb40); GATED default-OFF on BANISHED_SELECTION_OUTLINE
+extern void RegisterKeystoneARemovalBatch(); // Keystone A: RemovalTool::CalcPath (1035e0) + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0). Player clearance tool; lead-verified vs disasm.
 
 static void RegisterCodeFunctions() {
     // Each entry maps a Ghidra address to our reimplemented function.
@@ -618,6 +623,9 @@ static void RegisterCodeFunctions() {
     RegisterPlayerPlaceBatch();    // fd960 FlipVariant (+ 0x140152888 UpdateHierarchy dispatch slot)
     RegisterPlayerEditBatch();     // a0280 EntityAtCell, 101730 AvgTerrainHeight (leaf), dbf90 FencedAnchorCalc
     RegisterPlayerPathBatch();     // 104670/104770/1048a0 RemovalTool checks + 5780/3ea0/11e710/9f5d0 deps (bottom-up)
+    RegisterKeystoneARemovalBatch();// RemovalTool::CalcPath 1035e0 + closure (d960/f8d50/11e4d0/11dfa0/9c700/f9ad0).
+    //   Lead-verified offset-by-offset vs disasm (dfa0 had 2 crash bugs + 2 fidelity bugs, all fixed).
+    //   Player clearance tool — not autostart-reached, so registering only affects the removal path.
     RegisterPlayerTileBatch();     // r2 tile: 003870 + d580 + fd650 (closure complete via prior waves)
     RegisterPlayerRayBatch();      // r2 ray: aa530 + 1005a0 + 101270 + fda00 (bottom-up; 1005a0 resolves 4 exports locally)
     RegisterPlayerTradeBatch();    // r2c trade: 66800 EditTool + 666b0 EntityUI + AVL family (retrace disasm-verified, typo 2e30/c690->102e30/2c690 caught)
@@ -1634,6 +1642,14 @@ static void RegisterVtablesAndTypeIds() {
     // (Herd/Population/NaturalResource/Citizen) depend on it. Stream-identical to
     // the generic ExternalPtr serialize → reuse the StringTable reimpl body.
     RegisterExeAddr(0x140002340, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtr_Serialize_StringTable));
+
+    // Foundation C helper — ExternalPtr<ComponentDescription>[] ARRAY serialize
+    // (FUN_1400049c0). Per-element body is byte-identical to the 0x140002340
+    // single-element sibling above (same DWORD_1401c7318 = ComponentDescription
+    // validation). Was NULL in standalone, so Create{Removal,Bridge,Fenced}
+    // Description + animaldescription Serialize bailed and never deserialized
+    // their ExternalPtr arrays. 4-arg signature (caller passes nullptr deadInit).
+    RegisterExeAddr(0x1400049c0, reinterpret_cast<uintptr_t>(&Reimpl_ExternalPtrArray_Serialize));
 
     // Foundation C helper — single ExternalRef<Profession> field serialize
     // (NaturalResource +0x78, Citizen +0x20/+0x28/+0x30). Stream-identical to the

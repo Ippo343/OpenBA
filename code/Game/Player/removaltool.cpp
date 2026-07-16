@@ -17,6 +17,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ============================================================
 // RemovalTool vtable addresses (for vtable chain in Dtor)
@@ -506,6 +507,28 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                     }
                 }
 
+                if (std::getenv("BANISHED_REMOVE_TRACE")) {
+                    static int s_dbg = 0;
+                    uintptr_t occ = entityPtr ? entityPtr : entityPtr2;
+                    // Focus the budget on OCCUPIED tiles (where a resource sits).
+                    if (s_dbg < 24 && (occ || s_dbg < 4)) {
+                        void* occDesc = occ ? *(void**)(occ + 0x28) : nullptr;
+                        fprintf(stderr, "[RemoveTrace] tile(%u,%u) canRemove=%d occ=%p occDesc(+0x28)=%p | "
+                            "removalDesc=%p b20=%d count=%d arr=%p tgt=%p f40=%d f41=%d f42=%d f43=%d\n",
+                            c, r, (int)canRemove, (void*)occ, occDesc, (void*)removalDesc,
+                            removalDesc ? (int)*(char*)(removalDesc + 0x20) : -99,
+                            removalDesc ? *(int*)(removalDesc + 0x30) : -99,
+                            removalDesc ? *(void**)(removalDesc + 0x28) : nullptr,
+                            removalDesc ? *(void**)(removalDesc + 0x38) : nullptr,
+                            removalDesc ? (int)*(char*)(removalDesc + 0x40) : -99,
+                            removalDesc ? (int)*(char*)(removalDesc + 0x41) : -99,
+                            removalDesc ? (int)*(char*)(removalDesc + 0x42) : -99,
+                            removalDesc ? (int)*(char*)(removalDesc + 0x43) : -99);
+                        fflush(stderr);
+                        s_dbg++;
+                    }
+                }
+
                 TileRenderEntry entry;
                 entry.col   = c;
                 entry.row   = r;
@@ -580,6 +603,15 @@ static uint32_t RemovalTool_GetTypeId(void*) {
     if (!c) c = ::Object::GetTypeIdByName("RemovalTool");
     return c;
 }
+// +0x58 (Slot11) GetToolSettingTypeId — retail RemovalTool slot 11 (0x140004950) is
+// `*ret = 0; return ret;` (RemovalTool has NO tool-setting). SetEditMode
+// (Toolbar_ShowGroup_Impl / FUN_140102b60) DEREFERENCES the returned pointer, so a
+// Tool_Ret0 stub (returns 0 -> *0) crashes — same trap PlacementTool_GetSettingType
+// documents. Return a valid pointer to a 0 so SetEditMode skips ToolSetting creation.
+static uint32_t* RemovalTool_GetSettingType(void*, uint32_t* ret) {
+    if (ret) *ret = 0;
+    return ret;
+}
 static void* g_RemovalTool_Vtable[15] = {
     (void*)&RemovalTool_Dtor,      // +0x00 Dtor
     (void*)&Tool_Slot1,            // +0x08
@@ -592,7 +624,7 @@ static void* g_RemovalTool_Vtable[15] = {
     (void*)&RemovalTool_Draw,      // +0x40 Draw
     (void*)&Tool_Ret0,             // +0x48
     (void*)&Tool_Ret0,             // +0x50
-    (void*)&Tool_Ret0,             // +0x58
+    (void*)&RemovalTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
     (void*)&Tool_Ret0,             // +0x60
     (void*)&RemovalTool_CalcPath,  // +0x68 CalcPath
     (void*)&RemovalTool_CalcCost,  // +0x70 CalcCost

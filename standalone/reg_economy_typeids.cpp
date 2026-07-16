@@ -143,6 +143,24 @@ static uint32_t g_tid_CitizenDescription   = 0;   // 0x1401c7190
 // phase no-ops — the fill just stops the crash. A/B the default build.
 static uint32_t g_tid_RawMaterialComponent = 0;   // 0x1401c7c80
 
+// RemovalTool::CalcPath (clearance tool) type-id globals. All THREE are read only on
+// the player removal path (RemovalTool::Startup + CalcPath 0x1401035e0 and its
+// closure), which is not reached by autostart/default sa-run — so filling them
+// un-dormants the removal path only. A/B the default build after adding.
+//   0x1401c74a0 CreateRemovalDescription — RemovalTool::Startup scans the tool's
+//                description entity for this component and stores it as removalDesc
+//                (+0x38). CalcPath dereferences removalDesc throughout; with this
+//                unfilled Startup finds nothing -> removalDesc null -> CalcPath faults.
+//   0x1401c75f0 DestroyComponent — CalcPath's building-removal else-branch and the
+//                StateMachine-kick branch (sub_4670 -> StateMachine_impl_dfa0) FindComponent
+//                this on the target entity. Unfilled -> those branches match nothing (no-op).
+//   0x1401c6860 BuildRoad (TypeInfo_BuildRoad) — RemovalTool_helper_c700 (road removal)
+//                IsA/IsDerivedFrom-checks the resolved road component against this. Unfilled
+//                -> road removal treats every tile as non-road (removeKind stays 0xff).
+static uint32_t g_tid_CreateRemovalDescription = 0;  // 0x1401c74a0
+static uint32_t g_tid_DestroyComponent         = 0;  // 0x1401c75f0
+static uint32_t g_tid_BuildRoad                = 0;  // 0x1401c6860
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -161,6 +179,9 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7e78, reinterpret_cast<uintptr_t>(&g_tid_StorageComponent));
     RegisterExeAddr(0x1401c7190, reinterpret_cast<uintptr_t>(&g_tid_CitizenDescription));
     RegisterExeAddr(0x1401c7c80, reinterpret_cast<uintptr_t>(&g_tid_RawMaterialComponent));
+    RegisterExeAddr(0x1401c74a0, reinterpret_cast<uintptr_t>(&g_tid_CreateRemovalDescription));
+    RegisterExeAddr(0x1401c75f0, reinterpret_cast<uintptr_t>(&g_tid_DestroyComponent));
+    RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -181,6 +202,9 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_StorageComponent     = ::Object::GetTypeIdByName("StorageComponent");
     g_tid_CitizenDescription   = ::Object::GetTypeIdByName("CitizenDescription");
     g_tid_RawMaterialComponent = ::Object::GetTypeIdByName("RawMaterialComponent");
+    g_tid_CreateRemovalDescription = ::Object::GetTypeIdByName("CreateRemovalDescription");
+    g_tid_DestroyComponent         = ::Object::GetTypeIdByName("DestroyComponent");
+    g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");
 }
 
 #endif // STANDALONE_EXE

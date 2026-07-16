@@ -150,6 +150,15 @@ static fn_StringCopyCtor_t g_fn_StringCopyCtor = nullptr;
 typedef void (*fn_StringDtor_t)(void* self);
 static fn_StringDtor_t g_fn_StringDtor = nullptr;
 
+// SA no-op fallbacks for cosmetic drag helpers (sounds / dialog open+close). Their exe
+// addresses are frequently unregistered in the standalone exe — RemovalTool is the first
+// tool to actually exercise DragTool_OnKey — so a null call would fault. Pointing any null
+// one at a no-op keeps the drag lifecycle robust; the essential BuildPath / Validate
+// (CalcPath) path is unaffected.
+static void  DragNoop_Sound(uint64_t) {}
+static void  DragNoop_CloseDialog(void*) {}
+static void* DragNoop_OpenDialog(void*, void*, uint64_t) { return nullptr; }
+
 static bool g_funcsResolved = false;
 
 static void ResolveDragToolFuncs() {
@@ -189,6 +198,30 @@ static void ResolveDragToolFuncs() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152af0));
         if (d) g_fn_StringDtor = reinterpret_cast<fn_StringDtor_t>(*d);
     }
+
+    // SA fallback: the String ctor/dtor dispatch slots (0x140151428 / 0x140152af0) are
+    // unregistered in the standalone exe, so g_fn_StringDtor resolves null there — and
+    // RemovalTool is the first DragTool-derived tool to actually drag, so it faulted on the
+    // per-frame cost-string cleanup (before the commit->CalcPath). Fall back to the
+    // export-resolved System::String::~String — same slot->export pattern PlacementTool
+    // uses for KeyMapPressed/CloseDialog.
+    if (!g_fn_StringDtor && fn_String_Dtor)
+        g_fn_StringDtor = reinterpret_cast<fn_StringDtor_t>(fn_String_Dtor);
+
+    // SA fallback: the String copy-ctor dispatch slot (0x140151428) is likewise
+    // unregistered in the standalone exe, so g_fn_StringCopyCtor resolves null there and the
+    // cost-tooltip block gets skipped. Fall back to the export-resolved
+    // System::String::String(dst, src) — same slot->export pattern as g_fn_StringDtor above,
+    // and identical signature (void*(void* dst, const void* src)).
+    if (!g_fn_StringCopyCtor && fn_String_Ctor_Copy)
+        g_fn_StringCopyCtor = reinterpret_cast<fn_StringCopyCtor_t>(fn_String_Ctor_Copy);
+
+    // Null cosmetic helpers -> no-ops so the drag lifecycle never faults on them in SA.
+    if (!g_fn_PlayTickSound)   g_fn_PlayTickSound   = &DragNoop_Sound;
+    if (!g_fn_PlayPlaceSound)  g_fn_PlayPlaceSound  = &DragNoop_Sound;
+    if (!g_fn_PlayErrorSound)  g_fn_PlayErrorSound  = &DragNoop_Sound;
+    if (!g_fn_CloseToolDialog) g_fn_CloseToolDialog = &DragNoop_CloseDialog;
+    if (!g_fn_OpenToolDialog)  g_fn_OpenToolDialog  = &DragNoop_OpenDialog;
 
     g_funcsResolved = true;
 }
@@ -324,64 +357,64 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         int segmentCount = buildPath(self, self->startCell, self->endCell,
             pathType, tileH, tileW, &extraParam);
 
-        // ---- Find description from descriptionPtr ----
-        // FUN_140005160 searches the description list for a matching type
-        uint64_t descResult = 0;
-        g_fn_FindDescription((uint64_t)self->descriptionPtr, &descResult);
+        // ---- Cost tooltip (FindDescription -> cost string -> UpdateToolUI) ----
+        // g_fn_StringCopyCtor / g_fn_StringDtor now fall back to the export-resolved
+        // System::String ctor/dtor in SA (see ResolveDragToolFuncs), so the string plumbing
+        // works there. g_fn_UpdateToolUI (exe code 0x1400ffc60) may still resolve null in the
+        // standalone exe if unregistered — in that case this whole COSMETIC block is skipped
+        // (the drag + commit -> CalcPath still run, costString stays 0 / haveCostString=false,
+        // so the cleanup below is a no-op).
+        uint64_t costString = 0;
+        bool haveCostString = false;
+        if (g_fn_FindDescription && g_fn_StringCopyCtor && g_fn_StringDtor && g_fn_UpdateToolUI) {
+            uint64_t descResult = 0;
+            g_fn_FindDescription((uint64_t)self->descriptionPtr, &descResult);
 
-        // ---- Build cost string ----
-        // Description has a string array at +0x50 (ptr to array) and +0x58 (count).
-        // If segmentCount is within range, copy string at that index; else use empty string.
-        bool costOverflow = (segmentCount >= *(int*)((uintptr_t)descResult + 0x58));
+            if (descResult != 0) {
+                // Description has a string array at +0x50 (ptr) and +0x58 (count).
+                bool costOverflow = (segmentCount >= *(int*)((uintptr_t)descResult + 0x58));
 
-        uint64_t srcString;
-        uint64_t tempString;
-        if (!costOverflow) {
-            // String at index segmentCount in the array
-            uintptr_t strArrayBase = *(uintptr_t*)((uintptr_t)descResult + 0x50);
-            void* srcStrPtr = (void*)(strArrayBase + (uint64_t)segmentCount * 8);
-            g_fn_StringCopyCtor(&tempString, srcStrPtr);
-            srcString = tempString;
-        } else {
-            srcString = 0;  // empty string (null System::String)
+                uint64_t srcString;
+                uint64_t tempString;
+                if (!costOverflow) {
+                    uintptr_t strArrayBase = *(uintptr_t*)((uintptr_t)descResult + 0x50);
+                    void* srcStrPtr = (void*)(strArrayBase + (uint64_t)segmentCount * 8);
+                    g_fn_StringCopyCtor(&tempString, srcStrPtr);
+                    srcString = tempString;
+                } else {
+                    srcString = 0;  // empty string (null System::String)
+                }
+
+                g_fn_StringCopyCtor(&costString, &srcString);
+                haveCostString = true;
+
+                // Cleanup intermediate
+                if (!costOverflow) g_fn_StringDtor(&tempString);
+                else               g_fn_StringDtor(&srcString);
+
+                // ---- Init Transform and Box for UI positioning ----
+                uint8_t transform[40];  // Math::Transform
+                uint8_t box[24];        // Volume::Box
+                if (g_fn_TransformCtor) g_fn_TransformCtor(transform);
+                if (g_fn_BoxCtor) g_fn_BoxCtor(box);
+
+                // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
+                g_fn_UpdateToolUI(
+                    DIALOG_IBP(),                          // param_1
+                    tileH[0],                              // param_2
+                    tileW[0],                              // param_3
+                    (uint64_t)&costString,                 // param_4: cost string
+                    (segmentCount == 0) ? 1 : 0,           // param_5: isEmpty
+                    (pathType[0] == 2) ? 1 : 0,            // param_6: isInvalid
+                    (pathType[0] == 1) ? 1 : 0,            // param_7: isSingle
+                    (uint32_t)extraParam,                   // param_8
+                    self->startCell,                        // param_9
+                    self->endCell,                          // param_10
+                    box,                                    // param_11
+                    transform                               // param_12
+                );
+            }
         }
-
-        // Copy into the final cost string
-        uint64_t costString;
-        if (!costOverflow) {
-            g_fn_StringCopyCtor(&costString, &srcString);
-        } else {
-            g_fn_StringCopyCtor(&costString, &srcString);
-        }
-
-        // Cleanup intermediate
-        if (!costOverflow) {
-            g_fn_StringDtor(&tempString);
-        } else {
-            g_fn_StringDtor(&srcString);
-        }
-
-        // ---- Init Transform and Box for UI positioning ----
-        uint8_t transform[40];  // Math::Transform
-        uint8_t box[24];        // Volume::Box
-        if (g_fn_TransformCtor) g_fn_TransformCtor(transform);
-        if (g_fn_BoxCtor) g_fn_BoxCtor(box);
-
-        // ---- Call UpdateToolUI (operator_impl_fc60 at 0x1400ffc60) ----
-        g_fn_UpdateToolUI(
-            DIALOG_IBP(),                             // param_1: pointer to IBP (self->dialogPtr)
-            tileH[0],                              // param_2: tile count (width axis)
-            tileW[0],                              // param_3: tile count (height axis)
-            (uint64_t)&costString,                 // param_4: cost string
-            (segmentCount == 0) ? 1 : 0,           // param_5: isEmpty flag
-            (pathType[0] == 2) ? 1 : 0,            // param_6: isInvalid flag
-            (pathType[0] == 1) ? 1 : 0,            // param_7: isSingle flag
-            (uint32_t)extraParam,                   // param_8: extra parameter
-            self->startCell,                        // param_9
-            self->endCell,                          // param_10
-            box,                                    // param_11: Volume::Box
-            transform                               // param_12: Math::Transform
-        );
 
         // ---- Handle mouse release / commit ----
         if (self->singleClick != 0) {
@@ -450,7 +483,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         }
 
         // Cleanup cost string
-        g_fn_StringDtor(&costString);
+        if (haveCostString && g_fn_StringDtor) g_fn_StringDtor(&costString);
     }
 
     return 1; // Always returns 1 (event consumed)

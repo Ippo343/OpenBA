@@ -169,13 +169,23 @@ void FireRemovalTool(void* entityUI) {
            "(expect width=8 height=8 valid=0 ret=0)\n",
            (unsigned long long)cc, outValid, outB, outA, outLen);
 
-    // CalcPath (+0x68): the gap-8 target 0x1401035e0. Passthrough/no-op until
-    // ported; calling it now is safe and proves the trigger site.
-    printf("[ToolHarness] calling CalcPath (vtable[%d]) = gap target 0x1401035e0...\n",
-           kSlot_CalcPath);
-    int cp = reinterpret_cast<int(*)(void*, int, int)>(
-        vt[kSlot_CalcPath])(tool, startCell, endCell);
-    printf("[ToolHarness] CalcPath -> ret=%d (0 expected while passthrough/unported)\n", cp);
+    // CalcPath (+0x68): now the LIVE ported RemovalCalc_Slot13 (0x1401035e0). It
+    // dereferences removalDesc (self+0x38) throughout, so it is only safe to call with a
+    // real RemovalDescription. This harness leaves the description entity null (Startup ->
+    // removalDesc=null), so we SKIP the call here to avoid a null-deref fault. Drive
+    // CalcPath via the real toolbar Remove button instead (BANISHED_LIVE_TOOLBAR=1
+    // BANISHED_GAME_PRELOAD=1 BANISHED_LIVE_TOOLS=1), which supplies a live descriptor.
+    void* removalDesc = *reinterpret_cast<void**>(t + 0x38);
+    if (removalDesc) {
+        printf("[ToolHarness] calling CalcPath (vtable[%d]) = RemovalCalc_Slot13...\n",
+               kSlot_CalcPath);
+        int cp = reinterpret_cast<int(*)(void*, int, int)>(
+            vt[kSlot_CalcPath])(tool, startCell, endCell);
+        printf("[ToolHarness] CalcPath -> ret=%d\n", cp);
+    } else {
+        printf("[ToolHarness] SKIP CalcPath: removalDesc(+0x38) null (no description entity "
+               "wired) — the live CalcPath would fault. Use the toolbar Remove button.\n");
+    }
 
     printf("[ToolHarness] RemovalTool sequence complete.\n");
 }

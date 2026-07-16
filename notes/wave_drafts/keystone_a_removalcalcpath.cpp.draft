@@ -54,7 +54,7 @@ typedef void* (*fn_find3ea0_t)(int64_t entity, void* outIBP);                 //
 typedef void* (*fn_find5780_t)(int64_t entity, void* outIBP);                 // 0x140005780
 typedef char  (*fn_sub11e710_t)(int64_t obj);                                 // 0x14011e710
 typedef char  (*fn_sub12ead0_t)(int64_t obj);                                 // 0x14012ead0
-typedef void  (*fn_roadMesh_f370_t)(int64_t game, void* map);                 // 0x1400af370 (TradeWork_impl_f370)
+typedef uint64_t (*fn_roadMesh_f370_t)(int64_t game, void* map);              // 0x1400af370 (TradeWork_impl_f370)
 typedef void* (*fn_find780_t)(int64_t entity, void* outIBP);                  // 0x140005780 (dup alias)
 typedef void  (*fn_charAI8e30_t)(int64_t citizenAI, int cellId);             // 0x1400f8e30
 typedef void  (*fn_avlErase_a6e0_t)(int64_t* root, void* node);             // 0x14001a6e0
@@ -206,7 +206,9 @@ extern "C" void* RemovalCalc_helper_8d50(int64_t param_1, void** param_2, int pa
     int64_t node = lo;
     for (;;) {
         if (node == 0) {
-            *param_2 = nullptr;
+            // FIX(lead-verify): disasm calls InternalBasePtr_Ctor(param_2, 0), not a
+            // bare null store — callers expect a fully-constructed 16-byte IBP.
+            if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, nullptr);
             return param_2;
         }
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(node + 8));
@@ -270,8 +272,7 @@ extern "C" void RemovalCalc_helper_e4d0(int64_t param_1) {
 // `state` is the state object base. `useExtraArg` chooses the +0x30 call form
 // (phase 1 = no extra; phase 2 = passes &outState). Faithful to disasm.
 // ============================================================
-static void SM_RunPhase(int64_t state, int64_t* stackPtrField, bool useExtraArg,
-                        int32_t* outState) {
+static void SM_RunPhase(int64_t state, int64_t* stackPtrField, int32_t* outState) {
     bool first = true;
     if (*reinterpret_cast<char*>(state + 0x52) < 0)
         goto skipInner;
@@ -287,15 +288,21 @@ static void SM_RunPhase(int64_t state, int64_t* stackPtrField, bool useExtraArg,
                         p, (int)*reinterpret_cast<char*>(state + 0x50));
                 }
                 if (-1 < *reinterpret_cast<char*>(state + 0x53)) {
-                    int64_t* head = *reinterpret_cast<int64_t**>(*stackPtrField);
-                    (*reinterpret_cast<void(**)(int64_t*, int64_t*, int, int)>(*head + 0x28))(
-                        head, reinterpret_cast<int64_t*>(*stackPtrField),
+                    // FIX(lead-verify vs disasm 0x14011e0d7): this = N (*stackPtrField),
+                    // func = *(*N + 0x28), arg2 = stackPtrField (the state+0x48 field
+                    // address). The prior draft double-derefed (this=*N, func=*(*(*N)),
+                    // arg2=N) — a crash-level pointer-level error.
+                    int64_t* node = reinterpret_cast<int64_t*>(*stackPtrField);
+                    (*reinterpret_cast<void(**)(int64_t*, int64_t*, int, int)>(*node + 0x28))(
+                        node, stackPtrField,
                         (int)*reinterpret_cast<char*>(state + 0x51),
                         (int)*reinterpret_cast<char*>(state + 0x53));
                 }
             }
             char cur52 = *reinterpret_cast<char*>(state + 0x52);
-            int64_t head = *reinterpret_cast<int64_t*>(*stackPtrField);
+            // FIX(lead-verify vs disasm 0x14011e0f0 MOV RCX,[RBX]): head = N
+            // (*stackPtrField), NOT *N. The prior draft derefed one level too far.
+            int64_t head = *stackPtrField;
             *reinterpret_cast<char*>(state + 0x50) = cur52;
             // descend to the deepest child via node[2] chain
             int64_t deepest = head;
@@ -328,14 +335,13 @@ static void SM_RunPhase(int64_t state, int64_t* stackPtrField, bool useExtraArg,
         if (first && (-1 < *reinterpret_cast<char*>(state + 0x50))) {
             int it = (int)*reinterpret_cast<char*>(state + 0x51);
             int64_t* p = reinterpret_cast<int64_t*>(*stackPtrField);
-            while (it < 0 || [&]() -> bool {
-                       if (useExtraArg)
-                           return (*reinterpret_cast<char(**)(int64_t*, int64_t*, int32_t*)>(*p + 0x30))(
-                               p, stackPtrField, outState) == 0;
-                       return (*reinterpret_cast<char(**)(int64_t*, int64_t*)>(*p + 0x30))(
-                               p, stackPtrField) == 0;
-                   }()) {
-                if ((p = reinterpret_cast<int64_t*>(p[1])) == nullptr) break;
+            // FIX(lead-verify vs disasm 0x14011e199 / 0x14011e369): BOTH phases' +0x30
+            // call pass &outState (LEA R8,[RBP+0x20] in each). The prior "phase 1 =
+            // 2-arg" form was a decompiler artifact that left R8 uninitialized.
+            while (((it < 0) ||
+                    ((*reinterpret_cast<char(**)(int64_t*, int64_t*, int32_t*)>(*p + 0x30))(
+                        p, stackPtrField, outState) == 0)) &&
+                   ((p = reinterpret_cast<int64_t*>(p[1])) != nullptr)) {
                 it = (*reinterpret_cast<int(**)(int64_t*, int)>(*p))(
                     p, (int)*reinterpret_cast<char*>(state + 0x50));
             }
@@ -348,8 +354,9 @@ static void SM_RunPhase(int64_t state, int64_t* stackPtrField, bool useExtraArg,
 // 0x14011dfa0  StateMachine_impl_dfa0
 // State machine action driver. Reads the state object (FUN_140003ea0 on
 // self+0x10), short-circuits when its top state byte (+0x52/+0x50 fallback) is 6
-// (first two checks) or 7; if so it falls through to DestroyUI_helper_e4d0 only
-// in the (!=6 && !=6 && !=7) case. Otherwise runs the two-phase action tick.
+// (first two checks) or 7. The FIRST ==6 returns with no cleanup (JZ 0x14011e3b9);
+// the SECOND ==6 and the ==7 exits jump to 0x14011e3b1 which calls
+// DestroyUI_helper_e4d0(param_1) first. Otherwise runs the two-phase action tick.
 // Faithful to the decompile control flow.
 // ============================================================
 extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
@@ -382,12 +389,14 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     int64_t st1 = ((int64_t)(uint32_t)local_res8) | ((int64_t)uStackX_c << 32);
     cVar5 = *reinterpret_cast<char*>(st1 + 0x52);
     if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st1 + 0x50);
-    if (cVar5 == 6) return;
+    // FIX(lead-verify vs disasm 0x14011e01a JZ 0x14011e3b1): the 2nd ==6 exit calls e4d0.
+    if (cVar5 == 6) { RemovalCalc_helper_e4d0(param_1); return; }
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     cVar5 = *reinterpret_cast<char*>(st1 + 0x52);
     if (cVar5 < 0) cVar5 = *reinterpret_cast<char*>(st1 + 0x50);
-    if (cVar5 == 7) return;
+    // FIX(lead-verify vs disasm 0x14011e03c JZ 0x14011e3b1): the ==7 exit calls e4d0.
+    if (cVar5 == 7) { RemovalCalc_helper_e4d0(param_1); return; }
 
     // ---- main tick path ----
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x10));
@@ -400,8 +409,8 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     int64_t state = local_res10;
     int64_t* stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
 
-    // Phase 1 (transition slot +0x30, no extra arg)
-    SM_RunPhase(state, stackPtrField, /*useExtraArg=*/false, nullptr);
+    // Phase 1 (transition slot +0x30 passes &local_res8, same as phase 2)
+    SM_RunPhase(state, stackPtrField, &local_res8);
 
     // ---- between-phase: choose transition + kick Tick ----
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res10);
@@ -430,8 +439,8 @@ extern "C" void RemovalCalc_StateMachine_dfa0(int64_t param_1) {
     state = local_res10;
     stackPtrField = reinterpret_cast<int64_t*>(state + 0x48);
 
-    // Phase 2 (transition slot +0x30 takes &outState)
-    SM_RunPhase(state, stackPtrField, /*useExtraArg=*/true, &local_res8);
+    // Phase 2 (transition slot +0x30 passes &outState)
+    SM_RunPhase(state, stackPtrField, &local_res8);
 }
 
 // ============================================================
@@ -577,7 +586,7 @@ extern "C" uint64_t RemovalCalc_helper_c700(uint32_t* param_1, int param_2) {
 // 0x1400f9ad0  CitizenAI_impl_9ad0
 // Per-entity citizen-AI AVL update. param_1 = CitizenAI subsystem, param_2 = cell
 // id. Finds the entity node in the BST at param_1+0x30 (key == *node, left=+0x18
-// i.e. piVar4+6, right=+0x10 i.e. piVar4+8 — NOTE this tree uses the opposite
+// i.e. piVar4+6, right=+0x20 i.e. piVar4+8 — NOTE this tree uses the opposite
 // child convention from c700). Then re-keys an id AVL at param_1+0x10 by the
 // found entity's id (+0x24), inserting/erasing as needed; bumps count at +0x18.
 // Faithful to the decompile (int*-arith: piVar+6==+0x18, piVar+8==+0x20,
@@ -979,8 +988,9 @@ extern "C" uint64_t RemovalCalc_Slot13(int64_t param_1, int param_2, int param_3
 
         uVar16ret = 0;
         if (bVar5 && s_roadMesh)
-            s_roadMesh(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x110), puVar18);
+            uVar16ret = s_roadMesh(*reinterpret_cast<int64_t*>((uintptr_t)*g_pGameWorldSingleton + 0x110), puVar18);
     }
 
-    return ((uint64_t)((int)(uVar16ret >> 8)) << 8) | 1;
+    // FIX(lead-verify): faithful CONCAT71 — roadMesh return in the upper bytes, low byte 1.
+    return (uVar16ret & 0xffffffffffffff00ull) | 1;
 }
