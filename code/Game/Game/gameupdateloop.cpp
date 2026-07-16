@@ -716,44 +716,27 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     s_frameNum++;
 
 #ifdef STANDALONE_EXE
-    // [EVENTS] BANISHED_LIVE_EVENTS: fire a real event-log entry when the town
-    // population changes. The count lives at townMgr(gw+0xF0)+0xA8 — the same field
-    // the status bar reads. On the first tick the founding settlers appear (0 -> N),
-    // logging a "settlers arrived" event (type 0xe, sev 2); later births/immigration
-    // increment it and log again. Genuinely gameplay-driven, not a timer.
+    // [EVENTS] BANISHED_LIVE_EVENTS: drive the faithful event-log sources each tick.
+    // Only the resource-shortage scanner runs here — the earlier population-watch
+    // "settlers arrived" (0xe) demo fired at game start (founding 0 -> N), which retail
+    // does NOT do, so it was removed (nomad arrival is a specific immigration event,
+    // not every population bump). The scenario/achievement popup (0x1a-0x1d) is driven
+    // by the faithful source op_6830 (0x140096830) via GameUpdateLoop+0x150
+    // AchievementInstance IsMet()/HasFailed() — dormant in a sandbox game. Both the
+    // ribbon and the EventPopupDialog creation path stay live for any real event.
     {
         static int s_evGate = -1;
         if (s_evGate < 0) {
             const char* e = std::getenv("BANISHED_LIVE_EVENTS");
             s_evGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
         }
-        // Wait until the ribbon has ticked a while before firing the first event.
-        // The ribbon's Slot7 resets its "last seen index" (+0xC4) to count-1 every
-        // frame, self-correcting from the Startup seed (count) to -1 while count==0.
-        // If we add the founding event before that correction runs, index 0 is
-        // permanently skipped. ~120 frames gives the ribbon time to settle.
+        // ~120 frames lets the ribbon settle (Slot7 self-corrects its +0xC4 last-seen
+        // index to -1 while the log is empty) before the first event is appended.
         if (s_evGate && s_frameNum > 120) {
             void* gw = self;  // GameUpdateLoop == g_pGameWorldSingleton target
             void* eventLog = *(void**)((uintptr_t)gw + 0x138);
             void* townMgr  = *(void**)((uintptr_t)gw + 0xF0);
             if (eventLog && townMgr) {
-                int pop = *(int*)((uintptr_t)townMgr + 0xA8);
-                static int s_prevPop = 0;
-                if (pop > s_prevPop && pop > 0 && pop < 100000) {
-                    EventLog_AddSimple(0xE, 2);  // new citizens — settler/immigration event
-                }
-                if (pop != s_prevPop) s_prevPop = pop;
-
-                // NOTE: the scenario/achievement popup (event types 0x1a-0x1d, sev 4,
-                // popup field >= 0) is driven by the faithful source op_6830
-                // (0x140096830) — when the GameUpdateLoop+0x150 AchievementInstance
-                // resolves IsMet()/HasFailed(). That path is dormant in a sandbox game
-                // (no scenario), so no popup fires here. The creation path
-                // (EventNotifyDialog::Slot7 popup branch -> EventNotifyDialog_CreatePopup
-                // -> EventPopupDialog modal) is complete and drives any real 0x1a-0x1d
-                // event that reaches the log. Set BANISHED_EVENT_POPUP_POP to re-enable
-                // a population-milestone demo fire (see git history / commit 87f6de7).
-
                 // [SHORTAGE] Per-tick resource-shortage warnings (event types
                 // 0x11-0x18, sev 3). Faithful port of FUN_14008c100 scanning the
                 // town-manager shortage tables; self-gated so it stays silent until a
