@@ -209,6 +209,14 @@ static void EnsureFuncs() {
     s_fn_StringCtor        = (fn_StringCtor_t)resolveIAT(0x140151428);
     s_fn_StringDtor        = (fn_StringDtor_t)resolveIAT(0x140152af0);
 #ifdef STANDALONE_EXE
+    // The String copy-ctor / dtor IAT slots (0x140151428 / 0x140152af0) are unregistered in
+    // standalone → null, so the cost-string tooltip below silently skips (costString stays
+    // 0 → dialog shows a blank cost). Fall back to the export-resolved System::String
+    // ctor/dtor (same slot->export pattern as DragTool). Harmless in DLL mode (slots filled).
+    if (!s_fn_StringCtor && fn_String_Ctor_Copy)
+        s_fn_StringCtor = reinterpret_cast<fn_StringCtor_t>(fn_String_Ctor_Copy);
+    if (!s_fn_StringDtor && fn_String_Dtor)
+        s_fn_StringDtor = reinterpret_cast<fn_StringDtor_t>(fn_String_Dtor);
     // Math::Transform::FromYawPitchOffset is a STATIC fn returning Transform by value
     // (hidden retbuf: RCX=retbuf, RDX=yaw, R8=pitch, R9=offset) — matches the 4-arg
     // typedef. Its exe IAT slot 0x140151288 is registered in standalone via

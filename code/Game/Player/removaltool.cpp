@@ -340,7 +340,7 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                 entry.col   = (uint32_t)col;
                 entry.row   = (uint32_t)row;
                 entry.type  = 0;
-                entry.color = 0xFF000000; // default opaque
+                entry.color = 0xffffff00; // retail constrained-tile color (0x140104050)
                 entry.extra = 0;
                 PushTileEntry(&entityTiles, &entry);
             }
@@ -533,7 +533,10 @@ void RemovalTool_Draw(RemovalTool* self, void* context, char param3) {
                 entry.col   = c;
                 entry.row   = r;
                 entry.type  = canRemove ? 3 : 0;
-                entry.color = canRemove ? 0x8000ff00 : 0xffff0000;
+                // Retail (0x140104050): removable tile -> RED (0xffff0000), non-removable
+                // -> GREEN (0x8000ff00). NOT the intuitive green=valid — matches the game
+                // (red marks "will be cleared"). Our reimpl had these swapped.
+                entry.color = canRemove ? 0xffff0000 : 0x8000ff00;
                 entry.extra = 0;
                 PushTileEntry(&selTiles, &entry);
             }

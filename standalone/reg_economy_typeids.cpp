@@ -161,6 +161,23 @@ static uint32_t g_tid_CreateRemovalDescription = 0;  // 0x1401c74a0
 static uint32_t g_tid_DestroyComponent         = 0;  // 0x1401c75f0
 static uint32_t g_tid_BuildRoad                = 0;  // 0x1401c6860
 
+// 0x1401c7430 CreateDragDescription — the "brush" description that the removal
+// descriptor's target template (removalDesc+0x38) carries. RemovalTool_sub_48a0
+// (0x1401048a0, the NATURAL-RESOURCE removability gate — despite the older
+// "crop-field only" comment, FUN_1400052c0 finds a NaturalResourceComponent, id
+// 0x1401c7b30, so this path is exactly how trees/stone/iron are cleared) scans the
+// target template entity for this component into `matched`, then gates removability
+// on `desc+0x20 flag && matched != null && cellEntity has a NaturalResourceComponent`.
+// UNREGISTERED in standalone -> tool_base_path.cpp's s_pTid_7430 (and
+// keystone_a_removalcalcpath.cpp's s_tid_7430) resolved to null -> sub_48a0's
+// `matched` scan was skipped -> matched stayed null -> the gate failed for EVERY
+// cell -> the clearance tool rendered every natural-resource tile red (not removable)
+// and CalcPath never cloned/registered a ClearArea entity. CreateDragDescription is a
+// registered factory type (factory_registrations.csv:250), so GetTypeIdByName resolves
+// it. Fill un-dormants the player removal + drag-placement paths only (not reached by
+// default sa-run); A/B the default build after adding.
+static uint32_t g_tid_CreateDragDescription    = 0;  // 0x1401c7430
+
 // Register the .rdata global storage (value filled later by FillEconomyTypeIdGlobals).
 void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c7938, reinterpret_cast<uintptr_t>(&g_tid_InteractDescription));
@@ -182,6 +199,7 @@ void RegisterEconomyTypeIds() {
     RegisterExeAddr(0x1401c74a0, reinterpret_cast<uintptr_t>(&g_tid_CreateRemovalDescription));
     RegisterExeAddr(0x1401c75f0, reinterpret_cast<uintptr_t>(&g_tid_DestroyComponent));
     RegisterExeAddr(0x1401c6860, reinterpret_cast<uintptr_t>(&g_tid_BuildRoad));
+    RegisterExeAddr(0x1401c7430, reinterpret_cast<uintptr_t>(&g_tid_CreateDragDescription));
 }
 
 // Fill from the real-CRC type tree — call AFTER Engine::Startup.
@@ -205,6 +223,7 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_CreateRemovalDescription = ::Object::GetTypeIdByName("CreateRemovalDescription");
     g_tid_DestroyComponent         = ::Object::GetTypeIdByName("DestroyComponent");
     g_tid_BuildRoad                = ::Object::GetTypeIdByName("BuildRoad");
+    g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
 }
 
 #endif // STANDALONE_EXE

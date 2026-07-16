@@ -231,6 +231,15 @@ int StatGoal_Slot8(StatGoal* self) {
         if (slot) s_fn_StringCopyCtor = *reinterpret_cast<fn_StringCopyCtor_t*>(slot);
         slot = ResolveAddr(Module::Exe, 0x140152af0);
         if (slot) s_fn_StringDtor_dispatch = *reinterpret_cast<fn_StringDtor_dispatch_t*>(slot);
+        // SA fallback: these two dispatch slots (0x140151428 copy ctor / 0x140152af0 dtor)
+        // are unregistered in the standalone exe → null. Unlike the tools' cosmetic cost
+        // string, here the copy feeds the local ExternalPtr that ResolveExternalPtr uses to
+        // look up the stat value, so a null ctor would silently break the comparison. Fall
+        // back to the export-resolved System::String ctor/dtor (same pattern as dragtool).
+        if (!s_fn_StringCopyCtor && fn_String_Ctor_Copy)
+            s_fn_StringCopyCtor = reinterpret_cast<fn_StringCopyCtor_t>(fn_String_Ctor_Copy);
+        if (!s_fn_StringDtor_dispatch && fn_String_Dtor)
+            s_fn_StringDtor_dispatch = reinterpret_cast<fn_StringDtor_dispatch_t>(fn_String_Dtor);
         s_copyResolved = true;
     }
 

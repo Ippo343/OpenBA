@@ -568,10 +568,22 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // Unemployed flag
     char isUnemployed;
     int64_t profData1F0 = *reinterpret_cast<int64_t*>(p + 0x1F0);
-    // [STANDALONE GUARD] +0x1F0 = profession-list, null until assigned at gameplay
-    // (same field CitizenAI CheckEducation null-guards). A null list == no profession
-    // == unemployed-eligible (treat the +0x4C "has-profession" byte as 0).
-    char profByte = (profData1F0 != 0) ? *reinterpret_cast<char*>(profData1F0 + 0x4C) : 0;
+    // [STANDALONE GUARD] +0x1F0 = profession object, null until assigned at gameplay
+    // (same field CitizenAI CheckEducation null-guards). In retail EVERY citizen —
+    // children included — is stamped with the default profession at spawn
+    // (FUN_140117080 → ProfessionList+0x30), and that object's +0x4C bool governs the
+    // "unemployed" icon (flag 3). A null pointer here is a standalone-only gap, NOT a
+    // genuine "no profession". The old fallback defaulted profByte=0 (== unemployed),
+    // which mislabelled EVERY not-yet-employed citizen. Children/students can never hold
+    // a workplace (+0x248 stays 0 for them), so that fallback pinned a permanent "?"
+    // no-job badge on every child. Fall back on age instead: adults with no profession
+    // stamped still read as unemployed (they legitimately need a job), but children
+    // (age < adultAge) and students (in-school, +0x208 != 0) never do — which is what
+    // isAdult already encodes (computed at the top of Update). With a real profession
+    // present (DLL mode / stamped SA) this branch is skipped, so retail behaviour is
+    // byte-identical.
+    char profByte = (profData1F0 != 0) ? *reinterpret_cast<char*>(profData1F0 + 0x4C)
+                                       : (isAdult ? 0 : 1);
     if (profByte == 0 && *reinterpret_cast<int64_t*>(p + 0x248) == 0) {
         isUnemployed = 1;
     } else {
