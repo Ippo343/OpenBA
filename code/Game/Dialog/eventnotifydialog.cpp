@@ -882,3 +882,161 @@ void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int event
         }
     }
 }
+
+// ============================================================
+// STANDALONE EXE: real EventNotifyDialog vtable + ctor + registration
+// ============================================================
+// EventNotifyDialog (DialogInstance, 0xF0 bytes, exe vtable 0x14015bca0) — the
+// notification ribbon near the toolbar. In standalone this was a dormant
+// UI_DIALOG_STUB (all slots no-op) so the ribbon never processed or displayed
+// events. Promote it to a real per-class vtable + a standalone ctor, following
+// the FollowDialog (followdialog.cpp) DialogInstance promotion pattern.
+//
+// DialogInstance slot semantics (verified against FollowDialog + the exe vtable):
+//   +0x00 idx0 ScalarDtor          -> free notify/active arrays + base dtor
+//   +0x10 idx2 GetTypeId
+//   +0x18 idx3 Persist             -> no-op (serialize thunk)
+//   +0x20 idx4 Startup             -> Slot4 (find ribbon elements, build slot array)
+//   +0x28 idx5 Shutdown            -> Slot5 (RET 0)
+//   +0x30 idx6 OnUpdateLayout      -> Update (position ribbon, sync slot sprites)  [per-frame]
+//   +0x38 idx7 OnUpdate            -> Slot7 (scan event log, manage notifications) [per-frame]
+//   +0x40 idx8 OnCommand           -> OnEvent (ribbon button clicks -> navigate)
+//   +0x48 idx9 OnSerializeSettings -> no-op (serialize thunk)
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+
+namespace eventnotify_sa {
+
+void* GetVtable();  // fwd
+
+// Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone)
+// and, on the popup path, g_pExternalTypeId. Lazy-fill both so the ribbon tick
+// can't null-deref. The timer duration is a byte-faithful 30.0s (exe DAT_1401721cc).
+void EnsureGlobals() {
+    static float s_notifyTimer = 30.0f;
+    if (!g_pNotifyTimerDuration) g_pNotifyTimerDuration = &s_notifyTimer;
+    static uint32_t s_ext = 0;
+    if (!g_pExternalTypeId) {
+        s_ext = ::Object::ResolveTypeIdByNameLazy("External");
+        if (s_ext) g_pExternalTypeId = &s_ext;
+    }
+    static uint32_t s_img = 0;
+    if (!g_TypeId_ImageElement) {
+        s_img = ::Object::ResolveTypeIdByNameLazy("ImageElement");
+        if (s_img) g_TypeId_ImageElement = &s_img;
+    }
+}
+
+void StubNop(void*, ...) {}
+void* Slot1Getter(void*) { return nullptr; }
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("EventNotifyDialog");
+    return c;
+}
+
+// idx0 — scalar deleting destructor. Mirrors Reimpl_ScalarDtor (0x140011550):
+// free the +0xD8 active-event array (String at each entry +0x20), free the +0xC8
+// slot array, run the DialogInstance base dtor, free the object on flag bit 0.
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = GetVtable();
+    uintptr_t s = (uintptr_t)self;
+    void* activeArr = *(void**)(s + 0xD8);
+    int activeCnt = *(int*)(s + 0xE0);
+    if (activeArr && activeCnt > 0) {
+        uintptr_t e = (uintptr_t)activeArr;
+        for (int i = 0; i < activeCnt; i++, e += 0x30) fn_String_Dtor((void*)(e + 0x20));
+    }
+    if (fn_MemFreeStatic) { fn_MemFreeStatic(activeArr); fn_MemFreeStatic(*(void**)(s + 0xC8)); }
+    *(uint64_t*)(s + 0xC8) = 0; *(uint64_t*)(s + 0xD0) = 0;
+    *(uint64_t*)(s + 0xD8) = 0; *(uint64_t*)(s + 0xE0) = 0;
+    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void W_Startup(void* self) { EnsureGlobals(); if (self) EventNotifyDialog_Slot4(reinterpret_cast<EventNotifyDialog*>(self)); }
+int  W_Shutdown(void* self) { return self ? EventNotifyDialog_Slot5(reinterpret_cast<EventNotifyDialog*>(self)) : 0; }
+void W_Update(void* self) { EnsureGlobals(); if (self) EventNotifyDialog_Update(reinterpret_cast<EventNotifyDialog*>(self)); }
+void W_Load(void* self, void* p2) {
+    EnsureGlobals();
+    if (!self) return;
+    EventNotifyDialog_Slot7(reinterpret_cast<EventNotifyDialog*>(self), p2);
+    // Report when the ribbon's active-notification count changes.
+    static int s_lastActive = 0;
+    int active = *(int*)((uintptr_t)self + 0xE0);
+    if (active != s_lastActive) {
+        s_lastActive = active;
+        if (std::getenv("BANISHED_EVENT_TRACE")) {
+            fprintf(stderr, "[EventNotify] ribbon activeEventCount=%d (displaying notifications)\n", active);
+            fflush(stderr);
+        }
+    }
+}
+void W_OnEvent(void* self, void* e, int msg, int id) { if (self) EventNotifyDialog_OnEvent(reinterpret_cast<EventNotifyDialog*>(self), e, msg, id); }
+
+static void* g_vt[10];
+struct Init {
+    Init() {
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[1] = reinterpret_cast<void*>(&Slot1Getter);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[3] = reinterpret_cast<void*>(&StubNop);
+        g_vt[4] = reinterpret_cast<void*>(&W_Startup);
+        g_vt[5] = reinterpret_cast<void*>(&W_Shutdown);
+        g_vt[6] = reinterpret_cast<void*>(&W_Update);
+        g_vt[7] = reinterpret_cast<void*>(&W_Load);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnEvent);
+        g_vt[9] = reinterpret_cast<void*>(&StubNop);
+    }
+} g_init;
+
+void* GetVtable() { return reinterpret_cast<void*>(g_vt); }
+
+// Standalone ctor. Mirrors EventNotifyDialog_CopyCtor (0x140068ab0): DialogInstance
+// base ctor, install our vtable, then init the ribbon fields. The exe ctor's parent
+// is the toolbar dialog (positions the ribbon just below it — see Update).
+//   +0xB8 parentIBP · +0xC0 smoothedY=0 · +0xC4 lastEventIdx=-1 · +0xC8..+0xE8 = 0
+void* Ctor(void* self, void* ui, void* extRes, void* parentIBP) {
+    if (!self) return nullptr;
+    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
+    if (fn_DialogInstance_Ctor && extRes)
+        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
+    uintptr_t s = (uintptr_t)self;
+    *reinterpret_cast<void**>(self) = GetVtable();
+    *(uint64_t*)(s + 0xB8) = parentCopy;
+    *(uint32_t*)(s + 0xC0) = 0;
+    *(uint32_t*)(s + 0xC4) = 0xFFFFFFFF;
+    *(uint64_t*)(s + 0xC8) = 0; *(uint64_t*)(s + 0xD0) = 0;
+    *(uint64_t*)(s + 0xD8) = 0; *(uint64_t*)(s + 0xE0) = 0;
+    *(uint64_t*)(s + 0xE8) = 0;
+    return self;
+}
+
+void Zero(void* p) { for (size_t o = 0; o < (size_t)0xF0; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0xF0, 8);
+    if (!p) return nullptr;
+    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+}
+void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+
+}  // namespace eventnotify_sa
+
+REGISTER_TYPE(EventNotifyDialog, "UI::DialogInstance",
+              &eventnotify_sa::Factory, &eventnotify_sa::InPlace);
+
+// Called by GameUpdateLoop::Startup to build the ribbon in standalone.
+extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP) {
+    return eventnotify_sa::Ctor(self, ui, extRes, parentIBP);
+}
+extern "C" void* EventNotifyDialog_GetStandaloneVtable() { return eventnotify_sa::GetVtable(); }
+
+#endif  // STANDALONE_EXE

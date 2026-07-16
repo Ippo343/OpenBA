@@ -1012,7 +1012,57 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // Step 28 — SkyMesh MeshInstance (+0x108): the sky `_clear_` dome (helper above).
     BuildSkyMesh_Step28(p);
 
-    // Step 29 — Seasons/Events StringTable Finds — DEFERRED (leave +0x138 struct slots null).
+    // Step 29 — Seasons/Events StringTables. Fill the +0x138 event-log struct's
+    // StringTable slots: +0x00 = events (message templates, indexed by eventType),
+    // +0x08 = seasons. AddEvent (FUN_140095580) formats every event's text from
+    // these tables, so leaving them null yields empty event text AND risks a
+    // null-deref in the season/date formatter (FUN_140095230 dereferences +0x08).
+    // Load via ExternalFactory::FindOrLoad (m_resourceList is empty in standalone),
+    // mirroring the Environment/SkyMesh finds above. The ":events"/":seasons"
+    // suffix selects the named sub-resource within Dialog/StringTable.rsc.
+    {
+        void* evStruct = *(void**)(p + 0x138);
+        if (evStruct && fn_String_Ctor_CStr && fn_Filename_AdjustDelimiters &&
+            fn_ExternalFactory_FindOrLoad && fn_String_Dtor &&
+            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            void* factory = *g_pExternalFactorySingleton;
+
+            // Lazy-resolve the StringTable type-id from the factory tree (its exe
+            // .rdata global is null in standalone). Same as optionsdialog.cpp's
+            // LoadStringTable — the IsDerivedFrom validation is what makes FindOrLoad
+            // return the actual :events/:seasons sub-table instead of the wrong level.
+            static uint32_t s_stTid = 0;
+            if (!g_TypeId_StringTable && s_stTid == 0 && fn_Factory_GetTypeIdFromName &&
+                g_pFactorySingleton && *g_pFactorySingleton) {
+                void* factoryObj = *(void**)*g_pFactorySingleton;
+                if (factoryObj) s_stTid = fn_Factory_GetTypeIdFromName(factoryObj, "StringTable", true);
+                if (s_stTid) g_TypeId_StringTable = &s_stTid;
+            }
+            uint32_t stTid = g_TypeId_StringTable ? *g_TypeId_StringTable : 0;
+
+            // Load a StringTable sub-resource. AdjustDelimiters normalizes the
+            // "rsc:subname" delimiter so FindOrLoad resolves the named sub-table.
+            auto loadStringTable = [&](const char* name) -> void* {
+                uint8_t fname[8];
+                fn_String_Ctor_CStr(fname, name);
+                fn_Filename_AdjustDelimiters(fname);
+                void* ext = fn_ExternalFactory_FindOrLoad(factory, fname);
+                fn_String_Dtor(fname);
+                if (!ext) return nullptr;
+                if (stTid != 0 && fn_IsDerivedFrom && !fn_IsDerivedFrom(ext, stTid)) return nullptr;
+                return ext;
+            };
+
+            void* evTable = loadStringTable("Dialog/StringTable.rsc:events");
+            void* seTable = loadStringTable("Dialog/StringTable.rsc:seasons");
+            *(void**)((uint8_t*)evStruct + 0x00) = evTable;
+            *(void**)((uint8_t*)evStruct + 0x08) = seTable;
+
+            fprintf(stderr, "[GUL::Load] step29 event StringTables: events=%p seasons=%p (tid=%u)\n",
+                    evTable, seTable, stTid);
+            fflush(stderr);
+        }
+    }
 
     // Step 30 — AchievementManager::SetEventHandler — GUARDED (slot 0x1401514f0 not yet
     // registered in standalone, so g_ppAchievementManager is null → skip cleanly).

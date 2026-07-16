@@ -82,6 +82,7 @@ fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock = nullptr;
 // String functions
 fn_String_Set_t fn_String_Set = nullptr;
 fn_String_Format_t fn_String_Format = nullptr;
+fn_String_FormatIndexed_t fn_String_FormatIndexed = nullptr;
 fn_String_Dtor_t fn_String_Dtor = nullptr;
 fn_String_LessThan_t fn_String_LessThan = nullptr;
 fn_String_Ctor_Default_t fn_String_Ctor_Default = nullptr;
@@ -1599,6 +1600,9 @@ bool EngineFuncsInit() {
         fn_String_Format = reinterpret_cast<fn_String_Format_t>(
             ResolveAddr(Module::Runtime, 0x1800c9730));
     }
+
+    fn_String_FormatIndexed = reinterpret_cast<fn_String_FormatIndexed_t>(
+        ResolveExport("?FormatIndexed@String@System@@SA?AV12@PEBDZZ"));
 
     fn_String_Dtor = reinterpret_cast<fn_String_Dtor_t>(
         ResolveExport("??1String@System@@QEAA@XZ"));

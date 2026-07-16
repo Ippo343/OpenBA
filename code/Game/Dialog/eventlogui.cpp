@@ -187,41 +187,44 @@ void EventLogUI_Slot7(EventLogUI* self) {
     int displayCount = *(int*)(s + 0x58);  // number of display rows
     int scrollOffset = *(int*)(s + 0x48);
 
-    // Fill rows from bottom (displayCount-1) to top (0)
-    for (int i = displayCount - 1; i >= 0; i--) {
-        int eventIdx = (totalEvents - scrollOffset - 1) - i;
+    // Rows are filled bottom-up: the newest visible event lands in the BOTTOM row.
+    // Entry index for row `row` = firstIdx - (displayCount-1) + row, where
+    // firstIdx = totalEvents - scrollOffset - 1 (the newest visible entry). The exe
+    // skips the whole fill if firstIdx < 0 (no events yet). (0x140067471..)
+    int firstIdx = totalEvents - scrollOffset - 1;
+    if (firstIdx >= 0) {
+        int base = firstIdx - (displayCount - 1);
+        uintptr_t eventArray = *(uintptr_t*)(eventLog + 0x18);
+        for (int row = displayCount - 1; row >= 0; row--) {
+            int eventIdx = base + row;
 
-        void* textElem = *(void**)(*(uintptr_t*)(s + 0x50) + i * 8);
-        void* btnElem = *(void**)(*(uintptr_t*)(s + 0x60) + i * 8);
+            void* textElem = *(void**)(*(uintptr_t*)(s + 0x50) + row * 8);
+            void* btnElem  = *(void**)(*(uintptr_t*)(s + 0x60) + row * 8);
 
-        if (eventIdx < 0) {
-            // No event for this row — blank it out
-            uint8_t emptyStr[8];
-            fn_String_Ctor_CStr(emptyStr, "");
-            fn_TextElement_SetParameter(textElem, 0, emptyStr);
-            fn_String_Dtor(emptyStr);
-            // Call Update(visible=false) on button element: vtable[8]
-            void** vtbl = *(void***)btnElem;
-            typedef void (*VCall_Update_t)(void*, int);
-            ((VCall_Update_t)vtbl[8])(btnElem, 0);
-        } else {
-            // Get event entry: eventLog+0x18 = event array, each entry is 0x28 bytes
-            uintptr_t eventArray = *(uintptr_t*)(eventLog + 0x18);
-            uintptr_t eventEntry = eventArray + (uintptr_t)eventIdx * 0x28;
-
-            // Set text parameter from event entry +0x08 (event text)
-            fn_TextElement_SetParameter(textElem, 0, (void*)(eventEntry + 0x08));
-
-            // Set text color from event entry +0x00 (color/flags value)
-            // vtable[10] (0x50): SetColor virtual call
-            void** vtbl = *(void***)textElem;
-            typedef void (*VCall_SetColor_t)(void*, uint32_t);
-            ((VCall_SetColor_t)vtbl[10])(textElem, *(uint32_t*)eventEntry);
-
-            // Call Update(visible=true) on button element
-            void** btnVtbl = *(void***)btnElem;
-            typedef void (*VCall_Update_t)(void*, int);
-            ((VCall_Update_t)btnVtbl[8])(btnElem, 0);
+            int enabled;
+            if (eventIdx < 0) {
+                // No event for this row — blank the text.
+                uint8_t emptyStr[8];
+                fn_String_Ctor_CStr(emptyStr, "");
+                fn_TextElement_SetParameter(textElem, 0, emptyStr);
+                fn_String_Dtor(emptyStr);
+                enabled = 0;
+            } else {
+                uintptr_t eventEntry = eventArray + (uintptr_t)eventIdx * 0x28;
+                // Text = event entry +0x08.
+                fn_TextElement_SetParameter(textElem, 0, (void*)(eventEntry + 0x08));
+                // Colour = entry +0x00 via text element vtable[+0x50] (SetColor).
+                void** tvtbl = *(void***)textElem;
+                typedef void (*VCall_SetColor_t)(void*, uint32_t);
+                ((VCall_SetColor_t)tvtbl[10])(textElem, *(uint32_t*)eventEntry);
+                // The nav button is enabled only if the event has a map location
+                // (tileIdx at entry+0x18 >= 0).
+                enabled = (*(int*)(eventEntry + 0x18) >= 0) ? 1 : 0;
+            }
+            // btnElem vtable[+0x40] (SetEnabled) — DL = enabled. Common to both branches.
+            void** bvtbl = *(void***)btnElem;
+            typedef void (*VCall_Enable_t)(void*, int);
+            ((VCall_Enable_t)bvtbl[8])(btnElem, enabled);
         }
     }
 
@@ -322,3 +325,112 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
 }
 
 // EventLogUI_Slot6 — inline in ui_panels.h (3-byte no-op, 0x140067630)
+
+// ============================================================
+// STANDALONE EXE: real EventLogUI vtable + registration
+// ============================================================
+// EventLogUI (DialogController, 0x80 bytes, exe vtable 0x14015bc40). In standalone
+// this type was a dormant UI_DIALOG_STUB (all slots no-op) so the event-log panel
+// opened blank. Promote it to a real per-class vtable wiring the reimplemented
+// slots, following the CitizenUI promotion pattern (citizenui.cpp).
+//
+// DialogController slot semantics (verified against CitizenUI + the exe vtable):
+//   +0x00 idx0 ScalarDtor
+//   +0x10 idx2 GetTypeId
+//   +0x28 idx5 Slot5  = setup (find nav buttons, "display" rows, "notifybuttons")
+//   +0x30 idx6 Slot6  = 3-byte RET 0 no-op
+//   +0x38 idx7 Slot7  = content update (fill display rows from the event log)
+//   +0x40 idx8        = base DialogController::OnUpdate (per-frame). The framework
+//                       dispatches ONLY +0x40 each frame; the exe leaves it a base
+//                       no-op, so drive Slot7 here to refresh the panel every frame.
+//   +0x48 idx9 Slot9  = button dispatch (scroll / notify toggle / row click)
+//
+// EventLogUI_Slot5/7/9 read the event-log struct (gameWorld+0x138) but dereference
+// no exe-.rdata type-id globals, so no EnsureGlobals lazy-fill is needed.
+#ifdef STANDALONE_EXE
+
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+
+namespace eventlogui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("EventLogUI");
+    return c;
+}
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+void W_Slot5(void* self) {
+    if (!self) return;
+    EventLogUI_Slot5(reinterpret_cast<EventLogUI*>(self));
+    if (std::getenv("BANISHED_EVENT_TRACE")) {
+        fprintf(stderr, "[EventLogUI] Slot5 setup ran: displayRowCount(+0x58)=%d notifyCount(+0x78)=%d\n",
+                *(int*)((uintptr_t)self + 0x58), *(int*)((uintptr_t)self + 0x78));
+        fflush(stderr);
+    }
+}
+void W_Slot7(void* self) {
+    if (!self) return;
+    EventLogUI_Slot7(reinterpret_cast<EventLogUI*>(self));
+    static int s_once = 0;
+    if (!s_once && std::getenv("BANISHED_EVENT_TRACE")) {
+        s_once = 1;
+        void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
+        void* log = gw ? *(void**)((uintptr_t)gw + 0x138) : nullptr;
+        int cnt = log ? *(int*)((uintptr_t)log + 0x20) : -1;
+        fprintf(stderr, "[EventLogUI] Slot7 update ran (first): displayRows(+0x58)=%d eventLogCount=%d\n",
+                *(int*)((uintptr_t)self + 0x58), cnt);
+        fflush(stderr);
+    }
+}
+void W_OnUpdate(void* self, void* /*time*/) { W_Slot7(self); }  // +0x40 per-frame
+void W_Slot9(void* self, void* p2, int msg, int id) {
+    if (self) EventLogUI_Slot9(reinterpret_cast<EventLogUI*>(self), p2, msg, id);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[5] = reinterpret_cast<void*>(&W_Slot5);
+        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
+    }
+} g_init;
+
+void Zero(void* p) { for (size_t o = 0; o < (size_t)0x80; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x80, 8);
+    if (!p) return nullptr;
+    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+}
+void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+
+}  // namespace eventlogui_sa
+
+REGISTER_TYPE(EventLogUI, "UI::DialogController",
+              &eventlogui_sa::Factory, &eventlogui_sa::InPlace);
+
+// Expose the standalone vtable so the panel's open-trigger can bind it to a
+// manually-constructed instance (mirrors FollowDialog_GetStandaloneVtable).
+extern "C" void* EventLogUI_GetStandaloneVtable() {
+    return reinterpret_cast<void*>(eventlogui_sa::g_vt);
+}
+
+#endif  // STANDALONE_EXE

@@ -147,6 +147,13 @@ extern fn_String_Set_t fn_String_Set;
 typedef void* (*fn_String_Format_t)(void* retval, const char* fmt, ...);
 extern fn_String_Format_t fn_String_Format;
 
+// System::String::FormatIndexed(retbuf, fmt, arg0data, arg1data, ...) -> String
+// Static, non-trivial return: RCX=retbuf, RDX=fmt(char*), R8+=positional arg data
+// pointers (char*). The fmt uses %0/%1/... to reference the positional args.
+// ?FormatIndexed@String@System@@SA?AV12@PEBDZZ. Used by the event log (AddEvent).
+typedef void* (*fn_String_FormatIndexed_t)(void* retval, const char* fmt, ...);
+extern fn_String_FormatIndexed_t fn_String_FormatIndexed;
+
 // String::~String() — decrements refcount, frees if reaches 0
 // Member function: RCX=this(String*)
 typedef void (*fn_String_Dtor_t)(void* thisStr);

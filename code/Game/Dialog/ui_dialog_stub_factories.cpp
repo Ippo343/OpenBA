@@ -209,7 +209,8 @@ UI_DIALOG_STUB(DebugUI,             "DialogController",     0x130);
 UI_DIALOG_STUB(DestroyUI,           "UI::DialogController", 0x78);
 // EntityUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/entityui.cpp
 // (wires Slot4 so the entity panel gets its +0x30 entity ref → correct positioning).
-UI_DIALOG_STUB(EventLogUI,          "UI::DialogController", 0x80);
+// EventLogUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/eventlogui.cpp
+// (wires Slot5/7/9 + per-frame OnUpdate so the event-log panel populates from gameWorld+0x138).
 UI_DIALOG_STUB(HelpUI,              "UI::DialogController", 0x78);
 // HotKeyToolTipUI promoted to a real Slot4 reimpl above (was a no-op stub).
 // ---- ImmigrationUI: PROMOTED to a real SA vtable (immigrationui.cpp) ----------
@@ -749,8 +750,8 @@ UI_DIALOG_STUB(PastureUI,           "SelectResourceUI",     0x40);
 // ---- DialogInstance family --------------------------------------------------
 UI_DIALOG_STUB(AchievementDialog,   "UI::DialogInstance",   0xD0);
 UI_DIALOG_STUB(AutoSaveDialog,      "UI::DialogInstance",   0xD0);
-UI_DIALOG_STUB(EventNotifyDialog,   "UI::DialogInstance",   0xF0);
-UI_DIALOG_STUB(EventPopupDialog,    "UI::DialogInstance",   0xC0);
+// EventNotifyDialog / EventPopupDialog: PROMOTED to real per-class standalone vtables
+// in code/Game/Dialog/eventnotifydialog.cpp / eventpopupdialog.cpp (ribbon + modal popup).
 UI_DIALOG_STUB(FollowDialog,        "UI::DialogInstance",   0xD8);
 UI_DIALOG_STUB(GoalDialog,          "UI::DialogInstance",   0xC8);
 UI_DIALOG_STUB(MapParamsDialog,     "UI::DialogInstance",   0xF8);

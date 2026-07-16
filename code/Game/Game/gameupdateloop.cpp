@@ -31,6 +31,12 @@
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
 // from the BANISHED_LIVE_TOOLBAR-gated HUD path in Startup below.
 extern "C" void ToolbarStandalone_Init();
+// EventNotify ribbon standalone ctor (code/Game/Dialog/eventnotifydialog.cpp) —
+// builds the ribbon dialog (DialogInstance base + our SA vtable + field init).
+extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP);
+// Event-log writer (code/Game/Game/eventlog.cpp) — appends a real entry to the
+// gameWorld+0x138 event log (formatted from the events/seasons StringTables).
+extern "C" void EventLog_AddSimple(int eventType, int severity);
 
 // GUI_PLAN Keystone F Phase 3 — player tool activation + per-frame tick
 // (code/Game/Player/tool_activation_standalone.cpp). Gated behind BANISHED_LIVE_TOOLS
@@ -706,6 +712,37 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     s_frameNum++;
 
 #ifdef STANDALONE_EXE
+    // [EVENTS] BANISHED_LIVE_EVENTS: fire a real event-log entry when the town
+    // population changes. The count lives at townMgr(gw+0xF0)+0xA8 — the same field
+    // the status bar reads. On the first tick the founding settlers appear (0 -> N),
+    // logging a "settlers arrived" event (type 0xe, sev 2); later births/immigration
+    // increment it and log again. Genuinely gameplay-driven, not a timer.
+    {
+        static int s_evGate = -1;
+        if (s_evGate < 0) {
+            const char* e = std::getenv("BANISHED_LIVE_EVENTS");
+            s_evGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
+        }
+        // Wait until the ribbon has ticked a while before firing the first event.
+        // The ribbon's Slot7 resets its "last seen index" (+0xC4) to count-1 every
+        // frame, self-correcting from the Startup seed (count) to -1 while count==0.
+        // If we add the founding event before that correction runs, index 0 is
+        // permanently skipped. ~120 frames gives the ribbon time to settle.
+        if (s_evGate && s_frameNum > 120) {
+            void* gw = self;  // GameUpdateLoop == g_pGameWorldSingleton target
+            void* eventLog = *(void**)((uintptr_t)gw + 0x138);
+            void* townMgr  = *(void**)((uintptr_t)gw + 0xF0);
+            if (eventLog && townMgr) {
+                int pop = *(int*)((uintptr_t)townMgr + 0xA8);
+                static int s_prevPop = 0;
+                if (pop > s_prevPop && pop > 0 && pop < 100000) {
+                    EventLog_AddSimple(0xE, 2);  // new citizens — settler/immigration event
+                }
+                if (pop != s_prevPop) s_prevPop = pop;
+            }
+        }
+    }
+
     // [FPS TRACE] env BANISHED_FPS_TRACE: wall-clock fps over 120-frame windows (entry-to-
     // entry period). Also reports the entity count so we can correlate fps with world size.
     {
@@ -1618,6 +1655,12 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     }
     const bool kCreateToolbar = (s_toolbarGate != 0);
 
+    // Captured toolbar dialog — the EventNotify ribbon parents to it (positions the
+    // ribbon just below the toolbar; see EventNotifyDialog_Update). Null if the
+    // toolbar was not created (LIVE_TOOLBAR off), in which case the ribbon Update
+    // early-returns on the null parent, so we skip creating the ribbon too.
+    void* g_ribbonParentToolbar = nullptr;
+
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
     if (kCreateToolbar) {
@@ -1668,6 +1711,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 
         // Add to UI (only if the dialog was actually constructed).
         if (toolbar) {
+            g_ribbonParentToolbar = toolbar;  // parent for the EventNotify ribbon
             int64_t dialogPtr[1];
             fn_InternalBasePtr_Ctor(dialogPtr, toolbar);
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
@@ -1684,27 +1728,55 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     }
     TRACE("[GameUpdateLoop::Startup] Toolbar dialog added\n");
 
-    // Create and add EventNotify dialog
+    // Create and add EventNotify ribbon (BANISHED_LIVE_EVENTS). Shows recent game
+    // events as a strip below the toolbar. Uses the FindOrLoad fallback (empty
+    // m_resourceList in standalone) like the toolbar, and parents to the toolbar
+    // dialog so Update can position the ribbon. Skipped if the toolbar is absent
+    // (the ribbon Update early-returns on a null parent anyway).
     TRACE("[GameUpdateLoop::Startup] creating EventNotify dialog...\n");
-    if (kCreateGameDialogs) {
+    static int s_eventsGate = -1;
+    if (s_eventsGate < 0) {
+        const char* e = getenv("BANISHED_LIVE_EVENTS");
+        s_eventsGate = (e && e[0] && !(e[0] == '0' && e[1] == '\0')) ? 1 : 0;
+    }
+    if (s_eventsGate && g_ribbonParentToolbar != nullptr) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/EventNotify.rsc");
         void* foundBase = nullptr;
-        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0; // [GUARD-M5] slot 0x1401c4138 unregistered
-        fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+        uint32_t typeInfo = g_pDialogTypeId ? *g_pDialogTypeId : 0;
+        if (self->m_resourceList && fn_ExternalList_Find)
+            fn_ExternalList_Find(self->m_resourceList, &foundBase, filename, &typeInfo);
+        if (foundBase == nullptr && fn_ExternalFactory_FindOrLoad &&
+            g_pExternalFactorySingleton && *g_pExternalFactorySingleton) {
+            foundBase = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filename);
+        }
+        void* dialogRes = nullptr;
+        if (foundBase != nullptr && g_pDialogTypeId && fn_IsDerivedFrom(foundBase, *g_pDialogTypeId))
+            dialogRes = foundBase;
         fn_Filename_Dtor(filename);
 
-        // Allocate EventNotify (0xF0 bytes). [GUARD-M5]
+        fprintf(stderr, "[HUD] EventNotify: foundBase=%p dialogRes=%p parentToolbar=%p\n",
+                foundBase, dialogRes, g_ribbonParentToolbar);
+        fflush(stderr);
+
         void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xF0, 8);
         void* eventNotify = nullptr;
-        if (mem != nullptr && fn_EventNotifyDialog_Ctor) {
-            eventNotify = fn_EventNotifyDialog_Ctor(mem);
+        if (mem != nullptr && dialogRes != nullptr) {
+            int64_t parentIBP[1];
+            fn_InternalBasePtr_Ctor(parentIBP, g_ribbonParentToolbar);
+#ifdef STANDALONE_EXE
+            eventNotify = EventNotifyDialog_Ctor_Standalone(mem, self->m_userInterface, dialogRes, parentIBP);
+#else
+            if (fn_EventNotifyDialog_Ctor) eventNotify = fn_EventNotifyDialog_Ctor(mem);
+#endif
         }
 
         if (eventNotify) {
             int64_t dialogPtr[1];
             fn_InternalBasePtr_Ctor(dialogPtr, eventNotify);
             fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+            fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
+            fflush(stderr);
         } else if (mem) {
             fn_MemFreeStatic(mem);
         }
