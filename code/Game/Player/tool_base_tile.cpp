@@ -20,6 +20,7 @@
 #include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
+#include <cstring>                           // std::strcmp (BANISHED_CLEAR_PLACE_OVER)
 #endif
 
 // ============================================================
@@ -83,6 +84,59 @@ typedef bool (*ToolTile_f5d0_t)(int* param_1, int col, int row, unsigned int cod
 static ToolTile_f5d0_t s_fn_f5d0 = nullptr;
 static bool s_f5d0Init = false;
 
+#ifdef STANDALONE_EXE
+// ============================================================
+// Track A refinement #2 — allow SA placement over CLEARABLE resource cells.
+// ============================================================
+// In retail, a building's description clearable-filter (desc+0x50) matches the
+// tree/rock/iron resource descriptions, so f5d0's occupant check passes for those
+// cells and the building's ClearAreaComponent then harvests them. In the standalone
+// exe that filter isn't satisfied, so f5d0 rejects ANY occupied cell and a building
+// can never be anchored over resources — the ClearAreaComponent harvest mechanic can
+// only be exercised via the footprint-override harness, never through normal
+// placement. When BANISHED_CLEAR_PLACE_OVER is set, a cell that f5d0 rejects is
+// re-checked with allowOverlap=1 (f5d0 param_8, which bypasses ONLY the occupant
+// condition — terrain-mask, road flag, and height/slope rejections all still apply);
+// the cell is accepted only if its occupant is a clearable NaturalResourceComponent.
+// Default (env off) => the verified placement behaviour is byte-for-byte unchanged.
+static int s_clearPlaceOver = -1;
+static bool ToolTile_ClearPlaceOver() {
+    if (s_clearPlaceOver < 0) {
+        const char* e = std::getenv("BANISHED_CLEAR_PLACE_OVER");
+        s_clearPlaceOver = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return s_clearPlaceOver == 1;
+}
+// True iff the tile at (col,row) is occupied by an entity carrying a
+// NaturalResourceComponent (type-id 0x1401c7b30) — i.e. a clearable tree/rock/iron.
+static bool ToolTile_CellHasClearableResource(int* grid, int col, int row) {
+    static uint32_t s_tid = 0;
+    if (s_tid == 0) s_tid = ::Object::GetTypeIdByName("NaturalResourceComponent");
+    if (!grid || !s_tid) return false;
+    int width = *grid;
+    if (col < 0 || col >= width || row < 0 || row >= width) return false;
+    uintptr_t tiles = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(grid) + 0x80);
+    int cell = width * row + col;
+    uintptr_t slot = tiles + static_cast<uintptr_t>(cell) * 0x30 + 8;
+    if (!*reinterpret_cast<void**>(slot)) return false;
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(slot));
+    void* occ = *reinterpret_cast<void**>(slot);
+    if (!occ) return false;
+    uintptr_t e = reinterpret_cast<uintptr_t>(occ);
+    int n = *reinterpret_cast<int*>(e + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    for (int i = 0; i < n && arr; ++i) {
+        void* c = *reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (!c) continue;
+        void** vt = *reinterpret_cast<void***>(c);
+        if (!vt || !vt[2]) continue;
+        if (reinterpret_cast<uint32_t(*)(void*)>(vt[2])(c) == s_tid)
+            return fn_IsDerivedFrom && fn_IsDerivedFrom(c, s_tid);
+    }
+    return false;
+}
+#endif // STANDALONE_EXE
+
 unsigned long long ToolTile_FootprintValidity_d580(
         int* param_1, int param_2, int param_3, int param_4, int param_5,
         unsigned int param_6, long long* param_7, long long* param_8,
@@ -137,6 +191,18 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         ok = s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
                                        param_11, param_12, bVar13 ? 1 : 0, param_15);
                     }
+#ifdef STANDALONE_EXE
+                    // Refinement #2: accept a clearable-resource cell that f5d0 rejected
+                    // only on its occupant condition. Retry with allowOverlap=1 (keeps
+                    // terrain/height/slope rejection) and require a NaturalResourceComponent
+                    // occupant, so buildings/water/mountains stay rejected.
+                    if (!ok && s_fn_f5d0 && ToolTile_ClearPlaceOver() &&
+                        s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
+                                  param_11, /*allowOverlap=*/1, bVar13 ? 1 : 0, param_15) &&
+                        ToolTile_CellHasClearableResource(param_1, iVar10, iVar14)) {
+                        ok = true;
+                    }
+#endif
                     if (!ok) {
                         return 0;
                     }

@@ -802,6 +802,121 @@ void FireClearLive() {
     s_mr_fired = true; s_mr_entity = 0; s_mr_tileSlot = 0;
 }
 
+// Track A refinement #2: prove SA placement OVER a resource cell. Builds a WoodHouse
+// placement tool (as FirePlacementTool), finds a resource cell near centre, and drives
+// the real CREATE path (PlacementTool_HarnessPlaceAtCell -> helper_d650 -> d580 -> f5d0)
+// AT that resource cell. With BANISHED_CLEAR_PLACE_OVER=1 the footprint validity accepts
+// the clearable-resource cell and the building materialises; without it, placement is
+// rejected (placed=0), matching retail's clearable-terrain rule. (Tool/template
+// accessors declared at the top of this file.)
+void FireClearPlaceOver() {
+    void* gw = GetGW();
+    if (!gw) { printf("[ClearPlaceOver] ERROR: gameWorld null\n"); return; }
+    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    if (!map) { printf("[ClearPlaceOver] ERROR: map null\n"); return; }
+    int width = *reinterpret_cast<int*>(map);
+    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+
+    // Find a resource cell near centre.
+    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    for (int row = 110; row <= 150 && rcRow < 0; ++row)
+        for (int col = 110; col <= 150 && rcRow < 0; ++col) {
+            int cell = width * row + col;
+            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
+            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+                rcRow = row; rcCol = col; resEnt = occ;
+            }
+        }
+    if (rcRow < 0) { printf("[ClearPlaceOver] no resource cell found near centre\n"); return; }
+
+    void* tmpl = StartTown_ResolveTemplateByPath("Template\\WoodHouse.rsc");
+    if (!tmpl) { printf("[ClearPlaceOver] ERROR: WoodHouse template null\n"); return; }
+    void* tool = PlacementTool_Factory_SA();
+    if (!tool) { printf("[ClearPlaceOver] ERROR: tool factory null\n"); return; }
+    *reinterpret_cast<void**>(static_cast<uint8_t*>(tool) + 0x20) = tmpl;
+    if (!PlacementTool_HarnessStartupProbe(tool)) {
+        printf("[ClearPlaceOver] Startup probe failed\n"); return;
+    }
+
+    int centerCell = width * rcRow + rcCol;
+    printf("[ClearPlaceOver] placing WoodHouse AT resource cell (%d,%d) ent=%p (BANISHED_CLEAR_PLACE_OVER "
+           "must be set to succeed)...\n", rcCol, rcRow, (void*)resEnt);
+    int placed = PlacementTool_HarnessPlaceAtCell(tool, centerCell);
+    printf("[ClearPlaceOver] CREATE over resource -> %d %s\n", placed,
+           placed ? "(building MATERIALISED over the resource — refinement #2 works)"
+                  : "(rejected — set BANISHED_CLEAR_PLACE_OVER=1 to allow clearable-resource cells)");
+}
+
+// Track A refinement #1: prove the HARVEST dispatch (ClearArea_State0Enter, port of
+// helper_7960). Points a founding house's footprint at a resource cell, then drives
+// the state-0 ENTER handler directly (the not-done path never derefs the sm, so a
+// null sm is safe). Verifies: (a) it runs crash-free over a real resource footprint,
+// (b) if the owner has a WorkComponent, a ClearArea work-action is posted to the
+// citizen work-scheduler (gw+0x118, primary count at sched[6]). Restores the footprint.
+extern "C" char ClearArea_State0Enter(void* data, void* sm);
+void FireClearHarvest() {
+    void* gw = GetGW();
+    if (!gw) { printf("[ClearHarvest] ERROR: gameWorld null\n"); return; }
+    uintptr_t gwA = reinterpret_cast<uintptr_t>(gw);
+    void* map = *reinterpret_cast<void**>(gwA + 0xf8);
+    if (!map) { printf("[ClearHarvest] ERROR: map null\n"); return; }
+    int width = *reinterpret_cast<int*>(map);
+    uintptr_t tileArray = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(map) + 0x80);
+
+    int rcRow = -1, rcCol = -1; uint64_t resEnt = 0;
+    for (int row = 100; row <= 156 && rcRow < 0; ++row)
+        for (int col = 100; col <= 156 && rcRow < 0; ++col) {
+            int cell = width * row + col;
+            uint64_t occ = *reinterpret_cast<uint64_t*>(tileArray + (uintptr_t)cell * 0x30 + 8);
+            if (occ && !(*reinterpret_cast<uint32_t*>((uintptr_t)occ + 0x40) & 0x400)) {
+                rcRow = row; rcCol = col; resEnt = occ;
+            }
+        }
+    if (rcRow < 0) { printf("[ClearHarvest] no resource cell found near centre\n"); return; }
+
+    void* house = StartTown_GetFoundingHouseCount() > 0 ? StartTown_GetFoundingHouseEntity(0) : nullptr;
+    if (!house) { printf("[ClearHarvest] no founding house\n"); return; }
+    uint32_t caFlags = 0;
+    void* caComp = ClearAreaComponent_HarnessFind(house, &caFlags);
+    if (!caComp) { printf("[ClearHarvest] house has no ClearAreaComponent\n"); return; }
+
+    uint64_t bc = 0;
+    fn_FindComponent_Build(house, &bc);
+    fn_InternalBasePtr_CheckPtr(&bc);
+    if (!bc) { printf("[ClearHarvest] house has no BuildComponent\n"); return; }
+    uintptr_t b = (uintptr_t)bc;
+    int16_t sCol = *reinterpret_cast<int16_t*>(b + 0x28);
+    int16_t sRow = *reinterpret_cast<int16_t*>(b + 0x2a);
+    int16_t sW   = *reinterpret_cast<int16_t*>(b + 0x2c);
+    int16_t sH   = *reinterpret_cast<int16_t*>(b + 0x2e);
+    *reinterpret_cast<int16_t*>(b + 0x28) = (int16_t)rcCol;
+    *reinterpret_cast<int16_t*>(b + 0x2a) = (int16_t)rcRow;
+    *reinterpret_cast<int16_t*>(b + 0x2c) = 1;
+    *reinterpret_cast<int16_t*>(b + 0x2e) = 1;
+
+    // Work scheduler: gw+0x118 -> int*; primary AVL count at sched[6] (+0x18).
+    int* sched = *reinterpret_cast<int**>(gwA + 0x118);
+    int schedBefore = sched ? sched[6] : -1;
+
+    printf("[ClearHarvest] house[0]=%p ClearAreaComp=%p resource=(%d,%d) ent=%p — driving "
+           "State0Enter (harvest dispatch)...\n", house, caComp, rcCol, rcRow, (void*)resEnt);
+    ClearArea_State0Enter(caComp, nullptr);   // not-done path: sm unused
+
+    int schedAfter = sched ? sched[6] : -1;
+
+    // Restore footprint.
+    *reinterpret_cast<int16_t*>(b + 0x28) = sCol;
+    *reinterpret_cast<int16_t*>(b + 0x2a) = sRow;
+    *reinterpret_cast<int16_t*>(b + 0x2c) = sW;
+    *reinterpret_cast<int16_t*>(b + 0x2e) = sH;
+
+    printf("[ClearHarvest] ran crash-free. scheduler primary count %d -> %d %s\n",
+           schedBefore, schedAfter,
+           (schedAfter > schedBefore) ? "(ClearArea work POSTED — harvest job queued for a citizen)"
+                                      : "(no post — owner likely has no WorkComponent; dispatch ran)");
+}
+
 }  // namespace
 
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
@@ -875,6 +990,12 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     } else if (std::strcmp(s_toolName, "clearlive") == 0) {
         s_mr_fireFrame = frameNum;
         FireClearLive();
+    } else if (std::strcmp(s_toolName, "clearharvest") == 0) {
+        s_mr_fireFrame = frameNum;
+        FireClearHarvest();
+    } else if (std::strcmp(s_toolName, "clearplaceover") == 0) {
+        s_mr_fireFrame = frameNum;
+        FireClearPlaceOver();
     } else if (std::strcmp(s_toolName, "mapmenu") == 0) {
         MapParamsDialog_HarnessOpen();
     } else if (std::strcmp(s_toolName, "scan") == 0) {
