@@ -17,6 +17,7 @@
 #include "Work/pickup_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -243,7 +244,8 @@ void Pickup_Serialize_Impl(Pickup* self, void* stream) {
 //      11x11 cell neighbourhood (dy,dx in -5..+5, skipping the centre) around
 //      the *pile*, collecting every other reachable pile of the same kind whose
 //      per-type Pickup work is not already claimed (vtable slot 11 == false).
-//   5. Sort candidates nearest-first (0x14002c070, keyed on the int at +0x08).
+//   5. Sort candidates nearest-first (0x14002c070 = std::sort by +0x08 distance;
+//      reimplemented locally as Pickup_SortByDistance -- see the note there).
 //   6. For each candidate that still fits in the remaining capacity: convert its
 //      access cell to a world position and dispatch PerformWork (0x1400c0ad0) --
 //      THIS is what actually makes the citizen walk over and haul the pile --
@@ -275,6 +277,20 @@ struct PickupCandidate {
 };
 static_assert(sizeof(PickupCandidate) == 0x20, "PickupCandidate must be 32 bytes");
 
+// 0x14002c070 is MSVC's inlined std::sort over these 32-byte records, ordering
+// ascending on the int32 at +0x08 (distance): median-of-3 introsort with an
+// explicit range stack, falling back to a selection sort (0x14002c380) once a
+// range is <= 8 elements. Both are unstable, so std::sort reproduces the
+// ordering semantics exactly; only the tie-break among equal-distance
+// candidates may differ, which no caller observes. Reimplemented rather than
+// registered -- porting a hand-rolled introsort would add nothing.
+static void Pickup_SortByDistance(PickupCandidate* buf, int count) {
+    std::sort(buf, buf + count,
+              [](const PickupCandidate& a, const PickupCandidate& b) {
+                  return a.distance < b.distance;
+              });
+}
+
 // ---- sub-callees used only by the Execute port (PiX_ prefix) ----
 typedef void     (*PiX_FindRawMat_t)(int64_t entity, void* outIBP);                  // 0x1400223c0
 typedef void*    (*PiX_FindStorage_t)(int64_t inner, void* outIBP);                  // 0x140006270
@@ -291,7 +307,6 @@ typedef void*    (*PiX_FindStoreForRes_t)(void* townMgr, void* out, uint32_t acc
 typedef int      (*PiX_CalcDistance_t)(int* grid, uint32_t a, uint32_t b);           // 0x140008830
 typedef char     (*PiX_CanAdd_t)(void* storage, int64_t entity, int qty);            // 0x14012cd80
 typedef void*    (*PiX_FindComp_t)(int64_t entity, void* outIBP);                    // 0x140003050
-typedef void     (*PiX_Sort_t)(void* buf, int count);                                // 0x14002c070
 typedef void     (*PiX_GridToWorld_t)(int* grid, float* outPos, const float* in,
                                       char flag, void* p5);                          // 0x14009f3e0
 typedef void     (*PiX_PerformWork_t)(void* citizenIBP, uint32_t typeId, void* entityIBP,
@@ -312,7 +327,6 @@ static PiX_FindStoreForRes_t s_x_findStoreRes = nullptr;
 static PiX_CalcDistance_t    s_x_calcDist     = nullptr;
 static PiX_CanAdd_t          s_x_canAdd       = nullptr;
 static PiX_FindComp_t        s_x_findComp     = nullptr;
-static PiX_Sort_t            s_x_sort         = nullptr;
 static PiX_GridToWorld_t     s_x_gridToWorld  = nullptr;
 static PiX_PerformWork_t     s_x_performWork  = nullptr;
 static PiX_MemAlloc_t        s_x_memAlloc     = nullptr;
@@ -358,7 +372,6 @@ static void Pickup_ResolveExecFuncs() {
     s_x_calcDist     = reinterpret_cast<PiX_CalcDistance_t>(code(0x140008830));
     s_x_canAdd       = reinterpret_cast<PiX_CanAdd_t>(code(0x14012cd80));
     s_x_findComp     = reinterpret_cast<PiX_FindComp_t>(code(0x140003050));
-    s_x_sort         = reinterpret_cast<PiX_Sort_t>(code(0x14002c070));
     s_x_gridToWorld  = reinterpret_cast<PiX_GridToWorld_t>(code(0x14009f3e0));
     s_x_performWork  = reinterpret_cast<PiX_PerformWork_t>(code(0x1400c0ad0));
 
@@ -379,10 +392,10 @@ static void Pickup_ResolveExecFuncs() {
 
     if (PickupTrace()) {
         fprintf(stderr,
-            "[RawMatPickup] Execute deps: wantsRes(8d3c0)=%p sort(2c070)=%p "
+            "[RawMatPickup] Execute deps: wantsRes(8d3c0)=%p "
             "performWork(c0ad0)=%p findStoreRes(8d590)=%p checkAssign(f6ef0)=%p "
             "ltp(115e60)=%p memAlloc=%p v3ctor=%p\n",
-            (void*)s_x_wantsRes, (void*)s_x_sort, (void*)s_x_performWork,
+            (void*)s_x_wantsRes, (void*)s_x_performWork,
             (void*)s_x_findStoreRes, (void*)s_x_checkAssign,
             (void*)s_x_longTermPlan, (void*)s_x_memAlloc, (void*)s_x_v3ctor);
         fflush(stderr);
@@ -693,15 +706,7 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     }
 
     // --- nearest-first ----------------------------------------------------------
-    if (count > 1) {
-        if (s_x_sort) {
-            s_x_sort(buf, count);
-        } else if (PickupTrace()) {
-            fprintf(stderr, "[RawMatPickup] sort(0x14002c070) unresolved -- "
-                            "candidates left unsorted (%d)\n", count);
-            fflush(stderr);
-        }
-    }
+    if (count > 1) Pickup_SortByDistance(buf, count);
 
     // --- dispatch ---------------------------------------------------------------
     const float half = Pickup_CellCenterHalf();

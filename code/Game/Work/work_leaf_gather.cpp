@@ -27,9 +27,13 @@
 //     code/Game/Work/pickup_gate.cpp.
 //   • 0x1400c0ad0 (+ 0x1400c9b70) — since ported in
 //     code/Game/Work/work_base_actionctor.cpp.
-// Still genuinely unregistered from that old list: 0x14002c070 (the Pickup candidate
-// sort) and 0x1400c7cd0 / 0x1400ca520. Verify with a fresh grep over standalone/
-// before trusting any address list in a comment — including this one.
+//   • 0x14002c070 (+ 0x14002c380) — deliberately NOT registered: it is MSVC's
+//     inlined std::sort over Pickup's 32-byte candidate records (ascending on the
+//     distance int32 at +0x08). Reimplemented locally as Pickup_SortByDistance in
+//     code/Game/Work/pickup.cpp.
+// Still genuinely unregistered from that old list: 0x1400c7cd0 / 0x1400ca520.
+// Verify with a fresh grep over standalone/ before trusting any address list in a
+// comment — including this one.
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 // Bodies are unconditional so it compiles in BOTH dll and standalone builds.
