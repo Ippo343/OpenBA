@@ -43,8 +43,17 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
 namespace {
+
+// [diag] BANISHED_DELIVER_TRACE — watch the deposit half of the haul-to-storage leg.
+static inline bool DeliverTraceOn() {
+    static int s_ts = -1;
+    if (s_ts < 0) { const char* e = std::getenv("BANISHED_DELIVER_TRACE"); s_ts = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    return s_ts == 1;
+}
 // --- Float constants (exe .rdata). ---
 static const float* s_pDAT_172204 = nullptr;  // c78c0 RandTol(2) scale
 static const float* s_pDAT_172280 = nullptr;  // MoveTo speed (c7620, bbea0)
@@ -276,6 +285,13 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
             if (s_fn_addItem) s_fn_addItem(*reinterpret_cast<int64_t*>(param_3), param_4, iVar9);
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(param_1 + 0x30));
             if (s_fn_dropOff) s_fn_dropOff(*reinterpret_cast<int64_t*>(param_1 + 0x30), param_4, iVar9);
+            if (DeliverTraceOn()) {
+                std::fprintf(stderr, "[Deliver] DEPOSIT amount=%d resType=%p -> destStorage=%p "
+                                     "(banked; carry subtracted)\n",
+                             iVar9, reinterpret_cast<void*>(param_4),
+                             *reinterpret_cast<void**>(param_3));
+                std::fflush(stderr);
+            }
             return 1;
         }
     }
@@ -308,8 +324,20 @@ uint64_t Pf_DropOffExec_7620(int64_t param_1, int64_t* param_2, void* param_3, u
             s_fn_findStorageForRes(pplVar3, local_70, iVar1 * iVar5 + iVar8, param_4, iVar9, '\x01',
                                    local_50, &local_res8);
         if (local_70[0] == 0) {
+            if (DeliverTraceOn()) {
+                std::fprintf(stderr, "[Deliver] SPILL resType=%p amount=%d (no storage found; "
+                                     "dropping a pile on the ground)\n",
+                             reinterpret_cast<void*>(param_4), iVar9);
+                std::fflush(stderr);
+            }
             Pf_SpawnRawMaterialOnCell_78c0(param_1, param_4, iVar9);
             return 2;
+        }
+        if (DeliverTraceOn()) {
+            std::fprintf(stderr, "[Deliver] WALK-TO-STORAGE dest=%p (pushing MoveTo; deposit "
+                                 "retries on arrival)\n",
+                         reinterpret_cast<void*>(local_70[0]));
+            std::fflush(stderr);
         }
         *reinterpret_cast<int64_t*>(param_1 + 0x38) = local_70[0];
         void* self = MemAlloc(0x480, 8);

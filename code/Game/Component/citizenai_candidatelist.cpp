@@ -611,6 +611,17 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
                 if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
                 int64_t acc = *reinterpret_cast<int64_t*>(base + 0xc8);
                 ltpPrio = (timeBuf < acc) ? 3 : 1;
+                // [test-only] BANISHED_DELIVER_BOOST: skip the Time(300.0) carry-timer
+                // wait so a pile->barn delivery can be observed inside a short test run.
+                // Faithful behaviour (env unset): a carrying citizen Idles until +0xc8
+                // exceeds 300.0 time units, only then does LongTermPlan (deliver) beat
+                // Idle in the priority contest.
+                static int s_delivBoost = -1;
+                if (s_delivBoost < 0) {
+                    const char* e = getenv("BANISHED_DELIVER_BOOST");
+                    s_delivBoost = (e && e[0] && e[0] != '0') ? 1 : 0;
+                }
+                if (s_delivBoost) ltpPrio = 3;
                 AppendCandidate(outList, 0xd, ltpPrio);
             }
 

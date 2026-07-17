@@ -227,7 +227,11 @@ int DropOffRawMaterial_AbstractImpl_Impl(DropOffRawMaterial* self, void* actionS
 
     { // [HAUL-DIAG] gated: did the citizen's executor actually RUN a dropoff?
         static int t = -1;
-        if (t < 0) { const char* e = std::getenv("BANISHED_BUILD_TRACE"); t = (e && e[0] && e[0] != '0') ? 1 : 0; }
+        if (t < 0) {
+            const char* e = std::getenv("BANISHED_BUILD_TRACE");
+            const char* d = std::getenv("BANISHED_DELIVER_TRACE");
+            t = ((e && e[0] && e[0] != '0') || (d && d[0] && d[0] != '0')) ? 1 : 0;
+        }
         if (t == 1) {
             std::fprintf(stderr, "[BuildTrace] DropOffRawMaterial::AbstractImpl RUN self=%p src(+0x38)=%p tgtStorage(+0x30)=%p resType(+0x28)=%p count(+0x24)=%d\n",
                          (void*)self, *(void**)(s + 0x38), *(void**)(s + 0x30), *(void**)(s + 0x28), *(int*)(s + 0x24));
