@@ -21,6 +21,20 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+// Diagnostic trace for the harvest-completion investigation. Gated by
+// BANISHED_CLEAR_TRACE (shared with clearareacomponent_states.cpp); default off.
+static int s_ca_exec_trace = -1;
+static bool CA_ExecTrace() {
+    if (s_ca_exec_trace < 0) {
+        const char* e = std::getenv("BANISHED_CLEAR_TRACE");
+        s_ca_exec_trace = (e && e[0] && std::strcmp(e, "0") != 0) ? 1 : 0;
+    }
+    return s_ca_exec_trace == 1;
+}
 
 // ============================================================
 // Local function pointers (resolved once on first use)
@@ -588,6 +602,15 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     int treesCleared = self->field_50;
     int groundCleared = self->field_60;
 
+    static int s_execCount = 0;
+    if (CA_ExecTrace() && s_execCount < 40) {
+        ++s_execCount;
+        std::fprintf(stderr, "[ClearExec] #%d ClearArea::Execute self=%p stack=%p trees=%d ground=%d flags(t/g/b)=%d/%d/%d\n",
+                     s_execCount, selfPtr, actionStack, treesCleared, groundCleared,
+                     self->field_70, self->field_71, self->field_72);
+        std::fflush(stderr);
+    }
+
     // --- Check if work entity is valid ---
     // CheckPtr on self->field_18 (work entity IBP at +0x18, which is param_1[3] in decompilation)
     fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x18));
@@ -602,12 +625,35 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
     // If treesCleared + groundCleared >= totalSlots, all work done
     int totalSlots = *(int*)((uintptr_t)workEntity + 0x30);
     if (treesCleared + groundCleared >= totalSlots) {
+        if (CA_ExecTrace() && s_execCount <= 20)
+            std::fprintf(stderr, "[ClearExec]   EARLY-RETURN totalSlots-done: workEntity=%p slots=%d (trees+ground=%d)\n",
+                         workEntity, totalSlots, treesCleared + groundCleared);
         return 1;
     }
 
     // --- Check citizen entity has active build state ---
     fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     void* citizenEntity = self->field_10;
+
+    // One-shot: dump the owner entity (field_10) component type-ids so we know what
+    // it is and whether the WorkPlaceComponent gate legitimately applies.
+    static bool s_dumpedOwner = false;
+    if (CA_ExecTrace() && !s_dumpedOwner) {
+        s_dumpedOwner = true;
+        uintptr_t oe = (uintptr_t)citizenEntity;
+        int cn = *(int*)(oe + 0x38);
+        uintptr_t ca = *(uintptr_t*)(oe + 0x30);
+        std::fprintf(stderr, "[ClearExec]   OWNER field_10=%p compCount=%d field_18(WorkComp)=%p\n",
+                     citizenEntity, cn, self->field_18);
+        for (int j = 0; j < cn && j < 24; ++j) {
+            void** slot = (void**)(ca + (uintptr_t)j * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* comp = *slot;
+            uint32_t tid = comp ? reinterpret_cast<uint32_t(*)(void*)>((*(void***)comp)[2])(comp) : 0;
+            std::fprintf(stderr, "[ClearExec]     comp[%d]=%p tid=0x%08x\n", j, comp, tid);
+        }
+        std::fflush(stderr);
+    }
 
     // Find WorkplaceComponent (FUN_140002e10 = FindComponent_BuildState2)
     uint64_t buildStateIBP = 0;
@@ -621,6 +667,8 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
         fn_InternalBasePtr_CheckPtr(&buildStateIBP2);
         void* bsComp = reinterpret_cast<void*>(buildStateIBP2);
         if (*(char*)((uintptr_t)bsComp + 0x50) == 0) {
+            if (CA_ExecTrace() && s_execCount <= 20)
+                std::fprintf(stderr, "[ClearExec]   EARLY-RETURN buildState-inactive: bsComp=%p +0x50=0\n", bsComp);
             return 1;  // component not active
         }
     }
@@ -665,6 +713,9 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                                  &tileArray, clearTrees);
 
     int tileCount = tileArray.count;
+    if (CA_ExecTrace() && s_execCount <= 20)
+        std::fprintf(stderr, "[ClearExec]   area=(%d,%d)-(%d,%d) totalSlots=%d tileCount=%d clearTrees=%d filter=%p\n",
+                     (int)x1, (int)y1, (int)x2, (int)y2, totalSlots, tileCount, (int)clearTrees, self->field_68);
     if (tileCount == 0) {
         goto done_nothing;
     }
@@ -713,8 +764,10 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
             for (int i = 0; i < tileCount; i++) {
                 TileInfo* tile = &tiles[i];
                 uint64_t treeEntity = tile->entityPtr;
+                bool ptrace = CA_ExecTrace() && s_execCount <= 20;
 
                 if (treeEntity == 0) {
+                    if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] idx=%u NO-ENTITY\n", i, tile->tileIndex);
                     continue;  // no entity on this tile
                 }
 
@@ -735,7 +788,10 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                         bstNode = *(void**)((uintptr_t)bstNode + 0x20);  // right child
                     }
                 }
-                if (alreadyTracked) continue;
+                if (alreadyTracked) {
+                    if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p ALREADY-TRACKED\n", i, (void*)treeEntity);
+                    continue;
+                }
 
                 // Check filter: if field_68 is set, tree's +0x28 must match
                 if (self->field_68 != nullptr) {
@@ -743,6 +799,8 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                     void* treeEntityObj = reinterpret_cast<void*>(treeEntity);
                     int64_t treeType = *(int64_t*)((uintptr_t)treeEntityObj + 0x28);
                     if (treeType != reinterpret_cast<int64_t>(self->field_68)) {
+                        if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p FILTER-MISMATCH type=%p want=%p\n",
+                                                 i, (void*)treeEntity, (void*)treeType, self->field_68);
                         continue;  // doesn't match filter
                     }
                 }
@@ -752,20 +810,31 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 uint64_t natResIBP = 0;
                 fn_FindComponent_NatRes(reinterpret_cast<void*>(treeEntity), &natResIBP);
 
-                if (natResIBP == 0) continue;
+                if (natResIBP == 0) {
+                    if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p NO-NATRES\n", i, (void*)treeEntity);
+                    continue;
+                }
 
                 // Find valid cell near this tile
                 int cellIdx = fn_WorldGrid_FindCell(worldGrid, tile->tileIndex, refTileIdx, 0xe07);
-                if (cellIdx < 0) continue;
+                if (cellIdx < 0) {
+                    if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p NO-CELL (findCell<0)\n", i, (void*)treeEntity);
+                    continue;
+                }
 
                 // Validate cell is passable
                 int valid = fn_WorldGrid_ValidateCell(worldGrid, 0xe1f, (int)(uint32_t)cellIdx, refTileIdx);
-                if (!(valid & 0xFF)) continue;
+                if (!(valid & 0xFF)) {
+                    if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p CELL-NOT-PASSABLE cell=%d\n", i, (void*)treeEntity, cellIdx);
+                    continue;
+                }
 
                 // Try to set up the build structure work
                 void* actionStackPtr = *(void**)actionStack;
                 int buildResult = fn_BuildStructure_impl(selfPtr, &actionStackPtr,
                                                           (uint32_t)cellIdx, refTileIdx, time);
+                if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p natRes=%p cell=%d buildResult=%d\n",
+                                         i, (void*)treeEntity, (void*)natResIBP, cellIdx, buildResult);
                 if (!(buildResult & 0xFF)) {
                     // BuildStructure_impl returned false → result = 0 (no work assigned)
                     result = 0;
@@ -837,6 +906,8 @@ int ClearArea_Execute(void* selfPtr, void* actionStack, void* time) {
                 fn_ClearArea_TreeInsert(reinterpret_cast<void*>(s + 0x48), &workIBP,
                                         reinterpret_cast<void*>(&insertPair));
 
+                if (ptrace) std::fprintf(stderr, "[ClearExec]   P1 tile[%d] ent=%p DISPATCHED PerformWork chop (result=2) workId=%d\n",
+                                         i, (void*)treeEntity, workId);
                 result = 2;
                 goto cleanup;
             }

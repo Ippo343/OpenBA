@@ -507,6 +507,123 @@ extern "C" char ClearArea_State0Update(void* data, void* /*sm*/) {
 }
 
 // ============================================================
+// ModelComponent_helper_2b70 (0x1400c2b70) — broadcast a lifecycle event to every
+// component on an entity via the component vtable "event" slot +0x60. This is what
+// tells the clear-job's StatusIcon/Model/etc. components to finalize (remove the
+// removal icon, hide the felled model) when the area is cleared.
+// ============================================================
+static void ClearArea_BroadcastEvent(void* ownerEntity, uint32_t ev) {
+    if (!ownerEntity) return;
+    uintptr_t e = reinterpret_cast<uintptr_t>(ownerEntity);
+    int count = *reinterpret_cast<int*>(e + 0x38);
+    uintptr_t arr = *reinterpret_cast<uintptr_t*>(e + 0x30);
+    if (!arr) return;
+    for (int i = 0; i < count; ++i) {
+        void** slot = reinterpret_cast<void**>(arr + static_cast<uintptr_t>(i) * 8);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+        void* comp = *slot;
+        if (!comp) continue;
+        void** vt = *reinterpret_cast<void***>(comp);
+        void* fn = vt ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(vt) + 0x60) : nullptr;
+        if (fn) reinterpret_cast<void(*)(void*, uint32_t)>(fn)(comp, ev);
+    }
+}
+
+// ============================================================
+// ModelComponent_impl_8270 (0x140118270) — state-1 finalize body. Gated on the
+// ClearAreaDescription +0x2c flag: when set, notifies CitizenAI over the footprint
+// (terrain regrow — DEFERRED, e0e0 not yet ported) then broadcasts event 5 to the
+// owner's components. When +0x2c is clear (the common case) it is a no-op.
+// ============================================================
+typedef void (*fn_e0e0_t)(void* map, int x1, int y1, int x2, int y2);   // CitizenAI_impl_e0e0
+static fn_e0e0_t s_e0e0 = nullptr;
+static bool s_e0e0_res = false;
+
+static void ClearArea_Finalize8270(void* comp) {
+    if (!comp) return;
+    uintptr_t c = reinterpret_cast<uintptr_t>(comp);
+    void* descObj = *reinterpret_cast<void**>(c + 0x18);
+    bool isCA = descObj && fn_IsDerivedFrom && fn_IsDerivedFrom(descObj, DerefTid(0x1401c7200));
+    if (!isCA) return;
+    uint8_t flag2c = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(descObj) + 0x2c);
+    if (Trace())
+        std::fprintf(stderr, "[ClearCtrl] Finalize8270 comp=%p desc+0x2c=%d\n", comp, (int)flag2c);
+    if (flag2c == 0) return;
+
+    // desc+0x2c set: terrain regrow over the footprint, then broadcast event 5.
+    if (!s_e0e0_res) { s_e0e0 = reinterpret_cast<fn_e0e0_t>(ResolveAddr(Module::Exe, 0x14009e0e0)); s_e0e0_res = true; }
+    if (s_e0e0 && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
+        uint64_t bc = 0;
+        fn_FindComponent_Build(*reinterpret_cast<void**>(c + 0x10), &bc);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&bc);
+        if (bc) {
+            void* map = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+            uintptr_t b = static_cast<uintptr_t>(bc);
+            int x1 = *reinterpret_cast<int16_t*>(b + 0x28);
+            int y1 = *reinterpret_cast<int16_t*>(b + 0x2a);
+            int x2 = *reinterpret_cast<int16_t*>(b + 0x2c) + x1;
+            int y2 = *reinterpret_cast<int16_t*>(b + 0x2e) + y1;
+            s_e0e0(map, x1, y1, x2, y2);
+        }
+    }
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
+    ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 5);
+}
+
+// ============================================================
+// State-1 ENTER — port of ClearAreaDescription_helper_7820.
+//   ModelComponent_impl_8270(comp) then request the 1 -> 2 transition.
+// ============================================================
+extern "C" char ClearArea_State1Enter(void* data, void* sm) {
+    ResolveStates();
+    if (!data) return 1;
+    if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State1Enter (finalize) comp=%p\n", data); std::fflush(stderr); }
+    // One-shot: dump the clear-job entity (comp+0x10 owner) components + removal flag so
+    // we can identify the icon component and see what removes it.
+    static bool s_dumpedJob = false;
+    if (Trace() && !s_dumpedJob) {
+        s_dumpedJob = true;
+        uintptr_t cc = reinterpret_cast<uintptr_t>(data);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(cc + 0x10));
+        void* owner = *reinterpret_cast<void**>(cc + 0x10);
+        uintptr_t oe = reinterpret_cast<uintptr_t>(owner);
+        int cn = *reinterpret_cast<int*>(oe + 0x38);
+        uintptr_t ca = *reinterpret_cast<uintptr_t*>(oe + 0x30);
+        uint32_t eflags = *reinterpret_cast<uint32_t*>(oe + 0x40);
+        std::fprintf(stderr, "[ClearCtrl] JOB owner=%p compCount=%d entityFlags=0x%x (removalBit0x400=%d)\n",
+                     owner, cn, eflags, (eflags >> 10) & 1);
+        for (int j = 0; j < cn && j < 24; ++j) {
+            void** slot = reinterpret_cast<void**>(ca + static_cast<uintptr_t>(j) * 8);
+            if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(slot);
+            void* comp = *slot;
+            uint32_t tid = comp ? reinterpret_cast<uint32_t(*)(void*)>((*(void***)comp)[2])(comp) : 0;
+            void* ev = comp ? *reinterpret_cast<void**>((*(uintptr_t*)comp) + 0x60) : nullptr;
+            std::fprintf(stderr, "[ClearCtrl]   job comp[%d]=%p tid=0x%08x eventSlot+0x60=%p\n", j, comp, tid, ev);
+        }
+        std::fflush(stderr);
+    }
+    ClearArea_Finalize8270(data);
+    ::ControllerLive::RequestStateTransition(sm, 2);   // 1 -> 2
+    return 1;
+}
+
+// ============================================================
+// State-2 ENTER — port of ClearAreaDescription_helper_77f0.
+//   Broadcast event 1 to the owner's components (final cleanup: removes the removal
+//   icon, finishes the model). The SM then rests in state 2 (terminal for the flow).
+// ============================================================
+extern "C" char ClearArea_State2Enter(void* data, void* /*sm*/) {
+    ResolveStates();
+    if (!data) return 1;
+    uintptr_t c = reinterpret_cast<uintptr_t>(data);
+    if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(c + 0x10));
+    if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State2Enter (finalize event 1) comp=%p\n", data); std::fflush(stderr); }
+    ClearArea_BroadcastEvent(*reinterpret_cast<void**>(c + 0x10), 1);
+    return 1;
+}
+
+// ============================================================
 // Dispatcher + state table for the ClearAreaComponent controller.
 // ============================================================
 namespace { struct ClearAreaCtrlTag {}; }
@@ -534,11 +651,13 @@ extern "C" void ClearAreaCtrl_PopulateTable() {
     TableRegisterState(t, 0x15, nullptr, nullptr, nullptr, nullptr);
     TableAddTransition(t, 1, nullptr);
     TableAddTransition(t, 3, nullptr);
-    // state 1: model-finalize on entry (helper_7820, deferred) -> {2, 3}.
-    TableRegisterState(t, 1, nullptr, nullptr, nullptr, nullptr);
+    // state 1: model-finalize on entry (helper_7820: 8270 + request 1->2) -> {2, 3}.
+    TableRegisterState(t, 1, reinterpret_cast<void*>(&ClearArea_State1Enter),
+                       nullptr, nullptr, nullptr);
     TableAddTransition(t, 2, nullptr);
     TableAddTransition(t, 3, nullptr);
-    // state 2: model-finalize on entry (helper_77f0, deferred) -> {3}.
-    TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
+    // state 2: model-finalize on entry (helper_77f0: broadcast event 1) -> {3}.
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&ClearArea_State2Enter),
+                       nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }
