@@ -520,12 +520,32 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         }
     }
 
-    if (*reinterpret_cast<int8_t*>(s + 0x2d) == 0) return;  // not harvestable
+    // [diag] Gate trace for the harvest-yield investigation (BANISHED_FORESTER_SCAN_TRACE).
+    // 1260f0 has three early-outs before the pile spawn; report which one fires.
+    const bool yTrace = std::getenv("BANISHED_FORESTER_SCAN_TRACE") != nullptr;
+
+    if (*reinterpret_cast<int8_t*>(s + 0x2d) == 0) {   // not harvestable
+        if (yTrace) {
+            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes GATE-1 harvestable(+0x2d)=0 -> no yield "
+                            "(nrComp=%p mature(+0x2c)=%d frac(+0x28)=%f)\n",
+                    (void*)s, (int)*reinterpret_cast<int8_t*>(s + 0x2c),
+                    (double)*reinterpret_cast<float*>(s + 0x28));
+            fflush(stderr);
+        }
+        return;
+    }
 
     void* desc = *reinterpret_cast<void**>(s + 0x18);
     void* d = (s_pTid_c7b68 && fn_IsDerivedFrom && fn_IsDerivedFrom(desc, *s_pTid_c7b68)) ? desc : nullptr;
     int64_t descArr = *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20);
-    if (descArr == 0) return;
+    if (descArr == 0) {
+        if (yTrace) {
+            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes GATE-2 descArr(+0x20)=0 -> no yield "
+                            "(desc=%p isNatResDesc=%d)\n", desc, (int)(d != nullptr));
+            fflush(stderr);
+        }
+        return;
+    }
 
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     float frac = uvScale;
@@ -543,8 +563,18 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
                     ? reinterpret_cast<void**>(s_fn_GetMeshDesc_6330(descArr, &tmp)) : nullptr;
         amount = pd ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(*pd) + 0x44) : 0;
     }
+    int rawAmount = amount;
     amount = static_cast<int>(static_cast<float>(amount) * frac);
-    if (amount <= 0) return;
+    if (amount <= 0) {
+        if (yTrace) {
+            fprintf(stderr, "[ORGANIC-PRODUCE] RemoveNatRes GATE-3 amount=0 -> no yield "
+                            "(rawAmount=%d frac=%f mature(+0x2c)=%d descArr=%p GetMeshDesc=%p)\n",
+                    rawAmount, (double)frac, (int)*reinterpret_cast<int8_t*>(s + 0x2c),
+                    (void*)descArr, (void*)s_fn_GetMeshDesc_6330);
+            fflush(stderr);
+        }
+        return;
+    }
 
     // Compute the cell index from the model's grid position.
     int64_t posIBP = 0;
@@ -637,6 +667,23 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     if (s_fn_c48a0)
         s_fn_c48a0(*reinterpret_cast<void***>(gameWorld + 0xe8), &listIBP,
                    *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20) + 0x20));
+
+    // [diag] Is the spawned pile registered into the map-grid cell? GetTilesInArea
+    // (FUN_14009fc00) only reports a cell when its +0x08 entity slot is non-null, so an
+    // unregistered pile is invisible to every tile scan (incl. ClearArea::Execute Phase 3,
+    // which posts the gather/haul work). In retail the registration rides
+    // EntityList_RegisterEntity -> MapComponent::OnCreate -> impl_4750; that chain is inert
+    // in standalone. Report the cell slots so we know whether that is what strands the pile.
+    if (yTrace) {
+        uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
+        uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(mapGrid + 0x80);
+        uintptr_t rec = cellArr + static_cast<uintptr_t>(cell) * 0x30;
+        fprintf(stderr, "[ORGANIC-PRODUCE] pile REGISTERED cell=%d newEntity=%p | "
+                        "grid cell+0x00=%p cell+0x08=%p (0x08 null => invisible to tile scans)\n",
+                cell, (void*)newEntity,
+                *reinterpret_cast<void**>(rec + 0x00), *reinterpret_cast<void**>(rec + 0x08));
+        fflush(stderr);
+    }
 
     if ((harvestFlag != 0) && (*reinterpret_cast<int64_t*>(citizenIBP) != 0)) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(citizenIBP);

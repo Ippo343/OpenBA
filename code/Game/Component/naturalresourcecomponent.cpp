@@ -228,7 +228,58 @@ void NaturalResourceComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(NaturalResourceComponent, 0x30, 0x80)
+
+// The inert factory zero-fills the body, but the exe's NaturalResourceComponent
+// constructor (0x140125dc0; heap twin NaturalResourceComponent_Factory 0x140036550)
+// seeds two non-zero field defaults right after the Component base ctor:
+//
+//   140125de6: MOV dword ptr [RBX+0x28], 0x3f800000   ; resourceScale = 1.0f
+//   140125ded: MOV word  ptr [RBX+0x2c], 0x100        ; +0x2c = 0, +0x2d = 1
+//
+// That second store is a PACKED 16-bit write covering BOTH bools: little-endian
+// 0x0100 => +0x2c (mature) = 0, +0x2d (harvestable) = 1. Ghidra renders it as
+// `*(undefined2 *)(this + 0x2c) = 0x100`, which reads as a +0x2c-only write — the
+// +0x2d half is easy to miss, and missing it is not cosmetic: harvestable=0 makes
+// FUN_1401260f0 early-out, so a chopped tree/rock/ore yields NO resource pile ever
+// (the harvest chain runs to completion and silently produces nothing).
+//
+// Apply the same defaults here so standalone-spawned resources match the exe.
+static void NaturalResourceComponent_InitCtorDefaults(void* mem) {
+    if (!mem) return;
+    uint8_t* s = static_cast<uint8_t*>(mem);
+    *reinterpret_cast<float*>(s + 0x28) = 1.0f;      // resourceScale
+    *reinterpret_cast<uint16_t*>(s + 0x2c) = 0x100;  // +0x2c mature=0, +0x2d harvestable=1
+}
+
+// Hand-rolled equivalent of COMPONENT_INERT_FACTORY(NaturalResourceComponent, 0x30, 0x80)
+// plus the ctor defaults above. Expanded by hand rather than wrapping the macro because
+// the macro derives the type id from its Name argument (GetTypeIdByName(#Name)), so a
+// renamed "...Base" instantiation would resolve a type that does not exist and hand back
+// typeId 0 — breaking every FindComponent(NaturalResourceComponent) lookup.
+static uint32_t NaturalResourceComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("NaturalResourceComponent");
+    return cached;
+}
+static void* NaturalResourceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+
+extern "C" void* NaturalResourceComponent_Factory(void) {
+    void* mem = ::ComponentFactory::MakeInertTyped(
+        0x30, 0x80, NaturalResourceComponent_InertVtable,
+        reinterpret_cast<void*>(&NaturalResourceComponent_InertGetTypeId));
+    NaturalResourceComponent_InitCtorDefaults(mem);
+    return mem;
+}
+extern "C" void* NaturalResourceComponent_CreateInPlace(void* mem) {
+    if (mem) {
+        ::ComponentFactory::InitInertTyped(
+            mem, 0x30, 0x80, NaturalResourceComponent_InertVtable,
+            reinterpret_cast<void*>(&NaturalResourceComponent_InertGetTypeId));
+        NaturalResourceComponent_InitCtorDefaults(mem);
+    }
+    return mem;
+}
+
 REGISTER_TYPE(NaturalResourceComponent, "Component",
               &NaturalResourceComponent_Factory, &NaturalResourceComponent_CreateInPlace);
 #endif // STANDALONE_EXE
