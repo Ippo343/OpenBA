@@ -13,7 +13,8 @@
 //   0x14010f1f0  CitizenAIComponent_ValidateAndEnterState   -> CitizenAI_ValidateAndEnterState
 //
 // Sub-callees reused via ResolveAddr (already registered reimpls):
-//   0x140008090  Entity_FindComponent_Storage
+//   0x140008090  FindComponent_Residence  (Ghidra: "Entity_FindComponent_Storage")
+//   0x140006270  FindComponent_Storage    (Ghidra: same name -- see the typedefs)
 //   0x14012a9d0  Storage_GetResourceCount
 //   0x14012ab00  Storage_GetResourceCount2
 //   0x14012cf10  StorageComponent_QueryCount
@@ -72,8 +73,20 @@ void CitizenAI_SortByPriority(void* base, int count) {
 // Resolved sub-callees (all already registered reimpls in standalone).
 // ============================================================
 
-// Entity_FindComponent_Storage(entity, outIBP) -> InternalBasePtr* (0x140008090)
+// ⚠️ TWO different component finders, both named "Entity_FindComponent_Storage" by
+// Ghidra. They are NOT interchangeable — they search for different type ids, and
+// Ghidra's DECOMPILER renders a call to either one under the same name, so the
+// pseudocode cannot tell them apart. Always check the DISASSEMBLY's CALL target:
+//   0x140008090 -> reads [0x1401c7cf0] = ResidenceComponent  (1400080d3: MOV EDI,...)
+//   0x140006270 -> reads [0x1401c7e78] = StorageComponent    (1400062b3: MOV EDI,...)
+// (ownership per standalone/factory_registrations.csv; ResidenceComponent derives
+// from StorageComponent, which is why both feed StorageComponent::QueryCount and
+// the confusion is easy to miss.)
+//
+// FindComponent_Residence(entity, outIBP) -> InternalBasePtr* (0x140008090)
 typedef void* (*fn_FindComponentStorage_t)(int64_t entity, void* outIBP);
+// FindComponent_Storage(entity, outIBP) -> InternalBasePtr* (0x140006270)
+typedef void* (*fn_FindComponentCarry_t)(int64_t entity, void* outIBP);
 // Storage_GetResourceCount(storageComp) -> int (0x14012a9d0)
 typedef int (*fn_GetResourceCount_t)(int64_t storageComp);
 // Storage_GetResourceCount2(storageComp) -> int (0x14012ab00)
@@ -83,7 +96,8 @@ typedef int (*fn_StorageQueryCount_t)(int64_t storageComp);
 // CitizenComponent_CanFindHousing(citizenComp) -> char (0x140115be0)
 typedef char (*fn_CanFindHousing_t)(int64_t citizenComp);
 
-static fn_FindComponentStorage_t s_fn_FindComponentStorage = nullptr;
+static fn_FindComponentStorage_t s_fn_FindComponentStorage = nullptr;  // 8090 residence
+static fn_FindComponentCarry_t    s_fn_FindComponentCarry   = nullptr;  // 6270 storage
 static fn_GetResourceCount_t      s_fn_GetResourceCount     = nullptr;
 static fn_GetResourceCount2_t     s_fn_GetResourceCount2    = nullptr;
 static fn_StorageQueryCount_t     s_fn_StorageQueryCount    = nullptr;
@@ -99,6 +113,8 @@ static void EnsureResolved() {
     if (s_resolved) return;
     s_fn_FindComponentStorage = reinterpret_cast<fn_FindComponentStorage_t>(
         ResolveAddr(Module::Exe, 0x140008090));
+    s_fn_FindComponentCarry = reinterpret_cast<fn_FindComponentCarry_t>(
+        ResolveAddr(Module::Exe, 0x140006270));
     s_fn_GetResourceCount = reinterpret_cast<fn_GetResourceCount_t>(
         ResolveAddr(Module::Exe, 0x14012a9d0));
     s_fn_GetResourceCount2 = reinterpret_cast<fn_GetResourceCount2_t>(
@@ -233,11 +249,23 @@ int CitizenComp_HasSufficientResources2(int64_t self) {
 }
 
 // ============================================================
-// 4. CitizenComponent_GetHappiness (0x140115de0)
+// 4. CitizenComponent_GetHappiness (0x140115de0) — MISNAMED: this is CARRY COUNT
 // ------------------------------------------------------------
-// Finds the citizen's own entity storage (self+0x10) and tail-returns
-// StorageComponent_QueryCount's result (Ghidra shows void; the function tail-
-// calls QueryCount whose EAX is the return).
+// Finds the citizen's own-entity StorageComponent (self+0x10 = the owner entity)
+// and tail-returns StorageComponent_QueryCount's result (Ghidra shows void; the
+// function tail-calls QueryCount, whose EAX is the return). Nothing to do with
+// happiness — it answers "how much am I carrying?", and it is the gate on state
+// 0xd (LongTermPlan) = the haul-to-storage leg. Name kept to match Ghidra.
+//
+// 🐞 The finder here is 0x140006270 (StorageComponent), NOT the 0x140008090
+// (ResidenceComponent) used by (2)/(3) above — see the note at the typedefs. This
+// port originally called 0x140008090, which cannot match on a citizen entity:
+// Template/Citizen.rsc declares `StorageDescription storage` and no residence, so
+// the find always returned null, every citizen read as carrying nothing, state 0xd
+// was never appended as a candidate, and NOTHING WAS EVER DELIVERED to a barn —
+// silently, since the null was absorbed by the guard below. Verified against the
+// disassembly, which the decompiler hides (both finders print under one name):
+//   140115dfb: CALL 0x140006270
 // ============================================================
 int CitizenComp_GetHappiness(int64_t self) {
     EnsureResolved();
@@ -245,16 +273,35 @@ int CitizenComp_GetHappiness(int64_t self) {
     void* local_res8[4] = {nullptr, nullptr, nullptr, nullptr};
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p + 0x10);
-    if (s_fn_FindComponentStorage)
-        s_fn_FindComponentStorage(*reinterpret_cast<int64_t*>(p + 0x10),
-                                  reinterpret_cast<void*>(local_res8));
+    if (s_fn_FindComponentCarry)
+        s_fn_FindComponentCarry(*reinterpret_cast<int64_t*>(p + 0x10),
+                                reinterpret_cast<void*>(local_res8));
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(local_res8);
     if (!s_fn_StorageQueryCount) return 0;
     // Standalone: the citizen's own-entity StorageComponent find returns null when
     // its type-id global is unfilled (the recurring keystone-B pattern). The real
     // game always has a carry-inventory storage here; guard so QueryCount(null) -
-    // which derefs +0x30 - can't fault. No storage found => no happiness.
-    if (!local_res8[0]) return 0;
+    // which derefs +0x30 - can't fault. No storage found => count 0.
+    //
+    // This is NOT a cosmetic guard: despite the inherited Ghidra name, this function
+    // is the citizen's CARRY COUNT (body = FindComponent_Storage -> QueryCount), and
+    // it is the gate on state 0xd (LongTermPlan) = the haul-to-storage leg. If the
+    // find ever returns null here, every citizen reads as "carrying nothing" and
+    // NOBODY EVER DELIVERS, silently. So say so loudly (once) rather than let a
+    // null-guard mask it -- root-cause the find, do not paper over it.
+    if (!local_res8[0]) {
+        static bool s_warned = false;
+        if (!s_warned) {
+            s_warned = true;
+            std::fprintf(stderr,
+                "[Deliver] WARNING: citizen carry StorageComponent find (0x140006270) "
+                "returned NULL -- carry count reads 0 for every citizen, so state 0xd "
+                "(LongTermPlan / haul-to-storage) can never be a candidate and nothing "
+                "will ever be delivered. Root-cause the find; do not null-guard it.\n");
+            std::fflush(stderr);
+        }
+        return 0;
+    }
     return s_fn_StorageQueryCount(reinterpret_cast<int64_t>(local_res8[0]));
 }
 
@@ -556,14 +603,51 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             // LongTermPlan (id 0xd) only if GetHappiness > 0
             if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(self);
             int happy = CitizenComp_GetHappiness(*reinterpret_cast<int64_t*>(self));
+            int ltpPrio = 0;
             if (happy >= 1) {
                 // Time t(DAT_172234); prio = (t < self.acc@+0xc8) ? 3 : 1
                 int64_t timeBuf = 0;
                 float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
                 if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
                 int64_t acc = *reinterpret_cast<int64_t*>(base + 0xc8);
-                int prio = (timeBuf < acc) ? 3 : 1;
-                AppendCandidate(outList, 0xd, prio);
+                ltpPrio = (timeBuf < acc) ? 3 : 1;
+                AppendCandidate(outList, 0xd, ltpPrio);
+            }
+
+            // [diag] BANISHED_DELIVER_TRACE — why a carrying citizen does (or does
+            // not) go put its load in a barn. This is the haul-to-storage gate:
+            //   * 0x140115de0 is MISNAMED "GetHappiness" — its body is
+            //     FindComponent_Storage(self+0x10) -> StorageComponent::QueryCount,
+            //     i.e. the CARRY COUNT. So this gate really reads "am I carrying
+            //     anything?", and carry==0 (or a null carry storage, see the guard
+            //     in CitizenComp_GetHappiness) silently suppresses delivery.
+            //   * Even when it passes, state 0xd only RUNS if it out-prioritises the
+            //     unconditional Idle (id 9, prio 2): prio is 3 once the carry timer
+            //     (+0xc8) exceeds Time(DAT_140172234 = 300.0), else 1 => Idle wins.
+            //     CitizenAIComponent::Update zeroes +0xc8 whenever carry count is 0.
+            // Capped so a per-tick, per-citizen gate cannot flood the log.
+            static int s_delivTrace = -1;
+            if (s_delivTrace < 0) {
+                const char* e = getenv("BANISHED_DELIVER_TRACE");
+                s_delivTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
+            }
+            if (s_delivTrace) {
+                static int s_delivLogs = 0;
+                if (happy >= 1 && s_delivLogs < 40) {
+                    ++s_delivLogs;
+                    int64_t timeBuf = 0;
+                    float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
+                    if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
+                    std::fprintf(stderr,
+                        "[Deliver] citizen=%p carry(115de0)=%d acc(+0xc8)=%lld "
+                        "time(300.0)=%lld -> LongTermPlan(0xd) prio=%d %s\n",
+                        reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self)),
+                        happy,
+                        (long long)*reinterpret_cast<int64_t*>(base + 0xc8),
+                        (long long)timeBuf, ltpPrio,
+                        ltpPrio >= 3 ? "(beats Idle prio 2)" : "(LOSES to Idle prio 2)");
+                    std::fflush(stderr);
+                }
             }
         }
     }
