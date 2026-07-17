@@ -85,15 +85,25 @@ static fn_GetPickupCategory_t s_fn_GetPickupCategory = nullptr;
 typedef void (*fn_WorkCtor25_t)(void* self, void* entityRef);
 static fn_WorkCtor25_t s_fn_WorkCtor25 = nullptr;
 
-// vtable_Pickup — pickup draw item vtable at 0x14015e430
+// vtable_Pickup — the Pickup WORK class vtable at 0x140161810 (code/Game/Work/pickup.cpp;
+// standalone table registered by RegisterPickupVtable). Verified against the disassembly of
+// RawMaterialComponent::Draw: `14012924b CALL 0x1400f72e0` (Work_Ctor25) then
+// `140129251 LEA RAX,[0x140161810]` / `140129258 MOV [RBX],RAX` = the vtable store.
 static void** s_vtable_Pickup = nullptr;
 
 // fn_InternalBasePtr_Ctor — already in engine_funcs.h
 // fn_IsDerivedFrom — already in engine_funcs.h
 
 // CitizenAI_impl_ec60 — register draw item with scene
-typedef void (*fn_RegisterDrawItem_t)(uintptr_t entityRef, uint32_t category, char param3, void* itemRef);
-static fn_RegisterDrawItem_t s_fn_RegisterDrawItem = nullptr;
+typedef void (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char param3, void* workRef);
+static fn_PostWork_t s_fn_PostWork = nullptr;
+
+// BANISHED_RAWMAT_PICKUP_TRACE — log each posted Pickup work.
+static bool PickupTrace() {
+    static const bool on = [] { const char* e = std::getenv("BANISHED_RAWMAT_PICKUP_TRACE");
+                                return e && e[0] && e[0] != '0'; }();
+    return on;
+}
 
 static bool s_initialized = false;
 
@@ -162,10 +172,12 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x1400f72e0));  // Work_Ctor25 (CALL @14012924b in RawMaterialComponent::Draw)
 
     s_vtable_Pickup = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x14015e430));
+        ResolveAddr(Module::Exe, 0x140161810));
 
-    s_fn_RegisterDrawItem = reinterpret_cast<fn_RegisterDrawItem_t>(
-        ResolveAddr(Module::Exe, 0x14012ec60));  // CitizenAI_impl_ec60 register-draw-item (CALL @14012929e in RawMaterialComponent::Draw)
+    // CitizenAI_impl_ec60 = the citizen WORK-SCHEDULER POST (the same call the ClearArea
+    // controller uses to hand a job to a laborer), NOT a render/draw registration.
+    s_fn_PostWork = reinterpret_cast<fn_PostWork_t>(
+        ResolveAddr(Module::Exe, 0x14012ec60));  // CALL @14012929e in RawMaterialComponent::Draw
 
     s_initialized = true;
 }
@@ -254,19 +266,23 @@ void RawMaterialComponent_Serialize(RawMaterialComponent* self) {
 // ============================================================
 // RawMaterialComponent::Draw (vtable slot [6], 0x1401291d0)
 // ============================================================
-// Creates a pickup render object and registers it with the scene.
+// ⚠ NOT a render call — the name is Ghidra's. This is THE PILE-PICKUP TRIGGER: it builds a
+// Pickup WORK and posts it to the citizen work-scheduler, so a laborer comes and hauls the
+// pile away. Slot [6] (+0x30) is the OnAdded hook that ComponentEntity_OnAddedPass dispatches
+// when the entity is registered (flags 0x89 have bit 0 set), i.e. the moment a harvested pile
+// joins the world via EntityList_RegisterEntity.
 //
-// Original logic:
+// Original logic (FUN_1401291d0):
 //   1. CheckPtr on entity ref (+0x10)
-//   2. FindComponent_MatDesc on entity — find MaterialDescription component
+//   2. FUN_140003050 on the owner entity — its WorkComponent (the post target)
 //   3. IsDerivedFrom check on _unk18 for RawMaterialDescription
-//   4. GetPickupCategory — determine visual category from material flags
-//   5. MemAlloc 0x60 bytes for pickup draw item
-//   6. WorkCtor25 to initialize base
-//   7. Set vtable to vtable_Pickup, zero fields at +0x48, +0x50, +0x58
-//   8. InternalBasePtr_Ctor to wrap the item
-//   9. CheckPtr on MaterialDescription ref
-//  10. RegisterDrawItem to add to scene
+//   4. helper_9480 — the work kind/category code from the description
+//   5. MemAlloc 0x60 bytes for the Pickup work
+//   6. Work_Ctor25 (0x1400f72e0) to initialize the Work base
+//   7. Set vtable to vtable_Pickup (0x140161810), zero fields at +0x48, +0x50, +0x58
+//   8. InternalBasePtr_Ctor to wrap the work
+//   9. CheckPtr on the WorkComponent ref
+//  10. CitizenAI_impl_ec60 (0x14012ec60) — POST the work to the scheduler
 
 void RawMaterialComponent_Draw(RawMaterialComponent* self) {
     EnsureHelpers();
@@ -336,14 +352,20 @@ void RawMaterialComponent_Draw(RawMaterialComponent* self) {
         fn_InternalBasePtr_Ctor(&itemRef, pickupItemResult);
     }
 
-    // CheckPtr on MatDesc ref
+    // CheckPtr on the WorkComponent ref
     if (fn_InternalBasePtr_CheckPtr) {
         fn_InternalBasePtr_CheckPtr((void*)matDescBuf);
     }
 
-    // Register draw item with scene
-    if (s_fn_RegisterDrawItem) {
-        s_fn_RegisterDrawItem(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
+    // POST the Pickup work to the citizen work-scheduler — a laborer then claims it and
+    // hauls this pile away. This is the pile-pickup trigger.
+    if (s_fn_PostWork) {
+        s_fn_PostWork(matDescBuf[0], (uint32_t)category, '\x01', (void*)itemRef);
+        if (PickupTrace()) {
+            fprintf(stderr, "[RawMatPickup] posted Pickup work: comp=%p work=%p workComp=%p kind=%u\n",
+                    (void*)self, pickupItemResult, (void*)matDescBuf[0], (uint32_t)category);
+            fflush(stderr);
+        }
     }
 }
 
@@ -485,11 +507,11 @@ void RawMaterialComponent_InitFuncs() {
 #ifdef _DEBUG
     printf("[RawMaterialComponent] Funcs resolved: Component_Serialize=%p "
            "Time_Serialize=%p CheckPtr=%p RegisterRawMaterial=%p "
-           "GetPickupCategory=%p MemAlloc=%p RegisterDrawItem=%p\n",
+           "GetPickupCategory=%p MemAlloc=%p PostWork=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_Time_Serialize,
            (void*)s_fn_CheckPtr, (void*)s_fn_RegisterRawMaterial,
            (void*)s_fn_GetPickupCategory, (void*)fn_MemAlloc,
-           (void*)s_fn_RegisterDrawItem);
+           (void*)s_fn_PostWork);
 #endif
 }
 
@@ -497,7 +519,53 @@ void RawMaterialComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(RawMaterialComponent, 0x40, 0x89)
+
+// COMPONENT_INERT_FACTORY(RawMaterialComponent, 0x40, 0x89), expanded by hand so the
+// per-type vtable's +0x30 slot (index 6) routes to the ported RawMaterialComponent_Draw —
+// the pile-pickup trigger (it posts a Pickup work to the citizen work-scheduler; see the
+// note there). The inert vtable left slot 6 a stub, so a harvested pile joined the world and
+// no laborer was ever told to collect it: the pile just lay on the ground forever.
+// ComponentEntity_OnAddedPass dispatches this slot at EntityList_RegisterEntity time
+// (flags 0x89, bit 0 set) — exactly when RemoveNaturalResource's yield spawns the pile.
+//
+// 🔑 Do NOT rename the macro instantiation: COMPONENT_INERT_FACTORY derives its type-id from
+// GetTypeIdByName(#Name), so a renamed wrapper returns typeId 0 and breaks every
+// FindComponent(RawMaterialComponent) (the lesson from NaturalResourceComponent).
+static uint32_t RawMaterialComponent_InertGetTypeId(void*) {
+    static uint32_t cached = 0;
+    if (cached == 0) cached = ::Object::GetTypeIdByName("RawMaterialComponent");
+    return cached;
+}
+static void* RawMaterialComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+
+// Gated: this is the first live work-posting component path. Enable with
+// BANISHED_LIVE_RAWMAT_PICKUP=1; default OFF until the haul is verified end-to-end.
+static bool RawMatPickupLive() {
+    static const bool on = [] { const char* e = std::getenv("BANISHED_LIVE_RAWMAT_PICKUP");
+                                return e && e[0] && e[0] != '0'; }();
+    return on;
+}
+static void RawMaterialComponent_OnAddedVSlot(void* s) {
+    if (!s || !RawMatPickupLive()) return;
+    RawMaterialComponent_Draw(reinterpret_cast<RawMaterialComponent*>(s));
+}
+static void RawMaterialComponent_FinishVtable() {
+    RawMaterialComponent_InertVtable[6] = reinterpret_cast<void*>(&RawMaterialComponent_OnAddedVSlot);
+}
+extern "C" void* RawMaterialComponent_Factory(void) {
+    void* p = ::ComponentFactory::MakeInertTyped(0x40, 0x89,
+        RawMaterialComponent_InertVtable,
+        reinterpret_cast<void*>(&RawMaterialComponent_InertGetTypeId));
+    RawMaterialComponent_FinishVtable();
+    return p;
+}
+static void* RawMaterialComponent_CreateInPlace(void* mem) {
+    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x40, 0x89,
+        RawMaterialComponent_InertVtable,
+        reinterpret_cast<void*>(&RawMaterialComponent_InertGetTypeId));
+    RawMaterialComponent_FinishVtable();
+    return mem;
+}
 REGISTER_TYPE(RawMaterialComponent, "Component",
               &RawMaterialComponent_Factory, &RawMaterialComponent_CreateInPlace);
 #endif // STANDALONE_EXE

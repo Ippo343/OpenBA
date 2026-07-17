@@ -237,6 +237,19 @@ int Pickup_Slot4_Impl(Pickup* self, void* entityIBP, uint64_t param3, uint64_t p
 // 5. Return false (keep executing)
 // ============================================================
 int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
+    // [diag] Did a laborer actually claim the Pickup work that RawMaterialComponent::Draw
+    // posted for a harvest pile? BANISHED_RAWMAT_PICKUP_TRACE.
+    {
+        static const bool trace = [] { const char* e = std::getenv("BANISHED_RAWMAT_PICKUP_TRACE");
+                                       return e && e[0] && e[0] != '0'; }();
+        static int n = 0;
+        if (trace && ++n <= 12) {
+            fprintf(stderr, "[RawMatPickup] Pickup::Execute #%d self=%p status=%d citizen=%p\n",
+                    n, (void*)self, (int)self->status, (void*)self->citizenIBP);
+            fflush(stderr);
+        }
+    }
+
     // Check status != 0 and citizenIBP != null
     if (self->status == 0 || self->citizenIBP == nullptr) {
         return 0;
@@ -489,8 +502,14 @@ static void* g_Pickup_Vtable[13] = {
     (void*)&Work_Slot1,              // +0x08 slot1 (null)
     (void*)&Pickup_GetTypeId,        // +0x10 GetTypeId
     (void*)&Pickup_Serialize_Impl,   // +0x18 Serialize
-    (void*)&Pickup_Execute_Impl,     // +0x20 Execute
-    (void*)&Work_Slot5,              // +0x28 slot5 (returns 0)
+    // 🔑 Slot order verified against the exe vtable @0x140161810: [4]=0x1400f2f00 (the REAL
+    // Execute — the ~400-line "scan for nearby piles, dispatch PerformWork, set status/citizen"
+    // body; Ghidra mislabels it Pickup_Serialize), [5]=0x1400f38f0 (the re-target helper, which
+    // itself CALLS slot4 via *(vtable+0x20)). These two were swapped: the f38f0 port sat in
+    // slot4 and slot5 was a stub, so the pickup job could never run — Execute saw status==0 and
+    // returned immediately, which is precisely the case where retail does the whole job.
+    (void*)&Pickup_Slot4_Impl,       // +0x20 Execute      (0x1400f2f00)
+    (void*)&Pickup_Execute_Impl,     // +0x28 re-target    (0x1400f38f0)
     (void*)&Pickup_Slot6_Impl,       // +0x30 OnComplete
     (void*)&Pickup_Slot7_Impl,       // +0x38 OnCancel
     (void*)&Pickup_Slot8_Impl,       // +0x40 Cleanup

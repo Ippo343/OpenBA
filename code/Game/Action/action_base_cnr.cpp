@@ -508,6 +508,15 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         s_spawnItem = (e && e[0] == '0') ? 0 : 1;
     }
 
+    // Grid claim for the spawned pile (see the long note at the write below). Default ON,
+    // matching starttown.cpp's BANISHED_RES_OCCUPANCY collapse for worldgen resources;
+    // only "0" disables.
+    static int s_pileAttach = -1;
+    if (s_pileAttach < 0) {
+        const char* e = std::getenv("BANISHED_PILE_GRID_ATTACH");
+        s_pileAttach = (e && e[0] == '0') ? 0 : 1;
+    }
+
     // Detach model from the build queue when not already queued (bit 10 of +0x40).
     if (s_spawnItem && parent != 0) {
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&parent);
@@ -668,18 +677,56 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
         s_fn_c48a0(*reinterpret_cast<void***>(gameWorld + 0xe8), &listIBP,
                    *reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(d) + 0x20) + 0x20));
 
-    // [diag] Is the spawned pile registered into the map-grid cell? GetTilesInArea
-    // (FUN_14009fc00) only reports a cell when its +0x08 entity slot is non-null, so an
-    // unregistered pile is invisible to every tile scan (incl. ClearArea::Execute Phase 3,
-    // which posts the gather/haul work). In retail the registration rides
-    // EntityList_RegisterEntity -> MapComponent::OnCreate -> impl_4750; that chain is inert
-    // in standalone. Report the cell slots so we know whether that is what strands the pile.
+    // ── GRID CLAIM (dc20's net effect, scoped to this pile) ──────────────────
+    // Retail claims the cell via c48a0 -> ComponentEntity_OnAddedPass -> the pile
+    // MapComponent's vtable+0x30 (MapComponent::Draw 0x140124370) -> sub_41b0
+    // (0x1401241b0) -> dc20 (0x14009dc20), whose net effect is cell+0x08 = the owner
+    // entity plus comp+0x20 bit 0x100000 ("occupancy currently written"). Standalone's
+    // MapComponent is inert, so the pile spawned with cell+0x08 still null — and
+    // GetTilesInArea (FUN_14009fc00) only reports a cell whose +0x08 is non-null, so the
+    // pile was invisible to every tile scan, including the ClearArea::Execute Phase 3
+    // gather that posts the haul work. That is why piles were never picked up.
+    //
+    // This is the same spawn-site collapse starttown.cpp already applies to worldgen
+    // resources (StartTown_MarkResourceCellGrid), kept SCOPED to the pile: driving the
+    // attach from MapComponent's slot for every entity regressed the RemovalTool, because
+    // dc20 also marks any pre-existing cell occupant for removal. That hazard cannot fire
+    // here — 1260f0 marks the tree at its top via c2ea0, which dispatches the tree
+    // MapComponent's vtable+0x38 (-> impl_4750 -> dee0) IMMEDIATELY, nulling cell+0x08
+    // before we get here. So the cell is already empty and there is no occupant to mark.
+    // For the same reason the tree's later removal-drain cannot wipe this write.
+    //
+    // Only cell+0x08 is written: dc20 would also stamp the terrain type from
+    // MapDescription+0x20, but the tree's dee0 detach has already reclassified the cell to
+    // its natural (passable) type, which is what a walkable pile wants — the same
+    // deliberate divergence documented at the starttown.cpp collapse. Bit 0x100000 is set
+    // so the removal-side un-mark (MapComponent_DetachOccupancy_4750) stays symmetric and
+    // the grid cannot keep pointing at a freed pile.
+    if (s_pileAttach && newIBP != 0) {
+        uintptr_t mapIBP = 0;
+        if (s_fn_FindComp_4680) s_fn_FindComp_4680(newIBP, &mapIBP);
+        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&mapIBP);
+        uint8_t* mc = reinterpret_cast<uint8_t*>(mapIBP);
+        uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
+        uint8_t* cells = mapGrid ? *reinterpret_cast<uint8_t**>(mapGrid + 0x80) : nullptr;
+        const int dim = mapGrid ? *reinterpret_cast<int32_t*>(mapGrid) : 0;
+        // 41b0's own gate: skip when occupancy is already written for this component.
+        if (mc && cells && dim > 0 && cell >= 0 && cell < dim * dim &&
+            ((*reinterpret_cast<uint32_t*>(mc + 0x20) >> 20) & 1) == 0) {
+            *reinterpret_cast<uintptr_t*>(cells + static_cast<size_t>(cell) * 0x30 + 0x08) = newIBP;
+            *reinterpret_cast<uint32_t*>(mc + 0x20) |= 0x100000u;
+        }
+    }
+
+    // [diag] Report the cell slots so the claim above is observable: cell+0x08 non-null
+    // means the pile is now visible to tile scans.
     if (yTrace) {
         uintptr_t mapGrid = *reinterpret_cast<uintptr_t*>(gameWorld + 0xf8);
         uintptr_t cellArr = *reinterpret_cast<uintptr_t*>(mapGrid + 0x80);
         uintptr_t rec = cellArr + static_cast<uintptr_t>(cell) * 0x30;
         fprintf(stderr, "[ORGANIC-PRODUCE] pile REGISTERED cell=%d newEntity=%p | "
-                        "grid cell+0x00=%p cell+0x08=%p (0x08 null => invisible to tile scans)\n",
+                        "grid cell+0x00=%p cell+0x08=%p (0x08 must == newEntity; null => "
+                        "invisible to tile scans)\n",
                 cell, (void*)newEntity,
                 *reinterpret_cast<void**>(rec + 0x00), *reinterpret_cast<void**>(rec + 0x08));
         fflush(stderr);

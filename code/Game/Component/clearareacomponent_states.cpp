@@ -220,9 +220,35 @@ static bool ClearArea_IsDone(void* comp) {
 
     bool groundOK = (flag1 == 0) || Grid_GroundClear(grid, x1, y1, w, h);
     if (!groundOK) return false;
-    if (flag0 == 0 || flag2 != 0)
-        return Grid_AllEmpty(grid, x1, y1, w, h);
-    return Grid_NoTargetResource(grid, x1, y1, w, h, descRef);
+    const bool allEmptyBranch = (flag0 == 0 || flag2 != 0);
+    const bool done = allEmptyBranch ? Grid_AllEmpty(grid, x1, y1, w, h)
+                                     : Grid_NoTargetResource(grid, x1, y1, w, h, descRef);
+
+    // [diag] Which branch decides "done", over which rect, and what the grid holds there.
+    // NoTargetResource only counts NaturalResourceComponent occupants, so it ignores a
+    // harvest pile by design; AllEmpty tests cell+0x08 and so a registered pile holds the
+    // job open. Report the occupant slots to tell "pile outside the rect" apart from
+    // "wrong branch". Gated by BANISHED_CLEAR_TRACE.
+    if (Trace()) {
+        static int s_n = 0;
+        if (++s_n <= 24) {
+            const int width = *grid;
+            uintptr_t tiles = GridTiles(grid);
+            std::fprintf(stderr, "[ClearCtrl] IsDone comp=%p rect=(%d,%d)-(%dx%d) flags(0/1/2)=%d/%d/%d "
+                                 "branch=%s done=%d |", comp, x1, y1, w, h,
+                         (int)flag0, (int)flag1, (int)flag2,
+                         allEmptyBranch ? "AllEmpty" : "NoTargetResource", (int)done);
+            for (int row = y1; row < y1 + h; ++row)
+                for (int col = x1; col < x1 + w; ++col) {
+                    const int cell = width * row + col;
+                    std::fprintf(stderr, " cell[%d,%d]=%d occ+0x08=%p", col, row, cell,
+                                 *reinterpret_cast<void**>(tiles + (uintptr_t)cell * 0x30 + 8));
+                }
+            std::fprintf(stderr, "\n");
+            std::fflush(stderr);
+        }
+    }
+    return done;
 }
 
 // ============================================================
@@ -471,10 +497,20 @@ extern "C" char ClearArea_State0Enter(void* data, void* sm) {
 // State-0 PER-FRAME — port of ClearAreaDescription_helper_78f0.
 //   When the footprint is finally clear, request the 0 -> 1 transition.
 // ============================================================
+//   Faithful to 78f0: the ONLY done-test is the grid-emptiness is-done (140118440).
+//   The CountRemaining==0 short-circuit that State0Enter uses must NOT appear here.
+//   CountRemaining only counts natural-resource occupants, so it drops to 0 the moment
+//   the tree is felled — finishing the job (and stopping the citizen's work slot) before
+//   ClearArea::Execute Phase 3 can gather the harvest pile the felling just spawned. That
+//   is what stranded piles on the ground. The pile registers itself into its cell+0x08
+//   (see the grid claim in action_base_cnr.cpp), so Grid_AllEmpty stays false while it
+//   lies there, holding the job open until a citizen hauls it away — exactly as retail.
+//   State0Enter keeps its short-circuit: that guards the already-built founding houses,
+//   whose own footprint self-occupancy would otherwise post phantom clear-work forever.
 extern "C" char ClearArea_State0PerFrame(void* data, void* sm) {
     ResolveStates();
     if (!data) return 1;
-    if (ClearArea_CountRemaining(data) == 0 || ClearArea_IsDone(data)) {
+    if (ClearArea_IsDone(data)) {
         ::ControllerLive::RequestStateTransition(sm, 1);
         if (Trace()) { std::fprintf(stderr, "[ClearCtrl] State0PerFrame: cleared -> req state 1 (comp=%p)\n", data); std::fflush(stderr); }
     }
