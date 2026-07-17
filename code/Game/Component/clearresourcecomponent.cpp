@@ -84,7 +84,36 @@ void ClearResourceComponent_InitFuncs() {
 #ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
-COMPONENT_INERT_FACTORY(ClearResourceComponent, 0x48, 0x80)
+#include "Component/controller_live_base.h"
+
+// The clear-job's self-destruct controller — this is what clears the clearing ICON
+// once the resource is harvested (the DecalComponent's terrain decal is released by
+// the +0x38 detach that entity removal dispatches). State table + the state-2 enter
+// handler (a port of 0x140118560) live in clearresourcecomponent_states.cpp.
+//
+// Shape recovered from the exe (ClearResourceComponent_Ctor 0x1401186a0 + the
+// primary vtable at 0x140162840):
+//   size 0x48 / flags 0x80 (plain ControllerComponent — the SM ticks the node, so
+//     no self-tick bit)
+//   node at +0x28 (slot 17 CreateState 0x140004080 = `LEA RAX,[RCX+0x28]; RET`),
+//     back-pointer node+0x18 == comp+0x40 (the ctor's `*(param_1+0x40) = param_1`)
+//   default state 2 (slot 16 GetDefaultState 0x1400026c0 = `MOV EAX,2; RET`)
+//
+// ⚠️ The default state of 2 is faithful but must never be the one the SM adopts —
+// state 2 is the destroy. It is safe only because StateMachineComponent_Startup
+// (0x14012b6a0) reads GetDefaultState from the FIRST ControllerComponent only, and
+// `cleararea` (default 0) precedes `clearresource` in every template that uses this
+// component (Template/Clear.rsc, Template/ClearR.rsc — both verified). That is also
+// why the env gate below is BANISHED_LIVE_CLEARCTRL and not a var of its own: with
+// `cleararea` inert, this component would be the first LIVE controller our
+// standalone linker sees and every clear-job would delete itself on creation.
+extern "C" void** ClearResourceCtrl_NodeVtable();
+extern "C" void   ClearResourceCtrl_PopulateTable();
+
+CONTROLLER_LIVE_FACTORY_STATES(ClearResourceComponent, 0x48, 0x80, 0x28, 2,
+                               "BANISHED_LIVE_CLEARCTRL",
+                               ClearResourceCtrl_NodeVtable,
+                               ClearResourceCtrl_PopulateTable)
 REGISTER_TYPE(ClearResourceComponent, "ControllerComponent",
               &ClearResourceComponent_Factory, &ClearResourceComponent_CreateInPlace);
 #endif // STANDALONE_EXE
