@@ -9,12 +9,27 @@
 // CLOSURE-SAFETY: each function below was confirmed (snapshot notes/_reg_snapshot.txt)
 // to call ONLY already-registered exe sub-callees, sibling ports, or engine/runtime
 // dispatch slots that resolve at runtime (CheckPtr 0x140152ab0, IsDerivedFrom
-// 0x140152a98). The intricate pathfinding/copy-ctor helpers in the same batch
-// (0x1400bf790, 0x1400ba9f0, 0x1400881d0, 0x1400beae0, 0x1400f2f00) were DEFERRED —
-// their exe sub-callee closures (0x1400c29a0, 0x140042890, 0x1400c7cd0, 0x1400ca520,
-// 0x140088730, 0x14008d3c0, 0x14002c070, 0x1400c0ad0, 0x140115e60, 0x1400f6ef0 ...)
-// remain unregistered. Registering a half-null helper is silent corruption, strictly
-// worse than the safe no-op of leaving it unregistered.
+// 0x140152a98). Registering a half-null helper is silent corruption, strictly worse
+// than the safe no-op of leaving it unregistered.
+//
+// The intricate pathfinding/copy-ctor helpers in the same batch (0x1400bf790,
+// 0x1400ba9f0, 0x1400881d0, 0x1400beae0) were DEFERRED for the same reason.
+//
+// ⚠️ STALE-LIST CORRECTION (2026-07-16). This header used to list 0x1400f2f00 as
+// deferred behind an unregistered closure of "0x1400c29a0, 0x140042890, 0x140088730,
+// 0x14008d3c0, 0x14002c070, 0x1400c0ad0, 0x140115e60, 0x1400f6ef0 ...". That list has
+// been overtaken by events and was actively misleading:
+//   • 0x1400c29a0, 0x140042890, 0x140115e60, 0x1400f6ef0 — since REGISTERED
+//     (Phase 2 action child-ctor waves / work_base + work_walkpos batches).
+//   • 0x1400f2f00 itself — since ported (code/Game/Work/pickup.cpp, the real
+//     Pickup::Execute; Ghidra mislabels it Pickup_Serialize).
+//   • 0x14008d3c0 (+ 0x14012d990, 0x14012d560) — since ported in
+//     code/Game/Work/pickup_gate.cpp.
+//   • 0x1400c0ad0 (+ 0x1400c9b70) — since ported in
+//     code/Game/Work/work_base_actionctor.cpp.
+// Still genuinely unregistered from that old list: 0x14002c070 (the Pickup candidate
+// sort) and 0x1400c7cd0 / 0x1400ca520. Verify with a fresh grep over standalone/
+// before trusting any address list in a comment — including this one.
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 // Bodies are unconditional so it compiles in BOTH dll and standalone builds.

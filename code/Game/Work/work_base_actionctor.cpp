@@ -63,6 +63,13 @@ typedef void* (*WA_fn_CreateNaturalResource_CopyCtor_t)(void* self, void* p2, vo
 //   parameter so it lands in XMM2; actionType MUST be the 4th so it lands in R9.
 typedef void* (*WA_fn_PerformWork_Ctor7_t)(void* self, void* entity, float heading, int actionType, int64_t time, uint8_t p6, int p7);
 typedef void* (*WA_fn_MoveTo_Ctor_t)(void* self, void* familyIBP, int pathType, int p4, float* destination, int p6, int p7, float speed);
+// PickupRawMaterial_Action_CopyCtor (0x1400c9b70). Verified from disassembly:
+//   RCX=self, RDX=p2, R8=p3 → self+0x20 = *p2 (citizen inner), self+0x28 = *p3 (target inner).
+typedef void* (*WA_fn_PickupRawMaterial_CopyCtor_t)(void* self, void* p2, void* p3);
+// Entity_FindComponent_Storage (0x140006270) — member-style, RCX=entity inner, RDX=retIBP.
+typedef void* (*WA_fn_FindStorage_t)(int64_t entityInner, void* retIBP);
+// StorageComponent::QueryCount (0x14012cf10) — current carried total.
+typedef int   (*WA_fn_StorageQueryCount_t)(void* storageComp);
 
 // --- dispatch slots (0x140152xxx / 0x14015xxxx → ResolveAddr returns slot storage,
 //     must be dereferenced once to get the runtime fn ptr) ---
@@ -93,6 +100,9 @@ static WA_fn_AnimateNaturalResource_CopyCtor_t s_fn_AnimateNR          = nullptr
 static WA_fn_CreateNaturalResource_CopyCtor_t s_fn_CreateNR            = nullptr;
 static WA_fn_PerformWork_Ctor7_t             s_fn_PerformWork7         = nullptr;
 static WA_fn_MoveTo_Ctor_t                   s_fn_MoveTo               = nullptr;
+static WA_fn_PickupRawMaterial_CopyCtor_t    s_fn_PickupRawMaterial    = nullptr;
+static WA_fn_FindStorage_t                   s_fn_FindStorage          = nullptr;
+static WA_fn_StorageQueryCount_t             s_fn_StorageQueryCount    = nullptr;
 
 static WA_fn_MemAllocStatic2_t      s_fn_MemAllocStatic = nullptr;
 static WA_fn_ObjectInternal_Ctor_t  s_fn_ObjInternalCtor = nullptr;
@@ -105,6 +115,8 @@ static WA_fn_Vector3_Heading_t      s_fn_Vec3Heading     = nullptr;
 static void* s_vtable_Action        = nullptr;  // 0x14015faa0
 static void* s_vtable_PerformWork   = nullptr;  // 0x14015fea0
 static void* s_vtable_PlayAnimation = nullptr;  // 0x140158950
+static void* s_vtable_PickupRawMaterial = nullptr; // 0x14015ff10 (LEA @0x1400c9bb0)
+static const float* s_pf_172124 = nullptr;      // 0x140172124 (c0ad0 PerformWork time)
 static const uint32_t* s_pTid_c7b68 = nullptr;  // 0x1401c7b68 (PerformWork target derive check)
 static const uint32_t* s_pDword_c70e8 = nullptr;// 0x1401c70e8 (SendComponentMessage msg id)
 static const float* s_pf_172280 = nullptr;      // 0x140172280 (MoveTo speed)
@@ -132,6 +144,9 @@ static void ResolveAll() {
     s_fn_CreateNR            = reinterpret_cast<WA_fn_CreateNaturalResource_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c6a20));
     s_fn_PerformWork7        = reinterpret_cast<WA_fn_PerformWork_Ctor7_t>(ResolveAddr(Module::Exe, 0x1400c9720));
     s_fn_MoveTo              = reinterpret_cast<WA_fn_MoveTo_Ctor_t>(ResolveAddr(Module::Exe, 0x1400c9170));
+    s_fn_PickupRawMaterial   = reinterpret_cast<WA_fn_PickupRawMaterial_CopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c9b70));
+    s_fn_FindStorage         = reinterpret_cast<WA_fn_FindStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
+    s_fn_StorageQueryCount   = reinterpret_cast<WA_fn_StorageQueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
 
     // Dispatch slots — deref once to get the runtime fn ptr.
     if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152b60)) s_fn_MemAllocStatic  = *reinterpret_cast<WA_fn_MemAllocStatic2_t*>(s);
@@ -147,6 +162,8 @@ static void ResolveAll() {
     s_vtable_Action        = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015faa0));
     s_vtable_PerformWork   = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015fea0));
     s_vtable_PlayAnimation = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x140158950));
+    s_vtable_PickupRawMaterial = reinterpret_cast<void*>(ResolveAddr(Module::Exe, 0x14015ff10));
+    s_pf_172124    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172124));
     s_pTid_c7b68   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
     s_pDword_c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
     s_pf_172280    = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172280));
@@ -165,6 +182,34 @@ static inline void* WA_Alloc(uint64_t size, uint32_t align) {
 static inline void WA_IbpCtor(void* ibp, void* obj) { if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(ibp, obj); }
 static inline void WA_CheckPtr(void* p)             { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
 static inline void WA_Append(void* list, void* ibp) { if (s_fn_TaskListAppend) s_fn_TaskListAppend(list, ibp); }
+
+// Real-value .rdata fallbacks (raw .rdata resolves NULL in standalone — see
+// reference_standalone_rdata_null_fallback). Bit patterns read from Ghidra:
+//   DAT_140172124 = 0x3f400000 =  0.75f  (PerformWork action duration in c0ad0)
+//   DAT_140172280 = 0xbf800000 = -1.0f   (MoveTo speed sentinel)
+static inline float WA_C_172124() { return s_pf_172124 ? *s_pf_172124 : 0.75f; }
+// ⚠️ The three pre-existing ctors above fall back to 0.0f for DAT_140172280, which is
+// WRONG (real value is -1.0f) but only bites in standalone. Deliberately NOT changed
+// here — it would alter the behaviour of three already-shipping functions, which is out
+// of scope for this port. c0ad0 below uses the correct value via WA_MoveSpeed().
+static inline float WA_MoveSpeed() { return s_pf_172280 ? *s_pf_172280 : -1.0f; }
+
+// c0ad0 repeats this exact idiom three times (@0x1400c0d06, @0x1400c0f04, @0x1400c0fdc):
+//   CheckPtr(citizenIBP); e = *citizenIBP; CheckPtr(e+0x10);
+//   Entity_FindComponent_Storage(*(e+0x10), &ibp); CheckPtr(&ibp);
+//   StorageComponent_QueryCount(ibp)
+// i.e. "how much is the citizen carrying right now". Re-evaluated each time in the
+// original (not cached), so this mirrors that.
+static int WA_CitizenCarryCount(void* citizenIBP) {
+    if (!s_fn_FindStorage || !s_fn_StorageQueryCount) return 0;
+    WA_CheckPtr(citizenIBP);
+    uintptr_t e = *reinterpret_cast<uintptr_t*>(citizenIBP);
+    WA_CheckPtr(reinterpret_cast<void*>(e + 0x10));
+    void* storageIBP = nullptr;
+    s_fn_FindStorage(*reinterpret_cast<int64_t*>(e + 0x10), &storageIBP);
+    WA_CheckPtr(&storageIBP);
+    return s_fn_StorageQueryCount(storageIBP);
+}
 
 // ============================================================
 // PerformWork_Action_Ctor3 (0x1400c1eb0)
@@ -373,6 +418,235 @@ void WorkAct_PerformWorkCtor_c1eb0(void* citizenIBP, uint32_t workId, void* targ
         WA_CheckPtr(reinterpret_cast<void*>(targetObj + 0x10));
         void* detach = *reinterpret_cast<void**>(targetObj + 0x10);
         if (s_fn_WorkDetach_3470) s_fn_WorkDetach_3470(detach);
+    }
+}
+
+// ============================================================
+// PickupRawMaterial_Action_CopyCtor (0x1400c9b70)
+// ============================================================
+// Trivial field-copy ctor for the PickupRawMaterial action.
+// Disassembly-verified: RCX=self, RDX=p2, R8=p3.
+//   Object::Internal::Internal(self)
+//   self+0x00 = vtable_Action (0x14015faa0)   [immediately overwritten]
+//   self+0x10 = 0 ; self+0x18 = 0
+//   self+0x00 = vtable_PickupRawMaterial (0x14015ff10)
+//   self+0x20 = 0 then *p2   (citizen inner)
+//   self+0x28 = 0 then *p3   (target/pile inner)
+// Returns self (RAX).
+void* WorkAct_PickupRawMaterialCopyCtor_c9b70(void* self, void* p2, void* p3) {
+    ResolveAll();
+    if (!self) return nullptr;
+
+    if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(self);
+
+    uintptr_t o = reinterpret_cast<uintptr_t>(self);
+    *reinterpret_cast<void**>(o)           = s_vtable_Action;
+    *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
+    *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
+    *reinterpret_cast<void**>(o)           = s_vtable_PickupRawMaterial;
+    *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
+    *reinterpret_cast<uintptr_t*>(o + 0x20) = p2 ? *reinterpret_cast<uintptr_t*>(p2) : 0;
+    *reinterpret_cast<uint64_t*>(o + 0x28) = 0;
+    *reinterpret_cast<uintptr_t*>(o + 0x28) = p3 ? *reinterpret_cast<uintptr_t*>(p3) : 0;
+    return self;
+}
+
+// ============================================================
+// PerformWork_Action_Ctor9 (0x1400c0ad0) — THE pile-haul action builder
+// ============================================================
+// Called from Pickup::Execute (0x1400f2f00) once per accepted candidate. Builds the
+// citizen's LIFO action stack, so the pushed order below EXECUTES IN REVERSE:
+//   pushed:   ShowTool(~Hoe) → [SendComponentMessage → aiComp+0x58, not pushed]
+//             → PerformWork(kind 7) → [ShowTool(~Axe) if carrying nothing]
+//             → PickupRawMaterial → CompleteTask → PerformWork(kind 6) → MoveTo
+//             → [ShowTool(~Axe) if carrying something]
+//   executes: [ShowTool] → MoveTo(walk to pile) → PerformWork(6) → CompleteTask
+//             → PickupRawMaterial(pick it up) → [ShowTool] → PerformWork(7) → ShowTool(~Hoe)
+//
+//   param_1 = citizen InternalBasePtr*
+//   param_2 = workId / resource type id (u32) → CompleteTask
+//   param_3 = target (pile) InternalBasePtr*
+//   param_4 = float* worldPos (MoveTo destination + heading source)
+//   param_5 = int cell index (pile cell; indexes the map grid for the path-mask byte)
+//   param_6 = byte — when non-zero, cancel any pending actions first (first candidate only)
+//
+// Ghidra-verified constants: ~Hoe = -1 (OR R8D,0xffffffff @0x1400c0b68),
+// ~Axe = -2 (MOV R8D,0xfffffffe @0x1400c0d5b/@0x1400c1024),
+// pathType = QueryCount>0 ? 4 : 1 (MOV EAX,4 / MOV EBX,1 / CMOVNZ @0x1400c0f61).
+void WorkAct_PerformWorkCtor9_c0ad0(void* citizenIBP, uint32_t workId, void* targetIBP,
+                                    float* worldPos, int cellIdx, uint8_t cancelFirst) {
+    ResolveAll();
+
+    // list base = (*(citizen)+0x278) + 0x48
+    WA_CheckPtr(citizenIBP);
+    uintptr_t ci = *reinterpret_cast<uintptr_t*>(citizenIBP);
+    WA_CheckPtr(reinterpret_cast<void*>(ci + 0x278));
+    uintptr_t aiComp = *reinterpret_cast<uintptr_t*>(ci + 0x278);
+    void* list = reinterpret_cast<void*>(aiComp + 0x48);
+    if (cancelFirst != 0 && s_fn_TaskListCleanup) s_fn_TaskListCleanup(list);
+
+    // heading = Entity_impl_29a0(worldPos, &target inner) — returned in XMM0.
+    uintptr_t targetInner = targetIBP ? *reinterpret_cast<uintptr_t*>(targetIBP) : 0;
+    float heading = 0.0f;
+    {
+        uintptr_t headingArg = targetInner;
+        if (s_fn_Entity_29a0) heading = s_fn_Entity_29a0(worldPos, &headingArg);
+    }
+
+    void* obj;
+    uintptr_t ibpA = 0, ibpB = 0;
+
+    // --- ShowTool (~Hoe = -1) ---
+    obj = WA_Alloc(0x30, 8);
+    void* st = nullptr;
+    if (obj) {
+        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        if (s_fn_ShowTool) st = s_fn_ShowTool(obj, &entityInner, -1 /* ~Hoe */);
+    }
+    WA_IbpCtor(&ibpA, st);
+    WA_Append(list, &ibpA);
+
+    // --- SendComponentMessage → aiComp+0x58 (replaces prior, DeletePtr; NOT pushed) ---
+    obj = WA_Alloc(0x40, 8);
+    void* sm = nullptr;
+    if (obj) {
+        uintptr_t innerIbp = 0;
+        WA_IbpCtor(&innerIbp, nullptr);
+        uint32_t msgId = s_pDword_c70e8 ? *s_pDword_c70e8 : 0;
+        WA_CheckPtr(citizenIBP);
+        void* entityInner = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        if (s_fn_SendCompMsg) sm = s_fn_SendCompMsg(obj, &entityInner, &msgId, 0, &innerIbp, 0);
+    }
+    uintptr_t ibpSm = 0;
+    WA_IbpCtor(&ibpSm, sm);
+    if (*reinterpret_cast<uintptr_t*>(aiComp + 0x58) != 0 && fn_InternalBasePtr_DeletePtr)
+        fn_InternalBasePtr_DeletePtr(reinterpret_cast<void*>(aiComp + 0x58));
+    *reinterpret_cast<uintptr_t*>(aiComp + 0x58) = ibpSm;
+
+    // --- path-mask byte from the pile's map cell: cells(+0x80) + cellIdx*0x30, byte +0x29 ---
+    uint8_t cellFlag = 0;
+    if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        uintptr_t gw   = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+        uintptr_t grid = *reinterpret_cast<uintptr_t*>(gw + 0xf8);
+        uintptr_t cells = *reinterpret_cast<uintptr_t*>(grid + 0x80);
+        cellFlag = *reinterpret_cast<uint8_t*>(cells + 0x29 +
+                       static_cast<uintptr_t>(static_cast<int64_t>(cellIdx)) * 0x30);
+    }
+
+    // --- inline PerformWork action, kind 7 ---
+    obj = WA_Alloc(0x48, 8);
+    void* pw7 = nullptr;
+    if (obj) {
+        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        uint64_t timeVal = 0;
+        if (s_fn_TimeCtor) s_fn_TimeCtor(&timeVal, WA_C_172124());
+        if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(obj);
+        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
+        *reinterpret_cast<void**>(o)           = s_vtable_Action;
+        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
+        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
+        *reinterpret_cast<void**>(o)           = s_vtable_PerformWork;
+        *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
+        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;
+        *reinterpret_cast<float*>(o + 0x28)    = heading;
+        *reinterpret_cast<int*>(o + 0x2c)      = 7;
+        *reinterpret_cast<uint64_t*>(o + 0x30) = timeVal;
+        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;
+        *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;
+        *reinterpret_cast<uint32_t*>(o + 0x44) = 0xffffffffu;
+        pw7 = obj;
+    }
+    WA_IbpCtor(&ibpA, pw7);
+    WA_Append(list, &ibpA);
+
+    // --- ShowTool (~Axe = -2) when the citizen is currently carrying nothing ---
+    if (WA_CitizenCarryCount(citizenIBP) < 1) {
+        obj = WA_Alloc(0x30, 8);
+        void* stAxe = nullptr;
+        if (obj) {
+            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+            if (s_fn_ShowTool) stAxe = s_fn_ShowTool(obj, &entityInner, -2 /* ~Axe */);
+        }
+        WA_IbpCtor(&ibpA, stAxe);
+        WA_Append(list, &ibpA);
+    }
+
+    // --- PickupRawMaterial action (self+0x20 = citizen, self+0x28 = pile) ---
+    obj = WA_Alloc(0x30, 8);
+    void* prm = nullptr;
+    if (obj) {
+        uintptr_t targetSlot  = targetInner;
+        uintptr_t citizenSlot = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        if (s_fn_PickupRawMaterial) prm = s_fn_PickupRawMaterial(obj, &citizenSlot, &targetSlot);
+    }
+    WA_IbpCtor(&ibpB, prm);
+    WA_Append(list, &ibpB);
+
+    // --- CompleteTask action ---
+    obj = WA_Alloc(0x38, 8);
+    void* ct = nullptr;
+    if (obj) {
+        uintptr_t targetSlot  = targetInner;
+        uintptr_t citizenSlot = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        if (s_fn_CompleteTask) ct = s_fn_CompleteTask(obj, workId, &citizenSlot, &targetSlot, 0);
+    }
+    WA_IbpCtor(&ibpB, ct);
+    WA_Append(list, &ibpB);
+
+    // --- inline PerformWork action, kind 6 ---
+    obj = WA_Alloc(0x48, 8);
+    void* pw6 = nullptr;
+    if (obj) {
+        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+        uint64_t timeVal = 0;
+        if (s_fn_TimeCtor) s_fn_TimeCtor(&timeVal, WA_C_172124());
+        if (s_fn_ObjInternalCtor) s_fn_ObjInternalCtor(obj);
+        uintptr_t o = reinterpret_cast<uintptr_t>(obj);
+        *reinterpret_cast<void**>(o)           = s_vtable_Action;
+        *reinterpret_cast<uint64_t*>(o + 0x10) = 0;
+        *reinterpret_cast<uint8_t*>(o + 0x18)  = 0;
+        *reinterpret_cast<void**>(o)           = s_vtable_PerformWork;
+        *reinterpret_cast<uint64_t*>(o + 0x20) = 0;
+        *reinterpret_cast<uintptr_t*>(o + 0x20) = entityInner;
+        *reinterpret_cast<float*>(o + 0x28)    = heading;
+        *reinterpret_cast<int*>(o + 0x2c)      = 6;
+        *reinterpret_cast<uint64_t*>(o + 0x30) = timeVal;
+        *reinterpret_cast<uint64_t*>(o + 0x38) = 0;
+        *reinterpret_cast<uint8_t*>(o + 0x40)  = 0;
+        *reinterpret_cast<uint32_t*>(o + 0x44) = 0xffffffffu;
+        pw6 = obj;
+    }
+    WA_IbpCtor(&ibpA, pw6);
+    WA_Append(list, &ibpA);
+
+    // --- MoveTo: walk to the pile. pathType = carrying>0 ? 4 : 1; mask = (1<<(cellFlag&0x1f)) | 0xe1f ---
+    obj = WA_Alloc(0x480, 8);
+    void* mv = nullptr;
+    if (obj) {
+        int carried = WA_CitizenCarryCount(citizenIBP);
+        WA_CheckPtr(citizenIBP);
+        uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(citizenIBP) + 0x10);
+        WA_CheckPtr(&entityInner);
+        int pathType = (carried > 0) ? 4 : 1;
+        void* familyIBP = nullptr;
+        uintptr_t famRet = 0;
+        if (s_fn_FindComponentFamily) familyIBP = s_fn_FindComponentFamily(entityInner, &famRet);
+        int mask = static_cast<int>((1u << (cellFlag & 0x1f)) | 0xe1fu);
+        if (s_fn_MoveTo) mv = s_fn_MoveTo(obj, familyIBP, pathType, 0, worldPos, mask, 0, WA_MoveSpeed());
+    }
+    WA_IbpCtor(&ibpB, mv);
+    WA_Append(list, &ibpB);
+
+    // --- ShowTool (~Axe = -2) when the citizen IS carrying something ---
+    if (WA_CitizenCarryCount(citizenIBP) > 0) {
+        obj = WA_Alloc(0x30, 8);
+        void* stAxe2 = nullptr;
+        if (obj) {
+            uintptr_t entityInner = *reinterpret_cast<uintptr_t*>(citizenIBP);
+            if (s_fn_ShowTool) stAxe2 = s_fn_ShowTool(obj, &entityInner, -2 /* ~Axe */);
+        }
+        WA_IbpCtor(&ibpA, stAxe2);
+        WA_Append(list, &ibpA);
     }
 }
 
