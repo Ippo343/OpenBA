@@ -82,6 +82,10 @@ static bool s_initialized = false;
 // the slot's owner ptr (+0), and shrink the two sub-lists embedded at +8 and
 // +0x18 to zero length. 1:1 port of the exe body.
 void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
+    // [diag] BANISHED_DECAL_TRACE — release visibility (stale-icon hunt).
+    static int s_relTrace = -1;
+    if (s_relTrace < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
+                          s_relTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
     uintptr_t base = *(uintptr_t*)((uintptr_t)terrainDecalSys + 0x1f0);
     uintptr_t slot = base + (uintptr_t)decalId * 0x60;
     if (*(int*)(slot + 0x28) == decalId) {
@@ -91,6 +95,14 @@ void DecalComponent_TerrainDecalRemove(void* terrainDecalSys, int decalId) {
             s_fn_ResizeStride14((void*)(slot + 8), 0);
         if (s_fn_ResizeStride2)
             s_fn_ResizeStride2((void*)(slot + 0x18), 0);
+        if (s_relTrace) {
+            fprintf(stderr, "[Decal] Release id=%d FREED (sys=%p)\n", decalId, terrainDecalSys);
+            fflush(stderr);
+        }
+    } else if (s_relTrace) {
+        fprintf(stderr, "[Decal] Release id=%d MISMATCH slot.id=%d -- slot NOT freed\n",
+                decalId, *(int*)(slot + 0x28));
+        fflush(stderr);
     }
 }
 
@@ -512,6 +524,21 @@ void DecalComponent_Draw(DecalComponent* self) {
 // ============================================================
 // If decalId >= 0, removes the decal from terrain, resets decalId to -1.
 void DecalComponent_OnCreate(DecalComponent* self) {
+    // lazy-resolve (standalone: nothing calls InitFuncs — it is only invoked from the
+    // DLL-mode Install wrapper; without this the terrain-decal remover stays null and
+    // every released clear-job icon persists on screen forever)
+    DecalComponent_InitFuncs();
+    // [diag] BANISHED_DECAL_TRACE — detach visibility (stale-icon hunt): decalId=-1
+    // here means this component never owned a placed decal (the visible icon belongs
+    // to some other placement path).
+    static int s_relTrace = -1;
+    if (s_relTrace < 0) { const char* e = getenv("BANISHED_DECAL_TRACE");
+                          s_relTrace = (e && e[0] && e[0] != '0') ? 1 : 0; }
+    if (s_relTrace) {
+        fprintf(stderr, "[Decal] OnCreate(detach) self=%p decalId=%d remover=%p\n",
+                (void*)self, self->decalId, (void*)s_fn_TerrainDecalRemove);
+        fflush(stderr);
+    }
     if (self->decalId >= 0) {
         // Remove decal from terrain decal subsystem
         if (s_fn_TerrainDecalRemove && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
