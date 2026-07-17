@@ -632,9 +632,12 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
                 s_delivTrace = (e && e[0] && e[0] != '0') ? 1 : 0;
             }
             if (s_delivTrace) {
+                // Cap only the prio-1 "still accumulating" spam; ALWAYS log prio 3,
+                // which is the moment delivery actually wins and the citizen sets off
+                // for a barn -- that is the event worth watching for.
                 static int s_delivLogs = 0;
-                if (happy >= 1 && s_delivLogs < 40) {
-                    ++s_delivLogs;
+                if (happy >= 1 && (ltpPrio >= 3 || s_delivLogs < 40)) {
+                    if (ltpPrio < 3) ++s_delivLogs;
                     int64_t timeBuf = 0;
                     float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
                     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(&timeBuf, c172234);
