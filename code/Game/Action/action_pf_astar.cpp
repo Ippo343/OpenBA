@@ -775,11 +775,22 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
     case 5:
         iVar2 = Pf_AstarRun_ce00(reinterpret_cast<int*>(param_1 + 0x78), param_2[1], param_2[2],
                                  param_4, reinterpret_cast<int64_t>(auStack_10008));
+        // Hold the pathfinder CS (self+0x30) across the ENTIRE result commit — the array
+        // resize, the cell write loop, AND the ready-byte store. The original released the
+        // lock after the resize and wrote the cells unlocked; that is safe only if no other
+        // thread touches the self+0x160 result table meanwhile. It is NOT safe here: the
+        // main thread's slot allocator (Pf_AllocTradeSlot_a6240) GROWS/reallocates that same
+        // table under the same CS, freeing the old buffer — which the allocator then hands
+        // back out as a 0x28 EntityTreeNode. With the write loop unlocked, this worker thread
+        // wrote path cells (cell-index values) into that freed-then-reused node, corrupting
+        // the post-update entity tree (the intermittent TreeSuccessor/PostUpdate AV). Keeping
+        // the lock held for the whole commit makes the worker's write and a6240's grow
+        // mutually exclusive. Extra hold time is negligible (the expensive A* already ran
+        // outside the lock) and widening a lock can only remove races, never add them.
         if (s_fn_CSLock) s_fn_CSLock(reinterpret_cast<void*>(param_1 + 0x30));
         if (s_fn_ArrResize04)
             s_fn_ArrResize04(reinterpret_cast<int64_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x160) +
                                  (static_cast<uint64_t>(static_cast<uint>(param_2[3])) * 3 + 1) * 8), iVar2);
-        if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(param_1 + 0x30));
         lVar4 = 0;
         if (0 < static_cast<int64_t>(iVar2)) {
             do {
@@ -791,6 +802,7 @@ void Pf_WorkerApplyCmd_a6430(int64_t param_1, uint32_t* param_2, void* param_3, 
         }
         *reinterpret_cast<uint8_t*>(*reinterpret_cast<int64_t*>(param_1 + 0x160) +
                 static_cast<uint64_t>(static_cast<uint>(param_2[3])) * 0x18) = 1;
+        if (s_fn_CSUnlock) s_fn_CSUnlock(reinterpret_cast<void*>(param_1 + 0x30));
         return;
     }
     (void)param_3;

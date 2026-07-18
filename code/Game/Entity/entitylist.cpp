@@ -307,15 +307,91 @@ extern "C" void IBPTreeRemove_CppImpl(void* treeRootPtr, void* nodeV) {
 }
 
 // ============================================================
-// Helper: In-order tree traversal
+// Tree-walk corruption guard + diagnostics
+// ============================================================
+// The in-order walk (TreeMinimum/TreeSuccessor) intermittently faults reading
+// a node's child/parent pointer through a HALF-CORRUPTED value — high dword a
+// valid heap segment, low dword small garbage (e.g. 0x00000258_0000F1FA). See
+// notes/project_entitylist_postupdate_treesuccessor_crash. Every real node is
+// allocated 8-byte aligned (fn_MemAlloc(...,0x28,8)) with a heap address in the
+// low-4GB..high range, so a non-null pointer that is MISALIGNED or has a set
+// high dword with a tiny low dword cannot be a live node — it is corruption.
+// We refuse to dereference it (converting the hard crash into a safe early
+// stop) and record where it came from so the root cause can be pinned down.
+// A non-null 64-bit value that cannot be a live heap pointer: misaligned, or
+// a half-written pointer (valid high dword, tiny low dword — the freelist-link
+// pattern left in a freed block, e.g. 0x000001AC_0000D661).
+static inline bool PtrCorrupt(uintptr_t p) {
+    if (p == 0) return false;                 // null = legitimate terminator / cleared slot
+    if (p & 0x7) return true;                 // heap objects are 8-byte aligned
+    if ((uint32_t)(p >> 32) != 0 && (uint32_t)p < 0x10000) return true; // half-written
+    return false;
+}
+
+// A non-null pointer that cannot be a live tree node.
+static inline bool NodeCorrupt(const EntityTreeNode* n) {
+    return PtrCorrupt((uintptr_t)n);
+}
+
+// Set when a walk refuses a corrupt pointer; caller logs + continues.
+static bool             g_treeCorrupt = false;
+static const char*      g_treeCorruptSite = nullptr;   // which deref tripped
+static EntityTreeNode*  g_treeCorruptFrom = nullptr;   // node holding the bad field
+static uintptr_t        g_treeCorruptBad  = 0;         // the refused pointer value
+
+static void FlagTreeCorrupt(const char* site, EntityTreeNode* from, const void* bad) {
+    g_treeCorrupt = true;
+    g_treeCorruptSite = site;
+    g_treeCorruptFrom = from;
+    g_treeCorruptBad = (uintptr_t)bad;
+}
+
+// Dump the captured corruption context. `from` is a live node whose child/parent
+// field held the bad pointer — its full contents reveal whether the whole node
+// was trashed (freed+reused) or just one field (partial write).
+static void ReportTreeCorrupt(const char* walk, EntityList* self, EntityTreeNode* prev) {
+    // Rate-limit: the same isolated corruption re-trips every frame. Log the
+    // full context only when the (site, from-node, bad-ptr) tuple changes.
+    static const char*     lastSite = nullptr;
+    static EntityTreeNode*  lastFrom = nullptr;
+    static uintptr_t        lastBad  = 0;
+    if (g_treeCorruptSite == lastSite && g_treeCorruptFrom == lastFrom &&
+        g_treeCorruptBad == lastBad) {
+        return;
+    }
+    lastSite = g_treeCorruptSite; lastFrom = g_treeCorruptFrom; lastBad = g_treeCorruptBad;
+
+    printf("[TreeGuard] CORRUPT node refused during %s walk: site=%s bad=%p\n",
+           walk, g_treeCorruptSite ? g_treeCorruptSite : "?", (void*)g_treeCorruptBad);
+    EntityTreeNode* f = g_treeCorruptFrom;
+    if (f && !NodeCorrupt(f)) {
+        printf("[TreeGuard]   from-node=%p  entityIBP=%p parent=%p left=%p right=%p bal=%d ht=%d\n",
+               (void*)f, (void*)f->entityIBP, (void*)f->parent, (void*)f->left,
+               (void*)f->right, (int)f->balance, (int)f->height);
+    }
+    if (prev && !NodeCorrupt(prev) && prev != f) {
+        printf("[TreeGuard]   prev-node=%p  entityIBP=%p parent=%p left=%p right=%p\n",
+               (void*)prev, (void*)prev->entityIBP, (void*)prev->parent,
+               (void*)prev->left, (void*)prev->right);
+    }
+    printf("[TreeGuard]   postUpdateRoot=%p (cnt=%lld)  updateRoot=%p (cnt=%lld)\n",
+           (void*)self->postUpdateTreeRoot, (long long)self->postUpdateTreeCount,
+           (void*)self->updateTreeRoot, (long long)self->updateTreeCount);
+    fflush(stdout);
+}
+
+// ============================================================
+// Helper: In-order tree traversal (corruption-guarded)
 // ============================================================
 // Finds the leftmost node in the tree (minimum).
 static EntityTreeNode* TreeMinimum(EntityTreeNode* node) {
     if (!node) return nullptr;
-    while (node->left) {
-        node = node->left;
+    for (;;) {
+        EntityTreeNode* l = node->left;
+        if (NodeCorrupt(l)) { FlagTreeCorrupt("min.left", node, l); return node; }
+        if (!l) return node;
+        node = l;
     }
-    return node;
 }
 
 // In-order successor of a node.
@@ -323,15 +399,19 @@ static EntityTreeNode* TreeSuccessor(EntityTreeNode* node) {
     if (!node) return nullptr;
 
     // If right child exists, successor is leftmost of right subtree
-    if (node->right) {
-        return TreeMinimum(node->right);
+    EntityTreeNode* r = node->right;
+    if (NodeCorrupt(r)) { FlagTreeCorrupt("succ.right", node, r); return nullptr; }
+    if (r) {
+        return TreeMinimum(r);
     }
 
     // Walk up until we find a node that is a left child of its parent
     EntityTreeNode* parent = node->parent;
+    if (NodeCorrupt(parent)) { FlagTreeCorrupt("succ.parent", node, parent); return nullptr; }
     while (parent && parent->right == node) {
         node = parent;
         parent = node->parent;
+        if (NodeCorrupt(parent)) { FlagTreeCorrupt("succ.up-parent", node, parent); return nullptr; }
     }
     return parent;
 }
@@ -358,15 +438,24 @@ void EntityList_Update(EntityList* self, void* time) {
     // Step 3: In-order traversal of update tree (+0x68)
     EntityTreeNode* treeRoot = self->updateTreeRoot;
     if (treeRoot) {
+        g_treeCorrupt = false;
+
         // Find leftmost node (in-order start)
         EntityTreeNode* node = TreeMinimum(treeRoot);
+        EntityTreeNode* prev = nullptr;
 
-        while (node) {
+        while (node && !g_treeCorrupt) {
             // CheckPtr on the node (it's an IBP)
             fn_InternalBasePtr_CheckPtr((void*)node);
 
-            // Check entity not deleted (bit 10 of flags at entity+0x40)
+            // Guard the node's entity-IBP key against a freelist link (UAF node).
             int64_t entity = (int64_t)node->entityIBP;
+            if (PtrCorrupt((uintptr_t)entity)) {
+                FlagTreeCorrupt("entityIBP", node, (void*)entity);
+                break;
+            }
+
+            // Check entity not deleted (bit 10 of flags at entity+0x40)
             if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
                 fn_InternalBasePtr_CheckPtr((void*)node);
                 // Call tree node handler (inline for Update, calls vtable +0x40)
@@ -374,8 +463,11 @@ void EntityList_Update(EntityList* self, void* time) {
             }
 
             // Move to in-order successor
+            prev = node;
             node = TreeSuccessor(node);
         }
+
+        if (g_treeCorrupt) ReportTreeCorrupt("Update", self, prev);
     }
 
     // Step 4: 5-bucket round-robin
@@ -621,23 +713,36 @@ void EntityList_PostUpdate(EntityList* self) {
     EntityTreeNode* treeRoot = self->postUpdateTreeRoot;
     if (!treeRoot) return;
 
+    g_treeCorrupt = false;
+
     // Find leftmost node (in-order start)
     EntityTreeNode* node = TreeMinimum(treeRoot);
+    EntityTreeNode* prev = nullptr;
 
-    while (node) {
+    while (node && !g_treeCorrupt) {
         // CheckPtr on the node
         fn_InternalBasePtr_CheckPtr((void*)node);
 
-        // Check entity not deleted (bit 10 of flags at entity+0x40)
+        // Guard the node's entity-IBP key: a freed-but-still-linked node has a
+        // freelist link written over +0x00, so dereferencing it faults.
         int64_t entity = (int64_t)node->entityIBP;
+        if (PtrCorrupt((uintptr_t)entity)) {
+            FlagTreeCorrupt("entityIBP", node, (void*)entity);
+            break;
+        }
+
+        // Check entity not deleted (bit 10 of flags at entity+0x40)
         if (!((*(uint32_t*)(entity + 0x40) >> 10) & 1)) {
             fn_InternalBasePtr_CheckPtr((void*)node);
             EntityList_PostUpdateNodeHandler(entity);
         }
 
         // Move to in-order successor
+        prev = node;
         node = TreeSuccessor(node);
     }
+
+    if (g_treeCorrupt) ReportTreeCorrupt("PostUpdate", self, prev);
 }
 
 // ============================================================
