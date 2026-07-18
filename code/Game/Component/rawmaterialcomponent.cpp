@@ -516,7 +516,6 @@ void RawMaterialComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -568,4 +567,3 @@ static void* RawMaterialComponent_CreateInPlace(void* mem) {
 }
 REGISTER_TYPE(RawMaterialComponent, "Component",
               &RawMaterialComponent_Factory, &RawMaterialComponent_CreateInPlace);
-#endif // STANDALONE_EXE

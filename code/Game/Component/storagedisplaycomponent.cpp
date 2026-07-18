@@ -21,9 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
-#endif
 
 // ============================================================
 // Pile-rendering bring-up (BANISHED_LIVE_STORAGEDISPLAY, default OFF)
@@ -62,11 +60,9 @@ static uint32_t SDD_ModelDescTypeId() {
     }
     if (s_pModelDescTid_rdata && *s_pModelDescTid_rdata != 0 && *s_pModelDescTid_rdata != 0xFFFFFFFF)
         return *s_pModelDescTid_rdata;
-#ifdef STANDALONE_EXE
     static uint32_t cached = 0;
     if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("ModelDescription");
     if (cached != 0xFFFFFFFF) return cached;
-#endif
     return 0;
 }
 
@@ -76,11 +72,9 @@ static uint32_t SDD_RawMatDescTypeId() {
     if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
         && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
         return *g_TypeId_RawMaterialDescription;
-#ifdef STANDALONE_EXE
     static uint32_t cached = 0;
     if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("RawMaterialDescription");
     if (cached != 0xFFFFFFFF) return cached;
-#endif
     return 0;
 }
 
@@ -848,7 +842,6 @@ void StorageDisplayComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -917,4 +910,3 @@ static void* StorageDisplayComponent_CreateInPlace(void* mem) {
 REGISTER_TYPE(StorageDisplayComponent, "Component",
               &StorageDisplayComponent_Factory, &StorageDisplayComponent_CreateInPlace);
 
-#endif // STANDALONE_EXE

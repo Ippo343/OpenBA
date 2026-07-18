@@ -15,11 +15,9 @@
 #include <cstdio>
 #include <cstdlib>
 
-#ifdef STANDALONE_EXE
 // In-app RenderDoc capture (standalone only) — ApplyVideoSettings arms a delayed
 // capture after a video change so we can inspect the post-rebuild render targets.
 #include "renderdoc_integration.h"
-#endif
 
 // ============================================================
 // Element IDs assigned in Startup, dispatched in OnEvent
@@ -481,12 +479,10 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
     int modeCount = *(int*)(adapter + 0x10);
     intptr_t modes = *(intptr_t*)(adapter + 8);
 
-#ifdef STANDALONE_EXE
     printf("[OptionsDialog::PopulateResolutionCombo] savedW=%u savedH=%u modeCount=%d "
            "renderer=%u adapter=%u\n",
            self->savedWidth, self->savedHeight, modeCount,
            self->savedRenderer, self->savedAdapter);
-#endif
 
     fn_InternalBasePtr_CheckPtr(&self->comboResolution);
     fn_ComboElement_RemoveAllItems(self->comboResolution);
@@ -496,11 +492,9 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
         uint32_t w = *(uint32_t*)(modes + i * 0x18);
         uint32_t h = *(uint32_t*)(modes + i * 0x18 + 4);
 
-#ifdef STANDALONE_EXE
         if (i < 5 || (w == self->savedWidth && h == self->savedHeight))
             printf("[OptionsDialog::PopRes]   mode[%d] = %ux%u%s\n", i, w, h,
                    (w == self->savedWidth && h == self->savedHeight) ? " <-- MATCH" : "");
-#endif
 
         uint8_t fmtBuf[8];
         fn_String_Format(fmtBuf, "%ix%i", w, h);
@@ -605,7 +599,6 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     static const bool s_enableMouseClipCheck  = true;
     static const bool s_enableTabRestore      = true;
 
-#ifdef STANDALONE_EXE
     printf("[OptionsDialog::Startup] self=%p  flags: btn=%d aud=%d vid=%d "
            "sh=%d vchk=%d ilist=%d auto=%d uisc=%d game=%d mclip=%d tab=%d\n",
            self,
@@ -614,7 +607,6 @@ void OptionsDialog_Startup(OptionsDialog* self) {
            (int)s_enableInputList, (int)s_enableAutosaveCombo,
            (int)s_enableUIScaleSlider, (int)s_enableGameplayChecks,
            (int)s_enableMouseClipCheck, (int)s_enableTabRestore);
-#endif
 
     int32_t* audioVol = g_pAudioConfigSingleton
                         ? reinterpret_cast<int32_t*>(*g_pAudioConfigSingleton) : nullptr;
@@ -1094,14 +1086,12 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     }
     if (kVidTrace) printf("[OptVideo] -> applying (needsFullRestart=%d)\n", (int)needsFullRestart);
 
-#ifdef STANDALONE_EXE
     // A video setting actually changed → arm a RenderDoc capture ~8 frames out
     // so we capture a steady-state frame AFTER the engine's deferred swapchain/
     // target rebuild (BeginFrame consumes Device+0x9c next frame and skips it).
     // No-op unless launched via RenderDoc's UI. Lets us inspect the scene render
     // target's actual SampleDesc.Count to confirm whether MSAA is bound.
     RenderDocIntegration::RequestCaptureInFrames(8);
-#endif
 
     // If renderer or adapter changed, need full shutdown/startup
     if (needsFullRestart) {
@@ -1734,7 +1724,6 @@ cleanup:
     fn_String_Dtor(inputNameStr);
 }
 
-#ifdef STANDALONE_EXE
 
 // ============================================================
 // OptionsDialog standalone scaffolding
@@ -1899,4 +1888,3 @@ extern "C" void* OptionsDialog_StandaloneCreateInPlace(void* memory) {
 REGISTER_TYPE(OptionsDialog, "UI::DialogInstance",
               &OptionsDialog_StandaloneFactory, &OptionsDialog_StandaloneCreateInPlace);
 
-#endif  // STANDALONE_EXE

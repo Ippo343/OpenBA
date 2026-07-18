@@ -779,7 +779,6 @@ void GrowthComponent_InitFuncs() {
 //
 // All four recipe steps are DONE and verified in-game (BANISHED_GROWTH_TRACE): the
 // growth value at resource+0x28 accumulates monotonically per tick.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdlib>
@@ -789,4 +788,3 @@ COMPONENT_LIVE_FACTORY_S(GrowthComponent, 0x50, 0xcb, "BANISHED_LIVE_GROWTH",
                          GrowthComponent_Update, GrowthComponent_Startup)
 REGISTER_TYPE(GrowthComponent, "Component",
               &GrowthComponent_Factory, &GrowthComponent_CreateInPlace);
-#endif // STANDALONE_EXE

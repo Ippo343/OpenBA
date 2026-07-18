@@ -18,7 +18,6 @@
 //     null would route the region A* helper to a 0-resolve (silent no-op returning garbage
 //     into the 32KB stack path buffer) — strictly worse than the skipped-call no-op. The
 //     port exists in action_pf_region.cpp; register it once 0x14001dc00 + 0x14001dcd0 land.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -52,4 +51,3 @@ void RegisterPfRegionBatch() {
     RegisterExeAddr(0x1400a5b30, reinterpret_cast<uintptr_t>(&Pf_RegionPairCacheInsert_5b30));
     RegisterExeAddr(0x1400a8ba0, reinterpret_cast<uintptr_t>(&Pf_RegionPathLength_8ba0));  // dep 1dc00 now reg
 }
-#endif

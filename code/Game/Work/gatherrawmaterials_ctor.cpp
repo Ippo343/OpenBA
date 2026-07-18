@@ -31,9 +31,7 @@
 #include "resolve.h"
 #include <cstdint>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
-#endif
 
 // Base Work ctor. RCX=self, RDX=InternalBasePtr* (reads *param2 as the entity ptr).
 typedef void* (*GRMC_WorkCtor25_t)(void* self, void* ibp);              // 0x1400f72e0
@@ -50,12 +48,7 @@ typedef void  (*GRMC_ResizeIntArray_t)(void* arrayField, int count);   // 0x1400
 static uint32_t GRMC_BuildDescTypeId() {
     static uint32_t id = 0;
     if (id != 0 && id != 0xFFFFFFFFu) return id;
-#ifdef STANDALONE_EXE
     id = ::Object::GetTypeIdByName("BuildDescription");
-#else
-    uintptr_t g = ResolveAddr(Module::Exe, 0x1401c7040);
-    if (g) id = *reinterpret_cast<uint32_t*>(g);
-#endif
     return id;
 }
 

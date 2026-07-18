@@ -14,7 +14,6 @@
 //
 // (The "9c480 deferred" comment in reg_work_accessor.cpp is STALE — the pathfinding wave
 // landed 0x14009c480 in reg_pf_roots_road.cpp, which closes 12d5d0 then 8d590.)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -29,4 +28,3 @@ void RegisterPfRootsRouteBatch() {
     RegisterExeAddr(0x14012d5d0, reinterpret_cast<uintptr_t>(&Pf_FindBestAdjacentCell_d5d0));
     RegisterExeAddr(0x14008d590, reinterpret_cast<uintptr_t>(&Pf_PickBestDropTarget_8d590));
 }
-#endif

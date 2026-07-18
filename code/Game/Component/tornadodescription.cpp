@@ -35,7 +35,6 @@ static void TornadoDescription_Init(void* self) {
 }
 
 void TornadoDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float || !g_fn_Time_Serialize) return;
@@ -47,9 +46,6 @@ void TornadoDescription_Serialize(void* self, void* stream) {
     g_fn_Time_Serialize(s + 0x28, serializer);                               // Time  +0x28
     g_fn_Serialize_Int(serializer, s + 0x34, nullptr);                       // int   +0x34
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* TornadoDescription_Dtor(void* self, uint32_t flags) {
@@ -60,7 +56,6 @@ void* TornadoDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -108,4 +103,3 @@ static void* TornadoDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(TornadoDescription, "Description",
               &TornadoDescription_Factory, &TornadoDescription_CreateInPlace);
-#endif

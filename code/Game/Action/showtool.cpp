@@ -15,9 +15,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
-#endif
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -67,11 +65,9 @@ static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 static uint32_t ShowTool_ModelDescTid() {
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
-#ifdef STANDALONE_EXE
     static uint32_t c = 0;
     if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("ModelDescription");
     if (c != 0xFFFFFFFF) return c;
-#endif
     return 0;
 }
 // RawMaterialDescription type-id (DWORD_1401c7cb8 / g_TypeId_RawMaterialDescription).
@@ -81,11 +77,9 @@ static uint32_t ShowTool_RawMatTid() {
         return *g_TypeId_RawMaterialDescription;
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
-#ifdef STANDALONE_EXE
     static uint32_t c = 0;
     if (!c || c == 0xFFFFFFFF) c = ::Object::GetTypeIdByName("RawMaterialDescription");
     if (c != 0xFFFFFFFF) return c;
-#endif
     return 0;
 }
 
@@ -122,7 +116,6 @@ bool ShowTool_ResolveFuncs() {
     if (iatEntry) s_fn_CheckPtr = *reinterpret_cast<void(**)(void*)>(iatEntry);
 
     s_TypeInfo_ShowToolEntity = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
-#ifdef STANDALONE_EXE
     // DAT_1401c7158 is the CitizenComponent type-id (verified: CitizenComponent_
     // RegisterType writes it). In standalone that raw exe .rdata slot is null, so
     // resolve the id from the runtime registry and hand out a pointer to our own
@@ -139,7 +132,6 @@ bool ShowTool_ResolveFuncs() {
             s_TypeInfo_ShowToolEntity = &s_citizenTid;
         }
     }
-#endif
     s_fn_HideTool = reinterpret_cast<void(*)(void*)>(
         ResolveAddr(Module::Exe, 0x1401176e0));
     s_fn_ShowToolOnEntity = reinterpret_cast<void(*)(void*, int)>(
@@ -444,7 +436,6 @@ bool ShowTool_GetTarget_Impl(void* self, void* param) {
 // Vtable @ 0x1401589b0 (10 slots), size 0x30, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -480,4 +471,3 @@ extern "C" void* ShowTool_Factory(void) {
     return Action_Alloc(0x30, g_ShowTool_Vtable);
 }
 REGISTER_TYPE(ShowTool, "Action", &ShowTool_Factory, &ShowTool_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -265,7 +265,6 @@ void TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
 // Vtable @ 0x140160b20 (9 slots, Object::External base), size 0x38, parent "TutorialImage".
 // GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -300,4 +299,3 @@ extern "C" void* TutorialImageInputKey_Factory(void) {
     return p ? TutorialImageInputKey_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialImageInputKey, "TutorialImage", &TutorialImageInputKey_Factory, &TutorialImageInputKey_CreateInPlace);
-#endif // STANDALONE_EXE

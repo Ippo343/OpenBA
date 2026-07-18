@@ -35,10 +35,8 @@
 #include <cstdint>
 #include <cmath>
 #include <cstring>
-#ifdef STANDALONE_EXE
 #include <cstdio>
 #include <cstdlib>
-#endif
 
 namespace {
 
@@ -73,7 +71,6 @@ static fn_CtxEndVerts_t    s_ctxEnd      = nullptr;
 // heap the rest of the reimpl uses; the raw static-MemAlloc export doesn't resolve
 // reliably in standalone.
 
-#ifdef STANDALONE_EXE
 // Overlay Z handling (standalone). DEFAULT = faithful: the grid conforms exactly to the
 // collision terrain (verified: b10e0 == the game's own aa20 terrain ray), which renders
 // correctly and is visible. On this map the placed building anchors at Z=0 (sub_da00
@@ -86,7 +83,6 @@ static fn_CtxEndVerts_t    s_ctxEnd      = nullptr;
 // renders the visible, correct terrain-conforming overlay.
 static bool  OverlayAnchorOn() { static int on = -1; if (on < 0) { const char* e = std::getenv("BANISHED_TOOL_ZLIFT"); on = (e && e[0]) ? 1 : 0; } return on != 0; }
 static float OverlayZLift()     { static float v = 1e30f; if (v > 1e29f) { const char* e = std::getenv("BANISHED_TOOL_ZLIFT"); v = (e && e[0]) ? (float)std::atof(e) : 0.0f; } return v; }
-#endif
 
 static bool s_init = false;
 static void EnsureFns() {
@@ -252,14 +248,12 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     // the builder would otherwise leave count>0 with a null base -> null-record deref).
     int count3 = (param_3 && param_3[0]) ? (int)param_3[1] : 0;
     int count4 = (param_4 && param_4[0]) ? (int)param_4[1] : 0;
-#ifdef STANDALONE_EXE
     { static int s_on = -1;
       if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
       if (s_on) { static int n = 0; if (n++ < 5)
         std::fprintf(stderr, "[overlay] ctx=%p count3=%d count4=%d material=%p begin=%p add=%p end=%p b10e0hf=%p\n",
                      ctx, count3, count4, material, (void*)s_ctxBegin, (void*)s_ctxAddVtx, (void*)s_ctxEnd,
                      (void*)heightfield), std::fflush(stderr); } }
-#endif
     bool began = s_ctxBegin ? s_ctxBegin(ctx, (count3 + count4) * 6, 0x18) : false;
     if (!began) return;
 
@@ -320,7 +314,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         }
     }
 
-#ifdef STANDALONE_EXE
     // Standalone-only base anchor. The overlay faithfully conforms to the collision
     // heightmap (verified: b10e0 == the game's own aa20 terrain ray), but the placed
     // building anchors at Z=0 (sub_da00 forces pos.z=0) and the standalone's rendered
@@ -336,7 +329,6 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
         PlayerTileRender_TerrainCorners_b10e0(heightfield, mrec[0], mrec[1], mc);
         baselineZ = mc[2];
     }
-#endif
 
     // --- Loop 2: placement tile records (param_3). THE LIVE overlay path. ---
     for (int rIdx = 0; rIdx < count3; rIdx++) {
@@ -355,9 +347,7 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
             vtx[0] = corners[k * 3 + 0];
             vtx[1] = corners[k * 3 + 1];
             vtx[2] = corners[k * 3 + 2];
-#ifdef STANDALONE_EXE
             if (OverlayAnchorOn()) vtx[2] += OverlayZLift() - baselineZ;  // opt-in base-anchor (see helper)
-#endif
             vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + half) * uvScale + variantCol;
             vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + half;
             std::memcpy(&vtx[5], &rec[3], 4);                        // color = rec+0xc

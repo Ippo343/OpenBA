@@ -20,7 +20,6 @@
 // (their closure transits the Entity_impl_c4a0 EdgeMesh render family). The body resolves
 // them as exe pointers and null-guards them, so with the outline off the dialog still
 // opens with those steps skipped. See the body header for the full rationale.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -29,4 +28,3 @@ extern "C" void EditTool_SelectEntity_Impl(void*, void*);  // 0x1400fd3b0
 void RegisterEditToolSelectBatch() {
     RegisterExeAddr(0x1400fd3b0, reinterpret_cast<uintptr_t>(&EditTool_SelectEntity_Impl));
 }
-#endif  // STANDALONE_EXE

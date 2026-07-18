@@ -9,7 +9,6 @@
 //
 // Safety: every address below was verified as a real function ENTRY in Ghidra
 // (get_function_by_address Entry == address) and is a faithful 1:1 port.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -45,4 +44,3 @@ void RegisterActionHuntBatch() {
     // 0x140122340 HerdComponent_StartMigration SKIPPED (no-migration branch infinite-loops
     // single-threaded in standalone — needs the async removal-queue drain).
 }
-#endif

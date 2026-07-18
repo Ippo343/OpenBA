@@ -56,7 +56,6 @@ static void* CharacterDescription_Ctor_Impl(void* mem) {
 }
 
 void CharacterDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !fn_Serializer_Serialize_Float || !g_fn_Serialize_Bool) {
         return;
@@ -77,11 +76,6 @@ void CharacterDescription_Serialize(void* self, void* stream) {
     fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x44), nullptr);
 
     g_fn_Serializer_Dtor(serializer);
-#else
-    typedef void (*fn_t)(void*, void*);
-    fn_t orig = reinterpret_cast<fn_t>(ResolveAddr(Module::Exe, kSerializeAddr));
-    if (orig) orig(self, stream);
-#endif
 }
 
 void* CharacterDescription_Dtor(void* self, uint32_t flags) {
@@ -95,7 +89,6 @@ void* CharacterDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
 // ============================================================
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -169,4 +162,3 @@ extern "C" void* CharacterDescription_Factory(void) {
 REGISTER_TYPE(CharacterDescription, "Description",
               &CharacterDescription_Factory, &CharacterDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

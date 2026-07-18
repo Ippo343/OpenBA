@@ -207,11 +207,9 @@ void WildAnimalComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // Inert-but-valid WildAnimalComponent: size 0x30 + Object::Internal base + shared stub
 // vtable + capability flags +0x20=0x82 (from WildAnimalComponent_Ctor) + zeroed body.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(WildAnimalComponent, 0x30, 0x82)
 REGISTER_TYPE(WildAnimalComponent, "Component",
               &WildAnimalComponent_Factory, &WildAnimalComponent_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -93,7 +93,6 @@ static void* CitizenDescription_Ctor_Impl(void* mem) {
 }
 
 void CitizenDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !fn_Serializer_Serialize_Float || !g_fn_Serialize_Int) {
         return;
@@ -169,11 +168,6 @@ void CitizenDescription_Serialize(void* self, void* stream) {
     F(0x10c);
 
     g_fn_Serializer_Dtor(serializer);
-#else
-    typedef void (*fn_t)(void*, void*);
-    fn_t orig = reinterpret_cast<fn_t>(ResolveAddr(Module::Exe, kSerializeAddr));
-    if (orig) orig(self, stream);
-#endif
 }
 
 void* CitizenDescription_Dtor(void* self, uint32_t flags) {
@@ -194,7 +188,6 @@ void* CitizenDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
 // ============================================================
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -268,4 +261,3 @@ extern "C" void* CitizenDescription_Factory(void) {
 REGISTER_TYPE(CitizenDescription, "Description",
               &CitizenDescription_Factory, &CitizenDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

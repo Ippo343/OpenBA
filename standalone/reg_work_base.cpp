@@ -8,7 +8,6 @@
 //
 // Safety: every address below was verified as a real function ENTRY in Ghidra
 // (get_function_by_address Entry == address) and is a faithful 1:1 port.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -50,4 +49,3 @@ void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x1400a00f0, reinterpret_cast<uintptr_t>(&WorkBase_ValidateCell_a00f0));
     RegisterExeAddr(0x1400f72e0, reinterpret_cast<uintptr_t>(&Work_Ctor25_Impl));
 }
-#endif

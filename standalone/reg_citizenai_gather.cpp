@@ -10,7 +10,6 @@
 //
 // Called from address_registry.cpp (the lead wires the call site).
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdint>
@@ -25,4 +24,3 @@ void RegisterCitizenAIGather() {
     RegisterExeAddr(0x14012ab00, reinterpret_cast<uintptr_t>(&Storage_GetResourceCount2));
 }
 
-#endif // STANDALONE_EXE

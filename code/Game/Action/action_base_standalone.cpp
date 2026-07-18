@@ -8,7 +8,6 @@
 // (PlayAnimation_Factory 0x14014a5..: MemAlloc -> Internal::Internal -> zero
 // type fields -> install per-type vtable). All Action subtypes are 0x40 bytes.
 
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -63,4 +62,3 @@ extern "C" void* Action_Alloc(int size, void* vtable) {
     return Action_InitInPlace(p, size, vtable);
 }
 
-#endif  // STANDALONE_EXE

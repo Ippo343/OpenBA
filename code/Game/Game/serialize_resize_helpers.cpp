@@ -140,12 +140,6 @@ void GenericArrayResize(void* arrayHeader, int newCount,
 //
 // MemAlloc(cap*2, 2). Per element: 2-byte copy. No special teardown.
 extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride02) {
-        fn_Array_Resize_Stride02(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x02, 2);
 }
 
@@ -155,12 +149,6 @@ extern "C" void Reimpl_Array_Resize_Stride02(void* arrayHeader, int newCount) {
 //
 // MemAlloc(cap<<4, 4). Per element: copy 4 dwords (16 bytes total).
 extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride16A) {
-        fn_Array_Resize_Stride16A(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x10, 4);
 }
 
@@ -172,12 +160,6 @@ extern "C" void Reimpl_Array_Resize_Stride16A(void* arrayHeader, int newCount) {
 // Same byte size as Helper #2 but different alignment (2 vs 4) — kept
 // separate because the original exe also keeps these distinct functions.
 extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride16B) {
-        fn_Array_Resize_Stride16B(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x10, 2);
 }
 
@@ -188,12 +170,6 @@ extern "C" void Reimpl_Array_Resize_Stride16B(void* arrayHeader, int newCount) {
 // MemAlloc(cap<<2, 4). Per element: copy 1 dword. Used for Geometry +0x220
 // (version 4+ array, count at +0x228).
 extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride04) {
-        fn_Array_Resize_Stride04(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x04, 4);
 }
 
@@ -204,12 +180,6 @@ extern "C" void Reimpl_Array_Resize_Stride04(void* arrayHeader, int newCount) {
 // MemAlloc(cap*0xc, 4). Per element: copy 3 dwords (12 bytes). Used by
 // NameDatabase::Serialize for its +0x20 syllable-table array.
 extern "C" void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (void* f = (void*)ResolveAddr(Module::Exe, 0x14001c7c0)) {
-        reinterpret_cast<void(*)(void*, int)>(f)(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x0C, 4);
 }
 
@@ -220,12 +190,6 @@ extern "C" void Reimpl_Array_Resize_Stride0C(void* arrayHeader, int newCount) {
 // MemAlloc(cap, 1). Per element: copy 1 byte. Used by NameDatabase::Serialize
 // for its +0x40 packed-character buffer (and by PlantArea work in-game).
 extern "C" void Reimpl_Array_Resize_Byte(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (void* f = (void*)ResolveAddr(Module::Exe, 0x14000a590)) {
-        reinterpret_cast<void(*)(void*, int)>(f)(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x01, 1);
 }
 
@@ -316,12 +280,6 @@ void DeepCloneInner_FF00(void* dstHeader, const void* srcHeader) {
 // The decompile structure is unusual because the outer "shrink" path walks
 // the OLD buffer, not the new one — we follow that exact pattern.
 extern "C" void Reimpl_Array_Resize_ArrayOfArrays(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_ArrayOfArrays) {
-        fn_Array_Resize_ArrayOfArrays(arrayHeader, newCount);
-        return;
-    }
-#endif
     if (!arrayHeader) return;
     if (newCount < 0) {
         // Defensive: see GenericArrayResize note. The shrink-path here would

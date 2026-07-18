@@ -39,7 +39,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
 #endif
@@ -172,7 +172,7 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
 
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
 
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     if (loading && count > 0) {
         if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
             static int s_n = 0;
@@ -219,7 +219,6 @@ void* ToolbarDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -265,4 +264,3 @@ extern "C" void* ToolbarDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ToolbarDescription, "Description",
               &ToolbarDescription_Factory, &ToolbarDescription_CreateInPlace);
-#endif

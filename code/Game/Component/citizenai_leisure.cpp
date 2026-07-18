@@ -63,7 +63,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -855,4 +854,3 @@ extern "C" char CitizenAI_helper_a720_Reg(int64_t p1) {
     return CitizenAI_helper_a720(p1);
 }
 
-#endif // STANDALONE_EXE

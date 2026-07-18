@@ -22,7 +22,6 @@
 // registered so External::Load(Tornado.rsc) gets a valid object instead of the
 // NullFactory -> IsDerivedFrom(NULL) crash at Runtime+0xC039A.
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -63,4 +62,3 @@ extern "C" void* Tornado_Factory_SA(void) {
 }
 REGISTER_TYPE(Tornado, "Graphics::Particle",
               &Tornado_Factory_SA, &Tornado_CreateInPlace_SA);
-#endif // STANDALONE_EXE

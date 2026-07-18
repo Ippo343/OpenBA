@@ -65,7 +65,6 @@ static void ConsumeProduceDescription_Init(void* self) {
 }
 
 void ConsumeProduceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !g_fn_String_Serialize || !fn_Serializer_Serialize_Float ||
@@ -123,9 +122,6 @@ void ConsumeProduceDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serializer, s + 0x48, nullptr);
     g_fn_Serialize_Int(serializer, s + 0x4c, nullptr);
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* ConsumeProduceDescription_Dtor(void* self, uint32_t flags) {
@@ -149,7 +145,6 @@ void* ConsumeProduceDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -197,4 +192,3 @@ static void* ConsumeProduceDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(ConsumeProduceDescription, "Description",
               &ConsumeProduceDescription_Factory, &ConsumeProduceDescription_CreateInPlace);
-#endif

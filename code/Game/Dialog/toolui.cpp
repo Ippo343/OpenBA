@@ -21,11 +21,9 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include <cstdio>
 #include <cstdlib>
 #include "resolve.h"
-#endif
 
 // Forward declaration — defined in entityui.cpp
 extern void EntityUI_SelectEntity_Impl(void* playerController, void* entityPtr,
@@ -57,7 +55,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
     if (count <= 0) return;
 
     uintptr_t entries = *(uintptr_t*)(desc + 0x30);
-#ifdef STANDALONE_EXE
     if (std::getenv("BANISHED_MAP_TRACE")) {
         printf("[UIDescAdd] uiDesc=%p count=%d entries=%p dataSource=%p\n",
                uiDesc, count, (void*)entries, dataSource);
@@ -71,7 +68,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         }
         fflush(stdout);
     }
-#endif
 
     for (int i = 0; i < count; i++) {
         uintptr_t entry = entries + (uintptr_t)i * 0x28;
@@ -280,21 +276,17 @@ void ToolUI_Slot4(ToolUI* self) {
         void* desc = *(void**)(s + 0x30);
         int descCount = *(int*)((uintptr_t)desc + 0x30);
         uintptr_t descArray = *(uintptr_t*)((uintptr_t)desc + 0x28);
-#ifdef STANDALONE_EXE
         if (std::getenv("BANISHED_MAP_TRACE"))
             printf("[ToolUI_Slot4] desc(self+0x30)=%p descCount=%d uiDescTid=%u\n",
                    desc, descCount, g_TypeId_UIDescription ? *g_TypeId_UIDescription : 0);
-#endif
 
         for (int i = 0; i < descCount; i++) {
             void* entry = *(void**)(descArray + (uintptr_t)i * 8);
             typedef int (*fn_GetTypeId_t)(void*);
             void** vtbl = *(void***)entry;
             int typeId = ((fn_GetTypeId_t)vtbl[2])(entry);
-#ifdef STANDALONE_EXE
             if (std::getenv("BANISHED_MAP_TRACE"))
                 printf("[ToolUI_Slot4]   descEntry[%d]=%p tid=%d\n", i, entry, typeId);
-#endif
 
             if (typeId == (int)*g_TypeId_UIDescription) {
                 bool check = fn_IsDerivedFrom(entry, *g_TypeId_UIDescription);
@@ -323,7 +315,6 @@ void ToolUI_Slot4(ToolUI* self) {
 void ToolUI_Slot8(ToolUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-#ifdef STANDALONE_EXE
     // --- Standalone drag-enable for entity / citizen info panels ---------------
     // Retail arms the entity panel's title-bar drag through EntityUI's per-frame
     // input handler (exe 0x140066AD0 EntityUI::Slot8), which UNCONDITIONALLY sets
@@ -345,7 +336,6 @@ void ToolUI_Slot8(ToolUI* self) {
         if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity))
             *(uint8_t*)(s + 0x4C) = 1;
     }
-#endif
 
     // Pending drag: check mouse movement threshold
     if (*(char*)(s + 0x4D) != 0) {
@@ -512,7 +502,6 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         return;
     } else if (msg == 0x12 && id == 1) {
         // Close button — close dialog and remove from entity tracking
-#ifdef STANDALONE_EXE
         // Before closing an ENTITY info panel, drop the selecting EditTool's stale
         // dialog reference. Retail tears the tool down on close (EntityUI::Slot9 ->
         // SetEditMode(0)); that slot is stubbed in standalone, so otherwise the
@@ -568,7 +557,6 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
             uintptr_t di = *(uintptr_t*)(s + 0x18);
             if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return;
         }
-#endif
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
         fn_InternalBasePtr_CheckPtr((void*)(s + 0x18));
         void* userInterface = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);

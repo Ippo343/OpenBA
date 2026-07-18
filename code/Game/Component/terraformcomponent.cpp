@@ -261,11 +261,9 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 // (size 0x48, +0x20 capability flags 0x83, Object::Internal base + shared stub
 // vtable, zeroed body). Size from TerraformComponent_Factory MemAlloc; flags from the
 // Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(TerraformComponent, 0x48, 0x83)
 REGISTER_TYPE(TerraformComponent, "Component",
               &TerraformComponent_Factory, &TerraformComponent_CreateInPlace);
-#endif // STANDALONE_EXE

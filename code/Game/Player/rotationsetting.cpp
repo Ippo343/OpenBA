@@ -7,7 +7,6 @@
 // 4-slot vtable (Dtor, slot1, GetTypeId, Serialize/Persist) — no per-type
 // methods are reimplemented; this is a dormant landmine-removal factory.
 
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -35,4 +34,3 @@ extern "C" void* RotationSetting_Factory_SA(void) {
     return Tool_Alloc(0x18, g_RotationSetting_Vtable, 0);
 }
 REGISTER_TYPE(RotationSetting, "ToolSetting", &RotationSetting_Factory_SA, &RotationSetting_CreateInPlace_SA);
-#endif // STANDALONE_EXE

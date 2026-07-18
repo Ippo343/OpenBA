@@ -8,7 +8,6 @@
 // PF road batch; 9f3e0 move/CNR; 1a6e0 Work BST) EXCEPT 0x1400af370 (road-mesh
 // rebuild) which is DEFERRED — the ports call it via ResolveAddr so it is a safe no-op
 // until its own pass registers it.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -23,4 +22,3 @@ void RegisterPfRootsRoadBatch() {
     RegisterExeAddr(0x14009e0e0, reinterpret_cast<uintptr_t>(&Pf_RefreshRegionHeight_9e0e0));
     RegisterExeAddr(0x14009c640, reinterpret_cast<uintptr_t>(&Pf_FinalizeRoadTile_9c640));
 }
-#endif

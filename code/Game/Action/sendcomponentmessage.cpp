@@ -232,7 +232,6 @@ bool SendComponentMessage_GetTarget_Impl(SendComponentMessage* self, void* param
 // Vtable @ 0x1401600c0 (10 slots), size 0x40, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -268,4 +267,3 @@ extern "C" void* SendComponentMessage_Factory(void) {
     return Action_Alloc(0x40, g_SendComponentMessage_Vtable);
 }
 REGISTER_TYPE(SendComponentMessage, "Action", &SendComponentMessage_Factory, &SendComponentMessage_CreateInPlace);
-#endif // STANDALONE_EXE

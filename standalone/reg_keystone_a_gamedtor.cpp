@@ -15,7 +15,6 @@
 //     fn_MemFreeStatic (engine_funcs); Application singleton via g_pAppSingleton.
 //
 // Shutdown-only path (not autostart-exercised) — registering is purely additive.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -40,4 +39,3 @@ void RegisterKeystoneAGameDtorBatch() {
     RegisterExeAddr(0x14001dac0, reinterpret_cast<uintptr_t>(&GameDtor_FreeArray18_1dac0));
     RegisterExeAddr(0x14001e3a0, reinterpret_cast<uintptr_t>(&GameDtor_FreeArray20_1e3a0));
 }
-#endif

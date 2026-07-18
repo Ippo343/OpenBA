@@ -999,7 +999,6 @@ uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t
 // Standalone factory + vtable (factory cascade).
 // FencedTool: size 0x70, parent DragTool, 15-slot vtable @ 0x1401605d0.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1034,4 +1033,3 @@ extern "C" void* FencedTool_Factory_SA(void) {
     return Tool_Alloc(0x70, g_FencedTool_Vtable, 1);
 }
 REGISTER_TYPE(FencedTool, "DragTool", &FencedTool_Factory_SA, &FencedTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

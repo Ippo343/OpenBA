@@ -11,7 +11,6 @@
 // of those addresses are registered right here. The only external dep is fn_MemAlloc /
 // g_pMemAllocSingleton (engine_funcs.h, already satisfied). So registering this whole batch
 // at once leaves no half-null edge.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -43,4 +42,3 @@ void RegisterPfAvlBatch() {
     RegisterExeAddr(0x14001c940, reinterpret_cast<uintptr_t>(&Pf_BstInsertB_c940));
     RegisterExeAddr(0x14001a4f0, reinterpret_cast<uintptr_t>(&Pf_AvlInsertA_a4f0));
 }
-#endif

@@ -35,17 +35,11 @@ static void* CitizenAIDescription_Ctor_Impl(void* mem) {
 // No fields. We still create + destroy a Serializer for stream-state parity
 // with the original (advances no bytes, identical behaviour).
 void CitizenAIDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     (void)self;
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     g_fn_Serializer_Dtor(serializer);
-#else
-    typedef void (*fn_t)(void*, void*);
-    fn_t orig = reinterpret_cast<fn_t>(ResolveAddr(Module::Exe, kSerializeAddr));
-    if (orig) orig(self, stream);
-#endif
 }
 
 // ----- Dtor (vtable +0x00) ----------------------------------------------
@@ -60,7 +54,6 @@ void* CitizenAIDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
 // ============================================================
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -134,4 +127,3 @@ extern "C" void* CitizenAIDescription_Factory(void) {
 REGISTER_TYPE(CitizenAIDescription, "Description",
               &CitizenAIDescription_Factory, &CitizenAIDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

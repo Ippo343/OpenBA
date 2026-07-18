@@ -193,7 +193,6 @@ extern "C" void* NameDatabase_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -248,4 +247,3 @@ extern "C" void* NameDatabase_CreateInPlace(void* mem) {
 
 REGISTER_TYPE_FULL(NameDatabase, "Object::External", "ndb",
                    &NameDatabase_Factory, &NameDatabase_CreateInPlace);
-#endif

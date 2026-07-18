@@ -19,7 +19,6 @@
 //
 // The integrator wires RegisterComponentBatch_fruit() into address_registry.cpp and
 // FillComponentTypeIdGlobals_fruit() into game_main.cpp (after Engine::Startup).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -57,4 +56,3 @@ void RegisterComponentBatch_fruit() {
     // FruitDescription type-ID global (filled after Engine::Startup — see above).
     RegisterExeAddr(0x1401c4288, reinterpret_cast<uintptr_t>(&g_tid_FruitDescription));
 }
-#endif // STANDALONE_EXE

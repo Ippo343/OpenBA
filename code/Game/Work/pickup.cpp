@@ -21,9 +21,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"  // Object::GetTypeIdByName (.rdata tid fallback)
-#endif
 
 // ============================================================
 // BANISHED_RAWMAT_PICKUP_TRACE -- shared diagnostic gate.
@@ -414,12 +412,7 @@ static float Pickup_CellCenterHalf() {
 // Type-id read with runtime-name fallback (raw .rdata is NULL in standalone).
 static uint32_t Pickup_Tid(const uint32_t* p, const char* name) {
     if (p && *p) return *p;
-#ifdef STANDALONE_EXE
     return ::Object::GetTypeIdByName(name);
-#else
-    (void)name;
-    return 0;
-#endif
 }
 
 // Inlined Array<PickupCandidate>::Add. Mirrors the exe growth idiom byte-for-byte
@@ -1080,7 +1073,6 @@ void* Pickup_ScalarDtor_Impl(Pickup* self, uint32_t flags) {
 //   slot9 Validate = Slot9, slot10 GetTarget = Slot10, slot11 GetPriority = Slot11.
 //   slot4 Execute = Pickup_Execute_Impl (Pickup's unique Execute override).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1153,4 +1145,3 @@ extern "C" void* Pickup_Factory(void) {
     return p ? Pickup_Ctor_Impl((Pickup*)p) : nullptr;
 }
 REGISTER_TYPE(Pickup, "Work", &Pickup_Factory, &Pickup_CreateInPlace);
-#endif // STANDALONE_EXE

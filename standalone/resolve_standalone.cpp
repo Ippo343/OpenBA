@@ -5,7 +5,6 @@
 //
 // This file replaces patches/src/resolve.cpp in standalone builds.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdio>
@@ -190,4 +189,3 @@ void* ResolveOrdinal(uint16_t ordinal) {
     );
 }
 
-#endif // STANDALONE_EXE

@@ -9,7 +9,6 @@
 // NOTE: the ctor calls Work_Ctor25 @ 0x1400f72e0 (base Work ctor), which is NOT
 // yet registered for standalone — see the FLAG in the ctor source. It should be
 // registered too so the Work base fields get initialised.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -18,4 +17,3 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP); 
 extern "C" void RegisterGatherRawMaterialsCtor() {
     RegisterExeAddr(0x1400ec710, reinterpret_cast<uintptr_t>(&GatherRawMaterials_Ctor_Impl));
 }
-#endif

@@ -16,7 +16,6 @@
 // Per-type slots (Dtor, GetTypeId, Startup, OnKey, Draw, Serialize, CalcPath,
 // CalcCost, ...) point at the type's own reimpl functions in its .cpp.
 #pragma once
-#ifdef STANDALONE_EXE
 #include <cstdint>
 
 extern "C" {
@@ -48,4 +47,3 @@ void* Tool_Alloc(int size, void* vtable, int dragBase);
 
 }  // extern "C"
 
-#endif  // STANDALONE_EXE

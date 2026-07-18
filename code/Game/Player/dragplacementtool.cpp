@@ -704,7 +704,6 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
 // Standalone factory + vtable (factory cascade).
 // DragPlacementTool: size 0x48, parent DragTool, 15-slot vtable @ 0x140161b90.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Player/dragtool.h"
 #include "Object/factory_registration.h"
@@ -740,4 +739,3 @@ extern "C" void* DragPlacementTool_Factory_SA(void) {
     return Tool_Alloc(0x48, g_DragPlacementTool_Vtable, 1);
 }
 REGISTER_TYPE(DragPlacementTool, "DragTool", &DragPlacementTool_Factory_SA, &DragPlacementTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

@@ -503,22 +503,10 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
 
 extern "C" void Reimpl_Struct60B_Serialize(
     void* serializer, int count, void* arrayBase) {
-#ifndef STANDALONE_EXE
-    if (fn_Struct60B_Serialize) {
-        fn_Struct60B_Serialize(serializer, count, arrayBase);
-        return;
-    }
-#endif
     Struct60B_Serialize_Body(serializer, count, arrayBase);
 }
 
 extern "C" void Reimpl_Array_Serialize_External_MaterialInstance(
     void* serializer, int count, void* arrayBase) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Serialize_External_MaterialInstance) {
-        fn_Array_Serialize_External_MaterialInstance(serializer, count, arrayBase);
-        return;
-    }
-#endif
     Struct60B_ArraySerializeMaterialInstance_Body(serializer, count, arrayBase);
 }

@@ -13,7 +13,6 @@
 // are registered elsewhere; DAT_140172114 (0.5) is registered in reg_work_tail_fire.
 //
 // The integrator wires RegisterCitizenAIHandlers() into address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -33,4 +32,3 @@ void RegisterCitizenAIHandlers() {
     RegisterExeAddr(0x1401721a0, reinterpret_cast<uintptr_t>(&k_rdata_1721a0));
     RegisterExeAddr(0x140172280, reinterpret_cast<uintptr_t>(&k_rdata_172280));
 }
-#endif // STANDALONE_EXE

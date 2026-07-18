@@ -16,7 +16,6 @@
 //   0x14012ead0 / 0x14012eb50 material reserve      0x140042c60 audio emitter setup
 //   0x140002280 audio emitter data   + Audio::Scene dispatch slots (a00/a08/a10/a18/a20)
 // Any unregistered callee simply no-ops (guarded null in the port) — closure-safe.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -31,4 +30,3 @@ void RegisterCitizenAssignWorkplace() {
     RegisterExeAddr(0x14012a710, reinterpret_cast<uintptr_t>(&CitizenComponent_helper_a710));
     RegisterExeAddr(0x140129ff0, reinterpret_cast<uintptr_t>(&CitizenRoster_CountWorkers_129ff0));
 }
-#endif

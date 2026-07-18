@@ -297,11 +297,9 @@ void HappinessComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x50 (HappinessComponent_Factory MemAlloc), flags 0x82 (Ctor 0x14004ab60:
 // Component base sets +0x20=0x80, leaf OR 0x2 => 0x82).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(HappinessComponent, 0x50, 0x82)
 REGISTER_TYPE(HappinessComponent, "ControllerComponent",
               &HappinessComponent_Factory, &HappinessComponent_CreateInPlace);
-#endif // STANDALONE_EXE

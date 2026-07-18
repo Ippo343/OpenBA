@@ -9,7 +9,6 @@
 //   plus the four Runtime exports the worker funcs call (resolved via ResolveExport
 //   inside the ports, NOT via dispatch slots): CriticalSection::Lock/Unlock,
 //   Thread::Start, MemoryAllocator::MemAlloc (static).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -54,4 +53,3 @@ void RegisterPfAstarBatch() {
     RegisterExeAddr(0x1400a6240, reinterpret_cast<uintptr_t>(&Pf_AllocTradeSlot_a6240));
     RegisterExeAddr(0x14009c170, reinterpret_cast<uintptr_t>(&Pf_FloodFillRegion_9c170));
 }
-#endif

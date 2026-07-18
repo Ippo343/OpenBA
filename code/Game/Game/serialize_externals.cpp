@@ -179,12 +179,6 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
 extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(
     void* refField, void* serializer) {
 
-#ifndef STANDALONE_EXE
-    if (fn_ExternalPtr_Serialize_GraphicsMesh) {
-        fn_ExternalPtr_Serialize_GraphicsMesh(refField, serializer);
-        return;
-    }
-#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
@@ -200,12 +194,6 @@ extern "C" void Reimpl_ExternalPtr_Serialize_GraphicsMesh(
 extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
     void* refField, void* serializer) {
 
-#ifndef STANDALONE_EXE
-    if (fn_ExternalPtr_Serialize_Weather) {
-        fn_ExternalPtr_Serialize_Weather(refField, serializer);
-        return;
-    }
-#endif
 
     // Weather typeId is a direct dword (no double-deref).
     const uint32_t* typeIdPtr = g_pTypeId_Weather;
@@ -225,12 +213,6 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Weather(
 // ============================================================
 extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
     void* refField, void* serializer) {
-#ifndef STANDALONE_EXE
-    if (fn_ExternalPtr_Serialize2) {           // trampoline in DLL mode
-        fn_ExternalPtr_Serialize2(refField, serializer);
-        return;
-    }
-#endif
     // g_TypeId_StringTable is wired in engine_funcs.cpp (exref 0x140151488).
     // May be null in standalone until StringTable registers — the generic body
     // handles that (loads without type validation rather than crashing).
@@ -248,12 +230,6 @@ extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(
 // ============================================================
 extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(
     void* refField, void* serializer) {
-#ifndef STANDALONE_EXE
-    // In DLL mode call the original (no separate fn_ pointer; resolve inline).
-    typedef void (*orig_t)(void*, void*);
-    static orig_t s_orig = reinterpret_cast<orig_t>(ResolveAddr(Module::Exe, 0x140024c70));
-    if (s_orig) { s_orig(refField, serializer); return; }
-#endif
     const uint32_t* typeIdPtr = g_TypeId_ToolbarExternal;
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
                                 typeIdPtr, "Toolbar");

@@ -20,7 +20,6 @@
 // 0/false), so release builds and normal test runs are unaffected.
 
 #pragma once
-#ifdef STANDALONE_EXE
 
 // Swap fn_MemAlloc / fn_MemFreeStatic for the redzone wrappers if the
 // BANISHED_REDZONE env var is set. Call once, right after EngineFuncsInit().
@@ -60,4 +59,3 @@ extern "C" int RedzoneAlloc_CheckLinks(const char* tag);
 // fault. The crash handler sets this to its FILE_FLAG_WRITE_THROUGH logger.
 extern "C" void RedzoneAlloc_SetDumpSink(void (*sink)(const char*));
 
-#endif // STANDALONE_EXE

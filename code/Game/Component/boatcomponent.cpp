@@ -279,10 +279,8 @@ void BoatComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(BoatComponent, 0x98, 0x80)
 REGISTER_TYPE(BoatComponent, "ControllerComponent",
               &BoatComponent_Factory, &BoatComponent_CreateInPlace);
-#endif // STANDALONE_EXE

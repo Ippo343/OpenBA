@@ -160,7 +160,6 @@ extern "C" void* ParticleDescription_Slot8(void* self) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -206,4 +205,3 @@ extern "C" void* ParticleDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ParticleDescription, "Description",
               &ParticleDescription_Factory, &ParticleDescription_CreateInPlace);
-#endif // STANDALONE_EXE

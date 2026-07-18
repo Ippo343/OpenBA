@@ -25,7 +25,6 @@
 // separately — those are direct C++ calls within the ported TU. (b10e0 is also
 // registered by RegisterPlayerTileRenderBatch for the placement footprint grid;
 // registering it here too would double-register.)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 #include <cstdlib>
@@ -52,4 +51,3 @@ void RegisterPlayerRenderBatch() {
     // SUBMITTED). Leaving 0x1400fcc90 unresolved makes that per-frame slot a no-op.
     // (void)&HighlightDeselect_Impl;  // still exported for DLL-mode / documentation
 }
-#endif

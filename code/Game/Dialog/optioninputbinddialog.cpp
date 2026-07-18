@@ -227,7 +227,6 @@ void OptionInputBindDialog_OnEvent(OptionInputBindDialog* self, void* element, i
 //
 // Mirrors the OptionsDialog standalone wiring at the bottom of optionsdialog.cpp.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -410,4 +409,3 @@ REGISTER_TYPE(OptionInputBindDialog, "MessageDialog",
               &OptionInputBindDialog_StandaloneFactory,
               &OptionInputBindDialog_StandaloneCreateInPlace);
 
-#endif  // STANDALONE_EXE

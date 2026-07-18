@@ -23,7 +23,6 @@
 // Type-ids resolved self-contained via Object::GetTypeIdByName (the DAT_1401c7xxx globals are
 // UNFILLED 0xFFFFFFFF in standalone): "RawMaterialDescription" (DWORD_1401c7cb8),
 // "StorageComponent" (DWORD_1401c7e78), "WorkPlaceComponent" (DWORD_1401c80e0).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -36,4 +35,3 @@ void RegisterCitizenAIGrowUp() {
     RegisterExeAddr(0x140115e60, reinterpret_cast<uintptr_t>(&CitizenAI_State_LongTermPlan));
     RegisterExeAddr(0x14008f230, reinterpret_cast<uintptr_t>(&CitizenAI_Entity_impl_f230));
 }
-#endif // STANDALONE_EXE

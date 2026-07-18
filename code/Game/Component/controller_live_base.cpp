@@ -6,7 +6,6 @@
 #include "Component/component_factory_base.h"
 #include <cstdint>
 
-#ifdef STANDALONE_EXE
 
 namespace {
 
@@ -54,4 +53,3 @@ void** NodeVtable() {
 
 }  // namespace ControllerLive
 
-#endif  // STANDALONE_EXE

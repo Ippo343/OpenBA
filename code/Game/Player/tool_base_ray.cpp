@@ -201,14 +201,12 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
         }
     }
 
-#ifdef STANDALONE_EXE
     static int s_marchDiag = -1;
     if (s_marchDiag < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_marchDiag = (e && e[0] && e[0] != '0') ? 1 : 0; }
     static int s_marchN = 0;
     bool diagThis = s_marchDiag && (s_marchN++ < 3);
     int visited = 0, aa20calls = 0;
     uintptr_t aa20dbg = ResolveAddr(Module::Exe, 0x1400aaa20);
-#endif
     // Main DDA march.
     for (;;) {
         int axis = (tMax[1] <= tMax[0]) ? 1 : 0;   // SETBE: S[3] <= S[2]
@@ -221,21 +219,16 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
                 hit = reinterpret_cast<fn_aa20_t>(fn)(
                     param_1, cell[0], cell[1], param_3, param_2, param_4,
                     param_5, param_6, nullptr);
-#ifdef STANDALONE_EXE
                 if (diagThis) aa20calls++;
-#endif
             }
             if (hit) return 1;
         }
-#ifdef STANDALONE_EXE
         if (diagThis) visited++;
-#endif
         // Advance along the chosen axis.
         float oldTMax = tMax[axis];
         cell[axis] += step[axis];
         tMax[axis] = oldTMax + tDelta[axis];
         if (oldTMax >= *param_4) {  // exceeded max parametric distance
-#ifdef STANDALONE_EXE
             if (diagThis) {
                 fprintf(stderr, "[March] width=%d normDir=(%.3f,%.3f) seedCell=(%d,%d) "
                         "tEnter=%.2f tExit=%.2f aa20=%p visited=%d aa20calls=%d -> NO HIT (maxDist)\n",
@@ -244,7 +237,6 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
                         tEnter, tExit, (void*)aa20dbg, visited, aa20calls);
                 fflush(stderr);
             }
-#endif
             return 0;
         }
     }
@@ -287,7 +279,6 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     int screenW = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 4);
     int screenH = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 8);
 
-#ifdef STANDALONE_EXE
     {
         static int s_on = -1;
         if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
@@ -306,7 +297,6 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
     // implausible display sizes so sub_da00 returns invalid instead of hard-faulting.
     if (screenW <= 0 || screenH <= 0 || screenW > 16384 || screenH > 16384)
         return 0;
-#endif
 
     if (mouseX < 0 || mouseX >= screenW || mouseY < 0 || mouseY >= screenH)
         return 0;
@@ -381,7 +371,6 @@ extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
     uint8_t hit = PlayerRay_TerrainMarch_aa530(
         map, origin, dir, &maxDist, hitPos, scratch);
 
-#ifdef STANDALONE_EXE
     {
         static int s_on = -1;
         if (s_on < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_on = (e && e[0] && e[0] != '0') ? 1 : 0; }
@@ -396,7 +385,6 @@ extern "C" int PlayerRay_ScreenToCell_101270(uintptr_t param_1) {
             }
         }
     }
-#endif
 
     if (hit == 0)
         return -1;

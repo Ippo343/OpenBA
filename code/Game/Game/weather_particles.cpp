@@ -420,7 +420,6 @@ extern "C" void Reimpl_WeatherArray_Resize(void* hdr, int newCount) {
 // ============================================================
 // STANDALONE vtable + registration
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 
 static void* g_WeatherParticle_Vtable[9] = {
@@ -439,4 +438,3 @@ extern "C" void RegisterWeatherParticleVtable() {
     RegisterExeAddr(kWeatherGeometryVtable,
                     reinterpret_cast<uintptr_t>(g_WeatherParticle_Vtable));
 }
-#endif // STANDALONE_EXE

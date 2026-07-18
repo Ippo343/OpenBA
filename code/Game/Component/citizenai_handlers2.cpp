@@ -52,7 +52,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -484,4 +483,3 @@ extern "C" uint64_t CitizenAI_State_FindWork(int64_t param_1) {
     return r & 0xffffffffffffff00ULL;  // low byte 0
 }
 
-#endif // STANDALONE_EXE

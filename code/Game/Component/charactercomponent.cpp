@@ -118,7 +118,6 @@ void CharacterComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -274,4 +273,3 @@ COMPONENT_LIVE_FACTORY_S(CharacterComponent, 0x80, 0x8f,
                          CharacterComponent_UpdateAdapter, CharacterComponent_BodyInit)
 REGISTER_TYPE(CharacterComponent, "Component",
               &CharacterComponent_Factory, &CharacterComponent_CreateInPlace);
-#endif // STANDALONE_EXE

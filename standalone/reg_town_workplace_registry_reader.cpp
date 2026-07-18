@@ -11,7 +11,6 @@
 // via Object::GetTypeIdByName inside the port, so no .rdata DWORD dependency here.
 // Dormant until a caller passes a real professionKey; A/B-safe no-op when the
 // townMgr+0x100 BST is empty (default standalone).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -20,4 +19,3 @@ extern "C" void* FindAvailableBuilding(int64_t townMgr, void* out, uint64_t prof
 void RegisterTownWorkplaceReader() {
     RegisterExeAddr(0x14008d100, reinterpret_cast<uintptr_t>(&FindAvailableBuilding));
 }
-#endif // STANDALONE_EXE

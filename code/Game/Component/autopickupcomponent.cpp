@@ -170,11 +170,9 @@ void AutoPickupComponent_InitFuncs() {
 // resolves during ComponentEntity_CtorFromDescription instead of NullFactory.
 // size 0x40 (AutoPickupComponent_Factory MemAlloc), flags 0x80 (Ctor 0x140044ae0:
 // Component base sets +0x20=0x80, leaf BTS bit7 => 0x80).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(AutoPickupComponent, 0x40, 0x80)
 REGISTER_TYPE(AutoPickupComponent, "Component",
               &AutoPickupComponent_Factory, &AutoPickupComponent_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -16,7 +16,6 @@
 
 #pragma once
 
-#ifdef STANDALONE_EXE
 
 // Returns true if the detour was installed (or intentionally skipped via env).
 bool InstallAllocatorLock();
@@ -27,4 +26,3 @@ bool InstallAllocatorLock();
 // BANISHED_ALLOC_LOCK (shared) and BANISHED_FREE_LOCK (free-lock-specific).
 bool InstallFreeLock();
 
-#endif // STANDALONE_EXE

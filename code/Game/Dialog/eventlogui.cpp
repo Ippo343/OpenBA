@@ -347,7 +347,6 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
 //
 // EventLogUI_Slot5/7/9 read the event-log struct (gameWorld+0x138) but dereference
 // no exe-.rdata type-id globals, so no EnsureGlobals lazy-fill is needed.
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include <cstddef>
@@ -433,4 +432,3 @@ extern "C" void* EventLogUI_GetStandaloneVtable() {
     return reinterpret_cast<void*>(eventlogui_sa::g_vt);
 }
 
-#endif  // STANDALONE_EXE

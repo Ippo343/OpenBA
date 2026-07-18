@@ -8,7 +8,6 @@
 // action_pf_*, StorageComponent_QueryCount) that previously saw it null. Filled via
 // GetTypeIdByName AFTER Engine::Startup (Object::Factory::Startup assigns the real CRC
 // id only then), called from game_main.cpp alongside the other FillComponentTypeIdGlobals_*.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -51,4 +50,3 @@ void RegisterActionChildCtors2Batch() {
     RegisterExeAddr(0x1401c7350, reinterpret_cast<uintptr_t>(&g_tid_StateMachineComponent));
     RegisterExeAddr(0x1401c7388, reinterpret_cast<uintptr_t>(&g_tid_ConsumeProduceDescription));
 }
-#endif // STANDALONE_EXE

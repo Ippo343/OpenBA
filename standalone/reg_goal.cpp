@@ -17,7 +17,6 @@
 //                no-match) — read-only, never corrupts.
 //
 // SAFETY: both addresses verified as true function ENTRYs in Ghidra.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Goal/goal_exe_helpers.h"
 #include "Goal/statvaluedispatch.h"
@@ -28,4 +27,3 @@ void RegisterGoalBatch() {
     RegisterExeAddr(0x1400da4e0, reinterpret_cast<uintptr_t>(&StatGoal_StatValueDispatch));
 }
 
-#endif // STANDALONE_EXE

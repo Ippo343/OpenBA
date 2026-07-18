@@ -35,9 +35,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / ResolveTypeIdByNameLazy
-#endif
 
 namespace {
 
@@ -80,14 +78,10 @@ static void EnsureFns() {
     s_14da0  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014da0));
     s_122e20 = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
     s_yield  = reinterpret_cast<fn_Yield_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
-#ifdef STANDALONE_EXE
     // DAT_1401c4410 (HighlightComponent type-id) is raw exe .rdata -> NULL in standalone.
     static uint32_t s_tidHi = 0;
     if (s_tidHi == 0) s_tidHi = ::Object::GetTypeIdByName("HighlightComponent");
     s_pTid_Highlight = &s_tidHi;
-#else
-    s_pTid_Highlight = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4410));
-#endif
     s_init = true;
 }
 
@@ -653,9 +647,7 @@ extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
     }
 }
 
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 extern "C" void RegisterPathToolSetSelected() {
     RegisterExeAddr(0x1400dd710, reinterpret_cast<uintptr_t>(&PathTool_helper_d710));
 }
-#endif  // STANDALONE_EXE

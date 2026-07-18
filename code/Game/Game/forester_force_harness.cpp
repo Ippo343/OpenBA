@@ -36,7 +36,6 @@
 // has. If the check fails we never push (report-only), so the default-off path and a
 // mis-templated lodge both stay crash-free.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -200,4 +199,3 @@ extern "C" bool StartTown_ForcePushForesterWork(void* citizen) {
     return true;
 }
 
-#endif // STANDALONE_EXE

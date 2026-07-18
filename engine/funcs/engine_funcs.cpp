@@ -3128,7 +3128,6 @@ bool EngineFuncsInit() {
         if (dispatch) fn_DialogInstance_AddController6 =
             reinterpret_cast<fn_DialogInstance_AddController6_t>(*dispatch);
     }
-#ifdef STANDALONE_EXE
     // Standalone: the three exe IAT dispatch slots above are unregistered → null,
     // so the UIDescription controller-injection (ToolUI::Slot4 →
     // UIDesc_AddControllers_Impl) EXEC-faulted on a null fn ptr. Resolve them by
@@ -3148,7 +3147,6 @@ bool EngineFuncsInit() {
     if (!fn_DialogInstance_AddController6)
         fn_DialogInstance_AddController6 = reinterpret_cast<fn_DialogInstance_AddController6_t>(
             ResolveAddr(Module::Runtime, 0x180113470));
-#endif
 
     // --- DragTool support ---
     // KeyMap::Released — dispatch table at 0x1401528f0
@@ -3627,7 +3625,6 @@ bool EngineFuncsInit() {
     // UV scale float: DAT_14017214c
     g_fUVScale = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
-#ifdef STANDALONE_EXE
     // Standalone: the MaterialInstance/SpriteSheet/Sprite dispatch slots above are
     // unregistered → null, so MapUI::SetupImage guard-returned (MatCtor/SSCtor null)
     // and the minimap never bound its textures. Resolve them directly by their
@@ -3656,7 +3653,6 @@ bool EngineFuncsInit() {
     if (!fn_SpriteSheet_AddSpriteInfo)
         fn_SpriteSheet_AddSpriteInfo = reinterpret_cast<fn_SpriteSheet_AddSpriteInfo_t>(
             ResolveExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z"));
-#endif
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);

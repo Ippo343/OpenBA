@@ -1345,7 +1345,6 @@ int ClearArea_Validate(ClearArea* self, void* citizenIBP) {
 // ClearArea_ResolveFuncs(), so the factory does not pre-resolve.
 // Execute is named ClearArea_Execute with signature (self, actionStack, time).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1383,4 +1382,3 @@ extern "C" void* ClearArea_Factory(void) {
     return p ? ClearArea_Ctor((ClearArea*)p) : nullptr;
 }
 REGISTER_TYPE(ClearArea, "Work", &ClearArea_Factory, &ClearArea_CreateInPlace);
-#endif // STANDALONE_EXE

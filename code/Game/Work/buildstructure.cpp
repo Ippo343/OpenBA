@@ -939,7 +939,6 @@ done_empty:
 // self-resolves via internal EnsureHelpers()/EnsureVtables(); there is no
 // separate BuildStructure_ResolveFuncs(), so the factory does not pre-resolve.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1027,4 +1026,3 @@ extern "C" bool BuildStructure_DepsReady() {
            fn_SetupBuildActions && fn_BST_Insert && fn_IsA && fn_IsDerivedFrom &&
            s_vtable_BuildStructure && g_pGameWorldSingleton && *g_pGameWorldSingleton;
 }
-#endif // STANDALONE_EXE

@@ -612,7 +612,6 @@ void* FireWork_Slot10_Impl(FireWork* /*self*/, void* retbuf) {
 //   - ResolveFuncs      : FireWork_ResolveFuncs() (does NOT resolve a vtable;
 //                         the original vtable install lives in the exe Ctor).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -652,4 +651,3 @@ extern "C" void* FireWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x60, g_FireWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(FireWork, "Work", &FireWork_Factory, &FireWork_CreateInPlace);
-#endif // STANDALONE_EXE

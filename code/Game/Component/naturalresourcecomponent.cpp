@@ -225,7 +225,6 @@ void NaturalResourceComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -282,4 +281,3 @@ extern "C" void* NaturalResourceComponent_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(NaturalResourceComponent, "Component",
               &NaturalResourceComponent_Factory, &NaturalResourceComponent_CreateInPlace);
-#endif // STANDALONE_EXE

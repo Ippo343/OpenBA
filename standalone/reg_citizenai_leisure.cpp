@@ -22,7 +22,6 @@
 // Closure-safety: every exe sub-callee Leisure uses is already registered (verified):
 //   9f3e0, a8c0, 004680, 014c30, 9c480, a00f0, ba6b0, 002ed0, 122e20, 087fb0, 1158d0,
 //   021a30 (=CitizenAI_impl_1a30, reg as WorkBST_RegisterWork_1a30), 09f810, 132010.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -40,4 +39,3 @@ void RegisterCitizenAILeisure() {
     RegisterExeAddr(0x14002fd50, reinterpret_cast<uintptr_t>(&CitizenAI_State_Leisure_sub_fd50_Reg));
     RegisterExeAddr(0x14004a720, reinterpret_cast<uintptr_t>(&CitizenAI_helper_a720_Reg));
 }
-#endif // STANDALONE_EXE

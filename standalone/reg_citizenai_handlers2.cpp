@@ -28,7 +28,6 @@
 //   0x140122b00 FUN_140122b00 walkable-pos recur (reg_work_walkpos.cpp)
 //   0x140115a50 FUN_140115a50                    (reg_component_gap_A.cpp)
 //   0x1400c3470 FUN_1400c3470 notify-entity      (reg_action_hunt.cpp)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -41,4 +40,3 @@ void RegisterCitizenAIHandlers2() {
     RegisterExeAddr(0x14010c580, reinterpret_cast<uintptr_t>(&CitizenAI_State_SeekHappiness));
     RegisterExeAddr(0x14010d560, reinterpret_cast<uintptr_t>(&CitizenAI_State_FindWork));
 }
-#endif

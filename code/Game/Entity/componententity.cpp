@@ -791,7 +791,6 @@ void EntityList_RegisterEntity_Impl(void* entityListV, void* entityIBP, int cate
 // / External::Load no longer hits the NullFactory -> IsDerivedFrom(NULL) crash.
 // The default ctor sets the same vtable (0x14015fa78) the start-town spawn already
 // uses via CtorFromDescription, so the resulting entity is a valid empty container.
-#ifdef STANDALONE_EXE
 extern "C" void* ComponentEntity_CreateInPlace_SA(void* mem) {
     if (!mem) return nullptr;
     return ComponentEntity_CtorDefault(reinterpret_cast<ComponentEntity*>(mem));
@@ -863,4 +862,3 @@ void* g_ComponentEntity_StandaloneVtable[12] = {
     reinterpret_cast<void*>(&CE_VRet0),                   // [10] 0x1400c4a90
     reinterpret_cast<void*>(&CE_VRet0),                   // [11] 0x1400c4b90
 };
-#endif // STANDALONE_EXE

@@ -52,11 +52,7 @@ void LoaderDialog_Slot7(LoaderDialog* self, void* time) {
         // Fires once per unique LoaderDialog instance (s_seen dedup).
         // 2026-04-26: re-enabled to test "Runtime-global differs between modes"
         // hypothesis from project_standalone_splash_elements.md.
-#  ifdef STANDALONE_EXE
         const char* AB_TAG = "A/B-STANDALONE";
-#  else
-        const char* AB_TAG = "A/B-DLL      ";
-#  endif
     // Track up to 4 LoaderDialog instances; for each, find AnimatedImageElement
     // (vtbl = 0x180156000 = Runtime + 0x156000) during the first walk so we can
     // probe its +0xf8 accumulator on subsequent ticks. If +0xf8 grows tick over
@@ -204,7 +200,6 @@ void LoaderDialog_Slot7(LoaderDialog* self, void* time) {
 #endif
 }
 
-#ifdef STANDALONE_EXE
 
 // ============================================================
 // LoaderDialog standalone scaffolding
@@ -372,4 +367,3 @@ extern "C" void* LoaderDialog_StandaloneCreateInPlace(void* memory) {
 REGISTER_TYPE(LoaderDialog, "UI::DialogInstance",
               &LoaderDialog_StandaloneFactory, &LoaderDialog_StandaloneCreateInPlace);
 
-#endif  // STANDALONE_EXE

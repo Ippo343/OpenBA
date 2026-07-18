@@ -24,7 +24,6 @@
 
 #pragma once
 
-#ifdef STANDALONE_EXE
 
 namespace ChunkedSceneLoader {
 
@@ -44,4 +43,3 @@ bool IsBusy();
 
 } // namespace ChunkedSceneLoader
 
-#endif // STANDALONE_EXE

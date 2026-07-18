@@ -139,7 +139,6 @@ extern "C" void* HighlightDescription_Slot8(void* self) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -185,4 +184,3 @@ extern "C" void* HighlightDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(HighlightDescription, "Description",
               &HighlightDescription_Factory, &HighlightDescription_CreateInPlace);
-#endif // STANDALONE_EXE

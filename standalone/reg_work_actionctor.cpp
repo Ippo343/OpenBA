@@ -12,7 +12,6 @@
 // (get_function_by_address Entry == address). These are instruction-faithful
 // ports; the exe sub-callees they invoke are mirrored via guarded ResolveAddr
 // inside the reimpl (NOT registered here).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -54,4 +53,3 @@ void RegisterWorkActionCtorBatch() {
     RegisterExeAddr(0x14012d990, reinterpret_cast<uintptr_t>(&PickupGate_Accepts_12d990));
     RegisterExeAddr(0x14012d560, reinterpret_cast<uintptr_t>(&PickupGate_AcceptMask_12d560));
 }
-#endif

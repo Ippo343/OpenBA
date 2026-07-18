@@ -11,7 +11,6 @@
 // The ENTIRE exe-code closure of each is registered (003870 + d580 here; fd650's
 // other callees 1018d0/c3720/003f60/004680/c48a0/c2b70/fd960/9f5d0 were all
 // registered in prior waves). Runtime deps resolve at runtime (engine_funcs fn_*).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -34,4 +33,3 @@ void RegisterPlayerTileBatch() {
     RegisterExeAddr(0x14009d580, reinterpret_cast<uintptr_t>(&ToolTile_FootprintValidity_d580));
     RegisterExeAddr(0x1400fd650, reinterpret_cast<uintptr_t>(&ToolTile_ValidateCreate_fd650));
 }
-#endif

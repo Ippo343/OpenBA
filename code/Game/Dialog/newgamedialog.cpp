@@ -75,15 +75,10 @@ static void EnsureGeneratorTypeIds() {
 // standalone) so a still-unresolved (NULL) type-ID can't fault at the call site.
 static inline bool ResourceIsType(void* resource, uint32_t* typeIdPtr) {
     if (!resource) return false;
-#ifdef STANDALONE_EXE
     (void)typeIdPtr;
     return true;
-#else
-    return typeIdPtr && fn_IsDerivedFrom(resource, *typeIdPtr);
-#endif
 }
 
-#ifdef STANDALONE_EXE
 // ============================================================
 // EnsureGeneratorListsLoaded (standalone) — populate the combos for real
 // ============================================================
@@ -124,7 +119,6 @@ static void EnsureGeneratorListsLoaded() {
     loadInto(0x18, "Game/StartCondition/StartConditions.rsc");
     loadInto(0x20, "Game/Terrain/TerrainList.rsc");
 }
-#endif  // STANDALONE_EXE
 
 // ============================================================
 // Helper: populate combo from ExternalList with type check
@@ -184,7 +178,6 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 // NameDatabase, then checks if it ends in "vill" and appends "e" to make "ville".
 // Original: 0x140099ac0.
 static void* GenerateTownName(void* retStr, void* random, int maxLen) {
-#ifdef STANDALONE_EXE
     // Standalone: ExternalFactory::FindOrLoad("Game/Names/Cities.ndb") NULL-derefs
     // inside its OWN internal IsDerivedFrom (the NameDatabase factory subtree is
     // incomplete), and NameDatabase::GenerateName (exe 0x1400a4b30) isn't
@@ -193,50 +186,6 @@ static void* GenerateTownName(void* retStr, void* random, int maxLen) {
     (void)random; (void)maxLen;
     fn_String_Ctor_CStr(retStr, "New Town");
     return retStr;
-#else
-    // Load NameDatabase resource
-    uint8_t filenameBuf[8];
-    fn_Filename_CtorCStr(filenameBuf, "Game/Names/Cities.ndb");
-    void* resource = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, filenameBuf);
-    void* nameDB = nullptr;
-    if (ResourceIsType(resource, g_TypeId_NameDatabase)) {
-        nameDB = resource;
-    }
-    fn_Filename_Dtor(filenameBuf);
-
-    // Standalone fallback: NameDatabase::GenerateName (exe 0x1400a4b30) isn't
-    // reimplemented and/or the NameDatabase type-ID/resource didn't resolve.
-    // Produce a valid placeholder String so the caller's SetText/Dtor don't
-    // operate on uninitialized memory (and the OK button stays enabled so the
-    // Start path remains testable). No-op in DLL mode.
-    if (!fn_NameDB_GenerateName || !nameDB) {
-        fn_String_Ctor_CStr(retStr, "New Town");
-        return retStr;
-    }
-
-    // Generate name using inner algorithm (retry loop, binary search uniqueness check)
-    fn_NameDB_GenerateName(retStr, nameDB, random, 5, maxLen);
-
-    // Check if name ends in "vill" — if so, append "e" to make "ville"
-    uint64_t strPtr = *(uint64_t*)retStr;
-    bool endsInVill = false;
-    if (strPtr != 0) {
-        int len = *(int*)(strPtr - 8);  // COW header: length at strPtr-8
-        if (len > 4) {
-            uint8_t suffixStr[8];
-            fn_String_SubString(retStr, suffixStr, len - 4, len - 1);
-            endsInVill = fn_String_Equals(suffixStr, "vill");
-            fn_String_Dtor(suffixStr);
-        }
-    }
-    if (endsInVill) {
-        uint8_t tmpRet[8];
-        fn_String_Append(retStr, tmpRet, "e");
-        fn_String_Dtor(tmpRet);
-    }
-
-    return retStr;
-#endif  // STANDALONE_EXE
 }
 
 static void GenerateRandomName(void* editNamePtr, void* random) {
@@ -323,7 +272,6 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     // Standalone: lazy-resolve the generator/NameDB type-IDs (the exe .rdata
     // slots are NULL until resolved via the Factory). No-op in DLL mode.
     EnsureGeneratorTypeIds();
-#ifdef STANDALONE_EXE
     // Standalone: loading the three generator ExternalLists would populate the
     // combos, BUT ExternalFactory::FindOrLoad runs an internal IsDerivedFrom that
     // NULL-derefs against the incomplete standalone factory tree (the
@@ -338,7 +286,6 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     // three generator lists to populate the combos for real.
     static const bool s_loadGeneratorLists = true;
     if (s_loadGeneratorLists) EnsureGeneratorListsLoaded();
-#endif
 
     // --- Find all UI elements ---
     self->editName       = FindElement(self, "editName");
@@ -804,7 +751,6 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
     ((fn_SetEnabled_t)vtable[8])(okBtn, len > 0 ? 1 : 0);
 }
 
-#ifdef STANDALONE_EXE
 
 // ============================================================
 // NewGameDialog standalone scaffolding
@@ -993,4 +939,3 @@ extern "C" void* NewGameDialog_StandaloneCreateInPlace(void* memory) {
 REGISTER_TYPE(NewGameDialog, "UI::DialogInstance",
               &NewGameDialog_StandaloneFactory, &NewGameDialog_StandaloneCreateInPlace);
 
-#endif  // STANDALONE_EXE

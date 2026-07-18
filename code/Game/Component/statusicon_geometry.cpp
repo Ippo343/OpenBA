@@ -15,7 +15,6 @@
 //
 // Ported faithfully from Application-x64.exe (Ghidra), verified against the disassembly.
 
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -325,4 +324,3 @@ bool StatusIconGeometry_VtableBuilt() {
     return s_siGeomVtableBuilt;
 }
 
-#endif // STANDALONE_EXE

@@ -322,7 +322,6 @@ static void* FinishTutorialInstance_Ctor_Impl(void* memory) {
     return memory;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -368,4 +367,3 @@ extern "C" void* FinishTutorialInstance_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(FinishTutorialInstance, "Achievement::GoalInstance",
               &FinishTutorialInstance_Factory, &FinishTutorialInstance_CreateInPlace);
-#endif

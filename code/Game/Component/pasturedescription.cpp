@@ -23,7 +23,6 @@ static void PastureDescription_Init(void* self) {
 }
 
 void PastureDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
@@ -35,9 +34,6 @@ void PastureDescription_Serialize(void* self, void* stream) {
         SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
     }
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* PastureDescription_Dtor(void* self, uint32_t flags) {
@@ -48,7 +44,6 @@ void* PastureDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -96,4 +91,3 @@ static void* PastureDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(PastureDescription, "Description",
               &PastureDescription_Factory, &PastureDescription_CreateInPlace);
-#endif

@@ -23,7 +23,6 @@
 
 #pragma once
 
-#ifdef STANDALONE_EXE
 
 struct UpdateLoop;
 
@@ -49,4 +48,3 @@ bool IsAsyncLoadBusy();
 
 } // namespace AsyncLoader
 
-#endif // STANDALONE_EXE

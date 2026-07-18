@@ -40,7 +40,6 @@ static void SpawnDescription_Init(void* self) {
 }
 
 void SpawnDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float || !fn_ExternalPtr_BuildSerialize) return;
@@ -64,9 +63,6 @@ void SpawnDescription_Serialize(void* self, void* stream) {
         }
     }
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* SpawnDescription_Dtor(void* self, uint32_t flags) {
@@ -81,7 +77,6 @@ void* SpawnDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -129,4 +124,3 @@ static void* SpawnDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(SpawnDescription, "Description",
               &SpawnDescription_Factory, &SpawnDescription_CreateInPlace);
-#endif

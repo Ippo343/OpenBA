@@ -619,7 +619,6 @@ void* ClearStorage_GetTarget_Impl(ClearStorage* self, void* retbuf) {
 //     slot6 OnComplete -> ClearStorage_Slot6_Impl  (doc: "Slot6 +0x30")
 //     slot8 Cleanup    -> ClearStorage_CancelAll_Impl (doc: "Slot8/CancelAll +0x40")
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -659,4 +658,3 @@ extern "C" void* ClearStorage_Factory(void) {
     return p ? Work_GenericCtor(p, 0x68, g_ClearStorage_Vtable) : nullptr;
 }
 REGISTER_TYPE(ClearStorage, "Work", &ClearStorage_Factory, &ClearStorage_CreateInPlace);
-#endif // STANDALONE_EXE

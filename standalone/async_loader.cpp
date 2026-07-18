@@ -1,6 +1,5 @@
 // standalone/async_loader.cpp — see async_loader.h for design notes.
 
-#ifdef STANDALONE_EXE
 
 #include "async_loader.h"
 #include "stall_debug.h"
@@ -137,4 +136,3 @@ bool IsAsyncLoadBusy() {
 
 } // namespace AsyncLoader
 
-#endif // STANDALONE_EXE

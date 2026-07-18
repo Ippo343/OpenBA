@@ -30,7 +30,6 @@
 #include <cstdint>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 // Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
 // into the fake exref chain at slot 0x140151738 so that triple-deref reads
 // (g_pKeyMapObjectExref) reach the real KeyMap inside Input::Configuration.
@@ -42,9 +41,7 @@ extern "C" void SetStandaloneKeyMap(void* keyMap);
 // Idempotent. Called early in RunGameMain so SplashDLT::Stub_Startup's fade
 // trigger finds a populated KeyMap+0xa8 and the overlay actually renders.
 extern "C" void StandaloneEnsureSpriteSheetLoaded();
-#endif
 
-#ifdef STANDALONE_EXE
 // Defined in code/Game/Game/filesystem_setup.cpp. Relativizes the engine
 // FileSystem's resource directories so resource paths resolve relative to the
 // working dir (install dir) instead of long absolute "C:\GOG Games\..." strings.
@@ -57,7 +54,6 @@ namespace Game { extern "C" void FileSystem_PinDataDir(); }
 // type, invokes its factory, validates vtable + ctor-set field defaults.
 extern "C" void RunStartupSelfTests();
 
-#ifdef STANDALONE_EXE
 // Defined in standalone/reg_component_nature.cpp — fills the component type-ID
 // .rdata globals once Object::Factory::Startup has assigned the real CRC ids.
 extern "C" void FillComponentTypeIdGlobals_nature();
@@ -76,7 +72,6 @@ extern "C" void FillTypeIdGlobals_worktail_serialize();
 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription
 // find type-id globals (reg_pipeline_typeids.cpp; storage gated on BANISHED_LIVE_DECAL).
 extern "C" void FillPipelineTypeIds();
-#endif
 
 // Standalone-only chunked driver for MenuDLT::LoadScene. Init runs
 // MenuDialogLoopT_LoadSceneA1 (~10ms — small allocs + one .rsc load) inline
@@ -85,7 +80,6 @@ extern "C" void FillPipelineTypeIds();
 // Update frames (driven from splash_loop_stubs.cpp Stub_Update). Boot is
 // non-rendering, so the synchronous A1 cost is invisible.
 #include "chunked_scene_loader.h"
-#endif
 
 // ============================================================
 // Resolved Runtime DLL functions
@@ -394,7 +388,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
         }
     }
 
-#ifdef STANDALONE_EXE
     // Now that Object::Factory::Startup has assigned the real CRC type ids (the
     // 0xFFFFFFFF ctor sentinel is overwritten only here, NOT at
     // InvokeAllRegistrations), populate the component type-ID .rdata globals that
@@ -410,10 +403,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     FillTypeIdGlobals_worktail_serialize();// Phase 2 B tail — PastureWork Pasture/Animal ids
     FillEconomyTypeIdGlobals();            // Phase 3 economy — InteractDescription id (0x1401c7938)
     FillPipelineTypeIds();                 // StartTown 1fc0 pipeline — ModelComponent/ModelDescription/CreatePlacedDescription ids (c7a50/c7a88/c7468)
-#endif
 
     if (ok != 0) {
-#ifdef STANDALONE_EXE
         // Relativize the engine FileSystem resource directories. This was a
         // CANDIDATE crash mitigation (session 2e) that has been RULED OUT and is
         // ACTIVELY HARMFUL: with it on, the menu either crashes or stalls (never
@@ -433,7 +424,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             // to 0 and get freed-then-AddRef'd. No-op unless the env is set.
             Game::FileSystem_PinDataDir();
         }
-#endif
 
         // Stage 3: allocate + construct + destroy a MainLoop. (No Run yet —
         // that needs an UpdateLoop chain.)
@@ -451,12 +441,10 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
             void* memAllocSingleton = memAllocSingletonPtr ? *memAllocSingletonPtr : nullptr;
             printf("[GameMain] MemAllocSingleton (fresh) = %p\n", memAllocSingleton);
 
-#ifdef STANDALONE_EXE
             // Validate per-class factory registrations end-to-end now that
             // Engine::Engine::Engine has populated the MemoryAllocator
             // singleton. See standalone/main.cpp for the implementation.
             RunStartupSelfTests();
-#endif
 
             // MainLoop is 0xa0 bytes, 8-byte aligned (matches original GameMain).
             void* ml = fn_MemAlloc(memAllocSingleton, 0xa0, 8);
@@ -477,7 +465,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
                 }
 
-#ifdef STANDALONE_EXE
                 // Wire the live Input::KeyMap into our fake exref chain so
                 // triple-deref reads of g_pKeyMapObjectExref reach the real
                 // KeyMap. Engine::Startup constructed Input::Configuration at
@@ -511,7 +498,6 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // STATE machine still runs but no overlay actually renders, so
                 // splash transitions hard-cut as visible flashes.
                 ::StandaloneEnsureSpriteSheetLoaded();
-#endif
 
                 // Settings struct (0x34 bytes). Defaults from original GameMain.
                 int32_t* settings = reinterpret_cast<int32_t*>(
@@ -653,12 +639,10 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // animating while the heavy 12K-15K static-mesh loop
                         // runs in chunks. (Driving Init from the splash
                         // crashed inside VideoDX11 — see splash_loop_stubs.cpp.)
-#ifdef STANDALONE_EXE
                         if (menuLoop) {
                             printf("[GameMain] pre-running ChunkedSceneLoader::Init for MenuDLT\n");
                             ChunkedSceneLoader::Init(menuLoop);
                         }
-#endif
 
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.
                         // Inner LoaderLoop wraps shiningRockLoop, outer LoaderLoop

@@ -447,17 +447,6 @@ void ResidenceComponent_ResidenceInit(void* selfP) {
     // SetMeshFlag op manipulates the same MeshInstance and, with our partial/inert mesh
     // state, hides the building (it assumes the real game's fully-live mesh pipeline).
     // The registration below (push into townMgr+0x20) is the part standalone needs.
-#ifndef STANDALONE_EXE
-    for (int flag = 6; flag <= 7; flag++) {
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr((void*)(self + 0x10));
-        if (!s_fn_Entity_FindComponent_MeshInstance) break;
-        uint8_t compBuf[8] = {0};
-        s_fn_Entity_FindComponent_MeshInstance(*(uintptr_t*)(self + 0x10), compBuf);
-        if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(compBuf);
-        void* comp = *(void**)compBuf;
-        if (comp && s_fn_SetMeshFlag) s_fn_SetMeshFlag(comp, flag, '\0');
-    }
-#endif
 
     // Re-assign workplaces for each resident slot at +0x50 (count +0x58, stride 0x10)
     int slotCount = *(int*)(self + 0x58);
@@ -514,7 +503,6 @@ void ResidenceComponent_InitFuncs() {
 //     the standalone CopyCtor/RegisterEntity spawn flow, so the start-town structures
 //     spawn explicitly runs a faithful port of FUN_1400c2ea0 after RegisterEntity (see
 //     StartTown_RunOnCreatePass in code/Game/Game/starttown.cpp).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -565,4 +553,3 @@ static void* ResidenceComponent_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ResidenceComponent, "ControllerComponent",
               &ResidenceComponent_Factory, &ResidenceComponent_CreateInPlace);
-#endif // STANDALONE_EXE

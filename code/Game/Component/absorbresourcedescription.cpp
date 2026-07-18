@@ -28,17 +28,11 @@ static void* AbsorbResourceDescription_Ctor_Impl(void* mem) {
 }
 
 void AbsorbResourceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     (void)self;
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     g_fn_Serializer_Dtor(serializer);
-#else
-    typedef void (*fn_t)(void*, void*);
-    fn_t orig = reinterpret_cast<fn_t>(ResolveAddr(Module::Exe, kSerializeAddr));
-    if (orig) orig(self, stream);
-#endif
 }
 
 void* AbsorbResourceDescription_Dtor(void* self, uint32_t flags) {
@@ -51,7 +45,6 @@ void* AbsorbResourceDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
 // ============================================================
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -125,4 +118,3 @@ extern "C" void* AbsorbResourceDescription_Factory(void) {
 REGISTER_TYPE(AbsorbResourceDescription, "Description",
               &AbsorbResourceDescription_Factory, &AbsorbResourceDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

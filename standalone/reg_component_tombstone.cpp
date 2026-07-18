@@ -13,7 +13,6 @@
 // game-world singleton 0x1401c3dd8 (address_registry), and RandFloat via the engine
 // func fn_Random_RandFloat. The ONLY thing missing is the TombstoneDescription type-id
 // .rdata global, registered + filled below.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -42,4 +41,3 @@ void RegisterComponentBatch_tombstone() {
     // TombstoneDescription type-id global (filled after Engine::Startup — see above).
     RegisterExeAddr(0x1401c4a68, reinterpret_cast<uintptr_t>(&g_tid_TombstoneDescription));
 }
-#endif // STANDALONE_EXE

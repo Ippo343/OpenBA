@@ -7,7 +7,6 @@
 //
 // bffd0 (PerformWork_Action_Ctor, cleararea) is now closure-safe after the ca520
 // cascade landed (ca520/ca230 + RawMaterialDescription type-id global 0x1401c7cb8).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -32,4 +31,3 @@ void RegisterWorkActBatch() {
     RegisterExeAddr(0x1400bf790, reinterpret_cast<uintptr_t>(&WorkAct_GatherRawMatCtor_bf790));
     RegisterExeAddr(0x1400bef70, reinterpret_cast<uintptr_t>(&WorkAct_ConsumeProduceCtor_bef70));
 }
-#endif // STANDALONE_EXE

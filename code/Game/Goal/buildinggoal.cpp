@@ -287,7 +287,6 @@ BuildingGoal* BuildingGoal_CreateInstance(BuildingGoal* self) {
     return BuildingGoal_Slot6(self);
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -335,4 +334,3 @@ extern "C" void* BuildingGoal_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(BuildingGoal, "Achievement::Goal",
               &BuildingGoal_Factory, &BuildingGoal_CreateInPlace);
-#endif

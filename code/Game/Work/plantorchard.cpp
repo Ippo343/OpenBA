@@ -747,7 +747,6 @@ void* PlantOrchard_ScalarDtor_Impl(PlantOrchard* self, uint32_t flags) {
 // PlantOrchard_Execute_Impl is the 3-byte returns-false stub for "Slot5 (+0x28)",
 // which is the shared Work_Slot5 — it is NOT used here.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -816,4 +815,3 @@ extern "C" void* PlantOrchard_Factory(void) {
     return p ? PlantOrchard_Ctor_Impl((PlantOrchard*)p) : nullptr;
 }
 REGISTER_TYPE(PlantOrchard, "Work", &PlantOrchard_Factory, &PlantOrchard_CreateInPlace);
-#endif // STANDALONE_EXE

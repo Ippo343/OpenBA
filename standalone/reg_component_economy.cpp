@@ -7,7 +7,6 @@
 // The reimpl bodies live (non-static) in their owning component .cpp files; we
 // extern-declare them here and take their address. The integrator wires the
 // RegisterComponentBatch_economy() call into standalone/address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -109,4 +108,3 @@ void RegisterComponentBatch_economy() {
     // absorbresourcecomponent.cpp (shared Component base serialize)
     RegisterExeAddr(0x1401189b0, reinterpret_cast<uintptr_t>(&Component_SerializeReimpl));
 }
-#endif // STANDALONE_EXE

@@ -21,7 +21,6 @@
 // DEFERRED (NOT registered here): DropOffRawMaterial 0x1400c7570 / 0x1400c7620 — their
 // closure pulls in unregistered code sub-callees (FUN_1400c78c0 spawn, MoveTo ctor
 // 0x1400c9170, task-list append 0x1400c54e0). Draft in notes/wave3_drafts/.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -41,4 +40,3 @@ void RegisterActionCompleteBatch() {
     RegisterExeAddr(0x1401173b0, reinterpret_cast<uintptr_t>(&ActCt_ShowToolOnEntity_1173b0));
     RegisterExeAddr(0x1401176e0, reinterpret_cast<uintptr_t>(&ActCt_HideTool_1176e0));
 }
-#endif

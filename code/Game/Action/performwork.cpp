@@ -436,7 +436,6 @@ bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
 // Vtable @ 0x14015fea0 (10 slots), size 0x48, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -472,4 +471,3 @@ extern "C" void* PerformWork_Factory(void) {
     return Action_Alloc(0x48, g_PerformWork_Vtable);
 }
 REGISTER_TYPE(PerformWork, "Action", &PerformWork_Factory, &PerformWork_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -19,7 +19,6 @@
 //
 // The integrator wires RegisterComponentBatch_spawn() into address_registry.cpp and
 // FillComponentTypeIdGlobals_spawn() into game_main.cpp (after the Engine::Startup probe).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
@@ -47,4 +46,3 @@ void RegisterComponentBatch_spawn() {
     RegisterExeAddr(0x1401c4918, reinterpret_cast<uintptr_t>(&g_tid_SpawnDescription));
     RegisterExeAddr(0x1401c77e8, reinterpret_cast<uintptr_t>(&g_tid_GrowthDescription));
 }
-#endif // STANDALONE_EXE

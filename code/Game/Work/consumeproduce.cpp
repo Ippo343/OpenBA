@@ -1259,7 +1259,6 @@ void* ConsumeProduce_GetTarget_Impl(ConsumeProduceAction* self, void* retbuf) {
 // FLAG: slot11 GetPriority (+0x58) is NOT implemented in this file (no
 // ConsumeProduce_GetPriority_Impl exists). Left as a clearly-marked nullptr.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1299,4 +1298,3 @@ extern "C" void* ConsumeProduce_Factory(void) {
     return p ? ConsumeProduce_Ctor_Impl((ConsumeProduceAction*)p) : nullptr;
 }
 REGISTER_TYPE(ConsumeProduce, "Work", &ConsumeProduce_Factory, &ConsumeProduce_CreateInPlace);
-#endif // STANDALONE_EXE

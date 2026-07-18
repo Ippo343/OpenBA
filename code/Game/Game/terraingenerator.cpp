@@ -381,7 +381,6 @@ void TerrainGenerator_Init(TerrainGenerator* self) {
 // `fileVersion == obj->GetVersion()`; a wrong constant silently drops the
 // element and the terrain combo comes up empty.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -458,4 +457,3 @@ void RegisterGameTerrainReimpls() {
     RegisterExeAddr(0x140020870, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataSerialize));
 }
 
-#endif // STANDALONE_EXE

@@ -190,10 +190,8 @@ void DestroyComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(DestroyComponent, 0x68, 0x80)
 REGISTER_TYPE(DestroyComponent, "ControllerComponent",
               &DestroyComponent_Factory, &DestroyComponent_CreateInPlace);
-#endif // STANDALONE_EXE

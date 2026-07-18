@@ -14,7 +14,6 @@
 // behavior.
 //
 // The integrator wires RegisterGameLeafBatch() into address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -55,4 +54,3 @@ void RegisterGameLeafBatch() {
     RegisterExeAddr(0x14001fd10, reinterpret_cast<uintptr_t>(&Game_TerrainResolveMaterial));
     RegisterGameTerrainReimpls();
 }
-#endif // STANDALONE_EXE

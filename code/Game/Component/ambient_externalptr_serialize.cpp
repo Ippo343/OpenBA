@@ -112,11 +112,9 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     if (fn_Filename_Dtor) fn_Filename_Dtor(pathBuf);
 }
 
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 // NOTE: the 0x28-stride biome-table array resize (FUN_140002540 /
 // AmbientArrayResize_Reimpl) is already registered in reg_component_visuals.cpp.
 extern "C" void RegisterAmbientExternalPtrSerialize() {
     RegisterExeAddr(0x1400019a0, reinterpret_cast<uintptr_t>(&AmbientExternalPtrSerialize_Reimpl));
 }
-#endif

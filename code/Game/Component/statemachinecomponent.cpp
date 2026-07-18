@@ -510,7 +510,6 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x58 (StateMachineComponent_Factory MemAlloc), flags 0xcd (Ctor
 // 0x14012ba30: Component base sets +0x20=0x80, leaf OR 0xcd => 0xcd).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdlib>
@@ -751,4 +750,3 @@ COMPONENT_LIVE_FACTORY_S(StateMachineComponent, 0x58, 0xcd,
                          StateMachineComponent_BodyInit)
 REGISTER_TYPE(StateMachineComponent, "Component",
               &StateMachineComponent_Factory, &StateMachineComponent_CreateInPlace);
-#endif // STANDALONE_EXE

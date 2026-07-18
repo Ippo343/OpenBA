@@ -22,9 +22,7 @@
 #include <cstring>
 #include <cstdlib>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
-#endif
 
 // ============================================================
 // Resolved helpers
@@ -114,12 +112,10 @@ static uint32_t PC_DescTypeId() {
     if (s_pParticleDescTypeId && *s_pParticleDescTypeId != 0 &&
         *s_pParticleDescTypeId != 0xFFFFFFFF)
         return *s_pParticleDescTypeId;
-#ifdef STANDALONE_EXE
     static uint32_t cached = 0;
     if (cached == 0 || cached == 0xFFFFFFFF)
         cached = ::Object::GetTypeIdByName("ParticleDescription");
     if (cached != 0 && cached != 0xFFFFFFFF) return cached;
-#endif
     return 0;
 }
 
@@ -127,17 +123,10 @@ static uint32_t PC_DescTypeId() {
 static void* GetParticleDesc(void* self) {
     void* baseObj = *(void**)((uintptr_t)self + 0x18);
     if (!baseObj) return nullptr;
-#ifdef STANDALONE_EXE
     // +0x18 is the description sub-block the component was instantiated from;
     // the SA factory tree can false-negative IsDerivedFrom, so trust non-null
     // (Object::IsDerivedFromOrTrust convention).
     return Object::IsDerivedFromOrTrust(baseObj, PC_DescTypeId()) ? baseObj : nullptr;
-#else
-    uint32_t tid = PC_DescTypeId();
-    if (s_fn_IsDerivedFrom_d && tid && s_fn_IsDerivedFrom_d(baseObj, tid))
-        return baseObj;
-    return nullptr;
-#endif
 }
 
 // ============================================================
@@ -401,15 +390,11 @@ static bool PCTraceOn() {
 }
 static int s_pcTraceBudget = 0;
 
-#ifdef STANDALONE_EXE
 // g_fUVScale is the retail .rdata constant 1.0f. In SA the ResolveAddr for
 // 0x140172234 lands inside an unrelated registered data blob (observed value
 // 300.0 → fade rate 300/s, opacity 15+ → permanently opaque smoke), so use
 // the known retail value directly.
 static float PC_UVScale() { return 1.0f; }
-#else
-static float PC_UVScale() { return s_pUVScale ? *s_pUVScale : 1.0f; }
-#endif
 
 // Owning entity from the component's +0x10 InternalBasePtr.
 static uintptr_t PC_Entity(void* self) {
@@ -919,7 +904,6 @@ void ParticleComponent_InitFuncs() {
 //   [12] +0x60 Event     (0x140053090) — event 2/3 fade-in/out (b2 emitters)
 // Slot [3] (+0x18 save/load serialize) stays inert — SA does not exercise
 // component saves, and the bool array is rebuilt by Startup anyway.
-#ifdef STANDALONE_EXE
 #include "Component/component_factory_base.h"
 #include "address_registry.h"
 
@@ -1050,4 +1034,3 @@ extern "C" void RegisterParticleComponentAddrs() {
     RegisterExeAddr(0x140052b30, reinterpret_cast<uintptr_t>(&ParticleComponent_UpdateTick));
     RegisterExeAddr(0x140053090, reinterpret_cast<uintptr_t>(&ParticleComponent_Event));
 }
-#endif // STANDALONE_EXE

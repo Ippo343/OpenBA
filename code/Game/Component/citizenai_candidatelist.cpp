@@ -23,7 +23,6 @@
 //
 // This file must NOT depend on hooks.h — portable for standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -835,4 +834,3 @@ int CitizenAI_ValidateAndEnterState(void* selfV, int state) {
     return 0;
 }
 
-#endif // STANDALONE_EXE

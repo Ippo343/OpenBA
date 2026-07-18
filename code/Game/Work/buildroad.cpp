@@ -587,7 +587,6 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
 // Vtable @ 0x140161020 (13 slots), size 0x70, parent "Work".
 // Shared slot helpers: work_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -627,4 +626,3 @@ extern "C" void* BuildRoad_Factory(void) {
     return p ? BuildRoad_Ctor_Impl((BuildRoad*)p) : nullptr;
 }
 REGISTER_TYPE(BuildRoad, "Work", &BuildRoad_Factory, &BuildRoad_CreateInPlace);
-#endif // STANDALONE_EXE

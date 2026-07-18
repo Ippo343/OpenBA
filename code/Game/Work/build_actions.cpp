@@ -39,9 +39,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
-#endif
 
 namespace {
 
@@ -92,11 +90,9 @@ void EnsureInit() {
     s_msg70e8 = rd(0x1401c70e8);
     s_msg7008 = rd(0x1401c7008);
     s_msg75f0 = rd(0x1401c75f0);
-#ifdef STANDALONE_EXE
     // c7008 = BuildComponent type-id (the state-8 message target); heal it so the message
     // routes to the site's BuildComponent (the raw .rdata id is 0 in standalone).
     if (s_msg7008 == 0) s_msg7008 = ::Object::GetTypeIdByName("BuildComponent");
-#endif
     s_init = true;
 }
 

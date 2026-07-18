@@ -178,7 +178,6 @@ bool PlayAnimation_GetTarget_Impl(void* self, void* param) {
 // See action_base_standalone.{h,cpp} for the shared slot helpers.
 // Vtable @ 0x140158950 (10 slots), size 0x40, parent "Action".
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -223,4 +222,3 @@ extern "C" void* PlayAnimation_Factory(void) {
 
 REGISTER_TYPE(PlayAnimation, "Action", &PlayAnimation_Factory, &PlayAnimation_CreateInPlace);
 
-#endif  // STANDALONE_EXE

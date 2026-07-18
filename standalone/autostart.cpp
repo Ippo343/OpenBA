@@ -3,7 +3,6 @@
 // the menu -> New Game -> Start sequence by injecting synthetic dialog
 // slot-8 events, reusing the already-reimplemented click handlers.
 
-#ifdef STANDALONE_EXE
 
 #include "autostart.h"
 #include <cstdio>
@@ -150,4 +149,3 @@ void TickMenu(void* menuDLT) {
 
 }  // namespace AutoStart
 
-#endif  // STANDALONE_EXE

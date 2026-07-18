@@ -323,7 +323,6 @@ int CreateNaturalResource_GetTarget_Impl(CreateNaturalResource* self, void* para
 // Vtable @ 0x14015fca0 (10 slots), size 0x38, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -359,4 +358,3 @@ extern "C" void* CreateNaturalResource_Factory(void) {
     return Action_Alloc(0x38, g_CreateNaturalResource_Vtable);
 }
 REGISTER_TYPE(CreateNaturalResource, "Action", &CreateNaturalResource_Factory, &CreateNaturalResource_CreateInPlace);
-#endif // STANDALONE_EXE

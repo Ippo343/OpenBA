@@ -19,15 +19,11 @@ static void ClearResourceDescription_Init(void* self) {
 }
 
 void ClearResourceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     // No payload fields.
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* ClearResourceDescription_Dtor(void* self, uint32_t flags) {
@@ -38,7 +34,6 @@ void* ClearResourceDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -86,4 +81,3 @@ static void* ClearResourceDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(ClearResourceDescription, "Description",
               &ClearResourceDescription_Factory, &ClearResourceDescription_CreateInPlace);
-#endif

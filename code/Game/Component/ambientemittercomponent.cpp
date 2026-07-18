@@ -73,12 +73,7 @@ static uint32_t s_tidEmitterDesc = 0;
 static bool s_tidResolved = false;
 static void EnsureEmitterDescTid() {
     if (s_tidResolved) return;
-#ifdef STANDALONE_EXE
     uint32_t t = ::Object::GetTypeIdByName("AmbientEmitterDescription");
-#else
-    uintptr_t p = ResolveAddr(Module::Exe, 0x1401c3e98);
-    uint32_t t = p ? *reinterpret_cast<uint32_t*>(p) : 0;
-#endif
     if (t != 0 && t != 0xFFFFFFFFu) { s_tidEmitterDesc = t; s_tidResolved = true; }
 }
 
@@ -361,7 +356,6 @@ void AmbientEmitterComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 // Route the OnAdded slot (vtable +0x30 / index 6, dispatched by
@@ -375,4 +369,3 @@ COMPONENT_LIVE_FACTORY_ONADDED(AmbientEmitterComponent, 0x48, 0xC3,
                                "BANISHED_AMBIENT_AUDIO", AmbientEmitterComponent_Draw)
 REGISTER_TYPE(AmbientEmitterComponent, "Component",
               &AmbientEmitterComponent_Factory, &AmbientEmitterComponent_CreateInPlace);
-#endif // STANDALONE_EXE

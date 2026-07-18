@@ -225,7 +225,6 @@ void Weather_Serialize(Weather* self, void* stream) {
 // to retail addresses via ResolveAddr fallback when something virtual-calls
 // them.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 
@@ -291,4 +290,3 @@ extern "C" void* Weather_CreateInPlace(void* memory) {
 REGISTER_TYPE(Weather, "Object::External",
               &Weather_Factory, &Weather_CreateInPlace);
 
-#endif // STANDALONE_EXE

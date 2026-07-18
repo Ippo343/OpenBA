@@ -9,7 +9,6 @@
 // during the Action wave (after Ghidra-verifying the draft).
 //
 // Safety: address below verified as a real function ENTRY in Ghidra and a faithful port.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -19,4 +18,3 @@ extern float WorkImpl_Sqrtf_132010(float val);
 void RegisterWorkImpl2Batch() {
     RegisterExeAddr(0x140132010, reinterpret_cast<uintptr_t>(&WorkImpl_Sqrtf_132010));
 }
-#endif

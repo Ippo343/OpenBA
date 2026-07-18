@@ -37,17 +37,14 @@
 // Dialog-typed External the exe reaches via self+0x18 -> Dialog::GetReference)
 // and drive the promoted EventPopupDialog standalone ctor. Returns the new
 // dialog, or null if the resource/allocation is unavailable.
-#ifdef STANDALONE_EXE
 extern "C" void* EventPopupDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                                   void* parentIBP, int eventIndex);
-#endif
 
 static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventIndex) {
     uintptr_t s = (uintptr_t)self;
     void* ui = *(void**)(s + 0x10);
     if (!ui) return nullptr;
 
-#ifdef STANDALONE_EXE
     // Load Dialog/EventPopup.rsc once and cache it. The exe pulls this same resource
     // from the ribbon's own referenced-resource slot (self+0x18); loading by path is
     // equivalent and sidesteps the member-return Dialog::GetReference ABI.
@@ -91,13 +88,6 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
         fflush(stderr);
     }
     return popup;
-#else
-    // DLL mode: the exe's own Slot7 handles popups; our reimpl does not raise them
-    // here (standalone is the active target). No-op keeps behaviour parity with the
-    // previously-incomplete reimpl.
-    (void)eventIndex;
-    return nullptr;
-#endif
 }
 
 // ============================================================
@@ -960,7 +950,6 @@ void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int event
 //   +0x38 idx7 OnUpdate            -> Slot7 (scan event log, manage notifications) [per-frame]
 //   +0x40 idx8 OnCommand           -> OnEvent (ribbon button clicks -> navigate)
 //   +0x48 idx9 OnSerializeSettings -> no-op (serialize thunk)
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1097,4 +1086,3 @@ extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* e
 }
 extern "C" void* EventNotifyDialog_GetStandaloneVtable() { return eventnotify_sa::GetVtable(); }
 
-#endif  // STANDALONE_EXE

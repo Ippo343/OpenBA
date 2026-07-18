@@ -88,7 +88,6 @@ extern "C" void* AnimAudioEvent_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -132,4 +131,3 @@ extern "C" void* AnimAudioEvent_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(AnimAudioEvent, "Graphics::AnimationEvent",
               &AnimAudioEvent_Factory, &AnimAudioEvent_CreateInPlace);
-#endif

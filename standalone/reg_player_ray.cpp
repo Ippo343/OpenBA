@@ -21,7 +21,6 @@
 //
 // Safety: every code address below was verified as a real function ENTRY in Ghidra
 // (get_function_by_address Entry == address) and is a faithful 1:1 port.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -49,4 +48,3 @@ void RegisterPlayerRayBatch() {
     RegisterExeAddr(0x140101270, reinterpret_cast<uintptr_t>(&PlayerRay_ScreenToCell_101270));
     RegisterExeAddr(0x1400fda00, reinterpret_cast<uintptr_t>(&PlayerRay_PlacementPosCalc_fda00));
 }
-#endif

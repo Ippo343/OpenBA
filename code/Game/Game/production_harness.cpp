@@ -28,7 +28,6 @@
 //
 // Default build stays byte-clean: with the env unset the one-shot returns immediately.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -284,4 +283,3 @@ extern "C" void StartTown_DriveProduction() {
     fflush(stderr);
 }
 
-#endif // STANDALONE_EXE

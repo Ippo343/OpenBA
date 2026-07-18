@@ -17,7 +17,6 @@
 //     recurses fdb0/fe60 internally) and dtor (0x14001fb80) ARE registered as
 //     Reimpl_Struct60B_CopyCtor/DtorRange (address_registry.cpp, A/B-proven serialize path),
 //     so its closure IS satisfied — registered below.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -53,4 +52,3 @@ void RegisterPfPoolsBatch() {
     // serialize path) — closure satisfied, so register it (the last Action-gap entry).
     RegisterExeAddr(0x14001fa80, reinterpret_cast<uintptr_t>(&Pf_VectorResize60_fa80));
 }
-#endif

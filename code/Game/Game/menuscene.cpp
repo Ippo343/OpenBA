@@ -23,12 +23,8 @@
 
 // Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
 // BANISHED_REDZONE is unset).
-#ifdef STANDALONE_EXE
 #include "redzone_alloc.h"
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
-#else
-#define RZ_CHECK(tag) ((void)0)
-#endif
 
 // ============================================================
 // Local function typedefs (resolved lazily)
@@ -63,13 +59,11 @@ extern "C" void Reimpl_TradeWork_impl_f1a0(void* self, void* stream);
 // ============================================================
 // Lazy-init resolver
 // ============================================================
-#ifdef STANDALONE_EXE
 // Forward decl — Transform initializer reimplemented locally for standalone.
 // Mirrors FUN_140098800 (exe 0x140098800). Built from engine_funcs primitives
 // (Math::Transform::Transform + Volume::Frustum + Graphics::Camera) so we
 // don't depend on the exe address registry having 0x140098800.
 static void MenuScene_TransformInit_Standalone(void* transformObj);
-#endif
 
 static void EnsureResolved() {
     if (s_fn_External_Ctor) return;
@@ -83,15 +77,10 @@ static void EnsureResolved() {
     slot = ResolveAddr(Module::Exe, 0x140151ea0);
     if (slot) s_fn_External_BaseDtor = *reinterpret_cast<fn_External_BaseDtor_t*>(slot);
 
-#ifdef STANDALONE_EXE
     // Standalone: we don't have FUN_140098800 in our exe registry. Use our
     // local reimplementation instead — it composes the same Runtime DLL
     // primitives the original does (Transform ctor + Frustum + Camera).
     s_fn_Transform_Init = &MenuScene_TransformInit_Standalone;
-#else
-    s_fn_Transform_Init = reinterpret_cast<fn_Transform_Init_t>(
-        ResolveAddr(Module::Exe, 0x140098800));
-#endif
 
     s_fn_TreeCleanup = reinterpret_cast<fn_TreeCleanup_t>(
         ResolveAddr(Module::Exe, 0x14001b860));
@@ -300,7 +289,6 @@ void MenuScene_Cleanup(MenuScene* self) {
 void MenuScene_Serialize(MenuScene* self, void* stream) {
     EnsureResolved();
 
-#ifdef STANDALONE_EXE
     // M3.5 Path B session 8 — Geometry deserialize sub-sequence.
     //
     // Mirrors the Geometry-allocation + serialize calls inside the original
@@ -442,11 +430,6 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         // NOT_IMPLEMENTED stub via the address registry — DON'T call it,
         // use the inline path. In DLL mode, the wrapper points at the real
         // exe function, so prefer it.
-#ifndef STANDALONE_EXE
-        if (fn_Transform_SerializeWrapper) {
-            fn_Transform_SerializeWrapper(xform, stream);
-        } else
-#endif
         if (g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
                    fn_Math_Transform_Serialize && fn_Math_Vector3_Serialize &&
                    fn_Serializer_Serialize_Float) {
@@ -668,11 +651,6 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     }
     RZ_CHECK("Slot5 exit");
     return;
-#else
-    if (s_fn_Serialize_Orig) {
-        s_fn_Serialize_Orig(self, stream);
-    }
-#endif
 }
 
 // ============================================================
@@ -682,7 +660,6 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
 // 0x208 bytes (sizeof(MenuScene)) with 8-byte alignment and runs Init.
 // Mirrors the StatGoal pattern in code/Game/Goal/statgoal.cpp.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -805,4 +782,3 @@ extern "C" void* MenuScene_CreateInPlace(void* memory) {
 REGISTER_TYPE(MenuScene, "Object::External",
               &MenuScene_Factory, &MenuScene_CreateInPlace);
 
-#endif // STANDALONE_EXE

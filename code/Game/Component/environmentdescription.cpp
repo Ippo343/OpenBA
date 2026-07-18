@@ -62,7 +62,6 @@ static void EnvironmentDescription_Init(void* self) {
 }
 
 void EnvironmentDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_ExternalPtr_BuildSerialize || !fn_WeatherResize || !fn_WeatherExternalSerialize) {
@@ -103,9 +102,6 @@ void EnvironmentDescription_Serialize(void* self, void* stream) {
     }
 
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* EnvironmentDescription_Dtor(void* self, uint32_t flags) {
@@ -122,7 +118,6 @@ void* EnvironmentDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -175,4 +170,3 @@ static void* EnvironmentDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(EnvironmentDescription, "Object::External",
               &EnvironmentDescription_Factory, &EnvironmentDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

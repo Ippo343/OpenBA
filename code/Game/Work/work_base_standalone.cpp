@@ -2,7 +2,6 @@
 // Shared standalone factory/vtable helpers for the Work family.
 // See work_base_standalone.h and notes/FACTORY_CASCADE_145_BRIEF.md.
 
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -54,4 +53,3 @@ extern "C" void Work_SerializeNop(void* /*self*/, void* /*stream*/) {}
 // Fallback slot returning 0 (false / lowest priority).
 extern "C" int Work_SlotRet0(void) { return 0; }
 
-#endif  // STANDALONE_EXE

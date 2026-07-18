@@ -88,10 +88,8 @@ void HighlightComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(HighlightComponent, 0x128, 0x80)
 REGISTER_TYPE(HighlightComponent, "Component",
               &HighlightComponent_Factory, &HighlightComponent_CreateInPlace);
-#endif // STANDALONE_EXE

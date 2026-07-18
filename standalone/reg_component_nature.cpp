@@ -3,7 +3,6 @@
 // ResolveAddr(Module::Exe, ...) call sites in code/Game/Component/ actually fire.
 //
 // The integrator wires RegisterComponentBatch_nature() into address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -158,4 +157,3 @@ void RegisterComponentBatch_nature() {
     // Component type-ID global (filled after InvokeAllRegistrations — see above).
     RegisterExeAddr(0x1401c7b30, reinterpret_cast<uintptr_t>(&g_tid_NaturalResourceComponent));
 }
-#endif // STANDALONE_EXE

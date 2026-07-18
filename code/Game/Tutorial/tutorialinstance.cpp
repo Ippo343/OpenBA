@@ -188,7 +188,6 @@ void TutorialInstance_Serialize(void* self, void* stream) {
 // DORMANT-SAFE: installs the exe TutorialInstance vtable only if it resolves in
 // standalone (ResolveAddr != 0); otherwise keeps the Object::Internal base vtable
 // that fn_ObjectInternal_Ctor installs. Nothing currently drives a TutorialInstance.
-#ifdef STANDALONE_EXE
 static void* TutorialInstance_Build(void* p) {
     if (!p) return nullptr;
     uint8_t* s = reinterpret_cast<uint8_t*>(p);
@@ -213,4 +212,3 @@ extern "C" void* TutorialInstance_Factory_SA(void) {
 }
 REGISTER_TYPE(TutorialInstance, "Object::Internal",
               &TutorialInstance_Factory_SA, &TutorialInstance_CreateInPlace_SA);
-#endif // STANDALONE_EXE

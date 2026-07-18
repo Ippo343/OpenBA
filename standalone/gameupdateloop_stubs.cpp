@@ -35,7 +35,6 @@
 //     reaches the in-game world bring-up without faulting in the loop-
 //     construction / SetNextLoop machinery. The full Load reimpl is Stage C.
 
-#ifdef STANDALONE_EXE
 
 #include "address_registry.h"
 #include "resolve.h"
@@ -158,4 +157,3 @@ void RegisterGameUpdateLoopVtable() {
                     reinterpret_cast<uintptr_t>(g_GameUpdateLoop_Vtable_Standalone));
 }
 
-#endif // STANDALONE_EXE

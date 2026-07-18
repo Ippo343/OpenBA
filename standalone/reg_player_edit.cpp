@@ -11,7 +11,6 @@
 // (get_function_by_address Entry == address), is a faithful 1:1 port, and has its
 // ENTIRE exe sub-callee closure satisfied (registered or Runtime-export). See the
 // per-address notes in tool_base_edit.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -58,4 +57,3 @@ void RegisterPlayerEditBatch() {
     RegisterExeAddr(0x140101730, reinterpret_cast<uintptr_t>(&PlayerEdit_AvgTerrainHeight_101730));
     RegisterExeAddr(0x1400dbf90, reinterpret_cast<uintptr_t>(&PlayerEdit_FencedAnchorCalc_dbf90));
 }
-#endif

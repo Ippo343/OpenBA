@@ -553,10 +553,8 @@ extern "C" void CitizenAI_WorkScheduler_Post(uintptr_t workComp, uint32_t code, 
                      (void*)workComp, code, assignedId);
 }
 
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 extern "C" void RegisterCitizenAIWorkScheduler() {
     RegisterExeAddr(0x1400f88a0, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Insert));
     RegisterExeAddr(0x14012ec60, reinterpret_cast<uintptr_t>(&CitizenAI_WorkScheduler_Post));
 }
-#endif

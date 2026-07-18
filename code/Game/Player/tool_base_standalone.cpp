@@ -6,7 +6,6 @@
 // MemAlloc(size,8) -> <Tool>_Ctor) and the small shared base vtable slots
 // (slot1 -> null, slot3 -> Object::Internal::Persist, purecall placeholders).
 
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -54,4 +53,3 @@ extern "C" void* Tool_Alloc(int size, void* vtable, int dragBase) {
     return Tool_InitInPlace(p, size, vtable, dragBase);
 }
 
-#endif  // STANDALONE_EXE

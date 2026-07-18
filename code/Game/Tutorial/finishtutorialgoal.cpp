@@ -124,7 +124,6 @@ FinishTutorialGoal* FinishTutorialGoal_CreateInstance(FinishTutorialGoal* self) 
     return FinishTutorialGoal_Slot6(self);
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -188,7 +187,6 @@ extern "C" void* FinishTutorialGoal_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(FinishTutorialGoal, "Achievement::Goal",
               &FinishTutorialGoal_Factory, &FinishTutorialGoal_CreateInPlace);
-#endif
 
 // ============================================================
 // FinishTutorialGoal::Slot11 / FinishTutorialInstance::Dtor

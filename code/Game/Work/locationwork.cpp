@@ -548,7 +548,6 @@ void* LocationWork_ScalarDtor_Impl(LocationWork* self, uint32_t flags) {
 //                         /*FLAG*/ returns null until a Ctor_Impl is written.
 //   - ResolveFuncs      : LocationWork_ResolveFuncs() (does NOT resolve a vtable).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -588,4 +587,3 @@ extern "C" void* LocationWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x50, g_LocationWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(LocationWork, "Work", &LocationWork_Factory, &LocationWork_CreateInPlace);
-#endif // STANDALONE_EXE

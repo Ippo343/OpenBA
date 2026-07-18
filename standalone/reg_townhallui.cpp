@@ -13,7 +13,6 @@
 //   0x140014c30  BST subtree free                    (reg_work_base)
 //   0x14000a590  DynArray_Resize                     (address_registry core)
 //   0x1401c3dd8  game-world singleton                (address_registry core)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -46,4 +45,3 @@ void RegisterTownHallBatch() {
     RegisterExeAddr(0x14008c5f0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_c5f0));
     RegisterExeAddr(0x14008c4b0, reinterpret_cast<uintptr_t>(&CitizenEmploy_Strat_c4b0));
 }
-#endif // STANDALONE_EXE

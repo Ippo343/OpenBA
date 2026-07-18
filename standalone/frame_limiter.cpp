@@ -1,7 +1,6 @@
 // standalone/frame_limiter.cpp
 // See frame_limiter.h for rationale.
 
-#ifdef STANDALONE_EXE
 
 #include "frame_limiter.h"
 
@@ -208,4 +207,3 @@ double GetCapFps() { return g_capFps; }
 
 } // namespace FrameLimiter
 
-#endif // STANDALONE_EXE

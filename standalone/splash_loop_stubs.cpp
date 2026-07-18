@@ -22,7 +22,6 @@
 // Update returns false on the first tick so MainLoop::Run exits cleanly.
 // As real reimpls land in code/Game/Game/, replace the matching stub entry.
 
-#ifdef STANDALONE_EXE
 
 #include "address_registry.h"
 #include "resolve.h"
@@ -534,4 +533,3 @@ void RegisterSplashDialogLoopVtable() {
     RegisterExeAddr(0x140158800, reinterpret_cast<uintptr_t>(g_splashDialogLoopVtable));
 }
 
-#endif // STANDALONE_EXE

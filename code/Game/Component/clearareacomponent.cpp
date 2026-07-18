@@ -197,7 +197,6 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
 // (size 0x50, +0x20 capability flags 0x80, Object::Internal base + shared stub
 // vtable, zeroed body). Size from ClearAreaComponent_Factory MemAlloc; flags from the
 // Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstring>
@@ -363,4 +362,3 @@ extern "C" int ClearAreaComponent_HarnessSweep(void* ownerEntity) {
     *reinterpret_cast<void**>(comp + 0x10) = ownerEntity;
     return ClearAreaComponent_FootprintSweep(reinterpret_cast<ClearAreaComponent*>(comp));
 }
-#endif // STANDALONE_EXE

@@ -337,7 +337,6 @@ void PopulationComponent_InitFuncs() {
 // 0x1400546d0) + zeroed body. The component still registers in the world entity
 // list and its update/draw buckets; the stubbed Update/Draw are safe no-ops until
 // the real methods get true standalone reimpls.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -350,4 +349,3 @@ COMPONENT_LIVE_FACTORY(PopulationComponent, 0x70, 0xCB,
                        "BANISHED_LIVE_POPULATION", PopulationComponent_Update)
 REGISTER_TYPE(PopulationComponent, "Component",
               &PopulationComponent_Factory, &PopulationComponent_CreateInPlace);
-#endif // STANDALONE_EXE

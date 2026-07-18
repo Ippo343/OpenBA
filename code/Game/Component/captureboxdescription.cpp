@@ -36,7 +36,6 @@ static void CaptureBoxDescription_Init(void* self) {
 }
 
 void CaptureBoxDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!fn_ElementDescription_Serialize || !g_fn_Serializer_Ctor ||
         !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize || !g_fn_String_Serialize) {
@@ -48,9 +47,6 @@ void CaptureBoxDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68
     g_fn_String_Serialize(s + 0x70, serializer);             // String      +0x70
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* CaptureBoxDescription_Dtor(void* self, uint32_t flags) {
@@ -63,7 +59,6 @@ void* CaptureBoxDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -123,4 +118,3 @@ static void* CaptureBoxDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(CaptureBoxDescription, "ElementDescription",
               &CaptureBoxDescription_Factory, &CaptureBoxDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

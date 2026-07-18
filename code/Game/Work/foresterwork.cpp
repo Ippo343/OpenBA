@@ -532,7 +532,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
     uintptr_t selfAddr = (uintptr_t)self;
     uintptr_t* selfQ = (uintptr_t*)self;  // for qword-aligned field access
 
-#ifdef STANDALONE_EXE
     // Bring-up trace (first few ticks): confirms ForesterWork::Execute is actually being
     // ticked by the executor and reports the work-area entity + workplace cell it operates on.
     { static int s_tc = 0;
@@ -540,7 +539,6 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
         fprintf(stderr, "[ForesterWork::Execute] tick#%d self=%p workArea+0x10=%p cell+0x28=%d\n",
                 s_tc, (void*)self, (void*)selfQ[2], (int)selfQ[5]);
         fflush(stderr); } }
-#endif
 
     // Save citizen ref for later use
     uintptr_t citizenRef = *(uintptr_t*)entityIBP;
@@ -1337,7 +1335,6 @@ void* ForesterWork_Slot10_Impl(ForesterWork* self, void* outPtr) {
 //   slot11 (GetPriority) = 0x140029860 — the SHARED HasWorkers thunk;
 //   ForesterWork has NO own GetPriority fn in foresterwork.cpp -> FLAG.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1377,4 +1374,3 @@ extern "C" void* ForesterWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x60, g_ForesterWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(ForesterWork, "AutoPickupWork", &ForesterWork_Factory, &ForesterWork_CreateInPlace);
-#endif // STANDALONE_EXE

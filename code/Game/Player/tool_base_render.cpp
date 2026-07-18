@@ -116,11 +116,7 @@ uint32_t ResolveTid(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
     if (*cache) return *cache;
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
     if (p && *p) { *cache = *p; return *cache; }
-#ifdef STANDALONE_EXE
     *cache = ::Object::GetTypeIdByName(name);
-#else
-    (void)name;
-#endif
     return *cache;
 }
 
@@ -447,12 +443,6 @@ void Impl_b930(int64_t self) {
     void* mesh = fn_MemAllocStatic ? fn_MemAllocStatic(0x180, 8) : nullptr;
     if (mesh) {
         if (fn_EdgeMesh_Ctor) fn_EdgeMesh_Ctor(mesh);
-#ifndef STANDALONE_EXE
-        // Retail overrides the ctor's base vtable with the exe EdgeMesh-subclass
-        // vtable. That address is invalid in the standalone image, so keep the
-        // Runtime base vtable there (adequate for live render; see file header).
-        *reinterpret_cast<uintptr_t*>(mesh) = 0x140159a60;
-#endif
     }
     *reinterpret_cast<void**>(self + 0xf8) = mesh;
 

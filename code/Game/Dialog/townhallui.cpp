@@ -2459,7 +2459,6 @@ void TownHallUI_OnRemove(TownHallUI* self, void* param2, int msg, int id) {
 // The exe helper functions these methods call through fn_* pointers are ported in
 // townhall_helpers.cpp + citizen_employ_cascade.cpp and registered by
 // standalone/reg_townhallui.cpp, so EngineFuncsInit resolves them in SA.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 
@@ -2822,4 +2821,3 @@ extern "C" void TownHallSA_Diag(int frameNum) {
 REGISTER_TYPE(TownHallUI, "UI::DialogController",
               &townhallui_sa::Factory, &townhallui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

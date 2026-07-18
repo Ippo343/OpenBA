@@ -7,7 +7,6 @@
 //
 // The integrator wires RegisterComponentBatch_people() into address_registry.cpp
 // (adds an extern decl + a call). This file is owned solely by batch "people".
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -89,4 +88,3 @@ void RegisterComponentBatch_people() {
     // --- immigrationcomponent.cpp (shared DynArray<ptr> resize) ---
     RegisterExeAddr(0x1400032e0, reinterpret_cast<uintptr_t>(&ImmigrationComp_DynArrayResize));
 }
-#endif // STANDALONE_EXE

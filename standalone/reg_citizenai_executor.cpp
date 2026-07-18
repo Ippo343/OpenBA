@@ -21,7 +21,6 @@
 //
 // NOTE: the CharacterComponent Update-slot vtable promotion + address_registry wiring
 // + A/B is done by the lead, not here.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -34,4 +33,3 @@ void RegisterCitizenAIExecutor() {
     RegisterExeAddr(0x1400c4bb0, reinterpret_cast<uintptr_t>(&CitizenAI_ActionFlush_c4bb0));
     RegisterExeAddr(0x1401094c0, reinterpret_cast<uintptr_t>(&CharacterComponent_MoveTick_1094c0));
 }
-#endif

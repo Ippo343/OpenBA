@@ -14,7 +14,6 @@
 //  ported + registered in the pathfinding wave: action_pf_roots_misc.cpp via a same-size
 //  local quadtree-walker buffer (alignas(16) uint8_t[0x2438]) calling the registered
 //  18dd0/18880, with disasm-verified record offsets. Registered in RegisterPfRootsMiscBatch.)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -84,4 +83,3 @@ void RegisterActionMoveBatch() {
     // (Formerly-deferred e550/9cfb0/c8c10 are now wired above — the pathfinding wave landed
     //  the a6430 dispatcher + A* core + the enqueuer/flood-fill closure they depend on.)
 }
-#endif

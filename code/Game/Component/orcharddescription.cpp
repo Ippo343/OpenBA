@@ -29,7 +29,6 @@ static void OrchardDescription_Init(void* self) {
 }
 
 void OrchardDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float) return;
@@ -46,9 +45,6 @@ void OrchardDescription_Serialize(void* self, void* stream) {
         SerializerEncodingVCall(serializer, 0x98, s + 0x20);   // enum +0x20
     }
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* OrchardDescription_Dtor(void* self, uint32_t flags) {
@@ -59,7 +55,6 @@ void* OrchardDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -107,4 +102,3 @@ static void* OrchardDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(OrchardDescription, "Description",
               &OrchardDescription_Factory, &OrchardDescription_CreateInPlace);
-#endif

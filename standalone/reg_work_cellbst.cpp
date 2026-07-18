@@ -4,7 +4,6 @@
 // Hand-ported + Ghidra-verified AVL insert/remove/serialize for the ClearArea / cell-keyed
 // work tree (bodies in code/Game/Work/work_base_cellbst.cpp). Integrator wires
 // RegisterWorkCellBstBatch() into RegisterCodeFunctions() in standalone/address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -17,4 +16,3 @@ void RegisterWorkCellBstBatch() {
     RegisterExeAddr(0x14001ca60, reinterpret_cast<uintptr_t>(&WorkCellBST_Remove_ca60));
     RegisterExeAddr(0x140029de0, reinterpret_cast<uintptr_t>(&WorkCellBST_Serialize_9de0));
 }
-#endif

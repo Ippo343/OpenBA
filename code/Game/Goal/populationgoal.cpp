@@ -161,7 +161,6 @@ PopulationGoal* PopulationGoal_CreateInstance(PopulationGoal* self) {
     return PopulationGoal_Slot6(self);
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -209,4 +208,3 @@ extern "C" void* PopulationGoal_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(PopulationGoal, "Achievement::Goal",
               &PopulationGoal_Factory, &PopulationGoal_CreateInPlace);
-#endif

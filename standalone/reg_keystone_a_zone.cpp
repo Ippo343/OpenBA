@@ -10,7 +10,6 @@
 //   plus fn_InternalBasePtr_Ctor (engine_funcs) and the Runtime exports
 //   (CriticalSection::Lock/Unlock, Thread::Start, MemoryAllocator::MemAlloc,
 //   Application::YieldToThreads) resolved via ResolveExport inside the ports.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -25,4 +24,3 @@ void RegisterKeystoneAZoneBatch() {
     RegisterExeAddr(0x14009d360, reinterpret_cast<uintptr_t>(&ZoneComponent_sub_d360));
     RegisterExeAddr(0x14009ce00, reinterpret_cast<uintptr_t>(&RoadTool_sub_ce00));
 }
-#endif

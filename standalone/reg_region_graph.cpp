@@ -9,7 +9,6 @@
 // turn calls Pf_IntArrayClone_f9e0 (0x14000f9e0, registered in reg_pf_pools via
 // action_pf_pools.cpp — re-registered here for clarity/self-containment) and
 // Pf_CoarseCellFreeTail_e420 (this batch). All sub-callees are satisfied.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -24,4 +23,3 @@ void RegisterRegionGraphBuildBatch() {
     RegisterExeAddr(0x14001e420, reinterpret_cast<uintptr_t>(&Pf_CoarseCellFreeTail_e420));
     RegisterExeAddr(0x14000f9e0, reinterpret_cast<uintptr_t>(&Pf_IntArrayClone_f9e0));
 }
-#endif

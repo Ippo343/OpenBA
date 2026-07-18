@@ -33,7 +33,6 @@
 //
 // 0x1400f2f00 (Pickup::Slot4) is intentionally NOT here — see report: it is a trampoline
 // stub (not reimplemented) AND depends on 4 uncovered exe callees. Not closure-safe.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "Work/pasturework_funcs.h"        // PastureWork_Slot4_Impl
@@ -59,4 +58,3 @@ void RegisterWorkTailSerializeBatch() {
     RegisterExeAddr(0x1401c6fd0, reinterpret_cast<uintptr_t>(&g_tid_AnimalDescription));
     RegisterExeAddr(0x1401c7ba0, reinterpret_cast<uintptr_t>(&g_tid_PastureComponent));
 }
-#endif // STANDALONE_EXE

@@ -53,7 +53,6 @@
 //   sub_48a0 -> {fn_IsDerivedFrom, CheckPtr slot, FindComp 1400052c0 (reg),
 //                14009f5d0* -> 14009f3e0 (reg) + fabsf, fn_MemFreeStatic}        OK
 //   (* = registered in this batch, bottom-up)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -84,4 +83,3 @@ void RegisterPlayerPathBatch() {
     RegisterExeAddr(0x140104770, reinterpret_cast<uintptr_t>(&PlayerPath_Sub_4770));
     RegisterExeAddr(0x1401048a0, reinterpret_cast<uintptr_t>(&PlayerPath_Sub_48a0));
 }
-#endif // STANDALONE_EXE

@@ -861,7 +861,6 @@ void* HuntWork_ScalarDtor_Impl(HuntWork* self, uint32_t flags) {
 //   Ctor       : FLAG — NO HuntWork_Ctor_Impl in this file -> factory null
 //   ResolveFuncs: HuntWork_ResolveFuncs()
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -901,4 +900,3 @@ extern "C" void* HuntWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x58, g_HuntWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(HuntWork, "AutoPickupWork", &HuntWork_Factory, &HuntWork_CreateInPlace);
-#endif // STANDALONE_EXE

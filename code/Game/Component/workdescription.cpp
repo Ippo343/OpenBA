@@ -50,7 +50,6 @@ static void WorkDescription_Init(void* self) {
 // WorkDescription_Serialize (vtable +0x28, 0x14012e8b0)
 // ============================================================
 void WorkDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serialize_Int || !g_fn_Serialize_Bool) {
@@ -65,9 +64,6 @@ void WorkDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int (serializer, s + 0x30, nullptr);   // int  +0x30
     g_fn_Serialize_Bool(serializer, s + 0x20, nullptr);   // bool +0x20
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 // ============================================================
@@ -81,7 +77,6 @@ void* WorkDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -137,4 +132,3 @@ static void* WorkDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(WorkDescription, "Description",
               &WorkDescription_Factory, &WorkDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

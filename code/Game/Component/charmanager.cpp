@@ -42,7 +42,6 @@
 //
 // This file must NOT depend on hooks.h — portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -366,4 +365,3 @@ extern "C" void CharMgr_impl_8560(int64_t mgr, int idx) {
     }
 }
 
-#endif // STANDALONE_EXE

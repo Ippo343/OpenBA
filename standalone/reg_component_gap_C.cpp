@@ -8,7 +8,6 @@
 // complex defers (self-resolving passthroughs, uninitialized audio/scene/grid
 // subsystems, or deep unregistered closures) or caller-bug fixes that don't need
 // a new registration. See the batch C report for the full classification.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -28,4 +27,3 @@ void RegisterComponentGap_C() {
     RegisterExeAddr(0x1400b0d00, reinterpret_cast<uintptr_t>(&DecalComponent_TerrainDecalRemove));
     RegisterExeAddr(0x1400aa440, reinterpret_cast<uintptr_t>(&StatusIconComponent_GeometrySetup));
 }
-#endif // STANDALONE_EXE

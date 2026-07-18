@@ -415,7 +415,6 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
 // separate name because the BaseTypeInfo's inPlaceCreateFn slot is
 // distinct from the vtable slot in the original layout.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 
@@ -477,7 +476,6 @@ extern "C" void* StatGoal_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(StatGoal, "Achievement::Goal",
               &StatGoal_Factory, &StatGoal_CreateInPlace);
-#endif
 
 // ============================================================
 // StatGoal_Ctor_Impl (0x1400daa80)

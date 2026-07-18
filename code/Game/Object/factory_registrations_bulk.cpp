@@ -11,7 +11,6 @@
 // add the typeName to REIMPLEMENTED in tools/gen_factory_registrations.py
 // and re-run codegen. The per-class file's REGISTER_TYPE takes over.
 
-#ifdef STANDALONE_EXE
 #include "factory_registration.h"
 #include <cstdio>
 #include <cstdlib>
@@ -191,4 +190,3 @@ REGISTER_ABSTRACT_FACTORY(Description, "Object::External");  // 14014ea50 Descri
 REGISTER_ABSTRACT_FACTORY(ControllerComponent, "Component");  // 14014eb50 ControllerComponent_RegisterType
 REGISTER_ABSTRACT_FACTORY(ResourceProduceComponent, "ControllerComponent");  // 14014f8d0 ResourceProduceComponent_RegisterType
 
-#endif  // STANDALONE_EXE

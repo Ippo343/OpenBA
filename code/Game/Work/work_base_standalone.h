@@ -22,7 +22,6 @@
 // which installs the vtable via ResolveAddr(Module::Exe, <vtableAddr>) — so each
 // type registers its standalone vtable at that exe address (RegisterExeAddr).
 #pragma once
-#ifdef STANDALONE_EXE
 #include <cstdint>
 
 extern "C" {
@@ -64,4 +63,3 @@ void Work_SerializeNop(void* self, void* stream);
 
 }  // extern "C"
 
-#endif  // STANDALONE_EXE

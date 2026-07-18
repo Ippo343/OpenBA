@@ -105,10 +105,8 @@ void ForesterComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(ForesterComponent, 0x58, 0x80)
 REGISTER_TYPE(ForesterComponent, "ResourceProduceComponent",
               &ForesterComponent_Factory, &ForesterComponent_CreateInPlace);
-#endif // STANDALONE_EXE

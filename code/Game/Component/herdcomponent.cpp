@@ -629,11 +629,9 @@ void HerdComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x60 (HerdComponent_Factory MemAlloc), flags 0x8b (Ctor 0x140122150:
 // Component base sets +0x20=0x80, leaf OR 0xb => 0x8b).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(HerdComponent, 0x60, 0x8b)
 REGISTER_TYPE(HerdComponent, "Component",
               &HerdComponent_Factory, &HerdComponent_CreateInPlace);
-#endif // STANDALONE_EXE

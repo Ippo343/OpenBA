@@ -724,7 +724,6 @@ void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int ev
 // town citizen list townMgr+0xa0/+0xa8 (population/status/hearts/stars),
 // resource stock townMgr+0x170, game clock gw+0x128, weather gw+0x130, and
 // the town name String at gw+0x28 (title parameter).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 
@@ -950,4 +949,3 @@ void* InPlace(void* m) {
 REGISTER_TYPE(StatusBarUI, "UI::DialogController",
               &statusbarui_sa::Factory, &statusbarui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

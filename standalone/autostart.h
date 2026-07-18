@@ -19,7 +19,6 @@
 
 #pragma once
 
-#ifdef STANDALONE_EXE
 
 namespace AutoStart {
 
@@ -42,4 +41,3 @@ void TickMenu(void* menuDLT);
 // (Slot4) has populated the combos + OK button. Null until OpenNewGame runs.
 extern "C" void* g_StandaloneNewGameDialog;
 
-#endif  // STANDALONE_EXE

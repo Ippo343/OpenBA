@@ -189,14 +189,14 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
 //   SetParameter(elem, 0, (System::String)UIString(comp.stringTable, comp+0x40))
 //   hide/show by whether costString is empty.
 extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     static int s_e420n = 0;
     const char* s_e420diag = std::getenv("BANISHED_TOOL_DIAG");
     bool s_e420on = s_e420diag && s_e420diag[0] && s_e420diag[0] != '0' && s_e420n < 12;
 #endif
     void* descEntity = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x30);
     if (!descEntity) {
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
         if (s_e420on) { ++s_e420n; fprintf(stderr, "[e420] BAIL: descEntity(ctrl+0x30)=NULL\n"); fflush(stderr); }
 #endif
         return;
@@ -229,7 +229,7 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     void* elem = reinterpret_cast<void*>(elemBuf);
     if (fn_String_Dtor) fn_String_Dtor(nameStr);
     if (!elem) {
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
         if (s_e420on) { ++s_e420n; fprintf(stderr, "[e420] BAIL: 'textStatus' element not found (comp=%p)\n", comp); fflush(stderr); }
 #endif
         return;
@@ -241,7 +241,7 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     // empty instead of null-derefing. (The retail invariant holds; this only
     // matters for degraded standalone data.)
     if (!comp) {
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
         if (s_e420on) { ++s_e420n; fprintf(stderr, "[e420] BAIL: no ToolbarDescription comp on descEntity=%p\n", descEntity); fflush(stderr); }
 #endif
         return;
@@ -249,7 +249,7 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
 
     void* stringTable = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(comp) + 0x30);
 
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
         static int s_n = 0;
         if (s_n < 12) {
@@ -417,7 +417,6 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     }
     uint64_t ctrlIBP = 0;
     if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(&ctrlIBP, ctrl);
-#ifdef STANDALONE_EXE
     // One-shot diagnostic: confirm the CreateBar controller resolved (type-ids correct)
     // — else the populate silently no-ops here. Logs once; A/B-safe (only when fc60 runs).
     {
@@ -429,7 +428,6 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
             fflush(stderr);
         }
     }
-#endif
     if (ctrlIBP == 0) return;  // no live controller
 
     // --- Size text (controller-cached) ---
@@ -510,7 +508,6 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     void* rootIBP = fn_DialogInstance_GetRoot ? fn_DialogInstance_GetRoot(dialog, &rootRetbuf) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(rootIBP);
     void* rootElem = rootIBP ? *reinterpret_cast<void**>(rootIBP) : nullptr;
-#ifdef STANDALONE_EXE
     {
         static bool s_rootLogged = false;
         if (!s_rootLogged) { s_rootLogged = true;
@@ -521,7 +518,6 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
             fflush(stderr);
         }
     }
-#endif
     if (!rootElem) return;
     int left   = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x68);
     int top    = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(rootElem) + 0x6c);
@@ -553,7 +549,6 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     if (fn_DialogInstance_SetUpperLeft)
         fn_DialogInstance_SetUpperLeft(dialog, static_cast<int>(*cachedX),
                                        static_cast<int>(*cachedY), true);
-#ifdef STANDALONE_EXE
     {
         static bool s_posLogged = false;
         if (!s_posLogged) {
@@ -565,5 +560,4 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
             fflush(stderr);
         }
     }
-#endif
 }

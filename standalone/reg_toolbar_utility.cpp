@@ -19,7 +19,6 @@
 // The engine_funcs pointers fn_FindDialogByControllerType / fn_BST_Insert_0x14 read
 // ResolveAddr(Exe, 0x140100270 / 0x140014890) in EngineFuncsInit, which runs AFTER
 // AddressRegistryInit — so registering here makes them resolve to these reimpls.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -32,4 +31,3 @@ void RegisterToolbarUtilityBatch() {
     RegisterExeAddr(0x140014890,
         reinterpret_cast<uintptr_t>(&ToolbarUtility_BstInsert_4890));
 }
-#endif // STANDALONE_EXE

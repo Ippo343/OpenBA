@@ -66,7 +66,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -899,4 +898,3 @@ void CitizenAI_PlayAnimationCtor4_ba6b0(void* param_1, int64_t* param_2, uint32_
     PushMoveTo(param_1, stack, 1 /*Slow*/, reinterpret_cast<float*>(param_3), 0xe1f);
 }
 
-#endif // STANDALONE_EXE

@@ -31,9 +31,7 @@
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include <cstdio>
-#endif
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -517,7 +515,6 @@ static void Toolbar_ShowGroup_Impl(void* gameSubsys, int64_t groupId) {
 static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param) {
     uintptr_t self = (uintptr_t)gameSubsys;
 
-#ifdef STANDALONE_EXE
     // g_TypeId_UIDescription resolves from raw .rdata (0x1401c7f90) → NULL in the
     // standalone exe. Without it the UIDescription sub-item search below never
     // matches → no dialog opens. Point it at local storage filled from the live
@@ -528,7 +525,6 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
             s_tid_UIDescription = ::Object::GetTypeIdByName("UIDescription");
         g_TypeId_UIDescription = &s_tid_UIDescription;
     }
-#endif
 
     // Get the UserInterface singleton: *(gameWorld + 0x98)
     void* gameWorld = *g_pGameWorldSingleton;
@@ -608,10 +604,8 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
 
         // Override vtable to ToolUI child dialog vtable
         *(uintptr_t*)dialogInst = g_ToolUI_ChildDialog_Vtable;
-#ifdef STANDALONE_EXE
         extern void* g_HarnessLastUtilityDialog;
         g_HarnessLastUtilityDialog = dialogInst;   // harness: drive its controllers
-#endif
     }
 
     // Wrap in InternalBasePtr
@@ -671,7 +665,6 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     *(void**)retBuf = (void*)(uintptr_t)dialogRef;
 }
 
-#ifdef STANDALONE_EXE
 // Captures the last DialogInstance created by Toolbar_Utility_Impl so the harness
 // can reach its controllers (e.g. drive MapUI::SetupImage after open).
 void* g_HarnessLastUtilityDialog = nullptr;
@@ -781,7 +774,6 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
     }
     printf("[HarnessDrive] '%s' not found in %d open dialogs\n", controllerName, count);
 }
-#endif
 
 // ============================================================
 // Toolbar_ToggleAll_Impl (was fn_Toolbar_ToggleAll, FUN_140101ce0)

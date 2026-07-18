@@ -35,9 +35,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
-#endif
 
 extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // sub_8630 (ported)
 extern "C" void* g_pConstructionDemoSite;                            // the seeded foundation
@@ -45,7 +43,6 @@ extern "C" void* g_pBuildStructureWork = nullptr;                    // 2c-B pro
 extern void BuildComponent_DrawReimpl(void* self);                   // 0x140108d40 mesh-list fill
 extern "C" void* BuildStructure_CreateInPlace(void* mem);            // buildstructure.cpp 1-arg ctor (0x1400e5a90)
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim); // full ctor (0x1400e59c0)
-#ifdef STANDALONE_EXE
 extern "C" bool BuildComponent_DemoGateSkip(void* buildComp);        // buildcomponent_state1.cpp
 // citizen_employ_cascade.cpp — drive the real ProfessionUI seat cascade (cbf0/ca20/c5f0/c4b0)
 // against a SPECIFIC workplace entity (no FindAvailableBuilding / townMgr+0x100 lookup, which
@@ -55,9 +52,6 @@ extern "C" int  CitizenEmploy_SeatWorkersAt(int64_t townMgr, int64_t availEntity
 // workplacecomponent.cpp — roster-only mode: the WPC attach/detach (fa20/f7e0 reimpl) skips the
 // Scene mesh-visual toggle, so seating a Builder does NOT swap the site's build mesh.
 extern bool g_wpcRosterOnly;
-#else
-static inline bool BuildComponent_DemoGateSkip(void*) { return false; }
-#endif
 
 // ---- trace / demo-force gates ----------------------------------------------------
 static int s_bc8_trace = -1;
@@ -99,14 +93,8 @@ static bool BC8_BuilderNatural() {
 
 // ---- type ids (SA: runtime registry; DLL: raw .rdata) ----------------------------
 static uint32_t BC8_TypeId(const char* name, uintptr_t rdataGlobal) {
-#ifdef STANDALONE_EXE
     (void)rdataGlobal;
     return ::Object::GetTypeIdByName(name);
-#else
-    (void)name;
-    uintptr_t g = ResolveAddr(Module::Exe, rdataGlobal);
-    return g ? *reinterpret_cast<uint32_t*>(g) : 0;
-#endif
 }
 
 // ---- exe helper pointers ---------------------------------------------------------
@@ -273,12 +261,10 @@ extern "C" char BuildComponent_State1Update(void* buildComp, void* sm) {
     BC8_Resolve();
 
     bool haveAll = BuildComponent_HaveAllMaterials(buildComp);
-#ifdef STANDALONE_EXE
     if (!haveAll && BC8_DemoForce() && BC8_IsDemo(buildComp)) {
         haveAll = true;   // brick-2a harness: pretend materials arrived (real haul = 2b)
         if (BC8_Trace()) std::fprintf(stderr, "[BuildTrace] (force) State1Update demo materials present -> 8\n");
     }
-#endif
     if (haveAll) {
         BC8_StopWorker(bc);
         ::ControllerLive::RequestStateTransition(sm, 8);
@@ -331,7 +317,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
         // assigns each to a build position; PerformWork accumulates progress into bc+0x48).
         // Faithful to sub_7ae0's STAGED tail. Gated behind BANISHED_BUILD_LIVE_HAUL (needs
         // the live-citizen action stack + task manager, same as the gather post).
-#ifdef STANDALONE_EXE
         static int s_liveLabor = -1;
         if (s_liveLabor < 0) {
             const char* e = std::getenv("BANISHED_BUILD_LIVE_HAUL");
@@ -430,7 +415,6 @@ extern "C" char BuildComponent_State8Enter(void* buildComp, void* sm) {
                 std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: BuildStructure alloc/ctor failed (mem=%p)\n", mem);
             }
         } else
-#endif
         if (BC8_Trace())
             std::fprintf(stderr, "[BuildTrace] State8Enter STAGED: meshes reset (count=%d); BuildStructure work-spawn (liveLabor off)\n", meshCount);
     } else {
@@ -455,7 +439,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
     void* matComp = BC8_MatComp(bc);
     int target = BC8_Target(bc, matComp);
 
-#ifdef STANDALONE_EXE
     if (BC8_DemoForce() && BC8_IsDemo(buildComp)) {
         // brick-2a harness: ramp progress toward target (~60 frames) to drive the mesh
         // progression + completion. Real BuildStructure labor = brick 2c.
@@ -495,7 +478,6 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm) {
         if (p > target) p = target;
         *reinterpret_cast<int32_t*>(bc + 0x48) = p;
     }
-#endif
 
     BC8_EnsureMeshList(bc);
     int progress = *reinterpret_cast<int32_t*>(bc + 0x48);

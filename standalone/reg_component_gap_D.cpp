@@ -10,7 +10,6 @@
 // are documented defers (deep/unregistered sub-callee closures, vtable-emitting
 // ctors, or unavailable dispatch slots). A wrong/half-null port is silent
 // corruption, strictly worse than the safe no-op skip.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -80,4 +79,3 @@ void RegisterComponentGap_D() {
     RegisterExeAddr(0x140121ad0, reinterpret_cast<uintptr_t>(&HerdComponent_Helper1ad0));
     RegisterExeAddr(0x14012e510, reinterpret_cast<uintptr_t>(&HerdComponent_Impl_e510));
 }
-#endif // STANDALONE_EXE

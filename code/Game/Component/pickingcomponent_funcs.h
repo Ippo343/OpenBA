@@ -13,7 +13,6 @@ void PickingComponent_OnCreate(PickingComponent* self);
 
 void PickingComponent_InitFuncs();
 
-#ifdef STANDALONE_EXE
 // OnAdded (0x140128f50) port: register this component's picking mesh into Picking::Scene
 // (Startup +0x30=owner, then AddMesh). Drives mesh-precise picking for static start-town
 // buildings, whose real OnAdded/Startup lifecycle never fires in standalone. Idempotent
@@ -23,4 +22,3 @@ void PickingComponent_RegisterMesh(void* pc);
 // Convenience: find `entity`'s PickingComponent and register its mesh (for callers that
 // hold an entity, e.g. the player-placement create path). Respects BANISHED_LIVE_PICKMESH.
 void PickingComponent_RegisterMeshForEntity(void* entity);
-#endif

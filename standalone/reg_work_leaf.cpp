@@ -11,7 +11,6 @@
 //
 // Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdint>
@@ -67,4 +66,3 @@ void RegisterWorkLeafBatch() {
     RegisterExeAddr(0x14012b310, reinterpret_cast<uintptr_t>(&WorkLeaf_ConsumeProduce_b310));
 }
 
-#endif // STANDALONE_EXE

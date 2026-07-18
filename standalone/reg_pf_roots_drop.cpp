@@ -10,7 +10,6 @@
 // batches (notably 0x14009bd40 FindPlacementCell, ported by another agent THIS wave),
 // plus the action ctors in action_pf_ctors (this wave). See the header comment in
 // action_pf_roots_drop.cpp for the full sub-callee list.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -26,4 +25,3 @@ void RegisterPfRootsDropBatch() {
     RegisterExeAddr(0x1400c7620, reinterpret_cast<uintptr_t>(&Pf_DropOffExec_7620));
     RegisterExeAddr(0x1400bbea0, reinterpret_cast<uintptr_t>(&Pf_RemoveAnimalCtor_bbea0));
 }
-#endif

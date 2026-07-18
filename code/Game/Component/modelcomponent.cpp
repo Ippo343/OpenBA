@@ -190,18 +190,12 @@ static void* GetMultiObjDescription(uintptr_t self) {
     void* obj = *(void**)(self + 0x18);
     if (!obj) return nullptr;
 
-#ifdef STANDALONE_EXE
     // The standalone Runtime factory tree is incomplete, so fn_IsDerivedFrom
     // returns false for legit descriptions. ComponentEntity::CtorFromDescription
     // has already linked +0x18 to this component's ModelDescription template, so
     // trust the non-null pointer (matches the IsDerivedFromOrTrust policy used
     // throughout the spawn path).
     return obj;
-#else
-    if (!fn_IsDerivedFrom || !s_TypeId_MultiObjDesc) return nullptr;
-    bool derived = fn_IsDerivedFrom(obj, *s_TypeId_MultiObjDesc);
-    return derived ? obj : nullptr;
-#endif
 }
 
 // ============================================================
@@ -394,7 +388,7 @@ void ModelComponent_Serialize(ModelComponent* self) {
         }
     }
 
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     // Foundation F one-shot diagnostic: confirm the description carries mesh data.
     static int s_serLog = 0;
     if (s_serLog < 10) {
@@ -449,7 +443,7 @@ void ModelComponent_Draw(ModelComponent* self) {
             if (scene) {
                 uint32_t id = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
                 *(uint32_t*)(s + 0x16c) = id;
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
                 static int s_drawLog = 0;
                 if (s_drawLog < 10) {
                     ++s_drawLog;
@@ -567,7 +561,6 @@ void ModelComponent_InitFuncs() {
 // description) during instantiation, and OnAddedPass calls vtable+0x30
 // (OnAdded = ModelComponent_Draw, registers the geometry in Graphics::Scene).
 // Mirrors the exe constructor at 0x140124d20.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 
 // GetTypeId (vtable +0x10): return the ModelComponent type id, cached.
@@ -644,4 +637,3 @@ static void* ModelComponent_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ModelComponent, "Component",
               &ModelComponent_Factory, &ModelComponent_CreateInPlace);
-#endif // STANDALONE_EXE

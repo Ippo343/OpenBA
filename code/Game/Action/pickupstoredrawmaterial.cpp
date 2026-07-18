@@ -425,7 +425,6 @@ bool PickupStoredRawMaterial_GetTarget_Impl(PickupStoredRawMaterial* self, void*
 // Vtable @ 0x14015ff80 (10 slots), size 0x48, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -461,4 +460,3 @@ extern "C" void* PickupStoredRawMaterial_Factory(void) {
     return Action_Alloc(0x48, g_PickupStoredRawMaterial_Vtable);
 }
 REGISTER_TYPE(PickupStoredRawMaterial, "Action", &PickupStoredRawMaterial_Factory, &PickupStoredRawMaterial_CreateInPlace);
-#endif // STANDALONE_EXE

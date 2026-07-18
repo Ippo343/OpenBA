@@ -20,7 +20,6 @@
 //   absolute JMP back to Allocate+13, so calling the trampoline runs the real
 //   allocator body and returns to us.
 
-#ifdef STANDALONE_EXE
 
 #include "allocator_lock.h"
 #include "resolve.h"
@@ -232,4 +231,3 @@ bool InstallFreeLock() {
     return true;
 }
 
-#endif // STANDALONE_EXE

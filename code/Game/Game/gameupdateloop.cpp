@@ -26,7 +26,6 @@
 #include <cmath>
 #include <cstdlib>
 
-#ifdef STANDALONE_EXE
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
 // from the BANISHED_LIVE_TOOLBAR-gated HUD path in Startup below.
@@ -62,16 +61,13 @@ static bool LiveToolsEnabled() {
 // delayed capture armed by OptionsDialog::ApplyVideoSettings (after an MSAA/res
 // apply) actually fires. No-op unless the exe was launched via RenderDoc's UI.
 #include "renderdoc_integration.h"
-#endif
 
-#ifdef STANDALONE_EXE
 // Runtime type-id lookup (body in code/Game/Object/factory_registration.cpp) —
 // used as a standalone fallback for the Dialog type-id when the exe data slot
 // isn't registered. ResolveTypeIdByNameLazy walks the LIVE Runtime factory tree,
 // so it sees Runtime-self-registered types like "Dialog" (GetTypeIdByName only
 // knows our exe-side REGISTER_TYPE entries and returns 0 for Dialog).
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
-#endif
 
 // ============================================================
 // Exe globals (resolved at init time from .rdata/.data addresses)
@@ -608,7 +604,6 @@ static void EnsureInit() {
 
     // Dialog type ID
     g_pDialogTypeId = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4138));
-#ifdef STANDALONE_EXE
     // Standalone: the exe's Dialog type-id storage at 0x1401c4138 is unregistered,
     // so ResolveAddr returns 0. Fall back to the runtime type registry — "Dialog"
     // (parent External) is self-registered by Runtime at startup, so
@@ -618,7 +613,6 @@ static void EnsureInit() {
         if (s_dialogTypeId == 0) s_dialogTypeId = ::Object::ResolveTypeIdByNameLazy("Dialog");
         g_pDialogTypeId = &s_dialogTypeId;
     }
-#endif
 
     // Bulk null-check all ResolveExport pointers
     #define CHECK_FN(fn) if (!(fn)) TRACE("[GameUpdateLoop] WARNING: " #fn " is NULL!\n")
@@ -666,14 +660,12 @@ static void EnsureInit() {
 // ============================================================
 extern "C" void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self);
 
-#ifdef STANDALONE_EXE
 // In-game tool-injection harness (standalone/tool_harness.cpp), env-gated by
 // BANISHED_TOOL_HARNESS. No-op unless that env var is set.
 extern "C" void ToolHarness_Tick(void* entityUI, int frameNum);
 // TownHallUI gate diagnostic (code/Game/Dialog/townhallui.cpp) — one-shot report
 // of the fn-pointer / type-id / town-data gates behind the town-hall panel.
 extern "C" void TownHallSA_Diag(int frameNum);
-#endif
 
 // fn_MemFreeStatic is already available from engine_funcs.h
 
@@ -685,9 +677,7 @@ extern "C" void TownHallSA_Diag(int frameNum);
 //
 // HEAVILY INSTRUMENTED for debugging tutorial hang.
 
-#ifdef STANDALONE_EXE
 extern "C" unsigned long long __stdcall GetTickCount64(void);   // kernel32 (fps trace)
-#endif
 
 extern "C"
 bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
@@ -715,7 +705,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
     s_frameNum++;
 
-#ifdef STANDALONE_EXE
     // [EVENTS] BANISHED_LIVE_EVENTS: drive the faithful event-log sources each tick.
     // Only the resource-shortage scanner runs here — the earlier population-watch
     // "settlers arrived" (0xe) demo fired at game start (founding 0 -> N), which retail
@@ -769,9 +758,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
             }
         }
     }
-#endif
 
-#ifdef STANDALONE_EXE
     // Drive a Player tool (env-gated, one-shot) so otherwise-dormant tool code
     // paths fire for debugger validation. No-op unless BANISHED_TOOL_HARNESS set.
     ToolHarness_Tick(self->m_entityUI, s_frameNum);
@@ -795,7 +782,6 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
     // (StorageDisplayComponent pile rendering is now driven natively by EntityList::Update's
     // 5-bucket +0x48 tick — the explicit per-frame drain was removed once the spurious
     // bit-0x400 cull on start-town buildings was fixed. See storagedisplaycomponent.cpp.)
-#endif
 
     TRACE("[GameUpdateLoop::Update] ENTER frame=%d (self=%p, time=%p, gameTime=%lld)\n",
           s_frameNum, (void*)self, time, (long long)self->m_gameTime);
@@ -998,7 +984,6 @@ post_simulation:
         if (!pausedNow) {
             // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
             bool noInputFocus = (*(uint8_t*)((uintptr_t)self->m_userInterface + 0xd9) == 0);
-#ifdef STANDALONE_EXE
             // Standalone: EntityUI::Update (the camera/tool controller) is not
             // registered, so fn_EntityUI_Update is null and the camera never moved.
             // Drive the camera directly from the KeyMap here — hotkeys (pause/presets)
@@ -1012,7 +997,6 @@ post_simulation:
                 int toolCursor = EntityUI_ToolTick_SA(self->m_entityUI, noInputFocus ? 1 : 0, *(int64_t*)time);
                 if (toolCursor >= 0) cursorIndex = toolCursor;
             }
-#endif
             TRACE("[GameUpdateLoop::Update] calling EntityUI::Update (inputFlag=%d)...\n", (int)noInputFocus);
             int64_t result = fn_EntityUI_Update ? fn_EntityUI_Update(self->m_entityUI, *(int64_t*)time, noInputFocus) : 1; // [GUARD-M5]
             cursorIndex = (int)result;
@@ -1182,7 +1166,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
     EnsureInit();
 
-#ifdef STANDALONE_EXE
     // Tick the RenderDoc capture state machine once per rendered frame. The
     // engine's Present happens after this Draw returns (MainLoop::Draw EndFrame),
     // so a StartFrameCapture here brackets a full frame of GPU work.
@@ -1205,7 +1188,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             --s_capArm;
         }
     }
-#endif
 
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
 
@@ -1223,7 +1205,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         }
         ++s_drawN;
     }
-#ifdef STANDALONE_EXE
     // [DRAW FPS] env BANISHED_FPS_TRACE: the RENDER framerate (Draw calls/sec). The sim Update
     // runs fixed-timestep 60Hz (multiple steps per rendered frame to catch up), so the Update
     // counter always reads ~60; THIS measures the visible frame rate. Compare to the [FPS]
@@ -1241,7 +1222,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             s_dLastMs = now; s_dFrames = 0;
         }
     }
-#endif
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
     bool paused = fn_UI_PausesGame(self->m_userInterface);
@@ -1301,7 +1281,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(self->m_weather, videoCtx); // [GUARD-M5]
-#ifdef STANDALONE_EXE
         // Native time-of-day sun/lighting. The original Weather::DrawUpdate
         // (above) no-ops in standalone (not reimplemented + Environment.rsc not
         // loaded), so drive the day cycle directly from the real base-game
@@ -1374,7 +1353,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
                 *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x10800;
             }
         }
-#endif
     }
     TRACE("[GameUpdateLoop::Draw] Weather::DrawUpdate done\n");
 
@@ -1388,7 +1366,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         void* engine = *g_pEngineSingleton;
         uint32_t shadowMode = *(uint32_t*)((uintptr_t)engine + 0x30);
-#ifdef STANDALONE_EXE
         // The shadow-mode source field. The ORIGINAL GameUpdateLoop::Draw (exe 0x140096010)
         // sets renderer+0x3c from *(*g_pVideoConfigSingleton + 0x30) — the shadow-QUALITY
         // setting (index, 0=off, >0=on), NOT engine+0x30 (in standalone g_pEngineSingleton ==
@@ -1406,7 +1383,6 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         } else {
             shadowMode = 0;
         }
-#endif
         *(uint32_t*)((uintptr_t)self->m_renderer + 0x3c) = shadowMode;
     }
 
@@ -1667,11 +1643,9 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // Create and add Toolbar dialog
     TRACE("[GameUpdateLoop::Startup] creating Toolbar dialog...\n");
     if (kCreateToolbar) {
-#ifdef STANDALONE_EXE
         // Synthesize the standalone ToolbarDialog vtable + fill the toolbar type-id
         // globals before any toolbar object is constructed. Idempotent.
         ToolbarStandalone_Init();
-#endif
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
 
@@ -1845,11 +1819,7 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         if (mem != nullptr && dialogRes != nullptr) {
             int64_t parentIBP[1];
             fn_InternalBasePtr_Ctor(parentIBP, g_ribbonParentToolbar);
-#ifdef STANDALONE_EXE
             eventNotify = EventNotifyDialog_Ctor_Standalone(mem, self->m_userInterface, dialogRes, parentIBP);
-#else
-            if (fn_EventNotifyDialog_Ctor) eventNotify = fn_EventNotifyDialog_Ctor(mem);
-#endif
         }
 
         if (eventNotify) {
@@ -1910,11 +1880,9 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     // standalone (M5 first slice). [GUARD-M5]
     TRACE("[GameUpdateLoop::Startup] calling EntityUI::Startup...\n");
     if (fn_EntityUI_Startup) fn_EntityUI_Startup(self->m_entityUI);
-#ifdef STANDALONE_EXE
     // Standalone: fn_EntityUI_Startup (0x140101ee0) is NULL, so build the tool-mode
     // tree ourselves (Phase 3) so a build-button click resolves the PlacementTool.
     if (LiveToolsEnabled()) EntityUI_BuildToolModeTree_SA(self->m_entityUI);
-#endif
     TRACE("[GameUpdateLoop::Startup] EntityUI::Startup done\n");
 
     TRACE("[GameUpdateLoop::Startup] EXIT\n");

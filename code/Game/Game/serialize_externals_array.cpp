@@ -42,14 +42,6 @@
 extern "C" void Reimpl_ExternalPtrArray_Serialize(
     void* serializer, int count, long long arrayBase, void* /*deadInit*/) {
 
-#ifndef STANDALONE_EXE
-    // DLL mode: call the original (no dedicated fn_ pointer — resolve inline,
-    // same idiom as Reimpl_ExternalPtr_Serialize_Toolbar).
-    typedef void (*orig_t)(void*, int, long long, void*);
-    static orig_t s_orig =
-        reinterpret_cast<orig_t>(ResolveAddr(Module::Exe, 0x1400049c0));
-    if (s_orig) { s_orig(serializer, count, arrayBase, nullptr); return; }
-#endif
 
     if (count <= 0 || !arrayBase || !serializer) return;
 

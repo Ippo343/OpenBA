@@ -3,7 +3,6 @@
 //
 // Hand-ported + Ghidra-verified (bodies in code/Game/Work/work_base_grid.cpp). Integrator
 // wires RegisterWorkGridBatch() into RegisterCodeFunctions() in standalone/address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -16,4 +15,3 @@ void RegisterWorkGridBatch() {
     RegisterExeAddr(0x1400f8620, reinterpret_cast<uintptr_t>(&WorkGrid_TryAssignWorkplace_f8620));
     RegisterExeAddr(0x1400e3db0, reinterpret_cast<uintptr_t>(&WorkGrid_AutoPickup_e3db0));
 }
-#endif

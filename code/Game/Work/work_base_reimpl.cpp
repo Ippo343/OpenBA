@@ -18,9 +18,7 @@
 #include <cstdint>
 #include <cmath>
 
-#ifdef STANDALONE_EXE
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
-#endif
 
 // ============================================================
 // FindComponent family
@@ -75,7 +73,6 @@ static void EnsureTypeIds() {
     s_pTid_3050 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
     s_pTid_52c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
     s_pTid_6270 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-#ifdef STANDALONE_EXE
     // Raw .rdata type-id globals are NULL in standalone; fall back to the runtime type
     // registry so these FindComponent helpers actually match (else they return null and
     // callers deref null). Names verified from decomp/application.md TypeInfo column.
@@ -83,7 +80,6 @@ static void EnsureTypeIds() {
     if (!s_pTid_2ed0) { v_2ed0 = ::Object::GetTypeIdByName("InteractComponent"); s_pTid_2ed0 = &v_2ed0; }
     if (!s_pTid_3050) { v_3050 = ::Object::GetTypeIdByName("WorkComponent");      s_pTid_3050 = &v_3050; }
     if (!s_pTid_6270) { v_6270 = ::Object::GetTypeIdByName("StorageComponent");   s_pTid_6270 = &v_6270; }
-#endif
     s_tidInit = true;
 }
 
@@ -298,7 +294,6 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
     void* obj = *reinterpret_cast<void**>(taskIBP);
     uint32_t ciTid = g_TypeId_CitizenAIComponent_FC ? *g_TypeId_CitizenAIComponent_FC : 0;
-#ifdef STANDALONE_EXE
     // The IsA gate reads DWORD_1401c7158 (== g_TypeId_CitizenAIComponent_FC, actually the
     // CitizenComponent type-id — see citizenui.cpp:794). That raw .rdata global is null in
     // the standalone exe unless some other path (e.g. the citizen UI dialog) has already
@@ -306,7 +301,6 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     // and every registered haul task is judged invalid, driving the enqueue↔invalidate reset
     // loop that stops any construction haul from completing.
     if (!ciTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CitizenComponent"); ciTid = v; }
-#endif
     if (!fn_IsA || !ciTid || !fn_IsA(obj, ciTid)) return 0;
 
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(taskIBP);
@@ -318,7 +312,6 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
 
     uint32_t completeTaskTid = 0;
     if (uint32_t* pCT = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5e50))) completeTaskTid = *pCT;
-#ifdef STANDALONE_EXE
     // 0x1401c5e50 == CompleteTask TypeInfo (decomp/application.md). Raw .rdata type-id
     // globals resolve to NULL in the standalone exe, so completeTaskTid stays 0 and the
     // IsDerivedFrom(elem, completeTaskTid) below can NEVER recognise the CompleteTask node
@@ -326,7 +319,6 @@ uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskI
     // that IS validly hauling, and GatherRawMaterials::Update invalidates+removes it every
     // tick (the enqueue↔reset loop). Heal via the runtime type registry by name.
     if (!completeTaskTid) { static uint32_t v = 0; if (!v) v = ::Object::GetTypeIdByName("CompleteTask"); completeTaskTid = v; }
-#endif
     int wantId = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x20);
 
     for (int i = 0; i < count; i++) {

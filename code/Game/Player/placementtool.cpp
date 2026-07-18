@@ -17,9 +17,7 @@
 #include "Tool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
-#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -181,7 +179,6 @@ static void EnsureFuncs() {
     s_fn_CloseDialog       = (fn_CloseDialog_t)resolveIAT(0x140151550);
     s_fn_IBP_Ctor          = (fn_IBP_Ctor_t)resolveIAT(0x140152a90);
     s_fn_IBP_CheckPtr      = (fn_IBP_CheckPtr_t)resolveIAT(0x140152ab0);
-#ifdef STANDALONE_EXE
     // These IAT dispatch slots are unregistered in standalone (→ null). The resolved
     // engine_funcs globals are the canonical fallback (SetEditMode uses them). A null
     // IBP_Ctor silently makes an IBP wrapping a NON-null object come out 0 — e.g. the
@@ -194,7 +191,6 @@ static void EnsureFuncs() {
     // (same fn DragTool_CloseToolDialog uses). Harmless in DLL mode (slot is filled).
     if (!s_fn_CloseDialog && fn_UI_CloseDialog)
         s_fn_CloseDialog = reinterpret_cast<fn_CloseDialog_t>(fn_UI_CloseDialog);
-#endif
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     // Standalone: the raw IAT slot 0x140151758 is unfilled → null, which would make
     // EVERY key check (rotate/flip AND the key-5 place-confirm) no-op — the "can't place
@@ -208,7 +204,6 @@ static void EnsureFuncs() {
     s_fn_GeomGetTransform  = (fn_GeomGetTransform_t)resolveIAT(0x140151460);
     s_fn_StringCtor        = (fn_StringCtor_t)resolveIAT(0x140151428);
     s_fn_StringDtor        = (fn_StringDtor_t)resolveIAT(0x140152af0);
-#ifdef STANDALONE_EXE
     // The String copy-ctor / dtor IAT slots (0x140151428 / 0x140152af0) are unregistered in
     // standalone → null, so the cost-string tooltip below silently skips (costString stays
     // 0 → dialog shows a blank cost). Fall back to the export-resolved System::String
@@ -231,7 +226,6 @@ static void EnsureFuncs() {
     if (!s_fn_GeomGetTransform)
         s_fn_GeomGetTransform = reinterpret_cast<fn_GeomGetTransform_t>(
             ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
-#endif
 
     // Direct exe function addresses
     s_fn_HighlightRemove   = (fn_HighlightRemove_t)ResolveAddr(Module::Exe, 0x1400b0d00);
@@ -448,10 +442,8 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
 
     // Key 0x13: Rotate counter-clockwise
     bool rotCCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x13) : false;
-#ifdef STANDALONE_EXE
     { const char* e = std::getenv("BANISHED_TOOL_DIAG");
       if (e && e[0] && e[0] != '0' && rotCCW) { fprintf(stderr, "[OnKey] rotate-CCW key(0x13) PRESSED on this frame\n"); fflush(stderr); } }
-#endif
     if (rotCCW) {
         // Access rotationIBP at self+0x48, CheckPtr, then decrement value at +0x10
         void* rotIBPAddr = (void*)(selfAddr + 0x48);
@@ -471,10 +463,8 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     } else {
         // Key 0x14: Rotate clockwise
         bool rotCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x14) : false;
-#ifdef STANDALONE_EXE
         { const char* e = std::getenv("BANISHED_TOOL_DIAG");
           if (e && e[0] && e[0] != '0' && rotCW) { fprintf(stderr, "[OnKey] rotate-CW key(0x14) PRESSED on this frame\n"); fflush(stderr); } }
-#endif
         if (rotCW) {
             void* rotIBPAddr = (void*)(selfAddr + 0x48);
             if (s_fn_IBP_CheckPtr) s_fn_IBP_CheckPtr(rotIBPAddr);
@@ -504,7 +494,6 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     // --- Placement confirmation (key 5, only when active) ---
     if (param2 != 0) {
         bool placeKey = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 5) : false;
-#ifdef STANDALONE_EXE
         {
             static int s_ok = -1;
             if (s_ok < 0) { const char* e = std::getenv("BANISHED_TOOL_DIAG"); s_ok = (e && e[0] && e[0] != '0') ? 1 : 0; }
@@ -516,7 +505,6 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
                 if (placeKey) { fprintf(stderr, "[OnKey] key-5 PRESSED (left-click) — running confirm\n"); fflush(stderr); }
             }
         }
-#endif
         if (placeKey) {
             // Calculate placement position
             int startCol = 0, startRow = 0, endCol = 0, endRow = 0;
@@ -526,22 +514,18 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
             if (s_fn_sub_da00) {
                 bool valid = s_fn_sub_da00(self, &startCol, &startRow,
                                             &endCol, &endRow, pos, yaw);
-#ifdef STANDALONE_EXE
                 { const char* e = std::getenv("BANISHED_TOOL_DIAG");
                   if (e && e[0] && e[0] != '0') {
                     fprintf(stderr, "[OnKey] confirm: sub_da00 valid=%d cell=(%d,%d)-(%d,%d) helper_d650=%p\n",
                             valid, startCol, startRow, endCol, endRow, (void*)s_fn_helper_d650); fflush(stderr); } }
-#endif
                 if (valid) {
                     // Try to place via helper_d650
                     if (s_fn_helper_d650) {
                         bool placed = s_fn_helper_d650(self, startCol, startRow,
                                                         endCol, endRow, pos, yaw[0]);
-#ifdef STANDALONE_EXE
                         { const char* e = std::getenv("BANISHED_TOOL_DIAG");
                           if (e && e[0] && e[0] != '0') {
                             fprintf(stderr, "[OnKey] helper_d650 placed=%d\n", placed); fflush(stderr); } }
-#endif
                         if (placed) {
                             // Placement success — finalize
                             if (s_fn_FUN_1401000f0) {
@@ -611,7 +595,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         valid = s_fn_sub_da00(self, &startCol, &startRow, &endCol, &endRow, pos, yaw);
     }
 
-#ifdef STANDALONE_EXE
     // Diagnostic (BANISHED_TOOL_DIAG=1): throttled log of the per-frame Serialize state.
     // The ghost mesh is only in the scene while sub_da00 returns VALID (cursor over the
     // map); an invalid frame removes it. This tells us whether the cursor→terrain pick
@@ -630,7 +613,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
             }
         }
     }
-#endif
 
     if (!valid || param3 == 0) {
         // --- Invalid / inactive: remove scene object and highlight ---
@@ -760,7 +742,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     if (s_fn_FUN_140005160) {
         s_fn_FUN_140005160(self->descriptionPtr, &costResult);
     }
-#ifdef STANDALONE_EXE
     // Log each DISTINCT costResult (dedupe by pointer) so the trace captures the real
     // building being placed, not just the first (often-empty) default tool state.
     {
@@ -783,7 +764,6 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
             }
         }
     }
-#endif
 
     // Build cost string: index into string array at (costResult+0x50)
     // Index is 0 (valid) or 1 (invalid), based on tileValid
@@ -1069,7 +1049,6 @@ static void EnsureStartupFuncs() {
 
     // RotationSetting type ID at 0x1401c63c8 (read as uint32_t*)
     s_pTypeId_RotationSetting = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c63c8);
-#ifdef STANDALONE_EXE
     // 0x1401c63c8 is a raw .rdata constant → NULL in standalone. Without it Startup's
     // IsDerivedFrom(setting, RotationSetting) is skipped → rotationIBP (+0x48) wraps
     // null → sub_da00 crashes on rot+0x10 (the orientation read). Fill from the live
@@ -1079,12 +1058,10 @@ static void EnsureStartupFuncs() {
         s_tid_RotationSetting = ::Object::ResolveTypeIdByNameLazy("RotationSetting");
         s_pTypeId_RotationSetting = &s_tid_RotationSetting;
     }
-#endif
 
     // MeshInstance vtable at 0x14015e240 (LEA, not deref -- direct address in .rdata)
     s_pMeshInstanceVtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
 
-#ifdef STANDALONE_EXE
     // The four *Description type-id globals Startup's findComp reads are filled in
     // engine_funcs.cpp via ResolveAddr(Exe, .rdata) — which is NULL in the standalone
     // exe (raw .rdata constants don't resolve, see reference_standalone_rdata_null_fallback).
@@ -1111,7 +1088,6 @@ static void EnsureStartupFuncs() {
     fprintf(stderr, "[Placement] type-ids: CreatePlaced=%u Map=%u Model=%u Radius=%u\n",
             s_tid_CreatePlaced, s_tid_Map, s_tid_Model, s_tid_Radius);
     fflush(stderr);
-#endif
 
     s_startupFuncsResolved = true;
 }
@@ -1241,7 +1217,6 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     // Store variant index
     self->meshVariant = (int32_t)variant;
 
-#ifdef STANDALONE_EXE
     // Diagnostic: dump the built preview mesh's state so we can see why it may not
     // render. s_pMeshInstanceVtable is NULL in standalone (0x14015e240 is a raw .rdata
     // vtable → ResolveAddr(Exe, .rdata)=0), so the exe's vtable override is SKIPPED and
@@ -1257,7 +1232,6 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
                 mesh, meshCount, variant, b[0], b[1], b[2], b[3], b[4], b[5]);
         fflush(stderr);
     }
-#endif
 }
 
 // ============================================================
@@ -1265,7 +1239,6 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
 // PlacementTool: size 0x70, parent Tool, 13-slot vtable @ 0x140161d20.
 // (PlacementTool_Ctor's ~25-resource slot-map init is elided; dormant type.)
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1636,4 +1609,3 @@ extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell
     fflush(stderr);
     return (self->sceneObjectIdx >= 0 && !degenerate) ? 1 : 0;
 }
-#endif // STANDALONE_EXE

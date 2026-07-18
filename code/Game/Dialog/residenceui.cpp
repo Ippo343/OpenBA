@@ -556,7 +556,6 @@ void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
 //               drive the refresh here: build once (until +0x38 row count is set), then
 //               re-populate every frame so the roster stays live as residents change.
 //   +0x48 (idx9) Slot9  (0x1400b5820) — resident-row click dispatch (id 300+index)
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
@@ -691,6 +690,5 @@ void* InPlace(void* m) {
 REGISTER_TYPE(ResidenceUI, "UI::DialogController",
               &residenceui_sa::Factory, &residenceui_sa::InPlace);
 
-#endif  // STANDALONE_EXE
 
 // ============================================================

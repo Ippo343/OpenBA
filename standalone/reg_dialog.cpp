@@ -14,7 +14,6 @@
 //                one, FUN_140099d40, is ported inline as Dialog_AutoSaveBuildName).
 //
 // SAFETY: both addresses verified as true function ENTRYs in Ghidra.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Dialog/dialog_exe_helpers.h"   // exact signatures for the reimpl bodies
 #include <cstdint>
@@ -24,4 +23,3 @@ void RegisterDialogBatch() {
     RegisterExeAddr(0x14005dec0, reinterpret_cast<uintptr_t>(&Dialog_AutoSaveHandler));
 }
 
-#endif // STANDALONE_EXE

@@ -266,7 +266,6 @@ void Scenario_Init(Scenario* self) {
 // Serialize, plus Cleanup/Init). The base Achievement::Serialize (0x18009e070)
 // serializes its own fields without virtual-calling any Scenario slot, so the
 // inherited base-thunk slots stay null during load — same as StatGoal.
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -325,4 +324,3 @@ extern "C" void* Scenario_CreateInPlace(void* memory) {
 REGISTER_TYPE(Scenario, "::Achievement::Achievement",
               &Scenario_Factory, &Scenario_CreateInPlace);
 
-#endif // STANDALONE_EXE

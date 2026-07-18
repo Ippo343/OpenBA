@@ -58,7 +58,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -579,4 +578,3 @@ int64_t* CitizenAI_helper_e370(int64_t* param_1, int64_t* param_2, uint32_t para
     return ret;
 }
 
-#endif // STANDALONE_EXE

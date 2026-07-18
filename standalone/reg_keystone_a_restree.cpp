@@ -25,7 +25,6 @@
 // NOTE on the brief's "7460": the brief cited 0x140007460 for the node-alloc, but that is
 // a different unrelated function. The REAL node-alloc CALLed by 0x1400172f0 (verified via
 // disassemble CALL filter) is 0x140017460 (Ghidra symbol ResidenceComponent_impl_7460).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -48,4 +47,3 @@ void RegisterKeystoneARestreeBatch() {
     // NB: 0x140015000 / 0x140014ed0 are intentionally NOT registered here — already done
     // by reg_player_trade.cpp (PlayerTrade_Rot_15000 / _14ed0).
 }
-#endif // STANDALONE_EXE

@@ -42,7 +42,6 @@ static void ResidenceDescription_Init(void* self) {
 // ResidenceDescription_Serialize (vtable +0x28, 0x14012a3d0)
 // ============================================================
 void ResidenceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serialize_Int || !fn_Serializer_Serialize_Float) {
@@ -55,9 +54,6 @@ void ResidenceDescription_Serialize(void* self, void* stream) {
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x28), nullptr); // +0x28 float
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x2c), nullptr); // +0x2c float
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 // ============================================================
@@ -71,7 +67,6 @@ void* ResidenceDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -127,4 +122,3 @@ static void* ResidenceDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(ResidenceDescription, "Description",
               &ResidenceDescription_Factory, &ResidenceDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

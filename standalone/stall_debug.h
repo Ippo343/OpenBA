@@ -20,7 +20,6 @@
 
 #pragma once
 
-#ifdef STANDALONE_EXE
 
 #include <cstdio>
 
@@ -56,4 +55,3 @@ struct Phase {
 
 } // namespace StallDebug
 
-#endif // STANDALONE_EXE

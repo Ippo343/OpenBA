@@ -10,7 +10,6 @@
 //   2. IAT DISPATCH SLOTS — .rdata slots that hold Runtime DLL function pointers
 //   3. VTABLES & TYPE IDS — static vtable arrays and type info globals
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include "address_registry.h"
@@ -1710,4 +1709,3 @@ void AddressRegistryPrintStats() {
     printf("[AddressRegistry] %zu addresses registered\n", stats.registered);
 }
 
-#endif // STANDALONE_EXE

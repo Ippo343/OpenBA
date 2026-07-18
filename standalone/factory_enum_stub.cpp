@@ -30,7 +30,6 @@
 // code/Game/Object/factory_registrations_bulk.cpp). Default OFF -> the original
 // crash-on-first behavior is preserved exactly.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -122,4 +121,3 @@ extern "C" void* FactoryEnumStub(const char* typeName) {
     return p;
 }
 
-#endif // STANDALONE_EXE

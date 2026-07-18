@@ -560,67 +560,6 @@ void EntityUI_Slot6(EntityUI* self) {
 void EntityUI_Slot7(EntityUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-#ifndef STANDALONE_EXE
-    // Get current EditTool selection from player controller (IBP at +0x28)
-    void* playerController = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
-    void* currentTool = *(void**)((uintptr_t)playerController + 0x28);
-    fn_InternalBasePtr_CheckPtr(&currentTool);
-
-    // Check if current tool is EditTool type
-    bool isEditTool = fn_IsDerivedFrom(currentTool, *g_TypeId_EditTool);
-    void* editTool = isEditTool ? currentTool : nullptr;
-    uint8_t editToolBuf[8];
-    fn_InternalBasePtr_Ctor(editToolBuf, editTool);
-    void* editToolPtr = *(void**)editToolBuf;
-
-    // Determine tool hint: check if EditTool's selected entity matches ours
-    uint64_t toolHint;
-    if (!editToolPtr) {
-        toolHint = 0xffffffff;  // no edit tool active
-    } else {
-        // Get EditTool's selected entity via vtable[13] (offset 0x68)
-        void** vtbl = *(void***)editToolPtr;
-        typedef void* (*VCall_GetSelected_t)(void*, void*);
-        uint64_t selectedEntity = 0;
-        ((VCall_GetSelected_t)vtbl[13])(editToolPtr, &selectedEntity);
-
-        if (selectedEntity != *(uint64_t*)(s + 0x30)) {
-            toolHint = 0xffffffff;  // different entity selected
-        } else {
-            toolHint = 0xffffcd4d;  // our entity is selected (special hint value)
-        }
-    }
-
-    // Get ToolUI controller from dialog
-    void* dialogInst = *(void**)(s + 0x18);
-    uint8_t ctrlBuf[16];
-    fn_DialogInstance_GetController(dialogInst, ctrlBuf, *g_TypeId_ToolUI);
-    void* controller = *(void**)ctrlBuf;
-
-    void* toolUI = nullptr;
-    if (controller) {
-        bool isTool = fn_IsDerivedFrom(controller, *g_TypeId_ToolUI);
-        if (isTool) toolUI = controller;
-    }
-    uint8_t toolBuf[8];
-    fn_InternalBasePtr_Ctor(toolBuf, toolUI);
-    void* toolPtr = *(void**)toolBuf;
-
-    // Set tool hint via vtable[10] (offset 0x50) on ToolUI's +0x38 element
-    {
-        fn_InternalBasePtr_CheckPtr(toolBuf);  // CheckPtr on ToolUI controller IBP (matches original)
-        toolPtr = *(void**)toolBuf;
-        if (toolPtr) {
-            fn_InternalBasePtr_CheckPtr((void*)((uintptr_t)toolPtr + 0x38));  // CheckPtr on +0x38 element IBP
-            void* hintElem = *(void**)((uintptr_t)toolPtr + 0x38);
-            if (hintElem) {
-                void** vtbl = *(void***)hintElem;
-                typedef void (*VCall_SetHint_t)(void*, uint64_t);
-                ((VCall_SetHint_t)vtbl[10])(hintElem, toolHint);
-            }
-        }
-    }
-#endif  // STANDALONE_EXE — tool-hint highlight uses EditTool vtbl[13]/ToolUI vtbl[10]
         // (risky in SA, cosmetic only); the page-selection below is what makes the
         // entity/citizen content actually render, so it always runs.
 
@@ -1014,7 +953,6 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 // input handler) remains a no-op — its +0x40 slot is reused to drive Slot7 per-frame,
 // and clicking entities works via EditTool::OnKey. The panel's close/drag come from
 // the ToolUI controller (already wired).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstddef>
@@ -1154,7 +1092,6 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 REGISTER_TYPE(EntityUI, "UI::DialogController",
               &entityui_sa::Factory, &entityui_sa::InPlace);
 
-#endif  // STANDALONE_EXE
 // (original comment header retained below)
 // ============================================================
 // EntityUI::Shutdown (vtable +0x18) — No-op

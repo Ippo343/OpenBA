@@ -90,10 +90,8 @@ void DiseaseComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(DiseaseComponent, 0x58, 0x8B)
 REGISTER_TYPE(DiseaseComponent, "Component",
               &DiseaseComponent_Factory, &DiseaseComponent_CreateInPlace);
-#endif // STANDALONE_EXE

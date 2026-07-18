@@ -359,10 +359,8 @@ void FloorComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(FloorComponent, 0x30, 0xC3)
 REGISTER_TYPE(FloorComponent, "Component",
               &FloorComponent_Factory, &FloorComponent_CreateInPlace);
-#endif // STANDALONE_EXE

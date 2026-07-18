@@ -81,11 +81,7 @@ uint32_t ResolveTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
     if (*cache) return *cache;
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));
     if (p && *p) { *cache = *p; return *cache; }
-#ifdef STANDALONE_EXE
     *cache = ::Object::GetTypeIdByName(name);
-#else
-    (void)name;
-#endif
     return *cache;
 }
 

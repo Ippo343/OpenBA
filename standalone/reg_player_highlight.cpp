@@ -16,7 +16,6 @@
 // StorageYard brown foundation) and enables the PlacementTool radius overlay.
 //
 // Registered bottom-up: 14b00, 1f850, 4b40, 1fc00, 1f6b0, ace40, b0d80, 55430.
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdint>
@@ -45,4 +44,3 @@ void RegisterPlayerHighlightBatch() {
     RegisterExeAddr(0x1400b0d80, reinterpret_cast<uintptr_t>(&TradeWork_impl_0d80));
     RegisterExeAddr(0x140055430, reinterpret_cast<uintptr_t>(&Player_HighlightAdd_55430));
 }
-#endif

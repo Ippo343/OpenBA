@@ -889,7 +889,6 @@ void* PlantArea_ScalarDtor_Impl(PlantArea* self, uint32_t flags) {
 // logic). PlantArea_Execute_Impl is the 3-byte returns-false stub documented
 // as "Slot5 (+0x28)", which is the shared Work_Slot5 — it is NOT used here.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -958,4 +957,3 @@ extern "C" void* PlantArea_Factory(void) {
     return p ? PlantArea_Ctor_Impl((PlantArea*)p) : nullptr;
 }
 REGISTER_TYPE(PlantArea, "Work", &PlantArea_Factory, &PlantArea_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -14,7 +14,6 @@
 //
 // The lead calls RegisterCharManager() from address_registry.cpp and CharManager_Seed()
 // from gameupdateloop_load.cpp; this file only provides the registration.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -33,4 +32,3 @@ void RegisterCharManager() {
     RegisterExeAddr(0x1400928c0, reinterpret_cast<uintptr_t>(&CharMgr_helper_28c0));
     RegisterExeAddr(0x140018560, reinterpret_cast<uintptr_t>(&CharMgr_impl_8560));
 }
-#endif

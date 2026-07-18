@@ -35,9 +35,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
-#endif
 
 // Gated per-material delivered/required dump (BANISHED_BUILD_TRACE). Confirms whether
 // the demo-site StorageComponent physically RECEIVES hauled wood (delivered climbs)
@@ -64,12 +62,7 @@ typedef void* (*BC8630_FindCompStorage_t)(uintptr_t entity, void* retIBP);
 static uint32_t BC8630_BuildDescTypeId() {
     static uint32_t id = 0;
     if (id != 0 && id != 0xFFFFFFFFu) return id;
-#ifdef STANDALONE_EXE
     id = ::Object::GetTypeIdByName("BuildDescription");
-#else
-    uintptr_t g = ResolveAddr(Module::Exe, 0x1401c7040);
-    if (g) id = *reinterpret_cast<uint32_t*>(g);
-#endif
     return id;
 }
 

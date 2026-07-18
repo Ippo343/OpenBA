@@ -22,7 +22,6 @@
 //                      SortByPriority 0x14002fe10),
 //                  0x14010f1f0 ValidateAndEnterState (all 15 CitizenAI_State_* still unregistered),
 //                  0x140047200 CemeteryComponent::Draw (self-resolving passthrough -> recursion).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -80,4 +79,3 @@ void RegisterComponentGap_B() {
     RegisterExeAddr(0x140091ba0, reinterpret_cast<uintptr_t>(&WellComp_UnregisterEntity_91ba0));
     // nomadcomponent.cpp 0x140102b60 DEFERRED (see note above) — not registered.
 }
-#endif // STANDALONE_EXE

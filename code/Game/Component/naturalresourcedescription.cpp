@@ -81,7 +81,6 @@ static void* NaturalResourceDescription_Ctor_Impl(void* mem) {
 }
 
 void NaturalResourceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !fn_Serializer_Serialize_Float || !g_fn_Serialize_Bool ||
         !g_fn_Serialize_Int || !fn_ExternalPtr_BuildSerialize || !g_fn_Time_Serialize) {
@@ -142,11 +141,6 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     fn_Serializer_Serialize_Float(serializer, reinterpret_cast<float*>(s + 0x60), nullptr);
 
     g_fn_Serializer_Dtor(serializer);
-#else
-    typedef void (*fn_t)(void*, void*);
-    fn_t orig = reinterpret_cast<fn_t>(ResolveAddr(Module::Exe, kSerializeAddr));
-    if (orig) orig(self, stream);
-#endif
 }
 
 void* NaturalResourceDescription_Dtor(void* self, uint32_t flags) {
@@ -161,7 +155,6 @@ void* NaturalResourceDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
 // ============================================================
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -235,4 +228,3 @@ extern "C" void* NaturalResourceDescription_Factory(void) {
 REGISTER_TYPE(NaturalResourceDescription, "Description",
               &NaturalResourceDescription_Factory, &NaturalResourceDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

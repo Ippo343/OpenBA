@@ -450,7 +450,6 @@ void* TradeWork_ScalarDtor_Impl(TradeWork* self, uint32_t flags) {
 //   in DLL mode). The orphaned TradeWork_Execute_Impl ("returns false") is NOT
 //   in the vtable — slot5 is the shared Work_Slot5. Do NOT use it.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -490,4 +489,3 @@ extern "C" void* TradeWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x58, g_TradeWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(TradeWork, "Work", &TradeWork_Factory, &TradeWork_CreateInPlace);
-#endif // STANDALONE_EXE

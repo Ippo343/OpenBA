@@ -25,9 +25,7 @@
 #include <cstdint>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
-#endif
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -284,7 +282,6 @@ bool GatherRawMaterials_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_typeId_PosDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7938));
-#ifdef STANDALONE_EXE
     static uint32_t s_tidGatherDescVal = 0, s_tidRawMatCompVal = 0, s_tidPosDescVal = 0;
     if (!s_typeId_GatherDesc) {
         if (!s_tidGatherDescVal) s_tidGatherDescVal = ::Object::GetTypeIdByName("BuildDescription");
@@ -298,7 +295,6 @@ bool GatherRawMaterials_ResolveFuncs() {
         if (!s_tidPosDescVal) s_tidPosDescVal = ::Object::GetTypeIdByName("MapDescription");
         s_typeId_PosDesc = &s_tidPosDescVal;
     }
-#endif
 
     bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
               s_fn_SerializeInt && s_fn_SerializeIntBulk &&
@@ -1203,7 +1199,6 @@ void* GatherRawMaterials_ScalarDtor_Impl(GatherRawMaterials* self, uint32_t flag
 //                         /*FLAG*/ returns null until a Ctor_Impl is written.
 //   - ResolveFuncs      : GatherRawMaterials_ResolveFuncs() (does NOT resolve a vtable).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1287,4 +1282,3 @@ extern "C" bool GatherRawMaterials_DepsReady() {
            fn_InternalBasePtr_CheckPtr && fn_IsDerivedFrom && g_pGameWorldSingleton &&
            s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
 }
-#endif // STANDALONE_EXE

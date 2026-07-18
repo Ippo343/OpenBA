@@ -15,7 +15,6 @@
 //     +0x68 CalcPath = idx 13   (DragTool slot13)
 //     +0x70 CalcCost = idx 14   (DragTool slot14)
 
-#ifdef STANDALONE_EXE
 
 #include "tool_harness.h"
 #include "resolve.h"
@@ -1019,4 +1018,3 @@ extern "C" void ToolHarness_Tick(void* entityUI, int frameNum) {
     }
 }
 
-#endif  // STANDALONE_EXE

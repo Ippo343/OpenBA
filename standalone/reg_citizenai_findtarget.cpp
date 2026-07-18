@@ -22,7 +22,6 @@
 //   0x14012d5d0 Pf_FindBestAdjacentCell_d5d0  (reg_pf_roots_route.cpp)
 //   0x140132010 WorkImpl_Sqrtf_132010         (reg_work_impl2.cpp)
 //   0x140006270 WorkBase_FindComponent_6270   (reg_work_base.cpp)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -34,4 +33,3 @@ void RegisterCitizenAIFindTarget() {
     RegisterExeAddr(0x14008dd30, reinterpret_cast<uintptr_t>(&CitizenAI_FindBestTarget_dd30));
     RegisterExeAddr(0x1400178c0, reinterpret_cast<uintptr_t>(&CitizenAI_sub_78c0));
 }
-#endif

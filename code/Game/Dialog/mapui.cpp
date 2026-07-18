@@ -13,10 +13,8 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include <cstdio>
 #include <cstdlib>
-#endif
 
 // ============================================================
 // SetupImage (0x14006cb00): Create MaterialInstance + SpriteSheet
@@ -32,12 +30,8 @@
 void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
                       void** materialOut, char useBlend, const char* elementName) {
     uintptr_t s = (uintptr_t)self;
-#ifdef STANDALONE_EXE
     bool trc = std::getenv("BANISHED_MAP_TRACE") != nullptr;
     #define MAPTRC(msg) do { if (trc) { printf("[SetupImg] " msg " (elem=%s)\n", elementName); fflush(stdout);} } while(0)
-#else
-    #define MAPTRC(msg) do {} while(0)
-#endif
     MAPTRC("enter");
 
     // Defensive (standalone bring-up): the minimap ImageBuffer must exist — the
@@ -47,12 +41,10 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor ||
         !fn_ImageBuffer_Width || !fn_FindElement) {
-#ifdef STANDALONE_EXE
         if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p "
                "MatCtor=%p SSCtor=%p ImgW=%p FindElem=%p\n", elementName, imageBuffer,
                (void*)fn_MemAlloc, g_pMemAllocSingleton, (void*)fn_MaterialInstance_Ctor,
                (void*)fn_SpriteSheet_Ctor, (void*)fn_ImageBuffer_Width, (void*)fn_FindElement);
-#endif
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;
@@ -168,11 +160,9 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
         fn_IsDerivedFrom(rawElem, *g_TypeId_ImageElement)) {
         imageElem = rawElem;
     }
-#ifdef STANDALONE_EXE
     if (std::getenv("BANISHED_MAP_TRACE"))
         printf("[SetupImage] elem '%s': raw=%p imageElem=%p mat=%p sheet=%p\n",
                elementName, rawElem, imageElem, *materialOut, *spriteSheetOut);
-#endif
     uint64_t imageElemPtr = 0;
     fn_InternalBasePtr_Ctor((void*)&imageElemPtr, imageElem);
     fn_String_Dtor(elemNameStr);

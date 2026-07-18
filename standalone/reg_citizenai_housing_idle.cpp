@@ -20,7 +20,6 @@
 // The integrator wires RegisterCitizenAIHousingIdle() into RegisterCodeFunctions() in
 // address_registry.cpp.
 
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -58,4 +57,3 @@ void RegisterCitizenAIHousingIdle() {
     RegisterExeAddr(0x14003f010, reinterpret_cast<uintptr_t>(&CitizenAI_Reg_helper_3f010));
     RegisterExeAddr(0x14000e360, reinterpret_cast<uintptr_t>(&CitizenAI_Reg_helper_e360));
 }
-#endif

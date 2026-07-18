@@ -32,7 +32,6 @@
 // reimpl, matching ~30 existing action reimpls): the SendComponentMessage message-id
 // globals 0x1401c70e8 / 0x1401c7158 and the HappinessComponent id 0x1401c42c0. The
 // RawMaterialDescription id 0x1401c7cb8 is already registered+filled elsewhere.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -70,4 +69,3 @@ void RegisterCitizenAIActionCtors() {
     RegisterExeAddr(0x140172198, reinterpret_cast<uintptr_t>(&k_rdata_172198));
     RegisterExeAddr(0x14017214c, reinterpret_cast<uintptr_t>(&k_rdata_17214c));
 }
-#endif // STANDALONE_EXE

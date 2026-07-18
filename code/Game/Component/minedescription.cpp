@@ -22,15 +22,11 @@ static void MineDescription_Init(void* self) {
 }
 
 void MineDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     // No stream fields.
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* MineDescription_Dtor(void* self, uint32_t flags) {
@@ -41,7 +37,6 @@ void* MineDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -89,4 +84,3 @@ static void* MineDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(MineDescription, "Description",
               &MineDescription_Factory, &MineDescription_CreateInPlace);
-#endif

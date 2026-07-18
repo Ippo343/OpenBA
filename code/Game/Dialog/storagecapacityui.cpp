@@ -121,7 +121,6 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
 //   +0x40 (idx8)             — base DialogController::OnUpdate (per-frame). We drive
 //                the % refresh here so it stays live as the barn fills/drains: run
 //                Serialize once (until data30 is cached), then Startup every frame.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdio>
@@ -242,4 +241,3 @@ void* InPlace(void* m) {
 REGISTER_TYPE(StorageCapacityUI, "UI::DialogController",
               &storagecapacityui_sa::Factory, &storagecapacityui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

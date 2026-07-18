@@ -190,7 +190,6 @@ extern "C" void* ComponentDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // Standalone factory scaffolding
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -236,4 +235,3 @@ extern "C" void* ComponentDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ComponentDescription, "Object::External",
               &ComponentDescription_Factory, &ComponentDescription_CreateInPlace);
-#endif

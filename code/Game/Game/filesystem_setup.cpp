@@ -42,7 +42,6 @@
 // absolute paths (the real game tolerates them — it just spends more on path
 // strings).
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -210,4 +209,3 @@ extern "C" void FileSystem_PinDataDir() {
 
 } // namespace Game
 
-#endif // STANDALONE_EXE

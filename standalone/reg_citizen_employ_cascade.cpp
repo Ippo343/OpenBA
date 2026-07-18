@@ -16,7 +16,6 @@
 // AssignHousing 0x140111ee0 (reg_component_gap_A), Entity_FindComponent_Storage
 // 0x140008090 (reg_component_people), Entity_impl_7fb0 0x140087fb0 (reg_pf_road),
 // CalcDistance 0x140008830 (reg_work_base).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -25,4 +24,3 @@ extern "C" void CitizenComponent_OnAdd(void* citizenComp);   // 0x140114000
 void RegisterCitizenEmployCascade() {
     RegisterExeAddr(0x140114000, reinterpret_cast<uintptr_t>(&CitizenComponent_OnAdd));
 }
-#endif // STANDALONE_EXE

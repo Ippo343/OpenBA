@@ -198,7 +198,6 @@ void TutorialImage_Slot9(void* self, void* param1, void* param2) {
 // Vtable @ 0x140160a40 (9 slots, Object::External base), size 0x30, parent "Object::External".
 // GetFileVersion (+0x18) = 0x1000. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -233,4 +232,3 @@ extern "C" void* TutorialImage_Factory(void) {
     return p ? TutorialImage_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialImage, "Object::External", &TutorialImage_Factory, &TutorialImage_CreateInPlace);
-#endif // STANDALONE_EXE

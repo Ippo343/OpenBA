@@ -5,7 +5,6 @@
 //
 // The lead wires RegisterBuildComponentSub8630() into RegisterCodeFunctions()
 // in address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -14,4 +13,3 @@ extern "C" bool BuildComponent_HaveAllMaterials(void* buildComp);   // 0x1401086
 extern "C" void RegisterBuildComponentSub8630() {
     RegisterExeAddr(0x140108630, reinterpret_cast<uintptr_t>(&BuildComponent_HaveAllMaterials));
 }
-#endif

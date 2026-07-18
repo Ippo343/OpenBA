@@ -36,12 +36,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
 // SendComponentMessage copy-ctor (see Pf_SendComponentMessageCopyCtor_b1d0).
 #include "Object/factory_registration.h"           // ::Object::GetTypeIdByName
 #include "Component/component_factory_base.h"      // ::ComponentFactory::LiveEnabled
-#endif
 
 namespace {
 // --- Type-ID globals (exe .rdata), resolved lazily once. ---
@@ -334,7 +332,6 @@ void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uin
     *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x28) = *param_5;
     uint32_t compTypeId = *param_3;
-#ifdef STANDALONE_EXE
     // [ECONOMY M-D — BANISHED_LIVE_STORAGE typeid heal]
     // The eat push (PerformWork_Action_Ctor6, citizenai_actionctors.cpp) reads the
     // component-typeid from .rdata DWORD_1401c7158 (CitizenComponent) — deliberately
@@ -357,7 +354,6 @@ void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uin
             fflush(stderr);
         }
     }
-#endif
     *reinterpret_cast<uint32_t*>(s + 0x30) = compTypeId;
     *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;
     *reinterpret_cast<uint32_t*>(s + 0x38) = param_6;

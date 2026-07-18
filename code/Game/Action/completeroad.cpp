@@ -106,7 +106,6 @@ int CompleteRoad_AbstractImpl_Impl(void* self, void* actionStack) {
 // Vtable @ 0x14015fb70 (10 slots), size 0x30, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -142,4 +141,3 @@ extern "C" void* CompleteRoad_Factory(void) {
     return Action_Alloc(0x30, g_CompleteRoad_Vtable);
 }
 REGISTER_TYPE(CompleteRoad, "Action", &CompleteRoad_Factory, &CompleteRoad_CreateInPlace);
-#endif // STANDALONE_EXE

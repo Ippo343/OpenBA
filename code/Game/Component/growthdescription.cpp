@@ -53,7 +53,6 @@ static void GrowthDescription_Init(void* self) {
 }
 
 void GrowthDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float) return;
@@ -78,9 +77,6 @@ void GrowthDescription_Serialize(void* self, void* stream) {
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x60), nullptr);
     g_fn_Serialize_Bool(serializer, s + 0x64, nullptr);
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* GrowthDescription_Dtor(void* self, uint32_t flags) {
@@ -91,7 +87,6 @@ void* GrowthDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -139,4 +134,3 @@ static void* GrowthDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(GrowthDescription, "Description",
               &GrowthDescription_Factory, &GrowthDescription_CreateInPlace);
-#endif

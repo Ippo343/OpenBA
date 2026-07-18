@@ -17,7 +17,6 @@
 //   PositionEntity's getters were already registered in the CNR / component-nature waves.
 // DEFERRED (NOT registered — see action_base_rawmat.cpp):
 //   0x14009bd40 FindPlacementCell (260-insn spiral, unexercised citizen-action path; own pass).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -47,4 +46,3 @@ void RegisterActionRawMatBatch() {
     RegisterExeAddr(0x140088ef0, reinterpret_cast<uintptr_t>(&ActRm_RegisterRawMaterial_88ef0));
     RegisterExeAddr(0x140129760, reinterpret_cast<uintptr_t>(&ActRm_PositionEntity_9760));
 }
-#endif

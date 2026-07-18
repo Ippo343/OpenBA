@@ -24,7 +24,6 @@
 //   * All remaining callees are Runtime-x64.dll exports (engine_funcs globals +
 //     the by-value Math/Volume/String helpers resolved by mangled name inside
 //     tool_base_createbar.cpp's EnsureCreateBarExports).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -37,4 +36,3 @@ extern "C" void UpdateToolUI_fc60(void* dialogPtr, int W, int H, void* costStrin
 void RegisterPlayerCreateBarBatch() {
     RegisterExeAddr(0x1400ffc60, reinterpret_cast<uintptr_t>(&UpdateToolUI_fc60));
 }
-#endif // STANDALONE_EXE

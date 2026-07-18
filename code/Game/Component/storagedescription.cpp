@@ -152,7 +152,6 @@ extern "C" void* StorageDescription_Slot8(void* self) {
 // ============================================================
 // STANDALONE scaffolding
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -200,4 +199,3 @@ extern "C" void* StorageDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(StorageDescription, "Description",
               &StorageDescription_Factory, &StorageDescription_CreateInPlace);
-#endif // STANDALONE_EXE

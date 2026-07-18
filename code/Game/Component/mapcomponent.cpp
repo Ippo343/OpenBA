@@ -278,7 +278,6 @@ void MapComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdlib>
@@ -428,4 +427,3 @@ static void* MapComponent_CreateInPlace(void* mem) {
 }
 REGISTER_TYPE(MapComponent, "Component",
               &MapComponent_Factory, &MapComponent_CreateInPlace);
-#endif // STANDALONE_EXE

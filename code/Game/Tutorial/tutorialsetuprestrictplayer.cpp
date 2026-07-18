@@ -330,7 +330,6 @@ void* TutorialSetupRestrictPlayer_Ctor(void* self) {
 // Vtable @ 0x140160e20 (9 slots, Object::External base), size 0x68, parent "TutorialSetup".
 // GetFileVersion (+0x18) = 4. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -365,4 +364,3 @@ extern "C" void* TutorialSetupRestrictPlayer_Factory(void) {
     return p ? TutorialSetupRestrictPlayer_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialSetupRestrictPlayer, "TutorialSetup", &TutorialSetupRestrictPlayer_Factory, &TutorialSetupRestrictPlayer_CreateInPlace);
-#endif // STANDALONE_EXE

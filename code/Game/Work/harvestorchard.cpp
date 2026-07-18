@@ -807,7 +807,6 @@ void* HarvestOrchard_ScalarDtor_Impl(HarvestOrchard* self, uint32_t flags) {
 //   Ctor       : FLAG — NO HarvestOrchard_Ctor_Impl in this file -> factory null
 //   ResolveFuncs: HarvestOrchard_ResolveFuncs()
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -847,4 +846,3 @@ extern "C" void* HarvestOrchard_Factory(void) {
     return p ? Work_GenericCtor(p, 0x68, g_HarvestOrchard_Vtable) : nullptr;
 }
 REGISTER_TYPE(HarvestOrchard, "AutoPickupWork", &HarvestOrchard_Factory, &HarvestOrchard_CreateInPlace);
-#endif // STANDALONE_EXE

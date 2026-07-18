@@ -29,7 +29,6 @@ static void QuarryDescription_Init(void* self) {
 }
 
 void QuarryDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !fn_Serializer_Serialize_Float || !fn_ExternalPtr_BuildSerialize) return;
@@ -39,9 +38,6 @@ void QuarryDescription_Serialize(void* self, void* stream) {
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x28), nullptr);
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* QuarryDescription_Dtor(void* self, uint32_t flags) {
@@ -52,7 +48,6 @@ void* QuarryDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -100,4 +95,3 @@ static void* QuarryDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(QuarryDescription, "Description",
               &QuarryDescription_Factory, &QuarryDescription_CreateInPlace);
-#endif

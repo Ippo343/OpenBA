@@ -12,7 +12,6 @@
 //
 // Usage: Call AddressRegistryInit() from standalone main before any _InitFuncs().
 
-#ifdef STANDALONE_EXE
 
 #include <cstdint>
 
@@ -24,4 +23,3 @@ void AddressRegistryInit();
 // Print progress stats to stdout.
 void AddressRegistryPrintStats();
 
-#endif // STANDALONE_EXE

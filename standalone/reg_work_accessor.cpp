@@ -9,7 +9,6 @@
 //
 // Safety: every address below was verified as a real function ENTRY in Ghidra
 // (get_function_by_address Entry == address) and is a faithful 1:1 port.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -34,4 +33,3 @@ void RegisterWorkAccessorBatch() {
     RegisterExeAddr(0x140022520, reinterpret_cast<uintptr_t>(&WorkAcc_FindComponent_22520));
     RegisterExeAddr(0x140006330, reinterpret_cast<uintptr_t>(&WorkAcc_FindComponent_6330));
 }
-#endif

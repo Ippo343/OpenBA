@@ -172,7 +172,6 @@ void* TimeGoal_Dtor(TimeGoal* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -233,7 +232,6 @@ extern "C" void* TimeGoal_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(TimeGoal, "Achievement::Goal",
               &TimeGoal_Factory, &TimeGoal_CreateInPlace);
-#endif
 
 // ============================================================
 // TimeGoal_Ctor_Impl

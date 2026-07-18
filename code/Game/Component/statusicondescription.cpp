@@ -66,7 +66,6 @@ void* StatusIconDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -112,4 +111,3 @@ extern "C" void* StatusIconDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(StatusIconDescription, "Description",
               &StatusIconDescription_Factory, &StatusIconDescription_CreateInPlace);
-#endif

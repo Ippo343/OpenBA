@@ -6,7 +6,6 @@
 // standalone/address_registry.cpp. Each address is a real function ENTRY and a
 // faithful 1:1 port whose sub-callee closure is satisfied (only Math::Vector3
 // exports, System::MemoryAllocator/Random exports, and pure index/bit math).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -34,4 +33,3 @@ void RegisterPfGeomBatch() {
     RegisterExeAddr(0x140018dd0, reinterpret_cast<uintptr_t>(&Pf_QuadtreeInit_18dd0));
     RegisterExeAddr(0x140053ca0, reinterpret_cast<uintptr_t>(&Pf_PastureTargetPick_53ca0));
 }
-#endif

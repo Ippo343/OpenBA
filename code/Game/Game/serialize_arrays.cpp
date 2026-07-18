@@ -58,12 +58,6 @@
 extern "C" void Reimpl_Geometry_Init(void* self) {
     if (!self) return;
 
-#ifndef STANDALONE_EXE
-    if (fn_Geometry_Init) {
-        fn_Geometry_Init(self);
-        return;
-    }
-#endif
 
     if (!fn_Graphics_Geometry_Ctor || !fn_Video_VertexBuffer_Ctor ||
         !fn_Video_IndexBuffer_Ctor) {
@@ -146,7 +140,6 @@ extern "C" void Reimpl_Geometry_Init(void* self) {
 //   +0x38  0x14003AB1C   ?
 //   +0x40  0x14003AAAA   ?
 // ============================================================
-#ifdef STANDALONE_EXE
 // Real implementations of the 9 vtable slots live in
 // code/Game/Game/geometry_draw.cpp. They're decompiled from the original exe
 // at 0x14001ECC0 / 0x1400AED40 / 0x1400AEA10 / 0x1400AE490 / Runtime IAT
@@ -184,7 +177,6 @@ extern "C" void RegisterGeometryVtable() {
     RegisterExeAddr(0x14015f110,
                     reinterpret_cast<uintptr_t>(&g_Geometry_Vtable_Standalone));
 }
-#endif
 
 // ============================================================
 // Helper #2 — Transform::Serialize wrapper (FUN_1400988c0)
@@ -196,12 +188,6 @@ extern "C" void RegisterGeometryVtable() {
 extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream) {
     if (!transform || !stream) return;
 
-#ifndef STANDALONE_EXE
-    if (fn_Transform_SerializeWrapper) {
-        fn_Transform_SerializeWrapper(transform, stream);
-        return;
-    }
-#endif
 
     static bool s_warned = false;
     if (!s_warned) {
@@ -327,12 +313,6 @@ void GenericArrayResize(void* arrayHeader, int newCount,
 // Helpers #3-#5 — Array resize variants
 // ============================================================
 extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride20) {
-        fn_Array_Resize_Stride20(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x20, 4);
 }
 
@@ -356,12 +336,6 @@ extern "C" void Reimpl_Array_Resize_Stride20(void* arrayHeader, int newCount) {
 // divergence from the original. We therefore implement stride-8 with its own
 // faithful body that zeroes new slots unconditionally.
 extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride08) {
-        fn_Array_Resize_Stride08(arrayHeader, newCount);
-        return;
-    }
-#endif
     if (!arrayHeader) return;
     if (!fn_MemAlloc || !g_pMemAllocSingleton) {
         static bool s_warned = false;
@@ -415,12 +389,6 @@ extern "C" void Reimpl_Array_Resize_Stride08(void* arrayHeader, int newCount) {
 }
 
 extern "C" void Reimpl_Array_Resize_Stride14(void* arrayHeader, int newCount) {
-#ifndef STANDALONE_EXE
-    if (fn_Array_Resize_Stride14) {
-        fn_Array_Resize_Stride14(arrayHeader, newCount);
-        return;
-    }
-#endif
     GenericArrayResize(arrayHeader, newCount, 0x14, 4);
 }
 
@@ -439,12 +407,6 @@ extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
                                                 void* arrayBase) {
     if (!serializer || !arrayBase || count == 0) return;
 
-#ifndef STANDALONE_EXE
-    if (fn_Array_Serialize_Stride20) {
-        fn_Array_Serialize_Stride20(serializer, count, arrayBase);
-        return;
-    }
-#endif
     if (!g_fn_Serialize_Bool /* unused, just confirms serialize plumbing */) {
         // Soft-fail: we have no Serializer_Serialize_* primitives wired.
         // Returning early at least prevents memory corruption.
@@ -682,12 +644,6 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
 extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
     void* serializer, int count, void* arrayBase) {
 
-#ifndef STANDALONE_EXE
-    if (fn_Array_Serialize_External_GraphicsMesh) {
-        fn_Array_Serialize_External_GraphicsMesh(serializer, count, arrayBase);
-        return;
-    }
-#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_GraphicsMesh && *g_ppTypeInfo_GraphicsMesh) {
@@ -701,12 +657,6 @@ extern "C" void Reimpl_Array_Serialize_External_GraphicsMesh(
 extern "C" void Reimpl_Array_Serialize_External_Particle(
     void* serializer, int count, void* arrayBase) {
 
-#ifndef STANDALONE_EXE
-    if (fn_Array_Serialize_External_Particle) {
-        fn_Array_Serialize_External_Particle(serializer, count, arrayBase);
-        return;
-    }
-#endif
 
     const uint32_t* typeIdPtr = nullptr;
     if (g_ppTypeInfo_Particle && *g_ppTypeInfo_Particle) {

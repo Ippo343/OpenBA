@@ -635,7 +635,6 @@ void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*unus
 // factory tree (RawMaterialDescription/StorageComponent are already registered in
 // standalone; ComponentEntity is lazy-resolved here). W_* skip (not fault) if a
 // critical id or the ExternalFactory singleton has not resolved yet.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
@@ -766,5 +765,4 @@ void* InPlace(void* m) {
 REGISTER_TYPE(StorageUI, "UI::DialogController",
               &storageui_sa::Factory, &storageui_sa::InPlace);
 
-#endif  // STANDALONE_EXE
 

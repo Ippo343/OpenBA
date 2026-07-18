@@ -29,10 +29,8 @@ static int SelDiagOn() {
     return s;
 }
 
-#ifdef STANDALONE_EXE
 // Forward decl (full header is included in the STANDALONE factory block at file end).
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
-#endif
 
 // ============================================================
 // EditTool vtable addresses (for vtable chain in Dtor)
@@ -249,7 +247,6 @@ static void EnsureEditFuncs() {
     s_pTypeId_ToolUI       = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5788);
     s_pTypeId_PageToggleUI = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c4f00);
 
-#ifdef STANDALONE_EXE
     // In standalone the raw .rdata IAT dispatch slots above resolve to 0 (unregistered),
     // which would leave the pick + reposition pipeline dead (KeyMapPressed null -> OnKey
     // returns before ever picking). Fall back to the engine_funcs pointers, which ARE
@@ -294,7 +291,6 @@ static void EnsureEditFuncs() {
         if (!validTid(s_tid_EntityUI_sa)) s_tid_EntityUI_sa = ::Object::GetTypeIdByName("EntityUI");
         s_pTypeId_PageToggleUI = &s_tid_EntityUI_sa;
     }
-#endif
 
     s_editFuncsResolved = true;
 }
@@ -320,10 +316,8 @@ static uint32_t ModelComponentTypeId() {
     if (cached) return cached;
     uint32_t* p = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
     if (p && *p) { cached = *p; return cached; }
-#ifdef STANDALONE_EXE
     uint32_t v = ::Object::GetTypeIdByName("ModelComponent");
     if (v && v != 0xFFFFFFFFu) cached = v;
-#endif
     return cached;
 }
 
@@ -800,7 +794,6 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
 // Standalone factory + vtable (factory cascade).
 // EditTool: size 0x38, parent Tool, 13-slot vtable @ 0x140161ca0.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -977,4 +970,3 @@ extern "C" void* EditTool_Factory_SA(void) {
     return Tool_Alloc(0x38, g_EditTool_Vtable, 0);
 }
 REGISTER_TYPE(EditTool, "Tool", &EditTool_Factory_SA, &EditTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

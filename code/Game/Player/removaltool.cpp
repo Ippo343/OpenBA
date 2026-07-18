@@ -595,7 +595,6 @@ bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell) {
 // Standalone factory + vtable (factory cascade).
 // RemovalTool: size 0x40, parent DragTool, 15-slot vtable @ 0x140161de0.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Player/dragtool.h"
 #include "Object/factory_registration.h"
@@ -640,4 +639,3 @@ extern "C" void* RemovalTool_Factory_SA(void) {
     return Tool_Alloc(0x40, g_RemovalTool_Vtable, 1);
 }
 REGISTER_TYPE(RemovalTool, "DragTool", &RemovalTool_Factory_SA, &RemovalTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

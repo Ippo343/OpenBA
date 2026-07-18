@@ -36,7 +36,6 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include <cstdio>
 #include <cstdlib>
 // One-shot screen-rect projection diagnostics (BANISHED_TOOL_DIAG). A/B-safe: only
@@ -48,9 +47,6 @@ static bool SRDiagOn() {
     return s_srDiag != 0 && s_srDiagBudget > 0;
 }
 #define SRDIAG(...) do { if (SRDiagOn()) { --s_srDiagBudget; fprintf(stderr, __VA_ARGS__); fflush(stderr); } } while (0)
-#else
-#define SRDIAG(...) do {} while (0)
-#endif
 
 // ============================================================
 // Locally-resolved Math/Volume dispatch-slot exports (value-return, member ABI).

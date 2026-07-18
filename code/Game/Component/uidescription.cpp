@@ -36,10 +36,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include <cstdio>
 #include <cstdlib>
-#endif
 
 namespace {
 constexpr uintptr_t kVtable  = 0x140164a70;
@@ -121,11 +119,9 @@ void UIDescription_Serialize(void* self, void* stream) {
         }
     }
     *(int32_t*)(s + 0x38) = count;
-#ifdef STANDALONE_EXE
     if (std::getenv("BANISHED_MAP_TRACE"))
         printf("[UIDescSer] self=%p count=%d entries=%p cap->%d\n",
                self, count, *(void**)(s + 0x30), *(int32_t*)(s + 0x3c));
-#endif
 
     // 5. per-element serialize
     uint8_t* buf = *(uint8_t**)(s + 0x30);
@@ -168,7 +164,6 @@ void* UIDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -211,4 +206,3 @@ extern "C" void* UIDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(UIDescription, "Description",
               &UIDescription_Factory, &UIDescription_CreateInPlace);
-#endif

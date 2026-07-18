@@ -60,9 +60,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName (.rdata type-id fallback)
-#endif
 
 namespace {
 
@@ -132,20 +130,12 @@ static void EnsureFns() {
     // `*s_pTid_X` reads at the use sites fault (READ of 0x0). Resolve the VALUES self-
     // contained via Object::GetTypeIdByName and point the pointers at static storage
     // (names verified from the *_RegisterType writers in factory_registrations.csv).
-#ifdef STANDALONE_EXE
     static uint32_t v_c7cb8, v_c7ee8, v_c4560, v_c7e78, v_c7f20;
     v_c7cb8 = ::Object::GetTypeIdByName("RawMaterialDescription");     s_pTid_c7cb8 = &v_c7cb8;
     v_c7ee8 = ::Object::GetTypeIdByName("StorageLocationComponent");   s_pTid_c7ee8 = &v_c7ee8;
     v_c4560 = ::Object::GetTypeIdByName("MarketLocationComponent");    s_pTid_c4560 = &v_c4560;
     v_c7e78 = ::Object::GetTypeIdByName("StorageComponent");           s_pTid_c7e78 = &v_c7e78;
     v_c7f20 = ::Object::GetTypeIdByName("StorageLocationDescription"); s_pTid_c7f20 = &v_c7f20;
-#else
-    s_pTid_c7cb8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-    s_pTid_c7ee8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7ee8));
-    s_pTid_c4560 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4560));
-    s_pTid_c7e78 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
-    s_pTid_c7f20 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f20));
-#endif
     s_pHalfCell_172114 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_QueryCount = reinterpret_cast<fn_QueryCount_t>(ResolveAddr(Module::Exe, 0x14012cf10));
     s_init = true;

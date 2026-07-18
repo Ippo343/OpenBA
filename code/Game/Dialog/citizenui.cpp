@@ -25,12 +25,11 @@
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
 #include <cstdint>
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
 #endif
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 // FollowDialog's real standalone vtable (built in followdialog.cpp). In standalone
 // mode the exe .rdata FollowDialog vtable (0x14015be00) is never populated, so
@@ -50,7 +49,6 @@ static void CitizenUI_EnsureProfessionTypeId() {
         s_profTid = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent");
     if (s_profTid) g_TypeId_ProfessionComponent = &s_profTid;
 }
-#endif
 
 // A partially-initialized standalone citizen can leave CitizenAI description/pointer
 // fields as garbage (0, the -1 unresolved-IBP sentinel, or non-canonical high values
@@ -268,9 +266,7 @@ void CitizenUI_Slot6(CitizenUI* self) {
 void CitizenUI_Slot7(CitizenUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-#ifdef STANDALONE_EXE
     CitizenUI_EnsureProfessionTypeId();
-#endif
 
     // Get entity from data source (+0x28), cast to ComponentEntity
     void* entityBase = *(void**)(s + 0x28);
@@ -339,7 +335,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     bool okParam = CitUI_OkTextParam(textName);
     if (okName && okParam)
         fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     {
         static int s_nameTrace = 0;
         if (s_nameTrace < 4 && std::getenv("BANISHED_DIALOG_TRACE")) {
@@ -516,11 +512,6 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // the element, its +0xC8 array and its +0x98 chain all validate. It is a redundant
     // secondary name label — the primary textName above already shows the citizen's name
     // — so skip it in standalone. DLL mode keeps the original behaviour (CheckPtr + set).
-#ifndef STANDALONE_EXE
-    fn_InternalBasePtr_CheckPtr((void*)(s + 0x90));
-    void* textNameIs = (void*)*(uint64_t*)(s + 0x90);
-    if (textNameIs) fn_TextElement_SetParameter(textNameIs, 0, (void*)(ai + 0x28));
-#endif
 
     // --- Action text ---
     // Get entity reference from CitizenAI+0x10, find profession component
@@ -601,9 +592,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
     uintptr_t s = (uintptr_t)self;
 
-#ifdef STANDALONE_EXE
     CitizenUI_EnsureProfessionTypeId();
-#endif
 
     if (param4 == 0x227) {
         // --- buttonProfession: go to workplace/job ---
@@ -695,12 +684,10 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 
             // Patch vtable to FollowDialog.
             void* fdVtable = (void*)g_FollowDialog_Vtable;
-#ifdef STANDALONE_EXE
             // Standalone: exe .rdata vtable (0x14015be00) is null → g_FollowDialog_Vtable
             // unresolved. Use the real reimplemented vtable from followdialog.cpp,
             // otherwise the dialog gets a NULL vtable and hard-faults on dispatch.
             if (!fdVtable) fdVtable = FollowDialog_GetStandaloneVtable();
-#endif
             *(void**)followDialog = fdVtable;
 
             // Set FollowDialog-specific fields
@@ -754,7 +741,6 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 // standalone (raw .rdata addr → ResolveAddr returns null). EnsureGlobals lazy-fills
 // them from the live factory tree (post-Engine::Startup); Slot7 is guarded to skip
 // (not fault) if any critical id failed to resolve.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstddef>
@@ -876,4 +862,3 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 REGISTER_TYPE(CitizenUI, "UI::DialogController",
               &citizenui_sa::Factory, &citizenui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

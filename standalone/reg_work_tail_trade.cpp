@@ -15,7 +15,6 @@
 //
 // Every address verified as a real function ENTRY in Ghidra; ports are faithful 1:1
 // against the disassembly (offset by offset).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -53,4 +52,3 @@ void RegisterWorkTailTradeBatch() {
     RegisterExeAddr(0x14002c8a0, reinterpret_cast<uintptr_t>(&TradeWork_Serialize_c8a0));
     // NB: 0x1401c7158 is intentionally NOT registered here (see note above).
 }
-#endif // STANDALONE_EXE

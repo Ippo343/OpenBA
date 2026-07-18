@@ -26,7 +26,6 @@
 // First-pass: every slot is a print-only stub. Update returns false on the first
 // tick so MainLoop::Run exits cleanly. Real reimpls will land slot-by-slot.
 
-#ifdef STANDALONE_EXE
 
 #include "address_registry.h"
 #include "resolve.h"
@@ -333,4 +332,3 @@ void RegisterLoaderLoopVtables() {
     RegisterExeAddr(0x1401588d0, reinterpret_cast<uintptr_t>(g_outerLoaderLoopVtable));
 }
 
-#endif // STANDALONE_EXE

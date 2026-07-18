@@ -243,7 +243,6 @@ uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
 // tool_base_standalone.h + notes/FACTORY_CASCADE_145_BRIEF.md.
 // BridgeTool: size 0x40, parent DragTool, 15-slot vtable @ 0x140161b00.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Player/dragtool.h"
 #include "Object/factory_registration.h"
@@ -279,4 +278,3 @@ extern "C" void* BridgeTool_Factory_SA(void) {
     return Tool_Alloc(0x40, g_BridgeTool_Vtable, 1);
 }
 REGISTER_TYPE(BridgeTool, "DragTool", &BridgeTool_Factory_SA, &BridgeTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

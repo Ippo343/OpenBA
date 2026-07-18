@@ -119,7 +119,6 @@ static void LoadProfessionList_Step2(uint8_t* p) {
 
     const int mode = ProfListMode();
 
-#ifdef STANDALONE_EXE
     // Mode 2/3 — factory-only bisection: construct without any load.
     // (ProfessionList_Factory is standalone-only; DLL mode always uses FindOrLoad.)
     if (mode == 2 || mode == 3) {
@@ -131,7 +130,6 @@ static void LoadProfessionList_Step2(uint8_t* p) {
         fflush(stderr);
         return;
     }
-#endif
 
     if (!fn_Filename_CtorCStr || !fn_ExternalFactory_FindOrLoad || !fn_Filename_Dtor ||
         !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
@@ -884,7 +882,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // gracefully to null (weather sim still runs its temperature/snow half).
     if (*(void**)(p + 0x130)) {
         void* envRes = nullptr;
-#ifdef STANDALONE_EXE
         static int s_wxParticles = -1;
         if (s_wxParticles < 0) {
             const char* e = std::getenv("BANISHED_WEATHER_PARTICLES");
@@ -901,7 +898,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                     envRes, wxCount);
             fflush(stderr);
         }
-#endif
         Reimpl_FUN_140093e30(*(void**)(p + 0x130), envRes, /*climateGen*/*(void**)(p + 0x50));
     }
 
@@ -1280,7 +1276,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
 // STANDALONE_EXE: register the Load-owned exe addresses so gameupdateloop.cpp's
 // EnsureInit (which resolves these via ResolveAddr) finds real bodies/values.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 
 // .rdata float constants the in-game loop dereferences (*g_fXxx). Verified via
@@ -1300,4 +1295,3 @@ extern "C" void RegisterGameUpdateLoopLoadAddrs() {
     RegisterExeAddr(0x140172174, reinterpret_cast<uintptr_t>(&s_fCamParam2));
     RegisterExeAddr(0x140172240, reinterpret_cast<uintptr_t>(&s_fCamParam3));
 }
-#endif // STANDALONE_EXE

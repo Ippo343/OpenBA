@@ -288,7 +288,6 @@ void FruitComponent_InitFuncs() {
 //   * slot 4 (+0x20 Startup) -> FruitComponent_Startup  (body-init field28@+0x28)
 //   * slot 9 (+0x48 Update)  -> FruitComponent_Update    (per-tick ripening sim)
 // Size 0x38, capability flags +0x20 = 0x88 (from FruitComponent_Ctor).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -296,4 +295,3 @@ COMPONENT_LIVE_FACTORY_S(FruitComponent, 0x38, 0x88, "BANISHED_LIVE_FRUIT",
                          FruitComponent_Update, FruitComponent_Startup)
 REGISTER_TYPE(FruitComponent, "Component",
               &FruitComponent_Factory, &FruitComponent_CreateInPlace);
-#endif // STANDALONE_EXE

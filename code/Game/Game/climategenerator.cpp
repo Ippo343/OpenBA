@@ -227,7 +227,6 @@ void ClimateGenerator_Init(ClimateGenerator* self) {
 // Serialize on `fileVersion == obj->GetVersion()`; a wrong constant silently
 // drops the element and the climate combo comes up empty.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -294,4 +293,3 @@ extern "C" void* ClimateGenerator_CreateInPlace(void* memory) {
 REGISTER_TYPE(ClimateGenerator, "Object::External",
               &ClimateGenerator_Factory, &ClimateGenerator_CreateInPlace);
 
-#endif // STANDALONE_EXE

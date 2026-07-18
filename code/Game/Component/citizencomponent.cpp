@@ -84,7 +84,6 @@ static fn_FindStorage_t s_fn_FindStorage = nullptr;
 typedef void (*fn_HealthSetFlag_t)(void* healthComp, int flagIndex, char value);
 static fn_HealthSetFlag_t s_fn_HealthSetFlag = nullptr;
 
-#ifdef STANDALONE_EXE
 // --- Citizen status-icon driver (standalone wiring) ---
 // The 5 health-flag call sites in Update (bit 0 no-workplace, 1 hungry, 2 cold,
 // 3 unemployed/homeless, 5 has-profession) call s_fn_HealthSetFlag, which in the
@@ -118,7 +117,6 @@ static bool CitizenStatusIconEnabled() {
     }
     return cached != 0;
 }
-#endif // STANDALONE_EXE
 
 // CitizenComponent_AssignWorkplace(self, workplaceIBP, slotIndex)
 // At 0x140114ca0
@@ -260,16 +258,11 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x140111590));  // CitizenComponent::FindWorkplace (CALL @140113219 in Update)
     s_fn_FindStorage = reinterpret_cast<fn_FindStorage_t>(
         ResolveAddr(Module::Exe, 0x1401116f0));  // CitizenComponent::FindStorage (CALL @14011322b in Update)
-#ifdef STANDALONE_EXE
     // 0x14012c3f0 is unmapped in standalone → route the citizen health-flag calls to the
     // StatusIcon_Toggle port instead (default-off; see CitizenStatusIcon_SetFlag above).
     s_fn_HealthSetFlag = CitizenStatusIconEnabled()
                              ? reinterpret_cast<fn_HealthSetFlag_t>(&CitizenStatusIcon_SetFlag)
                              : nullptr;
-#else
-    s_fn_HealthSetFlag = reinterpret_cast<fn_HealthSetFlag_t>(
-        ResolveAddr(Module::Exe, 0x14012c3f0));
-#endif
     s_fn_AssignWorkplace = reinterpret_cast<fn_AssignWorkplace_t>(
         ResolveAddr(Module::Exe, 0x1401163d0));  // CitizenComponent::AssignWorkplace (7 CALLs in Update)
     s_fn_AssignHousing = reinterpret_cast<fn_AssignHousing_t>(
@@ -1958,7 +1951,6 @@ void CitizenComp_helper_1b90(int64_t selfV) {
 // per-category consumed counter (townMgr+0x170[cat*0x20+0xC]), OR the material's
 // diet bits (+0x5c) into the citizen's +0x54 state mask, hunger -= g_fUVScale (1.0f).
 // [EatMsg] traces gated on BANISHED_STORAGE_TRACE.
-#ifdef STANDALONE_EXE
 // Forward decl (factory_registration.h is only included further down, in the
 // factory section) — the standalone type-name -> CRC registry lookup.
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
@@ -1988,7 +1980,6 @@ static int64_t StandaloneFindStorageComp(void* entity) {
     }
     return 0;
 }
-#endif
 static bool EatStorageTraceOn() {
     static int s = -1;
     if (s < 0) {
@@ -2010,10 +2001,8 @@ void CitizenComp_ReleaseWorkplace(int64_t selfV, void* param2) {
     // DAT_1401c7cf0 — the previous code here used it by mistake, so the eat loop
     // found no storage on storage-only food buildings).
     if (s_fn_EntityFindCompStorage6270) s_fn_EntityFindCompStorage6270((int64_t)entity, &storeIBP);
-#ifdef STANDALONE_EXE
     // Scoped standalone fallback — see StandaloneFindStorageComp.
     if (storeIBP == 0) storeIBP = StandaloneFindStorageComp(entity);
-#endif
     if (storeIBP == 0) {
         // Retail assumes the eat target always carries a StorageComponent (it would
         // fault inside SubtractItem otherwise). In standalone the target may lack a
@@ -2438,14 +2427,12 @@ int64_t* CitizenComp_Entity_impl_ef40(void* param_1, int64_t* param_2, void* par
     int64_t storeIBP = 0;
     if (s_fn_EntityFindCompStorage6270)
         s_fn_EntityFindCompStorage6270(*reinterpret_cast<int64_t*>(param_3), &storeIBP);
-#ifdef STANDALONE_EXE
     // Scoped standalone fallback (registered 6270 port's typeid is dead .rdata) +
     // null bail: retail asserts the storage exists; in standalone an entity in a
     // town search list may still lack a live StorageComponent — treat as no slot.
     if (storeIBP == 0)
         storeIBP = StandaloneFindStorageComp(*reinterpret_cast<void**>(param_3));
     if (storeIBP == 0) { *param_2 = 0; return param_2; }
-#endif
 
     fn_InternalBasePtr_CheckPtr(&storeIBP);
     uint32_t chosen = 0xffffffff;
@@ -2914,7 +2901,6 @@ void CitizenComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdlib>
@@ -3175,4 +3161,3 @@ static void* CitizenComponent_CreateInPlace(void* mem) {
 }
 REGISTER_TYPE(CitizenComponent, "Component",
               &CitizenComponent_Factory, &CitizenComponent_CreateInPlace);
-#endif // STANDALONE_EXE

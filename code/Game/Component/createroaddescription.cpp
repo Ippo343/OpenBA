@@ -33,7 +33,6 @@ static void CreateRoadDescription_Init(void* self) {
 }
 
 void CreateRoadDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serialize_Bool || !fn_ExternalPtr_Serialize3) {
@@ -44,9 +43,6 @@ void CreateRoadDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Bool(serializer, s + 0x20, nullptr);   // bool        +0x20
     fn_ExternalPtr_Serialize3(s + 0x28, serializer);      // ExternalPtr +0x28
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* CreateRoadDescription_Dtor(void* self, uint32_t flags) {
@@ -57,7 +53,6 @@ void* CreateRoadDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -110,4 +105,3 @@ static void* CreateRoadDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(CreateRoadDescription, "Description",
               &CreateRoadDescription_Factory, &CreateRoadDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

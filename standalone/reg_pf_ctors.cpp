@@ -8,7 +8,6 @@
 //   0x1400032e0 (component_people), 0x1400c3470 (action_hunt), 0x1400012d0 (action_move),
 //   0x1400c5400 / 0x140006270 (work_base), 0x14012d150 (action_rawmat) — plus the
 //   Object::Internal::Internal / CheckPtr / Time::Time / IsDerivedFrom engine helpers.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -42,4 +41,3 @@ void RegisterPfCtorsBatch() {
     RegisterExeAddr(0x140116760, reinterpret_cast<uintptr_t>(&Pf_StorageDropOff_116760));
     RegisterExeAddr(0x1401167c0, reinterpret_cast<uintptr_t>(&Pf_StorageCountDelta_1167c0));
 }
-#endif

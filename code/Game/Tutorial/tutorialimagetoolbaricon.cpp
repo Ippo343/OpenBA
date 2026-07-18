@@ -342,7 +342,6 @@ void TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
 // Vtable @ 0x140160b90 (9 slots, Object::External base), size 0x48, parent "TutorialImage".
 // GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -377,4 +376,3 @@ extern "C" void* TutorialImageToolbarIcon_Factory(void) {
     return p ? TutorialImageToolbarIcon_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialImageToolbarIcon, "TutorialImage", &TutorialImageToolbarIcon_Factory, &TutorialImageToolbarIcon_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -33,7 +33,6 @@
 // +0x28 right, +0x30 balance. Insert = helper_ddb0 (0x14002ddb0) walk+link + rebalance
 // TradeWork_impl_4b40 (0x140014b40, already registered in standalone).
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -266,4 +265,3 @@ extern "C" void EntityUI_ToolDraw_SA(void* entityUI, void* context, int activeFl
     ((Draw_t)vt[8])(tool, context, (char)activeFlag);   // vt[8] = +0x40
 }
 
-#endif  // STANDALONE_EXE

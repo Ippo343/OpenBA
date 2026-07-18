@@ -12,7 +12,6 @@
 // (serialize) calls only Runtime exports + engine_funcs (no unregistered exe
 // sub-callees); family B calls only FUN_140003050 (reg, Work wave),
 // FUN_140004680 (reg, component-nature wave), and FUN_14012e5c0 (reg below).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -44,4 +43,3 @@ void RegisterTutorialBaseBatch() {
     RegisterExeAddr(0x14012e5c0, reinterpret_cast<uintptr_t>(&TutBase_ComputeWorkCapacity));
     RegisterExeAddr(0x14012fbb0, reinterpret_cast<uintptr_t>(&TutBase_GetWorkCapacity));
 }
-#endif

@@ -48,15 +48,11 @@
 // Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
 // BANISHED_REDZONE is unset). Localizes which Geometry::Serialize step trips a
 // tail-canary so the displaced free-list crash can be root-caused.
-#ifdef STANDALONE_EXE
 #include "redzone_alloc.h"
 // Use the free-list LINK validator (not the tail-canary ValidateAll, which is a
 // no-op at PAD=0) so a checkpoint catches the step that clobbers a freed block's
 // forward link — the menu heap-crash signature. Aborts (0x124) naming the tag.
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
-#else
-#define RZ_CHECK(tag) ((void)0)
-#endif
 
 // External reimpl entry points from sibling sessions.
 extern "C" void  Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount);
@@ -672,21 +668,9 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
 // mode, no exe code), we fall through to our cleaned C body.
 
 extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream) {
-#ifndef STANDALONE_EXE
-    if (fn_TradeWork_impl_04d0) {
-        fn_TradeWork_impl_04d0(self, stream);
-        return;
-    }
-#endif
     TradeWork_impl_04d0_Body(self, stream);
 }
 
 extern "C" void Reimpl_TradeWork_impl_f1a0(void* self, void* stream) {
-#ifndef STANDALONE_EXE
-    if (fn_TradeWork_impl_f1a0) {
-        fn_TradeWork_impl_f1a0(self, stream);
-        return;
-    }
-#endif
     TradeWork_impl_f1a0_Body(self, stream);
 }

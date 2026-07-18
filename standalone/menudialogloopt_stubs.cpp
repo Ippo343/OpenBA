@@ -28,7 +28,6 @@
 // As real reimplementations land in code/Game/Game/menudialogloopt.cpp, replace the
 // matching stub entry with the real function and remove the stub here.
 
-#ifdef STANDALONE_EXE
 
 #include "address_registry.h"
 #include "resolve.h"
@@ -680,4 +679,3 @@ void RegisterMenuDialogLoopVtable() {
     RegisterExeAddr(0x14015ed00, reinterpret_cast<uintptr_t>(g_menuDialogLoopVtable));
 }
 
-#endif // STANDALONE_EXE

@@ -17,9 +17,7 @@
 //
 // Registering either with its closure half-null is silent corruption on a dormant
 // (edit-tool) path the A/B test cannot catch — strictly worse than the safe no-op.
-#ifdef STANDALONE_EXE
 
 void RegisterPlayerEdit2Batch() {
     // intentionally empty — both addrs DEFERRED (see header / tool_base_edit2.cpp)
 }
-#endif

@@ -31,7 +31,6 @@
 #include <cstdio>
 #include <cstdlib>
 
-#ifdef STANDALONE_EXE
 
 // FindAvailableBuilding (0x14008d100) — town_workplace_registry.cpp. Walks townMgr+0x100[key]
 // and writes an available workplace ENTITY into *out (empty IBP if the key is absent or every
@@ -182,8 +181,3 @@ extern "C" void BuilderPool_Tick() {
                      seated, static_cast<unsigned long long>(builderKey));
 }
 
-#else   // !STANDALONE_EXE — no-op in DLL mode (retail drives its own builder seating).
-
-extern "C" void BuilderPool_Tick() {}
-
-#endif  // STANDALONE_EXE

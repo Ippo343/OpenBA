@@ -226,7 +226,6 @@ void* Toolbar_Slot8(Toolbar* self) {
 //   +0x00 Dtor(0x140024c10) +0x10 GetTypeId(0x140024b80, =TypeInfo_Toolbar)
 //   +0x18 GetFileVersion(0x1400d2120, =4) +0x28 Serialize(0x1400d2010)
 //   +0x30 Cleanup(0x140024bf0) +0x40 Init(0x140024be0).
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -287,4 +286,3 @@ extern "C" void* Toolbar_CreateInPlace(void* memory) {
 REGISTER_TYPE(Toolbar, "Object::External",
               &Toolbar_Factory, &Toolbar_CreateInPlace);
 
-#endif // STANDALONE_EXE

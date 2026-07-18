@@ -19,9 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
-#endif
 
 // ============================================================
 // Resolved helpers
@@ -213,11 +211,9 @@ static bool DecalTraceOn() {
 static uint32_t DecalDescTypeId() {
     if (s_TypeId_DecalDesc && *s_TypeId_DecalDesc != 0 && *s_TypeId_DecalDesc != 0xFFFFFFFF)
         return *s_TypeId_DecalDesc;
-#ifdef STANDALONE_EXE
     static uint32_t cached = 0;
     if (cached == 0 || cached == 0xFFFFFFFF) cached = ::Object::GetTypeIdByName("DecalDescription");
     if (cached != 0xFFFFFFFF) return cached;
-#endif
     return 0;
 }
 
@@ -249,7 +245,6 @@ static void EnsureDrawHelpers() {
 // successfully (FindComponentOnEntity). In DLL mode the exe constant is live, so we keep
 // delegating to the faithful 0x140003f60. Returns the ModelComponent ptr or nullptr.
 static void* FindModelComponentOnOwner(void* ownerEnt) {
-#ifdef STANDALONE_EXE
     // Preferred faithful path: the exe FindComponent(ModelComponent) (0x140003f60) now
     // works in standalone because the ModelComponent type-id .rdata constant
     // (DWORD_1401c7a50) is seeded by reg_pipeline_typeids.cpp (gated on BANISHED_LIVE_DECAL).
@@ -288,13 +283,6 @@ static void* FindModelComponentOnOwner(void* ownerEnt) {
         }
     }
     return nullptr;
-#else
-    if (!s_fn_FindComp_Model || !ownerEnt) return nullptr;
-    uintptr_t modelBuf[2] = {0, 0};
-    s_fn_FindComp_Model(ownerEnt, modelBuf);
-    if (modelBuf[0] && s_fn_CheckPtr_draw) s_fn_CheckPtr_draw(modelBuf);
-    return reinterpret_cast<void*>(modelBuf[0]);
-#endif
 }
 
 void DecalComponent_Draw(DecalComponent* self) {
@@ -606,7 +594,6 @@ void DecalComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x38 (DecalComponent_Factory MemAlloc), flags 0xc3 (Ctor 0x14011b8f0:
 // Component base sets +0x20=0x80, leaf OR 0xc3 => 0xc3).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -704,4 +691,3 @@ static void* DecalComponent_CreateInPlace(void* mem) {
 REGISTER_TYPE(DecalComponent, "Component",
               &DecalComponent_Factory, &DecalComponent_CreateInPlace);
 
-#endif // STANDALONE_EXE

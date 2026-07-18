@@ -25,7 +25,6 @@ static void TombstoneDescription_Init(void* self) {
 }
 
 void TombstoneDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_Serializer_Serialize_Float) return;
     uint8_t serializer[24];
@@ -33,9 +32,6 @@ void TombstoneDescription_Serialize(void* self, void* stream) {
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x20), nullptr);
     fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x24), nullptr);
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* TombstoneDescription_Dtor(void* self, uint32_t flags) {
@@ -46,7 +42,6 @@ void* TombstoneDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -94,4 +89,3 @@ static void* TombstoneDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(TombstoneDescription, "Description",
               &TombstoneDescription_Factory, &TombstoneDescription_CreateInPlace);
-#endif

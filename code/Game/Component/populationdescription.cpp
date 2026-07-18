@@ -43,7 +43,6 @@ static void PopulationDescription_Init(void* self) {
 }
 
 void PopulationDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !g_fn_Serialize_Bool || !g_fn_String_Serialize || !fn_ExternalPtr_BuildSerialize) return;
@@ -61,9 +60,6 @@ void PopulationDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_BuildSerialize(s + 0x50, serializer);     // ExternalPtr +0x50
     g_fn_String_Serialize(s + 0x20, serializer);             // String +0x20
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* PopulationDescription_Dtor(void* self, uint32_t flags) {
@@ -76,7 +72,6 @@ void* PopulationDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -126,4 +121,3 @@ static void* PopulationDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(PopulationDescription, "Description",
               &PopulationDescription_Factory, &PopulationDescription_CreateInPlace);
-#endif

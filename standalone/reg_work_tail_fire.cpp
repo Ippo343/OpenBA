@@ -16,7 +16,6 @@
 // terrain-position bias reads the exact image value instead of the 0.5f fallback.
 //
 // Mirrors reg_work_act.cpp + reg_action_child_ctors2.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include <cstdint>
@@ -44,4 +43,3 @@ void RegisterWorkTailFireBatch() {
     // 0.5f half-cell const (read-only; safe to register unconditionally)
     RegisterExeAddr(0x140172114, reinterpret_cast<uintptr_t>(&g_DAT_140172114));
 }
-#endif // STANDALONE_EXE

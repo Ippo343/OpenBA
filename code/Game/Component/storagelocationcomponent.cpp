@@ -134,7 +134,6 @@ void StorageLocationComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "Component/controller_live_base.h"
@@ -177,4 +176,3 @@ CONTROLLER_LIVE_FACTORY_STATES(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
                                StorageLocationComponent_PopulateStateTable)
 REGISTER_TYPE(StorageLocationComponent, "ControllerComponent",
               &StorageLocationComponent_Factory, &StorageLocationComponent_CreateInPlace);
-#endif // STANDALONE_EXE

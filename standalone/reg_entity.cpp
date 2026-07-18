@@ -13,7 +13,6 @@
 //
 // SAFETY: each address verified as a true function ENTRY (Ghidra) and matches
 // the reimpl body's signature. No mid-function / passthrough / typo issues.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Entity/entitylist_funcs.h"   // exact signatures for the reimpl bodies
 #include <cstdint>
@@ -27,4 +26,3 @@ void RegisterEntityBatch() {
     RegisterExeAddr(0x1400c44a0, reinterpret_cast<uintptr_t>(&EntityList_Serialize));
 }
 
-#endif // STANDALONE_EXE

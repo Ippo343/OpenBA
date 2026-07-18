@@ -182,7 +182,6 @@ void* TutorialSetupGameSpeed_Ctor(void* self) {
 // Vtable @ 0x140160da0 (9 slots, Object::External base), size 0x28, parent "TutorialSetup".
 // GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -217,4 +216,3 @@ extern "C" void* TutorialSetupGameSpeed_Factory(void) {
     return p ? TutorialSetupGameSpeed_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialSetupGameSpeed, "TutorialSetup", &TutorialSetupGameSpeed_Factory, &TutorialSetupGameSpeed_CreateInPlace);
-#endif // STANDALONE_EXE

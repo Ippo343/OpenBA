@@ -217,7 +217,6 @@ void* TutorialSetupCamera_Ctor(void* self) {
 // Vtable @ 0x140160ca0 (9 slots, Object::External base), size 0x30, parent "TutorialSetup".
 // GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -252,4 +251,3 @@ extern "C" void* TutorialSetupCamera_Factory(void) {
     return p ? TutorialSetupCamera_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialSetupCamera, "TutorialSetup", &TutorialSetupCamera_Factory, &TutorialSetupCamera_CreateInPlace);
-#endif // STANDALONE_EXE

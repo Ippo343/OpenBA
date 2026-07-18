@@ -29,7 +29,6 @@ static void TerraformDescription_Init(void* self) {
 }
 
 void TerraformDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_ExternalPtr_BuildSerialize) return;
     uint8_t serializer[24];
@@ -39,9 +38,6 @@ void TerraformDescription_Serialize(void* self, void* stream) {
     fn_ExternalPtr_BuildSerialize(s + 0x28, serializer);     // ExternalPtr +0x28
     SerializerEncodingVCall(serializer, 0x98, s + 0x34);     // enum        +0x34
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* TerraformDescription_Dtor(void* self, uint32_t flags) {
@@ -52,7 +48,6 @@ void* TerraformDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -100,4 +95,3 @@ static void* TerraformDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(TerraformDescription, "Description",
               &TerraformDescription_Factory, &TerraformDescription_CreateInPlace);
-#endif

@@ -45,7 +45,7 @@ static void WorkPlaceDescription_Init(void* self) {
     *(uint64_t*)(s + 0x28) = 0;  // ExternalPtr<Profession>
 }
 
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
 // WAVE 2 helper: read an Object::External's resource filename (base+8 = Filename
 // String*; engine String = char data at ptr, int length at ptr-8). Bounded, safe
 // for a null/blank instance (returns "(none)") — used to correlate the Serialized
@@ -68,7 +68,6 @@ static void WPDesc_ExtFilename(void* ext, char* out, int outcap) {
 // WorkPlaceDescription_Serialize (vtable +0x28, 0x14012f420)
 // ============================================================
 void WorkPlaceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
@@ -110,9 +109,6 @@ void WorkPlaceDescription_Serialize(void* self, void* stream) {
 #endif
 
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 // ============================================================
@@ -126,7 +122,6 @@ void* WorkPlaceDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -182,4 +177,3 @@ static void* WorkPlaceDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(WorkPlaceDescription, "Description",
               &WorkPlaceDescription_Factory, &WorkPlaceDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

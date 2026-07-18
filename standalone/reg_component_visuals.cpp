@@ -4,7 +4,6 @@
 // code/Game/Component/*.cpp files. Only the FEASIBLE helpers (no un-batched exe
 // sub-helpers, no unavailable engine internals) are wired here; the deep functional
 // reimpls in this batch are reported as SKIPPED to the integrator.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -23,4 +22,3 @@ void RegisterComponentBatch_visuals() {
     RegisterExeAddr(0x140002cc0, reinterpret_cast<uintptr_t>(&CemeteryListErase_Reimpl));
     RegisterExeAddr(0x1400c2b70, reinterpret_cast<uintptr_t>(&ModelComponentNotify_Reimpl));
 }
-#endif

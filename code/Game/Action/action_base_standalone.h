@@ -11,7 +11,6 @@
 // Per-type slots (GetTypeId, Serialize, AbstractImpl, [Execute], CheckEntity,
 // GetTarget) point at the type's own *_Impl functions in its reimpl file.
 #pragma once
-#ifdef STANDALONE_EXE
 #include <cstdint>
 
 extern "C" {
@@ -46,4 +45,3 @@ void* Action_Alloc(int size, void* vtable);
 
 }  // extern "C"
 
-#endif  // STANDALONE_EXE

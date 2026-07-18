@@ -250,7 +250,6 @@ void Profession_Serialize(Profession* self, void* stream) {
 // NullFactory stub → crash. Real factory + the reimpl'd Serialize above (now with
 // engine-global fallbacks) make it loadable. vtable @ 0x14015efa0 (9 slots,
 // +0x00..+0x40; GetVersion=3, Serialize +0x28, CreateInPlace +0x40).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -294,4 +293,3 @@ extern "C" void* Profession_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(Profession, "Object::External",
               &Profession_Factory, &Profession_CreateInPlace);
-#endif

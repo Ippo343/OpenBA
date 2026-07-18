@@ -15,7 +15,6 @@
 // instantiates FrustumOutlineElement; it is registered for completeness, not
 // driven. To fully activate, reconstruct the 0x14015c2a0 subclass vtable.
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -289,4 +288,3 @@ extern "C" void* FrustumOutlineElement_Factory_SA(void) {
 }
 REGISTER_TYPE(FrustumOutlineElement, "Element",
               &FrustumOutlineElement_Factory_SA, &FrustumOutlineElement_CreateInPlace_SA);
-#endif // STANDALONE_EXE

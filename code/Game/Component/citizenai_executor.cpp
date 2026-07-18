@@ -42,7 +42,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -659,4 +658,3 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     }
 }
 
-#endif // STANDALONE_EXE

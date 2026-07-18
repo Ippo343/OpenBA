@@ -13,7 +13,6 @@
 // (reg_citizenai_findhelpers.cpp); every other sub-callee was already registered (see the
 // citizenai_handlers3.cpp header for the full list). Type-ids (InteractDescription /
 // CitizenDescription) resolved self-contained via Object::GetTypeIdByName.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -26,4 +25,3 @@ void RegisterCitizenAIHandlers3() {
     RegisterExeAddr(0x14010cd80, reinterpret_cast<uintptr_t>(&CitizenAI_State_AdultTransition));
     RegisterExeAddr(0x14010d2c0, reinterpret_cast<uintptr_t>(&CitizenAI_State_ElderTransition));
 }
-#endif

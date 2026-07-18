@@ -553,7 +553,6 @@ void WorkplaceUI_OnRemove(WorkPlaceUI* self, void* param2, int msg, int id) {
 //                refresh is driven here so it stays live as buildings complete.
 //   +0x48 (idx9) OnRemove  (0x1400877e0) — button dispatch (no-op in SA; the
 //                worker/job spinners aren't wired without Serialize's element IDs).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
@@ -923,4 +922,3 @@ void* InPlace(void* m) {
 REGISTER_TYPE(WorkPlaceUI, "UI::DialogController",
               &workplaceui_sa::Factory, &workplaceui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

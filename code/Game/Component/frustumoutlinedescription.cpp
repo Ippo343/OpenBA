@@ -38,7 +38,6 @@ static void FrustumOutlineDescription_Init(void* self) {
 }
 
 void FrustumOutlineDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!fn_ElementDescription_Serialize || !g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !fn_ExternalPtr_Serialize || !g_fn_String_Serialize || !g_fn_Serialize_Int) {
@@ -52,9 +51,6 @@ void FrustumOutlineDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serializer, s + 0x78, nullptr);       // int         +0x78
     g_fn_Serialize_Int(serializer, s + 0x7c, nullptr);       // int         +0x7c
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* FrustumOutlineDescription_Dtor(void* self, uint32_t flags) {
@@ -67,7 +63,6 @@ void* FrustumOutlineDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -190,4 +185,3 @@ static void* FrustumOutlineDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(FrustumOutlineDescription, "ElementDescription",
               &FrustumOutlineDescription_Factory, &FrustumOutlineDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

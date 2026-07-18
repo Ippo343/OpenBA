@@ -37,7 +37,6 @@
 // Compiled into the standalone exe only; in DLL mode the real exe vtable + type-ids
 // are used, so this is a no-op (the whole TU is empty under #else).
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "Dialog/ui_dialogs.h"
@@ -161,4 +160,3 @@ extern "C" void ToolbarStandalone_Init() {
     s_done = true;
 }
 
-#endif // STANDALONE_EXE

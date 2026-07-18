@@ -485,7 +485,6 @@ bool PathTool_Serialize(PathTool* self, uint64_t* param2) {
 // PathTool: size 0x60, parent Tool, 13-slot vtable @ 0x140160680.
 // slot12 returns 4 (tool type id); other base slots stubbed.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -528,4 +527,3 @@ extern "C" void* PathTool_Factory_SA(void) {
     return Tool_Alloc(0x60, g_PathTool_Vtable, 0);
 }
 REGISTER_TYPE(PathTool, "Tool", &PathTool_Factory_SA, &PathTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

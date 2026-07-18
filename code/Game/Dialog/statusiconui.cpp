@@ -11,14 +11,12 @@
 #include "engine_funcs.h"
 #include <cstdint>
 
-#ifdef STANDALONE_EXE
 // By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
 // bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
 // component finder (Entity_FindComponent_MeshInstance, 0x140002f90) keys off the
 // StatusIconComponent type-id .rdata global DAT_1401c7e08, which is UNFILLED (0xFFFFFFFF)
 // in the standalone image and therefore matches no component for any entity.
 static void* StatusIconUI_FindStatusIconComp(void* entity);
-#endif
 
 // ============================================================
 // StatusIconUI::Serialize (vtable +0x20) — Cache icon child elements
@@ -96,11 +94,9 @@ void StatusIconUI_Startup(StatusIconUI* self) {
     // active bitfield — the SAME bits that drive the 3D warning billboards).
     void* meshComp = nullptr;
     fn_FindComponent_MeshInstance(entityInternal, &meshComp);
-#ifdef STANDALONE_EXE
     // Standalone: the exe finder's type-id global is unfilled → returns null for every
     // entity. Resolve the StatusIconComponent by name instead so the panel reads live bits.
     if (!meshComp) meshComp = StatusIconUI_FindStatusIconComp(entityInternal);
-#endif
 
     // Determine if icons should be visible based on page state
     bool iconsActive = true;
@@ -199,7 +195,6 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 // live the panel reflects real status; when they are all clear (a healthy citizen, or a
 // standalone entity whose status logic hasn't populated them) the guarded read yields 0 and
 // every icon is hidden — the correct "no active warnings" appearance, and never "all shown".
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstddef>
@@ -314,4 +309,3 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 REGISTER_TYPE(StatusIconUI, "UI::DialogController",
               &statusiconui_sa::Factory, &statusiconui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

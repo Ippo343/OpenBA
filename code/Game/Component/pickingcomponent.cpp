@@ -110,7 +110,6 @@ void PickingComponent_OnCreate(PickingComponent* self) {
 // This registration path depends on the standalone type registry (GetTypeIdByName)
 // and is only exercised from the SA start-town spawn — the DLL build uses the real
 // hooked picking path. Compile it standalone-only.
-#ifdef STANDALONE_EXE
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
 
 // Picking::Scene::AddMesh — member fn (this=RCX): RDX=mesh ExternalPtr, R8=&Transform,
@@ -253,7 +252,6 @@ void PickingComponent_RegisterMeshForEntity(void* entity) {
         }
     }
 }
-#endif // STANDALONE_EXE
 
 // ============================================================
 // Init: resolve function pointers
@@ -285,10 +283,8 @@ void PickingComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(PickingComponent, 0x38, 0xC3)
 REGISTER_TYPE(PickingComponent, "Component",
               &PickingComponent_Factory, &PickingComponent_CreateInPlace);
-#endif // STANDALONE_EXE

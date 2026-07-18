@@ -14,7 +14,6 @@
 //   0x140101380  BuildRecords    (per-cell validate + record build)  [here] -> 08c0 + f5d0
 //
 // The integrator wires RegisterPlayerTileRenderBatch() into RegisterCodeFunctions().
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -29,4 +28,3 @@ void RegisterPlayerTileRenderBatch() {
     RegisterExeAddr(0x1401008c0, reinterpret_cast<uintptr_t>(&PlayerTileRender_DrawOverlay_08c0));
     RegisterExeAddr(0x140101380, reinterpret_cast<uintptr_t>(&PlayerTileRender_BuildRecords_1380));
 }
-#endif // STANDALONE_EXE

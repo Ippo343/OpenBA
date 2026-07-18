@@ -56,7 +56,6 @@ static void CreateDragDescription_Init(void* self) {
 // CreateDragDescription_Serialize (vtable +0x28, 0x140119750)
 // ============================================================
 void CreateDragDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serialize_Int || !g_fn_Serialize_Bool) {
@@ -72,9 +71,6 @@ void CreateDragDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Bool(serializer, s + 0x24, nullptr);            // bool +0x24
     Reimpl_ExternalPtr_Serialize_StringTable(s + 0x38, serializer);// ref  +0x38
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 // ============================================================
@@ -88,7 +84,6 @@ void* CreateDragDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -141,4 +136,3 @@ static void* CreateDragDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(CreateDragDescription, "Description",
               &CreateDragDescription_Factory, &CreateDragDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

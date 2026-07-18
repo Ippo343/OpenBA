@@ -15,13 +15,11 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (scoped ModelComponent fallback)
 #include "Component/pickingcomponent_funcs.h" // PickingComponent_RegisterMeshForEntity (mesh-precise picking)
 #include <cstdio>                            // BANISHED_TOOL_DIAG place-model trace
 #include <cstdlib>                           // std::getenv
 #include <cstring>                           // std::strcmp (BANISHED_CLEAR_PLACE_OVER)
-#endif
 
 // ============================================================
 // 0x140003870 — SetTransformFromYaw
@@ -84,7 +82,6 @@ typedef bool (*ToolTile_f5d0_t)(int* param_1, int col, int row, unsigned int cod
 static ToolTile_f5d0_t s_fn_f5d0 = nullptr;
 static bool s_f5d0Init = false;
 
-#ifdef STANDALONE_EXE
 // ============================================================
 // Track A refinement #2 — allow SA placement over CLEARABLE resource cells.
 // ============================================================
@@ -135,7 +132,6 @@ static bool ToolTile_CellHasClearableResource(int* grid, int col, int row) {
     }
     return false;
 }
-#endif // STANDALONE_EXE
 
 unsigned long long ToolTile_FootprintValidity_d580(
         int* param_1, int param_2, int param_3, int param_4, int param_5,
@@ -191,7 +187,6 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         ok = s_fn_f5d0(param_1, iVar10, iVar14, param_6, param_9, param_10,
                                        param_11, param_12, bVar13 ? 1 : 0, param_15);
                     }
-#ifdef STANDALONE_EXE
                     // Refinement #2: accept a clearable-resource cell that f5d0 rejected
                     // only on its occupant condition. Retry with allowOverlap=1 (keeps
                     // terrain/height/slope rejection) and require a NaturalResourceComponent
@@ -202,7 +197,6 @@ unsigned long long ToolTile_FootprintValidity_d580(
                         ToolTile_CellHasClearableResource(param_1, iVar10, iVar14)) {
                         ok = true;
                     }
-#endif
                     if (!ok) {
                         return 0;
                     }
@@ -261,7 +255,6 @@ static void EnsureD650Deps() {
     s_d650Init = true;
 }
 
-#ifdef STANDALONE_EXE
 // Scoped ModelComponent finder. The shared component finder 003f60 resolves its
 // target type-id from raw .rdata 0x1401c7a50 (= ModelComponent), which is NULL in
 // the standalone exe, so it returns a null component — and helper_d650 derefs that
@@ -371,7 +364,6 @@ static bool ToolTile_OrganicConstruction() {
     }
     return s_v == 1;
 }
-#endif
 
 unsigned long long ToolTile_ValidateCreate_fd650(
         long long param_1, int param_2, int param_3, int param_4, int param_5,
@@ -460,10 +452,8 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, &local_48)) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
     long long modelComp = pIVar8 ? *reinterpret_cast<long long*>(pIVar8) : 0;
-#ifdef STANDALONE_EXE
     // 003f60's c7a50 type-id is NULL in standalone → null component. Scoped fallback.
     if (modelComp == 0) modelComp = reinterpret_cast<long long>(ToolTile_FindModelComponentScoped(local_res8));
-#endif
     if (modelComp != 0) ToolTile_SetTransformFromYaw_3870(modelComp, param_6, param_7);
 
     // Resolve again (different out-IBP) and fix up the model component.
@@ -472,10 +462,8 @@ unsigned long long ToolTile_ValidateCreate_fd650(
     pIVar8 = s_fn_clearPathQ ? reinterpret_cast<void*>(s_fn_clearPathQ(local_res8, local_38)) : nullptr;
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(pIVar8);
     long long* plVar4 = pIVar8 ? *reinterpret_cast<long long**>(pIVar8) : nullptr;
-#ifdef STANDALONE_EXE
     // Same c7a50-NULL fallback as the transform site above.
     if (plVar4 == nullptr) plVar4 = reinterpret_cast<long long*>(ToolTile_FindModelComponentScoped(local_res8));
-#endif
     if (plVar4 != nullptr) {
         int uVar2 = *reinterpret_cast<int*>(param_1 + 100);
         if (fn_IsDerivedFrom && s_pTid_c7a88) {
@@ -487,7 +475,6 @@ unsigned long long ToolTile_ValidateCreate_fd650(
             (*reinterpret_cast<void(**)(long long*)>(*plVar4 + 0x38))(plVar4);
         }
         *reinterpret_cast<unsigned short*>(reinterpret_cast<long long>(plVar4) + 0x166) = 0xffff;
-#ifdef STANDALONE_EXE
         // With the live construction pipeline (BANISHED_LIVE_BUILDCTRL) the placed building
         // is left at its FOUNDATION frame so the BuildComponent state machine drives it
         // through organic gather -> build -> complete: BuildComponent_DemoGateSkip picks up
@@ -495,7 +482,6 @@ unsigned long long ToolTile_ValidateCreate_fd650(
         // default = -1). Without the pipeline, force the finished mesh so the placed building
         // renders (the original "no completion flow -> model-less forever" guard).
         ToolTile_SetPlacedModel(reinterpret_cast<long long>(plVar4), ToolTile_OrganicConstruction());
-#endif
         if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(plVar4 + 2);
         if (s_fn_c2b70) s_fn_c2b70(plVar4[2], 0);
     }
@@ -507,14 +493,12 @@ unsigned long long ToolTile_ValidateCreate_fd650(
                    *reinterpret_cast<int*>(*reinterpret_cast<long long*>(param_1 + 0x20) + 0x20));
     }
 
-#ifdef STANDALONE_EXE
     // Mesh-precise picking: register the placed building's (now-completed, forced above)
     // model mesh into Picking::Scene so it's clickable anywhere on the model — the same
     // fix start-town buildings get. Retail would drive this via PickingComponent::OnAdded
     // during the build lifecycle, which is inert in standalone. Respects LIVE_PICKMESH.
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(&local_res8);
     PickingComponent_RegisterMeshForEntity(reinterpret_cast<void*>(local_res8));
-#endif
 
     unsigned long long uVar9 = s_fn_subd960 ? s_fn_subd960(param_1) : 0;
     return (uVar9 & ~0xffULL) | 1ULL;

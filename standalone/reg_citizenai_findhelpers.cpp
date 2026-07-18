@@ -22,7 +22,6 @@
 //   0x140122e20(pf_road) 0x1400a00f0(work_base) 0x140132010(work_impl2) 0x140087fb0(pf_road)
 //   0x14008ef40(gap_A) 0x14004edb0(pf_road) 0x140008830(work_base) 0x14009c480(pf_roots_road)
 //   0x14012d5d0(pf_roots_route) 0x1400178c0(citizenai_findtarget)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -40,4 +39,3 @@ void RegisterCitizenAIFindHelpers() {
     RegisterExeAddr(0x14008ec70, reinterpret_cast<uintptr_t>(&Entity_impl_ec70));
     RegisterExeAddr(0x14008e370, reinterpret_cast<uintptr_t>(&CitizenAI_helper_e370));
 }
-#endif

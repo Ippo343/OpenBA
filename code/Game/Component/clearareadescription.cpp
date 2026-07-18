@@ -74,7 +74,6 @@ void* ClearAreaDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -120,4 +119,3 @@ extern "C" void* ClearAreaDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ClearAreaDescription, "Description",
               &ClearAreaDescription_Factory, &ClearAreaDescription_CreateInPlace);
-#endif

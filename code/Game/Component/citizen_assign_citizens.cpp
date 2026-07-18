@@ -464,9 +464,7 @@ extern "C" void CitizenAssignCitizens(void* ctxV) {
 // ===========================================================================
 // Standalone registration
 // ===========================================================================
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 extern "C" void RegisterCitizenAssignCitizens() {
     RegisterExeAddr(0x1400d43b0, reinterpret_cast<uintptr_t>(&CitizenAssignCitizens));
 }
-#endif // STANDALONE_EXE

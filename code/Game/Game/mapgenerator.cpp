@@ -219,7 +219,6 @@ void MapGenerator_Init(MapGenerator* self) {
 //
 // Stream order mirrors the original 0x1400a2980 EXACTLY (note the non-monotonic
 // tail: +0x118, +0x138, +0x130, +0x150, +0x158, +0x170).
-#ifdef STANDALONE_EXE
 namespace {
 // Fresh-load dynamic array: set header {ptr@0, count@8, cap@0xC} and allocate
 // count*stride bytes. Returns the new buffer (uninitialized — caller inits).
@@ -251,11 +250,9 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
     }
 }
 } // namespace
-#endif
 
 void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !g_fn_String_Serialize || !g_fn_Serialize_Int ||
@@ -342,11 +339,6 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
 
     if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
     return;
-#else
-    if (s_fn_OrigSerialize) {
-        s_fn_OrigSerialize(self, stream);
-    }
-#endif
 }
 
 // ============================================================
@@ -389,7 +381,6 @@ void* MapGenerator_Slot8(MapGenerator* self) {
 // `fileVersion == obj->GetVersion()`; a wrong constant silently drops the
 // element and the start-condition combo comes up empty.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -456,4 +447,3 @@ extern "C" void* MapGenerator_CreateInPlace(void* memory) {
 REGISTER_TYPE(MapGenerator, "Object::External",
               &MapGenerator_Factory, &MapGenerator_CreateInPlace);
 
-#endif // STANDALONE_EXE

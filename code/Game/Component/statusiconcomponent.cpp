@@ -342,7 +342,6 @@ void StatusIconComponent_InitFuncs() {
 // ============================================================
 // Standalone bring-up (Phase A): faithful construction + diagnostics
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdlib>
@@ -692,4 +691,3 @@ COMPONENT_LIVE_FACTORY_STARTUP(StatusIconComponent, 0x108, 0xC2,
                                "BANISHED_LIVE_STATUSICON", StatusIconComponent_StartupInit)
 REGISTER_TYPE(StatusIconComponent, "Component",
               &StatusIconComponent_Factory, &StatusIconComponent_CreateInPlace);
-#endif // STANDALONE_EXE

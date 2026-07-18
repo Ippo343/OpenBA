@@ -233,7 +233,6 @@ extern "C" void* MusicList_CreateInPlace(void* mem) {
     return mem;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -278,4 +277,3 @@ extern "C" void* MusicList_Factory(void) {
 REGISTER_TYPE(MusicList, "Object::External",
               &MusicList_Factory, &MusicList_CreateInPlace);
 
-#endif // STANDALONE_EXE

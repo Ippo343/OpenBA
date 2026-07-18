@@ -1,6 +1,5 @@
 // standalone/stall_debug.cpp — see stall_debug.h.
 
-#ifdef STANDALONE_EXE
 
 #include "stall_debug.h"
 #include <cstdio>
@@ -90,4 +89,3 @@ Phase::~Phase() {
 
 } // namespace StallDebug
 
-#endif // STANDALONE_EXE

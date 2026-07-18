@@ -1,6 +1,5 @@
 // standalone/redzone_alloc.cpp — see redzone_alloc.h for design rationale.
 
-#ifdef STANDALONE_EXE
 
 #include "redzone_alloc.h"
 #include "engine_funcs.h"
@@ -747,4 +746,3 @@ static DWORD WINAPI RedzoneWatchdog(LPVOID) {
     return 0;
 }
 
-#endif // STANDALONE_EXE

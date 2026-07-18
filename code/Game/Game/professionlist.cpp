@@ -189,9 +189,7 @@ int ProfessionList_Serialize(ProfessionList* self, void* stream) {
 // via fn_ProfessionList_Startup — registered for standalone below). Without it the
 // array stays empty (count 0) and every profession-array consumer (TownHallUI
 // General/Professions tabs, ProfessionUI) sees zero professions and shows blank.
-#ifdef STANDALONE_EXE
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // fwd (full header below)
-#endif
 extern "C" void ProfessionList_Startup_Impl(void* profList) {
     uintptr_t pl = (uintptr_t)profList;
     if (!pl || !fn_ExternalFactory_FindNext || !fn_IsDerivedFrom ||
@@ -205,9 +203,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
         uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5a98));
         if (p && *p) profTid = *p;
     }
-#ifdef STANDALONE_EXE
     if (!profTid) profTid = ::Object::GetTypeIdByName("Profession");
-#endif
     if (!profTid) return;
 
     void* factory = *g_pExternalFactorySingleton;
@@ -293,7 +289,6 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
 // it was a NullFactory stub → IsDerivedFrom(NULL) crash @Runtime+0xC039A. Real factory
 // + the reimpl'd Serialize above (loads the 4 Profession refs) make it loadable.
 // vtable @ 0x14015ef50 (9 slots); GetVersion=2, Serialize +0x28, factory 0x14001e5c0.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -342,4 +337,3 @@ extern "C" void* ProfessionList_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ProfessionList, "Object::External",
               &ProfessionList_Factory, &ProfessionList_CreateInPlace);
-#endif

@@ -10,7 +10,6 @@
 //   the action vtables 0x1401589b0/0x140160050/0x14015fb10/0x14015fca0 (action reimpls),
 //   plus Object::Internal::Internal / CheckPtr engine helpers and the Vector3
 //   Normalize/Heading Runtime exports.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -27,4 +26,3 @@ void RegisterActionChildCtorsBatch() {
     RegisterExeAddr(0x1400c6a20, reinterpret_cast<uintptr_t>(&ActChild_CreateNRCopyCtor_c6a20));
     RegisterExeAddr(0x1400c29a0, reinterpret_cast<uintptr_t>(&ActChild_Entity29a0_c29a0));
 }
-#endif // STANDALONE_EXE

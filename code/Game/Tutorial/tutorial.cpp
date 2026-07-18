@@ -246,7 +246,6 @@ void Tutorial_Serialize(void* self, void* stream) {
 // Vtable @ 0x140160740 (9 slots, Object::External base), size 0x40, parent "Object::External".
 // GetFileVersion (+0x18) = 2. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -281,4 +280,3 @@ extern "C" void* Tutorial_Factory(void) {
     return p ? Tutorial_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(Tutorial, "Object::External", &Tutorial_Factory, &Tutorial_CreateInPlace);
-#endif // STANDALONE_EXE

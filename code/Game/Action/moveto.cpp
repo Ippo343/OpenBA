@@ -889,7 +889,6 @@ bool MoveTo_GetTarget_Impl(void* self, void* param) {
 // Vtable @ 0x14015fe40 (10 slots), size 0x480, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -925,4 +924,3 @@ extern "C" void* MoveTo_Factory(void) {
     return Action_Alloc(0x480, g_MoveTo_Vtable);
 }
 REGISTER_TYPE(MoveTo, "Action", &MoveTo_Factory, &MoveTo_CreateInPlace);
-#endif // STANDALONE_EXE

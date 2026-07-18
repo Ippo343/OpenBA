@@ -19,7 +19,7 @@
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include <cstdint>
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
 #endif
@@ -183,7 +183,6 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 
     // --- Process description if resolved ---
     uintptr_t desc = *(uintptr_t*)(s + 0x30);
-#ifdef STANDALONE_EXE
     // IsDerivedFromOrTrust: all three datasource type checks above go through
     // fn_IsDerivedFrom, which is unreliable in the partial standalone factory tree
     // and returns false for a legit description entity — leaving +0x30 null so the
@@ -203,8 +202,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             }
         }
     }
-#endif
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
         static int s_s4 = 0;
         if (s_s4 < 10) { ++s_s4;
@@ -270,7 +268,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
         if (textPtr && buildReqComp) {
             // Create UI::String from BuildRequirementComponent: StringTable at +0x30, name at +0x38
             uintptr_t brc = (uintptr_t)buildReqComp;
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
             if (const char* e = std::getenv("BANISHED_TOOL_DIAG"); e && e[0] && e[0] != '0') {
                 static int s_t = 0;
                 if (s_t < 8) { ++s_t;

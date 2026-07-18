@@ -71,7 +71,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -698,4 +697,3 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     return static_cast<uint64_t>(citizen) & 0xffffffffffffff00ULL;
 }
 
-#endif // STANDALONE_EXE

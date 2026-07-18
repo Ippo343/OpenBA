@@ -26,9 +26,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"  // ::Object::GetTypeIdByName (SA type-id fallback)
-#endif
 
 namespace {
 
@@ -70,11 +68,7 @@ void Ensure_PickupGate() {
 
 uint32_t PG_Tid(const uint32_t* p, const char* name) {
     if (p && *p) return *p;
-#ifdef STANDALONE_EXE
     return ::Object::GetTypeIdByName(name);
-#else
-    (void)name; return 0;
-#endif
 }
 
 // ⚠️ THE TWO SEARCHES BELOW WALK DIFFERENT STRUCTURES WITH DIFFERENT LAYOUTS. They look

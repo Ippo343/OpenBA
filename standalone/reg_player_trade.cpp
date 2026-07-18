@@ -22,7 +22,6 @@
 // call targets in 0x1400666b0 (verified via disassemble CALL filter) are
 // 0x140102e30 and 0x14002c690 (the Ghidra symbol names "TradeWork_impl_2e30/c690"
 // map to those full addresses). 0x140002e30 is mid-function (entry 0x140002e10).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -53,4 +52,3 @@ void RegisterPlayerTradeBatch() {
     RegisterExeAddr(0x1400666b0, reinterpret_cast<uintptr_t>(&PlayerTrade_EntityUI_66b0));
     RegisterExeAddr(0x140066800, reinterpret_cast<uintptr_t>(&PlayerTrade_EditTool_66800));
 }
-#endif

@@ -13,7 +13,6 @@
 // (Storage_GetResourceCount2) and the 14 CitizenAI_State_* handlers are NOT yet
 // registered in standalone — the ValidateAndEnterState dispatch null-guards each
 // handler and the HasSufficientResources2 path guards GetResourceCount2.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -33,4 +32,3 @@ void RegisterCitizenAICandidateList() {
     RegisterExeAddr(0x14010dca0, reinterpret_cast<uintptr_t>(&CitizenAI_BuildCandidateStateList));
     RegisterExeAddr(0x14010f1f0, reinterpret_cast<uintptr_t>(&CitizenAI_ValidateAndEnterState));
 }
-#endif // STANDALONE_EXE

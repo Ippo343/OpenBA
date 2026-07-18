@@ -29,7 +29,6 @@
 // register each slot here (a local slot-storage registrar mirroring the file-static
 // RegisterDispatchSlot in address_registry.cpp) so any OTHER standalone caller that reads
 // these .rdata dispatch slots gets a valid pointer too.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -56,4 +55,3 @@ void RegisterPlayerScreenRectBatch() {
     RegisterExeAddr(0x1400fe960, reinterpret_cast<uintptr_t>(&PlayerScreenRect_AccumulateRect_fe960));
     RegisterExeAddr(0x140100380, reinterpret_cast<uintptr_t>(&PlayerScreenRect_Entity_0380));
 }
-#endif // STANDALONE_EXE

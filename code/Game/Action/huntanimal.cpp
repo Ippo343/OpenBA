@@ -545,7 +545,6 @@ bool HuntAnimal_GetTarget_Impl(HuntAnimal* self, void* param) {
 // Vtable @ 0x14015fde0 (10 slots), size 0x40, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -581,4 +580,3 @@ extern "C" void* HuntAnimal_Factory(void) {
     return Action_Alloc(0x40, g_HuntAnimal_Vtable);
 }
 REGISTER_TYPE(HuntAnimal, "Action", &HuntAnimal_Factory, &HuntAnimal_CreateInPlace);
-#endif // STANDALONE_EXE

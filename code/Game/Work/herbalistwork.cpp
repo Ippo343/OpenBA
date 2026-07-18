@@ -1032,7 +1032,6 @@ void* HerbalistWork_ScalarDtor_Impl(HerbalistWork* self, uint32_t flags) {
 //   Ctor       : FLAG — NO HerbalistWork_Ctor_Impl in this file -> factory null
 //   ResolveFuncs: HerbalistWork_ResolveFuncs()
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1072,4 +1071,3 @@ extern "C" void* HerbalistWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x60, g_HerbalistWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(HerbalistWork, "AutoPickupWork", &HerbalistWork_Factory, &HerbalistWork_CreateInPlace);
-#endif // STANDALONE_EXE

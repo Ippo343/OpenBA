@@ -17,9 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (heal .rdata type-ids)
-#endif
 
 // Gated construction-haul completion trace (BANISHED_BUILD_TRACE). Pinpoints whether
 // the citizen's delivery ever reaches CompleteTask::AbstractImpl and whether the task
@@ -83,7 +81,6 @@ bool CompleteTask_ResolveFuncs() {
     // paths below (AbstractImpl/CheckEntity/GetTarget never touch them).
     s_TypeId_1401c7158 = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7158));
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4218));
-#ifdef STANDALONE_EXE
     static uint32_t s_healCitizen = 0, s_healCompEntity = 0;
     if (!s_TypeId_1401c7158) {
         s_healCitizen = ::Object::GetTypeIdByName("CitizenComponent");   // workEntity (+0x20)
@@ -93,7 +90,6 @@ bool CompleteTask_ResolveFuncs() {
         s_healCompEntity = ::Object::GetTypeIdByName("ComponentEntity"); // targetEntity (+0x28)
         s_TypeId_ComponentEntity = &s_healCompEntity;
     }
-#endif
 
     // Game state singleton (== g_pGameWorldSingleton; the task manager is *(this+0x118)).
     s_pGameState = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3dd8));
@@ -289,7 +285,6 @@ bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
 // Vtable @ 0x14015fbd0 (10 slots), size 0x38, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -325,4 +320,3 @@ extern "C" void* CompleteTask_Factory(void) {
     return Action_Alloc(0x38, g_CompleteTask_Vtable);
 }
 REGISTER_TYPE(CompleteTask, "Action", &CompleteTask_Factory, &CompleteTask_CreateInPlace);
-#endif // STANDALONE_EXE

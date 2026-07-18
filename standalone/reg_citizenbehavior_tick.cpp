@@ -32,7 +32,6 @@
 // not registered anywhere else):
 //   0x1401721fc = 75.0f (CollectStats interval — without it the stats timer
 //   never re-arms and the history recorder would run EVERY sim tick).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -46,4 +45,3 @@ extern "C" void RegisterCitizenBehaviorTick() {
     RegisterExeAddr(0x14008c2b0, reinterpret_cast<uintptr_t>(&CitizenBehavior_Update));
     RegisterExeAddr(0x1401721fc, reinterpret_cast<uintptr_t>(&k_rdata_1721fc));
 }
-#endif // STANDALONE_EXE

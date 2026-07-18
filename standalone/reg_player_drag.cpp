@@ -11,7 +11,6 @@
 // (get_function_by_address Entry == address), and its ENTIRE exe sub-callee closure
 // is satisfied (registered exe code / engine_funcs exports / singleton globals).
 // Each is a faithful 1:1 port.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -44,4 +43,3 @@ void RegisterPlayerDragBatch() {
     RegisterExeAddr(0x140100140, reinterpret_cast<uintptr_t>(&DragTool_PlayErrorSound_100140));
     RegisterExeAddr(0x1401018d0, reinterpret_cast<uintptr_t>(&DragPlacementTool_ClearPathEntities_1018d0));
 }
-#endif // STANDALONE_EXE

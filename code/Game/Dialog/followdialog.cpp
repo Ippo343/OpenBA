@@ -385,7 +385,6 @@ void FollowDialog_Slot7(FollowDialog* self) {
 // when g_FollowDialog_Vtable is null. The FollowDialog REGISTER_TYPE entry (with
 // its type id and dormant-safe factory) still lives in ui_dialog_stub_factories.cpp;
 // this vtable is only bound to the manually-constructed instance.
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 
@@ -469,4 +468,3 @@ extern "C" void* FollowDialog_GetStandaloneVtable() {
     return GetFollowDialogVtable();
 }
 
-#endif  // STANDALONE_EXE

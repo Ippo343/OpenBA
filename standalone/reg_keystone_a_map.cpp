@@ -13,7 +13,6 @@
 //
 // Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdint>
@@ -37,4 +36,3 @@ void RegisterKeystoneAMapBatch() {
     RegisterExeAddr(0x140124750, reinterpret_cast<uintptr_t>(&CreateNaturalResource_impl_4750));
 }
 
-#endif // STANDALONE_EXE

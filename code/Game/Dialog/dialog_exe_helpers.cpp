@@ -14,9 +14,7 @@
 #include "resolve.h"
 #include <cstdint>
 
-#ifdef STANDALONE_EXE
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
-#endif
 
 // ============================================================
 // WorkplaceUI FindComponent (FUN_14000d6c0, type 0x1401c7008)
@@ -33,13 +31,11 @@ static bool s_tidInit = false;
 void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
     if (!s_tidInit) {
         s_pTid_d6c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7008));
-#ifdef STANDALONE_EXE
         // 0x1401c7008 = BuildComponent TypeInfo (decomp/application.md); NULL in
         // standalone -> fall back to the runtime type registry so the gather Execute's
         // FindComp_Unk actually locates the build component (else null deref at +0x18).
         static uint32_t v_d6c0;
         if (!s_pTid_d6c0) { v_d6c0 = ::Object::GetTypeIdByName("BuildComponent"); s_pTid_d6c0 = &v_d6c0; }
-#endif
         s_tidInit = true;
     }
     void* found = nullptr;

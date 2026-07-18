@@ -709,7 +709,6 @@ void* TutorialGoalCount_Init(void* self) {
 // Vtable @ 0x140160950 (9 slots, Object::External base), size 0x50, parent "TutorialGoal".
 // GetFileVersion (+0x18) = 5. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -744,4 +743,3 @@ extern "C" void* TutorialGoalCount_Factory(void) {
     return p ? TutorialGoalCount_Init(p) : nullptr;
 }
 REGISTER_TYPE(TutorialGoalCount, "TutorialGoal", &TutorialGoalCount_Factory, &TutorialGoalCount_CreateInPlace);
-#endif // STANDALONE_EXE

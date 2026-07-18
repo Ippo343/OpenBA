@@ -24,16 +24,12 @@ static void CemeteryDescription_Init(void* self) {
 }
 
 void CemeteryDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_ExternalPtr_BuildSerialize) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);     // ExternalPtr +0x20
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* CemeteryDescription_Dtor(void* self, uint32_t flags) {
@@ -44,7 +40,6 @@ void* CemeteryDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -92,4 +87,3 @@ static void* CemeteryDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(CemeteryDescription, "Description",
               &CemeteryDescription_Factory, &CemeteryDescription_CreateInPlace);
-#endif

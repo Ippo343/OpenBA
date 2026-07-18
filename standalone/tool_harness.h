@@ -7,7 +7,6 @@
 // See notes/STANDALONE_REG_WAVES_PLAN.md (Wave 5 / Player last-8) and
 // memory project_player_tool_harness.
 #pragma once
-#ifdef STANDALONE_EXE
 
 extern "C" {
 
@@ -19,4 +18,3 @@ void ToolHarness_Tick(void* entityUI, int frameNum);
 
 }  // extern "C"
 
-#endif  // STANDALONE_EXE

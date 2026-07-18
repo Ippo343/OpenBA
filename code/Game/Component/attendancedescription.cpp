@@ -22,16 +22,12 @@ static void AttendanceDescription_Init(void* self) {
 }
 
 void AttendanceDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     g_fn_Serialize_Int(serializer, s + 0x20, nullptr);   // int +0x20
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* AttendanceDescription_Dtor(void* self, uint32_t flags) {
@@ -42,7 +38,6 @@ void* AttendanceDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -90,4 +85,3 @@ static void* AttendanceDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(AttendanceDescription, "Description",
               &AttendanceDescription_Factory, &AttendanceDescription_CreateInPlace);
-#endif

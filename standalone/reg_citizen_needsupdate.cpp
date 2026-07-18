@@ -20,7 +20,6 @@
 // inspect_memory_content; not registered anywhere else):
 //   0x140172114 = 0.5f   (msg-3 happiness increment)
 //   0x140172234 = 300.0f (msg-6/7 Time scale)
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -38,4 +37,3 @@ extern "C" void RegisterCitizenNeedsUpdate() {
     RegisterExeAddr(0x140172114, reinterpret_cast<uintptr_t>(&k_rdata_172114));
     RegisterExeAddr(0x140172234, reinterpret_cast<uintptr_t>(&k_rdata_172234));
 }
-#endif // STANDALONE_EXE

@@ -24,9 +24,7 @@
 #include "Component/ambientenvironmentcomponent_funcs.h"  // InitRegion (ambient biome region/pos)
 #include "Component/pickingcomponent_funcs.h"   // PickingComponent_RegisterMesh (mesh-precise picking)
 #include "Component/storagecomponent_funcs.h"   // StorageComponent_Draw (citizen carry-capacity init)
-#ifdef STANDALONE_EXE
 #include "Component/component_factory_base.h"   // ComponentFactory::LiveEnabled
-#endif
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -593,7 +591,6 @@ static void* FindDescriptionOnTemplate(void* tmpl, uint32_t typeId) {
 // For a WoodHouse this calls ResidenceComponent::OnCreate (+0x38), which (once the
 // BANISHED_LIVE_RESIDENCE factory routes that slot) pushes the house into
 // townMgr+0x20. Gated on the env so the default build never runs it.
-#ifdef STANDALONE_EXE
 // SURGICAL standalone variant: the faithful FUN_1400c2ea0 fires OnCreate(+0x38) on
 // EVERY bit-1 component, but several of those are only partially live in standalone
 // (notably the renderable ModelComponent, whose OnCreate re-initialises the mesh and
@@ -758,7 +755,6 @@ static void StartTown_WireStorage(void* entity, int entryIdx) {
         fflush(stderr);
     }
 }
-#endif // STANDALONE_EXE
 
 // NOTE: the resource path now uses StartTown_PlaceResourceCell (the Entity_impl_6540
 // port: MapComponent grid cell + jittered ModelComponent transform). The structures
@@ -775,7 +771,6 @@ static void ApplyResourceModelVariant(void* entity, uint32_t tidModel,
 // BuildComponent as g_pConstructionDemoSite. State1Enter then drives ONLY that site
 // through gather→build→complete, so no finished building's storage gets clobbered.
 // Index selectable via BANISHED_BUILD_DEMO_INDEX (default 0 = first structure).
-#ifdef STANDALONE_EXE
 extern "C" void* g_pConstructionDemoSite;
 extern "C" void* g_pConstructionDemoEntity;   // the demo foundation's OWNER entity (force-harness work-area)
 static bool BuildDemoEnabled() {
@@ -815,7 +810,6 @@ static bool BuildDemoWantsHouse() {
     }
     return en == 1;
 }
-#endif
 
 // ComponentEntity_impl_1fc0 — spawn the initial buildings around (spawnX,spawnY).
 static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
@@ -1002,7 +996,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
         fn_EntityList_RegisterEntity(entityList, &entIBP, category);
 
-#ifdef STANDALONE_EXE
         // Run the OnCreate pass on the freshly-registered entity (deferred-activation
         // equivalent — see StartTown_RunOnCreatePass). For a WoodHouse this fires
         // ResidenceComponent::OnCreate → registers the house into townMgr+0x20.
@@ -1037,7 +1030,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             // so this sits right after it.
             StartTown_WireStorage(entity, logIndex);
         }
-#endif
 
         fprintf(stderr, "[startTown::struct] [%d] tmpl=%p tile=(%d,%d) fp=%dx%d rot=%d map=%p\n",
                 logIndex, tmpl, tileX, tileY, fpW, fpH, rot, mapComp);
@@ -1051,11 +1043,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
     // spawn a COPY as the foundation AFTER the loop, clear of the whole cluster — every real
     // start house stays complete. Only the house-demo path (default) does this; an explicit
     // BANISHED_BUILD_DEMO_INDEX still marks that in-place building as the foundation.
-#ifdef STANDALONE_EXE
     void* demoTmpl = nullptr;
     int demoW0 = 0, demoH0 = 0;
     int clusterMaxEdgeX = spawnX;
-#endif
 
     for (int i = 0; i < count; ++i) {
         uint8_t* entry = pool + (size_t)i * STRUCT_STRIDE;
@@ -1084,13 +1074,9 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
         const int tileX  = spawnX + offX;
         const int tileY  = spawnY + offY;
 
-#ifdef STANDALONE_EXE
         // In-place demo only for the explicit-index path (default index -1 => never).
         const bool inPlaceDemo = BuildDemoEnabled() && !BuildDemoWantsHouse() &&
                                  (i == BuildDemoIndex());
-#else
-        const bool inPlaceDemo = false;
-#endif
 
         void* ent = placeStructure(tmpl, tileX, tileY, orient, w0, h0, inPlaceDemo, i);
         if (ent) {
@@ -1099,7 +1085,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             if (!g_pForceWorkBuilding) g_pForceWorkBuilding = ent;
         }
 
-#ifdef STANDALONE_EXE
         // Track the cluster's east edge (to place the fresh demo foundation clear of it) and
         // capture the first residence template as the demo-house source. Only the X-extent
         // (footprint width after the orientation axis-swap) matters for the east edge.
@@ -1110,10 +1095,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
             demoTmpl = tmpl; demoW0 = w0; demoH0 = h0;
             g_demoHouseAssigned = true;
         }
-#endif
     }
 
-#ifdef STANDALONE_EXE
     // Spawn the FRESH WoodHouse foundation two tiles east of the cluster, in the spawn row
     // (a walkable band by construction), left at its foundation mesh and recorded as the
     // construction-demo site — so the build-labor harness drives THIS building, not a real
@@ -1128,7 +1111,6 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                 dTileX, dTileY, demoEnt);
         fflush(stderr);
     }
-#endif
 
     return spawned;
 }
@@ -1173,7 +1155,6 @@ static void* ResolveTemplateByPath(const char* path) {
     return tmpl;
 }
 
-#ifdef STANDALONE_EXE
 // Exposed for the standalone tool-injection harness (standalone/tool_harness.cpp):
 // resolve a building DESCRIPTION template ("Template\\<Name>.rsc") to point a
 // PlacementTool's descriptionPtr (+0x20) at. Thin extern "C" wrapper over the
@@ -1181,7 +1162,6 @@ static void* ResolveTemplateByPath(const char* path) {
 extern "C" void* StartTown_ResolveTemplateByPath(const char* path) {
     return ResolveTemplateByPath(path);
 }
-#endif
 
 static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
                                      void* game, int spawnX, int spawnY) {
@@ -1294,14 +1274,12 @@ static void StartTown_SpawnWorkplace(uint8_t* startConfig, void* entityList,
     int category = *(int32_t*)((uint8_t*)tmpl + TEMPLATE_CATEGORY);
     fn_EntityList_RegisterEntity(entityList, &entIBP, category);
 
-#ifdef STANDALONE_EXE
     fn_InternalBasePtr_CheckPtr(&entIBP);
     StartTown_RunOnCreatePass((void*)entIBP);   // fires ResidenceComponent::OnCreate (LIVE_RESIDENCE)
     // Click-to-select: mark the workplace footprint in the region-map cell array (see
     // StartTown_MarkBuildingCells) so EditTool's click-pick resolves it under the cursor.
     fn_InternalBasePtr_CheckPtr(&entIBP);
     StartTown_MarkBuildingCells(game, tileX, tileY, fpW, fpH, entIBP);
-#endif
 
     // ---- THE PHASE A DIAGNOSTIC: dump the component set. --------------------
     fn_InternalBasePtr_CheckPtr(&entIBP);
@@ -1650,7 +1628,7 @@ static uintptr_t SetCitizenModelVariant(void* entity, uint32_t tidModel, int var
     fn_InternalBasePtr_CheckPtr(&mcIBP);
     if (!mcIBP) return 0;
     int chosen = ModelComponent_RandomizeVariant((void*)mcIBP, variantIdx);
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     static int s_varLog = 0;
     if (s_varLog < 12) {
         ++s_varLog;
@@ -1764,7 +1742,7 @@ static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
         char nameBuf[0x100];
         if (GenerateCitizenName(rng, female, nameBuf, (int)sizeof(nameBuf))) {
             fn_String_Ctor_CStr((void*)(citizen + 0x28), nameBuf);
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
             static int s_nameLog = 0;
             if (s_nameLog < 12) {
                 ++s_nameLog;
@@ -1776,7 +1754,7 @@ static void ApplyCitizenColorScale(void* entity, bool isChild, void* rng,
         }
     }
 
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     static int s_appLog = 0;
     if (s_appLog < 12) {
         ++s_appLog;
@@ -1852,7 +1830,7 @@ static void SetCitizenSpawnTransform(void* entity, uint32_t tidModel,
     fn_Transform_FromYawPitchOffset((void*)(m + 0x148), &yaw, &pitch, pos);
     *(float*)(m + 0x168) = yaw;
 
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     static int s_posLog = 0;
     if (s_posLog < 8) {
         ++s_posLog;
@@ -3162,11 +3140,7 @@ static int StartTown_SpawnEnvironment(uint8_t* startConfig, void* world) {
     void* ambTmpl = StartTown_ResolveTemplate(startConfig + 0x138);
     const int chunk = *(int32_t*)(startConfig + 0x150);
     const int dim   = game ? *(int32_t*)game : 0;
-#ifdef STANDALONE_EXE
     const bool ambientLive = ::ComponentFactory::LiveEnabled("BANISHED_AMBIENT_AUDIO");
-#else
-    const bool ambientLive = false;
-#endif
     if (ambTmpl && chunk > 0 && dim > 0) {
         for (int y = 0; y < dim && n2 < ENV_PASS_CAP; y += chunk)
             for (int x = 0; x < dim && n2 < ENV_PASS_CAP; x += chunk) {

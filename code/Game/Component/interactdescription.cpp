@@ -155,7 +155,6 @@ void* InteractDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -201,4 +200,3 @@ extern "C" void* InteractDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(InteractDescription, "Description",
               &InteractDescription_Factory, &InteractDescription_CreateInPlace);
-#endif

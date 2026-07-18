@@ -14,7 +14,6 @@
 // Acceptable for landmine removal — no current path instantiates this; it is
 // registered for completeness. To fully activate, rebuild the 0x14015d440 vtable.
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include <cstdint>
@@ -38,4 +37,3 @@ extern "C" void* CaptureBoxElement_Factory_SA(void) {
 }
 REGISTER_TYPE(CaptureBoxElement, "Element",
               &CaptureBoxElement_Factory_SA, &CaptureBoxElement_CreateInPlace_SA);
-#endif // STANDALONE_EXE

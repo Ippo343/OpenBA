@@ -242,7 +242,6 @@ static void* TimeGoalInstance_Ctor_Impl(void* memory) {
     return memory;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -295,4 +294,3 @@ extern "C" void* TimeGoalInstance_CreateInPlace(void* memory) {
 
 REGISTER_TYPE(TimeGoalInstance, "Achievement::GoalInstance",
               &TimeGoalInstance_Factory, &TimeGoalInstance_CreateInPlace);
-#endif

@@ -12,7 +12,6 @@
 // it properly: a same-size local walker buffer (0x2438) driven by the registered
 // 18dd0/18880, with disasm-verified record-field and result-read offsets. The stale
 // note in reg_action_move.cpp can be dropped by the integrator.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -25,4 +24,3 @@ void RegisterPfRootsMiscBatch() {
     RegisterExeAddr(0x140092260, reinterpret_cast<uintptr_t>(&Pf_SpatialProximityQuery_92260));
     RegisterExeAddr(0x140122340, reinterpret_cast<uintptr_t>(&Pf_HerdStartMigration_122340));
 }
-#endif

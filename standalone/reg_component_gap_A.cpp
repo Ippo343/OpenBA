@@ -26,7 +26,6 @@
 //                 identical body, slot +0x228 vs +0x230)
 //   0x140115a50 FUN_140115a50    -> DEFER: calls 0x140111840 TryFindPartner (unregistered,
 //                 KNOWN citizencomponent Level-2 lifecycle defer) -> NOT registered.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -99,4 +98,3 @@ void RegisterComponentGap_A() {
     RegisterExeAddr(0x1401159b0, reinterpret_cast<uintptr_t>(&AttendanceComponent_ReleaseLink59b0));
     RegisterExeAddr(0x140115a50, reinterpret_cast<uintptr_t>(&AttendanceComponent_ReleasePartnerSlot)); // cascade: TryFindPartner landed
 }
-#endif // STANDALONE_EXE

@@ -14,7 +14,6 @@
 // is inert for the default build.
 //
 // The integrator wires RegisterTownStorageSeed() into address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -30,4 +29,3 @@ extern "C" void RegisterTownStorageSeed() {
     RegisterExeAddr(0x140091660, reinterpret_cast<uintptr_t>(&TownStorage_SpawnResources_91660));
     RegisterExeAddr(0x1400a1f00, reinterpret_cast<uintptr_t>(&StartTown_SeedStartingResources));
 }
-#endif // STANDALONE_EXE

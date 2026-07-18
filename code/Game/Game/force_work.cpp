@@ -3,7 +3,6 @@
 // Extracted from forester_force_harness.cpp (unchanged mechanics) so multiple module
 // tests (forester, construction, ...) share the crash-safe probes + drive step.
 
-#ifdef STANDALONE_EXE
 
 #include "force_work.h"
 #include "engine_funcs.h"
@@ -120,4 +119,3 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void*, void*),
 
 }  // namespace ForceWork
 
-#endif  // STANDALONE_EXE

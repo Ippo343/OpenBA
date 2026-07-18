@@ -18,7 +18,6 @@
 //   dispatch slots (static MemAlloc 0x140152b60, Time::Time 0x140152b00).
 //
 // NOT autostart-exercised (player RemovalTool path) — Ghidra-verified only.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -41,4 +40,3 @@ void RegisterKeystoneARemovalBatch() {
     // the CalcPath itself (full closure now covered)
     RegisterExeAddr(0x1401035e0, reinterpret_cast<uintptr_t>(&RemovalCalc_Slot13));
 }
-#endif

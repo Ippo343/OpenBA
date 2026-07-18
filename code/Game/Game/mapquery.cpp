@@ -133,10 +133,8 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* /*game*/, float* outPos3, float*
     return outPos3;
 }
 
-#ifdef STANDALONE_EXE
 #include "address_registry.h"
 extern "C" void RegisterMapQueryAddrs() {
     // fn_MapGetTerrainPos (~100 call sites) resolves via ResolveAddr(0x14009f3e0).
     RegisterExeAddr(0x14009f3e0, reinterpret_cast<uintptr_t>(&Reimpl_MapGetTerrainPos));
 }
-#endif // STANDALONE_EXE

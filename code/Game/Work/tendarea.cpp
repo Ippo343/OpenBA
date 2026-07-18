@@ -702,7 +702,6 @@ void* TendArea_ScalarDtor_Impl(TendArea* self, uint32_t flags) {
 //   TendArea_Execute_Impl ("returns false") is NOT in the vtable — slot5
 //   is the shared Work_Slot5 (0x1400f7540). Do NOT use TendArea_Execute_Impl.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -742,4 +741,3 @@ extern "C" void* TendArea_Factory(void) {
     return p ? Work_GenericCtor(p, 0x60, g_TendArea_Vtable) : nullptr;
 }
 REGISTER_TYPE(TendArea, "Work", &TendArea_Factory, &TendArea_CreateInPlace);
-#endif // STANDALONE_EXE

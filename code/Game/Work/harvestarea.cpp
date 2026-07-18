@@ -965,7 +965,6 @@ void* HarvestArea_ScalarDtor_Impl(HarvestArea* self, uint32_t flags) {
 //   slot11 (GetPriority) = 0x140029860 — the SHARED HasWorkers thunk;
 //   HarvestArea has NO own GetPriority fn in harvestarea.cpp -> FLAG.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1005,4 +1004,3 @@ extern "C" void* HarvestArea_Factory(void) {
     return p ? Work_GenericCtor(p, 0x68, g_HarvestArea_Vtable) : nullptr;
 }
 REGISTER_TYPE(HarvestArea, "AutoPickupWork", &HarvestArea_Factory, &HarvestArea_CreateInPlace);
-#endif // STANDALONE_EXE

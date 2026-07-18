@@ -13,7 +13,6 @@
 // exe sub-callee closure is satisfied (registered exe code / registered dispatch
 // slot / Runtime export). DEFERRED addresses are documented with the exact
 // unregistered sub-callee.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 #include <unordered_map>
@@ -92,4 +91,3 @@ void RegisterPlayerPlaceBatch() {
     RegisterExeAddr(0x1400fd960,
         reinterpret_cast<uintptr_t>(&PlacementToolPlace_FlipVariant_d960));
 }
-#endif // STANDALONE_EXE

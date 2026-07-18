@@ -130,10 +130,8 @@ void HealerComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_INERT_FACTORY(HealerComponent, 0x48, 0x82)
 REGISTER_TYPE(HealerComponent, "ControllerComponent",
               &HealerComponent_Factory, &HealerComponent_CreateInPlace);
-#endif // STANDALONE_EXE

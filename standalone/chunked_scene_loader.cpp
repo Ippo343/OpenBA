@@ -1,6 +1,5 @@
 // standalone/chunked_scene_loader.cpp — see chunked_scene_loader.h for design.
 
-#ifdef STANDALONE_EXE
 
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"
@@ -134,4 +133,3 @@ bool IsBusy() {
 
 }  // namespace ChunkedSceneLoader
 
-#endif  // STANDALONE_EXE

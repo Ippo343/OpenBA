@@ -148,7 +148,6 @@ extern "C" void* ModelDescription_Slot8(void* self) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -196,4 +195,3 @@ extern "C" void* ModelDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(ModelDescription, "Description",
               &ModelDescription_Factory, &ModelDescription_CreateInPlace);
-#endif // STANDALONE_EXE

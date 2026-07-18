@@ -35,7 +35,6 @@ static void HerbalistDescription_Init(void* self) {
 }
 
 void HerbalistDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
     uint8_t serializer[24];
@@ -54,9 +53,6 @@ void HerbalistDescription_Serialize(void* self, void* stream) {
 
     SerializerEncodingVCall(serializer, 0x98, s + 0x30);   // enum +0x30
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* HerbalistDescription_Dtor(void* self, uint32_t flags) {
@@ -71,7 +67,6 @@ void* HerbalistDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -119,4 +114,3 @@ static void* HerbalistDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(HerbalistDescription, "Description",
               &HerbalistDescription_Factory, &HerbalistDescription_CreateInPlace);
-#endif

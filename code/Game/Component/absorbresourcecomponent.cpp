@@ -178,11 +178,9 @@ void AbsorbResourceComponent_InitFuncs() {
 // (size 0x48, +0x20 capability flags 0x80, Object::Internal base + shared stub
 // vtable, zeroed body). Size from AbsorbResourceComponent_Factory MemAlloc; flags from the
 // Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(AbsorbResourceComponent, 0x48, 0x80)
 REGISTER_TYPE(AbsorbResourceComponent, "ControllerComponent",
               &AbsorbResourceComponent_Factory, &AbsorbResourceComponent_CreateInPlace);
-#endif // STANDALONE_EXE

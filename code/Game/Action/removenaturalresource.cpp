@@ -356,7 +356,6 @@ bool RemoveNaturalResource_GetTarget_Impl(RemoveNaturalResource* self, void* par
 // Vtable @ 0x140160050 (10 slots), size 0x38, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -392,4 +391,3 @@ extern "C" void* RemoveNaturalResource_Factory(void) {
     return Action_Alloc(0x38, g_RemoveNaturalResource_Vtable);
 }
 REGISTER_TYPE(RemoveNaturalResource, "Action", &RemoveNaturalResource_Factory, &RemoveNaturalResource_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -291,7 +291,6 @@ void TombstoneComponent_InitFuncs() {
 // to the prior COMPONENT_INERT_FACTORY (default run unchanged). The only new exe-helper
 // registration is the TombstoneDescription type-id global 0x1401c4a68
 // (reg_component_tombstone.cpp); every other helper was already registered.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 COMPONENT_LIVE_FACTORY_S(TombstoneComponent, 0x30, 0x88,
@@ -299,4 +298,3 @@ COMPONENT_LIVE_FACTORY_S(TombstoneComponent, 0x30, 0x88,
                          TombstoneComponent_Update, TombstoneComponent_Startup)
 REGISTER_TYPE(TombstoneComponent, "Component",
               &TombstoneComponent_Factory, &TombstoneComponent_CreateInPlace);
-#endif // STANDALONE_EXE

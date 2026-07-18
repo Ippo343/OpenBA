@@ -49,7 +49,6 @@ static void MapDescription_Init(void* self) {
 // MapDescription_Serialize (vtable +0x28, 0x140124560)
 // ============================================================
 void MapDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_String_Serialize || !g_fn_Serialize_Bool || !fn_System_Color_Serialize) {
@@ -65,9 +64,6 @@ void MapDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Bool(serializer, s + 0x32, nullptr);      // bool    +0x32
     fn_System_Color_Serialize(s + 0x34, serializer);         // Color   +0x34
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 // ============================================================
@@ -83,7 +79,6 @@ void* MapDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -141,4 +136,3 @@ static void* MapDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(MapDescription, "Description",
               &MapDescription_Factory, &MapDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

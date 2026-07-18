@@ -21,7 +21,6 @@
 //   0x14015f5a0 g_ToolUI_ChildDialog_Vtable — registered to the static C++ array so
 //     ResolveAddr(Module::Exe, 0x14015f5a0) returns it (mirrors how mainmenudialog.cpp
 //     registers its standalone dialog vtable at 0x14015f550).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -86,4 +85,3 @@ void RegisterPlayerToolUIBatch() {
     g_ToolUI_ChildDialog_Vtable =
         reinterpret_cast<uintptr_t>(g_ToolUI_ChildDialog_Vtable_Standalone);
 }
-#endif // STANDALONE_EXE

@@ -35,9 +35,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (M-D scoped finder fallback)
-#endif
 
 namespace {
 
@@ -619,7 +617,6 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
     if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(reinterpret_cast<void*>(s + 0x10));
     uintptr_t ibp = 0;   // local_res8 (object pointer after ClearPathQueue)
     if (s_fn_ClearPathQueue) s_fn_ClearPathQueue(*reinterpret_cast<int64_t*>(s + 0x10), &ibp);
-#ifdef STANDALONE_EXE
     // [M-D SCOPED FALLBACK] "ClearPathQueue" = the shared ModelComponent finder
     // FUN_140003f60, whose type-id comes from raw .rdata 0x1401c7a50 — NULL in
     // standalone, so the find never matches (the GrowthComponent +0x30 lesson;
@@ -650,7 +647,6 @@ void* Pf_EntityResolvePos_2e20(void* self, float* retVec3, int p3, int p4, float
             return retVec3;
         }
     }
-#endif
 
     // Point node for (p3, p4) from the description's pair list — disasm-verified
     // (0x140122ea2..0x140122f42): pair {array,count} stride 0x10 at desc+0x28+p3*0x10;

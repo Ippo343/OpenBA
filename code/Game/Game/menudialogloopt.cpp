@@ -665,7 +665,6 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     void* sceneRng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
     uint32_t variant = fn_Random_Rand(sceneRng, 10);
 
-#ifdef STANDALONE_EXE
     // Diagnostic lever: BANISHED_MENU_SCENE pins the menu scene index (0..9) so
     // the otherwise-random MenuScene/SceneN.rsc choice becomes deterministic.
     // Lets us reproduce the intermittent menu heap-overflow per-scene instead
@@ -676,7 +675,6 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
                "(rng would have picked %u)\n", forced, variant);
         variant = forced;
     }
-#endif
 
     // Format the scene path (Game/MenuScene/Scene{0..9}.rsc).
     uint8_t stringBuf[16] = {};

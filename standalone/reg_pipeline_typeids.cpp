@@ -32,7 +32,6 @@
 //
 // The integrator wires RegisterPipelineTypeIds() into address_registry.cpp and
 // FillPipelineTypeIds() into game_main.cpp (after the Engine::Startup CRC probe).
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include "Object/factory_registration.h"     // Object::GetTypeIdByName
 #include "Component/component_factory_base.h" // ComponentFactory::LiveEnabled
@@ -65,4 +64,3 @@ void RegisterPipelineTypeIds() {
     // 0x1401c79e0 (MapComponent) intentionally omitted — already registered by
     // RegisterEconomyTypeIds() (reg_economy_typeids.cpp).
 }
-#endif // STANDALONE_EXE

@@ -75,7 +75,6 @@ extern "C" void* StorageLocationDescription_Slot8(void* self) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -121,4 +120,3 @@ extern "C" void* StorageLocationDescription_CreateInPlace(void* mem) {
 
 REGISTER_TYPE(StorageLocationDescription, "Description",
               &StorageLocationDescription_Factory, &StorageLocationDescription_CreateInPlace);
-#endif // STANDALONE_EXE

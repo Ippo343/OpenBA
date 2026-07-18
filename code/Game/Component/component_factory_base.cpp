@@ -7,7 +7,6 @@
 #include <cstring>
 #include <cstdlib>
 
-#ifdef STANDALONE_EXE
 
 namespace {
 
@@ -120,4 +119,3 @@ bool LiveEnabled(const char* envVar) {
 
 }  // namespace ComponentFactory
 
-#endif  // STANDALONE_EXE

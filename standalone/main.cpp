@@ -8,7 +8,6 @@
 // This is the long-term goal. Initially many functions will hit NOT_IMPLEMENTED
 // stubs. As the address registry fills in, more gameplay systems come alive.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -1353,4 +1352,3 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR lpCmdLine, int) {
     return rc;
 }
 
-#endif // STANDALONE_EXE

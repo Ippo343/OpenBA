@@ -418,7 +418,6 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x38 (SpawnComponent_Factory MemAlloc), flags 0x88 (Ctor 0x140056030:
 // Component base sets +0x20=0x80, leaf OR 0x88 => 0x88).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
@@ -436,4 +435,3 @@ COMPONENT_LIVE_FACTORY_S(SpawnComponent, 0x38, 0x88,
                          "BANISHED_LIVE_SPAWN", SpawnComponent_Update, SpawnComponent_Startup)
 REGISTER_TYPE(SpawnComponent, "Component",
               &SpawnComponent_Factory, &SpawnComponent_CreateInPlace);
-#endif // STANDALONE_EXE

@@ -649,7 +649,6 @@ bool MarketWork_Slot11_Impl(MarketWork* self) {
 //   slot8 Cleanup = Slot8 (CancelAll), slot9 Validate = Slot9 (RemoveInvalid),
 //   slot10 GetTarget = Slot10 (GetWorkEntity), slot11 GetPriority = Slot11.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -715,4 +714,3 @@ extern "C" void* MarketWork_Factory(void) {
     return p ? MarketWork_Ctor_Impl((MarketWork*)p) : nullptr;
 }
 REGISTER_TYPE(MarketWork, "Work", &MarketWork_Factory, &MarketWork_CreateInPlace);
-#endif // STANDALONE_EXE

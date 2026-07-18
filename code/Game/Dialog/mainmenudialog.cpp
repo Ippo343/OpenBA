@@ -746,7 +746,6 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
     }
 }
 
-#ifdef STANDALONE_EXE
 
 // ============================================================
 // MainMenuDialog standalone scaffolding
@@ -1228,4 +1227,3 @@ extern "C" void* MainMenuDialog_StandaloneCreateInPlace(void* memory) {
 REGISTER_TYPE(MainMenuDialog, "UI::DialogInstance",
               &MainMenuDialog_StandaloneFactory, &MainMenuDialog_StandaloneCreateInPlace);
 
-#endif  // STANDALONE_EXE

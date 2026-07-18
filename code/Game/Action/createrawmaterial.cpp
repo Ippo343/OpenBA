@@ -553,7 +553,6 @@ int CreateRawMaterial_GetTarget_Impl(CreateRawMaterial* self, void* param) {
 // Vtable @ 0x14015fd10 (10 slots), size 0x58, parent "Action".
 // Shared slot helpers live in action_base_standalone.{h,cpp}.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -589,4 +588,3 @@ extern "C" void* CreateRawMaterial_Factory(void) {
     return Action_Alloc(0x58, g_CreateRawMaterial_Vtable);
 }
 REGISTER_TYPE(CreateRawMaterial, "Action", &CreateRawMaterial_Factory, &CreateRawMaterial_CreateInPlace);
-#endif // STANDALONE_EXE

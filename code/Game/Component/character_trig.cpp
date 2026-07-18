@@ -13,11 +13,9 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include <cmath>
 
 extern "C" float CharacterComponent_Sinf_131c90(float x) { return sinf(x); }
 extern "C" float CharacterComponent_Cosf_131090(float x) { return cosf(x); }
 
-#endif // STANDALONE_EXE

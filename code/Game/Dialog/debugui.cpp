@@ -1529,7 +1529,6 @@ void DebugUI_Slot4(DebugUI* self) {
 // g_pEngineSingleton (used by Slot8) is null in standalone; Slot8 already opens
 // with `if (!g_pEngineSingleton) return;`, so the perf counters simply stay
 // blank there — no crash, no gating needed.
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
@@ -1670,4 +1669,3 @@ void* InPlace(void* m) {
 REGISTER_TYPE(DebugUI, "DialogController",
               &debugui_sa::Factory, &debugui_sa::InPlace);
 
-#endif  // STANDALONE_EXE

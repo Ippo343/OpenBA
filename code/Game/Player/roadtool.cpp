@@ -555,7 +555,6 @@ void RoadTool_Draw(RoadTool* self, void* context, char param3) {
 // RoadTool: size 0x48, parent DragTool, 15-slot vtable @ 0x140161e70.
 // NOTE: slot13 CalcPath is not reimplemented (stubbed); slot14 CalcCost is.
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -590,4 +589,3 @@ extern "C" void* RoadTool_Factory_SA(void) {
     return Tool_Alloc(0x48, g_RoadTool_Vtable, 1);
 }
 REGISTER_TYPE(RoadTool, "DragTool", &RoadTool_Factory_SA, &RoadTool_CreateInPlace_SA);
-#endif // STANDALONE_EXE

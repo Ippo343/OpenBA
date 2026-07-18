@@ -138,11 +138,9 @@ void MarketLocationComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0x48 (MarketLocationComponent_Factory MemAlloc), flags 0x82 (Ctor
 // 0x14004f060: Component base sets +0x20=0x80, leaf OR 0x2 => 0x82).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 
 COMPONENT_INERT_FACTORY(MarketLocationComponent, 0x48, 0x82)
 REGISTER_TYPE(MarketLocationComponent, "ControllerComponent",
               &MarketLocationComponent_Factory, &MarketLocationComponent_CreateInPlace);
-#endif // STANDALONE_EXE

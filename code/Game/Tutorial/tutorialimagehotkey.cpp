@@ -298,7 +298,6 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
 // Vtable @ 0x140160ab0 (9 slots, Object::External base), size 0x48, parent "TutorialImage".
 // GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -333,4 +332,3 @@ extern "C" void* TutorialImageHotKey_Factory(void) {
     return p ? TutorialImageHotKey_Ctor(p) : nullptr;
 }
 REGISTER_TYPE(TutorialImageHotKey, "TutorialImage", &TutorialImageHotKey_Factory, &TutorialImageHotKey_CreateInPlace);
-#endif // STANDALONE_EXE

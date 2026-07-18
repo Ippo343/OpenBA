@@ -22,7 +22,6 @@
 // env BANISHED_LIVE_CHARACTER_MOVETICK) runs. Driving only when the stack is idle lets the
 // previously-pushed sequence finish before the next Execute.
 #pragma once
-#ifdef STANDALONE_EXE
 
 #include <cstdint>
 #include <cstddef>
@@ -69,4 +68,3 @@ int DriveWhenIdle(void* citizen, void* work, int (*driveFn)(void* work, void* ci
 
 }  // namespace ForceWork
 
-#endif  // STANDALONE_EXE

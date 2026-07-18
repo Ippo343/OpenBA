@@ -141,7 +141,6 @@ void MessageDialog_Slot13(MessageDialog* self) {
 // own at 0x14015c480. No additional fields to init beyond DialogInstance's.
 //
 // Mirrors the OptionInputBindDialog standalone wiring above.
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -287,4 +286,3 @@ REGISTER_TYPE(MessageDialog, "UI::DialogInstance",
               &MessageDialog_StandaloneFactory,
               &MessageDialog_StandaloneCreateInPlace);
 
-#endif  // STANDALONE_EXE

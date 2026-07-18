@@ -25,7 +25,6 @@
 //
 // This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -314,4 +313,3 @@ bool CitizenAI_State_Wander(int64_t param_1) {
     return true;
 }
 
-#endif // STANDALONE_EXE

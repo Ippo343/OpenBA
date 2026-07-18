@@ -12,7 +12,6 @@
 //
 // Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdint>
@@ -30,4 +29,3 @@ void RegisterWorkWalkposBatch() {
     RegisterExeAddr(0x1400f6ef0, reinterpret_cast<uintptr_t>(&WorkImpl_BuildStructureStep_6ef0));
 }
 
-#endif // STANDALONE_EXE

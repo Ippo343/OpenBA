@@ -361,16 +361,13 @@ typedef void (*fn_BuildCandidateList_t)(void* self, int64_t* outList, char param
 static fn_ValidateEnterState_t s_fn_ValidateEnterState = nullptr;
 static fn_BuildCandidateList_t s_fn_BuildCandidateList = nullptr;
 
-#ifdef STANDALONE_EXE
 namespace Object { uint32_t GetTypeIdByName(const char*); }
-#endif
 
 static bool s_calleeResolved = false;
 static void EnsureCallees() {
     if (s_calleeResolved) return;
     s_TypeId_ResidenceComponent = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cf0));
     s_TypeId_RawMaterial         = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
-#ifdef STANDALONE_EXE
     // The .rdata type-id globals (c7cf0 ResidenceComponent / c7cb8 RawMaterialDescription)
     // are 0xFFFFFFFF (unfilled) in standalone, and filling the SHARED globals would
     // un-dormant ~30 unrelated readers. Repoint to private storage filled from the
@@ -385,7 +382,6 @@ static void EnsureCallees() {
         if (s_tidRawMaterial_local == 0) s_tidRawMaterial_local = ::Object::GetTypeIdByName("RawMaterialDescription");
         s_TypeId_RawMaterial = &s_tidRawMaterial_local;
     }
-#endif
     s_fn_SetupYoung = reinterpret_cast<fn_SetupYoung_t>(ResolveAddr(Module::Exe, 0x140115110));
     s_fn_SetupAdult = reinterpret_cast<fn_SetupAdult_t>(ResolveAddr(Module::Exe, 0x1401151a0));
     s_fn_SetupElder = reinterpret_cast<fn_SetupElder_t>(ResolveAddr(Module::Exe, 0x140115230));
@@ -428,7 +424,7 @@ static void CitizenComp_SetupAgeMesh(void* citizenP, float scale) {
     *reinterpret_cast<float*>(mesh + 0x138) = scale;
     *reinterpret_cast<float*>(mesh + 0x13c) = scale;
     *reinterpret_cast<float*>(mesh + 0x140) = (float)idx;
-#if defined(STANDALONE_EXE) && defined(_DEBUG)
+#if defined(_DEBUG)
     static int s_setupLog = 0;
     if (s_setupLog < 24) {
         ++s_setupLog;
@@ -694,7 +690,6 @@ void CitizenAIComponent_InitFuncs() {
 // ===== Standalone factory (Foundation D — component instantiation) =====
 // size 0xd0 (CitizenAIComponent_Factory MemAlloc), flags 0x89 (Ctor 0x14010fb70:
 // Component base sets +0x20=0x80, leaf OR 0x89 => 0x89).
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include <cstdlib>
@@ -909,4 +904,3 @@ COMPONENT_LIVE_FACTORY_S(CitizenAIComponent, 0xd0, 0x89,
                          CitizenAIComponent_BodyInit)
 REGISTER_TYPE(CitizenAIComponent, "Component",
               &CitizenAIComponent_Factory, &CitizenAIComponent_CreateInPlace);
-#endif // STANDALONE_EXE

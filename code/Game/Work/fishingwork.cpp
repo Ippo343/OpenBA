@@ -965,7 +965,6 @@ void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
 //                         (or in-place exe-ctor call) is written.
 //   - ResolveFuncs      : FishingWork_ResolveFuncs() (does NOT resolve a vtable).
 // ============================================================
-#ifdef STANDALONE_EXE
 #include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -1005,4 +1004,3 @@ extern "C" void* FishingWork_Factory(void) {
     return p ? Work_GenericCtor(p, 0x70, g_FishingWork_Vtable) : nullptr;
 }
 REGISTER_TYPE(FishingWork, "Work", &FishingWork_Factory, &FishingWork_CreateInPlace);
-#endif // STANDALONE_EXE

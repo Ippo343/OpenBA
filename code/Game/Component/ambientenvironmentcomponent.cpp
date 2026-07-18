@@ -45,9 +45,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
-#endif
 
 // Emitter-array resize helper, shared with the sibling component reimpl
 // (exe FUN_140001770 / AmbientEmitterComponent_sub_1770).
@@ -68,19 +66,9 @@ bool s_resolved = false;
 
 void EnsureResolved() {
     if (s_resolved) return;
-#ifdef STANDALONE_EXE
     s_tidEnvDesc     = ::Object::GetTypeIdByName("AmbientEnvironmentDescription");
     s_tidEmitterComp = ::Object::GetTypeIdByName("AmbientEmitterComponent");
     s_tidEmitterDesc = ::Object::GetTypeIdByName("AmbientEmitterDescription");
-#else
-    auto rd = [](uintptr_t a) -> uint32_t {
-        uintptr_t p = ResolveAddr(Module::Exe, a);
-        return p ? *reinterpret_cast<uint32_t*>(p) : 0;
-    };
-    s_tidEnvDesc     = rd(0x1401c3f08);
-    s_tidEmitterComp = rd(0x1401c3e60);
-    s_tidEmitterDesc = rd(0x1401c3e98);
-#endif
     // Only latch as resolved once the factory registry has frozen the ids
     // (they start at the 0xFFFFFFFF sentinel before Factory::Startup).
     if (s_tidEnvDesc != 0 && s_tidEnvDesc != 0xFFFFFFFFu)
@@ -432,7 +420,6 @@ void AmbientEnvironmentComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 // Route the per-tick Update slot (vtable +0x48 / index 9) to the biome-ambient
@@ -443,4 +430,3 @@ COMPONENT_LIVE_FACTORY(AmbientEnvironmentComponent, 0x48, 0x88,
                        "BANISHED_AMBIENT_AUDIO", AmbientEnvironmentComponent_Update)
 REGISTER_TYPE(AmbientEnvironmentComponent, "Component",
               &AmbientEnvironmentComponent_Factory, &AmbientEnvironmentComponent_CreateInPlace);
-#endif // STANDALONE_EXE

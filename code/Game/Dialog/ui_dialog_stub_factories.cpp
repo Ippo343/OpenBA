@@ -33,7 +33,6 @@
 // code/Game/Dialog/<type>.cpp (used by DLL-hook mode); this file only supplies
 // the standalone construction/registration the exe ctors used to provide.
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
@@ -786,4 +785,3 @@ UI_DIALOG_STUB(TutorialSetupDialog, "TutorialSetup",        0x78);
 
 #undef UI_DIALOG_STUB
 
-#endif  // STANDALONE_EXE

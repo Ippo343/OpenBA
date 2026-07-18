@@ -6,7 +6,6 @@
 //
 // The integrator wires RegisterRegionPairCacheBatch() into RegisterCodeFunctions() in
 // address_registry.cpp.
-#ifdef STANDALONE_EXE
 #include "resolve.h"
 #include <cstdint>
 
@@ -15,4 +14,3 @@ extern void Pf_RegionPairRingResize_cca0(int64_t* param_1);   // 0x14001cca0
 void RegisterRegionPairCacheBatch() {
     RegisterExeAddr(0x14001cca0, reinterpret_cast<uintptr_t>(&Pf_RegionPairRingResize_cca0));
 }
-#endif

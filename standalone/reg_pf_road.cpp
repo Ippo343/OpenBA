@@ -9,7 +9,6 @@
 //
 // Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include <cstdint>
@@ -40,4 +39,3 @@ void RegisterPfRoadBatch() {
     RegisterExeAddr(0x1400af370, reinterpret_cast<uintptr_t>(&Pf_RoadMeshRebuild_f370));
 }
 
-#endif // STANDALONE_EXE

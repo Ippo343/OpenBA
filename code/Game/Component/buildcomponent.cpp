@@ -25,9 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
-#endif
 
 // Draw trace (BANISHED_BUILD_TRACE): confirms the per-frame Draw runs for build sites
 // and reports the mesh-list (+0x58/+0x60) fill. Shares the construction trace env var.
@@ -304,14 +302,8 @@ static uint32_t s_tid_Storage    = 0;   // DAT_1401c7c10
 static uint32_t s_tid_Workplace  = 0;   // DWORD_1401c7ac0
 static bool s_bcDrawResolved = false;
 static uint32_t BC_ResolveTid(uintptr_t rdataGlobal, const char* name) {
-#ifdef STANDALONE_EXE
     (void)rdataGlobal;
     return ::Object::GetTypeIdByName(name);
-#else
-    (void)name;
-    uintptr_t g = ResolveAddr(Module::Exe, rdataGlobal);
-    return g ? *reinterpret_cast<uint32_t*>(g) : 0;
-#endif
 }
 static void EnsureDrawHelpers() {
     if (s_bcDrawResolved) return;
@@ -537,7 +529,6 @@ void BuildComponent_InitFuncs() {
 }
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "Component/controller_live_base.h"
@@ -651,4 +642,3 @@ REGISTER_TYPE(BuildComponent, "ControllerComponent",
 static void BuildComponent_InstallMsgSlot() {
     BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
 }
-#endif // STANDALONE_EXE

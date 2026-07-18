@@ -116,7 +116,6 @@ void* Disease_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -160,4 +159,3 @@ static void* Disease_CreateInPlace(void* mem) {
 }
 
 REGISTER_TYPE(Disease, "Object::External", &Disease_Factory, &Disease_CreateInPlace);
-#endif

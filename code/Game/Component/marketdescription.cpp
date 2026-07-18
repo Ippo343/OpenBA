@@ -34,7 +34,6 @@ static void MarketDescription_Init(void* self) {
 }
 
 void MarketDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int ||
         !fn_Serializer_Serialize_Float) return;
@@ -60,9 +59,6 @@ void MarketDescription_Serialize(void* self, void* stream) {
         }
     }
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* MarketDescription_Dtor(void* self, uint32_t flags) {
@@ -77,7 +73,6 @@ void* MarketDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
@@ -125,4 +120,3 @@ static void* MarketDescription_CreateInPlace(void* memory) {
 }
 REGISTER_TYPE(MarketDescription, "Description",
               &MarketDescription_Factory, &MarketDescription_CreateInPlace);
-#endif

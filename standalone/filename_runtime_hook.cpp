@@ -42,7 +42,6 @@
 // Env: BANISHED_FNHOOK=1 enable (default OFF). stderr is the reliable channel
 // (stdout/standalone_debug.log is lost on a hard-kill crash).
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 
@@ -673,4 +672,3 @@ extern "C" void InstallReadGuard() {
     fflush(stderr);
 }
 
-#endif // STANDALONE_EXE

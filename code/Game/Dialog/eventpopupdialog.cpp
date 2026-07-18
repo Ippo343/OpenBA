@@ -98,7 +98,6 @@ void EventPopupDialog_Slot8(EventPopupDialog* self, void* /*param2*/, int param3
 // DialogInstance slots: idx0 Dtor, idx2 GetTypeId, idx4 Setup (Slot4), idx8 OnCommand
 // (Slot8 -> close on buttonOk id=200); idx3/5/6/7/9 are base serialize/thunk no-ops.
 // The event index this popup displays is stored at +0xB8 (read by Slot4).
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include <cstddef>
@@ -172,4 +171,3 @@ extern "C" void* EventPopupDialog_Ctor_Standalone(void* self, void* ui, void* ex
 }
 extern "C" void* EventPopupDialog_GetStandaloneVtable() { return eventpopup_sa::GetVtable(); }
 
-#endif  // STANDALONE_EXE

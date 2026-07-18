@@ -31,17 +31,13 @@
 #include <cstdlib>
 #include <cstring>
 
-#ifdef STANDALONE_EXE
 #include "Object/factory_registration.h"
-#endif
 
 // Ported leaves (this brick):
 extern "C" bool  BuildComponent_HaveAllMaterials(void* buildComp);          // sub_8630
 extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP); // 0x1400ec710
-#ifdef STANDALONE_EXE
 // town_workplace_registry.cpp — register a workplace into townMgr+0x100 (profession map).
 extern "C" void  TownRegistry_RegisterWorkplace(int64_t townMgr, void* workplaceComp);
-#endif
 
 // ---- Exe helpers (all already registered in standalone unless noted) -------------
 // FUN_140004740 InteractComponent_FindWorkplaceComponent(entity, retIBP) -> retIBP
@@ -64,14 +60,8 @@ typedef void* (*BCS1_FindStorage_t)(uintptr_t entity, void* retIBP);
 typedef void  (*BCS1_StorageResize_t)(void* slotArrayField, int count);
 
 static uint32_t BCS1_TypeId(const char* name, uintptr_t rdataGlobal) {
-#ifdef STANDALONE_EXE
     (void)rdataGlobal;
     return ::Object::GetTypeIdByName(name);
-#else
-    (void)name;
-    uintptr_t g = ResolveAddr(Module::Exe, rdataGlobal);
-    return g ? *reinterpret_cast<uint32_t*>(g) : 0;
-#endif
 }
 
 // Scan a material entity's component list (+0x28 array, +0x30 count) for the first
@@ -131,7 +121,6 @@ extern "C" { void* g_pConstructionDemoSite = nullptr; }
 // The construction force harness uses it as the GatherRawMaterials/BuildStructure work-area.
 extern "C" { void* g_pConstructionDemoEntity = nullptr; }
 
-#ifdef STANDALONE_EXE
 // Best-effort completion check: a force-completed building has its ModelComponent build
 // variant (+0x166) at the final sub-mesh of a multi-stage group; a genuine foundation
 // sits at variant 0. Foundation / single-mesh buildings -> false (i.e. "build me").
@@ -183,7 +172,6 @@ extern "C" bool BuildComponent_DemoGateSkip(void* buildComp) {
     if (g_pConstructionDemoSite != nullptr) return true;
     return BCS1_IsModelComplete(reinterpret_cast<uintptr_t>(buildComp));
 }
-#endif
 
 // The state-1 ENTER handler. param1 = BuildComponent, param2 = state-machine node.
 extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
@@ -221,7 +209,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
         s_res = true;
     }
 
-#ifdef STANDALONE_EXE
     // ---- Construction-demo gate (see g_pConstructionDemoSite header note) ----------
     // Must run BEFORE any mutation (multiplier write / model reset / storage reset).
     if (BuildComponent_DemoGateSkip(buildComp)) {
@@ -230,7 +217,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                          buildComp, g_pConstructionDemoSite);
         return 1;
     }
-#endif
 
     // +0x4c = 1 (default multiplier)
     *reinterpret_cast<uint32_t*>(self + 0x4c) = 1;
@@ -393,7 +379,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                     if (BCS1_Trace())
                         std::fprintf(stderr, "[BuildTrace] WorkPlaceComponent accepting enabled (wpc=%p +0x50 %d->1)\n",
                                      wpc, (int)prev);
-#ifdef STANDALONE_EXE
                     // 2c-B: mark the site's WorkPlaceComponent as a "Builder workplace" —
                     // WPC+0x48 = Builder marker = *(*(gw+0xb0)+0x38). Retail's construction-start
                     // handler FUN_14012f520 does this (the inert WPC controller never runs it in
@@ -436,7 +421,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
                         std::fprintf(stderr, "[BuildTrace] site WorkPlaceComponent -> Builder (WPC+0x48=0x%llx, no townMgr+0x100 register; seat in State8Enter)\n",
                                      (unsigned long long)builderMarker);
                     }
-#endif
                 }
             } else if (BCS1_Trace()) {
                 std::fprintf(stderr, "[BuildTrace] (no WorkPlaceComponent on site to enable)\n");
@@ -457,8 +441,6 @@ extern "C" int BuildComponent_State1Enter(void* buildComp, void* smNode) {
     return 1;
 }
 
-#ifdef STANDALONE_EXE
 extern "C" void RegisterBuildComponentState1() {
     RegisterExeAddr(0x140108290, reinterpret_cast<uintptr_t>(&BuildComponent_State1Enter));
 }
-#endif

@@ -29,17 +29,11 @@ static void* StateMachineDescription_Ctor_Impl(void* mem) {
 }
 
 void StateMachineDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     (void)self;
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
     g_fn_Serializer_Dtor(serializer);
-#else
-    typedef void (*fn_t)(void*, void*);
-    fn_t orig = reinterpret_cast<fn_t>(ResolveAddr(Module::Exe, kSerializeAddr));
-    if (orig) orig(self, stream);
-#endif
 }
 
 void* StateMachineDescription_Dtor(void* self, uint32_t flags) {
@@ -52,7 +46,6 @@ void* StateMachineDescription_Dtor(void* self, uint32_t flags) {
 // ============================================================
 // STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
 // ============================================================
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -126,4 +119,3 @@ extern "C" void* StateMachineDescription_Factory(void) {
 REGISTER_TYPE(StateMachineDescription, "Description",
               &StateMachineDescription_Factory, &StateMachineDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE

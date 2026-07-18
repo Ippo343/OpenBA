@@ -56,7 +56,6 @@
 //                the Work classes (FUN_140002f90) — those paths need an employed citizen, not
 //                reached in the default Easy town, so A/B the default build after filling.
 
-#ifdef STANDALONE_EXE
 
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -226,4 +225,3 @@ extern "C" void FillEconomyTypeIdGlobals() {
     g_tid_CreateDragDescription    = ::Object::GetTypeIdByName("CreateDragDescription");
 }
 
-#endif // STANDALONE_EXE

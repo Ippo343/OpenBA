@@ -32,7 +32,6 @@
 // CRASH SAFETY: single observable subject; refuse to drive until deps resolve; all foreign
 // reads go through ForceWork's VirtualQuery-backed probes.
 
-#ifdef STANDALONE_EXE
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -253,4 +252,3 @@ extern "C" bool StartTown_ForcePushConstructionWork(void* citizen) {
     return true;
 }
 
-#endif  // STANDALONE_EXE

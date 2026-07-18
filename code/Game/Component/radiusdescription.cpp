@@ -33,7 +33,6 @@ static void RadiusDescription_Init(void* self) {
 }
 
 void RadiusDescription_Serialize(void* self, void* stream) {
-#ifdef STANDALONE_EXE
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
         !g_fn_Serialize_Int || !fn_ExternalPtr_Serialize3) {
@@ -44,9 +43,6 @@ void RadiusDescription_Serialize(void* self, void* stream) {
     g_fn_Serialize_Int(serializer, s + 0x28, nullptr);   // int         +0x28
     fn_ExternalPtr_Serialize3(s + 0x20, serializer);     // ExternalPtr +0x20
     g_fn_Serializer_Dtor(serializer);
-#else
-    (void)self; (void)stream;
-#endif
 }
 
 void* RadiusDescription_Dtor(void* self, uint32_t flags) {
@@ -57,7 +53,6 @@ void* RadiusDescription_Dtor(void* self, uint32_t flags) {
     return self;
 }
 
-#ifdef STANDALONE_EXE
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
@@ -110,4 +105,3 @@ static void* RadiusDescription_CreateInPlace(void* memory) {
 REGISTER_TYPE(RadiusDescription, "Description",
               &RadiusDescription_Factory, &RadiusDescription_CreateInPlace);
 
-#endif // STANDALONE_EXE
