@@ -17,6 +17,7 @@ extern void* WorkBase_FindComponent_2f90(uintptr_t, void*);  // 0x140002f90 type
 extern void* WorkBase_FindComponent_3050(uintptr_t, void*);  // 0x140003050 type 0x1401c8070
 extern void* WorkBase_FindComponent_52c0(uintptr_t, void*);  // 0x1400052c0 type 0x1401c7b30
 extern void* WorkBase_FindComponent_6270(uintptr_t, void*);  // 0x140006270 type 0x1401c7e78
+extern void* WorkBase_FindComponent_15140(uintptr_t, void*); // 0x140015140 type 0x1401c4b80 (TradeComponent)
 
 // Recursive tree free (work_base_reimpl.cpp) — void fn(void* root, void* node)
 extern void WorkBase_TreeNodeFree_14c30(void*, void*);       // 0x140014c30 children +0x10/+0x18
@@ -40,6 +41,7 @@ void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x140003050, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_3050));
     RegisterExeAddr(0x1400052c0, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_52c0));
     RegisterExeAddr(0x140006270, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_6270));
+    RegisterExeAddr(0x140015140, reinterpret_cast<uintptr_t>(&WorkBase_FindComponent_15140));
     RegisterExeAddr(0x140014c30, reinterpret_cast<uintptr_t>(&WorkBase_TreeNodeFree_14c30));
     RegisterExeAddr(0x14000e320, reinterpret_cast<uintptr_t>(&WorkBase_TreeNodeFree_e320));
     RegisterExeAddr(0x1400c5400, reinterpret_cast<uintptr_t>(&WorkBase_TaskListCleanup_c5400));

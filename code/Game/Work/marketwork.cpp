@@ -219,7 +219,7 @@ bool MarketWork_ResolveFuncs() {
 
 
 // ============================================================
-// MarketWork::Slot4 -- Main market trading logic
+// MarketWork::Slot4 -- Main market trading logic (exe 0x1400eff80)
 // ============================================================
 //
 // This function is extremely complex (~400+ instructions) and involves:
@@ -231,25 +231,26 @@ bool MarketWork_ResolveFuncs() {
 // - Distance scoring and best entity selection
 // - FindPath action creation and resource transfer
 //
-// Not yet reimplemented. For now, resolve and call the original exe
-// function directly.
+// STATUS: NOT reimplemented, and a faithful port is currently BLOCKED.
+//   Slot4's closure needs a 7-function MarketWork AVL/BST helper block
+//   (exe 0x14002a9f0, 0x14002afb0, 0x14002b680, 0x14002ba70, 0x14002ab60,
+//   0x14002ae50, 0x14002bd80) that is neither reimplemented nor registered.
+//   In standalone those resolve to 0, so a port would EXEC-of-0 crash. This
+//   is the historical "caller-bug BST block": the original resolver used
+//   dropped-digit typo addresses (0x1400fa9f0.. -> real 0x14002a9f0..) AND
+//   under-counted arg lists (sub_a9f0 takes 4 args, not 2). Both must be
+//   fixed together before this block can be ported. See reg_work_leaf.cpp.
 //
-// TODO: Full reimplementation when all sub-functions are understood.
-// The original function address is 0x1400eff80.
+// This body is DEAD: nothing dispatches to it. The MarketWork vtable's
+// Execute slot (+0x20) points at MarketWork_Execute_Impl (returns false),
+// so market trading is currently inert (a safe no-op), not corrupt. Even if
+// reached, ResolveAddr(Module::Exe, 0x1400eff80) is unregistered -> returns
+// 0 -> this returns 1 (no work). Kept only to document the intended wiring.
 //
-int MarketWork_Slot4_Impl(MarketWork* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    // Not yet reimplemented.
-    // Call the original function directly via resolved address.
-    typedef int (*MW_Slot4_Orig_t)(void* self, void* param2, void* param3);
-    static MW_Slot4_Orig_t s_fn_Slot4_Original = nullptr;
-    if (!s_fn_Slot4_Original) {
-        s_fn_Slot4_Original = reinterpret_cast<MW_Slot4_Orig_t>(
-            ResolveAddr(Module::Exe, 0x1400eff80));
-    }
-    if (s_fn_Slot4_Original) {
-        return s_fn_Slot4_Original(self, entityIBP, nullptr);
-    }
-    return 0;
+int MarketWork_Slot4_Impl(MarketWork* /*self*/, void* /*entityIBP*/, uint64_t /*param3*/, uint64_t /*param4*/) {
+    // BLOCKED on the 7-function AVL helper block above. Until that is ported
+    // and registered, return "no work" rather than crash-calling address 0.
+    return 1;
 }
 
 

@@ -63,6 +63,7 @@ static const uint32_t* s_pTid_2f90 = nullptr;  // 0x1401c7e08  (MeshInstance/Sta
 static const uint32_t* s_pTid_3050 = nullptr;  // 0x1401c8070
 static const uint32_t* s_pTid_52c0 = nullptr;  // 0x1401c7b30  (NaturalResource/BuildState)
 static const uint32_t* s_pTid_6270 = nullptr;  // 0x1401c7e78  (Storage)
+static const uint32_t* s_pTid_15140 = nullptr; // 0x1401c4b80  (TradeComponent)
 static bool s_tidInit = false;
 
 static void EnsureTypeIds() {
@@ -72,13 +73,15 @@ static void EnsureTypeIds() {
     s_pTid_3050 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c8070));
     s_pTid_52c0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b30));
     s_pTid_6270 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7e78));
+    s_pTid_15140 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4b80));
     // Raw .rdata type-id globals are NULL in standalone; fall back to the runtime type
     // registry so these FindComponent helpers actually match (else they return null and
     // callers deref null). Names verified from decomp/application.md TypeInfo column.
-    static uint32_t v_2ed0, v_3050, v_6270;
+    static uint32_t v_2ed0, v_3050, v_6270, v_15140;
     if (!s_pTid_2ed0) { v_2ed0 = ::Object::GetTypeIdByName("InteractComponent"); s_pTid_2ed0 = &v_2ed0; }
     if (!s_pTid_3050) { v_3050 = ::Object::GetTypeIdByName("WorkComponent");      s_pTid_3050 = &v_3050; }
     if (!s_pTid_6270) { v_6270 = ::Object::GetTypeIdByName("StorageComponent");   s_pTid_6270 = &v_6270; }
+    if (!s_pTid_15140){ v_15140 = ::Object::GetTypeIdByName("TradeComponent");    s_pTid_15140 = &v_15140; }
     s_tidInit = true;
 }
 
@@ -110,6 +113,16 @@ void* WorkBase_FindComponent_52c0(uintptr_t entity, void* retIBP) {
 void* WorkBase_FindComponent_6270(uintptr_t entity, void* retIBP) {
     EnsureTypeIds();
     return FindComponentByTypeId(entity, retIBP, s_pTid_6270);
+}
+
+// Reimpl of Entity_FindComponent_Building (FUN_140015140, type 0x1401c4b80 = TradeComponent).
+// Byte-for-byte the same component scan as the family above; the Ghidra name is a misnomer
+// (it matches the TradeComponent type-id, not a generic "building"). Ported to close the
+// TradeWork::Slot4 closure gap; the raw .rdata type-id 0x1401c4b80 is null in standalone so
+// EnsureTypeIds heals it via GetTypeIdByName("TradeComponent").
+void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
+    EnsureTypeIds();
+    return FindComponentByTypeId(entity, retIBP, s_pTid_15140);
 }
 
 // ============================================================

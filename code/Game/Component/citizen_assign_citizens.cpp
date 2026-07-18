@@ -74,9 +74,10 @@
 //   g_fUVScale           0x14017214c  (float const in the score formula)
 //
 // WIRING NOTE: replaces the notes/ scoped stand-in (construction-only Laborer->Builder).
-// In SA this must be registered (RegisterExeAddr 0x1400d43b0) AND the caller chain
-// FUN_1400d6f00 + ctx must reach it (see task #16). It is a direct (non-vtable) call,
-// exercised via SA registration / call-site redirection.
+// Registration is in place: RegisterCitizenAssignCitizens() maps 0x1400d43b0 to this
+// reimpl (standalone/address_registry.cpp). It is a direct (non-vtable) call, so it only
+// executes once a reimplemented caller reaches it — the employment tick FUN_1400d6f00
+// (+ its ctx) is the remaining dependency; until that caller is ported it stays dormant.
 
 #include "engine_funcs.h"
 #include "resolve.h"
