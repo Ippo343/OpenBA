@@ -1205,10 +1205,15 @@ void DebugUI_Slot4(DebugUI* self) {
         self->diseaseCombo = combo;
 
         if (combo) {
-            // Populate from ExternalList (resource descriptions at gameWorld+0xA8)
+            // Populate from ExternalList (resource descriptions at gameWorld+0xA8).
+            // STANDALONE: this list can be null/unpopulated (the description loader
+            // that fills it is a DLL-mode path), and GetResourceCount(null) faults
+            // reading null+0x28. Guard so a missing list yields an empty combo
+            // instead of crashing. No-op in DLL mode (list always live there).
             void* gameWorld_dc = *g_pGameWorldSingleton;
-            void* externalList = *(void**)((uintptr_t)gameWorld_dc + 0xa8);
-            int resourceCount = fn_ExternalList_GetResourceCount(externalList);
+            void* externalList = gameWorld_dc ? *(void**)((uintptr_t)gameWorld_dc + 0xa8) : nullptr;
+            int resourceCount = (externalList && fn_ExternalList_GetResourceCount)
+                                    ? fn_ExternalList_GetResourceCount(externalList) : 0;
             for (int i = 0; i < resourceCount; i++) {
                 void* resource = *(void**)((uintptr_t)i * 8 +
                     *(uintptr_t*)((uintptr_t)externalList + 0x20));
@@ -1284,9 +1289,10 @@ void DebugUI_Slot4(DebugUI* self) {
         if (combo) {
             fn_Element_SetElementId(self->drawCombo, 0x166);
 
-            // Populate from drawable type list at gameWorld+0xF0
+            // Populate from drawable type list at gameWorld+0xF0.
+            // STANDALONE: guard a null list (empty combo instead of a fault).
             uintptr_t drawableList = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-            int drawCount = *(int*)(drawableList + 200); // +0xC8
+            int drawCount = drawableList ? *(int*)(drawableList + 200) : 0; // +0xC8
             int selectedIndex = 0;
             for (int i = 0; i < drawCount; i++) {
                 void* entry = *(void**)((uintptr_t)i * 8 +
@@ -1393,10 +1399,11 @@ void DebugUI_Slot4(DebugUI* self) {
             fn_ComboElement_AddItem(self->comboWeather, spriteBuf, noneBuf, (void*)(intptr_t)-1);
             fn_String_Dtor(noneBuf);
 
-            // Populate from weather list at gameWorld+0x130
+            // Populate from weather list at gameWorld+0x130.
+            // STANDALONE: guard a null weather manager / list.
             void** weatherListPtr = *(void***)((uintptr_t)gameWorld + 0x130);
-            uintptr_t weatherList = *(uintptr_t*)weatherListPtr;
-            int weatherCount = *(int*)(weatherList + 0x30);
+            uintptr_t weatherList = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
+            int weatherCount = weatherList ? *(int*)(weatherList + 0x30) : 0;
             int selectedIndex = 0;
             for (int i = 0; i < weatherCount; i++) {
                 void* entry = *(void**)((uintptr_t)i * 0x10 +
@@ -1439,16 +1446,20 @@ void DebugUI_Slot4(DebugUI* self) {
     // Initialize day slider from current game time
     // ==========================================================
     {
+        // STANDALONE: gw+0x128 (weather time) can be null; Time_AsSeconds(null+8)
+        // would fault. SetDayLighting derefs **(gw+0x130) (the weather table), also
+        // null-able — only call it when that chain is live. No-op in DLL mode.
         uintptr_t weatherTime = *(uintptr_t*)((uintptr_t)gameWorld + 0x128);
-        float timeSeconds = fn_Time_AsSeconds((void*)(weatherTime + 8));
+        float timeSeconds = weatherTime ? fn_Time_AsSeconds((void*)(weatherTime + 8)) : 0.0f;
         // Convert time to month index: (seconds / secondsPerYear) * monthsPerYear
         // DAT_14017225c = 3600.0f, DAT_1401721b8 = 12.0f
         int monthIndex = (int)(timeSeconds / 3600.0f * 12.0f);
         if (monthIndex > 11) monthIndex = 0;
 
+        void** weatherLive = *(void***)((uintptr_t)gameWorld + 0x130);
         if (self->sliderDay) {
             *(float*)((uintptr_t)self->sliderDay + 0x128) = (float)(monthIndex * 30);
-            DebugUI_SetDayLighting_Impl(self, monthIndex);
+            if (weatherLive && *weatherLive) DebugUI_SetDayLighting_Impl(self, monthIndex);
         }
     }
 
@@ -1472,3 +1483,191 @@ void DebugUI_Slot4(DebugUI* self) {
 // ============================================================
 // DebugUI::Slot6 (vtable +0x30) — No-op
 // ============================================================
+
+// ============================================================
+// STANDALONE promotion — real DebugUI controller vtable
+// ============================================================
+// The developer debug/cheat panel is opened by the game's own data-driven
+// dialog system (a .rsc that names DebugUI as its controller, opened via the
+// dev keybind). In standalone this type was registered as a passive
+// UI_DIALOG_STUB (all slots StubNop) in ui_dialog_stub_factories.cpp, so the
+// panel window rendered from its .rsc but Slot4 (element binding / combo
+// populate / element-id assignment / perf-counter binding) never ran — hence
+// "it launches but none of the game data is linked to it". Slot7 (swatches),
+// Slot8 (perf counters) and Slot9 (button/combo/slider events) were likewise
+// dead. This block promotes DebugUI to a real per-class vtable wiring the
+// reimplemented slots above, following the CitizenUI/BuildRequirementUI
+// promotion pattern. The stub REGISTER_TYPE in ui_dialog_stub_factories.cpp is
+// REMOVED to avoid a duplicate registration.
+//
+// Verified vtable slot indices (exe DebugUI vtable @ 0x14015b870, read live):
+//   +0x20 (idx4) Slot4 = Setup (framework-dispatched once after construction)
+//   +0x30 (idx6)       = Slot6 no-op (OnClosed)
+//   +0x38 (idx7) Slot7 = swatches/day text (framework OnUpdateLayout drives it
+//                        on show/resize; Runtime dispatch is live in standalone)
+//   +0x40 (idx8)       = per-frame OnUpdate. The real +0x40 override IS Slot8
+//                        (perf counters), so we call Slot8 here; we ALSO append
+//                        Slot7 so the color swatches / day text stay synced to
+//                        the sliders every frame regardless of layout re-fires.
+//   +0x48 (idx9) Slot9 = event dispatch (OnElementEvent drives it)
+//
+// Every exe-.rdata type-id DebugUI dereferences is NULL in standalone (raw
+// .rdata addr -> ResolveAddr returns 0). EnsureGlobals lazy-fills them from the
+// live Runtime factory tree (post-Engine::Startup) by each id's REAL registered
+// name — the engine_funcs labels are misnomers, verified against the Ghidra
+// registration writers:
+//   g_TypeId_BuildComponent(0x1401c7318)        -> "ComponentDescription"
+//   g_TypeId_RawMaterialDescription(0x1401c7cb8)-> "RawMaterialDescription"
+//   g_TypeId_ResidenceComponent_FC(0x1401c7900) -> "InteractComponent"
+//   g_TypeId_ResidenceDescription(0x1401c7938)  -> "InteractDescription"
+//   g_TypeId_CitizenDescription(0x1401c7190)    -> "CitizenDescription"
+//   g_TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
+//   g_TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
+//   g_TypeId_ObjectInternal                     -> "Internal"
+//   g_TypeId_CitizenAIComponent_FC(0x1401c7158) -> "CitizenComponent"
+//     (via GetTypeIdByName, matching the proven CitizenUI heal)
+// g_pEngineSingleton (used by Slot8) is null in standalone; Slot8 already opens
+// with `if (!g_pEngineSingleton) return;`, so the perf counters simply stay
+// blank there — no crash, no gating needed.
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"
+#include <cstddef>
+#include <cstdlib>
+#include <cstdio>
+
+namespace debugui_sa {
+
+constexpr int kSlots = 48;
+static void* g_vt[kSlots];
+
+void StubNop(void*, ...) {}
+
+uint32_t GetTypeId(void*) {
+    static uint32_t c = 0;
+    if (!c) c = ::Object::GetTypeIdByName("DebugUI");
+    return c;
+}
+void* Dtor(void* self, uint32_t flags) {
+    if (!self) return self;
+    *reinterpret_cast<void**>(self) = g_vt;
+    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
+    return self;
+}
+
+// Idempotent heal of the exe-.rdata type-id globals. Safe to call on every slot
+// entry; each `if (*global)` short-circuits once filled (also a no-op in DLL
+// mode where the globals are already the real exe .rdata pointers).
+void EnsureGlobals() {
+    struct Heal { uint32_t** g; uint32_t* s; const char* name; };
+    static uint32_t s_build = 0, s_rawmat = 0, s_interactC = 0, s_interactD = 0,
+                    s_citDesc = 0, s_disease = 0, s_drawable = 0, s_internal = 0;
+    static const Heal heals[] = {
+        { &g_TypeId_BuildComponent,         &s_build,     "ComponentDescription"   },
+        { &g_TypeId_RawMaterialDescription, &s_rawmat,    "RawMaterialDescription" },
+        { &g_TypeId_ResidenceComponent_FC,  &s_interactC, "InteractComponent"      },
+        { &g_TypeId_ResidenceDescription,   &s_interactD, "InteractDescription"    },
+        { &g_TypeId_CitizenDescription,     &s_citDesc,   "CitizenDescription"     },
+        { &g_TypeId_DiseaseDescription,     &s_disease,   "Disease"                },
+        { &g_TypeId_DrawableType,           &s_drawable,  "PopulationDescription"  },
+        { &g_TypeId_ObjectInternal,         &s_internal,  "Internal"               },
+    };
+    for (const Heal& h : heals) {
+        if (*h.g) continue;
+        if (*h.s == 0) *h.s = ::Object::ResolveTypeIdByNameLazy(h.name);
+        if (*h.s) *h.g = h.s;
+    }
+    // CitizenComponent id resolves via GetTypeIdByName (the proven CitizenUI
+    // choice — DAT_1401c7158 is CitizenComponent despite the "CitizenAI" label).
+    if (!g_TypeId_CitizenAIComponent_FC) {
+        static uint32_t s_cai = 0;
+        if (s_cai == 0) s_cai = ::Object::GetTypeIdByName("CitizenComponent");
+        if (s_cai) g_TypeId_CitizenAIComponent_FC = &s_cai;
+    }
+}
+
+void W_Slot4(void* self) {
+    EnsureGlobals();
+    // Slot4 unconditionally dereferences ObjectInternal (every FindElemBase),
+    // DiseaseDescription (diseaseCombo populate) and DrawableType (drawCombo
+    // populate). Skip the whole setup rather than fault if any failed to
+    // resolve; all three reliably resolve post-Engine::Startup.
+    if (!self || !g_TypeId_ObjectInternal || !g_TypeId_DiseaseDescription
+        || !g_TypeId_DrawableType) {
+        if (std::getenv("BANISHED_DEBUG_PANEL"))
+            fprintf(stderr, "[DebugUI] Slot4 SKIPPED self=%p ObjInternal=%p Disease=%p Drawable=%p\n",
+                    self, (void*)g_TypeId_ObjectInternal,
+                    (void*)g_TypeId_DiseaseDescription, (void*)g_TypeId_DrawableType);
+        return;
+    }
+    DebugUI_Slot4(reinterpret_cast<DebugUI*>(self));
+    // One-shot confirmation that the promoted controller wired to live game data
+    // (element pointers land in the DebugUI struct fields). Env-gated so the
+    // default build stays quiet.
+    if (std::getenv("BANISHED_DEBUG_PANEL")) {
+        DebugUI* d = reinterpret_cast<DebugUI*>(self);
+        fprintf(stderr, "[DebugUI] Slot4 WIRED self=%p diseaseCombo=%p drawCombo=%p "
+                "comboWeather=%p sliderDay=%p numberFPS=%p\n",
+                self, d->diseaseCombo, d->drawCombo, d->comboWeather,
+                d->sliderDay, d->numberFPS);
+        fflush(stderr);
+    }
+}
+void W_Slot7(void* self) {
+    EnsureGlobals();
+    if (!self || !g_TypeId_ObjectInternal) return;  // FindElemBase / child deref
+    DebugUI_Slot7(reinterpret_cast<DebugUI*>(self));
+}
+void W_OnUpdate(void* self, void* /*time*/) {   // +0x40 per-frame
+    if (!self) return;
+    EnsureGlobals();
+    DebugUI_Slot8(reinterpret_cast<DebugUI*>(self));         // perf counters (self-guarded)
+    if (g_TypeId_ObjectInternal)
+        DebugUI_Slot7(reinterpret_cast<DebugUI*>(self));     // keep swatches/day live
+}
+void W_Slot9(void* self, void* p2, int msg, int id) {
+    EnsureGlobals();
+    // Resource-spawn buttons use no type-ids; the entity-manipulation buttons
+    // (raw-material purge, spawn citizens, disasters, tornado) do, and those ids
+    // reliably resolve above. Dispatch as the original did.
+    if (self) DebugUI_Slot9(reinterpret_cast<DebugUI*>(self),
+                            reinterpret_cast<uint64_t>(p2), msg, id);
+}
+
+struct Init {
+    Init() {
+        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
+        g_vt[0] = reinterpret_cast<void*>(&Dtor);
+        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
+        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
+        // g_vt[6] stays StubNop (Slot6 is a bare-return no-op in the exe)
+        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
+        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
+        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
+    }
+} g_init;
+
+void Zero(void* p) {
+    for (size_t o = 0; o < static_cast<size_t>(0x130); o += 8)
+        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+}
+void* Factory() {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
+    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x130), 8);
+    if (!p) return nullptr;
+    Zero(p);
+    *reinterpret_cast<void**>(p) = g_vt;
+    return p;
+}
+void* InPlace(void* m) {
+    if (!m) return nullptr;
+    Zero(m);
+    *reinterpret_cast<void**>(m) = g_vt;
+    return m;
+}
+
+}  // namespace debugui_sa
+
+REGISTER_TYPE(DebugUI, "DialogController",
+              &debugui_sa::Factory, &debugui_sa::InPlace);
+
+#endif  // STANDALONE_EXE

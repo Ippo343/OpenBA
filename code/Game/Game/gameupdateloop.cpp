@@ -1731,6 +1731,84 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
     }
     TRACE("[GameUpdateLoop::Startup] Toolbar dialog added\n");
 
+    // ----------------------------------------------------------------
+    // Debug/cheat panel auto-open (BANISHED_DEBUG_PANEL). One-shot: loads
+    // Dialog/Debug.rsc — whose Dialog resource declares DebugUI as its
+    // controller — and adds it to the in-game UI. fn_DialogInstance_Ctor
+    // (Runtime 0x180114870) instantiates the DebugUI controller via our promoted
+    // standalone factory (see code/Game/Dialog/debugui.cpp) and the framework
+    // dispatches its Slot4, binding the panel's combos/buttons/sliders/counters
+    // to live game data. Off by default so the normal build is byte-identical.
+    // The panel is otherwise opened in-game by the DebugMenu.pkm mod's trigger;
+    // this env just pops it automatically for testing. Grep the log for
+    // "[DebugUI]" to confirm the controller wired.
+    {
+        static bool s_debugPanelOpened = false;
+        const char* dbgEnv = getenv("BANISHED_DEBUG_PANEL");
+        const bool wantPanel = dbgEnv && dbgEnv[0] && !(dbgEnv[0] == '0' && dbgEnv[1] == '\0');
+        if (!s_debugPanelOpened && wantPanel) {
+            s_debugPanelOpened = true;
+            if (fn_Filename_CtorCStr_Local && fn_ExternalFactory_FindOrLoad &&
+                g_pExternalFactorySingleton && *g_pExternalFactorySingleton &&
+                fn_MemAlloc && g_pMemAllocSingleton && fn_DialogInstance_Ctor &&
+                fn_InternalBasePtr_Ctor && fn_UI_AddDialog && self->m_userInterface) {
+                // The package stores the leaf name ("Debug.rsc"); the folder the
+                // resource system prepends is uncertain (Toolbar/MainMenu live under
+                // "Dialog/"). Probe candidate paths and use the first that resolves.
+                static const char* kCandidates[] = {
+                    "Dialog/Debug.rsc", "Debug.rsc", "Menu/Debug.rsc",
+                    "Dialog/DebugMenu.rsc", "DebugMenu.rsc", "Dialog/Cheat.rsc",
+                };
+                void* found = nullptr;
+                for (const char* cand : kCandidates) {
+                    uint8_t fnbuf[8];
+                    fn_Filename_CtorCStr_Local(fnbuf, cand);
+                    void* r = fn_ExternalFactory_FindOrLoad(*g_pExternalFactorySingleton, fnbuf);
+                    if (fn_Filename_Dtor) fn_Filename_Dtor(fnbuf);
+                    fprintf(stderr, "[DebugUI] auto-open probe: '%s' -> %p\n", cand, r);
+                    if (r) { found = r; break; }
+                }
+                // Accept the loaded resource if it is a Dialog (or External) — the
+                // guard mirrors the toolbar/eventnotify open paths. Permissive when
+                // the type-id slot is unregistered in standalone.
+                void* dialogRes = nullptr;
+                if (found &&
+                    (!g_pDialogTypeId || fn_IsDerivedFrom(found, *g_pDialogTypeId) ||
+                     (g_pExternalTypeId && fn_IsDerivedFrom(found, *g_pExternalTypeId))))
+                    dialogRes = found;
+                fprintf(stderr, "[DebugUI] auto-open: Debug.rsc found=%p accepted=%p UI=%p\n",
+                        found, dialogRes, (void*)self->m_userInterface);
+                if (dialogRes) {
+                    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);  // DialogInstance base
+                    if (mem) {
+                        int64_t nullParent[1] = {0};
+                        fn_InternalBasePtr_Ctor(nullParent, nullptr);
+                        // (self, ui, dialogRes, parent, dataSource, extraCtrlData, flags)
+                        void* dlg = fn_DialogInstance_Ctor(mem, self->m_userInterface,
+                                                           dialogRes, nullParent, nullptr, nullptr, 0);
+                        if (dlg) {
+                            int64_t dialogPtr[1];
+                            fn_InternalBasePtr_Ctor(dialogPtr, dlg);
+                            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+                            fprintf(stderr, "[DebugUI] auto-open: DialogInstance added dlg=%p "
+                                    "(Slot4 fires on first layout/update)\n", dlg);
+                        } else if (fn_MemFreeStatic) {
+                            fn_MemFreeStatic(mem);
+                            fprintf(stderr, "[DebugUI] auto-open: DialogInstance_Ctor returned null\n");
+                        }
+                    }
+                } else {
+                    fprintf(stderr, "[DebugUI] auto-open: Debug.rsc not found / wrong type — is "
+                            "DebugMenu.pkm present in WinData?\n");
+                }
+                fflush(stderr);
+            } else {
+                fprintf(stderr, "[DebugUI] auto-open SKIPPED: a required engine fn/singleton is null\n");
+                fflush(stderr);
+            }
+        }
+    }
+
     // Create and add EventNotify ribbon (BANISHED_LIVE_EVENTS). Shows recent game
     // events as a strip below the toolbar. Uses the FindOrLoad fallback (empty
     // m_resourceList in standalone) like the toolbar, and parents to the toolbar

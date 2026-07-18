@@ -203,7 +203,10 @@ UI_DIALOG_STUB(AttendanceUI,        "UI::DialogController", 0x38);
 UI_DIALOG_STUB(CemeteryUI,          "UI::DialogController", 0x38);
 UI_DIALOG_STUB(ConsumeProduceUI,    "UI::DialogController", 0x40);
 UI_DIALOG_STUB(ControlUI,           "UI::DialogController", 0x40);
-UI_DIALOG_STUB(DebugUI,             "DialogController",     0x130);
+// DebugUI: PROMOTED to a real per-class standalone vtable in
+// code/Game/Dialog/debugui.cpp (wires Slot4/7/8/9 so the dev debug/cheat panel
+// links to live game data instead of rendering blank). Stub registration removed
+// to avoid a duplicate REGISTER_TYPE(DebugUI).
 // CitizenUI: PROMOTED to a real per-class standalone vtable in code/Game/Dialog/citizenui.cpp
 // (wires Slot4/6/7/9 so the clicked-citizen panel shows name/age/profession/hearts).
 UI_DIALOG_STUB(DestroyUI,           "UI::DialogController", 0x78);
