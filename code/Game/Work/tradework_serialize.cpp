@@ -7,7 +7,7 @@
 // standalone/reg_work_tail_trade.cpp.
 //
 // All functions are faithful 1:1 ports of the decompiled exe helpers (Ghidra
-// disassembly-verified, offset by offset). This file must NOT depend on hooks.h.
+// disassembly-verified, offset by offset).
 //
 // AVL node layout (0x38 bytes) — IDENTICAL to code/Game/Player/tool_base_trade.cpp
 // (the same engine BST template; that file ports the rotation/retrace/remove leaves):

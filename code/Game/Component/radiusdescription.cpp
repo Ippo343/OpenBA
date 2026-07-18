@@ -13,7 +13,7 @@
 // GetVersion (vtable +0x18, 0x140055590): mov eax,1; ret -> version 1.
 // Dtor (vtable +0x00, 0x14000bb10): External::~External + free.
 //
-// Field knowledge harvested from engine/reimpl/radiusdescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/radiusdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

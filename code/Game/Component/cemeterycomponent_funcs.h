@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented CemeteryComponent methods.
 // Called from engine/reimpl/cemeterycomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "CemeteryComponent.h"
 #include <cstdint>

@@ -23,7 +23,7 @@
 // standalone until 0x1400049c0 is registered (REPORTED to orchestrator). The 4th
 // param (param4) is a dead init inside FUN_1400049c0, so nullptr is safe.
 //
-// Field knowledge harvested from engine/reimpl/createbridgedescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/createbridgedescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

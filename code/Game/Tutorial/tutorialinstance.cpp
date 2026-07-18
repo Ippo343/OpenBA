@@ -11,7 +11,6 @@
 //   +0x30: void*    tutorialDef   -- ExternalPtr<Tutorial> definition
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Tutorial/tutorialinstance_funcs.h"
 #include "engine_funcs.h"

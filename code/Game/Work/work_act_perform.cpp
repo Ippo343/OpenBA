@@ -16,7 +16,6 @@
 // Sub-callees are resolved via ResolveAddr(Module::Exe, 0xADDR) and null-guarded
 // (skipped if unregistered, matching project semantics). They are NOT registered here.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented MultiObjectComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "MultiObjectComponent.h"
 #include <cstdint>

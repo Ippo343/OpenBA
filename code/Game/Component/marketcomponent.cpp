@@ -6,7 +6,6 @@
 //   Shutdown (0x14004ead0) — calls ResourceProduceComponent_Shutdown + empty Serializer block
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/marketcomponent_funcs.h"
 #include "engine_funcs.h"

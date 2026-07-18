@@ -13,7 +13,6 @@
 // The world population count is at game+0xF0+0xA8.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Goal/populationgoal_funcs.h"
 #include "engine_funcs.h"

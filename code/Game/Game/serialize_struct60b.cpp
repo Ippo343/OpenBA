@@ -362,11 +362,10 @@ void Struct60B_Resize_Body(void* arrayHeaderPtr, unsigned int newCount) {
 // Public reimpl entry points
 // ============================================================
 //
-// Each entry tries the original exe address first (DLL mode + standalone
-// when the exe code page is mapped). If that pointer is null (standalone
-// mode, no exe code), we fall through to our cleaned C body. The cleaned
-// body mirrors the original instruction-for-instruction so a future A/B
-// trace can verify equivalence.
+// Each entry tries the original exe address first (usable when the exe code
+// page is mapped). If that pointer is null (no exe code), we fall through to
+// our cleaned C body. The cleaned body mirrors the original
+// instruction-for-instruction so a future A/B trace can verify equivalence.
 
 extern "C" void Reimpl_Struct60B_Resize(void* arrayHeader, unsigned int newCount) {
     Struct60B_Resize_Body(arrayHeader, newCount);

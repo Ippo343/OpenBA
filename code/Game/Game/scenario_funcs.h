@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented Scenario methods.
 // Called from engine/reimpl/scenario.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "Scenario.h"
 #include <cstdint>

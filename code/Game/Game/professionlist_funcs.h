@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ProfessionList methods.
 // Called from engine/reimpl/professionlist.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ProfessionList.h"
 #include <cstdint>

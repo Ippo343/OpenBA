@@ -13,7 +13,6 @@
 //   +0x20: void*    tutorialInst   — InternalBasePtr to TutorialInstance object
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/finishtutorialinstance_funcs.h"
 #include "engine_funcs.h"

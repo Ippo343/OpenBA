@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented StorageLocationComponent methods.
 // Called from engine/reimpl/storagelocationcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "StorageLocationComponent.h"
 #include <cstdint>

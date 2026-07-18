@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented AmbientEnvironmentComponent methods.
 // Called from engine/reimpl/ambientenvironmentcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "AmbientEnvironmentComponent.h"
 #include <cstdint>

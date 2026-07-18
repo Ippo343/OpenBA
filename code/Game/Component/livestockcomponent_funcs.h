@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented LivestockComponent methods.
 // Called from engine/reimpl/livestockcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "LivestockComponent.h"
 #include <cstdint>

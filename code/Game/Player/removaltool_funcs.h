@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented RemovalTool methods.
 // Called from engine/reimpl/removaltool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "RemovalTool.h"
 #include <cstdint>

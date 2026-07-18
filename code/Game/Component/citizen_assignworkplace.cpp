@@ -31,7 +31,6 @@
 //                        0x140152a08 SetEmitterVolume, 0x140152a10 StopEffect3D,
 //                        0x140152a18 GetEmitterCount, 0x140152a20 RemoveEmitter
 //
-// This file must NOT depend on hooks.h — portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -60,8 +59,7 @@ namespace {
 
 // ------------------------------------------------------------
 // Lazily-resolved exe sub-helpers + dispatch-slot fn ptrs. All null-guarded at each
-// call: an unregistered/absent callee turns the call into a no-op (same net effect as
-// the original passthrough behavior in standalone).
+// call: an unregistered/absent callee turns the call into a no-op.
 // ------------------------------------------------------------
 typedef void* (*fn_FindComp_t)(int64_t entity, void* retIBP);       // member ABI RCX,RDX
 typedef void  (*fn_ModelComp2b70_t)(int64_t comp, uint32_t arg);    // 0x1400c2b70 model refresh

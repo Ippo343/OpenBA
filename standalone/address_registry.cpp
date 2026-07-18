@@ -957,8 +957,8 @@ static void RegisterDispatchSlots() {
         (uintptr_t)ResolveExport("?Serialize@Serializer@IO@@QEAAXHPEAEPEBD@Z"));
 
     // Phase 3 Keystone D Brick 4b-exec — MoveTo / PlayAnimation ACTION-METHOD dispatch slots.
-    // moveto.cpp / playanimation.cpp were written for DLL mode where these exe .rdata IAT slots
-    // are pre-filled by the loader. In standalone they must be registered or MoveTo_ResolveFuncs
+    // In the original exe these .rdata IAT slots are pre-filled by the loader; moveto.cpp /
+    // playanimation.cpp rely on that. In standalone they must be registered or MoveTo_ResolveFuncs
     // leaves s_fn_* null and the action vtable methods (precheck/execute, run by the move-tick
     // executor c4c50) call through null. Names = the exe's own import strings at each slot RVA.
     RegisterDispatchSlot(0x140152ab0,   // Object::InternalBasePtr::CheckPtr(this) const [protected, IEBA]

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialImageHotKey methods.
 // Called from engine/reimpl/tutorialimagehotkey.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TutorialImages.h"
 #include <cstdint>

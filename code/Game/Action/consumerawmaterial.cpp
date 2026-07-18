@@ -26,7 +26,6 @@
 //   +0x38: bool             consumeMode     (true = subtract, false = just check availability)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "ConsumeRawMaterial.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialStep methods.
 // Called from engine/reimpl/tutorialstep.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TutorialStep.h"
 #include <cstdint>

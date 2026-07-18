@@ -8,7 +8,6 @@
 //   Shutdown (0x14011f960) — ResourceProduceComponent::Shutdown + own serializer
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/forestercomponent_funcs.h"
 #include "engine_funcs.h"

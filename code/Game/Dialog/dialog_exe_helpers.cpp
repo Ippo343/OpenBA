@@ -6,7 +6,7 @@
 //   0x14005dec0  AutoSaveDialog autosave handler (timer-event 0x13).
 //   0x140099d40  autosave-name builder ("Autosave" UIString) — sub-callee of 0x14005dec0.
 //
-// Portable (no hooks.h) — depends only on engine_funcs.h + resolve.h.
+// Depends only on engine_funcs.h + resolve.h.
 // Decompiled from Application-x64.exe via Ghidra.
 
 #include "dialog_exe_helpers.h"

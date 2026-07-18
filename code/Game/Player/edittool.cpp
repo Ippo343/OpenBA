@@ -308,9 +308,9 @@ static void EnsureEditFuncs() {
 // BANISHED_SELECTION_OUTLINE, so it is a no-op on the shipping default path.
 extern "C" void HighlightFollow_Impl(void* self);
 
-// Resolve the ModelComponent class type-id: prefer the raw .rdata DWORD (valid in DLL
-// mode); in the standalone exe that constant is null, so fall back to the live factory
-// tree by name (the same reason 0x140003f60's registered reimpl finds nothing in SA).
+// Resolve the ModelComponent class type-id: prefer the raw .rdata DWORD; in the
+// standalone exe that constant is null, so fall back to the live factory tree by
+// name (the same reason 0x140003f60's registered reimpl finds nothing in SA).
 static uint32_t ModelComponentTypeId() {
     static uint32_t cached = 0;
     if (cached) return cached;
@@ -407,8 +407,8 @@ void EditTool_Startup_Impl(EditTool* self) {
     // code below dereferences it and calls GetController(-1,...), which faults deep in
     // the Runtime. Treat a dead / non-canonical ref as "nothing selected": clear it so
     // the per-frame tick becomes a safe no-op (line above already early-outs on 0).
-    // In DLL mode the dialog is always live here (retail destroys the tool on close),
-    // so this guard never triggers.
+    // (Retail destroys the tool on close, so the dialog is always live there and
+    // this guard never triggers.)
     {
         uintptr_t resolved = *(uintptr_t*)entityIBP;
         if (resolved < 0x10000 || resolved > 0x00007FFFFFFFFFFFULL) {

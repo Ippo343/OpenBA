@@ -59,7 +59,7 @@ static void Disease_InitFuncs() {
 
     // Standalone fallbacks: the exe IAT slots resolve to NULL when the original
     // exe isn't mapped. Fall back to the Runtime-resolved engine_funcs globals so
-    // the SAME Serialize works in both modes.
+    // the SAME Serialize works in the standalone exe.
     if (!s_fn_Serializer_Ctor) s_fn_Serializer_Ctor = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
     if (!s_fn_Serializer_Dtor) s_fn_Serializer_Dtor = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
     if (!s_fn_Serialize_Float) s_fn_Serialize_Float = reinterpret_cast<void(*)(void*, void*, const char*)>((uintptr_t)fn_Serializer_Serialize_Float);

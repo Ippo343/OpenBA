@@ -11,7 +11,6 @@
 //   OnCreate  (0x1401242f0) — Reads building data, calls terrain clear + map init
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/mapcomponent_funcs.h"
 #include "engine_funcs.h"

@@ -26,7 +26,6 @@
 //   +0x478: speed multiplier (float, default 1.0)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "MoveTo.h"
 #include "engine_funcs.h"

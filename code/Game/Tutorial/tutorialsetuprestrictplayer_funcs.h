@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialSetupRestrictPlayer methods.
 // Called from engine/reimpl/tutorialsetuprestrictplayer.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TutorialSetups.h"
 #include <cstdint>

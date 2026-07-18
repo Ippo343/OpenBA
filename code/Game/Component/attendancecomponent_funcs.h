@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented AttendanceComponent methods.
 // Called from engine/reimpl/attendancecomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "AttendanceComponent.h"
 #include <cstdint>

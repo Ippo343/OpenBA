@@ -14,10 +14,8 @@
 //     utility-dialog position node keyed by the Description ptr; rebalances via
 //     the already-registered retrace 0x140014b40.
 //
-// Faithful 1:1 against the Ghidra disassembly (offsets verified). In DLL mode
-// these are dead code (the engine_funcs pointers resolve to the real exe
-// functions); they are registered ONLY in the standalone build
-// (standalone/reg_toolbar_utility.cpp).
+// Faithful 1:1 against the Ghidra disassembly (offsets verified). Registered via
+// standalone/reg_toolbar_utility.cpp.
 
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -28,7 +26,7 @@ namespace {
 
 // Retrace/rebalance (0x140014b40, TradeWork_impl_4b40) — shared AVL retrace,
 // registered by reg_keystone_a_restree.cpp. Resolve it as a plain exe function
-// pointer (direct, not a dispatch slot) so this works in both build modes.
+// pointer (direct, not a dispatch slot) so this works in the standalone exe.
 typedef void (*BstRebalance_t)(int64_t* rootHolder, int64_t* insertedNodeSlot);
 BstRebalance_t s_fn_bstRebalance = nullptr;
 

@@ -12,7 +12,7 @@
 //
 // Remaining slots (Startup, Serialize, Draw, CalcPath, CalcCost) are too complex
 // (many unresolved helpers: MeshInstance, Transform, entity creation, fence segment
-// calculation) and stay as trampolines.
+// calculation) and are not reimplemented here.
 //
 // Decompiled from Application-x64.exe.
 

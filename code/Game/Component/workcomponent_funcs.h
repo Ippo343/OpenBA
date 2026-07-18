@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented WorkComponent methods.
 // Called from engine/reimpl/workcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "WorkComponent.h"
 #include <cstdint>

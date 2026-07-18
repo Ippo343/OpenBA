@@ -7,7 +7,6 @@
 // Ctor: 0x140021dc0 (factory), Vtable: 0x14015fb10
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "AnimateNaturalResource.h"
 #include "engine_funcs.h"

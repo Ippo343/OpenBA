@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented EntityList methods.
 // Called from code/Game/Game/gameupdateloop.cpp (not hooked directly).
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "EntityList.h"
 #include <cstdint>

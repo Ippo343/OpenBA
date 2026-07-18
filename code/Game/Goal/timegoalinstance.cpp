@@ -10,7 +10,6 @@
 //   +0x20: int64   elapsedTime — accumulated time in engine ticks (System::Time)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Goal/timegoalinstance_funcs.h"
 #include "engine_funcs.h"

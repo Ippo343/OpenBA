@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented NaturalResourceComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "NaturalResourceComponent.h"
 #include <cstdint>

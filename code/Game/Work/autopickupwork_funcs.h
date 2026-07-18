@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented AutoPickupWork methods.
 // Called from engine/reimpl/autopickupwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "AutoPickupWork.h"
 #include <cstdint>

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ClimateGenerator methods.
 // Called from engine/reimpl/climategenerator.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ClimateGenerator.h"
 #include <cstdint>

@@ -12,7 +12,6 @@
 //   - Status values: 0=unassigned, 1=assigned, 2=completing
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/pickup_funcs.h"
 #include "engine_funcs.h"
@@ -442,8 +441,8 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
     if (oldBuf != buf && oldBuf && s_x_memFree) s_x_memFree(oldBuf);
 }
 
-// The port proper. Kept separate from Pickup_Slot4_Impl so DLL mode can still
-// A/B against the original.
+// The port proper. Kept separate from Pickup_Slot4_Impl so the dispatcher can
+// fall back to the original when it resolves.
 static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
     if (self->status != 0) return 1;
@@ -809,11 +808,10 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
 // ============================================================
 // Pickup::Slot4 dispatcher.
 //
-// DLL mode keeps calling the original (s_fn_Slot4_Original resolves to real exe
-// code there), so this change cannot regress the in-game DLL build; the port runs
-// in standalone, where the address is unregistered and the old fallback silently
-// returned 1 ("no work") forever. Set BANISHED_PICKUP_PORT=1 to force the port in
-// DLL mode for A/B comparison against the original.
+// When s_fn_Slot4_Original resolves (address registered) the dispatcher calls it;
+// otherwise the port runs — the address is unregistered and the old fallback
+// silently returned 1 ("no work") forever. Set BANISHED_PICKUP_PORT=1 to force the
+// port even when the original resolves, for A/B comparison against it.
 // ============================================================
 int Pickup_Slot4_Impl(Pickup* self, void* entityIBP, uint64_t param3, uint64_t param4) {
     (void)param4;  // exe reads only RCX/RDX/R8; param4 is not part of the ABI here

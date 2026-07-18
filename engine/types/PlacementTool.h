@@ -19,7 +19,7 @@
 //   +0x40: Draw (0x1400fdcc0)
 //   +0x48: Slot9 (returns false)
 //   +0x50: Slot10 (returns false)
-//   +0x58: Slot11 (unsafe for trampoline)
+//   +0x58: Slot11
 //   +0x60: Slot12 (returns 5)
 
 #include <cstdint>

@@ -9,7 +9,6 @@
 //                            with entity ref validation, crop flags, IBP array, entity list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/cropfieldcomponent_funcs.h"
 #include "engine_funcs.h"

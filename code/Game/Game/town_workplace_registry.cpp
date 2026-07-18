@@ -15,8 +15,6 @@
 // 0x140090a30 (already Load step 10). Node = 0x38 bytes: +0x00 key(profession id) /
 // +0x08 array.data / +0x10 count / +0x14 cap / +0x18 parent / +0x20 left /
 // +0x28 right / +0x30 balance.
-//
-// This file must NOT depend on hooks.h — portable for standalone.
 
 #include "resolve.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented Profession methods.
 // Called from engine/reimpl/profession.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "Profession.h"
 #include <cstdint>

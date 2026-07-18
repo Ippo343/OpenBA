@@ -3,8 +3,7 @@
 //
 // These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
 // per-class Action .cpp files (moveto.cpp, performwork.cpp, playanimation.cpp,
-// huntanimal.cpp). In DLL mode they resolve to the original exe code; in standalone
-// mode they resolve to 0 (silently skipped) unless registered. This file provides
+// huntanimal.cpp). They resolve to 0 (silently skipped) unless registered. This file provides
 // faithful 1:1 reimplementations and a single registration point
 // (RegisterActionMoveBatch in standalone/reg_action_move.cpp) so the shared call
 // sites fire real logic in the standalone exe.
@@ -12,7 +11,6 @@
 // Wave 3 (Action) — MoveTo / PerformWork / PlayAnimation sub-batch. Each function is
 // a 1:1 port of the decompiled exe helper; do not "improve" behavior.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

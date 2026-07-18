@@ -40,7 +40,6 @@
 // flagged for lead review): Volume::Rectangle::Center/Size (rect = {min.xy,max.xy}),
 // Math::Vector2::operator+=/operator*= (component-wise), Math::Scalar::Max.
 //
-// This file must NOT depend on hooks.h — portable for the standalone exe.
 
 
 #include "engine_funcs.h"

@@ -21,7 +21,6 @@
 //                       count = *(param_2+8), element stride 0x18)
 //   i.e. out = obj.transform * record[i].pos. The draft applied the transform to garbage.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

@@ -56,7 +56,6 @@
 //     DAT_1401c7f20  -> StorageLocationDescription_Register     -> "StorageLocationDescription" [e370]
 //     DWORD_1401c7cf0-> ResidenceComponent_RegisterType   -> "ResidenceComponent"        [e370]
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

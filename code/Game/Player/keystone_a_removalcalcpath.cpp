@@ -50,8 +50,8 @@ uint64_t PlayerPath_Sub_4770(uintptr_t, void*);
 uint64_t PlayerPath_Sub_4670(uintptr_t, void*);
 
 // ============================================================
-// Already-registered exe helpers we call via ResolveAddr (in standalone they
-// route through the registry; in DLL mode to the original code).
+// Already-registered exe helpers we call via ResolveAddr (they route through the
+// registry).
 // ============================================================
 typedef void* (*fn_copyCtor_t)(void* mem, void* desc);                       // 0x1400c3720
 typedef void  (*fn_regEntity_t)(void* entityList, void* entityIBP, int cat);  // 0x1400c48a0

@@ -20,7 +20,6 @@
 //
 // In standalone the exe .text is not loaded, so this backs the vtable directly;
 // the Runtime Graphics/Video primitives are resolved from Runtime-x64.dll.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

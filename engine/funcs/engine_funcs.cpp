@@ -1324,7 +1324,7 @@ void fn_ExeArrayPush(void* arrayBase, int newCount, void* elementPtr) {
 // new entries are filled with *fillValue (existing entries are copied on realloc).
 // Faithful reimpl of FUN_140003110 (assigned to fn_ExeArrayResizeFill at init).
 // Pure C++ so it works in standalone (the exe is not mapped, so ResolveAddr on
-// 0x140003110 returns NULL there) and in DLL mode alike — mirrors the fn_ExeArrayResize
+// 0x140003110 returns NULL there) — mirrors the fn_ExeArrayResize
 // family. WAS THE START-TOWN SPAWN BUG: left NULL in standalone, so EntityList::
 // RegisterEntity silently skipped the master-array append (entity count stayed 0).
 static void ExeArrayResizeFill_CppImpl(void* arrayBase, int newCount, void* fillValue) {
@@ -5077,9 +5077,8 @@ bool EngineFuncsInit() {
     // ============================================================
     // The Renderer / Camera / Frustum / Math / Context primitives backing the
     // 9-slot derived Geometry vtable. All resolved via ResolveExport from the
-    // Runtime DLL exports. In standalone mode these provide the actual draw
-    // path; in DLL mode they're consulted only by code/Game/Game/geometry_draw.cpp
-    // when the original exe vtable's slot dispatch lands in our cleaned body.
+    // Runtime DLL exports. These provide the actual draw path, used by
+    // code/Game/Game/geometry_draw.cpp.
     fn_Renderer_GetCullCamera = reinterpret_cast<fn_Renderer_GetCullCamera_t>(
         ResolveExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ"));
     fn_Renderer_AddDrawItem = reinterpret_cast<fn_Renderer_AddDrawItem_t>(

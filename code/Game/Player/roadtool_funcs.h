@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented RoadTool methods.
 // Called from engine/reimpl/roadtool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "RoadTool.h"
 #include <cstdint>

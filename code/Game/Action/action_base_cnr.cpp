@@ -4,17 +4,15 @@
 //
 // These exe helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
 // per-class Action .cpp files (createnaturalresource.cpp, animatenaturalresource.cpp,
-// removenaturalresource.cpp). In DLL mode they resolve to the original exe code;
-// in standalone mode they resolve to 0 (silently skipped) unless registered.
+// removenaturalresource.cpp). They resolve to 0 (silently skipped) unless registered.
 // This file provides faithful 1:1 ports and a single registration point
 // (RegisterActionCnrBatch in standalone/reg_action_cnr.cpp).
 //
 // Each function is a literal port of the decompiled exe helper — no behavior is
 // invented or "improved". Every exe sub-call is mirrored through a guarded
 // ResolveAddr typedef'd pointer (closure-safe: an unregistered sub-callee simply
-// turns the call into a no-op, exactly like the original passthrough behavior).
+// turns the call into a no-op).
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -500,8 +498,6 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // occupancy un-mark wired (mapcomponent.cpp MapComponent_DetachOccupancy_4750), the
     // full lifecycle — tree removal via the entityList+0xd0 dirty list + ground-pile item
     // clone/position/register — runs crash-free (soak-verified: 37 organic produces).
-    // (This function runs only on the standalone registered path; DLL mode runs the
-    // original exe helper — the gate is inert there.)
     static int s_spawnItem = -1;
     if (s_spawnItem < 0) {
         const char* e = std::getenv("BANISHED_PRODUCE_SPAWN_ENTITY");
@@ -618,9 +614,7 @@ void ActCNR_RemoveNatRes_1260f0(int64_t self, void* citizenIBP, char harvestFlag
     // partially materialized (inert component factories); once it joins the live world entity
     // list the next frame's EntityList_PreUpdate → Serialize faults in Runtime-x64.dll. Gate
     // the whole visual/lifecycle block until entity materialization is live — the stock
-    // accounting above is what the economy loop reads. (This function runs only on the
-    // standalone registered path; DLL mode runs the original exe helper, so the gate never
-    // affects DLL-mode faithfulness.)
+    // accounting above is what the economy loop reads.
     if (!s_spawnItem) return;
 
     // Query the existing surface tile at the cell (for its material id at +0x24).

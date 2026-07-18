@@ -35,8 +35,8 @@
 // shouldn't crash even with partial type registration. Document expected
 // failure points inline so the user can iterate.
 //
-// Dispatch pattern: try the original exe address first (DLL mode + standalone
-// where 0x1400b04d0 / 0x1400af1a0 may be RegisterExeAddr-able). If null, fall
+// Dispatch pattern: try the original exe address first (usable when
+// 0x1400b04d0 / 0x1400af1a0 is RegisterExeAddr-able). If null, fall
 // through to the cleaned C body. Both functions self-resolve each Runtime
 // dispatch slot lazily on first use.
 
@@ -45,7 +45,7 @@
 #include <cstdint>
 #include <cstdio>
 
-// Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
+// Heap-overflow checkpoint (standalone diagnostic; no-op when
 // BANISHED_REDZONE is unset). Localizes which Geometry::Serialize step trips a
 // tail-canary so the displaced free-list crash can be root-caused.
 #include "redzone_alloc.h"
@@ -663,9 +663,9 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
 // Public reimpl entry points
 // ============================================================
 //
-// Each entry tries the original exe address first (DLL mode + standalone
-// when the exe code page is mapped). If that pointer is null (standalone
-// mode, no exe code), we fall through to our cleaned C body.
+// Each entry tries the original exe address first (usable when the exe code
+// page is mapped). If that pointer is null (no exe code), we fall through to
+// our cleaned C body.
 
 extern "C" void Reimpl_TradeWork_impl_04d0(void* self, void* stream) {
     TradeWork_impl_04d0_Body(self, stream);

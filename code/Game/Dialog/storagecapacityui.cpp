@@ -65,7 +65,7 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
     void* component = nullptr;
     fn_FindComponent_Storage(entityInternal, &component);
     // SA safety: a partially-materialized storage entity can resolve a null-wrapped
-    // component IBP. Skip crash-safe (no-op in DLL mode where it is always live).
+    // component IBP. Skip crash-safe.
     if (!component) return;
 
     // Query current count
@@ -88,7 +88,7 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
     // Store ratio at progress element +0x128
     void* progElem = (void*)self->data30;
     // SA safety: Serialize only caches data30 when the dialog template actually
-    // contains a ProgressElement. Skip if it did not (no-op in DLL mode).
+    // contains a ProgressElement. Skip if it did not.
     if (!progElem) return;
     *(float*)((uintptr_t)progElem + 0x128) = ratio;
 

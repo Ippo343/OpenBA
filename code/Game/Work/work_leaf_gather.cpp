@@ -2,9 +2,8 @@
 // Wave (Game-gap / Work-leaf) — gather/forester/storage leaf helpers.
 //
 // Faithful 1:1 ports of exe sub-helpers referenced via ResolveAddr(Module::Exe,
-// 0xADDR) from code/Game/Work/{gatherrawmaterials,foresterwork}.cpp. In DLL mode
-// these resolve to original exe code; in standalone mode they resolve to 0 (silently
-// skipped) unless registered. This file provides the closure-safe subset only.
+// 0xADDR) from code/Game/Work/{gatherrawmaterials,foresterwork}.cpp. They resolve
+// to 0 (silently skipped) unless registered. This file provides the closure-safe subset only.
 //
 // CLOSURE-SAFETY: each function below was confirmed (snapshot notes/_reg_snapshot.txt)
 // to call ONLY already-registered exe sub-callees, sibling ports, or engine/runtime
@@ -35,8 +34,7 @@
 // Verify with a fresh grep over standalone/ before trusting any address list in a
 // comment — including this one.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+// Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

@@ -25,7 +25,7 @@
 // resolve via ResolveAddr(Module::Exe,..) — null in standalone until those addrs are
 // registered (REPORTED). fn_ExternalPtr_BuildSerialize (0x140002340) is already registered.
 //
-// Field knowledge harvested from engine/reimpl/environmentdescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/environmentdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

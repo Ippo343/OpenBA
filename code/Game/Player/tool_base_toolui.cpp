@@ -3,16 +3,12 @@
 //
 // This is an exe sub-helper resolved via ResolveAddr(Module::Exe, 0x1400ff9e0)
 // from code/Game/Player/dragtool.cpp (g_fn_OpenToolDialog) and placementtool.cpp
-// (s_fn_FUN_1400ff9e0). In DLL mode it resolves to the original exe code; in
-// standalone mode it resolves to 0 (the guarded call is silently skipped) unless
-// registered. This file provides a faithful 1:1 reimplementation plus the
+// (s_fn_FUN_1400ff9e0). It resolves to 0 (the guarded call is silently skipped)
+// unless registered. This file provides a faithful 1:1 reimplementation plus the
 // supporting DialogInstance child-dialog vtable that the original installs.
 //
 // Player registration wave (round 2c — tool-ui). 1:1 port of the decompiled exe
 // helper; do not "improve" behavior. Ghidra-verified against the disassembly.
-//
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
 
 #include "engine_funcs.h"
 #include "resolve.h"

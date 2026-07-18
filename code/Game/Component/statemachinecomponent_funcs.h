@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented StateMachineComponent methods.
 // Called from engine/reimpl/statemachinecomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "StateMachineComponent.h"
 #include <cstdint>

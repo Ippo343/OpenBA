@@ -2,14 +2,11 @@
 // Player registration wave (batch "edit") — shared exe sub-helpers resolved from
 // code/Game/Player/edittool.cpp and fencedtool.cpp via ResolveAddr(Module::Exe, 0xADDR).
 //
-// In DLL mode these resolve to the original exe code; in standalone mode they
-// resolve to 0 (the guarded call site is silently skipped) unless registered.
+// These resolve to 0 (the guarded call site is silently skipped) unless registered.
 // This file provides faithful 1:1 reimplementations; registration lives in
 // standalone/reg_player_edit.cpp (RegisterPlayerEditBatch).
 //
 // Each body is a literal port of the decompiled exe helper — no "improvements".
-// This file must NOT depend on hooks.h. Bodies are unconditional so it compiles
-// in BOTH dll and standalone builds.
 
 #include "engine_funcs.h"
 #include "resolve.h"

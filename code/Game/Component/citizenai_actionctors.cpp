@@ -64,7 +64,6 @@
 //   0x14017214c = 1.0    (Ctor5/Ctor10/Ctor11 "g_fUVScale" Time)
 //   0x140172280 = -1.0   (MoveTo randomized-speed sentinel)
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

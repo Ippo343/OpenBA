@@ -130,7 +130,7 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     }
 
     // +0x78 ExternalRef<Profession> (exe FUN_140018020). Resolved via ResolveAddr;
-    // works in DLL mode, and in standalone once 0x140018020 is registered.
+    // works once 0x140018020 is registered.
     {
         fn_ExternalRefSerialize_t f =
             reinterpret_cast<fn_ExternalRefSerialize_t>(ResolveAddr(Module::Exe, 0x140018020));

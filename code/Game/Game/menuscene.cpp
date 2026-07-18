@@ -21,7 +21,7 @@
 #include <cstdlib>
 #include <cstring>
 
-// Heap-overflow checkpoint (standalone diagnostic; no-op in DLL mode and when
+// Heap-overflow checkpoint (standalone diagnostic; no-op when
 // BANISHED_REDZONE is unset).
 #include "redzone_alloc.h"
 #define RZ_CHECK(tag) RedzoneAlloc_CheckLinks(tag)
@@ -426,10 +426,8 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     // project_terrain_render_status.md (2026-05-01).
     if (stream) {
         void* xform = reinterpret_cast<uint8_t*>(self) + 0x88;
-        // In standalone, fn_Transform_SerializeWrapper resolves to a
-        // NOT_IMPLEMENTED stub via the address registry — DON'T call it,
-        // use the inline path. In DLL mode, the wrapper points at the real
-        // exe function, so prefer it.
+        // fn_Transform_SerializeWrapper resolves to a NOT_IMPLEMENTED stub via
+        // the address registry — DON'T call it, use the inline path.
         if (g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
                    fn_Math_Transform_Serialize && fn_Math_Vector3_Serialize &&
                    fn_Serializer_Serialize_Float) {

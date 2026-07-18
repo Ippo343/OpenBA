@@ -12,7 +12,6 @@
 // Does NOT serialize an extra int field (unlike HerbalistWork/ForesterWork).
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/huntwork_funcs.h"
 #include "engine_funcs.h"

@@ -25,7 +25,6 @@
 //   +0x30: uint8_t  harvestFlag
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "RemoveNaturalResource.h"
 #include "engine_funcs.h"
@@ -239,7 +238,7 @@ int RemoveNaturalResource_AbstractImpl_Impl(RemoveNaturalResource* self, void* a
     // makes the citizen actually arrive at the tree) is crash-safe rather than dereffing
     // null+0x18. The diagnostic reports the target so the cut-sequence target wiring (the
     // remaining economy gap, PerformWork_Action_Ctor3) can be closed. Returning 0 completes
-    // the action so the citizen isn't wedged. Live/DLL mode (non-null) is unchanged.
+    // the action so the citizen isn't wedged. The live-world path (non-null) is unchanged.
     fn_InternalBasePtr_CheckPtr(&nrCompIBP);
     if (nrCompIBP == nullptr) {
         if (std::getenv("BANISHED_FORESTER_SCAN_TRACE")) {

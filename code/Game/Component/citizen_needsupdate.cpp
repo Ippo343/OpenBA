@@ -37,7 +37,6 @@
 //     8-byte Time stored at +0x1e8.
 //   - msg 8: +0x88 |= 0x40000.
 //
-// This file must NOT depend on hooks.h — portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

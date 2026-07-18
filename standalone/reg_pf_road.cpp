@@ -7,7 +7,6 @@
 // index-math details — the 3x3 mask -> ae180 arg order and the vertex AO-uv overwrite offsets —
 // are now pinned against the disassembly).
 //
-// Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
 
 #include "resolve.h"

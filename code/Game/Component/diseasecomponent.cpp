@@ -13,7 +13,6 @@
 // called via direct function pointers.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/diseasecomponent_funcs.h"
 #include "engine_funcs.h"

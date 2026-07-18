@@ -16,8 +16,8 @@
 // Standalone profession-list data is not fully live (the CitizenAI +0x288 desc
 // backref and the ProfessionList entries can be garbage/-1). Mirror the
 // citizenui.cpp CitUI_OkPtr guard so Slot6's profession-text build can't deref a
-// bogus pointer and hardfault (the Follow crash). Byte-faithful in DLL mode where
-// these pointers are always valid.
+// bogus pointer and hardfault (the Follow crash). Byte-faithful when these
+// pointers are valid (as they are in the live game).
 static inline bool FD_OkPtr(uintptr_t p) { return p >= 0x10000 && p < 0x7FFFFFFFFFF0ULL; }
 
 // ============================================================
@@ -429,8 +429,8 @@ void FD_SA_Slot6(void* self, void* p2, void* p3, void* p4) {
 // standalone build (ResolveAddr -> 0), so the finder early-returns null and the follow
 // camera never receives the citizen's ModelComponent+0x158 position -> the dialog ticks
 // but the camera never tracks. Resolve it by name from the live factory tree (same fix
-// pattern as statusiconcomponent.cpp). In DLL mode the id is already live from .rdata so
-// this short-circuits (no-op); the value written by name equals what .rdata holds.
+// pattern as statusiconcomponent.cpp). The value written by name equals what the
+// exe .rdata holds.
 void EnsureFollowGlobals() {
     static uint32_t s_tidModel = 0;
     uint32_t* g = g_TypeId_CharacterComponent;

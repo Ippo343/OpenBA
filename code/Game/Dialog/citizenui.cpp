@@ -43,7 +43,7 @@ extern "C" void* FollowDialog_GetStandaloneVtable();
 // so fn_FindProfessionComponent yields null and the Action line can't resolve.
 // Resolve it lazily from the live Runtime factory tree on first panel update.
 static void CitizenUI_EnsureProfessionTypeId() {
-    if (g_TypeId_ProfessionComponent) return;  // already wired (DLL mode)
+    if (g_TypeId_ProfessionComponent) return;  // already wired
     static uint32_t s_profTid = 0;
     if (s_profTid == 0)
         s_profTid = ::Object::ResolveTypeIdByNameLazy("CitizenAIComponent");
@@ -55,8 +55,7 @@ static void CitizenUI_EnsureProfessionTypeId() {
 // like 0xfffffffffffffee7). CitizenUI_Slot7 dereferences several of these directly
 // (matching the original, which relies on the live game having them resolved). Reject
 // anything that isn't a plausible Win64 user-space heap pointer before dereferencing,
-// so the panel shows what it can instead of faulting. In DLL mode these are always
-// real pointers, so this is a no-op there.
+// so the panel shows what it can instead of faulting.
 static inline bool CitUI_OkPtr(uintptr_t p) {
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }
@@ -65,13 +64,12 @@ static inline bool CitUI_OkPtr(uintptr_t p) {
 // when index < *(int*)(elem+0xD0) (the param count). A citizen dialog element that
 // standalone resolves by name can be a partially-initialized TextElement with a positive
 // param count but a garbage param-array pointer (+0xC8) — the write then faults. Only
-// call SetParameter when the element genuinely has a valid parameter array. In DLL mode
-// the array is always live, so this passes through unchanged.
+// call SetParameter when the element genuinely has a valid parameter array.
 // A System::String is an 8-byte pointer to a ref-counted buffer (buffer[-4] = refcount).
 // SetParameter/SetText increment the source String's refcount (write buffer[-4]); an
 // uninitialized citizen field (e.g. the name at CitizenAI+0x28 is unset in standalone)
 // holds a garbage buffer pointer, faulting there. Accept only a null (empty) or a real
-// buffer pointer. In DLL mode citizen Strings are always live, so this passes through.
+// buffer pointer.
 static inline bool CitUI_OkString(const void* strObj) {
     if (!CitUI_OkPtr(reinterpret_cast<uintptr_t>(strObj))) return false;
     uintptr_t buf = *reinterpret_cast<const uintptr_t*>(strObj);
@@ -292,7 +290,6 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // (unresolved) while the Component-base description (+0x18, validated above as
     // citizenDesc) is valid. Use +0x288 when it looks like a real pointer, else fall
     // back to citizenDesc (the same CitizenDescription); 0 if neither is valid.
-    // In DLL mode +0x288 is always valid, so this is a no-op there.
     uintptr_t aiDesc = *(uintptr_t*)(ai + 0x288);
     if (!CitUI_OkPtr(aiDesc)) aiDesc = (uintptr_t)citizenDesc;
     if (!CitUI_OkPtr(aiDesc)) aiDesc = 0;
@@ -430,7 +427,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             // (the WorldGrid read at +0x118 below, starttown +0xb0). The prior
             // *(uintptr_t*)*g_pGameWorldSingleton double-deref read GameWorld field 0 and
             // then +0xB0 off THAT -> garbage profListBase, blanking the Student/worker Job
-            // text. Byte-faithful correction (wrong in DLL mode too, latent there).
+            // text. Byte-faithful correction (the original has the same latent bug).
             uintptr_t gwBase = (uintptr_t)*g_pGameWorldSingleton;
             uintptr_t profListBase = okPtr(gwBase) ? *(uintptr_t*)(gwBase + 0xB0) : 0;
 
@@ -511,7 +508,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // pointers), so SetParameter faults deep inside System::String::operator= even though
     // the element, its +0xC8 array and its +0x98 chain all validate. It is a redundant
     // secondary name label — the primary textName above already shows the citizen's name
-    // — so skip it in standalone. DLL mode keeps the original behaviour (CheckPtr + set).
+    // — so skip it in standalone. (The original keeps the CheckPtr + set here.)
 
     // --- Action text ---
     // Get entity reference from CitizenAI+0x10, find profession component

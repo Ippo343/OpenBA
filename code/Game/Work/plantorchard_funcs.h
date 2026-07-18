@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PlantOrchard methods.
 // Called from engine/reimpl/plantorchard.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "BuildActions.h"
 #include <cstdint>

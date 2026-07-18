@@ -19,8 +19,7 @@
 // All sub-callees that are themselves in the broader closure are resolved via
 // ResolveAddr(Module::Exe, 0xADDR) — they are registered in sibling batches:
 //   1fa80 acc10 ae180 1f8d0 aa810 ae270 a8420 123070 1a4f0  (+ dispatch slots / engine exports).
-// In DLL mode they resolve to the original exe code; in standalone they resolve to 0 (and the
-// call is skipped) unless registered. This file provides ONLY the callee bodies; the single
+// In standalone they resolve to 0 (and the call is skipped) unless registered. This file provides ONLY the callee bodies; the single
 // registration point is RegisterPfRoadBatch() in standalone/reg_pf_road.cpp.
 //
 // Faithfulness is everything: none of this is runtime-exercised on the autostart path, so a
@@ -28,7 +27,6 @@
 // decompile, cross-checked against disassemble_function for index math, member-ABI, the road-mesh
 // dynamic buffer offsets/strides, and the implicit-arg traps. Do NOT "improve" or simplify.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

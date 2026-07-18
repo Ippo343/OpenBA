@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HuntWork methods.
 // Called from engine/reimpl/huntwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HuntWork.h"
 #include <cstdint>

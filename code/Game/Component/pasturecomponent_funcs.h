@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PastureComponent methods.
 // Called from engine/reimpl/pasturecomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "PastureComponent.h"
 #include <cstdint>

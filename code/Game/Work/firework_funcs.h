@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FireWork methods.
 // Called from engine/reimpl/firework.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "FireWork.h"
 #include <cstdint>

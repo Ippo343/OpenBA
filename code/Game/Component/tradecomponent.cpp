@@ -4,12 +4,11 @@
 // TradeComponent is the largest ControllerComponent variant (0xa8 bytes) with
 // trade state, item arrays, and a controller sub-object at +0x88.
 // Three non-trivial vtable overrides:
-//   Shutdown (0x14005bd50) — PASSTHROUGH (too complex for safe reimpl)
+//   Shutdown (0x14005bd50) — delegated to original exe (too complex for safe reimpl)
 //   Draw     (0x14005c1d0) — add entity to trade pending list + call setup
 //   OnCreate (0x14005c190) — register entity with world trade list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/tradecomponent_funcs.h"
 #include "engine_funcs.h"

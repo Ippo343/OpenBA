@@ -8,7 +8,6 @@
 // Ctor: 0x140023070 (factory), Vtable: 0x1401600c0
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "SendComponentMessage.h"
 #include "engine_funcs.h"

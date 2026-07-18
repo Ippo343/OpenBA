@@ -69,8 +69,7 @@ static void* ToolbarDescription_Ctor_Impl(void* mem) {
 // FUN_140028860 — System::String dynamic-array resize.
 // Header layout: +0x00 String* buffer, +0x08 int count, +0x0c int capacity; each
 // element is an 8-byte System::String (COW). Used by ToolbarDescription::Serialize
-// to allocate the +0x50 status-string array (and by TutorialSetupDialog). In DLL
-// mode fn_StringArray_Resize resolves to this exe code; in standalone mode
+// to allocate the +0x50 status-string array (and by TutorialSetupDialog).
 // ResolveAddr(Exe, 0x140028860) is NULL (the exe function isn't loaded) so the
 // Serialize below falls back to this reimpl directly, and it is also registered
 // via RegisterExeAddr so the other resolve-by-address callers pick it up.
@@ -147,8 +146,8 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     int count = *(int32_t*)(s + 0x58);
     g_fn_Serialize_Int(serializer, &count, nullptr);
 
-    // 8. on load, resize the String array (+0x50) to count. In DLL mode the exe
-    //    resize resolves; in standalone ResolveAddr(Exe, 0x140028860) is NULL, so
+    // 8. on load, resize the String array (+0x50) to count. ResolveAddr(Exe, 0x140028860)
+    //    is NULL in the standalone exe, so
     //    fall back to the reimpl above (otherwise +0x50 stays NULL and the two
     //    cost/status strings are never deserialized — the "cost ???" bug).
     void* serObj = *(void**)(serializer + 8);

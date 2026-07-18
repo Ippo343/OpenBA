@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented MapGenerator methods.
 // Called from engine/reimpl/mapgenerator.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "MapGenerator.h"
 #include <cstdint>

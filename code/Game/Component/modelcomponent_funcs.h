@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ModelComponent methods.
 // Called from engine/reimpl/modelcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "ModelComponent.h"
 #include <cstdint>

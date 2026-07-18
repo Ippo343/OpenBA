@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FireComponent methods.
 // Called from engine/reimpl/firecomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "FireComponent.h"
 #include <cstdint>

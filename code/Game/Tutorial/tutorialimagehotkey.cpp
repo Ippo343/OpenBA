@@ -17,7 +17,6 @@
 //   +0x40: void* field40 — zeroed (pointer, used in Slot9 for KeyMap lookup)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialimagehotkey_funcs.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented DecalComponent methods.
 // Called from engine/reimpl/decalcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "DecalComponent.h"
 #include <cstdint>

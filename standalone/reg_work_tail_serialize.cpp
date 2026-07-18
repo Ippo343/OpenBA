@@ -31,8 +31,9 @@
 //   0x1401c6fd0 = "AnimalDescription"   (AnimalDescription_Register  @14014e575)
 //   0x1401c7ba0 = "PastureComponent"    (PastureComponent_RegisterType @14014f5f5)
 //
-// 0x1400f2f00 (Pickup::Slot4) is intentionally NOT here — see report: it is a trampoline
-// stub (not reimplemented) AND depends on 4 uncovered exe callees. Not closure-safe.
+// 0x1400f2f00 (Pickup::Slot4/Execute) is intentionally NOT here — it is reimplemented
+// as Pickup_Slot4_Impl and dispatched via the static Pickup vtable in
+// code/Game/Work/pickup.cpp, so no address registration is needed.
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "Work/pasturework_funcs.h"        // PastureWork_Slot4_Impl

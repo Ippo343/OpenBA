@@ -16,7 +16,6 @@
 // fn_IsDerivedFrom + fn_InternalBasePtr_CheckPtr/_Ctor + fn_MemAlloc/
 // fn_MemFreeStatic + fn_Time_AsSeconds. No exe-internal call escapes.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

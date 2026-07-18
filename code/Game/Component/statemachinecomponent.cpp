@@ -17,7 +17,6 @@
 //   +0x50: stateFlags (uint32, init 0xFF00FFFF)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/statemachinecomponent_funcs.h"
 #include "engine_funcs.h"
@@ -648,8 +647,7 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
     if (!self) return;
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
 
-    // Resolve s_fn_Tick (StateMachine::Tick @0x1400a9660 -> our reimpl). In DLL
-    // mode the hook wrappers call this; standalone has no wrapper, so do it here
+    // Resolve s_fn_Tick (StateMachine::Tick @0x1400a9660 -> our reimpl). Do it here
     // (idempotent). Without it s_fn_Tick stays null and Update is a silent no-op.
     StateMachineComponent_ResolveHelpers();
 

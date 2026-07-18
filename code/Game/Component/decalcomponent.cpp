@@ -11,7 +11,6 @@
 //   OnCreate  (0x14011b510) -- Removes decal from terrain if decalId >= 0
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/decalcomponent_funcs.h"
 #include "engine_funcs.h"
@@ -183,8 +182,8 @@ extern "C" int TradeWork_impl_0d80(int64_t sys, int minX, int minY, int maxX, in
                                    uint32_t uv2, uint32_t uv3, char p15, int p16, int p17,
                                    uint64_t p18, uint8_t p19);
 
-// Draw-path helpers (resolved independently of DecalComponent_InitFuncs, which is only
-// called from the DLL hook — in standalone the driver calls Draw without InitFuncs).
+// Draw-path helpers (resolved independently of DecalComponent_InitFuncs, which is
+// not invoked — the driver calls Draw without InitFuncs).
 typedef void  (*fn_CheckPtr_draw_t)(void* ptr);
 typedef void* (*fn_FindComp_t)(void* entityInner, void* retIBP);
 static fn_CheckPtr_draw_t s_fn_CheckPtr_draw   = nullptr;
@@ -205,9 +204,9 @@ static bool DecalTraceOn() {
     return v == 1;
 }
 
-// DecalDescription type-id (DAT_1401c75b8). In DLL mode the raw .rdata slot holds the id;
-// in standalone that .rdata address resolves NULL, so fall back to the runtime type
-// registry (valid after Object::Factory::Startup) — same split as StorageDisplayComponent.
+// DecalDescription type-id (DAT_1401c75b8). That .rdata address resolves NULL in the
+// standalone exe, so fall back to the runtime type
+// registry (valid after Object::Factory::Startup) — same approach as StorageDisplayComponent.
 static uint32_t DecalDescTypeId() {
     if (s_TypeId_DecalDesc && *s_TypeId_DecalDesc != 0 && *s_TypeId_DecalDesc != 0xFFFFFFFF)
         return *s_TypeId_DecalDesc;
@@ -242,8 +241,7 @@ static void EnsureDrawHelpers() {
 // (transparent). We therefore resolve the ModelComponent type-id from the runtime
 // registry (Object::GetTypeIdByName, valid after Object::Factory::Startup) and walk the
 // owner entity's component list ourselves — the same manual find StartTown already uses
-// successfully (FindComponentOnEntity). In DLL mode the exe constant is live, so we keep
-// delegating to the faithful 0x140003f60. Returns the ModelComponent ptr or nullptr.
+// successfully (FindComponentOnEntity). Returns the ModelComponent ptr or nullptr.
 static void* FindModelComponentOnOwner(void* ownerEnt) {
     // Preferred faithful path: the exe FindComponent(ModelComponent) (0x140003f60) now
     // works in standalone because the ModelComponent type-id .rdata constant
@@ -512,9 +510,8 @@ void DecalComponent_Draw(DecalComponent* self) {
 // ============================================================
 // If decalId >= 0, removes the decal from terrain, resets decalId to -1.
 void DecalComponent_OnCreate(DecalComponent* self) {
-    // lazy-resolve (standalone: nothing calls InitFuncs — it is only invoked from the
-    // DLL-mode Install wrapper; without this the terrain-decal remover stays null and
-    // every released clear-job icon persists on screen forever)
+    // lazy-resolve (nothing calls InitFuncs; without this the terrain-decal remover
+    // stays null and every released clear-job icon persists on screen forever)
     DecalComponent_InitFuncs();
     // [diag] BANISHED_DECAL_TRACE — detach visibility (stale-icon hunt): decalId=-1
     // here means this component never owned a placed decal (the visible icon belongs

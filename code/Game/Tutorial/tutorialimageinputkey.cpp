@@ -13,7 +13,6 @@
 //   +0x30: int32 inputId (serialized via stream vtable)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Tutorial/tutorialimageinputkey_funcs.h"
 #include "engine_funcs.h"

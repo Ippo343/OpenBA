@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ClearAreaComponent methods.
 // Called from engine/reimpl/clearareacomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ClearAreaComponent.h"
 #include <cstdint>

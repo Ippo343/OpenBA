@@ -9,7 +9,6 @@
 //   Draw     (0x140042ba0) -- Resizes emitter list, calls audio setup
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/ambientemittercomponent_funcs.h"
 #include "engine_funcs.h"
@@ -63,12 +62,11 @@ static bool s_initialized = false;
 // ============================================================
 // Type id for AmbientEmitterDescription (comp+0x18 building description).
 // ============================================================
-// The .rdata type-id global DAT_1401c3e98 is readable in DLL mode (exe mapped)
-// but NOT in standalone (ResolveAddr(Module::Exe, .rdata) hits a not-implemented
-// stub — see reference_standalone_rdata_null_fallback). So in standalone look the
-// id up by name via the factory registry (the same CRC32 fn_IsDerivedFrom
-// compares against); in DLL mode read the live .rdata slot. Latch only once the
-// factory registry has frozen the ids (they start at the 0xFFFFFFFF sentinel).
+// The .rdata type-id global DAT_1401c3e98 is NOT resolvable via
+// ResolveAddr(Module::Exe, .rdata) (it hits a not-implemented stub — see
+// reference_standalone_rdata_null_fallback), so look the id up by name via the
+// factory registry (the same CRC32 fn_IsDerivedFrom compares against). Latch only
+// once the factory registry has frozen the ids (they start at the 0xFFFFFFFF sentinel).
 static uint32_t s_tidEmitterDesc = 0;
 static bool s_tidResolved = false;
 static void EnsureEmitterDescTid() {
@@ -80,7 +78,7 @@ static void EnsureEmitterDescTid() {
 // ============================================================
 // Helper: Get building description component
 // ============================================================
-// Uses the shared fn_IsDerivedFrom engine func (resolved in both modes) rather
+// Uses the shared fn_IsDerivedFrom engine func (resolved via engine_funcs) rather
 // than the .rdata dispatch slot, so the building-emitter path works in standalone.
 static void* GetBuildingData(void* self) {
     EnsureEmitterDescTid();

@@ -20,7 +20,7 @@
 // Dtor (vtable +0x00, 0x14000bcc0): ~String(+0x38) + ~String(+0x28) +
 //   External::~External + free.
 //
-// Field knowledge harvested from engine/reimpl/selectdescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/selectdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

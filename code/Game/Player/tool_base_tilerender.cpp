@@ -27,8 +27,7 @@
 //
 // Each function is a 1:1 port of the Ghidra decompile + disassembly. Registration is in
 // standalone/reg_player_tilerender.cpp (RegisterPlayerTileRenderBatch), wired into
-// RegisterCodeFunctions(). This file must NOT depend on hooks.h — bodies are
-// unconditional so it compiles in BOTH dll and standalone builds.
+// RegisterCodeFunctions().
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -321,7 +320,7 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     // non-zero baseline — so a pure terrain-conforming grid floats that baseline above
     // the model. Anchor the grid to the footprint-centre terrain height so it sits flush
     // with the model base, KEEPING per-cell slope (far tiles still follow real relief).
-    // DLL/retail mode skips this (stays byte-faithful — there the two heights agree).
+    // The original skips this (byte-faithful — there the two heights agree).
     float baselineZ = 0.0f;
     if (OverlayAnchorOn() && count3 > 0) {
         const int32_t* mrec = reinterpret_cast<const int32_t*>(*param_3 + (int64_t)(count3 / 2) * 0x14);

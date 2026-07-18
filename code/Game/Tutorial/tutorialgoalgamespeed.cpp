@@ -12,7 +12,6 @@
 // Reads from: game(singleton) -> +0x120 (time/speed controller) -> +0x34 (current speed)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialgoalgamespeed_funcs.h"
 #include "engine_funcs.h"

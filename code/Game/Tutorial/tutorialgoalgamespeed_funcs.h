@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialGoalGameSpeed methods.
 // Called from engine/reimpl/tutorialgoalgamespeed.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TutorialGoals.h"
 #include <cstdint>
@@ -36,7 +35,7 @@ void TutorialGoalGameSpeed_Cleanup(void* self);
 // Slot8 (vtable +0x40, 0x1400df150): Check — test if game speed matches target.
 // Reads current game speed from game->updateLoop(+0x120)->speed(+0x34).
 // Returns 1 if speed == targetSpeed, 0 otherwise.
-// NOTE: Only 18 bytes in original (RIP-relative breaks trampoline), uses vtable patch.
+// NOTE: Only 18 bytes in original, RIP-relative.
 int TutorialGoalGameSpeed_Check(TutorialGoalGameSpeed* self);
 
 // Slot9 (vtable +0x48, 0x140027690): Init.

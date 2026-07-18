@@ -13,7 +13,7 @@
 // GetVersion (vtable +0x18, 0x140119ce0): mov eax,2; ret -> version 2.
 // Dtor (vtable +0x00, 0x140032e50): External::~External + free.
 //
-// Field knowledge harvested from engine/reimpl/createroaddescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/createroaddescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

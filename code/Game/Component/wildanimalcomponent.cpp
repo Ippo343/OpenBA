@@ -9,7 +9,6 @@
 //   [7] OnCreate = 0x14012e2b0 -- registers self with animal's component list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/wildanimalcomponent_funcs.h"
 #include "engine_funcs.h"

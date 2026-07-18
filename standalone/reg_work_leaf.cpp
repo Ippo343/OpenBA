@@ -9,7 +9,6 @@
 // sub-callee closures are incomplete, so a port would build a half-null/drifted structure
 // (silent corruption, strictly worse than the safe no-op skip). See the batch reports.
 //
-// Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
 
 #include "resolve.h"

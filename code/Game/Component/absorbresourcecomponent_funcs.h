@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented AbsorbResourceComponent methods.
 // Called from engine/reimpl/absorbresourcecomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "AbsorbResourceComponent.h"
 #include <cstdint>

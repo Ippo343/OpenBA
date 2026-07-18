@@ -334,7 +334,7 @@ proven crash-free.
 
 ### ✅ Item 1 — Ghost mesh renders (DONE, verified, committed a5bf926)
 **Root cause found:** the Phase-3B groundwork `TransformFromYaw` fix was DEAD. In
-`placementtool.cpp` the `#ifdef STANDALONE_EXE` export fallback for `s_fn_TransformFromYaw`
+`placementtool.cpp` the export fallback for `s_fn_TransformFromYaw`
 ran BEFORE the unconditional `s_fn_TransformFromYaw = resolveIAT(0x140151288)` a few lines
 later, which — the slot being unregistered in standalone → null — **clobbered the fallback
 back to null**. So the fn ptr was null, `localTransform` stayed all-zero (cos=0 → degenerate
@@ -434,7 +434,7 @@ had **three standalone-only bugs**, each gating the next (found by instrumenting
    `Display()` read `**g_pSingletonExref_151a80` (the exref the original exe uses), which is
    **unresolved in standalone**, so the whole projection bailed. FIX = prefer
    `*g_pVideoDeviceSingleton` (the same Video::Device the working `GetMouseRay` uses; `+4`/`+8`
-   = W/H), exref as fallback. This reimpl is standalone-only (DLL mode calls the real exe fn), so
+   = W/H), exref as fallback. This reimpl is the active path, so
    the change is safe. → `fe960` now projects the 8 footprint corners to a valid on-screen rect
    (e.g. `min=(664,312) max=(842,516)` at 1280×720), tracking the ghost.
 2. **`fn_DialogInstance_GetRoot` was NULL in standalone.** It resolves via dispatch slot
@@ -544,7 +544,7 @@ premise: **Town Hall / Trade are NOT Utility** items — they are `Action=Tool`/
 (`statusbar`/`eventlog`/`map`/`profession`/`limit`/`help`), each pointing at
 `Template\Utility<X>.rsc` whose UIDescription child loads `Dialog/StandardDialog.rsc`.
 
-**What it took (all standalone-only; DLL mode uses the real exe fns / vtable):**
+**What it took:**
 1. **Two exe helper ports** — `code/Game/Dialog/toolbar_utility_helpers.cpp` +
    `standalone/reg_toolbar_utility.cpp`: `FindDialogByControllerType` (0x140100270, toggle
    detect) and the AVL find-or-insert `BST_Insert_0x14` (0x140014890, dialog-position node).
@@ -561,7 +561,7 @@ premise: **Town Hall / Trade are NOT Utility** items — they are `Action=Tool`/
    (`RegisterPlayerToolUIBatch` had set the good value), it **clobbered it back to 0** → the new
    dialog got a NULL vtable at +0 → `UI::UserInterface::AddDialog` (calls dialog `vtable[+0x20]`)
    crashed `READ of 0x20`. FIX = null-guard: only overwrite `g_ToolUI_ChildDialog_Vtable` when
-   ResolveAddr returns non-null (keeps the SA replacement vtable; DLL mode still gets the real one).
+   ResolveAddr returns non-null (keeps the SA replacement vtable).
 
 **⚠️ Two follow-ups (open):**
 - **`map` crashes ~1s after open** in `UserInterface::UpdateEvents`, dispatching a queued event

@@ -3,14 +3,14 @@
 // Application-x64.exe, build 170910.
 //
 // All dialog classes extend DialogInstance (0xB8 base).
-// These are minimal structs for passthrough hooking; field names are
+// These are minimal structs; field names are
 // placeholders until fully reverse-engineered.
 
 #include <cstdint>
 #include <cstddef>
 
 // Base DialogInstance (from Runtime-x64.dll)
-// Size: 0xB8 bytes. We treat it as opaque for passthrough hooks.
+// Size: 0xB8 bytes. We treat it as opaque.
 
 struct AchievementDialog {
     uint8_t base[0xB8];       // +0x00: DialogInstance base

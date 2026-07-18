@@ -35,7 +35,6 @@
 //   3. Loop back to check pendingState again (Enter or Update may set a new one).
 //
 // Decompiled from Application-x64.exe using Ghidra, verified against disassembly.
-// This file does NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Game/statemachine_funcs.h"
 #include <cstdint>

@@ -21,7 +21,6 @@
 // use different offsets and different helper functions.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/marketwork_funcs.h"
 #include "engine_funcs.h"
@@ -69,7 +68,7 @@ typedef void  (*MW_MemFree_t)(void* ptr);
 typedef void  (*MW_MemFreeStatic_t)(void* ptr);
 // Object::Internal::~Internal
 typedef void  (*MW_Internal_Dtor_t)(void* self);
-// Slot4 original (call through trampoline for now)
+// Slot4 original exe function (called directly for now)
 typedef int   (*MW_Slot4_Original_t)(void* self, void* param2, void* param3);
 
 static MW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
@@ -232,14 +231,14 @@ bool MarketWork_ResolveFuncs() {
 // - Distance scoring and best entity selection
 // - FindPath action creation and resource transfer
 //
-// Since the hook is DISABLED (MOV RAX,RSP prologue), this only runs
-// in standalone exe mode. For now we call through to the original.
+// Not yet reimplemented. For now, resolve and call the original exe
+// function directly.
 //
 // TODO: Full reimplementation when all sub-functions are understood.
 // The original function address is 0x1400eff80.
 //
 int MarketWork_Slot4_Impl(MarketWork* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    // Hook is DISABLED -- this code path is only for standalone exe.
+    // Not yet reimplemented.
     // Call the original function directly via resolved address.
     typedef int (*MW_Slot4_Orig_t)(void* self, void* param2, void* param3);
     static MW_Slot4_Orig_t s_fn_Slot4_Original = nullptr;

@@ -15,7 +15,6 @@
 //   +0x28: right child
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
@@ -53,7 +52,7 @@ typedef void  (*TrW_TreeNodeCleanup_t)(void* bstRoot, void* node);
 // FindSubEntity
 typedef void* (*TrW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
 
-// Slot4 original function (too complex for clean reimpl, called via trampoline)
+// Slot4 original exe function (too complex for clean reimpl, called directly)
 typedef uint32_t (*TrW_Slot4_Original_t)(void* self, void* citizenIBP, void* param3);
 
 static TrW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
@@ -159,14 +158,11 @@ bool TradeWork_ResolveFuncs() {
 // calculates supply/demand for each resource type, finds storage components,
 // checks capacities, finds pathfinding routes, creates trade work actions.
 //
-// Hook is DISABLED (bug class 3 -- MOV RAX,RSP in prologue).
-// For standalone exe, this will need a full reimplementation from the decompiled
-// code. For now, provide a stub that returns 1 (no work) -- the hook wrapper
-// will continue to use the trampoline.
+// Not yet reimplemented: needs a full port from the decompiled code.
+// For now, provide a stub that returns 1 (no work).
 //
 int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    // Stub -- hook wrapper uses trampoline for this function
-    // since the hook is DISABLED (bug class 3).
+    // Stub -- not yet reimplemented.
     // Full reimpl requires ~700 lines of trade supply/demand logic.
     (void)self;
     (void)citizenIBP;
@@ -446,8 +442,8 @@ void* TradeWork_ScalarDtor_Impl(TradeWork* self, uint32_t flags) {
 // Vtable @ 0x140161a10 (13 slots), size 0x58, parent "Work".
 // Shared slot helpers: work_base_standalone.{h,cpp}.
 // Slot map ground-truthed from the real exe vtable @ 0x140161a10:
-//   slot4 (Execute)=TradeWork_Slot4_Impl (0x1400f5d40, STUB — uses trampoline
-//   in DLL mode). The orphaned TradeWork_Execute_Impl ("returns false") is NOT
+//   slot4 (Execute)=TradeWork_Slot4_Impl (0x1400f5d40, STUB). The orphaned
+//   TradeWork_Execute_Impl ("returns false") is NOT
 //   in the vtable — slot5 is the shared Work_Slot5. Do NOT use it.
 // ============================================================
 #include "work_base_standalone.h"

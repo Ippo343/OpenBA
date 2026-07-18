@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FinishTutorialGoal methods.
 // Called from engine/reimpl/finishtutorialgoal.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "AchievementGoals.h"
 #include <cstdint>

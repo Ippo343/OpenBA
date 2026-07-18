@@ -12,7 +12,6 @@
 //   Serializer(local, param_2, 0); ~Serializer(local)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/herbalistcomponent_funcs.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented LocationWork methods.
 // Called from engine/reimpl/locationwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "LocationWork.h"
 #include <cstdint>

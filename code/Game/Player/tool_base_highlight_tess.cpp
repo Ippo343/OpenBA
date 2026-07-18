@@ -13,9 +13,9 @@
 // GEOMETRY CORRUPTION.
 //
 // STANDALONE-ONLY: like the rest of tool_base_highlight.cpp, this reimpl is reached
-// only via RegisterExeAddr in standalone. In DLL mode the original exe's ace40 runs,
-// so the .rdata constants below are embedded as their retail values (ResolveAddr on a
-// .rdata constant returns NULL in standalone — see reference_standalone_rdata_null_fallback).
+// only via RegisterExeAddr. ResolveAddr on a .rdata constant returns NULL in standalone
+// (see reference_standalone_rdata_null_fallback), so the .rdata constants below are
+// embedded here as their retail values.
 //
 // Slot layout (lVar16 = param_1+0x1f0 + param_2*0x60):
 //   +0x08 vertex-buffer  {void* base, int count, int cap}        (plVar30 == lVar16+8)

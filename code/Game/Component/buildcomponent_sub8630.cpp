@@ -26,7 +26,6 @@
 //   +0x30  int  slot count
 //   delivered(material) = slot.total - slot.reserved for the matching slot type
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -57,8 +56,8 @@ typedef void* (*BC8630_FindCompStorage_t)(uintptr_t entity, void* retIBP);
 // Type-id for "BuildDescription" (DWORD_1401c7040). The .rdata BaseTypeInfo is
 // created by BuildDescription_Register (0x14014e5f5):
 //   Object::BaseTypeInfo::BaseTypeInfo(&DWORD_1401c7040,"BuildDescription",...)
-// so the name is verified. Read via GetTypeIdByName in standalone (the raw
-// .rdata global resolves to null there); read the live .rdata typeId in DLL mode.
+// so the name is verified. Read via GetTypeIdByName (the raw
+// .rdata global resolves to null in the standalone exe).
 static uint32_t BC8630_BuildDescTypeId() {
     static uint32_t id = 0;
     if (id != 0 && id != 0xFFFFFFFFu) return id;

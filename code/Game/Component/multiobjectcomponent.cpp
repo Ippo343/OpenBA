@@ -8,7 +8,6 @@
 //   Shutdown  (0x140125880) — Serialize entity ref array + multiCount
 //   OnCreate  (0x1401257C0) — Mark child entities for removal
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/multiobjectcomponent_funcs.h"
 #include "engine_funcs.h"

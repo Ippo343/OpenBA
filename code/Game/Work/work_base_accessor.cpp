@@ -2,17 +2,15 @@
 // Shared Work accessor / small-loop helpers referenced from several Work classes.
 //
 // Like work_base_reimpl.cpp, these are exe sub-helpers resolved via
-// ResolveAddr(Module::Exe, 0xADDR) from code/Game/Work/*.cpp. In DLL mode they
-// resolve to the original exe code; in standalone mode they resolve to 0 (silently
-// skipped) unless registered. This file provides faithful 1:1 reimplementations and
+// ResolveAddr(Module::Exe, 0xADDR) from code/Game/Work/*.cpp. They resolve to 0
+// (silently skipped) unless registered. This file provides faithful 1:1 reimplementations and
 // a single registration point (RegisterWorkAccessorBatch in
 // standalone/reg_work_accessor.cpp) so the shared call sites fire real logic.
 //
 // Wave 2 (Work) — shared accessor sub-batch. Each function is a 1:1 port of the
 // decompiled exe helper; do not "improve" behavior.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+// Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

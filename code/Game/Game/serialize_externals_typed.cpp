@@ -178,7 +178,6 @@ void ExternalPtrSerializeGeneric_7140(void** refField, void* serializer,
 extern "C" void Reimpl_ExternalPtr_Serialize_Typed_7140(
     void* refField, void* serializer) {
 
-    // Prefer trampoline to original when available (DLL mode). In standalone,
     // fn_ExternalPtr_Serialize_Typed_7140 resolves back to ourselves via the
     // address registry, so we always run the cleaned body here.
 

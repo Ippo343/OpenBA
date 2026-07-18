@@ -7,7 +7,6 @@
 // Ctor: 0x1400e4ad0, Vtable: 0x140161020
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "BuildActions.h"
 #include "engine_funcs.h"

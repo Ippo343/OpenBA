@@ -63,7 +63,7 @@
 // creation. With `cleararea` live, its 0 wins and this is unreachable except via
 // the real 1 -> 2 harvest transition.
 //
-// Faithful offset-by-offset port. Portable for the standalone exe (no hooks.h).
+// Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
 #include "resolve.h"

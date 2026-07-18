@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented TrackerComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TrackerComponent.h"
 #include <cstdint>

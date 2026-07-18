@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ClearResourceComponent methods.
 // Called from engine/reimpl/clearresourcecomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ClearResourceComponent.h"
 #include <cstdint>

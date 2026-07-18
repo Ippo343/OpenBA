@@ -6,7 +6,6 @@
 //   Shutdown  (0x14005cfa0) — Two empty serializer blocks
 //   OnCreate  (0x14005cf60) — Registers entity with population manager
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/wellcomponent_funcs.h"
 #include "engine_funcs.h"

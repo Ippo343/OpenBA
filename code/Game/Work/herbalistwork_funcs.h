@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HerbalistWork methods.
 // Called from engine/reimpl/herbalistwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HerbalistWork.h"
 #include <cstdint>

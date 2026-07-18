@@ -46,10 +46,9 @@
 //   * 0x14012cf10 StorageComponent::QueryCount (volume-weighted total)
 //   * 0x140006270 Entity_FindComponent_Storage (component scan)
 //
-// Type-ids are obtained with the documented standalone fallback: prefer the
-// raw .rdata global when resolvable AND non-zero (DLL mode), else
-// ::Object::GetTypeIdByName (standalone; valid after Object::Factory::Startup).
-// The shared .rdata globals are never written.
+// Type-ids are obtained with the documented fallback: prefer the raw .rdata
+// global when resolvable AND non-zero, else ::Object::GetTypeIdByName (valid
+// after Object::Factory::Startup). The shared .rdata globals are never written.
 //
 // Standalone-inert deviations (documented; retail dereferences unguarded):
 //   * SpawnResources phase A / cd80 / c560 / QueryCount: a template with no

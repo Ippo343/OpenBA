@@ -3,7 +3,6 @@
 //
 // Resolved via ResolveAddr(Module::Exe, 0xADDR) from many code/Game/Work/*.cpp; registered
 // via RegisterWorkGridBatch in standalone/reg_work_grid.cpp. Faithful 1:1 ports.
-// Must NOT depend on hooks.h.
 //
 // NOTE: this replaces an earlier parallel-agent draft that was NOT faithful (the draft is
 // kept under notes/wave2_drafts/work_base_grid.cpp.draft). Each function here was verified

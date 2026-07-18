@@ -330,7 +330,7 @@ void ToolUI_Slot8(ToolUI* self) {
     // function is g_vt[8], dispatched every frame by DialogInstance::OnUpdate), but
     // only for entity dialogs (datasource at +0x28 is a ComponentEntity). This arms
     // the pending-drag path that Slot9's mouse-down triggers and this function then
-    // follows. In DLL mode the real EntityUI handler does it, so this is SA-only.
+    // follows. (The original relies on the real EntityUI handler for this.)
     if (g_TypeId_ComponentEntity) {
         void* ds = *(void**)(s + 0x28);
         if (ds && fn_IsDerivedFrom(ds, *g_TypeId_ComponentEntity))
@@ -549,7 +549,7 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         // CloseDialog fn, the world singleton (walked for the tracking BST below), and
         // the dialog-instance pointer behind the IBP at +0x18 (deref'd for its
         // UserInterface at +0x10). Range check matches CitUI_OkPtr (canonical Win64
-        // user-space heap window). In DLL mode these are always live, so this is inert.
+        // user-space heap window).
         if (!fn_UI_CloseDialog || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
             return;
         {

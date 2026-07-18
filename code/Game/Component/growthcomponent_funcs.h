@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented GrowthComponent methods.
 // Called from engine/reimpl/growth.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "GrowthComponent.h"
 #include <cstdint>

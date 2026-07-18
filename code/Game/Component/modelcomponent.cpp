@@ -13,7 +13,6 @@
 //   OnRemove  (0x140124960) — Calls MeshInstance update, checks animating, clears flag
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/modelcomponent_funcs.h"
 #include "engine_funcs.h"

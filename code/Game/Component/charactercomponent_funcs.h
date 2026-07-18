@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented CharacterComponent methods.
 // Called from engine/reimpl/charactercomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "CharacterComponent.h"
 #include <cstdint>

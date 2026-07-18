@@ -10,7 +10,6 @@
 // 0x14009f810 MapPathCost) are registered by earlier waves; the Math::Transform::operator*
 // dispatch slot 0x140151470 is registered in RegisterDispatchSlots() (address_registry.cpp).
 //
-// Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
 
 #include "resolve.h"

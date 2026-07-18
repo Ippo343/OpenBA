@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented AnimalComponent methods.
 // Called from engine/reimpl/animal.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "AnimalComponent.h"
 #include <cstdint>

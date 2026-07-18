@@ -3,9 +3,8 @@
 // code/Game/Work/{cleararea,harvestarea,plantarea}.cpp.
 //
 // Like the other work_base_*.cpp files, these are exe helpers resolved via
-// ResolveAddr(Module::Exe, 0xADDR) from the Work class reimpls. In DLL mode they
-// resolve to original exe code; in standalone mode they resolve to 0 (silently
-// skipped) unless registered. This file provides faithful 1:1 ports so the call
+// ResolveAddr(Module::Exe, 0xADDR) from the Work class reimpls. They resolve to 0
+// (silently skipped) unless registered. This file provides faithful 1:1 ports so the call
 // sites fire real logic in the standalone exe. A single registration point lives
 // in standalone (see lead-integrated reg_*.cpp).
 //
@@ -23,8 +22,7 @@
 // unregistered, so porting them now would build a half-null/drifted action and
 // silently corrupt — strictly worse than the safe no-op skip.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+// Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

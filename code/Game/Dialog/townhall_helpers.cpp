@@ -1,10 +1,10 @@
 // code/Game/Dialog/townhall_helpers.cpp
 //
 // Faithful ports of the small exe helper functions the TownHallUI reimplementation
-// (townhallui.cpp) reaches through engine_funcs fn_* pointers. In DLL mode those
-// pointers resolve to the original exe code; in STANDALONE they resolve NULL unless
-// the address is registered, which left the town-hall panel's setup/refresh dead.
-// reg (standalone/reg_townhallui.cpp) maps each exe address to these ports.
+// (townhallui.cpp) reaches through engine_funcs fn_* pointers. Those pointers
+// resolve NULL unless the address is registered, which left the town-hall panel's
+// setup/refresh dead. reg (standalone/reg_townhallui.cpp) maps each exe address to
+// these ports.
 //
 //   0x14006abf0  GroupRating_Init      — cache "whole"/"half" heart/star ImageElements
 //   0x14006aed0  GroupRating_Update    — show N whole + optional half icon from value/max

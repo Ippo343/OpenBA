@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented PopulationComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "PopulationComponent.h"
 #include <cstdint>

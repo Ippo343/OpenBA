@@ -72,7 +72,6 @@
 // Engine externals (engine_funcs.h): fn_InternalBasePtr_CheckPtr, fn_InternalBasePtr_Ctor,
 //   fn_MemAlloc(+g_pMemAllocSingleton), fn_MemFreeStatic, fn_Random_Rand, g_pGameWorldSingleton.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

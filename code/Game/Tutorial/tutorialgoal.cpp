@@ -11,7 +11,6 @@
 // (no fields to serialize in the base class).
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialgoal_funcs.h"
 #include "engine_funcs.h"

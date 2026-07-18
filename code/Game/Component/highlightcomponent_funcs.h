@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HighlightComponent methods.
 // Called from engine/reimpl/highlightcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HighlightComponent.h"
 #include <cstdint>

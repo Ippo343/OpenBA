@@ -9,7 +9,7 @@
 // text + red/white validity tint, projects the building footprint to screen
 // space, and repositions (smoothed) the CreateBar dialog over that footprint.
 //
-// Ported exe functions (all UNCONDITIONAL — compile in BOTH dll + standalone):
+// Ported exe functions:
 //   operator_impl_fc60          0x1400ffc60  -> UpdateToolUI_fc60   (main)
 //   operator_impl_fc60_sub_e600 0x14005e600  -> UpdateToolUI_e600   ("textSize")
 //   operator_impl_e420          0x14005e420  -> UpdateToolUI_e420   ("textStatus")
@@ -42,7 +42,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (both modes)
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -87,7 +87,7 @@ void EnsureCreateBarExports() {
     s_fn_BoxGetCorners = reinterpret_cast<BoxGetCorners_t>(ResolveExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z"));
     s_fn_RectCtor      = reinterpret_cast<RectCtor_t>(ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
     s_fn_UIStrToSys    = reinterpret_cast<UIStrToSys_t>(ResolveExport("??BString@UI@@QEBA?AV0System@@XZ"));
-    // ec70 / fe960 are exe code (registered in standalone; real exe code in dll).
+    // ec70 / fe960 are exe code (registered in standalone).
     s_fn_ec70  = reinterpret_cast<Ec70_t>(ResolveAddr(Module::Exe, 0x1400fec70));
     s_fn_fe960 = reinterpret_cast<Fe960_t>(ResolveAddr(Module::Exe, 0x1400fe960));
     // Latch once everything critical resolved (retry next call otherwise). The
@@ -103,7 +103,7 @@ uint32_t BuildReqUICtrlTypeId() {
     static uint32_t t = 0;
     if (!t) {
         const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4d40));
-        if (p) t = *p;                                        // dll: real .rdata type-id
+        if (p) t = *p;                                        // raw .rdata type-id (null in standalone)
         if (!t) t = ::Object::GetTypeIdByName("BuildRequirementUI");  // standalone fallback
     }
     return t;
@@ -127,7 +127,7 @@ uint32_t ImageElementTypeId() {
     static uint32_t t = 0;
     if (!t) {
         void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151500));
-        if (slot && *slot) t = *reinterpret_cast<uint32_t*>(*slot);   // dll path
+        if (slot && *slot) t = *reinterpret_cast<uint32_t*>(*slot);   // raw .rdata slot (null in standalone)
         if (!t) {
             void* ti = ResolveExport("?_typeInfo@ImageElement@UI@@0VBaseTypeInfo@Object@@A");
             if (ti) t = *reinterpret_cast<uint32_t*>(ti);

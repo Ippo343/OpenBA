@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FloorComponent methods.
 // Called from engine/reimpl/floorcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "FloorComponent.h"
 #include <cstdint>

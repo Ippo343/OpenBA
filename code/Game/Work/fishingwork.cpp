@@ -16,7 +16,6 @@
 //   +0x50: Slot10     (0x1400ea8b0) — get target entity position IBP
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "FishingWork.h"
 #include "engine_funcs.h"

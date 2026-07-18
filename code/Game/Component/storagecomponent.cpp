@@ -11,7 +11,6 @@
 //   Helper_c560 (0x14012c560) — check material flag intersection
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/storagecomponent_funcs.h"
 #include "engine_funcs.h"
@@ -108,9 +107,8 @@ static void EnsureHelpers() {
 }
 
 // ============================================================
-// Effective type-ids — raw .rdata global preferred (DLL mode), with the
-// documented standalone fallback ::Object::GetTypeIdByName (the raw
-// 0x1401c7xxx addresses resolve to NULL in the standalone exe; the shared
+// Effective type-ids — the raw 0x1401c7xxx .rdata addresses resolve to NULL in the
+// standalone exe, so use ::Object::GetTypeIdByName (the shared
 // globals are never written).
 // ============================================================
 static uint32_t EffTid_StorageDescription() {
@@ -381,7 +379,7 @@ int StorageComponent_QueryCount(void* storageComp) {
 // guards against NULL.
 
 uint32_t StorageComponent_Helper_c560(void* param_1, void* param_2) {
-    // Type-id via EffTid (raw global in DLL mode, GetTypeIdByName in standalone).
+    // Type-id via EffTid (GetTypeIdByName in the standalone exe).
     void* rawMatDesc = FindRawMatDescription((uintptr_t)param_2);
 
     if (!rawMatDesc) return 0;

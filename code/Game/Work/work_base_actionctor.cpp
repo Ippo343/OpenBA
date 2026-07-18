@@ -7,9 +7,8 @@
 // PlayAnimation) and appends them to the CitizenAIComponent's task action list
 // (entity+0x278, list base +0x48). They are resolved via ResolveAddr(Module::Exe,
 // 0xADDR) from the Work .cpp call sites (cleararea / foresterwork / herbalistwork /
-// pasturework / tendarea / plantorchard / fishingwork). In DLL mode they resolve to
-// the original exe code; in standalone mode they resolve to 0 (silently skipped)
-// unless registered. This file provides faithful 1:1 ports + a single registration
+// pasturework / tendarea / plantorchard / fishingwork). They resolve to 0
+// (silently skipped) unless registered. This file provides faithful 1:1 ports + a single registration
 // point (RegisterWorkActionCtorBatch in standalone/reg_work_actionctor.cpp).
 //
 // Each function is an instruction-faithful port of the decompiled exe helper; do
@@ -18,7 +17,6 @@
 // is null-guarded and skipped, matching project semantics. Sub-callees are NOT
 // registered here (they are separate addresses, owned elsewhere).
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

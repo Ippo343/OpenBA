@@ -2,15 +2,13 @@
 // Player wave (round 2) — "tile" sub-batch. Shared PlacementTool tile/footprint
 // helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from code/Game/Player/*.cpp.
 //
-// In DLL mode these resolve to the original exe code; in standalone mode they
-// resolve to 0 (silently skipped) unless registered. This file provides faithful
-// 1:1 reimplementations and a single registration point
+// These resolve to 0 (silently skipped) unless registered. This file provides
+// faithful 1:1 reimplementations and a single registration point
 // (RegisterPlayerTileBatch in standalone/reg_player_tile.cpp) so the call sites
 // fire real logic.
 //
 // Each function is a 1:1 port of the decompiled+disassembled exe helper; do not
-// "improve" behavior. This file must NOT depend on hooks.h — bodies are
-// unconditional so it compiles in BOTH dll and standalone builds.
+// "improve" behavior.
 
 #include "engine_funcs.h"
 #include "resolve.h"

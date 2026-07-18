@@ -11,7 +11,6 @@
 //
 // Vtable at 0x140162580.
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/citizencomponent_funcs.h"
 #include "engine_funcs.h"
@@ -573,7 +572,7 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     // stamped still read as unemployed (they legitimately need a job), but children
     // (age < adultAge) and students (in-school, +0x208 != 0) never do — which is what
     // isAdult already encodes (computed at the top of Update). With a real profession
-    // present (DLL mode / stamped SA) this branch is skipped, so retail behaviour is
+    // present (stamped SA) this branch is skipped, so retail behaviour is
     // byte-identical.
     char profByte = (profData1F0 != 0) ? *reinterpret_cast<char*>(profData1F0 + 0x4C)
                                        : (isAdult ? 0 : 1);

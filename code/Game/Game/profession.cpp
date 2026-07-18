@@ -80,7 +80,7 @@ void Profession_InitFuncs() {
 
     // Standalone fallbacks: the exe IAT dispatch slots above resolve to NULL when
     // the original exe isn't mapped (standalone). Fall back to the Runtime-resolved
-    // engine_funcs globals so the SAME Serialize works in both modes. The
+    // engine_funcs globals so the SAME Serialize works in the standalone exe. The
     // ExternalPtr variants are stream-identical to fn_ExternalPtr_BuildSerialize.
     if (!s_fn_Serializer_Ctor)  s_fn_Serializer_Ctor  = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
     if (!s_fn_Serializer_Dtor)  s_fn_Serializer_Dtor  = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);

@@ -1515,8 +1515,8 @@ static void StartTown_EmployForesters() {
 // Children keep +0x1f0 == 0 (their panel branch uses ProfessionList+0x40 "Student").
 // Idempotent (sets only when +0x1f0 == 0), so it composes with EmployForesters' own
 // seed. Depends on the founding-housing pass having collected g_foundingCitizens and on
-// ProfessionList (gw+0xb0) being live (LoadProfessionList_Step2, default-on). Standalone-
-// only build-time pass -> no-op in DLL mode (retail runs the real FUN_140117080).
+// ProfessionList (gw+0xb0) being live (LoadProfessionList_Step2, default-on). Build-time
+// pass that reproduces what retail runs at runtime in FUN_140117080.
 static void StartTown_SeedLaborerProfessions() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     int64_t profList = *reinterpret_cast<int64_t*>(

@@ -20,7 +20,6 @@
 //   Returns: 1 if BST is empty after cleanup, 0 otherwise.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Work/firework_funcs.h"
 #include "engine_funcs.h"

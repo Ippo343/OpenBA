@@ -9,7 +9,6 @@
 //   Serialize (0x140044990) -- IsDerivedFrom check to init isEnabled from config
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/autopickupcomponent_funcs.h"
 #include "engine_funcs.h"

@@ -9,7 +9,6 @@
 //   OnCreate  (0x14012f090) — BST lookup to register with profession list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/workplacecomponent_funcs.h"
 #include "engine_funcs.h"

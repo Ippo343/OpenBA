@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TradeWork methods.
 // Called from engine/reimpl/tradework.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TradeWork.h"
 #include <cstdint>

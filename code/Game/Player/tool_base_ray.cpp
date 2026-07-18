@@ -2,17 +2,13 @@
 // Player tool terrain-raycast / mouse-ray / screen->cell / placement-position chain.
 //
 // These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
-// per-tool Player .cpp files (placementtool.cpp etc.). In DLL mode they resolve to
-// the original exe code; in standalone mode they resolve to 0 (silently skipped)
-// unless registered. This file provides faithful 1:1 reimplementations and a single
-// registration point (RegisterPlayerRayBatch in standalone/reg_player_ray.cpp) so the
-// shared call sites fire real logic in the standalone exe.
+// per-tool Player .cpp files (placementtool.cpp etc.). They resolve to 0 (silently
+// skipped) unless registered. This file provides faithful 1:1 reimplementations and a
+// single registration point (RegisterPlayerRayBatch in standalone/reg_player_ray.cpp) so
+// the shared call sites fire real logic in the standalone exe.
 //
 // Wave 5 (Player) round 2 — ray/screen-to-cell sub-batch. Each function is a 1:1 port
 // of the decompiled exe helper; do not "improve" behavior.
-//
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
 
 #include "engine_funcs.h"
 #include "resolve.h"

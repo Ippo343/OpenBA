@@ -18,7 +18,6 @@
 //   +0x20: int    field_20      — priority value
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "Work/buildstructure_funcs.h"
 #include "engine_funcs.h"

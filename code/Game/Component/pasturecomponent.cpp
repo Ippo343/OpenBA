@@ -10,7 +10,6 @@
 //   OnCreate  (0x1401277e0) — Complex entity ref setup + registration
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/pasturecomponent_funcs.h"
 #include "engine_funcs.h"

@@ -7,7 +7,6 @@
 //   OnCreate (0x14004ef60) — register entity with game world entity list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/marketlocationcomponent_funcs.h"
 #include "engine_funcs.h"

@@ -6,11 +6,9 @@
 //   FUN_1400feec0  EntityUI::UpdateCamera   — WASD pan, Q/E rotate, wheel zoom, pitch
 //   FUN_1400ff6e0  EntityUI::UpdateHotkeys   — TogglePause + camera presets (0..4)
 //
-// In the DLL build the original exe owns EntityUI::Update (0x1401026a0) and our
-// hooks chain into it, so the camera already responds to input. In the standalone
-// build EntityUI::Update is not registered, so the camera never moved. This file is
-// invoked directly from GameUpdateLoop::Update (Step 10, standalone only) so the
-// KeyMap drives the camera exactly like the original.
+// EntityUI::Update (0x1401026a0) is not registered, so the camera would never
+// move on its own. This file is invoked directly from GameUpdateLoop::Update
+// (Step 10) so the KeyMap drives the camera exactly like the original.
 //
 // ── Camera state lives on the PlayerController at GameWorld+0xE0 ──
 //   +0x1c,+0x20,+0x24  focus/target position (x,y,z) — what panning moves

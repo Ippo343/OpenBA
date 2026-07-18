@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ClearStorage methods.
 // Called from engine/reimpl/clearstorage.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ClearStorage.h"
 #include <cstdint>

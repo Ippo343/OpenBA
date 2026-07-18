@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented EditTool methods.
 // Called from engine/reimpl/edittool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "EditTool.h"
 #include <cstdint>

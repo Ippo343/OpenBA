@@ -100,13 +100,11 @@ inline void* WriteComponentTypeId(void* out, const char* componentName) {
 // not yet wired (caller should fall back to skip-validation).
 uint32_t ResolveTypeIdByNameLazy(const char* simpleName);
 
-// IsDerivedFrom wrapper safe for both build modes.
-//   - DLL mode: dispatches to fn_IsDerivedFrom (full Runtime factory tree).
-//   - Standalone mode: returns true if obj is non-null. Per
-//     `feedback_factory_cascade_strategy.md`, the standalone Runtime factory
-//     tree is incomplete — calling fn_IsDerivedFrom can return false (or
-//     NULL-deref) for legit objects, nullifying their loads. Trust
-//     ExternalFactory::FindOrLoad's return instead.
+// IsDerivedFrom wrapper. Returns true if obj is non-null. Per
+// `feedback_factory_cascade_strategy.md`, the standalone Runtime factory
+// tree is incomplete — calling fn_IsDerivedFrom can return false (or
+// NULL-deref) for legit objects, nullifying their loads. Trust
+// ExternalFactory::FindOrLoad's return instead.
 //
 // Used by serialize_externals.cpp / serialize_arrays.cpp / etc. as the gate
 // after a typed FindOrLoad. Also used in path-export (encState==3) for

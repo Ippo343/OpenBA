@@ -12,7 +12,6 @@
 // Draw and OnCreate are deeply coupled to zone rendering subsystem.
 // We call the original exe functions for these.
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/zonecomponent_funcs.h"
 #include "engine_funcs.h"

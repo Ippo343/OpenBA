@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented CropFieldComponent methods.
 // Called from engine/reimpl/cropfieldcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "CropFieldComponent.h"
 #include <cstdint>

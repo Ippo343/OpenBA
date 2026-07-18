@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented CitizenBehavior methods.
 // Called from engine/reimpl/ wrappers (when created) or future standalone exe.
-// No dependency on hooks.h — portable to standalone exe.
 //
 // CitizenBehavior is the population manager (GameUpdateLoop+0xF0).
 // Profile source path: Entity\CitizenBehavior.cpp

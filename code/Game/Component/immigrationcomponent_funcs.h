@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ImmigrationComponent methods.
 // Called from engine/reimpl/immigrationcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ImmigrationComponent.h"
 #include <cstdint>

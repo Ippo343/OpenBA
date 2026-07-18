@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HappinessComponent methods.
 // Called from engine/reimpl/happinesscomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HappinessComponent.h"
 #include <cstdint>

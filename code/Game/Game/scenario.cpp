@@ -64,8 +64,8 @@ static void EnsureResolved() {
     // functions (0x26d -> ~LayoutElement, 0x26e -> ~Light, 0x309 ->
     // EdgeMeshInstance::operator new), so Scenario_Init called ~LayoutElement on
     // the fresh Scenario and freed garbage -> heap corruption. Resolve by
-    // verified Runtime address instead (ResolveAddr applies the ASLR delta in
-    // both DLL and standalone modes). Addresses confirmed in Ghidra:
+    // verified Runtime address instead (ResolveAddr applies the ASLR delta).
+    // Addresses confirmed in Ghidra:
     //   ctor 0x18009e240, ~Achievement 0x18009e180,
     //   GetFileVersion (vtable+0x18) 0x18009e170, Serialize 0x18009e070.
     s_fn_Achievement_Ctor = reinterpret_cast<fn_Achievement_Ctor_t>(

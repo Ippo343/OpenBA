@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialGoalDialog methods.
 // Called from engine/reimpl/tutorialgoaldialog.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include <cstdint>
 

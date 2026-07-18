@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PopulationGoal methods.
 // Called from engine/reimpl/populationgoal.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "AchievementGoals.h"
 #include <cstdint>

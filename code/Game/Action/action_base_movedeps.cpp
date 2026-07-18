@@ -21,7 +21,6 @@
 // Each function below is a 1:1 port of the decompiled exe helper (Ghidra), ABI verified
 // against the disassembly. Do NOT "improve" behavior.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -112,8 +111,8 @@ void ActMvDep_AnimHelper_50f0(uintptr_t self, uint32_t animId, float p3, float p
     // c7b30 global stays 0xFFFFFFFF). The animation then targets the inert resource-entity
     // MeshInstance layer, which isn't brought up. Skip as a safe no-op rather than deref
     // null at self+0x18 — matches this function's existing inert-world no-op philosophy
-    // below and the move-tick tail's inert-ModelComponent guards. Live/DLL mode (self
-    // non-null) is unchanged. This keeps the organic forester cut sequence crash-safe once
+    // below and the move-tick tail's inert-ModelComponent guards. The live-world path
+    // (self non-null) is unchanged. This keeps the organic forester cut sequence crash-safe once
     // the citizen actually arrives at a tree (the MoveTo/arrival keystone now works).
     if (self == 0) return;
 

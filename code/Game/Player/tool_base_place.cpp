@@ -2,9 +2,8 @@
 // Player wave (batch "place") — shared PlacementTool sub-helpers resolved via
 // ResolveAddr(Module::Exe, 0xADDR) from code/Game/Player/placementtool.cpp.
 //
-// In DLL mode these resolve to the original exe code; in standalone mode they
-// resolve to 0 (silently skipped) unless registered. This file provides faithful
-// 1:1 reimplementations and a single registration point
+// These resolve to 0 (silently skipped) unless registered. This file provides
+// faithful 1:1 reimplementations and a single registration point
 // (RegisterPlayerPlaceBatch in standalone/reg_player_place.cpp) so the call
 // sites fire real logic.
 //
@@ -12,9 +11,6 @@
 // satisfied (registered exe code / registered dispatch slot / Runtime export)
 // are reimplemented + registered here. The rest are documented as DEFER in
 // reg_player_place.cpp with the exact unregistered sub-callee.
-//
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
 
 #include "engine_funcs.h"
 #include "resolve.h"

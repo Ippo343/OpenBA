@@ -15,7 +15,6 @@
 //   Validate (vtable slot 9, 0x1400e7530)
 //   GetTarget (vtable slot 10, 0x1400e8fb0)
 //
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/consumeproduce_funcs.h"
 #include "BuildActions.h"

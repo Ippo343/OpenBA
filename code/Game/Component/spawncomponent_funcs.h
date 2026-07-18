@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented SpawnComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "SpawnComponent.h"
 #include <cstdint>

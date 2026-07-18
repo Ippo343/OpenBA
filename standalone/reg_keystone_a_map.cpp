@@ -11,7 +11,6 @@
 // The externals (IsDerivedFrom / CheckPtr / InternalBasePtr::Ctor slots) come from
 // engine_funcs and need no exe registration.
 //
-// Guarded by STANDALONE_EXE — in DLL mode these addresses resolve to the original exe code.
 
 
 #include "resolve.h"

@@ -20,7 +20,6 @@
 //   +0x7c: int32  statSubType         — sub-type index (default 1)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Goal/statgoal_funcs.h"
 #include "engine_funcs.h"

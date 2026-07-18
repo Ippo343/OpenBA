@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented DestroyComponent methods.
 // Called from engine/reimpl/destroycomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "DestroyComponent.h"
 #include <cstdint>

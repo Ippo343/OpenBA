@@ -12,7 +12,6 @@
 //   +0x2C: int32_t  imageHeight      — image height
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialimage_funcs.h"
 #include "engine_funcs.h"

@@ -9,7 +9,6 @@
 //   OnCreate  (0x14012d270) — register entity with game world storage location list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/storagelocationcomponent_funcs.h"
 #include "engine_funcs.h"

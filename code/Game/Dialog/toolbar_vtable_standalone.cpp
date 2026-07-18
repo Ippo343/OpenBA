@@ -34,8 +34,7 @@
 //   g_TypeId_ToolbarElement            = "CheckElement"       (exref 0x1401516a8, Update)
 //   g_TypeId_TextElement               = "TextElement"        (exref 0x140151508, Update SpeedDisplay)
 //
-// Compiled into the standalone exe only; in DLL mode the real exe vtable + type-ids
-// are used, so this is a no-op (the whole TU is empty under #else).
+// Provides the standalone exe vtable + type-ids for the toolbar.
 
 
 #include "engine_funcs.h"

@@ -9,7 +9,6 @@
 //   Shutdown (0x140125cf0) — Serialize resourceScale + 2 bool fields
 //   OnRemove (0x140125c40) — Complex animation/path logic
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/naturalresourcecomponent_funcs.h"
 #include "engine_funcs.h"

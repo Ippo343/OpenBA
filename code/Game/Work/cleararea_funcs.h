@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ClearArea methods.
 // Called from engine/reimpl/cleararea.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "BuildActions.h"
 #include <cstdint>

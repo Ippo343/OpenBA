@@ -19,7 +19,6 @@
 //   [9] +0x48 GetTarget     = 0x1400ca720
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "RemoveAnimal.h"
 #include "engine_funcs.h"

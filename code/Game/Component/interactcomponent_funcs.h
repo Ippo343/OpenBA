@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented InteractComponent methods.
 // Called from engine/reimpl/interactcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "InteractComponent.h"
 #include <cstdint>

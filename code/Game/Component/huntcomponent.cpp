@@ -8,7 +8,6 @@
 //
 // Original: 0x140122740
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/huntcomponent_funcs.h"
 #include "engine_funcs.h"

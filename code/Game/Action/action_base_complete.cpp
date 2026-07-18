@@ -2,8 +2,8 @@
 // Wave 3 (Action) — CompleteTask / ShowTool exe sub-helpers (closure-safe subset).
 //
 // These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from the
-// CompleteTask / ShowTool action .cpp files. In DLL mode they resolve to the original
-// exe code; in standalone mode they resolve to 0 (silently skipped) unless registered.
+// CompleteTask / ShowTool action .cpp files. They resolve to 0 (silently skipped)
+// unless registered.
 // This file provides faithful 1:1 reimplementations and a single registration point
 // (RegisterActionCompleteBatch in standalone/reg_action_complete.cpp) so the shared
 // call sites fire real logic in the standalone exe.
@@ -27,7 +27,6 @@
 // .rdata slot, deref one level), exactly like action_base_move.cpp; an unregistered slot
 // resolves to null and the guarded graphics op is safely skipped.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

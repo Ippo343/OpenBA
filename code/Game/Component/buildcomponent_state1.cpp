@@ -22,7 +22,6 @@
 //
 // Faithful offset-by-offset port of the Ghidra decompilation of 0x140108290. All
 // exe-internal helpers are resolved guarded; if one is unavailable the step is skipped.
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

@@ -16,7 +16,6 @@
 // Then writes to the camera object at GameWorld+0x120.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialsetupcamera_funcs.h"
 #include "engine_funcs.h"

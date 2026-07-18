@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented BoatComponent methods.
 // Called from engine/reimpl/boatcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "BoatComponent.h"
 #include <cstdint>

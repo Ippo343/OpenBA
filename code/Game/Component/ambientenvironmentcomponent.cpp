@@ -37,7 +37,6 @@
 // Gated by BANISHED_AMBIENT_AUDIO (default ON; =0 restores the inert no-op for
 // A/B). Set BANISHED_AMBIENT_TRACE=1 for per-tick diagnostics.
 //
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/ambientenvironmentcomponent_funcs.h"
 #include "engine_funcs.h"
@@ -57,8 +56,7 @@ namespace {
 // In standalone the .rdata type-id globals are NOT resolvable via
 // ResolveAddr(Module::Exe, addr) (they hit a not-implemented stub), so we look
 // them up by name via the factory registry — the same value fn_IsDerivedFrom and
-// the inert GetTypeId vtable slot compare against. In DLL mode the exe is mapped,
-// so read the live .rdata slot directly.
+// the inert GetTypeId vtable slot compare against.
 uint32_t s_tidEnvDesc     = 0;  // AmbientEnvironmentDescription (0x1401c3f08)
 uint32_t s_tidEmitterComp = 0;  // AmbientEmitterComponent       (0x1401c3e60)
 uint32_t s_tidEmitterDesc = 0;  // AmbientEmitterDescription     (0x1401c3e98)

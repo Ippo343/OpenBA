@@ -8,7 +8,6 @@
 //   Shutdown (0x140057500) — Serialize Vector3 array
 //   OnCreate (0x140057350) — Apply terrain heights + tile type updates
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/terraformcomponent_funcs.h"
 #include "engine_funcs.h"

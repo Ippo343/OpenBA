@@ -21,7 +21,6 @@
 //   0x140115be0  CitizenComponent_CanFindHousing
 //   the 14 CitizenAI_State_* handlers (ValidateAndEnterState dispatch)
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 
 #include "engine_funcs.h"

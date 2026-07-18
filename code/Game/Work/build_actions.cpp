@@ -31,8 +31,7 @@
 // BuildComponent type-id (c7008) is healed via GetTypeIdByName so the state-8 message
 // targets the BuildComponent (the others carry 0, matching citizenai_actionctors).
 //
-// Standalone-portable: does NOT depend on hooks.h. In DLL mode fn_SetupBuildActions
-// resolves to the real exe c0690 (this port is registered only in standalone).
+// fn_SetupBuildActions corresponds to the exe helper at c0690.
 
 #include "engine_funcs.h"
 #include "resolve.h"

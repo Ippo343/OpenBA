@@ -35,7 +35,7 @@
 // byte-for-byte unchanged run. Requires the StateMachineComponent to be live
 // (BANISHED_LIVE_STATEMACHINE) so the node is linked and ticked.
 //
-// Faithful offset-by-offset port. Portable for the standalone exe (no hooks.h).
+// Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
 #include "resolve.h"

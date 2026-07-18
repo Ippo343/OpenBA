@@ -11,7 +11,6 @@
 //   +0x38: int32  currentStep — current step index (-1 = none)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorial_funcs.h"
 #include "engine_funcs.h"

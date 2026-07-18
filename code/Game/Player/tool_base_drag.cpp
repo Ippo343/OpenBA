@@ -2,21 +2,17 @@
 // Player drag-tool shared exe sub-helpers (DragTool / DragPlacementTool).
 //
 // These are exe sub-helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from
-// code/Game/Player/dragtool.cpp and code/Game/Player/dragplacementtool.cpp. In DLL
-// mode they resolve to the original exe code; in standalone mode they resolve to 0
-// (the guarded call is silently skipped) unless registered. This file provides
-// faithful 1:1 reimplementations; standalone/reg_player_drag.cpp registers the
-// closure-safe subset (RegisterPlayerDragBatch).
+// code/Game/Player/dragtool.cpp and code/Game/Player/dragplacementtool.cpp. They
+// resolve to 0 (the guarded call is silently skipped) unless registered. This file
+// provides faithful 1:1 reimplementations; standalone/reg_player_drag.cpp registers
+// the closure-safe subset (RegisterPlayerDragBatch).
 //
 // Player registration wave (P1 — drag). Each function is a 1:1 port of the decompiled
 // exe helper; do not "improve" behavior. Ghidra-verified against the disassembly.
-//
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
 
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (both modes)
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 
 // ============================================================
@@ -38,9 +34,9 @@ static bool s_tidC7f58Init = false;
 
 void* DragTool_FindDescription_5160(uintptr_t descList, void* retval) {
     if (!s_tidC7f58Init) {
-        // DLL: the raw .rdata global holds the real type-id. Standalone: that resolves to
-        // null → the scan below would no-op (the "no cost in CreateBar" symptom), so fall
-        // back to the name-keyed lookup (the proven Startup/createbar pattern).
+        // The raw .rdata global resolves to null in standalone → the scan below would
+        // no-op (the "no cost in CreateBar" symptom), so fall back to the name-keyed
+        // lookup (the proven Startup/createbar pattern).
         const uint32_t* p = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7f58));
         if (p) s_tid_c7f58 = *p;
         if (!s_tid_c7f58) s_tid_c7f58 = ::Object::GetTypeIdByName("ToolbarDescription");

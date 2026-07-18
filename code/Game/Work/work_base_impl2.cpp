@@ -16,7 +16,6 @@
 // together with their sub-callee closure during the Action wave, after Ghidra-verifying
 // the drafts offset-by-offset.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include <cmath>
 

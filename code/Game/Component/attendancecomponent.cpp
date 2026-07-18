@@ -12,7 +12,6 @@
 //   4. If idle, call FUN_140043f60 to process the attendance queue
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/attendancecomponent_funcs.h"
 #include "engine_funcs.h"

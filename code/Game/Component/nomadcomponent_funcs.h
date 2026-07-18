@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented NomadComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "NomadComponent.h"
 #include <cstdint>

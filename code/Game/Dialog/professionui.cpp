@@ -802,7 +802,7 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
     // gameplay-time Scene mesh-visual block dereferences inert standalone objects and
     // faults (READ of 0x10 in Detach's e710 getter when the player lowered a builder
     // count). Do the bare roster mutation only — the same guard the builder pool and the
-    // employment allocator hold around AssignHousing. DLL mode keeps the full visual path.
+    // employment allocator hold around AssignHousing. (The original runs the full visual path.)
     extern bool g_wpcRosterOnly;
     struct RosterGuard {
         bool prev;

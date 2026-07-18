@@ -23,7 +23,6 @@
 //     is unblockable-but-deferred to its own careful pass with in-game validation.
 //
 // Each function is a 1:1 port of the decompiled exe helper (Ghidra). Do NOT "improve".
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

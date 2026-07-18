@@ -1206,10 +1206,9 @@ void DebugUI_Slot4(DebugUI* self) {
 
         if (combo) {
             // Populate from ExternalList (resource descriptions at gameWorld+0xA8).
-            // STANDALONE: this list can be null/unpopulated (the description loader
-            // that fills it is a DLL-mode path), and GetResourceCount(null) faults
-            // reading null+0x28. Guard so a missing list yields an empty combo
-            // instead of crashing. No-op in DLL mode (list always live there).
+            // STANDALONE: this list can be null/unpopulated, and
+            // GetResourceCount(null) faults reading null+0x28. Guard so a missing
+            // list yields an empty combo instead of crashing.
             void* gameWorld_dc = *g_pGameWorldSingleton;
             void* externalList = gameWorld_dc ? *(void**)((uintptr_t)gameWorld_dc + 0xa8) : nullptr;
             int resourceCount = (externalList && fn_ExternalList_GetResourceCount)
@@ -1448,7 +1447,7 @@ void DebugUI_Slot4(DebugUI* self) {
     {
         // STANDALONE: gw+0x128 (weather time) can be null; Time_AsSeconds(null+8)
         // would fault. SetDayLighting derefs **(gw+0x130) (the weather table), also
-        // null-able — only call it when that chain is live. No-op in DLL mode.
+        // null-able — only call it when that chain is live.
         uintptr_t weatherTime = *(uintptr_t*)((uintptr_t)gameWorld + 0x128);
         float timeSeconds = weatherTime ? fn_Time_AsSeconds((void*)(weatherTime + 8)) : 0.0f;
         // Convert time to month index: (seconds / secondsPerYear) * monthsPerYear
@@ -1554,8 +1553,7 @@ void* Dtor(void* self, uint32_t flags) {
 }
 
 // Idempotent heal of the exe-.rdata type-id globals. Safe to call on every slot
-// entry; each `if (*global)` short-circuits once filled (also a no-op in DLL
-// mode where the globals are already the real exe .rdata pointers).
+// entry; each `if (*global)` short-circuits once filled.
 void EnsureGlobals() {
     struct Heal { uint32_t** g; uint32_t* s; const char* name; };
     static uint32_t s_build = 0, s_rawmat = 0, s_interactC = 0, s_interactD = 0,

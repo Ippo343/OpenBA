@@ -30,7 +30,6 @@
 //   0x14009f3e0  GridToWorld terrain query  (mapquery, reg)
 //   g_pGameWorldSingleton (+0xe8 / +0xd0 / +0xd8 / +0xf8 / +0x148)
 //
-// This file must NOT depend on hooks.h — portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

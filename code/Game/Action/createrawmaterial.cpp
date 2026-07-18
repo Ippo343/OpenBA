@@ -19,7 +19,6 @@
 //   +0x51: bool (place near flag)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "CreateRawMaterial.h"
 #include "engine_funcs.h"

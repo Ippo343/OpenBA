@@ -4,7 +4,6 @@
 // QuarryComponent (0x28 bytes) — minimal component, same as MineComponent.
 // Vtable at 0x14015a490. Only Shutdown has real logic.
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/quarrycomponent_funcs.h"
 #include "engine_funcs.h"

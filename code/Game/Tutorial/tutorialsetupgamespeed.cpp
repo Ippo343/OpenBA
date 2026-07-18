@@ -13,7 +13,6 @@
 // and optionally pauses the game.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Tutorial/tutorialsetupgamespeed_funcs.h"
 #include "engine_funcs.h"

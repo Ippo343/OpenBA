@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialImageInputKey methods.
 // Called from engine/reimpl/tutorialimageinputkey.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TutorialImages.h"
 #include <cstdint>

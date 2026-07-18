@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PathTool methods.
 // Called from engine/reimpl/pathtool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "PathTool.h"
 #include <cstdint>

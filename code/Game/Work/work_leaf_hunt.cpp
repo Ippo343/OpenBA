@@ -1,9 +1,8 @@
 // code/Game/Work/work_leaf_hunt.cpp
 // Wave (Game-gap / Work-leaf) — faithful 1:1 ports of small exe helper functions
 // referenced via ResolveAddr(Module::Exe, 0xADDR) from the Hunt / HarvestOrchard /
-// Pasture / ConsumeProduce work classes. In DLL mode each ResolveAddr returns the
-// original exe code; in standalone mode it returns 0 (silently skipped) unless the
-// address is registered. This file provides the clean reimplementations so the
+// Pasture / ConsumeProduce work classes. Each ResolveAddr returns 0 (silently
+// skipped) unless the address is registered. This file provides the clean reimplementations so the
 // standalone build fires real logic.
 //
 // Each function below is a byte-faithful port of the decompiled + disassembled exe
@@ -17,8 +16,7 @@
 // XMM2/mixed-stack CreateRawMaterial call is too fidelity-risky to register blind on a
 // path autostart does not exercise.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+// Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

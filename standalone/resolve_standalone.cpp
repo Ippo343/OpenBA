@@ -2,8 +2,6 @@
 // In standalone mode, WE are the exe — so Module::Exe addresses resolve
 // via a registry of our reimplemented functions. Module::Runtime and
 // Module::VideoDX11 still use ASLR delta (they're loaded DLLs).
-//
-// This file replaces patches/src/resolve.cpp in standalone builds.
 
 
 #include "resolve.h"
@@ -11,7 +9,7 @@
 #include <unordered_map>
 
 // ============================================================
-// Module info — same layout as DLL mode, but Exe slot unused
+// Module info — Exe slot unused
 // ============================================================
 ModuleInfo g_modules[static_cast<int>(Module::COUNT)] = {
     // Exe: WE are the exe — delta is meaningless, handle is us
@@ -111,7 +109,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
         return 0;
     }
 
-    // Runtime/VideoDX11 — standard ASLR delta (same as DLL mode)
+    // Runtime/VideoDX11 — standard ASLR delta
     return static_cast<uintptr_t>(
         static_cast<intptr_t>(ghidra_addr) + g_modules[static_cast<int>(mod)].delta
     );
@@ -169,7 +167,7 @@ bool ResolveInit() {
 }
 
 // ============================================================
-// Shared functions — same in both modes
+// Common resolution helpers
 // ============================================================
 const ModuleInfo* GetModuleInfo(Module mod) {
     return &g_modules[static_cast<int>(mod)];

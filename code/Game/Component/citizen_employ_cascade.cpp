@@ -23,8 +23,6 @@
 //   CitizenComp_AssignHousing 0x140111ee0  (citizencomponent.cpp) -> +0x248
 //   CitizenComp_Entity_FindComponent_Storage 0x140008090  (citizenaicomponent.cpp) -> c7cf0
 //   Entity_impl_7fb0 0x140087fb0, CalcDistance 0x140008830, arrayAdd 0x140003110
-//
-// This file must NOT depend on hooks.h — portable for standalone.
 
 #include "resolve.h"
 #include "engine_funcs.h"

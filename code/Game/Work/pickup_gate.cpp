@@ -20,8 +20,7 @@
 // 0x14012cd80 StorageComponent_impl_cd80 (CanAdd). Plus engine dispatch slots
 // 0x140152ab0 CheckPtr / 0x140152a90 IBP ctor / 0x140152a98 IsDerivedFrom.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+// Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

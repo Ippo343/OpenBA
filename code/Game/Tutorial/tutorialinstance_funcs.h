@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialInstance methods.
 // Called from engine/reimpl/tutorialinstance.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TutorialInstance.h"
 #include <cstdint>

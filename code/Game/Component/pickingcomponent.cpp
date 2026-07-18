@@ -8,7 +8,6 @@
 //   Shutdown (0x140128bb0) — Serialize IBP + IsDerivedFrom validation
 //   OnCreate (0x140128b50) — Remove picking mesh via Scene dispatch
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/pickingcomponent_funcs.h"
 #include "engine_funcs.h"
@@ -108,8 +107,7 @@ void PickingComponent_OnCreate(PickingComponent* self) {
 // So we replicate Startup (+0x30 = +0x10 owner, +0x28 = -1) then OnAdded (AddMesh).
 
 // This registration path depends on the standalone type registry (GetTypeIdByName)
-// and is only exercised from the SA start-town spawn — the DLL build uses the real
-// hooked picking path. Compile it standalone-only.
+// and is only exercised from the SA start-town spawn.
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
 
 // Picking::Scene::AddMesh — member fn (this=RCX): RDX=mesh ExternalPtr, R8=&Transform,

@@ -8,7 +8,6 @@
 // Profile source path: Entity\CitizenBehavior.cpp
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Entity/citizenbehavior_funcs.h"
 #include "engine_funcs.h"
@@ -20,7 +19,7 @@
 #include <cstring>
 
 // Tick-driven Builder pool (builder_pool_driver.cpp). No-op unless BANISHED_BUILDER_NATURAL
-// is set (and, in DLL mode, always a no-op). Called at the end of CitizenBehavior_Update.
+// is set. Called at the end of CitizenBehavior_Update.
 extern "C" void BuilderPool_Tick();
 
 // ============================================================

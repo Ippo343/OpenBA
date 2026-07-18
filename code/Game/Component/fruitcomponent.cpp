@@ -23,7 +23,6 @@
 // Original: 0x140049de0 (vtable slot 9, +0x48; vtable @ 0x140159450)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/fruitcomponent_funcs.h"
 #include "engine_funcs.h"
@@ -143,9 +142,8 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
     // invokes via vtable+0x20 in ComponentEntity_StartupComponents. Belt-and-
     // suspenders: if +0x28 is still null but the description(+0x18) is present, run
     // the body-init now (idempotent); if still incomplete, bail safely -- the math
-    // below divides by resData->+0x20 and derefs *(self+0x28). Harmless in
-    // DLL-hook mode (body populated there). See growthcomponent.cpp for the
-    // worked example / notes/STANDALONE_REG_WAVES_PLAN.md.
+    // below divides by resData->+0x20 and derefs *(self+0x28). See growthcomponent.cpp
+    // for the worked example / notes/STANDALONE_REG_WAVES_PLAN.md.
     if (*(uintptr_t*)(comp + 0x28) == 0) {
         if (*(uintptr_t*)(comp + 0x18) != 0)
             FruitComponent_Startup(self);
@@ -166,7 +164,6 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
     // IsDerivedFrom on a description is unreliable (see growthcomponent.cpp / the
     // SpawnComponent precedent). _unk18 is the FruitDescription the copy-ctor stored
     // at +0x18 — trust it as a fallback so a present fruit entity still simulates.
-    // DLL-hook mode is unchanged (the IsDerivedFrom branch already set resData).
     if (!resData && baseObj) resData = baseObj;
     if (!resData) return;  // original derefs resData->+0x20/+0x24/+0x28 below
 

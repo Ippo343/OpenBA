@@ -7,7 +7,6 @@
 //   Serialize (0x140118ef0) — init consume data from building template
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/consumeproducecomponent_funcs.h"
 #include "engine_funcs.h"

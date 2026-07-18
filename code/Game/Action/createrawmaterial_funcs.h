@@ -1,7 +1,6 @@
 #pragma once
 // CreateRawMaterial function declarations -- clean game logic layer.
 // Called from engine/reimpl/createrawmaterial.cpp hook wrappers.
-// Must NOT depend on hooks.h -- portable for standalone exe.
 
 #include <cstdint>
 

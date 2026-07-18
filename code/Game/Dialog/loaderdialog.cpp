@@ -47,8 +47,8 @@ void LoaderDialog_Slot7(LoaderDialog* self, void* time) {
     float elapsed = fn_Time_AsSeconds(time);
     *(float*)(s + 0xC0) += elapsed * 180.0f;
 
-#if 1   // A/B comparison dump: runs in BOTH dll and standalone modes so we
-        // can compare the loaded Loading.rsc Dialog External byte-for-byte.
+#if 1   // A/B comparison dump: emits the loaded Loading.rsc Dialog External
+        // byte-for-byte so it can be compared against a reference.
         // Fires once per unique LoaderDialog instance (s_seen dedup).
         // 2026-04-26: re-enabled to test "Runtime-global differs between modes"
         // hypothesis from project_standalone_splash_elements.md.

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented Toolbar methods.
 // Called from engine/reimpl/toolbar.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "Toolbar.h"
 #include <cstdint>
@@ -21,5 +20,4 @@ void Toolbar_Cleanup(Toolbar* self);
 void Toolbar_Init(Toolbar* self);
 
 // Slot8 (vtable +0x40): Construct-from-raw-memory pattern (null check + init).
-// NOT HOOKED (RIP-relative JNZ unsafe for trampoline) but included for standalone exe.
 void* Toolbar_Slot8(Toolbar* self);

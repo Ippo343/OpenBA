@@ -25,7 +25,7 @@
 // NOTE: fn_ExternalRefArray_Serialize -> exe FUN_1400049c0, null in standalone until
 // 0x1400049c0 is registered (REPORTED). param4 is a dead init -> nullptr safe.
 //
-// Field knowledge harvested from engine/reimpl/createfenceddescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/createfenceddescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

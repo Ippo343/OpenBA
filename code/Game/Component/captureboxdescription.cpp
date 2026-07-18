@@ -16,7 +16,7 @@
 // CreateInPlace (vtable +0x48, 0x140013df0): ElementDescription ctor + zero fields.
 // Dtor (vtable +0x00, 0x140014010): ~String(+0x70) + ElementDescription::~ + free.
 //
-// Field knowledge harvested from engine/reimpl/captureboxdescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/captureboxdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

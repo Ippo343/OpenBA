@@ -6,7 +6,7 @@
 // offsets. Resolved via ResolveAddr(Module::Exe, 0xADDR) from clear-area / harvest /
 // plant Work classes; registered via RegisterWorkCellBstBatch in reg_work_cellbst.cpp.
 //
-// Faithful 1:1 ports (Ghidra-verified). Must NOT depend on hooks.h.
+// Faithful 1:1 ports (Ghidra-verified).
 //
 // Node layout (0x30 bytes):
 //   +0x00  int     key (cell index)

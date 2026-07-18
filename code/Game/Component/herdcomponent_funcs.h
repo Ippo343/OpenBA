@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HerdComponent methods.
 // Called from engine/reimpl/herdcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HerdComponent.h"
 #include <cstdint>

@@ -36,8 +36,7 @@ static bool ResDbgTrace() {
 // Range check for pointers a standalone citizen may leave uninitialized. A rostered
 // CitizenComponent in standalone can have a garbage description cache (+0x288) or an
 // unset name String; the raw derefs the faithful retail port does would fault (MinGW
-// has no __try/__except to catch it). These guards are no-ops in DLL mode, where the
-// live game always populates the fields. Same idea as CitUI_OkPtr in citizenui.cpp.
+// has no __try/__except to catch it). Same idea as CitUI_OkPtr in citizenui.cpp.
 static inline bool RUI_OkPtr(uintptr_t p) {
     return p >= 0x10000 && p <= 0x00007FFFFFFFFFFFULL;
 }
@@ -331,7 +330,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     void* textName = *(void**)(rowBase + 0x10);
                     // SA safety: the name String buffer (citizen+0x28) may be unset on a
                     // standalone citizen; SetParameter refcounts the source buffer and
-                    // would fault on garbage. 0 (empty String) is fine. No-op in DLL.
+                    // would fault on garbage. 0 (empty String) is fine.
                     uintptr_t nameBuf = *(uintptr_t*)(citizen + 0x28);
                     if (textName && (nameBuf == 0 || RUI_OkPtr(nameBuf)))
                         fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));

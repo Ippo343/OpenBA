@@ -69,7 +69,7 @@
 //
 // The MeshInstance/AddObject/RemoveObject render sub-branch touches the still-INERT ModelComponent
 // — every deref through it is null-guarded so it stays crash-safe (it is NOT exercised at
-// world-start). This file must NOT depend on hooks.h — it is portable for the standalone exe.
+// world-start).
 
 
 #include "engine_funcs.h"

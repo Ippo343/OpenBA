@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented StorageDisplayComponent methods.
 // Called from engine/reimpl/storagedisplaycomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "StorageDisplayComponent.h"
 #include <cstdint>

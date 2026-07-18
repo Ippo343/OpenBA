@@ -23,8 +23,7 @@
 // FUN_1400021d0 @0x1400021d0 (int-array resize; sets ptr@+0 and count@+8).
 //
 // Consistent with the GatherRawMaterials struct + field conventions used by
-// code/Game/Work/gatherrawmaterials.cpp (which we do NOT modify). This file must
-// NOT depend on hooks.h — it is portable for the standalone exe.
+// code/Game/Work/gatherrawmaterials.cpp (which we do NOT modify).
 
 #include "BuildActions.h"
 #include "engine_funcs.h"
@@ -44,7 +43,7 @@ typedef void  (*GRMC_ResizeIntArray_t)(void* arrayField, int count);   // 0x1400
 
 // "BuildDescription" type-id (DWORD_1401c7040). Name verified via the .rdata
 // writer BuildDescription_Register (0x14014e5f5). GetTypeIdByName in standalone
-// (raw .rdata global is null there); live .rdata typeId in DLL mode.
+// (the raw .rdata global is null).
 static uint32_t GRMC_BuildDescTypeId() {
     static uint32_t id = 0;
     if (id != 0 && id != 0xFFFFFFFFu) return id;
@@ -57,10 +56,10 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
     uintptr_t self = reinterpret_cast<uintptr_t>(mem);
 
     // --- Base Work ctor with a temp IBP holding the raw build-entity pointer ---
-    // FLAG: Work_Ctor25 (0x1400f72e0) is NOT registered for standalone. In DLL
-    // mode ResolveAddr finds it; in standalone it returns 0 and the Work base
-    // (+0x10..+0x40) is left uninitialised. The lead should register 0x1400f72e0
-    // for standalone so the base fields (entity ptr, work-cell, sentinels) are set.
+    // FLAG: Work_Ctor25 (0x1400f72e0) is NOT registered for standalone, so
+    // ResolveAddr returns 0 and the Work base (+0x10..+0x40) is left
+    // uninitialised. The lead should register 0x1400f72e0 so the base fields
+    // (entity ptr, work-cell, sentinels) are set.
     void* entityRaw = buildEntityIBP ? *reinterpret_cast<void**>(buildEntityIBP) : nullptr;
     GRMC_WorkCtor25_t workCtor =
         reinterpret_cast<GRMC_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));

@@ -11,7 +11,6 @@
 // This stores a reference to the citizen entity assigned to the work.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "Work/locationwork_funcs.h"
 #include "engine_funcs.h"

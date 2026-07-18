@@ -2,9 +2,7 @@
 // Faithful clean-room port of Entity_impl_d3b0 (Application-x64.exe 0x1400fd3b0):
 // EditTool "select entity -> open its info dialog".
 //
-// This is the reimplementation body behind the fn_EditTool_SelectEntity passthrough
-// (engine_funcs). In DLL mode fn_EditTool_SelectEntity still resolves to the real exe
-// function (this body is compiled but unused). In STANDALONE mode
+// This is the reimplementation body behind fn_EditTool_SelectEntity (engine_funcs).
 // standalone/reg_edittool_select.cpp registers 0x1400fd3b0 -> EditTool_SelectEntity_Impl,
 // so EditTool::OnKey's click-to-select path (edittool.cpp:517) opens the entity dialog.
 //
@@ -54,8 +52,8 @@ namespace {
 // Both are ported in code/Game/Player/tool_base_render.cpp and registered by
 // RegisterPlayerRenderBatch — but ONLY when BANISHED_SELECTION_OUTLINE is set
 // (their closure transits the EdgeMesh render-mesh family, which mutates the live
-// Graphics::Scene). Resolved here as direct exe pointers: real in DLL mode, our
-// ports in standalone-with-outline, NULL in standalone-default -> null-guarded skip.
+// Graphics::Scene). Resolved here as direct exe pointers: our ports in
+// standalone-with-outline, NULL in standalone-default -> null-guarded skip.
 // Effect when skipped (outline off, the shipping default): the info dialog still
 // OPENS; only the previous-panel teardown + selection-highlight repaint are skipped.
 typedef void (*fn_void_self_t)(void* self);
@@ -75,8 +73,8 @@ void EnsureFuncs() {
     s_resolved = true;
 }
 
-// Resolve a class type-id: prefer the raw .rdata DWORD (valid in DLL mode); in the
-// standalone exe that pointer is NULL, so fall back to the live factory tree.
+// Resolve a class type-id: prefer the raw .rdata DWORD; in the standalone exe that
+// pointer is NULL, so fall back to the live factory tree.
 uint32_t ResolveTypeId(uintptr_t rdataAddr, const char* name, uint32_t* cache) {
     if (*cache) return *cache;
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, rdataAddr));

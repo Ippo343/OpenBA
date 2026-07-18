@@ -2,9 +2,8 @@
 // Wave (Game-gap / Work-leaf) — Market/Trade leaf helpers.
 //
 // These are exe sub-helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from
-// code/Game/Work/marketwork.cpp and tradework.cpp. In DLL mode they resolve to the
-// original exe code; in standalone mode they resolve to 0 (silently skipped) unless
-// registered in standalone/address_registry.cpp. This file provides faithful 1:1
+// code/Game/Work/marketwork.cpp and tradework.cpp. They resolve to 0 (silently
+// skipped) unless registered in standalone/address_registry.cpp. This file provides faithful 1:1
 // reimplementations so the standalone exe can fire real logic.
 //
 // SCOPE: this file currently contains ONLY the two closure-safe recursive BST/tree
@@ -23,8 +22,7 @@
 //   0x14002c8a0 — TradeWork_helper_c8a0: calls unregistered TradeWork_helper_c710
 //     (0x14002c710) → DEFER.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
-// Bodies are unconditional so it compiles in BOTH dll and standalone builds.
+// Bodies are unconditional so this compiles as-is in the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"

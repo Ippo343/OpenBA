@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented UI dialog methods.
 // These are clean game logic functions called from engine/reimpl/ wrappers.
-// No dependency on hooks.h or resolve.h — portable to standalone exe.
 
 #include "ui/Dialogs.h"
 #include <cstdint>

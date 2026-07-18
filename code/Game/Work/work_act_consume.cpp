@@ -14,8 +14,8 @@
 //
 // Pattern follows work_base_actionctor.cpp: self-contained ResolveAll() resolving
 // every sub-callee via ResolveAddr(Module::Exe, 0xADDR); WA-style helpers; vtable /
-// float-const pointers. All statics prefixed s_wcp_* to avoid ODR clashes. No hooks.h,
-// no RegisterExeAddr.
+// float-const pointers. All statics prefixed s_wcp_* to avoid ODR clashes. No
+// RegisterExeAddr.
 //
 // Every non-obvious offset/constant cites its disasm address.
 

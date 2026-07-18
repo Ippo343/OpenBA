@@ -18,7 +18,6 @@
 // BST nodes: +0x00=key (uint64), +0x10=count (int), +0x20=left, +0x28=right
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Goal/buildinggoal_funcs.h"
 #include "engine_funcs.h"

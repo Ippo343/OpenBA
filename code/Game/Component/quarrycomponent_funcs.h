@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented QuarryComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "QuarryComponent.h"
 #include <cstdint>

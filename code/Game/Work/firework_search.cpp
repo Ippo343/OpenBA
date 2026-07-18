@@ -34,15 +34,13 @@
 //   0x140002ed0 Entity_FindComponent_Position (reg_work_base.cpp WorkBase_FindComponent_2ed0)
 //   0x1401512e8 System::Random::Rand (dispatch slot, registered in address_registry.cpp)
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
 
 // ---------------------------------------------------------------------------
-// Lazily-resolved sub-helpers (resolve once; in DLL mode -> original exe code,
-// in standalone -> our registered ports). Mirrors action_pf_road.cpp's style.
+// Lazily-resolved sub-helpers (resolve once; in standalone -> our registered ports). Mirrors action_pf_road.cpp's style.
 // ---------------------------------------------------------------------------
 
 typedef void* (*fw_EntityResolvePos_t)(void* self, float* retVec3, int p3, int p4, float* p5);  // 0x140122e20

@@ -6,7 +6,6 @@
 // registered. Registration point: RegisterWorkBstBatch in standalone/reg_work_bst.cpp.
 //
 // All functions are faithful 1:1 ports of the decompiled exe helpers (Ghidra-verified).
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 //
 // Node layout (0x28 bytes), an AVL node keyed on the low uint64 of an Object IBP:
 //   +0x00  uint64  key          (== IBP value at IBP+0)

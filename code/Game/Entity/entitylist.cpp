@@ -20,7 +20,6 @@
 //   - EntityList::Serialize        (0x1400c44a0) — deep reimpl
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Entity/entitylist_funcs.h"
 #include "Entity/componententity_funcs.h"

@@ -121,7 +121,7 @@ static void ResetVideoRegistry() {
 }
 
 // ============================================================
-// Crash handler (simplified version of DLL mode's VEH)
+// Crash handler (simplified VEH)
 // ============================================================
 static const char* ExceptionCodeToString(DWORD code) {
     switch (code) {

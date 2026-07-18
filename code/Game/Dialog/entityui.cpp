@@ -94,8 +94,7 @@ static bool BuildComplete_Impl(void* posComp)
 {
     if (!posComp) return false;
     // In SA the exe .rdata type-id global can be null (raw .rdata not resolvable);
-    // treat "can't classify" as not-complete rather than dereferencing null. DLL
-    // mode always has it, so this is a no-op there.
+    // treat "can't classify" as not-complete rather than dereferencing null.
     if (!g_TypeId_ResourceComponent) return false;
 
     void* desc = *(void**)((uintptr_t)posComp + 0x18);
@@ -896,7 +895,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         // The pin state lives on the checkPin element (+0x38, set in Slot4) and the
         // pin flag on the sibling ToolUI controller (+0x40). Both must exist to pin;
         // in standalone a partially-built dialog could be missing either, so guard
-        // before dereferencing them (no-op in DLL mode where both are always live).
+        // before dereferencing them.
         if (toolPtr == nullptr || *(uintptr_t*)(s + 0x38) == 0) return;
 
         // Read current pin state from checkPin element (+0x38) -> +0xD8

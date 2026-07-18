@@ -9,7 +9,6 @@
 //      the spawn function. Repeat while timer still exceeds interval.
 //
 // Original: 0x140055ad0 (114 instructions)
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/spawncomponent_funcs.h"
 #include "engine_funcs.h"

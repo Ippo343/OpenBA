@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented WildAnimalComponent methods.
 // Called from engine/reimpl/wildanimalcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "WildAnimalComponent.h"
 #include <cstdint>

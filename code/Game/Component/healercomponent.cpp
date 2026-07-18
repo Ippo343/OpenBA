@@ -9,7 +9,6 @@
 //   [7] OnCreate  = 0x14004ae70 -- registers with healer list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/healercomponent_funcs.h"
 #include "engine_funcs.h"

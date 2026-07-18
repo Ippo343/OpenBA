@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented ZoneComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "ZoneComponent.h"
 #include <cstdint>

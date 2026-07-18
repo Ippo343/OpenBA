@@ -10,7 +10,6 @@
 //   OnCreate  (0x14012a0e0) — calls init helper + registers with game state
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/residencecomponent_funcs.h"
 #include "engine_funcs.h"

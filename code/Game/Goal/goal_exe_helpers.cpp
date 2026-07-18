@@ -2,7 +2,7 @@
 // Clean reimplementation of the StatGoal lazy ExternalPtr resolver
 // (FUN_1400265b0), ported to close the standalone Goal code-gap.
 //
-// Portable (no hooks.h) — depends only on engine_funcs.h + resolve.h.
+// Depends only on engine_funcs.h + resolve.h.
 // Decompiled from Application-x64.exe via Ghidra.
 
 #include "goal_exe_helpers.h"

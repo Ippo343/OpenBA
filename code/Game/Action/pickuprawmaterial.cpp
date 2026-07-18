@@ -24,7 +24,6 @@
 //   +0x28: InternalBasePtr  sourceEntity    (entity carrying the raw material)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "PickupRawMaterial.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FishingComponent methods.
 // Called from engine/reimpl/fishingcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "FishingComponent.h"
 #include <cstdint>

@@ -4499,7 +4499,6 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
         void* panelController = nullptr;
         // g_TypeId_PageToggleUI is an exe .rdata type-id that is NULL in standalone
         // until lazily resolved; dereferencing *g_TypeId_PageToggleUI would fault.
-        // In DLL mode it is always live, so this guard is a no-op there.
         if (controllerRaw != 0 && g_TypeId_PageToggleUI) {
             fn_InternalBasePtr_CheckPtr(controllerBuf);
             if (fn_IsDerivedFrom((void*)controllerRaw, *g_TypeId_PageToggleUI)) {
@@ -4637,7 +4636,7 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
     // lazily resolved (e.g. CitizenUI::EnsureGlobals). Dereferencing *g_TypeId_EditTool
     // with a null pointer reads address 0 and hard-faults. The camera snap (Section 3)
     // has already run, so if we can't classify the EditTool we simply skip the re-select
-    // — the camera still moves to the entity. In DLL mode the id is always live.
+    // — the camera still moves to the entity.
     void* currentTool = *(void**)(tc + 0x28);
     void* editTool = nullptr;
 

@@ -7,7 +7,7 @@
 // 5ec0 helper). The tree key is the node's low uint64 at +0x00.
 //
 // All functions are faithful 1:1 ports of the decompiled exe helpers, verified
-// offset-by-offset against the Ghidra disassembly. This file must NOT depend on hooks.h.
+// offset-by-offset against the Ghidra disassembly.
 //
 // AVL node layout (0x38 bytes) — confirmed from 0x140017460 disasm:
 //   +0x00 uint64  key

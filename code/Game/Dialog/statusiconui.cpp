@@ -106,7 +106,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         // Check if parent is a DialogController. Guard the type-id deref: in standalone the
         // exe .rdata type-id globals are null (page-check then defaults iconsActive=true,
         // which is the correct "show icons per active bits" behaviour for a single-view
-        // panel). In DLL mode the globals are always non-null, so this is a no-op there.
+        // panel).
         bool isDC = g_TypeId_DialogController &&
                     fn_IsDerivedFrom(parentController, *g_TypeId_DialogController);
         void* dcPtr = isDC ? parentController : nullptr;
@@ -154,8 +154,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         // Read the status-icon active bitfield from StatusIconComponent+0xF0. Guard the
         // deref: if no StatusIconComponent was found (a partial-world entity, or a building
         // without one in standalone), treat all bits as clear → every icon is hidden, which
-        // is the correct "no active warnings" appearance (and never faults). In DLL mode
-        // meshComp is always the real component, so this reads the live bits unchanged.
+        // is the correct "no active warnings" appearance (and never faults).
         uint32_t bitfield = meshComp ? *(uint32_t*)((uintptr_t)meshComp + 0xF0) : 0;
         bool bitSet = (bitfield & bitMask) != 0;
 

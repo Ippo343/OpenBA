@@ -27,7 +27,6 @@
 //   +0x38: void*    sourceEntity  (InternalBasePtr, source entity carrying resources)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "DropOffRawMaterial.h"
 #include "engine_funcs.h"

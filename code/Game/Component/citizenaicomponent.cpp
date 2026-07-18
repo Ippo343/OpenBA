@@ -18,7 +18,6 @@
 // Original: 0x14010f3e0
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/citizenaicomponent_funcs.h"
 #include "engine_funcs.h"

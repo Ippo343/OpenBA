@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented MapComponent methods.
 // Called from engine/reimpl/mapcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "MapComponent.h"
 #include <cstdint>

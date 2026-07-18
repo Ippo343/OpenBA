@@ -13,7 +13,6 @@
 //   OnUpdate2 (0x140056940) — Draw + Update combined
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/storagedisplaycomponent_funcs.h"
 #include "engine_funcs.h"
@@ -48,8 +47,8 @@ static bool SDDBudget(int& counter, int cap) {
 }
 
 // ModelDescription type-id (DAT_1401c7a88) — used by cbd0 to find a material entity's
-// display model. In DLL mode the raw .rdata slot holds the id; in standalone it
-// resolves NULL, so fall back to the runtime type registry (valid after
+// display model. The raw .rdata slot resolves NULL in the standalone exe, so fall
+// back to the runtime type registry (valid after
 // Object::Factory::Startup). Never writes the shared .rdata global.
 static uint32_t* s_pModelDescTid_rdata = nullptr;
 static bool      s_modelDescRdataResolved = false;
@@ -67,7 +66,7 @@ static uint32_t SDD_ModelDescTypeId() {
 }
 
 // RawMaterialDescription type-id (DAT_1401c7cb8, exposed as g_TypeId_RawMaterialDescription)
-// — used by Update to size each material's pile. Same DLL/SA split as above.
+// — used by Update to size each material's pile. Same fallback as above.
 static uint32_t SDD_RawMatDescTypeId() {
     if (g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
         && *g_TypeId_RawMaterialDescription != 0xFFFFFFFF)
@@ -739,8 +738,8 @@ static void EnsureSlotHelpers() {
 // global resolved at call time. Faithful 1:1 port of the Ghidra decompile.
 // ============================================================
 void* StorageDisplay_EntityFindByType_cbd0(void* hostP, void* retbuf) {
-    // DAT_1401c7a88 = ModelDescription. SA resolves it via the runtime registry
-    // fallback (SDD_ModelDescTypeId); DLL uses the real .rdata id.
+    // DAT_1401c7a88 = ModelDescription. Resolved via the runtime registry
+    // fallback (SDD_ModelDescTypeId).
     const uint32_t modelTid = SDD_ModelDescTypeId();
     uint8_t* host = reinterpret_cast<uint8_t*>(hostP);
     void* found = nullptr;

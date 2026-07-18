@@ -69,7 +69,6 @@
 // .rdata float const: DAT_1401721fc (GrowUp food-cooldown / walk-time scale). Read from the
 //   exe via ResolveAddr; null-guarded fallback 0.0f.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

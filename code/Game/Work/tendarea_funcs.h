@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TendArea methods.
 // Called from engine/reimpl/tendarea.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TendArea.h"
 #include <cstdint>

@@ -40,7 +40,6 @@ static void* FindElement(void* dialog, const char* name) {
 // `*g_TypeId_X` deref in Slot4 is a read of address 0 (hard crash). Mirror the
 // OptionsDialog/inputbindings StringTable pattern: lazy-resolve each via
 // Object::Factory::GetTypeIdFromName into a static, then point the global at it.
-// No-op in DLL mode (the slots are already non-null there).
 static uint32_t* LazyTypeId(uint32_t* current, const char* typeName, uint32_t* storage) {
     if (current) return current;
     if (!fn_Factory_GetTypeIdFromName || !g_pFactorySingleton || !*g_pFactorySingleton)
@@ -70,9 +69,8 @@ static void EnsureGeneratorTypeIds() {
 // Type-check a loaded resource. In STANDALONE the Runtime factory tree is
 // incomplete, so Object::IsDerivedFrom walks up the type's parent chain into a
 // NULL factory and crashes (NULL-this). Per feedback_factory_cascade_strategy we
-// trust FindOrLoad's result and skip the derivation check. DLL mode keeps the
-// real check (full factory tree present). typeIdPtr is passed (not deref'd in
-// standalone) so a still-unresolved (NULL) type-ID can't fault at the call site.
+// trust FindOrLoad's result and skip the derivation check. typeIdPtr is passed
+// (not deref'd) so a still-unresolved (NULL) type-ID can't fault at the call site.
 static inline bool ResourceIsType(void* resource, uint32_t* typeIdPtr) {
     if (!resource) return false;
     (void)typeIdPtr;
@@ -127,7 +125,7 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
                                     uint32_t typeId, int visibilityOffset) {
     // Standalone safety: the generator ExternalLists (KeyMap +0x10/+0x18/+0x20)
     // may be unpopulated if the Game resource container hasn't run yet — leave
-    // the combo empty rather than dereferencing a null list. (No-op in DLL mode.)
+    // the combo empty rather than dereferencing a null list.
     if (!externalList) return;
     int count = fn_ExternalList_GetResourceCount(externalList);
     for (int i = 0; i < count; i++) {
@@ -182,7 +180,7 @@ static void* GenerateTownName(void* retStr, void* random, int maxLen) {
     // inside its OWN internal IsDerivedFrom (the NameDatabase factory subtree is
     // incomplete), and NameDatabase::GenerateName (exe 0x1400a4b30) isn't
     // reimplemented anyway. Skip the load entirely and use a placeholder so the
-    // OK button stays enabled. DLL mode does the real name generation below.
+    // OK button stays enabled. (The original does real name generation below.)
     (void)random; (void)maxLen;
     fn_String_Ctor_CStr(retStr, "New Town");
     return retStr;
@@ -270,7 +268,7 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Standalone: lazy-resolve the generator/NameDB type-IDs (the exe .rdata
-    // slots are NULL until resolved via the Factory). No-op in DLL mode.
+    // slots are NULL until resolved via the Factory).
     EnsureGeneratorTypeIds();
     // Standalone: loading the three generator ExternalLists would populate the
     // combos, BUT ExternalFactory::FindOrLoad runs an internal IsDerivedFrom that
@@ -353,7 +351,7 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 
     // --- Restore saved combo selections from game settings ---
     // Standalone: g_pNewGameSettings (exe-data slot) may be NULL — skip the
-    // whole restore block rather than dereferencing null. No-op in DLL mode.
+    // whole restore block rather than dereferencing null.
     void* settings = (g_pNewGameSettings ? *g_pNewGameSettings : nullptr);
     uintptr_t cfg = (uintptr_t)settings;
     if (settings) {
@@ -757,7 +755,7 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
 // ============================================================
 // Provides the 10-slot DialogInstance vtable + a standalone in-place ctor +
 // factory + REGISTER_TYPE so MainMenuDialog::OpenNewGame can construct a real
-// NewGameDialog in standalone mode (no exe loader / no trampoline). Mirrors the
+// NewGameDialog (no exe loader). Mirrors the
 // OptionsDialog template (code/Game/Dialog/optionsdialog.cpp).
 //
 // Vtable layout (exe @ 0x14015c920, 10 slots — verified via read_memory):

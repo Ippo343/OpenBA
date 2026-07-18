@@ -8,7 +8,6 @@
 //   Shutdown (0x14004fc40) — Serialize IBP + 2 Vector3 + int + Time
 //   OnCreate (0x14004fd20) — Register with nomad list
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/nomadcomponent_funcs.h"
 #include "engine_funcs.h"

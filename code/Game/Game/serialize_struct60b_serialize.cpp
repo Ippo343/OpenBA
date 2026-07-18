@@ -497,9 +497,9 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
 // Public reimpl entry points
 // ============================================================
 //
-// Each entry tries the original exe address first (DLL mode + standalone
-// when the exe code page is mapped). If that pointer is null (standalone
-// mode, no exe code), we fall through to our cleaned C body.
+// Each entry tries the original exe address first (usable when the exe code
+// page is mapped). If that pointer is null (no exe code), we fall through to
+// our cleaned C body.
 
 extern "C" void Reimpl_Struct60B_Serialize(
     void* serializer, int count, void* arrayBase) {

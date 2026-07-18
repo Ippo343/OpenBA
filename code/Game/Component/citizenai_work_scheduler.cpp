@@ -26,7 +26,7 @@
 //   0x30 node (88a0 category/final): +0x00 u32 id, +0x08 u64 payload, +0x10 parent,
 //                          +0x18 left, +0x20 right, +0x28 u32 balance.
 //
-// Faithful offset-by-offset port. Portable for the standalone exe (no hooks.h).
+// Faithful offset-by-offset port.
 
 #include "engine_funcs.h"
 #include "resolve.h"

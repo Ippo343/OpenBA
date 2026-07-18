@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented MineComponent methods.
 // Called from engine/reimpl/minecomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "MineComponent.h"
 #include <cstdint>

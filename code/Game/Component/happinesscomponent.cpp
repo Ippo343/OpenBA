@@ -10,7 +10,6 @@
 //   [7] OnCreate  = 0x14004aa20 -- register with happiness list
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/happinesscomponent_funcs.h"
 #include "engine_funcs.h"

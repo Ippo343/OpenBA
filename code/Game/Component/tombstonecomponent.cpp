@@ -9,7 +9,6 @@
 //   Serialize (0x140057860) — Actually OnCreate: init random lifetime
 //   Update    (0x1400577D0) — Timer countdown + entity removal
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/tombstonecomponent_funcs.h"
 #include "engine_funcs.h"
@@ -181,7 +180,6 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
     // zero but the description (+0x18) is present, run the body-init now so the
     // countdown starts from the real random lifetime — otherwise the `timer < 1`
     // test below fires on tick 1 and marks the tombstone for instant removal.
-    // Harmless in DLL-hook mode (the engine's OnCreate already set +0x28 non-zero).
     if (*(int64_t*)&self->field28 == 0 && self->_unk18 != nullptr) {
         TombstoneComponent_Startup(self);
     }

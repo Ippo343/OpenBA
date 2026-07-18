@@ -24,9 +24,9 @@
 //
 // Instruction-faithful: do NOT "improve" behavior. Every offset / constant below
 // cites its disasm address. Self-contained: resolves every sub-callee via
-// ResolveAddr(Module::Exe, 0xADDR). No hooks.h, no RegisterExeAddr. In DLL mode
-// addresses resolve to the loaded exe; in standalone they resolve to 0 unless the
-// address is registered, in which case the guarded call is skipped (project norm).
+// ResolveAddr(Module::Exe, 0xADDR). No RegisterExeAddr. In standalone,
+// addresses resolve to 0 unless the address is registered, in which case the
+// guarded call is skipped (project norm).
 
 #include "engine_funcs.h"
 #include "resolve.h"

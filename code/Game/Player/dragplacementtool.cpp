@@ -10,8 +10,8 @@
 //   Slot14 CalcCost(0x1400fbae0) — validate area and calculate cost
 //
 // Remaining slots (Draw, CalcPath) are too complex (terrain validation, entity
-// creation, scene rendering) and stay as trampolines until helper functions
-// are typed and resolved.
+// creation, scene rendering) and are not yet reimplemented, pending typed and
+// resolved helper functions.
 //
 // Decompiled from Application-x64.exe.
 

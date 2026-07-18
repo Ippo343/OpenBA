@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented BridgeTool methods.
 // Called from engine/reimpl/bridgetool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "BridgeTool.h"
 #include <cstdint>

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ForesterWork methods.
 // Called from engine/reimpl/foresterwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ForesterWork.h"
 #include <cstdint>

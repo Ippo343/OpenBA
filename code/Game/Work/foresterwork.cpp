@@ -10,7 +10,6 @@
 // Finds nearby trees, checks terrain, assigns forester to cut/plant tasks.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — it is portable for standalone exe.
 
 #include "Work/foresterwork_funcs.h"
 #include "engine_funcs.h"
@@ -257,15 +256,15 @@ bool ForesterWork_ResolveFuncs() {
     // standalone exe (ResolveAddr -> 0, so *slot never ran and these stayed null, failing
     // ResolveFuncs); the MemAlloc/MemFree slot addresses were also wrong (they index the
     // _rng/Lerp imports, not MemoryAllocator). ResolveExport reads the Runtime DLL exports
-    // directly and is correct in BOTH build modes.
+    // directly, which is correct for the standalone exe.
     s_fn_MemAlloc = reinterpret_cast<FW_MemAlloc_t>(
         ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));     // static (size,align)
     s_fn_MemFreeFunc = reinterpret_cast<FW_MemFreeFunc_t>(
         ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));        // static (ptr)
     s_fn_Random_RandTol = reinterpret_cast<FW_Random_RandTol_t>(
         ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));                  // member (this,range)
-    // Keep the IAT-slot read as a fallback for the (faithful) DLL build, in case its slot is
-    // populated and the export lookup is ever unavailable.
+    // Keep the IAT-slot read as a fallback in case its slot is populated and the
+    // export lookup is ever unavailable.
     if (!s_fn_Random_RandTol) {
         uintptr_t iatRandTol = ResolveAddr(Module::Exe, 0x1401512f0);
         if (iatRandTol) s_fn_Random_RandTol = *reinterpret_cast<FW_Random_RandTol_t*>(iatRandTol);
@@ -295,7 +294,6 @@ bool ForesterWork_ResolveFuncs() {
     // Float constants from .rdata. In the standalone exe ResolveAddr(Module::Exe,...) on a
     // raw .rdata constant returns NULL (the exe's .rdata isn't mapped at the ghidra VA), so
     // fall back to a static holding the real value (reference_standalone_rdata_null_fallback).
-    // In DLL mode ResolveAddr returns the real .rdata address and the fallback never triggers.
     static float s_fb_PI = 3.14159265f;        // 0x140172184
     static float s_fb_MaxHeight = 1000.0f;     // 0x140172248
     static float s_fb_MinGrowth = 0.97f;       // 0x14017213c
@@ -341,7 +339,7 @@ bool ForesterWork_ResolveFuncs() {
     // through) and NatResDesc2 (c77e8) is a serialize-only id — Execute derefs none of them,
     // and all three are unregistered across the whole standalone build. Gate the force-driver
     // on execReady (Execute-critical only); keep `ok`/`s_forester_funcs_resolved` strict so
-    // the faithful DLL build still verifies the complete set.
+    // the complete set is still verified.
     bool ok = execReady && s_vtable_AutoPickupWork && s_vtable_Work && s_typeId_NatResDesc2;
 
     s_forester_exec_ready = execReady;

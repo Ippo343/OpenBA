@@ -12,7 +12,6 @@
 //  [11] OnUpdate2 = 0x14011F540 -- 12-byte stub (unhookable, not reimplemented here)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/floorcomponent_funcs.h"
 #include "engine_funcs.h"

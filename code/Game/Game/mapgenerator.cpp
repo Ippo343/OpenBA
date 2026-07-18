@@ -194,11 +194,7 @@ void MapGenerator_Init(MapGenerator* self) {
 // - ExternalRef resolution callbacks (FUN_14001b1d0) on load
 // - Complex array resize helpers (FUN_14001b270, FUN_14001b340, FUN_14001b4e0)
 //
-// DLL mode calls the original function directly since the internal helpers
-// (array resize with copy, ExternalRef factory resolution) are tightly coupled
-// to the exe's memory allocator and factory system.
-//
-// STANDALONE mode: the original (0x1400a2980) isn't in our process (we ARE the
+// The original (0x1400a2980) isn't in our process (we ARE the
 // exe), so the FULL deserialize is reimplemented in clean C++ below. This reads
 // the entire MapGenerator stream — scalar header AND every dynamic pool — so the
 // start-condition data (citizen families, structures, resource/cull lists, env

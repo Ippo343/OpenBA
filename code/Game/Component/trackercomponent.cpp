@@ -8,7 +8,6 @@
 // Vtable at 0x14015ab80. One non-trivial override:
 //   Shutdown (0x140059130) — Serialize two paired (IBP+int) arrays + trackerId
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/trackercomponent_funcs.h"
 #include "engine_funcs.h"

@@ -11,7 +11,6 @@
 //   Update    (0x140129130) — accumulate time, check threshold, mark for collection
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/rawmaterialcomponent_funcs.h"
 #include "engine_funcs.h"

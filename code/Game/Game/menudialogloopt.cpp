@@ -254,10 +254,10 @@ static void* AppendToDynArray(void* self, uintptr_t arrOff, size_t stride) {
 //      - Vtable+0x08 (Update) called with Time(0).
 //   4. Scene::AddObject(scene, instance) → uint32 id, append to MenuDLT+0xbf0.
 //
-// Implementation is split into two pieces so standalone can drive the loop
+// Implementation is split into two pieces so the loop can be driven
 // in chunks across the Loading splash's Update ticks (eliminating the
 // ~542ms synchronous freeze that would otherwise happen during MenuDLT::
-// Startup). DLL mode keeps the synchronous wrapper below.
+// Startup). A synchronous all-in-one wrapper is provided below.
 
 // Per-element processing — body of the original loop's `for (i = 0; i < meshCount; ++i)`.
 // Returns the number of material slots wired (for stat reporting). Sets
@@ -798,7 +798,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
 
     // Skip TradeWork (gameSettings[0x16]) — DLC ship, out of scope.
     // Static-mesh PhaseB + particle PhaseC happen in their own public funcs;
-    // the synchronous all-in-one wrapper below + DLL mode call them here.
+    // the synchronous all-in-one wrapper below calls them here.
     printf("[MenuDLT::LoadSceneA1] OK: renderer=%p gScene=%p sunLight=%p transform=%p "
            "mainMesh=%p sceneGeom=%p staticMeshCount=%d\n",
            renderer, gScene, sunLight, transform, mainMesh, sceneGeom,
@@ -1230,9 +1230,8 @@ void MenuDialogLoopT_StartMusic(void* self) {
 // these sounds route through the same scene we tick each frame (TickAudioScene).
 //
 // The five SoundEffect Externals must already be loaded into the KeyMap
-// container: in DLL mode PlacementTool_Ctor (driven by the Loader thread) does
-// it; in standalone EnsureUISoundsLoaded() loads them on demand before this
-// runs. Copying a null slot is harmless — Play no-ops on a null entry. Each
+// container: EnsureUISoundsLoaded() loads them on demand before this runs.
+// Copying a null slot is harmless — Play no-ops on a null entry. Each
 // slot is an 8-byte Object::ExternalPtr<SoundEffect> (raw External*), copied
 // by value exactly as helper_9260 does (no SetSound call).
 void MenuDialogLoopT_BindUISounds(void* self) {

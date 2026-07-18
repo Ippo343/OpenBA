@@ -7,7 +7,6 @@
 // Vtable at 0x14015a180. One hooked override:
 //   Shutdown (0x140051de0) — Complex entity ref serialization
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/orchardcomponent_funcs.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialImageToolbarIcon methods.
 // Called from engine/reimpl/tutorialimagetoolbaricon.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TutorialImages.h"
 #include <cstdint>

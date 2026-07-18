@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialGoal methods.
 // Called from engine/reimpl/tutorialgoal.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TutorialGoals.h"
 #include <cstdint>

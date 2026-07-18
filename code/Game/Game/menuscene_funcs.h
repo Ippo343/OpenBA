@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented MenuScene methods.
 // Called from engine/reimpl/menuscene.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "MenuScene.h"
 #include <cstdint>

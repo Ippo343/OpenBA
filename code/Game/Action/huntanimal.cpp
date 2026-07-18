@@ -27,7 +27,6 @@
 //   +0x38: uint8_t  huntStarted    (flag: 0=not started, 1=hunt completed)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "HuntAnimal.h"
 #include "engine_funcs.h"

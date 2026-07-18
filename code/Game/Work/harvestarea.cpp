@@ -24,7 +24,6 @@
 //   Serialize (0x1400ED350) -- serialization
 //   ScalarDtor body (0x1400ED410) -- destructor
 //
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/harvestarea_funcs.h"
 #include "engine_funcs.h"

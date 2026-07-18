@@ -3,15 +3,13 @@
 // from code/Game/Player/removaltool.cpp (RemovalTool::Draw / per-tile checks).
 //
 // These are exe sub-helpers resolved via ResolveAddr(Module::Exe, 0xADDR) from
-// the RemovalTool reimpl. In DLL mode they resolve to the original exe code; in
-// standalone mode they resolve to 0 (silently skipped) unless registered. This
-// file provides faithful 1:1 reimplementations and a single registration point
+// the RemovalTool reimpl. They resolve to 0 (silently skipped) unless registered.
+// This file provides faithful 1:1 reimplementations and a single registration point
 // (RegisterPlayerPathBatch in standalone/reg_player_path.cpp) so the call sites
 // fire real logic.
 //
 // Each function is a 1:1 port of the decompiled exe helper; do not "improve"
-// behavior. This file must NOT depend on hooks.h — it is portable for the
-// standalone exe. Bodies are unconditional so it compiles in BOTH builds.
+// behavior.
 //
 // Closure note: every exe sub-callee reached by the bodies here is either
 // (a) registered elsewhere (FUN_1400052c0 area-self find, FUN_14009f3e0

@@ -13,7 +13,6 @@
 //   +0x18: right child
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/tendarea_funcs.h"
 #include "engine_funcs.h"

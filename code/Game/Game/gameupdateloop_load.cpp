@@ -120,7 +120,6 @@ static void LoadProfessionList_Step2(uint8_t* p) {
     const int mode = ProfListMode();
 
     // Mode 2/3 — factory-only bisection: construct without any load.
-    // (ProfessionList_Factory is standalone-only; DLL mode always uses FindOrLoad.)
     if (mode == 2 || mode == 3) {
         void* profList = ProfessionList_Factory();
         // Mode 3 stores null (isolate construction from gw+0xb0 consumers).

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HuntComponent methods.
 // Called from engine/reimpl/huntcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "HuntComponent.h"
 #include <cstdint>

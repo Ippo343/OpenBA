@@ -1649,8 +1649,8 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         uint8_t filename[8];
         fn_Filename_CtorCStr_Local(filename, "Dialog/Toolbar.rsc");
 
-        // Find the Dialog resource. First try the loop's resource list (populated in
-        // DLL mode / when preload is on); if that is empty or misses, fall back to
+        // Find the Dialog resource. First try the loop's resource list (populated
+        // when preload is on); if that is empty or misses, fall back to
         // ExternalFactory::FindOrLoad (the path OpenToolDialog/ToggleAll use — loads
         // the .rsc directly, robust in standalone where m_resourceList is empty).
         void* foundBase = nullptr;

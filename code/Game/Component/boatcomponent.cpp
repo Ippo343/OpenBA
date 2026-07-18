@@ -9,7 +9,6 @@
 //   Shutdown (0x1400465d0) -- 95-instruction complex serialization
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/boatcomponent_funcs.h"
 #include "engine_funcs.h"

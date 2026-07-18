@@ -18,7 +18,6 @@
 //   Slot8 (0x1400EDDC0), Slot9 (0x1400ED5E0), Slot10 (0x1400EDE40)
 //   Serialize (0x1400EDEA0), ScalarDtor body (0x1400EDF60)
 //
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/harvestorchard_funcs.h"
 #include "engine_funcs.h"

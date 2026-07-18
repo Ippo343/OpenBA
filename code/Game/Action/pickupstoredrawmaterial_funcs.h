@@ -1,7 +1,6 @@
 #pragma once
 // PickupStoredRawMaterial function declarations -- clean game logic layer.
 // These functions are called from engine/reimpl/pickupstoredrawmaterial.cpp hook wrappers.
-// They must NOT depend on hooks.h -- they are portable for standalone exe.
 
 #include <cstdint>
 
@@ -18,7 +17,7 @@ int PickupStoredRawMaterial_AbstractImpl_Impl(PickupStoredRawMaterial* self, voi
 void PickupStoredRawMaterial_CheckEntity_Impl(PickupStoredRawMaterial* self);
 
 // PickupStoredRawMaterial::GetTarget -- checks +0x28 and +0x20->parent(+0x10)
-// NOT HOOKED in passthrough, but included for standalone exe.
+// Included for the standalone exe.
 bool PickupStoredRawMaterial_GetTarget_Impl(PickupStoredRawMaterial* self, void* param);
 
 // Resolution helper

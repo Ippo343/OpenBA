@@ -11,10 +11,10 @@
 //   FUN_1400bb7b0 (WorkAct_GatherWorkCtor_bb7b0)
 //   FUN_1400beae0 (WorkAct_FishWorkCtor_beae0)
 //
-// Resolved via ResolveAddr(Module::Exe, 0xADDR) — DLL mode -> original exe
-// code, standalone -> 0 (silently skipped) unless registered. Self-contained
+// Resolved via ResolveAddr(Module::Exe, 0xADDR) — 0 (silently skipped) unless
+// registered. Self-contained
 // (own static resolvers, s_war_* prefix to avoid ODR clashes with sibling
-// work_base_actionctor.cpp). Must NOT depend on hooks.h.
+// work_base_actionctor.cpp).
 //
 // Do NOT "improve" — every offset/constant cites its disasm address.
 

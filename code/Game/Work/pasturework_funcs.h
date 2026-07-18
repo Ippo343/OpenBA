@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PastureWork methods.
 // Called from engine/reimpl/pasturework.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "PastureWork.h"
 #include <cstdint>

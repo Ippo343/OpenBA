@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented DragTool methods.
 // Called from engine/reimpl/dragtool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "Tool.h"
 #include <cstdint>

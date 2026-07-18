@@ -41,16 +41,13 @@
 // - All Runtime primitives are resolved at startup in engine_funcs.cpp.
 // - If any of them is null at runtime (Runtime DLL load failure), the helper
 //   one-shot logs and returns early — no crash, no upload.
-// - The vtable at 0x14015c8c0 is exe-resident; in DLL mode `g_NoiseUI_ImageBufferVtable`
-//   already resolves via `ResolveAddr(Module::Exe, ...)`. In standalone mode,
-//   address_registry.cpp's RegisterNoiseUIImageBufferVtable (added this session)
-//   provides our own slot table that points at the same Runtime exports the
-//   exe thunks did.
+// - The vtable at 0x14015c8c0 is exe-resident; address_registry.cpp's
+//   RegisterNoiseUIImageBufferVtable provides our own slot table that points at
+//   the same Runtime exports the exe thunks did.
 //
 // This helper is NOT yet called from anywhere — Geometry::Serialize body is
 // session 8. Session 7's only goal is that the helper exists, links, and is
-// callable both in DLL mode (delegates to original) and standalone (executes
-// our cleaned C body).
+// callable, executing our cleaned C body.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -301,11 +298,10 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
 // Public reimpl entry point
 // ============================================================
 //
-// Tries the original exe address first (DLL mode + standalone when the exe
-// code page is mapped). If that pointer is null (standalone mode, no exe
-// code), falls through to our cleaned C body. The cleaned body mirrors the
-// original instruction-for-instruction so a future A/B trace can verify
-// equivalence.
+// Tries the original exe address first (usable when the exe code page is
+// mapped). If that pointer is null (no exe code), falls through to our cleaned
+// C body. The cleaned body mirrors the original instruction-for-instruction so
+// a future A/B trace can verify equivalence.
 
 extern "C" void Reimpl_TradeWork_sub_c780(void* self) {
     TradeWork_impl_sub_c780_Body(self);

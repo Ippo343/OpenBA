@@ -3,8 +3,7 @@
 // Function declarations for the MenuDialogLoopT (Engine::DialogLoopT subclass
 // that drives the main menu) deep reimplementation.
 //
-// Shared between standalone and DLL modes. Currently only used by standalone
-// (engine/reimpl/ has no MenuDialogLoopT wrapper yet — Phase A is standalone-only).
+// Drives the standalone menu Load path (Phase A).
 
 #include <cstdint>
 
@@ -15,8 +14,8 @@
 //   - TradeWork (gameSettings[0x16] gated DLC).
 //   - The exe-side vtable overrides (PTR_FUN_14015e290, _vslot10_14015e240).
 //
-// SYNCHRONOUS all-in-one entry point used by DLL mode and the standalone
-// Stub_Startup fallback path. It internally calls LoadSceneA1 +
+// SYNCHRONOUS all-in-one entry point used by the Stub_Startup fallback path.
+// It internally calls LoadSceneA1 +
 // LoadStaticMeshes_PhaseB + LoadSceneA3 in sequence (~542ms blocking).
 // Standalone's Loading splash drives those three pieces independently to
 // chunk PhaseB across multiple Update ticks (see ChunkedSceneLoader).
@@ -35,9 +34,8 @@ bool MenuDialogLoopT_LoadScene_PhaseA(void* self);
 // mesh, adds the 3 global objects, copies the deserialized transform.
 //
 // Cheap (~10ms) — does NOT iterate the 12K-15K-element static-mesh array.
-// Standalone calls this from the Loading splash's Stub_Startup so the
-// MenuScene External + scene-graph fields are populated before chunked
-// PhaseB starts; DLL mode reaches it through LoadScene_PhaseA above.
+// Called from the Loading splash's Stub_Startup so the MenuScene External +
+// scene-graph fields are populated before chunked PhaseB starts.
 //
 // Returns true on success, false if the MenuScene resource fails to load.
 bool MenuDialogLoopT_LoadSceneA1(void* self);
@@ -53,7 +51,7 @@ void MenuDialogLoopT_LoadSceneA3(void* self);
 // + material list, and add it to the global scene via Scene::AddObject. Result
 // is the props/buildings/foliage of the menu background.
 //
-// SYNCHRONOUS all-in-one wrapper for DLL mode. Internally calls
+// SYNCHRONOUS all-in-one wrapper. Internally calls
 // PhaseB_InitState + PhaseB_TickChunk(totalCount) which processes every
 // element in a single call (~542ms blocking on the main thread).
 //
@@ -181,8 +179,8 @@ void MenuDialogLoopT_StartMusic(void* self);
 // inside Engine::DialogLoopT::Update produce audible hover/click sounds:
 //   id2=BeginDrag id3=EndDrag id4=ButtonDown id5=ButtonUp id6=Alert.
 //
-// Requires the SoundEffects already loaded into the KeyMap container (DLL mode:
-// PlacementTool_Ctor; standalone: EnsureUISoundsLoaded). Call on the main
+// Requires the SoundEffects already loaded into the KeyMap container (via
+// EnsureUISoundsLoaded). Call on the main
 // thread from Startup after Engine::DialogLoopT::Startup has constructed the UI
 // (and after the audio scene is wired at self+0xd0 == UI+0x90, set by
 // StartMusic). No-op if the KeyMap container isn't populated; copying a null

@@ -9,7 +9,6 @@
 //      clamps smoothed density values to current density.
 //
 // Original: 0x140054070 (256 bytes)
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/populationcomponent_funcs.h"
 #include "engine_funcs.h"

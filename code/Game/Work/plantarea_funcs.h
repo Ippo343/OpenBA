@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PlantArea methods.
 // Called from engine/reimpl/plantarea.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "BuildActions.h"
 #include <cstdint>

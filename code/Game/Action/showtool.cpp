@@ -7,7 +7,6 @@
 // Vtable at 0x1401589b0 (10 slots).
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "ShowTool.h"
 #include "engine_funcs.h"
@@ -61,7 +60,7 @@ static fn_MeshSetMesh_t  s_slot_SetMesh = nullptr;
 static fn_SceneAdd_t     s_slot_SceneAdd = nullptr;
 static fn_MIDefCtor_t    s_slot_MI_DefCtor = nullptr;
 
-// ModelDescription type-id (DAT_1401c7a88). DLL: raw .rdata id; SA: runtime registry.
+// ModelDescription type-id (DAT_1401c7a88): .rdata resolves NULL in standalone, so fall back to the runtime registry.
 static uint32_t ShowTool_ModelDescTid() {
     uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     if (p && *p && *p != 0xFFFFFFFF) return *p;
@@ -384,7 +383,7 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
     // resource the citizen is hauling. The retail helper (Entity_impl_73b0) reads the
     // ModelDescription/RawMaterialDescription type-ids straight from exe .rdata, which
     // is null in standalone — so it can never match the mesh component and null-derefs.
-    // Use our faithful, guarded re-port instead (works in both modes).
+    // Use our faithful, guarded re-port instead.
     if ((int)toolId < 0) {
         ShowTool_ShowCarried(entity);
         return 1;

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented MarketLocationComponent methods.
 // Called from engine/reimpl/marketlocationcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "MarketLocationComponent.h"
 #include <cstdint>

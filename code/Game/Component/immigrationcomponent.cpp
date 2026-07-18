@@ -22,7 +22,6 @@
 //   ~Serializer(local_30)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/immigrationcomponent_funcs.h"
 #include "engine_funcs.h"

@@ -5,13 +5,12 @@
 // rectangle by transforming its world bounding-box corners and projecting them through
 // the camera. Resolved via ResolveAddr(Module::Exe, 0x140100380) from
 // code/Game/Player/edittool.cpp (EditTool_Startup positions the tool dialog near the
-// selected entity's on-screen rectangle). In DLL mode it resolves to the original exe
-// code; in standalone mode it resolves to 0 (silently skipped) unless registered.
+// selected entity's on-screen rectangle). It resolves to 0 (silently skipped) unless
+// registered.
 //
 // This file provides faithful 1:1 reimplementations of the four-function closure and a
 // single registration point (RegisterPlayerScreenRectBatch in
-// standalone/reg_player_screenrect.cpp). It must NOT depend on hooks.h; bodies are
-// unconditional so it compiles in BOTH dll and standalone builds.
+// standalone/reg_player_screenrect.cpp).
 //
 // Closure (registered bottom-up):
 //   0x1400fec70 CharacterComponent_impl_ec70  -> CharacterComponent_impl_f3e0 (0x14009f3e0, REG)
@@ -137,9 +136,9 @@ static inline uintptr_t GameWorld() {
 
 // Display object = Video::Device; +4=width, +8=height.
 // The original exe reads it via **g_pSingletonExref_151a80 (slot -> ptr -> Device),
-// but that exref is unresolved in standalone (this reimpl is standalone-only — DLL
-// mode calls the real exe fn), so prefer *g_pVideoDeviceSingleton, the same Device
-// instance the working GetMouseRay path uses. Fall back to the exref double-deref.
+// but that exref is unresolved in standalone, so prefer *g_pVideoDeviceSingleton, the
+// same Device instance the working GetMouseRay path uses. Fall back to the exref
+// double-deref.
 static inline void* Display() {
     if (g_pVideoDeviceSingleton && *g_pVideoDeviceSingleton)
         return *g_pVideoDeviceSingleton;

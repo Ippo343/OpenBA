@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ComponentEntity methods.
 // Called from engine/reimpl/componententity.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "ComponentEntity.h"
 #include <cstdint>
@@ -35,8 +34,7 @@ inline uint32_t ComponentEntity_GetTypeId(ComponentEntity* /*self*/) {
 // component IBPs (InternalBasePtr::Serialize), entityFlags (+0x40).
 // On load: resizes component array, creates components from factory,
 // sets component owner/description, calls Startup on each, then RefreshEntityFlags.
-// NOTE: Hook is DISABLED due to trampoline local_res corruption (bug class).
-// Still implemented as clean code for standalone exe target.
+// Implemented as clean code for the standalone exe target.
 void ComponentEntity_Serialize(ComponentEntity* self, void* stream);
 
 // Slot4 (vtable +0x20): NULL -- no function, skip.
@@ -65,7 +63,7 @@ void ComponentEntity_Slot8(ComponentEntity* self, void* stream);
 
 // Slot9 (vtable +0x48, 0x14003addc): Shared _purecall function.
 // This is a library pure virtual call handler, not entity-specific.
-// Left as passthrough in the reimpl wrapper.
+// Not reimplemented here.
 
 // Slot10 (vtable +0x50, 0x1400c4a90): Returns 0 (xor eax,eax; ret).
 inline int ComponentEntity_Slot10(ComponentEntity* /*self*/) { return 0; }

@@ -25,7 +25,7 @@
 // (replicates `node->slot08(node, sm->index, &desired); sm[+0xa/+0xb] = ...`).
 //
 // Faithful offset-by-offset port of the Ghidra decompilations. All exe-internal helpers
-// are resolved guarded; if one is unavailable the step is skipped. Standalone-portable.
+// are resolved guarded; if one is unavailable the step is skipped.
 
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -91,7 +91,7 @@ static bool BC8_BuilderNatural() {
     return s_bc8_builderNatural == 1;
 }
 
-// ---- type ids (SA: runtime registry; DLL: raw .rdata) ----------------------------
+// ---- type ids (runtime registry) ----------------------------
 static uint32_t BC8_TypeId(const char* name, uintptr_t rdataGlobal) {
     (void)rdataGlobal;
     return ::Object::GetTypeIdByName(name);

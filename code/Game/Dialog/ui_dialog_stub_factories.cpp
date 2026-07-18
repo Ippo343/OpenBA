@@ -30,8 +30,8 @@
 // code/Game/Dialog/messagedialog.cpp for that pattern).
 //
 // The method bodies for most of these dialogs already exist in their own
-// code/Game/Dialog/<type>.cpp (used by DLL-hook mode); this file only supplies
-// the standalone construction/registration the exe ctors used to provide.
+// code/Game/Dialog/<type>.cpp; this file only supplies the standalone
+// construction/registration the exe ctors used to provide.
 
 
 #include "Object/factory_registration.h"

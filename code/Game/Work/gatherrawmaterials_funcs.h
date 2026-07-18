@@ -1,7 +1,6 @@
 #pragma once
 // GatherRawMaterials function declarations -- clean game logic layer.
 // Called from engine/reimpl/gatherrawmaterials.cpp hook wrappers.
-// Must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "BuildActions.h"
 #include <cstdint>

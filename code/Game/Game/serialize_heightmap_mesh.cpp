@@ -90,8 +90,7 @@ bool s_runtimeResolved = false;
 void ResolveRuntimePtrs() {
     if (s_runtimeResolved) return;
 
-    // Try IAT dispatch slots first (filled by RegisterDispatchSlot in standalone,
-    // or by the Runtime DLL loader in DLL mode).
+    // Try IAT dispatch slots first (filled by RegisterDispatchSlot).
     auto loadSlot = [](uintptr_t slotAddr) -> void* {
         void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, slotAddr));
         return slot ? *slot : nullptr;
@@ -923,9 +922,9 @@ void GeometryChunkUpdate_Body(void* self) {
 // Public reimpl entry points
 // ============================================================
 //
-// Each entry tries the original exe address first (DLL mode + standalone
-// when the exe code page is mapped). If that pointer is null (standalone
-// mode, no exe code), we fall through to our cleaned C body.
+// Each entry tries the original exe address first (usable when the exe code
+// page is mapped). If that pointer is null (no exe code), we fall through to
+// our cleaned C body.
 
 extern "C" void Reimpl_TradeWork_sub_c1e0(void* self) {
     TradeWork_impl_sub_c1e0_Body(self);

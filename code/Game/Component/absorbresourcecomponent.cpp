@@ -6,7 +6,6 @@
 //   Shutdown (0x140105c00) -- Component_Serialize + two empty Serializer blocks
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/absorbresourcecomponent_funcs.h"
 #include "engine_funcs.h"

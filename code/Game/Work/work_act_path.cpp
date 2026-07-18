@@ -11,7 +11,7 @@
 // Instruction-faithful transcription of the decompiled exe helper; do NOT "improve"
 // behavior. Every exe sub-callee is resolved via ResolveAddr(Module::Exe, 0xADDR) and
 // null-guarded (skipped if unregistered, matching project semantics). Self-contained:
-// own ResolveAll(), no hooks.h, no RegisterExeAddr. Statics prefixed s_wap2_ to avoid
+// own ResolveAll(), no RegisterExeAddr. Statics prefixed s_wap2_ to avoid
 // ODR clashes with sibling action-ctor ports.
 //
 // All disasm citations are exe addresses (base 0x140000000).

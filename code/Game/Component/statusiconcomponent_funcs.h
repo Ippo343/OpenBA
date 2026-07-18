@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented StatusIconComponent methods.
 // Called from engine/reimpl/statusiconcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "StatusIconComponent.h"
 #include <cstdint>

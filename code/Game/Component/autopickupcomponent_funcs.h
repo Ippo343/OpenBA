@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented AutoPickupComponent methods.
 // Called from engine/reimpl/autopickupcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "AutoPickupComponent.h"
 #include <cstdint>

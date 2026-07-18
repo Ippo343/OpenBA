@@ -12,7 +12,6 @@
 //   OnUpdate2 (0x14012bf40) — Updates icon visibility, adds to Scene
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/statusiconcomponent_funcs.h"
 #include "engine_funcs.h"

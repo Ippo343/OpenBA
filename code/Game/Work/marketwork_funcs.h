@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented MarketWork methods.
 // Called from engine/reimpl/marketwork.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "MarketWork.h"
 #include <cstdint>

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HarvestOrchard methods.
 // Called from engine/reimpl/harvestorchard.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HarvestOrchard.h"
 #include <cstdint>

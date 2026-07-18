@@ -9,7 +9,6 @@
 //   Shutdown (0x140117EC0) -- serialize with clearState
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/clearareacomponent_funcs.h"
 #include "engine_funcs.h"

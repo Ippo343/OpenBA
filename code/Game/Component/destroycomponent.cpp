@@ -11,7 +11,6 @@
 //   Serialize (0x14011DB00) -- OnCreate: copy mesh ref from building data
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/destroycomponent_funcs.h"
 #include "engine_funcs.h"

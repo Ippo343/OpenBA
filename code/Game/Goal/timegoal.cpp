@@ -9,7 +9,6 @@
 //   +0x34: bool   requireOtherGoalsMet  — if set, time only counts when other goals are met
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Goal/timegoal_funcs.h"
 #include "engine_funcs.h"

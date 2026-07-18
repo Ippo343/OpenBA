@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented Weather methods.
 // Called from engine/reimpl/weather.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "Weather.h"
 #include <cstdint>

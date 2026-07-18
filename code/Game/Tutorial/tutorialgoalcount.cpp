@@ -10,7 +10,6 @@
 // If greaterOrEqual (+0x28), checks count >= target; else checks count == target.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialgoalcount_funcs.h"
 #include "engine_funcs.h"

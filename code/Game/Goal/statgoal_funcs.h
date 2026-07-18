@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented StatGoal methods.
 // Called from engine/reimpl/statgoal.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "AchievementGoals.h"
 #include <cstdint>

@@ -42,8 +42,7 @@ static constexpr int       kSize       = 0x30;
 static constexpr size_t    kEntryStride = 0x18;
 
 // Exe-internal array resize helper for the 0x18-byte track entries.
-//   DLL mode: reuse the real exe function (it default-inits new slots correctly).
-//   Standalone: exe-internal addr is not registered → ResolveAddr returns 0, so we
+//   The exe-internal addr is not registered → ResolveAddr returns 0, so we
 //   fall back to a faithful local resize with the same default-init.
 static constexpr uintptr_t kResizeEntries = 0x14001c3c0;
 
@@ -122,8 +121,7 @@ static bool     s_resolved = false;
 static void MusicList_ResolveFuncs() {
     if (s_resolved) return;
     s_resolved = true;
-    // DLL mode: real exe helper resolves; standalone: addr unregistered → 0,
-    // and we use the local fallback below.
+    // Exe-internal addr is unregistered → 0, so we use the local fallback below.
     s_resize = reinterpret_cast<Resize_t>(ResolveAddr(Module::Exe, kResizeEntries));
     if (!s_resize) s_resize = &MusicList_ResizeEntries_Fallback;
 }

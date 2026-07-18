@@ -14,7 +14,6 @@
 // Struct size: 0x60, vtable at 0x140163680
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/herdcomponent_funcs.h"
 #include "engine_funcs.h"

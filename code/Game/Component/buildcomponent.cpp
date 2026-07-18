@@ -15,7 +15,6 @@
 //   +0x70: int    entityArray2Count
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/buildcomponent_funcs.h"
 #include "engine_funcs.h"
@@ -246,7 +245,7 @@ void BuildComponent_OnCreate(BuildComponent* self) {
 //
 // Delegated to original exe code — too many subsystem interactions and vtable
 // dispatches to safely reimplement without full MultiObjectComponent/WorkplaceComponent
-// type coverage. The hook uses InstallHookVTable so the original code is intact.
+// type coverage.
 
 void BuildComponent_Draw(BuildComponent* self) {
     EnsureHelpers();
@@ -288,8 +287,8 @@ static fn_BC_FindComp_t  s_fn_BC_Find26a30 = nullptr;   // 0x140026a30 (FindComp
 static fn_BC_FindComp_t  s_fn_BC_FindWork  = nullptr;   // 0x140004740 (Workplace)
 static fn_BC_AddToList_t s_fn_BC_AddToList = nullptr;   // 0x140003110
 static fn_BC_Entity8f50_t s_fn_BC_Entity8f50 = nullptr; // 0x140128f50
-// Type-id VALUES. In the DLL build these come from raw .rdata; in standalone the
-// .rdata globals are never seeded (ResolveAddr(Exe,.rdata)==NULL) so we fall back to
+// Type-id VALUES. The .rdata globals are never seeded (ResolveAddr(Exe,.rdata)==NULL)
+// so we fall back to
 // the runtime type registry by name — otherwise block 1's IsDerivedFrom is guarded out
 // and the site's ModelComponent never gets appended to +0x58 (empty mesh list).
 //   0x1401c7a88 = ModelDescription (checked on the found ModelComponent's +0x18 desc)

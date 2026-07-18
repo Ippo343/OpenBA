@@ -75,9 +75,8 @@
 //
 // WIRING NOTE: replaces the notes/ scoped stand-in (construction-only Laborer->Builder).
 // In SA this must be registered (RegisterExeAddr 0x1400d43b0) AND the caller chain
-// FUN_1400d6f00 + ctx must reach it (see task #16). In DLL mode 0x1400d43b0 carries an
-// SEH-cookie prologue (trampoline bug class 8) and is a direct (non-vtable) call, so it
-// is exercised via SA registration / call-site redirection rather than a prologue hook.
+// FUN_1400d6f00 + ctx must reach it (see task #16). It is a direct (non-vtable) call,
+// exercised via SA registration / call-site redirection.
 
 #include "engine_funcs.h"
 #include "resolve.h"

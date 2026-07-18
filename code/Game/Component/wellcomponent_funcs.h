@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented WellComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "WellComponent.h"
 #include <cstdint>

@@ -17,7 +17,6 @@
 // Slot8/Slot9/Slot10/Serialize/Dtor are identical patterns to HuntWork.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/pasturework_funcs.h"
 #include "engine_funcs.h"
@@ -152,7 +151,7 @@ static void** s_vtable_PastureWork = nullptr;     // 0x1401617a0
 static void** s_vtable_AutoPickupWork = nullptr;   // 0x140161340
 static void** s_vtable_Work = nullptr;              // 0x1401612e0
 
-// Original Slot4 trampoline for fallback (complex function)
+// Original Slot4 exe function pointer for fallback (complex function)
 typedef int (*PW_OrigSlot4_t)(void* self, void* param2, uint64_t param3, uint64_t param4);
 static PW_OrigSlot4_t s_fn_OrigSlot4 = nullptr;
 

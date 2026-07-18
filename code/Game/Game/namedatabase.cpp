@@ -33,8 +33,7 @@
 static constexpr uintptr_t kVtableAddr = 0x14015eea0;
 static constexpr int       kSize       = 0x60;
 
-// Array resize helpers (exe addresses; standalone registers our reimpls,
-// DLL mode resolves the real exe functions).
+// Array resize helpers (exe addresses; we register our reimpls for these).
 static constexpr uintptr_t kResizeArr1 = 0x14001c7c0;  // stride 0xc
 static constexpr uintptr_t kResizeArr2 = 0x14001c890;  // stride 0x2
 static constexpr uintptr_t kResizeArr3 = 0x14000a590;  // stride 0x1 (byte)

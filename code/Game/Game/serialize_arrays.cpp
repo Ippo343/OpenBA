@@ -51,10 +51,8 @@
 //   +0x1a0..+0x228  zeroed
 //   +0x030  = 1  (state flag)
 //
-// DLL mode: fn_Geometry_Init holds the original exe code → passthrough.
-// Standalone mode: fn_Geometry_Init resolves to ourselves via the address
-//                  registry, so we run the cleaned body using Runtime DLL
-//                  ctors directly (no recursion).
+// fn_Geometry_Init resolves to ourselves via the address registry, so we run
+// the cleaned body using Runtime DLL ctors directly (no recursion).
 extern "C" void Reimpl_Geometry_Init(void* self) {
     if (!self) return;
 
@@ -117,10 +115,9 @@ extern "C" void Reimpl_Geometry_Init(void* self) {
 
 // ============================================================
 // Standalone-only stub vtable for the derived Geometry / "TerrainGenerator"
-// class. The 9-slot exe vtable lives at 0x14015f110; in DLL mode the original
-// exe code backs each slot, but in standalone none of those exe addresses are
-// registered, so the Geometry retained the Runtime base Graphics::Geometry
-// vtable — whose Draw slot (+0x18) is _purecall. Renderer::Draw walks
+// class. The 9-slot exe vtable lives at 0x14015f110; none of those exe
+// addresses are registered, so the Geometry retained the Runtime base
+// Graphics::Geometry vtable — whose Draw slot (+0x18) is _purecall. Renderer::Draw walks
 // Scene+0x60 and dispatches vtable[+0x18] on every object, hitting MSVC's
 // _purecall handler (a MessageBox).
 //

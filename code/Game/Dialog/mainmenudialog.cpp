@@ -464,8 +464,8 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
                            parentPtr,
                            0, 0, 0);
 
-    // Override vtable to BuildId secondary (DLL-mode only — in standalone
-    // the slot is null so we keep the default DI vtable from the ctor).
+    // Override vtable to BuildId secondary when that vtable is available; in
+    // standalone the slot is null so we keep the default DI vtable from the ctor.
     if (g_MainMenuDialog_BuildIdVtable) {
         *(void**)childDialog = (void*)g_MainMenuDialog_BuildIdVtable;
     }
@@ -759,11 +759,11 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
 //   +0x08 Slot1            — exe returns DAT_1401c5c28 (TypeName const)
 //   +0x10 Slot2            — exe returns DAT_1401c5c20 (TypeId const)
 //   +0x18 Slot3 Persist    — thunk to Runtime DialogInstance::Persist
-//   +0x20 Slot4 Setup      — REIMPL'd in MainMenuDialog_Slot4 (DLL-only; stubbed here)
-//   +0x28 Slot5 Shutdown   — REIMPL'd (DLL-only; stubbed here)
+//   +0x20 Slot4 Setup      — REIMPL'd in MainMenuDialog_Slot4 (stubbed here)
+//   +0x28 Slot5 Shutdown   — REIMPL'd (stubbed here)
 //   +0x30 Slot6 OnUpdateLayout — thunk
 //   +0x38 Slot7 OnUpdate   — thunk
-//   +0x40 Slot8 OnCommand  — REIMPL'd (DLL-only; stubbed here)
+//   +0x40 Slot8 OnCommand  — REIMPL'd (stubbed here)
 //   +0x48 Slot9 OnSerializeSettings — thunk
 //   +0x50 Slot10 DIDtor    — ~DialogInstance + free
 //   +0x58..+0x98 Slot11-19 — DialogController interface, all thunks
@@ -864,7 +864,7 @@ void StandaloneStub_Slot4_Setup(void* self) {
 
     // --- Create BuildId child dialog (cosmetic version overlay) ---
     // Pulls UI ptr from MainMenuDialog +0x10 (DialogInstance::m_userInterface).
-    // Uses shared helper so DLL-mode + standalone stay in lockstep.
+    // Uses the shared CreateBuildIdChildDialog helper.
     void* userInterface = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(self) + 0x10);
     CreateBuildIdChildDialog(self, userInterface);
@@ -936,7 +936,7 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         // Resume = close this in-game menu, which removes it from the UI's
         // dialog list. UI::UserInterface::PausesGame then returns false and
         // GameUpdateLoop::Update resumes ticking the simulation. This is the
-        // same close path the full DLL-mode MainMenuDialog_Slot8 uses, and it
+        // same close path MainMenuDialog_Slot8 uses, and it
         // relies only on fn_UI_CloseDialog / fn_InternalBasePtr_Ctor, both of
         // which the standalone toolbar already exercises (so they're resolved).
         printf("[MainMenuDialog::OnCommand] -> Resume (CloseDialog)\n");

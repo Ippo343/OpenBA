@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented BuildComponent methods.
 // Called from engine/reimpl/buildcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "BuildComponent.h"
 #include <cstdint>
@@ -28,8 +27,6 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream);
 // Draw (vtable slot [6], 0x140108D40): Complex worker assignment logic.
 // Checks game flags, iterates multi-object children, finds BuildComponents
 // and StorageComponents, manages worker assignments and draw calls.
-// NOTE: This hook is DISABLED in hooks.cpp due to RIP-relative prologue.
-// Included here for standalone exe completeness.
 void BuildComponent_Draw(BuildComponent* self);
 
 // OnCreate (vtable slot [7], 0x140108CB0): Removes component from removal queue.

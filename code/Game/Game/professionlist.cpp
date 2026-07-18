@@ -53,7 +53,7 @@ void ProfessionList_InitFuncs() {
 
     // Standalone fallbacks: the exe IAT dispatch slots resolve to NULL when the
     // original exe isn't mapped. Fall back to the Runtime-resolved engine_funcs
-    // globals so the SAME Serialize works in both modes.
+    // globals so the SAME Serialize works in the standalone exe.
     if (!s_fn_Serializer_Ctor) s_fn_Serializer_Ctor = reinterpret_cast<void(*)(void*, void*, int)>((uintptr_t)g_fn_Serializer_Ctor);
     if (!s_fn_Serializer_Dtor) s_fn_Serializer_Dtor = reinterpret_cast<void(*)(void*)>((uintptr_t)g_fn_Serializer_Dtor);
     if (!s_fn_ExternalPtrProf_Serialize) s_fn_ExternalPtrProf_Serialize = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
@@ -197,7 +197,7 @@ extern "C" void ProfessionList_Startup_Impl(void* profList) {
         !fn_MemAlloc || !g_pMemAllocSingleton)
         return;
 
-    // Profession type id: raw .rdata dword in DLL mode; live type tree in standalone.
+    // Profession type id: raw .rdata dword when the exe is mapped, else live type tree.
     uint32_t profTid = 0;
     {
         uint32_t* p = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5a98));

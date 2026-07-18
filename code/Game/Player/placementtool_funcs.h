@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented PlacementTool methods.
 // Called from engine/reimpl/placementtool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "PlacementTool.h"
 #include <cstdint>

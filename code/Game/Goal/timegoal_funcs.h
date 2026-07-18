@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TimeGoal methods.
 // Called from engine/reimpl/timegoal.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "AchievementGoals.h"
 #include <cstdint>
@@ -38,8 +37,8 @@ inline int TimeGoal_Slot8(TimeGoal* /*self*/) { return 0; }
 // Implemented inline since it just reads a global.
 inline void* TimeGoal_Slot9(TimeGoal* /*self*/, void* retval) {
     // Read TypeInfo_TimeGoalInstance from 0x1401c6320
-    // At runtime, this reads the type ID and stores it at *retval
-    // We let the trampoline handle this since it's unhookable
+    // At runtime, this reads the type ID and stores it at *retval.
+    // Stub: the type-id read is not implemented here; returns retval unchanged.
     return retval;
 }
 

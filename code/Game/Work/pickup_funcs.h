@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented Pickup methods.
 // Called from engine/reimpl/pickup.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "Pickup.h"
 #include <cstdint>

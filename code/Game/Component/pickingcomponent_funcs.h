@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented PickingComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "PickingComponent.h"
 #include <cstdint>

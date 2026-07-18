@@ -13,7 +13,6 @@
 //   - Aggregated entityFlags from components (update/draw/startup/shutdown bits)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Entity/componententity_funcs.h"
 #include "engine_funcs.h"
@@ -245,8 +244,7 @@ void* ComponentEntity_Dtor(ComponentEntity* self, uint32_t flags) {
 // component IBPs, entity flags. On load, creates components from
 // factory and inserts them into the component array.
 //
-// NOTE: Hook is DISABLED due to trampoline local_res corruption.
-// Implemented here for standalone exe completeness.
+// Implemented here for the standalone exe.
 void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     EnsureResolved();
     uintptr_t s = (uintptr_t)self;
@@ -824,8 +822,7 @@ REGISTER_TYPE(ComponentEntity, "Object::Internal",
 //                    Slot8 load / _purecall / ret0 / ret0
 // address_registry.cpp registers 0x14015fa78 -> &[0] and 0x14015faa0 -> &[5],
 // so both EnsureResolved() lookups above and every vtable-identity compare
-// resolve consistently. DLL mode never queries the registry (real vtable is
-// mapped), so this is standalone-only by construction.
+// resolve consistently.
 
 // Slots 1/6 (GetTypeInfo): the original returns a Runtime-filled type-info
 // global (0x1401c5d78 / 0x1401c5db0) that has no standalone storage yet.

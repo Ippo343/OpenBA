@@ -188,14 +188,14 @@ static void EnsureFuncs() {
     // CloseDialog slot 0x140151550 is likewise unfilled in standalone → null, so the
     // tool's Shutdown2/OnKey close paths no-op and the CreateBar never disappears when
     // the tool is dismissed (right-click). Fall back to the export-resolved global
-    // (same fn DragTool_CloseToolDialog uses). Harmless in DLL mode (slot is filled).
+    // (same fn DragTool_CloseToolDialog uses).
     if (!s_fn_CloseDialog && fn_UI_CloseDialog)
         s_fn_CloseDialog = reinterpret_cast<fn_CloseDialog_t>(fn_UI_CloseDialog);
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     // Standalone: the raw IAT slot 0x140151758 is unfilled → null, which would make
     // EVERY key check (rotate/flip AND the key-5 place-confirm) no-op — the "can't place
     // the building" symptom. Fall back to the export-resolved engine_funcs global (the
-    // same one the working camera-input path uses). Harmless in DLL mode (slot is filled).
+    // same one the working camera-input path uses).
     if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
         s_fn_KeyMapPressed = reinterpret_cast<fn_KeyMapPressed_t>(fn_KeyMap_Pressed);
     s_fn_TransformFromYaw  = (fn_TransformFromYaw_t)resolveIAT(0x140151288);
@@ -207,7 +207,7 @@ static void EnsureFuncs() {
     // The String copy-ctor / dtor IAT slots (0x140151428 / 0x140152af0) are unregistered in
     // standalone → null, so the cost-string tooltip below silently skips (costString stays
     // 0 → dialog shows a blank cost). Fall back to the export-resolved System::String
-    // ctor/dtor (same slot->export pattern as DragTool). Harmless in DLL mode (slots filled).
+    // ctor/dtor (same slot->export pattern as DragTool).
     if (!s_fn_StringCtor && fn_String_Ctor_Copy)
         s_fn_StringCtor = reinterpret_cast<fn_StringCtor_t>(fn_String_Ctor_Copy);
     if (!s_fn_StringDtor && fn_String_Dtor)
@@ -1068,7 +1068,7 @@ static void EnsureStartupFuncs() {
     // They are read by dormant tools that have never run in standalone, so they are
     // unfilled here. Point them at local storage filled from the LIVE factory tree
     // (ResolveTypeIdByNameLazy), the proven ToolbarStandalone_Init pattern. The `if
-    // (!global)` guard makes this a no-op in DLL mode (already filled).
+    // (!global)` guard skips this once the globals are filled.
     // 🔑 The engine_funcs LABELS for these 4 globals are WRONG (Ghidra-verified via the
     // RegisterType DATA writers, 2026-07-02). True types, per slot:
     //   +0x28 descComponent   = DAT_1401c7468 = CreatePlacedDescription (NOT "SizeDescription")

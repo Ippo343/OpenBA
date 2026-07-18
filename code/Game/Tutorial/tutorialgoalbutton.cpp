@@ -17,7 +17,6 @@
 //     invertCheck=false: returns (flags >> 22) & 1   (bit 22 set = success)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/tutorialgoalbutton_funcs.h"
 #include "engine_funcs.h"

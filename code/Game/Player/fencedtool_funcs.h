@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FencedTool methods.
 // Called from engine/reimpl/fencedtool.cpp wrappers.
-// No dependency on hooks.h or resolve.h -- portable to standalone exe.
 
 #include "FencedTool.h"
 #include <cstdint>

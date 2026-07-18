@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ResidenceComponent methods.
 // Called from engine/reimpl/residencecomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "ResidenceComponent.h"
 #include <cstdint>

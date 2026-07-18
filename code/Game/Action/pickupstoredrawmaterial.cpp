@@ -27,7 +27,6 @@
 //   +0x40: bool             partialAllowed  (if true, can pick up less than requested)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "PickupStoredRawMaterial.h"
 #include "engine_funcs.h"

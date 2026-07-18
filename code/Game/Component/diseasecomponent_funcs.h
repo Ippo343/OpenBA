@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented DiseaseComponent methods.
 // Called from engine/reimpl/diseasecomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "DiseaseComponent.h"
 #include <cstdint>

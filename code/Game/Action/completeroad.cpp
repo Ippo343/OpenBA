@@ -7,7 +7,6 @@
 // Vtable at 0x14015fb70 (10 slots).
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "CompleteRoad.h"
 #include "engine_funcs.h"

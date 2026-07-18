@@ -83,7 +83,7 @@ static inline bool OTrace() {
 // gated by NOT registering the exe addresses (standalone/reg_player_render.cpp).
 // The per-frame follow re-sync (Impl_HighlightFollow) is instead reached by a
 // direct cross-TU call from EditTool_Startup_Impl, so it self-gates on the same
-// env var to stay a no-op on the shipping default path (both build modes).
+// env var to stay a no-op on the shipping default path.
 static int s_outlineEnabled = -1;
 static inline bool OutlineEnabled() {
     if (s_outlineEnabled < 0) { const char* e = std::getenv("BANISHED_SELECTION_OUTLINE");
@@ -759,9 +759,9 @@ void Impl_c9e0(int64_t self) {
 // never stays up; [Outline] trace shows cc90->c9e0 looping on one entity). In SA
 // the dialog lifecycle is owned by d3b0/OnKey (step 4 reuses/replaces the panel),
 // so the retail teardown here is both redundant and harmful. Keeping just cb40
-// gives the outline-clear without disturbing the panel. (In DLL mode the real exe
-// cc90 runs unmodified — this body is standalone-only, reached via the registered
-// 0x1400fcc90 under BANISHED_SELECTION_OUTLINE.)
+// gives the outline-clear without disturbing the panel. (This body is reached via
+// the registered 0x1400fcc90 under BANISHED_SELECTION_OUTLINE; the original exe cc90
+// runs the full teardown unmodified.)
 // ===========================================================================
 void Impl_cc90(int64_t self) {
     EnsureFuncs();

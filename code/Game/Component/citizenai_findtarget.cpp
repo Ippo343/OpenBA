@@ -43,7 +43,6 @@
 // Every dereference of a scan-result pointer is additionally NULL-guarded so the
 // port is crash-safe even if a type id is unresolvable.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

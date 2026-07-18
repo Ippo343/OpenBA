@@ -50,7 +50,6 @@
 // .rdata float const: DAT_1401721fc = 75.0 (the per-state cooldown-stamp seconds; written to
 //   the CitizenAIComponent state-timestamp field at the top of Education/SeekHappiness).
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

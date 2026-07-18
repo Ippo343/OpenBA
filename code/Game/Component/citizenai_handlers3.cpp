@@ -50,7 +50,6 @@
 // .rdata float const: DAT_140172190 = 3.75 (Adult/Elder transition cooldown seconds; read
 //   from the exe at 0x140172190 = 0x40700000). Hardcoded here (pure scalar; no indirection).
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

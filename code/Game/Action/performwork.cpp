@@ -21,7 +21,6 @@
 //   [9] +0x48 GetTarget     = 0x1400C92D0 (compare entity parent)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "PerformWork.h"
 #include "engine_funcs.h"

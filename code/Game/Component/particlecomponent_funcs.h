@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented ParticleComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "ParticleComponent.h"
 #include <cstdint>

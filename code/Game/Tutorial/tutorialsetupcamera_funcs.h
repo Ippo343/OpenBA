@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TutorialSetupCamera methods.
 // Called from engine/reimpl/tutorialsetupcamera.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TutorialSetups.h"
 #include <cstdint>

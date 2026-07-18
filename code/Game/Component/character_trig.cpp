@@ -11,7 +11,6 @@
 // precedent set by WorkImpl_Sqrtf_132010 (0x140132010 -> sqrtf). The result feeds a
 // character heading angle, so any sub-ULP difference is irrelevant.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include <cmath>

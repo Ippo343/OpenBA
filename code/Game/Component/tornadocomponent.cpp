@@ -14,7 +14,6 @@
 // They interact with pathfinding, audio, random number generation, entity destruction,
 // and rendering. We call the original exe functions for these two methods.
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/tornadocomponent_funcs.h"
 #include "engine_funcs.h"

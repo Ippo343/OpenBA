@@ -15,7 +15,6 @@
 // - Validate marks cells with 0 (not available) instead of 1
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/plantorchard_funcs.h"
 #include "engine_funcs.h"

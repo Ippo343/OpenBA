@@ -3,9 +3,8 @@
 //
 // These exe sub-helpers are resolved via ResolveAddr(Module::Exe, 0xADDR) from
 // code/Game/Player/edittool.cpp (and reused by tradework.cpp / nomadcomponent.cpp /
-// entityui.cpp). In DLL mode they resolve to the original exe code; in standalone
-// mode they resolve to 0 (silently skipped) unless registered. This file provides
-// faithful 1:1 reimplementations and a single registration point
+// entityui.cpp). They resolve to 0 (silently skipped) unless registered. This file
+// provides faithful 1:1 reimplementations and a single registration point
 // (RegisterPlayerTradeBatch in standalone/reg_player_trade.cpp).
 //
 // Closure (registered bottom-up by RegisterPlayerTradeBatch):
@@ -28,8 +27,7 @@
 //   fn_InternalBasePtr_CheckPtr / _Ctor, fn_IsDerivedFrom, fn_DialogInstance_GetController
 //   (engine_funcs.h), and System::MemoryAllocator::MemAlloc/MemFree (static, by export).
 //
-// This file must NOT depend on hooks.h; bodies are unconditional so it compiles in
-// both dll and standalone builds. Port is 1:1 with the decompile — do not "improve".
+// Port is 1:1 with the decompile — do not "improve".
 
 #include "engine_funcs.h"
 #include "resolve.h"

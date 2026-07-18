@@ -10,9 +10,7 @@
 //
 // All 50 bindings are reproduced verbatim from the Ghidra decompile.
 //
-// In the DLL build the original exe owns this function and our wrapper
-// (engine/reimpl/) trampolines to it. In the standalone build there is no
-// original; this is the implementation. RunGameMain calls us right after
+// This is the implementation of that function. RunGameMain calls us right after
 // Engine::Startup so OptionsDialog can poll hotkey bindings without crashing.
 
 #include "inputbindings.h"

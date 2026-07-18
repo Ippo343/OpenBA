@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HealerComponent methods.
 // Called from engine/reimpl/healercomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HealerComponent.h"
 #include <cstdint>

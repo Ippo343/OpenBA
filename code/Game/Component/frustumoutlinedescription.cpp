@@ -17,7 +17,7 @@
 // CreateInPlace (vtable +0x48, 0x140012330): ctor + zero +0x68/+0x70 + (+0x78 = -1).
 // Dtor (vtable +0x00, 0x140012500): ~String(+0x70) + ElementDescription::~ + free.
 //
-// Field knowledge harvested from engine/reimpl/frustumoutlinedescription.cpp (DLL-mode reimpl).
+// Field knowledge harvested from engine/reimpl/frustumoutlinedescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
 
 #include "engine_funcs.h"

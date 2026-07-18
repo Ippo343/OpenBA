@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented HarvestArea methods.
 // Called from engine/reimpl/harvestarea.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "HarvestArea.h"
 #include <cstdint>

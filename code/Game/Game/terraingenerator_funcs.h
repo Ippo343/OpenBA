@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TerrainGenerator methods.
 // Called from engine/reimpl/terraingenerator.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "TerrainGenerator.h"
 #include <cstdint>

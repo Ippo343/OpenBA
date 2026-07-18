@@ -17,7 +17,6 @@
 //   +0x68: int32_t  goalCount      -- array count
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Tutorial/tutorialstep_funcs.h"
 #include "engine_funcs.h"

@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented FruitComponent methods.
 // Called from engine/reimpl/fruitcomponent.cpp wrappers.
-// No dependency on hooks.h -- portable to standalone exe.
 
 #include "FruitComponent.h"
 #include <cstdint>

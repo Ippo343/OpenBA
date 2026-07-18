@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented ForesterComponent methods.
 // Called from engine/reimpl/forestercomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "ForesterComponent.h"
 #include <cstdint>

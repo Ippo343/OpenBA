@@ -1,7 +1,6 @@
 #pragma once
 // DropOffRawMaterial function declarations — clean game logic layer.
 // These functions are called from engine/reimpl/dropoffrawmaterial.cpp hook wrappers.
-// They must NOT depend on hooks.h — they are portable for standalone exe.
 
 #include <cstdint>
 

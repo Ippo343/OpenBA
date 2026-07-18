@@ -10,7 +10,6 @@
 //   +0x30: void*    tutorialRef      — External* to Tutorial object
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Tutorial/finishtutorialgoal_funcs.h"
 #include "engine_funcs.h"

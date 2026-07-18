@@ -40,7 +40,6 @@
 // dispatch-slots / exe sub-callees are null-guarded; it stays dormant until ModelComponent
 // is brought live. See the report for the rendering-coupled sub-callee table.
 //
-// This file must NOT depend on hooks.h — it is portable for the standalone exe.
 
 
 #include "engine_funcs.h"

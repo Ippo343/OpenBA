@@ -8,7 +8,6 @@
 //   Shutdown (0x1401185E0) -- Component_Serialize + two empty serializer blocks
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/clearresourcecomponent_funcs.h"
 #include "engine_funcs.h"

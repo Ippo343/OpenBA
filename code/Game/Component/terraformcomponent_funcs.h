@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented TerraformComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TerraformComponent.h"
 #include <cstdint>

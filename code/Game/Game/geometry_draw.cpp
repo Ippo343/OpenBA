@@ -14,10 +14,7 @@
 //   +0x38  inherited SetSharedInstanceData (Runtime export)
 //   +0x40  inherited Clean             (Runtime export)
 //
-// In standalone mode the 9-slot vtable in serialize_arrays.cpp points at the
-// functions defined here. In DLL mode the original exe code backs the vtable;
-// nothing here is exercised. We still compile it in both modes (gated on
-// STANDALONE_EXE only at the registry layer) to keep the source unified.
+// The 9-slot vtable in serialize_arrays.cpp points at the functions defined here.
 
 #include "engine_funcs.h"
 #include "resolve.h"

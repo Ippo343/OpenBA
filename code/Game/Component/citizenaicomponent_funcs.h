@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented CitizenAIComponent methods.
 // Called from engine/reimpl/citizenaicomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "CitizenAIComponent.h"
 #include <cstdint>

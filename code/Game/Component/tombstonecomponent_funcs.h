@@ -1,6 +1,5 @@
 #pragma once
 // Function declarations for deeply reimplemented TombstoneComponent methods.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TombstoneComponent.h"
 #include <cstdint>

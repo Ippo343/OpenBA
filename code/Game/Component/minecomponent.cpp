@@ -5,7 +5,6 @@
 // Vtable at 0x140159ed0. Only Shutdown has real logic.
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/minecomponent_funcs.h"
 #include "engine_funcs.h"

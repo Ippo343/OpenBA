@@ -10,7 +10,6 @@
 //   [6] Draw     = 0x140123110 -- 140-instruction rebuild of interact list from scene
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/interactcomponent_funcs.h"
 #include "engine_funcs.h"

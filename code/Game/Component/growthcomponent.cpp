@@ -16,7 +16,6 @@
 //   6. If growth > growthScale and conditions met: harvest, reset growth
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/growthcomponent_funcs.h"
 #include "engine_funcs.h"
@@ -193,8 +192,7 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
     // still zero but the description(+0x18) is present, run the body-init now
     // (idempotent). If it is still incomplete afterward, bail safely — everything
     // below derefs config/resource (and .rdata float constants) unconditionally.
-    // Harmless in DLL-hook mode (body populated there → both non-null). See
-    // notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
+    // See notes/STANDALONE_REG_WAVES_PLAN.md "Recipe to bring a component to life".
     if (*(uintptr_t*)(comp + 0x38) == 0 || *(uintptr_t*)(comp + 0x28) == 0) {
         if (*(uintptr_t*)(comp + 0x18) != 0)
             GrowthComponent_Startup(self);
@@ -509,8 +507,8 @@ void GrowthComponent_Startup(GrowthComponent* self) {
     // write the growth-staged mesh scale. The shared FUN_140003f60 reimpl finds it via
     // the raw .rdata ModelComponent type-id (0x1401c7a50), which resolves NULL in
     // standalone → it returned null, so +0x30 never linked and tree growth-staging was a
-    // no-op (BANISHED_MATURE_TREES stood in). Prefer the shared finder (correct in DLL
-    // mode, where the global is filled); if it yields null (standalone), fall back to a
+    // no-op (BANISHED_MATURE_TREES stood in). Prefer the shared finder; if it yields
+    // null, fall back to a
     // SELF-CONTAINED ModelComponent scan via GetTypeIdByName. Scoped here so it cannot
     // change the shared produce/animation callers of 3f60 (verified paths).
     if (s_fn_CheckPtr) s_fn_CheckPtr(comp + 0x10);

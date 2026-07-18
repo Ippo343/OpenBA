@@ -12,7 +12,6 @@
 // to original exe functions for the complex Graphics work while the serialization
 // and control flow logic is reimplemented.
 //
-// This file must NOT depend on hooks.h — portable for standalone exe.
 
 #include "Component/particlecomponent_funcs.h"
 #include "engine_funcs.h"
@@ -105,8 +104,8 @@ static bool s_initialized = false;
 // active workplace), so the re-bucket is safe AND required to drive the tick. Always on.
 static bool PC_RebucketEntity() { return true; }
 
-// ParticleDescription type id — DLL mode reads the exe .rdata slot; in standalone
-// that ResolveAddr returns NULL (raw .rdata is not registered), so fall back to
+// ParticleDescription type id — the exe .rdata slot ResolveAddr returns NULL
+// (raw .rdata is not registered), so fall back to
 // the runtime type registry (valid after Object::Factory::Startup).
 static uint32_t PC_DescTypeId() {
     if (s_pParticleDescTypeId && *s_pParticleDescTypeId != 0 &&
@@ -321,8 +320,7 @@ void ParticleComponent_OnUpdate2(ParticleComponent* self) {
 }
 
 // ============================================================
-// Full ports of the exe helper closure (used by the standalone exe; in DLL
-// mode ResolveAddr returns the original exe code so these stay dormant).
+// Full ports of the exe helper closure.
 // Decompiled from Application-x64.exe:
 //   0x140052480  Setup        — (re)build geometry+flag arrays, create one
 //                               Graphics::ParticleSystemInstance per emitter
@@ -829,9 +827,7 @@ void ParticleComponent_InitFuncs() {
     s_fn_EmitterStartup = reinterpret_cast<fn_EmitterStartup_t>(
         ResolveAddr(Module::Exe, 0x140053660));
 
-    // OnRemove original — for vtable-hooked slot, get from vtable
-    // The original function pointer will be stored in the hook trampoline
-    // For standalone exe, this will be the actual function
+    // OnRemove original exe function.
     s_fn_OnRemove_Orig = reinterpret_cast<fn_OnRemove_Orig_t>(
         ResolveAddr(Module::Exe, 0x140052b30));
 

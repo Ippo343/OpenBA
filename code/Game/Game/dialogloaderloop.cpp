@@ -12,10 +12,9 @@
 //   4. dirty bits |= 0x10800
 //   5. UI::UserInterface::Draw(ui at self+0x60, context)
 //
-// Defense-in-depth: silently no-op on null mainLoop / ctx / device. The DLL hook
-// never sees these as null in practice, but the standalone vtable runs through
-// here from earliest splash frames so the guards keep both modes safe without
-// emitting noise into DLL-mode logs.
+// Defense-in-depth: silently no-op on null mainLoop / ctx / device. The
+// standalone vtable runs through here from the earliest splash frames, so the
+// guards keep it safe without emitting noise.
 
 #include "Game/dialogloaderloop.h"
 #include "MainLoop.h"

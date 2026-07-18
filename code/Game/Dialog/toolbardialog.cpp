@@ -1069,7 +1069,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     // call resolved null and was skipped — leaving the buttons in raw load order.
     // That is exactly the visible "wrong icon order" (main bar AND every sub-menu,
     // e.g. Pasture landing last instead of 3rd in the food group). Port the sort
-    // directly so both modes order identically. itemListCount is small (~10) and
+    // directly so the buttons order correctly. itemListCount is small (~10) and
     // a stable insertion sort matches the ascending-by-priority result; equal
     // priorities keep their load order.
     if (itemListCount > 1) {

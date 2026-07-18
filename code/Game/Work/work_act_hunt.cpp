@@ -13,9 +13,8 @@
 //
 // This file mirrors the verified resolution-block idiom of work_base_actionctor.cpp.
 // Statics are prefixed s_wah_* to avoid ODR clashes with sibling files. Every exe
-// sub-callee is resolved via ResolveAddr(Module::Exe, 0xADDR); in DLL mode these
-// reach the original code, in standalone mode they resolve to registered ports (or
-// 0 = silently skipped). This file must NOT depend on hooks.h.
+// sub-callee is resolved via ResolveAddr(Module::Exe, 0xADDR); they resolve to
+// registered ports (or 0 = silently skipped).
 //
 // Disasm references cite Application-x64.exe addresses (base 0x140000000).
 

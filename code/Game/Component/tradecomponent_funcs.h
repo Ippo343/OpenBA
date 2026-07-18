@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented TradeComponent methods.
 // Called from engine/reimpl/tradecomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "TradeComponent.h"
 #include <cstdint>
@@ -15,8 +14,8 @@
 // Shutdown (vtable slot [3], 0x14005bd50): Complex nested serialization
 // of multiple arrays (storage items, trade goods, offers), string
 // serialization, entity refs, Time, and version migration.
-// Kept as trampoline passthrough due to extreme complexity (174 instructions).
-// Declared here for API completeness — the reimpl wrapper calls the trampoline.
+// Kept delegated to the original exe function due to extreme complexity (174 instructions).
+// Declared here for API completeness.
 // void TradeComponent_Shutdown(TradeComponent* self, void* stream);
 
 // Draw (vtable slot [6], 0x14005c1d0): Adds owning entity to world trade

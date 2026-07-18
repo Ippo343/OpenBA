@@ -15,7 +15,6 @@
 //   Validate  (vtable slot 9, 0x1400ebb50)
 //   GetTarget (vtable slot 10, 0x1400ec510)
 //
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/gatherrawmaterials_funcs.h"
 #include "BuildActions.h"
@@ -258,7 +257,7 @@ bool GatherRawMaterials_ResolveFuncs() {
     // MemoryAllocator) — see ForesterWork's identical fix. Without this s_fn_MemAlloc stays
     // NULL and GatherRawMaterials::Validate crashes (EXEC of 0) at its removal-array grow
     // when a citizen's Idle-state work-tree walk validates the posted gather work.
-    // ResolveExport reads the Runtime DLL exports directly and is correct in BOTH modes.
+    // ResolveExport reads the Runtime DLL exports directly, which is correct for the standalone exe.
     s_fn_MemAlloc = reinterpret_cast<GRM_MemAlloc_t>(
         ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));     // static (size,align)
     if (!s_fn_MemAlloc) {
@@ -272,7 +271,7 @@ bool GatherRawMaterials_ResolveFuncs() {
         if (iatMemFree) s_fn_MemFree = *reinterpret_cast<GRM_MemFree_t*>(iatMemFree);
     }
 
-    // Type IDs. In the DLL build these come from raw .rdata; in standalone the .rdata
+    // Type IDs. In standalone the .rdata
     // globals are never seeded (ResolveAddr(Exe,.rdata)==NULL) so we fall back to the
     // runtime type registry by name — otherwise Execute derefs *s_typeId_* (NULL) and
     // crashes the moment a citizen claims the gather work.

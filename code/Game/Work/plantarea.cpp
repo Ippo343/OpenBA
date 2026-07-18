@@ -17,7 +17,6 @@
 //   +0x68: ExternalPtr (crop description resource reference)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- it is portable for standalone exe.
 
 #include "Work/plantarea_funcs.h"
 #include "engine_funcs.h"

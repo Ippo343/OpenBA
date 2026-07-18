@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented WorkPlaceComponent methods.
 // Called from engine/reimpl/workplacecomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "WorkPlaceComponent.h"
 #include <cstdint>

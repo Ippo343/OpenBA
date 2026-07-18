@@ -1,7 +1,6 @@
 #pragma once
 // Function declarations for deeply reimplemented RawMaterialComponent methods.
 // Called from engine/reimpl/rawmaterialcomponent.cpp wrappers.
-// No dependency on hooks.h — portable to standalone exe.
 
 #include "RawMaterialComponent.h"
 #include <cstdint>

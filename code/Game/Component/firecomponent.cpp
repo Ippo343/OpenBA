@@ -11,7 +11,6 @@
 // Original: 0x140048fb0 (53 instructions)
 //
 // Decompiled from Application-x64.exe using Ghidra.
-// This file must NOT depend on hooks.h -- portable for standalone exe.
 
 #include "Component/firecomponent_funcs.h"
 #include "engine_funcs.h"

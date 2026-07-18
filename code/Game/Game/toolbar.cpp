@@ -174,9 +174,6 @@ void Toolbar_Init(Toolbar* self) {
 // ============================================================
 // Original: 0x140024be0
 //
-// NOT HOOKED (RIP-relative JNZ in prologue, unsafe for trampoline).
-// Included for standalone exe completeness.
-//
 // Null-safe init: if self is null, returns null. Otherwise calls
 // External base ctor and initializes fields. Unlike Toolbar_Init,
 // this directly initializes fields without going through the full
