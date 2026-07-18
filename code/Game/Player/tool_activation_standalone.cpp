@@ -164,11 +164,23 @@ extern "C" void EntityUI_BuildToolModeTree_SA(void* entityUI) {
     if (tid_CreateRemoval && tid_RemovalTool)
         Tree_Insert(tree, tid_CreateRemoval, tid_RemovalTool);
 
+    // PathTool (the "Paths" report tool: shows worker home<->workplace routes). The
+    // reports-group "path" toolbar item (Game/Toolbar.rsc) carries Template/UtilityPath.rsc,
+    // whose CreatePathDescription is the trigger the ShowGroup component-scan matches. Add
+    // the node so a Paths click resolves+activates a PathTool. PathTool extends Tool
+    // directly (no ToolSetting; its +0x58 GetSettingType returns ptr-to-0). Vtable/factory
+    // registered in pathtool.cpp; type-ids resolve from the live factory tree.
+    uint32_t tid_CreatePath = ::Object::ResolveTypeIdByNameLazy("CreatePathDescription");
+    uint32_t tid_PathTool   = ::Object::ResolveTypeIdByNameLazy("PathTool");
+    if (tid_CreatePath && tid_PathTool)
+        Tree_Insert(tree, tid_CreatePath, tid_PathTool);
+
     fprintf(stderr, "[Tools] BuildToolModeTree: entityUI=%p Tool=%u ToolSetting=%u "
             "node{CreatePlaced=%u -> PlacementTool=%u} node{0 -> EditTool=%u} "
-            "node{CreateRemoval=%u -> RemovalTool=%u} count=%d\n",
+            "node{CreateRemoval=%u -> RemovalTool=%u} node{CreatePath=%u -> PathTool=%u} count=%d\n",
             entityUI, s_tid_Tool, s_tid_ToolSetting, tid_CreatePlaced, tid_PlacementTool,
-            tid_EditTool, tid_CreateRemoval, tid_RemovalTool, *(int32_t*)(tree + 1));
+            tid_EditTool, tid_CreateRemoval, tid_RemovalTool, tid_CreatePath, tid_PathTool,
+            *(int32_t*)(tree + 1));
     fflush(stderr);
 }
 

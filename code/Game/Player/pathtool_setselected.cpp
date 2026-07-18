@@ -1,0 +1,661 @@
+// code/Game/Player/pathtool_setselected.cpp
+// Faithful 1:1 port of the PathTool "SetSelectedEntity" route-builder chain from
+// Application-x64.exe. This is what fills the PathTool's point-marker (+0x40) and
+// line-segment (+0x50) arrays that PathTool::Draw renders — i.e. it computes the
+// worker home<->workplace routes shown by the "Paths" report tool.
+//
+// Ported functions (registered so pathtool.cpp's ResolveAddr(Exe, 0x1400dd710)
+// resolves to us in the standalone build):
+//   0x1400dd710  PathTool_helper_d710            SetSelectedEntity dispatcher
+//   0x1400dd250  thunk_helper_d250               clear old selection highlight
+//   0x1400dd0f0  PathTool_helper_d0f0            set new selection highlight
+//   0x1400dd770  PathTool_helper_d770            the route builder (A* + AVL dedup)
+//   0x1400de5d0  PathTool_helper_d770_sub_e5d0   workplace -> cell index
+//   0x140026ba0  PathTool_helper_d770_sub_6ba0   route-array push (stride 0x200c)
+//   0x140007080  thunk_helper_d250_sub_7080      FindComponent(HighlightComponent)
+//
+// Route-entry struct (stride 0x200c) in the PathTool +0x30 array:
+//   +0x00 int srcCell, +0x04 int dstCell, +0x08 int pathCellCount,
+//   +0x0c int pathCells[0x800]
+// PathTool fields: +0x28 selectedEntity IBP; +0x30/+0x38/+0x3c route array {ptr,cnt,cap};
+//   +0x40/+0x48/+0x4c point-marker int array; +0x50/+0x58/+0x5c line-segment 8B array.
+//
+// AVL dedup nodes are 0x28 bytes (identical layout for both the point tree — int key —
+// and the segment tree — packed {min,max} 8-byte key):
+//   +0x00 key (int or 8B), +0x08 parent, +0x10 left, +0x18 right,
+//   +0x20 short balance, +0x22 short height.
+// The rebalance/insert/flatten logic is byte-identical between the two trees, so it is
+// factored into shared helpers (AvlRebalanceUp / *Tree_Insert / in-order flatten) — a
+// faithful equivalent of the exe's 4x-inlined copies, transcribed from the disassembly.
+//
+// Decompiled from Application-x64.exe (READ-ONLY Ghidra); cross-checked vs disassembly.
+
+#include "engine_funcs.h"
+#include "resolve.h"
+#include <cstdint>
+#include <cstring>
+#include <cstdlib>
+#ifdef STANDALONE_EXE
+#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / ResolveTypeIdByNameLazy
+#endif
+
+namespace {
+
+// ---- registered exe sub-callees (all resolve to our reimpls in standalone) ----
+typedef void     (*fn_HighlightRefresh_t)(int64_t comp);                              // 0x14004c4a0
+typedef void*    (*fn_FindComp_t)(int64_t entity, void* retIBP);                      // 0x140002e10 / 0x140008090
+typedef uint32_t (*fn_AnchorCell_t)(void* ibp, float* p2);                            // 0x140087fb0
+typedef void*    (*fn_AStar_t)(void* map, void* out2ints, uint64_t mask, uint32_t src, uint32_t dst); // 0x14009cfb0
+typedef void     (*fn_ListFree_t)(void* listHdr, int flag);                          // 0x1400021d0
+typedef void     (*fn_AvlErase_t)(void** root, void* node);                          // 0x140014c30
+typedef void     (*fn_AvlRotate_t)(int64_t* root, int64_t node);                     // 0x140014c70 / 0x140014da0
+typedef void*    (*fn_ResolvePos_t)(int64_t ent, void* outVec3, int a, int b, float* p5); // 0x140122e20
+typedef void     (*fn_Yield_t)(void* app);                                            // Application::YieldToThreads
+
+static fn_HighlightRefresh_t s_c4a0   = nullptr;
+static fn_FindComp_t         s_2e10   = nullptr;   // WorkPlace-ish finder
+static fn_FindComp_t         s_8090   = nullptr;   // Storage-ish finder
+static fn_AnchorCell_t       s_7fb0   = nullptr;
+static fn_AStar_t            s_9cfb0  = nullptr;
+static fn_ListFree_t         s_21d0   = nullptr;
+static fn_AvlErase_t         s_14c30  = nullptr;
+static fn_AvlRotate_t        s_14c70  = nullptr;
+static fn_AvlRotate_t        s_14da0  = nullptr;
+static fn_ResolvePos_t       s_122e20 = nullptr;
+static fn_Yield_t            s_yield  = nullptr;
+
+static const uint32_t* s_pTid_Highlight = nullptr;  // DAT_1401c4410 = HighlightComponent type-id
+static bool s_init = false;
+
+static void EnsureFns() {
+    if (s_init) return;
+    s_c4a0   = reinterpret_cast<fn_HighlightRefresh_t>(ResolveAddr(Module::Exe, 0x14004c4a0));
+    s_2e10   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002e10));
+    s_8090   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140008090));
+    s_7fb0   = reinterpret_cast<fn_AnchorCell_t>(ResolveAddr(Module::Exe, 0x140087fb0));
+    s_9cfb0  = reinterpret_cast<fn_AStar_t>(ResolveAddr(Module::Exe, 0x14009cfb0));
+    s_21d0   = reinterpret_cast<fn_ListFree_t>(ResolveAddr(Module::Exe, 0x1400021d0));
+    s_14c30  = reinterpret_cast<fn_AvlErase_t>(ResolveAddr(Module::Exe, 0x140014c30));
+    s_14c70  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014c70));
+    s_14da0  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014da0));
+    s_122e20 = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
+    s_yield  = reinterpret_cast<fn_Yield_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
+#ifdef STANDALONE_EXE
+    // DAT_1401c4410 (HighlightComponent type-id) is raw exe .rdata -> NULL in standalone.
+    static uint32_t s_tidHi = 0;
+    if (s_tidHi == 0) s_tidHi = ::Object::GetTypeIdByName("HighlightComponent");
+    s_pTid_Highlight = &s_tidHi;
+#else
+    s_pTid_Highlight = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c4410));
+#endif
+    s_init = true;
+}
+
+static inline void CheckPtr(void* p) { if (fn_InternalBasePtr_CheckPtr) fn_InternalBasePtr_CheckPtr(p); }
+static inline uint32_t GetTypeId(void* obj) {
+    if (!obj) return 0;
+    return (*(uint32_t(**)(void*))(*(uintptr_t*)obj + 0x10))(obj);
+}
+
+// ---- AVL node accessors (0x28-byte node, shared layout) ----
+static inline void*  NodeParent(void* n) { return *(void**)((uintptr_t)n + 0x08); }
+static inline void*  NodeLeft  (void* n) { return *(void**)((uintptr_t)n + 0x10); }
+static inline void*  NodeRight (void* n) { return *(void**)((uintptr_t)n + 0x18); }
+static inline short  NodeBal   (void* n) { return *(short*)((uintptr_t)n + 0x20); }
+static inline short  NodeHeight(void* n) { return *(short*)((uintptr_t)n + 0x22); }
+
+// Allocate + init a fresh 0x28-byte AVL node with the given 8-byte key and parent.
+static void* AvlNodeAlloc(uint64_t key, void* parent) {
+    void* n = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+    if (!n) return nullptr;
+    uintptr_t p = (uintptr_t)n;
+    *(uint64_t*)(p + 0x00) = key;
+    *(void**)(p + 0x08)    = parent;
+    *(uint64_t*)(p + 0x10) = 0;   // left
+    *(uint64_t*)(p + 0x18) = 0;   // right
+    *(uint32_t*)(p + 0x20) = 0;   // balance(short)+height(short)
+    return n;
+}
+
+// Retrace/rebalance walking up from `node` (the node a child was just linked to).
+// Faithful transcription of the exe's inlined rebalance: recompute height/balance,
+// then AVL single/double rotate (14c70 = rotate-left, 14da0 = rotate-right).
+static void AvlRebalanceUp(void** root, void* node) {
+    while (node != nullptr) {
+        void* parent = NodeParent(node);
+        void* left   = NodeLeft(node);
+        void* right  = NodeRight(node);
+        short lh = left  ? (short)(NodeHeight(left)  + 1) : 0;
+        short rh = right ? (short)(NodeHeight(right) + 1) : 0;
+        short h  = (rh < lh) ? lh : rh;
+        *(short*)((uintptr_t)node + 0x22) = h;
+        short bal = (short)(rh - lh);
+        *(short*)((uintptr_t)node + 0x20) = bal;
+        if (bal > 1 && right) {
+            short rbal = NodeBal(right);
+            if (rbal < 1 && rbal < 0) { if (s_14da0) s_14da0((int64_t*)root, (int64_t)right); }
+            if (s_14c70) s_14c70((int64_t*)root, (int64_t)node);
+        }
+        // Second check re-reads balance from memory (a prior rotation may have changed it).
+        short bal2 = NodeBal(node);
+        if (bal2 < -1) {
+            left = NodeLeft(node);
+            if (left) {
+                short lbal = NodeBal(left);
+                if (lbal > -1 && lbal > 0) { if (s_14c70) s_14c70((int64_t*)root, (int64_t)left); }
+                if (s_14da0) s_14da0((int64_t*)root, (int64_t)node);
+            }
+        }
+        node = parent;
+    }
+}
+
+// Insert `key` into the point AVL tree (int key, dedup on equal). count at *pCount.
+static void PointTree_Insert(void** root, int* pCount, int key) {
+    if (*root == nullptr) {
+        void* n = AvlNodeAlloc((uint32_t)key, nullptr);
+        if (!n) return;
+        *pCount += 1;
+        *root = n;
+        return;
+    }
+    void* cur = *root;
+    for (;;) {
+        int nk = *(int*)cur;
+        if (key < nk) {
+            if (NodeLeft(cur) == nullptr) {
+                void* n = AvlNodeAlloc((uint32_t)key, cur);
+                *(void**)((uintptr_t)cur + 0x10) = n;
+                AvlRebalanceUp(root, cur);
+                *pCount += 1;
+                return;
+            }
+            cur = NodeLeft(cur);
+        } else if (key > nk) {
+            if (NodeRight(cur) == nullptr) {
+                void* n = AvlNodeAlloc((uint32_t)key, cur);
+                *(void**)((uintptr_t)cur + 0x18) = n;
+                AvlRebalanceUp(root, cur);
+                *pCount += 1;
+                return;
+            }
+            cur = NodeRight(cur);
+        } else {
+            return;  // equal → dedup
+        }
+    }
+}
+
+// Insert a packed {min,max} segment key into the segment AVL tree (dedup on equal pair).
+static void SegTree_Insert(void** root, int* pCount, int minCell, int maxCell, uint64_t packedKey) {
+    if (*root == nullptr) {
+        void* n = AvlNodeAlloc(packedKey, nullptr);
+        if (!n) return;
+        *pCount += 1;
+        *root = n;
+        return;
+    }
+    void* cur = *root;
+    for (;;) {
+        int nmin = (int)(*(uint64_t*)cur);
+        int nmax = (int)(*(uint64_t*)cur >> 32);
+        bool goLeft = false, skip = false;
+        if (minCell < nmin) {
+            goLeft = true;
+        } else if (minCell == nmin) {
+            if (maxCell < nmax) goLeft = true;
+            else if (maxCell <= nmax) skip = true;   // equal pair
+        }
+        if (skip) return;
+        if (goLeft) {
+            if (NodeLeft(cur) == nullptr) {
+                void* n = AvlNodeAlloc(packedKey, cur);
+                *(void**)((uintptr_t)cur + 0x10) = n;
+                AvlRebalanceUp(root, cur);
+                *pCount += 1;
+                return;
+            }
+            cur = NodeLeft(cur);
+        } else {
+            if (NodeRight(cur) == nullptr) {
+                void* n = AvlNodeAlloc(packedKey, cur);
+                *(void**)((uintptr_t)cur + 0x18) = n;
+                AvlRebalanceUp(root, cur);
+                *pCount += 1;
+                return;
+            }
+            cur = NodeRight(cur);
+        }
+    }
+}
+
+// In-order traversal helpers.
+static void* InorderFirst(void* n) { if (!n) return nullptr; while (NodeLeft(n)) n = NodeLeft(n); return n; }
+static void* InorderNext(void* n) {
+    if (NodeRight(n)) { n = NodeRight(n); while (NodeLeft(n)) n = NodeLeft(n); return n; }
+    void* p = NodeParent(n);
+    while (p && NodeRight(p) == n) { n = p; p = NodeParent(p); }
+    return p;
+}
+
+// Dynamic-array push (exe grow pattern: cap = newCount*3 on the first non-empty grow).
+static void IntArrayPush(void** pData, int* pCount, int* pCap, int val) {
+    int oldCount = *pCount;
+    int newCount = oldCount + 1;
+    void* oldData = *pData;
+    *pCount = newCount;
+    if (*pCap < newCount) {
+        *pCap = newCount;
+        if (oldCount != 0) *pCap = newCount * 3;
+        *pData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(*pCap) << 2, 4);
+    }
+    int start = (oldData == *pData) ? oldCount : 0;
+    int* dst = (int*)*pData;
+    int* src = (int*)oldData;
+    for (int i = start; i < newCount; i++)
+        if (dst) dst[i] = (i < oldCount) ? src[i] : val;
+    if (oldData != *pData && oldData) fn_MemFreeStatic(oldData);
+}
+static void U64ArrayPush(void** pData, int* pCount, int* pCap, uint64_t val) {
+    int oldCount = *pCount;
+    int newCount = oldCount + 1;
+    void* oldData = *pData;
+    *pCount = newCount;
+    if (*pCap < newCount) {
+        *pCap = newCount;
+        if (oldCount != 0) *pCap = newCount * 3;
+        *pData = fn_MemAlloc(g_pMemAllocSingleton, (int64_t)(*pCap) << 3, 4);
+    }
+    int start = (oldData == *pData) ? oldCount : 0;
+    uint64_t* dst = (uint64_t*)*pData;
+    uint64_t* src = (uint64_t*)oldData;
+    for (int i = start; i < newCount; i++)
+        if (dst) dst[i] = (i < oldCount) ? src[i] : val;
+    if (oldData != *pData && oldData) fn_MemFreeStatic(oldData);
+}
+
+}  // namespace
+
+// ============================================================
+// 0x140007080 — FindComponent(HighlightComponent) on a ComponentEntity.
+// param_1 = entity (+0x30 component ptr array, +0x38 count); writes IBP into param_2.
+// ============================================================
+static void* PathSel_FindHighlight_7080(int64_t param_1, void* param_2) {
+    EnsureFns();
+    void* found = nullptr;
+    int count = *(int*)(param_1 + 0x38);
+    int64_t* arr = *(int64_t**)(param_1 + 0x30);
+    uint32_t want = s_pTid_Highlight ? *s_pTid_Highlight : 0;
+    for (int i = 0; i < count; i++) {
+        void* comp = (void*)arr[i];
+        CheckPtr(&arr[i]);
+        if (GetTypeId(comp) == want && want != 0) {
+            void* c = (void*)arr[i];
+            CheckPtr(&arr[i]);
+            if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, want)) found = c;
+            break;
+        }
+    }
+    if (fn_InternalBasePtr_Ctor) fn_InternalBasePtr_Ctor(param_2, found);
+    return param_2;
+}
+
+// ============================================================
+// 0x1400de5d0 — sub_e5d0: workplace(+0x238 of the citizen) -> cell index.
+// param_2 is an IBP whose inner (+0) is a CitizenAI; +0x238 = its workplace entity.
+// ============================================================
+static int PathSel_WorkplaceCell_e5d0(int64_t /*param_1*/, void* param_2) {
+    EnsureFns();
+    int* mapGrid = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    CheckPtr(param_2);
+    int64_t workplace = *(int64_t*)(*(int64_t*)param_2 + 0x238);
+    CheckPtr(&workplace);
+    uint64_t posIBP = 0;
+    fn_FindComponent_Position((void*)workplace, &posIBP);
+    CheckPtr(&posIBP);
+    float vec[3] = {0, 0, 0};
+    if (s_122e20) s_122e20(*(int64_t*)&posIBP, vec, 0, 0, nullptr);
+    int w = *mapGrid;
+    int col = (int)(vec[0] + (float)(w >> 1));   // local_18 = x
+    int row = (int)((float)(w >> 1) + vec[1]);   // local_14 = y
+    if (col < 0) col = 0;
+    if (w <= col) col = w - 1;
+    if (row < 0) row = 0;
+    if (w <= row) row = w - 1;
+    return row * w + col;
+}
+
+// ============================================================
+// 0x140026ba0 — sub_6ba0: push a route entry (stride 0x200c) into the +0x30 array.
+// param_1 = array header {ptr@0, count@+8, cap@+0xc}; param_2 = new count; param_3 = src elem.
+// ============================================================
+static void PathSel_RoutePush_6ba0(int64_t* param_1, int param_2, uint64_t* param_3) {
+    EnsureFns();
+    int oldCount = (int)param_1[1];
+    if (param_2 == oldCount) return;
+    void* oldData = (void*)*param_1;
+    *(int*)((uintptr_t)param_1 + 8) = param_2;
+    if (*(int*)((uintptr_t)param_1 + 0xc) < param_2) {
+        *(int*)((uintptr_t)param_1 + 0xc) = param_2;
+        if (param_2 == oldCount + 1 && oldCount != 0)
+            *(int*)((uintptr_t)param_1 + 0xc) = param_2 * 3;
+        void* nb = fn_MemAlloc(g_pMemAllocSingleton,
+                               (int64_t)(*(int*)((uintptr_t)param_1 + 0xc)) * 0x200c, 4);
+        *param_1 = (int64_t)nb;
+    }
+    int start = (oldData == (void*)*param_1) ? oldCount : 0;
+    for (int i = start; i < param_2; i++) {
+        uint8_t* dst = (uint8_t*)*param_1 + (size_t)i * 0x200c;
+        if (!dst) continue;
+        const uint8_t* src = (i < oldCount) ? ((uint8_t*)oldData + (size_t)i * 0x200c)
+                                            : (const uint8_t*)param_3;
+        std::memcpy(dst, src, 0x200c);
+    }
+    if (oldData != (void*)*param_1 && oldData) fn_MemFreeStatic(oldData);
+}
+
+// ============================================================
+// 0x1400dd250 — clear the highlight flag (+0x11c) on the selected entity's related
+// entities and refresh (c4a0). self+0x28 = selectedEntity IBP.
+// ============================================================
+// FUN_140004740 finds a component holding a related-entity list (+0x48 array, +0x50 count).
+static fn_FindComp_t s_4740 = nullptr;
+static void EnsureFind4740() {
+    if (!s_4740) s_4740 = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004740));
+}
+
+static void PathSel_ClearHighlight_d250(int64_t param_1) {
+    EnsureFns();
+    EnsureFind4740();
+    void* self = (void*)(param_1 + 0x28);
+    if (*(int64_t*)(param_1 + 0x28) == 0) return;
+    CheckPtr(self);
+    uint64_t listIBP = 0;
+    if (s_4740) s_4740(*(int64_t*)self, &listIBP);
+    if (listIBP != 0) {
+        CheckPtr(&listIBP);
+        int n = *(int*)(listIBP + 0x50);
+        for (int i = 0; i < n; i++) {
+            CheckPtr(&listIBP);
+            int64_t ent = *(int64_t*)(*(int64_t*)(listIBP + 0x48) + (int64_t)i * 8);
+            CheckPtr(&ent);
+            uint64_t hi = 0;
+            PathSel_FindHighlight_7080(ent, &hi);
+            if (hi != 0) {
+                CheckPtr(&hi);
+                if (*(char*)(hi + 0x11c) != '\0') {
+                    *(char*)(hi + 0x11c) = 0;
+                    if (s_c4a0) s_c4a0((int64_t)hi);
+                }
+            }
+            CheckPtr(&listIBP);
+        }
+    }
+    CheckPtr(self);
+    uint64_t hi2 = 0;
+    PathSel_FindHighlight_7080(*(int64_t*)self, &hi2);
+    if (hi2 != 0) {
+        CheckPtr(&hi2);
+        if (*(char*)(hi2 + 0x11c) != '\0') {
+            *(char*)(hi2 + 0x11c) = 0;
+            if (s_c4a0) s_c4a0((int64_t)hi2);
+        }
+    }
+}
+
+// ============================================================
+// 0x1400dd0f0 — set the highlight flag (+0x11c = 1) on the related entities. Begins by
+// clearing (d250), then sets. Same shape as d250 with flag value 1.
+// ============================================================
+static void PathSel_SetHighlight_d0f0(int64_t param_1) {
+    EnsureFns();
+    PathSel_ClearHighlight_d250(param_1);
+    if (*(int64_t*)(param_1 + 0x28) == 0) return;
+    EnsureFind4740();
+    void* self = (void*)(param_1 + 0x28);
+    CheckPtr(self);
+    uint64_t listIBP = 0;
+    if (s_4740) s_4740(*(int64_t*)self, &listIBP);
+    if (listIBP != 0) {
+        CheckPtr(&listIBP);
+        int n = *(int*)(listIBP + 0x50);
+        for (int i = 0; i < n; i++) {
+            CheckPtr(&listIBP);
+            int64_t ent = *(int64_t*)(*(int64_t*)(listIBP + 0x48) + (int64_t)i * 8);
+            CheckPtr(&ent);
+            uint64_t hi = 0;
+            PathSel_FindHighlight_7080(ent, &hi);
+            if (hi != 0) {
+                CheckPtr(&hi);
+                if (*(char*)(hi + 0x11c) != '\x01') {
+                    *(char*)(hi + 0x11c) = 1;
+                    if (s_c4a0) s_c4a0((int64_t)hi);
+                }
+            }
+            CheckPtr(&listIBP);
+        }
+    }
+    CheckPtr(self);
+    uint64_t hi2 = 0;
+    PathSel_FindHighlight_7080(*(int64_t*)self, &hi2);
+    if (hi2 != 0) {
+        CheckPtr(&hi2);
+        if (*(char*)(hi2 + 0x11c) != '\x01') {
+            *(char*)(hi2 + 0x11c) = 1;
+            if (s_c4a0) s_c4a0((int64_t)hi2);
+        }
+    }
+}
+
+// ============================================================
+// 0x1400dd770 — the route builder. Determines the home<->workplace cell pairs for the
+// selected entity (citizen / workplace / storage), A*-routes each pair, and dedups the
+// path cells (point tree) and segments (segment tree) into +0x40 / +0x50.
+// ============================================================
+static void PathSel_BuildRoutes_d770(int64_t param_1) {
+    EnsureFns();
+
+    CheckPtr((void*)(param_1 + 0x28));
+    uint64_t local_res20 = 0;   // FUN_140002e10 result (workplace-ish component)
+    if (s_2e10) s_2e10(*(int64_t*)(param_1 + 0x28), &local_res20);
+    CheckPtr((void*)(param_1 + 0x28));
+    uint64_t local_res18 = 0;   // Entity_FindComponent_Storage (8090) result
+    if (s_8090) s_8090(*(int64_t*)(param_1 + 0x28), &local_res18);
+    CheckPtr((void*)(param_1 + 0x28));
+    uint64_t local_2098 = 0;    // CitizenAI component
+    fn_FindComponent_CitizenAI(*(void**)(param_1 + 0x28), &local_2098);
+
+    int64_t* routeArr = (int64_t*)(param_1 + 0x30);   // plVar24: route array header
+    // Reset the three output arrays.
+    fn_MemFreeStatic((void*)*routeArr);        *routeArr = 0; *(int64_t*)(param_1 + 0x38) = 0;
+    fn_MemFreeStatic(*(void**)(param_1 + 0x40)); *(int64_t*)(param_1 + 0x40) = 0; *(int64_t*)(param_1 + 0x48) = 0;
+    fn_MemFreeStatic(*(void**)(param_1 + 0x50)); *(int64_t*)(param_1 + 0x50) = 0; *(int64_t*)(param_1 + 0x58) = 0;
+
+    uint8_t entryBuf[0x200c];   // scratch route entry pushed via 6ba0 (garbage tail OK; count=0)
+
+    // --- Determine the source route pairs. ---
+    // (A) selected entity IS a citizen with both workplace (+0x238) and housing (+0x248).
+    bool citizenHandled = false;
+    if (local_2098 != 0) {
+        CheckPtr(&local_2098);
+        if (*(int64_t*)(local_2098 + 0x238) != 0) {
+            CheckPtr(&local_2098);
+            if (*(int64_t*)(local_2098 + 0x248) != 0) {
+                citizenHandled = true;
+                uint64_t housing = 0;
+                { uint64_t tmp = local_2098; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
+                int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
+                int wpCell = PathSel_WorkplaceCell_e5d0(local_2098, &local_2098);
+                *(int32_t*)(entryBuf + 0x00) = wpCell;      // srcCell
+                *(int32_t*)(entryBuf + 0x04) = anchorCell;  // dstCell
+                *(int32_t*)(entryBuf + 0x08) = 0;           // pathCount
+                PathSel_RoutePush_6ba0(routeArr, *(int*)(param_1 + 0x38) + 1, (uint64_t*)entryBuf);
+            }
+        }
+    }
+    (void)citizenHandled;
+
+    // (B) not a workplace-with-workers → iterate storage occupants; else iterate workers.
+    bool useStorage;
+    if (local_res20 == 0) { useStorage = true; }
+    else { CheckPtr(&local_res20); useStorage = (*(int64_t*)(local_res20 + 0x48) == 0); }
+
+    if (useStorage) {
+        if (local_res18 != 0) {
+            CheckPtr(&local_res18);
+            int outer = *(int*)(local_res18 + 0x58);
+            for (int oi = 0; oi < outer; oi++) {
+                CheckPtr(&local_res18);
+                int64_t innerHdr = *(int64_t*)(local_res18 + 0x50) + (int64_t)oi * 0x10;
+                int inner = *(int*)(innerHdr + 8);
+                for (int ii = 0; ii < inner; ii++) {
+                    CheckPtr(&local_res18);
+                    int64_t ent = *(int64_t*)((int64_t)ii * 8 + *(int64_t*)(*(int64_t*)(local_res18 + 0x50) + (int64_t)oi * 0x10));
+                    CheckPtr(&ent);
+                    if (*(int64_t*)(ent + 0x238) != 0) {
+                        CheckPtr(&ent);
+                        if (*(int64_t*)(ent + 0x248) != 0) {
+                            uint64_t housing = 0;
+                            { uint64_t tmp = ent; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
+                            int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
+                            uint64_t entIBP = ent;
+                            int wpCell = PathSel_WorkplaceCell_e5d0(ent, &entIBP);
+                            *(int32_t*)(entryBuf + 0x00) = wpCell;
+                            *(int32_t*)(entryBuf + 0x04) = anchorCell;
+                            *(int32_t*)(entryBuf + 0x08) = 0;
+                            PathSel_RoutePush_6ba0(routeArr, *(int*)(param_1 + 0x38) + 1, (uint64_t*)entryBuf);
+                        }
+                    }
+                    CheckPtr(&local_res18);
+                }
+            }
+        }
+    } else {
+        CheckPtr(&local_res20);
+        int workerCount = *(int*)(local_res20 + 0x60);
+        for (int wi = 0; wi < workerCount; wi++) {
+            CheckPtr(&local_res20);
+            int64_t ent = *(int64_t*)((int64_t)wi * 8 + *(int64_t*)(local_res20 + 0x58));
+            CheckPtr(&ent);
+            if (*(int64_t*)(ent + 0x238) != 0) {
+                CheckPtr(&ent);
+                if (*(int64_t*)(ent + 0x248) != 0) {
+                    uint64_t housing = 0;
+                    { uint64_t tmp = ent; CheckPtr(&tmp); housing = *(uint64_t*)(tmp + 0x248); }
+                    int anchorCell = s_7fb0 ? (int)s_7fb0(&housing, nullptr) : -1;
+                    uint64_t entIBP = ent;
+                    int wpCell = PathSel_WorkplaceCell_e5d0(ent, &entIBP);
+                    *(int32_t*)(entryBuf + 0x00) = wpCell;
+                    *(int32_t*)(entryBuf + 0x04) = anchorCell;
+                    *(int32_t*)(entryBuf + 0x08) = 0;
+                    PathSel_RoutePush_6ba0(routeArr, *(int*)(param_1 + 0x38) + 1, (uint64_t*)entryBuf);
+                }
+            }
+            CheckPtr(&local_res20);
+        }
+    }
+
+    // --- A*-route each pair, dedup cells/segments into the point/segment AVL trees. ---
+    int* map = *(int**)((uintptr_t)*g_pGameWorldSingleton + 0xf8);
+    void* pointTree = nullptr;  int pointCount = 0;
+    void* segTree   = nullptr;  int segCount   = 0;
+
+    int routeCount = *(int*)(param_1 + 0x38);
+    for (int r = 0; r < routeCount; r++) {
+        int64_t routeBase = *routeArr;
+        int64_t off = (int64_t)r * 0x200c;
+        uint32_t srcCell = *(uint32_t*)(routeBase + off);
+        uint32_t dstCell = *(uint32_t*)(routeBase + off + 4);
+
+        // Async A* query: returns {idx@+0, queryId@+4}. Spin on the map's result table.
+        uint64_t qr = 0;
+        if (s_9cfb0) s_9cfb0(map, &qr, 0xe1f, srcCell, dstCell);
+        int qIdx = (int)qr;
+        int qId  = (int)(qr >> 32);
+        if (qId == 0 || qIdx < 0) continue;   // no query issued → skip this route
+
+        int64_t holder = *(int64_t*)((uintptr_t)map + 0x68);
+        // Wait for the async worker to publish this query's cells.
+        bool ready = false;
+        // Standalone safety: bail the spin after a large bound (the exe spins forever;
+        // if the async pathfinder worker is not feeding results we must not hang the game).
+        for (int64_t spin = 0; spin < 20000000; ++spin) {
+            int cap = *(int*)(holder + 0x168);
+            int64_t table = *(int64_t*)(holder + 0x160);
+            if (qIdx < cap &&
+                *(int*)(table + 4 + (int64_t)qIdx * 0x18) == qId &&
+                *(char*)(table + (int64_t)qIdx * 0x18) != '\0') { ready = true; break; }
+            if (s_yield && g_pAppSingleton) s_yield(*g_pAppSingleton);
+            else break;
+        }
+        if (!ready) continue;
+
+        // Copy the path cells (capped at 0x800) into routeEntry.pathCells, release the slot.
+        int64_t table = *(int64_t*)(holder + 0x160);
+        int64_t slot = table + (int64_t)qIdx * 0x18;
+        int cellCount = *(int*)(slot + 0x10);
+        if (cellCount > 0x800) cellCount = 0x800;
+        int64_t cellsPtr = *(int64_t*)(slot + 0x08);
+        for (int c = 0; c < cellCount; c++)
+            *(int32_t*)(routeBase + off + 0xc + (int64_t)c * 4) = *(int32_t*)(cellsPtr + (int64_t)c * 4);
+        *(int32_t*)(slot + 4) = 0;      // clear queryId
+        *(char*)(slot + 0) = 0;         // clear ready flag
+        if (s_21d0) s_21d0((void*)(slot + 8), 0);   // free the slot's cell list
+        *(int32_t*)(routeBase + off + 8) = cellCount;  // routeEntry.pathCount
+
+        // Insert each cell into the point tree; each consecutive pair into the segment tree.
+        int pc = *(int32_t*)(*routeArr + off + 8);
+        for (int i = 0; i < pc; i++) {
+            int cell = *(int32_t*)(*routeArr + off + 0xc + (int64_t)i * 4);
+            PointTree_Insert(&pointTree, &pointCount, cell);
+            if (i == 0) continue;   // no previous cell → no segment
+            int prev = *(int32_t*)(*routeArr + off + 8 + (int64_t)i * 4);      // pathCells[i-1]
+            int curc = *(int32_t*)(*routeArr + off + 0xc + (int64_t)i * 4);    // pathCells[i]
+            int mn = prev, mx = curc;
+            if (prev < curc) { mn = prev; mx = curc; } else { mn = curc; mx = prev; }
+            uint64_t packed = ((uint64_t)(uint32_t)mx << 32) | (uint32_t)mn;
+            SegTree_Insert(&segTree, &segCount, mn, mx, packed);
+        }
+    }
+
+    // --- Flatten trees (in-order) into +0x40 (points) and +0x50 (segments). ---
+    for (void* n = InorderFirst(pointTree); n; n = InorderNext(n)) {
+        IntArrayPush((void**)(param_1 + 0x40), (int*)(param_1 + 0x48), (int*)(param_1 + 0x4c),
+                     *(int*)n);
+    }
+    for (void* n = InorderFirst(segTree); n; n = InorderNext(n)) {
+        U64ArrayPush((void**)(param_1 + 0x50), (int*)(param_1 + 0x58), (int*)(param_1 + 0x5c),
+                     *(uint64_t*)n);
+    }
+
+    // --- Free the AVL trees (14c30 recursively frees a subtree). ---
+    if (segTree) {
+        if (s_14c30) { s_14c30(&segTree, NodeLeft(segTree)); s_14c30(&segTree, NodeRight(segTree)); }
+        fn_MemFreeStatic(segTree);
+    }
+    if (pointTree) {
+        if (s_14c30) { s_14c30(&pointTree, NodeLeft(pointTree)); s_14c30(&pointTree, NodeRight(pointTree)); }
+        fn_MemFreeStatic(pointTree);
+    }
+}
+
+// ============================================================
+// 0x1400dd710 — SetSelectedEntity dispatcher (the registered entry point).
+// ============================================================
+extern "C" void PathTool_helper_d710(int64_t param_1, uint64_t* param_2) {
+    EnsureFns();
+    CheckPtr(param_2);
+    if (*(int64_t*)(param_1 + 0x28) != (int64_t)*param_2) {
+        PathSel_ClearHighlight_d250(param_1);
+        *(uint64_t*)(param_1 + 0x28) = *param_2;
+        PathSel_SetHighlight_d0f0(param_1);
+        PathSel_BuildRoutes_d770(param_1);
+    }
+}
+
+#ifdef STANDALONE_EXE
+#include "address_registry.h"
+extern "C" void RegisterPathToolSetSelected() {
+    RegisterExeAddr(0x1400dd710, reinterpret_cast<uintptr_t>(&PathTool_helper_d710));
+}
+#endif  // STANDALONE_EXE

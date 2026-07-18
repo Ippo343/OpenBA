@@ -233,6 +233,7 @@ extern "C" {
     void RegisterEditToolVtable();
     void RegisterFencedToolVtable();
     void RegisterPathToolVtable();
+    void RegisterPathToolSetSelected();   // dd710 route-builder (pathtool_setselected.cpp)
     void RegisterPlacementToolVtable();
     void RegisterRemovalToolVtable();
     void RegisterRoadToolVtable();
@@ -1630,6 +1631,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterEditToolVtable();
     RegisterFencedToolVtable();
     RegisterPathToolVtable();
+    RegisterPathToolSetSelected();
     RegisterPlacementToolVtable();
     RegisterRemovalToolVtable();
     RegisterRoadToolVtable();

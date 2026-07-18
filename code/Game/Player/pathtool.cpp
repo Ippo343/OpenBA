@@ -195,13 +195,17 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
     if (s_dispatchSlot_KeyMapPressed) {
         fnPressed = reinterpret_cast<fn_Pressed_t>(*s_dispatchSlot_KeyMapPressed);
     }
+    // Standalone: the IAT dispatch slot 0x140151758 is NOT populated, so *slot is null →
+    // fnPressed stays null and OnKey bailed before ever checking the click. EditTool_OnKey
+    // has this exact fallback (edittool.cpp:272); mirror it so world-clicks register.
+    if (!fnPressed && fn_KeyMap_Pressed) fnPressed = reinterpret_cast<fn_Pressed_t>(fn_KeyMap_Pressed);
 
     if (!fnPressed) return 1;
     bool pressed = fnPressed(keyMap, 0, 5);
     if (!pressed) return 1;
 
     // Get map data pointer
-    uint64_t mapData = *(uint64_t*)(uintptr_t(g_pGameWorldSingleton) + 0xf8);
+    uint64_t mapData = *(uint64_t*)(((uintptr_t)*g_pGameWorldSingleton) + 0xf8);
 
     // Compute mouse ray
     float rayOrigin[3] = {0};  // 12 bytes (vec3)
@@ -214,14 +218,14 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
     // Raycast terrain
     distance[0] = 400.0f;
     uint64_t entityIBP = 0;
-    int* mapGrid = *(int**)(uintptr_t(g_pGameWorldSingleton) + 0xf8);
+    int* mapGrid = *(int**)(((uintptr_t)*g_pGameWorldSingleton) + 0xf8);
     float outPos[4] = {0};
 
     // local_res18 is used for terrain height param: 400.0f
     float terrainParam[2] = {0};
     terrainParam[0] = 400.0f;  // 0x43c80000 as float
 
-    uint64_t mapSystem = *(uint64_t*)(uintptr_t(g_pGameWorldSingleton) + 0x110);
+    uint64_t mapSystem = *(uint64_t*)(((uintptr_t)*g_pGameWorldSingleton) + 0x110);
     if (s_fn_RaycastTerrain && mapSystem) {
         bool hit = s_fn_RaycastTerrain(mapSystem, (float*)rayDir, rayOrigin,
             terrainParam, outPos, distance);
@@ -246,7 +250,7 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
     // Try picking scene intersection as well
     float hitNormal[3] = {0};
     float hitPos[3] = {0};
-    void* pickingScene = *(void**)(uintptr_t(g_pGameWorldSingleton) + 0x70);
+    void* pickingScene = *(void**)(((uintptr_t)*g_pGameWorldSingleton) + 0x70);
     if (s_fn_PickingIntersect && pickingScene) {
         uint32_t hitIdx = s_fn_PickingIntersect(pickingScene, rayDir, rayOrigin,
             distance, hitNormal, hitPos);
@@ -492,6 +496,15 @@ static uint32_t PathTool_GetTypeId(void*) {
     return c;
 }
 static int PathTool_Slot12(void*) { return 4; }  // exe 0x1400de910 returns 4
+// +0x58 (Slot11) GetToolSettingTypeId — exe PathTool slot 11 (0x140004950, shared with
+// EditTool) is `*ret = 0; return ret;` (PathTool has NO tool-setting). SetEditMode /
+// Toolbar_ShowGroup_Impl DEREFERENCES the returned pointer to decide whether to build a
+// ToolSetting, so a Tool_Ret0 stub (returns 0 -> *0 read) crashes the instant the tool
+// is created. Return a valid pointer to a 0 (mirrors RemovalTool_GetSettingType).
+static uint32_t* PathTool_GetSettingType(void*, uint32_t* ret) {
+    if (ret) *ret = 0;
+    return ret;
+}
 static void* g_PathTool_Vtable[13] = {
     (void*)&PathTool_Dtor,       // +0x00 Dtor
     (void*)&Tool_Slot1,          // +0x08
@@ -504,7 +517,7 @@ static void* g_PathTool_Vtable[13] = {
     (void*)&PathTool_Draw,       // +0x40 Draw
     (void*)&Tool_Ret0,           // +0x48 (returns false)
     (void*)&PathTool_Serialize,  // +0x50 Serialize
-    (void*)&Tool_Ret0,           // +0x58
+    (void*)&PathTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
     (void*)&PathTool_Slot12,     // +0x60 (returns 4)
 };
 extern "C" void RegisterPathToolVtable() {
