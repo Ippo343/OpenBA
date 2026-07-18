@@ -2,10 +2,8 @@
 // Multi-binary address resolution for Banished reimplementation.
 // Translates Ghidra addresses to runtime addresses for any loaded module.
 //
-// Two build modes:
-//   DLL mode (default):       ASLR delta against loaded original exe/DLLs.
-//   Standalone mode (-DSTANDALONE_EXE): Exe addresses resolved via address
-//       registry of reimplemented functions. Runtime/VideoDX11 still use ASLR.
+// Exe addresses are resolved via an address registry of reimplemented
+// functions; Runtime-x64.dll and VideoDX11-x64.dll use the normal ASLR delta.
 
 #include <windows.h>
 #include <cstdint>
@@ -28,13 +26,11 @@ struct ModuleInfo {
 };
 
 // Initialize address resolution for all loaded modules.
-// DLL mode: Returns true if exe + Runtime-x64.dll are resolved.
-// Standalone mode: Returns true if Runtime-x64.dll is resolved (exe is us).
+// Returns true if Runtime-x64.dll is resolved (the exe is us).
 bool ResolveInit();
 
 // Translate a Ghidra address to a runtime address.
-// DLL mode: applies ASLR delta for all modules.
-// Standalone mode: Module::Exe queries the address registry; others use ASLR delta.
+// Module::Exe queries the address registry; others use the ASLR delta.
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 // Get the ModuleInfo for a module (read-only).
@@ -59,7 +55,6 @@ inline void WriteGlobal(Module mod, uintptr_t ghidra_addr, T value) {
 }
 
 // --- Standalone address registry ---
-#ifdef STANDALONE_EXE
 
 // Register a reimplemented function/vtable/global at a Ghidra exe address.
 // Call during static init or from standalone main before game loop.
@@ -95,19 +90,3 @@ RegistryStats GetRegistryStats();
 extern volatile int g_traceExeCallbacks;
 void TraceExeBegin(const char* label);
 void TraceExeEnd(const char* label);
-
-#endif // STANDALONE_EXE
-
-// --- Inline implementation (DLL mode only) ---
-
-#ifndef STANDALONE_EXE
-
-extern ModuleInfo g_modules[static_cast<int>(Module::COUNT)];
-
-inline uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr) {
-    return static_cast<uintptr_t>(
-        static_cast<intptr_t>(ghidra_addr) + g_modules[static_cast<int>(mod)].delta
-    );
-}
-
-#endif // !STANDALONE_EXE

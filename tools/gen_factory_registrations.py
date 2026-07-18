@@ -78,7 +78,6 @@ def main():
     lines.append("// add the typeName to REIMPLEMENTED in tools/gen_factory_registrations.py")
     lines.append("// and re-run codegen. The per-class file's REGISTER_TYPE takes over.")
     lines.append("")
-    lines.append("#ifdef STANDALONE_EXE")
     lines.append("#include \"factory_registration.h\"")
     lines.append("#include <cstdio>")
     lines.append("#include <cstdlib>")
@@ -146,8 +145,6 @@ def main():
         else:
             lines.append(f"REGISTER_NULL_FACTORY({type_name}, {parent_arg});  {comment}")
 
-    lines.append("")
-    lines.append("#endif  // STANDALONE_EXE")
     lines.append("")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

@@ -60,7 +60,7 @@
 
 #include "serializer.h"
 #include "../../../engine/types/io_serializer.h"
-#include "../../../patches/src/resolve.h"
+#include "resolve.h"
 
 #include <cstdlib>
 #include <cstdio>
