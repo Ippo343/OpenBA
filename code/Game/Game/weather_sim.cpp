@@ -12,29 +12,28 @@
 // real, animated temperature model.
 //
 // SCOPE (decompiled from Application-x64.exe, verified in Ghidra):
-//   Weather::ResetTime has SIX logical parts. This port implements the three
-//   that are self-contained pure math + time/perlin (they drive the ground
-//   snow) and DEFERS the three that need the precipitation-particle subsystem
-//   (Environment.rsc weather descriptors + Graphics/Audio scene emitters),
-//   which are null in standalone:
+//   Weather::ResetTime has SIX logical parts. All are now ported — envRes loads
+//   from Environment.rsc (GameUpdateLoop::Load Step 16), so the effect array
+//   (weather+0x50, count weather+0x58 == weatherDescCount) is live and the
+//   rain/snow particles spawn, integrate, and render:
 //
-//     Part 1  active-effect audio/geometry cleanup   — DEFERRED (count==0)
-//     Part 2  exponential smoothing (+0x2c,+0x44)     — ported
-//     Part 3  Weather_helper_3810 temperature (+0x18) — ported
-//     Part 4  FUN_140093420 coverage/fades (+0x1c..)  — ported
-//     Part 5  FUN_1400935f0 weather-type state machine— DEFERRED (precip sched)
-//     impl_42c0 effect enable/disable (2x/tick)       — DEFERRED (needs envRes)
-//     Part 6  precipitation entity spawn              — DEFERRED (particles)
+//     Part 1  active-effect geometry cleanup + Update  — ported
+//     Part 2  exponential smoothing (+0x2c,+0x44)      — ported
+//     Part 3  Weather_helper_3810 temperature (+0x18)  — ported
+//     Part 4  FUN_140093420 coverage/fades (+0x1c..)   — ported
+//     Part 5  FUN_1400935f0 weather-type state machine — ported
+//     impl_42c0 effect enable/disable (2x/tick)        — ported (WeatherEffect_SetEnabled)
+//     Part 6  precipitation entity spawn               — ported (geometry)
 //
-//   The deferred parts belong to the falling-rain/snow-particle task. They
-//   dereference the active-weather array (weather+0x50, null here) and the
-//   Environment weather-descriptor array (envRes+0x28, null here), so running
-//   them now would fault — and they produce no visible output without the
-//   particle emitter subsystem anyway.
+//   The one piece still out of scope is the per-effect ambient AUDIO emitter
+//   (the entry+8 audio template + Audio::Scene registration): audio was skipped
+//   for the whole weather task. The visible falling rain/snow does not depend on
+//   it. See weather_particles.cpp (particle geometry) and weather_sun.cpp (the
+//   day-cycle lighting these effects tint).
 //
 // Weather sim struct (gameWorld+0x130, 0x78 bytes; ctor FUN_140093f60,
 // env-bind FUN_140093e30):
-//   +0x00 envRes (Environment weather descriptors; NULL in standalone)
+//   +0x00 envRes (Environment weather descriptors; loaded from Environment.rsc)
 //   +0x08 climateGen (ClimateGenerator resource; real, set by NewGameDialog)
 //   +0x10 state    +0x14 intensityLevel (0..5)
 //   +0x18 temperature (accumulated by Part 3)
@@ -43,7 +42,7 @@
 //   +0x2c meanTemp (smoothed)   +0x30 meanTemp target (from climate+0x34)
 //   +0x34 PerlinNoise (0x10 bytes, temperature noise; built by ctor)
 //   +0x44 precipProb (smoothed)   +0x48 precipProb target
-//   +0x50 activeEffect geometry array (ptr)   +0x58 count  (empty in standalone)
+//   +0x50 activeEffect geometry array (ptr)   +0x58 count (== weatherDescCount)
 //   +0x70 elapsed-time accumulator (int64)
 //
 // ClimateGenerator fields (real; ctor 0x1400930c0 defaults):
@@ -327,7 +326,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
             fadeB = 1.0f - saturate(doy / kFadeB0);
         }
 
-        // Max intensity across active weather effects (empty in standalone -> 0).
+        // Max intensity across the active weather effects (fade value geo+0xc0).
         float maxIntensity = 0.0f;
         int cnt = *reinterpret_cast<int*>(w + 0x58);
         if (cnt > 0) {

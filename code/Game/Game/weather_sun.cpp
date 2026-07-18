@@ -140,8 +140,25 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
     if (frac < 0.0f) frac = 0.0f;
     if (frac > 1.0f) frac = 1.0f;
 
-    const EnvKeyframe& a = kKeyframes[kf];
-    const EnvKeyframe& b = kKeyframes[kfNext];
+    // Base keyframes: retail Weather::DrawUpdate (helper_3ac0 @ exe 0x140093ac0)
+    // reads the LIVE per-month lighting table from the loaded Environment.rsc
+    // (envRes) at envRes+0x38+i*0x20 — the exact bytes the debug-UI lighting
+    // sliders edit (DebugUI_WriteLightingColors, debugui.cpp). Source from there
+    // so slider edits take effect and the day cycle is data-driven exactly like
+    // retail; fall back to the baked-in kKeyframes only if Environment.rsc failed
+    // to load (envRes null). EnvKeyframe is byte-compatible with the envRes entry
+    // layout (ambient@0, light@4, fog@8, fogNear@c, fogFar@10, fogMax@14,
+    // heading@18, pitch@1c), so the table is a direct reinterpret.
+    const EnvKeyframe* table = kKeyframes;
+    void* wsim = *reinterpret_cast<void**>(p + 0x130);   // weather sim (gameWorld+0x130)
+    if (wsim) {
+        void* envRes = *reinterpret_cast<void**>(wsim);  // *(weatherSim+0) == envRes
+        if (envRes)
+            table = reinterpret_cast<const EnvKeyframe*>(
+                reinterpret_cast<uint8_t*>(envRes) + 0x38);
+    }
+    const EnvKeyframe& a = table[kf];
+    const EnvKeyframe& b = table[kfNext];
 
     // Base day-cycle look (interpolated keyframe): sun angle + light/ambient/fog.
     float heading = Lerp(a.sunHeading, b.sunHeading, frac);
@@ -155,15 +172,16 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
 
     // Active weather-effect color blend — faithful port of Weather::DrawUpdate's
     // helper_3ac0 second loop (exe 0x140093ac0). Each live rain/snow effect lerps
-    // the day-cycle look toward its Weather descriptor colors/fog/sun angle
-    // (desc+0x60 ambient, +0x64 light, +0x68 fog, +0x6c/+0x70 fog dist, +0x78/+0x7c
-    // sun heading/pitch), weighted by the effect's fade intensity (geo+0xc0). This
-    // tints the scene grey during rain / bright during snow. No-op when no effects
-    // are active (envRes not loaded / no precipitation), so the base look is intact.
+    // the day-cycle look toward its Weather descriptor colors/fog distances
+    // (desc+0x60 ambient, +0x64 light, +0x68 fog, +0x6c/+0x70 fog dist), weighted
+    // by the effect's fade intensity (geo+0xc0). This tints the scene grey during
+    // rain / bright during snow. Note: retail's interpolator sub_49f0 is called
+    // with param_5=0 here, so it does NOT blend sun heading/pitch (desc+0x78/+0x7c)
+    // — the sun angle stays on the base day-cycle value during precipitation. No-op
+    // when no effects are active, so the base look is intact.
     {
         uint8_t weatherSetting = (g_pGameSettingsPtr && *g_pGameSettingsPtr)
             ? reinterpret_cast<const uint8_t*>(*g_pGameSettingsPtr)[0x16] : 0;
-        void* wsim = *reinterpret_cast<void**>(p + 0x130);
         if (weatherSetting != 0 && wsim) {
             uint8_t* ws = reinterpret_cast<uint8_t*>(wsim);
             int cnt = *reinterpret_cast<int*>(ws + 0x58);
@@ -187,8 +205,8 @@ extern "C" void Weather_SunUpdate(void* self, void* ctx) {
                     }
                     fogNear = Lerp(fogNear, *reinterpret_cast<float*>(dd + 0x6c), t);
                     fogFar  = Lerp(fogFar,  *reinterpret_cast<float*>(dd + 0x70), t);
-                    heading = Lerp(heading, *reinterpret_cast<float*>(dd + 0x78), t);
-                    pitch   = Lerp(pitch,   *reinterpret_cast<float*>(dd + 0x7c), t);
+                    // heading/pitch intentionally NOT blended (retail sub_49f0
+                    // param_5=0 keeps the base day-cycle sun angle during precip).
                 }
             }
         }

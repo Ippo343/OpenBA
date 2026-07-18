@@ -38,9 +38,11 @@ static int DebugUI_GetMonthFromTime_Impl(void* weatherMgr) {
 // Fog: [0x42]=R [0x41]=G [0x40]=B; sun H/P at [0x50/0x54]; fog N/F/M at [0x44/0x48/0x4c]
 static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
     uintptr_t s = (uintptr_t)self;
-    // weatherTable = **(gameWorld+0x130)
+    // weatherTable = **(gameWorld+0x130) == envRes (null if Environment.rsc
+    // failed to load; guard so the reads below don't hit a wild low address).
     void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
-    uintptr_t weatherTable = *(uintptr_t*)weatherListPtr;
+    uintptr_t weatherTable = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
+    if (!weatherTable) return;
     uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
@@ -80,7 +82,11 @@ static void DebugUI_SetDayLighting_Impl(DebugUI* self, int month) {
 static void DebugUI_WriteLightingColors_Impl(DebugUI* self, int month) {
     uintptr_t s = (uintptr_t)self;
     void** weatherListPtr = *(void***)((uintptr_t)(*g_pGameWorldSingleton) + 0x130);
-    uintptr_t weatherTable = *(uintptr_t*)weatherListPtr;
+    // weatherTable == *(weatherSim+0) == envRes (Environment.rsc keyframe table).
+    // Null if Environment.rsc failed to load; without this guard the per-month
+    // writes below would target (0 + month*0x20) — a wild low-address store.
+    uintptr_t weatherTable = weatherListPtr ? *(uintptr_t*)weatherListPtr : 0;
+    if (!weatherTable) return;
     uintptr_t entry = weatherTable + (uintptr_t)month * 0x20;
 
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x80));
@@ -202,6 +208,25 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
 static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
 
+    // The show path allocates and constructs an engine DrawGeometry (and,
+    // optionally, an AudioObjectGroup) via original-exe helpers that are not
+    // yet reimplemented. In standalone mode ResolveAddr returns 0 for those
+    // unregistered exe addresses, so fn_DrawGeometry_Ctor/Init are null and a
+    // selection would call through a null pointer (crash). Bail out until the
+    // draw-geometry chain is ported. This is safe: geometry can only exist if
+    // the ctor ran, so the hide path below would be a no-op anyway.
+    if (fn_DrawGeometry_Ctor == nullptr || fn_DrawGeometry_Init == nullptr) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            fprintf(stderr,
+                "[DebugUI::OnDrawComboChanged] draw-geometry helpers not "
+                "reimplemented (Ctor=%p Init=%p); draw combo is inert\n",
+                (void*)fn_DrawGeometry_Ctor, (void*)fn_DrawGeometry_Init);
+        }
+        return;
+    }
+
     // Get selected combo index
     fn_InternalBasePtr_CheckPtr((void*)(s + 0x108));
     int selectedIdx = *(int*)(*(uintptr_t*)(s + 0x108) + 0x118);
@@ -247,7 +272,22 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 
                 // Check if this entry has an audio descriptor
                 uintptr_t audioDescPtr = *(uintptr_t*)(descArray + (uintptr_t)i * 0x10 + 8);
-                if (audioDescPtr != 0) {
+                // The audio branch needs fn_Entity_FindAudioComponent (exe
+                // 0x140002280), which is not yet reimplemented in standalone (the
+                // weather port deliberately skipped ambient audio). Guard it so a
+                // descriptor carrying an audio template degrades to "geometry only"
+                // instead of calling through a null pointer.
+                bool audioReady = fn_AudioObjectGroup_Ctor && fn_AudioScene_RegisterObject &&
+                                  fn_Entity_FindAudioComponent;
+                if (audioDescPtr != 0 && !audioReady) {
+                    static bool warnedAudio = false;
+                    if (!warnedAudio) {
+                        warnedAudio = true;
+                        fprintf(stderr, "[DebugUI::OnDrawComboChanged] audio helpers "
+                            "not reimplemented; showing geometry without ambient audio\n");
+                    }
+                }
+                if (audioDescPtr != 0 && audioReady) {
                     // Allocate and construct AudioObjectGroup (0x48 bytes)
                     void* audioMem = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
                     void* audioObj = nullptr;

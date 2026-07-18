@@ -436,4 +436,13 @@ static void* g_WeatherParticle_Vtable[9] = {
 extern "C" void RegisterWeatherParticleVtable() {
     RegisterExeAddr(kWeatherGeometryVtable,
                     reinterpret_cast<uintptr_t>(g_WeatherParticle_Vtable));
+
+    // The debug-UI draw combo (DebugUI_OnDrawComboChanged) constructs the very
+    // same weather-particle Geometry via exe helpers DrawGeometry_Ctor
+    // (0x1400d3f10) and DrawGeometry_Init (0x1400d3f80). Those are exactly our
+    // WeatherParticle_GeoCtor / WeatherParticle_Config (same alloc->ctor->config
+    // sequence used in-game at weather_particles.cpp SpawnEffect). Register them
+    // so ResolveAddr(Module::Exe, ...) returns non-null and the combo works.
+    RegisterExeAddr(0x1400d3f10, reinterpret_cast<uintptr_t>(&WeatherParticle_GeoCtor));
+    RegisterExeAddr(0x1400d3f80, reinterpret_cast<uintptr_t>(&WeatherParticle_Config));
 }
